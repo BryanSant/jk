@@ -16,13 +16,11 @@ public final class Jk {
     public static final String VERSION = dev.jkbuild.util.JkVersion.VERSION;
 
     /**
-     * Hidden verb aliases for ergonomic migration from other build tools.
-     * Documented in {@code docs/aliases.md}. Keys are alias names; values
-     * are the canonical verb path (one or more positionals). We don't
-     * register these with picocli (so they stay out of {@code --help} and
-     * shell completion); instead we rewrite the first positional arg
-     * before parsing — possibly expanding it into multiple positionals
-     * (e.g. {@code install} → {@code tool install}).
+     * Hidden verb aliases for ergonomic migration from other build tools. Documented in {@code
+     * docs/aliases.md}. Keys are alias names; values are the canonical verb path (one or more
+     * positionals). We don't register these with picocli (so they stay out of {@code --help} and
+     * shell completion); instead we rewrite the first positional arg before parsing — possibly
+     * expanding it into multiple positionals (e.g. {@code install} → {@code tool install}).
      */
     static final Map<String, List<String>> VERB_ALIASES = Map.ofEntries(
             Map.entry("generate", List.of("new")), // Maven mvn archetype:generate
@@ -163,12 +161,11 @@ public final class Jk {
     }
 
     /**
-     * Argv-scan pass that folds explicit CLI flags into {@link ActiveConfig}.
-     * This is intentionally a small scan rather than reusing picocli's parser:
-     * the highest-precedence layer needs to be available <em>before</em>
-     * picocli runs (e.g. so {@link dev.jkbuild.config.Quietable} can mute
-     * stdout before the first subcommand println). Only flags that affect
-     * global behavior are read here; everything else flows through picocli.
+     * Argv-scan pass that folds explicit CLI flags into {@link ActiveConfig}. This is intentionally a
+     * small scan rather than reusing picocli's parser: the highest-precedence layer needs to be
+     * available <em>before</em> picocli runs (e.g. so {@link dev.jkbuild.config.Quietable} can mute
+     * stdout before the first subcommand println). Only flags that affect global behavior are read
+     * here; everything else flows through picocli.
      */
     private static void applyCliOverrides(String[] args) {
         java.util.Optional<JkConfig.ColorChoice> color = java.util.Optional.empty();
@@ -208,13 +205,13 @@ public final class Jk {
     }
 
     /**
-     * Read {@code --config-file} / {@code --no-config} out of raw argv with a
-     * cheap linear scan, then ask {@link JkConfigLoader} to build the merged
-     * {@link JkConfig} and stash it in {@link ActiveConfig}. This runs before
-     * picocli parsing so the rest of the CLI sees an already-resolved config.
+     * Read {@code --config-file} / {@code --no-config} out of raw argv with a cheap linear scan, then
+     * ask {@link JkConfigLoader} to build the merged {@link JkConfig} and stash it in {@link
+     * ActiveConfig}. This runs before picocli parsing so the rest of the CLI sees an already-resolved
+     * config.
      *
-     * <p>CLI flag values (the highest layer) are folded in lazily as each
-     * command's {@link GlobalOptions} mixin reads them after parsing.
+     * <p>CLI flag values (the highest layer) are folded in lazily as each command's {@link
+     * GlobalOptions} mixin reads them after parsing.
      */
     private static void loadAndInstallConfig(String[] args) {
         boolean noConfig = false;
@@ -240,9 +237,9 @@ public final class Jk {
     }
 
     /**
-     * Rewrite any {@code --list} occurrence to {@code --help}. {@code --list} is
-     * an undocumented alias so muscle memory from tools like {@code rustup} /
-     * {@code cargo} keeps working; downstream code never sees it.
+     * Rewrite any {@code --list} occurrence to {@code --help}. {@code --list} is an undocumented
+     * alias so muscle memory from tools like {@code rustup} / {@code cargo} keeps working; downstream
+     * code never sees it.
      */
     static String[] rewriteListToHelp(String[] args) {
         String[] out = null;

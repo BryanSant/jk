@@ -8,8 +8,8 @@ import org.jline.utils.AttributedString;
 import org.junit.jupiter.api.Test;
 
 /**
- * {@link StackTraceHighlight} paints genuine stack-trace lines (frame, summary,
- * "{@code … N more}") and leaves everything else byte-for-byte unchanged.
+ * {@link StackTraceHighlight} paints genuine stack-trace lines (frame, summary, "{@code … N more}")
+ * and leaves everything else byte-for-byte unchanged.
  */
 class StackTraceHighlightTest {
 

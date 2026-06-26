@@ -36,34 +36,32 @@ import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
 
 /**
- * Converts a Maven {@code pom.xml} into a {@link JkBuild} model plus a
- * {@link ImportReport} of constructs that were not perfectly faithful
- * (PRD §24.2 three-tier fidelity).
+ * Converts a Maven {@code pom.xml} into a {@link JkBuild} model plus a {@link ImportReport} of
+ * constructs that were not perfectly faithful (PRD §24.2 three-tier fidelity).
  *
  * <p>Slice C scope — Tier 1 (lossless) for single-module POMs:
+ *
  * <ul>
- *   <li>Project coordinates (groupId/artifactId/version; inherited from parent).</li>
- *   <li>Dependencies across compile / runtime / provided / test scopes. Maven's
- *       implicit-caret {@code 1.2.3} → jk's {@code =1.2.3} exact pin per
- *       PRD §7.3.</li>
- *   <li>{@code <dependencyManagement>} BOM imports ({@code scope=import,
- *       type=pom}) → {@code dependencies.platform}.</li>
- *   <li>{@code <repositories>}.</li>
- *   <li>{@code maven-compiler-plugin} release/source/target → {@code project.jdk}.</li>
+ *   <li>Project coordinates (groupId/artifactId/version; inherited from parent).
+ *   <li>Dependencies across compile / runtime / provided / test scopes. Maven's implicit-caret
+ *       {@code 1.2.3} → jk's {@code =1.2.3} exact pin per PRD §7.3.
+ *   <li>{@code <dependencyManagement>} BOM imports ({@code scope=import, type=pom}) → {@code
+ *       dependencies.platform}.
+ *   <li>{@code <repositories>}.
+ *   <li>{@code maven-compiler-plugin} release/source/target → {@code project.jdk}.
  * </ul>
  *
- * <p>Anything else (profiles, custom plugins, modules, build extensions, system
- * scope) is logged in the report — Tier 2 / Tier 3 mapping arrives in slice D.
+ * <p>Anything else (profiles, custom plugins, modules, build extensions, system scope) is logged in
+ * the report — Tier 2 / Tier 3 mapping arrives in slice D.
  */
 public final class PomImporter {
 
     public record Result(JkBuild jkBuild, ImportReport report) {}
 
     /**
-     * Outcome of importing a multi-module POM tree: the root's {@link JkBuild}
-     * (carrying the workspace block), each module's {@link JkBuild} keyed by
-     * the relative module path, and one aggregated {@link ImportReport}
-     * spanning the root + every child.
+     * Outcome of importing a multi-module POM tree: the root's {@link JkBuild} (carrying the
+     * workspace block), each module's {@link JkBuild} keyed by the relative module path, and one
+     * aggregated {@link ImportReport} spanning the root + every child.
      */
     public record WorkspaceImportResult(JkBuild root, Map<String, JkBuild> modules, ImportReport report) {}
 
@@ -85,7 +83,7 @@ public final class PomImporter {
         JkBuild.Project project = mapProject(pom, doc, report, suppressParentMatching);
         Map<Scope, List<Dependency>> byScope = mapDependencies(pom, report);
         List<RepositorySpec> repos = mapRepositories(doc, report);
-        warnUnsupportedSections(doc, report, /*isWorkspaceRoot=*/ false);
+        warnUnsupportedSections(doc, report, /* isWorkspaceRoot= */ false);
 
         JkBuild.Dependencies dependencies = new JkBuild.Dependencies(byScope);
         JkBuild jkBuild = new JkBuild(project, dependencies, repos);
@@ -95,10 +93,9 @@ public final class PomImporter {
     }
 
     /**
-     * Custom jar-manifest attributes from a build plugin's
-     * {@code <archive><manifestEntries>} (maven-jar / assembly / shade).
-     * {@code Main-Class} is excluded — it routes to {@code project.main} via
-     * {@link #mainClassFromPom}. Unresolved {@code ${...}} property values and
+     * Custom jar-manifest attributes from a build plugin's {@code <archive><manifestEntries>}
+     * (maven-jar / assembly / shade). {@code Main-Class} is excluded — it routes to {@code
+     * project.main} via {@link #mainClassFromPom}. Unresolved {@code ${...}} property values and
      * blanks are skipped. Insertion order preserved.
      */
     private static Map<String, String> manifestFromPom(Document doc) {
@@ -120,10 +117,9 @@ public final class PomImporter {
     }
 
     /**
-     * Import a multi-module Maven build into a workspace-root {@code JkBuild}
-     * plus per-module {@code JkBuild}s (PRD §24.2 Tier 2 "multi-module
-     * &lt;modules&gt; → workspace"). When the root POM has no
-     * {@code <modules>}, falls back to single-POM import.
+     * Import a multi-module Maven build into a workspace-root {@code JkBuild} plus per-module {@code
+     * JkBuild}s (PRD §24.2 Tier 2 "multi-module &lt;modules&gt; → workspace"). When the root POM has
+     * no {@code <modules>}, falls back to single-POM import.
      */
     public static WorkspaceImportResult importWorkspace(Path rootPom) throws IOException {
         byte[] rootXml = Files.readAllBytes(rootPom);
@@ -140,7 +136,7 @@ public final class PomImporter {
         // Root coords serve as the "expected parent" for children.
         Pom.Parent expectedParent =
                 new Pom.Parent(rootProject.group(), rootPomParsed.artifactId(), rootProject.version());
-        warnUnsupportedSections(rootDoc, report, /*isWorkspaceRoot=*/ true);
+        warnUnsupportedSections(rootDoc, report, /* isWorkspaceRoot= */ true);
 
         Workspace workspace = new Workspace(modules);
         // The workspace root is a coordination point — no deps of its own.
@@ -195,8 +191,12 @@ public final class PomImporter {
                     && pom.parent().artifactId().equals(suppressParentMatching.artifactId())
                     && pom.parent().version().equals(suppressParentMatching.version());
             if (!isWorkspaceParent) {
-                report.warning("`<parent>` was referenced (" + pom.parent().groupId() + ":"
-                        + pom.parent().artifactId() + ":" + pom.parent().version()
+                report.warning("`<parent>` was referenced ("
+                        + pom.parent().groupId()
+                        + ":"
+                        + pom.parent().artifactId()
+                        + ":"
+                        + pom.parent().version()
                         + ") but jk-import did not flatten its dependencyManagement / properties / build config."
                         + " Run `mvn help:effective-pom` and re-import if any dependency versions are unresolved.");
             }
@@ -228,12 +228,11 @@ public final class PomImporter {
     }
 
     /**
-     * Detect the Kotlin compiler version from the {@code kotlin-maven-plugin}.
-     * The version comes from the plugin's {@code <version>} (resolving a
-     * {@code ${kotlin.version}} placeholder against {@code <properties>}), else
-     * the {@code kotlin.version} property, else a floating
-     * {@link KotlinResolver#DEFAULT_VERSION} (pinned later by {@code jk lock}).
-     * Returns {@code null} when the plugin is absent (a Java project).
+     * Detect the Kotlin compiler version from the {@code kotlin-maven-plugin}. The version comes from
+     * the plugin's {@code <version>} (resolving a {@code ${kotlin.version}} placeholder against
+     * {@code <properties>}), else the {@code kotlin.version} property, else a floating {@link
+     * KotlinResolver#DEFAULT_VERSION} (pinned later by {@code jk lock}). Returns {@code null} when
+     * the plugin is absent (a Java project).
      */
     private static VersionSelector kotlinFromPom(Document doc, ImportReport.Builder report) {
         Element root = doc.getDocumentElement();
@@ -264,15 +263,17 @@ public final class PomImporter {
         if (resolved == null || resolved.isBlank()) {
             resolved = KotlinResolver.DEFAULT_VERSION;
             report.warning("kotlin-maven-plugin recognised without a resolvable version; defaulted"
-                    + " project.kotlin to " + resolved + " (floating). `jk lock` pins it.");
+                    + " project.kotlin to "
+                    + resolved
+                    + " (floating). `jk lock` pins it.");
         }
         return VersionSelector.parseFloating(resolved);
     }
 
     /**
-     * Best-effort application main class: the first non-placeholder
-     * {@code <mainClass>} element (jar/assembly/shade/exec plugin configs), or a
-     * {@code start-class}/{@code exec.mainClass}/{@code main.class} property.
+     * Best-effort application main class: the first non-placeholder {@code <mainClass>} element
+     * (jar/assembly/shade/exec plugin configs), or a {@code start-class}/{@code
+     * exec.mainClass}/{@code main.class} property.
      */
     private static String mainClassFromPom(Document doc) {
         NodeList nodes = doc.getElementsByTagName("mainClass");
@@ -334,25 +335,32 @@ public final class PomImporter {
         // Standard scopes.
         for (Pom.Dep dep : pom.dependencies()) {
             if ("system".equalsIgnoreCase(dep.scope())) {
-                report.error("`<dependency>` with `<scope>system</scope>` is rejected (" + dep.module()
+                report.error("`<dependency>` with `<scope>system</scope>` is rejected ("
+                        + dep.module()
                         + "). Move it to a git dependency or a local repository.");
                 continue;
             }
             if (dep.optional()) {
                 report.warning("`<dependency><optional>true</optional></dependency>` on "
-                        + dep.module() + " — jk has no `<optional>`; emitted as a normal dep."
+                        + dep.module()
+                        + " — jk has no `<optional>`; emitted as a normal dep."
                         + " Use a feature flag if it should be opt-in.");
             }
             if (dep.classifier() != null && !dep.classifier().isBlank()) {
-                report.warning("`<classifier>" + dep.classifier() + "</classifier>` on " + dep.module()
+                report.warning("`<classifier>"
+                        + dep.classifier()
+                        + "</classifier>` on "
+                        + dep.module()
                         + " — classifier support lands in a later slice; the coord was emitted without it.");
             }
             if (!dep.exclusions().isEmpty()) {
-                report.warning("`<exclusions>` on " + dep.module()
+                report.warning("`<exclusions>` on "
+                        + dep.module()
                         + " — exclusion support lands in a later slice; exclusions were dropped.");
             }
             if (dep.version() == null || dep.version().isBlank()) {
-                report.warning("`<dependency>` " + dep.module()
+                report.warning("`<dependency>` "
+                        + dep.module()
                         + " has no resolved `<version>`; jk wrote `=unresolved`."
                         + " Run `mvn help:effective-pom` and re-import.");
             }
@@ -364,7 +372,9 @@ public final class PomImporter {
             if ("import".equalsIgnoreCase(managed.scope()) && "pom".equalsIgnoreCase(managed.type())) {
                 byScope.computeIfAbsent(Scope.PLATFORM, s -> new ArrayList<>()).add(toDependency(managed));
             } else {
-                report.warning("`<dependencyManagement>` entry " + managed.module() + " is a version pin,"
+                report.warning("`<dependencyManagement>` entry "
+                        + managed.module()
+                        + " is a version pin,"
                         + " not a BOM import. jk has no equivalent; the pin was dropped."
                         + " Inline the version on the matching `<dependency>` instead.");
             }
@@ -451,7 +461,9 @@ public final class PomImporter {
             for (Element plugin : childElements(plugins, "plugin")) {
                 String artifactId = childText(plugin, "artifactId");
                 if (artifactId == null || "maven-compiler-plugin".equals(artifactId)) continue;
-                report.warning("`<plugin>" + artifactId + "</plugin>` was not imported."
+                report.warning("`<plugin>"
+                        + artifactId
+                        + "</plugin>` was not imported."
                         + " Plugin-aware mappings (Spotless, JaCoCo, Spring Boot, ...) arrive in slice D.");
             }
         }
@@ -465,11 +477,10 @@ public final class PomImporter {
     // --- profile analysis ---------------------------------------------------
 
     /**
-     * Emits per-profile diagnostics describing what was inside a Maven
-     * {@code <profile>}. jk's current Profile model carries only javac/JVM
-     * args, so faithful mapping of property/dep/plugin profiles is not yet
-     * possible — instead we give the user a precise checklist of items to
-     * port by hand.
+     * Emits per-profile diagnostics describing what was inside a Maven {@code <profile>}. jk's
+     * current Profile model carries only javac/JVM args, so faithful mapping of property/dep/plugin
+     * profiles is not yet possible — instead we give the user a precise checklist of items to port by
+     * hand.
      */
     private static void analyzeProfile(Element profile, ImportReport.Builder report) {
         String id = childText(profile, "id");
@@ -485,14 +496,20 @@ public final class PomImporter {
         if (deps != null) {
             int count = childElements(deps, "dependency").size();
             if (count > 0) {
-                parts.add(count + " dependenc" + (count == 1 ? "y" : "ies") + " (convert to a jk feature `" + label
+                parts.add(count
+                        + " dependenc"
+                        + (count == 1 ? "y" : "ies")
+                        + " (convert to a jk feature `"
+                        + label
                         + "` if opt-in, or move into the main deps list)");
             }
         }
         Element managed = childElement(childElement(profile, "dependencyManagement"), "dependencies");
         if (managed != null && !childElements(managed, "dependency").isEmpty()) {
             int count = childElements(managed, "dependency").size();
-            parts.add(count + " dependencyManagement entr" + (count == 1 ? "y" : "ies")
+            parts.add(count
+                    + " dependencyManagement entr"
+                    + (count == 1 ? "y" : "ies")
                     + " (inline versions on the matching `<dependency>` or use a BOM import)");
         }
         Element properties = childElement(profile, "properties");
@@ -501,7 +518,9 @@ public final class PomImporter {
             if (!propEntries.isEmpty()) {
                 List<String> names = new ArrayList<>();
                 for (Element p : propEntries) names.add(p.getNodeName());
-                parts.add("properties=[" + String.join(",", names) + "]"
+                parts.add("properties=["
+                        + String.join(",", names)
+                        + "]"
                         + " (no jk equivalent — fold maven.compiler.* into project.jdk; drop the rest)");
             }
         }
@@ -541,13 +560,15 @@ public final class PomImporter {
         if (os != null) {
             String family = childText(os, "family");
             String name = childText(os, "name");
-            kinds.add("os=" + (family != null ? family : name != null ? name : "?")
+            kinds.add("os="
+                    + (family != null ? family : name != null ? name : "?")
                     + " (use jk target predicates per dep)");
         }
         Element property = childElement(activation, "property");
         if (property != null) {
             String name = childText(property, "name");
-            kinds.add("property=" + (name != null ? name : "?")
+            kinds.add("property="
+                    + (name != null ? name : "?")
                     + " (no jk equivalent — replace with an explicit jk profile or feature)");
         }
         Element file = childElement(activation, "file");

@@ -17,8 +17,8 @@ import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
 
 /**
- * Parsed contents of a Maven repository's {@code maven-metadata.xml}.
- * Only the bits the resolver currently needs: the version list.
+ * Parsed contents of a Maven repository's {@code maven-metadata.xml}. Only the bits the resolver
+ * currently needs: the version list.
  */
 public record MavenMetadata(String groupId, String artifactId, List<String> versions, String latest, String release) {
 

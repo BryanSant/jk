@@ -18,6 +18,7 @@ import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.function.IntSupplier;
+import java.util.regex.Pattern;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -454,7 +455,7 @@ class JdkCommandTest {
         Files.writeString(home.resolve("bin").resolve("java"), "#!/fake");
         // ProbeSupport.discoverJdk demands a release file — every modern
         // JDK ships one since 7u72, so the fixture follows suit.
-        var m = java.util.regex.Pattern.compile("(\\d+(?:\\.\\d+){0,2})")
+        var m = Pattern.compile("(\\d+(?:\\.\\d+){0,2})")
                 .matcher(home.getFileName().toString());
         String version = m.find() ? m.group(1) : "21";
         Files.writeString(

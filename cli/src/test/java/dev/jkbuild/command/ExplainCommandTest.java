@@ -10,6 +10,7 @@ import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -64,9 +65,8 @@ class ExplainCommandTest {
         assertThat(elided).matches(".*…\\+\\d+ more…$"); // ends with …+<count> more…
         assertThat(elided.length()).isLessThan(full.length());
         // Count = units that didn't fit (the leading ones shown are excluded).
-        int shown = (int) java.util.Arrays.stream(elided.split(", "))
-                .filter(s -> s.startsWith(":"))
-                .count();
+        int shown = (int)
+                Arrays.stream(elided.split(", ")).filter(s -> s.startsWith(":")).count();
         assertThat(elided).contains("…+" + (units.size() - shown) + " more…");
 
         // A single prereq is never elided.

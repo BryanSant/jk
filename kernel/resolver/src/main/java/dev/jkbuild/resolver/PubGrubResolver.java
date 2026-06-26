@@ -24,9 +24,8 @@ import java.util.Set;
 import java.util.TreeMap;
 
 /**
- * The {@link Resolver} implementation backed by the PubGrub solver. Glue
- * between jk's {@link Dependency}/{@link Resolution} types and the
- * solver's {@link Term}/decision map.
+ * The {@link Resolver} implementation backed by the PubGrub solver. Glue between jk's {@link
+ * Dependency}/{@link Resolution} types and the solver's {@link Term}/decision map.
  */
 public final class PubGrubResolver implements Resolver {
 
@@ -45,18 +44,17 @@ public final class PubGrubResolver implements Resolver {
     }
 
     /**
-     * @param bomConstraints {@code group:artifact → pinned version} from
-     *     the user's platform BOMs. Empty map = no BOM constraints.
+     * @param bomConstraints {@code group:artifact → pinned version} from the user's platform BOMs.
+     *     Empty map = no BOM constraints.
      */
     public PubGrubResolver(RepoGroup repos, Map<String, String> bomConstraints) {
         this(repos, bomConstraints, Map.of());
     }
 
     /**
-     * Conservative-lock variant: {@code lockedVersionPrefs} moves each locked
-     * version to the front of PubGrub's candidate list so the solver selects
-     * it first. If a new dep's constraint rules it out, PubGrub backtracks to
-     * the next available version naturally.
+     * Conservative-lock variant: {@code lockedVersionPrefs} moves each locked version to the front of
+     * PubGrub's candidate list so the solver selects it first. If a new dep's constraint rules it
+     * out, PubGrub backtracks to the next available version naturally.
      */
     public PubGrubResolver(
             RepoGroup repos, Map<String, String> bomConstraints, Map<String, String> lockedVersionPrefs) {

@@ -16,28 +16,25 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Builds {@link EffectivePom}s from a {@link MavenRepo}, merging the parent
- * chain and inlining BOM imports.
+ * Builds {@link EffectivePom}s from a {@link MavenRepo}, merging the parent chain and inlining BOM
+ * imports.
  *
- * <p>Merge rules (matching Maven where simple, simplifying where Maven is
- * pathological):
+ * <p>Merge rules (matching Maven where simple, simplifying where Maven is pathological):
+ *
  * <ul>
- *   <li><b>Properties:</b> walk parent chain root→leaf; child overrides
- *       parent on key collision. Implicit {@code project.*} keys are
- *       always derived from the *child*'s own coordinates.</li>
- *   <li><b>dependencyManagement:</b> processed root→leaf in declaration
- *       order. {@code import}/{@code pom} entries are expanded by
- *       recursively building the referenced BOM and inlining its
- *       managed deps. Later entries override earlier on
- *       {@code groupId:artifactId} collisions.</li>
- *   <li><b>dependencies:</b> root→leaf union, deduped by
- *       {@code groupId:artifactId}; child wins.</li>
- *   <li><b>version backfill:</b> any dep without a version is filled
- *       from the merged dependencyManagement.</li>
+ *   <li><b>Properties:</b> walk parent chain root→leaf; child overrides parent on key collision.
+ *       Implicit {@code project.*} keys are always derived from the *child*'s own coordinates.
+ *   <li><b>dependencyManagement:</b> processed root→leaf in declaration order. {@code
+ *       import}/{@code pom} entries are expanded by recursively building the referenced BOM and
+ *       inlining its managed deps. Later entries override earlier on {@code groupId:artifactId}
+ *       collisions.
+ *   <li><b>dependencies:</b> root→leaf union, deduped by {@code groupId:artifactId}; child wins.
+ *   <li><b>version backfill:</b> any dep without a version is filled from the merged
+ *       dependencyManagement.
  * </ul>
  *
- * <p>Hard depth cap of {@value #MAX_DEPTH} on the parent chain and BOM
- * import chain to fail loudly rather than recurse forever.
+ * <p>Hard depth cap of {@value #MAX_DEPTH} on the parent chain and BOM import chain to fail loudly
+ * rather than recurse forever.
  */
 public final class EffectivePomBuilder {
 
@@ -180,10 +177,9 @@ public final class EffectivePomBuilder {
     }
 
     /**
-     * Fill in the version / scope / type / classifier / exclusions a dependency
-     * leaves unspecified from its {@code dependencyManagement} entry (a declared
-     * value on the dependency itself always wins). Mirrors Maven: management
-     * supplies defaults for all of these, not just the version.
+     * Fill in the version / scope / type / classifier / exclusions a dependency leaves unspecified
+     * from its {@code dependencyManagement} entry (a declared value on the dependency itself always
+     * wins). Mirrors Maven: management supplies defaults for all of these, not just the version.
      */
     private static Pom.Dep applyManagedDefaults(Pom.Dep dep, Pom.Dep managed) {
         String version = blank(dep.version()) ? managed.version() : dep.version();

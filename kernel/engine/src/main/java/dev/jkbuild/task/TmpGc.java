@@ -10,13 +10,12 @@ import java.util.List;
 import java.util.stream.Stream;
 
 /**
- * Aggressively GC jk's scratch dir ({@code ~/.jk/tmp/}): delete <em>any</em>
- * file older than {@link #DEFAULT_TTL} (7 days). Invoked by {@code jk cache
- * prune} alongside the other phases.
+ * Aggressively GC jk's scratch dir ({@code ~/.jk/tmp/}): delete <em>any</em> file older than {@link
+ * #DEFAULT_TTL} (7 days). Invoked by {@code jk cache prune} alongside the other phases.
  *
- * <p>The scratch dir holds transient, regenerable artefacts — e.g. {@code jk
- * import} reports. Nothing here is load-bearing, so a flat 7-day age cutoff
- * (no liveness/reachability check) keeps it bounded without user attention.
+ * <p>The scratch dir holds transient, regenerable artefacts — e.g. {@code jk import} reports.
+ * Nothing here is load-bearing, so a flat 7-day age cutoff (no liveness/reachability check) keeps
+ * it bounded without user attention.
  */
 public final class TmpGc {
 
@@ -28,9 +27,8 @@ public final class TmpGc {
     public record Report(int deleted, long freedBytes) {}
 
     /**
-     * Recursively walk {@code tmpDir} and delete every regular file whose mtime
-     * is older than {@code ttl}. Missing dir is a no-op. Returns counts for the
-     * prune summary line.
+     * Recursively walk {@code tmpDir} and delete every regular file whose mtime is older than {@code
+     * ttl}. Missing dir is a no-op. Returns counts for the prune summary line.
      */
     public static Report sweep(Path tmpDir, Duration ttl, boolean dryRun) throws IOException {
         if (!Files.isDirectory(tmpDir)) return new Report(0, 0L);

@@ -6,9 +6,9 @@ import java.io.UncheckedIOException;
 import org.jline.utils.NonBlockingReader;
 
 /**
- * Single-byte / escape-sequence parser. Reads one logical key from a JLine
- * {@link NonBlockingReader} in raw mode. The 50 ms peek after {@code 0x1B}
- * disambiguates a bare ESC from the start of a CSI sequence.
+ * Single-byte / escape-sequence parser. Reads one logical key from a JLine {@link
+ * NonBlockingReader} in raw mode. The 50 ms peek after {@code 0x1B} disambiguates a bare ESC from
+ * the start of a CSI sequence.
  */
 public final class KeyReader {
 
@@ -84,9 +84,9 @@ public final class KeyReader {
     }
 
     /**
-     * Like {@link #read(NonBlockingReader)} but returns {@code null} when no
-     * byte arrives within {@code timeoutMs}. Lets callers periodically check
-     * an external cancellation flag without blocking forever.
+     * Like {@link #read(NonBlockingReader)} but returns {@code null} when no byte arrives within
+     * {@code timeoutMs}. Lets callers periodically check an external cancellation flag without
+     * blocking forever.
      */
     public static Key readOrNull(NonBlockingReader reader, long timeoutMs) {
         try {

@@ -11,20 +11,17 @@ import java.util.Set;
 /**
  * In-memory representation of {@code jk.lock} per PRD §9.
  *
- * <p>The schema is pinned to {@code version = 1} for the pre-1.x window;
- * the version bumps when we cut a public release. Fields added in this
- * window stay backward-compatible at the reader (unknown / missing optional
- * fields fall back to defaults).
+ * <p>The schema is pinned to {@code version = 1} for the pre-1.x window; the version bumps when we
+ * cut a public release. Fields added in this window stay backward-compatible at the reader (unknown
+ * / missing optional fields fall back to defaults).
  *
- * <p>{@code jdk} is the resolved JDK install identifier the project was
- * built against (e.g. {@code temurin-25.0.3}), stamped by {@code jk new}
- * and refreshed by {@code jk lock}. Optional; {@code null} for legacy
- * lockfiles produced before the field existed.
+ * <p>{@code jdk} is the resolved JDK install identifier the project was built against (e.g. {@code
+ * temurin-25.0.3}), stamped by {@code jk new} and refreshed by {@code jk lock}. Optional; {@code
+ * null} for legacy lockfiles produced before the field existed.
  *
- * <p>{@code kotlin} is the resolved Kotlin compiler version (e.g.
- * {@code 2.3.21}) that the floating {@code project.kotlin} selector locked to,
- * stamped by {@code jk lock}. Optional; {@code null} for Java projects or when
- * resolution was skipped (offline).
+ * <p>{@code kotlin} is the resolved Kotlin compiler version (e.g. {@code 2.3.21}) that the floating
+ * {@code project.kotlin} selector locked to, stamped by {@code jk lock}. Optional; {@code null} for
+ * Java projects or when resolution was skipped (offline).
  */
 public record Lockfile(
         int version,
@@ -90,9 +87,9 @@ public record Lockfile(
     /**
      * A third-party plugin pinned in {@code jk.lock}.
      *
-     * @param coordinate  Maven {@code group:name} (e.g. {@code "com.example:my-jk-plugin"})
-     * @param version     exact version (e.g. {@code "1.2.0"})
-     * @param checksum    {@code sha256:<hex>} content hash of the plugin JAR
+     * @param coordinate Maven {@code group:name} (e.g. {@code "com.example:my-jk-plugin"})
+     * @param version exact version (e.g. {@code "1.2.0"})
+     * @param checksum {@code sha256:<hex>} content hash of the plugin JAR
      */
     public record PluginEntry(String coordinate, String version, String checksum) {
         public PluginEntry {
@@ -161,8 +158,8 @@ public record Lockfile(
         }
 
         /**
-         * Back-compat constructor without {@code pinnedBy} — for callers that
-         * don't track BOM provenance. Equivalent to passing {@code null}.
+         * Back-compat constructor without {@code pinnedBy} — for callers that don't track BOM
+         * provenance. Equivalent to passing {@code null}.
          */
         public Artifact(
                 String name,
@@ -186,9 +183,9 @@ public record Lockfile(
         }
 
         /**
-         * Provenance for a git-source artifact: the canonical repo URL, the
-         * resolved commit SHA, and the original ref token (e.g. {@code tag:v1}).
-         * Present only for git-built artifacts; null for Maven coordinates.
+         * Provenance for a git-source artifact: the canonical repo URL, the resolved commit SHA, and
+         * the original ref token (e.g. {@code tag:v1}). Present only for git-built artifacts; null for
+         * Maven coordinates.
          */
         public record GitInfo(String url, String rev, String ref) {
             public GitInfo {

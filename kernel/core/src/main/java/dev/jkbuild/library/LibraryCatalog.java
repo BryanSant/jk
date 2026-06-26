@@ -23,26 +23,23 @@ import org.tomlj.TomlTable;
 /**
  * Curated mapping of short names to {@code group:artifact} pairs.
  *
- * <p>The catalog is layered. Each layer shadows the ones below it on a
- * per-name basis, so a project can locally override a single entry without
- * losing the rest of the curated set. Highest precedence first:
+ * <p>The catalog is layered. Each layer shadows the ones below it on a per-name basis, so a project
+ * can locally override a single entry without losing the rest of the curated set. Highest
+ * precedence first:
  *
  * <ol>
- *   <li><b>Project</b> — the {@code [libraries]} table in the project's
- *       {@code jk.toml}. Passed in by the parser.</li>
- *   <li><b>Local</b> — {@code ~/.jk/libs.local.toml} (per-user overrides,
- *       hand-edited).</li>
- *   <li><b>Global</b> — {@code ~/.jk/libs.global.toml}, refreshed
- *       by {@code jk library update} from
- *       {@code github.com/jkbuild/jk-library-registry}.</li>
- *   <li><b>Bundled</b> — classpath resource shipped with the jk binary
- *       ({@code dev/jkbuild/library/libraries.toml}). Acts as the floor so
- *       lookups still work offline before any update has run.</li>
+ *   <li><b>Project</b> — the {@code [libraries]} table in the project's {@code jk.toml}. Passed in
+ *       by the parser.
+ *   <li><b>Local</b> — {@code ~/.jk/libs.local.toml} (per-user overrides, hand-edited).
+ *   <li><b>Global</b> — {@code ~/.jk/libs.global.toml}, refreshed by {@code jk library update} from
+ *       {@code github.com/jkbuild/jk-library-registry}.
+ *   <li><b>Bundled</b> — classpath resource shipped with the jk binary ({@code
+ *       dev/jkbuild/library/libraries.toml}). Acts as the floor so lookups still work offline
+ *       before any update has run.
  * </ol>
  *
- * <p>The non-project layers are read-only from jk's perspective. The
- * bundled layer is the only one guaranteed to exist; the others light up
- * when their files appear on disk.
+ * <p>The non-project layers are read-only from jk's perspective. The bundled layer is the only one
+ * guaranteed to exist; the others light up when their files appear on disk.
  */
 public final class LibraryCatalog {
 
@@ -62,17 +59,15 @@ public final class LibraryCatalog {
     }
 
     /**
-     * The downloaded layer, refreshed by {@code jk library update}:
-     * {@code ~/.jk/libs.global.toml}.
+     * The downloaded layer, refreshed by {@code jk library update}: {@code ~/.jk/libs.global.toml}.
      */
     public static Path downloadedFile() {
         return JkDirs.home().resolve("libs.global.toml");
     }
 
     /**
-     * The bundled-only catalog. Loaded once on first call; subsequent
-     * calls are O(1). Use this when other layers shouldn't apply
-     * (renderer-side defaulting, where local overrides would create
+     * The bundled-only catalog. Loaded once on first call; subsequent calls are O(1). Use this when
+     * other layers shouldn't apply (renderer-side defaulting, where local overrides would create
      * file-vs-tool consistency surprises).
      */
     public static LibraryCatalog bundled() {
@@ -86,18 +81,17 @@ public final class LibraryCatalog {
     }
 
     /**
-     * The full read-only chain: local overrides → global → bundled.
-     * Project overrides aren't applied here — the parser layers them on
-     * top via {@link #withProjectOverrides}.
+     * The full read-only chain: local overrides → global → bundled. Project overrides aren't applied
+     * here — the parser layers them on top via {@link #withProjectOverrides}.
      */
     public static LibraryCatalog layered() {
         return layered(w -> {});
     }
 
     /**
-     * As {@link #layered()}, but reports each skipped-malformed-layer warning
-     * to {@code warn} instead of a stream — only the CLI view layer owns
-     * {@code System.err}, so callers there pass {@code System.err::println}.
+     * As {@link #layered()}, but reports each skipped-malformed-layer warning to {@code warn} instead
+     * of a stream — only the CLI view layer owns {@code System.err}, so callers there pass {@code
+     * System.err::println}.
      */
     public static LibraryCatalog layered(java.util.function.Consumer<String> warn) {
         List<Layer> chain = new ArrayList<>();
@@ -118,10 +112,9 @@ public final class LibraryCatalog {
     }
 
     /**
-     * Returns a new view with {@code projectLibraries} as the top-priority
-     * layer. The original catalog is unchanged. Used by the parser to
-     * make {@code [libraries]} from the current {@code jk.toml} the
-     * authoritative source for that file.
+     * Returns a new view with {@code projectLibraries} as the top-priority layer. The original
+     * catalog is unchanged. Used by the parser to make {@code [libraries]} from the current {@code
+     * jk.toml} the authoritative source for that file.
      */
     public LibraryCatalog withProjectOverrides(Map<String, Module> projectLibraries) {
         if (projectLibraries == null || projectLibraries.isEmpty()) return this;
@@ -132,8 +125,8 @@ public final class LibraryCatalog {
     }
 
     /**
-     * Look up a short name. Walks layers in order; the first hit wins.
-     * Returns empty when no layer carries the name.
+     * Look up a short name. Walks layers in order; the first hit wins. Returns empty when no layer
+     * carries the name.
      */
     public Optional<Module> lookup(String name) {
         if (name == null) return Optional.empty();
@@ -152,8 +145,7 @@ public final class LibraryCatalog {
     }
 
     /**
-     * For diagnostics: report which layer a name resolves through. Empty
-     * when no layer carries it.
+     * For diagnostics: report which layer a name resolves through. Empty when no layer carries it.
      */
     public Optional<Source> source(String name) {
         if (name == null) return Optional.empty();
@@ -176,17 +168,14 @@ public final class LibraryCatalog {
     }
 
     /**
-     * Best-effort name suggestions for an unknown library. Splits the
-     * candidate on {@code -} and returns up to {@code maxResults}
-     * catalog names that contain every non-empty part as a substring
-     * (case-insensitive). Useful for "did you mean" diagnostics — typing
-     * {@code jackson-databind} surfaces {@code jackson2-databind} and
-     * {@code jackson3-databind} since both contain "jackson" and
-     * "databind".
+     * Best-effort name suggestions for an unknown library. Splits the candidate on {@code -} and
+     * returns up to {@code maxResults} catalog names that contain every non-empty part as a substring
+     * (case-insensitive). Useful for "did you mean" diagnostics — typing {@code jackson-databind}
+     * surfaces {@code jackson2-databind} and {@code jackson3-databind} since both contain "jackson"
+     * and "databind".
      *
-     * <p>Walks the layered chain in lookup-priority order, so a
-     * project-level override shadows a same-named bundled entry in the
-     * suggestion list too.
+     * <p>Walks the layered chain in lookup-priority order, so a project-level override shadows a
+     * same-named bundled entry in the suggestion list too.
      */
     public List<String> suggestionsFor(String unknownName, int maxResults) {
         if (unknownName == null || unknownName.isBlank() || maxResults <= 0) {
@@ -278,8 +267,8 @@ public final class LibraryCatalog {
     }
 
     /**
-     * Parse an already-located {@code [libraries]} sub-table. Used by the
-     * jk.toml parser, which has already navigated to the table.
+     * Parse an already-located {@code [libraries]} sub-table. Used by the jk.toml parser, which has
+     * already navigated to the table.
      */
     public static Map<String, Module> parseLibrariesTable(TomlTable table, String displayPath) {
         Map<String, Module> out = new LinkedHashMap<>();
@@ -295,7 +284,9 @@ public final class LibraryCatalog {
                         displayPath + ".libraries." + name + " must be \"group:artifact\" — got: " + coord);
             }
             if (coord.indexOf(':', sep + 1) >= 0) {
-                throw new IllegalStateException(displayPath + ".libraries." + name
+                throw new IllegalStateException(displayPath
+                        + ".libraries."
+                        + name
                         + " carries a version — strip it; the catalog is name→coord only: "
                         + coord);
             }

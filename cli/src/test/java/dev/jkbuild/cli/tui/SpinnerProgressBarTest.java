@@ -6,6 +6,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.regex.Pattern;
 import org.junit.jupiter.api.Test;
 
 class SpinnerProgressBarTest {
@@ -195,10 +198,9 @@ class SpinnerProgressBarTest {
     }
 
     /** In-order truecolor SGRs of each filled (▰) glyph in {@code raw}. */
-    private static java.util.List<String> filledGlyphColors(String raw) {
-        var out = new java.util.ArrayList<String>();
-        var m = java.util.regex.Pattern.compile("\033\\[(38;2;\\d+;\\d+;\\d+)m▰")
-                .matcher(raw);
+    private static List<String> filledGlyphColors(String raw) {
+        var out = new ArrayList<String>();
+        var m = Pattern.compile("\033\\[(38;2;\\d+;\\d+;\\d+)m▰").matcher(raw);
         while (m.find()) out.add(m.group(1));
         return out;
     }

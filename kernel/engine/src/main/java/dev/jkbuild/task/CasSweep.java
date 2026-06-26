@@ -13,28 +13,23 @@ import java.util.stream.Stream;
 /**
  * Mark-and-sweep over the CAS pool.
  *
- * <p>Given the live set produced by {@link CacheRoots}, walks the
- * {@code sha256/AA/BB/<rest>} tree and deletes every object that's both
- * unreferenced and old enough to be sweep-eligible. Two age guards keep
- * the sweep safe under concurrency:
+ * <p>Given the live set produced by {@link CacheRoots}, walks the {@code sha256/AA/BB/<rest>} tree
+ * and deletes every object that's both unreferenced and old enough to be sweep-eligible. Two age
+ * guards keep the sweep safe under concurrency:
  *
  * <ul>
- *   <li><strong>Watermark:</strong> never touch a file whose mtime is
- *       later than the sweep's start time. Anything written during the
- *       sweep is by definition not in the live snapshot we took up
- *       front; the watermark prevents us deleting it just for being
- *       new.</li>
- *   <li><strong>Min-age:</strong> never touch a file younger than
- *       {@link Sweep#MIN_AGE_FOR_SWEEP}. Closes the gap between
- *       "writer puts an object in the CAS" and "writer finishes stamping
- *       the root that references it" — the gap is normally
- *       milliseconds, but {@code jk sync} runs root-stamping after the
- *       parallel fetches resolve.</li>
+ *   <li><strong>Watermark:</strong> never touch a file whose mtime is later than the sweep's start
+ *       time. Anything written during the sweep is by definition not in the live snapshot we took
+ *       up front; the watermark prevents us deleting it just for being new.
+ *   <li><strong>Min-age:</strong> never touch a file younger than {@link Sweep#MIN_AGE_FOR_SWEEP}.
+ *       Closes the gap between "writer puts an object in the CAS" and "writer finishes stamping the
+ *       root that references it" — the gap is normally milliseconds, but {@code jk sync} runs
+ *       root-stamping after the parallel fetches resolve.
  * </ul>
  *
- * <p>Both guards are unconditional (not configurable). Dropping either
- * trades reproducibility for slightly more aggressive collection, and
- * the GC isn't the bottleneck anyone is asking us to optimise.
+ * <p>Both guards are unconditional (not configurable). Dropping either trades reproducibility for
+ * slightly more aggressive collection, and the GC isn't the bottleneck anyone is asking us to
+ * optimise.
  */
 public final class CasSweep {
 
@@ -43,9 +38,8 @@ public final class CasSweep {
     public record Report(int deleted, long freedBytes, int kept) {}
 
     /**
-     * Walk the CAS and delete objects not present in {@code liveRefs}
-     * (subject to the age guards above). {@code dryRun = true} reports
-     * what would be deleted without touching the filesystem.
+     * Walk the CAS and delete objects not present in {@code liveRefs} (subject to the age guards
+     * above). {@code dryRun = true} reports what would be deleted without touching the filesystem.
      */
     public static Report sweep(Cas cas, Set<String> liveRefs, boolean dryRun) throws IOException {
         long sweepStartMillis = System.currentTimeMillis();

@@ -11,9 +11,8 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * The {@code features} block of a {@code jk.toml}: named feature
- * definitions plus the {@code default} list applied when no
- * {@code --features} flag is given.
+ * The {@code features} block of a {@code jk.toml}: named feature definitions plus the {@code
+ * default} list applied when no {@code --features} flag is given.
  */
 public record Features(Map<String, Feature> byName, List<String> defaults) {
 
@@ -33,9 +32,9 @@ public record Features(Map<String, Feature> byName, List<String> defaults) {
     }
 
     /**
-     * Expand a requested set of feature names into the full transitive
-     * activation set. {@code withDefaults} flips on the {@code default}
-     * list. Unknown feature names → {@link IllegalArgumentException}.
+     * Expand a requested set of feature names into the full transitive activation set. {@code
+     * withDefaults} flips on the {@code default} list. Unknown feature names → {@link
+     * IllegalArgumentException}.
      */
     public Set<String> activate(Set<String> requested, boolean withDefaults) {
         Objects.requireNonNull(requested, "requested");
@@ -58,13 +57,12 @@ public record Features(Map<String, Feature> byName, List<String> defaults) {
     }
 
     /**
-     * The dependency <em>names</em> (the {@code [dependencies.*]} short-name
-     * keys) requested by an activated feature set — the union of each feature's
-     * {@code deps}, in activation order. The resolver maps these to the declared
-     * {@code optional = true} dependencies and pulls them into the graph (see
-     * {@code LockOrchestrator}); a name that isn't a declared optional dep is an
-     * error there. Features carry names, not coords, so they inherit the full
-     * dependency grammar (git / path / workspace / catalog / selectors) for free.
+     * The dependency <em>names</em> (the {@code [dependencies.*]} short-name keys) requested by an
+     * activated feature set — the union of each feature's {@code deps}, in activation order. The
+     * resolver maps these to the declared {@code optional = true} dependencies and pulls them into
+     * the graph (see {@code LockOrchestrator}); a name that isn't a declared optional dep is an error
+     * there. Features carry names, not coords, so they inherit the full dependency grammar (git /
+     * path / workspace / catalog / selectors) for free.
      */
     public List<String> requestedDepNames(Set<String> activated) {
         List<String> names = new ArrayList<>();

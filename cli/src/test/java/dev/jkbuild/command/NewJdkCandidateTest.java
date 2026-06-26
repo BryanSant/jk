@@ -200,9 +200,8 @@ class NewJdkCandidateTest {
     }
 
     /**
-     * Builds Options with a side-channel vendor map so {@link Fixture#build}
-     * can hand the correct {@link JdkVendor} back to {@link NewJdkCandidate}
-     * without writing real release files on disk.
+     * Builds Options with a side-channel vendor map so {@link Fixture#build} can hand the correct
+     * {@link JdkVendor} back to {@link NewJdkCandidate} without writing real release files on disk.
      */
     private static final class Fixture {
         private final Map<NewJdkOptions.Option, JdkVendor> vendors = new HashMap<>();

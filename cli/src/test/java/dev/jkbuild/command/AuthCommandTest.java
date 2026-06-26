@@ -18,10 +18,10 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
- * Exercises the {@code jk auth} command wiring. Uses Gitea on a made-up host
- * for the round-trip cases: it has no native token CLI to shell out to and
- * no env var likely to be set in CI, so the only token source is jk's own
- * store — which the hidden {@code --credentials-dir} points at a temp dir.
+ * Exercises the {@code jk auth} command wiring. Uses Gitea on a made-up host for the round-trip
+ * cases: it has no native token CLI to shell out to and no env var likely to be set in CI, so the
+ * only token source is jk's own store — which the hidden {@code --credentials-dir} points at a temp
+ * dir.
  */
 class AuthCommandTest {
 

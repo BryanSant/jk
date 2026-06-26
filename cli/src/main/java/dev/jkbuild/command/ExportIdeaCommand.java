@@ -7,9 +7,9 @@ import dev.jkbuild.model.command.Opt;
 import java.util.List;
 
 /**
- * {@code jk export idea} — generate IntelliJ IDEA project files. Shares
- * {@code jk idea}'s behavior exactly; provided under {@code export} so the
- * three target systems (gradle / maven / idea) live together.
+ * {@code jk export idea} — generate IntelliJ IDEA project files. Shares {@code jk idea}'s behavior
+ * exactly; provided under {@code export} so the three target systems (gradle / maven / idea) live
+ * together.
  */
 public final class ExportIdeaCommand implements CliCommand {
 

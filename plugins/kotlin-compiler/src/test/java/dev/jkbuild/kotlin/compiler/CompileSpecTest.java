@@ -13,9 +13,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
- * Pure parsing + argument-building behaviour of the worker — no Build Tools
- * API runtime required (those paths are exercised end-to-end once jk's
- * launcher + resolver land).
+ * Pure parsing + argument-building behaviour of the worker — no Build Tools API runtime required
+ * (those paths are exercised end-to-end once jk's launcher + resolver land).
  */
 class CompileSpecTest {
 

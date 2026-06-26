@@ -5,16 +5,16 @@ import java.net.URI;
 import java.util.Optional;
 
 /**
- * Resolves HTTP git credentials from forge auth tokens (PRD §11.4).
- * Returns {@code {username, password}} pairs suitable for passing to a
- * git operation; the JGit wrapping happens in the {@code jk-git-runner}
- * worker subprocess.
+ * Resolves HTTP git credentials from forge auth tokens (PRD §11.4). Returns {@code {username,
+ * password}} pairs suitable for passing to a git operation; the JGit wrapping happens in the {@code
+ * jk-git-runner} worker subprocess.
  *
  * <p>Per-forge HTTP Basic shape:
+ *
  * <ul>
- *   <li>GitHub / Gitea-Forgejo — token as username, empty password.</li>
- *   <li>GitLab — username {@code oauth2}, token as password.</li>
- *   <li>Bitbucket — username {@code x-token-auth}, token as password.</li>
+ *   <li>GitHub / Gitea-Forgejo — token as username, empty password.
+ *   <li>GitLab — username {@code oauth2}, token as password.
+ *   <li>Bitbucket — username {@code x-token-auth}, token as password.
  * </ul>
  */
 public final class ForgeGitCredentials {
@@ -30,8 +30,8 @@ public final class ForgeGitCredentials {
     }
 
     /**
-     * Resolve {@code {username, password}} for a remote, or {@code null} when
-     * auth isn't applicable (non-HTTP, unknown host, or no stored token).
+     * Resolve {@code {username, password}} for a remote, or {@code null} when auth isn't applicable
+     * (non-HTTP, unknown host, or no stored token).
      */
     public String[] resolveCredentials(String remoteUrl) {
         return credentials(remoteUrl, forgeAuth).orElse(null);

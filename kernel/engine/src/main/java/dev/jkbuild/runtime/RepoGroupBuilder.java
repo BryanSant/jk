@@ -18,13 +18,12 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Builds a {@link RepoGroup} from a {@link JkBuild}'s declared repositories,
- * with command-line overrides for {@code --repo-url} (used in tests). If
- * neither the project nor the override specifies a repo, default to Maven
- * Central.
+ * Builds a {@link RepoGroup} from a {@link JkBuild}'s declared repositories, with command-line
+ * overrides for {@code --repo-url} (used in tests). If neither the project nor the override
+ * specifies a repo, default to Maven Central.
  *
- * <p>One {@link Http} client and one {@link Cas} are shared across the
- * resulting {@link MavenRepo}s — they all back into the same cache.
+ * <p>One {@link Http} client and one {@link Cas} are shared across the resulting {@link MavenRepo}s
+ * — they all back into the same cache.
  */
 public final class RepoGroupBuilder {
 

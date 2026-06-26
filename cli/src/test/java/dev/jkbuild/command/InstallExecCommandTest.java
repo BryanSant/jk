@@ -212,9 +212,8 @@ class InstallExecCommandTest {
     }
 
     /**
-     * Compile a tiny "main returns 0" class on the fly and wrap it in a jar
-     * with the right MANIFEST.MF Main-Class. Used by the exec tests so
-     * the spawned JVM has something real to run.
+     * Compile a tiny "main returns 0" class on the fly and wrap it in a jar with the right
+     * MANIFEST.MF Main-Class. Used by the exec tests so the spawned JVM has something real to run.
      */
     private static Path buildRealRunnableJar(Path tempDir, String className) throws Exception {
         Path src = tempDir.resolve(className + ".java");
@@ -239,7 +238,17 @@ class InstallExecCommandTest {
     }
 
     private static String mavenPath(String group, String artifact, String version, String ext) {
-        return "/" + group.replace('.', '/') + "/" + artifact + "/" + version + "/" + artifact + "-" + version + "."
+        return "/"
+                + group.replace('.', '/')
+                + "/"
+                + artifact
+                + "/"
+                + version
+                + "/"
+                + artifact
+                + "-"
+                + version
+                + "."
                 + ext;
     }
 

@@ -2,11 +2,10 @@
 package dev.jkbuild.forge;
 
 /**
- * Where a resolved token came from. Callers branch on this — notably, a
- * {@code 401} should only clear jk's stored credential when the token was
- * read from {@link #STORE}; a rejected {@link #NATIVE_CLI} / env token is
- * the user's to fix, so we surface that instead of silently deleting our own
- * (unrelated) state.
+ * Where a resolved token came from. Callers branch on this — notably, a {@code 401} should only
+ * clear jk's stored credential when the token was read from {@link #STORE}; a rejected {@link
+ * #NATIVE_CLI} / env token is the user's to fix, so we surface that instead of silently deleting
+ * our own (unrelated) state.
  */
 public enum TokenSource {
     /** jk's own {@code JK_<KIND>_TOKEN} override. */

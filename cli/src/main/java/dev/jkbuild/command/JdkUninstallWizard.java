@@ -21,19 +21,18 @@ import org.jline.utils.AttributedStringBuilder;
 /**
  * TUI for {@code jk jdk uninstall} when no argument is supplied.
  *
- * <p>One vertical checkbox step over every installed JDK. Each row renders
- * as:
+ * <p>One vertical checkbox step over every installed JDK. Each row renders as:
+ *
  * <pre>
  *   {source}/{identifier} - {Vendor} {Product}
  * </pre>
- * with {@code source} in bold-yellow, {@code /identifier} in bold-white,
- * and the trailing vendor metadata in dark gray. The currently-installed
- * default JDK gets a {@code (default)} hint so the user sees what they're
- * about to remove.
  *
- * <p>Returns the {@link JdkHit}s the user checked. The caller does the
- * confirmation prompt + per-item deletion + default reconciliation —
- * keeping the wizard's responsibility narrow.
+ * with {@code source} in bold-yellow, {@code /identifier} in bold-white, and the trailing vendor
+ * metadata in dark gray. The currently-installed default JDK gets a {@code (default)} hint so the
+ * user sees what they're about to remove.
+ *
+ * <p>Returns the {@link JdkHit}s the user checked. The caller does the confirmation prompt +
+ * per-item deletion + default reconciliation — keeping the wizard's responsibility narrow.
  */
 final class JdkUninstallWizard {
 
@@ -44,8 +43,8 @@ final class JdkUninstallWizard {
     private JdkUninstallWizard() {}
 
     /**
-     * Show the wizard. Empty result means the user cancelled (Esc); a result
-     * with an empty list means they committed without checking anything.
+     * Show the wizard. Empty result means the user cancelled (Esc); a result with an empty list means
+     * they committed without checking anything.
      */
     static Optional<List<JdkHit>> run(List<JdkHit> installed, Optional<String> currentDefault, Terminal terminal) {
         Map<String, JdkHit> byId = new LinkedHashMap<>();
@@ -77,14 +76,13 @@ final class JdkUninstallWizard {
     }
 
     /**
-     * Render-only: {@code source/identifier - Vendor Product} as a mixed-style
-     * {@link AttributedString}.
+     * Render-only: {@code source/identifier - Vendor Product} as a mixed-style {@link
+     * AttributedString}.
      *
-     * <p>When {@code focused} is {@code true}: source bold-yellow,
-     * identifier bold-white. When {@code false}: same colors with the bold
-     * dropped, so only the row the user's cursor is sitting on stands out.
-     * The trailing vendor metadata is always dark-gray; vendor block
-     * omitted when unknown.
+     * <p>When {@code focused} is {@code true}: source bold-yellow, identifier bold-white. When {@code
+     * false}: same colors with the bold dropped, so only the row the user's cursor is sitting on
+     * stands out. The trailing vendor metadata is always dark-gray; vendor block omitted when
+     * unknown.
      */
     static AttributedString richLabel(JdkHit hit, String identifier, boolean focused) {
         var sourceStyle =

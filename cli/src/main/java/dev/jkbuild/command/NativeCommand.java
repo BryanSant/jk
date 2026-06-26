@@ -28,17 +28,16 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * {@code jk native} — build a GraalVM-compiled native artifact for the project,
- * from source. Runs the full {@linkplain BuildPipeline build pipeline}
- * (compile → test → package) and then composes the native-image tail onto the
- * <em>same</em> goal — an executable when a main class resolves, else a shared
- * library ({@code --shared}).
+ * {@code jk native} — build a GraalVM-compiled native artifact for the project, from source. Runs
+ * the full {@linkplain BuildPipeline build pipeline} (compile → test → package) and then composes
+ * the native-image tail onto the <em>same</em> goal — an executable when a main class resolves,
+ * else a shared library ({@code --shared}).
  *
- * <p>Native builds are opt-in: only modules with {@code native = true} are
- * compiled to a native artifact. Other modules are still compiled and packaged
- * (so eligible modules can depend on them) but produce no native output. The
- * GraalVM that owns {@code native-image} is chosen by {@link dev.jkbuild.cli.GraalResolver}
- * (honoring {@code project.graal}), resolved up front before the progress UI.
+ * <p>Native builds are opt-in: only modules with {@code native = true} are compiled to a native
+ * artifact. Other modules are still compiled and packaged (so eligible modules can depend on them)
+ * but produce no native output. The GraalVM that owns {@code native-image} is chosen by {@link
+ * dev.jkbuild.cli.GraalResolver} (honoring {@code project.graal}), resolved up front before the
+ * progress UI.
  */
 public final class NativeCommand implements CliCommand {
 
@@ -115,8 +114,11 @@ public final class NativeCommand implements CliCommand {
             Path wsRoot = rootOpt.get();
             JkBuild rootBuild = JkBuildParser.parse(wsRoot.resolve("jk.toml"));
             if (rootBuild.isWorkspaceRoot()) {
-                System.err.println("jk native: building from workspace root " + wsRoot.getFileName() + " (module: "
-                        + startDir.getFileName() + ")");
+                System.err.println("jk native: building from workspace root "
+                        + wsRoot.getFileName()
+                        + " (module: "
+                        + startDir.getFileName()
+                        + ")");
                 return runWorkspaceNative(wsRoot, rootBuild, cache);
             }
         }
@@ -224,7 +226,10 @@ public final class NativeCommand implements CliCommand {
                 .filter(NativeCommand::isNativeEligible)
                 .count();
         String elapsed = " " + BuildCommand.elapsedSince(buildStart);
-        String summary = built + " module" + (built == 1 ? "" : "s") + " built"
+        String summary = built
+                + " module"
+                + (built == 1 ? "" : "s")
+                + " built"
                 + (nativeCount > 0 ? ", " + nativeCount + " native artifact" + (nativeCount == 1 ? "" : "s") : "");
         view.finishGoalSuccess(
                 Theme.colorize("Native build successful", Theme.active().success()) + ", " + summary + elapsed);
@@ -232,11 +237,10 @@ public final class NativeCommand implements CliCommand {
     }
 
     /**
-     * Construct (but do not run) one module's goal: core phases plus the
-     * native-image tail when the module is native-eligible. Split out of the run
-     * step so the workspace path can build every module's goal up front and sum
-     * {@link Goal#estimatedTotalWeight()} — including the native phase's weight —
-     * to calibrate the shared progress bar before any module runs.
+     * Construct (but do not run) one module's goal: core phases plus the native-image tail when the
+     * module is native-eligible. Split out of the run step so the workspace path can build every
+     * module's goal up front and sum {@link Goal#estimatedTotalWeight()} — including the native
+     * phase's weight — to calibrate the shared progress bar before any module runs.
      */
     private PreparedNativeModule prepareNativeModule(Path moduleDir, JkBuild module, Path cache, Path graalHome) {
         boolean eligible = isNativeEligible(module);
@@ -272,10 +276,9 @@ public final class NativeCommand implements CliCommand {
     }
 
     /**
-     * Run an already-built module goal and map its result to an exit code. When
-     * {@code agg} is non-null the module feeds the one shared calibrated bar,
-     * scaling its progress into its reserved slice; otherwise it renders on its
-     * own (the verbose/JSON per-module path).
+     * Run an already-built module goal and map its result to an exit code. When {@code agg} is
+     * non-null the module feeds the one shared calibrated bar, scaling its progress into its reserved
+     * slice; otherwise it renders on its own (the verbose/JSON per-module path).
      */
     private int runPreparedNative(PreparedNativeModule pm, dev.jkbuild.cli.run.AggregateContext agg) {
         GoalResult result;
@@ -294,9 +297,8 @@ public final class NativeCommand implements CliCommand {
     }
 
     /**
-     * A workspace module's goal, built and ready to run, paired with its pre-scan
-     * bar weight (its slice of the calibrated aggregate total) and whether it
-     * carries the native-image tail.
+     * A workspace module's goal, built and ready to run, paired with its pre-scan bar weight (its
+     * slice of the calibrated aggregate total) and whether it carries the native-image tail.
      */
     private record PreparedNativeModule(
             Path dir, String target, Path cache, Goal goal, long barWeight, boolean eligible) {}
@@ -309,7 +311,8 @@ public final class NativeCommand implements CliCommand {
         JkBuild build = JkBuildParser.parse(buildFile);
         String graalSpec;
         if (build.project().nativeMode() != JkBuild.NativeMode.ALWAYS) {
-            System.err.println("jk native: " + projectDir.getFileName()
+            System.err.println("jk native: "
+                    + projectDir.getFileName()
                     + " is not native-eligible — set `native = true` under [project] to enable.");
             return 2;
         }
@@ -363,11 +366,10 @@ public final class NativeCommand implements CliCommand {
     // --- helpers -------------------------------------------------------------
 
     /**
-     * A module is native-eligible only when it sets {@code native = true}
-     * (NativeMode.ALWAYS). Absent {@code native} (SUPPORTED) and
-     * {@code native = false} (DISABLED) are both skipped by {@code jk native}.
-     * A main class is <em>not</em> required: with one we build an executable,
-     * without one a shared library.
+     * A module is native-eligible only when it sets {@code native = true} (NativeMode.ALWAYS). Absent
+     * {@code native} (SUPPORTED) and {@code native = false} (DISABLED) are both skipped by {@code jk
+     * native}. A main class is <em>not</em> required: with one we build an executable, without one a
+     * shared library.
      */
     static boolean isNativeEligible(JkBuild build) {
         return build.project().nativeMode() == JkBuild.NativeMode.ALWAYS;

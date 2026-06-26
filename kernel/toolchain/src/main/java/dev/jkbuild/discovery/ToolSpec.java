@@ -4,13 +4,13 @@ package dev.jkbuild.discovery;
 import java.util.Objects;
 
 /**
- * What we're looking for. {@code kind} matches SDKMAN candidate slugs
- * ({@code java}, {@code kotlin}, {@code maven}, {@code gradle}) so the
- * probes can map directly to {@code ~/.sdkman/candidates/<kind>/}.
+ * What we're looking for. {@code kind} matches SDKMAN candidate slugs ({@code java}, {@code
+ * kotlin}, {@code maven}, {@code gradle}) so the probes can map directly to {@code
+ * ~/.sdkman/candidates/<kind>/}.
  *
- * <p>{@code distribution} only applies to JDKs — the SDKMAN-style suffix
- * ({@code tem}, {@code graalce}, {@code zulu}, …). Nullable for build
- * tools (Maven, Gradle, Kotlin) which have a single distribution.
+ * <p>{@code distribution} only applies to JDKs — the SDKMAN-style suffix ({@code tem}, {@code
+ * graalce}, {@code zulu}, …). Nullable for build tools (Maven, Gradle, Kotlin) which have a single
+ * distribution.
  */
 public record ToolSpec(String kind, String version, String distribution) {
 

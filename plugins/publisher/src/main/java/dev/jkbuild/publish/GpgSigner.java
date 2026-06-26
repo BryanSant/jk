@@ -25,14 +25,12 @@ import org.bouncycastle.openpgp.operator.bc.BcPGPDigestCalculatorProvider;
 import org.bouncycastle.openpgp.operator.jcajce.JcaKeyFingerprintCalculator;
 
 /**
- * Detached ASCII-armored GPG signatures over artifact bytes, used by
- * {@link MavenPublisher} to emit the {@code .asc} files every Maven
- * Central upload requires (PRD §21.2, §23.2).
+ * Detached ASCII-armored GPG signatures over artifact bytes, used by {@link MavenPublisher} to emit
+ * the {@code .asc} files every Maven Central upload requires (PRD §21.2, §23.2).
  *
- * <p>Implementation is pure-Java via BouncyCastle (impl-plan §4) — no
- * dependency on a system {@code gpg} binary. The signer is built from a
- * secret-key file (ASCII-armored or binary) and a passphrase; the first
- * signing-capable key in the file wins.
+ * <p>Implementation is pure-Java via BouncyCastle (impl-plan §4) — no dependency on a system {@code
+ * gpg} binary. The signer is built from a secret-key file (ASCII-armored or binary) and a
+ * passphrase; the first signing-capable key in the file wins.
  */
 public final class GpgSigner {
 
@@ -69,16 +67,16 @@ public final class GpgSigner {
     }
 
     /**
-     * For programmatic use (e.g. tests): wrap an already-extracted
-     * {@link PGPPrivateKey} together with its matching {@link PGPPublicKey}.
+     * For programmatic use (e.g. tests): wrap an already-extracted {@link PGPPrivateKey} together
+     * with its matching {@link PGPPublicKey}.
      */
     public static GpgSigner of(PGPPrivateKey privateKey, PGPPublicKey publicKey) {
         return new GpgSigner(privateKey, publicKey);
     }
 
     /**
-     * Produce a detached, ASCII-armored signature over {@code data}. The
-     * returned bytes are what gets uploaded as the {@code .asc} file.
+     * Produce a detached, ASCII-armored signature over {@code data}. The returned bytes are what gets
+     * uploaded as the {@code .asc} file.
      */
     public byte[] signArmored(byte[] data) throws IOException {
         try {

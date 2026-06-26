@@ -16,8 +16,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
- * Exercises {@link GitFetcher#resolveRef} against a real local git repo built
- * with jgit — fully offline (clone over a {@code file://} URL).
+ * Exercises {@link GitFetcher#resolveRef} against a real local git repo built with jgit — fully
+ * offline (clone over a {@code file://} URL).
  */
 class GitFetcherResolveRefTest {
 

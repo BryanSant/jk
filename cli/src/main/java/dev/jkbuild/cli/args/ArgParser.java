@@ -10,22 +10,22 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Recursive-descent parser of an argument vector against a {@link Command}'s
- * declared {@link Opt}s and {@link Param}s — jk's replacement for picocli's
- * reflective parsing. Supports the surface jk's commands actually use:
+ * Recursive-descent parser of an argument vector against a {@link Command}'s declared {@link Opt}s
+ * and {@link Param}s — jk's replacement for picocli's reflective parsing. Supports the surface jk's
+ * commands actually use:
  *
  * <ul>
- *   <li>{@code --name value}, {@code --name=value}, and boolean {@code --flag}</li>
- *   <li>short options {@code -n value}, {@code -nvalue}, and bundled boolean shorts {@code -qv}</li>
- *   <li>negatable flags ({@code --no-name})</li>
- *   <li>repeatable options and comma-{@code split} values (→ multiple values)</li>
- *   <li>optional-argument options (a {@code fallbackValue} when present without a value)</li>
- *   <li>{@code --} to end option parsing; everything after is positional</li>
- *   <li>positional arity validation ({@code 0..1}, {@code 1}, {@code 1..*}, {@code 0..*})</li>
+ *   <li>{@code --name value}, {@code --name=value}, and boolean {@code --flag}
+ *   <li>short options {@code -n value}, {@code -nvalue}, and bundled boolean shorts {@code -qv}
+ *   <li>negatable flags ({@code --no-name})
+ *   <li>repeatable options and comma-{@code split} values (→ multiple values)
+ *   <li>optional-argument options (a {@code fallbackValue} when present without a value)
+ *   <li>{@code --} to end option parsing; everything after is positional
+ *   <li>positional arity validation ({@code 0..1}, {@code 1}, {@code 1..*}, {@code 0..*})
  * </ul>
  *
- * Subcommand dispatch happens before parsing (the caller selects the leaf
- * command and hands us only its arguments).
+ * Subcommand dispatch happens before parsing (the caller selects the leaf command and hands us only
+ * its arguments).
  */
 public final class ArgParser {
 
@@ -36,10 +36,9 @@ public final class ArgParser {
     }
 
     /**
-     * @param passthroughUnknown when true, unrecognized options are treated as
-     *     positional arguments rather than errors — needed for passthrough commands
-     *     like {@code jk mvn} / {@code jk gradle} that forward unknown flags to
-     *     a child process.
+     * @param passthroughUnknown when true, unrecognized options are treated as positional arguments
+     *     rather than errors — needed for passthrough commands like {@code jk mvn} / {@code jk
+     *     gradle} that forward unknown flags to a child process.
      */
     public static Invocation parse(Command command, List<String> args, boolean passthroughUnknown)
             throws ParseException {

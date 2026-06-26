@@ -7,27 +7,25 @@ import java.util.Locale;
 import java.util.Optional;
 
 /**
- * A git forge jk knows how to authenticate against. The enum captures the
- * provider <i>software</i> (the protocol/endpoint shape); the concrete
- * <i>host</i> is a separate axis ({@code github.com} vs a self-hosted GHE,
- * {@code gitlab.com} vs a private GitLab, any number of Gitea/Forgejo
+ * A git forge jk knows how to authenticate against. The enum captures the provider <i>software</i>
+ * (the protocol/endpoint shape); the concrete <i>host</i> is a separate axis ({@code github.com} vs
+ * a self-hosted GHE, {@code gitlab.com} vs a private GitLab, any number of Gitea/Forgejo
  * instances). See docs/forge-auth.md.
  *
  * <p>Each kind declares:
+ *
  * <ul>
- *   <li>how to reach its OAuth device-flow endpoints for a given host
- *       (or that it has none — {@link #supportsDeviceFlow()});</li>
- *   <li>the native CLI we can piggyback on for a token, if one exists
- *       ({@code gh}, {@code glab});</li>
- *   <li>the native environment variables that ecosystem already uses
- *       ({@code GH_TOKEN}, {@code GITLAB_TOKEN}, …);</li>
- *   <li>jk's own override variable, {@code JK_<KIND>_TOKEN}.</li>
+ *   <li>how to reach its OAuth device-flow endpoints for a given host (or that it has none — {@link
+ *       #supportsDeviceFlow()});
+ *   <li>the native CLI we can piggyback on for a token, if one exists ({@code gh}, {@code glab});
+ *   <li>the native environment variables that ecosystem already uses ({@code GH_TOKEN}, {@code
+ *       GITLAB_TOKEN}, …);
+ *   <li>jk's own override variable, {@code JK_<KIND>_TOKEN}.
  * </ul>
  *
- * <p>OAuth client IDs are <i>not</i> baked in here — they are a per-app
- * registration detail resolved at login time (a public client_id, no
- * secret). The placeholders below are wired through {@code DeviceFlow}'s
- * caller, not consumed from the enum.
+ * <p>OAuth client IDs are <i>not</i> baked in here — they are a per-app registration detail
+ * resolved at login time (a public client_id, no secret). The placeholders below are wired through
+ * {@code DeviceFlow}'s caller, not consumed from the enum.
  */
 public enum ForgeKind {
     GITHUB("github", "GitHub", "github.com", true, List.of("gh", "auth", "token"), new String[] {
@@ -105,15 +103,14 @@ public enum ForgeKind {
     }
 
     /**
-     * jk's built-in public OAuth-app client id for this provider's <i>default
-     * host</i> (the app jk registered on the public instance). Empty for
-     * providers/instances jk hasn't registered an app for — those must supply
-     * one via {@code JK_<PROVIDER>_OAUTH_CLIENT_ID} or {@code [forge.*]}
+     * jk's built-in public OAuth-app client id for this provider's <i>default host</i> (the app jk
+     * registered on the public instance). Empty for providers/instances jk hasn't registered an app
+     * for — those must supply one via {@code JK_<PROVIDER>_OAUTH_CLIENT_ID} or {@code [forge.*]}
      * config. Not a secret; safe to ship.
      *
-     * <p>Deliberately scoped to the default host only: github.com's client id
-     * is meaningless to a self-hosted GitHub Enterprise instance, so callers
-     * must not fall back to it for non-default hosts.
+     * <p>Deliberately scoped to the default host only: github.com's client id is meaningless to a
+     * self-hosted GitHub Enterprise instance, so callers must not fall back to it for non-default
+     * hosts.
      */
     public Optional<String> defaultOAuthClientId() {
         return switch (this) {

@@ -4,12 +4,10 @@ package dev.jkbuild.model.command;
 import java.util.List;
 
 /**
- * A command's parseable surface, declared as data (no annotations, no
- * reflection): a name, a one-line description, and the options + positional
- * parameters it accepts. This is the contract jk's own arg parser and help
- * renderer read — and that a future GUI or IDE bridge can render without any
- * CLI framework. See {@link CliCommand} for the executable, CLI-presentable
- * extension.
+ * A command's parseable surface, declared as data (no annotations, no reflection): a name, a
+ * one-line description, and the options + positional parameters it accepts. This is the contract
+ * jk's own arg parser and help renderer read — and that a future GUI or IDE bridge can render
+ * without any CLI framework. See {@link CliCommand} for the executable, CLI-presentable extension.
  */
 public interface Command {
 

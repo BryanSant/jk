@@ -8,14 +8,13 @@ import java.util.Map;
 /**
  * Environment plumbing for {@code jk mvn} / {@code jk gradle} passthroughs.
  *
- * <p>Scrubs the env vars that would otherwise silently change Maven/Gradle
- * behavior under the user's nose (PRD §23.5):
- * {@code JAVA_TOOL_OPTIONS}, {@code _JAVA_OPTIONS}, {@code KOTLIN_HOME},
- * {@code MAVEN_OPTS}, {@code GRADLE_OPTS}. Inherits the rest — passthrough
- * isn't a hermetic build, so {@code PATH} / {@code HOME} / shell vars stay.
+ * <p>Scrubs the env vars that would otherwise silently change Maven/Gradle behavior under the
+ * user's nose (PRD §23.5): {@code JAVA_TOOL_OPTIONS}, {@code _JAVA_OPTIONS}, {@code KOTLIN_HOME},
+ * {@code MAVEN_OPTS}, {@code GRADLE_OPTS}. Inherits the rest — passthrough isn't a hermetic build,
+ * so {@code PATH} / {@code HOME} / shell vars stay.
  *
- * <p>When a project JDK is provided, sets {@code JAVA_HOME} and prepends
- * {@code <jdk>/bin} to {@code PATH} so the child finds it first.
+ * <p>When a project JDK is provided, sets {@code JAVA_HOME} and prepends {@code <jdk>/bin} to
+ * {@code PATH} so the child finds it first.
  */
 public final class PassthroughEnv {
 

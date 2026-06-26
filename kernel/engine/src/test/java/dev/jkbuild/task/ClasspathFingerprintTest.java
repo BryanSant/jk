@@ -4,8 +4,12 @@ package dev.jkbuild.task;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -61,12 +65,12 @@ class ClasspathFingerprintTest {
     }
 
     private static Path writeJar(Path jar, String[][] entries, long time) throws IOException {
-        try (var zos = new java.util.zip.ZipOutputStream(Files.newOutputStream(jar))) {
+        try (var zos = new ZipOutputStream(Files.newOutputStream(jar))) {
             for (String[] e : entries) {
-                var ze = new java.util.zip.ZipEntry(e[0]);
+                var ze = new ZipEntry(e[0]);
                 ze.setTime(time);
                 zos.putNextEntry(ze);
-                zos.write(e[1].getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                zos.write(e[1].getBytes(StandardCharsets.UTF_8));
                 zos.closeEntry();
             }
         }
@@ -113,7 +117,6 @@ class ClasspathFingerprintTest {
     void of_is_order_independent(@TempDir Path dir) throws IOException {
         Path a = write(dir.resolve("a.jar"), "A");
         Path b = write(dir.resolve("b.jar"), "B");
-        assertThat(ClasspathFingerprint.of(java.util.List.of(a, b)))
-                .isEqualTo(ClasspathFingerprint.of(java.util.List.of(b, a)));
+        assertThat(ClasspathFingerprint.of(List.of(a, b))).isEqualTo(ClasspathFingerprint.of(List.of(b, a)));
     }
 }

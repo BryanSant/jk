@@ -7,11 +7,10 @@ import java.util.Objects;
 import java.util.function.IntSupplier;
 
 /**
- * One unit of work inside a {@link Goal}. Phases declare their
- * dependencies by name and run when their prerequisites finish.
+ * One unit of work inside a {@link Goal}. Phases declare their dependencies by name and run when
+ * their prerequisites finish.
  *
- * <p>Phases are immutable after construction. Use {@link Phase#builder}
- * to assemble one.
+ * <p>Phases are immutable after construction. Use {@link Phase#builder} to assemble one.
  */
 public final class Phase {
 
@@ -46,6 +45,7 @@ public final class Phase {
     public String name() {
         return name;
     }
+
     /** Display label shown in the TUI progress bar. Defaults to {@link #name()}. */
     public String label() {
         return label;
@@ -60,9 +60,9 @@ public final class Phase {
     }
 
     /**
-     * Internal unit count — how granularly this phase ticks (sources, artifacts,
-     * tests). Drives the within-phase fraction, <em>not</em> the share of the bar
-     * the phase occupies; see {@link #estimateWeight}.
+     * Internal unit count — how granularly this phase ticks (sources, artifacts, tests). Drives the
+     * within-phase fraction, <em>not</em> the share of the bar the phase occupies; see {@link
+     * #estimateWeight}.
      */
     public int estimateScope() {
         return Math.max(0, scope.getAsInt());
@@ -74,10 +74,9 @@ public final class Phase {
     }
 
     /**
-     * The phase's share of the progress bar — a time-proportional cost, not a
-     * unit count. The goal's denominator sums these, and a phase's own
-     * 0→100% (its {@link #estimateScope} internal progress) is scaled into this
-     * many ticks. Defaults to {@link #estimateScope} when no weight was set, so
+     * The phase's share of the progress bar — a time-proportional cost, not a unit count. The goal's
+     * denominator sums these, and a phase's own 0→100% (its {@link #estimateScope} internal progress)
+     * is scaled into this many ticks. Defaults to {@link #estimateScope} when no weight was set, so
      * goals that don't opt in keep counting units exactly as before.
      */
     public int estimateWeight() {
@@ -85,12 +84,11 @@ public final class Phase {
     }
 
     /**
-     * True when the scheduler should ease this phase's bar slice forward over
-     * elapsed time while it runs, rather than leaving it flat until the body
-     * reports progress. Use only for <em>opaque</em> phases (a single black-box
-     * call like javac) — phases that already report fine-grained progress
-     * (per-artifact, per-test, per-stage) must leave this off, or a too-short
-     * time estimate would race the bar ahead and then stall.
+     * True when the scheduler should ease this phase's bar slice forward over elapsed time while it
+     * runs, rather than leaving it flat until the body reports progress. Use only for <em>opaque</em>
+     * phases (a single black-box call like javac) — phases that already report fine-grained progress
+     * (per-artifact, per-test, per-stage) must leave this off, or a too-short time estimate would
+     * race the bar ahead and then stall.
      */
     public boolean interpolated() {
         return interpolated;
@@ -147,9 +145,8 @@ public final class Phase {
         }
 
         /**
-         * Cheap up-front size estimate. Called once before the goal
-         * starts. Use {@link PhaseContext#updateScope} during execution
-         * if it turns out the estimate was low.
+         * Cheap up-front size estimate. Called once before the goal starts. Use {@link
+         * PhaseContext#updateScope} during execution if it turns out the estimate was low.
          */
         public Builder scope(IntSupplier supplier) {
             this.scope = supplier;
@@ -163,12 +160,11 @@ public final class Phase {
         }
 
         /**
-         * Set the phase's share of the progress bar — a time-proportional cost,
-         * independent of its {@link #scope} unit count. Use this to keep a
-         * file-count- or test-count-scoped phase from dominating the bar: e.g. a
-         * compile over 300 sources and a 5-test run can each be weighted by their
-         * expected duration so the bar paces by time, not by raw counts. When
-         * unset, the weight tracks the scope (legacy behaviour).
+         * Set the phase's share of the progress bar — a time-proportional cost, independent of its
+         * {@link #scope} unit count. Use this to keep a file-count- or test-count-scoped phase from
+         * dominating the bar: e.g. a compile over 300 sources and a 5-test run can each be weighted by
+         * their expected duration so the bar paces by time, not by raw counts. When unset, the weight
+         * tracks the scope (legacy behaviour).
          */
         public Builder weight(IntSupplier supplier) {
             this.weight = supplier;
@@ -182,8 +178,8 @@ public final class Phase {
         }
 
         /**
-         * Ease this phase's bar slice forward over elapsed time while it runs.
-         * For opaque phases only — see {@link Phase#interpolated()}.
+         * Ease this phase's bar slice forward over elapsed time while it runs. For opaque phases only —
+         * see {@link Phase#interpolated()}.
          */
         public Builder interpolated() {
             this.interpolated = true;

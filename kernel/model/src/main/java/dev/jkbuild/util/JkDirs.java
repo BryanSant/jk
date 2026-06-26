@@ -6,9 +6,9 @@ import java.util.Objects;
 import java.util.function.Function;
 
 /**
- * Resolves the on-disk directories jk uses for config, cache, state, data,
- * tool launchers, and installed JDKs. Cargo-style flat layout under a
- * single root, identical on Linux, macOS, and Windows:
+ * Resolves the on-disk directories jk uses for config, cache, state, data, tool launchers, and
+ * installed JDKs. Cargo-style flat layout under a single root, identical on Linux, macOS, and
+ * Windows:
  *
  * <pre>
  *   ~/.jk/
@@ -21,23 +21,20 @@ import java.util.function.Function;
  * </pre>
  *
  * <p>Overrides, highest precedence first:
+ *
  * <ul>
- *   <li>Per-directory: {@code JK_CONFIG_FILE}, {@code JK_CACHE_DIR},
- *       {@code JK_STATE_DIR}, {@code JK_DATA_DIR}, {@code JK_BIN_DIR},
- *       {@code JK_JDKS_DIR}. Absolute paths; no jk suffix appended.</li>
- *   <li>Root: {@code JK_HOME} relocates the entire tree. Defaults to
- *       {@code $HOME/.jk}.</li>
+ *   <li>Per-directory: {@code JK_CONFIG_FILE}, {@code JK_CACHE_DIR}, {@code JK_STATE_DIR}, {@code
+ *       JK_DATA_DIR}, {@code JK_BIN_DIR}, {@code JK_JDKS_DIR}. Absolute paths; no jk suffix
+ *       appended.
+ *   <li>Root: {@code JK_HOME} relocates the entire tree. Defaults to {@code $HOME/.jk}.
  * </ul>
  *
- * <p>XDG Base Directory variables are deliberately not consulted —
- * jk owns its tree the way Cargo owns {@code ~/.cargo} and Rustup owns
- * {@code ~/.rustup}. Tool launchers under {@code ~/.jk/bin} should be
- * added to {@code $PATH} explicitly (jk's installer does this on first
- * run).
+ * <p>XDG Base Directory variables are deliberately not consulted — jk owns its tree the way Cargo
+ * owns {@code ~/.cargo} and Rustup owns {@code ~/.rustup}. Tool launchers under {@code ~/.jk/bin}
+ * should be added to {@code $PATH} explicitly (jk's installer does this on first run).
  *
- * <p>This class is configuration, not policy: it doesn't create
- * directories. Callers materialise paths with
- * {@link java.nio.file.Files#createDirectories}.
+ * <p>This class is configuration, not policy: it doesn't create directories. Callers materialise
+ * paths with {@link java.nio.file.Files#createDirectories}.
  */
 public final class JkDirs {
 
@@ -62,8 +59,8 @@ public final class JkDirs {
     }
 
     /**
-     * Back-compat seam for callers that still pass an OS string. The OS is
-     * no longer consulted; the layout is identical on every platform.
+     * Back-compat seam for callers that still pass an OS string. The OS is no longer consulted; the
+     * layout is identical on every platform.
      */
     public static JkDirs of(Function<String, String> env, String userHome, String ignoredOs) {
         return new JkDirs(env, userHome);
@@ -105,10 +102,7 @@ public final class JkDirs {
         return current().jdksDir();
     }
 
-    /**
-     * The root of jk's on-disk tree. {@code JK_HOME} overrides; otherwise
-     * {@code $HOME/.jk}.
-     */
+    /** The root of jk's on-disk tree. {@code JK_HOME} overrides; otherwise {@code $HOME/.jk}. */
     public Path homeDir() {
         String override = nonBlank(env.apply("JK_HOME"));
         if (override != null) return Path.of(override);
@@ -116,8 +110,7 @@ public final class JkDirs {
     }
 
     /**
-     * Single-file user config at {@code ~/.jk/config.toml}.
-     * Overridable via {@code JK_CONFIG_FILE}.
+     * Single-file user config at {@code ~/.jk/config.toml}. Overridable via {@code JK_CONFIG_FILE}.
      */
     public Path userConfigFilePath() {
         String override = nonBlank(env.apply("JK_CONFIG_FILE"));
@@ -134,8 +127,8 @@ public final class JkDirs {
     }
 
     /**
-     * Scratch space for transient, regenerable artifacts (e.g. {@code jk import}
-     * reports). Defaults to {@code ~/.jk/tmp/}; override via {@code JK_TMP_DIR}.
+     * Scratch space for transient, regenerable artifacts (e.g. {@code jk import} reports). Defaults
+     * to {@code ~/.jk/tmp/}; override via {@code JK_TMP_DIR}.
      */
     public Path tmpDir() {
         return resolve("JK_TMP_DIR", "tmp");
@@ -146,9 +139,8 @@ public final class JkDirs {
     }
 
     /**
-     * Where {@code jk tool install} writes launchers. Defaults to
-     * {@code ~/.jk/bin/} (cargo-style). Override via {@code JK_BIN_DIR}.
-     * On a fresh install jk asks the user to add this directory to
+     * Where {@code jk tool install} writes launchers. Defaults to {@code ~/.jk/bin/} (cargo-style).
+     * Override via {@code JK_BIN_DIR}. On a fresh install jk asks the user to add this directory to
      * {@code $PATH}.
      */
     public Path binDirectory() {
@@ -156,30 +148,26 @@ public final class JkDirs {
     }
 
     /**
-     * Where {@code jk install} places an application's jar(s) — the app jar and
-     * its hard-linked runtime dependencies, or a single fat jar. Defaults to
-     * {@code ~/.jk/libexec/}. Override via {@code JK_LIBEXEC_DIR}. Launchers in
-     * {@link #binDirectory()} reference jars here by absolute path.
+     * Where {@code jk install} places an application's jar(s) — the app jar and its hard-linked
+     * runtime dependencies, or a single fat jar. Defaults to {@code ~/.jk/libexec/}. Override via
+     * {@code JK_LIBEXEC_DIR}. Launchers in {@link #binDirectory()} reference jars here by absolute
+     * path.
      */
     public Path libexecDir() {
         return resolve("JK_LIBEXEC_DIR", "libexec");
     }
 
     /**
-     * Where {@code jk jdk install} extracts JDK tarballs. Defaults to
-     * {@code ~/.jk/jdks/} on every platform. Override via
-     * {@code JK_JDKS_DIR}. JDKs installed elsewhere (IntelliJ's
-     * {@code ~/.jdks} or {@code ~/Library/Java/JavaVirtualMachines}, SDKMAN,
-     * mise, system packages) are still discovered by the probe chain;
-     * they're not stored here.
+     * Where {@code jk jdk install} extracts JDK tarballs. Defaults to {@code ~/.jk/jdks/} on every
+     * platform. Override via {@code JK_JDKS_DIR}. JDKs installed elsewhere (IntelliJ's {@code
+     * ~/.jdks} or {@code ~/Library/Java/JavaVirtualMachines}, SDKMAN, mise, system packages) are
+     * still discovered by the probe chain; they're not stored here.
      */
     public Path jdksDir() {
         return resolve("JK_JDKS_DIR", "jdks");
     }
 
-    /**
-     * Per-method env override wins; otherwise {@code $JK_HOME/<segment>}.
-     */
+    /** Per-method env override wins; otherwise {@code $JK_HOME/<segment>}. */
     private Path resolve(String jkEnv, String segment) {
         String override = nonBlank(env.apply(jkEnv));
         if (override != null) return Path.of(override);

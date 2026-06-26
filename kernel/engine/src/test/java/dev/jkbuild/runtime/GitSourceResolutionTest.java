@@ -27,11 +27,10 @@ import org.junit.jupiter.api.io.TempDir;
 
 /**
  * End-to-end (offline) wiring of a git-source dependency through the resolver
- * (docs/git-source-deps.md): a consuming project declares a {@code git} dep on a
- * local tagged library; {@link GitSourceResolution#prepare} materializes it,
- * rewrites it to an exact coordinate pin, and augments the repo group; the real
- * {@link LockOrchestrator} solves it; {@link GitSourceResolution#stamp} records
- * the git provenance on the locked package.
+ * (docs/git-source-deps.md): a consuming project declares a {@code git} dep on a local tagged
+ * library; {@link GitSourceResolution#prepare} materializes it, rewrites it to an exact coordinate
+ * pin, and augments the repo group; the real {@link LockOrchestrator} solves it; {@link
+ * GitSourceResolution#stamp} records the git provenance on the locked package.
  */
 class GitSourceResolutionTest {
 

@@ -4,6 +4,7 @@ package dev.jkbuild.runtime;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.within;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -116,7 +117,7 @@ class PhaseTimingsTest {
     @Test
     void limits_resolve_from_env_over_config_over_default(@TempDir Path dir) throws Exception {
         Path cfg = dir.resolve("config.toml");
-        java.nio.file.Files.writeString(cfg, "[cache]\ntimings-max-size-mb = 50\ntimings-max-age-days = 365\n");
+        Files.writeString(cfg, "[cache]\ntimings-max-size-mb = 50\ntimings-max-age-days = 365\n");
 
         // Defaults when nothing set.
         var def = PhaseTimings.Limits.resolve(dir.resolve("missing.toml"), k -> null);

@@ -14,11 +14,10 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * {@link RepoTransport} over HTTP(S), wrapping the shared {@link Http} client
- * (so it inherits the retry / offline / backoff policy). Renders the
- * {@link RepoCredential} to an {@code Authorization} header via
- * {@link AuthHeaders}. Covers Maven Central, Nexus, Artifactory, WebDAV, and
- * the forge package registries.
+ * {@link RepoTransport} over HTTP(S), wrapping the shared {@link Http} client (so it inherits the
+ * retry / offline / backoff policy). Renders the {@link RepoCredential} to an {@code Authorization}
+ * header via {@link AuthHeaders}. Covers Maven Central, Nexus, Artifactory, WebDAV, and the forge
+ * package registries.
  */
 public final class HttpTransport implements RepoTransport {
 

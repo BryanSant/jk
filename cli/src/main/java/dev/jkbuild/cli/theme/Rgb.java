@@ -9,8 +9,10 @@ public record Rgb(int r, int g, int b) {
         return new Rgb((rgb >> 16) & 0xff, (rgb >> 8) & 0xff, rgb & 0xff);
     }
 
-    /** Scale every channel by {@code factor} (clamped to 0–255) — the
-     *  {@code filter: brightness()} model. {@code <1} darkens, {@code >1} brightens. */
+    /**
+     * Scale every channel by {@code factor} (clamped to 0–255) — the {@code filter: brightness()}
+     * model. {@code <1} darkens, {@code >1} brightens.
+     */
     public Rgb scaled(double factor) {
         return new Rgb(clamp(r * factor), clamp(g * factor), clamp(b * factor));
     }

@@ -4,8 +4,8 @@ package dev.jkbuild.model;
 import java.util.Objects;
 
 /**
- * Maven coordinate: {@code groupId:artifactId:version[:classifier@type]}.
- * Type defaults to {@code jar}; classifier defaults to absent.
+ * Maven coordinate: {@code groupId:artifactId:version[:classifier@type]}. Type defaults to {@code
+ * jar}; classifier defaults to absent.
  */
 public record Coordinate(String group, String artifact, String version, String classifier, String type) {
 
@@ -23,9 +23,7 @@ public record Coordinate(String group, String artifact, String version, String c
         return new Coordinate(group, artifact, version, null, "jar");
     }
 
-    /**
-     * Parse a coordinate spec of the form {@code group:artifact:version[:classifier][@type]}.
-     */
+    /** Parse a coordinate spec of the form {@code group:artifact:version[:classifier][@type]}. */
     public static Coordinate parse(String spec) {
         Objects.requireNonNull(spec, "spec");
         String type = "jar";

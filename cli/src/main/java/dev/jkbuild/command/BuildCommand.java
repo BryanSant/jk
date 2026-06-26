@@ -41,22 +41,21 @@ import java.util.Set;
  * {@code jk build} — smart meta-goal that orchestrates the full pipeline:
  *
  * <ol>
- *   <li>{@code parse-build} — load {@code jk.toml}; if {@code jk.lock} is
- *       absent, run the lock resolver inline (same as {@code jk lock}).</li>
- *   <li>{@code sync-deps} (IO) — ensure all locked artifacts are in the CAS;
- *       virtually a no-op when everything is already cached.</li>
- *   <li>{@code ensure-jdk} (IO, parallel with sync-deps) — install the
- *       pinned JDK when it is not yet on disk.</li>
- *   <li>{@code compile-java} (CPU) — javac, with action-cache + freshness
- *       stamp skip layers.</li>
- *   <li>{@code compile-kotlin} (CPU) — no-op when no {@code .kt} sources.</li>
- *   <li>{@code copy-resources} (CPU) — mirror {@code src/main/resources}.</li>
- *   <li>{@code compile-test} (CPU) — compile {@code src/test/java}.</li>
- *   <li>{@code run-tests} (IO) — fork JUnit Platform runner(s).</li>
- *   <li>{@code package-jar} (CPU) — assemble the project jar.</li>
- *   <li>{@code native-image} (IO, only when {@code native = "always"}) —
- *       GraalVM native-image compilation.</li>
- *   <li>{@code write-stamp} (SYNC) — refresh the freshness stamp.</li>
+ *   <li>{@code parse-build} — load {@code jk.toml}; if {@code jk.lock} is absent, run the lock
+ *       resolver inline (same as {@code jk lock}).
+ *   <li>{@code sync-deps} (IO) — ensure all locked artifacts are in the CAS; virtually a no-op when
+ *       everything is already cached.
+ *   <li>{@code ensure-jdk} (IO, parallel with sync-deps) — install the pinned JDK when it is not
+ *       yet on disk.
+ *   <li>{@code compile-java} (CPU) — javac, with action-cache + freshness stamp skip layers.
+ *   <li>{@code compile-kotlin} (CPU) — no-op when no {@code .kt} sources.
+ *   <li>{@code copy-resources} (CPU) — mirror {@code src/main/resources}.
+ *   <li>{@code compile-test} (CPU) — compile {@code src/test/java}.
+ *   <li>{@code run-tests} (IO) — fork JUnit Platform runner(s).
+ *   <li>{@code package-jar} (CPU) — assemble the project jar.
+ *   <li>{@code native-image} (IO, only when {@code native = "always"}) — GraalVM native-image
+ *       compilation.
+ *   <li>{@code write-stamp} (SYNC) — refresh the freshness stamp.
  * </ol>
  */
 public final class BuildCommand implements CliCommand {
@@ -151,7 +150,9 @@ public final class BuildCommand implements CliCommand {
                 if (!global.outputIsJson()) {
                     System.err.println("jk build: building workspace from "
                             + root.getFileName()
-                            + " (module: " + startDir.getFileName() + ")");
+                            + " (module: "
+                            + startDir.getFileName()
+                            + ")");
                 }
                 return buildWorkspace(root, JkBuildParser.parse(root.resolve("jk.toml")));
             }
@@ -170,10 +171,9 @@ public final class BuildCommand implements CliCommand {
     }
 
     /**
-     * Size worker-JVM concurrency and per-JVM heaps from the host's free memory
-     * before any fork. {@code requestedModules} is the peak number of modules
-     * that could build at once; folded with {@code --workers} and
-     * {@code --parallel-tests} into a desired JVM count, which the memory plan
+     * Size worker-JVM concurrency and per-JVM heaps from the host's free memory before any fork.
+     * {@code requestedModules} is the peak number of modules that could build at once; folded with
+     * {@code --workers} and {@code --parallel-tests} into a desired JVM count, which the memory plan
      * may shrink (down to serial). A no-op when the user pinned heap tuning.
      */
     private void applyMemoryPlan(int requestedModules) {
@@ -213,13 +213,12 @@ public final class BuildCommand implements CliCommand {
     private record UnitOutcome(String coord, boolean success, int exitCode, long millis, List<String> output) {}
 
     /**
-     * Build the whole composite + workspace graph in parallel (Option B): one
-     * {@link BuildGraph}, scheduled by topological level, independent units built
-     * concurrently on {@link JkThreads#io()} (their CPU work shares the bounded cpu
-     * pool, so no oversubscription). Each unit runs buffered — its output is
-     * captured and flushed as one contiguous block on completion, so parallel logs
-     * never interleave. Tests are serialized across units by default
-     * (BuildPipeline's gate); {@code --parallel-tests} lifts that.
+     * Build the whole composite + workspace graph in parallel (Option B): one {@link BuildGraph},
+     * scheduled by topological level, independent units built concurrently on {@link JkThreads#io()}
+     * (their CPU work shares the bounded cpu pool, so no oversubscription). Each unit runs buffered —
+     * its output is captured and flushed as one contiguous block on completion, so parallel logs
+     * never interleave. Tests are serialized across units by default (BuildPipeline's gate); {@code
+     * --parallel-tests} lifts that.
      */
     private int runGraphParallel(Path entryDir, JkBuild entryBuild) throws Exception {
         Path cache = cacheDir != null ? cacheDir : JkDirs.cache();
@@ -283,13 +282,12 @@ public final class BuildCommand implements CliCommand {
     }
 
     /**
-     * Modules that will actually rebuild this run, in dependency order — the same
-     * cascade-aware, content-hash forecast {@code jk explain} shows
-     * ({@link BuildPlanForecast}). The live pre-scan reserves these modules' real
-     * compile/test slice up front (via {@code forceRebuild}), so the bar's total is
-     * correct from the start instead of growing mid-build (which slid it backward).
-     * On any failure, treat every module as dirty — over-reserving only ever makes
-     * the bar jump <em>forward</em> as cached phases collapse, never backward.
+     * Modules that will actually rebuild this run, in dependency order — the same cascade-aware,
+     * content-hash forecast {@code jk explain} shows ({@link BuildPlanForecast}). The live pre-scan
+     * reserves these modules' real compile/test slice up front (via {@code forceRebuild}), so the
+     * bar's total is correct from the start instead of growing mid-build (which slid it backward). On
+     * any failure, treat every module as dirty — over-reserving only ever makes the bar jump
+     * <em>forward</em> as cached phases collapse, never backward.
      */
     private static Set<Path> forecastDirty(BuildGraph.Result graph, Path cache) {
         try {
@@ -343,13 +341,12 @@ public final class BuildCommand implements CliCommand {
     }
 
     /**
-     * Live aggregate scheduler: one {@link CommandManager} (goal mode) shows a
-     * spinner header + a single bar calibrated to the whole graph + a tree of the
-     * modules building <em>right now</em>; the tree grows to the parallelism limit
-     * and shrinks back to 0 as units drain. Each unit's process output is buffered
-     * and flushed (with a ✓/✗ {@code [k/N]} line) above the region when it
-     * completes — so concurrent logs never interleave. On a non-interactive
-     * terminal nothing animates; the same blocks + lines print append-only.
+     * Live aggregate scheduler: one {@link CommandManager} (goal mode) shows a spinner header + a
+     * single bar calibrated to the whole graph + a tree of the modules building <em>right now</em>;
+     * the tree grows to the parallelism limit and shrinks back to 0 as units drain. Each unit's
+     * process output is buffered and flushed (with a ✓/✗ {@code [k/N]} line) above the region when it
+     * completes — so concurrent logs never interleave. On a non-interactive terminal nothing
+     * animates; the same blocks + lines print append-only.
      */
     private int runGraphLive(
             CommandManager view,
@@ -469,12 +466,11 @@ public final class BuildCommand implements CliCommand {
     }
 
     /**
-     * Build one unit feeding the shared live {@code view}; buffer its output. On
-     * completion: when animating, the colored ✓/✗ {@code [k/N]} line joins the
-     * region's completed tail and the unit's process output is appended to
-     * {@code deferredOutput} (flushed below the region once the build settles, so
-     * concurrent logs never interleave with the live view); otherwise (pipes /
-     * {@code --quiet}) the buffered block + line print append-only, atomically.
+     * Build one unit feeding the shared live {@code view}; buffer its output. On completion: when
+     * animating, the colored ✓/✗ {@code [k/N]} line joins the region's completed tail and the unit's
+     * process output is appended to {@code deferredOutput} (flushed below the region once the build
+     * settles, so concurrent logs never interleave with the live view); otherwise (pipes / {@code
+     * --quiet}) the buffered block + line print append-only, atomically.
      */
     private UnitOutcome buildUnitLive(
             BuildGraph.BuildUnit unit,
@@ -570,14 +566,12 @@ public final class BuildCommand implements CliCommand {
     }
 
     /**
-     * A finished unit's scroll-back line: {@code ✓ [01 of 16] group:artifact took 16ms}.
-     * No leading indent (it's complete, not active); the numerator is zero-padded
-     * to the denominator's width; the duration is normalized like every other jk
-     * duration ({@link ConsoleSpec#took}). Colors: green check, bright-black
-     * {@code [ ]} brackets around a plain {@code NN of MM} count, the
-     * {@code group:artifact} plain with a strikethrough to mark it done, and the
-     * bright-black italic {@code took …} suffix. A failed unit keeps the red cross
-     * and {@code — failed}.
+     * A finished unit's scroll-back line: {@code ✓ [01 of 16] group:artifact took 16ms}. No leading
+     * indent (it's complete, not active); the numerator is zero-padded to the denominator's width;
+     * the duration is normalized like every other jk duration ({@link ConsoleSpec#took}). Colors:
+     * green check, bright-black {@code [ ]} brackets around a plain {@code NN of MM} count, the
+     * {@code group:artifact} plain with a strikethrough to mark it done, and the bright-black italic
+     * {@code took …} suffix. A failed unit keeps the red cross and {@code — failed}.
      */
     private static String completionLine(boolean ok, int index, int total, String coord, long millis) {
         var th = Theme.active();
@@ -603,18 +597,14 @@ public final class BuildCommand implements CliCommand {
     }
 
     /**
-     * Build every module of the workspace whose root is {@code workspaceRoot}.
-     * Modules compile in topological order computed from each module's
-     * inter-sibling deps (a sibling listed as a regular Maven coord whose
-     * group+artifact match another module's {@code [project]}). Each
-     * module's jar lands at {@code <workspaceRoot>/target/} per the
-     * {@link BuildLayout} contract.
+     * Build every module of the workspace whose root is {@code workspaceRoot}. Modules compile in
+     * topological order computed from each module's inter-sibling deps (a sibling listed as a regular
+     * Maven coord whose group+artifact match another module's {@code [project]}). Each module's jar
+     * lands at {@code <workspaceRoot>/target/} per the {@link BuildLayout} contract.
      *
-     * <p>If the root manifest also declares its own {@code [project]} with
-     * source files, that build is skipped — the workspace root is
-     * coordinator-only here. (We may revisit this once virtual workspaces
-     * land; for now the assumption matches every multi-module JVM project
-     * we've seen.)
+     * <p>If the root manifest also declares its own {@code [project]} with source files, that build
+     * is skipped — the workspace root is coordinator-only here. (We may revisit this once virtual
+     * workspaces land; for now the assumption matches every multi-module JVM project we've seen.)
      */
     private int runWorkspaceBuild(Path workspaceRoot, JkBuild root) throws Exception {
         Map<Path, JkBuild> modulesByDir;
@@ -726,21 +716,19 @@ public final class BuildCommand implements CliCommand {
     }
 
     /**
-     * Order workspace modules so each builds after its sibling deps.
-     * Kahn's algorithm against the in-workspace dep graph. Sibling
-     * matches are by full Maven coord ({@code group:artifact}) — modules
-     * declare sibling deps explicitly with inline coords, no
-     * {@code .workspace = true} shorthand needed.
+     * Order workspace modules so each builds after its sibling deps. Kahn's algorithm against the
+     * in-workspace dep graph. Sibling matches are by full Maven coord ({@code group:artifact}) —
+     * modules declare sibling deps explicitly with inline coords, no {@code .workspace = true}
+     * shorthand needed.
      *
-     * <p>The graph also includes {@code [build].order-after} edges: build-order-only
-     * prerequisites (by project name or {@code group:artifact}) that carry no
-     * classpath or lockfile weight — used when a module must build after a sibling
-     * it doesn't actually depend on (e.g. to embed that sibling's artifact hash).
+     * <p>The graph also includes {@code [build].order-after} edges: build-order-only prerequisites
+     * (by project name or {@code group:artifact}) that carry no classpath or lockfile weight — used
+     * when a module must build after a sibling it doesn't actually depend on (e.g. to embed that
+     * sibling's artifact hash).
      *
-     * <p>Cycles (which the workspace's
-     * {@link dev.jkbuild.config.WorkspaceLoader} doesn't currently
-     * detect) result in any unsorted modules being appended in
-     * declaration order so the build still attempts to make progress.
+     * <p>Cycles (which the workspace's {@link dev.jkbuild.config.WorkspaceLoader} doesn't currently
+     * detect) result in any unsorted modules being appended in declaration order so the build still
+     * attempts to make progress.
      */
     static List<Path> topoSortModules(Map<Path, JkBuild> modulesByDir) {
         Map<String, Path> dirByCoord = new HashMap<>();
@@ -809,12 +797,11 @@ public final class BuildCommand implements CliCommand {
     }
 
     /**
-     * Build the entry's transitive composite ({@code path} / branch-git) dependency
-     * units from source — compile-only, in dependency order — via the SAME real
-     * pipeline as any project ({@code prepareModule} → {@code coreBuilder}). jk's
-     * {@code includeBuild} analog. The consumer/modules then locate these jars on
-     * their classpath ({@code CompositeLocator}). No-op when none are declared.
-     * Returns 0 on success, else an exit code (errors already printed).
+     * Build the entry's transitive composite ({@code path} / branch-git) dependency units from source
+     * — compile-only, in dependency order — via the SAME real pipeline as any project ({@code
+     * prepareModule} → {@code coreBuilder}). jk's {@code includeBuild} analog. The consumer/modules
+     * then locate these jars on their classpath ({@code CompositeLocator}). No-op when none are
+     * declared. Returns 0 on success, else an exit code (errors already printed).
      */
     private int buildCompositeDeps(Path entryDir, JkBuild entry) throws Exception {
         Path cache = cacheDir != null ? cacheDir : JkDirs.cache();
@@ -826,9 +813,8 @@ public final class BuildCommand implements CliCommand {
     }
 
     /**
-     * Build one project directory. When {@code agg} is non-null this is a
-     * workspace module whose events feed the shared aggregate view rather than
-     * a per-module progress display.
+     * Build one project directory. When {@code agg} is non-null this is a workspace module whose
+     * events feed the shared aggregate view rather than a per-module progress display.
      */
     private int runForDir(Path dir, AggregateContext agg) throws Exception {
         Path buildFile = dir.resolve("jk.toml");
@@ -840,30 +826,29 @@ public final class BuildCommand implements CliCommand {
     }
 
     /**
-     * Construct (but do not run) a module's build goal: inputs → core phases →
-     * declared tails. Returns {@code null} when {@code dir} has no {@code jk.toml}.
-     * Split out of {@link #runForDir} so the workspace path can build every
-     * module's goal up front and sum {@link Goal#estimatedTotalWeight()} to
-     * calibrate the shared progress bar before any module runs.
+     * Construct (but do not run) a module's build goal: inputs → core phases → declared tails.
+     * Returns {@code null} when {@code dir} has no {@code jk.toml}. Split out of {@link #runForDir}
+     * so the workspace path can build every module's goal up front and sum {@link
+     * Goal#estimatedTotalWeight()} to calibrate the shared progress bar before any module runs.
      */
     private PreparedModule prepareModule(Path dir) {
         return prepareModule(dir, buildOpts.skipTests);
     }
 
     /**
-     * As {@link #prepareModule(Path)} but with an explicit {@code skipTests} — used
-     * to build composite dependency units compile-only (a dependency's tests aren't
-     * run when it's consumed as a source dependency).
+     * As {@link #prepareModule(Path)} but with an explicit {@code skipTests} — used to build
+     * composite dependency units compile-only (a dependency's tests aren't run when it's consumed as
+     * a source dependency).
      */
     private PreparedModule prepareModule(Path dir, boolean skipTests) {
         return prepareModule(dir, skipTests, false);
     }
 
     /**
-     * As {@link #prepareModule(Path, boolean)} but with a {@code forceRebuild} hint
-     * (this module will rebuild because an upstream sibling changed) so its
-     * compile/test slice is reserved in the calibrated total up front — keeping the
-     * aggregate bar honest from the start. Set from {@link #forecastDirty}.
+     * As {@link #prepareModule(Path, boolean)} but with a {@code forceRebuild} hint (this module will
+     * rebuild because an upstream sibling changed) so its compile/test slice is reserved in the
+     * calibrated total up front — keeping the aggregate bar honest from the start. Set from {@link
+     * #forecastDirty}.
      */
     private PreparedModule prepareModule(Path dir, boolean skipTests, boolean forceRebuild) {
         try {
@@ -931,8 +916,8 @@ public final class BuildCommand implements CliCommand {
     }
 
     /**
-     * A workspace module's goal, built and ready to run, paired with its pre-scan
-     * bar weight — the module's slice of the calibrated aggregate total.
+     * A workspace module's goal, built and ready to run, paired with its pre-scan bar weight — the
+     * module's slice of the calibrated aggregate total.
      */
     private record PreparedModule(Path dir, String target, Path cache, Goal goal, long barWeight) {}
 
@@ -948,16 +933,18 @@ public final class BuildCommand implements CliCommand {
         }
     }
 
-    /** Dim italic {@code "took Xms"} from a wall-clock start captured with {@link System#nanoTime()}. */
+    /**
+     * Dim italic {@code "took Xms"} from a wall-clock start captured with {@link System#nanoTime()}.
+     */
     static String elapsedSince(long startNanos) {
         long ms = (System.nanoTime() - startNanos) / 1_000_000;
         return dev.jkbuild.cli.run.ConsoleSpec.took(java.time.Duration.ofMillis(ms));
     }
 
     /**
-     * Workspace build-failure result line: red "Build failed", the failing module
-     * in cyan, dim duration — e.g. {@code ‼ Build failed: Failure at kernel/core in 8.7s}
-     * (the {@code ‼} + red is added by {@code finishFailure}).
+     * Workspace build-failure result line: red "Build failed", the failing module in cyan, dim
+     * duration — e.g. {@code ‼ Build failed: Failure at kernel/core in 8.7s} (the {@code ‼} + red is
+     * added by {@code finishFailure}).
      */
     /** The green {@code Build successful} lead that opens every build success message. */
     private static String buildOk() {
@@ -966,20 +953,26 @@ public final class BuildCommand implements CliCommand {
 
     /** Success tail {@code Build successful for N modules took T} (work done) — N bold-white. */
     private static String modulesTail(int total, long start) {
-        return buildOk() + " for "
-                + Theme.colorize(String.valueOf(total), Theme.active().focused()) + " module" + (total == 1 ? "" : "s")
-                + " " + elapsedSince(start);
+        return buildOk()
+                + " for "
+                + Theme.colorize(String.valueOf(total), Theme.active().focused())
+                + " module"
+                + (total == 1 ? "" : "s")
+                + " "
+                + elapsedSince(start);
     }
 
-    /** Success tail {@code Build successful, <scope> up to date took T} — when nothing was rebuilt. */
+    /**
+     * Success tail {@code Build successful, <scope> up to date took T} — when nothing was rebuilt.
+     */
     private static String upToDateTail(String scope, long start) {
         return buildOk() + ", " + scope + " up to date " + elapsedSince(start);
     }
 
     /**
-     * Single-project success tail: {@code Build successful, project up to date} when
-     * nothing was rebuilt, else {@code Build successful. Built <artifact>} naming the
-     * headline output. No duration — the framework appends it.
+     * Single-project success tail: {@code Build successful, project up to date} when nothing was
+     * rebuilt, else {@code Build successful. Built <artifact>} naming the headline output. No
+     * duration — the framework appends it.
      */
     static String projectTail(Goal goal) {
         if ("up-to-date".equals(goal.get(BUILD_OUTCOME).orElse(""))) {
@@ -990,9 +983,9 @@ public final class BuildCommand implements CliCommand {
     }
 
     /**
-     * The headline artifact this build produced, as {@code ". Built <relpath>"} in the
-     * path color — the native binary/library if present, else the shadow (fat) jar,
-     * else the plain jar. Empty when none exists. Shared with {@code jk native}.
+     * The headline artifact this build produced, as {@code ". Built <relpath>"} in the path color —
+     * the native binary/library if present, else the shadow (fat) jar, else the plain jar. Empty when
+     * none exists. Shared with {@code jk native}.
      */
     static String builtArtifact(Goal goal) {
         BuildLayout layout = goal.get(LAYOUT).orElse(null);
@@ -1028,13 +1021,17 @@ public final class BuildCommand implements CliCommand {
 
     /** Failure tail for a module missing its {@code jk.toml}. */
     private static String noTomlTail(String where, long start) {
-        return "— no jk.toml in " + where + " "
+        return "— no jk.toml in "
+                + where
+                + " "
                 + Theme.colorize(elapsedSince(start), Theme.active().darkGray());
     }
 
     private static String buildFailedAt(String module, long buildStart) {
         return Theme.colorize("Build failed", Theme.active().error())
-                + ": Failure at " + Theme.colorize(module, Theme.active().cyan())
-                + " " + elapsedSince(buildStart);
+                + ": Failure at "
+                + Theme.colorize(module, Theme.active().cyan())
+                + " "
+                + elapsedSince(buildStart);
     }
 }

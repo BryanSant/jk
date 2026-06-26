@@ -12,9 +12,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
- * The test-skip freshness key: it must stay stable when nothing changed, and
- * bust when the module's own main code, a test source, a dependency's content,
- * the lock, or the toolchain identity changed.
+ * The test-skip freshness key: it must stay stable when nothing changed, and bust when the module's
+ * own main code, a test source, a dependency's content, the lock, or the toolchain identity
+ * changed.
  */
 class TestStampTest {
 

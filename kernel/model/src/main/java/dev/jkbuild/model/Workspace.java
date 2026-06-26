@@ -7,10 +7,9 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * The {@code [workspace]} block of a root {@code jk.toml}: the literal
- * module paths plus the optional {@code [workspace.dependencies]} table
- * of shared external dep declarations inherited by modules via
- * {@code <name>.workspace = true}.
+ * The {@code [workspace]} block of a root {@code jk.toml}: the literal module paths plus the
+ * optional {@code [workspace.dependencies]} table of shared external dep declarations inherited by
+ * modules via {@code <name>.workspace = true}.
  */
 public record Workspace(List<String> modules, Map<String, WorkspaceDependency> dependencies) {
 
@@ -31,10 +30,9 @@ public record Workspace(List<String> modules, Map<String, WorkspaceDependency> d
     }
 
     /**
-     * A single entry in {@code [workspace.dependencies]}. Holds the same
-     * shape as an inline dep table — group/artifact/version, or a path
-     * or git source override. Resolution happens when a child writes
-     * {@code <name>.workspace = true}.
+     * A single entry in {@code [workspace.dependencies]}. Holds the same shape as an inline dep table
+     * — group/artifact/version, or a path or git source override. Resolution happens when a child
+     * writes {@code <name>.workspace = true}.
      */
     public record WorkspaceDependency(
             String group, String artifact, VersionSelector version, GitSource gitSource, String pathSource) {

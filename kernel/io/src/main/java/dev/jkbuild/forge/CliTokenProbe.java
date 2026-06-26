@@ -8,11 +8,10 @@ import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Piggybacks on a native forge CLI to reuse an existing login
- * ({@code gh auth token}, {@code glab auth token}). Best-effort by
- * contract: every failure mode — binary not on {@code PATH}, non-zero exit,
- * empty output, hang — yields {@link Optional#empty()} so the caller falls
- * through to jk's own flow. Never throws.
+ * Piggybacks on a native forge CLI to reuse an existing login ({@code gh auth token}, {@code glab
+ * auth token}). Best-effort by contract: every failure mode — binary not on {@code PATH}, non-zero
+ * exit, empty output, hang — yields {@link Optional#empty()} so the caller falls through to jk's
+ * own flow. Never throws.
  */
 @FunctionalInterface
 public interface CliTokenProbe {

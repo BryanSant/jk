@@ -28,24 +28,22 @@ import java.util.Optional;
 import java.util.stream.Stream;
 
 /**
- * {@code jk clean} — delete generated build outputs for the workspace root
- * and every declared module.
+ * {@code jk clean} — delete generated build outputs for the workspace root and every declared
+ * module.
  *
- * <p>Each module owns its own {@code target/} directory (final artifacts +
- * build intermediates). By default {@code jk clean} removes the full
- * {@code target/} tree for every project directory. With
- * {@code --keep-artifacts}, only {@code target/} (compiler outputs,
- * test reports, etc.) is removed — handy when you want a fresh compile but
- * still need the existing jars around for downstream consumers.
+ * <p>Each module owns its own {@code target/} directory (final artifacts + build intermediates). By
+ * default {@code jk clean} removes the full {@code target/} tree for every project directory. With
+ * {@code --keep-artifacts}, only {@code target/} (compiler outputs, test reports, etc.) is removed
+ * — handy when you want a fresh compile but still need the existing jars around for downstream
+ * consumers.
  *
- * <p>The shared cache at {@code $JK_CACHE_DIR} is left alone by default —
- * that's per-machine state, not per-project. Pass {@code --cache} to also run
- * a cache GC: a mark-and-sweep that purges unreferenced CAS blobs (and their
- * {@code repo/} mirror links) idle for more than 90 days, then compacts the
- * access log.
+ * <p>The shared cache at {@code $JK_CACHE_DIR} is left alone by default — that's per-machine state,
+ * not per-project. Pass {@code --cache} to also run a cache GC: a mark-and-sweep that purges
+ * unreferenced CAS blobs (and their {@code repo/} mirror links) idle for more than 90 days, then
+ * compacts the access log.
  *
- * <p>The first command ported off picocli to jk's own {@link CliCommand}
- * model (docs/plugin-refactor.md §5).
+ * <p>The first command ported off picocli to jk's own {@link CliCommand} model
+ * (docs/plugin-refactor.md §5).
  */
 public final class CleanCommand implements CliCommand {
 
@@ -140,9 +138,8 @@ public final class CleanCommand implements CliCommand {
     }
 
     /**
-     * Returns the workspace root plus every declared module directory.
-     * Falls back to just {@code [workspaceRoot]} when parsing fails or
-     * there are no modules (single-project).
+     * Returns the workspace root plus every declared module directory. Falls back to just {@code
+     * [workspaceRoot]} when parsing fails or there are no modules (single-project).
      */
     private static List<Path> collectProjectDirs(Path workspaceRoot) {
         List<Path> dirs = new ArrayList<>();

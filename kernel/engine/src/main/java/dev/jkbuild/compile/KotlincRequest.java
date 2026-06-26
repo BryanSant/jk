@@ -6,20 +6,20 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Input to {@link KotlincDriver}, which forks the {@code jk-kotlin-compiler}
- * worker to drive the Kotlin Build Tools API.
+ * Input to {@link KotlincDriver}, which forks the {@code jk-kotlin-compiler} worker to drive the
+ * Kotlin Build Tools API.
  *
  * <ul>
- *   <li>{@code sources} / {@code classpath} / {@code outputDir} / {@code jvmTarget}
- *       — the compilation itself. {@code classpath} is the <em>compilation</em>
- *       classpath (project deps + a version-matched kotlin-stdlib); the caller
- *       pairs it with {@code -no-stdlib} in {@code extraArgs}.</li>
- *   <li>{@code workerClasspath} — the worker JVM's own classpath: the worker jar
- *       plus the resolved Build Tools API implementation closure.</li>
- *   <li>{@code javaHome} — the JDK that hosts the worker JVM.</li>
- *   <li>{@code workingDir} — incremental state dir; {@code null} ⇒ a full
- *       (non-incremental) compile.</li>
- *   <li>{@code extraArgs} — free compiler arguments appended verbatim.</li>
+ *   <li>{@code sources} / {@code classpath} / {@code outputDir} / {@code jvmTarget} — the
+ *       compilation itself. {@code classpath} is the <em>compilation</em> classpath (project deps +
+ *       a version-matched kotlin-stdlib); the caller pairs it with {@code -no-stdlib} in {@code
+ *       extraArgs}.
+ *   <li>{@code workerClasspath} — the worker JVM's own classpath: the worker jar plus the resolved
+ *       Build Tools API implementation closure.
+ *   <li>{@code javaHome} — the JDK that hosts the worker JVM.
+ *   <li>{@code workingDir} — incremental state dir; {@code null} ⇒ a full (non-incremental)
+ *       compile.
+ *   <li>{@code extraArgs} — free compiler arguments appended verbatim.
  * </ul>
  */
 public record KotlincRequest(

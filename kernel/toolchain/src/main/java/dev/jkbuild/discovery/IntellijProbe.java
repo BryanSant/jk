@@ -13,22 +13,20 @@ import java.util.Optional;
 import java.util.stream.Stream;
 
 /**
- * Surfaces JDKs that IntelliJ (and other tools using its convention)
- * placed in the platform-standard location:
+ * Surfaces JDKs that IntelliJ (and other tools using its convention) placed in the
+ * platform-standard location:
  *
  * <ul>
- *   <li>Linux / Windows: {@code ~/.jdks/<install-folder-name>/}</li>
- *   <li>macOS: {@code ~/Library/Java/JavaVirtualMachines/<install-folder-name>/Contents/Home/}</li>
+ *   <li>Linux / Windows: {@code ~/.jdks/<install-folder-name>/}
+ *   <li>macOS: {@code ~/Library/Java/JavaVirtualMachines/<install-folder-name>/Contents/Home/}
  * </ul>
  *
- * <p>The root path is <strong>not</strong> affected by {@code JK_JDKS_DIR}
- * / {@code JK_HOME} — those move jk's own install dir, which is what
- * {@link JkProbe} scans. This probe specifically targets JDKs installed
- * by external tools that we want to surface but never modify.
+ * <p>The root path is <strong>not</strong> affected by {@code JK_JDKS_DIR} / {@code JK_HOME} —
+ * those move jk's own install dir, which is what {@link JkProbe} scans. This probe specifically
+ * targets JDKs installed by external tools that we want to surface but never modify.
  *
- * <p>On macOS the JDK ships as a {@code .jdk} bundle whose real
- * {@code JAVA_HOME} is under {@code Contents/Home}; the
- * {@link IntellijJdkDir#javaHome} unwrap normalises both layouts.
+ * <p>On macOS the JDK ships as a {@code .jdk} bundle whose real {@code JAVA_HOME} is under {@code
+ * Contents/Home}; the {@link IntellijJdkDir#javaHome} unwrap normalises both layouts.
  */
 public final class IntellijProbe implements LocalToolProbe {
 

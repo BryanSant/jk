@@ -12,10 +12,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
- * The build goal composes only the language steps a project opts into. Java and
- * Kotlin are independent opt-ins (given a required {@code jdk}):
- * {@code jdk}+{@code kotlin} ⇒ Kotlin only; {@code jdk}+{@code java}+{@code kotlin}
- * ⇒ both; {@code jdk} alone ⇒ Java only.
+ * The build goal composes only the language steps a project opts into. Java and Kotlin are
+ * independent opt-ins (given a required {@code jdk}): {@code jdk}+{@code kotlin} ⇒ Kotlin only;
+ * {@code jdk}+{@code java}+{@code kotlin} ⇒ both; {@code jdk} alone ⇒ Java only.
  */
 class BuildPipelineKotlinPhaseTest {
 

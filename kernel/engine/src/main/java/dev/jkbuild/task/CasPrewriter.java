@@ -17,29 +17,25 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
 /**
- * Stream-into-CAS for an action's output directory while another thread
- * (typically a {@code javac} subprocess) is still writing to it.
+ * Stream-into-CAS for an action's output directory while another thread (typically a {@code javac}
+ * subprocess) is still writing to it.
  *
- * <p>Polls {@code outputDir} on a background thread. When a file's
- * {@code (size, mtime)} matches across two consecutive polls — i.e. it
- * has been stable for at least one poll interval — hash it, hard-link
- * it into the CAS, and remodule the {@code (relPath → hex)} mapping.
- * By the time the compile finishes, most outputs are already in the
- * CAS and the manifest write just needs to consult the precomputed map.
+ * <p>Polls {@code outputDir} on a background thread. When a file's {@code (size, mtime)} matches
+ * across two consecutive polls — i.e. it has been stable for at least one poll interval — hash it,
+ * hard-link it into the CAS, and remodule the {@code (relPath → hex)} mapping. By the time the
+ * compile finishes, most outputs are already in the CAS and the manifest write just needs to
+ * consult the precomputed map.
  *
- * <p>{@link #finish} stops the poller and runs a final correctness pass:
- * any file whose {@code (size, mtime)} has drifted since we processed it
- * — or that we missed entirely — gets re-hashed and re-linked. So the
- * pre-processing is a best-effort optimisation; the final pass is what
- * the action record actually trusts.
+ * <p>{@link #finish} stops the poller and runs a final correctness pass: any file whose {@code
+ * (size, mtime)} has drifted since we processed it — or that we missed entirely — gets re-hashed
+ * and re-linked. So the pre-processing is a best-effort optimisation; the final pass is what the
+ * action record actually trusts.
  *
- * <p>Magnitude check: for a typical 1000-file Java compile, the CAS
- * write costs about 60ms total (5 MB of bytecode, SHA-256 + hard-link).
- * Streaming this in parallel with a 5–30 second compile saves ~60ms.
- * Not transformative. The architecture matters more than the millis —
- * future post-compile steps (SBOM extraction, ABI hashing for
- * Zinc-style incremental, signature analysis) plug into the same
- * "background work during compile" slot.
+ * <p>Magnitude check: for a typical 1000-file Java compile, the CAS write costs about 60ms total (5
+ * MB of bytecode, SHA-256 + hard-link). Streaming this in parallel with a 5–30 second compile saves
+ * ~60ms. Not transformative. The architecture matters more than the millis — future post-compile
+ * steps (SBOM extraction, ABI hashing for Zinc-style incremental, signature analysis) plug into the
+ * same "background work during compile" slot.
  */
 public final class CasPrewriter implements AutoCloseable {
 
@@ -63,9 +59,8 @@ public final class CasPrewriter implements AutoCloseable {
     }
 
     /**
-     * Start a prewriter watching {@code outputDir}. The caller's
-     * responsibility to call {@link #finish} before reading the result —
-     * {@code finish} also stops the background poller.
+     * Start a prewriter watching {@code outputDir}. The caller's responsibility to call {@link
+     * #finish} before reading the result — {@code finish} also stops the background poller.
      */
     public static CasPrewriter watching(Cas cas, Path outputDir) {
         CasPrewriter p = new CasPrewriter(cas, outputDir);
@@ -75,9 +70,8 @@ public final class CasPrewriter implements AutoCloseable {
     }
 
     /**
-     * Stop polling and run the final correctness pass. Returns the
-     * {@code (relPath → hex)} map ready for
-     * {@link ActionCache#storeWithOutputs}.
+     * Stop polling and run the final correctness pass. Returns the {@code (relPath → hex)} map ready
+     * for {@link ActionCache#storeWithOutputs}.
      */
     public Map<String, String> finish() throws IOException {
         running = false;
@@ -141,9 +135,9 @@ public final class CasPrewriter implements AutoCloseable {
     }
 
     /**
-     * Two-poll stability rule: if a file's (size, mtime) matches what we
-     * saw last poll, it's been quiet for at least one interval — safe to
-     * hash. Otherwise update the snapshot and revisit next tick.
+     * Two-poll stability rule: if a file's (size, mtime) matches what we saw last poll, it's been
+     * quiet for at least one interval — safe to hash. Otherwise update the snapshot and revisit next
+     * tick.
      */
     private void handleCandidate(Path file) {
         try {

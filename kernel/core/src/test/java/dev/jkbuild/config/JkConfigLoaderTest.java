@@ -106,7 +106,7 @@ class JkConfigLoaderTest {
         Path projectToml = tempDir.resolve("jk.toml");
         Files.writeString(projectToml, "[config]\ncolor = \"always\"\n");
 
-        JkConfig loaded = JkConfigLoader.load(tempDir, /*noConfig=*/ true, Optional.empty());
+        JkConfig loaded = JkConfigLoader.load(tempDir, /* noConfig= */ true, Optional.empty());
         // Project config was IGNORED.
         assertThat(loaded.color()).isEmpty();
     }

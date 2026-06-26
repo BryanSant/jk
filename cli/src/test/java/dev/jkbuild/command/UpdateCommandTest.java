@@ -211,13 +211,31 @@ class UpdateCommandTest {
     }
 
     private void registerPom(String group, String artifact, String version, String body) {
-        String path = "/" + group.replace('.', '/') + "/" + artifact + "/" + version + "/" + artifact + "-" + version
+        String path = "/"
+                + group.replace('.', '/')
+                + "/"
+                + artifact
+                + "/"
+                + version
+                + "/"
+                + artifact
+                + "-"
+                + version
                 + ".pom";
         served.put(path, body.getBytes(StandardCharsets.UTF_8));
     }
 
     private void registerJar(String group, String artifact, String version, byte[] bytes) {
-        String path = "/" + group.replace('.', '/') + "/" + artifact + "/" + version + "/" + artifact + "-" + version
+        String path = "/"
+                + group.replace('.', '/')
+                + "/"
+                + artifact
+                + "/"
+                + version
+                + "/"
+                + artifact
+                + "-"
+                + version
                 + ".jar";
         served.put(path, bytes);
     }

@@ -2,12 +2,11 @@
 package dev.jkbuild.model;
 
 /**
- * Per-repository configuration for object-store backends ({@code s3://},
- * {@code gs://}) declared on a {@code [repositories.<name>]} table in
- * {@code jk.toml} — see docs/artifact-repos.md. Every field is optional; an
- * unset field falls back to the AWS environment / default chain, so a
- * zero-config CI setup keeps working. Credentials are typically supplied via
- * {@code ${ENV}} interpolation rather than committed literally.
+ * Per-repository configuration for object-store backends ({@code s3://}, {@code gs://}) declared on
+ * a {@code [repositories.<name>]} table in {@code jk.toml} — see docs/artifact-repos.md. Every
+ * field is optional; an unset field falls back to the AWS environment / default chain, so a
+ * zero-config CI setup keeps working. Credentials are typically supplied via {@code ${ENV}}
+ * interpolation rather than committed literally.
  *
  * <p>Irrelevant for {@code http(s)} and {@code file://} repositories.
  */

@@ -20,15 +20,14 @@ import java.nio.file.Path;
 
 /**
  * Materializes a git-source dependency into a locally-published Maven artifact
- * (docs/git-source-deps.md): clone the repo at the ref, derive a version, build
- * it with {@link GitProjectBuilder}, and write the jar + POM into a per-commit
- * {@code file://} Maven repository. The result hands the resolver a concrete
- * coordinate it can pin and a {@code file://} repo to fetch from — so the
- * PubGrub solver never has to know about git.
+ * (docs/git-source-deps.md): clone the repo at the ref, derive a version, build it with {@link
+ * GitProjectBuilder}, and write the jar + POM into a per-commit {@code file://} Maven repository.
+ * The result hands the resolver a concrete coordinate it can pin and a {@code file://} repo to
+ * fetch from — so the PubGrub solver never has to know about git.
  *
- * <p>The local repo lives under {@code $JK_CACHE_DIR/git-artifacts/<urlhash>/<sha>/repo}
- * keyed by commit SHA, so an immutable tag/rev is built once and cached, while
- * a branch rebuilds when its tip moves.
+ * <p>The local repo lives under {@code $JK_CACHE_DIR/git-artifacts/<urlhash>/<sha>/repo} keyed by
+ * commit SHA, so an immutable tag/rev is built once and cached, while a branch rebuilds when its
+ * tip moves.
  */
 public final class GitSourceMaterializer {
 
@@ -78,10 +77,9 @@ public final class GitSourceMaterializer {
     }
 
     /**
-     * Fail loudly if {@code source}'s ref no longer resolves to
-     * {@code expectedSha} — the tag/branch was force-moved since the lockfile
-     * was written (docs/git-source-deps.md §"Supply-chain safety"). Callers use
-     * this on {@code jk lock} for immutable (tag/rev) refs; {@code jk update}
+     * Fail loudly if {@code source}'s ref no longer resolves to {@code expectedSha} — the tag/branch
+     * was force-moved since the lockfile was written (docs/git-source-deps.md §"Supply-chain
+     * safety"). Callers use this on {@code jk lock} for immutable (tag/rev) refs; {@code jk update}
      * skips it to accept the new commit.
      */
     void verifyLocked(GitSource source, String expectedSha) throws IOException {
@@ -102,8 +100,10 @@ public final class GitSourceMaterializer {
                 : fetched.checkoutPath();
         Path buildFile = projectDir.resolve("jk.toml");
         if (!Files.isRegularFile(buildFile)) {
-            throw new IOException("git dependency " + source.canonicalUrl()
-                    + " has no jk.toml at " + (source.path() == null ? "repo root" : source.path())
+            throw new IOException("git dependency "
+                    + source.canonicalUrl()
+                    + " has no jk.toml at "
+                    + (source.path() == null ? "repo root" : source.path())
                     + " (only jk.toml builds are supported)");
         }
         JkBuild project = JkBuildParser.parse(Files.readString(buildFile));

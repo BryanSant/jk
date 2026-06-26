@@ -18,41 +18,40 @@ import org.jline.utils.AttributedStyle;
  * The live console component for long-running commands. Two presentation modes:
  *
  * <ul>
- *   <li><b>Simple task</b> — an animated spinner + a human verb
- *       ({@code ✸ Locking…}); on completion the spinner freezes to its first
- *       glyph and a result line is printed below
- *       ({@code ✔ Finished syncing 13 artifacts} / {@code ✗ …}).</li>
- *   <li><b>Goal-oriented</b> — a spinner header
- *       ({@code ✸ Building › acme:api… (1m 52s)}), an aggregate
- *       {@link ProgressBar}, and a dynamic phase list whose completed rows sink
- *       to the bottom and collapse to {@code … +N completed}. On completion the
- *       whole region is replaced by a single {@code ✔}/{@code ✗} result line.</li>
+ *   <li><b>Simple task</b> — an animated spinner + a human verb ({@code ✸ Locking…}); on completion
+ *       the spinner freezes to its first glyph and a result line is printed below ({@code ✔
+ *       Finished syncing 13 artifacts} / {@code ✗ …}).
+ *   <li><b>Goal-oriented</b> — a spinner header ({@code ✸ Building › acme:api… (1m 52s)}), an
+ *       aggregate {@link ProgressBar}, and a dynamic phase list whose completed rows sink to the
+ *       bottom and collapse to {@code … +N completed}. On completion the whole region is replaced
+ *       by a single {@code ✔}/{@code ✗} result line.
  * </ul>
  *
- * <p>The {@code animate} flag decides whether anything is drawn live: on a TTY it
- * animates; under pipes / {@code --quiet} / {@code --no-progress} it stays put
- * and only the final result line is printed. Registers as the active
- * {@link LiveRegion} so a Ctrl-C repaints cleanly. The animator runs on a daemon
- * thread; all writes are guarded by one lock. The spinner frame set, interval,
- * and gradient are shared with {@link Spinner}.
+ * <p>The {@code animate} flag decides whether anything is drawn live: on a TTY it animates; under
+ * pipes / {@code --quiet} / {@code --no-progress} it stays put and only the final result line is
+ * printed. Registers as the active {@link LiveRegion} so a Ctrl-C repaints cleanly. The animator
+ * runs on a daemon thread; all writes are guarded by one lock. The spinner frame set, interval, and
+ * gradient are shared with {@link Spinner}.
  *
- * <p>Goal mode aggregates across callers: feed phases/progress for any number of
- * modules into one instance and it renders a single bar + single list. Terminal
- * width is detected once at construction (a mid-run resize is tolerated — the
- * next repaint may be briefly imperfect).
+ * <p>Goal mode aggregates across callers: feed phases/progress for any number of modules into one
+ * instance and it renders a single bar + single list. Terminal width is detected once at
+ * construction (a mid-run resize is tolerated — the next repaint may be briefly imperfect).
  */
 public final class CommandManager implements AutoCloseable, LiveRegion {
 
     private static final String[] FRAMES = Spinner.FRAMES;
     private static final long FRAME_MS = Spinner.FRAME_MS;
+
     /** Flush a captured partial line (no newline yet) after this much quiet. */
     private static final long STALE_FLUSH_MS = 360;
 
     private static final String ELLIPSIS = "…";
     private static final int DEFAULT_WIDTH = 80;
     private static final int DEFAULT_HEIGHT = 24;
+
     /** Max phase rows shown before completed rows collapse into a "+N" line. */
     static final int MAX_ROWS = 8;
+
     /** Max completed lines shown below the active tree before a "… plus N more …" footer. */
     static final int MAX_COMPLETIONS = 5;
 
@@ -60,14 +59,18 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
     private final boolean animate;
     private final boolean goalMode;
     private final int width;
+
     /**
-     * Terminal rows. The whole region must fit within this — a region taller
-     * than the viewport scrolls its top into scrollback, and cursor-relative
-     * repaint/wipe ({@code cursorUp(n)}) clamps at the viewport top and can no
-     * longer reach it (leaving stale lines, e.g. a lingering spinner on cancel).
+     * Terminal rows. The whole region must fit within this — a region taller than the viewport
+     * scrolls its top into scrollback, and cursor-relative repaint/wipe ({@code cursorUp(n)}) clamps
+     * at the viewport top and can no longer reach it (leaving stale lines, e.g. a lingering spinner
+     * on cancel).
      */
     int height = DEFAULT_HEIGHT; // package-private: tests set it directly
-    /** [global].nerdfont — gates the powerline pill header. Package-private: tests set it directly. */
+
+    /**
+     * [global].nerdfont — gates the powerline pill header. Package-private: tests set it directly.
+     */
     boolean nerdfont = GlobalConfig.nerdfont();
 
     private final AttributedStyle[] frameColors = Spinner.buildGradient(FRAMES.length);
@@ -94,6 +97,7 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
     private long finishSeq;
 
     private final Map<String, Row> rows = new LinkedHashMap<>();
+
     /** Pre-formatted completion lines, oldest→newest; bounded to {@link #MAX_COMPLETIONS}. */
     private final List<String> recentCompletions = new ArrayList<>();
 
@@ -145,8 +149,8 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
     // --- goal-oriented mode -----------------------------------------------
 
     /**
-     * Start goal-oriented mode. {@code name} is the verb shown in the header
-     * (e.g. {@code "Building"}); set the active module with {@link #target}.
+     * Start goal-oriented mode. {@code name} is the verb shown in the header (e.g. {@code
+     * "Building"}); set the active module with {@link #target}.
      */
     public static CommandManager goal(PrintStream out, String name, boolean animate) {
         int[] size = animate ? detectSize() : new int[] {DEFAULT_HEIGHT, DEFAULT_WIDTH};
@@ -225,10 +229,10 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
     }
 
     /**
-     * Seed the {@code [hh:mm:ss]} countdown with the total predicted build time (the
-     * same figure {@code jk explain} reports). The countdown then ticks down purely by
-     * wall-clock — one second off per real second — flooring at zero and holding there
-     * until the build settles. {@code 0} hides the countdown.
+     * Seed the {@code [hh:mm:ss]} countdown with the total predicted build time (the same figure
+     * {@code jk explain} reports). The countdown then ticks down purely by wall-clock — one second
+     * off per real second — flooring at zero and holding there until the build settles. {@code 0}
+     * hides the countdown.
      */
     public void setEtaEstimate(long totalMillis) {
         synchronized (lock) {
@@ -260,10 +264,9 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
     }
 
     /**
-     * Record a finished unit's pre-formatted completion line in the live
-     * completed-tail rendered below the active rows (newest first, capped to
-     * {@link #MAX_COMPLETIONS}; the rest collapse into a "… plus N more …"
-     * footer). Callers that aren't animating should print append-only instead
+     * Record a finished unit's pre-formatted completion line in the live completed-tail rendered
+     * below the active rows (newest first, capped to {@link #MAX_COMPLETIONS}; the rest collapse into
+     * a "… plus N more …" footer). Callers that aren't animating should print append-only instead
      * (see {@link #animating()}) — this only feeds the live region.
      */
     public void addCompletion(String line) {
@@ -288,11 +291,10 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
     }
 
     /**
-     * Like {@link #finishSuccess(String)}, but first prints {@code above} —
-     * buffered subprocess output (compiler warnings, &c.) — as scrollback above
-     * the result line, so the {@code ✔ Successful} summary is the last thing the
-     * user sees. The lines land after the live region is wiped, under one lock,
-     * so they never interleave with the bar.
+     * Like {@link #finishSuccess(String)}, but first prints {@code above} — buffered subprocess
+     * output (compiler warnings, &c.) — as scrollback above the result line, so the {@code ✔
+     * Successful} summary is the last thing the user sees. The lines land after the live region is
+     * wiped, under one lock, so they never interleave with the bar.
      */
     public void finishSuccess(String message, List<String> above) {
         String head = Glyphs.CHECK + (goalName().isEmpty() ? "" : " " + goalName()) + " Successful";
@@ -300,9 +302,9 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
     }
 
     /**
-     * Settle the build goal with the green chip: {@code  ✓ Build ▶ Successfully
-     * <tail>}. The {@code tail} (e.g. "built 17 modules took 1.4s") is pre-styled by
-     * the caller; this owns only the chip + cap + verb. See {@link GoalWedge}.
+     * Settle the build goal with the green chip: {@code ✓ Build ▶ Successfully <tail>}. The {@code
+     * tail} (e.g. "built 17 modules took 1.4s") is pre-styled by the caller; this owns only the chip
+     * + cap + verb. See {@link GoalWedge}.
      */
     public void finishGoalSuccess(String tail, List<String> above) {
         settle(GoalWedge.chipLine(Glyphs.CHECK, goalName(), nerdfont, tail), above);
@@ -314,8 +316,8 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
     }
 
     /**
-     * Settle with the play chip: {@code  ▶ Exec ▶ Executing …} — for commands that
-     * hand off to a subprocess after the goal settles (e.g. {@code jk run}).
+     * Settle with the play chip: {@code ▶ Exec ▶ Executing …} — for commands that hand off to a
+     * subprocess after the goal settles (e.g. {@code jk run}).
      */
     public void finishGoalExec(String tail, List<String> above) {
         settle(GoalWedge.chipLine(Glyphs.PLAY, goalName(), nerdfont, tail), above);
@@ -326,7 +328,7 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
         finishGoalExec(tail, List.of());
     }
 
-    /** Settle the build goal with the red chip: {@code  ‼ Build ▶ Failure <tail>}. */
+    /** Settle the build goal with the red chip: {@code ‼ Build ▶ Failure <tail>}. */
     public void finishGoalFailure(String tail, List<String> above) {
         settle(GoalWedge.failureLine(goalName(), nerdfont, tail), above);
     }
@@ -490,10 +492,9 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
     }
 
     /**
-     * Print {@code text} as a permanent line <em>above</em> the live region, then
-     * repaint the region just below it — so process/phase output scrolls up and
-     * the {@code CommandManager} view stays pinned to the bottom. No-op-ish
-     * (plain {@code println}) when not animating or already settled.
+     * Print {@code text} as a permanent line <em>above</em> the live region, then repaint the region
+     * just below it — so process/phase output scrolls up and the {@code CommandManager} view stays
+     * pinned to the bottom. No-op-ish (plain {@code println}) when not animating or already settled.
      */
     public void writeAbove(String text) {
         synchronized (lock) {
@@ -525,15 +526,14 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
     }
 
     /**
-     * Repaint the multi-line goal region (must hold {@link #lock}), rewriting
-     * only the lines that changed since the last paint to avoid flicker. The
-     * spinner header changes every frame; the bar and phase rows only on real
-     * updates, so a steady region mostly just rewrites its top line.
+     * Repaint the multi-line goal region (must hold {@link #lock}), rewriting only the lines that
+     * changed since the last paint to avoid flicker. The spinner header changes every frame; the bar
+     * and phase rows only on real updates, so a steady region mostly just rewrites its top line.
      *
-     * <p>Cursor invariant: between paints the cursor is parked at the start of
-     * the line immediately below the region. We move up to the first line, walk
-     * down rewriting changed lines (and advancing past unchanged ones with a
-     * bare newline), then clear any lines a now-shorter region left behind.
+     * <p>Cursor invariant: between paints the cursor is parked at the start of the line immediately
+     * below the region. We move up to the first line, walk down rewriting changed lines (and
+     * advancing past unchanged ones with a bare newline), then clear any lines a now-shorter region
+     * left behind.
      */
     private void paintGoal() {
         List<String> lines = renderGoalLines(width, elapsedMillis());
@@ -556,10 +556,9 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
     }
 
     /**
-     * Build the goal region's lines (header-with-bar, active phase tree, completed
-     * tail). Pure — no cursor control, no output. Package-private for tests; the
-     * {@code frame} field and {@code elapsedMillis} are passed/read so tests are
-     * deterministic.
+     * Build the goal region's lines (header-with-bar, active phase tree, completed tail). Pure — no
+     * cursor control, no output. Package-private for tests; the {@code frame} field and {@code
+     * elapsedMillis} are passed/read so tests are deterministic.
      */
     public List<String> renderGoalLines(int cols, long elapsedMillis) {
         AttributedStyle dim = Theme.active().darkGray();
@@ -619,16 +618,15 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
     /**
      * The goal header line: {@code {spinner} {name} {bar} …elapsed…}.
      *
-     * <p>With a Nerd Font ({@code [global].nerdfont}) the spinner (glyph-cycling
-     * only — same bright-white foreground as the name, no color animation) + name form
-     * a pill filled with the accent (the bar gradient's bright end), closed by a
-     * U+E0B0 powerline cap whose <em>foreground</em> is that same pill color (so its
-     * body blends with the chip) and whose <em>background</em> tracks the bar's lead
-     * color, tapering the chip into the first bar cell; the cap is underlined to sit
-     * flush with the bar's underscored track. Without a Nerd Font it's the plain
-     * animated spinner + a bright-white name, as before. Either way a leading space
-     * gives the whole region its one-column indent — on the pill background in Nerd
-     * Font mode, so the chip reaches the left edge.
+     * <p>With a Nerd Font ({@code [global].nerdfont}) the spinner (glyph-cycling only — same
+     * bright-white foreground as the name, no color animation) + name form a pill filled with the
+     * accent (the bar gradient's bright end), closed by a U+E0B0 powerline cap whose
+     * <em>foreground</em> is that same pill color (so its body blends with the chip) and whose
+     * <em>background</em> tracks the bar's lead color, tapering the chip into the first bar cell; the
+     * cap is underlined to sit flush with the bar's underscored track. Without a Nerd Font it's the
+     * plain animated spinner + a bright-white name, as before. Either way a leading space gives the
+     * whole region its one-column indent — on the pill background in Nerd Font mode, so the chip
+     * reaches the left edge.
      */
     private String goalHeader(long elapsedMillis) {
         AttributedStyle dim = Theme.active().darkGray();
@@ -685,7 +683,10 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
         return h.toString();
     }
 
-    /** Countdown/elapsed duration: {@code "42s"}, {@code "1m 02s"}, {@code "1h 05m 09s"} (units past the lead zero-padded). Callers prepend {@code "+"} for count-up display. */
+    /**
+     * Countdown/elapsed duration: {@code "42s"}, {@code "1m 02s"}, {@code "1h 05m 09s"} (units past
+     * the lead zero-padded). Callers prepend {@code "+"} for count-up display.
+     */
     static String fmtClock(long millis) {
         long totalSec = Math.max(0, millis) / 1000;
         long h = totalSec / 3600, m = (totalSec % 3600) / 60, s = totalSec % 60;
@@ -695,9 +696,8 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
     }
 
     /**
-     * A running phase row: {@code <group>:<artifact> › <Phase>[ › <message>]} —
-     * no status glyph, module coordinate colored (cyan group, bright-cyan
-     * artifact). No trailing ellipsis.
+     * A running phase row: {@code <group>:<artifact> › <Phase>[ › <message>]} — no status glyph,
+     * module coordinate colored (cyan group, bright-cyan artifact). No trailing ellipsis.
      */
     private static String renderActiveRow(Row r, String sep) {
         StringBuilder sb = new StringBuilder();
@@ -791,17 +791,15 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
     }
 
     /**
-     * Truncate an ANSI-colored string to {@code maxCols} visible columns,
-     * copying escape sequences without counting them and appending a reset if
-     * the text was cut. Treats every visible codepoint as one column (good
-     * enough for our ASCII + single-width glyphs).
+     * Truncate an ANSI-colored string to {@code maxCols} visible columns, copying escape sequences
+     * without counting them and appending a reset if the text was cut. Treats every visible codepoint
+     * as one column (good enough for our ASCII + single-width glyphs).
      *
-     * <p>JLine can do this width-aware ({@code AttributedString.fromAnsi} /
-     * {@code WCWidth}), but measured at +187–312 KB on the native image — its
-     * ANSI parser / width tables aren't otherwise reachable — to gain East-Asian
-     * wide-glyph handling that jk's ASCII coordinates and single-width
-     * box/spinner glyphs never need. Not worth the binary growth, so this stays
-     * hand-rolled by design.
+     * <p>JLine can do this width-aware ({@code AttributedString.fromAnsi} / {@code WCWidth}), but
+     * measured at +187–312 KB on the native image — its ANSI parser / width tables aren't otherwise
+     * reachable — to gain East-Asian wide-glyph handling that jk's ASCII coordinates and single-width
+     * box/spinner glyphs never need. Not worth the binary growth, so this stays hand-rolled by
+     * design.
      */
     static String truncateVisible(String s, int maxCols) {
         if (maxCols <= 0) return "";
@@ -834,14 +832,12 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
     }
 
     /**
-     * Terminal size {@code {rows, cols}}, detected once, leak-free. We
-     * deliberately do NOT build a JLine terminal: JLine probes the terminal with
-     * capability queries (DA1 {@code \e[c}, mode reports like {@code \e[?2027$p}),
-     * and a transient build-then-close races the async replies — they arrive
-     * after we exit and the shell echoes them as garbage. Instead ask the tty
-     * directly via {@code stty size} (an ioctl, no escape sequences), then the
-     * {@code $LINES}/{@code $COLUMNS} env, then conservative defaults. Only
-     * called when animating (interactive tty).
+     * Terminal size {@code {rows, cols}}, detected once, leak-free. We deliberately do NOT build a
+     * JLine terminal: JLine probes the terminal with capability queries (DA1 {@code \e[c}, mode
+     * reports like {@code \e[?2027$p}), and a transient build-then-close races the async replies —
+     * they arrive after we exit and the shell echoes them as garbage. Instead ask the tty directly
+     * via {@code stty size} (an ioctl, no escape sequences), then the {@code $LINES}/{@code $COLUMNS}
+     * env, then conservative defaults. Only called when animating (interactive tty).
      */
     /** Terminal width in columns ({@code stty size} → {@code $COLUMNS} → {@value #DEFAULT_WIDTH}). */
     public static int detectColumns() {
@@ -889,12 +885,11 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
     }
 
     /**
-     * Redirect {@code System.out}/{@code System.err} so any process/phase output
-     * is line-buffered and printed <em>above</em> the live region via
-     * {@link #writeAbove}, keeping the region pinned to the bottom. The region
-     * itself keeps painting to the original (captured) stdout, so there's no
-     * recursion. Close the returned scope (try-with-resources) to restore the
-     * streams and flush any trailing partial line. No-op when not animating.
+     * Redirect {@code System.out}/{@code System.err} so any process/phase output is line-buffered and
+     * printed <em>above</em> the live region via {@link #writeAbove}, keeping the region pinned to
+     * the bottom. The region itself keeps painting to the original (captured) stdout, so there's no
+     * recursion. Close the returned scope (try-with-resources) to restore the streams and flush any
+     * trailing partial line. No-op when not animating.
      */
     public OutputScope captureOutput() {
         synchronized (lock) {
@@ -911,10 +906,10 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
     }
 
     /**
-     * Restore the real {@code System.out}/{@code System.err} and flush any
-     * trailing partial line above the region. Idempotent — called by the
-     * {@link OutputScope}, and defensively when the region settles (so a Ctrl-C
-     * mid-goal hands the streams back before {@link GlobalCancel} prints).
+     * Restore the real {@code System.out}/{@code System.err} and flush any trailing partial line
+     * above the region. Idempotent — called by the {@link OutputScope}, and defensively when the
+     * region settles (so a Ctrl-C mid-goal hands the streams back before {@link GlobalCancel}
+     * prints).
      */
     private void restoreStreams() {
         LineSink toFlush = null;
@@ -965,9 +960,9 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
         }
 
         /**
-         * Flush a buffered partial line that hasn't grown for {@code ms} (a
-         * sliding window reset on each write) — so output without a trailing
-         * newline still appears in a timely manner instead of stalling.
+         * Flush a buffered partial line that hasn't grown for {@code ms} (a sliding window reset on
+         * each write) — so output without a trailing newline still appears in a timely manner instead
+         * of stalling.
          */
         synchronized void maybeFlushStale(long ms) {
             if (buf.size() == 0) return;

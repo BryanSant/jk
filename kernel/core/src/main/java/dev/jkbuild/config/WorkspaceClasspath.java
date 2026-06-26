@@ -18,16 +18,14 @@ import java.util.Queue;
 import java.util.Set;
 
 /**
- * Resolve workspace-internal dependency jars for a single module's build
- * (PRD §13.3 composite-build semantics).
+ * Resolve workspace-internal dependency jars for a single module's build (PRD §13.3 composite-build
+ * semantics).
  *
- * <p>External deps come from {@code jk.lock} via {@code ClasspathResolver}.
- * Workspace-internal coords are filtered out of the lockfile by
- * {@code WorkspaceMerge}, so they must be re-injected here: for each
- * sibling module whose project coord matches an entry in the current
- * module's {@code dependencies.<scope>}, add the sibling's main jar
- * (under the workspace's shared {@code target/} per {@link BuildLayout})
- * to the classpath.
+ * <p>External deps come from {@code jk.lock} via {@code ClasspathResolver}. Workspace-internal
+ * coords are filtered out of the lockfile by {@code WorkspaceMerge}, so they must be re-injected
+ * here: for each sibling module whose project coord matches an entry in the current module's {@code
+ * dependencies.<scope>}, add the sibling's main jar (under the workspace's shared {@code target/}
+ * per {@link BuildLayout}) to the classpath.
  */
 public final class WorkspaceClasspath {
 
@@ -36,8 +34,8 @@ public final class WorkspaceClasspath {
     /**
      * @param moduleDir the module being built
      * @param module the parsed manifest of {@code moduleDir}
-     * @param scopes the scopes whose deps should contribute (typically
-     *     {@code MAIN} for compile, {@code MAIN}+{@code TEST} for tests)
+     * @param scopes the scopes whose deps should contribute (typically {@code MAIN} for compile,
+     *     {@code MAIN}+{@code TEST} for tests)
      */
     public static Result resolve(Path projectDir, JkBuild project, Set<Scope> scopes) throws IOException {
         // Case 1: project IS the workspace root — add all module jars implicitly.
@@ -158,8 +156,8 @@ public final class WorkspaceClasspath {
     }
 
     /**
-     * When the workspace root itself has source code, all module jars are
-     * automatically on its classpath — no explicit dep declaration needed.
+     * When the workspace root itself has source code, all module jars are automatically on its
+     * classpath — no explicit dep declaration needed.
      */
     private static Result resolveForRoot(Path root, JkBuild rootManifest) throws IOException {
         List<Path> jars = new ArrayList<>();
@@ -197,14 +195,15 @@ public final class WorkspaceClasspath {
             siblingLockfiles = List.copyOf(siblingLockfiles);
             siblingClosureJars = List.copyOf(siblingClosureJars);
         }
+
         /**
-         * Back-compat constructor for callers that don't distinguish the
-         * declared closure from the built jars (build/run): the closure
-         * defaults to {@code jars}.
+         * Back-compat constructor for callers that don't distinguish the declared closure from the
+         * built jars (build/run): the closure defaults to {@code jars}.
          */
         public Result(List<Path> jars, List<String> missingSiblingJars, List<Path> siblingLockfiles) {
             this(jars, missingSiblingJars, siblingLockfiles, jars);
         }
+
         /** Back-compat constructor for callers that don't use sibling lockfiles. */
         public Result(List<Path> jars, List<String> missingSiblingJars) {
             this(jars, missingSiblingJars, List.of(), jars);

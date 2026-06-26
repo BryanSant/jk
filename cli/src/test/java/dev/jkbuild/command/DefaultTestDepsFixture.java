@@ -7,11 +7,10 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * jk now injects the latest-stable JUnit Platform into every project's TEST
- * scope (see {@code LockOrchestrator.DEFAULT_TEST_DEPS}), so any test that runs
- * a real {@code jk lock}/{@code jk build} against a mock Maven server must offer
- * those coords. This seeds them with minimal, dependency-free POMs + stub jars
- * so resolution succeeds without pulling the real JUnit closure.
+ * jk now injects the latest-stable JUnit Platform into every project's TEST scope (see {@code
+ * LockOrchestrator.DEFAULT_TEST_DEPS}), so any test that runs a real {@code jk lock}/{@code jk
+ * build} against a mock Maven server must offer those coords. This seeds them with minimal,
+ * dependency-free POMs + stub jars so resolution succeeds without pulling the real JUnit closure.
  */
 final class DefaultTestDepsFixture {
 
@@ -44,14 +43,23 @@ final class DefaultTestDepsFixture {
         put(
                 served,
                 base + "/maven-metadata.xml",
-                "<metadata><groupId>" + group + "</groupId><artifactId>" + artifact
-                        + "</artifactId><versioning><versions><version>" + version
+                "<metadata><groupId>"
+                        + group
+                        + "</groupId><artifactId>"
+                        + artifact
+                        + "</artifactId><versioning><versions><version>"
+                        + version
                         + "</version></versions></versioning></metadata>");
         String dir = base + "/" + version + "/" + artifact + "-" + version;
         put(
                 served,
                 dir + ".pom",
-                "<project><groupId>" + group + "</groupId><artifactId>" + artifact + "</artifactId><version>" + version
+                "<project><groupId>"
+                        + group
+                        + "</groupId><artifactId>"
+                        + artifact
+                        + "</artifactId><version>"
+                        + version
                         + "</version></project>");
         served.put(dir + ".jar", (artifact + "-stub").getBytes(StandardCharsets.UTF_8));
     }

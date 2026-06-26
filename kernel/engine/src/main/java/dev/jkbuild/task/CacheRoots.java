@@ -13,34 +13,33 @@ import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 /**
- * Collects every CAS reference the on-disk roots name, so the sweep can
- * tell the live set from collectible garbage.
+ * Collects every CAS reference the on-disk roots name, so the sweep can tell the live set from
+ * collectible garbage.
  *
  * <p>Roots scanned:
+ *
  * <ul>
- *   <li>{@code actions/keys/<key>} — compile manifests. INPUT and
- *       OUTPUT lines name shas directly; CP lines embed shas in the
- *       absolute path they hand to javac.</li>
- *   <li>{@code actions/synced/<projectId>} — sync manifests (per-project
- *       reachability stamped by {@code jk sync}).</li>
- *   <li>{@code tools/envs/<bin>/env.json} — tool environments. Their
- *       classpath entries are absolute paths into the CAS.</li>
+ *   <li>{@code actions/keys/<key>} — compile manifests. INPUT and OUTPUT lines name shas directly;
+ *       CP lines embed shas in the absolute path they hand to javac.
+ *   <li>{@code actions/synced/<projectId>} — sync manifests (per-project reachability stamped by
+ *       {@code jk sync}).
+ *   <li>{@code tools/envs/<bin>/env.json} — tool environments. Their classpath entries are absolute
+ *       paths into the CAS.
  * </ul>
  *
- * <p>The scanner is intentionally string-pattern based rather than a
- * strict format parser: any text that <em>looks like</em> a path under
- * the CAS contributes its sha to the reachable set. That tolerates
- * format drift and means a new on-disk root subsystem can opt into
- * being-reachable just by writing absolute CAS paths anywhere it likes.
+ * <p>The scanner is intentionally string-pattern based rather than a strict format parser: any text
+ * that <em>looks like</em> a path under the CAS contributes its sha to the reachable set. That
+ * tolerates format drift and means a new on-disk root subsystem can opt into being-reachable just
+ * by writing absolute CAS paths anywhere it likes.
  */
 public final class CacheRoots {
 
     private CacheRoots() {}
 
     /**
-     * Collect every reachable sha from the on-disk roots beneath the
-     * given action + tools directories. The CAS is consulted only to
-     * recognise its own path layout — no objects are touched.
+     * Collect every reachable sha from the on-disk roots beneath the given action + tools
+     * directories. The CAS is consulted only to recognise its own path layout — no objects are
+     * touched.
      */
     public static Set<String> collect(Cas cas, Path actionsDir, Path toolsDir) throws IOException {
         Set<String> refs = new HashSet<>();
@@ -57,8 +56,8 @@ public final class CacheRoots {
     }
 
     /**
-     * Walk {@code dir}, read every regular file as text, pull explicit
-     * sha tokens AND any CAS-style path fragments into {@code refs}.
+     * Walk {@code dir}, read every regular file as text, pull explicit sha tokens AND any CAS-style
+     * path fragments into {@code refs}.
      */
     private static void scanTextFilesRecursively(Path dir, Cas cas, Set<String> refs) throws IOException {
         try (Stream<Path> stream = Files.walk(dir)) {
@@ -79,8 +78,8 @@ public final class CacheRoots {
     }
 
     /**
-     * Action records emit lines like {@code INPUT <sha> <path>} and
-     * {@code REF <sha>} (sync manifests). Pull those direct mentions.
+     * Action records emit lines like {@code INPUT <sha> <path>} and {@code REF <sha>} (sync
+     * manifests). Pull those direct mentions.
      */
     private static void addExplicitShaTokens(String body, Set<String> refs) {
         // 64-char lowercase hex, surrounded by start-of-line / whitespace /
@@ -93,10 +92,9 @@ public final class CacheRoots {
     }
 
     /**
-     * Any absolute path that looks like {@code .../sha256/AA/BB/<rest>}
-     * is treated as a reference — covers tool env JSONs, action-record
-     * {@code INPUT cp:} lines, and any other writer that stamps absolute
-     * CAS paths.
+     * Any absolute path that looks like {@code .../sha256/AA/BB/<rest>} is treated as a reference —
+     * covers tool env JSONs, action-record {@code INPUT cp:} lines, and any other writer that stamps
+     * absolute CAS paths.
      */
     private static void addPathEmbeddedShas(String body, Cas cas, Set<String> refs) {
         Matcher m = CAS_PATH.matcher(body);
@@ -110,11 +108,10 @@ public final class CacheRoots {
             Pattern.compile("(?:^|[\\s:])(?:sha256:)?([0-9a-f]{64})(?:$|[\\s\\n])", Pattern.MULTILINE);
 
     /**
-     * A path fragment ending in the CAS layout's
-     * {@code sha256/AA/BB/<60-hex>} suffix. We anchor on the literal
-     * {@code sha256/} segment so the match starts where the directory
-     * does — the caller still calls {@link Cas#hashFromPath} to verify
-     * the path actually sits under the active CAS root.
+     * A path fragment ending in the CAS layout's {@code sha256/AA/BB/<60-hex>} suffix. We anchor on
+     * the literal {@code sha256/} segment so the match starts where the directory does — the caller
+     * still calls {@link Cas#hashFromPath} to verify the path actually sits under the active CAS
+     * root.
      */
     private static final Pattern CAS_PATH =
             Pattern.compile("(?<=[\\s\"'(])/[^\\s\"'\\n]*/sha256/[0-9a-f]{2}/[0-9a-f]{2}/[0-9a-f]{60}");

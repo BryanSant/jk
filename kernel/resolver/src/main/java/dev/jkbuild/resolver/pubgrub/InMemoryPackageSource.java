@@ -13,12 +13,12 @@ import java.util.function.Consumer;
  * In-memory {@link PackageSource} for solver tests. Pure data; no I/O.
  *
  * <pre>{@code
- *   PackageSource src = InMemoryPackageSource.builder()
- *       .version("root", "1.0", deps -> deps
- *           .require("widget", VersionSet.exact("2.0")))
- *       .version("widget", "2.0")
- *       .version("widget", "1.0")
- *       .build();
+ * PackageSource src = InMemoryPackageSource.builder()
+ *     .version("root", "1.0", deps -> deps
+ *         .require("widget", VersionSet.exact("2.0")))
+ *     .version("widget", "2.0")
+ *     .version("widget", "1.0")
+ *     .build();
  * }</pre>
  */
 public final class InMemoryPackageSource implements PackageSource {

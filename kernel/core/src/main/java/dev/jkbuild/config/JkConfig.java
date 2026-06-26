@@ -6,29 +6,27 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Immutable view of the merged user/project configuration. Built by
- * {@link JkConfigLoader} (file layers from {@link ConfigSources}) which honours
- * the precedence:
+ * Immutable view of the merged user/project configuration. Built by {@link JkConfigLoader} (file
+ * layers from {@link ConfigSources}) which honours the precedence:
  *
  * <ol>
- *   <li>command-line flag (highest — applied by callers AFTER load)</li>
- *   <li>environment variable</li>
- *   <li>project-local {@code jk.toml} (from {@code [config]} table)</li>
- *   <li>user-global {@code ~/.jk/config.toml} (from {@code [config]} table)</li>
+ *   <li>command-line flag (highest — applied by callers AFTER load)
+ *   <li>environment variable
+ *   <li>project-local {@code jk.toml} (from {@code [config]} table)
+ *   <li>user-global {@code ~/.jk/config.toml} (from {@code [config]} table)
  * </ol>
  *
- * <p>There is no {@code /etc/jk} system layer and jk never reads {@code ~/.config}
- * — see {@link ConfigSources}.
+ * <p>There is no {@code /etc/jk} system layer and jk never reads {@code ~/.config} — see {@link
+ * ConfigSources}.
  *
- * <p>Each setting is an {@link Optional} — empty means "no layer set
- * this; use the built-in default". A consumer asks the config and falls
- * back to its own default when the answer is empty. This keeps the
- * "what does the user actually want" decision in one place.
+ * <p>Each setting is an {@link Optional} — empty means "no layer set this; use the built-in
+ * default". A consumer asks the config and falls back to its own default when the answer is empty.
+ * This keeps the "what does the user actually want" decision in one place.
  *
- * <p>This model only carries CLI-wide settings (color, offline, progress,
- * working-directory hint, …). Project-specific data like dependency
- * declarations stays in {@link dev.jkbuild.model.JkBuild}; this is the
- * thin slice the runtime needs before any project parsing happens.
+ * <p>This model only carries CLI-wide settings (color, offline, progress, working-directory hint,
+ * …). Project-specific data like dependency declarations stays in {@link
+ * dev.jkbuild.model.JkBuild}; this is the thin slice the runtime needs before any project parsing
+ * happens.
  */
 public record JkConfig(
         Optional<ColorChoice> color,
@@ -81,9 +79,8 @@ public record JkConfig(
     }
 
     /**
-     * Return a new config with {@code over}'s set values laid on top of
-     * this one's. {@code over} wins where it has a value; otherwise this
-     * config's value passes through.
+     * Return a new config with {@code over}'s set values laid on top of this one's. {@code over} wins
+     * where it has a value; otherwise this config's value passes through.
      */
     public JkConfig mergedWith(JkConfig over) {
         return new JkConfig(
@@ -105,10 +102,12 @@ public record JkConfig(
     public boolean offlineOr(boolean fallback) {
         return offline.orElse(fallback);
     }
+
     /** Re-run build outputs (compile/test/package), honoring cached deps. */
     public boolean rerunOr(boolean fallback) {
         return rerun.orElse(fallback);
     }
+
     /** Re-validate dependencies against their remotes (re-download if changed). */
     public boolean refreshOr(boolean fallback) {
         return refresh.orElse(fallback);

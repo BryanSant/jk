@@ -2,10 +2,9 @@
 package dev.jkbuild.command;
 
 /**
- * Minimal POSIX single-quote escaping for shell values. Wraps in single
- * quotes and escapes embedded single quotes via {@code '\''}. Used by
- * Bash, Zsh, and Fish — PowerShell uses a different scheme (see
- * {@link PwshShell}).
+ * Minimal POSIX single-quote escaping for shell values. Wraps in single quotes and escapes embedded
+ * single quotes via {@code '\''}. Used by Bash, Zsh, and Fish — PowerShell uses a different scheme
+ * (see {@link PwshShell}).
  */
 final class PosixQuote {
 

@@ -6,9 +6,8 @@ import dev.jkbuild.run.GoalResult;
 import java.io.PrintStream;
 
 /**
- * Quietest console listener: prints only the final pass/fail summary
- * line and any structured errors. Used when the user pipes output,
- * passes {@code --quiet}, or when the goal is marked
+ * Quietest console listener: prints only the final pass/fail summary line and any structured
+ * errors. Used when the user pipes output, passes {@code --quiet}, or when the goal is marked
  * {@link dev.jkbuild.run.Goal#interactive interactive}.
  */
 public final class SilentListener implements GoalListener {

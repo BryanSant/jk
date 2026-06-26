@@ -14,6 +14,7 @@ import dev.jkbuild.model.VersionSelector;
 import dev.jkbuild.model.Workspace;
 import java.net.URI;
 import java.util.EnumMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -126,7 +127,7 @@ class JkBuildRendererTest {
 
     @Test
     void renders_and_round_trips_manifest_table() {
-        var manifest = new java.util.LinkedHashMap<String, String>();
+        var manifest = new LinkedHashMap<String, String>();
         manifest.put("Implementation-Title", "jk-test-runner");
         manifest.put("Implementation-Version", "1.0.0");
         JkBuild model = JkBuild.of(new JkBuild.Project("com.example", "widget", "1.0.0", 21))
@@ -140,8 +141,8 @@ class JkBuildRendererTest {
         JkBuild reparsed = JkBuildParser.parse(out);
         assertThat(reparsed.manifest())
                 .containsExactly(
-                        java.util.Map.entry("Implementation-Title", "jk-test-runner"),
-                        java.util.Map.entry("Implementation-Version", "1.0.0"));
+                        Map.entry("Implementation-Title", "jk-test-runner"),
+                        Map.entry("Implementation-Version", "1.0.0"));
     }
 
     @Test

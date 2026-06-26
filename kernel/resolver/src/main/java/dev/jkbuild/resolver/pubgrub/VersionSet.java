@@ -8,14 +8,12 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 
 /**
- * A set of version strings, represented as a disjoint union of ranges.
- * Closed under intersection, union, and complement — the algebra PubGrub
- * needs to reason about positive and negative terms.
+ * A set of version strings, represented as a disjoint union of ranges. Closed under intersection,
+ * union, and complement — the algebra PubGrub needs to reason about positive and negative terms.
  *
- * <p>Total order on versions comes from {@link Versions#compare(String, String)},
- * which is "good enough" for the v0.1 first PubGrub port. Full Maven version
- * ordering (qualifier precedence: alpha &lt; beta &lt; rc &lt; ga &lt; sp)
- * ships as a follow-up.
+ * <p>Total order on versions comes from {@link Versions#compare(String, String)}, which is "good
+ * enough" for the v0.1 first PubGrub port. Full Maven version ordering (qualifier precedence: alpha
+ * &lt; beta &lt; rc &lt; ga &lt; sp) ships as a follow-up.
  */
 public sealed interface VersionSet permits VersionSet.Empty, VersionSet.All, VersionSet.Range, VersionSet.Union {
 
@@ -149,8 +147,8 @@ public sealed interface VersionSet permits VersionSet.Empty, VersionSet.All, Ver
     }
 
     /**
-     * A single range. {@code null} bounds mean unbounded on that side.
-     * Constructor normalizes degenerate ranges to {@link #EMPTY}.
+     * A single range. {@code null} bounds mean unbounded on that side. Constructor normalizes
+     * degenerate ranges to {@link #EMPTY}.
      */
     record Range(String min, boolean minInclusive, String max, boolean maxInclusive) implements VersionSet {
 
@@ -161,8 +159,12 @@ public sealed interface VersionSet permits VersionSet.Empty, VersionSet.All, Ver
             if (min != null && max != null) {
                 int cmp = Versions.compare(min, max);
                 if (cmp > 0 || (cmp == 0 && (!minInclusive || !maxInclusive))) {
-                    throw new IllegalArgumentException("empty range: " + bracket(minInclusive, '[', '(') + min + ","
-                            + max + bracket(maxInclusive, ']', ')'));
+                    throw new IllegalArgumentException("empty range: "
+                            + bracket(minInclusive, '[', '(')
+                            + min
+                            + ","
+                            + max
+                            + bracket(maxInclusive, ']', ')'));
                 }
             }
         }
@@ -346,7 +348,8 @@ public sealed interface VersionSet permits VersionSet.Empty, VersionSet.All, Ver
                 return "{" + min + "}";
             }
             return (minInclusive ? "[" : "(")
-                    + (min == null ? "-∞" : min) + ","
+                    + (min == null ? "-∞" : min)
+                    + ","
                     + (max == null ? "+∞" : max)
                     + (maxInclusive ? "]" : ")");
         }

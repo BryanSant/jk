@@ -13,8 +13,8 @@ import java.util.HexFormat;
 import java.util.Objects;
 
 /**
- * SHA-256-keyed content-addressed store. Layout: {@code &lt;root&gt;/sha256/AB/CD/&lt;rest&gt;}
- * per PRD §4. Writes are atomic (write-then-rename); reads verify the hash.
+ * SHA-256-keyed content-addressed store. Layout: {@code &lt;root&gt;/sha256/AB/CD/&lt;rest&gt;} per
+ * PRD §4. Writes are atomic (write-then-rename); reads verify the hash.
  */
 public final class Cas {
 
@@ -44,12 +44,11 @@ public final class Cas {
     }
 
     /**
-     * Inverse of {@link #pathFor}: extract the hex hash from a path that
-     * looks like a CAS object location, or {@link java.util.Optional#empty}
-     * if it doesn't fit the layout. Used by the sweep when scanning tool
-     * env JSONs and action records — any absolute path under
-     * {@code <root>/sha256/AA/BB/<rest>} contributes its hash to the
-     * reachable set, regardless of the file format it came from.
+     * Inverse of {@link #pathFor}: extract the hex hash from a path that looks like a CAS object
+     * location, or {@link java.util.Optional#empty} if it doesn't fit the layout. Used by the sweep
+     * when scanning tool env JSONs and action records — any absolute path under {@code
+     * <root>/sha256/AA/BB/<rest>} contributes its hash to the reachable set, regardless of the file
+     * format it came from.
      */
     public java.util.Optional<String> hashFromPath(Path candidate) {
         Path normalised = candidate.toAbsolutePath().normalize();
@@ -77,9 +76,8 @@ public final class Cas {
     }
 
     /**
-     * Write data into the CAS. Returns the on-disk path. Idempotent — if the
-     * blob is already present and matches, the existing path is returned
-     * without re-writing.
+     * Write data into the CAS. Returns the on-disk path. Idempotent — if the blob is already present
+     * and matches, the existing path is returned without re-writing.
      */
     public Path put(byte[] data) throws IOException {
         String hex = Hashing.sha256Hex(data);
@@ -100,16 +98,14 @@ public final class Cas {
     }
 
     /**
-     * Stream {@code in} into the CAS, hashing as the bytes flow through a
-     * fixed buffer so the full payload is never resident in memory — the
-     * memory-safe counterpart to {@link #put(byte[])} for large artifacts
-     * fetched off the network. The content's own SHA-256 becomes its key, so
-     * the hash isn't known until the stream is drained: bytes land in a temp
-     * file first, then move atomically into place. The caller owns closing
-     * {@code in}.
+     * Stream {@code in} into the CAS, hashing as the bytes flow through a fixed buffer so the full
+     * payload is never resident in memory — the memory-safe counterpart to {@link #put(byte[])} for
+     * large artifacts fetched off the network. The content's own SHA-256 becomes its key, so the hash
+     * isn't known until the stream is drained: bytes land in a temp file first, then move atomically
+     * into place. The caller owns closing {@code in}.
      *
-     * <p>Idempotent — if a blob with the computed hash is already present the
-     * temp file is discarded and the existing entry returned.
+     * <p>Idempotent — if a blob with the computed hash is already present the temp file is discarded
+     * and the existing entry returned.
      */
     public Stored putStream(InputStream in) throws IOException {
         Files.createDirectories(root);
@@ -145,18 +141,16 @@ public final class Cas {
     public record Stored(Path path, String sha256, long size) {}
 
     /**
-     * Materialise a CAS entry as a hard link to {@code source} when the
-     * filesystem supports it; falls back to a byte copy otherwise.
+     * Materialise a CAS entry as a hard link to {@code source} when the filesystem supports it; falls
+     * back to a byte copy otherwise.
      *
-     * <p>This is the right primitive when an action has just produced a
-     * file in its own output tree (e.g. {@code build/classes/main/Hello.class}
-     * fresh out of javac) and we want the CAS to also reference it: one
-     * inode, two paths. No double-write, no double-storage. The caller
-     * supplies the hex hash so the file isn't re-read just to verify the
-     * key — the caller already had to hash it to build the action record.
+     * <p>This is the right primitive when an action has just produced a file in its own output tree
+     * (e.g. {@code build/classes/main/Hello.class} fresh out of javac) and we want the CAS to also
+     * reference it: one inode, two paths. No double-write, no double-storage. The caller supplies the
+     * hex hash so the file isn't re-read just to verify the key — the caller already had to hash it
+     * to build the action record.
      *
-     * <p>Idempotent. If a CAS entry for {@code hex} already exists the
-     * source is left untouched.
+     * <p>Idempotent. If a CAS entry for {@code hex} already exists the source is left untouched.
      */
     public Path putByLink(Path source, String hex) throws IOException {
         Path target = pathFor(hex);
@@ -173,8 +167,8 @@ public final class Cas {
     }
 
     /**
-     * Read bytes for a hash. Verifies the content actually hashes to the
-     * expected value; throws if the on-disk blob is corrupted.
+     * Read bytes for a hash. Verifies the content actually hashes to the expected value; throws if
+     * the on-disk blob is corrupted.
      */
     public byte[] read(String sha256Hex) throws IOException {
         Path file = pathFor(sha256Hex);

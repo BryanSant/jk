@@ -15,14 +15,13 @@ import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
 
 /**
- * Orchestrates {@code jk audit} (PRD §23.5): turn a {@link Lockfile} into
- * a list of {@link OsvClient.Query}, batch-query OSV, then fetch full
- * vuln details for any hits to populate severity + summary.
+ * Orchestrates {@code jk audit} (PRD §23.5): turn a {@link Lockfile} into a list of {@link
+ * OsvClient.Query}, batch-query OSV, then fetch full vuln details for any hits to populate severity
+ * + summary.
  *
- * <p>Per-vuln fetches dispatch concurrently on {@link JkThreads#io()} —
- * each is an independent {@code GET /v1/vulns/<id>} HTTP call. Findings
- * are emitted in deterministic order (package iteration order × OSV
- * result order) regardless of completion order.
+ * <p>Per-vuln fetches dispatch concurrently on {@link JkThreads#io()} — each is an independent
+ * {@code GET /v1/vulns/<id>} HTTP call. Findings are emitted in deterministic order (package
+ * iteration order × OSV result order) regardless of completion order.
  */
 public final class Auditor {
 

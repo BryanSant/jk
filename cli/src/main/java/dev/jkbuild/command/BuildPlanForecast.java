@@ -29,31 +29,29 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Forecasts what {@code jk build} would do, phase by phase, for every module in
- * the {@link BuildGraph} — without executing anything. It reuses the build's own
- * cache primitives so the prediction matches reality:
+ * Forecasts what {@code jk build} would do, phase by phase, for every module in the {@link
+ * BuildGraph} — without executing anything. It reuses the build's own cache primitives so the
+ * prediction matches reality:
  *
  * <ul>
- *   <li><b>compile-main / compile-test</b> — {@link JavaIncrementalCompile#predict}
- *       on the same {@link CompileRequest} the build assembles (exact action key →
- *       CACHE_HIT / FULL / INCREMENTAL).</li>
- *   <li><b>run-tests</b> — {@link TestStamp#computeKey} + a read-only
- *       {@link ActionCache#lookup}.</li>
- *   <li><b>package-jar</b> — {@link ActionKey#forArtifact} + a read-only lookup.</li>
+ *   <li><b>compile-main / compile-test</b> — {@link JavaIncrementalCompile#predict} on the same
+ *       {@link CompileRequest} the build assembles (exact action key → CACHE_HIT / FULL /
+ *       INCREMENTAL).
+ *   <li><b>run-tests</b> — {@link TestStamp#computeKey} + a read-only {@link ActionCache#lookup}.
+ *   <li><b>package-jar</b> — {@link ActionKey#forArtifact} + a read-only lookup.
  * </ul>
  *
- * <p>The one correctness rule that makes this a <em>faithful</em> forecast rather
- * than a per-phase snapshot: <b>dirty-propagation in dependency order</b>. A
- * downstream phase's cache key is derived from outputs an upstream phase is about
- * to change, so a current-disk lookup would falsely report "cached". Therefore, if
- * a module's compile does real work — or any of its workspace-sibling dependencies
- * is dirty (its classpath jar changes) — every consumer (compile-test → run-tests →
- * package) is reported as <em>will run</em>. Only a fully cache-clean chain trusts
- * the downstream keys.
+ * <p>The one correctness rule that makes this a <em>faithful</em> forecast rather than a per-phase
+ * snapshot: <b>dirty-propagation in dependency order</b>. A downstream phase's cache key is derived
+ * from outputs an upstream phase is about to change, so a current-disk lookup would falsely report
+ * "cached". Therefore, if a module's compile does real work — or any of its workspace-sibling
+ * dependencies is dirty (its classpath jar changes) — every consumer (compile-test → run-tests →
+ * package) is reported as <em>will run</em>. Only a fully cache-clean chain trusts the downstream
+ * keys.
  *
- * <p>Read-only lookups make any residual key drift <em>safe</em>: a miscomputed
- * downstream key misses the cache and is reported as "will run" (pessimistic) — it
- * can never produce a false "cached".
+ * <p>Read-only lookups make any residual key drift <em>safe</em>: a miscomputed downstream key
+ * misses the cache and is reported as "will run" (pessimistic) — it can never produce a false
+ * "cached".
  */
 final class BuildPlanForecast {
 
@@ -68,8 +66,8 @@ final class BuildPlanForecast {
     }
 
     /**
-     * One phase of a module's build. {@code text} is the right-hand detail after
-     * the status glyph; {@code key} is the 8-char action key when known (cached).
+     * One phase of a module's build. {@code text} is the right-hand detail after the status glyph;
+     * {@code key} is the 8-char action key when known (cached).
      */
     record Phase(String name, Status status, String text, String key) {
         boolean cached() {

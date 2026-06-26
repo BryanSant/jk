@@ -10,8 +10,8 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * Aggregated {@code jk audit} findings (PRD §23.5). Built from a
- * {@link Lockfile} plus the per-package OSV response.
+ * Aggregated {@code jk audit} findings (PRD §23.5). Built from a {@link Lockfile} plus the
+ * per-package OSV response.
  */
 public final class AuditReport {
 

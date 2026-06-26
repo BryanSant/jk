@@ -25,10 +25,9 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * {@code jk mvn ...} — passthrough to Maven (PRD §24.1). The
- * {@code jk-compat-runner} worker provisions the distribution if needed and
- * returns its path; the main process then execs {@code bin/mvn} directly so
- * Maven's stdout/stderr reach the terminal unmodified.
+ * {@code jk mvn ...} — passthrough to Maven (PRD §24.1). The {@code jk-compat-runner} worker
+ * provisions the distribution if needed and returns its path; the main process then execs {@code
+ * bin/mvn} directly so Maven's stdout/stderr reach the terminal unmodified.
  */
 public final class MvnCommand implements CliCommand {
 

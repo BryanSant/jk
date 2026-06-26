@@ -10,10 +10,9 @@ import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 
 /**
- * Exercises {@link PluginLoader}'s fork dispatch end-to-end: it launches the
- * worker as {@code <java> -cp <jar> PluginWorkerMain <args>}, which ServiceLoad-s
- * the plugin and runs it. (jk has no in-process plugin path — every worker is
- * its own JVM.)
+ * Exercises {@link PluginLoader}'s fork dispatch end-to-end: it launches the worker as {@code
+ * <java> -cp <jar> PluginWorkerMain <args>}, which ServiceLoad-s the plugin and runs it. (jk has no
+ * in-process plugin path — every worker is its own JVM.)
  */
 class PluginLoaderTest {
 

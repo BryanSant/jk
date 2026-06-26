@@ -19,22 +19,23 @@ import java.nio.file.Path;
 import java.util.function.Consumer;
 
 /**
- * Resolves the toolchain paths the subprocess compile strategies need:
- * the JDK that hosts {@code javac} and the Kotlin distribution that
- * hosts {@code kotlinc}. Centralised so {@code BuildCommand},
- * {@code CompileCommand} and {@code TestCommand} agree on lookup order.
+ * Resolves the toolchain paths the subprocess compile strategies need: the JDK that hosts {@code
+ * javac} and the Kotlin distribution that hosts {@code kotlinc}. Centralised so {@code
+ * BuildCommand}, {@code CompileCommand} and {@code TestCommand} agree on lookup order.
  *
  * <p>Java home order:
+ *
  * <ol>
- *   <li>{@code JdkResolver.resolve(projectDir)} — the project's pinned JDK.</li>
- *   <li>{@code System.getProperty("java.home")} — the JVM running jk.</li>
+ *   <li>{@code JdkResolver.resolve(projectDir)} — the project's pinned JDK.
+ *   <li>{@code System.getProperty("java.home")} — the JVM running jk.
  * </ol>
  *
  * <p>Kotlin home order:
+ *
  * <ol>
- *   <li>{@code KOTLIN_HOME} env var — honours SDKMAN / manual installs.</li>
- *   <li>{@code $JK_CACHE_DIR/tools/kotlin/&lt;default&gt;/} — auto-installed
- *       via {@link ToolInstaller} on first use.</li>
+ *   <li>{@code KOTLIN_HOME} env var — honours SDKMAN / manual installs.
+ *   <li>{@code $JK_CACHE_DIR/tools/kotlin/&lt;default&gt;/} — auto-installed via {@link
+ *       ToolInstaller} on first use.
  * </ol>
  */
 public final class CompileToolchain {
@@ -84,10 +85,9 @@ public final class CompileToolchain {
     }
 
     /**
-     * The JDK that's hosting the current jk process, or {@code $JAVA_HOME}
-     * when running under GraalVM native-image (which doesn't expose
-     * {@code java.home}). Used as the last-resort fallback when no project
-     * JDK is pinned; throws an explanatory error if neither is available.
+     * The JDK that's hosting the current jk process, or {@code $JAVA_HOME} when running under GraalVM
+     * native-image (which doesn't expose {@code java.home}). Used as the last-resort fallback when no
+     * project JDK is pinned; throws an explanatory error if neither is available.
      */
     public static Path runningJavaHome() {
         String home = System.getProperty("java.home");
@@ -101,9 +101,8 @@ public final class CompileToolchain {
     }
 
     /**
-     * Resolve a Kotlin installation, auto-downloading via {@link ToolInstaller}
-     * if neither {@code KOTLIN_HOME} nor {@code $JK_CACHE_DIR/tools/kotlin/} is
-     * populated.
+     * Resolve a Kotlin installation, auto-downloading via {@link ToolInstaller} if neither {@code
+     * KOTLIN_HOME} nor {@code $JK_CACHE_DIR/tools/kotlin/} is populated.
      *
      * @param cacheDir the {@link Cas} root (typically {@link JkDirs#cache()})
      */
@@ -115,10 +114,9 @@ public final class CompileToolchain {
     private static final Consumer<String> NO_NOTICE = s -> {};
 
     /**
-     * Pick the Kotlin compiler version to provision: the version pinned in
-     * {@code jk.lock} (resolved by {@code jk lock}) if present, else an exact
-     * {@code project.kotlin} pin, else {@code null} — which falls back to the
-     * bundled default distribution.
+     * Pick the Kotlin compiler version to provision: the version pinned in {@code jk.lock} (resolved
+     * by {@code jk lock}) if present, else an exact {@code project.kotlin} pin, else {@code null} —
+     * which falls back to the bundled default distribution.
      */
     public static String kotlinVersionFor(dev.jkbuild.lock.Lockfile lock, JkBuild project) {
         if (lock != null && lock.kotlin() != null && !lock.kotlin().isBlank()) {
@@ -131,19 +129,18 @@ public final class CompileToolchain {
     }
 
     /**
-     * Resolve a Kotlin installation pinned to a specific version (e.g. from
-     * a script's {@code //KOTLIN 2.1.0} directive). Passes {@code null} to
-     * fall back to the bundled default distribution.
+     * Resolve a Kotlin installation pinned to a specific version (e.g. from a script's {@code
+     * //KOTLIN 2.1.0} directive). Passes {@code null} to fall back to the bundled default
+     * distribution.
      */
     public static Path resolveKotlinHome(Path cacheDir, String versionOverride) {
         return resolveKotlinHome(cacheDir, versionOverride, NO_NOTICE);
     }
 
     /**
-     * As {@link #resolveKotlinHome(Path, String)}, but reports a one-line
-     * provisioning notice ("Linked/Installed Kotlin …") to {@code notice}
-     * instead of a stream — the caller (the CLI view, or a phase's
-     * {@code PhaseContext::output}) decides how to surface it.
+     * As {@link #resolveKotlinHome(Path, String)}, but reports a one-line provisioning notice
+     * ("Linked/Installed Kotlin …") to {@code notice} instead of a stream — the caller (the CLI view,
+     * or a phase's {@code PhaseContext::output}) decides how to surface it.
      */
     public static Path resolveKotlinHome(Path cacheDir, String versionOverride, Consumer<String> notice) {
         // ToolProvisioning already runs the EnvVarProbe (which reads
@@ -157,14 +154,17 @@ public final class CompileToolchain {
         if (versionOverride == null || versionOverride.isBlank()) {
             dist = KotlinResolver.defaultDistribution();
         } else {
-            URI uri = URI.create("https://github.com/JetBrains/kotlin/releases/download/v" + versionOverride
-                    + "/kotlin-compiler-" + versionOverride + ".zip");
+            URI uri = URI.create("https://github.com/JetBrains/kotlin/releases/download/v"
+                    + versionOverride
+                    + "/kotlin-compiler-"
+                    + versionOverride
+                    + ".zip");
             dist = new ToolDistribution(BuildTool.KOTLIN, versionOverride, uri, "zip");
         }
         try {
             boolean refresh = dev.jkbuild.config.ActiveConfig.get().refreshOr(false);
             ToolProvisioning.Result result =
-                    ToolProvisioning.provision(dist, registry, new Http(), /*noDiscover=*/ false, refresh);
+                    ToolProvisioning.provision(dist, registry, new Http(), /* noDiscover= */ false, refresh);
             switch (result.source()) {
                 case LINKED -> notice.accept("Linked Kotlin " + dist.version() + " from " + result.detail());
                 case DOWNLOADED -> notice.accept("Installed Kotlin " + dist.version() + " from " + result.detail());

@@ -14,10 +14,10 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * {@code jk export gradle} — translate {@code jk.toml} (+ {@code jk.lock}) into a
- * runnable Gradle Kotlin-DSL build ({@code settings.gradle.kts} +
- * {@code build.gradle.kts} per project). Locked versions reproduce what jk builds;
- * {@code project.jdk} maps to a Gradle toolchain + the foojay resolver.
+ * {@code jk export gradle} — translate {@code jk.toml} (+ {@code jk.lock}) into a runnable Gradle
+ * Kotlin-DSL build ({@code settings.gradle.kts} + {@code build.gradle.kts} per project). Locked
+ * versions reproduce what jk builds; {@code project.jdk} maps to a Gradle toolchain + the foojay
+ * resolver.
  */
 public final class ExportGradleCommand implements CliCommand {
 

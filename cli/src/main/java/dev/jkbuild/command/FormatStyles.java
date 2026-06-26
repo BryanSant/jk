@@ -7,18 +7,17 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Resolves the effective Java/Kotlin formatter styles {@code jk format} hands
- * to the {@code jk-formatter} worker, plus the cross-language aliases.
+ * Resolves the effective Java/Kotlin formatter styles {@code jk format} hands to the {@code
+ * jk-formatter} worker, plus the cross-language aliases.
  *
- * <p>Style names are the worker's contract (it maps them onto Spotless steps):
- * Java {@code palantir} / {@code google} / {@code aosp}; Kotlin {@code kotlinlang}
- * / {@code google} / {@code meta}. The bare-{@code jk format} default is
- * {@code palantir} + {@code kotlinlang} — both 4-space, 120-col, for a
- * consistent look in mixed Java/Kotlin repos.
+ * <p>Style names are the worker's contract (it maps them onto Spotless steps): Java {@code
+ * palantir} / {@code google} / {@code aosp}; Kotlin {@code kotlinlang} / {@code google} / {@code
+ * meta}. The bare-{@code jk format} default is {@code palantir} + {@code kotlinlang} — both
+ * 4-space, 120-col, for a consistent look in mixed Java/Kotlin repos.
  *
- * <p>Per-language precedence: a {@code --java-style}/{@code --kotlin-style} flag
- * wins, then a {@code --style} alias, then {@code format.java}/{@code format.kotlin}
- * in jk.toml, then the {@code format.style} alias, then the built-in default.
+ * <p>Per-language precedence: a {@code --java-style}/{@code --kotlin-style} flag wins, then a
+ * {@code --style} alias, then {@code format.java}/{@code format.kotlin} in jk.toml, then the {@code
+ * format.style} alias, then the built-in default.
  */
 final class FormatStyles {
 
@@ -46,9 +45,9 @@ final class FormatStyles {
     record Resolved(String java, String kotlin, boolean optimizeImports) {}
 
     /**
-     * Resolve the effective styles from (CLI flags) + (jk.toml {@code [format]}).
-     * {@code cliAlias} is {@code --style}; {@code cliJava}/{@code cliKotlin} are
-     * {@code --java-style}/{@code --kotlin-style}. Any of these may be {@code null}.
+     * Resolve the effective styles from (CLI flags) + (jk.toml {@code [format]}). {@code cliAlias} is
+     * {@code --style}; {@code cliJava}/{@code cliKotlin} are {@code --java-style}/{@code
+     * --kotlin-style}. Any of these may be {@code null}.
      *
      * @throws IllegalArgumentException on an unknown style or alias (message is user-facing)
      */
@@ -91,15 +90,23 @@ final class FormatStyles {
         if (name == null || name.isBlank()) return null;
         Resolved pair = ALIASES.get(name.trim().toLowerCase(java.util.Locale.ROOT));
         if (pair == null) {
-            throw new IllegalArgumentException(source + " = \"" + name + "\" is not a known style preset ("
-                    + String.join(", ", ALIASES.keySet()) + ")");
+            throw new IllegalArgumentException(source
+                    + " = \""
+                    + name
+                    + "\" is not a known style preset ("
+                    + String.join(", ", ALIASES.keySet())
+                    + ")");
         }
         return pair;
     }
 
     private static void validate(String style, List<String> allowed, String lang) {
         if (!allowed.contains(style)) {
-            throw new IllegalArgumentException("unknown " + lang + " format style \"" + style + "\" — choose one of "
+            throw new IllegalArgumentException("unknown "
+                    + lang
+                    + " format style \""
+                    + style
+                    + "\" — choose one of "
                     + String.join(", ", allowed));
         }
     }

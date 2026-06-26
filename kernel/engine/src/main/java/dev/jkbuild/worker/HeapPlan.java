@@ -2,24 +2,22 @@
 package dev.jkbuild.worker;
 
 /**
- * Turns "how much memory is free" + "how many worker JVMs we'd like to run at
- * once" into a concrete heap budget: a final concurrency and the per-JVM
- * {@code -Xms} / {@code -XX:SoftMaxHeapSize} / {@code -Xmx} sizes.
+ * Turns "how much memory is free" + "how many worker JVMs we'd like to run at once" into a concrete
+ * heap budget: a final concurrency and the per-JVM {@code -Xms} / {@code -XX:SoftMaxHeapSize} /
+ * {@code -Xmx} sizes.
  *
  * <p>The policy (all sizes in bytes):
+ *
  * <ol>
- *   <li>reserve a buffer for the rest of the machine — {@code max(10%, 96 MiB)};</li>
- *   <li>{@code usable = available − buffer};</li>
- *   <li>shrink the requested JVM count while a JVM's share
- *       ({@code usable / count}) is below {@link #MIN_PARALLEL_HEAP} (512 MiB) —
- *       parallelism is only worth it if each fork gets a real heap;</li>
- *   <li>if it collapses to a single JVM and even that is under 512 MiB, run
- *       serial with {@code -Xmx = usable} and emit a {@linkplain Plan#warning()
- *       warning};</li>
- *   <li>otherwise {@code -Xmx = usable / count} (burst), the soft target is
- *       {@code clamp(50% × perJvm, 512 MiB, perJvm)} (good neighbour — ZGC
- *       floats up to it and {@code ZUncommit} returns the rest), and {@code -Xms}
- *       is small so nothing is pre-committed.</li>
+ *   <li>reserve a buffer for the rest of the machine — {@code max(10%, 96 MiB)};
+ *   <li>{@code usable = available − buffer};
+ *   <li>shrink the requested JVM count while a JVM's share ({@code usable / count}) is below {@link
+ *       #MIN_PARALLEL_HEAP} (512 MiB) — parallelism is only worth it if each fork gets a real heap;
+ *   <li>if it collapses to a single JVM and even that is under 512 MiB, run serial with {@code -Xmx
+ *       = usable} and emit a {@linkplain Plan#warning() warning};
+ *   <li>otherwise {@code -Xmx = usable / count} (burst), the soft target is {@code clamp(50% ×
+ *       perJvm, 512 MiB, perJvm)} (good neighbour — ZGC floats up to it and {@code ZUncommit}
+ *       returns the rest), and {@code -Xms} is small so nothing is pre-committed.
  * </ol>
  */
 public final class HeapPlan {
@@ -34,17 +32,16 @@ public final class HeapPlan {
     static final long XMX_FLOOR = 32L << 20; // never hand a JVM a degenerate heap
 
     /**
-     * The resolved budget. {@code parallelism} is the number of worker JVMs that
-     * may run at once; the heap sizes apply to each one. {@code warning} is
-     * non-null only when forced to a sub-512 MiB serial best-effort run.
+     * The resolved budget. {@code parallelism} is the number of worker JVMs that may run at once; the
+     * heap sizes apply to each one. {@code warning} is non-null only when forced to a sub-512 MiB
+     * serial best-effort run.
      */
     public record Plan(int parallelism, long xmsBytes, long softMaxBytes, long xmxBytes, String warning) {}
 
     /**
-     * Peak worker-JVM count we'd like before the memory veto: {@code modules}
-     * built at once, each forking up to {@code workers} test JVMs.
-     * {@code --parallel-tests} lets test phases overlap (so the peak multiplies);
-     * otherwise tests are gated to one module at a time and the peak is the
+     * Peak worker-JVM count we'd like before the memory veto: {@code modules} built at once, each
+     * forking up to {@code workers} test JVMs. {@code --parallel-tests} lets test phases overlap (so
+     * the peak multiplies); otherwise tests are gated to one module at a time and the peak is the
      * larger of the two. Clamped to {@code cap} (the usable thread count).
      */
     public static int requestedJvms(int modules, int workers, boolean parallelTests, int cap) {
@@ -54,7 +51,10 @@ public final class HeapPlan {
         return Math.max(1, Math.min(peak, Math.max(1, cap)));
     }
 
-    /** Compute the budget for {@code availableBytes} of free memory and {@code requestedJvms} desired forks. */
+    /**
+     * Compute the budget for {@code availableBytes} of free memory and {@code requestedJvms} desired
+     * forks.
+     */
     public static Plan compute(long availableBytes, int requestedJvms) {
         long available = Math.max(0, availableBytes);
         long buffer = Math.max((long) (available * BUFFER_FRACTION), BUFFER_FLOOR);
@@ -66,8 +66,12 @@ public final class HeapPlan {
         long perJvm = Math.max(XMX_FLOOR, usable / jvms);
         String warning = null;
         if (jvms == 1 && usable < MIN_PARALLEL_HEAP) {
-            warning = "only " + mib(usable) + " MiB of usable memory (< 512 MiB) — " + "building serially with -Xmx"
-                    + mib(perJvm) + "m as a best effort";
+            warning = "only "
+                    + mib(usable)
+                    + " MiB of usable memory (< 512 MiB) — "
+                    + "building serially with -Xmx"
+                    + mib(perJvm)
+                    + "m as a best effort";
         }
 
         long softMax = Math.min(perJvm, Math.max((long) (perJvm * SOFT_FRACTION), MIN_PARALLEL_HEAP));

@@ -3,6 +3,7 @@ package dev.jkbuild.command;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 
 class ShellTest {
@@ -125,21 +126,21 @@ class ShellTest {
     void zsh_rc_file_is_dot_zshrc_not_zshenv() {
         // .zshrc is the interactive-shell config; .zshenv runs even for
         // non-interactive subshells where our precmd/chpwd hooks don't fit.
-        var home = java.nio.file.Path.of("/home/u");
+        var home = Path.of("/home/u");
         assertThat(new ZshShell().rcFile(home)).isEqualTo(home.resolve(".zshrc"));
         assertThat(new ZshShell().rcFileDisplay()).isEqualTo("~/.zshrc");
     }
 
     @Test
     void bash_rc_file_is_dot_bashrc() {
-        var home = java.nio.file.Path.of("/home/u");
+        var home = Path.of("/home/u");
         assertThat(new BashShell().rcFile(home)).isEqualTo(home.resolve(".bashrc"));
         assertThat(new BashShell().rcFileDisplay()).isEqualTo("~/.bashrc");
     }
 
     @Test
     void fish_rc_file_is_config_fish() {
-        var home = java.nio.file.Path.of("/home/u");
+        var home = Path.of("/home/u");
         assertThat(new FishShell().rcFile(home))
                 .isEqualTo(home.resolve(".config").resolve("fish").resolve("config.fish"));
     }

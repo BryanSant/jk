@@ -7,12 +7,11 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * A repository declared in {@code jk.toml}'s {@code repositories.*} block:
- * a name, a URL, an optional inline {@link RepoCredential} (from
- * {@code username}/{@code password}/{@code token} fields), and optional
- * {@link ObjectStoreConfig} for {@code s3://}/{@code gs://} backends
- * (region/endpoint/keys) — see docs/artifact-repos.md. Most repos carry
- * neither and resolve auth from env / store / settings.xml / the forge bridge.
+ * A repository declared in {@code jk.toml}'s {@code repositories.*} block: a name, a URL, an
+ * optional inline {@link RepoCredential} (from {@code username}/{@code password}/{@code token}
+ * fields), and optional {@link ObjectStoreConfig} for {@code s3://}/{@code gs://} backends
+ * (region/endpoint/keys) — see docs/artifact-repos.md. Most repos carry neither and resolve auth
+ * from env / store / settings.xml / the forge bridge.
  */
 public record RepositorySpec(
         String name, URI url, Optional<RepoCredential> credential, Optional<ObjectStoreConfig> objectStore) {

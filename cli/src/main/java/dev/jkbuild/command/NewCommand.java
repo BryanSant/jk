@@ -36,24 +36,21 @@ import org.jline.utils.AttributedStringBuilder;
 /**
  * {@code jk new} — create a new jk project (aliases: {@code init}, {@code create}).
  *
- * <p>If stdin/stdout is a TTY and no flags were supplied, drops into an
- * interactive wizard (see {@code dev.jkbuild.cli.tui}). Otherwise reads from
- * flags with sane defaults. Both paths converge on {@link NewInputs} +
- * {@link NewScaffolder#write(NewInputs)}.
+ * <p>If stdin/stdout is a TTY and no flags were supplied, drops into an interactive wizard (see
+ * {@code dev.jkbuild.cli.tui}). Otherwise reads from flags with sane defaults. Both paths converge
+ * on {@link NewInputs} + {@link NewScaffolder#write(NewInputs)}.
  *
- * <p><b>Project vs. module.</b> We walk up from where the project will live
- * looking for an enclosing {@code jk.toml}: the first one found is the parent
- * and the new directory is registered as its <em>module</em>. The search stops
- * — meaning "standalone project" — when it exits a git repo (a {@code .git}
- * reached before any {@code jk.toml}) or reaches {@code $HOME}. {@code --no-module}
- * forces a standalone project.
+ * <p><b>Project vs. module.</b> We walk up from where the project will live looking for an
+ * enclosing {@code jk.toml}: the first one found is the parent and the new directory is registered
+ * as its <em>module</em>. The search stops — meaning "standalone project" — when it exits a git
+ * repo (a {@code .git} reached before any {@code jk.toml}) or reaches {@code $HOME}. {@code
+ * --no-module} forces a standalone project.
  *
- * <p>For a module the wizard changes shape (titled "Create a New Module for
- * &lt;project&gt;", asking for a module name) and inherits the parent's group,
- * JDK, and language as defaults; its path is appended to the root
- * {@code [workspace].modules} (promoting a plain project into a workspace on its
- * first module), and no per-module {@code jk.lock} is written (the root lock
- * owns resolution). Mirrors {@code cargo new} / {@code uv init}.
+ * <p>For a module the wizard changes shape (titled "Create a New Module for &lt;project&gt;",
+ * asking for a module name) and inherits the parent's group, JDK, and language as defaults; its
+ * path is appended to the root {@code [workspace].modules} (promoting a plain project into a
+ * workspace on its first module), and no per-module {@code jk.lock} is written (the root lock owns
+ * resolution). Mirrors {@code cargo new} / {@code uv init}.
  */
 public final class NewCommand implements CliCommand {
 
@@ -124,18 +121,16 @@ public final class NewCommand implements CliCommand {
     private volatile Module registered;
 
     /**
-     * The enclosing project/workspace this invocation will add a module to, or
-     * {@code null} when we're creating a standalone project. Resolved once in
-     * {@link #call()} and consumed by the wizard (UX + inherited defaults),
-     * the flag path, and scaffolding.
+     * The enclosing project/workspace this invocation will add a module to, or {@code null} when
+     * we're creating a standalone project. Resolved once in {@link #call()} and consumed by the
+     * wizard (UX + inherited defaults), the flag path, and scaffolding.
      */
     private ParentInfo parent;
 
     /**
-     * The user's global default JDK identifier ({@code default-jdk} in
-     * {@code ~/.jk/config/jk.toml}, e.g. {@code temurin-25.0.1}), or empty when
-     * none is set. Resolved once in {@link #callBody()} and used to skip the
-     * "Select a JDK" prompt: when a default exists we adopt its major and write
+     * The user's global default JDK identifier ({@code default-jdk} in {@code ~/.jk/config/jk.toml},
+     * e.g. {@code temurin-25.0.1}), or empty when none is set. Resolved once in {@link #callBody()}
+     * and used to skip the "Select a JDK" prompt: when a default exists we adopt its major and write
      * a bare-major pin (the vendor stays out of {@code jk.toml} per policy).
      */
     private Optional<String> defaultJdk = Optional.empty();
@@ -153,22 +148,26 @@ public final class NewCommand implements CliCommand {
         boolean kotlin() {
             return project.isKotlin();
         }
+
         /** The JDK toolchain version (which JDK runs the build). */
         int jdkMajor() {
             return project.jdkMajor() > 0 ? project.jdkMajor() : project.javaRelease();
         }
-        /** The {@code java = N} compile target, which flows through even when it diverges from {@link #jdkMajor()}. */
+
+        /**
+         * The {@code java = N} compile target, which flows through even when it diverges from {@link
+         * #jdkMajor()}.
+         */
         int javaRelease() {
             return project.javaRelease();
         }
     }
 
     /**
-     * Decide whether we're adding a module to an existing project/workspace.
-     * Walk up from {@code startDir}: the first directory with a {@code jk.toml}
-     * is the parent. Stop (— standalone project —) on exiting a git repo (a
-     * {@code .git} dir reached before any jk.toml) or hitting {@code $HOME}.
-     * {@code --no-module} short-circuits to standalone.
+     * Decide whether we're adding a module to an existing project/workspace. Walk up from {@code
+     * startDir}: the first directory with a {@code jk.toml} is the parent. Stop (— standalone project
+     * —) on exiting a git repo (a {@code .git} dir reached before any jk.toml) or hitting {@code
+     * $HOME}. {@code --no-module} short-circuits to standalone.
      */
     static Optional<Path> detectParentDir(Path startDir, Path home, boolean noModule) {
         if (noModule) return Optional.empty();
@@ -182,10 +181,10 @@ public final class NewCommand implements CliCommand {
     }
 
     /**
-     * Where to begin the parent search — the directory the project will live
-     * <em>in</em> (its target's parent). For {@code jk new foo} that's the cwd;
-     * for {@code jk new /abs/foo} it's {@code /abs}; for {@code .} / no arg it's
-     * the cwd (the module is the cwd itself, or cwd/&lt;name&gt;).
+     * Where to begin the parent search — the directory the project will live <em>in</em> (its
+     * target's parent). For {@code jk new foo} that's the cwd; for {@code jk new /abs/foo} it's
+     * {@code /abs}; for {@code .} / no arg it's the cwd (the module is the cwd itself, or
+     * cwd/&lt;name&gt;).
      */
     private Path detectionStartDir(Path cwd) {
         if (directory == null || isCurrentDirArg(directory)) return cwd;
@@ -193,7 +192,9 @@ public final class NewCommand implements CliCommand {
         return parentDir != null ? parentDir : cwd;
     }
 
-    /** Resolve {@link #parent} by parsing the detected parent's manifest (null if none / unparseable). */
+    /**
+     * Resolve {@link #parent} by parsing the detected parent's manifest (null if none / unparseable).
+     */
     private ParentInfo resolveParent(Path startDir) {
         Path home = Optional.ofNullable(System.getProperty("user.home"))
                 .map(Path::of)
@@ -257,23 +258,21 @@ public final class NewCommand implements CliCommand {
 
     /**
      * Wizard mode: four phases under a Goal marked interactive.
+     *
      * <ol>
-     *   <li>{@code prewarm} (IO) — opens the terminal + discovers JDKs +
-     *       fetches the catalog in parallel via
-     *       {@link java.util.concurrent.CompletableFuture}; saves the
-     *       perceived 50–200ms by overlapping three IO-bound calls.</li>
-     *   <li>{@code wizard} (SYNC) — runs the wizard UI on the open terminal.
-     *       Ctrl-C halts the process hard (Runtime.halt) so JLine's
-     *       cleanup hook can't deadlock on the NonBlockingReader.</li>
-     *   <li>{@code install-jdk} (IO) — only when the user picked an
-     *       installable (not-yet-on-disk) candidate; runs the same
-     *       download/extract dance as {@code jk jdk install}.</li>
-     *   <li>{@code scaffold} (SYNC) — writes jk.toml + jk.lock + sources,
-     *       emits the styled "Done. Next:" line through the wizard
-     *       terminal's writer.</li>
+     *   <li>{@code prewarm} (IO) — opens the terminal + discovers JDKs + fetches the catalog in
+     *       parallel via {@link java.util.concurrent.CompletableFuture}; saves the perceived 50–200ms
+     *       by overlapping three IO-bound calls.
+     *   <li>{@code wizard} (SYNC) — runs the wizard UI on the open terminal. Ctrl-C halts the process
+     *       hard (Runtime.halt) so JLine's cleanup hook can't deadlock on the NonBlockingReader.
+     *   <li>{@code install-jdk} (IO) — only when the user picked an installable (not-yet-on-disk)
+     *       candidate; runs the same download/extract dance as {@code jk jdk install}.
+     *   <li>{@code scaffold} (SYNC) — writes jk.toml + jk.lock + sources, emits the styled "Done.
+     *       Next:" line through the wizard terminal's writer.
      * </ol>
-     * The terminal lives across phases via a {@link GoalKey} and is
-     * closed in a finally so it survives both success and failure.
+     *
+     * The terminal lives across phases via a {@link GoalKey} and is closed in a finally so it
+     * survives both success and failure.
      */
     private int runWizardGoal(Path cwd) throws IOException {
         Path cache = JkDirs.cache();
@@ -444,9 +443,9 @@ public final class NewCommand implements CliCommand {
     }
 
     /**
-     * Flag mode: validate inputs, scaffold. Not interactive (no wizard,
-     * no progress widgets in the command's own output). Wrapping it in
-     * a goal still gives us a run-log entry for `jk new --name=X` etc.
+     * Flag mode: validate inputs, scaffold. Not interactive (no wizard, no progress widgets in the
+     * command's own output). Wrapping it in a goal still gives us a run-log entry for `jk new
+     * --name=X` etc.
      */
     private int runFlagGoal(Path cwd) {
         NewInputs inputs;
@@ -487,9 +486,8 @@ public final class NewCommand implements CliCommand {
     }
 
     /**
-     * TTY + no real flags. A bare positional ({@code jk new my-project} or
-     * {@code jk new .}) still runs the wizard — the positional only
-     * pre-seeds the name.
+     * TTY + no real flags. A bare positional ({@code jk new my-project} or {@code jk new .}) still
+     * runs the wizard — the positional only pre-seeds the name.
      */
     private boolean shouldRunWizard() {
         if (!isInteractiveTerminal()) {
@@ -516,11 +514,10 @@ public final class NewCommand implements CliCommand {
     }
 
     /**
-     * Scaffold the project, then — if it lands inside an existing workspace —
-     * skip the per-module {@code jk.lock} and register the new module in the
-     * root {@code [workspace].modules} (Cargo/uv: {@code cargo new} /
-     * {@code uv init} edit the workspace manifest). Records the registration
-     * for the success message.
+     * Scaffold the project, then — if it lands inside an existing workspace — skip the per-module
+     * {@code jk.lock} and register the new module in the root {@code [workspace].modules} (Cargo/uv:
+     * {@code cargo new} / {@code uv init} edit the workspace manifest). Records the registration for
+     * the success message.
      */
     private void scaffoldAndRegister(NewInputs inputs) throws IOException {
         NewScaffolder.write(inputs, parent == null); // modules skip the gitignore (root owns it)
@@ -602,15 +599,17 @@ public final class NewCommand implements CliCommand {
     }
 
     /**
-     * The wizard's pre-seed value for the "Project name" answer when the
-     * user already supplied the answer via the positional arg.
+     * The wizard's pre-seed value for the "Project name" answer when the user already supplied the
+     * answer via the positional arg.
+     *
      * <ul>
-     *   <li>{@code "."} → cwd's leaf name.</li>
-     *   <li>{@code "my-project"} → {@code "my-project"} (the file-name of
-     *       the path, in case the user typed a relative/absolute path).</li>
-     *   <li>{@code null} (no positional) → empty — wizard asks the user,
-     *       defaulting to {@code "untitled"}.</li>
+     *   <li>{@code "."} → cwd's leaf name.
+     *   <li>{@code "my-project"} → {@code "my-project"} (the file-name of the path, in case the user
+     *       typed a relative/absolute path).
+     *   <li>{@code null} (no positional) → empty — wizard asks the user, defaulting to {@code
+     *       "untitled"}.
      * </ul>
+     *
      * Package-private for unit testing.
      */
     static Optional<String> wizardPresetName(Path directoryArg, Path cwd) {
@@ -628,8 +627,8 @@ public final class NewCommand implements CliCommand {
     }
 
     /**
-     * Final target directory, given the positional arg, the cwd, and the
-     * resolved project name. Package-private for unit testing.
+     * Final target directory, given the positional arg, the cwd, and the resolved project name.
+     * Package-private for unit testing.
      */
     static Path resolveTarget(Path directoryArg, Path cwd, String projectName) {
         if (directoryArg != null) {
@@ -677,7 +676,8 @@ public final class NewCommand implements CliCommand {
         var label = Theme.active().activeStep();
         var body = Theme.active().normalGray();
         System.err.println(Theme.colorize("⚠", warn)
-                + " " + Theme.colorize("Jk", label)
+                + " "
+                + Theme.colorize("Jk", label)
                 + Theme.colorize(": No JDKs found on this system. Run ", body)
                 + Theme.colorize("jk jdk install", warn)
                 + Theme.colorize(" first, then re-run ", body)
@@ -727,12 +727,11 @@ public final class NewCommand implements CliCommand {
     }
 
     /**
-     * Resolve an explicit {@code --jdk <spec>} into its major + {@code jk.toml}
-     * pin. Keywords ({@code lts} / {@code stable} / {@code latest}) resolve to a
-     * major against the JetBrains feed (falling back to the latest LTS offline)
-     * and always pin a bare major; a {@code <vendor>-<major>} spec keeps its
-     * vendor; a bare major stays bare. Throws {@link IllegalArgumentException}
-     * (caught by the flag path) on a point release or a spec with no major.
+     * Resolve an explicit {@code --jdk <spec>} into its major + {@code jk.toml} pin. Keywords ({@code
+     * lts} / {@code stable} / {@code latest}) resolve to a major against the JetBrains feed (falling
+     * back to the latest LTS offline) and always pin a bare major; a {@code <vendor>-<major>} spec
+     * keeps its vendor; a bare major stays bare. Throws {@link IllegalArgumentException} (caught by
+     * the flag path) on a point release or a spec with no major.
      */
     private NewJdkPlan.Spec resolveJdkArg(String arg) {
         String a = arg.trim();
@@ -750,9 +749,9 @@ public final class NewCommand implements CliCommand {
     }
 
     /**
-     * Best-effort catalog fetch for the wizard's "Select a JDK" step. Network
-     * failures (offline, DNS, 5xx) degrade to an empty optional rather than
-     * killing the wizard: the user still sees whatever installs are on disk.
+     * Best-effort catalog fetch for the wizard's "Select a JDK" step. Network failures (offline, DNS,
+     * 5xx) degrade to an empty optional rather than killing the wizard: the user still sees whatever
+     * installs are on disk.
      */
     private static Optional<dev.jkbuild.jdk.JdkCatalog> fetchCatalogQuiet() {
         try {
@@ -763,9 +762,9 @@ public final class NewCommand implements CliCommand {
     }
 
     /**
-     * Resolve the wizard's {@code jdk} answer back to a candidate. The
-     * candidate's {@code id()} matches one of the entries we surfaced via
-     * {@link NewJdkCandidate#filter}, so this is just a lookup.
+     * Resolve the wizard's {@code jdk} answer back to a candidate. The candidate's {@code id()}
+     * matches one of the entries we surfaced via {@link NewJdkCandidate#filter}, so this is just a
+     * lookup.
      */
     private NewJdkCandidate pickCandidate(Answers answers, List<NewJdkCandidate> candidates) {
         if (answers.has("jdk")) { // the "Select a JDK" step ran
@@ -787,10 +786,9 @@ public final class NewCommand implements CliCommand {
     }
 
     /**
-     * Download + extract an installable candidate. Reuses the same progress
-     * UI as {@code jk jdk install}. On success, returns the freshly-resolved
-     * installed candidate (so its {@code home()} points at the new JDK).
-     * On failure, prints the error and returns empty so the caller exits.
+     * Download + extract an installable candidate. Reuses the same progress UI as {@code jk jdk
+     * install}. On success, returns the freshly-resolved installed candidate (so its {@code home()}
+     * points at the new JDK). On failure, prints the error and returns empty so the caller exits.
      */
     private Optional<NewJdkCandidate> installCandidate(NewJdkCandidate candidate) {
         if (!(candidate instanceof NewJdkCandidate.Installable installable)) {
@@ -825,16 +823,16 @@ public final class NewCommand implements CliCommand {
     }
 
     /**
-     * Fully-qualified main class name for an executable project — must match
-     * where {@link NewScaffolder} actually writes the file.
+     * Fully-qualified main class name for an executable project — must match where {@link
+     * NewScaffolder} actually writes the file.
+     *
      * <ul>
-     *   <li>Java (both layouts) → {@code <group>.Main}; the scaffolder always
-     *       packages {@code Main} under {@code <group>}, even in the simple
-     *       layout (it just lives in {@code src/<group>/} rather than
-     *       {@code src/main/java/<group>/}).</li>
-     *   <li>Kotlin compact → {@code MainKt} (no package; Kotlin emits a
-     *       {@code FilenameKt} synthetic class for top-level {@code fun main}).</li>
-     *   <li>Kotlin standard → {@code <group>.MainKt}.</li>
+     *   <li>Java (both layouts) → {@code <group>.Main}; the scaffolder always packages {@code Main}
+     *       under {@code <group>}, even in the simple layout (it just lives in {@code src/<group>/}
+     *       rather than {@code src/main/java/<group>/}).
+     *   <li>Kotlin compact → {@code MainKt} (no package; Kotlin emits a {@code FilenameKt} synthetic
+     *       class for top-level {@code fun main}).
+     *   <li>Kotlin standard → {@code <group>.MainKt}.
      * </ul>
      */
     private static String deriveMainFqcn(String group, NewInputs.Language lang, boolean compact) {
@@ -989,10 +987,9 @@ public final class NewCommand implements CliCommand {
     }
 
     /**
-     * Lowest JDK feature-release the "Select a JDK" step may offer: a JDK can't
-     * compile a release newer than itself. A module inherits the parent's
-     * {@code java} target; a standalone Java project uses the chosen Java
-     * Language Version; Kotlin (no Java target) imposes no floor.
+     * Lowest JDK feature-release the "Select a JDK" step may offer: a JDK can't compile a release
+     * newer than itself. A module inherits the parent's {@code java} target; a standalone Java
+     * project uses the chosen Java Language Version; Kotlin (no Java target) imposes no floor.
      */
     static int jdkFloor(Answers answers, ParentInfo parent) {
         if (parent != null) return parent.javaRelease();

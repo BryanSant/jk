@@ -20,21 +20,19 @@ import org.jline.utils.AttributedStyle;
 import org.jline.utils.NonBlockingReader;
 
 /**
- * Wizard orchestrator. Sets up raw mode + a shutdown hook + a SIGINT handler,
- * then drives a frame loop over its sealed {@link WizardStep} list.
+ * Wizard orchestrator. Sets up raw mode + a shutdown hook + a SIGINT handler, then drives a frame
+ * loop over its sealed {@link WizardStep} list.
  *
- * <p>Rendering is incremental: the header line and each settled step are
- * printed exactly once. Only the active step's region (its bullet line plus
- * the interactive UI below it) is erased and redrawn on each keystroke, so
- * the screen doesn't flash.
+ * <p>Rendering is incremental: the header line and each settled step are printed exactly once. Only
+ * the active step's region (its bullet line plus the interactive UI below it) is erased and redrawn
+ * on each keystroke, so the screen doesn't flash.
  *
- * <p>The cursor is hidden for the wizard's lifetime, except during an input
- * step where it is shown and positioned at the end of the typed buffer. On
- * cancellation (Ctrl+C) the SGR state is reset, the cursor restored, and a
- * newline emitted so the shell prompt lands on a fresh line.
+ * <p>The cursor is hidden for the wizard's lifetime, except during an input step where it is shown
+ * and positioned at the end of the typed buffer. On cancellation (Ctrl+C) the SGR state is reset,
+ * the cursor restored, and a newline emitted so the shell prompt lands on a fresh line.
  *
- * <p>The alt-screen buffer is intentionally NOT used: the locked-in transcript
- * stays visible after exit, so users can scroll back and review their answers.
+ * <p>The alt-screen buffer is intentionally NOT used: the locked-in transcript stays visible after
+ * exit, so users can scroll back and review their answers.
  */
 public final class Wizard {
 
@@ -43,7 +41,7 @@ public final class Wizard {
     private static final String RESET_SGR = Ansi.RESET;
     private static final String CLEAR_TO_END = Ansi.ERASE_DISPLAY_TO_END;
 
-    /** Display width of the rail prefix "│  " in columns. */
+    /** Display width of the rail prefix "│ " in columns. */
     private static final int RAIL_PREFIX_WIDTH = 3;
 
     /** Poll interval for keys; lets the loop observe async cancellation flag. */
@@ -65,17 +63,15 @@ public final class Wizard {
     /**
      * Open a system terminal with input echo suppressed.
      *
-     * <p>{@link TerminalBuilder#build()} probes the terminal with capability
-     * queries (DA, DECRQM). Their responses arrive on stdin shortly after;
-     * with default cooked-mode ECHO on, the OS driver echoes them to the
-     * screen as raw ANSI text before {@link #run} gets a chance to enter raw
-     * mode. The flash is most noticeable when the caller does parallel work
-     * between build and {@code run()} (e.g. {@code jk new}'s prewarm phase).
+     * <p>{@link TerminalBuilder#build()} probes the terminal with capability queries (DA, DECRQM).
+     * Their responses arrive on stdin shortly after; with default cooked-mode ECHO on, the OS driver
+     * echoes them to the screen as raw ANSI text before {@link #run} gets a chance to enter raw mode.
+     * The flash is most noticeable when the caller does parallel work between build and {@code run()}
+     * (e.g. {@code jk new}'s prewarm phase).
      *
-     * <p>Disabling ECHO here closes the window. Output flags are left alone,
-     * so callers that {@code println} between build and {@code run()} still
-     * get normal LF→CRLF translation. The original attributes are restored
-     * when the terminal is closed.
+     * <p>Disabling ECHO here closes the window. Output flags are left alone, so callers that {@code
+     * println} between build and {@code run()} still get normal LF→CRLF translation. The original
+     * attributes are restored when the terminal is closed.
      */
     public static Terminal openTerminal() throws IOException {
         var terminal = TerminalBuilder.builder().system(true).build();
@@ -86,13 +82,12 @@ public final class Wizard {
     }
 
     /**
-     * Restore {@code terminal} to cooked input from {@code saved}, forcing ECHO
-     * and ICANON back on, and flush. {@link #openTerminal} suppresses ECHO before
-     * {@code build()} to hide JLine's probe-response flicker, so {@code saved}
-     * typically captured "echo off"; callers that read {@code System.in} after the
-     * prompt (e.g. {@code jk jdk uninstall}'s {@code [Y/n]}) need echo on. Shared
-     * by {@link #run} (its {@code finally} and crash-safety shutdown hook) and
-     * {@link Confirm}, so the one ECHO+ICANON restore lives in a single place.
+     * Restore {@code terminal} to cooked input from {@code saved}, forcing ECHO and ICANON back on,
+     * and flush. {@link #openTerminal} suppresses ECHO before {@code build()} to hide JLine's
+     * probe-response flicker, so {@code saved} typically captured "echo off"; callers that read
+     * {@code System.in} after the prompt (e.g. {@code jk jdk uninstall}'s {@code [Y/n]}) need echo
+     * on. Shared by {@link #run} (its {@code finally} and crash-safety shutdown hook) and {@link
+     * Confirm}, so the one ECHO+ICANON restore lives in a single place.
      */
     public static void restoreCooked(Terminal terminal, Attributes saved) {
         var cooked = new Attributes(saved);
@@ -119,10 +114,9 @@ public final class Wizard {
     }
 
     /**
-     * Run with pre-seeded answers. Each step whose {@code key()} is present
-     * in {@code preset} is skipped interactively but rendered as completed,
-     * so the user can see what was inferred. Useful when {@code jk init
-     * my-project} has supplied the "Project name" answer up front.
+     * Run with pre-seeded answers. Each step whose {@code key()} is present in {@code preset} is
+     * skipped interactively but rendered as completed, so the user can see what was inferred. Useful
+     * when {@code jk init my-project} has supplied the "Project name" answer up front.
      */
     public Optional<Answers> run(Terminal terminal, Answers preset) {
         var saved = terminal.enterRawMode();
@@ -175,14 +169,13 @@ public final class Wizard {
     }
 
     /**
-     * Render a Ctrl-C cancellation closer on top of the wizard's active rail:
-     * step the cursor back up to the active {@code ╰} row, preserve the existing
-     * {@code ╰──} prefix (which the active region already drew in cyan), and
-     * append a separator space + red {@code <message>} right after it.
+     * Render a Ctrl-C cancellation closer on top of the wizard's active rail: step the cursor back up
+     * to the active {@code ╰} row, preserve the existing {@code ╰──} prefix (which the active region
+     * already drew in cyan), and append a separator space + red {@code <message>} right after it.
      *
-     * <p>Assumes the wizard has just returned {@link Optional#empty()} and that
-     * the in-loop cancel path called {@link #moveBelowCloser} — so {@link #run}'s
-     * trailing {@code \r\n} places the cursor two lines below the active closer.
+     * <p>Assumes the wizard has just returned {@link Optional#empty()} and that the in-loop cancel
+     * path called {@link #moveBelowCloser} — so {@link #run}'s trailing {@code \r\n} places the
+     * cursor two lines below the active closer.
      */
     public static void printCancellation(Terminal terminal, String message) {
         var writer = terminal.writer();
@@ -198,10 +191,9 @@ public final class Wizard {
     }
 
     /**
-     * Reposition the cursor one row below the active closer so cancellation
-     * handlers can rely on a fixed cursor position regardless of step type.
-     * Input steps leave the cursor mid-region (on the input buffer line); other
-     * step types leave it already below the closer.
+     * Reposition the cursor one row below the active closer so cancellation handlers can rely on a
+     * fixed cursor position regardless of step type. Input steps leave the cursor mid-region (on the
+     * input buffer line); other step types leave it already below the closer.
      */
     private static void moveBelowCloser(PrintWriter writer, int regionLines, int cursorOffset) {
         int linesDown = regionLines - cursorOffset;
@@ -342,10 +334,9 @@ public final class Wizard {
     }
 
     /**
-     * Positions the cursor for input steps and returns the cursor's offset
-     * (in lines) from the top of the active region. The caller must pass this
-     * value back to {@link #eraseLines} so the redraw moves up by the correct
-     * amount instead of climbing past the region origin and eating prior
+     * Positions the cursor for input steps and returns the cursor's offset (in lines) from the top of
+     * the active region. The caller must pass this value back to {@link #eraseLines} so the redraw
+     * moves up by the correct amount instead of climbing past the region origin and eating prior
      * terminal content.
      */
     private int positionInputCursor(PrintWriter writer, WizardStep step, ActiveState state, int regionLines) {
@@ -368,9 +359,9 @@ public final class Wizard {
     }
 
     /**
-     * Build the header: the dark-gray {@code ╭──} corner, then the title on a
-     * bright-black chip (pure-black text), space-padded so it reads as a badge.
-     * The chip's leading pad doubles as the gap after the corner dashes.
+     * Build the header: the dark-gray {@code ╭──} corner, then the title on a bright-black chip
+     * (pure-black text), space-padded so it reads as a badge. The chip's leading pad doubles as the
+     * gap after the corner dashes.
      */
     private String headerLine(Terminal terminal) {
         Theme t = Theme.active();
@@ -440,8 +431,8 @@ public final class Wizard {
     }
 
     /**
-     * Per-step interactive state. Created at the start of each step iteration
-     * and torn down once {@link #handle(KeyReader.Key)} reports completion.
+     * Per-step interactive state. Created at the start of each step iteration and torn down once
+     * {@link #handle(KeyReader.Key)} reports completion.
      */
     private static final class ActiveState {
 
@@ -768,9 +759,8 @@ public final class Wizard {
         }
 
         /**
-         * Render the editable free-form field: the placeholder as dim italic
-         * example text while empty (overwrite-able), or the typed text in the
-         * focused/dim style once the user starts typing.
+         * Render the editable free-form field: the placeholder as dim italic example text while empty
+         * (overwrite-able), or the typed text in the focused/dim style once the user starts typing.
          */
         private void appendCustomField(AttributedStringBuilder sb, boolean focused, String placeholder) {
             if (input.length() == 0) {

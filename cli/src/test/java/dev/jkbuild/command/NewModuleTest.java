@@ -13,11 +13,10 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
- * {@code jk new} / {@code jk init} module-awareness: detecting an enclosing
- * project, inheriting its settings, and registering the new directory as a
- * workspace module (promoting a plain project into a workspace on its first
- * module). The non-TTY flag path is exercised here; the wizard UX shares the
- * same {@code parent} resolution.
+ * {@code jk new} / {@code jk init} module-awareness: detecting an enclosing project, inheriting its
+ * settings, and registering the new directory as a workspace module (promoting a plain project into
+ * a workspace on its first module). The non-TTY flag path is exercised here; the wizard UX shares
+ * the same {@code parent} resolution.
  */
 class NewModuleTest {
 

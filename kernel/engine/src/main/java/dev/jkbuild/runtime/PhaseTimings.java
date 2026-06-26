@@ -23,33 +23,32 @@ import org.tomlj.TomlParseResult;
 import org.tomlj.TomlTable;
 
 /**
- * A learned ledger of how long each module's build phases actually take, so the
- * progress bar can weight phases by real wall-clock instead of static guesses.
+ * A learned ledger of how long each module's build phases actually take, so the progress bar can
+ * weight phases by real wall-clock instead of static guesses.
  *
- * <p>Everything is kept in the bar's existing <em>weight</em> unit (≈150 ms each),
- * and only the <em>per-unit rate</em> is learned — the per-phase fixed floor stays
- * static in {@link EffortWeights}. So a phase's expected weight is
- * {@code floor + perUnit × count}, where {@code count} is the cheap up-front signal
- * (lexical test count, incremental changed-source count). Learning a rate rather
- * than an absolute makes the estimate resilient to churn: add/remove tests and the
- * count rescales it; per-unit drift is smoothed by an EWMA. With no history a phase
- * has no entry here and the caller falls back to the static Phase-1 estimate, so
- * <em>cold == Phase 1</em>.
+ * <p>Everything is kept in the bar's existing <em>weight</em> unit (≈150 ms each), and only the
+ * <em>per-unit rate</em> is learned — the per-phase fixed floor stays static in {@link
+ * EffortWeights}. So a phase's expected weight is {@code floor + perUnit × count}, where {@code
+ * count} is the cheap up-front signal (lexical test count, incremental changed-source count).
+ * Learning a rate rather than an absolute makes the estimate resilient to churn: add/remove tests
+ * and the count rescales it; per-unit drift is smoothed by an EWMA. With no history a phase has no
+ * entry here and the caller falls back to the static Phase-1 estimate, so <em>cold == Phase 1</em>.
  *
- * <p>Each entry carries the wall-clock millis it was last updated, so a {@code jk}
- * GC cycle can {@link #prune} it: entries older than the configured max age are
- * evicted, and if the file still exceeds the size cap the oldest entries go until
- * it fits — a project you stopped building doesn't bloat a file read on every build.
+ * <p>Each entry carries the wall-clock millis it was last updated, so a {@code jk} GC cycle can
+ * {@link #prune} it: entries older than the configured max age are evicted, and if the file still
+ * exceeds the size cap the oldest entries go until it fits — a project you stopped building doesn't
+ * bloat a file read on every build.
  *
- * <p>Stored as TOML ({@code <cache>/timings.toml}, an array of {@code [[timing]]}
- * tables) — jk bundles a TOML parser and hand-writes TOML for the lockfile, so this
- * adds no new dependency. Reads (memoized per cache root) happen at build start; the
- * single {@link #record} at build end does a load-update-write, so concurrent module
- * builds never race a write.
+ * <p>Stored as TOML ({@code <cache>/timings.toml}, an array of {@code [[timing]]} tables) — jk
+ * bundles a TOML parser and hand-writes TOML for the lockfile, so this adds no new dependency.
+ * Reads (memoized per cache root) happen at build start; the single {@link #record} at build end
+ * does a load-update-write, so concurrent module builds never race a write.
  */
 public final class PhaseTimings {
 
-    /** EWMA recency: recent-weighted but smoothed, so one GC pause / cold-disk run can't wreck a rate. */
+    /**
+     * EWMA recency: recent-weighted but smoothed, so one GC pause / cold-disk run can't wreck a rate.
+     */
     public static final double DEFAULT_ALPHA = 0.4;
 
     private static final ConcurrentHashMap<Path, PhaseTimings> MEMO = new ConcurrentHashMap<>();
@@ -57,14 +56,17 @@ public final class PhaseTimings {
     /** A learned phase rate plus when it was last refreshed (epoch millis; 0 = unknown/legacy). */
     private record Entry(double perUnit, long updatedMillis) {}
 
-    /** key = {@code dir   phase} → learned rate + timestamp. */
+    /** key = {@code dir phase} → learned rate + timestamp. */
     private final Map<String, Entry> entries;
 
     private PhaseTimings(Map<String, Entry> entries) {
         this.entries = entries;
     }
 
-    /** Read-only ledger for {@code cache}, memoized for the process. Missing/unreadable → empty (cold). */
+    /**
+     * Read-only ledger for {@code cache}, memoized for the process. Missing/unreadable → empty
+     * (cold).
+     */
     public static PhaseTimings load(Path cache) {
         return MEMO.computeIfAbsent(cache, PhaseTimings::read);
     }
@@ -75,9 +77,9 @@ public final class PhaseTimings {
     }
 
     /**
-     * True when this ledger has at least one learned rate for any of {@code dirs} — i.e.
-     * the project has useful timings, so a countdown ETA is trustworthy (vs. a cold
-     * project, whose estimate is a static guess and should count up instead).
+     * True when this ledger has at least one learned rate for any of {@code dirs} — i.e. the project
+     * has useful timings, so a countdown ETA is trustworthy (vs. a cold project, whose estimate is a
+     * static guess and should count up instead).
      */
     public boolean hasTimingsFor(java.util.Collection<String> dirs) {
         for (String d : dirs) {
@@ -89,20 +91,22 @@ public final class PhaseTimings {
         return false;
     }
 
-    /** The learned per-unit weight for a module's phase, or empty when unseen (cold → caller's fallback). */
+    /**
+     * The learned per-unit weight for a module's phase, or empty when unseen (cold → caller's
+     * fallback).
+     */
     public OptionalDouble perUnit(String dir, String phase) {
         Entry e = entries.get(key(dir, phase));
         return e == null ? OptionalDouble.empty() : OptionalDouble.of(e.perUnit());
     }
 
     /**
-     * The median learned per-unit rate across <em>all</em> modules for {@code phase}
-     * — a cross-module fallback so a module never seen before borrows this machine's
-     * typical rate for that phase (e.g. ~per-test wall-clock) instead of the static
-     * Phase-1 constant, which is calibrated for the worst case and runs ~10× hot for
-     * fast unit suites. Empty only when no module has ever recorded this phase, in
-     * which case the caller falls back to the static estimate. Median (not mean) so
-     * one pathological module can't skew it.
+     * The median learned per-unit rate across <em>all</em> modules for {@code phase} — a cross-module
+     * fallback so a module never seen before borrows this machine's typical rate for that phase (e.g.
+     * ~per-test wall-clock) instead of the static Phase-1 constant, which is calibrated for the worst
+     * case and runs ~10× hot for fast unit suites. Empty only when no module has ever recorded this
+     * phase, in which case the caller falls back to the static estimate. Median (not mean) so one
+     * pathological module can't skew it.
      */
     public OptionalDouble medianPerUnit(String phase) {
         String suffix = ' ' + phase;
@@ -120,10 +124,10 @@ public final class PhaseTimings {
     public record Sample(String dir, String phase, double observedPerUnit) {}
 
     /**
-     * Fold this build's samples into the on-disk ledger with an EWMA and persist —
-     * a single load-update-write at build end, stamping each touched entry with
-     * {@code nowMillis}. A brand-new (dir, phase) seeds at its observed value.
-     * Best-effort: any IO failure is swallowed (timings are advisory).
+     * Fold this build's samples into the on-disk ledger with an EWMA and persist — a single
+     * load-update-write at build end, stamping each touched entry with {@code nowMillis}. A brand-new
+     * (dir, phase) seeds at its observed value. Best-effort: any IO failure is swallowed (timings are
+     * advisory).
      */
     public static void record(Path cache, List<Sample> samples, double alpha, long nowMillis) {
         if (samples == null || samples.isEmpty()) return;
@@ -152,9 +156,9 @@ public final class PhaseTimings {
         static final long DEFAULT_MAX_AGE_DAYS = 730; // 2 years
 
         /**
-         * Resolve from {@code JK_TIMINGS_MAX_SIZE_MB} / {@code JK_TIMINGS_MAX_AGE_DAYS}
-         * env vars, else the {@code [cache] timings-max-size-mb} / {@code timings-max-age-days}
-         * keys in the user config, else the defaults (100 MB / 2 years).
+         * Resolve from {@code JK_TIMINGS_MAX_SIZE_MB} / {@code JK_TIMINGS_MAX_AGE_DAYS} env vars, else
+         * the {@code [cache] timings-max-size-mb} / {@code timings-max-age-days} keys in the user
+         * config, else the defaults (100 MB / 2 years).
          */
         public static Limits resolve(Path userConfig, Function<String, String> env) {
             long mb = envLong(env, "JK_TIMINGS_MAX_SIZE_MB")
@@ -172,10 +176,10 @@ public final class PhaseTimings {
     }
 
     /**
-     * Evict stale/overflowing entries: first anything older than {@code maxAge}
-     * (skipping unknown-age legacy entries), then — if the rendered file still
-     * exceeds {@code maxBytes} — the oldest entries until it fits (uniform
-     * average-bytes-per-entry × kept ≤ max). Rewrites the file unless {@code dryRun}.
+     * Evict stale/overflowing entries: first anything older than {@code maxAge} (skipping unknown-age
+     * legacy entries), then — if the rendered file still exceeds {@code maxBytes} — the oldest
+     * entries until it fits (uniform average-bytes-per-entry × kept ≤ max). Rewrites the file unless
+     * {@code dryRun}.
      */
     public static PruneReport prune(Path cache, Limits limits, long nowMillis, boolean dryRun) {
         Path file = cache.resolve("timings.toml");

@@ -6,13 +6,12 @@ import java.util.Locale;
 import java.util.Optional;
 
 /**
- * Shell detection + rc-file paths shared by {@code jk jdk install}
- * (advice text) and {@code jk jdk update-shell} (actual rc edits).
+ * Shell detection + rc-file paths shared by {@code jk jdk install} (advice text) and {@code jk jdk
+ * update-shell} (actual rc edits).
  *
- * <p>Detection reads {@code $SHELL} and maps its basename to one of the
- * supported shells (bash / zsh / fish). Anything else returns
- * {@link Optional#empty()} so the caller can fall back to a generic
- * message.
+ * <p>Detection reads {@code $SHELL} and maps its basename to one of the supported shells (bash /
+ * zsh / fish). Anything else returns {@link Optional#empty()} so the caller can fall back to a
+ * generic message.
  */
 enum JdkShell {
     BASH,
@@ -44,9 +43,9 @@ enum JdkShell {
     }
 
     /**
-     * The one-line shell command a user can paste to wire {@code jk hook}
-     * into their rc — e.g. {@code jk hook zsh >> ~/.zshenv}. Fish gets
-     * {@code >} (its hook lives in a dedicated file) instead of {@code >>}.
+     * The one-line shell command a user can paste to wire {@code jk hook} into their rc — e.g. {@code
+     * jk hook zsh >> ~/.zshenv}. Fish gets {@code >} (its hook lives in a dedicated file) instead of
+     * {@code >>}.
      */
     String hookInstallCommand() {
         String redirect = this == FISH ? ">" : ">>";

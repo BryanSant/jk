@@ -49,25 +49,24 @@ import java.util.Set;
 
 /**
  * Executes a standalone file as a program — one of:
+ *
  * <ul>
- *   <li><b>{@code .java}</b> script (JBang-compatible, PRD §19).</li>
- *   <li><b>{@code .kt}</b> Kotlin script (JBang-compatible, with
- *       {@code //KOTLIN <version>} support).</li>
- *   <li><b>{@code .kts}</b> Kotlin Script — delegated to {@code kotlinc -script}.</li>
- *   <li><b>{@code .jar}</b> already-built artifact.</li>
+ *   <li><b>{@code .java}</b> script (JBang-compatible, PRD §19).
+ *   <li><b>{@code .kt}</b> Kotlin script (JBang-compatible, with {@code //KOTLIN <version>}
+ *       support).
+ *   <li><b>{@code .kts}</b> Kotlin Script — delegated to {@code kotlinc -script}.
+ *   <li><b>{@code .jar}</b> already-built artifact.
  * </ul>
  *
- * <p>This is the engine behind {@code jk tool run <file>}. {@code jk run} no
- * longer interprets file arguments — it only runs the current project and
- * forwards every argument to the project's main method. To execute a loose
- * {@code .java}/{@code .kt}/{@code .kts}/{@code .jar} file, reach for
+ * <p>This is the engine behind {@code jk tool run <file>}. {@code jk run} no longer interprets file
+ * arguments — it only runs the current project and forwards every argument to the project's main
+ * method. To execute a loose {@code .java}/{@code .kt}/{@code .kts}/{@code .jar} file, reach for
  * {@code jk tool run} instead.
  *
- * <p>Each mode runs its preparation (parse, resolve, compile) inside a
- * {@link Goal} so progress, warnings, and the run-log behave like every
- * other {@code jk} verb. The actual subprocess that exec's the user's
- * program runs <i>after</i> the goal returns — by then the progress widget
- * has wiped itself, so the inferior owns the TTY cleanly.
+ * <p>Each mode runs its preparation (parse, resolve, compile) inside a {@link Goal} so progress,
+ * warnings, and the run-log behave like every other {@code jk} verb. The actual subprocess that
+ * exec's the user's program runs <i>after</i> the goal returns — by then the progress widget has
+ * wiped itself, so the inferior owns the TTY cleanly.
  */
 final class ScriptRunner {
 
@@ -110,9 +109,8 @@ final class ScriptRunner {
     }
 
     /**
-     * Run {@code file} (dispatched by extension) with {@code args} forwarded
-     * to the program. The caller guarantees {@link #isRunnableFile} held for
-     * the original argument.
+     * Run {@code file} (dispatched by extension) with {@code args} forwarded to the program. The
+     * caller guarantees {@link #isRunnableFile} held for the original argument.
      */
     int run(Path file, List<String> args) throws IOException, InterruptedException {
         String name = file.getFileName().toString().toLowerCase(Locale.ROOT);
@@ -190,9 +188,13 @@ final class ScriptRunner {
                         for (var d : result.diagnostics()) {
                             ctx.error(
                                     "javac",
-                                    d.severity() + " "
+                                    d.severity()
+                                            + " "
                                             + (d.source() != null ? d.source().getFileName() : "<unknown>")
-                                            + ":" + d.line() + ": " + d.message());
+                                            + ":"
+                                            + d.line()
+                                            + ": "
+                                            + d.message());
                         }
                         throw new RuntimeException("javac failed");
                     }
@@ -554,8 +556,8 @@ final class ScriptRunner {
     // --- shared helpers --------------------------------------------------
 
     /**
-     * Map a failed goal to exit code 1. The listener already painted
-     * the diagnostic and the "Failed" bar; we don't repeat ourselves.
+     * Map a failed goal to exit code 1. The listener already painted the diagnostic and the "Failed"
+     * bar; we don't repeat ourselves.
      */
     private int failureExitCode(GoalResult result) {
         return 1;

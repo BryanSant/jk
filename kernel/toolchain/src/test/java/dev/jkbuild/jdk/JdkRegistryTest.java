@@ -242,7 +242,10 @@ class JdkRegistryTest {
                 .containsExactly("temurin-25.0.2");
     }
 
-    /** A {@link JdkRegistry} backed by a single {@link JkProbe} rooted at {@code root} — isolates the test from any JDKs actually installed on the host. */
+    /**
+     * A {@link JdkRegistry} backed by a single {@link JkProbe} rooted at {@code root} — isolates the
+     * test from any JDKs actually installed on the host.
+     */
     private static JdkRegistry isolatedRegistry(Path root) {
         return new JdkRegistry(root, List.of(new JkProbe(root)));
     }

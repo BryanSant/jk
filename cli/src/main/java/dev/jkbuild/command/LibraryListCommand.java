@@ -11,9 +11,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
-/**
- * {@code jk library list} — print every library known to the layered catalog.
- */
+/** {@code jk library list} — print every library known to the layered catalog. */
 public final class LibraryListCommand implements CliCommand {
 
     @Override

@@ -7,8 +7,8 @@ import java.nio.file.Path;
 import java.util.Comparator;
 
 /**
- * Filesystem utility methods shared across kernel modules. Intentionally
- * minimal — only consolidates patterns that appear in 3+ unrelated classes.
+ * Filesystem utility methods shared across kernel modules. Intentionally minimal — only
+ * consolidates patterns that appear in 3+ unrelated classes.
  */
 public final class PathUtil {
 
@@ -17,14 +17,13 @@ public final class PathUtil {
     /**
      * Recursively delete {@code root} and all of its contents.
      *
-     * <p>Deletes children before parents (reverse walk order) so non-empty
-     * directories are emptied before the directory itself is removed.
-     * Per-entry {@link IOException}s are silently ignored; if the walk itself
-     * fails (e.g. the path vanished concurrently) the exception is also
-     * swallowed. A missing or {@code null} root is a no-op.
+     * <p>Deletes children before parents (reverse walk order) so non-empty directories are emptied
+     * before the directory itself is removed. Per-entry {@link IOException}s are silently ignored; if
+     * the walk itself fails (e.g. the path vanished concurrently) the exception is also swallowed. A
+     * missing or {@code null} root is a no-op.
      *
-     * <p>Callers that need to propagate {@link IOException} (e.g. on a
-     * critical cleanup path) should keep their own implementation.
+     * <p>Callers that need to propagate {@link IOException} (e.g. on a critical cleanup path) should
+     * keep their own implementation.
      */
     public static void deleteRecursively(Path root) {
         if (root == null || !Files.exists(root)) return;

@@ -23,13 +23,12 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * Client for the JetBrains JDK feed
- * ({@value #DEFAULT_FEED_URL}). Fetches the xz-compressed JSON catalog,
- * caches it on disk with a 24 h TTL, revalidates with conditional GET,
- * and falls back to the cached copy when offline.
+ * Client for the JetBrains JDK feed ({@value #DEFAULT_FEED_URL}). Fetches the xz-compressed JSON
+ * catalog, caches it on disk with a 24 h TTL, revalidates with conditional GET, and falls back to
+ * the cached copy when offline.
  *
- * <p>The feed is the same source IntelliJ uses, so any JDK jk downloads
- * lands in IntelliJ's expected directory and vice versa.
+ * <p>The feed is the same source IntelliJ uses, so any JDK jk downloads lands in IntelliJ's
+ * expected directory and vice versa.
  */
 public final class JdkCatalogClient {
 
@@ -47,10 +46,9 @@ public final class JdkCatalogClient {
     private final Duration ttl;
 
     /**
-     * Where the "feed unreachable, using cached" degradation notice goes.
-     * No-op by default — only the CLI view layer owns the streams, so callers
-     * there install {@code System.err::println} via {@link #onWarning}, and
-     * in-phase callers route it to {@code PhaseContext::warn}.
+     * Where the "feed unreachable, using cached" degradation notice goes. No-op by default — only the
+     * CLI view layer owns the streams, so callers there install {@code System.err::println} via
+     * {@link #onWarning}, and in-phase callers route it to {@code PhaseContext::warn}.
      */
     private java.util.function.Consumer<String> warn = s -> {};
 
@@ -77,17 +75,16 @@ public final class JdkCatalogClient {
     }
 
     /**
-     * Fetch the catalog, honouring the on-disk cache and TTL.
-     * Network errors fall back to whatever the cache holds (with a stderr
-     * warning) so {@code jk jdk list} stays useful offline.
+     * Fetch the catalog, honouring the on-disk cache and TTL. Network errors fall back to whatever
+     * the cache holds (with a stderr warning) so {@code jk jdk list} stays useful offline.
      */
     public JdkCatalog fetch() throws IOException, InterruptedException {
         return fetch(false);
     }
 
     /**
-     * Fetch the catalog. When {@code noCache} is {@code true} the TTL
-     * check is skipped and the feed is always re-fetched from the network.
+     * Fetch the catalog. When {@code noCache} is {@code true} the TTL check is skipped and the feed
+     * is always re-fetched from the network.
      */
     public JdkCatalog fetch(boolean noCache) throws IOException, InterruptedException {
         return fetch(noCache, true);
@@ -96,12 +93,11 @@ public final class JdkCatalogClient {
     /**
      * Fetch the catalog, choosing how aggressively to prune majors.
      *
-     * <p>{@code firstClassOnly} = {@code true} (the default for every
-     * resolution / auto-install path) keeps jk's curated set — LTS majors
-     * at or above {@link SupportedJdk#MIN_MAJOR} plus the single most-recent
-     * major. {@code false} keeps <em>every</em> major at or above the floor,
-     * which is what {@code jk jdk list --all} wants: a complete catalogue of
-     * installable vendors / products / majors, not just the recommended ones.
+     * <p>{@code firstClassOnly} = {@code true} (the default for every resolution / auto-install path)
+     * keeps jk's curated set — LTS majors at or above {@link SupportedJdk#MIN_MAJOR} plus the single
+     * most-recent major. {@code false} keeps <em>every</em> major at or above the floor, which is
+     * what {@code jk jdk list --all} wants: a complete catalogue of installable vendors / products /
+     * majors, not just the recommended ones.
      */
     public JdkCatalog fetch(boolean noCache, boolean firstClassOnly) throws IOException, InterruptedException {
         byte[] body = loadBody(noCache);
@@ -158,10 +154,9 @@ public final class JdkCatalogClient {
     }
 
     /**
-     * Parse the JDK catalog from raw (uncompressed) JSON bytes using a
-     * stateful line scanner — no JSON library required. The feed is always
-     * pretty-printed with one key/value per line, so simple line-by-line
-     * field extraction is reliable.
+     * Parse the JDK catalog from raw (uncompressed) JSON bytes using a stateful line scanner — no
+     * JSON library required. The feed is always pretty-printed with one key/value per line, so simple
+     * line-by-line field extraction is reliable.
      */
     private JdkCatalog parse(byte[] json, boolean firstClassOnly) throws IOException {
         List<JdkCatalog.Entry> entries = new ArrayList<>(256);
@@ -309,18 +304,16 @@ public final class JdkCatalogClient {
     }
 
     /**
-     * Drop catalog rows for majors jk doesn't claim to support. Always drops
-     * anything below {@link SupportedJdk#MIN_MAJOR}. When {@code firstClassOnly}
-     * is set, also drops any non-LTS that isn't the single most-recent major in
-     * the feed — the JetBrains feed publishes 8 / 11 / 17 / 21 / 23 / 24 / 25 /
-     * 26 / …, so that pass keeps {17, 21, 25, latestMajor}. With it cleared,
-     * every major at or above the floor is kept (for {@code jk jdk list --all}).
+     * Drop catalog rows for majors jk doesn't claim to support. Always drops anything below {@link
+     * SupportedJdk#MIN_MAJOR}. When {@code firstClassOnly} is set, also drops any non-LTS that isn't
+     * the single most-recent major in the feed — the JetBrains feed publishes 8 / 11 / 17 / 21 / 23 /
+     * 24 / 25 / 26 / …, so that pass keeps {17, 21, 25, latestMajor}. With it cleared, every major at
+     * or above the floor is kept (for {@code jk jdk list --all}).
      *
-     * <p>"Latest" is the newest <em>GA</em> major: preview/EA builds are
-     * excluded from the computation. Otherwise an early-access next release
-     * (e.g. a {@code 27-ea} when 26 is the newest GA) would claim the single
-     * latest-major slot, and since the wizard and lists hide preview entries,
-     * the real latest (26) would silently vanish from both.
+     * <p>"Latest" is the newest <em>GA</em> major: preview/EA builds are excluded from the
+     * computation. Otherwise an early-access next release (e.g. a {@code 27-ea} when 26 is the newest
+     * GA) would claim the single latest-major slot, and since the wizard and lists hide preview
+     * entries, the real latest (26) would silently vanish from both.
      */
     private static List<JdkCatalog.Entry> filterSupported(List<JdkCatalog.Entry> all, boolean firstClassOnly) {
         if (all.isEmpty()) return all;

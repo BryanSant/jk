@@ -16,18 +16,16 @@ import java.util.TreeMap;
 import org.jline.terminal.Terminal;
 
 /**
- * 3-step TUI for {@code jk jdk install} when no {@code <spec>} was given.
- * Asks for major version (25 / 21 / 17), vendor (drawn from the catalog,
- * defaulting to Temurin), and whether to mark the installed JDK as the
- * system-wide default. Resolves to a concrete {@link JdkCatalog.Entry}
- * which the caller hands to {@code JdkInstaller}.
+ * 3-step TUI for {@code jk jdk install} when no {@code <spec>} was given. Asks for major version
+ * (25 / 21 / 17), vendor (drawn from the catalog, defaulting to Temurin), and whether to mark the
+ * installed JDK as the system-wide default. Resolves to a concrete {@link JdkCatalog.Entry} which
+ * the caller hands to {@code JdkInstaller}.
  */
 final class JdkInstallWizard {
 
     /**
-     * Majors the wizard exposes — derived from the (already supported-
-     * filtered) catalog rather than hard-coded, so when JDK 27 ships
-     * we don't have to update a constant.
+     * Majors the wizard exposes — derived from the (already supported- filtered) catalog rather than
+     * hard-coded, so when JDK 27 ships we don't have to update a constant.
      */
     static List<Integer> supportedMajorsFrom(JdkCatalog catalog, String os, String arch) {
         var sorted = new java.util.TreeSet<Integer>(Comparator.reverseOrder());
@@ -44,9 +42,8 @@ final class JdkInstallWizard {
     private static final String VENDOR_PRODUCT_SEP = "|";
 
     /**
-     * Curated default set surfaced in the wizard. {@code --show-all} bypasses
-     * this and exposes every (vendor, product) from the feed. Order here is
-     * preserved in the rendered list.
+     * Curated default set surfaced in the wizard. {@code --show-all} bypasses this and exposes every
+     * (vendor, product) from the feed. Order here is preserved in the rendered list.
      */
     private static final List<String> CURATED_VENDOR_IDS =
             List.of("Eclipse|Temurin", "Oracle|GraalVM", "Amazon|Corretto", "BellSoft|Liberica JDK");
@@ -56,12 +53,11 @@ final class JdkInstallWizard {
     public record Result(JdkCatalog.Entry entry, boolean makeDefault) {}
 
     /**
-     * One row in the vendor-step list. {@code id} is the wizard answer key
-     * (encoded "vendor|product"); {@code label} is the friendly display
-     * ("Eclipse Temurin"); {@code installFolderByMajor} maps each supported
-     * major to the {@code installFolderName} of the latest entry for that
-     * (vendor, product, major) — used as the dark-gray hint and updated
-     * reactively when the user changes their version selection.
+     * One row in the vendor-step list. {@code id} is the wizard answer key (encoded
+     * "vendor|product"); {@code label} is the friendly display ("Eclipse Temurin"); {@code
+     * installFolderByMajor} maps each supported major to the {@code installFolderName} of the latest
+     * entry for that (vendor, product, major) — used as the dark-gray hint and updated reactively
+     * when the user changes their version selection.
      */
     record VendorOption(
             String id, String label, String vendor, String product, Map<Integer, String> installFolderByMajor) {
@@ -134,11 +130,10 @@ final class JdkInstallWizard {
     }
 
     /**
-     * Resolve the dark-gray hint for a vendor option against the current
-     * answers — i.e., the {@code installFolderName} for the major the user
-     * has selected on the version step. Falls back to the option's highest
-     * supported major when the version answer is missing (e.g., when the
-     * vendor step is rendered without a prior version step).
+     * Resolve the dark-gray hint for a vendor option against the current answers — i.e., the {@code
+     * installFolderName} for the major the user has selected on the version step. Falls back to the
+     * option's highest supported major when the version answer is missing (e.g., when the vendor step
+     * is rendered without a prior version step).
      */
     private static String hintForAnswers(VendorOption v, Answers answers) {
         var versionStr = answers.get("version");
@@ -158,15 +153,14 @@ final class JdkInstallWizard {
     }
 
     /**
-     * Distinct (vendor, product) pairs from the catalog with at least one
-     * supported (os, arch, LTS, non-preview) entry. Each option carries a
-     * map from supported major → {@code installFolderName} of the latest
-     * entry for that major, so the wizard can update the dark-gray hint
-     * reactively as the user picks a version.
+     * Distinct (vendor, product) pairs from the catalog with at least one supported (os, arch, LTS,
+     * non-preview) entry. Each option carries a map from supported major → {@code installFolderName}
+     * of the latest entry for that major, so the wizard can update the dark-gray hint reactively as
+     * the user picks a version.
      *
-     * <p>When {@code showAll} is false, the result is restricted to the
-     * curated set ({@link #CURATED_VENDOR_IDS}) and preserves that order;
-     * when true, every (vendor, product) is included, Temurin pinned first.
+     * <p>When {@code showAll} is false, the result is restricted to the curated set ({@link
+     * #CURATED_VENDOR_IDS}) and preserves that order; when true, every (vendor, product) is included,
+     * Temurin pinned first.
      */
     static List<VendorOption> vendorsFor(JdkCatalog catalog, String os, String arch, boolean showAll) {
         // For each (vendor, product), track the latest entry per major.

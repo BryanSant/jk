@@ -10,9 +10,9 @@ import java.util.Optional;
 import java.util.function.Function;
 
 /**
- * Reads {@code JAVA_HOME} / {@code KOTLIN_HOME} / {@code M2_HOME} /
- * {@code GRADLE_HOME} (and {@code MAVEN_HOME} as a synonym). Honours
- * the user's explicit "use this tool" hint when the version matches.
+ * Reads {@code JAVA_HOME} / {@code KOTLIN_HOME} / {@code M2_HOME} / {@code GRADLE_HOME} (and {@code
+ * MAVEN_HOME} as a synonym). Honours the user's explicit "use this tool" hint when the version
+ * matches.
  */
 public final class EnvVarProbe implements LocalToolProbe {
 

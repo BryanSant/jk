@@ -4,8 +4,8 @@ package dev.jkbuild.command;
 import java.nio.file.Path;
 
 /**
- * Bash flavour. Uses {@code PROMPT_COMMAND} as the prompt-time hook since
- * bash lacks a native {@code chpwd} event.
+ * Bash flavour. Uses {@code PROMPT_COMMAND} as the prompt-time hook since bash lacks a native
+ * {@code chpwd} event.
  */
 public final class BashShell implements Shell {
 

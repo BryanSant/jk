@@ -13,20 +13,17 @@ import java.util.concurrent.ExecutionException;
 import java.util.stream.Stream;
 
 /**
- * SHA-256 over a sorted file-list of a tool install. Used by the
- * {@code --verify-linked} opt-in to fingerprint a linked external install
- * so a future invocation can detect that the upstream changed without
- * jk's knowledge.
+ * SHA-256 over a sorted file-list of a tool install. Used by the {@code --verify-linked} opt-in to
+ * fingerprint a linked external install so a future invocation can detect that the upstream changed
+ * without jk's knowledge.
  *
- * <p>Walk order is deterministic (lexicographic on the relative path);
- * each entry contributes its relative path plus the SHA-256 of its
- * contents. The aggregated digest is the SHA-256 of the concatenated
- * "{@code <path>\0<contents-sha256>\n}" lines.
+ * <p>Walk order is deterministic (lexicographic on the relative path); each entry contributes its
+ * relative path plus the SHA-256 of its contents. The aggregated digest is the SHA-256 of the
+ * concatenated "{@code <path>\0<contents-sha256>\n}" lines.
  *
- * <p>Per-file content hashing runs on {@link JkThreads#cpu()} since it's
- * embarrassingly parallel CPU work. The aggregated buffer is assembled in
- * the original sorted order regardless of completion order so the final
- * digest stays deterministic.
+ * <p>Per-file content hashing runs on {@link JkThreads#cpu()} since it's embarrassingly parallel
+ * CPU work. The aggregated buffer is assembled in the original sorted order regardless of
+ * completion order so the final digest stays deterministic.
  */
 public final class TreeFingerprint {
 

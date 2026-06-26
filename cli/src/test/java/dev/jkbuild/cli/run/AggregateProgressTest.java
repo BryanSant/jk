@@ -13,9 +13,9 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 /**
- * The workspace progress bar must calibrate to the aggregate tick total up front
- * and advance cumulatively — the denominator stays fixed and the numerator only
- * grows across the module boundary, instead of resetting per module.
+ * The workspace progress bar must calibrate to the aggregate tick total up front and advance
+ * cumulatively — the denominator stays fixed and the numerator only grows across the module
+ * boundary, instead of resetting per module.
  */
 class AggregateProgressTest {
 
@@ -137,8 +137,8 @@ class AggregateProgressTest {
     }
 
     /**
-     * The aggregate numerator/denominator currently driving the bar. (The bar no
-     * longer prints an N-of-M count, so read the values the view holds directly.)
+     * The aggregate numerator/denominator currently driving the bar. (The bar no longer prints an
+     * N-of-M count, so read the values the view holds directly.)
      */
     private static String barCount(CommandManager cm) {
         return cm.numerator() + " of " + cm.denominator();

@@ -18,9 +18,7 @@ import java.util.List;
 import java.util.Optional;
 import org.jline.terminal.Terminal;
 
-/**
- * {@code jk activate [<shell>]} — wire jk into the user's shell.
- */
+/** {@code jk activate [<shell>]} — wire jk into the user's shell. */
 public final class ActivateCommand implements CliCommand {
 
     @Override
@@ -63,13 +61,15 @@ public final class ActivateCommand implements CliCommand {
     private int runInstaller() throws IOException {
         var shell = Shell.detect();
         if (shell.isEmpty()) {
-            System.err.println("jk activate: couldn't detect your shell from $SHELL (value: `" + System.getenv("SHELL")
+            System.err.println("jk activate: couldn't detect your shell from $SHELL (value: `"
+                    + System.getenv("SHELL")
                     + "`). Pass an explicit shell, e.g. `jk activate zsh`.");
             return 64;
         }
         if (!isInteractiveTerminal()) {
             System.err.println("jk activate: stdin is not a TTY — pass a shell (e.g. `jk activate "
-                    + shell.get().name() + "`) to print the integration script instead.");
+                    + shell.get().name()
+                    + "`) to print the integration script instead.");
             return 64;
         }
         return runWizard(shell.get());
@@ -84,9 +84,9 @@ public final class ActivateCommand implements CliCommand {
         if (Files.exists(rcFile)) {
             String existing = Files.readString(rcFile, StandardCharsets.UTF_8);
             if (existing.contains(activationLine)) {
-                System.out.println(
-                        Theme.colorize("✓", Theme.active().completedStep()) + " jk activation is already wired up in "
-                                + Theme.colorize(rcDisplay, Theme.active().focused()));
+                System.out.println(Theme.colorize("✓", Theme.active().completedStep())
+                        + " jk activation is already wired up in "
+                        + Theme.colorize(rcDisplay, Theme.active().focused()));
                 return 0;
             }
         }
@@ -116,7 +116,8 @@ public final class ActivateCommand implements CliCommand {
             return 0;
         }
         appendActivationLine(rcFile, activationLine);
-        System.out.println(Theme.colorize("✓", Theme.active().completedStep()) + " appended jk activation to "
+        System.out.println(Theme.colorize("✓", Theme.active().completedStep())
+                + " appended jk activation to "
                 + Theme.colorize(rcDisplay, Theme.active().focused()));
         System.out.println("Open a new shell (or " + sourceHint(shell, rcDisplay) + ") to pick up the change.");
         return 0;
@@ -126,7 +127,8 @@ public final class ActivateCommand implements CliCommand {
         if (rcFile.getParent() != null) Files.createDirectories(rcFile.getParent());
         String block =
                 "\n# Added by `jk activate` — keep this at the end of the file so jk's\n# JAVA_HOME / PATH overrides land after any other tool's edits.\n"
-                        + line + "\n";
+                        + line
+                        + "\n";
         if (Files.exists(rcFile)) Files.writeString(rcFile, block, StandardCharsets.UTF_8, StandardOpenOption.APPEND);
         else
             Files.writeString(

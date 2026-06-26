@@ -7,14 +7,13 @@ import java.util.Objects;
  * What ref of a git repository to resolve (PRD §11.1). One of:
  *
  * <ul>
- *   <li>{@link Tag} — an annotated or lightweight tag (e.g. {@code v1.2.3}).</li>
- *   <li>{@link Branch} — a moving branch ref (e.g. {@code main}).</li>
- *   <li>{@link Rev} — an explicit 40-char SHA, the canonical pin.</li>
+ *   <li>{@link Tag} — an annotated or lightweight tag (e.g. {@code v1.2.3}).
+ *   <li>{@link Branch} — a moving branch ref (e.g. {@code main}).
+ *   <li>{@link Rev} — an explicit 40-char SHA, the canonical pin.
  * </ul>
  *
- * <p>Tags and branches are mutable; only a {@link Rev} is fully reproducible.
- * The resolver always pins to a SHA in the lockfile regardless of the spec
- * (PRD §11.2).
+ * <p>Tags and branches are mutable; only a {@link Rev} is fully reproducible. The resolver always
+ * pins to a SHA in the lockfile regardless of the spec (PRD §11.2).
  */
 public sealed interface GitRefSpec {
 
@@ -27,10 +26,9 @@ public sealed interface GitRefSpec {
     }
 
     /**
-     * Whether the spec names an effectively-immutable ref ({@link Tag} or
-     * {@link Rev}). Immutable git deps are materialized and pinned in
-     * {@code jk.lock} (a tag's stability is enforced by the tag-rewrite canary).
-     * A {@link Branch} is a moving target: it is built-from-source on demand and
+     * Whether the spec names an effectively-immutable ref ({@link Tag} or {@link Rev}). Immutable git
+     * deps are materialized and pinned in {@code jk.lock} (a tag's stability is enforced by the
+     * tag-rewrite canary). A {@link Branch} is a moving target: it is built-from-source on demand and
      * injected onto the classpath like a {@code path} dependency, never locked.
      */
     default boolean isImmutable() {

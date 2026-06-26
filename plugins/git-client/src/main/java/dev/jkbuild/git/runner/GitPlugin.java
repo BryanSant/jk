@@ -15,26 +15,19 @@ import java.nio.file.Path;
 import java.util.List;
 
 /**
- * The {@code jk-git-runner} plugin: performs JGit operations (clone, resolve-ref,
- * verify-locked) in an isolated child JVM, keeping JGit off jk's own classpath.
+ * The {@code jk-git-runner} plugin: performs JGit operations (clone, resolve-ref, verify-locked) in
+ * an isolated child JVM, keeping JGit off jk's own classpath.
  *
- * <p>This is the first runner converted to the {@link Plugin} SPI
- * (docs/plugin-refactor.md, Phase 1): the worker entry point is the shared
- * {@link dev.jkbuild.plugin.worker.PluginWorkerMain}, which discovers this class via
- * {@link java.util.ServiceLoader} and drives it. The hand-rolled {@code main()},
- * NDJSON escaping, and exit-code plumbing the old {@code GitRunner} carried are
- * now shared infrastructure.
+ * <p>This is the first runner converted to the {@link Plugin} SPI (docs/plugin-refactor.md, Phase
+ * 1): the worker entry point is the shared {@link dev.jkbuild.plugin.worker.PluginWorkerMain},
+ * which discovers this class via {@link java.util.ServiceLoader} and drives it. The hand-rolled
+ * {@code main()}, NDJSON escaping, and exit-code plumbing the old {@code GitRunner} carried are now
+ * shared infrastructure.
  *
- * Spec file format:
- *   COMMAND      fetch|resolve_ref|verify_locked
- *   URL          https://github.com/user/repo.git
- *   REF_TYPE     Tag|Branch|Rev
- *   REF          main|v1.0.0|sha
- *   NO_CACHE     false
- *   GIT_ROOT     /abs/path/git-cache
- *   CRED_USER    token       (optional)
- *   CRED_PASS    secret      (optional, spec is 0600)
- *   EXPECTED_SHA abc123      (verify_locked only)
+ * <p>Spec file format: COMMAND fetch|resolve_ref|verify_locked URL https://github.com/user/repo.git
+ * REF_TYPE Tag|Branch|Rev REF main|v1.0.0|sha NO_CACHE false GIT_ROOT /abs/path/git-cache CRED_USER
+ * token (optional) CRED_PASS secret (optional, spec is 0600) EXPECTED_SHA abc123 (verify_locked
+ * only)
  */
 public final class GitPlugin implements Plugin {
 
@@ -108,8 +101,11 @@ public final class GitPlugin implements Plugin {
         try {
             out.emit("{\"t\":\"progress\",\"msg\":" + Ndjson.quote("Fetching " + source.canonicalUrl()) + "}");
             GitFetcherWorker.Fetched r = w.fetch(source, noCache);
-            out.emit("{\"t\":\"result\",\"ok\":true,\"sha\":" + Ndjson.quote(r.sha()) + ",\"checkout\":"
-                    + Ndjson.quote(r.checkoutPath().toAbsolutePath().toString()) + "}");
+            out.emit("{\"t\":\"result\",\"ok\":true,\"sha\":"
+                    + Ndjson.quote(r.sha())
+                    + ",\"checkout\":"
+                    + Ndjson.quote(r.checkoutPath().toAbsolutePath().toString())
+                    + "}");
             return 0;
         } catch (IOException e) {
             out.emit("{\"t\":\"result\",\"ok\":false,\"error\":" + Ndjson.quote(e.getMessage()) + "}");
@@ -120,8 +116,10 @@ public final class GitPlugin implements Plugin {
     private static int doResolveRef(ProtocolWriter out, GitFetcherWorker w, GitSource source) {
         try {
             GitFetcherWorker.RefInfo r = w.resolveRef(source);
-            out.emit("{\"t\":\"result\",\"ok\":true,\"sha\":" + Ndjson.quote(r.sha())
-                    + ",\"commit_time\":" + r.commitTime().getEpochSecond()
+            out.emit("{\"t\":\"result\",\"ok\":true,\"sha\":"
+                    + Ndjson.quote(r.sha())
+                    + ",\"commit_time\":"
+                    + r.commitTime().getEpochSecond()
                     + ",\"nearest_tag\":"
                     + (r.nearestTag().isPresent() ? Ndjson.quote(r.nearestTag().get()) : "null")
                     + "}");
@@ -143,9 +141,13 @@ public final class GitPlugin implements Plugin {
             return 0;
         } catch (GitFetcherWorker.TagRewriteException e) {
             out.emit("{\"t\":\"result\",\"ok\":false,\"tag_rewrite\":true"
-                    + ",\"expected\":" + Ndjson.quote(e.expectedSha())
-                    + ",\"actual\":" + Ndjson.quote(e.actualSha())
-                    + ",\"error\":" + Ndjson.quote(e.getMessage()) + "}");
+                    + ",\"expected\":"
+                    + Ndjson.quote(e.expectedSha())
+                    + ",\"actual\":"
+                    + Ndjson.quote(e.actualSha())
+                    + ",\"error\":"
+                    + Ndjson.quote(e.getMessage())
+                    + "}");
             return 1;
         } catch (IOException e) {
             out.emit("{\"t\":\"result\",\"ok\":false,\"error\":" + Ndjson.quote(e.getMessage()) + "}");

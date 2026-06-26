@@ -21,23 +21,24 @@ import org.jline.utils.AttributedStyle;
  * Combined spinner + progress bar listener.
  *
  * <p>Line layout:
+ *
  * <pre>
  *   {spin} {24-bar} [pct%] N of M › Goal › Phase step-message
  * </pre>
  *
  * <ul>
- *   <li>Spinner glyph animates every 120 ms on a daemon thread — no OSC 9;4.</li>
- *   <li>Bar segments send OSC 9;4 on every {@link #progress} event.</li>
- *   <li>Percent box {@code [  0%]}: dark-gray brackets, bold-white value.</li>
- *   <li>{@code N of M}: normal-gray, not fixed-width.</li>
- *   <li>Separators {@code ›}: dark-gray.</li>
- *   <li>Goal label: bold + bright-green.</li>
- *   <li>Phase label: bold.</li>
- *   <li>Step message: normal-gray.</li>
+ *   <li>Spinner glyph animates every 120 ms on a daemon thread — no OSC 9;4.
+ *   <li>Bar segments send OSC 9;4 on every {@link #progress} event.
+ *   <li>Percent box {@code [ 0%]}: dark-gray brackets, bold-white value.
+ *   <li>{@code N of M}: normal-gray, not fixed-width.
+ *   <li>Separators {@code ›}: dark-gray.
+ *   <li>Goal label: bold + bright-green.
+ *   <li>Phase label: bold.
+ *   <li>Step message: normal-gray.
  * </ul>
  *
- * <p>On failure: bar repaints in the failure gradient, goal label becomes
- * bold + bright-red with strikethrough, everything after it is struck through.
+ * <p>On failure: bar repaints in the failure gradient, goal label becomes bold + bright-red with
+ * strikethrough, everything after it is struck through.
  */
 public final class ProgressBarListener implements GoalListener {
 

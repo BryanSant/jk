@@ -4,6 +4,7 @@ package dev.jkbuild.cache;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -29,7 +30,7 @@ class CasTest {
         Cas cas = new Cas(tempDir);
         byte[] payload = "hello world".getBytes(StandardCharsets.UTF_8);
 
-        Cas.Stored stored = cas.putStream(new java.io.ByteArrayInputStream(payload));
+        Cas.Stored stored = cas.putStream(new ByteArrayInputStream(payload));
 
         // Same key and bytes as the buffered put() — streaming must not change the hash.
         assertThat(stored.path()).isEqualTo(cas.put(payload));
@@ -42,8 +43,8 @@ class CasTest {
     void putStream_is_idempotent(@TempDir Path tempDir) throws IOException {
         Cas cas = new Cas(tempDir);
         byte[] payload = "hello".getBytes(StandardCharsets.UTF_8);
-        Cas.Stored a = cas.putStream(new java.io.ByteArrayInputStream(payload));
-        Cas.Stored b = cas.putStream(new java.io.ByteArrayInputStream(payload));
+        Cas.Stored a = cas.putStream(new ByteArrayInputStream(payload));
+        Cas.Stored b = cas.putStream(new ByteArrayInputStream(payload));
         assertThat(a.path()).isEqualTo(b.path());
         // No leftover temp files from the second (discarded) write.
         try (var entries = Files.list(tempDir)) {

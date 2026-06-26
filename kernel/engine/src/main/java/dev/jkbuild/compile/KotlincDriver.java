@@ -13,14 +13,13 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 /**
- * Drives Kotlin compilation by forking the {@code jk-kotlin-compiler} worker,
- * which runs the Kotlin Build Tools API in-process under the project's JDK.
+ * Drives Kotlin compilation by forking the {@code jk-kotlin-compiler} worker, which runs the Kotlin
+ * Build Tools API in-process under the project's JDK.
  *
  * <p>The worker is launched as {@code <javaHome>/bin/java -cp <workerClasspath>
- * dev.jkbuild.kotlin.compiler.KotlinCompilerWorker @<spec>}. It streams NDJSON
- * back on stdout (each line prefixed {@value #PROTOCOL_PREFIX}); we collect the
- * diagnostics and the terminal result. Replaces the former
- * {@code <kotlin-home>/bin/kotlinc} subprocess.
+ * dev.jkbuild.kotlin.compiler.KotlinCompilerWorker @<spec>}. It streams NDJSON back on stdout (each
+ * line prefixed {@value #PROTOCOL_PREFIX}); we collect the diagnostics and the terminal result.
+ * Replaces the former {@code <kotlin-home>/bin/kotlinc} subprocess.
  */
 public final class KotlincDriver {
 

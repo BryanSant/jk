@@ -4,9 +4,9 @@ package dev.jkbuild.cli;
 import java.util.List;
 
 /**
- * Optional escape hatch a command's user object MAY implement to express help
- * details not captured in the {@link dev.jkbuild.model.command.CliCommand} defaults.
- * No command uses this yet; it exists as an extension point for future commands.
+ * Optional escape hatch a command's user object MAY implement to express help details not captured
+ * in the {@link dev.jkbuild.model.command.CliCommand} defaults. No command uses this yet; it exists
+ * as an extension point for future commands.
  */
 public interface DescribesUsage {
 

@@ -40,17 +40,15 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * {@code jk update} — re-resolve declared dependencies and overwrite
- * {@code jk.lock}. Same pipeline as {@code jk lock}; the difference is
- * intent: {@code lock} is "make sure a lock exists", {@code update} is
- * "throw away whatever I have and resolve fresh."
+ * {@code jk update} — re-resolve declared dependencies and overwrite {@code jk.lock}. Same pipeline
+ * as {@code jk lock}; the difference is intent: {@code lock} is "make sure a lock exists", {@code
+ * update} is "throw away whatever I have and resolve fresh."
  *
- * <p>For workspace roots, updating cascades to each declared module in
- * declaration order, writing a fresh {@code jk.lock} alongside each
- * module's {@code jk.toml}.
+ * <p>For workspace roots, updating cascades to each declared module in declaration order, writing a
+ * fresh {@code jk.lock} alongside each module's {@code jk.toml}.
  *
- * <p>{@code --precise &lt;coord&gt;@&lt;ver&gt;} per PRD §6 is accepted
- * but a no-op until selective resolution lands.
+ * <p>{@code --precise &lt;coord&gt;@&lt;ver&gt;} per PRD §6 is accepted but a no-op until selective
+ * resolution lands.
  */
 public final class UpdateCommand implements CliCommand {
 
@@ -240,18 +238,22 @@ public final class UpdateCommand implements CliCommand {
             var th = Theme.active();
             int n = lock.artifacts().size();
             System.out.println(Theme.colorize(Glyphs.CHECK, th.success())
-                    + " Updated: " + Theme.colorize(PathDisplay.of(lockFile, global.workingDir()), th.path())
-                    + " " + Theme.colorize("›", th.darkGray())
-                    + " " + Theme.colorize(String.valueOf(n), th.cyan())
-                    + " package" + (n == 1 ? "" : "s"));
+                    + " Updated: "
+                    + Theme.colorize(PathDisplay.of(lockFile, global.workingDir()), th.path())
+                    + " "
+                    + Theme.colorize("›", th.darkGray())
+                    + " "
+                    + Theme.colorize(String.valueOf(n), th.cyan())
+                    + " package"
+                    + (n == 1 ? "" : "s"));
         }
         return 0;
     }
 
     /**
-     * {@code jk update --git}: clear the branch-tip freshness stamp for every
-     * branch git dependency (project + workspace modules), so the next build
-     * re-resolves the remote tip regardless of the freshness window.
+     * {@code jk update --git}: clear the branch-tip freshness stamp for every branch git dependency
+     * (project + workspace modules), so the next build re-resolves the remote tip regardless of the
+     * freshness window.
      */
     private int refreshGitBranches(Path dir, JkBuild root, Path cache) throws Exception {
         List<JkBuild> builds = new java.util.ArrayList<>();
@@ -278,7 +280,10 @@ public final class UpdateCommand implements CliCommand {
             System.out.println(
                     n == 0
                             ? "No branch git dependencies to refresh."
-                            : "Marked " + n + " branch git dependenc" + (n == 1 ? "y" : "ies")
+                            : "Marked "
+                                    + n
+                                    + " branch git dependenc"
+                                    + (n == 1 ? "y" : "ies")
                                     + " for re-fetch on the next build.");
         }
         return 0;

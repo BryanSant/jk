@@ -18,21 +18,19 @@ import java.nio.file.Path;
 import java.util.List;
 
 /**
- * Shared "resolve jk.toml → write jk.lock" pipeline used by both
- * {@code jk lock} and {@code jk sync} (the latter delegating here when no
- * lockfile exists yet). This is pure logic: failures are returned in
- * {@link Result#error} for the caller to surface — nothing is written to
- * {@code stderr} here, so only the CLI view layer touches the streams.
+ * Shared "resolve jk.toml → write jk.lock" pipeline used by both {@code jk lock} and {@code jk
+ * sync} (the latter delegating here when no lockfile exists yet). This is pure logic: failures are
+ * returned in {@link Result#error} for the caller to surface — nothing is written to {@code stderr}
+ * here, so only the CLI view layer touches the streams.
  */
 public final class LockFlow {
 
     private LockFlow() {}
 
     /**
-     * Outcome of one lock pass. {@code status == 0} means success,
-     * {@link #error} is {@code null}, and {@link #lockfile} / {@link #build}
-     * are populated. Non-zero means the caller should return that exit code
-     * and surface {@link #error} (a bare message, no verb prefix).
+     * Outcome of one lock pass. {@code status == 0} means success, {@link #error} is {@code null},
+     * and {@link #lockfile} / {@link #build} are populated. Non-zero means the caller should return
+     * that exit code and surface {@link #error} (a bare message, no verb prefix).
      */
     public record Result(int status, String error, Lockfile lockfile, JkBuild build, int workspaceModuleCount) {}
 

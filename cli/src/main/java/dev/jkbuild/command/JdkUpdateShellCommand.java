@@ -14,8 +14,8 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * {@code jk jdk update-shell} — append a line to the user's shell rc file
- * so {@code $JK_BIN_DIR} ends up on the {@code PATH}.
+ * {@code jk jdk update-shell} — append a line to the user's shell rc file so {@code $JK_BIN_DIR}
+ * ends up on the {@code PATH}.
  */
 public final class JdkUpdateShellCommand implements CliCommand {
 
@@ -51,7 +51,8 @@ public final class JdkUpdateShellCommand implements CliCommand {
         Path binDir = binDirOverride != null ? binDirOverride : JkDirs.binDir();
         Optional<JdkShell> detected = shellOverride != null ? JdkShell.detect(shellOverride) : JdkShell.detect();
         if (detected.isEmpty()) {
-            System.err.println("jk jdk update-shell: could not detect shell (set --shell, or add `" + bashLine(binDir)
+            System.err.println("jk jdk update-shell: could not detect shell (set --shell, or add `"
+                    + bashLine(binDir)
                     + "` to your rc file manually).");
             return 64;
         }

@@ -17,14 +17,12 @@ import java.util.Optional;
 /**
  * Computes the per-directory environment {@code jk hook-env} should expose.
  *
- * <p>Walks up from a starting directory to find the nearest {@code jk.toml};
- * if found, consults the sibling {@code jk.lock} for the resolved JDK
- * identifier and looks up the install's {@code JAVA_HOME} (and
- * {@code GRAALVM_HOME} when the install is a GraalVM distribution).
+ * <p>Walks up from a starting directory to find the nearest {@code jk.toml}; if found, consults the
+ * sibling {@code jk.lock} for the resolved JDK identifier and looks up the install's {@code
+ * JAVA_HOME} (and {@code GRAALVM_HOME} when the install is a GraalVM distribution).
  *
- * <p>The PATH prepend is rendered against {@code __JK_ORIG_PATH} (set by the
- * activation script on first source) so re-sourcing the activate script
- * doesn't accumulate duplicate entries.
+ * <p>The PATH prepend is rendered against {@code __JK_ORIG_PATH} (set by the activation script on
+ * first source) so re-sourcing the activate script doesn't accumulate duplicate entries.
  */
 public final class JkEnv {
 
@@ -56,13 +54,12 @@ public final class JkEnv {
     }
 
     /**
-     * Resolve the desired env for a {@code cwd} via the one canonical JDK order
-     * ({@link dev.jkbuild.jdk.JdkResolution}): {@code JK_JDK} env, the project's
-     * {@code .jdk-version} / {@code jk.lock} / {@code project.jdk}, then the
-     * global current / default JDK, then {@code JAVA_HOME} / {@code GRAALVM_HOME}
-     * / {@code PATH}. Never installs (the hook must not block the shell). Empty
-     * only when nothing resolves. Carries JAVA_HOME / GRAALVM_HOME / PATH plus
-     * the project root (when a {@code jk.toml} was found upstream).
+     * Resolve the desired env for a {@code cwd} via the one canonical JDK order ({@link
+     * dev.jkbuild.jdk.JdkResolution}): {@code JK_JDK} env, the project's {@code .jdk-version} /
+     * {@code jk.lock} / {@code project.jdk}, then the global current / default JDK, then {@code
+     * JAVA_HOME} / {@code GRAALVM_HOME} / {@code PATH}. Never installs (the hook must not block the
+     * shell). Empty only when nothing resolves. Carries JAVA_HOME / GRAALVM_HOME / PATH plus the
+     * project root (when a {@code jk.toml} was found upstream).
      */
     public Target resolve(Path cwd) throws IOException {
         var root = findProjectRoot(cwd);
@@ -111,11 +108,10 @@ public final class JkEnv {
     }
 
     /**
-     * Build the env vars (JAVA_HOME / GRAALVM_HOME / PATH). GRAALVM_HOME is
-     * managed independently of JAVA_HOME from its own chain ({@code JK_GRAAL} >
-     * {@code project.graal} > the {@code jk jdk graal} default); only when that
-     * chain finds nothing do we fall back to the active JDK if it is itself a
-     * GraalVM. Absent → the hook unsets any GRAALVM_HOME it previously exported.
+     * Build the env vars (JAVA_HOME / GRAALVM_HOME / PATH). GRAALVM_HOME is managed independently of
+     * JAVA_HOME from its own chain ({@code JK_GRAAL} > {@code project.graal} > the {@code jk jdk
+     * graal} default); only when that chain finds nothing do we fall back to the active JDK if it is
+     * itself a GraalVM. Absent → the hook unsets any GRAALVM_HOME it previously exported.
      */
     private Target targetFor(Optional<Path> root, ResolvedJdk jdk, Optional<Path> graalHome) {
         var vars = new LinkedHashMap<String, String>();
@@ -132,10 +128,9 @@ public final class JkEnv {
     }
 
     /**
-     * Resolve the default GraalVM home, independent of JAVA_HOME:
-     * {@code JK_GRAAL} > {@code project.graal} > the {@code jk jdk graal} default
-     * pointer. The {@code native} keyword (or no match) means "the newest
-     * installed GraalVM". Empty when no GraalVM is configured/installed.
+     * Resolve the default GraalVM home, independent of JAVA_HOME: {@code JK_GRAAL} > {@code
+     * project.graal} > the {@code jk jdk graal} default pointer. The {@code native} keyword (or no
+     * match) means "the newest installed GraalVM". Empty when no GraalVM is configured/installed.
      */
     private Optional<Path> resolveGraalHome(String projectGraalSpec, ResolvedJdk javaJdk) {
         for (String spec : new String[] {System.getenv("JK_GRAAL"), projectGraalSpec}) {
@@ -182,10 +177,9 @@ public final class JkEnv {
     }
 
     /**
-     * Look up a JDK install by the identifier stored in {@code jk.lock}.
-     * {@link JdkRegistry#find} handles both jk-managed installs (short
-     * identifier like {@code temurin-25.0.3}) and external installs (whose
-     * identifier is the basename of the install dir).
+     * Look up a JDK install by the identifier stored in {@code jk.lock}. {@link JdkRegistry#find}
+     * handles both jk-managed installs (short identifier like {@code temurin-25.0.3}) and external
+     * installs (whose identifier is the basename of the install dir).
      */
     Optional<ResolvedJdk> lookupJdkHome(String id) throws IOException {
         // Absolute-path identifier — used by legacy lockfiles that stamped
@@ -260,8 +254,8 @@ public final class JkEnv {
      * Target env state for a given cwd.
      *
      * @param projectRoot present iff a {@code jk.toml} was found upstream
-     * @param vars the env keys + values jk should ensure are set; an empty map
-     *     means "no project — restore originals"
+     * @param vars the env keys + values jk should ensure are set; an empty map means "no project —
+     *     restore originals"
      */
     public record Target(Optional<Path> projectRoot, Map<String, String> vars) {
 

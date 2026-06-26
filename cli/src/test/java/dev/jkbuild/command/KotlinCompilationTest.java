@@ -12,9 +12,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
- * End-to-end tests for Kotlin support in jk check / jk build. No network —
- * jk init produces a jk.toml + empty lockfile, then we run check and
- * build against pure-Kotlin sources.
+ * End-to-end tests for Kotlin support in jk check / jk build. No network — jk init produces a
+ * jk.toml + empty lockfile, then we run check and build against pure-Kotlin sources.
  */
 class KotlinCompilationTest {
 

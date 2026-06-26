@@ -4,9 +4,9 @@ package dev.jkbuild.command;
 import java.nio.file.Path;
 
 /**
- * Fish flavour. Uses {@code --on-event fish_prompt} and {@code --on-variable PWD}
- * for the equivalent of precmd/chpwd. PATH is treated as a colon-joined string
- * for emission — fish accepts that via its {@code $PATH} compat shim.
+ * Fish flavour. Uses {@code --on-event fish_prompt} and {@code --on-variable PWD} for the
+ * equivalent of precmd/chpwd. PATH is treated as a colon-joined string for emission — fish accepts
+ * that via its {@code $PATH} compat shim.
  */
 public final class FishShell implements Shell {
 

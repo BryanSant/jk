@@ -36,22 +36,20 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * {@code jk run [-- <args>...]} — build the current project through the shared
- * {@link BuildPipeline} and run its best artifact, forwarding every argument to
- * the program.
+ * {@code jk run [-- <args>...]} — build the current project through the shared {@link
+ * BuildPipeline} and run its best artifact, forwarding every argument to the program.
  *
- * <p>The build runs in a {@link Goal} (so progress/warnings/run-log behave like
- * every other verb) and produces whatever {@code jk.toml} declares — a plain
- * jar, a shadow jar, and/or a native binary. We then exec the most
- * self-contained artifact available, in order of preference:
- * <strong>native binary &gt; shadow jar &gt; plain jar</strong>. The subprocess
- * starts <em>after</em> the goal returns (the progress widget has wiped itself,
- * so the inferior owns the TTY); a native binary is exec'd directly, a jar via
- * {@code java -cp … <main>}. We never hoist a jar into this JVM.
+ * <p>The build runs in a {@link Goal} (so progress/warnings/run-log behave like every other verb)
+ * and produces whatever {@code jk.toml} declares — a plain jar, a shadow jar, and/or a native
+ * binary. We then exec the most self-contained artifact available, in order of preference:
+ * <strong>native binary &gt; shadow jar &gt; plain jar</strong>. The subprocess starts
+ * <em>after</em> the goal returns (the progress widget has wiped itself, so the inferior owns the
+ * TTY); a native binary is exec'd directly, a jar via {@code java -cp … <main>}. We never hoist a
+ * jar into this JVM.
  *
- * <p>{@code jk run} does not interpret file arguments — a {@code .java} /
- * {@code .jar} argument is forwarded to the program, not executed. Use
- * {@code jk tool run} for a loose file or a published tool.
+ * <p>{@code jk run} does not interpret file arguments — a {@code .java} / {@code .jar} argument is
+ * forwarded to the program, not executed. Use {@code jk tool run} for a loose file or a published
+ * tool.
  */
 public final class RunCommand implements CliCommand {
 
@@ -98,7 +96,8 @@ public final class RunCommand implements CliCommand {
         Path projectDir = global.workingDir();
         Path manifest = projectDir.resolve("jk.toml");
         if (!Files.exists(manifest)) {
-            System.err.println("jk run: no jk.toml in " + dev.jkbuild.cli.PathDisplay.styledRaw(projectDir)
+            System.err.println("jk run: no jk.toml in "
+                    + dev.jkbuild.cli.PathDisplay.styledRaw(projectDir)
                     + " — run from a project directory, or use `jk tool run` to run a file or tool.");
             return 64; // EX_USAGE
         }
@@ -108,8 +107,11 @@ public final class RunCommand implements CliCommand {
     private int runProject(Path projectDir, List<String> appArgs) throws IOException, InterruptedException {
         JkBuild project = JkBuildParser.parse(projectDir.resolve("jk.toml"));
         if (project.project().main() == null) {
-            System.err.println(
-                    "jk run: no `main` class set in [project] for " + projectDir + " — set `main = \"<fqcn>\"`.");
+            boolean nerdfont = dev.jkbuild.config.GlobalConfig.nerdfont();
+            String msg = "No " + Theme.colorize("main", Theme.active().cyan())
+                    + " class specified in "
+                    + Theme.colorize("[project]", Theme.active().cyan());
+            System.out.println(GoalWedge.failureLine("Exec", nerdfont, msg));
             return 64;
         }
         BuildLayout layout = BuildLayout.of(projectDir, project);
@@ -212,11 +214,10 @@ public final class RunCommand implements CliCommand {
     }
 
     /**
-     * The styled tail shown in the exec chip line or banner:
-     * {@code "[cyan]{jdk}[/]: [yellow]java …[/]"} for JVM,
-     * {@code "Executing the native binary: [yellow]target/app[/]"} for native.
-     * Shared between the chip-mode tail (returned to the {@link ConsoleSpec} lambda)
-     * and the banner printed in verbose/JSON modes.
+     * The styled tail shown in the exec chip line or banner: {@code "[cyan]{jdk}[/]: [yellow]java
+     * …[/]"} for JVM, {@code "Executing the native binary: [yellow]target/app[/]"} for native. Shared
+     * between the chip-mode tail (returned to the {@link ConsoleSpec} lambda) and the banner printed
+     * in verbose/JSON modes.
      */
     private static String execTail(Path projectDir, List<String> command) {
         Theme t = Theme.active();
@@ -250,8 +251,8 @@ public final class RunCommand implements CliCommand {
     }
 
     /**
-     * Prints the {@code ▶ Executing …} line to stderr (verbose/JSON modes, where no
-     * chip is rendered). Delegates styling to {@link #execTail}.
+     * Prints the {@code ▶ Executing …} line to stderr (verbose/JSON modes, where no chip is
+     * rendered). Delegates styling to {@link #execTail}.
      */
     private static void printExecBanner(Path projectDir, List<String> command) {
         Theme t = Theme.active();

@@ -14,12 +14,12 @@ import java.nio.file.Path;
 import java.util.Optional;
 
 /**
- * The full provisioning pipeline for build tools (Maven, Gradle,
- * Kotlin). Glues {@link ToolProvisioner} discovery, {@link SymlinkProvisioner}
- * linking, the {@link ToolHealth} broken-link check, and the existing
- * {@link ToolInstaller} download path.
+ * The full provisioning pipeline for build tools (Maven, Gradle, Kotlin). Glues {@link
+ * ToolProvisioner} discovery, {@link SymlinkProvisioner} linking, the {@link ToolHealth}
+ * broken-link check, and the existing {@link ToolInstaller} download path.
  *
  * <p>Pseudocode the caller could write themselves (and previously did):
+ *
  * <pre>
  *   1. find in $JK_CACHE_DIR/tools/&lt;slug&gt;/&lt;version&gt;/
  *   2. if found and healthy: return
@@ -47,9 +47,8 @@ public final class ToolProvisioning {
     }
 
     /**
-     * Provision the tool described by {@code distribution}, preferring
-     * a local install over a download. Returns the resolved
-     * {@link InstalledTool} and a tag describing how it was obtained
+     * Provision the tool described by {@code distribution}, preferring a local install over a
+     * download. Returns the resolved {@link InstalledTool} and a tag describing how it was obtained
      * (for log output).
      */
     public static Result provision(ToolDistribution distribution, ToolRegistry registry, Http http, boolean noDiscover)
@@ -111,11 +110,10 @@ public final class ToolProvisioning {
     }
 
     /**
-     * Symlinked entries get the full {@link ToolHealth} check (broken-link
-     * detection + version-pin verification — catches silent upstream
-     * updates). Real directories we wrote ourselves get the cheap
-     * "binary still there?" check — we trust the dir name to encode the
-     * version, so a full {@code lib/maven-core-X.jar} probe is overkill.
+     * Symlinked entries get the full {@link ToolHealth} check (broken-link detection + version-pin
+     * verification — catches silent upstream updates). Real directories we wrote ourselves get the
+     * cheap "binary still there?" check — we trust the dir name to encode the version, so a full
+     * {@code lib/maven-core-X.jar} probe is overkill.
      */
     private static boolean isHealthyEntry(ToolSpec spec, Path home) {
         if (Files.isSymbolicLink(home)) {

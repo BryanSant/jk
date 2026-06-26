@@ -2,11 +2,11 @@
 package dev.jkbuild.cli.args;
 
 /**
- * Raised by {@link ArgParser} when the argument vector doesn't match a command's
- * declared options/parameters. Carries a {@link Kind} and the offending token so
- * the error renderer can produce a cargo-style diagnostic (unrecognized option,
- * missing value, missing required argument, too many arguments) — the same
- * categories the picocli {@code ParameterException} hierarchy gave us.
+ * Raised by {@link ArgParser} when the argument vector doesn't match a command's declared
+ * options/parameters. Carries a {@link Kind} and the offending token so the error renderer can
+ * produce a cargo-style diagnostic (unrecognized option, missing value, missing required argument,
+ * too many arguments) — the same categories the picocli {@code ParameterException} hierarchy gave
+ * us.
  */
 public final class ParseException extends Exception {
 

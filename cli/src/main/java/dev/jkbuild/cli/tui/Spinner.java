@@ -8,19 +8,17 @@ import java.io.PrintStream;
 import org.jline.utils.AttributedStyle;
 
 /**
- * Single-line animated spinner widget for indeterminate-progress CLI
- * operations. Cycles through {@code · ✢ ✳ ✶ ✻ ✽} on a daemon thread,
- * one frame every {@value #FRAME_MS} ms. Each frame is rendered in its
- * own color along a magenta → orange gradient (the reverse of the
- * {@code jk init} title gradient).
+ * Single-line animated spinner widget for indeterminate-progress CLI operations. Cycles through
+ * {@code · ✢ ✳ ✶ ✻ ✽} on a daemon thread, one frame every {@value #FRAME_MS} ms. Each frame is
+ * rendered in its own color along a magenta → orange gradient (the reverse of the {@code jk init}
+ * title gradient).
  *
  * <p>Layout: {@code <frame> <message>} on the current line.
  *
- * <p>The cursor is hidden between {@link #show(PrintStream, String)} and
- * {@link #close()}. {@link #update(String)} mutates the message
- * displayed on the next tick; shrinking the message overwrites the
- * previous trailing chars with spaces (no further). Both {@code update}
- * and {@code close} are safe to call from any thread.
+ * <p>The cursor is hidden between {@link #show(PrintStream, String)} and {@link #close()}. {@link
+ * #update(String)} mutates the message displayed on the next tick; shrinking the message overwrites
+ * the previous trailing chars with spaces (no further). Both {@code update} and {@code close} are
+ * safe to call from any thread.
  */
 public final class Spinner implements AutoCloseable {
 
@@ -53,9 +51,9 @@ public final class Spinner implements AutoCloseable {
     private Thread animator;
 
     /**
-     * Start a new spinner on the caller's current line, hiding the cursor.
-     * If the resolved config has {@code --no-progress}, returns a silent
-     * spinner that emits no animation and no terminal escapes.
+     * Start a new spinner on the caller's current line, hiding the cursor. If the resolved config has
+     * {@code --no-progress}, returns a silent spinner that emits no animation and no terminal
+     * escapes.
      */
     public static Spinner show(PrintStream out, String message) {
         Spinner s = new Spinner(out, message);

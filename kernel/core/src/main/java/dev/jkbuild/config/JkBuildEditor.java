@@ -10,27 +10,27 @@ import org.tomlj.Toml;
 import org.tomlj.TomlParseResult;
 
 /**
- * Surgical text editor for {@code jk.toml}. Adds and removes single-line
- * dependency entries while preserving user formatting and comments — the
- * way {@code cargo add} / {@code uv add} treat their config files.
+ * Surgical text editor for {@code jk.toml}. Adds and removes single-line dependency entries while
+ * preserving user formatting and comments — the way {@code cargo add} / {@code uv add} treat their
+ * config files.
  *
  * <p>Works against the v0.7 name-as-key sub-table format:
- * <pre>{@code
- *   [dependencies.main]
- *   spring-web = { group = "org.springframework.boot", name = "spring-boot-starter-web", version = "3.4.0" }
  *
- *   [dependencies.test]
- *   junit-jupiter.workspace = true
+ * <pre>{@code
+ * [dependencies.main]
+ * spring-web = { group = "org.springframework.boot", name = "spring-boot-starter-web", version = "3.4.0" }
+ *
+ * [dependencies.test]
+ * junit-jupiter.workspace = true
  * }</pre>
  *
- * <p>Default-scope shorthand: when a file's {@code [dependencies]} table
- * contains only inline-table children (i.e. no sub-scopes), it is treated
- * as {@code [dependencies.main]}; we add main deps directly under that
- * header. Adding a {@code test} dep to such a file creates a separate
- * {@code [dependencies.test]} sub-table.
+ * <p>Default-scope shorthand: when a file's {@code [dependencies]} table contains only inline-table
+ * children (i.e. no sub-scopes), it is treated as {@code [dependencies.main]}; we add main deps
+ * directly under that header. Adding a {@code test} dep to such a file creates a separate {@code
+ * [dependencies.test]} sub-table.
  *
- * <p>After every edit we run the result through {@link Toml#parse(String)}
- * for validation; if the document no longer parses, the edit is rejected.
+ * <p>After every edit we run the result through {@link Toml#parse(String)} for validation; if the
+ * document no longer parses, the edit is rejected.
  */
 public final class JkBuildEditor {
 
@@ -56,7 +56,10 @@ public final class JkBuildEditor {
     /** A double-quoted string literal element. */
     private static final Pattern QUOTED = Pattern.compile("\"([^\"]*)\"");
 
-    /** A dep entry line: {@code key = { ... }} or {@code key.workspace = true}. Captures key in group 2. */
+    /**
+     * A dep entry line: {@code key = { ... }} or {@code key.workspace = true}. Captures key in group
+     * 2.
+     */
     private static final Pattern DEP_ENTRY =
             Pattern.compile("^(\\s*)([A-Za-z][A-Za-z0-9_-]*)(?:\\.[a-zA-Z][a-zA-Z0-9_-]*)?\\s*=.*$");
 
@@ -66,22 +69,22 @@ public final class JkBuildEditor {
      * Add a dependency entry to {@code [dependencies.<scope>]}.
      *
      * <p>Decisions:
+     *
      * <ul>
-     *   <li>If {@code artifact.equals(name)}, the {@code artifact} field is
-     *       omitted (it defaults to the key per the design doc).</li>
-     *   <li>If the file has no {@code [dependencies]} table at all, we append
-     *       a fresh {@code [dependencies.<scope>]} header at the end.</li>
-     *   <li>If the file has a flat {@code [dependencies]} table holding only
-     *       inline-table deps (the shorthand for {@code main}), we treat it
-     *       as {@code [dependencies.main]}: adding a main dep extends it in
-     *       place; adding a non-main dep appends a separate sub-table.</li>
-     *   <li>If a {@code [dependencies.<scope>]} sub-table already exists, we
-     *       append the new entry just before the next table header.</li>
+     *   <li>If {@code artifact.equals(name)}, the {@code artifact} field is omitted (it defaults to
+     *       the key per the design doc).
+     *   <li>If the file has no {@code [dependencies]} table at all, we append a fresh {@code
+     *       [dependencies.<scope>]} header at the end.
+     *   <li>If the file has a flat {@code [dependencies]} table holding only inline-table deps (the
+     *       shorthand for {@code main}), we treat it as {@code [dependencies.main]}: adding a main
+     *       dep extends it in place; adding a non-main dep appends a separate sub-table.
+     *   <li>If a {@code [dependencies.<scope>]} sub-table already exists, we append the new entry
+     *       just before the next table header.
      * </ul>
      *
-     * @param versionLiteral the value placed inside {@code version = "..."}.
-     *                       Pass {@code "=1.2.3"} for an exact pin or {@code "1.2.3"}
-     *                       for caret-floating (the parser uses {@code parseFloating}).
+     * @param versionLiteral the value placed inside {@code version = "..."}. Pass {@code "=1.2.3"}
+     *     for an exact pin or {@code "1.2.3"} for caret-floating (the parser uses {@code
+     *     parseFloating}).
      */
     public static String addDependency(
             String content, Scope scope, String name, String group, String artifact, String versionLiteral) {
@@ -128,14 +131,15 @@ public final class JkBuildEditor {
     }
 
     /**
-     * Add a file-backed (CAS sha256) dependency entry to
-     * {@code [dependencies.<scope>]}. The rendered form is:
+     * Add a file-backed (CAS sha256) dependency entry to {@code [dependencies.<scope>]}. The rendered
+     * form is:
+     *
      * <pre>{@code
-     *   library = { sha256 = "...", group = "...", version = "..." }
+     * library = { sha256 = "...", group = "...", version = "..." }
      * }</pre>
-     * The {@code name} field is omitted when {@code artifact} equals
-     * {@code library}, following the same convention as
-     * {@link #addDependency}.
+     *
+     * The {@code name} field is omitted when {@code artifact} equals {@code library}, following the
+     * same convention as {@link #addDependency}.
      */
     public static String addFileDependency(
             String content, Scope scope, String library, String group, String artifact, String version, String sha256) {
@@ -189,9 +193,8 @@ public final class JkBuildEditor {
     }
 
     /**
-     * Remove a dependency by short {@code name} from
-     * {@code [dependencies.<scope>]}. Leaves the (possibly now-empty)
-     * sub-table in place — minimal blast radius on surrounding formatting.
+     * Remove a dependency by short {@code name} from {@code [dependencies.<scope>]}. Leaves the
+     * (possibly now-empty) sub-table in place — minimal blast radius on surrounding formatting.
      *
      * @throws IllegalStateException if the scope or name isn't present.
      */
@@ -211,14 +214,12 @@ public final class JkBuildEditor {
     }
 
     /**
-     * Append {@code modulePath} to the root manifest's
-     * {@code [workspace].modules} array, preserving the array's existing
-     * shape (single-line vs multi-line) and any surrounding comments.
+     * Append {@code modulePath} to the root manifest's {@code [workspace].modules} array, preserving
+     * the array's existing shape (single-line vs multi-line) and any surrounding comments.
      *
-     * <p>Idempotent: if the path is already a module the content is
-     * returned unchanged. Used by {@code jk new}/{@code jk init}/
-     * {@code jk add <path>} to register a new module, the way
-     * {@code cargo new} / {@code uv init} edit the workspace manifest.
+     * <p>Idempotent: if the path is already a module the content is returned unchanged. Used by
+     * {@code jk new}/{@code jk init}/ {@code jk add <path>} to register a new module, the way {@code
+     * cargo new} / {@code uv init} edit the workspace manifest.
      *
      * @throws IllegalStateException if there is no {@code [workspace]} table.
      */
@@ -227,11 +228,10 @@ public final class JkBuildEditor {
     }
 
     /**
-     * Register a workspace module, <em>creating</em> the {@code [workspace]}
-     * table if the manifest doesn't have one yet. This is how adding the first
-     * module promotes a plain single-project {@code jk.toml} into a workspace
-     * root (Cargo/uv semantics). When a {@code [workspace]} table already
-     * exists this is identical to {@link #addWorkspaceModule(String, String)}.
+     * Register a workspace module, <em>creating</em> the {@code [workspace]} table if the manifest
+     * doesn't have one yet. This is how adding the first module promotes a plain single-project
+     * {@code jk.toml} into a workspace root (Cargo/uv semantics). When a {@code [workspace]} table
+     * already exists this is identical to {@link #addWorkspaceModule(String, String)}.
      */
     public static String registerWorkspaceModule(String content, String modulePath) {
         return addWorkspaceModule(content, modulePath, true);
@@ -353,10 +353,9 @@ public final class JkBuildEditor {
     // --- internals ---------------------------------------------------------
 
     /**
-     * Locate the line that opens {@code [dependencies.<scope>]}. Honors
-     * default-scope shorthand: a bare {@code [dependencies]} table whose
-     * direct children are all dep entries (not sub-scopes) counts as
-     * {@code [dependencies.main]}.
+     * Locate the line that opens {@code [dependencies.<scope>]}. Honors default-scope shorthand: a
+     * bare {@code [dependencies]} table whose direct children are all dep entries (not sub-scopes)
+     * counts as {@code [dependencies.main]}.
      */
     private static int findScopeHeader(List<String> lines, Scope scope) {
         int flat = -1;
@@ -377,17 +376,15 @@ public final class JkBuildEditor {
     }
 
     /**
-     * A bare {@code [dependencies]} table is the shorthand for
-     * {@code [dependencies.main]} iff every direct child line under it is
-     * a dep entry (i.e. no sub-table line like {@code [dependencies.test]}
-     * comes between this header and the next top-level header).
+     * A bare {@code [dependencies]} table is the shorthand for {@code [dependencies.main]} iff every
+     * direct child line under it is a dep entry (i.e. no sub-table line like {@code
+     * [dependencies.test]} comes between this header and the next top-level header).
      *
-     * <p>In practice all we need to check is that the bare header isn't
-     * immediately followed by sub-scope headers — those would mean the
-     * flat header is a parse error per the design doc. The parser rejects
-     * mixed shape, but the editor must still be forgiving: if any sub-scope
-     * appears anywhere after {@code [dependencies]}, that sub-scope is the
-     * canonical container; we don't treat the bare table as main.
+     * <p>In practice all we need to check is that the bare header isn't immediately followed by
+     * sub-scope headers — those would mean the flat header is a parse error per the design doc. The
+     * parser rejects mixed shape, but the editor must still be forgiving: if any sub-scope appears
+     * anywhere after {@code [dependencies]}, that sub-scope is the canonical container; we don't
+     * treat the bare table as main.
      */
     private static boolean isFlatShorthand(List<String> lines, int flatHeaderLine) {
         // If any [dependencies.<scope>] header exists in the file, the bare
@@ -411,10 +408,9 @@ public final class JkBuildEditor {
     }
 
     /**
-     * If a flat {@code [dependencies]} shorthand block is present, rewrite
-     * its header to {@code [dependencies.main]} so a sibling sub-scope can
-     * be added without producing a "mixed flat and sub-scope" parse error.
-     * No-op when no flat shorthand exists.
+     * If a flat {@code [dependencies]} shorthand block is present, rewrite its header to {@code
+     * [dependencies.main]} so a sibling sub-scope can be added without producing a "mixed flat and
+     * sub-scope" parse error. No-op when no flat shorthand exists.
      */
     private static void promoteFlatShorthandIfPresent(List<String> lines) {
         for (int i = 0; i < lines.size(); i++) {
@@ -442,7 +438,10 @@ public final class JkBuildEditor {
         return -1;
     }
 
-    /** Return the index of the next top-level header after {@code headerLine}, or {@code lines.size()}. */
+    /**
+     * Return the index of the next top-level header after {@code headerLine}, or {@code
+     * lines.size()}.
+     */
     private static int endOfTable(List<String> lines, int headerLine) {
         for (int i = headerLine + 1; i < lines.size(); i++) {
             if (ANY_HEADER.matcher(lines.get(i)).matches()) return i;

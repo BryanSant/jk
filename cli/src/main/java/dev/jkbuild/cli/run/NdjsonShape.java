@@ -9,64 +9,101 @@ import java.time.Duration;
 import java.time.Instant;
 
 /**
- * Stable wire format for goal events as one-JSON-object-per-line text.
- * Shared by {@link NdjsonListener} (writes to stdout for
- * {@code --output json}) and {@link EventLogListener} (writes to
- * {@code <cacheRoot>/runs/<ts>.ndjson} always). Centralising the shape
- * here means anyone parsing jk's event stream has one schema to keep
- * compatible with, no matter which channel they read it from.
+ * Stable wire format for goal events as one-JSON-object-per-line text. Shared by {@link
+ * NdjsonListener} (writes to stdout for {@code --output json}) and {@link EventLogListener} (writes
+ * to {@code <cacheRoot>/runs/<ts>.ndjson} always). Centralising the shape here means anyone parsing
+ * jk's event stream has one schema to keep compatible with, no matter which channel they read it
+ * from.
  */
 final class NdjsonShape {
 
     private NdjsonShape() {}
 
     static String goalStart(GoalView v) {
-        return "{\"ts\":" + nowMillis()
+        return "{\"ts\":"
+                + nowMillis()
                 + ",\"type\":\"goal-start\""
-                + ",\"goal\":" + js(v.goalName())
-                + ",\"denominator\":" + v.denominator()
-                + ",\"phases\":" + v.phasesTotal()
+                + ",\"goal\":"
+                + js(v.goalName())
+                + ",\"denominator\":"
+                + v.denominator()
+                + ",\"phases\":"
+                + v.phasesTotal()
                 + "}";
     }
 
     static String phaseStart(String phase, int scope) {
-        return "{\"ts\":" + nowMillis()
+        return "{\"ts\":"
+                + nowMillis()
                 + ",\"type\":\"phase-start\""
-                + ",\"phase\":" + js(phase) + ",\"scope\":" + scope + "}";
+                + ",\"phase\":"
+                + js(phase)
+                + ",\"scope\":"
+                + scope
+                + "}";
     }
 
     static String progress(String phase, int delta, GoalView v) {
-        return "{\"ts\":" + nowMillis()
+        return "{\"ts\":"
+                + nowMillis()
                 + ",\"type\":\"progress\""
-                + ",\"phase\":" + js(phase) + ",\"delta\":" + delta
-                + ",\"numerator\":" + v.numerator()
-                + ",\"denominator\":" + v.denominator() + "}";
+                + ",\"phase\":"
+                + js(phase)
+                + ",\"delta\":"
+                + delta
+                + ",\"numerator\":"
+                + v.numerator()
+                + ",\"denominator\":"
+                + v.denominator()
+                + "}";
     }
 
     static String scopeUpdate(String phase, int delta, GoalView v) {
-        return "{\"ts\":" + nowMillis()
+        return "{\"ts\":"
+                + nowMillis()
                 + ",\"type\":\"scope-update\""
-                + ",\"phase\":" + js(phase) + ",\"delta\":" + delta
-                + ",\"denominator\":" + v.denominator() + "}";
+                + ",\"phase\":"
+                + js(phase)
+                + ",\"delta\":"
+                + delta
+                + ",\"denominator\":"
+                + v.denominator()
+                + "}";
     }
 
     static String label(String phase, String label) {
-        return "{\"ts\":" + nowMillis()
+        return "{\"ts\":"
+                + nowMillis()
                 + ",\"type\":\"label\""
-                + ",\"phase\":" + js(phase) + ",\"label\":" + js(label) + "}";
+                + ",\"phase\":"
+                + js(phase)
+                + ",\"label\":"
+                + js(label)
+                + "}";
     }
 
     static String output(String phase, String line) {
-        return "{\"ts\":" + nowMillis()
+        return "{\"ts\":"
+                + nowMillis()
                 + ",\"type\":\"output\""
-                + ",\"phase\":" + js(phase) + ",\"line\":" + js(line) + "}";
+                + ",\"phase\":"
+                + js(phase)
+                + ",\"line\":"
+                + js(line)
+                + "}";
     }
 
     static String warn(String phase, String code, String msg) {
-        return "{\"ts\":" + nowMillis()
+        return "{\"ts\":"
+                + nowMillis()
                 + ",\"type\":\"warn\""
-                + ",\"phase\":" + js(phase) + ",\"code\":" + js(code)
-                + ",\"message\":" + js(msg) + "}";
+                + ",\"phase\":"
+                + js(phase)
+                + ",\"code\":"
+                + js(code)
+                + ",\"message\":"
+                + js(msg)
+                + "}";
     }
 
     static String error(String phase, String code, String msg) {
@@ -74,10 +111,9 @@ final class NdjsonShape {
     }
 
     /**
-     * Error event with optional discrete {@code test} / {@code exceptionClass}
-     * fields — emitted (in addition to {@code message}) only when non-empty, so
-     * a test failure's parts stay separate on the wire without bloating the
-     * common diagnostic shape.
+     * Error event with optional discrete {@code test} / {@code exceptionClass} fields — emitted (in
+     * addition to {@code message}) only when non-empty, so a test failure's parts stay separate on
+     * the wire without bloating the common diagnostic shape.
      */
     static String error(String phase, String code, String msg, String test, String exceptionClass) {
         StringBuilder sb = new StringBuilder("{\"ts\":")
@@ -95,27 +131,39 @@ final class NdjsonShape {
     }
 
     static String phaseFinish(String phase, PhaseStatus status, Duration duration) {
-        return "{\"ts\":" + nowMillis()
+        return "{\"ts\":"
+                + nowMillis()
                 + ",\"type\":\"phase-finish\""
-                + ",\"phase\":" + js(phase)
-                + ",\"status\":" + js(status.name())
-                + ",\"duration_ms\":" + duration.toMillis() + "}";
+                + ",\"phase\":"
+                + js(phase)
+                + ",\"status\":"
+                + js(status.name())
+                + ",\"duration_ms\":"
+                + duration.toMillis()
+                + "}";
     }
 
     static String goalFinish(GoalResult r) {
-        return "{\"ts\":" + nowMillis()
+        return "{\"ts\":"
+                + nowMillis()
                 + ",\"type\":\"goal-finish\""
-                + ",\"goal\":" + js(r.goalName())
-                + ",\"success\":" + r.success()
-                + ",\"duration_ms\":" + r.duration().toMillis()
-                + ",\"warnings\":" + r.warnings().size()
-                + ",\"errors\":" + r.errors().size() + "}";
+                + ",\"goal\":"
+                + js(r.goalName())
+                + ",\"success\":"
+                + r.success()
+                + ",\"duration_ms\":"
+                + r.duration().toMillis()
+                + ",\"warnings\":"
+                + r.warnings().size()
+                + ",\"errors\":"
+                + r.errors().size()
+                + "}";
     }
 
     /**
-     * JSON string escaping — delegates to the shared {@link Ndjson#quote} codec
-     * (same escaping the worker wire protocol uses) so there's one implementation
-     * to keep correct. A {@code null} encodes as the bare literal {@code null}.
+     * JSON string escaping — delegates to the shared {@link Ndjson#quote} codec (same escaping the
+     * worker wire protocol uses) so there's one implementation to keep correct. A {@code null}
+     * encodes as the bare literal {@code null}.
      */
     static String js(String s) {
         return Ndjson.quote(s);

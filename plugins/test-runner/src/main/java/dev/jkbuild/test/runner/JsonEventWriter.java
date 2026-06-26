@@ -6,15 +6,14 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * NDJSON encoder for the jk-test wire protocol. Each event is rendered as a
- * single JSON object and handed to the shared {@link ProtocolWriter}, which
- * frames it with the plugin's prefix so the parent jk process can distinguish
- * protocol lines from the user's plain test output streaming through the same
- * pipe.
+ * NDJSON encoder for the jk-test wire protocol. Each event is rendered as a single JSON object and
+ * handed to the shared {@link ProtocolWriter}, which frames it with the plugin's prefix so the
+ * parent jk process can distinguish protocol lines from the user's plain test output streaming
+ * through the same pipe.
  *
- * <p>Thread-safety: {@link #write} synchronises on {@code this}, and
- * {@code ProtocolWriter.emit} synchronises too, so listeners firing from
- * different test threads can't interleave a half-written line.
+ * <p>Thread-safety: {@link #write} synchronises on {@code this}, and {@code ProtocolWriter.emit}
+ * synchronises too, so listeners firing from different test threads can't interleave a half-written
+ * line.
  */
 public final class JsonEventWriter implements EventWriter {
 

@@ -17,22 +17,21 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Resolves the Kotlin Build Tools API <em>implementation</em> closure — the
- * jars the {@code :kotlin-compiler} worker needs on its classpath at runtime
- * ({@code kotlin-build-tools-impl} plus its transitive {@code -api},
- * {@code compiler-embeddable}, {@code kotlinx-coroutines}, …). The worker is
- * compiled against only the tiny stable API; everything else is fetched here,
+ * Resolves the Kotlin Build Tools API <em>implementation</em> closure — the jars the {@code
+ * :kotlin-compiler} worker needs on its classpath at runtime ({@code kotlin-build-tools-impl} plus
+ * its transitive {@code -api}, {@code compiler-embeddable}, {@code kotlinx-coroutines}, …). The
+ * worker is compiled against only the tiny stable API; everything else is fetched here,
  * version-matched to the Kotlin the build targets.
  *
- * <p>Unlike {@link CompileToolchain#resolveKotlinHome} — which provisions a
- * pre-built {@code kotlinc} <em>distribution</em> zip — this goes through jk's
- * Maven {@link PubGrubResolver}, because the Build Tools API ships as ordinary
- * Maven artifacts (and is <em>not</em> bundled in the compiler distribution).
+ * <p>Unlike {@link CompileToolchain#resolveKotlinHome} — which provisions a pre-built {@code
+ * kotlinc} <em>distribution</em> zip — this goes through jk's Maven {@link PubGrubResolver},
+ * because the Build Tools API ships as ordinary Maven artifacts (and is <em>not</em> bundled in the
+ * compiler distribution).
  *
- * <p>The resolved closure is cached as a list of CAS content hashes under
- * {@code <cache>/tools/kotlin-bta/<version>/closure.shas}, so a warm build skips
- * resolution and network entirely. The cache self-invalidates if any blob has
- * been evicted from the CAS, or when {@code --refresh} is in effect.
+ * <p>The resolved closure is cached as a list of CAS content hashes under {@code
+ * <cache>/tools/kotlin-bta/<version>/closure.shas}, so a warm build skips resolution and network
+ * entirely. The cache self-invalidates if any blob has been evicted from the CAS, or when {@code
+ * --refresh} is in effect.
  */
 public final class KotlinBtaResolver {
 
@@ -42,13 +41,12 @@ public final class KotlinBtaResolver {
     private KotlinBtaResolver() {}
 
     /**
-     * Resolve and fetch the Build Tools API impl closure for {@code kotlinVersion},
-     * returning the local jar paths (in the CAS) for the worker's classpath.
+     * Resolve and fetch the Build Tools API impl closure for {@code kotlinVersion}, returning the
+     * local jar paths (in the CAS) for the worker's classpath.
      *
-     * @param repos        the repositories to resolve against (build via
-     *                     {@link RepoGroupBuilder#buildFor}, so project mirrors /
-     *                     credentials apply)
-     * @param cas          the content-addressed store the jars land in
+     * @param repos the repositories to resolve against (build via {@link RepoGroupBuilder#buildFor},
+     *     so project mirrors / credentials apply)
+     * @param cas the content-addressed store the jars land in
      * @param kotlinVersion the exact Kotlin version to match (e.g. {@code 2.4.0})
      */
     public static List<Path> resolveClasspath(RepoGroup repos, Cas cas, String kotlinVersion)
@@ -78,8 +76,12 @@ public final class KotlinBtaResolver {
             shas.add(hit.get().fetched().sha256());
         }
         if (jars.isEmpty()) {
-            throw new IOException("Kotlin Build Tools closure for " + kotlinVersion
-                    + " resolved to no jars — is " + BTA_IMPL_MODULE + ":" + kotlinVersion
+            throw new IOException("Kotlin Build Tools closure for "
+                    + kotlinVersion
+                    + " resolved to no jars — is "
+                    + BTA_IMPL_MODULE
+                    + ":"
+                    + kotlinVersion
                     + " available in the configured repositories?");
         }
         writeCachedClosure(cacheFile, shas);
@@ -87,11 +89,10 @@ public final class KotlinBtaResolver {
     }
 
     /**
-     * Resolve (and fetch into the CAS) the version-matched {@code kotlin-stdlib}
-     * jar. It must go on the <em>compilation</em> classpath: the worker runs the
-     * compiler in-process with no Kotlin distribution, so — unlike the old
-     * {@code kotlinc} — nothing auto-supplies the stdlib. The caller pairs this
-     * with {@code -no-stdlib}. Already in the CAS after {@link #resolveClasspath}
+     * Resolve (and fetch into the CAS) the version-matched {@code kotlin-stdlib} jar. It must go on
+     * the <em>compilation</em> classpath: the worker runs the compiler in-process with no Kotlin
+     * distribution, so — unlike the old {@code kotlinc} — nothing auto-supplies the stdlib. The
+     * caller pairs this with {@code -no-stdlib}. Already in the CAS after {@link #resolveClasspath}
      * (stdlib is part of the closure), so this is a cache hit, not a download.
      */
     public static Path resolveStdlib(RepoGroup repos, Cas cas, String kotlinVersion)
@@ -105,8 +106,8 @@ public final class KotlinBtaResolver {
     }
 
     /**
-     * Guard the 2.4.0 floor: the worker drives the Build Tools API through its
-     * {@code KotlinToolchains} entry point, which does not exist before 2.4.0.
+     * Guard the 2.4.0 floor: the worker drives the Build Tools API through its {@code
+     * KotlinToolchains} entry point, which does not exist before 2.4.0.
      */
     static void requireSupportedVersion(String version) {
         int major = 0;
@@ -116,7 +117,9 @@ public final class KotlinBtaResolver {
         if (parts.length > 1) minor = parseLeadingInt(parts[1]);
         if (major < 2 || (major == 2 && minor < 4)) {
             throw new IllegalArgumentException("jk requires Kotlin 2.4.0 or newer (Build Tools API), but the project "
-                    + "targets " + version + ". Pin a newer version in jk.toml (project.kotlin).");
+                    + "targets "
+                    + version
+                    + ". Pin a newer version in jk.toml (project.kotlin).");
         }
     }
 
@@ -135,9 +138,8 @@ public final class KotlinBtaResolver {
     }
 
     /**
-     * Reconstruct a previously resolved closure from its recorded hashes, or
-     * {@code null} if there's no record or any blob has been evicted from the
-     * CAS (forcing a fresh resolve).
+     * Reconstruct a previously resolved closure from its recorded hashes, or {@code null} if there's
+     * no record or any blob has been evicted from the CAS (forcing a fresh resolve).
      */
     static List<Path> readCachedClosure(Path cacheFile, Cas cas) throws IOException {
         if (!Files.isRegularFile(cacheFile)) return null;

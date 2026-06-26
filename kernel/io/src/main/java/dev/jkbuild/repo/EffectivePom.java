@@ -6,13 +6,11 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * A POM with its parent chain merged, BOM imports flattened, and
- * {@code <dependencyManagement>} applied to fill versions of bare deps.
- * The thing the resolver actually wants to look at.
+ * A POM with its parent chain merged, BOM imports flattened, and {@code <dependencyManagement>}
+ * applied to fill versions of bare deps. The thing the resolver actually wants to look at.
  *
- * <p>The {@link Pom.Dep} entries here may still carry classifier/type/scope
- * variations; the dedup key is {@code groupId:artifactId} (Maven's rule —
- * a module appears at most once per scope).
+ * <p>The {@link Pom.Dep} entries here may still carry classifier/type/scope variations; the dedup
+ * key is {@code groupId:artifactId} (Maven's rule — a module appears at most once per scope).
  */
 public record EffectivePom(
         String groupId,

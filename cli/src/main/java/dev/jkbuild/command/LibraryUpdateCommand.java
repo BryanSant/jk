@@ -15,12 +15,9 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.TreeSet;
+import java.util.*;
 import org.jline.utils.AttributedStyle;
 
 /** {@code jk library update} — pull the latest library catalog. */
@@ -84,8 +81,7 @@ public final class LibraryUpdateCommand implements CliCommand {
         }
 
         Files.createDirectories(cacheFile.getParent());
-        if (Files.exists(cacheFile))
-            Files.copy(cacheFile, previousBackup, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        if (Files.exists(cacheFile)) Files.copy(cacheFile, previousBackup, StandardCopyOption.REPLACE_EXISTING);
         Files.writeString(cacheFile, body, StandardCharsets.UTF_8);
 
         Diff diff = Diff.compute(before, after);
@@ -104,7 +100,7 @@ public final class LibraryUpdateCommand implements CliCommand {
 
     private static Map<String, LibraryCatalog.Module> materialise(String body) {
         LibraryCatalog parsed = LibraryCatalog.parse(body);
-        Map<String, LibraryCatalog.Module> out = new java.util.LinkedHashMap<>();
+        Map<String, LibraryCatalog.Module> out = new LinkedHashMap<>();
         for (String name : parsed.names()) parsed.lookup(name).ifPresent(m -> out.put(name, m));
         return out;
     }
@@ -112,8 +108,10 @@ public final class LibraryUpdateCommand implements CliCommand {
     private void printSummary(int total, Diff diff, Duration elapsed) {
         System.out.println(
                 Theme.colorize("✓ Library catalog updated", Theme.active().completedStep())
-                        + " — " + Theme.colorize(String.valueOf(total), AttributedStyle.DEFAULT.bold())
-                        + " entries cached " + ConsoleSpec.took(elapsed));
+                        + " — "
+                        + Theme.colorize(String.valueOf(total), AttributedStyle.DEFAULT.bold())
+                        + " entries cached "
+                        + ConsoleSpec.took(elapsed));
         if (diff.isEmpty()) {
             System.out.println("\n  (no changes from previous version)");
             return;
@@ -139,7 +137,10 @@ public final class LibraryUpdateCommand implements CliCommand {
                 LibraryCatalog.Module b = before.get(name), a = after.get(name);
                 if (b == null) added.add(Coords.shortName(name) + " → " + Coords.module(a.moduleKey()));
                 else if (!b.equals(a))
-                    changed.add(Coords.shortName(name) + ": " + Coords.module(b.moduleKey()) + " → "
+                    changed.add(Coords.shortName(name)
+                            + ": "
+                            + Coords.module(b.moduleKey())
+                            + " → "
                             + Coords.module(a.moduleKey()));
             }
             for (String name : new TreeSet<>(before.keySet()))

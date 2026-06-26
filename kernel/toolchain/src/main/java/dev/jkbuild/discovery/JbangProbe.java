@@ -11,9 +11,8 @@ import java.util.Optional;
 import java.util.stream.Stream;
 
 /**
- * JBang caches downloaded JDKs under {@code ~/.jbang/cache/jdks/<major>/}
- * (major-version key, single distribution per major). JDKs only — JBang
- * doesn't manage Maven/Gradle/Kotlin.
+ * JBang caches downloaded JDKs under {@code ~/.jbang/cache/jdks/<major>/} (major-version key,
+ * single distribution per major). JDKs only — JBang doesn't manage Maven/Gradle/Kotlin.
  */
 public final class JbangProbe implements LocalToolProbe {
 

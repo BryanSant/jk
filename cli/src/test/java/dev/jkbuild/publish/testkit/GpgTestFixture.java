@@ -33,9 +33,9 @@ import org.bouncycastle.openpgp.operator.bc.BcPGPKeyPair;
 import org.bouncycastle.openpgp.operator.jcajce.JcaKeyFingerprintCalculator;
 
 /**
- * Generates an ephemeral PGP keypair for tests: a small (1024-bit) RSA
- * key bound to a test identity, written as an armored secret-key file
- * that {@code GpgSigner.fromKeyFile(Path, char[])} can consume.
+ * Generates an ephemeral PGP keypair for tests: a small (1024-bit) RSA key bound to a test
+ * identity, written as an armored secret-key file that {@code GpgSigner.fromKeyFile(Path, char[])}
+ * can consume.
  */
 public final class GpgTestFixture {
 

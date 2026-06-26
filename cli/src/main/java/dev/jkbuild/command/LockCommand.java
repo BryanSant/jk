@@ -47,18 +47,15 @@ import java.util.concurrent.atomic.AtomicInteger;
 /**
  * {@code jk lock} — resolve declared dependencies and write {@code jk.lock}.
  *
- * <p>Reads repositories + features from the project's jk.toml. Feature
- * selection: {@code --features=A,B} adds those features on top of the
- * declared {@code features.default}; {@code --no-default-features}
- * disables the default list entirely. Cargo semantics.
+ * <p>Reads repositories + features from the project's jk.toml. Feature selection: {@code
+ * --features=A,B} adds those features on top of the declared {@code features.default}; {@code
+ * --no-default-features} disables the default list entirely. Cargo semantics.
  *
- * <p>For workspace roots, locking cascades: after the root's own
- * {@code jk.lock} is written, each declared module is locked in
- * declaration order using its own {@code jk.lock} alongside its
- * {@code jk.toml}. {@code workspace:} placeholder deps are resolved to
- * real Maven coords before each module's solve; sibling-internal deps
- * are filtered out (they're injected at build time via
- * {@link dev.jkbuild.config.WorkspaceClasspath}).
+ * <p>For workspace roots, locking cascades: after the root's own {@code jk.lock} is written, each
+ * declared module is locked in declaration order using its own {@code jk.lock} alongside its {@code
+ * jk.toml}. {@code workspace:} placeholder deps are resolved to real Maven coords before each
+ * module's solve; sibling-internal deps are filtered out (they're injected at build time via {@link
+ * dev.jkbuild.config.WorkspaceClasspath}).
  */
 public final class LockCommand implements CliCommand {
 
@@ -156,11 +153,10 @@ public final class LockCommand implements CliCommand {
     }
 
     /**
-     * When invoked from a workspace module (not the root), discover the
-     * enclosing workspace and apply module context: resolve {@code workspace:}
-     * placeholders and filter out sibling-internal dep coords so the solver
-     * only sees external Maven coordinates. Returns {@code project} unchanged
-     * if it is a workspace root or no enclosing workspace is found.
+     * When invoked from a workspace module (not the root), discover the enclosing workspace and apply
+     * module context: resolve {@code workspace:} placeholders and filter out sibling-internal dep
+     * coords so the solver only sees external Maven coordinates. Returns {@code project} unchanged if
+     * it is a workspace root or no enclosing workspace is found.
      */
     private static JkBuild applyWorkspaceContextIfModule(Path dir, JkBuild project) {
         if (project.isWorkspaceRoot()) return project;
@@ -179,9 +175,9 @@ public final class LockCommand implements CliCommand {
     }
 
     /**
-     * Run the three-phase lock pipeline (parse → resolve → write) for one
-     * project directory. {@code effective} is the pre-parsed {@link JkBuild}
-     * with any {@code workspace:} placeholders already resolved.
+     * Run the three-phase lock pipeline (parse → resolve → write) for one project directory. {@code
+     * effective} is the pre-parsed {@link JkBuild} with any {@code workspace:} placeholders already
+     * resolved.
      */
     private int lockSingleProject(Path dir, JkBuild effective, Path cache, String label) throws Exception {
         Path lockFile = dir.resolve("jk.lock");
@@ -374,13 +370,12 @@ public final class LockCommand implements CliCommand {
     }
 
     /**
-     * Resolve the project's {@code kotlin} version selector to a concrete
-     * Kotlin compiler release, the same way a dependency version is resolved:
-     * an {@code =}-pin short-circuits; a floating selector is matched against
-     * the versions of {@code kotlin-compiler-embeddable} on Maven Central, and
-     * the highest match wins. Returns {@code null} for a Java project, or when
-     * resolution can't complete (offline with nothing cached, or no match) —
-     * the build then falls back to its default Kotlin version.
+     * Resolve the project's {@code kotlin} version selector to a concrete Kotlin compiler release,
+     * the same way a dependency version is resolved: an {@code =}-pin short-circuits; a floating
+     * selector is matched against the versions of {@code kotlin-compiler-embeddable} on Maven
+     * Central, and the highest match wins. Returns {@code null} for a Java project, or when
+     * resolution can't complete (offline with nothing cached, or no match) — the build then falls
+     * back to its default Kotlin version.
      */
     private static String resolveKotlinVersion(JkBuild effective, RepoGroup repos) {
         if (!effective.project().isKotlin()) return null;
@@ -410,9 +405,9 @@ public final class LockCommand implements CliCommand {
     }
 
     /**
-     * Throw if an existing lockfile can't be honored entirely from the local
-     * CAS while offline: every declared (non-platform) coordinate must be a
-     * locked package, and every checksummed package's blob must be present.
+     * Throw if an existing lockfile can't be honored entirely from the local CAS while offline: every
+     * declared (non-platform) coordinate must be a locked package, and every checksummed package's
+     * blob must be present.
      */
     private static void requireOfflineSatisfiable(JkBuild effective, Lockfile lock, Cas cas) {
         java.util.Set<String> locked = new java.util.HashSet<>();
@@ -423,7 +418,8 @@ public final class LockCommand implements CliCommand {
             if (entry.getKey() == Scope.PLATFORM) continue; // BOMs aren't resolved packages
             for (var dep : entry.getValue()) {
                 if (!locked.contains(dep.module())) {
-                    throw new IllegalStateException("offline: " + dep.module()
+                    throw new IllegalStateException("offline: "
+                            + dep.module()
                             + " is declared in jk.toml but not in jk.lock; run `jk lock` online first");
                 }
             }
@@ -433,7 +429,10 @@ public final class LockCommand implements CliCommand {
             if (checksum == null) continue;
             String hex = checksum.startsWith("sha256:") ? checksum.substring("sha256:".length()) : checksum;
             if (!cas.contains(hex)) {
-                throw new IllegalStateException("offline: " + pkg.name() + ":" + pkg.version()
+                throw new IllegalStateException("offline: "
+                        + pkg.name()
+                        + ":"
+                        + pkg.version()
                         + " is locked but its artifact isn't cached; run `jk sync` online first");
             }
         }

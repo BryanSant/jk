@@ -7,10 +7,9 @@ import dev.jkbuild.model.command.Opt;
 import java.util.List;
 
 /**
- * {@code jk deactivate} — emit the shell script that undoes {@code jk activate}.
- * The activation-side {@code jk()} proxy intercepts this call and runs the
- * output through {@code eval} / {@code source} so the current shell loses
- * its hooks immediately.
+ * {@code jk deactivate} — emit the shell script that undoes {@code jk activate}. The
+ * activation-side {@code jk()} proxy intercepts this call and runs the output through {@code eval}
+ * / {@code source} so the current shell loses its hooks immediately.
  */
 public final class DeactivateCommand implements CliCommand {
 

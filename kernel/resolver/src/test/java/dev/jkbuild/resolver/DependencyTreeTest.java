@@ -8,9 +8,13 @@ import dev.jkbuild.model.Dependency;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.Scope;
 import dev.jkbuild.model.VersionSelector;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.function.UnaryOperator;
 import org.junit.jupiter.api.Test;
 
 class DependencyTreeTest {
@@ -56,12 +60,12 @@ class DependencyTreeTest {
                 pkg("com.foo:b", "1.0", List.of("com.foo:leaf@1.0")),
                 pkg("com.foo:leaf", "1.0", List.of()));
         var styling = new DependencyTree.Styling(
-                java.util.function.UnaryOperator.identity(),
-                java.util.function.UnaryOperator.identity(),
-                java.util.function.UnaryOperator.identity(),
-                java.util.function.UnaryOperator.identity(),
+                UnaryOperator.identity(),
+                UnaryOperator.identity(),
+                UnaryOperator.identity(),
+                UnaryOperator.identity(),
                 s -> "<dim>" + s + "</dim>", // reference styler
-                java.util.function.UnaryOperator.identity()); // scope badge
+                UnaryOperator.identity()); // scope badge
 
         String rendered = DependencyTree.render(project, lock, Integer.MAX_VALUE, styling);
 
@@ -93,7 +97,7 @@ class DependencyTreeTest {
     }
 
     @Test
-    void composite_deps_are_annotated_not_missing(@org.junit.jupiter.api.io.TempDir java.nio.file.Path tmp) {
+    void composite_deps_are_annotated_not_missing(@org.junit.jupiter.api.io.TempDir Path tmp) {
         var deps = new ArrayList<Dependency>();
         deps.add(Dependency.path("lib", "com.foo:lib", "../lib")); // ../lib absent → not built
         deps.add(Dependency.git(
@@ -113,7 +117,7 @@ class DependencyTreeTest {
     }
 
     @Test
-    void direct_deps_are_grouped_into_scope_sections(@org.junit.jupiter.api.io.TempDir java.nio.file.Path tmp) {
+    void direct_deps_are_grouped_into_scope_sections(@org.junit.jupiter.api.io.TempDir Path tmp) {
         JkBuild project = new JkBuild(
                 new JkBuild.Project("com.example", "widget", "0.1.0", 0),
                 new JkBuild.Dependencies(Map.of(
@@ -135,10 +139,10 @@ class DependencyTreeTest {
     }
 
     @Test
-    void workspace_root_groups_modules_under_scope_sections(@org.junit.jupiter.api.io.TempDir java.nio.file.Path root)
+    void workspace_root_groups_modules_under_scope_sections(@org.junit.jupiter.api.io.TempDir Path root)
             throws Exception {
         // A workspace root with two modules; module b depends on a via `workspace = true`.
-        java.nio.file.Files.writeString(root.resolve("jk.toml"), """
+        Files.writeString(root.resolve("jk.toml"), """
                 [project]
                 group = "com.acme"
                 name = "ws"
@@ -147,16 +151,16 @@ class DependencyTreeTest {
                 [workspace]
                 modules = ["a", "b"]
                 """);
-        java.nio.file.Path a = java.nio.file.Files.createDirectories(root.resolve("a"));
-        java.nio.file.Files.writeString(a.resolve("jk.toml"), """
+        Path a = Files.createDirectories(root.resolve("a"));
+        Files.writeString(a.resolve("jk.toml"), """
                 [project]
                 group = "com.acme"
                 name = "a"
                 version = "9.9.9"
                 """);
-        java.nio.file.Files.writeString(a.resolve("jk.lock"), EMPTY_LOCK);
-        java.nio.file.Path b = java.nio.file.Files.createDirectories(root.resolve("b"));
-        java.nio.file.Files.writeString(b.resolve("jk.toml"), """
+        Files.writeString(a.resolve("jk.lock"), EMPTY_LOCK);
+        Path b = Files.createDirectories(root.resolve("b"));
+        Files.writeString(b.resolve("jk.toml"), """
                 [project]
                 group = "com.acme"
                 name = "b"
@@ -165,7 +169,7 @@ class DependencyTreeTest {
                 [dependencies.main]
                 a = { workspace = true }
                 """);
-        java.nio.file.Files.writeString(b.resolve("jk.lock"), EMPTY_LOCK);
+        Files.writeString(b.resolve("jk.lock"), EMPTY_LOCK);
 
         JkBuild rootProject = dev.jkbuild.config.JkBuildParser.parse(root.resolve("jk.toml"));
         String rendered =
@@ -187,7 +191,7 @@ class DependencyTreeTest {
     }
 
     @Test
-    void flatten_lists_each_scope_dep_once_without_nesting(@org.junit.jupiter.api.io.TempDir java.nio.file.Path dir) {
+    void flatten_lists_each_scope_dep_once_without_nesting(@org.junit.jupiter.api.io.TempDir Path dir) {
         // Diamond: root -> a -> leaf ; root -> b -> leaf.
         JkBuild project = projectWithMainDeps("com.foo:root");
         Lockfile lock = lockOf(
@@ -212,7 +216,7 @@ class DependencyTreeTest {
     }
 
     @Test
-    void explicit_scope_order_filters_and_reorders_sections(@org.junit.jupiter.api.io.TempDir java.nio.file.Path dir) {
+    void explicit_scope_order_filters_and_reorders_sections(@org.junit.jupiter.api.io.TempDir Path dir) {
         var main = List.of(new Dependency("com.foo:m", new VersionSelector.Exact("=1.0", "1.0")));
         var test = List.of(new Dependency("com.foo:t", new VersionSelector.Exact("=1.0", "1.0")));
         JkBuild project = new JkBuild(
@@ -236,7 +240,7 @@ class DependencyTreeTest {
     }
 
     @Test
-    void stack_blends_all_scopes_under_one_badge_row(@org.junit.jupiter.api.io.TempDir java.nio.file.Path dir) {
+    void stack_blends_all_scopes_under_one_badge_row(@org.junit.jupiter.api.io.TempDir Path dir) {
         var main = List.of(new Dependency("com.foo:m", new VersionSelector.Exact("=1.0", "1.0")));
         var test = List.of(new Dependency("com.foo:t", new VersionSelector.Exact("=1.0", "1.0")));
         JkBuild project = new JkBuild(
@@ -249,7 +253,7 @@ class DependencyTreeTest {
 
         // A single header line carries every scope badge; deps from all scopes are
         // blended into the one tree beneath it.
-        List<String> headers = java.util.Arrays.stream(rendered.split("\n"))
+        List<String> headers = Arrays.stream(rendered.split("\n"))
                 .filter(l -> l.contains("main"))
                 .toList();
         assertThat(headers).hasSize(1);

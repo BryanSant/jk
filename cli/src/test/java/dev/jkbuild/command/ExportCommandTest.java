@@ -11,9 +11,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
- * End-to-end coverage for {@code jk export <gradle|maven|idea>}: the in-process
- * exporters write runnable build files for a single project and a workspace,
- * and the overwrite guard / parent-usage behavior holds.
+ * End-to-end coverage for {@code jk export <gradle|maven|idea>}: the in-process exporters write
+ * runnable build files for a single project and a workspace, and the overwrite guard / parent-usage
+ * behavior holds.
  */
 class ExportCommandTest {
 

@@ -17,26 +17,23 @@ import java.util.Objects;
 import java.util.concurrent.ConcurrentLinkedDeque;
 
 /**
- * Runs a project's compiled tests by forking child JVM(s) that invoke
- * {@code dev.jkbuild.test.runner.JkRunner}. Supports two modes:
+ * Runs a project's compiled tests by forking child JVM(s) that invoke {@code
+ * dev.jkbuild.test.runner.JkRunner}. Supports two modes:
  *
  * <ul>
- *   <li><b>Single-worker</b> ({@code workers=1}, default): one child JVM
- *       discovers and runs everything, streaming events back via NDJSON on
- *       stdout. The baseline path — preserves today's behavior exactly.</li>
- *   <li><b>Parallel pull-queue</b> ({@code workers>1}): spawn a discovery
- *       child first to enumerate test classes, then spawn N pull-mode
- *       workers concurrently. Each worker stays alive across multiple
- *       classes; the parent dispatches one class at a time via RUN/DONE
- *       commands on the worker's stdin, in response to {@code ready}
- *       events the worker emits after each class completes. Process
- *       isolation between forks; serial within a fork.</li>
+ *   <li><b>Single-worker</b> ({@code workers=1}, default): one child JVM discovers and runs
+ *       everything, streaming events back via NDJSON on stdout. The baseline path — preserves
+ *       today's behavior exactly.
+ *   <li><b>Parallel pull-queue</b> ({@code workers>1}): spawn a discovery child first to enumerate
+ *       test classes, then spawn N pull-mode workers concurrently. Each worker stays alive across
+ *       multiple classes; the parent dispatches one class at a time via RUN/DONE commands on the
+ *       worker's stdin, in response to {@code ready} events the worker emits after each class
+ *       completes. Process isolation between forks; serial within a fork.
  * </ul>
  *
- * <p>Wire protocol: child emits one NDJSON event per line on stdout, each
- * line prefixed with {@code ##JK:}. Lines without the prefix are the user's
- * test stdout/stderr — forwarded to the parent's stdout with a
- * {@code [w<N>] } worker prefix in parallel mode.
+ * <p>Wire protocol: child emits one NDJSON event per line on stdout, each line prefixed with {@code
+ * ##JK:}. Lines without the prefix are the user's test stdout/stderr — forwarded to the parent's
+ * stdout with a {@code [w<N>] } worker prefix in parallel mode.
  */
 public final class JUnitLauncher {
 
@@ -44,28 +41,26 @@ public final class JUnitLauncher {
     private static final String PROTOCOL_PREFIX = "##JK:";
 
     /**
-     * The plugin the worker host must run. The test-runner jar is launched with
-     * the module-under-test on its classpath (to discover its tests); when that
-     * module is itself a plugin, the host would otherwise see two {@code Plugin}
-     * services. Naming the runner explicitly via {@code -Djk.plugin.class} keeps
-     * the host on {@code JkRunner} regardless of what the module registers.
+     * The plugin the worker host must run. The test-runner jar is launched with the module-under-test
+     * on its classpath (to discover its tests); when that module is itself a plugin, the host would
+     * otherwise see two {@code Plugin} services. Naming the runner explicitly via {@code
+     * -Djk.plugin.class} keeps the host on {@code JkRunner} regardless of what the module registers.
      */
     private static final String RUNNER_PLUGIN_CLASS = "dev.jkbuild.test.runner.JkRunner";
 
     /**
-     * {@code jk.<worker>.worker.jar} overrides handed to the test JVM so tests
-     * that fork a first-party worker (e.g. the git client) locate its jar by
-     * path. Mirrors what Gradle's test config provides; under {@code jk build}
-     * the {@code run-tests} phase resolves the freshly-built sibling worker jars
-     * (built before this module via the {@code [build.embed-sha]} order-after
-     * edges) and passes them here. Empty when none are built (e.g. a scoped
-     * single-module build) — tests then fall back to CAS-by-sha.
+     * {@code jk.<worker>.worker.jar} overrides handed to the test JVM so tests that fork a
+     * first-party worker (e.g. the git client) locate its jar by path. Mirrors what Gradle's test
+     * config provides; under {@code jk build} the {@code run-tests} phase resolves the freshly-built
+     * sibling worker jars (built before this module via the {@code [build.embed-sha]} order-after
+     * edges) and passes them here. Empty when none are built (e.g. a scoped single-module build) —
+     * tests then fall back to CAS-by-sha.
      */
     private Map<String, String> workerJarProps = Map.of();
 
     /**
-     * Worker JVM flags: the heap/GC tuning, the {@code jk.plugin.class} selector
-     * for the runner, and any {@code jk.<worker>.worker.jar} overrides.
+     * Worker JVM flags: the heap/GC tuning, the {@code jk.plugin.class} selector for the runner, and
+     * any {@code jk.<worker>.worker.jar} overrides.
      */
     private List<String> runnerFlags(int concurrency) {
         List<String> flags = new ArrayList<>(dev.jkbuild.worker.JvmOptions.workerFlags(concurrency));
@@ -75,15 +70,15 @@ public final class JUnitLauncher {
     }
 
     /**
-     * Run the project's tests. {@code workers} of 1 (today's default) takes
-     * the one-shot path; anything higher fans out across pull-mode workers.
+     * Run the project's tests. {@code workers} of 1 (today's default) takes the one-shot path;
+     * anything higher fans out across pull-mode workers.
      *
-     * <p>{@code listener} receives a stream of progress callbacks as events
-     * arrive — pass {@link TestProgressListener#noop()} when no UI is wired.
+     * <p>{@code listener} receives a stream of progress callbacks as events arrive — pass {@link
+     * TestProgressListener#noop()} when no UI is wired.
      *
-     * <p>{@code workerJarProps} maps {@code jk.<worker>.worker.jar} property
-     * names to built worker-jar paths, forwarded to the test JVM so worker-forking
-     * tests can locate their worker by path (see {@link #workerJarProps}).
+     * <p>{@code workerJarProps} maps {@code jk.<worker>.worker.jar} property names to built
+     * worker-jar paths, forwarded to the test JVM so worker-forking tests can locate their worker by
+     * path (see {@link #workerJarProps}).
      */
     public Result run(
             Path javaHome,
@@ -98,9 +93,9 @@ public final class JUnitLauncher {
     }
 
     /**
-     * As {@link #run(Path, Path, List, Path, int, Map, TestProgressListener)} but also
-     * writes Gradle-compatible {@code TEST-<classname>.xml} files into {@code testResultsDir}
-     * after the run completes. {@code testResultsDir} may be {@code null} to skip XML output.
+     * As {@link #run(Path, Path, List, Path, int, Map, TestProgressListener)} but also writes
+     * Gradle-compatible {@code TEST-<classname>.xml} files into {@code testResultsDir} after the run
+     * completes. {@code testResultsDir} may be {@code null} to skip XML output.
      */
     public Result run(
             Path javaHome,
@@ -270,11 +265,10 @@ public final class JUnitLauncher {
     }
 
     /**
-     * Per-worker reader thread. Reads the child's stdout line-by-line. On
-     * each {@code ready} event, dispatch the next class from the shared
-     * queue (or {@code DONE} when the queue is empty) by writing one line
-     * to the child's stdin. Non-protocol lines are user test output —
-     * passed through to the parent's stdout, tagged with the worker id.
+     * Per-worker reader thread. Reads the child's stdout line-by-line. On each {@code ready} event,
+     * dispatch the next class from the shared queue (or {@code DONE} when the queue is empty) by
+     * writing one line to the child's stdin. Non-protocol lines are user test output — passed through
+     * to the parent's stdout, tagged with the worker id.
      */
     private int driveWorker(
             Path javaBinary,
@@ -326,9 +320,9 @@ public final class JUnitLauncher {
     }
 
     /**
-     * Phase one of parallel mode: list every top-level test class without
-     * running anything. Uses {@code Launcher.discover} (not {@code execute})
-     * so this completes in 100–300 ms even for big suites.
+     * Phase one of parallel mode: list every top-level test class without running anything. Uses
+     * {@code Launcher.discover} (not {@code execute}) so this completes in 100–300 ms even for big
+     * suites.
      */
     private List<String> discoverClasses(
             Path javaBinary, String classpath, Path testClassesDir, TestProgressListener listener)
@@ -356,20 +350,17 @@ public final class JUnitLauncher {
     // -------- shared helpers --------------------------------------------
 
     /**
-     * Look up the jk-test-runner jar in the local CAS, keyed by its
-     * SHA-256 (the hash this build of engine was paired against —
-     * embedded as a resource at {@link #RUNNER_SHA_RESOURCE} by
-     * Gradle's {@code writeRunnerSha} task).
+     * Look up the jk-test-runner jar in the local CAS, keyed by its SHA-256 (the hash this build of
+     * engine was paired against — embedded as a resource at {@link #RUNNER_SHA_RESOURCE} by Gradle's
+     * {@code writeRunnerSha} task).
      *
-     * <p>Until jk-test-runner ships to Maven Central, the user is
-     * responsible for side-loading the jar into the CAS — typically by
-     * running {@code ./gradlew :test-runner:installLocalCas} in jk's
-     * own tree. Once the runner is published, {@code jk sync} will
-     * populate the CAS automatically.
+     * <p>Until jk-test-runner ships to Maven Central, the user is responsible for side-loading the
+     * jar into the CAS — typically by running {@code ./gradlew :test-runner:installLocalCas} in jk's
+     * own tree. Once the runner is published, {@code jk sync} will populate the CAS automatically.
      *
-     * <p>Throws {@link IOException} with side-load instructions if the
-     * jar isn't in the CAS at the expected hash. The error message
-     * spells out the exact destination path the user needs to populate.
+     * <p>Throws {@link IOException} with side-load instructions if the jar isn't in the CAS at the
+     * expected hash. The error message spells out the exact destination path the user needs to
+     * populate.
      */
     private static Path locateRunner(Path cacheRoot) throws IOException {
         // Location (override → CAS-by-SHA) is shared with every other worker via
@@ -397,18 +388,16 @@ public final class JUnitLauncher {
     // -------- event aggregation -----------------------------------------
 
     /**
-     * Thread-safe accumulator. Multiple driveWorker threads call into
-     * {@link #accept} concurrently. Counts come from FINISHED / SKIPPED
-     * events for {@code type == TEST} — we ignore CONTAINER nodes (the
-     * engine root, classes themselves) so totals match
-     * {@code SummaryGeneratingListener} semantics. Failure detail is
-     * pulled from FINISHED[status=FAILED] events.
+     * Thread-safe accumulator. Multiple driveWorker threads call into {@link #accept} concurrently.
+     * Counts come from FINISHED / SKIPPED events for {@code type == TEST} — we ignore CONTAINER nodes
+     * (the engine root, classes themselves) so totals match {@code SummaryGeneratingListener}
+     * semantics. Failure detail is pulled from FINISHED[status=FAILED] events.
      *
-     * <p>Counting per-event (not summing per-worker plan totals) sidesteps
-     * a {@link org.junit.platform.launcher.listeners.SummaryGeneratingListener}
-     * quirk: it resets its accumulator on every {@code testPlanExecutionStarted}
-     * — which fires per {@code Launcher.execute()} call — so in pull mode a
-     * worker's final summary reflects only its last class.
+     * <p>Counting per-event (not summing per-worker plan totals) sidesteps a {@link
+     * org.junit.platform.launcher.listeners.SummaryGeneratingListener} quirk: it resets its
+     * accumulator on every {@code testPlanExecutionStarted} — which fires per {@code
+     * Launcher.execute()} call — so in pull mode a worker's final summary reflects only its last
+     * class.
      */
     static final class ResultAggregator {
 
@@ -547,9 +536,9 @@ public final class JUnitLauncher {
         }
 
         /**
-         * As {@link #toResult(int)}, attaching {@code crashOutput} (the worker's
-         * captured stdout/stderr) to the synthetic "runner exited" failure so a
-         * hard crash with no test events still explains itself.
+         * As {@link #toResult(int)}, attaching {@code crashOutput} (the worker's captured
+         * stdout/stderr) to the synthetic "runner exited" failure so a hard crash with no test events
+         * still explains itself.
          */
         synchronized Result toResult(int exitCode, String crashOutput) {
             long total = succeeded + failed + skipped;
@@ -576,11 +565,10 @@ public final class JUnitLauncher {
     }
 
     /**
-     * Bounded, thread-safe tail of a worker's non-protocol output. Kept so a hard
-     * crash (uncaught throwable / {@code System.exit} before any test event) can be
-     * explained — the runner prints the stack to stderr, which is otherwise dropped
-     * unless {@code --verbose}. Capped to the last {@link #MAX_LINES} lines so a
-     * chatty-then-crashing worker can't blow up memory.
+     * Bounded, thread-safe tail of a worker's non-protocol output. Kept so a hard crash (uncaught
+     * throwable / {@code System.exit} before any test event) can be explained — the runner prints the
+     * stack to stderr, which is otherwise dropped unless {@code --verbose}. Capped to the last {@link
+     * #MAX_LINES} lines so a chatty-then-crashing worker can't blow up memory.
      */
     static final class CaptureBuffer {
         private static final int MAX_LINES = 400;
@@ -613,13 +601,11 @@ public final class JUnitLauncher {
     }
 
     /**
-     * One failed test. {@code exceptionClass} and {@code message} are the
-     * failure's throwable split into discrete fields (the exception's class name
-     * and its message); either may be empty when the failure carries no
-     * throwable — e.g. a non-zero runner exit, where {@code message} holds the
-     * synthetic "runner exited N" summary and {@code exceptionClass} is empty.
-     * {@code details} is the full stack trace as the runner rendered it (empty
-     * when there is no captured throwable).
+     * One failed test. {@code exceptionClass} and {@code message} are the failure's throwable split
+     * into discrete fields (the exception's class name and its message); either may be empty when the
+     * failure carries no throwable — e.g. a non-zero runner exit, where {@code message} holds the
+     * synthetic "runner exited N" summary and {@code exceptionClass} is empty. {@code details} is the
+     * full stack trace as the runner rendered it (empty when there is no captured throwable).
      */
     public record Failure(String testName, String exceptionClass, String message, String details) {}
 }

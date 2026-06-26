@@ -30,20 +30,19 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * {@code jk sync} — bring the local toolchain + dependency cache in line with
- * the project's {@code jk.lock}.
+ * {@code jk sync} — bring the local toolchain + dependency cache in line with the project's {@code
+ * jk.lock}.
  *
  * <p>Organised as a {@link Goal} with four phases:
+ *
  * <ol>
- *   <li>{@code parse-lock} (SYNC) — read {@code jk.lock} or delegate to
- *       {@link LockFlow} when it's missing.</li>
- *   <li>{@code ensure-jdk} (IO, parallel) — resolve or install the
- *       project's pinned JDK via {@link JdkEnsure}.</li>
- *   <li>{@code sync-cas} (IO, parallel) — fetch any locked artifacts the
- *       CAS doesn't already hold. Per-package progress events come from
- *       {@link CacheSync.ProgressObserver}.</li>
- *   <li>{@code write-sync-manifest} (SYNC) — stamp
- *       {@code actions/synced/<projectFingerprint>}.</li>
+ *   <li>{@code parse-lock} (SYNC) — read {@code jk.lock} or delegate to {@link LockFlow} when it's
+ *       missing.
+ *   <li>{@code ensure-jdk} (IO, parallel) — resolve or install the project's pinned JDK via {@link
+ *       JdkEnsure}.
+ *   <li>{@code sync-cas} (IO, parallel) — fetch any locked artifacts the CAS doesn't already hold.
+ *       Per-package progress events come from {@link CacheSync.ProgressObserver}.
+ *   <li>{@code write-sync-manifest} (SYNC) — stamp {@code actions/synced/<projectFingerprint>}.
  * </ol>
  */
 public final class SyncCommand implements CliCommand {
@@ -385,9 +384,9 @@ public final class SyncCommand implements CliCommand {
     }
 
     /**
-     * For workspace roots: download any artifacts locked by each module's
-     * own {@code jk.lock} that aren't already in the CAS. Skips modules
-     * whose lock file hasn't been created yet (run {@code jk lock} first).
+     * For workspace roots: download any artifacts locked by each module's own {@code jk.lock} that
+     * aren't already in the CAS. Skips modules whose lock file hasn't been created yet (run {@code jk
+     * lock} first).
      */
     private void cascadeSyncModules(Path dir, Path cache) {
         JkBuild root;
@@ -426,10 +425,14 @@ public final class SyncCommand implements CliCommand {
                 var report = new dev.jkbuild.resolver.CacheSync(cas, http)
                         .sync(lock, dev.jkbuild.resolver.CacheSync.ProgressObserver.NOOP, refresh);
                 if (!global.outputIsJson() && (report.fetched() > 0 || report.upToDate() > 0)) {
-                    System.out.println(dir.relativize(moduleDir) + ": "
-                            + report.fetched() + " fetched, "
-                            + report.upToDate() + " up-to-date, "
-                            + report.skipped() + " skipped");
+                    System.out.println(dir.relativize(moduleDir)
+                            + ": "
+                            + report.fetched()
+                            + " fetched, "
+                            + report.upToDate()
+                            + " up-to-date, "
+                            + report.skipped()
+                            + " skipped");
                 }
             } catch (Exception e) {
                 System.err.println("jk sync: " + dir.relativize(moduleDir) + ": sync failed — " + e.getMessage());
@@ -438,9 +441,8 @@ public final class SyncCommand implements CliCommand {
     }
 
     /**
-     * On success, surface the backward-compat one-liners every prior
-     * version of {@code jk sync} printed. Tests + dotfiles + scripts
-     * grep for these.
+     * On success, surface the backward-compat one-liners every prior version of {@code jk sync}
+     * printed. Tests + dotfiles + scripts grep for these.
      */
     private void printSuccessSummary(Goal goal, Path lockFile) {
         if (global.outputIsJson()) return;
@@ -450,8 +452,13 @@ public final class SyncCommand implements CliCommand {
         goal.get(LOCKFILE).ifPresent(lock -> {
             if (created) {
                 int n = lock.artifacts().size();
-                System.out.println("Created " + dev.jkbuild.cli.PathDisplay.styledRaw(lockFile) + " (" + n + " package"
-                        + (n == 1 ? "" : "s") + ")");
+                System.out.println("Created "
+                        + dev.jkbuild.cli.PathDisplay.styledRaw(lockFile)
+                        + " ("
+                        + n
+                        + " package"
+                        + (n == 1 ? "" : "s")
+                        + ")");
             }
         });
         goal.get(JDK_OUTCOME).ifPresent(SyncCommand::printJdkSummary);
@@ -460,7 +467,12 @@ public final class SyncCommand implements CliCommand {
                         r.fetched() + " fetched, " + r.upToDate() + " up-to-date, " + r.skipped() + " skipped"));
         goal.get(WORKER_REPORT).ifPresent(r -> {
             if (r.fetched() > 0 || r.missing() > 0) {
-                System.out.println("Workers: " + r.present() + " present, " + r.fetched() + " fetched, " + r.missing()
+                System.out.println("Workers: "
+                        + r.present()
+                        + " present, "
+                        + r.fetched()
+                        + " fetched, "
+                        + r.missing()
                         + " missing");
             }
         });
@@ -476,7 +488,8 @@ public final class SyncCommand implements CliCommand {
             case ALREADY_PINNED, LOCKFILE_INSTALL ->
                 System.out.println("JDK: " + jdk.identifier() + " (already installed)");
             case INSTALLED ->
-                System.out.println("JDK: installed " + jdk.identifier()
+                System.out.println("JDK: installed "
+                        + jdk.identifier()
                         + (outcome.specUsed() != null ? " (from spec " + outcome.specUsed() + ")" : ""));
         }
     }

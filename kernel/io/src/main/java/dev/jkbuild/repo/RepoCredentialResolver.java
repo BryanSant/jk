@@ -13,23 +13,22 @@ import java.util.Optional;
 import java.util.function.Function;
 
 /**
- * Resolves the {@link RepoCredential} for an artifact repository across the
- * sources in docs/artifact-repos.md. Precedence (explicit first; the forge
- * bridge is a convenience fallback so it can't shadow a credential the user
- * set deliberately):
+ * Resolves the {@link RepoCredential} for an artifact repository across the sources in
+ * docs/artifact-repos.md. Precedence (explicit first; the forge bridge is a convenience fallback so
+ * it can't shadow a credential the user set deliberately):
  *
  * <ol>
- *   <li>inline {@code jk.toml} credential (passed in by the caller);</li>
- *   <li>env vars {@code JK_REPO_<NAME>_TOKEN} or
- *       {@code JK_REPO_<NAME>_USERNAME} + {@code _PASSWORD};</li>
- *   <li>the jk repo credential store ({@code jk repo login});</li>
- *   <li>{@code ~/.m2/settings.xml} {@code <server>} matched by id;</li>
- *   <li>forge-token bridge — for package-registry hosts, borrow the token a
- *       prior {@code jk auth login} stored (see {@link ForgeAuth}).</li>
+ *   <li>inline {@code jk.toml} credential (passed in by the caller);
+ *   <li>env vars {@code JK_REPO_<NAME>_TOKEN} or {@code JK_REPO_<NAME>_USERNAME} + {@code
+ *       _PASSWORD};
+ *   <li>the jk repo credential store ({@code jk repo login});
+ *   <li>{@code ~/.m2/settings.xml} {@code <server>} matched by id;
+ *   <li>forge-token bridge — for package-registry hosts, borrow the token a prior {@code jk auth
+ *       login} stored (see {@link ForgeAuth}).
  * </ol>
  *
- * <p>All collaborators are injected so the resolver is unit-testable without
- * the environment, real files, or the network.
+ * <p>All collaborators are injected so the resolver is unit-testable without the environment, real
+ * files, or the network.
  */
 public final class RepoCredentialResolver {
 
@@ -57,10 +56,9 @@ public final class RepoCredentialResolver {
     }
 
     /**
-     * Resolve credentials for the repository named {@code repoId} at
-     * {@code url}. {@code inline} is the credential declared inline in
-     * {@code jk.toml} (empty when none / not yet parsed). Never returns null;
-     * falls back to {@link RepoCredential#ANONYMOUS}.
+     * Resolve credentials for the repository named {@code repoId} at {@code url}. {@code inline} is
+     * the credential declared inline in {@code jk.toml} (empty when none / not yet parsed). Never
+     * returns null; falls back to {@link RepoCredential#ANONYMOUS}.
      */
     public RepoCredential resolve(String repoId, URI url, Optional<RepoCredential> inline) {
         // 1. inline jk.toml
@@ -106,17 +104,16 @@ public final class RepoCredentialResolver {
     }
 
     /**
-     * If {@code url}'s host is a known forge package registry, reuse the token
-     * a prior {@code jk auth login} stored, in the auth shape that registry
-     * expects:
+     * If {@code url}'s host is a known forge package registry, reuse the token a prior {@code jk auth
+     * login} stored, in the auth shape that registry expects:
+     *
      * <ul>
-     *   <li><b>GitHub Packages</b> ({@code maven.pkg.github.com}) — HTTP Basic
-     *       with the account login as username and the token as password.
-     *       The login is looked up via the GitHub API; if that can't be
-     *       resolved (offline / error) we fall back to Bearer, which is no
-     *       worse than before.</li>
-     *   <li><b>GitLab / Gitea</b> — Bearer. The device-flow login yields an
-     *       OAuth access token, which these accept on their package APIs.</li>
+     *   <li><b>GitHub Packages</b> ({@code maven.pkg.github.com}) — HTTP Basic with the account login
+     *       as username and the token as password. The login is looked up via the GitHub API; if that
+     *       can't be resolved (offline / error) we fall back to Bearer, which is no worse than
+     *       before.
+     *   <li><b>GitLab / Gitea</b> — Bearer. The device-flow login yields an OAuth access token, which
+     *       these accept on their package APIs.
      * </ul>
      */
     private Optional<RepoCredential> forgeBridge(URI url) {

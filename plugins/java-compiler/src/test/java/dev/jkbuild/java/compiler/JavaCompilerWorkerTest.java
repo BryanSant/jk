@@ -18,9 +18,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
- * Drives the worker's protocol end-to-end (in-process via {@link JavaCompilerWorker#run}):
- * a real annotation processor is ServiceLoader-discovered from a processor path,
- * runs, and its generated-file provenance is reported as NDJSON.
+ * Drives the worker's protocol end-to-end (in-process via {@link JavaCompilerWorker#run}): a real
+ * annotation processor is ServiceLoader-discovered from a processor path, runs, and its
+ * generated-file provenance is reported as NDJSON.
  */
 class JavaCompilerWorkerTest {
 

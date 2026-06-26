@@ -15,25 +15,23 @@ import org.tomlj.TomlParseResult;
 import org.tomlj.TomlTable;
 
 /**
- * Reads a Gradle version catalog ({@code gradle/libs.versions.toml}) and
- * resolves type-safe accessors — {@code libs.junit.platform.launcher},
- * {@code libs.bundles.testing} — back to concrete {@code group:artifact:version}
- * coordinates so {@link GradleImporter} can turn catalog-based dependency
- * declarations into jk.toml entries.
+ * Reads a Gradle version catalog ({@code gradle/libs.versions.toml}) and resolves type-safe
+ * accessors — {@code libs.junit.platform.launcher}, {@code libs.bundles.testing} — back to concrete
+ * {@code group:artifact:version} coordinates so {@link GradleImporter} can turn catalog-based
+ * dependency declarations into jk.toml entries.
  *
- * <p>Accessor mapping mirrors Gradle: an alias's {@code -}, {@code _} and
- * {@code .} separators are all folded to {@code .}, so the alias
- * {@code junit-platform-launcher} is reached as
- * {@code libs.junit.platform.launcher}. Library values may use the table form
- * ({@code { module = "g:a", version.ref = "x" }} or {@code { group, name,
- * version }}) or the string form ({@code "g:a:v"}); versions resolve through
- * the {@code [versions]} table, including rich {@code strictly}/{@code require}/
- * {@code prefer} forms.
+ * <p>Accessor mapping mirrors Gradle: an alias's {@code -}, {@code _} and {@code .} separators are
+ * all folded to {@code .}, so the alias {@code junit-platform-launcher} is reached as {@code
+ * libs.junit.platform.launcher}. Library values may use the table form ({@code { module = "g:a",
+ * version.ref = "x" }} or {@code { group, name, version }}) or the string form ({@code "g:a:v"});
+ * versions resolve through the {@code [versions]} table, including rich {@code strictly}/{@code
+ * require}/ {@code prefer} forms.
  */
 public final class GradleVersionCatalog {
 
     /** accessor (dot-folded) → {@code group:artifact:version}. */
     private final Map<String, String> coordinates;
+
     /** bundle accessor (dot-folded) → module library accessors. */
     private final Map<String, List<String>> bundles;
 
@@ -43,10 +41,9 @@ public final class GradleVersionCatalog {
     }
 
     /**
-     * Walk up from {@code projectDir} looking for {@code gradle/libs.versions.toml},
-     * checking the project directory and then its parent. Returns the first
-     * match, or empty once the search would climb above the project's parent
-     * directory.
+     * Walk up from {@code projectDir} looking for {@code gradle/libs.versions.toml}, checking the
+     * project directory and then its parent. Returns the first match, or empty once the search would
+     * climb above the project's parent directory.
      */
     public static Optional<Path> locate(Path projectDir) {
         if (projectDir == null) return Optional.empty();
@@ -61,7 +58,9 @@ public final class GradleVersionCatalog {
         return Optional.empty();
     }
 
-    /** Locate and parse the catalog for {@code projectDir}; empty if none found or it fails to parse. */
+    /**
+     * Locate and parse the catalog for {@code projectDir}; empty if none found or it fails to parse.
+     */
     public static Optional<GradleVersionCatalog> forProject(Path projectDir) {
         return locate(projectDir).flatMap(catalog -> {
             try {

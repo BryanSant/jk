@@ -29,20 +29,18 @@ import java.util.concurrent.Semaphore;
 // changes to the solver itself.
 
 /**
- * Adapts a {@link MavenRepo} + {@link EffectivePomBuilder} into the
- * PubGrub {@link PackageSource} contract.
+ * Adapts a {@link MavenRepo} + {@link EffectivePomBuilder} into the PubGrub {@link PackageSource}
+ * contract.
  *
- * <p>Caches versions and dep lists in-memory per solver run so repeated
- * lookups during conflict resolution don't re-hit the network.
+ * <p>Caches versions and dep lists in-memory per solver run so repeated lookups during conflict
+ * resolution don't re-hit the network.
  *
- * <p>After resolving a package's dependency list, the source
- * speculatively prefetches {@code maven-metadata.xml} for each transitive
- * on {@link JkThreads#io()}. PubGrub explores one package at a time, so
- * by the time it asks for those packages' versions the metadata is
- * already in the on-disk cache. A {@link Semaphore} caps concurrent
- * prefetches so we don't get rate-limited by Maven Central; the cache
- * maps are switched to {@link ConcurrentHashMap} so speculative writes
- * are safe.
+ * <p>After resolving a package's dependency list, the source speculatively prefetches {@code
+ * maven-metadata.xml} for each transitive on {@link JkThreads#io()}. PubGrub explores one package
+ * at a time, so by the time it asks for those packages' versions the metadata is already in the
+ * on-disk cache. A {@link Semaphore} caps concurrent prefetches so we don't get rate-limited by
+ * Maven Central; the cache maps are switched to {@link ConcurrentHashMap} so speculative writes are
+ * safe.
  */
 public final class MavenPackageSource implements PackageSource {
 
@@ -54,6 +52,7 @@ public final class MavenPackageSource implements PackageSource {
     private final RepoGroup repos;
     private final EffectivePomBuilder pomBuilder;
     private final Map<String, String> bomConstraints;
+
     /** Locked versions from a prior lock file — preferred but NOT hard-pinned. */
     private final Map<String, String> lockedVersionPrefs;
 
@@ -74,12 +73,10 @@ public final class MavenPackageSource implements PackageSource {
     }
 
     /**
-     * Conservative-lock variant: {@code lockedVersionPrefs} contains the exact
-     * versions from a prior lockfile. Unlike BOM constraints (which hard-pin),
-     * these move the locked version to the <em>front</em> of the candidate list.
-     * PubGrub will select it first; if a new dep's constraint rules it out,
-     * PubGrub naturally backtracks to the next candidate — no manual fallback
-     * needed.
+     * Conservative-lock variant: {@code lockedVersionPrefs} contains the exact versions from a prior
+     * lockfile. Unlike BOM constraints (which hard-pin), these move the locked version to the
+     * <em>front</em> of the candidate list. PubGrub will select it first; if a new dep's constraint
+     * rules it out, PubGrub naturally backtracks to the next candidate — no manual fallback needed.
      */
     public MavenPackageSource(
             RepoGroup repos,
@@ -160,11 +157,10 @@ public final class MavenPackageSource implements PackageSource {
     }
 
     /**
-     * Fire-and-forget metadata fetches for each {@code Term}'s package on
-     * {@link JkThreads#io()}. Bounded by {@link #prefetchSlots} so a deep
-     * fan-out doesn't blast a remote repo. Failures are swallowed — the
-     * solver's own synchronous {@link #versions} call will report the
-     * real error if the package is genuinely unreachable.
+     * Fire-and-forget metadata fetches for each {@code Term}'s package on {@link JkThreads#io()}.
+     * Bounded by {@link #prefetchSlots} so a deep fan-out doesn't blast a remote repo. Failures are
+     * swallowed — the solver's own synchronous {@link #versions} call will report the real error if
+     * the package is genuinely unreachable.
      */
     private void prefetchVersionsAsync(List<Term> deps) {
         for (Term dep : deps) {

@@ -8,19 +8,16 @@ import java.util.Locale;
 import java.util.Optional;
 
 /**
- * Picks the best {@link JdkCatalog.Entry} for a {@link JdkSpec} on a
- * given host. Strategy:
+ * Picks the best {@link JdkCatalog.Entry} for a {@link JdkSpec} on a given host. Strategy:
  *
  * <ol>
- *   <li>Filter to entries whose {@link JdkCatalog.Entry#os() os} and
- *       {@link JdkCatalog.Entry#arch() arch} match the host.</li>
- *   <li>Keep entries where the spec matches the entry's
- *       {@code shared_index_aliases} or {@code suggested_sdk_name}
- *       (case-insensitive).</li>
- *   <li>For bare-version specs ({@code 21}), keep entries flagged
- *       {@code default: true} when any exist; otherwise keep all
- *       matches.</li>
- *   <li>Prefer non-preview; then highest {@code jdk_version}.</li>
+ *   <li>Filter to entries whose {@link JdkCatalog.Entry#os() os} and {@link JdkCatalog.Entry#arch()
+ *       arch} match the host.
+ *   <li>Keep entries where the spec matches the entry's {@code shared_index_aliases} or {@code
+ *       suggested_sdk_name} (case-insensitive).
+ *   <li>For bare-version specs ({@code 21}), keep entries flagged {@code default: true} when any
+ *       exist; otherwise keep all matches.
+ *   <li>Prefer non-preview; then highest {@code jdk_version}.
  * </ol>
  */
 public final class JdkSelector {
@@ -28,19 +25,17 @@ public final class JdkSelector {
     private JdkSelector() {}
 
     /**
-     * {@link #select} with jk's vendor-preference bias: when {@code rawSpec} names
-     * no vendor (a bare major / version like {@code 26} or {@code 25.0.3}), the
-     * vendors in {@link JdkVendor#PREFERENCE} (Temurin, Liberica, Oracle OpenJDK,
-     * Corretto) are tried in order, preferring the first that satisfies the spec
-     * on this host over the feed's {@code default:true} entry-for-major. Falls
-     * back to the unbiased {@link #select} when none match (or when the spec
-     * already names a vendor, e.g. {@code corretto-25}).
+     * {@link #select} with jk's vendor-preference bias: when {@code rawSpec} names no vendor (a bare
+     * major / version like {@code 26} or {@code 25.0.3}), the vendors in {@link JdkVendor#PREFERENCE}
+     * (Temurin, Liberica, Oracle OpenJDK, Corretto) are tried in order, preferring the first that
+     * satisfies the spec on this host over the feed's {@code default:true} entry-for-major. Falls
+     * back to the unbiased {@link #select} when none match (or when the spec already names a vendor,
+     * e.g. {@code corretto-25}).
      *
-     * <p>This is the entry point every <em>install</em> path should use so the
-     * preference is consistent across {@code jk jdk install <ver>},
-     * {@code jk jdk ensure <ver>}, and the build pipeline's auto-install — the
-     * keyword path ({@code lts}/{@code latest}) is already Temurin-biased via
-     * {@link JdkKeywords#resolveToMajorSpec}. Range specs ({@code >=21}) skip the
+     * <p>This is the entry point every <em>install</em> path should use so the preference is
+     * consistent across {@code jk jdk install <ver>}, {@code jk jdk ensure <ver>}, and the build
+     * pipeline's auto-install — the keyword path ({@code lts}/{@code latest}) is already
+     * Temurin-biased via {@link JdkKeywords#resolveToMajorSpec}. Range specs ({@code >=21}) skip the
      * bias and resolve via {@link #selectFlexible}'s vendor-ranked tie-break.
      */
     public static Optional<JdkCatalog.Entry> selectPreferred(
@@ -91,16 +86,15 @@ public final class JdkSelector {
     }
 
     /**
-     * Permissive selector: parses denormalized identifiers like {@code 25-graal},
-     * {@code temurin-25}, {@code 17.0.19}, {@code java-17-openjdk},
-     * {@code corretto-21} into a {@code (major, exactVersion?, hints[])} tuple
-     * and picks the highest-ranked entry whose feed metadata satisfies it.
+     * Permissive selector: parses denormalized identifiers like {@code 25-graal}, {@code temurin-25},
+     * {@code 17.0.19}, {@code java-17-openjdk}, {@code corretto-21} into a {@code (major,
+     * exactVersion?, hints[])} tuple and picks the highest-ranked entry whose feed metadata satisfies
+     * it.
      *
-     * <p>Scoring: each token is worth one point if it matches the entry's
-     * vendor / product / suggestedSdkName / alias (case-insensitive); exact
-     * version match adds a heavy weight; default-for-major wins ties; latest
-     * version breaks remaining ties. Returns empty if nothing satisfies the
-     * version constraint on the target host.
+     * <p>Scoring: each token is worth one point if it matches the entry's vendor / product /
+     * suggestedSdkName / alias (case-insensitive); exact version match adds a heavy weight;
+     * default-for-major wins ties; latest version breaks remaining ties. Returns empty if nothing
+     * satisfies the version constraint on the target host.
      */
     public static Optional<JdkCatalog.Entry> selectFlexible(JdkCatalog catalog, String raw, String os, String arch) {
         var query = parseFlexible(raw);
@@ -173,11 +167,10 @@ public final class JdkSelector {
     }
 
     /**
-     * Token-walker that handles the denormalized forms callers care about.
-     * Splits on {@code -} / {@code _}; numeric-leading tokens become version
-     * info, everything else lands in {@code hints}. {@code "java"} is dropped
-     * (it's a noise word in inputs like {@code java-17-openjdk}); {@code "jdk"}
-     * gets the same treatment.
+     * Token-walker that handles the denormalized forms callers care about. Splits on {@code -} /
+     * {@code _}; numeric-leading tokens become version info, everything else lands in {@code hints}.
+     * {@code "java"} is dropped (it's a noise word in inputs like {@code java-17-openjdk}); {@code
+     * "jdk"} gets the same treatment.
      */
     public static FlexibleQuery parseFlexible(String raw) {
         if (raw == null) return new FlexibleQuery(Optional.empty(), Optional.empty(), List.of());
@@ -229,13 +222,18 @@ public final class JdkSelector {
     }
 
     /**
-     * +1 per hint that matches the entry's vendor / product / suggestedSdkName
-     * / any alias (case-insensitive substring). Substring rather than equality
-     * so {@code "graal"} hits {@code "graalvm-jdk-25"}.
+     * +1 per hint that matches the entry's vendor / product / suggestedSdkName / any alias
+     * (case-insensitive substring). Substring rather than equality so {@code "graal"} hits {@code
+     * "graalvm-jdk-25"}.
      */
     private static int scoreHints(JdkCatalog.Entry entry, List<String> hints) {
         if (hints.isEmpty()) return 0;
-        var haystack = (entry.vendor() + " " + entry.product() + " " + entry.suggestedSdkName() + " "
+        var haystack = (entry.vendor()
+                        + " "
+                        + entry.product()
+                        + " "
+                        + entry.suggestedSdkName()
+                        + " "
                         + String.join(" ", entry.aliases()))
                 .toLowerCase(Locale.ROOT);
         int score = 0;
@@ -261,9 +259,9 @@ public final class JdkSelector {
     }
 
     /**
-     * Sortable key for a JDK version string. Splits on {@code .}, {@code +},
-     * {@code -}, pads numeric parts to a fixed width so lexicographic
-     * comparison agrees with numeric ordering ({@code 21.0.9} &lt; {@code 21.0.10}).
+     * Sortable key for a JDK version string. Splits on {@code .}, {@code +}, {@code -}, pads numeric
+     * parts to a fixed width so lexicographic comparison agrees with numeric ordering ({@code 21.0.9}
+     * &lt; {@code 21.0.10}).
      */
     public static String versionKey(String version) {
         if (version == null) return "";

@@ -16,22 +16,19 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Thin driver over GraalVM's {@code native-image} binary (PRD §6
- * {@code jk native} verb). Verifies the JDK ships
- * {@code bin/native-image}, assembles the classpath argument, and execs.
+ * Thin driver over GraalVM's {@code native-image} binary (PRD §6 {@code jk native} verb). Verifies
+ * the JDK ships {@code bin/native-image}, assembles the classpath argument, and execs.
  *
- * <p>Subprocess stdout and stderr are forwarded line-by-line through
- * {@code System.out} and {@code System.err} respectively. When the jk TUI
- * is active those streams have been replaced by {@code CommandManager}'s
- * {@code LineSink}, so all native-image output appears above the progress
- * bar rather than interleaved with it.
+ * <p>Subprocess stdout and stderr are forwarded line-by-line through {@code System.out} and {@code
+ * System.err} respectively. When the jk TUI is active those streams have been replaced by {@code
+ * CommandManager}'s {@code LineSink}, so all native-image output appears above the progress bar
+ * rather than interleaved with it.
  *
- * <p>This driver only resolves and execs {@code native-image}; it does not
- * install GraalVM. Selecting/auto-installing the GraalVM that owns
- * {@code native-image} (via {@code project.graal}, or a prompt) is the CLI's
- * job — see {@code GraalResolver}, which passes the resolved GraalVM home in as
- * {@link Request#javaHome()}. If {@code native-image} is still missing the
- * driver fails with a clear hint.
+ * <p>This driver only resolves and execs {@code native-image}; it does not install GraalVM.
+ * Selecting/auto-installing the GraalVM that owns {@code native-image} (via {@code project.graal},
+ * or a prompt) is the CLI's job — see {@code GraalResolver}, which passes the resolved GraalVM home
+ * in as {@link Request#javaHome()}. If {@code native-image} is still missing the driver fails with
+ * a clear hint.
  */
 public final class NativeImageDriver {
 
@@ -62,19 +59,19 @@ public final class NativeImageDriver {
     }
 
     /**
-     * Receives structured progress events parsed from native-image's stdout.
-     * All callbacks are invoked from the stdout-reader daemon thread.
+     * Receives structured progress events parsed from native-image's stdout. All callbacks are
+     * invoked from the stdout-reader daemon thread.
      */
     public interface ProgressListener {
         /**
-         * Called for each {@code [N/M] label} header line in native-image output,
-         * including the first. When {@code current == 1} the caller should also
-         * grow the scope to account for all upcoming steps.
+         * Called for each {@code [N/M] label} header line in native-image output, including the first.
+         * When {@code current == 1} the caller should also grow the scope to account for all upcoming
+         * steps.
          *
-         * @param current  step number (1-based)
-         * @param total    total steps declared by native-image (e.g. 8)
-         * @param label    human-readable step description stripped of trailing
-         *                 progress indicators and timing (e.g. "Performing analysis")
+         * @param current step number (1-based)
+         * @param total total steps declared by native-image (e.g. 8)
+         * @param label human-readable step description stripped of trailing progress indicators and
+         *     timing (e.g. "Performing analysis")
          */
         void onStep(int current, int total, String label);
     }
@@ -92,13 +89,13 @@ public final class NativeImageDriver {
     /**
      * Exec native-image; return its exit code.
      *
-     * <p>stdout is forwarded line-by-line through {@code System.out} (so the
-     * TUI's {@code CommandManager.captureOutput()} displays it above the progress
-     * bar) and parsed for {@code [N/M]} step headers. Each header fires
-     * {@link ProgressListener#onStep} on the stdout-reader thread.
+     * <p>stdout is forwarded line-by-line through {@code System.out} (so the TUI's {@code
+     * CommandManager.captureOutput()} displays it above the progress bar) and parsed for {@code
+     * [N/M]} step headers. Each header fires {@link ProgressListener#onStep} on the stdout-reader
+     * thread.
      *
-     * <p>{@code listener} may be {@code null} — output still flows to
-     * {@code System.out} but no callbacks are invoked.
+     * <p>{@code listener} may be {@code null} — output still flows to {@code System.out} but no
+     * callbacks are invoked.
      */
     public static int run(Request request, ProgressListener listener) throws IOException, InterruptedException {
         Path binary = resolve(request.javaHome()).orElseThrow(() -> notFoundError(request.javaHome()));
@@ -119,10 +116,10 @@ public final class NativeImageDriver {
     }
 
     /**
-     * Assemble the {@code native-image} command line. Executable builds end with
-     * the main class; shared-library builds ({@code --shared}) take no main class
-     * and let native-image derive {@code lib<name>.<ext>} + headers from {@code -o}.
-     * Package-private for unit testing the assembly without execing.
+     * Assemble the {@code native-image} command line. Executable builds end with the main class;
+     * shared-library builds ({@code --shared}) take no main class and let native-image derive {@code
+     * lib<name>.<ext>} + headers from {@code -o}. Package-private for unit testing the assembly
+     * without execing.
      */
     static List<String> buildCommand(Path binary, Request request) {
         List<String> command = new ArrayList<>();
@@ -143,9 +140,9 @@ public final class NativeImageDriver {
     }
 
     /**
-     * Forward stdout to {@code System.out} line-by-line, parsing
-     * {@code [N/M]} step headers and firing the listener when found.
-     * stderr uses the simpler {@link #forwardStream} (no parsing needed).
+     * Forward stdout to {@code System.out} line-by-line, parsing {@code [N/M]} step headers and
+     * firing the listener when found. stderr uses the simpler {@link #forwardStream} (no parsing
+     * needed).
      */
     private static Thread forwardStdout(java.io.InputStream in, ProgressListener listener) {
         Thread t = new Thread(
@@ -192,11 +189,13 @@ public final class NativeImageDriver {
 
     /**
      * Locate the {@code native-image} binary, trying in order:
+     *
      * <ol>
-     *   <li>{@code <javaHome>/bin/native-image} — the project-pinned JDK</li>
-     *   <li>{@code $GRAALVM_HOME/bin/native-image} — explicit GraalVM override</li>
-     *   <li>{@code native-image} on {@code $PATH}</li>
+     *   <li>{@code <javaHome>/bin/native-image} — the project-pinned JDK
+     *   <li>{@code $GRAALVM_HOME/bin/native-image} — explicit GraalVM override
+     *   <li>{@code native-image} on {@code $PATH}
      * </ol>
+     *
      * Returns the first candidate that exists as a regular file.
      */
     public static Optional<Path> resolve(Path javaHome) {
@@ -238,7 +237,8 @@ public final class NativeImageDriver {
 
     public static IOException notFoundError(Path javaHome) {
         return new IOException("native-image binary not found.\n"
-                + "  Checked: " + (javaHome != null ? javaHome.resolve("bin/native-image") + ", " : "")
+                + "  Checked: "
+                + (javaHome != null ? javaHome.resolve("bin/native-image") + ", " : "")
                 + "$GRAALVM_HOME/bin/native-image, PATH\n"
                 + "  Install a GraalVM JDK and pin it:\n"
                 + "    jk jdk install graalvm-25\n"

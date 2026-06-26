@@ -182,8 +182,14 @@ public final class GitFetcherWorker {
         private final String expectedSha, actualSha;
 
         public TagRewriteException(GitSource source, String expected, String actual) {
-            super("git tag/branch rewrite detected for " + source.canonicalUrl() + " "
-                    + source.ref().token() + ": lock says " + expected + ", upstream now resolves to " + actual);
+            super("git tag/branch rewrite detected for "
+                    + source.canonicalUrl()
+                    + " "
+                    + source.ref().token()
+                    + ": lock says "
+                    + expected
+                    + ", upstream now resolves to "
+                    + actual);
             this.source = source;
             this.expectedSha = expected;
             this.actualSha = actual;

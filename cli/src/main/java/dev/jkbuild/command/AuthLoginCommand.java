@@ -23,9 +23,7 @@ import java.util.Locale;
 import java.util.Optional;
 import java.util.function.Function;
 
-/**
- * {@code jk auth login <provider> [--host H]} — obtain and store a token for a forge.
- */
+/** {@code jk auth login <provider> [--host H]} — obtain and store a token for a forge. */
 public final class AuthLoginCommand implements CliCommand {
 
     @Override
@@ -113,15 +111,20 @@ public final class AuthLoginCommand implements CliCommand {
     private String runDeviceFlow(ForgeKind kind, String resolvedHost) {
         if (!kind.supportsDeviceFlow())
             throw new AuthException(kind.displayName()
-                    + " has no device flow — log in with: jk auth login " + kind.id()
+                    + " has no device flow — log in with: jk auth login "
+                    + kind.id()
                     + " --with-token  (paste a token / app password).");
         ForgeAuthConfig forgeConfig =
                 ForgeAuthConfig.discover(global.workingDir(), global.noConfig, Optional.ofNullable(global.configFile));
         String clientId =
                 oauthClientId(kind, resolvedHost, System::getenv, forgeConfig).orElse(null);
         if (clientId == null)
-            throw new AuthException("No OAuth client configured for " + kind.displayName()
-                    + ". Set " + kind.oauthClientIdEnvVar() + ", add [forge." + kind.id()
+            throw new AuthException("No OAuth client configured for "
+                    + kind.displayName()
+                    + ". Set "
+                    + kind.oauthClientIdEnvVar()
+                    + ", add [forge."
+                    + kind.id()
                     + "] client-id to your jk.toml, or use --with-token.");
         String requestedScope = (scope != null && !scope.isBlank()) ? scope.strip() : defaultScope(kind);
         DeviceFlow flow = DeviceFlow.forHost(new Http(), kind, resolvedHost, clientId, requestedScope);

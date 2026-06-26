@@ -14,26 +14,25 @@ import java.util.Objects;
 import java.util.TreeMap;
 
 /**
- * Renders a {@link JkBuild} value as a TOML {@code jk.toml} document in
- * the v0.7 name-as-key sub-table format.
+ * Renders a {@link JkBuild} value as a TOML {@code jk.toml} document in the v0.7 name-as-key
+ * sub-table format.
  *
  * <p>Output shape:
+ *
  * <ul>
- *   <li>{@code [project]} block — group/artifact/version/jdk/language always
- *       emitted; main/shadow/native emitted only when set.</li>
- *   <li>{@code [workspace]} block when this is a workspace root.</li>
- *   <li>{@code [repositories]} block with per-name URL strings.</li>
- *   <li>{@code [dependencies.<scope>]} sub-tables; each entry is
- *       {@code <lib> = { group = "...", name = "...", version = "..." }}.
- *       The {@code name} field is omitted when it equals the {@code <lib>} key. Workspace
- *       placeholders ({@code module} starts with {@code workspace:}) collapse
- *       to {@code <lib>.workspace = true}. Git sources emit the inline-table
- *       form with {@code git}/{@code tag|branch|rev} fields. Path sources emit
- *       {@code path = "..."}.</li>
+ *   <li>{@code [project]} block — group/artifact/version/jdk/language always emitted;
+ *       main/shadow/native emitted only when set.
+ *   <li>{@code [workspace]} block when this is a workspace root.
+ *   <li>{@code [repositories]} block with per-name URL strings.
+ *   <li>{@code [dependencies.<scope>]} sub-tables; each entry is {@code <lib> = { group = "...",
+ *       name = "...", version = "..." }}. The {@code name} field is omitted when it equals the
+ *       {@code <lib>} key. Workspace placeholders ({@code module} starts with {@code workspace:})
+ *       collapse to {@code <lib>.workspace = true}. Git sources emit the inline-table form with
+ *       {@code git}/{@code tag|branch|rev} fields. Path sources emit {@code path = "..."}.
  * </ul>
  *
- * <p>Within a scope, deps are alphabetised by the short library key for
- * determinism; declared order is not preserved.
+ * <p>Within a scope, deps are alphabetised by the short library key for determinism; declared order
+ * is not preserved.
  */
 public final class JkBuildRenderer {
 
@@ -142,12 +141,14 @@ public final class JkBuildRenderer {
 
     /**
      * Render a single dep entry line. Three forms:
+     *
      * <ul>
-     *   <li>Workspace placeholder (module starts with {@code workspace:}):
-     *       {@code <lib>.workspace = true}</li>
-     *   <li>Git-sourced: {@code <lib> = { group = "...", name?, git = "...", tag|branch|rev = "..." }}</li>
-     *   <li>Path-sourced: {@code <lib> = { group = "...", name?, path = "..." }}</li>
-     *   <li>Versioned: {@code <lib> = { group = "...", name?, version = "..." }}</li>
+     *   <li>Workspace placeholder (module starts with {@code workspace:}): {@code <lib>.workspace =
+     *       true}
+     *   <li>Git-sourced: {@code <lib> = { group = "...", name?, git = "...", tag|branch|rev = "..."
+     *       }}
+     *   <li>Path-sourced: {@code <lib> = { group = "...", name?, path = "..." }}
+     *   <li>Versioned: {@code <lib> = { group = "...", name?, version = "..." }}
      * </ul>
      */
     private static String renderEntry(Dependency d) {
@@ -180,10 +181,9 @@ public final class JkBuildRenderer {
     }
 
     /**
-     * Convert a {@link VersionSelector} into the literal that goes inside
-     * {@code version = "..."}. Exact selectors keep their {@code =} prefix so
-     * a re-parse via {@code parseFloating} round-trips back to {@code Exact};
-     * other selectors emit their decoration as written.
+     * Convert a {@link VersionSelector} into the literal that goes inside {@code version = "..."}.
+     * Exact selectors keep their {@code =} prefix so a re-parse via {@code parseFloating} round-trips
+     * back to {@code Exact}; other selectors emit their decoration as written.
      */
     private static String versionLiteral(VersionSelector v) {
         return switch (v) {
@@ -196,8 +196,8 @@ public final class JkBuildRenderer {
     }
 
     /**
-     * TOML bare-key check — a name with only [A-Za-z0-9_-] can be emitted
-     * unquoted; anything else gets wrapped in a quoted key.
+     * TOML bare-key check — a name with only [A-Za-z0-9_-] can be emitted unquoted; anything else
+     * gets wrapped in a quoted key.
      */
     private static String safeKey(String name) {
         for (int i = 0; i < name.length(); i++) {

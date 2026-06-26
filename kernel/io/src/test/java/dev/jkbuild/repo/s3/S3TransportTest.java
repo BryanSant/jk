@@ -10,6 +10,7 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
@@ -119,7 +120,7 @@ class S3TransportTest {
                     case "AWS_SECRET_ACCESS_KEY" -> "googsk";
                     default -> null;
                 },
-                java.nio.file.Path.of("/nonexistent"));
+                Path.of("/nonexistent"));
         var gcs = S3Transport.forGcs(
                 new Http(),
                 URI.create("gs://gcs-bucket/maven/x.jar"),
@@ -145,7 +146,7 @@ class S3TransportTest {
 
         var cfg = new dev.jkbuild.model.ObjectStoreConfig("eu-central-1", endpoint.toString(), "CFGAK", "cfgsk", null);
         // Empty chain + empty env: config must supply region/endpoint/creds.
-        var chain = new AwsCredentialChain(k -> null, java.nio.file.Path.of("/nonexistent"));
+        var chain = new AwsCredentialChain(k -> null, Path.of("/nonexistent"));
         S3Transport t = S3Transport.forS3(new Http(), URI.create("s3://cfg-bucket/x.jar"), cfg, chain, k -> null);
 
         assertThat(t.fetch(URI.create("s3://cfg-bucket/x.jar"), RepoCredential.ANONYMOUS))

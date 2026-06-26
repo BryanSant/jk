@@ -4,15 +4,13 @@ package dev.jkbuild.jdk;
 import java.util.Locale;
 
 /**
- * The host's OS / architecture in the vocabulary the JetBrains JDK feed
- * uses ({@code linux} / {@code macOS} / {@code windows}; {@code x86_64} /
- * {@code aarch64}). Separate from {@link Platform}, which encodes
- * foojay vocabulary for the dormant {@link DiscoClient} path.
+ * The host's OS / architecture in the vocabulary the JetBrains JDK feed uses ({@code linux} /
+ * {@code macOS} / {@code windows}; {@code x86_64} / {@code aarch64}). Separate from {@link
+ * Platform}, which encodes foojay vocabulary for the dormant {@link DiscoClient} path.
  *
- * <p>Hosts the feed doesn't cover (AIX, FreeBSD, 32-bit x86, arm32,
- * Alpine/musl) return {@link #UNSUPPORTED} so callers can surface a clean
- * "set JAVA_HOME explicitly" message instead of silently downloading the
- * wrong binary.
+ * <p>Hosts the feed doesn't cover (AIX, FreeBSD, 32-bit x86, arm32, Alpine/musl) return {@link
+ * #UNSUPPORTED} so callers can surface a clean "set JAVA_HOME explicitly" message instead of
+ * silently downloading the wrong binary.
  */
 public final class HostPlatform {
 
@@ -35,9 +33,9 @@ public final class HostPlatform {
     /**
      * Returns {@code true} when the current JVM is running on Windows.
      *
-     * <p>Callers should use this rather than inlining
-     * {@code System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win")}
-     * which appears in many places and is inconsistent about locale.
+     * <p>Callers should use this rather than inlining {@code System.getProperty("os.name",
+     * "").toLowerCase(Locale.ROOT).contains("win")} which appears in many places and is inconsistent
+     * about locale.
      */
     public static boolean isWindows() {
         return "windows".equals(currentOs());

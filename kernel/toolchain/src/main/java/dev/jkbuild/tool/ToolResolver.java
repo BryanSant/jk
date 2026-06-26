@@ -21,19 +21,18 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Resolves a Maven coord into a {@link ToolEnv} ready for
- * {@link ToolLauncher} to install or exec (PRD §20).
+ * Resolves a Maven coord into a {@link ToolEnv} ready for {@link ToolLauncher} to install or exec
+ * (PRD §20).
  *
  * <p>Pipeline:
+ *
  * <ol>
- *   <li>{@link NaiveResolver} walks the primary coord's effective POM to
- *       collect transitive {@code compile}/{@code runtime} deps.</li>
- *   <li>Each resolved coord's jar is fetched into the {@link Cas} via
- *       {@link RepoGroup}.</li>
- *   <li>The primary jar's {@code META-INF/MANIFEST.MF Main-Class}
- *       attribute is read; a caller-provided override wins if present.</li>
- *   <li>The result carries the classpath in resolution order (primary
- *       first, then transitives).</li>
+ *   <li>{@link NaiveResolver} walks the primary coord's effective POM to collect transitive {@code
+ *       compile}/{@code runtime} deps.
+ *   <li>Each resolved coord's jar is fetched into the {@link Cas} via {@link RepoGroup}.
+ *   <li>The primary jar's {@code META-INF/MANIFEST.MF Main-Class} attribute is read; a
+ *       caller-provided override wins if present.
+ *   <li>The result carries the classpath in resolution order (primary first, then transitives).
  * </ol>
  */
 public final class ToolResolver {

@@ -9,8 +9,8 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * The {@code profiles} block of a {@code jk.toml}. Holds the raw
- * {@link Profile}s by name and resolves {@code inherits} chains.
+ * The {@code profiles} block of a {@code jk.toml}. Holds the raw {@link Profile}s by name and
+ * resolves {@code inherits} chains.
  */
 public record Profiles(Map<String, Profile> byName) {
 
@@ -28,8 +28,8 @@ public record Profiles(Map<String, Profile> byName) {
     }
 
     /**
-     * Walk the inherits chain and merge — parent fields go first, child
-     * appends. Cycle in the chain → {@link IllegalStateException}.
+     * Walk the inherits chain and merge — parent fields go first, child appends. Cycle in the chain →
+     * {@link IllegalStateException}.
      */
     public Profile resolve(String name) {
         if (!byName.containsKey(name)) {

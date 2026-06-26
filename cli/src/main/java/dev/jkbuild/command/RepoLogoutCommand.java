@@ -12,8 +12,8 @@ import java.nio.file.Path;
 import java.util.List;
 
 /**
- * {@code jk repo logout <id>} — forget stored credentials for an artifact
- * repository. Leaves env vars and {@code ~/.m2/settings.xml} untouched.
+ * {@code jk repo logout <id>} — forget stored credentials for an artifact repository. Leaves env
+ * vars and {@code ~/.m2/settings.xml} untouched.
  */
 public final class RepoLogoutCommand implements CliCommand {
 

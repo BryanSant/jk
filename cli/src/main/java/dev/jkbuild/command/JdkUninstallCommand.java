@@ -35,22 +35,19 @@ import java.util.Set;
 import org.jline.terminal.Terminal;
 
 /**
- * {@code jk jdk uninstall <source>/<spec>} — source-qualified single-target
- * removal. Without arguments (and on a TTY) opens an interactive checkbox
- * wizard listing every install across every probe with the same
- * {@code <source>/<spec>} contract applied per-row.
+ * {@code jk jdk uninstall <source>/<spec>} — source-qualified single-target removal. Without
+ * arguments (and on a TTY) opens an interactive checkbox wizard listing every install across every
+ * probe with the same {@code <source>/<spec>} contract applied per-row.
  *
- * <p>Both paths funnel through the same per-victim logic:
- * {@link #uninstallOne}. The interactive path asks for confirmation
- * <em>once</em> with a summary of all victims rather than per row.
+ * <p>Both paths funnel through the same per-victim logic: {@link #uninstallOne}. The interactive
+ * path asks for confirmation <em>once</em> with a summary of all victims rather than per row.
  *
- * <p>After all deletions, if the global default JDK was among the victims,
- * delegate to {@link JdkDefaultCommand#applyLts} so the next-best LTS on
- * disk becomes the new default automatically.
+ * <p>After all deletions, if the global default JDK was among the victims, delegate to {@link
+ * JdkDefaultCommand#applyLts} so the next-best LTS on disk becomes the new default automatically.
  *
- * <p>The Goal wraps the actual delete loop + default reconciliation so
- * we get a run-log entry per uninstall. Marked interactive so the
- * progress widget stays out of the way of the spinner + wizard UI.
+ * <p>The Goal wraps the actual delete loop + default reconciliation so we get a run-log entry per
+ * uninstall. Marked interactive so the progress widget stays out of the way of the spinner + wizard
+ * UI.
  */
 // Take our CliCommand interface + main's expanded aliases and logic
 public final class JdkUninstallCommand implements CliCommand {
@@ -91,11 +88,10 @@ public final class JdkUninstallCommand implements CliCommand {
             Set.of("jk", "intellij", "jdks", "sdkman", "jbang", "mise", "asdf", "jenv", "homebrew", "path");
 
     /**
-     * Sources jk refuses to uninstall from — the install's lifecycle belongs to
-     * another owner. {@code system} is the OS package manager; {@code intellij}
-     * is a JDK an IDE has registered in its {@code jdk.table.xml} (an unmanaged
-     * JDK merely sitting in {@code ~/.jdks} is labelled {@code jdks} and stays
-     * removable). See {@link #forbiddenSourceMessage}.
+     * Sources jk refuses to uninstall from — the install's lifecycle belongs to another owner. {@code
+     * system} is the OS package manager; {@code intellij} is a JDK an IDE has registered in its
+     * {@code jdk.table.xml} (an unmanaged JDK merely sitting in {@code ~/.jdks} is labelled {@code
+     * jdks} and stays removable). See {@link #forbiddenSourceMessage}.
      */
     private static final Set<String> UNINSTALL_FORBIDDEN_SOURCES = Set.of("system", "intellij");
 
@@ -103,11 +99,14 @@ public final class JdkUninstallCommand implements CliCommand {
     private static String forbiddenSourceMessage(String source) {
         return switch (source) {
             case "intellij" ->
-                "jk jdk uninstall: `" + source + "` JDKs are managed by your IDE — "
+                "jk jdk uninstall: `"
+                        + source
+                        + "` JDKs are managed by your IDE — "
                         + "remove this one through IntelliJ (Project Structure ▸ SDKs, or the "
                         + "Download JDK list), not jk.";
             default ->
-                "jk jdk uninstall: refusing to remove `" + source
+                "jk jdk uninstall: refusing to remove `"
+                        + source
                         + "` installs — they're managed by the OS package manager "
                         + "(use your distro's tooling, e.g. apt/dnf/brew, to remove them).";
         };
@@ -154,7 +153,9 @@ public final class JdkUninstallCommand implements CliCommand {
         String source = slash < 0 ? null : argument.substring(0, slash);
         String spec = slash < 0 ? argument : argument.substring(slash + 1);
         if (slash == 0 || slash == argument.length() - 1) {
-            System.err.println("jk jdk uninstall: argument must be `<spec>` or `<source>/<spec>` " + "(got `" + argument
+            System.err.println("jk jdk uninstall: argument must be `<spec>` or `<source>/<spec>` "
+                    + "(got `"
+                    + argument
                     + "`). Examples: temurin-26.0.1, intellij/temurin-26.0.1.");
             return 64;
         }
@@ -166,8 +167,12 @@ public final class JdkUninstallCommand implements CliCommand {
                 return 64;
             }
             if (!KNOWN_SOURCES.contains(source)) {
-                System.err.println("jk jdk uninstall: unknown source `" + source + "` " + "(supported: "
-                        + String.join(", ", KNOWN_SOURCES.stream().sorted().toList()) + ")");
+                System.err.println("jk jdk uninstall: unknown source `"
+                        + source
+                        + "` "
+                        + "(supported: "
+                        + String.join(", ", KNOWN_SOURCES.stream().sorted().toList())
+                        + ")");
                 return 64;
             }
         }
@@ -269,10 +274,9 @@ public final class JdkUninstallCommand implements CliCommand {
     // --- goal-wrapped delete + reconcile ------------------------------------
 
     /**
-     * One goal per command invocation. The wizard or single-arg path has
-     * already settled which hits are victims; the goal does the actual
-     * disk work + default-pointer reconciliation. Interactive=true keeps
-     * the {@link Spinner} from competing with the framework's bar.
+     * One goal per command invocation. The wizard or single-arg path has already settled which hits
+     * are victims; the goal does the actual disk work + default-pointer reconciliation.
+     * Interactive=true keeps the {@link Spinner} from competing with the framework's bar.
      */
     private Integer runDeleteGoal(List<JdkHit> victims, JdkRegistry registry, GlobalDefaultJdk defaults) {
         Path cache = JkDirs.cache();
@@ -324,9 +328,9 @@ public final class JdkUninstallCommand implements CliCommand {
     // --- shared mechanics ---------------------------------------------------
 
     /**
-     * Spinner → owning-tool uninstall (best-effort) → {@link JdkRegistry#purge}
-     * fallback → {@code "✓ <spec> from <source>"}. The single-target and
-     * wizard paths funnel through here, so output shape stays consistent.
+     * Spinner → owning-tool uninstall (best-effort) → {@link JdkRegistry#purge} fallback → {@code "✓
+     * <spec> from <source>"}. The single-target and wizard paths funnel through here, so output shape
+     * stays consistent.
      */
     private static void uninstallOne(JdkHit hit, JdkRegistry registry) throws IOException {
         String identifier = JdkRegistry.identifierFor(hit.home());
@@ -340,7 +344,8 @@ public final class JdkUninstallCommand implements CliCommand {
                 "Deleting "
                         + Theme.colorize(
                                 JdkInstallCommand.tildeCollapse(installDir),
-                                Theme.active().path()) + "...")) {
+                                Theme.active().path())
+                        + "...")) {
             // Try the owning tool first so its manifest stays consistent
             // (sdkman, mise, jbang, jenv, asdf, brew). Anything left on disk
             // after — including the intellij / java-home sources, which
@@ -353,20 +358,22 @@ public final class JdkUninstallCommand implements CliCommand {
             // The spinner has already cleared its line; print the failure where
             // the confirmation prompt was (confirmDeletion wiped it for us), then
             // rethrow so the goal records the failure and the exit code is 1.
-            System.out.println(Theme.colorize(Glyphs.CROSS, Theme.active().error()) + " Failed to remove "
-                    + Theme.colorize(label, Theme.active().warning()) + "!");
+            System.out.println(Theme.colorize(Glyphs.CROSS, Theme.active().error())
+                    + " Failed to remove "
+                    + Theme.colorize(label, Theme.active().warning())
+                    + "!");
             throw e;
         }
-        System.out.println(Theme.colorize(Glyphs.CHECK, Theme.active().completedStep()) + " Removed "
+        System.out.println(Theme.colorize(Glyphs.CHECK, Theme.active().completedStep())
+                + " Removed "
                 + JdkRender.coord(hit.source(), identifier));
     }
 
     /**
-     * Single bulk confirmation. {@code --yes} short-circuits. Returns
-     * {@code true} on Enter / {@code y} / {@code yes}; anything else aborts.
-     * Caller is responsible for keeping the JLine terminal open across
-     * this call (see {@link #runWizard}) — once the terminal closes, the
-     * underlying {@code System.in} FD goes with it.
+     * Single bulk confirmation. {@code --yes} short-circuits. Returns {@code true} on Enter / {@code
+     * y} / {@code yes}; anything else aborts. Caller is responsible for keeping the JLine terminal
+     * open across this call (see {@link #runWizard}) — once the terminal closes, the underlying
+     * {@code System.in} FD goes with it.
      */
     private boolean confirmDeletion(List<JdkHit> victims, Terminal terminal) {
         if (assumeYes) return true;
@@ -410,9 +417,8 @@ public final class JdkUninstallCommand implements CliCommand {
     }
 
     /**
-     * If any of the victims was the system default, delegate to
-     * {@link JdkDefaultCommand#applyLts} so the next-best LTS install on
-     * disk auto-promotes. When no LTS survives we clear the default;
+     * If any of the victims was the system default, delegate to {@link JdkDefaultCommand#applyLts} so
+     * the next-best LTS install on disk auto-promotes. When no LTS survives we clear the default;
      * applyLts handles the messaging in either case.
      */
     private static void reconcileDefaultAfterRemoval(
@@ -437,7 +443,8 @@ public final class JdkUninstallCommand implements CliCommand {
             } else {
                 defaults.set(survivors.getFirst());
                 System.out.println(Theme.colorize("➜", Theme.active().brightGreen())
-                        + " The " + Theme.colorize("default", Theme.active().focused())
+                        + " The "
+                        + Theme.colorize("default", Theme.active().focused())
                         + " JDK is now set to "
                         + Theme.colorize(
                                 survivors.getFirst().identifier(),

@@ -17,17 +17,15 @@ import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 
 /**
- * Always-on goal-event recorder. Writes the same NDJSON shape as
- * {@link NdjsonListener} but to {@code <cacheRoot>/runs/<ts>-<goal>.ndjson}
- * — one file per invocation. The cache prune sweep collects files
- * older than 7 days (see {@link dev.jkbuild.task.RunLogGc}).
+ * Always-on goal-event recorder. Writes the same NDJSON shape as {@link NdjsonListener} but to
+ * {@code <cacheRoot>/runs/<ts>-<goal>.ndjson} — one file per invocation. The cache prune sweep
+ * collects files older than 7 days (see {@link dev.jkbuild.task.RunLogGc}).
  *
- * <p>Purpose: post-hoc debugging ({@code jk debug last}), usage
- * analytics, CI traces, future "what was slow in this build" tooling.
+ * <p>Purpose: post-hoc debugging ({@code jk debug last}), usage analytics, CI traces, future "what
+ * was slow in this build" tooling.
  *
- * <p>Writes are best-effort: an IO failure during a single event
- * silently drops that event. A failure opening the file makes the
- * whole listener a no-op for the goal's lifetime.
+ * <p>Writes are best-effort: an IO failure during a single event silently drops that event. A
+ * failure opening the file makes the whole listener a no-op for the goal's lifetime.
  */
 public final class EventLogListener implements GoalListener {
 
@@ -43,9 +41,8 @@ public final class EventLogListener implements GoalListener {
     }
 
     /**
-     * Open a fresh log under {@code cacheRoot/runs/}. {@code goalName}
-     * is folded into the filename for human scanning. Returns
-     * {@code null} on failure — caller can simply skip adding the
+     * Open a fresh log under {@code cacheRoot/runs/}. {@code goalName} is folded into the filename
+     * for human scanning. Returns {@code null} on failure — caller can simply skip adding the
      * listener.
      */
     public static EventLogListener open(Path cacheRoot, String goalName) {
@@ -56,7 +53,7 @@ public final class EventLogListener implements GoalListener {
             Path file = dir.resolve(TS_FORMAT.format(Instant.now()) + "-" + safeGoal + ".ndjson");
             PrintStream stream = new PrintStream(
                     Files.newOutputStream(file, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE),
-                    /*autoFlush=*/ true,
+                    /* autoFlush= */ true,
                     StandardCharsets.UTF_8);
             return new EventLogListener(file, stream);
         } catch (IOException e) {

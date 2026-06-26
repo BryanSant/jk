@@ -7,9 +7,8 @@ import java.time.Duration;
 import org.junit.jupiter.api.Test;
 
 /**
- * {@link ConsoleSpec#fmtDuration} is the one duration formatter in the CLI:
- * bare millis below a second, one-decimal seconds below a minute, then
- * {@code m/h/d} compound forms — capping at days.
+ * {@link ConsoleSpec#fmtDuration} is the one duration formatter in the CLI: bare millis below a
+ * second, one-decimal seconds below a minute, then {@code m/h/d} compound forms — capping at days.
  */
 class ConsoleSpecTest {
 

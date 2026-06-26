@@ -11,25 +11,24 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Thread-safe accumulator for per-test results that writes a single
- * {@code test-results.md} into the test-results directory.
+ * Thread-safe accumulator for per-test results that writes a single {@code test-results.md} into
+ * the test-results directory.
  *
  * <p>The file mimics the Jenkins Test Results page layout:
+ *
  * <ul>
- *   <li>A one-line summary (total failures, total tests, wall-clock duration)</li>
- *   <li>An "All Failed Tests" section — failures grouped by class, each with its
- *       stack trace in a fenced code block</li>
- *   <li>An "All Tests" table — one row per package with Fail / Skip / Pass /
- *       Total counts</li>
+ *   <li>A one-line summary (total failures, total tests, wall-clock duration)
+ *   <li>An "All Failed Tests" section — failures grouped by class, each with its stack trace in a
+ *       fenced code block
+ *   <li>An "All Tests" table — one row per package with Fail / Skip / Pass / Total counts
  * </ul>
  *
- * <p>In parallel mode all workers share one instance; synchronization is on
- * the entry list. {@link #writeAll(Path)} is called once after all workers
- * have joined, so the full result set is available before any rendering starts.
+ * <p>In parallel mode all workers share one instance; synchronization is on the entry list. {@link
+ * #writeAll(Path)} is called once after all workers have joined, so the full result set is
+ * available before any rendering starts.
  *
- * <p>Companion to {@link XmlTestReport}: both writers share the same event
- * stream; the XML files provide CI/IDE compatibility while this file provides
- * a human- and AI-readable summary.
+ * <p>Companion to {@link XmlTestReport}: both writers share the same event stream; the XML files
+ * provide CI/IDE compatibility while this file provides a human- and AI-readable summary.
  */
 public final class MarkdownTestReport {
 
@@ -56,9 +55,9 @@ public final class MarkdownTestReport {
     private final List<Entry> entries = new ArrayList<>();
 
     /**
-     * Record a finished test (passed, failed, or aborted).
-     * {@code throwableJson} is the raw nested JSON object from the protocol
-     * event's {@code throwable} field — {@code null} for a passing test.
+     * Record a finished test (passed, failed, or aborted). {@code throwableJson} is the raw nested
+     * JSON object from the protocol event's {@code throwable} field — {@code null} for a passing
+     * test.
      */
     public synchronized void recordFinished(String uniqueId, String display, long durationMs, String throwableJson) {
         String className = classNameFrom(uniqueId);
@@ -74,8 +73,7 @@ public final class MarkdownTestReport {
     }
 
     /**
-     * Record a skipped test.
-     * {@code reason} is the skip reason from the protocol event, may be null.
+     * Record a skipped test. {@code reason} is the skip reason from the protocol event, may be null.
      */
     public synchronized void recordSkipped(String uniqueId, String display, String reason) {
         String className = classNameFrom(uniqueId);
@@ -83,8 +81,8 @@ public final class MarkdownTestReport {
     }
 
     /**
-     * Write {@code test-results.md} into {@code dir}, creating it if needed.
-     * No-ops when no test events were recorded.
+     * Write {@code test-results.md} into {@code dir}, creating it if needed. No-ops when no test
+     * events were recorded.
      */
     public synchronized void writeAll(Path dir) throws IOException {
         if (entries.isEmpty()) return;

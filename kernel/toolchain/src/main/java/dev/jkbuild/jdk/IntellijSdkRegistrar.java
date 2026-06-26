@@ -25,25 +25,23 @@ import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 
 /**
- * Writes {@code <jdk>} entries into the JetBrains IDEs' global SDK tables
- * ({@code <config>/<Product><Version>/options/jdk.table.xml}). The write
- * counterpart to the read-only {@link IntellijJdkTable}.
+ * Writes {@code <jdk>} entries into the JetBrains IDEs' global SDK tables ({@code
+ * <config>/<Product><Version>/options/jdk.table.xml}). The write counterpart to the read-only
+ * {@link IntellijJdkTable}.
  *
- * <p>IntelliJ pins a project SDK by name; the name only resolves if a matching
- * {@code <jdk>} exists in this global table. {@code jk idea} therefore registers
- * a {@code jk-<vendor>-<level>} SDK pointing at the stable
- * {@link StableJdkPointer} path so the generated {@code .idea/} resolves with no
- * "missing SDK", and survives point-release upgrades (the path is stable).
+ * <p>IntelliJ pins a project SDK by name; the name only resolves if a matching {@code <jdk>} exists
+ * in this global table. {@code jk idea} therefore registers a {@code jk-<vendor>-<level>} SDK
+ * pointing at the stable {@link StableJdkPointer} path so the generated {@code .idea/} resolves
+ * with no "missing SDK", and survives point-release upgrades (the path is stable).
  *
- * <p>Everything here is <strong>best-effort</strong>: a missing IDE, an
- * unreadable table, or a malformed file is skipped, never fatal. Upserts are
- * idempotent — an entry with the same {@code <name>} is replaced in place, all
- * other SDKs preserved.
+ * <p>Everything here is <strong>best-effort</strong>: a missing IDE, an unreadable table, or a
+ * malformed file is skipped, never fatal. Upserts are idempotent — an entry with the same {@code
+ * <name>} is replaced in place, all other SDKs preserved.
  *
- * <p><b>Caveat (documented for callers to surface):</b> a running IDE keeps
- * {@code jdk.table.xml} in memory and rewrites it on exit, so an edit made while
- * the IDE is open can be clobbered. Run {@code jk idea} with the IDE closed, or
- * reopen the project afterwards. This is inherent to IntelliJ's config model.
+ * <p><b>Caveat (documented for callers to surface):</b> a running IDE keeps {@code jdk.table.xml}
+ * in memory and rewrites it on exit, so an edit made while the IDE is open can be clobbered. Run
+ * {@code jk idea} with the IDE closed, or reopen the project afterwards. This is inherent to
+ * IntelliJ's config model.
  */
 public final class IntellijSdkRegistrar {
 
@@ -62,9 +60,9 @@ public final class IntellijSdkRegistrar {
     }
 
     /**
-     * Registrar over explicit vendor roots (each a directory whose children are
-     * {@code <Product><Version>} config dirs). Used by {@code jk idea}'s
-     * {@code --ide-config-dir} override and by tests.
+     * Registrar over explicit vendor roots (each a directory whose children are {@code
+     * <Product><Version>} config dirs). Used by {@code jk idea}'s {@code --ide-config-dir} override
+     * and by tests.
      */
     public static IntellijSdkRegistrar of(List<Path> vendorRoots) {
         return new IntellijSdkRegistrar(vendorRoots);
@@ -77,8 +75,8 @@ public final class IntellijSdkRegistrar {
     }
 
     /**
-     * Upsert {@code sdks} into every Java-capable IDE table found. Returns the
-     * table files actually written (for caller logging). Never throws.
+     * Upsert {@code sdks} into every Java-capable IDE table found. Returns the table files actually
+     * written (for caller logging). Never throws.
      */
     public List<Path> register(Collection<SdkEntry> sdks) {
         List<Path> touched = new ArrayList<>();
@@ -94,7 +92,9 @@ public final class IntellijSdkRegistrar {
         return touched;
     }
 
-    /** {@code options/jdk.table.xml} under every installed IntelliJ IDEA / Android Studio config dir. */
+    /**
+     * {@code options/jdk.table.xml} under every installed IntelliJ IDEA / Android Studio config dir.
+     */
     private List<Path> targetTables() {
         List<Path> out = new ArrayList<>();
         for (Path root : vendorRoots) {
@@ -111,7 +111,9 @@ public final class IntellijSdkRegistrar {
         return out;
     }
 
-    /** Only IDEs that actually use a JavaSDK table: IntelliJ IDEA (both editions) and Android Studio. */
+    /**
+     * Only IDEs that actually use a JavaSDK table: IntelliJ IDEA (both editions) and Android Studio.
+     */
     private static boolean isJavaIde(String product) {
         String p = product.toLowerCase(Locale.ROOT);
         return p.startsWith("intellijidea") || p.startsWith("ideaic") || p.startsWith("androidstudio");
@@ -196,12 +198,11 @@ public final class IntellijSdkRegistrar {
     }
 
     /**
-     * Platform module names for a modular JDK home, sorted — the source for the
-     * per-module jrt classpath roots IntelliJ requires. Prefers the
-     * {@code MODULES="a b c"} line in the JDK's {@code release} file (present in
-     * every JDK 9+ image, including jlink runtimes that ship no {@code jmods/}),
-     * then falls back to listing {@code jmods/*.jmod}. Returns empty when the
-     * home is non-modular or unreadable, so the caller emits a single bare root.
+     * Platform module names for a modular JDK home, sorted — the source for the per-module jrt
+     * classpath roots IntelliJ requires. Prefers the {@code MODULES="a b c"} line in the JDK's {@code
+     * release} file (present in every JDK 9+ image, including jlink runtimes that ship no {@code
+     * jmods/}), then falls back to listing {@code jmods/*.jmod}. Returns empty when the home is
+     * non-modular or unreadable, so the caller emits a single bare root.
      */
     private static List<String> moduleNames(Path javaHome) {
         Path release = javaHome.resolve("release");

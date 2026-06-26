@@ -3,6 +3,7 @@ package dev.jkbuild.java.compiler;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.io.Writer;
@@ -12,6 +13,7 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -52,7 +54,9 @@ public class InProcessJavacTest {
                 try {
                     JavaFileObject jfo = processingEnv.getFiler().createSourceFile(genName, type);
                     try (Writer w = jfo.openWriter()) {
-                        w.write((pkg.isEmpty() ? "" : "package " + pkg + ";\n") + "public class " + type.getSimpleName()
+                        w.write((pkg.isEmpty() ? "" : "package " + pkg + ";\n")
+                                + "public class "
+                                + type.getSimpleName()
                                 + "Gen {}\n");
                     }
                 } catch (IOException ex) {
@@ -97,8 +101,8 @@ public class InProcessJavacTest {
 
     private static List<Path> testClasspath() {
         String cp = System.getProperty("java.class.path");
-        java.util.List<Path> paths = new java.util.ArrayList<>();
-        for (String e : cp.split(java.io.File.pathSeparator)) paths.add(Path.of(e));
+        List<Path> paths = new ArrayList<>();
+        for (String e : cp.split(File.pathSeparator)) paths.add(Path.of(e));
         return paths;
     }
 }

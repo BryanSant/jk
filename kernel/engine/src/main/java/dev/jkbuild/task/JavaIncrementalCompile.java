@@ -35,26 +35,25 @@ import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.tree.ClassNode;
 
 /**
- * Precise incremental Java compilation (mirrors {@link KotlinCompile} in shape;
- * the Kotlin worker self-incrementals, javac doesn't, so jk computes the dirty
- * set here). javac always does the actual compilation; this layer decides which
- * sources to recompile and carries the rest over from the CAS.
+ * Precise incremental Java compilation (mirrors {@link KotlinCompile} in shape; the Kotlin worker
+ * self-incrementals, javac doesn't, so jk computes the dirty set here). javac always does the
+ * actual compilation; this layer decides which sources to recompile and carries the rest over from
+ * the CAS.
  *
- * <p>Three tiers (the cheap {@code .jstamp} freshness check sits in front, in the
- * phase):
+ * <p>Three tiers (the cheap {@code .jstamp} freshness check sits in front, in the phase):
+ *
  * <ol>
- *   <li>action-key hit → restore the whole output from the CAS;</li>
- *   <li>else multi-pass incremental: recompile the changed sources, hash the new
- *       {@link ClassAbi ABI}, and expand to the reverse-dependency closure of the
- *       classes whose ABI actually changed — to a fixed point. A body-only edit
- *       changes no ABI, so no dependents recompile;</li>
- *   <li>else (no usable prior state, classpath/options/release change, removed
- *       sources, or annotation-processor-generated sources) a clean full compile.</li>
+ *   <li>action-key hit → restore the whole output from the CAS;
+ *   <li>else multi-pass incremental: recompile the changed sources, hash the new {@link ClassAbi
+ *       ABI}, and expand to the reverse-dependency closure of the classes whose ABI actually
+ *       changed — to a fixed point. A body-only edit changes no ABI, so no dependents recompile;
+ *   <li>else (no usable prior state, classpath/options/release change, removed sources, or
+ *       annotation-processor-generated sources) a clean full compile.
  * </ol>
  *
- * <p>State (per-class ABI hash + forward type deps) is persisted under
- * {@code stateDir}; carry-over + change detection reuse the prior
- * {@link ActionCache.ActionRecord} (its {@code inputs}/{@code outputs}/{@code units}).
+ * <p>State (per-class ABI hash + forward type deps) is persisted under {@code stateDir}; carry-over
+ * + change detection reuse the prior {@link ActionCache.ActionRecord} (its {@code inputs}/{@code
+ * outputs}/{@code units}).
  */
 public final class JavaIncrementalCompile {
 
@@ -80,19 +79,18 @@ public final class JavaIncrementalCompile {
     }
 
     /**
-     * A dry-run prediction ({@code jk explain}): {@code sourceCount} is the total
-     * source count for a {@link Outcome#CACHE_HIT} or {@link Outcome#FULL}, and the
-     * changed-source count for an {@link Outcome#INCREMENTAL} (partial) compile.
+     * A dry-run prediction ({@code jk explain}): {@code sourceCount} is the total source count for a
+     * {@link Outcome#CACHE_HIT} or {@link Outcome#FULL}, and the changed-source count for an {@link
+     * Outcome#INCREMENTAL} (partial) compile.
      */
     public record Prediction(Outcome outcome, String actionKey, int sourceCount) {}
 
     /**
-     * Persisted per-class facts (key = internal class name, e.g. {@code a/Foo$Bar}).
-     * {@code constants} records whether the class defines an inlinable compile-time
-     * constant — its consumers inline the value with no bytecode edge, so removing
-     * (or changing) such a class needs a conservative recompile. Absent in
-     * pre-{@code constants} state files → deserializes to {@code false}; self-heals
-     * as classes recompile.
+     * Persisted per-class facts (key = internal class name, e.g. {@code a/Foo$Bar}). {@code
+     * constants} records whether the class defines an inlinable compile-time constant — its consumers
+     * inline the value with no bytecode edge, so removing (or changing) such a class needs a
+     * conservative recompile. Absent in pre-{@code constants} state files → deserializes to {@code
+     * false}; self-heals as classes recompile.
      */
     public record ClassFacts(String abi, List<String> deps, boolean constants) {
         public ClassFacts {
@@ -101,16 +99,14 @@ public final class JavaIncrementalCompile {
     }
 
     /**
-     * Annotation-processor setup. A project known to run <em>source-generating</em>
-     * processors compiles via the {@code jk-java-compiler} worker (in-process javac
-     * under the project JDK) so generated-file → originating-source provenance can
-     * be captured.
+     * Annotation-processor setup. A project known to run <em>source-generating</em> processors
+     * compiles via the {@code jk-java-compiler} worker (in-process javac under the project JDK) so
+     * generated-file → originating-source provenance can be captured.
      *
-     * <p>{@code workerJar} is a <em>lazy</em> resolver: it is invoked only once the
-     * project has proven it needs the worker (the {@code sourceGenAps} flag), so a
-     * project whose processors are bytecode-only (e.g. Lombok) — or any first build —
-     * never pays the worker lookup. The supplier returns {@code null} when no worker
-     * is available, which keeps the plain subprocess-javac path.
+     * <p>{@code workerJar} is a <em>lazy</em> resolver: it is invoked only once the project has
+     * proven it needs the worker (the {@code sourceGenAps} flag), so a project whose processors are
+     * bytecode-only (e.g. Lombok) — or any first build — never pays the worker lookup. The supplier
+     * returns {@code null} when no worker is available, which keeps the plain subprocess-javac path.
      */
     public record ApSetup(Supplier<Path> workerJar, Path generatedSourceDir) {}
 
@@ -199,11 +195,10 @@ public final class JavaIncrementalCompile {
     }
 
     /**
-     * Predict, without compiling, what {@link #run} would do for {@code request} —
-     * for {@code jk explain}. Uses the same gates as {@code run}: an action-cache
-     * hit on the javac key → {@link Outcome#CACHE_HIT}; else a usable prior record +
-     * state (and a non-aggregating processor setup) → {@link Outcome#INCREMENTAL}
-     * with the changed-source count; else {@link Outcome#FULL}.
+     * Predict, without compiling, what {@link #run} would do for {@code request} — for {@code jk
+     * explain}. Uses the same gates as {@code run}: an action-cache hit on the javac key → {@link
+     * Outcome#CACHE_HIT}; else a usable prior record + state (and a non-aggregating processor setup)
+     * → {@link Outcome#INCREMENTAL} with the changed-source count; else {@link Outcome#FULL}.
      */
     public static Prediction predict(
             String taskId, CompileRequest request, String jkVersion, ActionCache actionCache, Path stateDir)
@@ -515,15 +510,15 @@ public final class JavaIncrementalCompile {
             Map<Path, List<ClassInfo>> bySource, boolean orphans, boolean isolatingSafe, boolean hasGenerated) {}
 
     /**
-     * Read every {@code .class} under {@code out}, hash its ABI + deps, attribute it
-     * to a source. Input sources match by SourceFile-attr suffix; annotation-processor
-     * <em>generated</em> classes (whose SourceFile names a non-input file) are attributed
-     * to their originating input source via {@code provenance} (generated {@code .java} →
-     * originating {@code .java}), so they fold into the same dirty-set/ABI graph.
+     * Read every {@code .class} under {@code out}, hash its ABI + deps, attribute it to a source.
+     * Input sources match by SourceFile-attr suffix; annotation-processor <em>generated</em> classes
+     * (whose SourceFile names a non-input file) are attributed to their originating input source via
+     * {@code provenance} (generated {@code .java} → originating {@code .java}), so they fold into the
+     * same dirty-set/ABI graph.
      *
-     * @param provenance   generated source → originating source(s), this build's waves
-     * @param knownRelPaths class outputs carried over from the prior build (so a
-     *                      carried-over generated class isn't mistaken for an orphan)
+     * @param provenance generated source → originating source(s), this build's waves
+     * @param knownRelPaths class outputs carried over from the prior build (so a carried-over
+     *     generated class isn't mistaken for an orphan)
      */
     private static Analysis analyze(
             Path out, List<Path> sources, Map<Path, Set<Path>> provenance, Set<String> knownRelPaths)

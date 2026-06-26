@@ -4,17 +4,15 @@ package dev.jkbuild.resolver.pubgrub;
 import java.util.Objects;
 
 /**
- * A statement about a package: it must (or must NOT) be at one of the
- * versions in {@link #versions()}. Pure data; algebra is implemented
- * as operations that return new {@link Term}s.
+ * A statement about a package: it must (or must NOT) be at one of the versions in {@link
+ * #versions()}. Pure data; algebra is implemented as operations that return new {@link Term}s.
  *
  * <p>Following the PubGrub paper:
+ *
  * <ul>
- *   <li>Positive term {@code [p, V]}: package {@code p} is at some
- *       version in {@code V}.</li>
- *   <li>Negative term {@code [p, ¬V]}: package {@code p} is at some
- *       version <i>not</i> in {@code V} (or absent — encoded by the empty
- *       version set on the inverted view).</li>
+ *   <li>Positive term {@code [p, V]}: package {@code p} is at some version in {@code V}.
+ *   <li>Negative term {@code [p, ¬V]}: package {@code p} is at some version <i>not</i> in {@code V}
+ *       (or absent — encoded by the empty version set on the inverted view).
  * </ul>
  */
 public record Term(String pkg, VersionSet versions, boolean positive) {

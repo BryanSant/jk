@@ -14,28 +14,27 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Writes a persistent launcher for {@code jk install} and runs the
- * ephemeral exec path for {@code jk exec} (PRD §20).
+ * Writes a persistent launcher for {@code jk install} and runs the ephemeral exec path for {@code
+ * jk exec} (PRD §20).
  *
- * <p>Persistent layout per PRD §20.2 (paths resolved by the caller via
- * {@code dev.jkbuild.util.JkDirs}):
+ * <p>Persistent layout per PRD §20.2 (paths resolved by the caller via {@code
+ * dev.jkbuild.util.JkDirs}):
+ *
  * <pre>
  *   $JK_STATE_DIR/tools/envs/&lt;bin&gt;/env.json   # metadata (XDG: ~/.local/state/jk/...)
  *   $JK_BIN_DIR/&lt;bin&gt;                          # launcher script  (XDG: ~/.local/bin/...)
  * </pre>
  *
- * <p>The launcher embeds an absolute classpath into the CAS — there's no
- * runtime lookup. A coord upgrade re-runs {@code jk install} which
- * regenerates both files.
+ * <p>The launcher embeds an absolute classpath into the CAS — there's no runtime lookup. A coord
+ * upgrade re-runs {@code jk install} which regenerates both files.
  */
 public final class ToolLauncher {
 
     private ToolLauncher() {}
 
     /**
-     * Materialise {@code env} as an installed tool. Writes the launcher
-     * script under {@code binDir} and the env metadata under
-     * {@code envsRoot/<binName>/env.json}. Idempotent.
+     * Materialise {@code env} as an installed tool. Writes the launcher script under {@code binDir}
+     * and the env metadata under {@code envsRoot/<binName>/env.json}. Idempotent.
      *
      * @return the launcher path the user should add to PATH.
      */
@@ -65,8 +64,8 @@ public final class ToolLauncher {
     }
 
     /**
-     * Exec the env's main class in-process via {@link ProcessBuilder}
-     * (the {@code jk exec} path). Returns the child's exit code.
+     * Exec the env's main class in-process via {@link ProcessBuilder} (the {@code jk exec} path).
+     * Returns the child's exit code.
      */
     public static int execEphemeral(Path javaHome, ToolEnv env, List<String> args)
             throws IOException, InterruptedException {

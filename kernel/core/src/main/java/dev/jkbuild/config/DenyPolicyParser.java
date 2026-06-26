@@ -14,10 +14,9 @@ import org.tomlj.TomlParseResult;
 import org.tomlj.TomlTable;
 
 /**
- * Parses the {@code [deny]} block from a {@code jk.toml} into a
- * {@link DenyPolicy} (PRD §23.6). The block is independent of the rest
- * of the file so it has its own entry point — {@code jk deny} doesn't
- * need the full project model.
+ * Parses the {@code [deny]} block from a {@code jk.toml} into a {@link DenyPolicy} (PRD §23.6). The
+ * block is independent of the rest of the file so it has its own entry point — {@code jk deny}
+ * doesn't need the full project model.
  */
 public final class DenyPolicyParser {
 

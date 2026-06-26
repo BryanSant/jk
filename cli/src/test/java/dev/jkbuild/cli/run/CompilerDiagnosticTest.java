@@ -7,9 +7,9 @@ import org.jline.utils.AttributedString;
 import org.junit.jupiter.api.Test;
 
 /**
- * {@link CompilerDiagnostic} must colorize a javac/kotlinc block without
- * changing its text: stripping the ANSI codes has to yield the compiler's
- * verbatim output (only the path is relativized, by the caller's anchor).
+ * {@link CompilerDiagnostic} must colorize a javac/kotlinc block without changing its text:
+ * stripping the ANSI codes has to yield the compiler's verbatim output (only the path is
+ * relativized, by the caller's anchor).
  */
 class CompilerDiagnosticTest {
 

@@ -10,26 +10,23 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Renders an {@link UnsatisfiableException}'s root-cause incompatibility
- * DAG into an English explanation. Approach (a simplification of PubGrub
- * paper §7):
+ * Renders an {@link UnsatisfiableException}'s root-cause incompatibility DAG into an English
+ * explanation. Approach (a simplification of PubGrub paper §7):
  *
  * <ol>
- *   <li>Walk the DAG post-order so deeper facts are stated first.</li>
- *   <li>Leaf causes ({@link Incompatibility.Cause.Dependency},
- *       {@link Incompatibility.Cause.NoVersions},
- *       {@link Incompatibility.Cause.Root}) render as bullets.</li>
- *   <li>{@link Incompatibility.Cause.Derived} nodes render as
- *       {@code "therefore: ..."} sentences after their inputs.</li>
- *   <li>Incompatibilities shared between multiple Derived branches get
- *       a numeric label like {@code (#1)} on their first emission so a
- *       later branch can refer to them by number without re-emitting.</li>
+ *   <li>Walk the DAG post-order so deeper facts are stated first.
+ *   <li>Leaf causes ({@link Incompatibility.Cause.Dependency}, {@link
+ *       Incompatibility.Cause.NoVersions}, {@link Incompatibility.Cause.Root}) render as bullets.
+ *   <li>{@link Incompatibility.Cause.Derived} nodes render as {@code "therefore: ..."} sentences
+ *       after their inputs.
+ *   <li>Incompatibilities shared between multiple Derived branches get a numeric label like {@code
+ *       (#1)} on their first emission so a later branch can refer to them by number without
+ *       re-emitting.
  * </ol>
  *
- * <p>When {@code ansi} is true the output includes ANSI 24-bit color codes
- * matching jk's dark theme: red ‼ header, blue/cyan package coordinates,
- * yellow version constraints. Colors are hardcoded here so the resolver
- * module has no compile-time dependency on the CLI theme layer.
+ * <p>When {@code ansi} is true the output includes ANSI 24-bit color codes matching jk's dark
+ * theme: red ‼ header, blue/cyan package coordinates, yellow version constraints. Colors are
+ * hardcoded here so the resolver module has no compile-time dependency on the CLI theme layer.
  */
 public final class Diagnostics {
 
@@ -47,14 +44,11 @@ public final class Diagnostics {
     }
 
     /**
-     * @param rootDepNames maps {@code group:artifact} modules of the user's
-     *                     root deps to the short name they used as the
-     *                     {@code [dependencies.<scope>]} table key. When a
-     *                     {@link Incompatibility.Cause.NoVersions} cause
-     *                     names a module that's in this map and the artifact
-     *                     portion of the module matches the name, the
-     *                     renderer appends a hint pointing at the
-     *                     artifact-defaulted-from-key behavior.
+     * @param rootDepNames maps {@code group:artifact} modules of the user's root deps to the short
+     *     name they used as the {@code [dependencies.<scope>]} table key. When a {@link
+     *     Incompatibility.Cause.NoVersions} cause names a module that's in this map and the artifact
+     *     portion of the module matches the name, the renderer appends a hint pointing at the
+     *     artifact-defaulted-from-key behavior.
      */
     public static String render(Incompatibility rootCause, Map<String, String> rootDepNames) {
         return render(rootCause, rootDepNames, false);
@@ -89,9 +83,9 @@ public final class Diagnostics {
     }
 
     /**
-     * Walks the incompatibility DAG and emits a hint paragraph for each
-     * {@code NoVersions(unknownPackage=true)} cause that corresponds to a
-     * root dep whose key matches the artifact portion of the failed module.
+     * Walks the incompatibility DAG and emits a hint paragraph for each {@code
+     * NoVersions(unknownPackage=true)} cause that corresponds to a root dep whose key matches the
+     * artifact portion of the failed module.
      */
     private static void appendArtifactHints(
             Incompatibility inco,
@@ -233,8 +227,8 @@ public final class Diagnostics {
     }
 
     /**
-     * Color a package name. {@code group:artifact} coords get group in primary and
-     * artifact in cyan; bare names (like {@code <root>}) get cyan wholesale.
+     * Color a package name. {@code group:artifact} coords get group in primary and artifact in cyan;
+     * bare names (like {@code <root>}) get cyan wholesale.
      */
     private static String colorPkg(String pkg, boolean ansi) {
         if (!ansi) return pkg;

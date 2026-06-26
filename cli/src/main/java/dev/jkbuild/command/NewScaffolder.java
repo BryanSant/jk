@@ -10,32 +10,32 @@ import java.util.Map;
 
 /**
  * Writes the generated project tree from {@link NewInputs}:
+ *
  * <ul>
- *   <li>{@code jk.toml} via {@link NewJkBuildRenderer}</li>
- *   <li>the production + test source roots (see {@link #createSourceTree})</li>
- *   <li>optional sample source tree (Java or Kotlin)</li>
+ *   <li>{@code jk.toml} via {@link NewJkBuildRenderer}
+ *   <li>the production + test source roots (see {@link #createSourceTree})
+ *   <li>optional sample source tree (Java or Kotlin)
  * </ul>
  *
  * <p>No {@code jk.lock} — that's generated on the first build/run.
  *
- * The curated dependency map is the single source of truth for which "short
- * id" maps to which Maven coordinate + version + scope; both the renderer
- * and the wizard's MultiSelect step pull from it.
+ * <p>The curated dependency map is the single source of truth for which "short id" maps to which
+ * Maven coordinate + version + scope; both the renderer and the wizard's MultiSelect step pull from
+ * it.
  */
 public final class NewScaffolder {
 
     /**
-     * Per-dep record. {@code version} is the major-version selector that ends
-     * up after the {@code @} in the rendered TOML coord
-     * (e.g., {@code org.projectlombok:lombok@1}). Floating @-form lets the
+     * Per-dep record. {@code version} is the major-version selector that ends up after the {@code @}
+     * in the rendered TOML coord (e.g., {@code org.projectlombok:lombok@1}). Floating @-form lets the
      * project pick up patch updates without an explicit bump.
      */
     public record CuratedEntry(String coord, String version, String scope) {}
 
     /**
-     * Curated dependency catalog. The {@code version} is intentionally a bare
-     * major (e.g. {@code "1"}); the renderer emits the {@code @}-form so the
-     * resolver treats it as a floating caret selector ({@code ^1} → 1.x.x).
+     * Curated dependency catalog. The {@code version} is intentionally a bare major (e.g. {@code
+     * "1"}); the renderer emits the {@code @}-form so the resolver treats it as a floating caret
+     * selector ({@code ^1} → 1.x.x).
      */
     public static final Map<String, List<CuratedEntry>> CURATED_DEPS = Map.of(
             "lombok",
@@ -55,12 +55,12 @@ public final class NewScaffolder {
     }
 
     /**
-     * Scaffold the project tree. {@code standalone} is false for a workspace
-     * module, whose {@code .gitignore} is owned by the workspace root and so is
-     * skipped here (Cargo/uv: modules never carry their own gitignore).
+     * Scaffold the project tree. {@code standalone} is false for a workspace module, whose {@code
+     * .gitignore} is owned by the workspace root and so is skipped here (Cargo/uv: modules never
+     * carry their own gitignore).
      *
-     * <p>No {@code jk.lock} is written — it's generated on the first build or
-     * run, so a freshly-scaffolded project carries only its manifest + sources.
+     * <p>No {@code jk.lock} is written — it's generated on the first build or run, so a
+     * freshly-scaffolded project carries only its manifest + sources.
      */
     public static void write(NewInputs inputs, boolean standalone) throws IOException {
         var dir = inputs.directory();
@@ -81,9 +81,9 @@ public final class NewScaffolder {
     }
 
     /**
-     * Ensure the production and test source roots both exist from the start:
-     * {@code src/} + {@code test/} for the simple layout, or
-     * {@code src/main/<lang>} + {@code src/test/<lang>} for the traditional one.
+     * Ensure the production and test source roots both exist from the start: {@code src/} + {@code
+     * test/} for the simple layout, or {@code src/main/<lang>} + {@code src/test/<lang>} for the
+     * traditional one.
      */
     private static void createSourceTree(NewInputs inputs) throws IOException {
         var dir = inputs.directory();
@@ -98,9 +98,8 @@ public final class NewScaffolder {
     }
 
     /**
-     * Seed a {@code .gitignore} covering jk's outputs. Don't clobber an
-     * existing file — the user (or their template) may have customised
-     * it. We only create one on first scaffold.
+     * Seed a {@code .gitignore} covering jk's outputs. Don't clobber an existing file — the user (or
+     * their template) may have customised it. We only create one on first scaffold.
      */
     private static void writeGitignore(Path dir) throws IOException {
         Path gitignore = dir.resolve(".gitignore");
@@ -139,10 +138,9 @@ public final class NewScaffolder {
     private static final int JAVA_INSTANCE_MAIN_MIN = 25;
 
     /**
-     * Sample sources mirroring jk's reference layout: a {@code Calc} class with
-     * a JUnit {@code CalcTest}, plus a {@code Main} entry point for runnable
-     * projects. The package follows the project group; the test relies on the
-     * JUnit jk defaults in when no test framework is declared.
+     * Sample sources mirroring jk's reference layout: a {@code Calc} class with a JUnit {@code
+     * CalcTest}, plus a {@code Main} entry point for runnable projects. The package follows the
+     * project group; the test relies on the JUnit jk defaults in when no test framework is declared.
      */
     private static void writeSample(NewInputs inputs) throws IOException {
         switch (inputs.lang()) {
@@ -198,9 +196,8 @@ public final class NewScaffolder {
     }
 
     /**
-     * Entry point referencing the sample {@code Calc}. JDK 25+ gets the JEP 512
-     * instance {@code main} with the implicit {@code IO} import; older targets
-     * get a classic static {@code main}.
+     * Entry point referencing the sample {@code Calc}. JDK 25+ gets the JEP 512 instance {@code main}
+     * with the implicit {@code IO} import; older targets get a classic static {@code main}.
      */
     private static String renderJavaMain(String pkg, boolean instanceMain) {
         if (instanceMain) {

@@ -32,14 +32,13 @@ import java.nio.file.Path;
 import java.util.List;
 
 /**
- * {@code jk tool install <coord>} — install a Maven-published tool as a
- * launcher under {@code $JK_BIN_DIR} (PRD §20.1). Was {@code jk install}
- * pre-v1.0; {@code install} remains a hidden alias.
+ * {@code jk tool install <coord>} — install a Maven-published tool as a launcher under {@code
+ * $JK_BIN_DIR} (PRD §20.1). Was {@code jk install} pre-v1.0; {@code install} remains a hidden
+ * alias.
  *
- * <p>Two phases: {@code resolve-coord} (IO) → {@code install-launcher}.
- * Not marked interactive — the work is straightforward enough that the
- * standard progress widget works fine, and the goal stays
- * {@code --output json}-friendly.
+ * <p>Two phases: {@code resolve-coord} (IO) → {@code install-launcher}. Not marked interactive —
+ * the work is straightforward enough that the standard progress widget works fine, and the goal
+ * stays {@code --output json}-friendly.
  */
 public final class ToolInstallCommand implements CliCommand {
 

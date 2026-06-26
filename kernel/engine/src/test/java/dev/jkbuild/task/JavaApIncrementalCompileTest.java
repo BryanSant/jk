@@ -19,21 +19,21 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
- * Annotation-processor-aware incremental compilation (slice 3b) end-to-end through
- * {@link JavaIncrementalCompile#run} against the real {@code jk-java-compiler} worker.
+ * Annotation-processor-aware incremental compilation (slice 3b) end-to-end through {@link
+ * JavaIncrementalCompile#run} against the real {@code jk-java-compiler} worker.
  *
- * <p>Exercises the new surface: the orphan-signal detection that flips a project into
- * worker mode, the provenance-arity gate that classifies <em>isolating</em> vs
- * <em>aggregating</em> processors, the incremental tier actually running for an
- * isolating processor, and the safe full-rebuild fallback for an aggregating one.
- * The underlying dirty-set/ABI machinery is shared with {@link JavaIncrementalCompileTest}.
+ * <p>Exercises the new surface: the orphan-signal detection that flips a project into worker mode,
+ * the provenance-arity gate that classifies <em>isolating</em> vs <em>aggregating</em> processors,
+ * the incremental tier actually running for an isolating processor, and the safe full-rebuild
+ * fallback for an aggregating one. The underlying dirty-set/ABI machinery is shared with {@link
+ * JavaIncrementalCompileTest}.
  */
 class JavaApIncrementalCompileTest {
 
     /**
-     * Isolating processor (1 generated file per annotated type → arity 1): the project
-     * is detected on build 1, establishes provenance state on the first worker build,
-     * then takes the incremental tier on a subsequent body edit — without going stale.
+     * Isolating processor (1 generated file per annotated type → arity 1): the project is detected on
+     * build 1, establishes provenance state on the first worker build, then takes the incremental
+     * tier on a subsequent body edit — without going stale.
      */
     @Test
     void isolating_processor_detected_then_incrementally_compiles_via_worker(@TempDir Path dir) throws Exception {
@@ -79,9 +79,9 @@ class JavaApIncrementalCompileTest {
     }
 
     /**
-     * Aggregating processor (one generated file from many originating sources → arity &gt;1):
-     * the arity gate classifies it non-isolating, so the project safely stays on full
-     * rebuilds instead of risking a stale aggregate from a subset recompile.
+     * Aggregating processor (one generated file from many originating sources → arity &gt;1): the
+     * arity gate classifies it non-isolating, so the project safely stays on full rebuilds instead of
+     * risking a stale aggregate from a subset recompile.
      */
     @Test
     void aggregating_processor_is_classified_non_isolating_and_stays_full(@TempDir Path dir) throws Exception {

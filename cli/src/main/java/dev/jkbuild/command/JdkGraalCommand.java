@@ -19,11 +19,10 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * {@code jk jdk graal [<spec>]} — set the default GraalVM-based JDK (Oracle
- * GraalVM or GraalVM CE). It's tracked separately from the default <em>java</em>
- * JDK and backs {@code GRAALVM_HOME} (via the {@code jk activate} hook) and
- * {@code jk native}. With no spec, the newest installed GraalVM is chosen,
- * preferring Oracle GraalVM over GraalVM CE.
+ * {@code jk jdk graal [<spec>]} — set the default GraalVM-based JDK (Oracle GraalVM or GraalVM CE).
+ * It's tracked separately from the default <em>java</em> JDK and backs {@code GRAALVM_HOME} (via
+ * the {@code jk activate} hook) and {@code jk native}. With no spec, the newest installed GraalVM
+ * is chosen, preferring Oracle GraalVM over GraalVM CE.
  */
 public final class JdkGraalCommand implements CliCommand {
 
@@ -84,10 +83,12 @@ public final class JdkGraalCommand implements CliCommand {
         String identifier = JdkRegistry.identifierFor(chosen.home());
         defaults.setGraal(new InstalledJdk(identifier, chosen.home()));
         System.out.println(Theme.colorize("➜", Theme.active().brightGreen())
-                + " The " + Theme.colorize("native", Theme.active().focused())
+                + " The "
+                + Theme.colorize("native", Theme.active().focused())
                 + " (default GraalVM) JDK is now set to "
                 + Theme.colorize(display(chosen), Theme.active().focused())
-                + " " + Theme.colorize("(" + identifier + ")", Theme.active().darkGray()));
+                + " "
+                + Theme.colorize("(" + identifier + ")", Theme.active().darkGray()));
         return 0;
     }
 

@@ -9,14 +9,12 @@ import java.util.Objects;
 /**
  * The parsed metadata block of a single-file script (PRD §19).
  *
- * <p>Both jk-style ({@code //jk dep ...}) and JBang-style ({@code //DEPS},
- * {@code //JAVA}, {@code //JAVAC_OPTIONS}, {@code //JAVA_OPTIONS},
- * {@code //KOTLIN}) directives feed into the same record. The runner makes
- * no distinction once parsing is done.
+ * <p>Both jk-style ({@code //jk dep ...}) and JBang-style ({@code //DEPS}, {@code //JAVA}, {@code
+ * //JAVAC_OPTIONS}, {@code //JAVA_OPTIONS}, {@code //KOTLIN}) directives feed into the same record.
+ * The runner makes no distinction once parsing is done.
  *
- * @param kotlinVersion explicit Kotlin compiler version (from {@code //KOTLIN}
- *     or {@code //jk kotlin}), or {@code null} to use the default installed
- *     distribution.
+ * @param kotlinVersion explicit Kotlin compiler version (from {@code //KOTLIN} or {@code //jk
+ *     kotlin}), or {@code null} to use the default installed distribution.
  */
 public record ScriptHeader(
         List<Dependency> deps,

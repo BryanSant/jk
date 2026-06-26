@@ -14,15 +14,13 @@ import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 
 /**
- * Reads {@code <server>} credentials from Maven's {@code ~/.m2/settings.xml}
- * so teams already on Maven get repository auth with zero reconfiguration. A
- * repository's jk name is matched against the server {@code <id>} (the same
- * convention Maven uses).
+ * Reads {@code <server>} credentials from Maven's {@code ~/.m2/settings.xml} so teams already on
+ * Maven get repository auth with zero reconfiguration. A repository's jk name is matched against
+ * the server {@code <id>} (the same convention Maven uses).
  *
- * <p>Best-effort and read-only: a missing or malformed file yields an empty
- * result rather than an error. Only {@code id}/{@code username}/{@code
- * password} are read; {@code privateKey}/{@code passphrase}/{@code
- * configuration} (SSH and HTTP-header extensions) are out of scope for now.
+ * <p>Best-effort and read-only: a missing or malformed file yields an empty result rather than an
+ * error. Only {@code id}/{@code username}/{@code password} are read; {@code privateKey}/{@code
+ * passphrase}/{@code configuration} (SSH and HTTP-header extensions) are out of scope for now.
  * Maven's property/encryption (`{...}`) expansion is also not yet handled.
  */
 public final class MavenSettings {

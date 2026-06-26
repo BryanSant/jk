@@ -18,9 +18,8 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
 /**
- * Reads {@code META-INF/MANIFEST.MF} entries from a jar without unpacking.
- * Used by {@link ToolResolver} to discover the {@code Main-Class} for an
- * installed tool.
+ * Reads {@code META-INF/MANIFEST.MF} entries from a jar without unpacking. Used by {@link
+ * ToolResolver} to discover the {@code Main-Class} for an installed tool.
  */
 public final class JarManifest {
 
@@ -59,11 +58,10 @@ public final class JarManifest {
     }
 
     /**
-     * Scan {@code META-INF/maven/&lt;group&gt;/&lt;artifact&gt;/} for embedded
-     * Maven metadata. Returns one entry per group:artifact pair found,
-     * carrying the {@code pom.xml} bytes (if present) and the
-     * {@code pom.properties} content (if present). Shaded ("uber") jars use
-     * this layout to record what they bundled.
+     * Scan {@code META-INF/maven/&lt;group&gt;/&lt;artifact&gt;/} for embedded Maven metadata.
+     * Returns one entry per group:artifact pair found, carrying the {@code pom.xml} bytes (if
+     * present) and the {@code pom.properties} content (if present). Shaded ("uber") jars use this
+     * layout to record what they bundled.
      */
     public static List<EmbeddedPom> scanEmbeddedPoms(Path jar) throws IOException {
         Objects.requireNonNull(jar, "jar");
@@ -100,9 +98,9 @@ public final class JarManifest {
     }
 
     /**
-     * Read Maven coordinates from the first complete {@code pom.properties}
-     * entry found under {@code META-INF/maven/}. Returns empty when no entry
-     * has all three of {@code groupId}, {@code artifactId}, and {@code version}.
+     * Read Maven coordinates from the first complete {@code pom.properties} entry found under {@code
+     * META-INF/maven/}. Returns empty when no entry has all three of {@code groupId}, {@code
+     * artifactId}, and {@code version}.
      */
     public static Optional<dev.jkbuild.model.Coordinate> coordinateFrom(Path jar) throws IOException {
         for (EmbeddedPom pom : scanEmbeddedPoms(jar)) {
@@ -144,10 +142,9 @@ public final class JarManifest {
     }
 
     /**
-     * One {@code META-INF/maven/<g>/<a>/} folder's contents. {@code pomXml}
-     * is the raw bytes of {@code pom.xml} (suitable for
-     * {@code PomImporter.importFromBytes}); {@code pomProperties} is the raw
-     * key-value text of {@code pom.properties}.
+     * One {@code META-INF/maven/<g>/<a>/} folder's contents. {@code pomXml} is the raw bytes of
+     * {@code pom.xml} (suitable for {@code PomImporter.importFromBytes}); {@code pomProperties} is
+     * the raw key-value text of {@code pom.properties}.
      */
     public record EmbeddedPom(String group, String artifact, byte[] pomXml, String pomProperties) {
         public boolean hasPomXml() {

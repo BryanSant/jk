@@ -15,20 +15,18 @@ import java.util.Set;
 import java.util.stream.Stream;
 
 /**
- * LRU-style size-cap eviction over the CAS pool. Runs <em>after</em>
- * {@link CasSweep} — by the time we get here, every survivor is
- * reachable from some root; the only reason to delete more is to
+ * LRU-style size-cap eviction over the CAS pool. Runs <em>after</em> {@link CasSweep} — by the time
+ * we get here, every survivor is reachable from some root; the only reason to delete more is to
  * respect a user-configured budget.
  *
- * <p>Ordering signal: {@link AccessLedger} latest-touch millis when
- * present; falls back to filesystem mtime for objects the ledger
- * doesn't cover yet (newly added writers, or pre-ledger objects).
+ * <p>Ordering signal: {@link AccessLedger} latest-touch millis when present; falls back to
+ * filesystem mtime for objects the ledger doesn't cover yet (newly added writers, or pre-ledger
+ * objects).
  *
- * <p>When the budget forces us to delete a still-reachable object,
- * that's counted as {@code reachableEvicted} and surfaced in the
- * report — the user gets a "your budget is below your live set" signal
- * without us silently corrupting the next build (the action / sync
- * layer naturally re-fetches deleted CAS objects).
+ * <p>When the budget forces us to delete a still-reachable object, that's counted as {@code
+ * reachableEvicted} and surfaced in the report — the user gets a "your budget is below your live
+ * set" signal without us silently corrupting the next build (the action / sync layer naturally
+ * re-fetches deleted CAS objects).
  */
 public final class LruEvictor {
 
@@ -37,10 +35,9 @@ public final class LruEvictor {
     public record Report(int deleted, long freedBytes, int reachableEvicted, long finalSize) {}
 
     /**
-     * Evict oldest objects until the CAS is at or below {@code maxBytes}.
-     * No-op when already under budget. {@code reachable} is the live set
-     * computed by {@link CacheRoots}; only used here to count how many
-     * of the evictees were still in it (for the warning summary).
+     * Evict oldest objects until the CAS is at or below {@code maxBytes}. No-op when already under
+     * budget. {@code reachable} is the live set computed by {@link CacheRoots}; only used here to
+     * count how many of the evictees were still in it (for the warning summary).
      */
     public static Report evictDownTo(Cas cas, long maxBytes, Set<String> reachable, AccessLedger ledger, boolean dryRun)
             throws IOException {
@@ -101,9 +98,8 @@ public final class LruEvictor {
     }
 
     /**
-     * Parse a human-friendly byte size: {@code 500}, {@code 500M},
-     * {@code 1G}, {@code 20GiB}, {@code 2.5GB}. Returns bytes. Throws
-     * {@link IllegalArgumentException} on unparseable input.
+     * Parse a human-friendly byte size: {@code 500}, {@code 500M}, {@code 1G}, {@code 20GiB}, {@code
+     * 2.5GB}. Returns bytes. Throws {@link IllegalArgumentException} on unparseable input.
      */
     public static long parseSize(String spec) {
         if (spec == null || spec.isBlank()) {

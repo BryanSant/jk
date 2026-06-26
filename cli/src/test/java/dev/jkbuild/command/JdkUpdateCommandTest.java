@@ -22,6 +22,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.IntSupplier;
+import java.util.function.Supplier;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -340,7 +341,7 @@ class JdkUpdateCommandTest {
         return out.toString(StandardCharsets.UTF_8);
     }
 
-    private static <T> T withStdin(String input, java.util.function.Supplier<T> body) {
+    private static <T> T withStdin(String input, Supplier<T> body) {
         InputStream origIn = System.in;
         System.setIn(new ByteArrayInputStream(input.getBytes(StandardCharsets.UTF_8)));
         try {

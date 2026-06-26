@@ -8,9 +8,8 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Ordered list of {@link MavenRepo}s with try-each / first-hit-wins
- * semantics per PRD §7.5. Used by {@code EffectivePomBuilder},
- * {@code MavenPackageSource}, and {@code LockOrchestrator} so they're
+ * Ordered list of {@link MavenRepo}s with try-each / first-hit-wins semantics per PRD §7.5. Used by
+ * {@code EffectivePomBuilder}, {@code MavenPackageSource}, and {@code LockOrchestrator} so they're
  * indifferent to whether the user declared one or many repositories.
  */
 public final class RepoGroup {
@@ -46,10 +45,9 @@ public final class RepoGroup {
     }
 
     /**
-     * Union of the versions of {@code coord}'s {@code group:artifact}
-     * available across all repos, de-duplicated, preserving first-seen order.
-     * Online this merges each repo's {@code maven-metadata.xml}; offline it
-     * merges what each repo's journal holds locally.
+     * Union of the versions of {@code coord}'s {@code group:artifact} available across all repos,
+     * de-duplicated, preserving first-seen order. Online this merges each repo's {@code
+     * maven-metadata.xml}; offline it merges what each repo's journal holds locally.
      */
     public List<String> availableVersions(Coordinate coord) throws IOException, InterruptedException {
         java.util.LinkedHashSet<String> union = new java.util.LinkedHashSet<>();

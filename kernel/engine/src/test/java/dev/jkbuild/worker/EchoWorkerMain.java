@@ -10,16 +10,15 @@ import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 
 /**
- * A cooperating subprocess used by {@link WorkerProcessTest} to exercise
- * {@link WorkerProcess} against a real forked JVM. Two modes:
+ * A cooperating subprocess used by {@link WorkerProcessTest} to exercise {@link WorkerProcess}
+ * against a real forked JVM. Two modes:
  *
  * <ul>
- *   <li>{@code oneshot} — emit a passthrough line and two protocol events, then
- *       exit. Drives {@link WorkerProcess#run}.</li>
- *   <li>(default) <b>pull</b> — emit a passthrough line and an initial
- *       {@code ready}, then loop on stdin: {@code RUN <x>} echoes a {@code ran}
- *       event for {@code x} followed by another {@code ready}; {@code DONE} or
- *       EOF exits. Drives {@link WorkerProcess#converse}.</li>
+ *   <li>{@code oneshot} — emit a passthrough line and two protocol events, then exit. Drives {@link
+ *       WorkerProcess#run}.
+ *   <li>(default) <b>pull</b> — emit a passthrough line and an initial {@code ready}, then loop on
+ *       stdin: {@code RUN <x>} echoes a {@code ran} event for {@code x} followed by another {@code
+ *       ready}; {@code DONE} or EOF exits. Drives {@link WorkerProcess#converse}.
  * </ul>
  *
  * Protocol prefix is {@code ##T:}.

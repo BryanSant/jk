@@ -26,18 +26,16 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
- * Builds a {@code jk.toml} project on disk into a jar + POM headlessly —
- * composing the standalone build primitives (resolve → classpath → kotlinc →
- * javac → merge → jar → POM) without the CLI goal/console machinery. The engine
- * of immutable git-source dependencies (via {@link GitProjectBuilder} /
- * {@link GitSourceMaterializer}). Composite {@code path}/branch-git deps now
+ * Builds a {@code jk.toml} project on disk into a jar + POM headlessly — composing the standalone
+ * build primitives (resolve → classpath → kotlinc → javac → merge → jar → POM) without the CLI
+ * goal/console machinery. The engine of immutable git-source dependencies (via {@link
+ * GitProjectBuilder} / {@link GitSourceMaterializer}). Composite {@code path}/branch-git deps now
  * build through the full pipeline ({@code BuildPipeline.coreBuilder}) instead.
  *
- * <p>Scope: Java + Kotlin sources, layout-aware (jk's flat {@code SIMPLE}
- * layout and Maven-style {@code TRADITIONAL}), plus the project's own (Maven)
- * dependencies. Test execution, native image, and signing are out — a source
- * dependency only needs its main artifact + POM. The published coordinate and
- * version are supplied by the caller; the rendered POM is stamped to match.
+ * <p>Scope: Java + Kotlin sources, layout-aware (jk's flat {@code SIMPLE} layout and Maven-style
+ * {@code TRADITIONAL}), plus the project's own (Maven) dependencies. Test execution, native image,
+ * and signing are out — a source dependency only needs its main artifact + POM. The published
+ * coordinate and version are supplied by the caller; the rendered POM is stamped to match.
  */
 public final class LocalProjectBuilder {
 
@@ -51,11 +49,10 @@ public final class LocalProjectBuilder {
     }
 
     /**
-     * Build {@code project} (rooted at {@code projectDir}) into the jar + POM for
-     * coordinate {@code group:artifact:version}. Resolves the project's own
-     * dependencies through {@code repos} (no network when it declares none) and
-     * compiles with {@code javaHome}. The jar is written to
-     * {@link BuildLayout#mainJar()} so callers can reuse it on disk.
+     * Build {@code project} (rooted at {@code projectDir}) into the jar + POM for coordinate {@code
+     * group:artifact:version}. Resolves the project's own dependencies through {@code repos} (no
+     * network when it declares none) and compiles with {@code javaHome}. The jar is written to {@link
+     * BuildLayout#mainJar()} so callers can reuse it on disk.
      */
     static Built build(
             Path projectDir,

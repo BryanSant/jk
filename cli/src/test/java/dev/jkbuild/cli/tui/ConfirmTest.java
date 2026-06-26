@@ -9,9 +9,9 @@ import java.nio.charset.StandardCharsets;
 import org.junit.jupiter.api.Test;
 
 /**
- * In tests {@code System.console()} is null, so {@link Confirm#ask()} takes the
- * cooked (non-TTY) fallback — the same path piped/CI input hits. We drive it via
- * {@code System.in} and assert the y/n/default/EOF semantics.
+ * In tests {@code System.console()} is null, so {@link Confirm#ask()} takes the cooked (non-TTY)
+ * fallback — the same path piped/CI input hits. We drive it via {@code System.in} and assert the
+ * y/n/default/EOF semantics.
  */
 class ConfirmTest {
 

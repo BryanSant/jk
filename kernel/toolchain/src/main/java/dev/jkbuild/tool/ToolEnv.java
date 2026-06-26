@@ -7,13 +7,11 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * A resolved tool: the primary Maven coord, its launcher name, the
- * {@code Main-Class} to exec, and the transitive classpath (paths into
- * the CAS).
+ * A resolved tool: the primary Maven coord, its launcher name, the {@code Main-Class} to exec, and
+ * the transitive classpath (paths into the CAS).
  *
- * <p>Produced by {@link ToolResolver}, consumed by {@link ToolLauncher}
- * for both {@code jk install} (persistent launcher) and {@code jk exec}
- * (one-shot ephemeral exec).
+ * <p>Produced by {@link ToolResolver}, consumed by {@link ToolLauncher} for both {@code jk install}
+ * (persistent launcher) and {@code jk exec} (one-shot ephemeral exec).
  */
 public record ToolEnv(String binName, Coordinate primary, String mainClass, List<Path> classpath) {
 

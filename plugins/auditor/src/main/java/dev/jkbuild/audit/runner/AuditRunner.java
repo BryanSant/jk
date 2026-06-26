@@ -18,12 +18,12 @@ import java.nio.file.Path;
 import java.util.List;
 
 /**
- * The {@code jk-audit-runner} plugin: queries the OSV vulnerability API in an
- * isolated child JVM so Jackson and the OSV HTTP client never load in jk's own
- * process. Discovered by the shared {@link dev.jkbuild.plugin.worker.PluginWorkerMain}
- * via {@link java.util.ServiceLoader}.
+ * The {@code jk-audit-runner} plugin: queries the OSV vulnerability API in an isolated child JVM so
+ * Jackson and the OSV HTTP client never load in jk's own process. Discovered by the shared {@link
+ * dev.jkbuild.plugin.worker.PluginWorkerMain} via {@link java.util.ServiceLoader}.
  *
  * <p>Receives a single argument: the path to a line-oriented spec file:
+ *
  * <pre>
  * LOCKFILE /absolute/path/to/jk.lock
  * BATCH_URL https://api.osv.dev/v1/querybatch  # optional override
@@ -31,13 +31,14 @@ import java.util.List;
  * </pre>
  *
  * <p>Streams NDJSON to stdout, each line prefixed {@code ##JKAU:}:
+ *
  * <pre>
  * ##JKAU:{"t":"finding","module":"g:a","version":"1.0","vuln_id":"GHSA-xx","severity":"HIGH","summary":"..."}
  * ##JKAU:{"t":"result","total":1}
  * </pre>
  *
- * <p>Exit codes: 0 success (findings may still be present; threshold is the
- * caller's decision), 1 network/parse error, 2 bad arguments.
+ * <p>Exit codes: 0 success (findings may still be present; threshold is the caller's decision), 1
+ * network/parse error, 2 bad arguments.
  */
 public final class AuditRunner implements Plugin {
 
@@ -112,11 +113,20 @@ public final class AuditRunner implements Plugin {
         for (AuditReport.Finding f : findings) {
             out.emit("{"
                     + "\"t\":\"finding\","
-                    + "\"module\":" + Ndjson.quote(f.module()) + ","
-                    + "\"version\":" + Ndjson.quote(f.version()) + ","
-                    + "\"vuln_id\":" + Ndjson.quote(f.vulnId()) + ","
-                    + "\"severity\":" + Ndjson.quote(f.severity().name()) + ","
-                    + "\"summary\":" + Ndjson.quote(f.summary())
+                    + "\"module\":"
+                    + Ndjson.quote(f.module())
+                    + ","
+                    + "\"version\":"
+                    + Ndjson.quote(f.version())
+                    + ","
+                    + "\"vuln_id\":"
+                    + Ndjson.quote(f.vulnId())
+                    + ","
+                    + "\"severity\":"
+                    + Ndjson.quote(f.severity().name())
+                    + ","
+                    + "\"summary\":"
+                    + Ndjson.quote(f.summary())
                     + "}");
         }
         out.emit("{\"t\":\"result\",\"total\":" + findings.size() + "}");

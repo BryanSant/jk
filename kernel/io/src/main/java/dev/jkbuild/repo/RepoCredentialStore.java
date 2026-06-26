@@ -16,13 +16,13 @@ import java.util.Locale;
 import java.util.Optional;
 
 /**
- * Stores artifact-repository credentials under {@code ~/.jk/repo-credentials/},
- * one file per repository id (the same id used in {@code jk.toml} and Maven's
- * {@code settings.xml}). Populated by {@code jk repo login}. Mirrors the forge
- * {@code TokenStore}: {@code 0600}/{@code 0700} on POSIX, best-effort on
- * Windows.
+ * Stores artifact-repository credentials under {@code ~/.jk/repo-credentials/}, one file per
+ * repository id (the same id used in {@code jk.toml} and Maven's {@code settings.xml}). Populated
+ * by {@code jk repo login}. Mirrors the forge {@code TokenStore}: {@code 0600}/{@code 0700} on
+ * POSIX, best-effort on Windows.
  *
  * <p>File format is line-based: first line is the scheme, then its fields.
+ *
  * <pre>
  *   bearer
  *   &lt;token&gt;

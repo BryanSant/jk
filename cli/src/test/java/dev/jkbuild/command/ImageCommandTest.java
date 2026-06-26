@@ -10,9 +10,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
- * {@code jk image} builds from source through the shared pipeline — no prior
- * {@code jk build}. A project with no main class compiles + packages (proving
- * the pipeline ran), then the image tail rejects it with EX_USAGE (64).
+ * {@code jk image} builds from source through the shared pipeline — no prior {@code jk build}. A
+ * project with no main class compiles + packages (proving the pipeline ran), then the image tail
+ * rejects it with EX_USAGE (64).
  */
 class ImageCommandTest {
 

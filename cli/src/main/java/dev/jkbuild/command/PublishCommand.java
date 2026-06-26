@@ -37,13 +37,13 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * {@code jk publish} — assembles, signs, and uploads Maven artifacts via the
- * {@code jk-publish-runner} worker subprocess (PRD §21). BouncyCastle, sigstore-java,
- * and the upload HTTP logic live in the worker, not in the main jk binary.
+ * {@code jk publish} — assembles, signs, and uploads Maven artifacts via the {@code
+ * jk-publish-runner} worker subprocess (PRD §21). BouncyCastle, sigstore-java, and the upload HTTP
+ * logic live in the worker, not in the main jk binary.
  *
- * <p>The parent process validates inputs and resolves credentials, then forks the
- * worker which streams {@code ##JKPU:} NDJSON progress back. SNAPSHOT versions are
- * refused unless {@code --allow-snapshot} is set (PRD §21.4).
+ * <p>The parent process validates inputs and resolves credentials, then forks the worker which
+ * streams {@code ##JKPU:} NDJSON progress back. SNAPSHOT versions are refused unless {@code
+ * --allow-snapshot} is set (PRD §21.4).
  */
 public final class PublishCommand implements CliCommand {
 
@@ -151,7 +151,8 @@ public final class PublishCommand implements CliCommand {
                         ctx.error(
                                 "composite-dep",
                                 "refusing to publish: dependency `"
-                                        + composite.module() + "` is a local source dependency ("
+                                        + composite.module()
+                                        + "` is a local source dependency ("
                                         + (composite.isPath() ? "path" : "branch git")
                                         + ") with no published coordinate. Pin it to a released version"
                                         + " (`version = \"…\"`) — or an immutable git tag/rev — before publishing.");
@@ -324,9 +325,9 @@ public final class PublishCommand implements CliCommand {
 
     /**
      * The first composite source dependency (a {@code path =} dep, or a <em>branch</em> git dep)
-     * declared in any scope, or {@code null} if none. These are built from local source and carry
-     * no published coordinate, so they cannot appear in a published POM. Immutable (tag/rev) git
-     * deps are materialized to a real coordinate and are fine.
+     * declared in any scope, or {@code null} if none. These are built from local source and carry no
+     * published coordinate, so they cannot appear in a published POM. Immutable (tag/rev) git deps
+     * are materialized to a real coordinate and are fine.
      */
     private static Dependency firstCompositeDep(JkBuild project) {
         for (List<Dependency> deps : project.dependencies().byScope().values()) {

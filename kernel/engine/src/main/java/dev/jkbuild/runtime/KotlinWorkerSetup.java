@@ -11,33 +11,35 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Prepares everything a Kotlin compile needs to fork the {@code jk-kotlin-compiler}
- * worker: the worker JVM classpath (the worker jar + the resolved Build Tools API
- * implementation closure, version-matched to the project's Kotlin) and the
- * version-matched {@code kotlin-stdlib} for the compilation classpath.
+ * Prepares everything a Kotlin compile needs to fork the {@code jk-kotlin-compiler} worker: the
+ * worker JVM classpath (the worker jar + the resolved Build Tools API implementation closure,
+ * version-matched to the project's Kotlin) and the version-matched {@code kotlin-stdlib} for the
+ * compilation classpath.
  *
- * <p>Shared by every Kotlin compile entry point ({@code jk build}'s
- * {@code compile-kotlin}, {@code jk compile}, {@code jk run} scripts) so they
- * resolve and locate consistently. Jar location itself is delegated to the
- * shared {@link WorkerJar} registry; this class adds only the Kotlin-specific
+ * <p>Shared by every Kotlin compile entry point ({@code jk build}'s {@code compile-kotlin}, {@code
+ * jk compile}, {@code jk run} scripts) so they resolve and locate consistently. Jar location itself
+ * is delegated to the shared {@link WorkerJar} registry; this class adds only the Kotlin-specific
  * closure/stdlib resolution on top.
  */
 public final class KotlinWorkerSetup {
 
-    /** Override for the {@code jk-kotlin-compiler} jar path (tests, dev). Takes precedence over the CAS lookup. */
+    /**
+     * Override for the {@code jk-kotlin-compiler} jar path (tests, dev). Takes precedence over the
+     * CAS lookup.
+     */
     public static final String WORKER_JAR_PROPERTY = WorkerJar.KOTLIN_COMPILER.jarProperty();
 
     private KotlinWorkerSetup() {}
 
     /**
      * @param workerClasspath worker JVM {@code -cp}: worker jar + BTA closure
-     * @param stdlib          the version-matched kotlin-stdlib for the compile classpath
+     * @param stdlib the version-matched kotlin-stdlib for the compile classpath
      */
     public record Prepared(List<Path> workerClasspath, Path stdlib) {}
 
     /**
-     * Resolve the closure + stdlib for {@code kotlinVersion} (null ⇒ jk's
-     * default) against {@code repos}, and locate the worker jar.
+     * Resolve the closure + stdlib for {@code kotlinVersion} (null ⇒ jk's default) against {@code
+     * repos}, and locate the worker jar.
      */
     public static Prepared prepare(RepoGroup repos, Cas cas, String kotlinVersion)
             throws IOException, InterruptedException {
@@ -53,8 +55,8 @@ public final class KotlinWorkerSetup {
     }
 
     /**
-     * Locate the {@code jk-kotlin-compiler} worker jar via the shared registry:
-     * the {@value #WORKER_JAR_PROPERTY} override, then the CAS by expected SHA.
+     * Locate the {@code jk-kotlin-compiler} worker jar via the shared registry: the {@value
+     * #WORKER_JAR_PROPERTY} override, then the CAS by expected SHA.
      */
     public static Path locateWorkerJar(Cas cas) {
         return WorkerJar.KOTLIN_COMPILER.locate(cas);

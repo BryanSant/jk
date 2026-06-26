@@ -20,21 +20,18 @@ import java.util.concurrent.CompletableFuture;
 import java.util.stream.Stream;
 
 /**
- * Flat view of every JDK on the host. Backed by the {@link Probes}
- * default chain, so JDKs from {@code $JAVA_HOME}, the IntelliJ JDK dir
- * ({@code ~/.jdks/}), SDKMAN, JBang, mise, asdf, jenv, Homebrew, and the
- * system package-manager locations all show up as equal peers.
+ * Flat view of every JDK on the host. Backed by the {@link Probes} default chain, so JDKs from
+ * {@code $JAVA_HOME}, the IntelliJ JDK dir ({@code ~/.jdks/}), SDKMAN, JBang, mise, asdf, jenv,
+ * Homebrew, and the system package-manager locations all show up as equal peers.
  *
- * <p>When a single install appears under multiple probes (e.g.
- * {@code $JAVA_HOME} pointing at an SDKMAN install), the first probe in
- * the chain wins — the dedup key is the canonical real path of the
- * install's {@code home}.
+ * <p>When a single install appears under multiple probes (e.g. {@code $JAVA_HOME} pointing at an
+ * SDKMAN install), the first probe in the chain wins — the dedup key is the canonical real path of
+ * the install's {@code home}.
  *
- * <p>{@link #jdksRoot()} remains the directory {@code jk jdk install}
- * writes new downloads into — by default the IntelliJ JDK dir. Removal
- * via {@link #remove} is restricted to installs that live under that
- * root; JDKs surfaced by external probes (SDKMAN etc.) are read-only
- * from {@code jk}'s perspective.
+ * <p>{@link #jdksRoot()} remains the directory {@code jk jdk install} writes new downloads into —
+ * by default the IntelliJ JDK dir. Removal via {@link #remove} is restricted to installs that live
+ * under that root; JDKs surfaced by external probes (SDKMAN etc.) are read-only from {@code jk}'s
+ * perspective.
  */
 public final class JdkRegistry {
 
@@ -48,10 +45,9 @@ public final class JdkRegistry {
     }
 
     /**
-     * Test-friendly: walk only the given {@code jdksRoot} (via a single
-     * {@link JkProbe}). External-tool probes (SDKMAN, mise, IntelliJ, system)
-     * are not consulted, so a test pointing at a {@code @TempDir} sees only
-     * what the test placed there.
+     * Test-friendly: walk only the given {@code jdksRoot} (via a single {@link JkProbe}).
+     * External-tool probes (SDKMAN, mise, IntelliJ, system) are not consulted, so a test pointing at
+     * a {@code @TempDir} sees only what the test placed there.
      */
     public JdkRegistry(Path jdksRoot) {
         this(jdksRoot, List.of(new JkProbe(jdksRoot)));
@@ -75,8 +71,8 @@ public final class JdkRegistry {
     }
 
     /**
-     * Every JDK the probe chain finds, deduplicated by canonical home path
-     * (first probe wins). Listed in probe-chain order.
+     * Every JDK the probe chain finds, deduplicated by canonical home path (first probe wins). Listed
+     * in probe-chain order.
      */
     public List<InstalledJdk> list() throws IOException {
         List<InstalledJdk> result = new ArrayList<>();
@@ -87,13 +83,12 @@ public final class JdkRegistry {
     }
 
     /**
-     * Richer view of {@link #list()} — keeps the resolved {@link JdkVendor}
-     * and probe source alongside each install.
+     * Richer view of {@link #list()} — keeps the resolved {@link JdkVendor} and probe source
+     * alongside each install.
      *
-     * <p>Probes run concurrently on {@link JkThreads#io()} (each probe is
-     * essentially a {@code Files.list} + per-candidate release-file parse —
-     * IO-bound). Final ordering matches the probe chain's declared order
-     * (first-source-wins on dedup), not arrival order, so results are
+     * <p>Probes run concurrently on {@link JkThreads#io()} (each probe is essentially a {@code
+     * Files.list} + per-candidate release-file parse — IO-bound). Final ordering matches the probe
+     * chain's declared order (first-source-wins on dedup), not arrival order, so results are
      * deterministic regardless of timing.
      */
     public List<JdkHit> listHits() {
@@ -155,17 +150,17 @@ public final class JdkRegistry {
 
     /**
      * Finalise a hit's source label:
+     *
      * <ul>
-     *   <li>{@code java-home} → {@code path} (the manager that owns it, if any,
-     *       has already won the dedup above; what's left is an unmanaged
-     *       {@code $JAVA_HOME} pointer).</li>
-     *   <li>{@code intellij} → {@code jdks} unless the install is actually
-     *       registered in some IDE's {@code jdk.table.xml}. Only IDE-registered
-     *       JDKs keep the {@code intellij} label (and the uninstall protection
-     *       that comes with it).</li>
+     *   <li>{@code java-home} → {@code path} (the manager that owns it, if any, has already won the
+     *       dedup above; what's left is an unmanaged {@code $JAVA_HOME} pointer).
+     *   <li>{@code intellij} → {@code jdks} unless the install is actually registered in some IDE's
+     *       {@code jdk.table.xml}. Only IDE-registered JDKs keep the {@code intellij} label (and the
+     *       uninstall protection that comes with it).
      * </ul>
-     * The {@code jdk.table.xml} scan is consulted lazily — only when an
-     * {@code intellij}-sourced hit is present — so the common case pays nothing.
+     *
+     * The {@code jdk.table.xml} scan is consulted lazily — only when an {@code intellij}-sourced hit
+     * is present — so the common case pays nothing.
      */
     private JdkHit relabel(JdkHit hit) {
         if (isEnvSource(hit.source())) {
@@ -182,11 +177,10 @@ public final class JdkRegistry {
     }
 
     /**
-     * Drop installs below the supported floor ({@link SupportedJdk#MIN_MAJOR}).
-     * Hits whose {@code release} file is unreadable / lacks a parseable
-     * version are kept on the benefit of the doubt — they may be valid
-     * installs we can't classify, and silently hiding them would be worse
-     * than letting the user see an unknown row in {@code jk jdk list}.
+     * Drop installs below the supported floor ({@link SupportedJdk#MIN_MAJOR}). Hits whose {@code
+     * release} file is unreadable / lacks a parseable version are kept on the benefit of the doubt —
+     * they may be valid installs we can't classify, and silently hiding them would be worse than
+     * letting the user see an unknown row in {@code jk jdk list}.
      */
     private static boolean isSupportedHit(JdkHit hit) {
         Integer m = majorOfVersion(hit.version());
@@ -227,37 +221,32 @@ public final class JdkRegistry {
     }
 
     /**
-     * Spec-driven lookup: parses inputs like {@code 25}, {@code temurin-25},
-     * {@code corretto-25.0.3}, or {@code 26.0.1-librca} into
-     * {@code (major, exactVersion?, hints[])} (via
-     * {@link JdkSelector#parseFlexible(String)}) and returns the first
-     * installed JDK whose version + vendor metadata satisfies every
-     * constraint. "First" is probe-chain order — the same ordering
-     * {@link #list()} uses — so callers get a deterministic
-     * "natural precedence" pick.
+     * Spec-driven lookup: parses inputs like {@code 25}, {@code temurin-25}, {@code corretto-25.0.3},
+     * or {@code 26.0.1-librca} into {@code (major, exactVersion?, hints[])} (via {@link
+     * JdkSelector#parseFlexible(String)}) and returns the first installed JDK whose version + vendor
+     * metadata satisfies every constraint. "First" is probe-chain order — the same ordering {@link
+     * #list()} uses — so callers get a deterministic "natural precedence" pick.
      */
     public Optional<InstalledJdk> findBySpec(String spec) {
         return findHitBySpec(spec).map(hit -> new InstalledJdk(identifierFor(hit.home()), hit.home()));
     }
 
     /**
-     * Same matcher as {@link #findBySpec}, but returns the raw {@link JdkHit}
-     * so callers can read vendor + version metadata for display purposes
-     * without re-parsing the install's {@code release} file.
+     * Same matcher as {@link #findBySpec}, but returns the raw {@link JdkHit} so callers can read
+     * vendor + version metadata for display purposes without re-parsing the install's {@code release}
+     * file.
      */
     public Optional<JdkHit> findHitBySpec(String spec) {
         return findHitBySpec(spec, null);
     }
 
     /**
-     * Every <em>jk-managed</em> install — those under {@link #jdksRoot()},
-     * surfaced by {@link dev.jkbuild.discovery.JkProbe} with source
-     * {@code "jk"} — optionally narrowed to a spec. A blank/null spec returns
-     * all of them; otherwise the same flexible matcher {@link #findHitBySpec}
-     * uses is applied (so {@code 25} matches major 25 across every vendor,
-     * {@code temurin} matches all Temurin, {@code temurin-25} matches Temurin
-     * 25). Used by {@code jk jdk update}, which only ever touches installs jk
-     * owns. Returned in probe-chain order.
+     * Every <em>jk-managed</em> install — those under {@link #jdksRoot()}, surfaced by {@link
+     * dev.jkbuild.discovery.JkProbe} with source {@code "jk"} — optionally narrowed to a spec. A
+     * blank/null spec returns all of them; otherwise the same flexible matcher {@link #findHitBySpec}
+     * uses is applied (so {@code 25} matches major 25 across every vendor, {@code temurin} matches
+     * all Temurin, {@code temurin-25} matches Temurin 25). Used by {@code jk jdk update}, which only
+     * ever touches installs jk owns. Returned in probe-chain order.
      */
     public List<JdkHit> managedHits(String spec) {
         JdkSelector.FlexibleQuery query = (spec == null || spec.isBlank()) ? null : JdkSelector.parseFlexible(spec);
@@ -270,12 +259,10 @@ public final class JdkRegistry {
     }
 
     /**
-     * Source-scoped variant of {@link #findHitBySpec(String)} — only considers
-     * hits whose {@link JdkHit#source()} matches {@code sourceFilter}. Pass
-     * {@code null} or empty to disable the source filter. Used by
-     * {@code jk jdk uninstall} where the user must qualify which probe's
-     * copy of a JDK to remove (e.g. {@code intellij/temurin-26.0.1} vs
-     * {@code sdkman/25.0.3-tem}).
+     * Source-scoped variant of {@link #findHitBySpec(String)} — only considers hits whose {@link
+     * JdkHit#source()} matches {@code sourceFilter}. Pass {@code null} or empty to disable the source
+     * filter. Used by {@code jk jdk uninstall} where the user must qualify which probe's copy of a
+     * JDK to remove (e.g. {@code intellij/temurin-26.0.1} vs {@code sdkman/25.0.3-tem}).
      */
     public Optional<JdkHit> findHitBySpec(String spec, String sourceFilter) {
         if (spec == null || spec.isBlank()) return Optional.empty();
@@ -307,13 +294,11 @@ public final class JdkRegistry {
     }
 
     /**
-     * Delete an install regardless of where it lives. Used by
-     * {@code jk jdk uninstall <source>/<spec>}, where the user has
-     * explicitly qualified which copy to remove — so the
-     * "external installs are read-only" guard {@link #remove} applies no
-     * longer fits. {@link IntellijJdkDir#installDirOf} still handles the
-     * macOS {@code Contents/Home} unwrap. Returns {@code true} when the
-     * directory existed and was deleted.
+     * Delete an install regardless of where it lives. Used by {@code jk jdk uninstall
+     * <source>/<spec>}, where the user has explicitly qualified which copy to remove — so the
+     * "external installs are read-only" guard {@link #remove} applies no longer fits. {@link
+     * IntellijJdkDir#installDirOf} still handles the macOS {@code Contents/Home} unwrap. Returns
+     * {@code true} when the directory existed and was deleted.
      */
     public boolean purge(InstalledJdk jdk) throws IOException {
         Objects.requireNonNull(jdk, "jdk");
@@ -324,19 +309,19 @@ public final class JdkRegistry {
     }
 
     /**
-     * Minimum-version-aware installed lookup, used by {@code jk jdk ensure}.
-     * Returns the first installed JDK (in probe-chain order) that:
+     * Minimum-version-aware installed lookup, used by {@code jk jdk ensure}. Returns the first
+     * installed JDK (in probe-chain order) that:
+     *
      * <ul>
-     *   <li>is the given {@code major},</li>
-     *   <li>matches every vendor {@code hint} (case-insensitive, against the
-     *       same vendor haystack {@link #findHitBySpec} uses), and</li>
-     *   <li>when {@code minVersion} is non-null, has a version &ge;
-     *       {@code minVersion} per {@link JdkSelector#versionKey} ordering
-     *       ({@code 25.0.3} satisfies a {@code 25.0.3} floor; {@code 25.0.2}
-     *       does not; {@code 25.0.4} does).</li>
+     *   <li>is the given {@code major},
+     *   <li>matches every vendor {@code hint} (case-insensitive, against the same vendor haystack
+     *       {@link #findHitBySpec} uses), and
+     *   <li>when {@code minVersion} is non-null, has a version &ge; {@code minVersion} per {@link
+     *       JdkSelector#versionKey} ordering ({@code 25.0.3} satisfies a {@code 25.0.3} floor; {@code
+     *       25.0.2} does not; {@code 25.0.4} does).
      * </ul>
-     * A {@code null} {@code minVersion} means "any point release of the major"
-     * — the bare-major case.
+     *
+     * A {@code null} {@code minVersion} means "any point release of the major" — the bare-major case.
      */
     public Optional<JdkHit> findHitAtLeast(int major, String minVersion, List<String> hints) {
         String floor = minVersion == null ? null : JdkSelector.versionKey(minVersion);
@@ -416,10 +401,9 @@ public final class JdkRegistry {
     }
 
     /**
-     * Delete the install named {@code identifier}, but only when it lives
-     * under {@link #jdksRoot()} — externally-managed JDKs (SDKMAN, mise,
-     * system packages, …) are read-only from {@code jk}'s perspective and
-     * yield {@code false}.
+     * Delete the install named {@code identifier}, but only when it lives under {@link #jdksRoot()} —
+     * externally-managed JDKs (SDKMAN, mise, system packages, …) are read-only from {@code jk}'s
+     * perspective and yield {@code false}.
      */
     public boolean remove(String identifier) throws IOException {
         Optional<InstalledJdk> match = find(identifier);
@@ -441,11 +425,10 @@ public final class JdkRegistry {
     }
 
     /**
-     * Compute the identifier for a discovered JDK. For installs under
-     * {@link #jdksRoot()} this is the install-folder name (matches what
-     * the JetBrains catalog publishes). For external installs it's the
-     * basename of the install dir (the home itself, or its grandparent on
-     * macOS where the real install dir wraps {@code Contents/Home}).
+     * Compute the identifier for a discovered JDK. For installs under {@link #jdksRoot()} this is the
+     * install-folder name (matches what the JetBrains catalog publishes). For external installs it's
+     * the basename of the install dir (the home itself, or its grandparent on macOS where the real
+     * install dir wraps {@code Contents/Home}).
      */
     public static String identifierFor(Path home) {
         return IntellijJdkDir.installDirOf(home).getFileName().toString();

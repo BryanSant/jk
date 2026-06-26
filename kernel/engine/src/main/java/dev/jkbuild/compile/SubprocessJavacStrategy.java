@@ -16,24 +16,22 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Default {@link JavaCompileStrategy}: execs {@code <java-home>/bin/javac}
- * as a subprocess so the project's pinned JDK drives compilation
- * regardless of what JVM jk itself is running on. Diagnostics are parsed
- * from javac's stderr.
+ * Default {@link JavaCompileStrategy}: execs {@code <java-home>/bin/javac} as a subprocess so the
+ * project's pinned JDK drives compilation regardless of what JVM jk itself is running on.
+ * Diagnostics are parsed from javac's stderr.
  *
  * <p>Why subprocess by default:
+ *
  * <ul>
- *   <li>The native-image binary has no JVM and can't host
- *       {@code javax.tools.JavaCompiler} in-process.</li>
- *   <li>Aligning the compiler with {@code project.jdk} is automatic — no
- *       "current JVM matches?" branch.</li>
- *   <li>Per-call process isolation: a hung annotation processor doesn't
- *       take jk down.</li>
+ *   <li>The native-image binary has no JVM and can't host {@code javax.tools.JavaCompiler}
+ *       in-process.
+ *   <li>Aligning the compiler with {@code project.jdk} is automatic — no "current JVM matches?"
+ *       branch.
+ *   <li>Per-call process isolation: a hung annotation processor doesn't take jk down.
  * </ul>
  *
- * <p>Long classpaths use an {@code @argfile} so we don't blow past
- * {@code ARG_MAX}. javac's diagnostic format (
- * {@code <file>:<line>: <severity>: <message>}) has been stable for two
+ * <p>Long classpaths use an {@code @argfile} so we don't blow past {@code ARG_MAX}. javac's
+ * diagnostic format ( {@code <file>:<line>: <severity>: <message>}) has been stable for two
  * decades; the parser is a single regex.
  */
 public final class SubprocessJavacStrategy implements JavaCompileStrategy {
@@ -144,12 +142,11 @@ public final class SubprocessJavacStrategy implements JavaCompileStrategy {
     private static final Pattern SUMMARY = Pattern.compile("^\\d+ (?:error|warning)s?$");
 
     /**
-     * Group javac's output into one {@link CompileResult.Diagnostic} per diagnostic,
-     * keeping each block <em>verbatim</em> — the {@code file:line: severity: message}
-     * header plus the source snippet, caret, and any {@code symbol:}/{@code location:}
-     * trailer lines. A block runs from one header line up to (but not including) the
-     * next header or the {@code "N errors"} summary. The full text is the diagnostic's
-     * message; the CLI relativizes paths and colorizes on top.
+     * Group javac's output into one {@link CompileResult.Diagnostic} per diagnostic, keeping each
+     * block <em>verbatim</em> — the {@code file:line: severity: message} header plus the source
+     * snippet, caret, and any {@code symbol:}/{@code location:} trailer lines. A block runs from one
+     * header line up to (but not including) the next header or the {@code "N errors"} summary. The
+     * full text is the diagnostic's message; the CLI relativizes paths and colorizes on top.
      */
     private static List<CompileResult.Diagnostic> parseStream(Process process) throws IOException {
         List<CompileResult.Diagnostic> diagnostics = new ArrayList<>();

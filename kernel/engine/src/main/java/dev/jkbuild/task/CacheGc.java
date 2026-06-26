@@ -13,23 +13,22 @@ import java.util.Set;
 import java.util.stream.Stream;
 
 /**
- * The cache garbage collector run by {@code jk clean --cache}. A gentler pass
- * than {@code jk cache prune --sweep}: it never touches still-reachable blobs
- * and only reaps unreferenced ones that haven't been used in a long time.
+ * The cache garbage collector run by {@code jk clean --cache}. A gentler pass than {@code jk cache
+ * prune --sweep}: it never touches still-reachable blobs and only reaps unreferenced ones that
+ * haven't been used in a long time.
  *
  * <p>Steps:
+ *
  * <ol>
- *   <li><strong>Mark.</strong> Collect every sha reachable from the on-disk
- *       roots via {@link CacheRoots} — those are always kept.</li>
- *   <li><strong>Read the access log.</strong> A sha's age is "now minus its
- *       latest recorded access" (falling back to file mtime when the log has
- *       never seen it).</li>
- *   <li><strong>Sweep.</strong> Delete unmarked blobs older than
- *       {@link #MAX_AGE} from the {@code sha256/} pool, and the matching
- *       hard-links from the {@code repo/} mirror — leaving one behind would
- *       keep the inode's bytes on disk.</li>
- *   <li><strong>Rewrite the access log.</strong> Sum each sha's counts,
- *       dedupe to the latest entry, drop entries for purged shas, write back.</li>
+ *   <li><strong>Mark.</strong> Collect every sha reachable from the on-disk roots via {@link
+ *       CacheRoots} — those are always kept.
+ *   <li><strong>Read the access log.</strong> A sha's age is "now minus its latest recorded access"
+ *       (falling back to file mtime when the log has never seen it).
+ *   <li><strong>Sweep.</strong> Delete unmarked blobs older than {@link #MAX_AGE} from the {@code
+ *       sha256/} pool, and the matching hard-links from the {@code repo/} mirror — leaving one
+ *       behind would keep the inode's bytes on disk.
+ *   <li><strong>Rewrite the access log.</strong> Sum each sha's counts, dedupe to the latest entry,
+ *       drop entries for purged shas, write back.
  * </ol>
  */
 public final class CacheGc {

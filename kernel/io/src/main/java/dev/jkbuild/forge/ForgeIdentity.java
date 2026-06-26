@@ -10,24 +10,23 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Looks up the login name a forge token authenticates as, via the forge's
- * {@code /user} API. Needed because GitHub Packages (Maven) uses HTTP Basic
- * auth with the <em>username</em> as the account login and the token as the
- * password — so reusing a {@code jk auth login} token there requires knowing
- * the login.
+ * Looks up the login name a forge token authenticates as, via the forge's {@code /user} API. Needed
+ * because GitHub Packages (Maven) uses HTTP Basic auth with the <em>username</em> as the account
+ * login and the token as the password — so reusing a {@code jk auth login} token there requires
+ * knowing the login.
  *
- * <p>Endpoint-based (the caller resolves the {@code /user} URI and the JSON
- * field to read from {@link ForgeKind}) so the mechanism stays decoupled and
- * testable against a local server. Best-effort by contract: offline, a non-2xx
- * response, or any error yields {@link Optional#empty()} so the caller falls
- * back to another auth shape. Results are cached per (endpoint, token).
+ * <p>Endpoint-based (the caller resolves the {@code /user} URI and the JSON field to read from
+ * {@link ForgeKind}) so the mechanism stays decoupled and testable against a local server.
+ * Best-effort by contract: offline, a non-2xx response, or any error yields {@link
+ * Optional#empty()} so the caller falls back to another auth shape. Results are cached per
+ * (endpoint, token).
  */
 public interface ForgeIdentity {
 
     /**
-     * The login at {@code userEndpoint} (a forge {@code /user} API), reading
-     * {@code loginField} from the JSON ({@code "login"} for GitHub/Gitea,
-     * {@code "username"} for GitLab). Empty when it can't be determined.
+     * The login at {@code userEndpoint} (a forge {@code /user} API), reading {@code loginField} from
+     * the JSON ({@code "login"} for GitHub/Gitea, {@code "username"} for GitLab). Empty when it can't
+     * be determined.
      */
     Optional<String> login(URI userEndpoint, String loginField, String token);
 

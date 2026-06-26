@@ -13,29 +13,26 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * The system-wide "default JDK" pointer plus the floating "current JDK"
- * pointer that {@code jk env} steers per project.
+ * The system-wide "default JDK" pointer plus the floating "current JDK" pointer that {@code jk env}
+ * steers per project.
  *
- * <p>Two-channel storage so things work even on filesystems where symbolic
- * links aren't first-class:
+ * <p>Two-channel storage so things work even on filesystems where symbolic links aren't
+ * first-class:
  *
  * <ol>
- *   <li><b>Default symlink</b> at {@link JkDirs#data()}{@code /default-jdk}
- *       — written by {@link #set(InstalledJdk)} (i.e. {@code jk jdk install
- *       --make-default}). POSIX shells can source {@code JAVA_HOME}
- *       straight off this path.</li>
- *   <li><b>Current symlink</b> at {@link JkDirs#data()}{@code /current-jdk}
- *       — mirrors the default by default; {@link #setCurrent(InstalledJdk)}
- *       (called from {@code jk env}) re-points it at whatever JDK the
- *       current project pins.</li>
- *   <li><b>Config record</b>: {@code default-jdk = "<identifier>"} in
- *       {@link JkDirs#userConfigFile()}. Authoritative when the default
- *       symlink is missing or unreadable (Windows without dev mode,
- *       restricted filesystems, container layers).</li>
+ *   <li><b>Default symlink</b> at {@link JkDirs#data()}{@code /default-jdk} — written by {@link
+ *       #set(InstalledJdk)} (i.e. {@code jk jdk install --make-default}). POSIX shells can source
+ *       {@code JAVA_HOME} straight off this path.
+ *   <li><b>Current symlink</b> at {@link JkDirs#data()}{@code /current-jdk} — mirrors the default
+ *       by default; {@link #setCurrent(InstalledJdk)} (called from {@code jk env}) re-points it at
+ *       whatever JDK the current project pins.
+ *   <li><b>Config record</b>: {@code default-jdk = "<identifier>"} in {@link
+ *       JkDirs#userConfigFile()}. Authoritative when the default symlink is missing or unreadable
+ *       (Windows without dev mode, restricted filesystems, container layers).
  * </ol>
  *
- * <p>Symlink writes are best-effort — {@link #currentIdentifier()} reads
- * the config record so the answer matches across platforms.
+ * <p>Symlink writes are best-effort — {@link #currentIdentifier()} reads the config record so the
+ * answer matches across platforms.
  */
 public final class GlobalDefaultJdk {
 
@@ -91,10 +88,9 @@ public final class GlobalDefaultJdk {
     }
 
     /**
-     * Point the system default at {@code jdk}. Writes the config record
-     * unconditionally; both symlinks (default + current) are best-effort.
-     * Current is reset to match the new default — projects with their own
-     * pin will re-flip it on the next {@code jk env}.
+     * Point the system default at {@code jdk}. Writes the config record unconditionally; both
+     * symlinks (default + current) are best-effort. Current is reset to match the new default —
+     * projects with their own pin will re-flip it on the next {@code jk env}.
      */
     public void set(InstalledJdk jdk) throws IOException {
         writeConfigRecord(DEFAULT_KEY, jdk.identifier());
@@ -104,18 +100,17 @@ public final class GlobalDefaultJdk {
     }
 
     /**
-     * Re-point the {@code current-jdk} symlink only — used by {@code jk env}
-     * when a project pins a different JDK than the system default.
+     * Re-point the {@code current-jdk} symlink only — used by {@code jk env} when a project pins a
+     * different JDK than the system default.
      */
     public void setCurrent(InstalledJdk jdk) throws IOException {
         writeSymlink(currentSymlink, jdk.home());
     }
 
     /**
-     * Point the default <em>GraalVM</em> at {@code jdk} (set by {@code jk jdk
-     * graal}). Independent of the default/current java JDK: it backs
-     * {@code GRAALVM_HOME} and {@code jk native}. Writes the {@code
-     * default-graal-jdk} config record + a best-effort symlink.
+     * Point the default <em>GraalVM</em> at {@code jdk} (set by {@code jk jdk graal}). Independent of
+     * the default/current java JDK: it backs {@code GRAALVM_HOME} and {@code jk native}. Writes the
+     * {@code default-graal-jdk} config record + a best-effort symlink.
      */
     public void setGraal(InstalledJdk jdk) throws IOException {
         writeConfigRecord(GRAAL_KEY, jdk.identifier());
@@ -133,10 +128,9 @@ public final class GlobalDefaultJdk {
     }
 
     /**
-     * The exact home of the default <em>java</em> JDK — the {@code default-jdk-home}
-     * config record (authoritative, cross-platform), else the {@code default-jdk}
-     * symlink's resolved path. This pins which install is the default even when
-     * two installs share a vendor-major identifier.
+     * The exact home of the default <em>java</em> JDK — the {@code default-jdk-home} config record
+     * (authoritative, cross-platform), else the {@code default-jdk} symlink's resolved path. This
+     * pins which install is the default even when two installs share a vendor-major identifier.
      */
     public Optional<Path> defaultHome() {
         return resolveHome(DEFAULT_HOME_KEY, defaultSymlink);
@@ -170,12 +164,10 @@ public final class GlobalDefaultJdk {
     }
 
     /**
-     * Drop the system-wide default pointer entirely. Removes both symlinks
-     * (best-effort) and strips the {@code default-jdk} line from the config
-     * file. Other keys in the config file are preserved. Used by
-     * {@code jk jdk uninstall} when the user removes the JDK that was the
-     * default and no survivors remain (or by future {@code jk jdk default
-     * --unset}).
+     * Drop the system-wide default pointer entirely. Removes both symlinks (best-effort) and strips
+     * the {@code default-jdk} line from the config file. Other keys in the config file are preserved.
+     * Used by {@code jk jdk uninstall} when the user removes the JDK that was the default and no
+     * survivors remain (or by future {@code jk jdk default --unset}).
      */
     public void clear() throws IOException {
         Files.deleteIfExists(defaultSymlink);
@@ -198,9 +190,9 @@ public final class GlobalDefaultJdk {
     }
 
     /**
-     * The {@code current-jdk} pointer's resolved home, if the symlink exists
-     * and points at a live directory. Empty when unset, broken, or unsupported
-     * by the filesystem — callers then fall back to the configured default.
+     * The {@code current-jdk} pointer's resolved home, if the symlink exists and points at a live
+     * directory. Empty when unset, broken, or unsupported by the filesystem — callers then fall back
+     * to the configured default.
      */
     public Optional<Path> currentHome() {
         try {
@@ -217,11 +209,10 @@ public final class GlobalDefaultJdk {
     }
 
     /**
-     * Read a top-level string config key, or empty when absent/blank. Degrades to
-     * empty on a missing or malformed config (consistent with every other jk
-     * config reader — a stray syntax error must not break {@code jk jdk}); the
-     * symlink channel remains as a fallback signal. Reads through the shared
-     * {@link TomlValues} coercion.
+     * Read a top-level string config key, or empty when absent/blank. Degrades to empty on a missing
+     * or malformed config (consistent with every other jk config reader — a stray syntax error must
+     * not break {@code jk jdk}); the symlink channel remains as a fallback signal. Reads through the
+     * shared {@link TomlValues} coercion.
      */
     private Optional<String> readKey(String key) {
         return TomlValues.parse(configFile).flatMap(toml -> TomlValues.optString(toml, key));

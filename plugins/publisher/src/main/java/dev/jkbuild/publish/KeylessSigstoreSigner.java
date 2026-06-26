@@ -10,16 +10,14 @@ import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 
 /**
- * Production {@link SigstoreSigner}: keyless OIDC signing against the
- * public Sigstore instance (Fulcio + Rekor). On CI runners with an OIDC
- * token issuer in scope (GitHub Actions, GitLab, etc.), sigstore-java
- * auto-detects credentials; locally, it falls back to a browser-based
+ * Production {@link SigstoreSigner}: keyless OIDC signing against the public Sigstore instance
+ * (Fulcio + Rekor). On CI runners with an OIDC token issuer in scope (GitHub Actions, GitLab,
+ * etc.), sigstore-java auto-detects credentials; locally, it falls back to a browser-based
  * device-code flow.
  *
- * <p>Wraps {@link KeylessSigner} so that {@code dev.sigstore.*} types
- * never leak across the {@code :supply-chain} module boundary —
- * {@link KeylessSignerException} surfaces as {@link IOException}, which
- * is what every {@code :cli} call site already handles.
+ * <p>Wraps {@link KeylessSigner} so that {@code dev.sigstore.*} types never leak across the {@code
+ * :supply-chain} module boundary — {@link KeylessSignerException} surfaces as {@link IOException},
+ * which is what every {@code :cli} call site already handles.
  */
 public final class KeylessSigstoreSigner implements SigstoreSigner, AutoCloseable {
 

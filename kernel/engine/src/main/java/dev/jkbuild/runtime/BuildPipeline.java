@@ -41,16 +41,15 @@ import java.util.Set;
 import java.util.stream.Stream;
 
 /**
- * The single build pipeline shared by every build-family command
- * ({@code build}, {@code native}, {@code image}, {@code run}, {@code install}).
- * It owns the cross-phase {@link GoalKey}s and the phase factories; each command
- * composes the {@linkplain #coreBuilder core phases} (always the same DAG —
- * sequential with parallelism where deps allow) and appends its own target tail
+ * The single build pipeline shared by every build-family command ({@code build}, {@code native},
+ * {@code image}, {@code run}, {@code install}). It owns the cross-phase {@link GoalKey}s and the
+ * phase factories; each command composes the {@linkplain #coreBuilder core phases} (always the same
+ * DAG — sequential with parallelism where deps allow) and appends its own target tail
  * (native-image, OCI image, install launcher, …) into <em>one</em> {@link Goal}.
  *
- * <p>This is why commands never shell out to a nested {@code jk} process: the
- * phases are assembled and run in-process, which keeps progress/aggregation
- * coherent and lets embedders (e.g. an IntelliJ plugin) drive jk as pure Java.
+ * <p>This is why commands never shell out to a nested {@code jk} process: the phases are assembled
+ * and run in-process, which keeps progress/aggregation coherent and lets embedders (e.g. an
+ * IntelliJ plugin) drive jk as pure Java.
  */
 public final class BuildPipeline {
 
@@ -99,11 +98,10 @@ public final class BuildPipeline {
     public static final GoalKey<Boolean> NO_TEST_SOURCES = GoalKey.of("no-test-sources", Boolean.class);
 
     /**
-     * Process-wide gate that serializes the {@code run-tests} phase across
-     * concurrently-built units (parallel workspace module builds). Tests commonly
-     * contend on shared resources — ports, lock files, fixtures — so they run one
-     * at a time by default; {@link #setParallelTests} lifts the gate for users who
-     * opt into true parallel test execution ({@code --parallel-tests}).
+     * Process-wide gate that serializes the {@code run-tests} phase across concurrently-built units
+     * (parallel workspace module builds). Tests commonly contend on shared resources — ports, lock
+     * files, fixtures — so they run one at a time by default; {@link #setParallelTests} lifts the
+     * gate for users who opt into true parallel test execution ({@code --parallel-tests}).
      */
     private static final java.util.concurrent.Semaphore TEST_GATE = new java.util.concurrent.Semaphore(1);
 
@@ -220,21 +218,20 @@ public final class BuildPipeline {
     static final int W_NATIVE = 90; // native-image build ≈ 9 steps × 10
 
     /**
-     * Assemble the goal builder with the core build phases (parse → sync → jdk →
-     * compile → resources → [test] → package → stamp) plus the shadow/native
-     * tails the project's {@code jk.toml} requests. Callers may append further
-     * target-specific phases before {@code build()}.
+     * Assemble the goal builder with the core build phases (parse → sync → jdk → compile → resources
+     * → [test] → package → stamp) plus the shadow/native tails the project's {@code jk.toml}
+     * requests. Callers may append further target-specific phases before {@code build()}.
      */
     public static Goal.Builder coreBuilder(Inputs in) {
         return coreBuilder(in, false);
     }
 
     /**
-     * As {@link #coreBuilder(Inputs)} but with a {@code forceRebuild} hint passed to
-     * the effort-weight prediction: the workspace pre-scan sets it when the module
-     * will rebuild because of an upstream sibling, so the progress bar reserves its
-     * real slice up front instead of discovering it mid-build (see
-     * {@link EffortWeights#predict(Inputs, Cas, boolean, boolean, boolean, boolean)}).
+     * As {@link #coreBuilder(Inputs)} but with a {@code forceRebuild} hint passed to the
+     * effort-weight prediction: the workspace pre-scan sets it when the module will rebuild because
+     * of an upstream sibling, so the progress bar reserves its real slice up front instead of
+     * discovering it mid-build (see {@link EffortWeights#predict(Inputs, Cas, boolean, boolean,
+     * boolean, boolean)}).
      */
     public static Goal.Builder coreBuilder(Inputs in, boolean forceRebuild) {
         Cas cas = new Cas(in.cache());
@@ -673,7 +670,8 @@ public final class BuildPipeline {
                                         ctx.warn(
                                                 "javac",
                                                 "java-compiler worker unavailable ("
-                                                        + e.getMessage() + "); compiling with plain javac"
+                                                        + e.getMessage()
+                                                        + "); compiling with plain javac"
                                                         + " (no incremental annotation-processing provenance)");
                                         return null;
                                     }
@@ -910,7 +908,8 @@ public final class BuildPipeline {
                                             ctx.warn(
                                                     "javac",
                                                     "java-compiler worker unavailable ("
-                                                            + e.getMessage() + "); compiling tests with plain javac"
+                                                            + e.getMessage()
+                                                            + "); compiling tests with plain javac"
                                                             + " (no incremental annotation-processing provenance)");
                                             return null;
                                         }
@@ -1256,9 +1255,13 @@ public final class BuildPipeline {
                             if (sha == null) {
                                 ctx.error(
                                         "embed-sha",
-                                        "worker '" + key + "' is known but its sha "
+                                        "worker '"
+                                                + key
+                                                + "' is known but its sha "
                                                 + "resource isn't bundled in this jk build — rebuild jk so its "
-                                                + "image includes META-INF/" + key + "-sha256.txt");
+                                                + "image includes META-INF/"
+                                                + key
+                                                + "-sha256.txt");
                                 throw new RuntimeException("embed-sha: missing worker sha for '" + key + "'");
                             }
                         } else if (jar != null) {
@@ -1324,15 +1327,14 @@ public final class BuildPipeline {
     }
 
     /**
-     * Append the artifact tails the project's {@code jk.toml} declares:
-     * {@code shadow = true} → fat-jar phase. {@code jk build} / {@code jk run} /
-     * {@code jk install} call this after {@link #coreBuilder}.
+     * Append the artifact tails the project's {@code jk.toml} declares: {@code shadow = true} →
+     * fat-jar phase. {@code jk build} / {@code jk run} / {@code jk install} call this after {@link
+     * #coreBuilder}.
      *
-     * <p>Native images are <em>not</em> appended here: {@code native = true}
-     * makes a project native-eligible, but a native artifact is only ever built
-     * by {@code jk native} (which composes the native tail explicitly) or by
-     * {@code jk install} of a native application (which adds the phase itself,
-     * resolving GraalVM up front). {@code jk build} stays JVM-only.
+     * <p>Native images are <em>not</em> appended here: {@code native = true} makes a project
+     * native-eligible, but a native artifact is only ever built by {@code jk native} (which composes
+     * the native tail explicitly) or by {@code jk install} of a native application (which adds the
+     * phase itself, resolving GraalVM up front). {@code jk build} stays JVM-only.
      */
     public static void appendDeclaredTails(Goal.Builder b, Inputs in) {
         try {
@@ -1426,16 +1428,15 @@ public final class BuildPipeline {
     }
 
     /**
-     * GraalVM native-image phase — what {@code jk native} composes onto the core
-     * build (and {@code jk install} of a native application adds explicitly).
-     * Builds an <em>executable</em> when a main class is resolvable
-     * ({@code mainOverride} > {@code [native].main-class} > {@code [project].main}),
-     * otherwise a <em>shared library</em> ({@code native-image --shared}). Run
+     * GraalVM native-image phase — what {@code jk native} composes onto the core build (and {@code jk
+     * install} of a native application adds explicitly). Builds an <em>executable</em> when a main
+     * class is resolvable ({@code mainOverride} > {@code [native].main-class} > {@code
+     * [project].main}), otherwise a <em>shared library</em> ({@code native-image --shared}). Run
      * directly as a subprocess; requires package-jar.
      *
-     * <p>{@code graalHome} is the GraalVM the CLI's {@code GraalResolver} selected
-     * (its {@code bin/native-image} is used); when {@code null} the phase falls
-     * back to the project JDK / {@code $GRAALVM_HOME} / {@code PATH} search.
+     * <p>{@code graalHome} is the GraalVM the CLI's {@code GraalResolver} selected (its {@code
+     * bin/native-image} is used); when {@code null} the phase falls back to the project JDK / {@code
+     * $GRAALVM_HOME} / {@code PATH} search.
      */
     public static Phase nativePhase(
             Path dir,
@@ -1615,11 +1616,10 @@ public final class BuildPipeline {
     }
 
     /**
-     * Warn (best-effort) when the consumer and a composite ({@code path}/branch-git)
-     * dependency disagree on a shared external coordinate's version — both jars are
-     * on the classpath, deduped by path not coordinate, since each project resolves
-     * its own lock independently (no cross-boundary unification). jk surfaces what
-     * Gradle/Maven sidestep.
+     * Warn (best-effort) when the consumer and a composite ({@code path}/branch-git) dependency
+     * disagree on a shared external coordinate's version — both jars are on the classpath, deduped by
+     * path not coordinate, since each project resolves its own lock independently (no cross-boundary
+     * unification). jk surfaces what Gradle/Maven sidestep.
      */
     private static void warnCompositeVersionConflicts(PhaseContext ctx, Path dir, JkBuild project, Path cache) {
         boolean any = false;
@@ -1640,8 +1640,10 @@ public final class BuildPipeline {
                         .collect(java.util.stream.Collectors.joining(", "));
                 ctx.warn(
                         "composite-version",
-                        "version conflict on `" + c.coord()
-                                + "` across composite dependencies (" + detail
+                        "version conflict on `"
+                                + c.coord()
+                                + "` across composite dependencies ("
+                                + detail
                                 + "); both versions are on the classpath");
             }
         } catch (Exception ignored) {
@@ -1650,12 +1652,12 @@ public final class BuildPipeline {
     }
 
     /**
-     * The main-compile classpath contributed by the lockfile and workspace siblings:
-     * {@code COMPILE_MAIN} lockfile deps + each depended sibling's built jar + those
-     * siblings' own {@code COMPILE_MAIN} lockfile deps (so e.g. tomlj declared in
-     * jk-core is visible when compiling jk-io). Shared by the {@code compile-main}
-     * phase and {@code jk explain} so their javac action keys agree. Does NOT include
-     * composite (path / branch-git) deps — the build appends those after building them.
+     * The main-compile classpath contributed by the lockfile and workspace siblings: {@code
+     * COMPILE_MAIN} lockfile deps + each depended sibling's built jar + those siblings' own {@code
+     * COMPILE_MAIN} lockfile deps (so e.g. tomlj declared in jk-core is visible when compiling
+     * jk-io). Shared by the {@code compile-main} phase and {@code jk explain} so their javac action
+     * keys agree. Does NOT include composite (path / branch-git) deps — the build appends those after
+     * building them.
      */
     public static List<Path> mainCompileClasspath(
             Lockfile lock, ClasspathResolver resolver, WorkspaceClasspath.Result siblings) throws IOException {
@@ -1702,14 +1704,13 @@ public final class BuildPipeline {
     }
 
     /**
-     * Compile Kotlin {@code sources} into {@code outputDir} via the worker
-     * (action-cached: restores from the CAS on an exact-input hit without
-     * launching the worker, else compiles incrementally). Shared by the main
-     * {@code compile-kotlin} and {@code compile-test} phases. The caller owns
+     * Compile Kotlin {@code sources} into {@code outputDir} via the worker (action-cached: restores
+     * from the CAS on an exact-input hit without launching the worker, else compiles incrementally).
+     * Shared by the main {@code compile-kotlin} and {@code compile-test} phases. The caller owns
      * freshness stamps, output assembly, and outcome reporting.
      *
-     * @param javaSourceRoot when non-null, passed as {@code -Xjava-source-roots}
-     *     so a mixed module's Kotlin can read Java declarations from source
+     * @param javaSourceRoot when non-null, passed as {@code -Xjava-source-roots} so a mixed module's
+     *     Kotlin can read Java declarations from source
      */
     private static dev.jkbuild.task.KotlinCompile.Result compileKotlinSources(
             PhaseContext ctx,
@@ -1771,10 +1772,10 @@ public final class BuildPipeline {
     }
 
     /**
-     * The version-matched {@code kotlin-stdlib} path (already in the CAS from the
-     * worker closure). Kotlin output needs it on the <em>runtime</em> classpath
-     * too — compilation pairs the stdlib with {@code -no-stdlib}, but the JVM
-     * still needs {@code kotlin.jvm.internal.*} etc. when the code runs.
+     * The version-matched {@code kotlin-stdlib} path (already in the CAS from the worker closure).
+     * Kotlin output needs it on the <em>runtime</em> classpath too — compilation pairs the stdlib
+     * with {@code -no-stdlib}, but the JVM still needs {@code kotlin.jvm.internal.*} etc. when the
+     * code runs.
      */
     private static Path kotlinStdlib(PhaseContext ctx, Cas cas) throws IOException {
         String kotlinVersion = CompileToolchain.kotlinVersionFor(ctx.require(LOCKFILE), ctx.require(PROJECT));
@@ -1801,10 +1802,9 @@ public final class BuildPipeline {
     }
 
     /**
-     * Map each workspace sibling to its main output jar, keyed by both project
-     * name and {@code group:artifact} coord. Used by the {@code embed-sha} phase
-     * to find the jar a {@code [build.embed-sha]} entry names. Empty when this
-     * module isn't in a workspace.
+     * Map each workspace sibling to its main output jar, keyed by both project name and {@code
+     * group:artifact} coord. Used by the {@code embed-sha} phase to find the jar a {@code
+     * [build.embed-sha]} entry names. Empty when this module isn't in a workspace.
      */
     static Map<String, Path> siblingMainJars(Path moduleDir) throws IOException {
         Map<String, Path> out = new LinkedHashMap<>();
@@ -1835,10 +1835,9 @@ public final class BuildPipeline {
     }
 
     /**
-     * Packaging cache (mirrors the compile {@link ActionCache} path, for artifacts).
-     * Returns {@code true} when a cached artifact for {@code key} was hard-linked
-     * back into {@code baseDir} — the caller then skips the (re)packaging work.
-     * Honors {@code --rerun}.
+     * Packaging cache (mirrors the compile {@link ActionCache} path, for artifacts). Returns {@code
+     * true} when a cached artifact for {@code key} was hard-linked back into {@code baseDir} — the
+     * caller then skips the (re)packaging work. Honors {@code --rerun}.
      */
     private static boolean restorePackaged(Path cacheRoot, String key, Path baseDir) throws IOException {
         if (dev.jkbuild.config.ActiveConfig.get().rerunOr(false)) return false;
@@ -1877,9 +1876,9 @@ public final class BuildPipeline {
     }
 
     /**
-     * The run-tests stamp's identity tokens for {@code project} at {@code dir} —
-     * the same set the build folds into its {@code TestStamp} key, exposed so
-     * {@code jk explain}'s forecast predicts test-skip without drifting.
+     * The run-tests stamp's identity tokens for {@code project} at {@code dir} — the same set the
+     * build folds into its {@code TestStamp} key, exposed so {@code jk explain}'s forecast predicts
+     * test-skip without drifting.
      */
     public static List<String> testStampExtras(Path dir, JkBuild project) throws IOException {
         return testStampExtras(workerJarProps(dir, project.build().testWorkerJars()));

@@ -11,11 +11,11 @@ import java.util.Comparator;
 import java.util.List;
 
 /**
- * Deterministic TOML emitter for {@link Lockfile}. PRD §9.1 requirements:
- * sorted, LF newlines, two-space indent, no comments, terminal newline.
+ * Deterministic TOML emitter for {@link Lockfile}. PRD §9.1 requirements: sorted, LF newlines,
+ * two-space indent, no comments, terminal newline.
  *
- * <p>Hand-rolled rather than using a TOML library to guarantee output
- * stability across library upgrades.
+ * <p>Hand-rolled rather than using a TOML library to guarantee output stability across library
+ * upgrades.
  */
 public final class LockfileWriter {
 

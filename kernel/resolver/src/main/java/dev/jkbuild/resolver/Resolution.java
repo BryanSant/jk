@@ -7,9 +7,8 @@ import java.util.Objects;
 import java.util.TreeMap;
 
 /**
- * The result of a resolution: every module that ended up in the graph
- * and its picked version. The materializer (next slice) downloads the
- * actual artifacts and writes {@code jk.lock}.
+ * The result of a resolution: every module that ended up in the graph and its picked version. The
+ * materializer (next slice) downloads the actual artifacts and writes {@code jk.lock}.
  */
 public record Resolution(Map<String, ResolvedModule> modules) {
 

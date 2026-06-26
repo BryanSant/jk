@@ -11,14 +11,12 @@ import java.nio.file.Path;
 import java.util.List;
 
 /**
- * {@code jk shell} — spawn a subshell with the env the project would have
- * under {@code jk activate}. Resolves the JDK via {@link JkEnv} (the
- * {@code jk.toml} + {@code jk.lock} flow), so {@code jk shell} and
- * {@code jk activate} can never disagree on which JDK is "current".
+ * {@code jk shell} — spawn a subshell with the env the project would have under {@code jk
+ * activate}. Resolves the JDK via {@link JkEnv} (the {@code jk.toml} + {@code jk.lock} flow), so
+ * {@code jk shell} and {@code jk activate} can never disagree on which JDK is "current".
  *
- * <p>POSIX shells only for this iteration — picks {@code $SHELL} (or
- * {@code /bin/sh}) and inherits stdio. Native cmd / PowerShell wiring lands
- * in a follow-up.
+ * <p>POSIX shells only for this iteration — picks {@code $SHELL} (or {@code /bin/sh}) and inherits
+ * stdio. Native cmd / PowerShell wiring lands in a follow-up.
  */
 public final class ShellCommand implements CliCommand {
 
@@ -56,7 +54,8 @@ public final class ShellCommand implements CliCommand {
         JdkRegistry registry = jdksDir != null ? new JdkRegistry(jdksDir) : new JdkRegistry();
         var target = new JkEnv(registry, origPath).resolve(dir);
         if (!target.isActive()) {
-            System.err.println("jk shell: no pinned JDK for " + dev.jkbuild.cli.PathDisplay.styledRaw(dir)
+            System.err.println("jk shell: no pinned JDK for "
+                    + dev.jkbuild.cli.PathDisplay.styledRaw(dir)
                     + " (run `jk new` to scaffold, or stamp `jdk = \"<id>\"` in jk.lock)");
             return 2;
         }

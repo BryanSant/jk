@@ -10,25 +10,24 @@ import java.util.Set;
 import java.util.TreeMap;
 
 /**
- * Solver state: the ordered sequence of assignments that the solver has
- * committed to so far. Maintains the decision level (the depth in the
- * search tree) so we can backtrack on conflict.
+ * Solver state: the ordered sequence of assignments that the solver has committed to so far.
+ * Maintains the decision level (the depth in the search tree) so we can backtrack on conflict.
  *
- * <p>Each {@link Assignment} is either a {@link Assignment.Decision}
- * (the solver chose a specific version) or a {@link Assignment.Derivation}
- * (a term was forced by an incompatibility under unit propagation).
+ * <p>Each {@link Assignment} is either a {@link Assignment.Decision} (the solver chose a specific
+ * version) or a {@link Assignment.Derivation} (a term was forced by an incompatibility under unit
+ * propagation).
  */
 public final class PartialSolution {
 
     private final List<Assignment> assignments = new ArrayList<>();
     private final Map<String, VersionSet> positiveByPackage = new HashMap<>();
+
     /**
-     * Packages that the partial solution has seen via at least one
-     * <em>positive</em> term. Used to distinguish "needs a decision"
-     * (positive constraint, even if the constraint set happens to be
-     * {@link VersionSet#ALL}) from a phantom package mentioned only by
-     * derived negative incompatibilities (no positive force ever
-     * required it; the solver shouldn't pick a version for it).
+     * Packages that the partial solution has seen via at least one <em>positive</em> term. Used to
+     * distinguish "needs a decision" (positive constraint, even if the constraint set happens to be
+     * {@link VersionSet#ALL}) from a phantom package mentioned only by derived negative
+     * incompatibilities (no positive force ever required it; the solver shouldn't pick a version for
+     * it).
      */
     private final Set<String> packagesWithPositiveTerm = new HashSet<>();
 
@@ -68,9 +67,8 @@ public final class PartialSolution {
     }
 
     /**
-     * True iff at least one positive term about {@code pkg} has been
-     * recorded — i.e. the partial solution requires the package to
-     * exist at some version. False for "phantom" packages mentioned
+     * True iff at least one positive term about {@code pkg} has been recorded — i.e. the partial
+     * solution requires the package to exist at some version. False for "phantom" packages mentioned
      * only by negative incompatibilities.
      */
     public boolean hasPositiveTerm(String pkg) {
@@ -92,19 +90,15 @@ public final class PartialSolution {
     }
 
     /**
-     * True iff every allowed version of {@code term.pkg()} contradicts
-     * {@code term}.
+     * True iff every allowed version of {@code term.pkg()} contradicts {@code term}.
      *
-     * <p>If the partial solution has no positive constraint about
-     * {@code term.pkg()} at all, the package is unconstrained — nothing
-     * the solution holds can contradict a term about it. Without this
-     * guard, a negative term whose {@code effectiveVersions} is
-     * {@link VersionSet#EMPTY} (the negation of a positive root term
-     * with {@code versionSet = ALL}, i.e. an unbounded {@code @latest}
-     * selector) would spuriously appear contradicted — and the inco
-     * carrying it would stay INCONCLUSIVE forever, so no positive term
-     * for the package ever gets derived and the dep is silently
-     * dropped from the resolution.
+     * <p>If the partial solution has no positive constraint about {@code term.pkg()} at all, the
+     * package is unconstrained — nothing the solution holds can contradict a term about it. Without
+     * this guard, a negative term whose {@code effectiveVersions} is {@link VersionSet#EMPTY} (the
+     * negation of a positive root term with {@code versionSet = ALL}, i.e. an unbounded
+     * {@code @latest} selector) would spuriously appear contradicted — and the inco carrying it would
+     * stay INCONCLUSIVE forever, so no positive term for the package ever gets derived and the dep is
+     * silently dropped from the resolution.
      */
     public boolean contradicts(Term term) {
         if (!packagesWithPositiveTerm.contains(term.pkg())) return false;
@@ -121,8 +115,8 @@ public final class PartialSolution {
     }
 
     /**
-     * Discard every assignment with decision level &gt; {@code targetLevel}
-     * and replay the survivors. Used by conflict resolution.
+     * Discard every assignment with decision level &gt; {@code targetLevel} and replay the survivors.
+     * Used by conflict resolution.
      */
     public void backtrack(int targetLevel) {
         if (targetLevel < 0) {
@@ -146,16 +140,16 @@ public final class PartialSolution {
     }
 
     /**
-     * Compute the relation between an {@link Incompatibility} and the
-     * current partial solution. Distinguishes the three states PubGrub
-     * acts on (paper §3 / §4):
+     * Compute the relation between an {@link Incompatibility} and the current partial solution.
+     * Distinguishes the three states PubGrub acts on (paper §3 / §4):
+     *
      * <ul>
-     *   <li>{@link IncompatibilityRelation#SATISFIED}: every term holds —
-     *       a real conflict, must be resolved.</li>
-     *   <li>{@link IncompatibilityRelation#ALMOST_SATISFIED}: exactly one
-     *       term doesn't hold, the rest do — unit propagation fires.</li>
-     *   <li>{@link IncompatibilityRelation#INCONCLUSIVE}: more than one
-     *       term unresolved — nothing to do yet.</li>
+     *   <li>{@link IncompatibilityRelation#SATISFIED}: every term holds — a real conflict, must be
+     *       resolved.
+     *   <li>{@link IncompatibilityRelation#ALMOST_SATISFIED}: exactly one term doesn't hold, the rest
+     *       do — unit propagation fires.
+     *   <li>{@link IncompatibilityRelation#INCONCLUSIVE}: more than one term unresolved — nothing to
+     *       do yet.
      * </ul>
      */
     public Relation relationTo(Incompatibility inco) {

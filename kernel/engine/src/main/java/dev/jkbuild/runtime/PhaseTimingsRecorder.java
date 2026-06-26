@@ -9,18 +9,15 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Listens to one module's build and turns each <em>real</em> phase run into a
- * per-unit timing {@link PhaseTimings.Sample} — the write side of the learned
- * progress-bar ledger. Captures the phase's unit count at {@code phaseStart} and
- * its wall-clock at {@code phaseFinish}, then derives the per-unit weight via
- * {@link EffortWeights#observedPerUnit} (which returns a negative sentinel for a
- * cache hit / skip that finished at or under its floor, so we never teach a ~0
- * rate). Only the variable, count-driven phases are learned; flat phases keep
- * their static weight.
+ * Listens to one module's build and turns each <em>real</em> phase run into a per-unit timing
+ * {@link PhaseTimings.Sample} — the write side of the learned progress-bar ledger. Captures the
+ * phase's unit count at {@code phaseStart} and its wall-clock at {@code phaseFinish}, then derives
+ * the per-unit weight via {@link EffortWeights#observedPerUnit} (which returns a negative sentinel
+ * for a cache hit / skip that finished at or under its floor, so we never teach a ~0 rate). Only
+ * the variable, count-driven phases are learned; flat phases keep their static weight.
  *
- * <p>Samples are appended to a shared, thread-safe sink (many modules build
- * concurrently); the caller folds them into the on-disk ledger once at build end
- * via {@link PhaseTimings#record}.
+ * <p>Samples are appended to a shared, thread-safe sink (many modules build concurrently); the
+ * caller folds them into the on-disk ledger once at build end via {@link PhaseTimings#record}.
  */
 public final class PhaseTimingsRecorder implements GoalListener {
 

@@ -11,15 +11,14 @@ import java.util.Map;
 import java.util.function.Consumer;
 
 /**
- * OAuth 2.0 Device Authorization Grant (RFC 8628) — the "copy this code into
- * the browser" login that {@code gh auth login} popularized. Works against
- * any forge whose endpoints follow the RFC (GitHub, GitLab, Gitea/Forgejo);
- * Bitbucket has no device grant, so {@link ForgeKind#deviceCodeUri} refuses
- * to produce endpoints for it.
+ * OAuth 2.0 Device Authorization Grant (RFC 8628) — the "copy this code into the browser" login
+ * that {@code gh auth login} popularized. Works against any forge whose endpoints follow the RFC
+ * (GitHub, GitLab, Gitea/Forgejo); Bitbucket has no device grant, so {@link
+ * ForgeKind#deviceCodeUri} refuses to produce endpoints for it.
  *
- * <p>This class is the provider-neutral <i>mechanism</i>: it takes the two
- * resolved endpoints and drives the request → poll loop. Endpoint resolution
- * is {@link ForgeKind}'s job; use {@link #forHost} to wire the two together.
+ * <p>This class is the provider-neutral <i>mechanism</i>: it takes the two resolved endpoints and
+ * drives the request → poll loop. Endpoint resolution is {@link ForgeKind}'s job; use {@link
+ * #forHost} to wire the two together.
  */
 public final class DeviceFlow {
 
@@ -71,10 +70,9 @@ public final class DeviceFlow {
     }
 
     /**
-     * Run the flow to completion and return the access token. {@code prompt}
-     * is invoked once with the {@link DeviceCode} so the caller can display
-     * the user code / verification URL and optionally open a browser; the
-     * code and URL must always be shown so headless sessions still work.
+     * Run the flow to completion and return the access token. {@code prompt} is invoked once with the
+     * {@link DeviceCode} so the caller can display the user code / verification URL and optionally
+     * open a browser; the code and URL must always be shown so headless sessions still work.
      */
     public String run(Consumer<DeviceCode> prompt) {
         DeviceCode dc = requestCode();

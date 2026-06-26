@@ -33,25 +33,25 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * {@code jk add &lt;coord|path&gt;} — add a dependency (or a local workspace
- * module) to {@code jk.toml}.
+ * {@code jk add &lt;coord|path&gt;} — add a dependency (or a local workspace module) to {@code
+ * jk.toml}.
  *
  * <p>The argument may be:
+ *
  * <ul>
- *   <li>A Maven-coord shorthand: {@code group:artifact:version} (pinned) or
- *       {@code group:artifact@version} (floating caret). The short {@code library}
- *       handle defaults to the artifactId; override with {@code --library}. The
- *       artifactId itself can be overridden with {@code --name}.</li>
- *   <li>A bare short name (e.g. {@code spring-web}), optionally with an
- *       {@code @version} suffix ({@code spring-web@3.4.0}), resolved against the
- *       library catalog. The version defaults to {@code latest} when omitted.
- *       Combine with {@code --group}/{@code --ver} for names not in the catalog.</li>
- *   <li>A local workspace module, when the argument begins with {@code :}
- *       ({@code :widget}) or contains a path separator ({@code ./widget},
- *       {@code ../widget}, {@code libs/widget}, {@code widget/}). jk adds a
- *       dependency edge on the sibling — pinned to its {@code [project].version}
- *       — and registers its path in the workspace root's
- *       {@code [workspace].modules} (≈ {@code uv add ./lib}).</li>
+ *   <li>A Maven-coord shorthand: {@code group:artifact:version} (pinned) or {@code
+ *       group:artifact@version} (floating caret). The short {@code library} handle defaults to the
+ *       artifactId; override with {@code --library}. The artifactId itself can be overridden with
+ *       {@code --name}.
+ *   <li>A bare short name (e.g. {@code spring-web}), optionally with an {@code @version} suffix
+ *       ({@code spring-web@3.4.0}), resolved against the library catalog. The version defaults to
+ *       {@code latest} when omitted. Combine with {@code --group}/{@code --ver} for names not in
+ *       the catalog.
+ *   <li>A local workspace module, when the argument begins with {@code :} ({@code :widget}) or
+ *       contains a path separator ({@code ./widget}, {@code ../widget}, {@code libs/widget}, {@code
+ *       widget/}). jk adds a dependency edge on the sibling — pinned to its {@code
+ *       [project].version} — and registers its path in the workspace root's {@code
+ *       [workspace].modules} (≈ {@code uv add ./lib}).
  * </ul>
  *
  * <p>Pass {@code --ping} to check availability without modifying anything.
@@ -166,13 +166,18 @@ public final class AddCommand implements CliCommand {
         }
         Files.writeString(file, updated, StandardCharsets.UTF_8);
         String check = Theme.colorize("✓", Theme.active().success());
-        System.out.println(check + " Added "
+        System.out.println(check
+                + " Added "
                 + Coords.shortName(parsed.library())
-                + " (" + Coords.gav(parsed.group(), parsed.name(), parsed.versionLiteral())
-                + ") to " + Theme.colorize("dependency", Theme.active().cyan())
-                + "." + Theme.colorize(scope.canonical(), Theme.active().cyan()));
+                + " ("
+                + Coords.gav(parsed.group(), parsed.name(), parsed.versionLiteral())
+                + ") to "
+                + Theme.colorize("dependency", Theme.active().cyan())
+                + "."
+                + Theme.colorize(scope.canonical(), Theme.active().cyan()));
         System.out.println();
-        System.out.println("Run " + Theme.colorize("jk lock", Theme.active().warning())
+        System.out.println("Run "
+                + Theme.colorize("jk lock", Theme.active().warning())
                 + " to lock your dependencies to hard versions");
         return 0;
     }
@@ -190,18 +195,15 @@ public final class AddCommand implements CliCommand {
     }
 
     /**
-     * Whether the positional argument denotes a local workspace module rather
-     * than a Maven coord or catalog library. True when it begins with
-     * {@code :} (an explicit local marker, e.g. {@code :jackson}) or looks
-     * like a filesystem path — i.e. contains a {@code /} or {@code \}
-     * separator ({@code ./m}, {@code ../m}, {@code backend/m}, {@code m/},
-     * {@code ..\..\m}).
+     * Whether the positional argument denotes a local workspace module rather than a Maven coord or
+     * catalog library. True when it begins with {@code :} (an explicit local marker, e.g. {@code
+     * :jackson}) or looks like a filesystem path — i.e. contains a {@code /} or {@code \} separator
+     * ({@code ./m}, {@code ../m}, {@code backend/m}, {@code m/}, {@code ..\..\m}).
      *
-     * <p>A bare name with none of these (e.g. {@code jackson}) is a catalog
-     * library and is resolved as a coord — never treated as a path, even if a
-     * directory by that name happens to exist. A Maven coord
-     * ({@code group:artifact:version}) has its {@code :} after the group, not
-     * at the start, so it is not mistaken for a local marker.
+     * <p>A bare name with none of these (e.g. {@code jackson}) is a catalog library and is resolved
+     * as a coord — never treated as a path, even if a directory by that name happens to exist. A
+     * Maven coord ({@code group:artifact:version}) has its {@code :} after the group, not at the
+     * start, so it is not mistaken for a local marker.
      */
     private static boolean isLocalPathArg(String arg) {
         if (arg.isEmpty()) return false;
@@ -209,9 +211,8 @@ public final class AddCommand implements CliCommand {
     }
 
     /**
-     * Add a local sibling as a dependency of the current project (pinned to
-     * the sibling's declared version) and register it in the enclosing
-     * workspace root's {@code [workspace].modules}.
+     * Add a local sibling as a dependency of the current project (pinned to the sibling's declared
+     * version) and register it in the enclosing workspace root's {@code [workspace].modules}.
      */
     private int addModule(Path cwd, Scope scope) throws IOException {
         Path currentToml = cwd.resolve("jk.toml");
@@ -256,9 +257,12 @@ public final class AddCommand implements CliCommand {
             return 1;
         }
         Files.writeString(currentToml, updated, StandardCharsets.UTF_8);
-        System.out.println("Added " + Coords.shortName(name)
-                + " (" + Coords.gav(group, artifact, version)
-                + ") to dependencies." + scope.canonical());
+        System.out.println("Added "
+                + Coords.shortName(name)
+                + " ("
+                + Coords.gav(group, artifact, version)
+                + ") to dependencies."
+                + scope.canonical());
 
         // 2. Register membership in the enclosing workspace root (cwd itself
         //    when cwd is the root).
@@ -266,8 +270,10 @@ public final class AddCommand implements CliCommand {
         Path rootToml = root.resolve("jk.toml");
         try {
             if (!target.startsWith(root)) {
-                System.err.println("jk add: " + raw
-                        + " is outside the workspace root " + root
+                System.err.println("jk add: "
+                        + raw
+                        + " is outside the workspace root "
+                        + root
                         + "; added the dependency but not registering it as a module.");
             } else if (Files.exists(rootToml) && JkBuildParser.parse(rootToml).isWorkspaceRoot()) {
                 String rel = root.relativize(target).toString().replace('\\', '/');
@@ -275,7 +281,9 @@ public final class AddCommand implements CliCommand {
                 String newRoot = JkBuildEditor.addWorkspaceModule(rootContent, rel);
                 if (!newRoot.equals(rootContent)) {
                     Files.writeString(rootToml, newRoot, StandardCharsets.UTF_8);
-                    System.out.println("Registered module '" + rel + "' in workspace "
+                    System.out.println("Registered module '"
+                            + rel
+                            + "' in workspace "
                             + dev.jkbuild.cli.PathDisplay.styledRaw(root));
                 }
             }
@@ -286,14 +294,14 @@ public final class AddCommand implements CliCommand {
     }
 
     /**
-     * Add an arbitrary local file as a dependency. The file is immediately
-     * stored in the CAS and mirrored into the m2 local repo so
-     * {@code jk lock} can resolve it without re-reading the original path.
+     * Add an arbitrary local file as a dependency. The file is immediately stored in the CAS and
+     * mirrored into the m2 local repo so {@code jk lock} can resolve it without re-reading the
+     * original path.
      *
-     * <p>For {@code .jar} files, Maven coordinate metadata is auto-detected
-     * from {@code META-INF/maven/.../pom.properties}; flag overrides win.
-     * Non-JAR files, or JARs without embedded metadata, require all three of
-     * {@code --group}, {@code --name}/{@code --library}, and {@code --ver}.
+     * <p>For {@code .jar} files, Maven coordinate metadata is auto-detected from {@code
+     * META-INF/maven/.../pom.properties}; flag overrides win. Non-JAR files, or JARs without embedded
+     * metadata, require all three of {@code --group}, {@code --name}/{@code --library}, and {@code
+     * --ver}.
      */
     private int addFile(Path cwd, Path filePath, Scope scope) throws IOException {
         Path tomlFile = cwd.resolve("jk.toml");
@@ -364,13 +372,21 @@ public final class AddCommand implements CliCommand {
 
         String check = Theme.colorize("✓", Theme.active().success());
         String shortSha = sha256.substring(0, Math.min(12, sha256.length()));
-        System.out.println(check + " Added "
+        System.out.println(check
+                + " Added "
                 + Coords.shortName(library)
-                + " (" + Coords.gav(group, artifact, version) + ", sha256:" + shortSha + "...)"
-                + " to " + Theme.colorize("dependency", Theme.active().cyan())
-                + "." + Theme.colorize(scope.canonical(), Theme.active().cyan()));
+                + " ("
+                + Coords.gav(group, artifact, version)
+                + ", sha256:"
+                + shortSha
+                + "...)"
+                + " to "
+                + Theme.colorize("dependency", Theme.active().cyan())
+                + "."
+                + Theme.colorize(scope.canonical(), Theme.active().cyan()));
         System.out.println();
-        System.out.println("Run " + Theme.colorize("jk lock", Theme.active().warning())
+        System.out.println("Run "
+                + Theme.colorize("jk lock", Theme.active().warning())
                 + " to lock your dependencies to hard versions");
         return 0;
     }
@@ -380,10 +396,9 @@ public final class AddCommand implements CliCommand {
     }
 
     /**
-     * Parsed representation of a dep spec. Carries the four pieces the
-     * editor needs ({@code name}, {@code group}, {@code artifact},
-     * {@code versionLiteral}) and the floating/pinned distinction for
-     * round-trip display.
+     * Parsed representation of a dep spec. Carries the four pieces the editor needs ({@code name},
+     * {@code group}, {@code artifact}, {@code versionLiteral}) and the floating/pinned distinction
+     * for round-trip display.
      */
     record ParsedDep(String library, String group, String name, String versionLiteral, boolean floating) {
 

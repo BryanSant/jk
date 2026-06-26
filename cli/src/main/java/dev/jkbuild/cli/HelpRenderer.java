@@ -8,9 +8,9 @@ import java.util.Map;
 import org.jline.utils.AttributedStyle;
 
 /**
- * The help-screen painter for jk's model-driven rendering path. Paints
- * from a {@link CommandModel} record (built by {@link CommandModels}).
- * Colors come from the active {@link Theme}; escapes from {@link Ansi}.
+ * The help-screen painter for jk's model-driven rendering path. Paints from a {@link CommandModel}
+ * record (built by {@link CommandModels}). Colors come from the active {@link Theme}; escapes from
+ * {@link Ansi}.
  */
 public final class HelpRenderer {
 
@@ -19,10 +19,9 @@ public final class HelpRenderer {
     // --- theme-sourced colorizing ---------------------------------------
 
     /**
-     * Wrap {@code text} in the SGR for {@code style} when {@code ansi} is true,
-     * delegating to {@link Theme#colorize(String, AttributedStyle)} so the
-     * canonical attribute-leading byte order is owned by the theme layer. When
-     * {@code ansi} is false the text is returned unstyled.
+     * Wrap {@code text} in the SGR for {@code style} when {@code ansi} is true, delegating to {@link
+     * Theme#colorize(String, AttributedStyle)} so the canonical attribute-leading byte order is owned
+     * by the theme layer. When {@code ansi} is false the text is returned unstyled.
      */
     static String paint(String text, AttributedStyle style, boolean ansi) {
         return ansi ? Theme.colorize(text, style) : text;
@@ -47,11 +46,10 @@ public final class HelpRenderer {
     // --- model-driven full-screen render (picocli-free path) -------------
 
     /**
-     * Assemble a complete help screen from a {@link CommandModel} for commands
-     * parsed by jk's own {@link dev.jkbuild.cli.args.ArgParser} (no picocli
-     * {@code Help}). Mirrors the section order and styling of the
-     * {@code IHelpSectionRenderer} methods above and reuses the same private
-     * painters, so a ported command's help is byte-identical to an unported one.
+     * Assemble a complete help screen from a {@link CommandModel} for commands parsed by jk's own
+     * {@link dev.jkbuild.cli.args.ArgParser} (no picocli {@code Help}). Mirrors the section order and
+     * styling of the {@code IHelpSectionRenderer} methods above and reuses the same private painters,
+     * so a ported command's help is byte-identical to an unported one.
      */
     public static String renderHelp(CommandModel model, boolean ansi) {
         StringBuilder out = new StringBuilder();
@@ -138,9 +136,9 @@ public final class HelpRenderer {
     }
 
     /**
-     * Format a list of options as `  -x, --xx <param>  description` rows.
-     * Name block is bold-cyan; param label (when present) is plain cyan;
-     * description is unstyled. Boolean flags (arity 0) skip the label.
+     * Format a list of options as ` -x, --xx <param> description` rows. Name block is bold-cyan;
+     * param label (when present) is plain cyan; description is unstyled. Boolean flags (arity 0) skip
+     * the label.
      */
     static String renderOptionRows(List<OptionModel> options, boolean ansi) {
         if (options.isEmpty()) return "";
@@ -171,15 +169,14 @@ public final class HelpRenderer {
     // --- short (bare `jk`) help screen -----------------------------------
 
     /**
-     * Render the abbreviated help shown when the user runs bare {@code jk}.
-     * Lists a curated subset of verbs (see {@link UsageGroups#SHORT_COMMAND_GROUPS})
-     * plus a "More commands:" footer pointing at {@code jk --help}. Reuses the
-     * heading / command-name styling from the full screen.
+     * Render the abbreviated help shown when the user runs bare {@code jk}. Lists a curated subset of
+     * verbs (see {@link UsageGroups#SHORT_COMMAND_GROUPS}) plus a "More commands:" footer pointing at
+     * {@code jk --help}. Reuses the heading / command-name styling from the full screen.
      */
     /**
-     * Model-driven short-help screen: looks up commands from the
-     * {@link CommandDispatch} registry instead of picocli's CommandSpec map.
-     * Called from {@link Jk#run()} now that all commands are ported.
+     * Model-driven short-help screen: looks up commands from the {@link CommandDispatch} registry
+     * instead of picocli's CommandSpec map. Called from {@link Jk#run()} now that all commands are
+     * ported.
      */
     public static void printShortHelp(
             List<dev.jkbuild.model.command.CliCommand> commands,
@@ -190,7 +187,9 @@ public final class HelpRenderer {
         out.println(rootDescription);
         out.println();
         if (ansi) {
-            out.println(heading("Usage:", true) + " " + commandName(qualifiedName, true)
+            out.println(heading("Usage:", true)
+                    + " "
+                    + commandName(qualifiedName, true)
                     + paramLabel(" <COMMAND> [OPTIONS]", true));
         } else {
             out.println("Usage: " + qualifiedName + " <COMMAND> [OPTIONS]");
@@ -227,7 +226,10 @@ public final class HelpRenderer {
         String ellipsisPad = " ".repeat(descCol - 2 - ellipsis.length());
         String helpCmd = "jk --help";
         if (ansi) {
-            out.println("  " + paramLabel(ellipsis, true) + ellipsisPad + "See all commands and options by running "
+            out.println("  "
+                    + paramLabel(ellipsis, true)
+                    + ellipsisPad
+                    + "See all commands and options by running "
                     + commandName(helpCmd, true));
         } else {
             out.println("  " + ellipsis + ellipsisPad + "See all commands and options by running " + helpCmd);

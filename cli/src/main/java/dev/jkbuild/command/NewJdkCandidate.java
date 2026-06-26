@@ -10,12 +10,10 @@ import java.util.Optional;
 import java.util.function.Function;
 
 /**
- * A row in the {@code jk new} "Select a JDK" step — either an installed JDK
- * (wraps {@link NewJdkOptions.Option}) or an installable catalog entry
- * (wraps {@link JdkCatalog.Entry}). Used so the wizard can mix
- * already-present JDKs with "we'll install this for you" suggestions
- * (e.g., latest LTS when none is on disk; latest GraalVM when the user
- * picks the Native build target).
+ * A row in the {@code jk new} "Select a JDK" step — either an installed JDK (wraps {@link
+ * NewJdkOptions.Option}) or an installable catalog entry (wraps {@link JdkCatalog.Entry}). Used so
+ * the wizard can mix already-present JDKs with "we'll install this for you" suggestions (e.g.,
+ * latest LTS when none is on disk; latest GraalVM when the user picks the Native build target).
  */
 public sealed interface NewJdkCandidate {
 
@@ -23,9 +21,8 @@ public sealed interface NewJdkCandidate {
     String id();
 
     /**
-     * Human-readable label. Format: {@code "JDK <major> - <Vendor> <Product>"}
-     * (e.g. {@code "JDK 25 - Eclipse Temurin"}). Unknown vendors fall back to
-     * the install id.
+     * Human-readable label. Format: {@code "JDK <major> - <Vendor> <Product>"} (e.g. {@code "JDK 25 -
+     * Eclipse Temurin"}). Unknown vendors fall back to the install id.
      */
     String label();
 
@@ -33,10 +30,9 @@ public sealed interface NewJdkCandidate {
     JdkVendor vendor();
 
     /**
-     * Friendly product label used both in the radio label and in the
-     * dedup key, e.g. {@code "Eclipse Temurin"}. Catalog entries carry this
-     * directly from the feed; installed candidates derive it from the
-     * resolved {@link JdkVendor}.
+     * Friendly product label used both in the radio label and in the dedup key, e.g. {@code "Eclipse
+     * Temurin"}. Catalog entries carry this directly from the feed; installed candidates derive it
+     * from the resolved {@link JdkVendor}.
      */
     String vendorLabel();
 
@@ -47,10 +43,9 @@ public sealed interface NewJdkCandidate {
     boolean installed();
 
     /**
-     * Dark-gray suffix rendered after the label by the wizard. Installed
-     * rows surface the install identifier (so {@code (temurin-25.0.3)}
-     * tells the user where it'll be picked from); installable rows show
-     * {@code (will install)}.
+     * Dark-gray suffix rendered after the label by the wizard. Installed rows surface the install
+     * identifier (so {@code (temurin-25.0.3)} tells the user where it'll be picked from); installable
+     * rows show {@code (will install)}.
      */
     default String hint() {
         return installed() ? "(" + id() + ")" : "(will install)";
@@ -132,22 +127,19 @@ public sealed interface NewJdkCandidate {
     }
 
     /**
-     * Build the list of candidates the wizard should consider, deduplicated by
-     * {@code (vendor, product, major)} so that an SDKMAN-managed
-     * {@code 25.0.3-graal} and the catalog's "Oracle GraalVM 25" don't both
-     * appear — they're the same JDK in two wrappers.
+     * Build the list of candidates the wizard should consider, deduplicated by {@code (vendor,
+     * product, major)} so that an SDKMAN-managed {@code 25.0.3-graal} and the catalog's "Oracle
+     * GraalVM 25" don't both appear — they're the same JDK in two wrappers.
      *
-     * <p>Priority within a duplicate group: installed candidates beat
-     * installable ones; within installed, {@code installed} arrives in the
-     * order {@link NewJdkOptions#discover} returns it (jk-managed installs
-     * first, then external probes), so {@code ~/.jdks/temurin-25.0.3} wins
-     * over {@code ~/.sdkman/.../25.0.3-tem}. Unknown-vendor entries are never
-     * collapsed — we can't safely identify them as duplicates of anything.
+     * <p>Priority within a duplicate group: installed candidates beat installable ones; within
+     * installed, {@code installed} arrives in the order {@link NewJdkOptions#discover} returns it
+     * (jk-managed installs first, then external probes), so {@code ~/.jdks/temurin-25.0.3} wins over
+     * {@code ~/.sdkman/.../25.0.3-tem}. Unknown-vendor entries are never collapsed — we can't safely
+     * identify them as duplicates of anything.
      *
-     * <p>Latest-LTS installable rows for Temurin, Oracle GraalVM, and GraalVM
-     * CE are appended when their {@code (vendor, product, major)} slot is
-     * still vacant after the installed pass — so a host with nothing on disk
-     * still gets all three offered.
+     * <p>Latest-LTS installable rows for Temurin, Oracle GraalVM, and GraalVM CE are appended when
+     * their {@code (vendor, product, major)} slot is still vacant after the installed pass — so a
+     * host with nothing on disk still gets all three offered.
      */
     static List<NewJdkCandidate> build(
             List<NewJdkOptions.Option> installed,
@@ -159,10 +151,9 @@ public sealed interface NewJdkCandidate {
     }
 
     /**
-     * Test-friendly overload: caller injects the vendor resolver. Production
-     * uses {@link #inferVendor} which reads the install's release file;
-     * tests can pass a precomputed mapping so fake-path fixtures don't have
-     * to also stage release files.
+     * Test-friendly overload: caller injects the vendor resolver. Production uses {@link
+     * #inferVendor} which reads the install's release file; tests can pass a precomputed mapping so
+     * fake-path fixtures don't have to also stage release files.
      */
     static List<NewJdkCandidate> build(
             List<NewJdkOptions.Option> installed,
@@ -189,9 +180,8 @@ public sealed interface NewJdkCandidate {
     }
 
     /**
-     * Equality key for the {@code build()} dedup. Unknown-vendor candidates
-     * use their install id as a sentinel so each stays distinct — we don't
-     * know enough about them to safely collapse.
+     * Equality key for the {@code build()} dedup. Unknown-vendor candidates use their install id as a
+     * sentinel so each stays distinct — we don't know enough about them to safely collapse.
      */
     record DedupKey(String vendor, String product, int major) {}
 
@@ -204,15 +194,14 @@ public sealed interface NewJdkCandidate {
 
     /**
      * Filter for the radio step:
+     *
      * <ul>
-     *   <li>Native build selected — keep only GraalVM candidates (Oracle +
-     *       CE) at {@code latestLtsMajor}. GraalVM is the only thing that
-     *       can produce a native binary.</li>
-     *   <li>Anything else — promote the latest-LTS Eclipse Temurin to the
-     *       top of the list (so it's the default selection), then preserve
-     *       the existing order for everything else. The Temurin LTS is
-     *       always present because {@link #build} stamps a catalog row when
-     *       it's not already installed.</li>
+     *   <li>Native build selected — keep only GraalVM candidates (Oracle + CE) at {@code
+     *       latestLtsMajor}. GraalVM is the only thing that can produce a native binary.
+     *   <li>Anything else — promote the latest-LTS Eclipse Temurin to the top of the list (so it's
+     *       the default selection), then preserve the existing order for everything else. The Temurin
+     *       LTS is always present because {@link #build} stamps a catalog row when it's not already
+     *       installed.
      * </ul>
      */
     static List<NewJdkCandidate> filter(List<NewJdkCandidate> all, boolean nativeSelected, int latestLtsMajor) {
@@ -268,10 +257,9 @@ public sealed interface NewJdkCandidate {
     }
 
     /**
-     * Map a JetBrains-feed {@code (vendor, product)} pair back to a
-     * {@link JdkVendor} enum value. {@link JdkVendor} itself only exposes the
-     * release-file detector; we need this for the inverse direction when
-     * presenting catalog entries to the wizard.
+     * Map a JetBrains-feed {@code (vendor, product)} pair back to a {@link JdkVendor} enum value.
+     * {@link JdkVendor} itself only exposes the release-file detector; we need this for the inverse
+     * direction when presenting catalog entries to the wizard.
      */
     private static JdkVendor vendorByLabel(String vendor, String product) {
         for (JdkVendor v : JdkVendor.values()) {

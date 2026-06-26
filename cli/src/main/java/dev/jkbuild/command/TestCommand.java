@@ -26,17 +26,15 @@ import java.util.stream.Stream;
 /**
  * {@code jk test} — compile main + test sources and run JUnit Platform tests.
  *
- * <p>Runs the same {@linkplain BuildPipeline#coreBuilder core pipeline} as
- * {@code jk build}, in {@code testOnly} mode: parse → sync → jdk → compile
- * (Kotlin and/or Java, main and test) → resources → compile-test → run-tests,
- * stopping short of packaging a jar. Sharing the pipeline means Kotlin test
- * sources compile and run exactly as they do under {@code jk build} — no
+ * <p>Runs the same {@linkplain BuildPipeline#coreBuilder core pipeline} as {@code jk build}, in
+ * {@code testOnly} mode: parse → sync → jdk → compile (Kotlin and/or Java, main and test) →
+ * resources → compile-test → run-tests, stopping short of packaging a jar. Sharing the pipeline
+ * means Kotlin test sources compile and run exactly as they do under {@code jk build} — no
  * separate, Java-only test path to keep in sync.
  *
- * <p>The test-runner's NDJSON event stream bridges into the goal's progress
- * bar (the same {@code ProgressBarListener} {@code jk compile}/{@code jk build}
- * use): each completion ticks the numerator, each failure becomes a
- * {@code ctx.error}, discovery grows the denominator.
+ * <p>The test-runner's NDJSON event stream bridges into the goal's progress bar (the same {@code
+ * ProgressBarListener} {@code jk compile}/{@code jk build} use): each completion ticks the
+ * numerator, each failure becomes a {@code ctx.error}, discovery grows the denominator.
  */
 public final class TestCommand implements CliCommand {
 
@@ -134,8 +132,8 @@ public final class TestCommand implements CliCommand {
     }
 
     /**
-     * Success result line (sans the leading ✓): {@code Passed N tests in 32s},
-     * or {@code No tests in <t>} for a project with no test sources.
+     * Success result line (sans the leading ✓): {@code Passed N tests in 32s}, or {@code No tests in
+     * <t>} for a project with no test sources.
      */
     private String testSummary(Goal goal, GoalResult result) {
         var testResult = goal.get(TEST_RESULT).orElse(null);
@@ -151,15 +149,14 @@ public final class TestCommand implements CliCommand {
     }
 
     /**
-     * Up-front lexical estimate of the test count for the run-tests phase's
-     * scope. Counts {@code @Test}, {@code @ParameterizedTest},
-     * {@code @TestFactory}, {@code @TestTemplate}, and {@code @RepeatedTest}
-     * occurrences across every {@code .java}/{@code .kt} file under {@code root}.
+     * Up-front lexical estimate of the test count for the run-tests phase's scope. Counts
+     * {@code @Test}, {@code @ParameterizedTest}, {@code @TestFactory}, {@code @TestTemplate}, and
+     * {@code @RepeatedTest} occurrences across every {@code .java}/{@code .kt} file under {@code
+     * root}.
      *
-     * <p>The estimate is intentionally generous (a parameterized method counts
-     * once; an annotation in a comment over-counts). Both biases are safe — the
-     * numerator is gated on the static plan, so over-estimation just means the
-     * bar reaches ~98% and phase-end auto-fill closes the rest.
+     * <p>The estimate is intentionally generous (a parameterized method counts once; an annotation in
+     * a comment over-counts). Both biases are safe — the numerator is gated on the static plan, so
+     * over-estimation just means the bar reaches ~98% and phase-end auto-fill closes the rest.
      */
     private static final Pattern TEST_ANNOTATION_REGEX =
             Pattern.compile("@(?:Test|ParameterizedTest|TestFactory|TestTemplate|RepeatedTest)\\b");

@@ -19,13 +19,12 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
- * Regression guard for the compile-test annotation-processor wiring (the bug where
- * {@code jk}'s test compilation never ran declared processors). {@link
- * TestSupport#compileWithCache} must put the processor path on the request — modern
- * javac (JDK 23+) only runs processors named by {@code -processorpath}, not ones
- * merely on the classpath. The fixture uses a source-generating processor: a test
- * source annotated with {@code @gen.Gen} references the generated {@code <Type>Gen}
- * type, so if the processor doesn't run the symbol is missing and the compile fails.
+ * Regression guard for the compile-test annotation-processor wiring (the bug where {@code jk}'s
+ * test compilation never ran declared processors). {@link TestSupport#compileWithCache} must put
+ * the processor path on the request — modern javac (JDK 23+) only runs processors named by {@code
+ * -processorpath}, not ones merely on the classpath. The fixture uses a source-generating
+ * processor: a test source annotated with {@code @gen.Gen} references the generated {@code
+ * <Type>Gen} type, so if the processor doesn't run the symbol is missing and the compile fails.
  */
 class CompileTestProcessorTest {
 

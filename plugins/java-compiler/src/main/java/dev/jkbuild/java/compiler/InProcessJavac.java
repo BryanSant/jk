@@ -39,28 +39,27 @@ import javax.tools.StandardLocation;
 import javax.tools.ToolProvider;
 
 /**
- * Runs {@code javac} in-process via the {@link JavacTask} API and captures
- * annotation-processing <em>provenance</em>: for each source file an annotation
- * processor generated, the input source file(s) it originated from. That mapping
- * — unavailable from a plain {@code javac} subprocess — is what lets the
- * incremental compiler re-run a processor for just the changed originators
- * instead of recompiling the world.
+ * Runs {@code javac} in-process via the {@link JavacTask} API and captures annotation-processing
+ * <em>provenance</em>: for each source file an annotation processor generated, the input source
+ * file(s) it originated from. That mapping — unavailable from a plain {@code javac} subprocess — is
+ * what lets the incremental compiler re-run a processor for just the changed originators instead of
+ * recompiling the world.
  *
- * <p>Capture works by wrapping each {@link Processor}: on {@code init} we hand
- * the real processor a {@link ProcessingEnvironment} whose {@link Filer} records
- * the {@code originatingElements} passed to {@code createSourceFile} /
- * {@code createClassFile}, resolved to their source files via {@link Trees}.
+ * <p>Capture works by wrapping each {@link Processor}: on {@code init} we hand the real processor a
+ * {@link ProcessingEnvironment} whose {@link Filer} records the {@code originatingElements} passed
+ * to {@code createSourceFile} / {@code createClassFile}, resolved to their source files via {@link
+ * Trees}.
  *
- * <p>Depends only on the JDK compiler APIs, so it runs in the {@code :java-compiler}
- * worker under the project's JDK (never in jk's own native-image process).
+ * <p>Depends only on the JDK compiler APIs, so it runs in the {@code :java-compiler} worker under
+ * the project's JDK (never in jk's own native-image process).
  */
 public final class InProcessJavac {
 
     private InProcessJavac() {}
 
     /**
-     * @param generated  generated source file → the input source files it came from
-     *                   (only source-resolvable originating elements are recorded)
+     * @param generated generated source file → the input source files it came from (only
+     *     source-resolvable originating elements are recorded)
      */
     public record Result(boolean success, List<Diag> diagnostics, Map<Path, Set<Path>> generated) {
         public Result {
@@ -69,10 +68,10 @@ public final class InProcessJavac {
     }
 
     /**
-     * One javac diagnostic, ready for the parent to re-surface: {@code kind} is
-     * the {@code javax.tools.Diagnostic.Kind} name (severity); {@code message}
-     * already carries the {@code file:line:} location prefix so the parent
-     * doesn't need the structured coordinates over the wire.
+     * One javac diagnostic, ready for the parent to re-surface: {@code kind} is the {@code
+     * javax.tools.Diagnostic.Kind} name (severity); {@code message} already carries the {@code
+     * file:line:} location prefix so the parent doesn't need the structured coordinates over the
+     * wire.
      */
     public record Diag(String kind, String message) {}
 
@@ -89,8 +88,8 @@ public final class InProcessJavac {
     }
 
     /**
-     * Compile {@code sources} into {@code classOutput}, generating any
-     * processor output into {@code sourceOutput}.
+     * Compile {@code sources} into {@code classOutput}, generating any processor output into {@code
+     * sourceOutput}.
      */
     public static Result compile(
             List<Path> sources,

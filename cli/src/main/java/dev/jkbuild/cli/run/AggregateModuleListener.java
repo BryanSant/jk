@@ -11,11 +11,10 @@ import java.time.Duration;
 import java.util.List;
 
 /**
- * Feeds one workspace module's goal/phase events into the shared
- * {@link AggregateContext}'s {@link CommandManager}, tagging every phase row
- * with the module so interleaved modules stay distinct. Does <em>not</em>
- * finalize the shared view — {@code BuildCommand} settles it once after the
- * last module.
+ * Feeds one workspace module's goal/phase events into the shared {@link AggregateContext}'s {@link
+ * CommandManager}, tagging every phase row with the module so interleaved modules stay distinct.
+ * Does <em>not</em> finalize the shared view — {@code BuildCommand} settles it once after the last
+ * module.
  */
 public final class AggregateModuleListener implements GoalListener {
 
@@ -25,31 +24,31 @@ public final class AggregateModuleListener implements GoalListener {
     private final List<Phase> phases;
 
     /**
-     * This module's reserved slice of the calibrated {@code total} — the same
-     * pre-scan {@link dev.jkbuild.run.Goal#estimatedTotalWeight()} that was summed
-     * into the aggregate denominator. The module's own 0→100% progress is scaled
-     * into this slice, so it can never consume more than its share and the base
-     * advances by exactly this much on completion (no boundary drift). Ignored on
-     * the uncalibrated path ({@code total == 0}), which falls back to live ticks.
+     * This module's reserved slice of the calibrated {@code total} — the same pre-scan {@link
+     * dev.jkbuild.run.Goal#estimatedTotalWeight()} that was summed into the aggregate denominator.
+     * The module's own 0→100% progress is scaled into this slice, so it can never consume more than
+     * its share and the base advances by exactly this much on completion (no boundary drift). Ignored
+     * on the uncalibrated path ({@code total == 0}), which falls back to live ticks.
      */
     /**
-     * Mutable: starts at the module's pre-scan estimate, but tracks its goal
-     * denominator as phases {@link dev.jkbuild.run.PhaseContext#reweight reweight}
-     * mid-run (e.g. a compile that turns out to be a cheap restore). Each change
-     * is propagated to the aggregate total via {@link AggregateContext#growTotal}
-     * so the module's share of the bar reflects the work it actually does.
+     * Mutable: starts at the module's pre-scan estimate, but tracks its goal denominator as phases
+     * {@link dev.jkbuild.run.PhaseContext#reweight reweight} mid-run (e.g. a compile that turns out
+     * to be a cheap restore). Each change is propagated to the aggregate total via {@link
+     * AggregateContext#growTotal} so the module's share of the bar reflects the work it actually
+     * does.
      */
     private long slice;
+
     /** The goal denominator we've already folded into {@link #slice} / the total. */
     private long knownDenominator;
 
     private long lastDenominator;
 
     /**
-     * When non-null, this module's process output + warnings are appended here
-     * instead of being written above the live region as they arrive. Parallel
-     * builds set this so concurrent modules' output never interleaves — the
-     * caller flushes the whole block (above the region) when the module finishes.
+     * When non-null, this module's process output + warnings are appended here instead of being
+     * written above the live region as they arrive. Parallel builds set this so concurrent modules'
+     * output never interleaves — the caller flushes the whole block (above the region) when the
+     * module finishes.
      */
     private java.util.List<String> outBuffer;
 

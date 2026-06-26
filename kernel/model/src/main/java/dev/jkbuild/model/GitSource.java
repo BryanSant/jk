@@ -6,29 +6,25 @@ import java.util.Objects;
 /**
  * A git-sourced dependency declaration (PRD §11.1).
  *
- * <p>The {@code canonicalUrl} is the result of {@code GitUrl.canonicalize}
- * — host-shorthands expanded, default ports dropped, {@code .git} suffix
- * stripped. The {@code originalUrl} preserves what the user wrote so
- * diagnostics can quote it back accurately.
+ * <p>The {@code canonicalUrl} is the result of {@code GitUrl.canonicalize} — host-shorthands
+ * expanded, default ports dropped, {@code .git} suffix stripped. The {@code originalUrl} preserves
+ * what the user wrote so diagnostics can quote it back accurately.
  *
- * <p>{@code path} optionally points at a subdirectory inside a monorepo;
- * the resolver narrows the sparse checkout to that path. {@code submodules}
- * follows {@code .gitmodules} (default true). {@code verifySignature}
- * (default false) enforces signed-commit / signed-tag checks against
- * {@code keys.jk} (PRD §11.3).
+ * <p>{@code path} optionally points at a subdirectory inside a monorepo; the resolver narrows the
+ * sparse checkout to that path. {@code submodules} follows {@code .gitmodules} (default true).
+ * {@code verifySignature} (default false) enforces signed-commit / signed-tag checks against {@code
+ * keys.jk} (PRD §11.3).
  *
- * <p>{@code overrideGroup} / {@code overrideArtifact} / {@code overrideVersion}
- * are the optional discovery overrides (docs/git-source-deps.md §"Discovery
- * with override"). Materialization discovers the coordinate from the cloned
- * repo's {@code [project]} and derives the version from the ref; a non-null
- * override replaces the corresponding discovered/derived value. All-null is
+ * <p>{@code overrideGroup} / {@code overrideArtifact} / {@code overrideVersion} are the optional
+ * discovery overrides (docs/git-source-deps.md §"Discovery with override"). Materialization
+ * discovers the coordinate from the cloned repo's {@code [project]} and derives the version from
+ * the ref; a non-null override replaces the corresponding discovered/derived value. All-null is
  * pure discovery.
  *
- * <p>{@code fetch} is the freshness policy for a <em>branch</em> ref's remote
- * tip (immutable tag/rev ignore it): {@code "always"}/{@code "0"} re-resolve
- * every build, otherwise a window ({@code "30m"}, {@code "12h"}, {@code "48h"},
- * {@code "3d"}, …) within which a previously-resolved tip is reused. {@code null}
- * means the default window (12h). See {@code GitFetcher}.
+ * <p>{@code fetch} is the freshness policy for a <em>branch</em> ref's remote tip (immutable
+ * tag/rev ignore it): {@code "always"}/{@code "0"} re-resolve every build, otherwise a window
+ * ({@code "30m"}, {@code "12h"}, {@code "48h"}, {@code "3d"}, …) within which a previously-resolved
+ * tip is reused. {@code null} means the default window (12h). See {@code GitFetcher}.
  */
 public record GitSource(
         String canonicalUrl,

@@ -12,17 +12,15 @@ import java.util.Properties;
 import java.util.function.Function;
 
 /**
- * Resolves a {@link JdkSpec} to an already-on-disk {@link InstalledJdk},
- * without downloading. Lookup order:
+ * Resolves a {@link JdkSpec} to an already-on-disk {@link InstalledJdk}, without downloading.
+ * Lookup order:
  *
  * <ol>
- *   <li>An installed JDK matching the spec, discovered via {@link JdkRegistry}'s
- *       probe chain (jk / IntelliJ / Gradle / SDKMAN / mise / asdf / jenv /
- *       Homebrew / system).</li>
- *   <li>{@code JAVA_HOME} — accepted when its {@code release} file's
- *       {@code IMPLEMENTOR} + {@code JAVA_VERSION} are consistent with
- *       the spec.</li>
- *   <li>Empty — caller decides whether to invoke {@link JdkInstaller}.</li>
+ *   <li>An installed JDK matching the spec, discovered via {@link JdkRegistry}'s probe chain (jk /
+ *       IntelliJ / Gradle / SDKMAN / mise / asdf / jenv / Homebrew / system).
+ *   <li>{@code JAVA_HOME} — accepted when its {@code release} file's {@code IMPLEMENTOR} + {@code
+ *       JAVA_VERSION} are consistent with the spec.
+ *   <li>Empty — caller decides whether to invoke {@link JdkInstaller}.
  * </ol>
  */
 public final class JdkProvisioning {

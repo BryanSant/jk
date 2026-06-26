@@ -5,14 +5,12 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * Internal {@link PhaseContext} the scheduler hands to each phase.
- * Wires {@code progress / updateScope / warn / error} into the goal's
- * counters and listener fanout; tracks per-phase scope growth so the
- * scheduler can do the "auto-fill the bar to 100% on success" trick
- * without conflating it with the phase's own reports.
+ * Internal {@link PhaseContext} the scheduler hands to each phase. Wires {@code progress /
+ * updateScope / warn / error} into the goal's counters and listener fanout; tracks per-phase scope
+ * growth so the scheduler can do the "auto-fill the bar to 100% on success" trick without
+ * conflating it with the phase's own reports.
  *
- * <p>Package-private — phases only see this through the
- * {@link PhaseContext} interface.
+ * <p>Package-private — phases only see this through the {@link PhaseContext} interface.
  */
 final class DefaultPhaseContext implements PhaseContext {
 
@@ -20,17 +18,15 @@ final class DefaultPhaseContext implements PhaseContext {
     private final Goal goal;
 
     /**
-     * Weighted phases occupy a fixed {@code weight} of bar ticks regardless of
-     * how many internal units ({@code internalScope}) they count; their
-     * 0→internalScope progress is scaled into that weight. Legacy phases (no
-     * explicit weight) keep the old 1:1 model: {@code progress} deltas hit the
-     * numerator directly and {@code updateScope} grows the goal denominator.
+     * Weighted phases occupy a fixed {@code weight} of bar ticks regardless of how many internal
+     * units ({@code internalScope}) they count; their 0→internalScope progress is scaled into that
+     * weight. Legacy phases (no explicit weight) keep the old 1:1 model: {@code progress} deltas hit
+     * the numerator directly and {@code updateScope} grows the goal denominator.
      */
     /**
-     * Interpolation ceiling: a time-driven phase eases up to this fraction of its
-     * weight and then waits for real completion, so a too-short time estimate
-     * can't sprint the bar to 100% and stall — the auto-fill on success closes
-     * the remaining sliver.
+     * Interpolation ceiling: a time-driven phase eases up to this fraction of its weight and then
+     * waits for real completion, so a too-short time estimate can't sprint the bar to 100% and stall
+     * — the auto-fill on success closes the remaining sliver.
      */
     private static final double INTERP_CAP = 0.9;
 
@@ -76,9 +72,9 @@ final class DefaultPhaseContext implements PhaseContext {
     }
 
     /**
-     * Weighted mode: move the numerator so the phase's share of the bar matches
-     * its internal progress fraction ({@code internalDone / internalScope}) ×
-     * {@code weight}. Real progress can fill the whole weight.
+     * Weighted mode: move the numerator so the phase's share of the bar matches its internal progress
+     * fraction ({@code internalDone / internalScope}) × {@code weight}. Real progress can fill the
+     * whole weight.
      */
     private void advance() {
         long scope = internalScope.get();
@@ -88,11 +84,10 @@ final class DefaultPhaseContext implements PhaseContext {
     }
 
     /**
-     * Wall-clock interpolation tick (driven by the goal's scheduler for opaque
-     * phases). Eases the slice toward {@code weight × elapsed/expected}, capped at
-     * {@link #INTERP_CAP}. Never moves the bar past where real progress already
-     * put it — {@link #advanceTo} is monotonic — so it only fills the gap an
-     * opaque phase leaves while its single body call runs.
+     * Wall-clock interpolation tick (driven by the goal's scheduler for opaque phases). Eases the
+     * slice toward {@code weight × elapsed/expected}, capped at {@link #INTERP_CAP}. Never moves the
+     * bar past where real progress already put it — {@link #advanceTo} is monotonic — so it only
+     * fills the gap an opaque phase leaves while its single body call runs.
      */
     void tick(long nowNanos) {
         if (expectedNanos <= 0) return;
@@ -224,14 +219,16 @@ final class DefaultPhaseContext implements PhaseContext {
     @Override
     public <T> T require(GoalKey<T> key) {
         return goal.get(key)
-                .orElseThrow(() -> new IllegalStateException("phase '" + phase + "' required key '" + key.name()
+                .orElseThrow(() -> new IllegalStateException("phase '"
+                        + phase
+                        + "' required key '"
+                        + key.name()
                         + "' but it wasn't set by any upstream phase"));
     }
 
     /**
-     * Fanout for synthetic auto-fill at phase end. Same shape as a
-     * regular {@link #progress} but invoked by the scheduler, not by
-     * the phase body.
+     * Fanout for synthetic auto-fill at phase end. Same shape as a regular {@link #progress} but
+     * invoked by the scheduler, not by the phase body.
      */
     void notifyProgress(int delta) {
         if (delta <= 0) return;

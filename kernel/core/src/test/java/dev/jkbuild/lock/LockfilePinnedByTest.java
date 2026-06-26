@@ -10,10 +10,9 @@ import org.junit.jupiter.api.Test;
 /**
  * Round-trip the optional {@code pinned-by} field on {@link Lockfile.Artifact}.
  *
- * <p>{@code pinned-by} records the BOM coord ({@code group:artifact:version})
- * that constrained a package to its locked version. It's optional — packages
- * that resolved through normal at-least propagation have a {@code null}
- * {@code pinnedBy} and emit no {@code pinned-by} line.
+ * <p>{@code pinned-by} records the BOM coord ({@code group:artifact:version}) that constrained a
+ * package to its locked version. It's optional — packages that resolved through normal at-least
+ * propagation have a {@code null} {@code pinnedBy} and emit no {@code pinned-by} line.
  */
 class LockfilePinnedByTest {
 

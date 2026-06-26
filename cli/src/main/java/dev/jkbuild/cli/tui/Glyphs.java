@@ -2,9 +2,9 @@
 package dev.jkbuild.cli.tui;
 
 /**
- * Single source of truth for the status/marker glyphs used across jk's
- * terminal UI. These are just the codepoints — color is applied separately
- * via the theme (e.g. {@code Theme.colorize(Glyphs.CHECK, Theme.active().success())}).
+ * Single source of truth for the status/marker glyphs used across jk's terminal UI. These are just
+ * the codepoints — color is applied separately via the theme (e.g. {@code
+ * Theme.colorize(Glyphs.CHECK, Theme.active().success())}).
  */
 public final class Glyphs {
 
@@ -28,10 +28,13 @@ public final class Glyphs {
     // so badges fall back to a plain padded chip (no caps).
     /** Nerd Font powerline left solid half-circle (U+E0B6). */
     public static final String PILL_LEFT_NERD = "";
+
     /** Nerd Font powerline right solid half-circle (U+E0B4). */
     public static final String PILL_RIGHT_NERD = "";
+
     /** Nerd Font powerline right-pointing segment terminator / arrow (U+E0B0). */
     public static final String SEGMENT_END_NERD = "";
+
     /** Nerd Font powerline left-pointing segment terminator / arrow (U+E0B2). */
     public static final String SEGMENT_BACK_NERD = "";
 }

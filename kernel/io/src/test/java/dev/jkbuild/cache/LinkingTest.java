@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.BasicFileAttributes;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -22,10 +23,8 @@ class LinkingTest {
         assertThat(Files.readString(dst)).isEqualTo("hello");
         // Same-fs link → same inode (BasicFileAttributes.fileKey() is the
         // best portable proxy we have for "shared inode").
-        var srcKey = Files.readAttributes(src, java.nio.file.attribute.BasicFileAttributes.class)
-                .fileKey();
-        var dstKey = Files.readAttributes(dst, java.nio.file.attribute.BasicFileAttributes.class)
-                .fileKey();
+        var srcKey = Files.readAttributes(src, BasicFileAttributes.class).fileKey();
+        var dstKey = Files.readAttributes(dst, BasicFileAttributes.class).fileKey();
         assertThat(dstKey).as("hard-link should share an inode with the source").isEqualTo(srcKey);
     }
 

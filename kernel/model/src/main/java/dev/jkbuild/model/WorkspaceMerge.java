@@ -12,20 +12,18 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Builds a synthetic {@link JkBuild} that combines a workspace root with
- * its modules so the existing {@code LockOrchestrator} can resolve the
- * whole workspace in a single pass.
+ * Builds a synthetic {@link JkBuild} that combines a workspace root with its modules so the
+ * existing {@code LockOrchestrator} can resolve the whole workspace in a single pass.
  *
- * <p>In addition to scope-aggregated deduping (root wins, then declaration
- * order), this also resolves the {@code workspace = true} placeholder
- * deps the parser emits for child manifests:
+ * <p>In addition to scope-aggregated deduping (root wins, then declaration order), this also
+ * resolves the {@code workspace = true} placeholder deps the parser emits for child manifests:
+ *
  * <ol>
- *   <li>If a workspace sibling has a matching {@code [project].artifact},
- *       the dep is rewritten to that sibling's coord (the dep then dedupes
- *       away as workspace-internal).</li>
- *   <li>Else if {@code [workspace.dependencies]} declares an entry under
- *       that name, the dep is rewritten to that entry's coord.</li>
- *   <li>Else: a parse error pointing at the unresolved name.</li>
+ *   <li>If a workspace sibling has a matching {@code [project].artifact}, the dep is rewritten to
+ *       that sibling's coord (the dep then dedupes away as workspace-internal).
+ *   <li>Else if {@code [workspace.dependencies]} declares an entry under that name, the dep is
+ *       rewritten to that entry's coord.
+ *   <li>Else: a parse error pointing at the unresolved name.
  * </ol>
  */
 public final class WorkspaceMerge {
@@ -36,19 +34,16 @@ public final class WorkspaceMerge {
     private WorkspaceMerge() {}
 
     /**
-     * Apply workspace context to a single module's manifest. Resolves any
-     * {@code workspace:*} placeholders against the workspace siblings and
-     * the root's {@code [workspace.dependencies]}, then filters out any
-     * dep whose resolved coordinate matches a workspace sibling — those
-     * are not on Maven Central; their jars are injected by
-     * {@link dev.jkbuild.config.WorkspaceClasspath} at compile time from
-     * the workspace's shared {@code target/} directory.
+     * Apply workspace context to a single module's manifest. Resolves any {@code workspace:*}
+     * placeholders against the workspace siblings and the root's {@code [workspace.dependencies]},
+     * then filters out any dep whose resolved coordinate matches a workspace sibling — those are not
+     * on Maven Central; their jars are injected by {@link dev.jkbuild.config.WorkspaceClasspath} at
+     * compile time from the workspace's shared {@code target/} directory.
      *
-     * <p>Returns a JkBuild shaped like {@code module} (same project,
-     * repositories, profiles, features) but with the dep list trimmed to
-     * only external Maven coords. Lock orchestration sees a clean,
-     * resolvable set; classpath construction (which keeps the original
-     * parsed module) still sees the sibling refs.
+     * <p>Returns a JkBuild shaped like {@code module} (same project, repositories, profiles,
+     * features) but with the dep list trimmed to only external Maven coords. Lock orchestration sees
+     * a clean, resolvable set; classpath construction (which keeps the original parsed module) still
+     * sees the sibling refs.
      */
     public static JkBuild applyToModule(JkBuild root, JkBuild module, Collection<JkBuild> allModules) {
         if (allModules.isEmpty()) return module;
@@ -153,9 +148,8 @@ public final class WorkspaceMerge {
     }
 
     /**
-     * Rewrites a placeholder {@code workspace:<name>} dep into the real
-     * coord, using the sibling list first and then the workspace's
-     * shared-dep table. Non-placeholder deps pass through unchanged.
+     * Rewrites a placeholder {@code workspace:<name>} dep into the real coord, using the sibling list
+     * first and then the workspace's shared-dep table. Non-placeholder deps pass through unchanged.
      */
     private static Dependency resolve(
             Dependency d, Map<String, JkBuild> siblingByArtifact, Map<String, Workspace.WorkspaceDependency> wsDeps) {

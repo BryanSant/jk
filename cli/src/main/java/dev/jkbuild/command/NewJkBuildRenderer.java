@@ -7,35 +7,34 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Emits a {@code jk.toml} document from {@link NewInputs}. The schema reflects
- * the v0.7 name-as-key sub-table form:
+ * Emits a {@code jk.toml} document from {@link NewInputs}. The schema reflects the v0.7 name-as-key
+ * sub-table form:
  *
  * <pre>{@code
- *   [project]
- *   group    = "..."
- *   name     = "..."
- *   version  = "0.1.0"
- *   jdk      = "25"
- *   java     = 25
+ * [project]
+ * group    = "..."
+ * name     = "..."
+ * version  = "0.1.0"
+ * jdk      = "25"
+ * java     = 25
  *
- *   [dependencies.test]
- *   junit-jupiter = { group = "org.junit.jupiter", version = "6.1.0" }
+ * [dependencies.test]
+ * junit-jupiter = { group = "org.junit.jupiter", version = "6.1.0" }
  * }</pre>
  *
  * <ul>
- *   <li>{@code jdk = "<spec>"} — a JDK spec string: a bare major ({@code "25"})
- *       or, only when the user passed {@code --jdk <vendor>-<major>}, a
- *       vendor-hinted pin ({@code "corretto-25"}). Resolved to a concrete
- *       install identifier in {@code jk.lock}.</li>
- *   <li>{@code java = <major>} (integer) or {@code kotlin = "<version>"}
- *       (compiler version string) — mutually exclusive language indicator.</li>
+ *   <li>{@code jdk = "<spec>"} — a JDK spec string: a bare major ({@code "25"}) or, only when the
+ *       user passed {@code --jdk <vendor>-<major>}, a vendor-hinted pin ({@code "corretto-25"}).
+ *       Resolved to a concrete install identifier in {@code jk.lock}.
+ *   <li>{@code java = <major>} (integer) or {@code kotlin = "<version>"} (compiler version string)
+ *       — mutually exclusive language indicator.
  * </ul>
  */
 public final class NewJkBuildRenderer {
 
     /**
-     * Default Kotlin compiler version selector when language=kotlin. Floating
-     * (caret) so {@code jk lock} pins it to the latest compatible release.
+     * Default Kotlin compiler version selector when language=kotlin. Floating (caret) so {@code jk
+     * lock} pins it to the latest compatible release.
      */
     private static final String DEFAULT_KOTLIN_VERSION = dev.jkbuild.kotlin.KotlinResolver.DEFAULT_VERSION;
 
@@ -90,16 +89,14 @@ public final class NewJkBuildRenderer {
     }
 
     /**
-     * Render a single curated dep. The short name is the artifactId (the part
-     * after the colon in {@code group:artifact}).
+     * Render a single curated dep. The short name is the artifactId (the part after the colon in
+     * {@code group:artifact}).
      *
-     * <p>When that short name resolves through the bundled library catalog to
-     * this exact coordinate, emit the Cargo-style one-liner
-     * {@code name = "latest"} — the catalog supplies group/artifact and the
-     * resolver floats to the newest release. Otherwise fall back to the
-     * explicit inline table {@code { group = "...", version = "..." }} using
-     * the curated major (bare-string version is caret-floating per the v1
-     * default — {@code ^1} → 1.x.x).
+     * <p>When that short name resolves through the bundled library catalog to this exact coordinate,
+     * emit the Cargo-style one-liner {@code name = "latest"} — the catalog supplies group/artifact
+     * and the resolver floats to the newest release. Otherwise fall back to the explicit inline table
+     * {@code { group = "...", version = "..." }} using the curated major (bare-string version is
+     * caret-floating per the v1 default — {@code ^1} → 1.x.x).
      */
     private static String formatEntry(NewScaffolder.CuratedEntry e) {
         int colon = e.coord().indexOf(':');
@@ -113,9 +110,9 @@ public final class NewJkBuildRenderer {
     }
 
     /**
-     * Group selected dep ids by scope. Returns a nested map of scope ->
-     * curated entries, preserving insertion order so generated files have a
-     * stable shape and de-duping by short name (artifactId) within a scope.
+     * Group selected dep ids by scope. Returns a nested map of scope -> curated entries, preserving
+     * insertion order so generated files have a stable shape and de-duping by short name (artifactId)
+     * within a scope.
      */
     private static Map<String, List<NewScaffolder.CuratedEntry>> resolvePicks(List<String> deps) {
         Map<String, Map<String, NewScaffolder.CuratedEntry>> byScope = new LinkedHashMap<>();

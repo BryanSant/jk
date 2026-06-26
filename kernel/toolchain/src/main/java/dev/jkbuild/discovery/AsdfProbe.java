@@ -11,11 +11,9 @@ import java.util.Optional;
 import java.util.stream.Stream;
 
 /**
- * asdf-vm keeps installs under {@code ~/.asdf/installs/<kind>/<version>/}.
- * For JDKs, the {@code <version>} is asdf-plugin-specific
- * ({@code openjdk-21.0.5}, {@code temurin-21.0.5+11}); we scan for any
- * subdir whose {@code release} file matches the requested version +
- * distribution.
+ * asdf-vm keeps installs under {@code ~/.asdf/installs/<kind>/<version>/}. For JDKs, the {@code
+ * <version>} is asdf-plugin-specific ({@code openjdk-21.0.5}, {@code temurin-21.0.5+11}); we scan
+ * for any subdir whose {@code release} file matches the requested version + distribution.
  */
 public final class AsdfProbe implements LocalToolProbe {
 

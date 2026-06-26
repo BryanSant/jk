@@ -6,9 +6,9 @@ import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 
 /**
- * Loads shell hook templates from {@code cli/.../resources/activate/}.
- * Resources are bundled in the jar; native-image builds need them declared in
- * {@code resource-config.json} (see {@code META-INF/native-image} under cli).
+ * Loads shell hook templates from {@code cli/.../resources/activate/}. Resources are bundled in the
+ * jar; native-image builds need them declared in {@code resource-config.json} (see {@code
+ * META-INF/native-image} under cli).
  */
 final class ShellResources {
 

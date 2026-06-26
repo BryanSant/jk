@@ -5,9 +5,7 @@ import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Invocation;
 import java.util.List;
 
-/**
- * {@code jk library} parent verb — manage the short-name library catalog.
- */
+/** {@code jk library} parent verb — manage the short-name library catalog. */
 public final class LibraryCommand implements CliCommand {
 
     @Override

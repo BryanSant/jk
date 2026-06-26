@@ -22,8 +22,8 @@ import java.nio.file.Path;
 import java.util.List;
 
 /**
- * {@code jk deny} — apply the jk.toml {@code deny} policy against the
- * locked dependencies (PRD §23.6). Exits non-zero on any violation.
+ * {@code jk deny} — apply the jk.toml {@code deny} policy against the locked dependencies (PRD
+ * §23.6). Exits non-zero on any violation.
  */
 public final class DenyCommand implements CliCommand {
 
@@ -54,7 +54,8 @@ public final class DenyCommand implements CliCommand {
             return 66;
         }
         if (!Files.exists(lockPath)) {
-            System.err.println("jk deny: no jk.lock in " + dev.jkbuild.cli.PathDisplay.styledRaw(projectDir)
+            System.err.println("jk deny: no jk.lock in "
+                    + dev.jkbuild.cli.PathDisplay.styledRaw(projectDir)
                     + " (run `jk lock` first).");
             return 2;
         }

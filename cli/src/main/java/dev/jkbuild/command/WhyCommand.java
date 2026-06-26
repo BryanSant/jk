@@ -19,9 +19,7 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.stream.Collectors;
 
-/**
- * {@code jk why &lt;module&gt;} — explain why a module is in the dependency graph.
- */
+/** {@code jk why &lt;module&gt;} — explain why a module is in the dependency graph. */
 public final class WhyCommand implements CliCommand {
 
     @Override
@@ -94,8 +92,8 @@ public final class WhyCommand implements CliCommand {
     }
 
     /**
-     * Match a lockfile {@code group:artifact} name against a user query.
-     * Exact match, artifact-only match (query has no colon), or substring.
+     * Match a lockfile {@code group:artifact} name against a user query. Exact match, artifact-only
+     * match (query has no colon), or substring.
      */
     private static boolean matchesQuery(String name, String query) {
         if (name.equals(query)) return true;

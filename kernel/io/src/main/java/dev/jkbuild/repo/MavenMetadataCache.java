@@ -20,30 +20,26 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * On-disk cache for {@code maven-metadata.xml} — the version-enumeration
- * counterpart to the artifact {@link dev.jkbuild.cache.Cas}.
+ * On-disk cache for {@code maven-metadata.xml} — the version-enumeration counterpart to the
+ * artifact {@link dev.jkbuild.cache.Cas}.
  *
- * <p>Metadata is a <em>mutable</em> index (it grows as new versions are
- * published), so unlike artifacts it can't be content-addressed and reused
- * forever. Instead this caches the bytes keyed by URL and freshness-checks them
- * the way the JDK feed client does: served straight from disk within a
- * {@linkplain #DEFAULT_TTL TTL}, and beyond that revalidated with a conditional
- * GET ({@code If-None-Match} on the stored {@code ETag}, {@code If-Modified-Since}
- * on the stored {@code Last-Modified}). A {@code 304 Not Modified} costs only
- * response headers, so repeat resolves no longer re-download the index — and
- * within the TTL they make no request at all, which is what was hammering Maven
- * Central (HTTP 429) across back-to-back builds.
+ * <p>Metadata is a <em>mutable</em> index (it grows as new versions are published), so unlike
+ * artifacts it can't be content-addressed and reused forever. Instead this caches the bytes keyed
+ * by URL and freshness-checks them the way the JDK feed client does: served straight from disk
+ * within a {@linkplain #DEFAULT_TTL TTL}, and beyond that revalidated with a conditional GET
+ * ({@code If-None-Match} on the stored {@code ETag}, {@code If-Modified-Since} on the stored {@code
+ * Last-Modified}). A {@code 304 Not Modified} costs only response headers, so repeat resolves no
+ * longer re-download the index — and within the TTL they make no request at all, which is what was
+ * hammering Maven Central (HTTP 429) across back-to-back builds.
  *
- * <p>No SHA-1/checksum comparison: the conditional GET already signals change,
- * and metadata (unlike artifacts) isn't hash-pinned in {@code jk.lock}. When the
- * server can't be reached or refuses a refresh (network error, 429, …) a
- * previously-cached copy is reused rather than failing the resolve; a genuine
- * 404 surfaces as {@link MavenRepo.ArtifactNotFoundException} so {@link RepoGroup} can fall
- * through to the next repo.
+ * <p>No SHA-1/checksum comparison: the conditional GET already signals change, and metadata (unlike
+ * artifacts) isn't hash-pinned in {@code jk.lock}. When the server can't be reached or refuses a
+ * refresh (network error, 429, …) a previously-cached copy is reused rather than failing the
+ * resolve; a genuine 404 surfaces as {@link MavenRepo.ArtifactNotFoundException} so {@link
+ * RepoGroup} can fall through to the next repo.
  *
- * <p>Rooted under the active cache dir (passed by {@link MavenRepo} as
- * {@code <cache>/metadata}), so {@code --cache-dir} / per-invocation isolation is
- * preserved.
+ * <p>Rooted under the active cache dir (passed by {@link MavenRepo} as {@code <cache>/metadata}),
+ * so {@code --cache-dir} / per-invocation isolation is preserved.
  */
 public final class MavenMetadataCache {
 
@@ -61,9 +57,9 @@ public final class MavenMetadataCache {
     }
 
     /**
-     * The {@code maven-metadata.xml} bytes for {@code uri} — from the on-disk
-     * cache within the TTL, otherwise revalidated with a conditional GET.
-     * Throws {@link MavenRepo.ArtifactNotFoundException} on a 404 (no such coordinate here).
+     * The {@code maven-metadata.xml} bytes for {@code uri} — from the on-disk cache within the TTL,
+     * otherwise revalidated with a conditional GET. Throws {@link
+     * MavenRepo.ArtifactNotFoundException} on a 404 (no such coordinate here).
      */
     public byte[] fetch(URI uri, RepoCredential credential) throws IOException, InterruptedException {
         Path body = dir.resolve(Hashing.sha256Hex(uri.toString()));

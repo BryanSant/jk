@@ -7,21 +7,22 @@ import java.nio.file.Path;
 import java.util.List;
 
 /**
- * Global flags that apply to every {@code jk} subcommand. Populated from a
- * parsed {@link dev.jkbuild.model.command.Invocation} via {@link #from(dev.jkbuild.model.command.Invocation)}.
+ * Global flags that apply to every {@code jk} subcommand. Populated from a parsed {@link
+ * dev.jkbuild.model.command.Invocation} via {@link #from(dev.jkbuild.model.command.Invocation)}.
  *
- * <p>Precedence for resolving each setting: explicit flag &gt; env var
- * &gt; project {@code jk.toml} &gt; user-global {@code ~/.jk/config.toml}.
- * There is no {@code /etc/jk} system layer and jk never reads
- * {@code ~/.config} — see {@link dev.jkbuild.config.ConfigSources}.
+ * <p>Precedence for resolving each setting: explicit flag &gt; env var &gt; project {@code jk.toml}
+ * &gt; user-global {@code ~/.jk/config.toml}. There is no {@code /etc/jk} system layer and jk never
+ * reads {@code ~/.config} — see {@link dev.jkbuild.config.ConfigSources}.
  */
 public final class GlobalOptions {
     public boolean quiet;
     public boolean verbose;
     public String color;
     public boolean offline;
+
     /** {@code --rerun}: re-run build outputs (compile/test/package), honoring cached deps. */
     public boolean rerun;
+
     /** {@code --refresh}: re-validate deps against their remotes (re-download if changed). */
     public boolean refresh;
 
@@ -35,9 +36,8 @@ public final class GlobalOptions {
     public String output;
 
     /**
-     * True when the user asked for {@code --output json} (or set
-     * {@code JK_OUTPUT=json}). Commands may use this to suppress their
-     * own human-readable summary lines so the NDJSON stream stays
+     * True when the user asked for {@code --output json} (or set {@code JK_OUTPUT=json}). Commands
+     * may use this to suppress their own human-readable summary lines so the NDJSON stream stays
      * machine-parseable.
      */
     public boolean outputIsJson() {
@@ -53,12 +53,10 @@ public final class GlobalOptions {
     public Path directory;
 
     /**
-     * Resolve the working directory: explicit {@code --directory} if set
-     * (either on this mixin or via {@link dev.jkbuild.config.ActiveConfig},
-     * which captures {@code -C} placed before the subcommand), otherwise
-     * the current working directory. Always returns an absolute normalised
-     * path so callers can pass it into IO without worrying about whether
-     * {@code -C} was supplied.
+     * Resolve the working directory: explicit {@code --directory} if set (either on this mixin or via
+     * {@link dev.jkbuild.config.ActiveConfig}, which captures {@code -C} placed before the
+     * subcommand), otherwise the current working directory. Always returns an absolute normalised
+     * path so callers can pass it into IO without worrying about whether {@code -C} was supplied.
      */
     public Path workingDir() {
         Path raw = directory;
@@ -73,25 +71,24 @@ public final class GlobalOptions {
 
     /** {@code --max-ram-percent}: per-JVM heap cap for jk's worker JVMs, or null. */
     public Double maxRamPercent;
+
     /** {@code --jvm-arg}: extra raw flags for jk's worker JVMs (repeatable). */
     public List<String> jvmArgs = List.of();
 
     /**
-     * The CLI-supplied JVM tuning as the highest-precedence
-     * {@link dev.jkbuild.worker.JvmOptions.Settings} layer. {@code gc} /
-     * {@code string-dedup} are left unset here — those come from env /
-     * {@code jk.toml}; the CLI exposes only the two most common knobs.
+     * The CLI-supplied JVM tuning as the highest-precedence {@link
+     * dev.jkbuild.worker.JvmOptions.Settings} layer. {@code gc} / {@code string-dedup} are left unset
+     * here — those come from env / {@code jk.toml}; the CLI exposes only the two most common knobs.
      */
     public dev.jkbuild.worker.JvmOptions.Settings jvmCli() {
         return new dev.jkbuild.worker.JvmOptions.Settings(maxRamPercent, null, null, jvmArgs);
     }
 
     /**
-     * Populate a {@code GlobalOptions} from a parsed {@link Invocation} — the
-     * picocli-free counterpart to the {@code @Mixin}. A ported command's
-     * {@code run(Invocation)} replaces its {@code @Mixin GlobalOptions global}
-     * field with {@code GlobalOptions.from(in)}; the rest of the body
-     * ({@code global.workingDir()}, {@code global.offline}, …) is unchanged.
+     * Populate a {@code GlobalOptions} from a parsed {@link Invocation} — the picocli-free
+     * counterpart to the {@code @Mixin}. A ported command's {@code run(Invocation)} replaces its
+     * {@code @Mixin GlobalOptions global} field with {@code GlobalOptions.from(in)}; the rest of the
+     * body ({@code global.workingDir()}, {@code global.offline}, …) is unchanged.
      */
     public static GlobalOptions from(Invocation in) {
         GlobalOptions g = new GlobalOptions();
@@ -133,9 +130,9 @@ public final class GlobalOptions {
     }
 
     /**
-     * The global options as {@link dev.jkbuild.model.command.Opt} data. The
-     * dispatcher merges these into every command's option set so global flags
-     * are accepted everywhere and shown in the "Global options" help section.
+     * The global options as {@link dev.jkbuild.model.command.Opt} data. The dispatcher merges these
+     * into every command's option set so global flags are accepted everywhere and shown in the
+     * "Global options" help section.
      */
     /** Stash a CLI spec process-wide (set when present, cleared when absent). */
     private static void applyProp(String key, String value) {

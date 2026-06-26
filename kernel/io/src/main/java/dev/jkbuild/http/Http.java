@@ -18,12 +18,12 @@ import java.util.Map;
 import java.util.zip.GZIPInputStream;
 
 /**
- * Thin wrapper over {@link HttpClient} that adds the retry/backoff schedule
- * the PRD §8.3 calls for: exponential backoff with jitter on 5xx and on
- * network {@link IOException}s; never retries on 4xx; max 5 attempts.
+ * Thin wrapper over {@link HttpClient} that adds the retry/backoff schedule the PRD §8.3 calls for:
+ * exponential backoff with jitter on 5xx and on network {@link IOException}s; never retries on 4xx;
+ * max 5 attempts.
  *
- * <p>ETag / If-Modified-Since / range requests / negative caching arrive
- * once the resolver actually wants them.
+ * <p>ETag / If-Modified-Since / range requests / negative caching arrive once the resolver actually
+ * wants them.
  */
 public final class Http {
 
@@ -59,9 +59,8 @@ public final class Http {
     }
 
     /**
-     * GET with extra request headers — used for conditional GET
-     * ({@code If-Modified-Since}, {@code If-None-Match}). 304 responses
-     * are returned to the caller as-is.
+     * GET with extra request headers — used for conditional GET ({@code If-Modified-Since}, {@code
+     * If-None-Match}). 304 responses are returned to the caller as-is.
      */
     public HttpResponse<byte[]> get(URI uri, Map<String, String> headers) throws IOException, InterruptedException {
         checkOffline(uri);
@@ -104,25 +103,22 @@ public final class Http {
     }
 
     /**
-     * Streaming GET — returns the response with the body as an
-     * {@link InputStream} so the caller can pump bytes through a hash /
-     * progress / file sink without buffering the whole payload in memory.
-     * Same retry policy as {@link #get(URI)} for connect failures and
-     * 5xx; mid-stream failures propagate to the caller (no resume).
+     * Streaming GET — returns the response with the body as an {@link InputStream} so the caller can
+     * pump bytes through a hash / progress / file sink without buffering the whole payload in memory.
+     * Same retry policy as {@link #get(URI)} for connect failures and 5xx; mid-stream failures
+     * propagate to the caller (no resume).
      *
-     * <p>The per-request timeout is generous (15 min) because JDK archives
-     * commonly run 100–250 MB and the standard {@code .get()} 60s ceiling
-     * would cut them off on slow links.
+     * <p>The per-request timeout is generous (15 min) because JDK archives commonly run 100–250 MB
+     * and the standard {@code .get()} 60s ceiling would cut them off on slow links.
      */
     public HttpResponse<InputStream> getStream(URI uri) throws IOException, InterruptedException {
         return getStream(uri, Map.of());
     }
 
     /**
-     * Streaming GET with extra request headers (e.g. {@code Authorization}
-     * for an authenticated repository). Otherwise identical to
-     * {@link #getStream(URI)}: same generous timeout and retry policy, body
-     * delivered as an {@link InputStream} the caller pumps to a sink.
+     * Streaming GET with extra request headers (e.g. {@code Authorization} for an authenticated
+     * repository). Otherwise identical to {@link #getStream(URI)}: same generous timeout and retry
+     * policy, body delivered as an {@link InputStream} the caller pumps to a sink.
      */
     public HttpResponse<InputStream> getStream(URI uri, Map<String, String> headers)
             throws IOException, InterruptedException {
@@ -164,16 +160,15 @@ public final class Http {
     }
 
     /**
-     * POST an {@code application/x-www-form-urlencoded} body and ask for a
-     * JSON reply. Same retry/offline policy as {@link #get(URI)}: retries
-     * on connect failures and 5xx, never on 4xx, max 5 attempts.
+     * POST an {@code application/x-www-form-urlencoded} body and ask for a JSON reply. Same
+     * retry/offline policy as {@link #get(URI)}: retries on connect failures and 5xx, never on 4xx,
+     * max 5 attempts.
      *
-     * <p>Responses below 500 are returned to the caller as-is — including
-     * 4xx. The OAuth device flow (docs/gh-integration.md) relies on this:
-     * GitHub signals {@code authorization_pending} / {@code slow_down}
-     * with a non-2xx status plus a JSON {@code error} field, so the poll
-     * loop needs the body, not an exception. The form values ride the wire
-     * URL-encoded; callers must use https URIs for anything sensitive.
+     * <p>Responses below 500 are returned to the caller as-is — including 4xx. The OAuth device flow
+     * (docs/gh-integration.md) relies on this: GitHub signals {@code authorization_pending} / {@code
+     * slow_down} with a non-2xx status plus a JSON {@code error} field, so the poll loop needs the
+     * body, not an exception. The form values ride the wire URL-encoded; callers must use https URIs
+     * for anything sensitive.
      */
     public HttpResponse<byte[]> postForm(URI uri, Map<String, String> form) throws IOException, InterruptedException {
         checkOffline(uri);
@@ -220,12 +215,11 @@ public final class Http {
     }
 
     /**
-     * PUT a byte body with caller-supplied headers (e.g. {@code Authorization},
-     * {@code Content-Type}) — the upload primitive for publishing to Maven
-     * repositories and object stores (docs/artifact-repos.md). Same offline
-     * guard and retry policy as {@link #get(URI)}: PUT is idempotent, so
-     * retrying on connect failures and 5xx is safe; 4xx is returned to the
-     * caller as-is (auth failures, 409 conflicts, etc.).
+     * PUT a byte body with caller-supplied headers (e.g. {@code Authorization}, {@code Content-Type})
+     * — the upload primitive for publishing to Maven repositories and object stores
+     * (docs/artifact-repos.md). Same offline guard and retry policy as {@link #get(URI)}: PUT is
+     * idempotent, so retrying on connect failures and 5xx is safe; 4xx is returned to the caller
+     * as-is (auth failures, 409 conflicts, etc.).
      */
     public HttpResponse<byte[]> put(URI uri, byte[] body, Map<String, String> headers)
             throws IOException, InterruptedException {
@@ -269,17 +263,15 @@ public final class Http {
     }
 
     /**
-     * Body handler that returns the response as a {@code byte[]} and
-     * transparently inflates the payload when the server set
-     * {@code Content-Encoding: gzip}. Java's {@link HttpClient} never
-     * decompresses on its own (unlike curl), so without this every
-     * gzip-aware caller would have to wrap manually.
+     * Body handler that returns the response as a {@code byte[]} and transparently inflates the
+     * payload when the server set {@code Content-Encoding: gzip}. Java's {@link HttpClient} never
+     * decompresses on its own (unlike curl), so without this every gzip-aware caller would have to
+     * wrap manually.
      *
-     * <p>Callers should treat the returned bytes as the canonical body.
-     * The response object retains the original {@code Content-Encoding}
-     * and {@code Content-Length} headers — those describe the wire, not
-     * the decoded payload, so reading them is now a footgun. In practice
-     * jk callers don't, so the tradeoff is acceptable.
+     * <p>Callers should treat the returned bytes as the canonical body. The response object retains
+     * the original {@code Content-Encoding} and {@code Content-Length} headers — those describe the
+     * wire, not the decoded payload, so reading them is now a footgun. In practice jk callers don't,
+     * so the tradeoff is acceptable.
      */
     static BodyHandler<byte[]> gzipAwareByteArray() {
         return responseInfo -> {
@@ -296,11 +288,9 @@ public final class Http {
     }
 
     /**
-     * Streaming counterpart of {@link #gzipAwareByteArray()}. Wraps the
-     * incoming {@link InputStream} in a {@link GZIPInputStream} when the
-     * response is gzip-encoded; the caller's {@code try-with-resources}
-     * closes the gzip stream, which in turn releases the underlying
-     * connection.
+     * Streaming counterpart of {@link #gzipAwareByteArray()}. Wraps the incoming {@link InputStream}
+     * in a {@link GZIPInputStream} when the response is gzip-encoded; the caller's {@code
+     * try-with-resources} closes the gzip stream, which in turn releases the underlying connection.
      */
     static BodyHandler<InputStream> gzipAwareInputStream() {
         return responseInfo -> {
@@ -331,12 +321,10 @@ public final class Http {
     }
 
     /**
-     * Fail fast when the user passed {@code --offline} (or set
-     * {@code JK_OFFLINE} / {@code config.offline = true}). Any outbound HTTP
-     * is short-circuited with a clear error before the request is even
-     * constructed; callers that need to fall back to cached data should
-     * either avoid calling Http entirely in offline mode or catch this and
-     * substitute a cache lookup.
+     * Fail fast when the user passed {@code --offline} (or set {@code JK_OFFLINE} / {@code
+     * config.offline = true}). Any outbound HTTP is short-circuited with a clear error before the
+     * request is even constructed; callers that need to fall back to cached data should either avoid
+     * calling Http entirely in offline mode or catch this and substitute a cache lookup.
      */
     private static void checkOffline(URI uri) throws OfflineException {
         if (dev.jkbuild.config.ActiveConfig.get().offlineOr(false)) {

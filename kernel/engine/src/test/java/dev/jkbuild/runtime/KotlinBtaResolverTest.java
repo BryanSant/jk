@@ -16,9 +16,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
- * Deterministic coverage of the resolved-closure cache (the warm-build fast
- * path). The Maven resolution itself is network-bound and exercised end-to-end
- * by the higher-level Kotlin build tests once the worker is wired in.
+ * Deterministic coverage of the resolved-closure cache (the warm-build fast path). The Maven
+ * resolution itself is network-bound and exercised end-to-end by the higher-level Kotlin build
+ * tests once the worker is wired in.
  */
 class KotlinBtaResolverTest {
 

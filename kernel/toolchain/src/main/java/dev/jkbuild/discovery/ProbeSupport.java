@@ -11,13 +11,12 @@ import java.util.Optional;
 import java.util.Properties;
 
 /**
- * Shared helpers for {@link LocalToolProbe} implementations enumerating
- * JDK installs via {@code discoverAllJdks}.
+ * Shared helpers for {@link LocalToolProbe} implementations enumerating JDK installs via {@code
+ * discoverAllJdks}.
  *
- * <p>{@link #discoverJdk} parses the {@code release} file exactly once and
- * extracts both the {@code JAVA_VERSION} (validation) and the
- * {@code IMPLEMENTOR} / {@code IMPLEMENTOR_VERSION} (vendor lookup) from
- * that single read.
+ * <p>{@link #discoverJdk} parses the {@code release} file exactly once and extracts both the {@code
+ * JAVA_VERSION} (validation) and the {@code IMPLEMENTOR} / {@code IMPLEMENTOR_VERSION} (vendor
+ * lookup) from that single read.
  */
 public final class ProbeSupport {
 
@@ -27,11 +26,10 @@ public final class ProbeSupport {
     private ProbeSupport() {}
 
     /**
-     * Validate a JDK home directory and produce a {@link JdkHit}: resolves
-     * symlinks, confirms {@code bin/java} exists, then reads the {@code release}
-     * file once to derive both version and vendor. Returns empty when the
-     * candidate isn't a runnable JDK (or the {@code release} file is missing
-     * — mandatory since JDK 7u72).
+     * Validate a JDK home directory and produce a {@link JdkHit}: resolves symlinks, confirms {@code
+     * bin/java} exists, then reads the {@code release} file once to derive both version and vendor.
+     * Returns empty when the candidate isn't a runnable JDK (or the {@code release} file is missing —
+     * mandatory since JDK 7u72).
      */
     public static Optional<JdkHit> discoverJdk(Path home, String source) {
         try {

@@ -9,25 +9,22 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Per-line colorizer for Java stack traces, with token rules ported from the
- * <a href="https://prismjs.com/">Prism.js</a> {@code javastacktrace} grammar.
+ * Per-line colorizer for Java stack traces, with token rules ported from the <a
+ * href="https://prismjs.com/">Prism.js</a> {@code javastacktrace} grammar.
  *
- * <p>The grammar's three top-level tokens — {@code summary} (the exception
- * line), {@code stack-frame} (an {@code at …} line) and {@code more}
- * ({@code … 42 more}) — are all single-line {@code /m} patterns, so this is a
- * stateless per-line classifier: {@link #line(String)} recognizes which of the
- * three (if any) a line is and colorizes it, returning the input unchanged
- * otherwise. That lets it sit directly on a console listener's {@code output}
- * path: every program/output line is offered, and only genuine trace lines are
- * painted.
+ * <p>The grammar's three top-level tokens — {@code summary} (the exception line), {@code
+ * stack-frame} (an {@code at …} line) and {@code more} ({@code … 42 more}) — are all single-line
+ * {@code /m} patterns, so this is a stateless per-line classifier: {@link #line(String)} recognizes
+ * which of the three (if any) a line is and colorizes it, returning the input unchanged otherwise.
+ * That lets it sit directly on a console listener's {@code output} path: every program/output line
+ * is offered, and only genuine trace lines are painted.
  *
- * <p>Recognition is deliberately conservative — a bare word, a {@code "N tests
- * failed:"} header, or arbitrary program output must <em>not</em> be mistaken
- * for an exception summary — so the summary form requires a {@code Caused
- * by:}/{@code Suppressed:}/{@code Exception in thread} prefix, or a leading
- * token that looks like a fully-qualified class name or an {@code …Exception}/
- * {@code …Error}. As with {@link SyntaxHighlight}, only SGR escapes are
- * inserted; stripping the ANSI restores the line byte-for-byte.
+ * <p>Recognition is deliberately conservative — a bare word, a {@code "N tests failed:"} header, or
+ * arbitrary program output must <em>not</em> be mistaken for an exception summary — so the summary
+ * form requires a {@code Caused by:}/{@code Suppressed:}/{@code Exception in thread} prefix, or a
+ * leading token that looks like a fully-qualified class name or an {@code …Exception}/ {@code
+ * …Error}. As with {@link SyntaxHighlight}, only SGR escapes are inserted; stripping the ANSI
+ * restores the line byte-for-byte.
  */
 public final class StackTraceHighlight {
 
@@ -75,8 +72,8 @@ public final class StackTraceHighlight {
     private static final Pattern EXCEPTION_NAME = Pattern.compile("[A-Z][\\w$]*(?:Exception|Error|Throwable)");
 
     /**
-     * Colorize {@code raw} if it is a stack-trace line (frame, summary, or
-     * "{@code … N more}"); otherwise return it unchanged.
+     * Colorize {@code raw} if it is a stack-trace line (frame, summary, or "{@code … N more}");
+     * otherwise return it unchanged.
      */
     public static String line(String raw) {
         if (raw == null || raw.isEmpty()) return raw;
@@ -92,7 +89,9 @@ public final class StackTraceHighlight {
         return raw;
     }
 
-    /** A summary line only counts when it is clearly an exception, not arbitrary {@code word: text}. */
+    /**
+     * A summary line only counts when it is clearly an exception, not arbitrary {@code word: text}.
+     */
     private static boolean isExceptionSummary(Matcher s) {
         if (s.group("prefix") != null) return true;
         String fqcn = s.group("fqcn");

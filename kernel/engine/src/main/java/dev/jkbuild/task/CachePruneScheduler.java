@@ -10,21 +10,16 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Decide whether an opportunistic prune should fire in the tail of
- * {@code jk sync} / {@code jk build}, and (if so) launch it as a
- * detached subprocess.
+ * Decide whether an opportunistic prune should fire in the tail of {@code jk sync} / {@code jk
+ * build}, and (if so) launch it as a detached subprocess.
  *
- * <p>Trigger: {@code auto-prune = true} AND
- * ({@code .last-pruned} is missing OR older than
- * {@code prune-interval-days}). Size-based triggers add complexity
- * with little benefit — interval-based is enough to keep the cache
- * bounded over time.
+ * <p>Trigger: {@code auto-prune = true} AND ({@code .last-pruned} is missing OR older than {@code
+ * prune-interval-days}). Size-based triggers add complexity with little benefit — interval-based is
+ * enough to keep the cache bounded over time.
  *
- * <p>The actual prune runs as a detached child process via
- * {@code jk cache prune --background}. The flock inside the child
- * ensures only one prune runs at a time across concurrent invocations.
- * The parent doesn't wait — the build/sync command exits immediately
- * after the spawn.
+ * <p>The actual prune runs as a detached child process via {@code jk cache prune --background}. The
+ * flock inside the child ensures only one prune runs at a time across concurrent invocations. The
+ * parent doesn't wait — the build/sync command exits immediately after the spawn.
  */
 public final class CachePruneScheduler {
 
@@ -34,8 +29,8 @@ public final class CachePruneScheduler {
     private CachePruneScheduler() {}
 
     /**
-     * Run if cued; do nothing otherwise. Errors are swallowed — the
-     * opportunistic prune is a hygiene optimisation, never load-bearing.
+     * Run if cued; do nothing otherwise. Errors are swallowed — the opportunistic prune is a hygiene
+     * optimisation, never load-bearing.
      */
     public static void maybeRun(JkCacheConfig config, Path cacheRoot, String jkExe) {
         if (!config.autoPrune()) return;
@@ -63,9 +58,8 @@ public final class CachePruneScheduler {
     }
 
     /**
-     * Build the equivalent of {@code jk cache prune --background --sweep
-     * [--max-size <N>G]} command line. Returned verbatim so the spawn
-     * site can audit / log it.
+     * Build the equivalent of {@code jk cache prune --background --sweep [--max-size <N>G]} command
+     * line. Returned verbatim so the spawn site can audit / log it.
      */
     static List<String> commandFor(JkCacheConfig config, Path cacheRoot, String jkExe) {
         List<String> cmd = new java.util.ArrayList<>();
@@ -98,9 +92,8 @@ public final class CachePruneScheduler {
     }
 
     /**
-     * Best-effort resolution of the absolute path to the running
-     * {@code jk} binary. Mirrors the logic in {@code ActivateCommand};
-     * lives here so engine doesn't depend on cli.
+     * Best-effort resolution of the absolute path to the running {@code jk} binary. Mirrors the logic
+     * in {@code ActivateCommand}; lives here so engine doesn't depend on cli.
      */
     public static Optional<String> resolveJkExe() {
         String envOverride = System.getenv("JK_EXE");

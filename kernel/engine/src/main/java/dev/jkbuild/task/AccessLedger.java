@@ -16,29 +16,28 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Append-only access journal for the CAS. Every CAS read (and every
- * {@code jk.lock} read/write) should record the shas involved so the GC and
- * LRU evictor have signal for "which objects are actually being used."
+ * Append-only access journal for the CAS. Every CAS read (and every {@code jk.lock} read/write)
+ * should record the shas involved so the GC and LRU evictor have signal for "which objects are
+ * actually being used."
  *
- * <p>Filesystem atime updates can't be trusted — most Linux mounts use
- * {@code relatime} (updates only when atime is more than 24h older than
- * mtime) or {@code noatime} (never updates). Our own ledger is the only
- * reliable way to know "this dep jar was touched again today."
+ * <p>Filesystem atime updates can't be trusted — most Linux mounts use {@code relatime} (updates
+ * only when atime is more than 24h older than mtime) or {@code noatime} (never updates). Our own
+ * ledger is the only reliable way to know "this dep jar was touched again today."
  *
  * <p>Default location: {@code ~/.jk/cache/.access.log}.
  *
  * <p>Format (text, append-only, line-per-touch):
+ *
  * <pre>{@code
- *   <sha256-hex>\t<epoch-millis>\t<access-count>
+ * <sha256-hex>\t<epoch-millis>\t<access-count>
  * }</pre>
  *
- * <p>The count is always {@code 1} on a fresh touch; it only grows when the
- * GC compacts the log, summing every entry for a sha into one line carrying
- * the latest timestamp. {@link #entries()} folds the raw log into that
- * deduped view on read regardless of how many loose lines exist.
+ * <p>The count is always {@code 1} on a fresh touch; it only grows when the GC compacts the log,
+ * summing every entry for a sha into one line carrying the latest timestamp. {@link #entries()}
+ * folds the raw log into that deduped view on read regardless of how many loose lines exist.
  *
- * <p>This class is best-effort: every write method swallows IO failures
- * because the journal is an optimisation signal, not a correctness boundary.
+ * <p>This class is best-effort: every write method swallows IO failures because the journal is an
+ * optimisation signal, not a correctness boundary.
  */
 public final class AccessLedger {
 
@@ -60,10 +59,9 @@ public final class AccessLedger {
     }
 
     /**
-     * Record that {@code hex} was just accessed. Single-line append; no
-     * exception leaks. {@code FileChannel.open(APPEND)} on POSIX is atomic for
-     * writes shorter than {@code PIPE_BUF}, so concurrent touches don't
-     * interleave bytes within a line.
+     * Record that {@code hex} was just accessed. Single-line append; no exception leaks. {@code
+     * FileChannel.open(APPEND)} on POSIX is atomic for writes shorter than {@code PIPE_BUF}, so
+     * concurrent touches don't interleave bytes within a line.
      */
     public void touch(String hex) {
         touchAll(java.util.List.of(hex));
@@ -90,9 +88,9 @@ public final class AccessLedger {
     }
 
     /**
-     * Touch every checksummed sha named by {@code lock} — its package jars and
-     * any sources jars. Called whenever a {@code jk.lock} is read or written so
-     * the deps a project actually depends on stay fresh against the 90-day GC.
+     * Touch every checksummed sha named by {@code lock} — its package jars and any sources jars.
+     * Called whenever a {@code jk.lock} is read or written so the deps a project actually depends on
+     * stay fresh against the 90-day GC.
      */
     public void touchLock(Lockfile lock) {
         Set<String> hexes = new LinkedHashSet<>();
@@ -109,8 +107,8 @@ public final class AccessLedger {
     }
 
     /**
-     * Fold the raw log into one {@link Entry} per sha: the latest timestamp
-     * seen and the summed access count. Missing / corrupt lines are skipped.
+     * Fold the raw log into one {@link Entry} per sha: the latest timestamp seen and the summed
+     * access count. Missing / corrupt lines are skipped.
      */
     public Map<String, Entry> entries() throws IOException {
         Map<String, Entry> out = new HashMap<>();
@@ -144,9 +142,8 @@ public final class AccessLedger {
     }
 
     /**
-     * Rewrite the ledger as one summed, deduped line per sha. Safe to call any
-     * time; no-op when the file is smaller than {@link #COMPACT_THRESHOLD_BYTES}.
-     * Returns the new byte size.
+     * Rewrite the ledger as one summed, deduped line per sha. Safe to call any time; no-op when the
+     * file is smaller than {@link #COMPACT_THRESHOLD_BYTES}. Returns the new byte size.
      */
     public long compactIfLarge() throws IOException {
         if (!Files.isRegularFile(file)) return 0;
@@ -156,8 +153,8 @@ public final class AccessLedger {
     }
 
     /**
-     * Rewrite the ledger summed + deduped, dropping every sha in {@code drop}
-     * (the GC passes the shas it just purged so their entries don't linger).
+     * Rewrite the ledger summed + deduped, dropping every sha in {@code drop} (the GC passes the shas
+     * it just purged so their entries don't linger).
      */
     public void rewriteDropping(Set<String> drop) throws IOException {
         Map<String, Entry> folded = entries();

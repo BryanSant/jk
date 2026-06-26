@@ -10,18 +10,14 @@ import java.util.concurrent.TimeUnit;
 /**
  * Best-effort "good neighbor" delegation for {@code jk jdk uninstall}.
  *
- * <p>When a JDK comes from a tool that manages its own state
- * (SDKMAN, mise, jbang, jenv, asdf, Homebrew), removing the install
- * directory out from under it leaves the tool's manifest / shims /
- * version index out of sync. So we shell out to the owning tool's
- * uninstall command first — non-interactive, with a short timeout —
- * and fall back to the direct {@code rm -rf} purge only when that
- * fails (binary not on PATH, command errored, install dir still
- * present after).
+ * <p>When a JDK comes from a tool that manages its own state (SDKMAN, mise, jbang, jenv, asdf,
+ * Homebrew), removing the install directory out from under it leaves the tool's manifest / shims /
+ * version index out of sync. So we shell out to the owning tool's uninstall command first —
+ * non-interactive, with a short timeout — and fall back to the direct {@code rm -rf} purge only
+ * when that fails (binary not on PATH, command errored, install dir still present after).
  *
- * <p>{@code intellij} (jk's own {@code ~/.jdks}) and {@code java-home}
- * don't go through here — those are direct deletes. IntelliJ
- * recovers from a missing JDK on its own.
+ * <p>{@code intellij} (jk's own {@code ~/.jdks}) and {@code java-home} don't go through here —
+ * those are direct deletes. IntelliJ recovers from a missing JDK on its own.
  */
 public final class JdkToolUninstaller {
 
@@ -37,10 +33,9 @@ public final class JdkToolUninstaller {
     private JdkToolUninstaller() {}
 
     /**
-     * Attempt to uninstall {@code hit} via its owning tool. Returns
-     * {@link Outcome#HANDLED_BY_TOOL} when the tool ran cleanly and the
-     * install directory is gone afterwards; {@link Outcome#FALL_THROUGH}
-     * otherwise (caller should run the direct {@code purge} fallback).
+     * Attempt to uninstall {@code hit} via its owning tool. Returns {@link Outcome#HANDLED_BY_TOOL}
+     * when the tool ran cleanly and the install directory is gone afterwards; {@link
+     * Outcome#FALL_THROUGH} otherwise (caller should run the direct {@code purge} fallback).
      */
     public static Outcome tryUninstall(JdkHit hit, String identifier) {
         List<String> command = commandFor(hit, identifier);
@@ -53,10 +48,9 @@ public final class JdkToolUninstaller {
     }
 
     /**
-     * The non-interactive command line for {@code hit.source()}'s owning
-     * tool. Returns {@code null} when we don't have a recipe for this
-     * source — the caller treats that the same as "tool failed" and
-     * falls back to the direct delete.
+     * The non-interactive command line for {@code hit.source()}'s owning tool. Returns {@code null}
+     * when we don't have a recipe for this source — the caller treats that the same as "tool failed"
+     * and falls back to the direct delete.
      */
     private static List<String> commandFor(JdkHit hit, String identifier) {
         return switch (hit.source()) {
@@ -68,7 +62,8 @@ public final class JdkToolUninstaller {
                 List.of(
                         "bash",
                         "-c",
-                        "source \"$HOME/.sdkman/bin/sdkman-init.sh\" && " + "sdk uninstall java "
+                        "source \"$HOME/.sdkman/bin/sdkman-init.sh\" && "
+                                + "sdk uninstall java "
                                 + shellQuote(identifier));
             case "mise" -> List.of("mise", "uninstall", "--yes", "java@" + identifier);
             case "jbang" -> List.of("jbang", "jdk", "uninstall", identifier);
@@ -92,10 +87,9 @@ public final class JdkToolUninstaller {
     }
 
     /**
-     * Walk up from a Homebrew JDK home to find the {@code Cellar/<formula>}
-     * segment and return the formula name. Returns {@code null} when the
-     * path doesn't look like a Cellar install (in which case the caller
-     * falls back to the direct purge).
+     * Walk up from a Homebrew JDK home to find the {@code Cellar/<formula>} segment and return the
+     * formula name. Returns {@code null} when the path doesn't look like a Cellar install (in which
+     * case the caller falls back to the direct purge).
      */
     private static String homebrewFormulaFor(Path home) {
         Path p = home;
@@ -111,10 +105,9 @@ public final class JdkToolUninstaller {
     }
 
     /**
-     * Fire-and-wait subprocess with stdio dropped — we don't want the tool's
-     * progress chatter mixed into jk's own spinner output. Bounded by
-     * {@link #TIMEOUT_SECONDS}; anything that hangs longer than that is
-     * killed and treated as a failure.
+     * Fire-and-wait subprocess with stdio dropped — we don't want the tool's progress chatter mixed
+     * into jk's own spinner output. Bounded by {@link #TIMEOUT_SECONDS}; anything that hangs longer
+     * than that is killed and treated as a failure.
      */
     private static boolean runQuietly(List<String> command) {
         try {

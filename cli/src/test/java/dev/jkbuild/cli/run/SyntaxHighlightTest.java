@@ -9,8 +9,8 @@ import org.jline.utils.AttributedStyle;
 import org.junit.jupiter.api.Test;
 
 /**
- * {@link SyntaxHighlight} colorizes a single source line without changing its
- * text, and overlays the caret underline on the highlighted character.
+ * {@link SyntaxHighlight} colorizes a single source line without changing its text, and overlays
+ * the caret underline on the highlighted character.
  */
 class SyntaxHighlightTest {
 

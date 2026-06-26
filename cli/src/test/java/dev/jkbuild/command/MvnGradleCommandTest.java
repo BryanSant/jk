@@ -24,10 +24,10 @@ import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
- * Exercises {@link MvnCommand} and {@link GradleCommand} end-to-end against a
- * local HTTP server serving a synthetic distribution. The "binary" inside the
- * zip is a tiny shell script that records its argv and env so we can verify
- * passthrough + env scrubbing without depending on a real Maven/Gradle.
+ * Exercises {@link MvnCommand} and {@link GradleCommand} end-to-end against a local HTTP server
+ * serving a synthetic distribution. The "binary" inside the zip is a tiny shell script that records
+ * its argv and env so we can verify passthrough + env scrubbing without depending on a real
+ * Maven/Gradle.
  */
 @DisabledOnOs(OS.WINDOWS) // launcher scripts are .sh-only.
 class MvnGradleCommandTest {
@@ -172,13 +172,17 @@ class MvnGradleCommandTest {
     }
 
     /**
-     * A zip carrying a single shell launcher that writes its argv to one file
-     * and its env to another. Used as a synthetic mvn/gradle distribution.
+     * A zip carrying a single shell launcher that writes its argv to one file and its env to another.
+     * Used as a synthetic mvn/gradle distribution.
      */
     private static byte[] recordingZip(String topDir, String binaryName, Path argsLog, Path envLog) throws IOException {
         String script = "#!/usr/bin/env bash\n"
-                + "echo \"$@\" > " + shellQuote(argsLog.toString()) + "\n"
-                + "env > " + shellQuote(envLog.toString()) + "\n"
+                + "echo \"$@\" > "
+                + shellQuote(argsLog.toString())
+                + "\n"
+                + "env > "
+                + shellQuote(envLog.toString())
+                + "\n"
                 + "exit 0\n";
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         try (ZipOutputStream zos = new ZipOutputStream(baos)) {

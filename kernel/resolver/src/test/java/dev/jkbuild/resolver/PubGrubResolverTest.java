@@ -26,11 +26,10 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
- * End-to-end tests for {@link PubGrubResolver}'s BOM-constraint hook.
- * Other PubGrub semantics are covered by the in-memory solver tests
- * under {@code pubgrub/} — these focus on the {@code bomConstraints}
- * map being threaded through {@link MavenPackageSource#versions} and
- * correctly overriding transitive at-least preferences.
+ * End-to-end tests for {@link PubGrubResolver}'s BOM-constraint hook. Other PubGrub semantics are
+ * covered by the in-memory solver tests under {@code pubgrub/} — these focus on the {@code
+ * bomConstraints} map being threaded through {@link MavenPackageSource#versions} and correctly
+ * overriding transitive at-least preferences.
  */
 class PubGrubResolverTest {
 
@@ -163,7 +162,16 @@ class PubGrubResolverTest {
     }
 
     private void servePom(String group, String artifact, String version, String body) {
-        String path = "/" + group.replace('.', '/') + "/" + artifact + "/" + version + "/" + artifact + "-" + version
+        String path = "/"
+                + group.replace('.', '/')
+                + "/"
+                + artifact
+                + "/"
+                + version
+                + "/"
+                + artifact
+                + "-"
+                + version
                 + ".pom";
         servePath(path, body);
     }

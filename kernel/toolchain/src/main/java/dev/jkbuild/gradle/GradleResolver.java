@@ -16,9 +16,9 @@ import java.util.regex.Pattern;
  * Picks the Gradle distribution to use for a project (PRD §24.1).
  *
  * <ol>
- *   <li>{@code gradle/wrapper/gradle-wrapper.properties} {@code distributionUrl}
- *       — honor what the project pinned.</li>
- *   <li>Otherwise jk's bundled default ({@link #DEFAULT_VERSION}).</li>
+ *   <li>{@code gradle/wrapper/gradle-wrapper.properties} {@code distributionUrl} — honor what the
+ *       project pinned.
+ *   <li>Otherwise jk's bundled default ({@link #DEFAULT_VERSION}).
  * </ol>
  *
  * <p>Gradle distributions are always {@code .zip}.

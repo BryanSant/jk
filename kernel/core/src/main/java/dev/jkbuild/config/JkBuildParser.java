@@ -43,23 +43,23 @@ import org.tomlj.TomlTable;
  * Loads {@code jk.toml} into a {@link JkBuild}.
  *
  * <p>v0.7 schema (see {@code docs/artifact-coord-design.md}):
+ *
  * <ul>
  *   <li>{@code [project]} — required; {@code group}, {@code name}, {@code version} required;
- *       optional {@code jdk}, {@code main}, {@code java}/{@code kotlin}, {@code shadow},
- *       {@code native}, {@code description}.</li>
- *   <li>{@code [dependencies.<scope>]} — library-as-key sub-tables; each entry is
- *       {@code <lib> = { group, name?, version | path | git | workspace }}.
- *       {@code [dependencies]} with only inline-table children is shorthand for
- *       {@code [dependencies.main]}; mixing flat and sub-scope is a parse error.</li>
- *   <li>{@code [workspace]} — optional; {@code modules = [...]} plus an optional
- *       {@code [workspace.dependencies]} table of shared external deps inherited by
- *       modules via {@code <name>.workspace = true}.</li>
- *   <li>{@code [repositories]} — optional; per-name URL string or inline table.</li>
- *   <li>{@code [profiles.<name>]} — optional; per-profile {@code inherits}, {@code javac},
- *       {@code jvm-args}.</li>
- *   <li>{@code [features]} — optional; {@code default = [...]} plus
- *       {@code [features.<name>]} sub-tables whose {@code deps} fields are <b>dep
- *       names</b> (not coord strings).</li>
+ *       optional {@code jdk}, {@code main}, {@code java}/{@code kotlin}, {@code shadow}, {@code
+ *       native}, {@code description}.
+ *   <li>{@code [dependencies.<scope>]} — library-as-key sub-tables; each entry is {@code <lib> = {
+ *       group, name?, version | path | git | workspace }}. {@code [dependencies]} with only
+ *       inline-table children is shorthand for {@code [dependencies.main]}; mixing flat and
+ *       sub-scope is a parse error.
+ *   <li>{@code [workspace]} — optional; {@code modules = [...]} plus an optional {@code
+ *       [workspace.dependencies]} table of shared external deps inherited by modules via {@code
+ *       <name>.workspace = true}.
+ *   <li>{@code [repositories]} — optional; per-name URL string or inline table.
+ *   <li>{@code [profiles.<name>]} — optional; per-profile {@code inherits}, {@code javac}, {@code
+ *       jvm-args}.
+ *   <li>{@code [features]} — optional; {@code default = [...]} plus {@code [features.<name>]}
+ *       sub-tables whose {@code deps} fields are <b>dep names</b> (not coord strings).
  * </ul>
  */
 public final class JkBuildParser {
@@ -67,15 +67,13 @@ public final class JkBuildParser {
     private JkBuildParser() {}
 
     /**
-     * Memoises {@link #parse(Path)} results for the life of the process,
-     * keyed by file identity (path + size + mtime). jk is single-shot, so a
-     * manifest's bytes don't change mid-invocation; workspace commands, on the
-     * other hand, re-resolve the same handful of manifests over and over (e.g.
-     * {@code jk idea} runs {@code WorkspaceClasspath.resolve} twice per module,
-     * and each call re-reads the root plus every sibling {@code jk.toml}). That
-     * turns an N-module workspace into O(N²) ANTLR parses; caching collapses it
-     * to one parse per distinct file. Keying on size+mtime means a manifest
-     * that actually changes on disk (a test rewriting it) re-parses cleanly.
+     * Memoises {@link #parse(Path)} results for the life of the process, keyed by file identity (path
+     * + size + mtime). jk is single-shot, so a manifest's bytes don't change mid-invocation;
+     * workspace commands, on the other hand, re-resolve the same handful of manifests over and over
+     * (e.g. {@code jk idea} runs {@code WorkspaceClasspath.resolve} twice per module, and each call
+     * re-reads the root plus every sibling {@code jk.toml}). That turns an N-module workspace into
+     * O(N²) ANTLR parses; caching collapses it to one parse per distinct file. Keying on size+mtime
+     * means a manifest that actually changes on disk (a test rewriting it) re-parses cleanly.
      */
     private static final Map<CacheKey, JkBuild> PARSE_CACHE = new ConcurrentHashMap<>();
 
@@ -104,9 +102,9 @@ public final class JkBuildParser {
     }
 
     /**
-     * Test seam: parse against a synthetic library catalog instead of the
-     * default layered one. The manifest's own {@code [libraries]} table is
-     * still layered on top via {@link LibraryCatalog#withProjectOverrides}.
+     * Test seam: parse against a synthetic library catalog instead of the default layered one. The
+     * manifest's own {@code [libraries]} table is still layered on top via {@link
+     * LibraryCatalog#withProjectOverrides}.
      */
     public static JkBuild parse(String toml, LibraryCatalog catalog) {
         Objects.requireNonNull(toml, "toml");
@@ -133,10 +131,10 @@ public final class JkBuildParser {
     }
 
     /**
-     * Parse the optional {@code [format]} table — the styles {@code jk format}
-     * uses. {@code style} is a cross-language preset; {@code java} / {@code kotlin}
-     * are per-language overrides. All are plain strings, validated downstream by
-     * {@code jk format} (the model + parser stay tool-agnostic). Absent → EMPTY.
+     * Parse the optional {@code [format]} table — the styles {@code jk format} uses. {@code style} is
+     * a cross-language preset; {@code java} / {@code kotlin} are per-language overrides. All are
+     * plain strings, validated downstream by {@code jk format} (the model + parser stay
+     * tool-agnostic). Absent → EMPTY.
      */
     private static JkBuild.FormatConfig parseFormat(TomlTable root) {
         TomlTable format = root.getTable("format");
@@ -160,10 +158,9 @@ public final class JkBuildParser {
     }
 
     /**
-     * Parse the optional top-level {@code [manifest]} table — string-valued
-     * custom jar-manifest attributes (e.g. {@code "Implementation-Title"}).
-     * {@code Main-Class} is intentionally <em>not</em> read here; it derives
-     * from {@code project.main}.
+     * Parse the optional top-level {@code [manifest]} table — string-valued custom jar-manifest
+     * attributes (e.g. {@code "Implementation-Title"}). {@code Main-Class} is intentionally
+     * <em>not</em> read here; it derives from {@code project.main}.
      */
     private static Map<String, String> parseManifest(TomlParseResult root) {
         TomlTable table = root.getTable("manifest");
@@ -183,9 +180,9 @@ public final class JkBuildParser {
     }
 
     /**
-     * Parse the optional top-level {@code [libraries]} table. Empty map when
-     * absent. Validated through {@link LibraryCatalog#parseLibrariesTable} so
-     * the schema matches the bundled and user files.
+     * Parse the optional top-level {@code [libraries]} table. Empty map when absent. Validated
+     * through {@link LibraryCatalog#parseLibrariesTable} so the schema matches the bundled and user
+     * files.
      */
     private static java.util.Map<String, LibraryCatalog.Module> parseProjectLibraries(TomlTable root) {
         TomlTable libraries = root.getTable("libraries");
@@ -212,7 +209,8 @@ public final class JkBuildParser {
         requireSupportedMajor("project.java", java);
         String main = project.getString("main");
         boolean shadow = Boolean.TRUE.equals(project.getBoolean("shadow"));
-        // native = true           → ALWAYS    (eligible: `jk native` builds it; `jk install` of an app builds+deploys
+        // native = true           → ALWAYS    (eligible: `jk native` builds it; `jk install` of an app
+        // builds+deploys
         // it)
         // native = "always"       → ALWAYS    (same as true)
         // native = false          → DISABLED  (never build a native artifact)
@@ -268,13 +266,12 @@ public final class JkBuildParser {
     }
 
     /**
-     * {@code project.jdk} is a JDK spec string following the same rules as
-     * {@code .jdk-version}, except a vendorless bare major is allowed: a
-     * vendor+major ({@code "temurin-25"}) or a bare major ({@code "25"}) pins
-     * the feature release; a point release ({@code "25.0.3"}) is rejected
-     * because jk keeps the patch current behind the major pointer. For
-     * convenience an unquoted integer ({@code jdk = 25}) is accepted too and
-     * treated as that bare major. Absent/blank → {@code null} (unset).
+     * {@code project.jdk} is a JDK spec string following the same rules as {@code .jdk-version},
+     * except a vendorless bare major is allowed: a vendor+major ({@code "temurin-25"}) or a bare
+     * major ({@code "25"}) pins the feature release; a point release ({@code "25.0.3"}) is rejected
+     * because jk keeps the patch current behind the major pointer. For convenience an unquoted
+     * integer ({@code jdk = 25}) is accepted too and treated as that bare major. Absent/blank →
+     * {@code null} (unset).
      */
     private static String parseJdkSpec(TomlTable project) {
         if (!project.contains("jdk")) return null;
@@ -289,7 +286,8 @@ public final class JkBuildParser {
         }
         if (spec.isEmpty()) return null;
         if (JkBuild.Project.hasPointRelease(spec)) {
-            throw new JkBuildParseException("project.jdk = \"" + spec
+            throw new JkBuildParseException("project.jdk = \""
+                    + spec
                     + "\" must not pin a point release — use \"<vendor>-<major>\" or "
                     + "\"<major>\" (e.g. \"temurin-25\" or \"25\"); jk keeps the patch current.");
         }
@@ -303,13 +301,12 @@ public final class JkBuildParser {
     }
 
     /**
-     * {@code project.graal} selects the GraalVM whose {@code bin/native-image}
-     * {@code jk native} uses. Same shape as {@code project.jdk} — a bare major
-     * ({@code 25} or {@code "25"}) or vendor-hinted spec ({@code "graalvm-25"}) —
-     * plus the keyword {@code "native"} (latest Oracle GraalVM). A point release
-     * is rejected; jk keeps the patch current. Resolution and any auto-install
-     * happen at native-build time (see the CLI's {@code GraalResolver}), so this
-     * parser only normalizes the spec. Absent/blank → {@code null} (unset).
+     * {@code project.graal} selects the GraalVM whose {@code bin/native-image} {@code jk native}
+     * uses. Same shape as {@code project.jdk} — a bare major ({@code 25} or {@code "25"}) or
+     * vendor-hinted spec ({@code "graalvm-25"}) — plus the keyword {@code "native"} (latest Oracle
+     * GraalVM). A point release is rejected; jk keeps the patch current. Resolution and any
+     * auto-install happen at native-build time (see the CLI's {@code GraalResolver}), so this parser
+     * only normalizes the spec. Absent/blank → {@code null} (unset).
      */
     private static String parseGraalSpec(TomlTable project) {
         if (!project.contains("graal")) return null;
@@ -325,7 +322,8 @@ public final class JkBuildParser {
         }
         if (spec.isEmpty()) return null;
         if (JkBuild.Project.hasPointRelease(spec)) {
-            throw new JkBuildParseException("project.graal = \"" + spec
+            throw new JkBuildParseException("project.graal = \""
+                    + spec
                     + "\" must not pin a point release — use \"graalvm-<major>\", "
                     + "\"<major>\", or \"native\"; jk keeps the patch current.");
         }
@@ -345,9 +343,9 @@ public final class JkBuildParser {
     }
 
     /**
-     * {@code project.kotlin} is a Kotlin compiler version selector (string),
-     * parsed the same way as a floating dependency version: bare {@code 2.3.21}
-     * → caret, {@code =2.3.21} pins. Absent → {@code null} (a Java project).
+     * {@code project.kotlin} is a Kotlin compiler version selector (string), parsed the same way as a
+     * floating dependency version: bare {@code 2.3.21} → caret, {@code =2.3.21} pins. Absent → {@code
+     * null} (a Java project).
      */
     private static VersionSelector parseKotlinVersion(TomlTable project) {
         if (!project.contains("kotlin")) return null;
@@ -360,14 +358,15 @@ public final class JkBuildParser {
     }
 
     /**
-     * jk only supports JDK 17 and above (LTS + latest). Reject any older
-     * value at parse time so users learn the constraint up front instead
-     * of in the middle of a resolve.
+     * jk only supports JDK 17 and above (LTS + latest). Reject any older value at parse time so users
+     * learn the constraint up front instead of in the middle of a resolve.
      */
     private static void requireSupportedMajor(String path, int value) {
         if (value == 0) return;
         if (value < 17) {
-            throw new JkBuildParseException(path + " = " + value
+            throw new JkBuildParseException(path
+                    + " = "
+                    + value
                     + " is not supported — jk targets JDK 17 and above "
                     + "(LTS: 17, 21, 25, … plus the latest release).");
         }
@@ -450,7 +449,10 @@ public final class JkBuildParser {
                 continue;
             }
             if (!(value instanceof TomlTable entry)) {
-                throw new JkBuildParseException("dependencies." + scope.canonical() + "." + name
+                throw new JkBuildParseException("dependencies."
+                        + scope.canonical()
+                        + "."
+                        + name
                         + " must be an inline table (e.g. { group = \"...\", version = \"...\" })"
                         + " or a version-string shorthand for a catalog-known name");
             }
@@ -460,8 +462,8 @@ public final class JkBuildParser {
     }
 
     /**
-     * Resolve a {@code name = "version-spec"} shorthand by looking the
-     * short name up in the bundled library catalog.
+     * Resolve a {@code name = "version-spec"} shorthand by looking the short name up in the bundled
+     * library catalog.
      */
     private static Dependency parseShorthandEntry(String name, String versionRaw, Scope scope, LibraryCatalog catalog) {
         String displayPath = "dependencies." + scope.canonical() + "." + name;
@@ -475,10 +477,9 @@ public final class JkBuildParser {
     }
 
     /**
-     * Compose the error shown when a short name doesn't resolve. Appends
-     * a "did you mean" line when the catalog has plausible alternatives —
-     * particularly useful for major-version-split families like Jackson 2
-     * vs 3, where typing the unprefixed name silently fails by design.
+     * Compose the error shown when a short name doesn't resolve. Appends a "did you mean" line when
+     * the catalog has plausible alternatives — particularly useful for major-version-split families
+     * like Jackson 2 vs 3, where typing the unprefixed name silently fails by design.
      */
     private static String unknownLibraryMessage(String displayPath, String name, LibraryCatalog catalog) {
         StringBuilder msg = new StringBuilder(displayPath)
@@ -694,13 +695,19 @@ public final class JkBuildParser {
         boolean verifySigned = obj.getBoolean("verify-signed", () -> false);
         String fetch = obj.getString("fetch");
         if (fetch != null && !isValidFetchPolicy(fetch)) {
-            throw new JkBuildParseException(displayPath + ".fetch must be \"always\", \"0\", "
-                    + "or a duration like \"30m\", \"12h\", \"3d\" (got: " + fetch + ")");
+            throw new JkBuildParseException(displayPath
+                    + ".fetch must be \"always\", \"0\", "
+                    + "or a duration like \"30m\", \"12h\", \"3d\" (got: "
+                    + fetch
+                    + ")");
         }
         return new GitSource(canonical, urlRaw, ref, path, submodules, verifySigned).withFetch(fetch);
     }
 
-    /** A git branch-tip freshness policy: {@code "always"}/{@code "0"}, or a duration {@code <n>[smhd]}. */
+    /**
+     * A git branch-tip freshness policy: {@code "always"}/{@code "0"}, or a duration {@code
+     * <n>[smhd]}.
+     */
     private static boolean isValidFetchPolicy(String policy) {
         return "always".equals(policy) || "0".equals(policy) || policy.matches("\\d+[smhd]");
     }
@@ -742,11 +749,10 @@ public final class JkBuildParser {
     }
 
     /**
-     * Optional object-store config on a {@code [repositories.<name>]} table for
-     * {@code s3://}/{@code gs://} backends: {@code region}, {@code endpoint},
-     * {@code access-key}, {@code secret-key}, {@code session-token}. All
-     * support {@code ${ENV}} interpolation (so keys aren't committed literally);
-     * any unset field falls back to the AWS environment / default chain.
+     * Optional object-store config on a {@code [repositories.<name>]} table for {@code s3://}/{@code
+     * gs://} backends: {@code region}, {@code endpoint}, {@code access-key}, {@code secret-key},
+     * {@code session-token}. All support {@code ${ENV}} interpolation (so keys aren't committed
+     * literally); any unset field falls back to the AWS environment / default chain.
      */
     private static Optional<ObjectStoreConfig> parseObjectStore(String name, TomlTable t) {
         String region = interpolateEnv(name, t.getString("region"));
@@ -768,11 +774,10 @@ public final class JkBuildParser {
     }
 
     /**
-     * Optional inline credential on a {@code [repositories.<name>]} table:
-     * {@code token = "..."} (bearer) or {@code username}/{@code password}
-     * (basic). Values support {@code ${ENV}} interpolation so secrets need not
-     * be committed literally; an unset referenced variable is an error so a
-     * typo fails loudly rather than silently authenticating anonymously.
+     * Optional inline credential on a {@code [repositories.<name>]} table: {@code token = "..."}
+     * (bearer) or {@code username}/{@code password} (basic). Values support {@code ${ENV}}
+     * interpolation so secrets need not be committed literally; an unset referenced variable is an
+     * error so a typo fails loudly rather than silently authenticating anonymously.
      */
     private static Optional<RepoCredential> parseRepoCredential(String name, TomlTable t) {
         String token = interpolateEnv(name, t.getString("token"));
@@ -941,14 +946,15 @@ public final class JkBuildParser {
 
     /**
      * Parse the optional top-level {@code [build]} table:
+     *
      * <ul>
-     *   <li>{@code order-after} — workspace modules (by project name or
-     *       {@code group:artifact}) that must build before this one, with no
-     *       classpath/lockfile edge.</li>
-     *   <li>{@code [build.embed-sha]} — a {@code <resource-basename> = <module>}
-     *       map; the build writes {@code META-INF/<basename>-sha256.txt} = the
-     *       SHA-256 of {@code <module>}'s output jar.</li>
+     *   <li>{@code order-after} — workspace modules (by project name or {@code group:artifact}) that
+     *       must build before this one, with no classpath/lockfile edge.
+     *   <li>{@code [build.embed-sha]} — a {@code <resource-basename> = <module>} map; the build
+     *       writes {@code META-INF/<basename>-sha256.txt} = the SHA-256 of {@code <module>}'s output
+     *       jar.
      * </ul>
+     *
      * Absent table/keys yield {@link JkBuild.Build#EMPTY}.
      */
     private static JkBuild.Build parseBuild(TomlTable root) {

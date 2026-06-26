@@ -9,19 +9,16 @@ import java.nio.file.Path;
 import java.util.List;
 
 /**
- * Single entry point CLI commands use to run a {@link Goal} against
- * the right set of console listeners — picks {@link ProgressBarListener}
- * (default TTY), {@link VerboseListener} ({@code --verbose}),
- * {@link NdjsonListener} ({@code --output json}), or
- * {@link SilentListener} (non-TTY, {@code --quiet}, or interactive
- * goal); always layers an {@link EventLogListener} on top so the run
- * lands in {@code <cacheRoot>/runs/}.
+ * Single entry point CLI commands use to run a {@link Goal} against the right set of console
+ * listeners — picks {@link ProgressBarListener} (default TTY), {@link VerboseListener} ({@code
+ * --verbose}), {@link NdjsonListener} ({@code --output json}), or {@link SilentListener} (non-TTY,
+ * {@code --quiet}, or interactive goal); always layers an {@link EventLogListener} on top so the
+ * run lands in {@code <cacheRoot>/runs/}.
  *
- * <p>Ctrl-C during a goal is handled by the app-level
- * {@link dev.jkbuild.cli.tui.GlobalCancel} handler (installed at startup):
- * it repaints the in-flight progress bar as canceled, prints
- * {@code ‼ Canceled by user}, and halts. There is no cooperative
- * unwind — a hard cancel is immediate and predictable.
+ * <p>Ctrl-C during a goal is handled by the app-level {@link dev.jkbuild.cli.tui.GlobalCancel}
+ * handler (installed at startup): it repaints the in-flight progress bar as canceled, prints {@code
+ * ‼ Canceled by user}, and halts. There is no cooperative unwind — a hard cancel is immediate and
+ * predictable.
  */
 public final class GoalConsole {
 
@@ -40,10 +37,9 @@ public final class GoalConsole {
     private GoalConsole() {}
 
     /**
-     * Pick listeners + run the goal. Ctrl-C is handled by the app-level
-     * {@link dev.jkbuild.cli.tui.GlobalCancel} handler. Returns the goal's
-     * {@link GoalResult}; caller decides what exit code to surface based on
-     * {@code result.success()}.
+     * Pick listeners + run the goal. Ctrl-C is handled by the app-level {@link
+     * dev.jkbuild.cli.tui.GlobalCancel} handler. Returns the goal's {@link GoalResult}; caller
+     * decides what exit code to surface based on {@code result.success()}.
      */
     public static GoalResult run(Goal goal, Mode mode, Path cacheRoot) {
         // Always log every run for post-hoc debug. Best-effort: a
@@ -58,18 +54,17 @@ public final class GoalConsole {
     }
 
     /**
-     * Variant that derives the cache root from {@link JkDirs#cache}.
-     * Use when the command doesn't have an explicit override.
+     * Variant that derives the cache root from {@link JkDirs#cache}. Use when the command doesn't
+     * have an explicit override.
      */
     public static GoalResult run(Goal goal, Mode mode) {
         return run(goal, mode, JkDirs.cache());
     }
 
     /**
-     * Simple-task variant: render the goal as a spinner + verb (on a TTY) and a
-     * {@code ✓}/{@code ✗} result line from {@code spec}, instead of the
-     * phase-by-phase progress bar. {@code --output json} still emits NDJSON and
-     * {@code --verbose} still prints per-phase lines; otherwise the
+     * Simple-task variant: render the goal as a spinner + verb (on a TTY) and a {@code ✓}/{@code ✗}
+     * result line from {@code spec}, instead of the phase-by-phase progress bar. {@code --output
+     * json} still emits NDJSON and {@code --verbose} still prints per-phase lines; otherwise the
      * {@link SimpleTaskListener} owns the output (animating only on a TTY).
      */
     public static GoalResult run(Goal goal, Mode mode, Path cacheRoot, ConsoleSpec spec) {
@@ -90,14 +85,12 @@ public final class GoalConsole {
     }
 
     /**
-     * Translate {@code GlobalOptions} flags into a {@link Mode}. Lives
-     * here so every command picks the same precedence:
-     * {@code --output json} &gt; {@code --quiet} &gt;
-     * {@code --no-progress} &gt; {@code --verbose} &gt; default.
+     * Translate {@code GlobalOptions} flags into a {@link Mode}. Lives here so every command picks
+     * the same precedence: {@code --output json} &gt; {@code --quiet} &gt; {@code --no-progress} &gt;
+     * {@code --verbose} &gt; default.
      *
-     * <p>{@code --output json} wins over the visualization flags
-     * because it's an explicit "I want machine-readable output" —
-     * the user's other preferences don't override that.
+     * <p>{@code --output json} wins over the visualization flags because it's an explicit "I want
+     * machine-readable output" — the user's other preferences don't override that.
      */
     public static Mode modeFor(dev.jkbuild.cli.GlobalOptions opts) {
         if (opts == null) return Mode.AUTO;
@@ -109,11 +102,10 @@ public final class GoalConsole {
     }
 
     /**
-     * Goal-oriented variant: render the goal with the new {@link CommandManagerListener}
-     * (spinner header + aggregate bar + dynamic phase list) attributed to
-     * {@code module} (the project's {@code group:artifact}), then a
-     * {@code ✓}/{@code ✗} result line from {@code spec}. {@code --output json}
-     * still emits NDJSON and {@code --verbose} still prints per-phase lines.
+     * Goal-oriented variant: render the goal with the new {@link CommandManagerListener} (spinner
+     * header + aggregate bar + dynamic phase list) attributed to {@code module} (the project's {@code
+     * group:artifact}), then a {@code ✓}/{@code ✗} result line from {@code spec}. {@code --output
+     * json} still emits NDJSON and {@code --verbose} still prints per-phase lines.
      */
     public static GoalResult runGoal(Goal goal, Mode mode, Path cacheRoot, ConsoleSpec spec, String module) {
         EventLogListener log = EventLogListener.open(cacheRoot, goal.name());
@@ -132,11 +124,10 @@ public final class GoalConsole {
     }
 
     /**
-     * Run {@code goal} with no console output (only the event log), returning its
-     * result. For builds whose progress must NOT render to the terminal — e.g.
-     * composite dependency units built concurrently, where N live progress bars
-     * can't share one terminal region; the caller prints a compact summary line
-     * per unit instead.
+     * Run {@code goal} with no console output (only the event log), returning its result. For builds
+     * whose progress must NOT render to the terminal — e.g. composite dependency units built
+     * concurrently, where N live progress bars can't share one terminal region; the caller prints a
+     * compact summary line per unit instead.
      */
     public static GoalResult runGoalSilently(Goal goal, Path cacheRoot) {
         EventLogListener log = EventLogListener.open(cacheRoot, goal.name());
@@ -149,10 +140,10 @@ public final class GoalConsole {
     public record Buffered(GoalResult result, List<String> output) {}
 
     /**
-     * Run {@code goal} capturing its output + warnings + errors into a buffer
-     * instead of rendering live — for concurrently-built units, where the caller
-     * flushes each unit's buffer as one contiguous block on completion (no
-     * interleaving across parallel builds). Only the event log renders eagerly.
+     * Run {@code goal} capturing its output + warnings + errors into a buffer instead of rendering
+     * live — for concurrently-built units, where the caller flushes each unit's buffer as one
+     * contiguous block on completion (no interleaving across parallel builds). Only the event log
+     * renders eagerly.
      */
     public static Buffered runGoalBuffered(Goal goal, Path cacheRoot) {
         EventLogListener log = EventLogListener.open(cacheRoot, goal.name());
@@ -197,21 +188,20 @@ public final class GoalConsole {
     }
 
     /**
-     * Run a workspace module's goal into a shared {@link AggregateContext} — its
-     * events feed the one aggregate {@link dev.jkbuild.cli.tui.CommandManager}
-     * (bar + phase list) instead of a per-module view. The shared view is
-     * settled by the caller after the last module. Always records the event log.
+     * Run a workspace module's goal into a shared {@link AggregateContext} — its events feed the one
+     * aggregate {@link dev.jkbuild.cli.tui.CommandManager} (bar + phase list) instead of a per-module
+     * view. The shared view is settled by the caller after the last module. Always records the event
+     * log.
      */
     public static GoalResult runGoalInto(Goal goal, Path cacheRoot, String module, AggregateContext agg) {
         return runGoalInto(goal, cacheRoot, module, agg, 0);
     }
 
     /**
-     * As {@link #runGoalInto(Goal, Path, String, AggregateContext)}, but with the
-     * module's reserved {@code slice} of the calibrated total (its pre-scan
-     * estimate). The slice scales the module's own 0→100% into its share of the
-     * aggregate bar so the bar advances cumulatively without backtracking. Pass
-     * the same estimate that was summed into {@link AggregateContext#calibrate}.
+     * As {@link #runGoalInto(Goal, Path, String, AggregateContext)}, but with the module's reserved
+     * {@code slice} of the calibrated total (its pre-scan estimate). The slice scales the module's
+     * own 0→100% into its share of the aggregate bar so the bar advances cumulatively without
+     * backtracking. Pass the same estimate that was summed into {@link AggregateContext#calibrate}.
      */
     public static GoalResult runGoalInto(Goal goal, Path cacheRoot, String module, AggregateContext agg, long slice) {
         EventLogListener log = EventLogListener.open(cacheRoot, goal.name());
@@ -221,11 +211,10 @@ public final class GoalConsole {
     }
 
     /**
-     * As {@link #runGoalInto(Goal, Path, String, AggregateContext, long)} but for a
-     * module built <em>concurrently</em>: its process output is appended to
-     * {@code outBuffer} instead of being written above the live region as it
-     * arrives, so parallel modules' logs never interleave. The caller flushes the
-     * buffer (above the shared region) when the module completes. Phase/progress
+     * As {@link #runGoalInto(Goal, Path, String, AggregateContext, long)} but for a module built
+     * <em>concurrently</em>: its process output is appended to {@code outBuffer} instead of being
+     * written above the live region as it arrives, so parallel modules' logs never interleave. The
+     * caller flushes the buffer (above the shared region) when the module completes. Phase/progress
      * events still feed the shared aggregate view live (the running rows + bar).
      */
     public static GoalResult runGoalIntoBuffered(

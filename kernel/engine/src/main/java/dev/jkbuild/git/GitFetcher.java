@@ -21,12 +21,12 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Git resolver (PRD §11). Thin driver: writes a spec file and forks the
- * {@code jk-git-runner} worker subprocess so JGit never loads in the main
- * jk process. Public API is identical to the former JGit-direct
- * implementation; callers need no changes.
+ * Git resolver (PRD §11). Thin driver: writes a spec file and forks the {@code jk-git-runner}
+ * worker subprocess so JGit never loads in the main jk process. Public API is identical to the
+ * former JGit-direct implementation; callers need no changes.
  *
  * <p>Cache layout (same as before, worker uses the same directories):
+ *
  * <pre>
  *   &lt;root&gt;/db/&lt;sha256(canonical-url)&gt;/             # bare clone per URL
  *   &lt;root&gt;/co/&lt;sha256(canonical-url)&gt;/&lt;sha&gt;/   # checkout per resolved SHA
@@ -68,11 +68,11 @@ public final class GitFetcher {
     }
 
     /**
-     * Resolve and checkout, optionally bypassing the checkout cache. For a moving
-     * <em>branch</em> ref, the remote tip is re-resolved at most once per freshness
-     * window ({@link GitSource#fetch()}; default 12h) — within the window (or under
-     * {@code --offline}) the previously-resolved tip's checkout is reused without a
-     * network round-trip. Immutable tag/rev refs are unaffected.
+     * Resolve and checkout, optionally bypassing the checkout cache. For a moving <em>branch</em>
+     * ref, the remote tip is re-resolved at most once per freshness window ({@link
+     * GitSource#fetch()}; default 12h) — within the window (or under {@code --offline}) the
+     * previously-resolved tip's checkout is reused without a network round-trip. Immutable tag/rev
+     * refs are unaffected.
      */
     public Fetched fetch(GitSource source, boolean noCache) throws IOException {
         Objects.requireNonNull(source, "source");
@@ -81,7 +81,8 @@ public final class GitFetcher {
             Fetched cached = freshBranchTip(source);
             if (cached != null) return cached;
             if (offline()) {
-                throw new IOException("offline: branch tip for " + source.canonicalUrl()
+                throw new IOException("offline: branch tip for "
+                        + source.canonicalUrl()
                         + " is not cached (drop --offline, or run `jk update --git`)");
             }
         }
@@ -93,8 +94,8 @@ public final class GitFetcher {
     }
 
     /**
-     * Drop the recorded branch-tip freshness stamp for {@code source}, forcing the
-     * next {@link #fetch} to re-resolve the remote tip ({@code jk update --git}).
+     * Drop the recorded branch-tip freshness stamp for {@code source}, forcing the next {@link
+     * #fetch} to re-resolve the remote tip ({@code jk update --git}).
      */
     public void invalidateBranchTip(GitSource source) {
         try {
@@ -217,9 +218,8 @@ public final class GitFetcher {
     private record TipMeta(long epochMs, String sha, String checkout) {}
 
     /**
-     * The previously-resolved branch tip when it's still fresh — within the
-     * {@link GitSource#fetch()} window, or any time under {@code --offline} —
-     * else {@code null} to force a re-resolve.
+     * The previously-resolved branch tip when it's still fresh — within the {@link GitSource#fetch()}
+     * window, or any time under {@code --offline} — else {@code null} to force a re-resolve.
      */
     private Fetched freshBranchTip(GitSource source) {
         TipMeta m = readTip(source);
@@ -266,7 +266,10 @@ public final class GitFetcher {
         return gitRoot.resolve("meta").resolve(key);
     }
 
-    /** Window in millis: {@code null} → 12h default; {@code "always"}/{@code "0"} → -1 (always re-resolve). */
+    /**
+     * Window in millis: {@code null} → 12h default; {@code "always"}/{@code "0"} → -1 (always
+     * re-resolve).
+     */
     static long windowMillis(String fetch) {
         if (fetch == null || fetch.isBlank()) return DEFAULT_WINDOW_MS;
         if ("always".equals(fetch) || "0".equals(fetch)) return -1;
@@ -310,8 +313,8 @@ public final class GitFetcher {
     }
 
     /**
-     * Raised when a git tag's SHA no longer matches the lockfile —
-     * indicates the tag was force-pushed (PRD §11.3).
+     * Raised when a git tag's SHA no longer matches the lockfile — indicates the tag was force-pushed
+     * (PRD §11.3).
      */
     public static final class TagRewriteException extends IOException {
         private final GitSource source;
@@ -319,9 +322,14 @@ public final class GitFetcher {
         private final String actualSha;
 
         public TagRewriteException(GitSource source, String expectedSha, String actualSha) {
-            super("git tag/branch rewrite detected for " + source.canonicalUrl()
-                    + " " + source.ref().token() + ": lock says " + expectedSha
-                    + ", upstream now resolves to " + actualSha
+            super("git tag/branch rewrite detected for "
+                    + source.canonicalUrl()
+                    + " "
+                    + source.ref().token()
+                    + ": lock says "
+                    + expectedSha
+                    + ", upstream now resolves to "
+                    + actualSha
                     + " (re-run with `jk update` to accept).");
             this.source = source;
             this.expectedSha = expectedSha;

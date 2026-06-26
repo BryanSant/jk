@@ -14,19 +14,19 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * Uploads an artifact bundle (jar, pom, optional sources jar, plus their
- * checksums) to a Maven-style HTTP repository via PUT (PRD §21.2).
+ * Uploads an artifact bundle (jar, pom, optional sources jar, plus their checksums) to a
+ * Maven-style HTTP repository via PUT (PRD §21.2).
  *
  * <p>Layout under the repo base URL:
+ *
  * <pre>
  *   &lt;group-path&gt;/&lt;artifact&gt;/&lt;version&gt;/&lt;artifact&gt;-&lt;version&gt;.{jar,pom,sources.jar}
  *                                       + .md5, .sha1, .sha256, .sha512 per file
  * </pre>
  *
- * <p>Authentication is supplied as a {@link RepoCredential} (Basic, Bearer, or
- * anonymous), resolved by the caller through the shared credential chain
- * (docs/artifact-repos.md). GPG signatures (.asc), Sigstore, SLSA provenance,
- * and SBOMs are layered on by the signing options.
+ * <p>Authentication is supplied as a {@link RepoCredential} (Basic, Bearer, or anonymous), resolved
+ * by the caller through the shared credential chain (docs/artifact-repos.md). GPG signatures
+ * (.asc), Sigstore, SLSA provenance, and SBOMs are layered on by the signing options.
  */
 public final class MavenPublisher {
 
@@ -49,11 +49,10 @@ public final class MavenPublisher {
     }
 
     /**
-     * As {@link #MavenPublisher(URI, RepoCredential)} but with per-target
-     * object-store config (region/endpoint/keys) applied to {@code s3://} /
-     * {@code gs://} destinations; ignored for {@code http(s)}. A factory rather
-     * than a constructor so {@code (URI, null, null)} stays unambiguous against
-     * the Basic-auth constructor.
+     * As {@link #MavenPublisher(URI, RepoCredential)} but with per-target object-store config
+     * (region/endpoint/keys) applied to {@code s3://} / {@code gs://} destinations; ignored for
+     * {@code http(s)}. A factory rather than a constructor so {@code (URI, null, null)} stays
+     * unambiguous against the Basic-auth constructor.
      */
     public static MavenPublisher withObjectStore(
             URI repoBase, RepoCredential credential, dev.jkbuild.model.ObjectStoreConfig objectStore) {
@@ -84,11 +83,9 @@ public final class MavenPublisher {
     }
 
     /**
-     * Upload {@code artifacts} for {@code project} with no signing — every
-     * artifact gets its four checksum files but no {@code .asc} or
-     * {@code .sigstore} sidecar. See
-     * {@link #publish(JkBuild.Project, Iterable, SigningOptions)} for the
-     * signed variant.
+     * Upload {@code artifacts} for {@code project} with no signing — every artifact gets its four
+     * checksum files but no {@code .asc} or {@code .sigstore} sidecar. See {@link
+     * #publish(JkBuild.Project, Iterable, SigningOptions)} for the signed variant.
      */
     public Result publish(JkBuild.Project project, Iterable<Artifact> artifacts)
             throws IOException, InterruptedException {
@@ -97,14 +94,13 @@ public final class MavenPublisher {
 
     /**
      * Upload {@code artifacts} for {@code project}. Per artifact:
+     *
      * <ul>
-     *   <li>the artifact itself + four checksum files;</li>
-     *   <li>if {@link SigningOptions#gpg()} is set, a detached
-     *       ASCII-armored {@code .asc} signature + its four checksum files
-     *       (PRD §21.2);</li>
-     *   <li>if {@link SigningOptions#sigstore()} is set, a Sigstore Bundle
-     *       JSON {@code .sigstore} file + its four checksum files
-     *       (PRD §23.3).</li>
+     *   <li>the artifact itself + four checksum files;
+     *   <li>if {@link SigningOptions#gpg()} is set, a detached ASCII-armored {@code .asc} signature +
+     *       its four checksum files (PRD §21.2);
+     *   <li>if {@link SigningOptions#sigstore()} is set, a Sigstore Bundle JSON {@code .sigstore}
+     *       file + its four checksum files (PRD §23.3).
      * </ul>
      */
     public Result publish(JkBuild.Project project, Iterable<Artifact> artifacts, SigningOptions signing)

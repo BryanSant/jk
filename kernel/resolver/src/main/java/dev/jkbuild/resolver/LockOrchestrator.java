@@ -28,15 +28,14 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * Composes the resolver pipeline end-to-end: parsed {@link JkBuild} ->
- * {@link Resolution} -> artifact downloads -> {@link Lockfile}.
+ * Composes the resolver pipeline end-to-end: parsed {@link JkBuild} -> {@link Resolution} ->
+ * artifact downloads -> {@link Lockfile}.
  *
- * <p>One resolution pass over the union of all scope roots (plus any
- * deps contributed by activated features). After the solver returns,
- * BFS the resolved graph from each scope's declared roots independently
- * to tag every package with the scopes whose roots reach it.
- * Downstream {@link dev.jkbuild.compile.ClasspathResolver} filters by
- * scope so test deps don't pollute the main classpath.
+ * <p>One resolution pass over the union of all scope roots (plus any deps contributed by activated
+ * features). After the solver returns, BFS the resolved graph from each scope's declared roots
+ * independently to tag every package with the scopes whose roots reach it. Downstream {@link
+ * dev.jkbuild.compile.ClasspathResolver} filters by scope so test deps don't pollute the main
+ * classpath.
  */
 public final class LockOrchestrator {
 
@@ -44,23 +43,20 @@ public final class LockOrchestrator {
             List.of(Scope.EXPORT, Scope.MAIN, Scope.RUNTIME, Scope.PROVIDED, Scope.TEST, Scope.PROCESSOR);
 
     /**
-     * The JUnit Platform deps jk adds to every project's TEST scope so that
-     * {@code jk test} (which forks {@code jk-test-runner} over the JUnit
-     * Platform) works out of the box — the user never mentions these in
-     * {@code jk.toml}.
+     * The JUnit Platform deps jk adds to every project's TEST scope so that {@code jk test} (which
+     * forks {@code jk-test-runner} over the JUnit Platform) works out of the box — the user never
+     * mentions these in {@code jk.toml}.
      *
-     * <p>Declared as {@code latest}, not a pinned version: {@code jk lock}
-     * records today's latest <em>stable</em> release into {@code jk.lock}
-     * (reproducible), and {@code jk update} advances it — so "jk defaults to
-     * the latest stable JUnit" stays evergreen. Unbounded {@code latest} is
-     * safe because the runner jar bundles no JUnit; it drives whatever
-     * launcher + engines resolve here through the stable JUnit Platform
-     * Launcher API, so a newer JUnit is always fine.
+     * <p>Declared as {@code latest}, not a pinned version: {@code jk lock} records today's latest
+     * <em>stable</em> release into {@code jk.lock} (reproducible), and {@code jk update} advances it
+     * — so "jk defaults to the latest stable JUnit" stays evergreen. Unbounded {@code latest} is safe
+     * because the runner jar bundles no JUnit; it drives whatever launcher + engines resolve here
+     * through the stable JUnit Platform Launcher API, so a newer JUnit is always fine.
      *
-     * <p>Injected on every lock (see {@link #lock}). For a project that
-     * declared no test deps this <em>is</em> the default test framework; when
-     * the user did declare their own, {@code putIfAbsent} keeps their chosen
-     * {@code junit-jupiter} version and just ensures the launcher is present.
+     * <p>Injected on every lock (see {@link #lock}). For a project that declared no test deps this
+     * <em>is</em> the default test framework; when the user did declare their own, {@code
+     * putIfAbsent} keeps their chosen {@code junit-jupiter} version and just ensures the launcher is
+     * present.
      */
     private static final List<Dependency> DEFAULT_TEST_DEPS = List.of(
             new Dependency("org.junit.jupiter:junit-jupiter", VersionSelector.parse("latest")),
@@ -90,10 +86,9 @@ public final class LockOrchestrator {
     }
 
     /**
-     * Lock and additionally attempt to resolve the {@code -sources.jar} for
-     * every Maven package, populating {@link Lockfile.Artifact#sourcesChecksum()}
-     * when found. Sources that return 404 are silently skipped — not all
-     * packages publish sources.
+     * Lock and additionally attempt to resolve the {@code -sources.jar} for every Maven package,
+     * populating {@link Lockfile.Artifact#sourcesChecksum()} when found. Sources that return 404 are
+     * silently skipped — not all packages publish sources.
      */
     public Lockfile lockWithSources(
             JkBuild project,
@@ -112,10 +107,9 @@ public final class LockOrchestrator {
     }
 
     /**
-     * Lock with an explicit feature selection and a progress observer.
-     * {@link ResolveObserver#onTotal} fires once after the solver returns the
-     * full decision map; {@link ResolveObserver#onPackage} fires once per
-     * package as each artifact is fetched and recorded.
+     * Lock with an explicit feature selection and a progress observer. {@link
+     * ResolveObserver#onTotal} fires once after the solver returns the full decision map; {@link
+     * ResolveObserver#onPackage} fires once per package as each artifact is fetched and recorded.
      */
     public Lockfile lock(
             JkBuild project,
@@ -128,12 +122,11 @@ public final class LockOrchestrator {
     }
 
     /**
-     * Conservative re-lock: same as {@link #lock} but seeds the solver with
-     * the exact versions from {@code existing} as <em>soft preferences</em>.
-     * The solver selects each locked version first; if a new or changed dep's
-     * constraint rules it out, the solver backtracks to the next candidate
-     * automatically. Only versions that genuinely conflict with new constraints
-     * are bumped — everything else stays pinned.
+     * Conservative re-lock: same as {@link #lock} but seeds the solver with the exact versions from
+     * {@code existing} as <em>soft preferences</em>. The solver selects each locked version first; if
+     * a new or changed dep's constraint rules it out, the solver backtracks to the next candidate
+     * automatically. Only versions that genuinely conflict with new constraints are bumped —
+     * everything else stays pinned.
      */
     public Lockfile lockConservative(
             JkBuild project,
@@ -180,9 +173,10 @@ public final class LockOrchestrator {
         for (String depName : project.features().requestedDepNames(activated)) {
             Dependency opt = optionalByLib.get(depName);
             if (opt == null) {
-                throw new IllegalArgumentException(
-                        "feature dependency '" + depName + "' is not a declared optional dependency"
-                                + " — declare it under [dependencies.*] with `optional = true`");
+                throw new IllegalArgumentException("feature dependency '"
+                        + depName
+                        + "' is not a declared optional dependency"
+                        + " — declare it under [dependencies.*] with `optional = true`");
             }
             deduped.putIfAbsent(opt.module(), opt);
         }
@@ -235,10 +229,16 @@ public final class LockOrchestrator {
                     bomConstraints.put(m.module(), m.version());
                     constraintProvenance.put(m.module(), bomLabel);
                 } else if (!existing.equals(m.version())) {
-                    throw new IllegalStateException("platform BOM conflict on `" + m.module()
-                            + "`: " + constraintProvenance.get(m.module())
-                            + " constrains to " + existing + ", but "
-                            + bomLabel + " constrains to " + m.version()
+                    throw new IllegalStateException("platform BOM conflict on `"
+                            + m.module()
+                            + "`: "
+                            + constraintProvenance.get(m.module())
+                            + " constrains to "
+                            + existing
+                            + ", but "
+                            + bomLabel
+                            + " constrains to "
+                            + m.version()
                             + ". Pick one BOM or pin the coord explicitly.");
                 }
             }
@@ -340,10 +340,9 @@ public final class LockOrchestrator {
     }
 
     /**
-     * Extract a concrete version literal from a platform-dep's selector.
-     * Platform BOMs must be pinned (Exact) or anchored (Caret/Tilde) to a
-     * specific version — they're an authoritative pin, not a search. Returns
-     * {@code null} for selectors with no resolvable literal (Range, Latest).
+     * Extract a concrete version literal from a platform-dep's selector. Platform BOMs must be pinned
+     * (Exact) or anchored (Caret/Tilde) to a specific version — they're an authoritative pin, not a
+     * search. Returns {@code null} for selectors with no resolvable literal (Range, Latest).
      */
     private static String versionLiteral(VersionSelector v) {
         return switch (v) {
@@ -356,21 +355,19 @@ public final class LockOrchestrator {
     }
 
     /**
-     * A composite source dependency — built from source and injected onto the
-     * classpath at build time rather than resolved as a Maven coordinate:
-     * a {@code path = …} dep, or a <em>branch</em> git dep (a moving target).
-     * Immutable (tag/rev) git deps are materialized to a pin upstream
-     * ({@code GitSourceResolution}) and arrive here as ordinary coordinates.
+     * A composite source dependency — built from source and injected onto the classpath at build time
+     * rather than resolved as a Maven coordinate: a {@code path = …} dep, or a <em>branch</em> git
+     * dep (a moving target). Immutable (tag/rev) git deps are materialized to a pin upstream ({@code
+     * GitSourceResolution}) and arrive here as ordinary coordinates.
      */
     private static boolean isComposite(Dependency d) {
         return d.isPath() || (d.isGit() && !d.gitSource().ref().isImmutable());
     }
 
     /**
-     * Try to fetch {@code -sources.jar} for every Maven package in {@code lock}
-     * and return a copy with {@link Lockfile.Artifact#sourcesChecksum()} populated
-     * where sources exist. Packages that return 404, have a non-maven source, or
-     * already have a sources checksum are left unchanged.
+     * Try to fetch {@code -sources.jar} for every Maven package in {@code lock} and return a copy
+     * with {@link Lockfile.Artifact#sourcesChecksum()} populated where sources exist. Packages that
+     * return 404, have a non-maven source, or already have a sources checksum are left unchanged.
      */
     public Lockfile attachSources(Lockfile lock) throws InterruptedException {
         List<Lockfile.Artifact> updated = new ArrayList<>();

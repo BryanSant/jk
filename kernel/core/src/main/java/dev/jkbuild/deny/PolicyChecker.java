@@ -9,9 +9,9 @@ import java.util.Locale;
 import java.util.Objects;
 
 /**
- * Apply a {@link DenyPolicy} to the resolved {@link Lockfile} (PRD §23.6).
- * v0.8 first cut checks source-URL host denylisting; license inspection
- * (which needs to read each package's POM) is layered on in a follow-up.
+ * Apply a {@link DenyPolicy} to the resolved {@link Lockfile} (PRD §23.6). v0.8 first cut checks
+ * source-URL host denylisting; license inspection (which needs to read each package's POM) is
+ * layered on in a follow-up.
  */
 public final class PolicyChecker {
 

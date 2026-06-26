@@ -7,32 +7,33 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * The "de-facto default JDK" rule jk applies when the user hasn't explicitly run
- * {@code jk jdk default}. Pure and offline — given the installed JDKs and the
- * current latest-LTS major, it picks which one a build/shell should default to.
+ * The "de-facto default JDK" rule jk applies when the user hasn't explicitly run {@code jk jdk
+ * default}. Pure and offline — given the installed JDKs and the current latest-LTS major, it picks
+ * which one a build/shell should default to.
  *
  * <p>Rule:
- * <ul>
- *   <li>0 installed → empty (the caller installs the latest LTS and persists it).</li>
- *   <li>exactly 1 → that one.</li>
- *   <li>&gt;1 → the <em>current latest-LTS major</em> if any installed JDK has it;
- *       otherwise the latest installed version overall.</li>
- * </ul>
- * Examples (latest LTS = 25): {@code {17,21,26}} → 26 (25 not installed);
- * {@code {24,25,26}} → 25 (the latest installed LTS, even though 26 is newer).
  *
- * <p>This is only the <em>computation</em> — it is not persisted. An explicit
- * {@code jk jdk default} or a jk-managed install writes
- * {@link GlobalDefaultJdk}, which then wins over this rule.
+ * <ul>
+ *   <li>0 installed → empty (the caller installs the latest LTS and persists it).
+ *   <li>exactly 1 → that one.
+ *   <li>&gt;1 → the <em>current latest-LTS major</em> if any installed JDK has it; otherwise the
+ *       latest installed version overall.
+ * </ul>
+ *
+ * Examples (latest LTS = 25): {@code {17,21,26}} → 26 (25 not installed); {@code {24,25,26}} → 25
+ * (the latest installed LTS, even though 26 is newer).
+ *
+ * <p>This is only the <em>computation</em> — it is not persisted. An explicit {@code jk jdk
+ * default} or a jk-managed install writes {@link GlobalDefaultJdk}, which then wins over this rule.
  */
 public final class DefaultJdkPolicy {
 
     private DefaultJdkPolicy() {}
 
     /**
-     * Choose the de-facto default among {@code installed}, given the major of the
-     * newest LTS that currently exists ({@code latestLtsMajor}; e.g. 25). Empty
-     * when nothing is installed (caller should bootstrap-install).
+     * Choose the de-facto default among {@code installed}, given the major of the newest LTS that
+     * currently exists ({@code latestLtsMajor}; e.g. 25). Empty when nothing is installed (caller
+     * should bootstrap-install).
      */
     public static Optional<JdkHit> choose(List<JdkHit> installed, int latestLtsMajor) {
         if (installed == null || installed.isEmpty()) return Optional.empty();

@@ -23,8 +23,8 @@ public final class Hashing {
     }
 
     /**
-     * SHA-256 of a file's contents, computed by streaming through a fixed
-     * buffer so a multi-hundred-MB artifact is never held in memory at once.
+     * SHA-256 of a file's contents, computed by streaming through a fixed buffer so a
+     * multi-hundred-MB artifact is never held in memory at once.
      */
     public static String sha256Hex(Path file) throws IOException {
         MessageDigest md = newSha256();

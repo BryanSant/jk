@@ -8,13 +8,11 @@ import java.util.Objects;
  * The {@code deny { ... }} policy block (PRD §23.6). First-cut shape:
  *
  * <ul>
- *   <li>{@code sources.deny} — denylist of repository host names.</li>
- *   <li>{@code licenses.deny} / {@code licenses.allow} — denylist /
- *       allowlist of SPDX license identifiers (checked when license
- *       data is available; full POM-license inspection is a v0.8
- *       follow-up).</li>
- *   <li>{@code yanked} — {@code "deny"} (default), {@code "warn"}, or
- *       {@code "allow"}.</li>
+ *   <li>{@code sources.deny} — denylist of repository host names.
+ *   <li>{@code licenses.deny} / {@code licenses.allow} — denylist / allowlist of SPDX license
+ *       identifiers (checked when license data is available; full POM-license inspection is a v0.8
+ *       follow-up).
+ *   <li>{@code yanked} — {@code "deny"} (default), {@code "warn"}, or {@code "allow"}.
  * </ul>
  */
 public record DenyPolicy(

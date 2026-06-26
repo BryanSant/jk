@@ -11,23 +11,23 @@ import java.util.EnumSet;
 import java.util.Set;
 
 /**
- * Minimal TAR reader that handles {@code .tar} and {@code .tar.gz} archives
- * without any external library. Replaces Apache Commons Compress's
- * {@code TarArchiveInputStream} for the JDK install use case.
+ * Minimal TAR reader that handles {@code .tar} and {@code .tar.gz} archives without any external
+ * library. Replaces Apache Commons Compress's {@code TarArchiveInputStream} for the JDK install use
+ * case.
  *
  * <p>Supported entry types:
+ *
  * <ul>
- *   <li>Regular files ({@code '0'} or NUL)</li>
- *   <li>Hard links ({@code '1'}) — treated as regular files</li>
- *   <li>Symbolic links ({@code '2'})</li>
- *   <li>Directories ({@code '5'})</li>
- *   <li>GNU long-name ({@code 'L'}) and long-link ({@code 'K'}) extensions</li>
- *   <li>PAX extended headers ({@code 'x'}, {@code 'g'}) — {@code path} and
- *       {@code linkpath} fields extracted</li>
+ *   <li>Regular files ({@code '0'} or NUL)
+ *   <li>Hard links ({@code '1'}) — treated as regular files
+ *   <li>Symbolic links ({@code '2'})
+ *   <li>Directories ({@code '5'})
+ *   <li>GNU long-name ({@code 'L'}) and long-link ({@code 'K'}) extensions
+ *   <li>PAX extended headers ({@code 'x'}, {@code 'g'}) — {@code path} and {@code linkpath} fields
+ *       extracted
  * </ul>
  *
- * <p>All other types (device files, etc.) are skipped silently — JDK archives
- * don't use them.
+ * <p>All other types (device files, etc.) are skipped silently — JDK archives don't use them.
  */
 public final class MinimalTar {
 
@@ -38,14 +38,14 @@ public final class MinimalTar {
         /**
          * Called for each entry.
          *
-         * @param name     entry path (may contain subdirs)
+         * @param name entry path (may contain subdirs)
          * @param linkName symlink target, or empty string for non-symlinks
-         * @param mode     POSIX permission bits (e.g. {@code 0755})
-         * @param isDir    true when the entry is a directory
-         * @param isLink   true when the entry is a symbolic link
-         * @param data     stream positioned at entry data ({@code size} bytes available);
-         *                 {@code null} for directories and symlinks
-         * @param size     uncompressed byte count of the entry data
+         * @param mode POSIX permission bits (e.g. {@code 0755})
+         * @param isDir true when the entry is a directory
+         * @param isLink true when the entry is a symbolic link
+         * @param data stream positioned at entry data ({@code size} bytes available); {@code null} for
+         *     directories and symlinks
+         * @param size uncompressed byte count of the entry data
          */
         void handle(String name, String linkName, int mode, boolean isDir, boolean isLink, InputStream data, long size)
                 throws IOException;
@@ -225,8 +225,8 @@ public final class MinimalTar {
     }
 
     /**
-     * Wraps an {@link InputStream} and limits reads to exactly {@code size}
-     * bytes — prevents the handler from reading beyond the current TAR entry.
+     * Wraps an {@link InputStream} and limits reads to exactly {@code size} bytes — prevents the
+     * handler from reading beyond the current TAR entry.
      */
     static final class LimitedInputStream extends InputStream {
         private final InputStream delegate;

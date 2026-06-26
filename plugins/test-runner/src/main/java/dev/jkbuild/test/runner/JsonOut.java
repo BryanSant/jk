@@ -6,13 +6,12 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Hand-rolled JSON encoder. Tiny and dep-free so jk-test-runner stays a
- * single-jar artifact; we don't drag jackson/gson into every user's test
- * classpath. Covers exactly the value types our event schema uses: String,
- * Number, Boolean, Map&lt;String,?&gt;, List&lt;?&gt;, and {@code null}.
+ * Hand-rolled JSON encoder. Tiny and dep-free so jk-test-runner stays a single-jar artifact; we
+ * don't drag jackson/gson into every user's test classpath. Covers exactly the value types our
+ * event schema uses: String, Number, Boolean, Map&lt;String,?&gt;, List&lt;?&gt;, and {@code null}.
  *
- * <p>Output matches the JSON spec for these shapes — verifiable by feeding
- * the output through any standard JSON parser.
+ * <p>Output matches the JSON spec for these shapes — verifiable by feeding the output through any
+ * standard JSON parser.
  */
 final class JsonOut {
 

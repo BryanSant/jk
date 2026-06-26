@@ -6,8 +6,8 @@ import dev.jkbuild.model.Coordinate;
 /**
  * Maps coordinates to Maven repository paths.
  *
- * <p>Layout (per Maven Central convention):
- * {@code <group-with-slashes>/<artifact>/<version>/<artifact>-<version>[-<classifier>].<ext>}
+ * <p>Layout (per Maven Central convention): {@code
+ * <group-with-slashes>/<artifact>/<version>/<artifact>-<version>[-<classifier>].<ext>}
  */
 public final class MavenLayout {
 

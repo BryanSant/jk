@@ -2,10 +2,9 @@
 package dev.jkbuild.resolver.pubgrub;
 
 /**
- * Raised when PubGrub determines that no version assignment satisfies the
- * supplied constraints. Carries the root-level incompatibility that fired
- * so the diagnostics renderer can walk back through the cause DAG and
- * produce a human-readable explanation.
+ * Raised when PubGrub determines that no version assignment satisfies the supplied constraints.
+ * Carries the root-level incompatibility that fired so the diagnostics renderer can walk back
+ * through the cause DAG and produce a human-readable explanation.
  */
 public final class UnsatisfiableException extends RuntimeException {
 

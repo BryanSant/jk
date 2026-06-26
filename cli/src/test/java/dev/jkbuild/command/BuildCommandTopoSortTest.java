@@ -12,9 +12,8 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 /**
- * {@link BuildCommand#topoSortModules} ordering, with focus on the
- * {@code [build].order-after} build-order-only edges: they must affect order
- * without being dependencies.
+ * {@link BuildCommand#topoSortModules} ordering, with focus on the {@code [build].order-after}
+ * build-order-only edges: they must affect order without being dependencies.
  */
 class BuildCommandTopoSortTest {
 

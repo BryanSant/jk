@@ -11,23 +11,23 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Renders a {@link JkBuild} as a Maven-Central-grade {@code pom.xml} (PRD
- * §21.3 / §24.4). The companion to {@link PomImporter}.
+ * Renders a {@link JkBuild} as a Maven-Central-grade {@code pom.xml} (PRD §21.3 / §24.4). The
+ * companion to {@link PomImporter}.
  *
  * <p>Fidelity rules per PRD §21.3:
+ *
  * <ul>
- *   <li>{@code dependencies.platform} → {@code <dependencyManagement>} with
- *       {@code <scope>import</scope><type>pom</type>}.</li>
- *   <li>{@code dependencies.provided} → {@code <scope>provided</scope>}.</li>
- *   <li>{@code dependencies.processor} → {@code annotationProcessorPaths}
- *       inside the {@code maven-compiler-plugin} configuration.</li>
- *   <li>{@code workspace} root → {@code <packaging>pom</packaging>} plus
- *       {@code <modules>}.</li>
- *   <li>Features are stripped (consumer-side selectors, not a POM concept).</li>
- *   <li>jk profiles are not emitted — the model is too different from
- *       Maven's; a publish-time warning lands the caveat.</li>
- *   <li>Non-exact version selectors collapse to their inner version string
- *       with a fidelity warning in the {@link ImportReport}.</li>
+ *   <li>{@code dependencies.platform} → {@code <dependencyManagement>} with {@code
+ *       <scope>import</scope><type>pom</type>}.
+ *   <li>{@code dependencies.provided} → {@code <scope>provided</scope>}.
+ *   <li>{@code dependencies.processor} → {@code annotationProcessorPaths} inside the {@code
+ *       maven-compiler-plugin} configuration.
+ *   <li>{@code workspace} root → {@code <packaging>pom</packaging>} plus {@code <modules>}.
+ *   <li>Features are stripped (consumer-side selectors, not a POM concept).
+ *   <li>jk profiles are not emitted — the model is too different from Maven's; a publish-time
+ *       warning lands the caveat.
+ *   <li>Non-exact version selectors collapse to their inner version string with a fidelity warning
+ *       in the {@link ImportReport}.
  * </ul>
  */
 public final class PomExporter {
@@ -47,16 +47,16 @@ public final class PomExporter {
     }
 
     /**
-     * Export {@code jkBuild} as a {@code pom.xml}. {@code locked} maps a
-     * {@code group:artifact} module to the exact version resolved in {@code jk.lock};
-     * when a module is present there it's emitted verbatim (the build reproduces
-     * what jk builds), otherwise the declared selector collapses with a warning.
+     * Export {@code jkBuild} as a {@code pom.xml}. {@code locked} maps a {@code group:artifact}
+     * module to the exact version resolved in {@code jk.lock}; when a module is present there it's
+     * emitted verbatim (the build reproduces what jk builds), otherwise the declared selector
+     * collapses with a warning.
      *
-     * <p>{@code layout} should be a concrete {@link JkBuild.Layout#SIMPLE} or
-     * {@link JkBuild.Layout#TRADITIONAL} (callers resolve {@code AUTO} against the
-     * directory tree); {@code SIMPLE} emits {@code <sourceDirectory>src</…>} +
-     * {@code <testSourceDirectory>test</…>} so Maven finds jk's flat layout.
-     * {@code TRADITIONAL}/{@code AUTO} use Maven's default {@code src/main/java}.
+     * <p>{@code layout} should be a concrete {@link JkBuild.Layout#SIMPLE} or {@link
+     * JkBuild.Layout#TRADITIONAL} (callers resolve {@code AUTO} against the directory tree); {@code
+     * SIMPLE} emits {@code <sourceDirectory>src</…>} + {@code <testSourceDirectory>test</…>} so Maven
+     * finds jk's flat layout. {@code TRADITIONAL}/{@code AUTO} use Maven's default {@code
+     * src/main/java}.
      */
     public static Result export(JkBuild jkBuild, JkBuild.Layout layout, Map<String, String> locked) {
         if (locked == null) locked = Map.of();
@@ -192,21 +192,31 @@ public final class PomExporter {
     /** Git / path / content-addressed deps have no Maven equivalent — warn and skip. */
     private static boolean warnIfUnmappable(Dependency d, ImportReport.Builder report) {
         if (d.isGit()) {
-            report.warning("dependency `" + d.module() + "` is git-sourced; Maven has no git-source"
+            report.warning("dependency `"
+                    + d.module()
+                    + "` is git-sourced; Maven has no git-source"
                     + " equivalent — dropped. Build & install that project to your local repo"
                     + " (`mvn install`, or `jk install`) so it resolves by coordinate, then add it"
                     + " as a normal <dependency>.");
             return true;
         }
         if (d.isPath()) {
-            report.warning("dependency `" + d.module() + "` is a local path dep; Maven has no direct"
+            report.warning("dependency `"
+                    + d.module()
+                    + "` is a local path dep; Maven has no direct"
                     + " equivalent — dropped. Install the local project to your Maven repo first"
-                    + " (`cd " + d.pathSource() + " && mvn install`, or `jk install`), then declare"
-                    + " `" + d.module() + "` as a normal <dependency>; or fold it in as a Maven <module>.");
+                    + " (`cd "
+                    + d.pathSource()
+                    + " && mvn install`, or `jk install`), then declare"
+                    + " `"
+                    + d.module()
+                    + "` as a normal <dependency>; or fold it in as a Maven <module>.");
             return true;
         }
         if (d.isFile()) {
-            report.warning("dependency `" + d.module() + "` is content-addressed (sha256); no Maven"
+            report.warning("dependency `"
+                    + d.module()
+                    + "` is content-addressed (sha256); no Maven"
                     + " equivalent — dropped.");
             return true;
         }
@@ -308,9 +318,9 @@ public final class PomExporter {
     }
 
     /**
-     * Foojay-backed toolchains plugin — auto-downloads the project's JDK (the
-     * Maven analog of Gradle's foojay-resolver), so `project.jdk` reproduces
-     * jk's JDK auto-provisioning rather than requiring a hand-edited toolchains.xml.
+     * Foojay-backed toolchains plugin — auto-downloads the project's JDK (the Maven analog of
+     * Gradle's foojay-resolver), so `project.jdk` reproduces jk's JDK auto-provisioning rather than
+     * requiring a hand-edited toolchains.xml.
      */
     private static void appendToolchainsPlugin(StringBuilder sb, JkBuild.Project p) {
         int major = p.jdkMajor();
@@ -405,33 +415,47 @@ public final class PomExporter {
     }
 
     /**
-     * Extract a Maven-compatible version string from a {@link VersionSelector}.
-     * Maven publishes exact pins; non-exact selectors collapse to their version
-     * with a fidelity warning.
+     * Extract a Maven-compatible version string from a {@link VersionSelector}. Maven publishes exact
+     * pins; non-exact selectors collapse to their version with a fidelity warning.
      */
     private static String extractVersion(VersionSelector v, String module, ImportReport.Builder report) {
         return switch (v) {
             case VersionSelector.Exact e -> e.version();
             case VersionSelector.Caret c -> {
-                report.warning("dependency `" + module + "` was declared as `^" + c.version()
-                        + "` (caret); pinned to `" + c.version() + "` in the exported POM."
+                report.warning("dependency `"
+                        + module
+                        + "` was declared as `^"
+                        + c.version()
+                        + "` (caret); pinned to `"
+                        + c.version()
+                        + "` in the exported POM."
                         + " Consumers using Maven get exact-match semantics.");
                 yield c.version();
             }
             case VersionSelector.Tilde t -> {
-                report.warning("dependency `" + module + "` was declared as `~" + t.version() + "` (tilde); pinned to `"
-                        + t.version() + "` in the exported POM.");
+                report.warning("dependency `"
+                        + module
+                        + "` was declared as `~"
+                        + t.version()
+                        + "` (tilde); pinned to `"
+                        + t.version()
+                        + "` in the exported POM.");
                 yield t.version();
             }
             case VersionSelector.Range r -> {
                 // jk range expressions usually look enough like Maven ranges to pass through,
                 // but emit a warning so the user reviews.
-                report.warning("dependency `" + module + "` uses range `" + r.raw()
+                report.warning("dependency `"
+                        + module
+                        + "` uses range `"
+                        + r.raw()
                         + "`; emitted verbatim — Maven range syntax differs in edge cases.");
                 yield r.raw();
             }
             case VersionSelector.Latest l -> {
-                report.warning("dependency `" + module + "` uses `latest`; emitted as `LATEST` —"
+                report.warning("dependency `"
+                        + module
+                        + "` uses `latest`; emitted as `LATEST` —"
                         + " note that Maven 3+ has deprecated LATEST/RELEASE in <version>.");
                 yield "LATEST";
             }

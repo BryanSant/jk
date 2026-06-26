@@ -8,6 +8,7 @@ import com.sun.net.httpserver.HttpServer;
 import dev.jkbuild.credential.RepoCredential;
 import dev.jkbuild.http.Http;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -87,8 +88,7 @@ class HttpTransportTest {
             ex.close();
         });
 
-        Optional<java.io.InputStream> body =
-                transport().fetchStream(base.resolve("/a.jar"), new RepoCredential.Bearer("tok"));
+        Optional<InputStream> body = transport().fetchStream(base.resolve("/a.jar"), new RepoCredential.Bearer("tok"));
         assertThat(body).isPresent();
         try (var in = body.get()) {
             assertThat(new String(in.readAllBytes(), StandardCharsets.UTF_8)).isEqualTo("bytes");

@@ -24,17 +24,16 @@ import org.jetbrains.kotlin.buildtools.api.jvm.operations.JvmCompilationOperatio
  * Child-JVM entry point that drives the Kotlin Build Tools API.
  *
  * <p>jk launches this as {@code java -cp <worker.jar>:<kotlin-bta-closure>
- * dev.jkbuild.kotlin.compiler.KotlinCompilerWorker @&lt;spec&gt;}. The worker reads the
- * {@link CompileSpec}, runs an in-process JVM compile (incremental when the spec
- * carries a {@code WORKDIR}), streams diagnostics back as NDJSON, and exits:
- * {@code 0} success, {@code 1} compilation error, {@code 3} OOM/internal compiler
- * error, {@code 2} bad spec / unexpected failure.
+ * dev.jkbuild.kotlin.compiler.KotlinCompilerWorker @&lt;spec&gt;}. The worker reads the {@link
+ * CompileSpec}, runs an in-process JVM compile (incremental when the spec carries a {@code
+ * WORKDIR}), streams diagnostics back as NDJSON, and exits: {@code 0} success, {@code 1}
+ * compilation error, {@code 3} OOM/internal compiler error, {@code 2} bad spec / unexpected
+ * failure.
  *
- * <p>It uses the {@link KotlinToolchains} entry point (the post-2.4 BTA surface;
- * the older {@code CompilationService} flow is deprecated). It depends on nothing
- * but the Build Tools API at compile time — the implementation and the Kotlin
- * compiler arrive on the classpath at runtime, version-matched by jk, so the
- * worker never leaks compiler deps into jk.
+ * <p>It uses the {@link KotlinToolchains} entry point (the post-2.4 BTA surface; the older {@code
+ * CompilationService} flow is deprecated). It depends on nothing but the Build Tools API at compile
+ * time — the implementation and the Kotlin compiler arrive on the classpath at runtime,
+ * version-matched by jk, so the worker never leaks compiler deps into jk.
  */
 public final class KotlinCompilerWorker implements Plugin {
 
@@ -104,12 +103,11 @@ public final class KotlinCompilerWorker implements Plugin {
     }
 
     /**
-     * Compute (and cache) a classpath ABI snapshot file per compile-classpath
-     * entry, returning the snapshot file list for the IC config. Snapshots are
-     * keyed by the entry's path — jk's classpath entries are content-addressed
-     * (CAS) paths, so a given file is immutable and its snapshot can be reused
-     * across builds. On any failure we degrade to no snapshots (still
-     * source-incremental), preserving the pre-snapshot behaviour.
+     * Compute (and cache) a classpath ABI snapshot file per compile-classpath entry, returning the
+     * snapshot file list for the IC config. Snapshots are keyed by the entry's path — jk's classpath
+     * entries are content-addressed (CAS) paths, so a given file is immutable and its snapshot can be
+     * reused across builds. On any failure we degrade to no snapshots (still source-incremental),
+     * preserving the pre-snapshot behaviour.
      */
     private static List<Path> snapshotClasspath(
             JvmPlatformToolchain jvm,
@@ -150,10 +148,9 @@ public final class KotlinCompilerWorker implements Plugin {
     }
 
     /**
-     * Translate the spec into raw Kotlin compiler arguments (destination excluded —
-     * it's a builder parameter). The worker sets only what the spec describes; jk
-     * owns all policy (e.g. {@code -no-stdlib}) via {@code ARG} entries appended
-     * verbatim at the end.
+     * Translate the spec into raw Kotlin compiler arguments (destination excluded — it's a builder
+     * parameter). The worker sets only what the spec describes; jk owns all policy (e.g. {@code
+     * -no-stdlib}) via {@code ARG} entries appended verbatim at the end.
      */
     static List<String> buildArgs(CompileSpec spec) {
         List<String> args = new ArrayList<>();

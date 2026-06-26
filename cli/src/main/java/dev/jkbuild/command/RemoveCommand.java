@@ -17,12 +17,11 @@ import java.nio.file.Path;
 import java.util.List;
 
 /**
- * {@code jk remove &lt;name&gt;} — remove a dependency from {@code jk.toml}
- * by its short name (the manifest key).
+ * {@code jk remove &lt;name&gt;} — remove a dependency from {@code jk.toml} by its short name (the
+ * manifest key).
  *
- * <p>A Maven-coord shorthand ({@code group:artifact} or
- * {@code group:artifact:version}) is also accepted as a migration aid:
- * the artifactId is extracted and used as the short name. The
+ * <p>A Maven-coord shorthand ({@code group:artifact} or {@code group:artifact:version}) is also
+ * accepted as a migration aid: the artifactId is extracted and used as the short name. The
  * recommended form is the bare short name.
  */
 public final class RemoveCommand implements CliCommand {
@@ -96,16 +95,18 @@ public final class RemoveCommand implements CliCommand {
         }
         Files.writeString(file, updated, StandardCharsets.UTF_8);
         System.out.println(Theme.colorize("✗", Theme.active().darkGray())
-                + " Removed " + Theme.colorize(name, Theme.active().activeStep())
-                + " from " + Theme.colorize("dependencies", Theme.active().cyan())
-                + "." + Theme.colorize(scope.canonical(), Theme.active().cyan()));
+                + " Removed "
+                + Theme.colorize(name, Theme.active().activeStep())
+                + " from "
+                + Theme.colorize("dependencies", Theme.active().cyan())
+                + "."
+                + Theme.colorize(scope.canonical(), Theme.active().cyan()));
         return 0;
     }
 
     /**
-     * Extract the short name from the user's argument. A bare token is
-     * returned unchanged; a {@code group:artifact[:version]} coord
-     * collapses to its artifactId.
+     * Extract the short name from the user's argument. A bare token is returned unchanged; a {@code
+     * group:artifact[:version]} coord collapses to its artifactId.
      */
     private static String shortNameOf(String arg) {
         if (arg == null || arg.isBlank()) {

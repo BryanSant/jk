@@ -6,18 +6,17 @@ import java.util.Optional;
 import java.util.function.Function;
 
 /**
- * Lenient coercion for {@code JK_*} environment variables, shared by every config
- * view so a boolean (or numeric) env var means the same thing everywhere.
+ * Lenient coercion for {@code JK_*} environment variables, shared by every config view so a boolean
+ * (or numeric) env var means the same thing everywhere.
  *
- * <p>Boolean truthiness is fixed across jk: {@code 1 / true / yes / on} → true,
- * {@code 0 / false / no / off} → false (case-insensitive, trimmed). Anything else
- * — including blank/unset — is empty ("not set by this layer"), so the next layer
- * decides. Define the truth set once here rather than re-inventing it per setting.
+ * <p>Boolean truthiness is fixed across jk: {@code 1 / true / yes / on} → true, {@code 0 / false /
+ * no / off} → false (case-insensitive, trimmed). Anything else — including blank/unset — is empty
+ * ("not set by this layer"), so the next layer decides. Define the truth set once here rather than
+ * re-inventing it per setting.
  *
- * <p>Environment variables sit <em>above</em> all file layers in precedence (but
- * below CLI flags). Each loader applies them after folding the file layers from
- * {@link ConfigSources}; see {@link JkConfigLoader}. Companion to
- * {@link TomlValues} (file coercion).
+ * <p>Environment variables sit <em>above</em> all file layers in precedence (but below CLI flags).
+ * Each loader applies them after folding the file layers from {@link ConfigSources}; see {@link
+ * JkConfigLoader}. Companion to {@link TomlValues} (file coercion).
  */
 public final class EnvValues {
 
@@ -68,9 +67,9 @@ public final class EnvValues {
     }
 
     /**
-     * Coerce a raw string to a boolean per the jk-wide truth set. Exposed (not
-     * just {@link #bool}) for callers that already hold the raw value, e.g. a
-     * value read from somewhere other than {@link System#getenv}.
+     * Coerce a raw string to a boolean per the jk-wide truth set. Exposed (not just {@link #bool})
+     * for callers that already hold the raw value, e.g. a value read from somewhere other than {@link
+     * System#getenv}.
      */
     public static Optional<Boolean> parseBool(String raw) {
         if (raw == null) return Optional.empty();

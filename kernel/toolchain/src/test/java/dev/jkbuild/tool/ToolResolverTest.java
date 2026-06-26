@@ -138,7 +138,16 @@ class ToolResolverTest {
                   %s
                 </project>
                 """.formatted(group, artifact, version, depsXml);
-        String path = "/" + group.replace('.', '/') + "/" + artifact + "/" + version + "/" + artifact + "-" + version
+        String path = "/"
+                + group.replace('.', '/')
+                + "/"
+                + artifact
+                + "/"
+                + version
+                + "/"
+                + artifact
+                + "-"
+                + version
                 + ".pom";
         served.put(path, pom.getBytes());
     }
@@ -155,7 +164,16 @@ class ToolResolverTest {
             jos.write(new byte[] {(byte) 0xCA, (byte) 0xFE, (byte) 0xBA, (byte) 0xBE});
             jos.closeEntry();
         }
-        String path = "/" + group.replace('.', '/') + "/" + artifact + "/" + version + "/" + artifact + "-" + version
+        String path = "/"
+                + group.replace('.', '/')
+                + "/"
+                + artifact
+                + "/"
+                + version
+                + "/"
+                + artifact
+                + "-"
+                + version
                 + ".jar";
         served.put(path, baos.toByteArray());
     }

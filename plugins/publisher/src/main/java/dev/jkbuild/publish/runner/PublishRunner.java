@@ -36,6 +36,7 @@ import java.util.UUID;
  * Entry point for the {@code jk-publish-runner} worker subprocess.
  *
  * <p>Receives a single argument: the path to a line-oriented spec file:
+ *
  * <pre>
  * PROJECT_DIR /absolute/path/to/project
  * JAR         /absolute/path/to/app-1.0.jar
@@ -57,6 +58,7 @@ import java.util.UUID;
  * </pre>
  *
  * <p>Streams {@value #PREFIX}-prefixed NDJSON to stdout:
+ *
  * <pre>
  * ##JKPU:{"t":"artifact","name":"app-1.0.jar","size":12345}
  * ##JKPU:{"t":"upload","name":"app-1.0.jar","status":200}
@@ -149,7 +151,10 @@ public final class PublishRunner implements Plugin {
             byte[] jarBytes = Files.readAllBytes(jar);
             artifacts.add(new MavenPublisher.Artifact(".jar", jarBytes));
             out.emit("{\"t\":\"artifact\",\"name\":"
-                    + Ndjson.quote(jar.getFileName().toString()) + ",\"size\":" + jarBytes.length + "}");
+                    + Ndjson.quote(jar.getFileName().toString())
+                    + ",\"size\":"
+                    + jarBytes.length
+                    + "}");
 
             PublishablePom.Pom pom = PublishablePom.render(project, PublishablePom.Metadata.empty());
             byte[] pomBytes = pom.xml().getBytes(StandardCharsets.UTF_8);
@@ -157,7 +162,9 @@ public final class PublishRunner implements Plugin {
             out.emit("{\"t\":\"artifact\",\"name\":"
                     + Ndjson.quote(
                             project.project().name() + "-" + project.project().version() + ".pom")
-                    + ",\"size\":" + pomBytes.length + "}");
+                    + ",\"size\":"
+                    + pomBytes.length
+                    + "}");
 
             if (!noSources) {
                 Path srcRoot = projectDir.resolve("src/main/java");
@@ -166,7 +173,9 @@ public final class PublishRunner implements Plugin {
                 out.emit("{\"t\":\"artifact\",\"name\":"
                         + Ndjson.quote(project.project().name() + "-"
                                 + project.project().version() + "-sources.jar")
-                        + ",\"size\":" + sourcesJar.length + "}");
+                        + ",\"size\":"
+                        + sourcesJar.length
+                        + "}");
             }
 
             if (slsa) {
@@ -195,7 +204,9 @@ public final class PublishRunner implements Plugin {
                 out.emit("{\"t\":\"artifact\",\"name\":"
                         + Ndjson.quote(project.project().name() + "-"
                                 + project.project().version() + ".intoto.json")
-                        + ",\"size\":" + provenance.length + "}");
+                        + ",\"size\":"
+                        + provenance.length
+                        + "}");
             }
 
             if (sbom) {
@@ -205,7 +216,8 @@ public final class PublishRunner implements Plugin {
                 byte[] spdxBytes = Sbom.spdx(project, lock);
                 artifacts.add(new MavenPublisher.Artifact("-cyclonedx.json", cdx));
                 artifacts.add(new MavenPublisher.Artifact("-spdx.json", spdxBytes));
-                out.emit("{\"t\":\"artifact\",\"name\":\"cyclonedx+spdx\",\"size\":" + (cdx.length + spdxBytes.length)
+                out.emit("{\"t\":\"artifact\",\"name\":\"cyclonedx+spdx\",\"size\":"
+                        + (cdx.length + spdxBytes.length)
                         + "}");
             }
         } catch (IOException e) {

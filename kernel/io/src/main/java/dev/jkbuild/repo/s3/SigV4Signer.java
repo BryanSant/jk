@@ -12,13 +12,12 @@ import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 
 /**
- * AWS Signature Version 4 request signing (the {@code Authorization: AWS4-HMAC-SHA256}
- * scheme), hand-rolled over the JDK's crypto so jk needs no AWS SDK. Used by
- * {@link S3Transport} for S3 and S3-compatible object stores (MinIO, GCS XML
- * API). See docs/artifact-repos.md.
+ * AWS Signature Version 4 request signing (the {@code Authorization: AWS4-HMAC-SHA256} scheme),
+ * hand-rolled over the JDK's crypto so jk needs no AWS SDK. Used by {@link S3Transport} for S3 and
+ * S3-compatible object stores (MinIO, GCS XML API). See docs/artifact-repos.md.
  *
- * <p>Verified against the canonical {@code aws-sig-v4-test-suite}
- * ({@code get-vanilla}) — see SigV4SignerTest.
+ * <p>Verified against the canonical {@code aws-sig-v4-test-suite} ({@code get-vanilla}) — see
+ * SigV4SignerTest.
  */
 public final class SigV4Signer {
 
@@ -29,19 +28,18 @@ public final class SigV4Signer {
     /**
      * Compute the {@code Authorization} header value for a request.
      *
-     * @param method      HTTP method (GET, PUT, …)
-     * @param uri         full request URI (host taken from it; path/query signed)
-     * @param signedHeaders headers to include in the signature — MUST contain
-     *                    {@code host}; callers typically also pass
-     *                    {@code x-amz-date} and {@code x-amz-content-sha256}.
-     *                    Header names are treated case-insensitively.
-     * @param payloadHashHex hex SHA-256 of the body (use {@link #sha256Hex} or
-     *                    {@code "UNSIGNED-PAYLOAD"})
+     * @param method HTTP method (GET, PUT, …)
+     * @param uri full request URI (host taken from it; path/query signed)
+     * @param signedHeaders headers to include in the signature — MUST contain {@code host}; callers
+     *     typically also pass {@code x-amz-date} and {@code x-amz-content-sha256}. Header names are
+     *     treated case-insensitively.
+     * @param payloadHashHex hex SHA-256 of the body (use {@link #sha256Hex} or {@code
+     *     "UNSIGNED-PAYLOAD"})
      * @param accessKeyId AWS access key id
-     * @param secretKey   AWS secret access key
-     * @param region      e.g. {@code us-east-1}
-     * @param service     e.g. {@code s3}
-     * @param amzDate     ISO basic timestamp {@code yyyyMMdd'T'HHmmss'Z'}
+     * @param secretKey AWS secret access key
+     * @param region e.g. {@code us-east-1}
+     * @param service e.g. {@code s3}
+     * @param amzDate ISO basic timestamp {@code yyyyMMdd'T'HHmmss'Z'}
      */
     public static String authorization(
             String method,
@@ -64,30 +62,45 @@ public final class SigV4Signer {
                 .reduce("", String::concat);
         String signedHeaderNames = String.join(";", headers.keySet());
 
-        String canonicalRequest = method + "\n"
-                + canonicalUri(uri) + "\n"
-                + canonicalQuery(uri) + "\n"
-                + canonicalHeaders + "\n"
-                + signedHeaderNames + "\n"
+        String canonicalRequest = method
+                + "\n"
+                + canonicalUri(uri)
+                + "\n"
+                + canonicalQuery(uri)
+                + "\n"
+                + canonicalHeaders
+                + "\n"
+                + signedHeaderNames
+                + "\n"
                 + payloadHashHex;
 
         String dateStamp = amzDate.substring(0, 8);
         String scope = dateStamp + "/" + region + "/" + service + "/aws4_request";
-        String stringToSign = ALGORITHM + "\n"
-                + amzDate + "\n"
-                + scope + "\n"
+        String stringToSign = ALGORITHM
+                + "\n"
+                + amzDate
+                + "\n"
+                + scope
+                + "\n"
                 + sha256Hex(canonicalRequest.getBytes(StandardCharsets.UTF_8));
 
         byte[] signingKey = signingKey(secretKey, dateStamp, region, service);
         String signature = hex(hmac(signingKey, stringToSign.getBytes(StandardCharsets.UTF_8)));
 
         return ALGORITHM
-                + " Credential=" + accessKeyId + "/" + scope
-                + ", SignedHeaders=" + signedHeaderNames
-                + ", Signature=" + signature;
+                + " Credential="
+                + accessKeyId
+                + "/"
+                + scope
+                + ", SignedHeaders="
+                + signedHeaderNames
+                + ", Signature="
+                + signature;
     }
 
-    /** Canonical URI: the path with each segment RFC3986-encoded; {@code /} preserved; empty → "/". */
+    /**
+     * Canonical URI: the path with each segment RFC3986-encoded; {@code /} preserved; empty → "/".
+     */
     static String canonicalUri(URI uri) {
         String path = uri.getPath() == null ? "" : uri.getPath();
         if (path.isEmpty()) return "/";
@@ -100,7 +113,9 @@ public final class SigV4Signer {
         return out.length() == 0 ? "/" : out.toString();
     }
 
-    /** Canonical query string: params sorted by encoded key, {@code key=value} joined by {@code &}. */
+    /**
+     * Canonical query string: params sorted by encoded key, {@code key=value} joined by {@code &}.
+     */
     static String canonicalQuery(URI uri) {
         String raw = uri.getRawQuery();
         if (raw == null || raw.isEmpty()) return "";

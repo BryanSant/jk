@@ -11,9 +11,8 @@ import java.util.Optional;
 import java.util.stream.Stream;
 
 /**
- * {@code ~/.jenv/versions/<version>/} (JDKs only). jenv typically
- * symlinks here from the original install location; we follow the
- * link via {@link Path#toRealPath()} before validating.
+ * {@code ~/.jenv/versions/<version>/} (JDKs only). jenv typically symlinks here from the original
+ * install location; we follow the link via {@link Path#toRealPath()} before validating.
  */
 public final class JenvProbe implements LocalToolProbe {
 

@@ -14,9 +14,8 @@ import java.util.Objects;
 /**
  * Loads every module's {@code jk.toml} for a workspace root.
  *
- * <p>Literal module paths only (no globs). Each entry in
- * {@code workspace.modules} must resolve to a directory containing a
- * {@code jk.toml}. Missing modules raise {@link JkBuildParseException}.
+ * <p>Literal module paths only (no globs). Each entry in {@code workspace.modules} must resolve to
+ * a directory containing a {@code jk.toml}. Missing modules raise {@link JkBuildParseException}.
  */
 public final class WorkspaceLoader {
 
@@ -43,9 +42,12 @@ public final class WorkspaceLoader {
             // user fixes the manifest rather than discovers it at build
             // time when paths quietly diverge.
             if (moduleBuild.isWorkspaceRoot()) {
-                throw new JkBuildParseException("workspaces cannot be nested — `" + module
+                throw new JkBuildParseException("workspaces cannot be nested — `"
+                        + module
                         + "` declares its own `[workspace]` block "
-                        + "while being a module of `" + workspaceRoot + "`.");
+                        + "while being a module of `"
+                        + workspaceRoot
+                        + "`.");
             }
             modules.put(moduleDir, moduleBuild);
         }
@@ -57,16 +59,13 @@ public final class WorkspaceLoader {
     }
 
     /**
-     * Final artifacts land in a shared {@code <workspaceRoot>/target/}
-     * directory keyed by {@code <artifact>-<version>.jar} — so two modules
-     * declaring the same artifact + version would race to write the same
-     * jar and the second one would silently win. Reject at workspace-parse
-     * time so the failure is loud and the file paths in the error point
-     * at the conflict.
+     * Final artifacts land in a shared {@code <workspaceRoot>/target/} directory keyed by {@code
+     * <artifact>-<version>.jar} — so two modules declaring the same artifact + version would race to
+     * write the same jar and the second one would silently win. Reject at workspace-parse time so the
+     * failure is loud and the file paths in the error point at the conflict.
      *
-     * <p>Modules and the workspace root itself can collide (a workspace
-     * root that's <i>also</i> a runnable project is rare but legal, so we
-     * include the root in the uniqueness set).
+     * <p>Modules and the workspace root itself can collide (a workspace root that's <i>also</i> a
+     * runnable project is rare but legal, so we include the root in the uniqueness set).
      */
     private static void checkArtifactCollisions(JkBuild root, Map<Path, JkBuild> modules) {
         Map<String, Path> claimed = new LinkedHashMap<>();
@@ -91,8 +90,13 @@ public final class WorkspaceLoader {
                 Path previous = claimed.get(key);
                 String prevLabel = previous == null ? "<workspace root>" : previous.toString();
                 String thisLabel = e.dir == null ? "<workspace root>" : e.dir.toString();
-                throw new JkBuildParseException("workspace artifact collision: `" + key + ".jar` would be "
-                        + "produced by both `" + prevLabel + "` and `" + thisLabel
+                throw new JkBuildParseException("workspace artifact collision: `"
+                        + key
+                        + ".jar` would be "
+                        + "produced by both `"
+                        + prevLabel
+                        + "` and `"
+                        + thisLabel
                         + "`. Final artifacts share <workspaceRoot>/target/, so two "
                         + "modules can't emit the same `<artifact>-<version>.jar`. "
                         + "Differentiate via the modules' [project].artifact or "

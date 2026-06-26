@@ -17,18 +17,18 @@ import java.util.Collection;
 import java.util.List;
 
 /**
- * Auto-lock: when {@code jk.toml} is newer than {@code jk.lock}, transparently
- * re-locks with a conservative strategy before any command reads the lockfile.
+ * Auto-lock: when {@code jk.toml} is newer than {@code jk.lock}, transparently re-locks with a
+ * conservative strategy before any command reads the lockfile.
  *
  * <h3>Conservative vs explicit lock</h3>
+ *
  * <ul>
- *   <li><b>Auto (conservative)</b> — locked versions are used as soft
- *       preferences fed into PubGrub's candidate ordering. The solver selects
- *       the locked version first; only versions that conflict with a new or
- *       changed constraint are bumped. Deps removed from {@code jk.toml} are
- *       dropped from the lock. New deps are resolved normally.</li>
- *   <li><b>Explicit {@code jk lock}</b> — full fresh resolution, no version
- *       preferences; always picks the latest compatible versions.</li>
+ *   <li><b>Auto (conservative)</b> — locked versions are used as soft preferences fed into
+ *       PubGrub's candidate ordering. The solver selects the locked version first; only versions
+ *       that conflict with a new or changed constraint are bumped. Deps removed from {@code
+ *       jk.toml} are dropped from the lock. New deps are resolved normally.
+ *   <li><b>Explicit {@code jk lock}</b> — full fresh resolution, no version preferences; always
+ *       picks the latest compatible versions.
  * </ul>
  */
 public final class AutoLock {
@@ -36,9 +36,8 @@ public final class AutoLock {
     private AutoLock() {}
 
     /**
-     * Returns {@code true} when {@code jk.toml} has a newer modification time
-     * than {@code jk.lock}.  Both files must exist; any I/O error returns
-     * {@code false} (fail-open: assume up-to-date).
+     * Returns {@code true} when {@code jk.toml} has a newer modification time than {@code jk.lock}.
+     * Both files must exist; any I/O error returns {@code false} (fail-open: assume up-to-date).
      */
     public static boolean isStale(Path dir, Path lockFile) {
         try {
@@ -53,21 +52,20 @@ public final class AutoLock {
     }
 
     /**
-     * If {@code lockFile} is stale (jk.toml newer), performs a conservative
-     * re-lock, writes the updated lock file, and returns the new
-     * {@link Lockfile}.  Returns {@code null} if the lock is up-to-date or
-     * if re-locking fails (the caller should fall back to reading the existing
-     * lock and optionally surface a warning).
+     * If {@code lockFile} is stale (jk.toml newer), performs a conservative re-lock, writes the
+     * updated lock file, and returns the new {@link Lockfile}. Returns {@code null} if the lock is
+     * up-to-date or if re-locking fails (the caller should fall back to reading the existing lock and
+     * optionally surface a warning).
      *
-     * @param dir             project root (contains {@code jk.toml})
-     * @param existing        current contents of {@code jk.lock}
-     * @param lockFile        path to {@code jk.lock} (will be overwritten)
-     * @param cache           jk CAS directory
-     * @param repoUrl         optional single-URL override (tests / CI)
-     * @param jkVersion       version string stamped in the lockfile header
-     * @param features        active feature flags
-     * @param withDefaults    whether to include the project's default features
-     * @param observer        resolver progress callbacks
+     * @param dir project root (contains {@code jk.toml})
+     * @param existing current contents of {@code jk.lock}
+     * @param lockFile path to {@code jk.lock} (will be overwritten)
+     * @param cache jk CAS directory
+     * @param repoUrl optional single-URL override (tests / CI)
+     * @param jkVersion version string stamped in the lockfile header
+     * @param features active feature flags
+     * @param withDefaults whether to include the project's default features
+     * @param observer resolver progress callbacks
      */
     public static Lockfile maybeReLock(
             Path dir,

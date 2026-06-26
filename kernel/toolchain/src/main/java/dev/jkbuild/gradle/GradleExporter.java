@@ -12,15 +12,14 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Renders a {@link JkBuild} (and workspace) as a Gradle Kotlin-DSL build:
- * {@code settings.gradle.kts} plus a {@code build.gradle.kts} per project. The
- * export-direction companion to {@link GradleImporter}.
+ * Renders a {@link JkBuild} (and workspace) as a Gradle Kotlin-DSL build: {@code
+ * settings.gradle.kts} plus a {@code build.gradle.kts} per project. The export-direction companion
+ * to {@link GradleImporter}.
  *
- * <p>Versions come from {@code jk.lock} when present ({@code locked} maps
- * {@code group:artifact} → exact version), so the generated build reproduces
- * what jk builds; otherwise the declared selector collapses with a warning.
- * {@code project.jdk} maps to a Gradle Java toolchain, with the
- * {@code foojay-resolver-convention} settings plugin enabling auto-download.
+ * <p>Versions come from {@code jk.lock} when present ({@code locked} maps {@code group:artifact} →
+ * exact version), so the generated build reproduces what jk builds; otherwise the declared selector
+ * collapses with a warning. {@code project.jdk} maps to a Gradle Java toolchain, with the {@code
+ * foojay-resolver-convention} settings plugin enabling auto-download.
  */
 public final class GradleExporter {
 
@@ -29,7 +28,10 @@ public final class GradleExporter {
     private static final String SHADOW = "8.3.6"; // com.gradleup.shadow
     private static final String NATIVE = "0.10.3"; // org.graalvm.buildtools.native
 
-    /** {@code settings} = settings.gradle.kts; {@code buildFiles} maps a project-relative dir ("" = root) to its build.gradle.kts. */
+    /**
+     * {@code settings} = settings.gradle.kts; {@code buildFiles} maps a project-relative dir ("" =
+     * root) to its build.gradle.kts.
+     */
     public record Result(String settings, Map<String, String> buildFiles, ImportReport report) {}
 
     private GradleExporter() {}
@@ -45,12 +47,11 @@ public final class GradleExporter {
     }
 
     /**
-     * Export a project or workspace. {@code modulesByRelPath} (empty for a single
-     * project) maps each module's path relative to the root to its parsed build;
-     * {@code layoutByRelPath} carries the concrete {@link JkBuild.Layout} for each
-     * project keyed the same way (root = {@code ""}), so jk's flat {@code SIMPLE}
-     * layout emits a matching {@code sourceSets} block (callers resolve {@code AUTO}
-     * against the directory tree). Missing entries default to {@code AUTO}.
+     * Export a project or workspace. {@code modulesByRelPath} (empty for a single project) maps each
+     * module's path relative to the root to its parsed build; {@code layoutByRelPath} carries the
+     * concrete {@link JkBuild.Layout} for each project keyed the same way (root = {@code ""}), so
+     * jk's flat {@code SIMPLE} layout emits a matching {@code sourceSets} block (callers resolve
+     * {@code AUTO} against the directory tree). Missing entries default to {@code AUTO}.
      */
     public static Result export(
             JkBuild root,
@@ -73,8 +74,14 @@ public final class GradleExporter {
                     e.getValue().dependencies().byScope().values()) {
                 for (Dependency d : list) {
                     if (d.isPath()) {
-                        report.warning("module `" + e.getKey() + "` has a path dep `" + d.module()
-                                + "`; add `includeBuild(\"" + e.getKey() + "/" + d.pathSource()
+                        report.warning("module `"
+                                + e.getKey()
+                                + "` has a path dep `"
+                                + d.module()
+                                + "`; add `includeBuild(\""
+                                + e.getKey()
+                                + "/"
+                                + d.pathSource()
                                 + "\")` to settings.gradle.kts manually.");
                     }
                 }
@@ -221,10 +228,10 @@ public final class GradleExporter {
     }
 
     /**
-     * jk's {@link JkBuild.Layout#SIMPLE} layout is flat ({@code ./src}, {@code ./test},
-     * {@code ./resources}) where Gradle defaults to {@code src/main/java}. Remap the
-     * source sets so the exported build compiles the same files. {@code TRADITIONAL}
-     * and {@code AUTO} already match Gradle's convention — no block needed.
+     * jk's {@link JkBuild.Layout#SIMPLE} layout is flat ({@code ./src}, {@code ./test}, {@code
+     * ./resources}) where Gradle defaults to {@code src/main/java}. Remap the source sets so the
+     * exported build compiles the same files. {@code TRADITIONAL} and {@code AUTO} already match
+     * Gradle's convention — no block needed.
      */
     private static void appendSourceSets(StringBuilder sb, JkBuild.Layout layout, boolean kotlin) {
         if (layout != JkBuild.Layout.SIMPLE) return;
@@ -267,12 +274,16 @@ public final class GradleExporter {
 
     private static boolean warnIfUnmappable(Dependency d, ImportReport.Builder report) {
         if (d.isGit()) {
-            report.warning("dependency `" + d.module() + "` is git-sourced; Gradle has no built-in"
+            report.warning("dependency `"
+                    + d.module()
+                    + "` is git-sourced; Gradle has no built-in"
                     + " git-source — dropped. Consider `includeBuild` of a local checkout.");
             return true;
         }
         if (d.isFile()) {
-            report.warning("dependency `" + d.module() + "` is content-addressed (sha256); no Gradle"
+            report.warning("dependency `"
+                    + d.module()
+                    + "` is content-addressed (sha256); no Gradle"
                     + " equivalent — dropped.");
             return true;
         }
@@ -299,7 +310,12 @@ public final class GradleExporter {
         return switch (v) {
             case VersionSelector.Exact e -> e.version();
             case VersionSelector.Caret c -> {
-                report.warning("`" + module + "` declared `^" + c.version() + "`; pinned to `" + c.version()
+                report.warning("`"
+                        + module
+                        + "` declared `^"
+                        + c.version()
+                        + "`; pinned to `"
+                        + c.version()
                         + "` (no jk.lock to resolve against).");
                 yield c.version();
             }
@@ -308,7 +324,10 @@ public final class GradleExporter {
                 yield t.version();
             }
             case VersionSelector.Range r -> {
-                report.warning("`" + module + "` uses range `" + r.raw()
+                report.warning("`"
+                        + module
+                        + "` uses range `"
+                        + r.raw()
                         + "`; emitted verbatim — Gradle range syntax differs.");
                 yield r.raw();
             }

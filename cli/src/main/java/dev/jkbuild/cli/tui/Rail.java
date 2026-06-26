@@ -7,9 +7,8 @@ import org.jline.utils.AttributedStringBuilder;
 import org.jline.utils.AttributedStyle;
 
 /**
- * Left-rail line builders. The rail is the box-drawing column on the left
- * edge of the wizard frame: a {@code ┌} opener, repeated {@code │} interior
- * lines, and a final {@code └} closer.
+ * Left-rail line builders. The rail is the box-drawing column on the left edge of the wizard frame:
+ * a {@code ┌} opener, repeated {@code │} interior lines, and a final {@code └} closer.
  */
 public final class Rail {
 
@@ -19,7 +18,9 @@ public final class Rail {
         OPEN,
         MID,
         CLOSE,
-        /** Step header bullet; used for active, completed, and inactive steps (color varies by state). */
+        /**
+         * Step header bullet; used for active, completed, and inactive steps (color varies by state).
+         */
         BULLET
     }
 
@@ -32,6 +33,7 @@ public final class Rail {
     private static final String OPEN_CHAR = "╭";
     private static final String MID_CHAR = "│";
     private static final String CLOSE_CHAR = "╰";
+
     /** Filled box for the active step; empty box for completed/inactive steps. */
     private static final String BULLET_CHAR = "■";
 
@@ -67,7 +69,7 @@ public final class Rail {
                 .toAttributedString();
     }
 
-    /** {@code │  <text>} — interior line, with text styled by caller. */
+    /** {@code │ <text>} — interior line, with text styled by caller. */
     public static AttributedString mid(AttributedString text, StepState state) {
         return new AttributedStringBuilder()
                 .append(MID_CHAR, Theme.active().railStyle(state, RailGlyph.MID))
@@ -107,9 +109,8 @@ public final class Rail {
     }
 
     /**
-     * Step header bullet: filled {@code ■} only for the active step, empty
-     * {@code □} for completed/inactive steps. Coloring is unchanged — accent
-     * when active, dark-gray otherwise.
+     * Step header bullet: filled {@code ■} only for the active step, empty {@code □} for
+     * completed/inactive steps. Coloring is unchanged — accent when active, dark-gray otherwise.
      */
     public static AttributedString stepBullet(StepState state, String prompt) {
         var promptStyle =

@@ -5,12 +5,11 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 
 /**
- * Hex digests of artifact bytes for the four checksum files every Maven
- * upload ships alongside the artifact (PRD §21.2): {@code .md5},
- * {@code .sha1}, {@code .sha256}, {@code .sha512}.
+ * Hex digests of artifact bytes for the four checksum files every Maven upload ships alongside the
+ * artifact (PRD §21.2): {@code .md5}, {@code .sha1}, {@code .sha256}, {@code .sha512}.
  *
- * <p>Maven Central rejects uploads without all four; mirrors generally
- * accept any subset but we emit all four for consistency.
+ * <p>Maven Central rejects uploads without all four; mirrors generally accept any subset but we
+ * emit all four for consistency.
  */
 public final class Checksums {
 

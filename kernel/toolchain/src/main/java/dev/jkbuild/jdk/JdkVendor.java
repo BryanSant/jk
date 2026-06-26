@@ -12,24 +12,22 @@ import java.util.Optional;
 import java.util.Properties;
 
 /**
- * Canonical vocabulary for the JDK vendors {@code jk} recognises on disk,
- * with cross-references into the three identifier schemes that
- * matter elsewhere:
+ * Canonical vocabulary for the JDK vendors {@code jk} recognises on disk, with cross-references
+ * into the three identifier schemes that matter elsewhere:
  *
  * <ul>
- *   <li><strong>JetBrains feed</strong> — the {@code vendor}, {@code product},
- *       and {@code suggested_sdk_name} prefix used by
- *       {@code download.jetbrains.com/jdk/feed} (which {@code jk jdk install}
- *       and {@code jk jdk list} consume).</li>
- *   <li><strong>SDKMAN</strong> — the candidate-suffix conventions used by
- *       {@code sdk install java <version>-<suffix>}.</li>
- *   <li><strong>foojay Disco API</strong> — the {@code distro} name used by
- *       {@code https://api.foojay.io/disco}.</li>
+ *   <li><strong>JetBrains feed</strong> — the {@code vendor}, {@code product}, and {@code
+ *       suggested_sdk_name} prefix used by {@code download.jetbrains.com/jdk/feed} (which {@code jk
+ *       jdk install} and {@code jk jdk list} consume).
+ *   <li><strong>SDKMAN</strong> — the candidate-suffix conventions used by {@code sdk install java
+ *       <version>-<suffix>}.
+ *   <li><strong>foojay Disco API</strong> — the {@code distro} name used by {@code
+ *       https://api.foojay.io/disco}.
  * </ul>
  *
- * <p>{@link #fromRelease} reads {@code $JAVA_HOME/release}'s {@code IMPLEMENTOR}
- * (with {@code IMPLEMENTOR_VERSION} disambiguation) and returns the matching
- * vendor. Falls back to {@link #UNKNOWN} when nothing matches.
+ * <p>{@link #fromRelease} reads {@code $JAVA_HOME/release}'s {@code IMPLEMENTOR} (with {@code
+ * IMPLEMENTOR_VERSION} disambiguation) and returns the matching vendor. Falls back to {@link
+ * #UNKNOWN} when nothing matches.
  */
 public enum JdkVendor {
 
@@ -94,18 +92,17 @@ public enum JdkVendor {
     }
 
     /**
-     * JetBrains {@code suggested_sdk_name} prefix, or empty when this vendor
-     * isn't in the JetBrains feed. The full identifier for a specific
-     * install is {@code jbPrefix + "-" + version} (e.g. {@code "temurin-21.0.5"}).
+     * JetBrains {@code suggested_sdk_name} prefix, or empty when this vendor isn't in the JetBrains
+     * feed. The full identifier for a specific install is {@code jbPrefix + "-" + version} (e.g.
+     * {@code "temurin-21.0.5"}).
      */
     public Optional<String> jbPrefix() {
         return Optional.ofNullable(jbPrefix);
     }
 
     /**
-     * SDKMAN candidate suffix, or empty when this vendor isn't on SDKMAN.
-     * The full identifier is {@code version + "-" + sdkmanSuffix}
-     * (e.g. {@code "21.0.5-tem"}).
+     * SDKMAN candidate suffix, or empty when this vendor isn't on SDKMAN. The full identifier is
+     * {@code version + "-" + sdkmanSuffix} (e.g. {@code "21.0.5-tem"}).
      */
     public Optional<String> sdkmanSuffix() {
         return Optional.ofNullable(sdkmanSuffix);
@@ -127,9 +124,9 @@ public enum JdkVendor {
     }
 
     /**
-     * Vendor preference for a vendor-unqualified spec (and for breaking ties):
-     * Eclipse Temurin, then BellSoft Liberica, Oracle OpenJDK, Amazon Corretto.
-     * Any vendor not listed sorts after all listed ones (see {@link #preferenceRank}).
+     * Vendor preference for a vendor-unqualified spec (and for breaking ties): Eclipse Temurin, then
+     * BellSoft Liberica, Oracle OpenJDK, Amazon Corretto. Any vendor not listed sorts after all
+     * listed ones (see {@link #preferenceRank}).
      */
     public static final List<JdkVendor> PREFERENCE = List.of(TEMURIN, LIBERICA, ORACLE_OPENJDK, CORRETTO);
 
@@ -148,18 +145,18 @@ public enum JdkVendor {
     }
 
     /**
-     * Detect a JDK's vendor by reading {@code home/release}'s {@code IMPLEMENTOR}
-     * and {@code IMPLEMENTOR_VERSION} properties. Returns {@link #UNKNOWN} when
-     * the file is missing, malformed, or matches no known vendor.
+     * Detect a JDK's vendor by reading {@code home/release}'s {@code IMPLEMENTOR} and {@code
+     * IMPLEMENTOR_VERSION} properties. Returns {@link #UNKNOWN} when the file is missing, malformed,
+     * or matches no known vendor.
      *
-     * <p>Prefer {@link #fromProperties(Properties)} when the caller has already
-     * parsed the release file — this method exists so callers that only have
-     * a {@link Path} don't have to load the file themselves.
+     * <p>Prefer {@link #fromProperties(Properties)} when the caller has already parsed the release
+     * file — this method exists so callers that only have a {@link Path} don't have to load the file
+     * themselves.
      */
     /**
-     * Resolve a vendor from the JetBrains feed's {@code vendor} + {@code product}
-     * strings (e.g. {@code "Oracle"} + {@code "GraalVM"} → {@link #ORACLE_GRAALVM}).
-     * Returns {@link #UNKNOWN} when no enum constant matches both fields.
+     * Resolve a vendor from the JetBrains feed's {@code vendor} + {@code product} strings (e.g.
+     * {@code "Oracle"} + {@code "GraalVM"} → {@link #ORACLE_GRAALVM}). Returns {@link #UNKNOWN} when
+     * no enum constant matches both fields.
      */
     public static JdkVendor fromFeed(String vendor, String product) {
         if (vendor == null || product == null) return UNKNOWN;
@@ -187,13 +184,13 @@ public enum JdkVendor {
      * Detect a JDK's vendor from pre-parsed release-file properties.
      *
      * <p>Disambiguation rules (ported from JDKMon's {@code Finder.java:507}):
+     *
      * <ul>
-     *   <li>{@code Azul Systems, Inc.} + {@code IMPLEMENTOR_VERSION}
-     *       starting with {@code "Zing"} or {@code "Prime"} → {@link #ZULU_PRIME}.</li>
-     *   <li>{@code Oracle Corporation} + {@code IMPLEMENTOR_VERSION} containing
-     *       {@code "GraalVM"} (or a {@code GRAALVM_VERSION} property present) →
-     *       {@link #ORACLE_GRAALVM}, with {@code "Community"} downgrading to
-     *       {@link #GRAALVM_CE}.</li>
+     *   <li>{@code Azul Systems, Inc.} + {@code IMPLEMENTOR_VERSION} starting with {@code "Zing"} or
+     *       {@code "Prime"} → {@link #ZULU_PRIME}.
+     *   <li>{@code Oracle Corporation} + {@code IMPLEMENTOR_VERSION} containing {@code "GraalVM"} (or
+     *       a {@code GRAALVM_VERSION} property present) → {@link #ORACLE_GRAALVM}, with {@code
+     *       "Community"} downgrading to {@link #GRAALVM_CE}.
      * </ul>
      */
     public static JdkVendor fromProperties(Properties props) {

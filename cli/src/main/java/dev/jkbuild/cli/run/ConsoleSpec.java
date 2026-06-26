@@ -8,15 +8,14 @@ import java.time.Duration;
 import java.util.function.Function;
 
 /**
- * Describes how a simple-task command should present itself in the console:
- * the human verb shown next to the spinner ("Locking", "Syncing", …) and the
- * final result line to print, derived from the {@link GoalResult}.
+ * Describes how a simple-task command should present itself in the console: the human verb shown
+ * next to the spinner ("Locking", "Syncing", …) and the final result line to print, derived from
+ * the {@link GoalResult}.
  *
- * <p>The {@code onSuccess} / {@code onFailure} mappers run after the goal
- * settles, so they may close over the command's goal/state to build a rich
- * message (e.g. {@code "Resolved 13 dependencies"}). The framework always
- * appends a dim italic {@code "took Xms"} suffix so individual commands do not need
- * to format duration themselves.
+ * <p>The {@code onSuccess} / {@code onFailure} mappers run after the goal settles, so they may
+ * close over the command's goal/state to build a rich message (e.g. {@code "Resolved 13
+ * dependencies"}). The framework always appends a dim italic {@code "took Xms"} suffix so
+ * individual commands do not need to format duration themselves.
  */
 public record ConsoleSpec(
         String verb,
@@ -26,13 +25,12 @@ public record ConsoleSpec(
         boolean exec) {
 
     /**
-     * Default presentation — the generic {@code ✓ <Verb> Successful: <msg>} finish.
-     * Set {@code chip = true} (the 4-arg form) to settle through the goal-chip
-     * renderer instead ({@code  ✓ Build ▶ <onSuccess>}); {@code onSuccess}/{@code
-     * onFailure} then return the tail that follows the chip's verb.
-     * Set both {@code chip = true} and {@code exec = true} (the 5-arg form) to
-     * settle with {@code Glyphs.PLAY} instead of {@code Glyphs.CHECK} — for
-     * commands that hand off to a subprocess after the goal (e.g. {@code jk run}).
+     * Default presentation — the generic {@code ✓ <Verb> Successful: <msg>} finish. Set {@code chip =
+     * true} (the 4-arg form) to settle through the goal-chip renderer instead ({@code ✓ Build ▶
+     * <onSuccess>}); {@code onSuccess}/{@code onFailure} then return the tail that follows the chip's
+     * verb. Set both {@code chip = true} and {@code exec = true} (the 5-arg form) to settle with
+     * {@code Glyphs.PLAY} instead of {@code Glyphs.CHECK} — for commands that hand off to a
+     * subprocess after the goal (e.g. {@code jk run}).
      */
     public ConsoleSpec(String verb, Function<GoalResult, String> onSuccess, Function<GoalResult, String> onFailure) {
         this(verb, onSuccess, onFailure, false, false);
@@ -43,21 +41,28 @@ public record ConsoleSpec(
         this(verb, onSuccess, onFailure, chip, false);
     }
 
-    /** Dim italic {@code "took Xms"} duration suffix — appended by the framework to every result line. */
+    /**
+     * Dim italic {@code "took Xms"} duration suffix — appended by the framework to every result line.
+     */
     public static String took(Duration d) {
         return Theme.colorize(
                 "took " + fmtDuration(d), Theme.active().darkGray().italic());
     }
 
     /**
-     * A diagnostic error line: red {@code ‼ Error}, the phase in plain brackets,
-     * then the message on its own line — e.g.
+     * A diagnostic error line: red {@code ‼ Error}, the phase in plain brackets, then the message on
+     * its own line — e.g.
+     *
      * <pre>‼ Error [compile-test]:
      * Foo.java:3: package … does not exist</pre>
      */
     public static String errorLine(String phase, String message) {
-        return Theme.colorize(Glyphs.CROSS + " Error", Theme.active().error()) + " [" + phase + "]:"
-                + System.lineSeparator() + message;
+        return Theme.colorize(Glyphs.CROSS + " Error", Theme.active().error())
+                + " ["
+                + phase
+                + "]:"
+                + System.lineSeparator()
+                + message;
     }
 
     /** Render an error diagnostic for the console, per its {@code code}. */
@@ -79,12 +84,16 @@ public record ConsoleSpec(
     }
 
     /**
-     * A compiler warning: a yellow {@code ‼ Warning [phase]:} header, then the
-     * compiler's verbatim block colorized like an error (relative paths, etc.).
+     * A compiler warning: a yellow {@code ‼ Warning [phase]:} header, then the compiler's verbatim
+     * block colorized like an error (relative paths, etc.).
      */
     public static String compilerWarning(String phase, String message) {
-        return Theme.colorize(Glyphs.CROSS + " Warning", Theme.active().warning()) + " [" + phase + "]:"
-                + System.lineSeparator() + CompilerDiagnostic.render(message);
+        return Theme.colorize(Glyphs.CROSS + " Warning", Theme.active().warning())
+                + " ["
+                + phase
+                + "]:"
+                + System.lineSeparator()
+                + CompilerDiagnostic.render(message);
     }
 
     /** Compiler diagnostics (javac/kotlinc) carry a verbatim multi-line block. */
@@ -92,7 +101,10 @@ public record ConsoleSpec(
         return "javac".equals(code) || "kotlinc".equals(code);
     }
 
-    /** Human-friendly duration: {@code 712ms}, {@code 3.1s}, {@code 2m 4s}, {@code 1h 3m 2s}, {@code 1d 12h 13m 5s}. */
+    /**
+     * Human-friendly duration: {@code 712ms}, {@code 3.1s}, {@code 2m 4s}, {@code 1h 3m 2s}, {@code
+     * 1d 12h 13m 5s}.
+     */
     public static String fmtDuration(Duration d) {
         long ms = d.toMillis();
         if (ms < 1000) return ms + "ms";

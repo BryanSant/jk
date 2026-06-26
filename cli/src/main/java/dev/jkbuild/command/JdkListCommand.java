@@ -33,20 +33,18 @@ import java.util.regex.Pattern;
 import org.jline.utils.AttributedStyle;
 
 /**
- * {@code jk jdk list} — every JDK the probe chain finds on this machine
- * (jk's managed dir, SDKMAN, JBang, mise, asdf, jenv, Homebrew, system
- * paths). With {@code --all}, also lists JDKs available for download from
- * the JetBrains feed for the current OS / arch.
+ * {@code jk jdk list} — every JDK the probe chain finds on this machine (jk's managed dir, SDKMAN,
+ * JBang, mise, asdf, jenv, Homebrew, system paths). With {@code --all}, also lists JDKs available
+ * for download from the JetBrains feed for the current OS / arch.
  *
- * <p>The JDK {@code javac} on {@code PATH} resolves to is highlighted as
- * {@code current}; jk's global default is shown as {@code default} only when
- * it differs from the current one. Each row's source column names the tool
- * that owns the install ({@code sdkman}, {@code intellij}, …) rather than the
- * ephemeral {@code $JAVA_HOME} pointer.
+ * <p>The JDK {@code javac} on {@code PATH} resolves to is highlighted as {@code current}; jk's
+ * global default is shown as {@code default} only when it differs from the current one. Each row's
+ * source column names the tool that owns the install ({@code sdkman}, {@code intellij}, …) rather
+ * than the ephemeral {@code $JAVA_HOME} pointer.
  *
- * <p>Renders a box-drawn table grouped by major version. Without
- * {@code --all} the command is purely offline; with {@code --all},
- * network failure degrades to installed-only rows with a stderr warning.
+ * <p>Renders a box-drawn table grouped by major version. Without {@code --all} the command is
+ * purely offline; with {@code --all}, network failure degrades to installed-only rows with a stderr
+ * warning.
  */
 public final class JdkListCommand implements CliCommand {
 
@@ -95,9 +93,9 @@ public final class JdkListCommand implements CliCommand {
     }
 
     /**
-     * One row in the rendered table. {@code status} is the primary role (for
-     * sort + styling); {@code statusLabel} is the displayed text, which may be a
-     * composite of roles a single JDK holds at once (e.g. {@code active/native}).
+     * One row in the rendered table. {@code status} is the primary role (for sort + styling); {@code
+     * statusLabel} is the displayed text, which may be a composite of roles a single JDK holds at
+     * once (e.g. {@code active/native}).
      */
     record Row(int major, String vendor, String spec, Status status, String statusLabel, String location) {}
 
@@ -279,9 +277,9 @@ public final class JdkListCommand implements CliCommand {
     }
 
     /**
-     * True when {@code currentHome} and a probe-discovered {@code hitHome}
-     * point at the same JDK. Both are normally already canonical, but we
-     * canonicalise defensively (each may be a symlink path) before comparing.
+     * True when {@code currentHome} and a probe-discovered {@code hitHome} point at the same JDK.
+     * Both are normally already canonical, but we canonicalise defensively (each may be a symlink
+     * path) before comparing.
      */
     /** Resolve an install identifier to its home via the registry (first match), or empty. */
     private static Optional<Path> findHome(JdkRegistry registry, String id) {
@@ -306,10 +304,9 @@ public final class JdkListCommand implements CliCommand {
     }
 
     /**
-     * Extract the major version from an install identifier when no catalog
-     * match is available. Handles modern names ({@code temurin-25.0.3} → 25,
-     * {@code graalvm-jdk-21} → 21) and the legacy Java-8 form
-     * ({@code temurin-1.8.0_492} → 8). Returns 0 when no number is found.
+     * Extract the major version from an install identifier when no catalog match is available.
+     * Handles modern names ({@code temurin-25.0.3} → 25, {@code graalvm-jdk-21} → 21) and the legacy
+     * Java-8 form ({@code temurin-1.8.0_492} → 8). Returns 0 when no number is found.
      */
     static int parseMajor(String identifier) {
         var m = Pattern.compile("(\\d+)(?:[._](\\d+))?").matcher(identifier);
@@ -513,10 +510,10 @@ public final class JdkListCommand implements CliCommand {
     }
 
     /**
-     * Render the (possibly composite) status label with a distinct color per
-     * role — active = bright-cyan+bold, default = bright-yellow, native =
-     * bright-green — joined by a dim slash, then padded to the column width. The
-     * row's italic/bold emphasis is layered on so the whole line reads uniformly.
+     * Render the (possibly composite) status label with a distinct color per role — active =
+     * bright-cyan+bold, default = bright-yellow, native = bright-green — joined by a dim slash, then
+     * padded to the column width. The row's italic/bold emphasis is layered on so the whole line
+     * reads uniformly.
      */
     private static String statusCell(String label, int width, boolean italic, boolean bold, Rgb band) {
         String[] parts = label.split("/");
@@ -575,7 +572,7 @@ public final class JdkListCommand implements CliCommand {
                     .onWarning(System.err::println);
             // --all is the "show me everything" view: every vendor/product at
             // every major >= 17, not just jk's curated LTS-or-latest set.
-            return client.fetch(refresh, /* firstClassOnly = */ false);
+            return client.fetch(refresh, /* firstClassOnly= */ false);
         } catch (IOException | InterruptedException e) {
             if (e instanceof InterruptedException) Thread.currentThread().interrupt();
             System.err.println(

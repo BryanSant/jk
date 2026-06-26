@@ -5,9 +5,9 @@ import java.net.URI;
 import java.util.Objects;
 
 /**
- * Metadata for a downloadable JDK distribution from the foojay Disco API
- * (PRD §12). Carries the redirect URL the actual archive is at and the
- * sha256 so the installer can verify what it downloaded.
+ * Metadata for a downloadable JDK distribution from the foojay Disco API (PRD §12). Carries the
+ * redirect URL the actual archive is at and the sha256 so the installer can verify what it
+ * downloaded.
  */
 public record JdkPackage(
         String distribution,
@@ -30,18 +30,17 @@ public record JdkPackage(
     }
 
     /**
-     * SDKMAN-style identifier: {@code 21.0.5-tem}. Uses the foojay
-     * distribution abbreviation as the suffix.
+     * SDKMAN-style identifier: {@code 21.0.5-tem}. Uses the foojay distribution abbreviation as the
+     * suffix.
      */
     public String sdkmanIdentifier() {
         return version + "-" + distributionAbbreviation();
     }
 
     /**
-     * The jk-style identifier this package would be installed as under
-     * the IntelliJ JDK directory: {@code 21.0.5-tem-x64-linux}. Matches the
-     * directory name {@link InstalledJdk#identifier()} carries, so the
-     * list / install / uninstall verbs can address the same string.
+     * The jk-style identifier this package would be installed as under the IntelliJ JDK directory:
+     * {@code 21.0.5-tem-x64-linux}. Matches the directory name {@link InstalledJdk#identifier()}
+     * carries, so the list / install / uninstall verbs can address the same string.
      */
     public String installIdentifier() {
         return sdkmanIdentifier() + "-" + architecture + "-" + operatingSystem;

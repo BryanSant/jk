@@ -10,9 +10,9 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 /**
- * Drives {@link WorkerProcess} against a real forked JVM ({@link EchoWorkerMain})
- * — the first end-to-end coverage of the fork + read-loop and the two-way
- * stdin conversation the test-runner's pull mode relies on.
+ * Drives {@link WorkerProcess} against a real forked JVM ({@link EchoWorkerMain}) — the first
+ * end-to-end coverage of the fork + read-loop and the two-way stdin conversation the test-runner's
+ * pull mode relies on.
  */
 class WorkerProcessTest {
 

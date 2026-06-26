@@ -16,29 +16,25 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Predicts each build phase's progress-bar weight from the work it will
- * actually do <em>this</em> run, so skipped/cached phases shrink to a near-no-op
- * slice and real work dominates the bar. Runs once at goal-start using only
- * on-disk state (freshness stamps, the lockfile, the CAS); a misprediction just
- * mis-sizes a slice and is closed by phase-end auto-fill.
+ * Predicts each build phase's progress-bar weight from the work it will actually do <em>this</em>
+ * run, so skipped/cached phases shrink to a near-no-op slice and real work dominates the bar. Runs
+ * once at goal-start using only on-disk state (freshness stamps, the lockfile, the CAS); a
+ * misprediction just mis-sizes a slice and is closed by phase-end auto-fill.
  *
- * <p>Pragmatic v1: skip detection is a cheap stamp+mtime probe
- * ({@link FreshnessStamp#looksFresh}), and a CAS-restore is folded into the
- * full-compile weight (exact restore detection needs the content-hashed action
- * key, which depends on inputs earlier phases produce). Compile→test→package are
- * <em>correlated</em>: if compile is predicted to run, the phases consuming its
- * output are predicted to run too — so the common "edited a source" case sizes
- * correctly rather than trusting a now-stale stamp.
+ * <p>Pragmatic v1: skip detection is a cheap stamp+mtime probe ({@link FreshnessStamp#looksFresh}),
+ * and a CAS-restore is folded into the full-compile weight (exact restore detection needs the
+ * content-hashed action key, which depends on inputs earlier phases produce). Compile→test→package
+ * are <em>correlated</em>: if compile is predicted to run, the phases consuming its output are
+ * predicted to run too — so the common "edited a source" case sizes correctly rather than trusting
+ * a now-stale stamp.
  *
- * <p>Weights are time-proportional shares (the bar normalises Σ weights to 100%).
- * A skipped phase is {@value #SKIP} — a true no-op so cached/up-to-date work never
- * occupies the bar. A real compile is {@code ceil(sources × 0.1)}; a fetch is
- * {@value #ARTIFACT_FETCH} per artifact; a jar package is {@value #PACKAGE_JAR}.
- * A test run is a fixed {@value #TEST_STARTUP} JVM-startup floor (forking the test
- * JVM + framework init dominates a short suite, and {@code run-tests} is serialized
- * across the workspace) plus {@value #TEST_METHOD} per discovered test method. (JDK
- * download, shadow jar, native image and OCI weights are tracked in their own
- * command goals.)
+ * <p>Weights are time-proportional shares (the bar normalises Σ weights to 100%). A skipped phase
+ * is {@value #SKIP} — a true no-op so cached/up-to-date work never occupies the bar. A real compile
+ * is {@code ceil(sources × 0.1)}; a fetch is {@value #ARTIFACT_FETCH} per artifact; a jar package
+ * is {@value #PACKAGE_JAR}. A test run is a fixed {@value #TEST_STARTUP} JVM-startup floor (forking
+ * the test JVM + framework init dominates a short suite, and {@code run-tests} is serialized across
+ * the workspace) plus {@value #TEST_METHOD} per discovered test method. (JDK download, shadow jar,
+ * native image and OCI weights are tracked in their own command goals.)
  */
 public final class EffortWeights {
 
@@ -51,7 +47,10 @@ public final class EffortWeights {
     static final int COMPILE_FLOOR = 2; // javac/kotlinc fixed startup (the learned per-source rate adds to it)
     static final int ARTIFACT_FETCH = 8; // per dependency artifact downloaded
 
-    /** A weight unit is ≈150 ms — the {@code Goal} interpolation constant; the bridge between learned ms and bar weight. */
+    /**
+     * A weight unit is ≈150 ms — the {@code Goal} interpolation constant; the bridge between learned
+     * ms and bar weight.
+     */
     public static final int MS_PER_WEIGHT = 150;
 
     static final int PACKAGE_JAR = 5;
@@ -62,12 +61,11 @@ public final class EffortWeights {
     static final int OCI_SKIP = 2; // OCI image up-to-date
 
     /**
-     * Per-phase predicted weights for one module's build. {@code fullyCached} is set
-     * when every work phase (sync/compile/test/package) collapsed to {@link #SKIP} —
-     * the module is a no-op this run, so its always-run phases (parse, resources,
-     * stamps, assemble) should also shrink to a token "touch" instead of carrying
-     * their full static weight, which would otherwise reserve ~1.5 s of phantom time
-     * per cached module in the workspace estimate for ~30 ms of real work.
+     * Per-phase predicted weights for one module's build. {@code fullyCached} is set when every work
+     * phase (sync/compile/test/package) collapsed to {@link #SKIP} — the module is a no-op this run,
+     * so its always-run phases (parse, resources, stamps, assemble) should also shrink to a token
+     * "touch" instead of carrying their full static weight, which would otherwise reserve ~1.5 s of
+     * phantom time per cached module in the workspace estimate for ~30 ms of real work.
      */
     public record Plan(
             int sync,
@@ -84,13 +82,12 @@ public final class EffortWeights {
     }
 
     /**
-     * Weight of an actually-running test phase: a fixed JVM-startup floor plus a
-     * per-method term. The floor matters because {@code run-tests} forks a JVM and
-     * is serialized across the workspace, so even a small suite is a real,
-     * sequential chunk of wall-clock — without it the bar races through the fast,
-     * parallel compile work and then stalls on the slow serial test tail. Shared by
-     * {@link #predict} (up-front reservation) and the {@code run-tests} phase's
-     * runtime reweight so they agree.
+     * Weight of an actually-running test phase: a fixed JVM-startup floor plus a per-method term. The
+     * floor matters because {@code run-tests} forks a JVM and is serialized across the workspace, so
+     * even a small suite is a real, sequential chunk of wall-clock — without it the bar races through
+     * the fast, parallel compile work and then stalls on the slow serial test tail. Shared by {@link
+     * #predict} (up-front reservation) and the {@code run-tests} phase's runtime reweight so they
+     * agree.
      */
     public static int runTestsWeight(int methods) {
         return TEST_STARTUP + Math.max(0, methods) * TEST_METHOD;
@@ -106,14 +103,13 @@ public final class EffortWeights {
     }
 
     /**
-     * The learned weight for a running phase: {@code floor + rate × count}, where the
-     * per-unit {@code rate} is, in order of preference, (1) this exact (module, phase)
-     * if seen before, (2) the median rate this machine has measured for the phase
-     * across <em>any</em> module, so a never-built module borrows a realistic rate
-     * instead of the static constant, or (3) the static Phase-1 estimate
-     * ({@code staticWeight}) when nothing for the phase has ever been recorded — so a
-     * fully cold ledger still reproduces Phase 1 exactly, and warm runs rescale by the
-     * current {@code count}.
+     * The learned weight for a running phase: {@code floor + rate × count}, where the per-unit {@code
+     * rate} is, in order of preference, (1) this exact (module, phase) if seen before, (2) the median
+     * rate this machine has measured for the phase across <em>any</em> module, so a never-built
+     * module borrows a realistic rate instead of the static constant, or (3) the static Phase-1
+     * estimate ({@code staticWeight}) when nothing for the phase has ever been recorded — so a fully
+     * cold ledger still reproduces Phase 1 exactly, and warm runs rescale by the current {@code
+     * count}.
      */
     static int learned(PhaseTimings timings, String dir, String phase, int count, int staticWeight) {
         var perUnit = timings.perUnit(dir, phase);
@@ -129,11 +125,10 @@ public final class EffortWeights {
     }
 
     /**
-     * The per-unit weight one phase run teaches the ledger: its measured duration
-     * (converted to weight units) minus the fixed {@link #floor}, spread over the
-     * unit count. Returns a negative sentinel when the phase plainly did no per-unit
-     * work (cache hit / skip: it finished at or under its floor) so the recorder can
-     * drop it instead of teaching a ~0 rate.
+     * The per-unit weight one phase run teaches the ledger: its measured duration (converted to
+     * weight units) minus the fixed {@link #floor}, spread over the unit count. Returns a negative
+     * sentinel when the phase plainly did no per-unit work (cache hit / skip: it finished at or under
+     * its floor) so the recorder can drop it instead of teaching a ~0 rate.
      */
     public static double observedPerUnit(String phase, long durationMs, int count) {
         double actualWeight = durationMs / (double) MS_PER_WEIGHT;
@@ -148,16 +143,14 @@ public final class EffortWeights {
     }
 
     /**
-     * As {@link #predict(BuildPipeline.Inputs, Cas, boolean, boolean, boolean)} but
-     * with a {@code forceRebuild} hint: when set, the module is treated as
-     * definitely rebuilding (compile/test/package reserved at running weights),
-     * even if its own on-disk stamps look fresh. The workspace pre-scan sets this
-     * from {@code BuildPlanForecast}'s dependency-ordered dirty set, so a module
-     * that will rebuild only because an upstream sibling changed reserves its real
-     * slice up front — the bar's true total is known from the start instead of
-     * growing mid-build (which slid the bar backward). A misprediction here can only
-     * over-reserve: the phase's own runtime cache check reweights it back down (the
-     * bar jumps forward), never up.
+     * As {@link #predict(BuildPipeline.Inputs, Cas, boolean, boolean, boolean)} but with a {@code
+     * forceRebuild} hint: when set, the module is treated as definitely rebuilding
+     * (compile/test/package reserved at running weights), even if its own on-disk stamps look fresh.
+     * The workspace pre-scan sets this from {@code BuildPlanForecast}'s dependency-ordered dirty set,
+     * so a module that will rebuild only because an upstream sibling changed reserves its real slice
+     * up front — the bar's true total is known from the start instead of growing mid-build (which
+     * slid the bar backward). A misprediction here can only over-reserve: the phase's own runtime
+     * cache check reweights it back down (the bar jumps forward), never up.
      */
     public static Plan predict(
             BuildPipeline.Inputs in,
@@ -238,11 +231,10 @@ public final class EffortWeights {
     }
 
     /**
-     * {@code ensure-jdk}: 70 only when a JDK download will actually happen — the
-     * same condition {@link JdkEnsure} uses ({@code resolve} finds no usable JDK
-     * across the whole order, including the current/PATH tiers, and a spec
-     * <em>would install</em>). {@code resolve} is offline; the download it
-     * predicts is the network cost. Anything resolvable on disk → 1.
+     * {@code ensure-jdk}: 70 only when a JDK download will actually happen — the same condition
+     * {@link JdkEnsure} uses ({@code resolve} finds no usable JDK across the whole order, including
+     * the current/PATH tiers, and a spec <em>would install</em>). {@code resolve} is offline; the
+     * download it predicts is the network cost. Anything resolvable on disk → 1.
      */
     public static int jdkWeight(Path dir, Path jdksDir) {
         try {
@@ -269,7 +261,9 @@ public final class EffortWeights {
         }
     }
 
-    /** Fat/shadow jar present and at least as new as the main jar (and not {@code --rerun}) → skip. */
+    /**
+     * Fat/shadow jar present and at least as new as the main jar (and not {@code --rerun}) → skip.
+     */
     public static int shadowWeight(Path dir) {
         return artifactFresh(dir, BuildLayout::shadowJar) ? SKIP : SHADOW_RUN;
     }
@@ -287,10 +281,9 @@ public final class EffortWeights {
     }
 
     /**
-     * True when the artifact selected by {@code artifact} exists, isn't being
-     * forced by {@code --rerun}, and is at least as new as the main jar it's
-     * derived from — a cheap "this output is up-to-date" proxy for the
-     * artifact-cache skip the phase itself performs.
+     * True when the artifact selected by {@code artifact} exists, isn't being forced by {@code
+     * --rerun}, and is at least as new as the main jar it's derived from — a cheap "this output is
+     * up-to-date" proxy for the artifact-cache skip the phase itself performs.
      */
     private static boolean artifactFresh(Path dir, java.util.function.Function<BuildLayout, Path> artifact) {
         try {
@@ -332,20 +325,22 @@ public final class EffortWeights {
 
     // --- parallel-aware wall-clock estimate ----------------------------------
 
-    /** One module's cost for the schedule estimate: its weight, its serialized test weight, and its prereqs. */
+    /**
+     * One module's cost for the schedule estimate: its weight, its serialized test weight, and its
+     * prereqs.
+     */
     public record ModuleCost(Path dir, Set<Path> prereqs, int weight, int testWeight) {}
 
     /**
-     * Estimate a build's wall-clock (ms) from per-module weights, honoring how
-     * {@code jk build} actually schedules. Serial ({@code --no-parallel}) sums every
-     * module's weight. The parallel graph build overlaps independent modules, so the
-     * estimate is the largest of three lower bounds — the dependency <b>critical path</b>
-     * (longest weighted chain, since a module can't start before its prereqs finish),
-     * the <b>throughput</b> ceiling (Σweight ÷ concurrency, when work saturates the
-     * worker JVMs), and — when tests are serialized across modules (the default, no
-     * {@code --parallel-tests}) — the <b>serial test-phase total</b>, since those phases
-     * share one test JVM and cannot overlap. Summing everything (the old estimate)
-     * over-counts the compile/package work that overlaps the long serial test tail.
+     * Estimate a build's wall-clock (ms) from per-module weights, honoring how {@code jk build}
+     * actually schedules. Serial ({@code --no-parallel}) sums every module's weight. The parallel
+     * graph build overlaps independent modules, so the estimate is the largest of three lower bounds
+     * — the dependency <b>critical path</b> (longest weighted chain, since a module can't start
+     * before its prereqs finish), the <b>throughput</b> ceiling (Σweight ÷ concurrency, when work
+     * saturates the worker JVMs), and — when tests are serialized across modules (the default, no
+     * {@code --parallel-tests}) — the <b>serial test-phase total</b>, since those phases share one
+     * test JVM and cannot overlap. Summing everything (the old estimate) over-counts the
+     * compile/package work that overlaps the long serial test tail.
      */
     public static long scheduleMillis(List<ModuleCost> mods, int concurrency, boolean serial, boolean parallelTests) {
         long serialSum = 0;
@@ -362,11 +357,10 @@ public final class EffortWeights {
     }
 
     /**
-     * Longest <em>blocking</em>-weighted path through the module DAG:
-     * {@code finish(m) = blocking(m) + max prereq finish}. Only a module's blocking work
-     * (compile + package — what produces the jar dependents wait on) sits on the path; its
-     * test phase doesn't block dependents and is accounted for separately by the serial
-     * test floor, so counting it here would double the tail.
+     * Longest <em>blocking</em>-weighted path through the module DAG: {@code finish(m) = blocking(m)
+     * + max prereq finish}. Only a module's blocking work (compile + package — what produces the jar
+     * dependents wait on) sits on the path; its test phase doesn't block dependents and is accounted
+     * for separately by the serial test floor, so counting it here would double the tail.
      */
     private static long criticalPath(List<ModuleCost> mods) {
         java.util.Map<Path, ModuleCost> byDir = new java.util.HashMap<>();

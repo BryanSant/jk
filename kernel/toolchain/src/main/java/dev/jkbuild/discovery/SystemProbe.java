@@ -15,13 +15,12 @@ import java.util.stream.Stream;
  * Catch-all for OS package-manager JDK locations:
  *
  * <ul>
- *   <li>macOS: {@code /Library/Java/JavaVirtualMachines/<id>.jdk/Contents/Home/}</li>
- *   <li>Linux: {@code /usr/lib/jvm/<id>/} (Debian/Ubuntu, Fedora, Arch)</li>
- *   <li>Linux: {@code /usr/java/<id>/} (RHEL family)</li>
+ *   <li>macOS: {@code /Library/Java/JavaVirtualMachines/<id>.jdk/Contents/Home/}
+ *   <li>Linux: {@code /usr/lib/jvm/<id>/} (Debian/Ubuntu, Fedora, Arch)
+ *   <li>Linux: {@code /usr/java/<id>/} (RHEL family)
  * </ul>
  *
- * <p>JDKs only — system package managers rarely ship Maven/Gradle/Kotlin
- * in standardised paths.
+ * <p>JDKs only — system package managers rarely ship Maven/Gradle/Kotlin in standardised paths.
  */
 public final class SystemProbe implements LocalToolProbe {
 

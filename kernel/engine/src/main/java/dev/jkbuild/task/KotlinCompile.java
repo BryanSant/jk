@@ -11,20 +11,20 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * Action-cache front for Kotlin compilation, mirroring {@link JavaIncrementalCompile}
- * but simpler: the Kotlin worker owns its own incremental recompile (BTA tracks
- * sources in its working dir), so there's no dependency-graph dirty-set step —
- * just a whole-set action-key fast path before forking the worker.
+ * Action-cache front for Kotlin compilation, mirroring {@link JavaIncrementalCompile} but simpler:
+ * the Kotlin worker owns its own incremental recompile (BTA tracks sources in its working dir), so
+ * there's no dependency-graph dirty-set step — just a whole-set action-key fast path before forking
+ * the worker.
  *
  * <ol>
- *   <li>On an exact-input hit, restore the output dir from the CAS and skip the
- *       worker (the win for clean checkouts, CI, and cross-machine cache reuse).</li>
- *   <li>On a miss, fork the worker, then snapshot its output dir into the CAS and
- *       record it under the key.</li>
+ *   <li>On an exact-input hit, restore the output dir from the CAS and skip the worker (the win for
+ *       clean checkouts, CI, and cross-machine cache reuse).
+ *   <li>On a miss, fork the worker, then snapshot its output dir into the CAS and record it under
+ *       the key.
  * </ol>
  *
- * <p>Sits behind the cheap {@code .kstamp} freshness check (which short-circuits
- * the unchanged case before we even hash sources here).
+ * <p>Sits behind the cheap {@code .kstamp} freshness check (which short-circuits the unchanged case
+ * before we even hash sources here).
  */
 public final class KotlinCompile {
 
@@ -39,8 +39,8 @@ public final class KotlinCompile {
     }
 
     /**
-     * @param useCache when false ({@code --rerun}), skip the lookup and always
-     *                 run the worker; the result is still recorded.
+     * @param useCache when false ({@code --rerun}), skip the lookup and always run the worker; the
+     *     result is still recorded.
      */
     public static Result run(
             String taskId, KotlincRequest request, String jkVersion, boolean useCache, Cas cas, ActionCache actionCache)

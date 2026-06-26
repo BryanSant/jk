@@ -6,17 +6,14 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Parsed view of the JetBrains JDK feed at
- * {@code https://download.jetbrains.com/jdk/feed/v1/jdks.json.xz}. The
- * feed is the same source IntelliJ uses to populate
- * {@code ~/.jdks} (Linux/Windows) and
- * {@code ~/Library/Java/JavaVirtualMachines} (macOS), so jk-installed
- * JDKs naturally appear alongside IntelliJ-installed ones.
+ * Parsed view of the JetBrains JDK feed at {@code
+ * https://download.jetbrains.com/jdk/feed/v1/jdks.json.xz}. The feed is the same source IntelliJ
+ * uses to populate {@code ~/.jdks} (Linux/Windows) and {@code ~/Library/Java/JavaVirtualMachines}
+ * (macOS), so jk-installed JDKs naturally appear alongside IntelliJ-installed ones.
  *
- * <p>Each {@link Entry} is a flattened (top-level × package) row: one
- * downloadable archive on one (os, arch) pair. The feed currently puts a
- * single package under each top-level entry, but we treat the structure
- * as 1:N so we don't have to rework parsing if that changes.
+ * <p>Each {@link Entry} is a flattened (top-level × package) row: one downloadable archive on one
+ * (os, arch) pair. The feed currently puts a single package under each top-level entry, but we
+ * treat the structure as 1:N so we don't have to rework parsing if that changes.
  */
 public record JdkCatalog(List<Entry> entries) {
 
@@ -25,8 +22,8 @@ public record JdkCatalog(List<Entry> entries) {
     }
 
     /**
-     * One downloadable JDK on one platform. All identifier fields come
-     * straight from the feed — there is no jk-side naming logic.
+     * One downloadable JDK on one platform. All identifier fields come straight from the feed — there
+     * is no jk-side naming logic.
      */
     public record Entry(
             String vendor,

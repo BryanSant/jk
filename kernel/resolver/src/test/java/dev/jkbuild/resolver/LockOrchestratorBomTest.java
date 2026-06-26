@@ -36,12 +36,12 @@ import org.junit.jupiter.api.io.TempDir;
  * BOM-driven resolution end-to-end through {@link LockOrchestrator}:
  *
  * <ul>
- *   <li>A platform BOM dep collected from {@code [dependencies.platform]}
- *       contributes constraints to the resolver.</li>
- *   <li>Two BOMs with conflicting constraints on the same coord surface a
- *       diagnostic listing both BOM coords.</li>
- *   <li>Coords pinned by a BOM get a {@code pinned-by} field in the
- *       resulting {@link Lockfile.Artifact}.</li>
+ *   <li>A platform BOM dep collected from {@code [dependencies.platform]} contributes constraints
+ *       to the resolver.
+ *   <li>Two BOMs with conflicting constraints on the same coord surface a diagnostic listing both
+ *       BOM coords.
+ *   <li>Coords pinned by a BOM get a {@code pinned-by} field in the resulting {@link
+ *       Lockfile.Artifact}.
  * </ul>
  */
 class LockOrchestratorBomTest {
@@ -69,8 +69,8 @@ class LockOrchestratorBomTest {
     }
 
     /**
-     * jk injects latest-stable JUnit into every project's TEST scope, so the
-     * mock repo must offer a resolvable version of those coords for any lock.
+     * jk injects latest-stable JUnit into every project's TEST scope, so the mock repo must offer a
+     * resolvable version of those coords for any lock.
      */
     private void serveJUnitDefaults() {
         serveLeaf("org.junit.jupiter", "junit-jupiter", "6.1.0");
@@ -87,7 +87,12 @@ class LockOrchestratorBomTest {
                 group,
                 artifact,
                 version,
-                "<project><groupId>" + group + "</groupId><artifactId>" + artifact + "</artifactId><version>" + version
+                "<project><groupId>"
+                        + group
+                        + "</groupId><artifactId>"
+                        + artifact
+                        + "</artifactId><version>"
+                        + version
                         + "</version></project>");
     }
 
@@ -317,7 +322,8 @@ class LockOrchestratorBomTest {
     }
 
     private static String leaf(String artifact) {
-        return "<project><groupId>com.foo</groupId><artifactId>" + artifact
+        return "<project><groupId>com.foo</groupId><artifactId>"
+                + artifact
                 + "</artifactId><version>1.0</version></project>";
     }
 
@@ -342,7 +348,16 @@ class LockOrchestratorBomTest {
     }
 
     private void servePom(String group, String artifact, String version, String body) {
-        String path = "/" + group.replace('.', '/') + "/" + artifact + "/" + version + "/" + artifact + "-" + version
+        String path = "/"
+                + group.replace('.', '/')
+                + "/"
+                + artifact
+                + "/"
+                + version
+                + "/"
+                + artifact
+                + "-"
+                + version
                 + ".pom";
         servePath(path, body);
     }

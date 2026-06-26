@@ -31,21 +31,19 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * {@code jk jdk update [spec]} (alias {@code upgrade}) — refresh jk-managed
- * JDKs to the latest point release of their own family and major.
+ * {@code jk jdk update [spec]} (alias {@code upgrade}) — refresh jk-managed JDKs to the latest
+ * point release of their own family and major.
  *
- * <p>Only installs jk owns (under {@code ~/.jk/jdks}, source {@code "jk"}) are
- * touched; SDKMAN / IntelliJ / system / {@code $JAVA_HOME} JDKs are left alone.
- * With no spec every managed JDK is considered; a spec narrows the set with the
- * usual flexible matcher ({@code 25} = major 25 of any vendor, {@code temurin} =
- * all Temurin, {@code temurin-25} = Temurin 25).
+ * <p>Only installs jk owns (under {@code ~/.jk/jdks}, source {@code "jk"}) are touched; SDKMAN /
+ * IntelliJ / system / {@code $JAVA_HOME} JDKs are left alone. With no spec every managed JDK is
+ * considered; a spec narrows the set with the usual flexible matcher ({@code 25} = major 25 of any
+ * vendor, {@code temurin} = all Temurin, {@code temurin-25} = Temurin 25).
  *
- * <p>Each match is updated <em>within its family+major</em>:
- * {@code temurin-25.0.2 → temurin-25.0.3}, never a major bump and never a
- * vendor switch. The newer release is installed and the superseded one removed;
- * if a removed install was the global default, the default is re-pointed at its
- * replacement. The planned changes are shown and confirmed ({@code [Y/n]})
- * unless {@code --yes} is passed.
+ * <p>Each match is updated <em>within its family+major</em>: {@code temurin-25.0.2 →
+ * temurin-25.0.3}, never a major bump and never a vendor switch. The newer release is installed and
+ * the superseded one removed; if a removed install was the global default, the default is
+ * re-pointed at its replacement. The planned changes are shown and confirmed ({@code [Y/n]}) unless
+ * {@code --yes} is passed.
  */
 public final class JdkUpdateCommand implements CliCommand {
 
@@ -151,14 +149,18 @@ public final class JdkUpdateCommand implements CliCommand {
 
         for (String id : noTarget) {
             System.out.println(Theme.colorize("•", Theme.active().darkGray())
-                    + " " + Theme.colorize(id, Theme.active().cyan())
+                    + " "
+                    + Theme.colorize(id, Theme.active().cyan())
                     + Theme.colorize(
                             " — no update available in the feed", Theme.active().normalGray()));
         }
 
         if (updates.isEmpty()) {
             System.out.println(Theme.colorize("✓", Theme.active().completedStep())
-                    + " All " + managed.size() + " jk-managed JDK" + (managed.size() == 1 ? "" : "s")
+                    + " All "
+                    + managed.size()
+                    + " jk-managed JDK"
+                    + (managed.size() == 1 ? "" : "s")
                     + " are up to date.");
             return 0;
         }
@@ -208,7 +210,8 @@ public final class JdkUpdateCommand implements CliCommand {
                     defaults.set(newJdk);
                 }
                 System.out.println(Theme.colorize("✓", Theme.active().completedStep())
-                        + " Updated " + Theme.colorize(oldId, Theme.active().cyan())
+                        + " Updated "
+                        + Theme.colorize(oldId, Theme.active().cyan())
                         + " → "
                         + Theme.colorize(newJdk.identifier(), Theme.active().cyan()));
                 updated++;
@@ -217,7 +220,8 @@ public final class JdkUpdateCommand implements CliCommand {
                 System.out.println(Theme.colorize("✗", Theme.active().error())
                         + " Failed to update "
                         + Theme.colorize(oldId, Theme.active().warning())
-                        + ": " + e.getMessage());
+                        + ": "
+                        + e.getMessage());
                 failed++;
             }
         }
@@ -230,9 +234,8 @@ public final class JdkUpdateCommand implements CliCommand {
     }
 
     /**
-     * Idempotently repoint {@code <vendor>-<major> → <install dir>} for a
-     * freshly-built JDK. Derives the names from the install identifier
-     * ({@code temurin-25.0.4} → pointer {@code temurin-25}).
+     * Idempotently repoint {@code <vendor>-<major> → <install dir>} for a freshly-built JDK. Derives
+     * the names from the install identifier ({@code temurin-25.0.4} → pointer {@code temurin-25}).
      */
     private static void repointStablePointer(JdkRegistry registry, InstalledJdk jdk) {
         JdkSelector.FlexibleQuery q = JdkSelector.parseFlexible(jdk.identifier());
@@ -265,10 +268,9 @@ public final class JdkUpdateCommand implements CliCommand {
     // --- planning helpers ---------------------------------------------------
 
     /**
-     * Highest-versioned non-preview catalog entry on this host that belongs to
-     * the same family as the installed id (its {@code suggested_sdk_name} is a
-     * delimiter-bounded prefix of the id). The suggested name encodes the major,
-     * so this never crosses majors.
+     * Highest-versioned non-preview catalog entry on this host that belongs to the same family as the
+     * installed id (its {@code suggested_sdk_name} is a delimiter-bounded prefix of the id). The
+     * suggested name encodes the major, so this never crosses majors.
      */
     private static Optional<JdkCatalog.Entry> latestPointRelease(
             JdkCatalog catalog, String installedId, String os, String arch) {
@@ -321,7 +323,9 @@ public final class JdkUpdateCommand implements CliCommand {
     private boolean hostSupported() {
         if (HostPlatform.supported()) return true;
         System.err.println("jk jdk update: host "
-                + System.getProperty("os.name") + "/" + System.getProperty("os.arch")
+                + System.getProperty("os.name")
+                + "/"
+                + System.getProperty("os.arch")
                 + " is not covered by the JetBrains JDK feed. Set JAVA_HOME explicitly.");
         return false;
     }

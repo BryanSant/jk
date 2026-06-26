@@ -3,6 +3,7 @@ package dev.jkbuild.util;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.io.File;
 import java.nio.file.Path;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -34,8 +35,8 @@ class JkDirsTest {
     void layout_is_identical_on_windows() {
         JkDirs dirs = JkDirs.of(Map.<String, String>of()::get, "C:\\Users\\me");
         assertThat(dirs.homeDir().toString()).endsWith(".jk");
-        assertThat(dirs.cacheDir().toString()).endsWith(".jk" + java.io.File.separator + "cache");
-        assertThat(dirs.jdksDir().toString()).endsWith(".jk" + java.io.File.separator + "jdks");
+        assertThat(dirs.cacheDir().toString()).endsWith(".jk" + File.separator + "cache");
+        assertThat(dirs.jdksDir().toString()).endsWith(".jk" + File.separator + "jdks");
     }
 
     @Test

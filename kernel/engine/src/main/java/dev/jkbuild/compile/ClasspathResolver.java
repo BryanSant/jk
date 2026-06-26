@@ -12,13 +12,12 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * Maps a {@link Lockfile}'s checksummed packages to on-disk artifact
- * paths in the {@link Cas}, filtered by scope. Packages without a
- * checksum (POM-only / path / git) are skipped — they don't contribute
- * to the compile classpath.
+ * Maps a {@link Lockfile}'s checksummed packages to on-disk artifact paths in the {@link Cas},
+ * filtered by scope. Packages without a checksum (POM-only / path / git) are skipped — they don't
+ * contribute to the compile classpath.
  *
- * <p>This is a pure name-resolution step: it doesn't fetch anything.
- * {@code jk sync} ensures the CAS is populated.
+ * <p>This is a pure name-resolution step: it doesn't fetch anything. {@code jk sync} ensures the
+ * CAS is populated.
  */
 public final class ClasspathResolver {
 

@@ -26,20 +26,20 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * {@code jk tool run <coord|file> -- <args>} — ephemerally run a tool or a
- * standalone file (PRD §20.3), forwarding {@code <args>} to the program.
+ * {@code jk tool run <coord|file> -- <args>} — ephemerally run a tool or a standalone file (PRD
+ * §20.3), forwarding {@code <args>} to the program.
  *
  * <p>The target may be either:
+ *
  * <ul>
- *   <li>a Maven coordinate ({@code group:artifact:version}) — resolved,
- *       cached under {@code $JK_CACHE_DIR}, and exec'd via its
- *       {@code Main-Class}; or</li>
- *   <li>a {@code .java}/{@code .kt}/{@code .kts}/{@code .jar} file — compiled
- *       (if needed) and run via {@link ScriptRunner}.</li>
+ *   <li>a Maven coordinate ({@code group:artifact:version}) — resolved, cached under {@code
+ *       $JK_CACHE_DIR}, and exec'd via its {@code Main-Class}; or
+ *   <li>a {@code .java}/{@code .kt}/{@code .kts}/{@code .jar} file — compiled (if needed) and run
+ *       via {@link ScriptRunner}.
  * </ul>
  *
- * <p>{@code jk activate} scripts also expose this on the path as a
- * {@code jkx} alias for uvx-style muscle memory.
+ * <p>{@code jk activate} scripts also expose this on the path as a {@code jkx} alias for uvx-style
+ * muscle memory.
  */
 public final class ToolRunCommand implements CliCommand {
 

@@ -8,26 +8,22 @@ import java.util.regex.Pattern;
 import org.jline.utils.AttributedStyle;
 
 /**
- * Single-line Java/Kotlin syntax highlighter for compiler-diagnostic source
- * snippets. Tokenizes one line, colorizes each token via the active
- * {@link Theme}, and optionally underlines the single character a caret points
- * at — keeping that character's syntax color and layering the underline on top,
- * all in one pass.
+ * Single-line Java/Kotlin syntax highlighter for compiler-diagnostic source snippets. Tokenizes one
+ * line, colorizes each token via the active {@link Theme}, and optionally underlines the single
+ * character a caret points at — keeping that character's syntax color and layering the underline on
+ * top, all in one pass.
  *
- * <p>The token <em>rules</em> are ported from the <a
- * href="https://prismjs.com/">Prism.js</a> grammars for {@code java} and
- * {@code kotlin} (their {@code clike} base folded in). Rather than reproduce
- * Prism's full nested tokenizer, each grammar is flattened into an ordered,
- * first-match-wins list of {@link Rule}s: at every cursor position the rules are
- * tried in order and the first that matches at the cursor wins. This keeps the
- * lexer small while reading like Prism's output. The same engine and role→style
- * mapping are reused by {@link StackTraceHighlight}.
+ * <p>The token <em>rules</em> are ported from the <a href="https://prismjs.com/">Prism.js</a>
+ * grammars for {@code java} and {@code kotlin} (their {@code clike} base folded in). Rather than
+ * reproduce Prism's full nested tokenizer, each grammar is flattened into an ordered,
+ * first-match-wins list of {@link Rule}s: at every cursor position the rules are tried in order and
+ * the first that matches at the cursor wins. This keeps the lexer small while reading like Prism's
+ * output. The same engine and role→style mapping are reused by {@link StackTraceHighlight}.
  *
- * <p>It only ever inserts SGR escapes — never adds or removes characters — so
- * stripping the ANSI yields the original source line byte-for-byte. The line is
- * a fragment (not a full compilation unit), so the lexer degrades gracefully:
- * an unterminated string or block comment colors to end-of-line, and anything
- * unrecognized falls back to plain text.
+ * <p>It only ever inserts SGR escapes — never adds or removes characters — so stripping the ANSI
+ * yields the original source line byte-for-byte. The line is a fragment (not a full compilation
+ * unit), so the lexer degrades gracefully: an unterminated string or block comment colors to
+ * end-of-line, and anything unrecognized falls back to plain text.
  */
 public final class SyntaxHighlight {
 
@@ -70,6 +66,7 @@ public final class SyntaxHighlight {
 
     /** Closed block/JavaDoc comment, then line comment, then an unterminated block to EOL. */
     private static final Rule BLOCK_COMMENT = Rule.of("/\\*\\*?[\\s\\S]*?\\*/", Role.COMMENT);
+
     /** A line comment, but not the {@code //} inside a URL ({@code http://}) or escaped. */
     private static final Rule LINE_COMMENT = Rule.of("(?<![:\\\\])//.*", Role.COMMENT);
 
@@ -156,28 +153,27 @@ public final class SyntaxHighlight {
             PUNCTUATION);
 
     /**
-     * Highlight {@code src} as Java, underlining the character at {@code caretCol}.
-     * Convenience overload for the common case.
+     * Highlight {@code src} as Java, underlining the character at {@code caretCol}. Convenience
+     * overload for the common case.
      */
     public static String highlight(String src, int caretCol) {
         return highlight(src, caretCol, Language.JAVA);
     }
 
     /**
-     * Highlight {@code src} in {@code lang}, underlining the character at
-     * {@code caretCol}. A {@code caretCol} outside the line (negative, or past
-     * the end — a misaligned caret) simply highlights without an underline.
+     * Highlight {@code src} in {@code lang}, underlining the character at {@code caretCol}. A {@code
+     * caretCol} outside the line (negative, or past the end — a misaligned caret) simply highlights
+     * without an underline.
      */
     public static String highlight(String src, int caretCol, Language lang) {
         return render(src, caretCol, lang == Language.KOTLIN ? KOTLIN_RULES : JAVA_RULES);
     }
 
     /**
-     * The ordered-rule engine. Walks the cursor left-to-right; at each position
-     * the first {@code rules} entry that matches (a non-empty match anchored at
-     * the cursor) wins and its span is emitted in that role's style. When no rule
-     * matches, a single plain character is emitted — this guarantees forward
-     * progress and that stripping the ANSI restores the input byte-for-byte.
+     * The ordered-rule engine. Walks the cursor left-to-right; at each position the first {@code
+     * rules} entry that matches (a non-empty match anchored at the cursor) wins and its span is
+     * emitted in that role's style. When no rule matches, a single plain character is emitted — this
+     * guarantees forward progress and that stripping the ANSI restores the input byte-for-byte.
      */
     static String render(String src, int caretCol, List<Rule> rules) {
         StringBuilder out = new StringBuilder();
@@ -215,9 +211,9 @@ public final class SyntaxHighlight {
     }
 
     /**
-     * Emit {@code src[s, e)} colored for {@code role}. If the caret falls inside
-     * the token, the run is split so the caret character keeps the token color
-     * and gains an underline, while its neighbours stay plainly colored.
+     * Emit {@code src[s, e)} colored for {@code role}. If the caret falls inside the token, the run
+     * is split so the caret character keeps the token color and gains an underline, while its
+     * neighbours stay plainly colored.
      */
     private static void emit(StringBuilder out, String src, int s, int e, Role role, int caretCol) {
         AttributedStyle style = styleFor(role);

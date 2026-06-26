@@ -9,26 +9,25 @@ import org.jline.utils.AttributedString;
 import org.jline.utils.AttributedStyle;
 
 /**
- * Color and style provider used by the TUI widgets, the goal runner, and the
- * help/command renderers. Implementations map jk's semantic roles (error,
- * success, active accent, gradients, …) onto truecolor {@link AttributedStyle}s.
- * Terminals without 24-bit color degrade to the nearest indexed color via
- * JLine's renderer.
+ * Color and style provider used by the TUI widgets, the goal runner, and the help/command
+ * renderers. Implementations map jk's semantic roles (error, success, active accent, gradients, …)
+ * onto truecolor {@link AttributedStyle}s. Terminals without 24-bit color degrade to the nearest
+ * indexed color via JLine's renderer.
  *
- * <p>The active theme is resolved through the static {@link #active()} accessor;
- * call sites pull styles via {@code Theme.active().error()} etc. The two
- * theme-independent helpers — {@link #colorEnabled()} and
- * {@link #colorize(String, AttributedStyle)} — remain static on this interface.
+ * <p>The active theme is resolved through the static {@link #active()} accessor; call sites pull
+ * styles via {@code Theme.active().error()} etc. The two theme-independent helpers — {@link
+ * #colorEnabled()} and {@link #colorize(String, AttributedStyle)} — remain static on this
+ * interface.
  *
- * <p>Color emission is decided by the user's resolved {@code --color}
- * choice in {@link ActiveConfig} (see {@link JkConfig.ColorChoice}):
+ * <p>Color emission is decided by the user's resolved {@code --color} choice in {@link
+ * ActiveConfig} (see {@link JkConfig.ColorChoice}):
+ *
  * <ul>
- *   <li>{@code ALWAYS} — emit color unconditionally.</li>
- *   <li>{@code NEVER} — strip all foreground colors. Text attributes
- *       (bold, italic, faint) survive — color choice is about color.</li>
- *   <li>{@code AUTO} (default) — emit color unless the
- *       <a href="https://no-color.org/">NO_COLOR</a> env var is set, or
- *       stdout is not attached to a terminal.</li>
+ *   <li>{@code ALWAYS} — emit color unconditionally.
+ *   <li>{@code NEVER} — strip all foreground colors. Text attributes (bold, italic, faint) survive
+ *       — color choice is about color.
+ *   <li>{@code AUTO} (default) — emit color unless the <a href="https://no-color.org/">NO_COLOR</a>
+ *       env var is set, or stdout is not attached to a terminal.
  * </ul>
  */
 public interface Theme {
@@ -40,7 +39,10 @@ public interface Theme {
     /** Inactive/completed rail glyphs (┌ │ └) and completed step prompts — Jk Dark bright black. */
     AttributedStyle darkGray();
 
-    /** 40% darker than {@link #darkGray()} (bright black) — the dimmest gray, for ultra-low-emphasis filler. */
+    /**
+     * 40% darker than {@link #darkGray()} (bright black) — the dimmest gray, for ultra-low-emphasis
+     * filler.
+     */
     AttributedStyle darkBlack();
 
     /** The {@link #darkBlack()} color as an {@link Rgb} — for use as a background fill. */
@@ -70,10 +72,9 @@ public interface Theme {
     AttributedStyle brightWhite();
 
     /**
-     * Dark gray (same as the inactive rail glyphs). Used for the prompt line of
-     * a step once it has been settled — the gray de-emphasises the question
-     * against the focused-white text of the active step, while matching the
-     * rail's color above and below.
+     * Dark gray (same as the inactive rail glyphs). Used for the prompt line of a step once it has
+     * been settled — the gray de-emphasises the question against the focused-white text of the active
+     * step, while matching the rail's color above and below.
      */
     AttributedStyle completedPrompt();
 
@@ -95,7 +96,10 @@ public interface Theme {
     /** Cyan — used to label structural keys like scopes (Jk Dark cyan). */
     AttributedStyle cyan();
 
-    /** Black — the darkest palette color; used for low-emphasis filler like dotted leaders (Jk Dark normal black). */
+    /**
+     * Black — the darkest palette color; used for low-emphasis filler like dotted leaders (Jk Dark
+     * normal black).
+     */
     AttributedStyle black();
 
     /** Bright green — used for the settled-answer arrow and "➜" prefixes. */
@@ -116,7 +120,10 @@ public interface Theme {
     /** Coordinate version segment — bright white ({@code #ECEFF1}). */
     AttributedStyle coordVersion();
 
-    /** Chip / pill badge (jk tree scope sections, jk explain unit indices) — black on a bright-black background. */
+    /**
+     * Chip / pill badge (jk tree scope sections, jk explain unit indices) — black on a bright-black
+     * background.
+     */
     AttributedStyle scopeBadge();
 
     /** Header segment (jk explain's "Build Plan for …") — near-black on a cyan background. */
@@ -150,11 +157,10 @@ public interface Theme {
     Rgb goalFailColor();
 
     /**
-     * Layer {@code bg} as the background of {@code base}, keeping its foreground and
-     * attributes (unless {@code --color} disables color). Used to build the
-     * goal-header pill: the spinner and name sit on the bar gradient's left-most
-     * color, and the U+E0B0 cap pairs that same color (as foreground) with the bar's
-     * lead color (as background) so it tapers the pill into the bar.
+     * Layer {@code bg} as the background of {@code base}, keeping its foreground and attributes
+     * (unless {@code --color} disables color). Used to build the goal-header pill: the spinner and
+     * name sit on the bar gradient's left-most color, and the U+E0B0 cap pairs that same color (as
+     * foreground) with the bar's lead color (as background) so it tapers the pill into the bar.
      */
     AttributedStyle withBackground(AttributedStyle base, Rgb bg);
 
@@ -211,9 +217,9 @@ public interface Theme {
     AttributedStyle synAnnotation();
 
     /**
-     * Namespace / package qualifier (the {@code java.util} in {@code java.util.List},
-     * the package segments of a stack-frame class) — GitHub gray {@code #8b949e}, so
-     * the qualifier recedes behind the simple type name.
+     * Namespace / package qualifier (the {@code java.util} in {@code java.util.List}, the package
+     * segments of a stack-frame class) — GitHub gray {@code #8b949e}, so the qualifier recedes behind
+     * the simple type name.
      */
     AttributedStyle synNamespace();
 
@@ -224,19 +230,17 @@ public interface Theme {
     AttributedStyle errorLabel();
 
     /**
-     * The {@code tip:} suggestion accent in error blocks, as a raw SGR parameter
-     * body (no {@code ESC[} / {@code m}). This is a legacy 16-color accent
-     * (bright green) that does not round-trip byte-identically through
-     * {@link AttributedStyle#toAnsi()}, so it is sourced as a literal body here
-     * — keeping the color choice in the theme layer, not in the renderer.
+     * The {@code tip:} suggestion accent in error blocks, as a raw SGR parameter body (no {@code
+     * ESC[} / {@code m}). This is a legacy 16-color accent (bright green) that does not round-trip
+     * byte-identically through {@link AttributedStyle#toAnsi()}, so it is sourced as a literal body
+     * here — keeping the color choice in the theme layer, not in the renderer.
      */
     String tip();
 
     /**
-     * The {@code --help} hint accent in error blocks, as a raw SGR parameter
-     * body (no {@code ESC[} / {@code m}). A legacy 16-color accent (bold bright
-     * cyan); see {@link #tip()} for why it is a literal body rather than an
-     * {@link AttributedStyle}.
+     * The {@code --help} hint accent in error blocks, as a raw SGR parameter body (no {@code ESC[} /
+     * {@code m}). A legacy 16-color accent (bold bright cyan); see {@link #tip()} for why it is a
+     * literal body rather than an {@link AttributedStyle}.
      */
     String helpHint();
 
@@ -258,12 +262,11 @@ public interface Theme {
     AttributedString gradientHeader(String text);
 
     /**
-     * Same gradient as {@link #gradientHeader(String)} but returned as a raw
-     * ANSI string with {@code 1;38;2;R;G;B} (bold-first truecolor) in every
-     * per-codepoint SGR sequence. Use this when you need the bold attribute
-     * stamped on each char's SGR — {@link AttributedString#toAnsi} emits bold
-     * only on the first char's SGR and relies on persistence, which can look
-     * not-bold against vivid gradient colors on some terminal renderings.
+     * Same gradient as {@link #gradientHeader(String)} but returned as a raw ANSI string with {@code
+     * 1;38;2;R;G;B} (bold-first truecolor) in every per-codepoint SGR sequence. Use this when you
+     * need the bold attribute stamped on each char's SGR — {@link AttributedString#toAnsi} emits bold
+     * only on the first char's SGR and relies on persistence, which can look not-bold against vivid
+     * gradient colors on some terminal renderings.
      */
     String gradientHeaderAnsi(String text);
 
@@ -307,21 +310,17 @@ public interface Theme {
     }
 
     /**
-     * Wrap {@code text} in the ANSI SGR codes for {@code style} so the
-     * result can be written to a {@code PrintStream} / {@code System.out}
-     * verbatim. Bypasses {@link org.jline.utils.AttributedString#toAnsi()}
-     * — that path rewrites single-line box-drawing glyphs to ASCII when
-     * called without a terminal, which mangles widgets that use box
-     * characters.
+     * Wrap {@code text} in the ANSI SGR codes for {@code style} so the result can be written to a
+     * {@code PrintStream} / {@code System.out} verbatim. Bypasses {@link
+     * org.jline.utils.AttributedString#toAnsi()} — that path rewrites single-line box-drawing glyphs
+     * to ASCII when called without a terminal, which mangles widgets that use box characters.
      *
-     * <p>Emits jk's canonical <em>attribute-leading</em> SGR order: every
-     * text-attribute code (bold {@code 1}, faint {@code 2}, italic {@code 3},
-     * underline {@code 4}, …) is placed <em>before</em> the truecolor
-     * {@code 38;2;r;g;b}/{@code 48;2;r;g;b} color group. jline's
-     * {@link AttributedStyle#toAnsi()} emits the color group first and the
-     * attributes last; we re-order so the bytes match jk's historical output
-     * (e.g. {@code 1;38;2;0;188;212} rather than {@code 38;2;0;188;212;1}).
-     * Terminals ignore SGR parameter order, so this is visually identical for
+     * <p>Emits jk's canonical <em>attribute-leading</em> SGR order: every text-attribute code (bold
+     * {@code 1}, faint {@code 2}, italic {@code 3}, underline {@code 4}, …) is placed <em>before</em>
+     * the truecolor {@code 38;2;r;g;b}/{@code 48;2;r;g;b} color group. jline's {@link
+     * AttributedStyle#toAnsi()} emits the color group first and the attributes last; we re-order so
+     * the bytes match jk's historical output (e.g. {@code 1;38;2;0;188;212} rather than {@code
+     * 38;2;0;188;212;1}). Terminals ignore SGR parameter order, so this is visually identical for
      * every consumer — it just makes one canonical byte order across the module.
      */
     static String colorize(String text, AttributedStyle style) {
@@ -333,10 +332,10 @@ public interface Theme {
     }
 
     /**
-     * Re-order a {@code ;}-separated SGR body so the truecolor color group(s)
-     * ({@code 38;2;r;g;b} / {@code 48;2;r;g;b}) come last and every other
-     * (attribute) code keeps its original relative order in front. jline emits
-     * color-first/attribute-last; jk's canonical order is attribute-first.
+     * Re-order a {@code ;}-separated SGR body so the truecolor color group(s) ({@code 38;2;r;g;b} /
+     * {@code 48;2;r;g;b}) come last and every other (attribute) code keeps its original relative
+     * order in front. jline emits color-first/attribute-last; jk's canonical order is
+     * attribute-first.
      */
     private static String attributeLeading(String body) {
         String[] params = body.split(";");

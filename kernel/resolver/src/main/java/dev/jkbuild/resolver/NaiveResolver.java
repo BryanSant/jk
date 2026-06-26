@@ -19,18 +19,17 @@ import java.util.Set;
 import java.util.TreeMap;
 
 /**
- * Naive breadth-first resolver. Walks each declared dep's
- * {@link EffectivePom}, follows {@code compile} and {@code runtime}
- * scopes only, and picks the highest version it sees per module —
+ * Naive breadth-first resolver. Walks each declared dep's {@link EffectivePom}, follows {@code
+ * compile} and {@code runtime} scopes only, and picks the highest version it sees per module —
  * Gradle / Cargo semantics.
  *
  * <p>v0.1 limitations (all addressed by PubGrub in the next session):
+ *
  * <ul>
- *   <li>Version selectors are treated as exact pins. Caret / tilde / range
- *       resolution and {@code maven-metadata.xml} lookups arrive with PubGrub.</li>
- *   <li>No prose diagnostics on conflict — the "highest wins" pick is
- *       silent.</li>
- *   <li>Optional transitives and {@code &lt;exclusions&gt;} are ignored.</li>
+ *   <li>Version selectors are treated as exact pins. Caret / tilde / range resolution and {@code
+ *       maven-metadata.xml} lookups arrive with PubGrub.
+ *   <li>No prose diagnostics on conflict — the "highest wins" pick is silent.
+ *   <li>Optional transitives and {@code &lt;exclusions&gt;} are ignored.
  * </ul>
  */
 public final class NaiveResolver implements Resolver {

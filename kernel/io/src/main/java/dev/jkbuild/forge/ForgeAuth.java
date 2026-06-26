@@ -5,20 +5,19 @@ import java.util.Optional;
 import java.util.function.Function;
 
 /**
- * Resolves a usable token for a {@code (provider, host)} pair, in priority
- * order. The chain is provider-neutral — each {@link ForgeKind} supplies the
- * variable names and native CLI to consult:
+ * Resolves a usable token for a {@code (provider, host)} pair, in priority order. The chain is
+ * provider-neutral — each {@link ForgeKind} supplies the variable names and native CLI to consult:
  *
  * <ol>
- *   <li>{@code JK_<KIND>_TOKEN} — jk's own override (CI / scripting wins);</li>
- *   <li>ecosystem-native env vars ({@code GH_TOKEN}, {@code GITLAB_TOKEN}, …);</li>
- *   <li>native CLI piggyback ({@code gh auth token});</li>
- *   <li>jk's stored per-host credential;</li>
- *   <li>(interactive only) the device flow — see {@link DeviceFlow}.</li>
+ *   <li>{@code JK_<KIND>_TOKEN} — jk's own override (CI / scripting wins);
+ *   <li>ecosystem-native env vars ({@code GH_TOKEN}, {@code GITLAB_TOKEN}, …);
+ *   <li>native CLI piggyback ({@code gh auth token});
+ *   <li>jk's stored per-host credential;
+ *   <li>(interactive only) the device flow — see {@link DeviceFlow}.
  * </ol>
  *
- * <p>Env and CLI access are injected so the resolver is fully unit-testable
- * without touching the real environment or spawning processes.
+ * <p>Env and CLI access are injected so the resolver is fully unit-testable without touching the
+ * real environment or spawning processes.
  */
 public final class ForgeAuth {
 
@@ -38,9 +37,8 @@ public final class ForgeAuth {
     }
 
     /**
-     * Steps 1–4: resolve a token without ever prompting. Returns empty when
-     * nothing is configured and the caller should fall back to an
-     * interactive login.
+     * Steps 1–4: resolve a token without ever prompting. Returns empty when nothing is configured and
+     * the caller should fall back to an interactive login.
      */
     public Optional<ResolvedToken> resolveSilently(ForgeKind kind, String host) {
         // 1. jk's own override
@@ -72,8 +70,8 @@ public final class ForgeAuth {
     }
 
     /**
-     * Resolve the effective host: explicit value wins, else the provider's
-     * default. Providers without a default (Gitea/Forgejo) require one.
+     * Resolve the effective host: explicit value wins, else the provider's default. Providers without
+     * a default (Gitea/Forgejo) require one.
      */
     public static String resolveHost(ForgeKind kind, String host) {
         String h = nonBlank(host);

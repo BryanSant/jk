@@ -32,9 +32,8 @@ import java.nio.file.Path;
 import java.util.List;
 
 /**
- * {@code jk verify} — re-build the project into a clean scratch directory
- * and compare the produced jar's SHA-256 against the existing
- * {@code target/<artifact>-<version>.jar} (PRD §23.7).
+ * {@code jk verify} — re-build the project into a clean scratch directory and compare the produced
+ * jar's SHA-256 against the existing {@code target/<artifact>-<version>.jar} (PRD §23.7).
  */
 public final class VerifyBuildCommand implements CliCommand {
 

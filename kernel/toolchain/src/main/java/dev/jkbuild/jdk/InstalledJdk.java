@@ -5,10 +5,9 @@ import java.nio.file.Path;
 import java.util.Objects;
 
 /**
- * A JDK that {@link JdkInstaller} has placed under the IntelliJ JDK
- * directory ({@code ~/.jdks} on Linux/Windows,
- * {@code ~/Library/Java/JavaVirtualMachines} on macOS), overridable via
- * {@code JK_JDKS_DIR}.
+ * A JDK that {@link JdkInstaller} has placed under the IntelliJ JDK directory ({@code ~/.jdks} on
+ * Linux/Windows, {@code ~/Library/Java/JavaVirtualMachines} on macOS), overridable via {@code
+ * JK_JDKS_DIR}.
  */
 public record InstalledJdk(String identifier, Path home) {
 

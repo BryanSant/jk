@@ -71,8 +71,12 @@ public final class AuthTokenCommand implements CliCommand {
         Optional<ResolvedToken> token =
                 AuthCommand.authFor(credentialsDir).resolveSilently(target.kind(), resolvedHost);
         if (token.isEmpty()) {
-            System.err.println("error: not logged in to " + target.kind().displayName() + " (" + resolvedHost
-                    + "). Run: jk auth login " + target.kind().id());
+            System.err.println("error: not logged in to "
+                    + target.kind().displayName()
+                    + " ("
+                    + resolvedHost
+                    + "). Run: jk auth login "
+                    + target.kind().id());
             return 1;
         }
         System.out.println(token.get().value());

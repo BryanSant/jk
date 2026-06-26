@@ -2,9 +2,9 @@
 package dev.jkbuild.cli.theme;
 
 /**
- * A two-stop linear color gradient. jk keeps several named gradients (title,
- * progress, spinner) so each can be tuned independently; {@link #at(double)}
- * is the per-position lerp every consumer shares.
+ * A two-stop linear color gradient. jk keeps several named gradients (title, progress, spinner) so
+ * each can be tuned independently; {@link #at(double)} is the per-position lerp every consumer
+ * shares.
  */
 public record Gradient(Rgb start, Rgb end) {
 

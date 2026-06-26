@@ -19,22 +19,20 @@ import javax.xml.stream.XMLStreamReader;
 /**
  * Read-only view of the JDKs an IDE has registered in its {@code jdk.table.xml}.
  *
- * <p>JetBrains IDEs (IntelliJ IDEA, PyCharm, GoLand, …) and Android Studio each
- * keep a global SDK list at
- * {@code <config>/<Product><Version>/options/jdk.table.xml}. A JDK that sits in
- * IntelliJ's install directory ({@code ~/.jdks} /
- * {@code ~/Library/Java/JavaVirtualMachines}) <em>and</em> appears in one of
- * these tables is genuinely IDE-managed: the IDE owns its lifecycle and offers
+ * <p>JetBrains IDEs (IntelliJ IDEA, PyCharm, GoLand, …) and Android Studio each keep a global SDK
+ * list at {@code <config>/<Product><Version>/options/jdk.table.xml}. A JDK that sits in IntelliJ's
+ * install directory ({@code ~/.jdks} / {@code ~/Library/Java/JavaVirtualMachines}) <em>and</em>
+ * appears in one of these tables is genuinely IDE-managed: the IDE owns its lifecycle and offers
  * its own removal UI, so {@code jk} must not delete it out from under the IDE.
  *
- * <p>This class only ever <strong>reads</strong> the tables — it never writes
- * them — so it carries none of the "clobber the IDE's in-memory copy" risk that
- * editing would. Discovery + parse is lazy (first {@link #isManaged} call) and
- * cached for the process lifetime; on a short-lived CLI that's one pass.
+ * <p>This class only ever <strong>reads</strong> the tables — it never writes them — so it carries
+ * none of the "clobber the IDE's in-memory copy" risk that editing would. Discovery + parse is lazy
+ * (first {@link #isManaged} call) and cached for the process lifetime; on a short-lived CLI that's
+ * one pass.
  *
- * <p>{@code homePath} entries use the {@code $USER_HOME$} macro and, on macOS,
- * point at the {@code Contents/Home} runtime — the same canonical {@code JAVA_HOME}
- * the discovery probes resolve, so a canonicalised comparison lines up.
+ * <p>{@code homePath} entries use the {@code $USER_HOME$} macro and, on macOS, point at the {@code
+ * Contents/Home} runtime — the same canonical {@code JAVA_HOME} the discovery probes resolve, so a
+ * canonicalised comparison lines up.
  */
 public final class IntellijJdkTable {
 
@@ -78,9 +76,9 @@ public final class IntellijJdkTable {
     }
 
     /**
-     * Vendor directories that may contain {@code <Product><Version>} config
-     * folders. Both JetBrains products and Android Studio (under {@code Google})
-     * live beside each other under the platform's per-user config base.
+     * Vendor directories that may contain {@code <Product><Version>} config folders. Both JetBrains
+     * products and Android Studio (under {@code Google}) live beside each other under the platform's
+     * per-user config base.
      */
     static List<Path> defaultVendorRoots(Function<String, String> env, String osName, String userHome) {
         String lower = osName.toLowerCase(Locale.ROOT);

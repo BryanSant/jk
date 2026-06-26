@@ -12,9 +12,9 @@ import java.util.List;
 import java.util.stream.Stream;
 
 /**
- * Pure source-set helpers shared by the build pipeline and the git-source
- * builder. Extracted out of the CLI's {@code CompileCommand} so embedders can
- * drive compilation inputs without depending on {@code :cli}.
+ * Pure source-set helpers shared by the build pipeline and the git-source builder. Extracted out of
+ * the CLI's {@code CompileCommand} so embedders can drive compilation inputs without depending on
+ * {@code :cli}.
  */
 public final class CompileSupport {
 
@@ -24,13 +24,12 @@ public final class CompileSupport {
     public record Languages(boolean java, boolean kotlin) {}
 
     /**
-     * Resolve which languages a project compiles. Explicit {@code jk.toml}
-     * opt-ins win: {@code java = <int>} enables Java, {@code kotlin = "<ver>"}
-     * enables Kotlin (either or both). When <em>neither</em> is declared, infer
-     * from the tree — a {@code src/main/java} dir or any {@code .java} under
-     * {@code src/} enables Java (at the jdk release); a {@code src/main/kotlin}
-     * dir or any {@code .kt} enables Kotlin (at the default release). A project
-     * with nothing to go on defaults to Java (a bare {@code jdk = N} project).
+     * Resolve which languages a project compiles. Explicit {@code jk.toml} opt-ins win: {@code java =
+     * <int>} enables Java, {@code kotlin = "<ver>"} enables Kotlin (either or both). When
+     * <em>neither</em> is declared, infer from the tree — a {@code src/main/java} dir or any {@code
+     * .java} under {@code src/} enables Java (at the jdk release); a {@code src/main/kotlin} dir or
+     * any {@code .kt} enables Kotlin (at the default release). A project with nothing to go on
+     * defaults to Java (a bare {@code jdk = N} project).
      */
     public static Languages resolveLanguages(JkBuild.Project project, Path projectDir) {
         boolean javaDeclared = project.java() > 0;
@@ -70,18 +69,19 @@ public final class CompileSupport {
      * Whether this project uses the simple (flat) source layout.
      *
      * <p>Determined by {@code project.layout} in {@code jk.toml}:
+     *
      * <ul>
-     *   <li>{@code "simple"} — always use simple layout.</li>
-     *   <li>{@code "traditional"} — always use Maven layout.</li>
-     *   <li>{@code "auto"} or absent — infer from the directory tree: simple
-     *       when both {@code src/main/kotlin} and {@code src/main/java} are
-     *       absent or empty, traditional otherwise.</li>
+     *   <li>{@code "simple"} — always use simple layout.
+     *   <li>{@code "traditional"} — always use Maven layout.
+     *   <li>{@code "auto"} or absent — infer from the directory tree: simple when both {@code
+     *       src/main/kotlin} and {@code src/main/java} are absent or empty, traditional otherwise.
      * </ul>
      *
      * <p>Simple layout source roots:
+     *
      * <ul>
-     *   <li>Main: {@code ./src}  (all {@code .kt} and {@code .java} files)</li>
-     *   <li>Test: {@code ./test} (all {@code .kt} and {@code .java} files)</li>
+     *   <li>Main: {@code ./src} (all {@code .kt} and {@code .java} files)
+     *   <li>Test: {@code ./test} (all {@code .kt} and {@code .java} files)
      * </ul>
      */
     public static boolean isSimpleLayout(JkBuild.Project project, Path projectDir) {
@@ -94,7 +94,9 @@ public final class CompileSupport {
         };
     }
 
-    /** @deprecated Use {@link #isSimpleLayout(JkBuild.Project, Path)} instead. */
+    /**
+     * @deprecated Use {@link #isSimpleLayout(JkBuild.Project, Path)} instead.
+     */
     @Deprecated
     public static boolean isCompact(JkBuild.Project project, Path projectDir) {
         return isSimpleLayout(project, projectDir);
@@ -121,9 +123,10 @@ public final class CompileSupport {
 
     /**
      * All main {@code .kt} files for a project.
+     *
      * <ul>
-     *   <li>Standard layout: {@code src/main/kotlin/} and {@code src/main/java/}</li>
-     *   <li>Compact layout:  {@code src/}  (all {@code .kt} files)</li>
+     *   <li>Standard layout: {@code src/main/kotlin/} and {@code src/main/java/}
+     *   <li>Compact layout: {@code src/} (all {@code .kt} files)
      * </ul>
      */
     public static List<Path> collectKotlinSources(Path projectDir, boolean compact) throws IOException {
@@ -138,9 +141,10 @@ public final class CompileSupport {
 
     /**
      * All test {@code .kt} files for a project.
+     *
      * <ul>
-     *   <li>Standard layout: {@code src/test/kotlin/} and {@code src/test/java/}</li>
-     *   <li>Compact layout:  {@code test/} (all {@code .kt} files)</li>
+     *   <li>Standard layout: {@code src/test/kotlin/} and {@code src/test/java/}
+     *   <li>Compact layout: {@code test/} (all {@code .kt} files)
      * </ul>
      */
     public static List<Path> collectKotlinTestSources(Path projectDir, boolean compact) throws IOException {
@@ -154,18 +158,16 @@ public final class CompileSupport {
     }
 
     /**
-     * The {@code -jvm-target} kotlinc should use for a given Java release.
-     * Kotlin tops out at 21 today; targeting a newer JDK is fine because Java is
-     * bytecode-backward-compatible.
+     * The {@code -jvm-target} kotlinc should use for a given Java release. Kotlin tops out at 21
+     * today; targeting a newer JDK is fine because Java is bytecode-backward-compatible.
      */
     public static int kotlinJvmTarget(int release) {
         return Math.min(release, 21);
     }
 
     /**
-     * Pick the active profile. Explicit {@code explicitName} wins; otherwise the
-     * {@code ci} profile is auto-selected when running on CI. Returns null when
-     * no profile applies.
+     * Pick the active profile. Explicit {@code explicitName} wins; otherwise the {@code ci} profile
+     * is auto-selected when running on CI. Returns null when no profile applies.
      */
     public static Profile resolveProfile(Profiles profiles, String explicitName) {
         if (explicitName != null && !explicitName.isBlank()) {

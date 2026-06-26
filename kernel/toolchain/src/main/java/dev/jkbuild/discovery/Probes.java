@@ -6,13 +6,12 @@ import java.util.List;
 import java.util.ServiceLoader;
 
 /**
- * The default {@link LocalToolProbe} chain, in the order callers should
- * consult them. ServiceLoader-discovered probes are appended after the
- * built-ins so a plugin can extend (but not preempt) the default order.
+ * The default {@link LocalToolProbe} chain, in the order callers should consult them.
+ * ServiceLoader-discovered probes are appended after the built-ins so a plugin can extend (but not
+ * preempt) the default order.
  *
- * <p>Order rationale: explicit user intent first ({@code env}), then the
- * version managers in rough popularity order for JVM developers, then
- * OS-level system installs as a last resort.
+ * <p>Order rationale: explicit user intent first ({@code env}), then the version managers in rough
+ * popularity order for JVM developers, then OS-level system installs as a last resort.
  */
 public final class Probes {
 

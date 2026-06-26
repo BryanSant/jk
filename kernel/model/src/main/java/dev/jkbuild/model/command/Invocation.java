@@ -8,10 +8,9 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * The result of parsing an argument vector against a {@link Command}: the
- * option values, boolean flag states, and positional arguments, keyed by each
- * option's {@link Opt#canonicalName()}. Commands read their inputs from here
- * instead of from picocli-populated fields.
+ * The result of parsing an argument vector against a {@link Command}: the option values, boolean
+ * flag states, and positional arguments, keyed by each option's {@link Opt#canonicalName()}.
+ * Commands read their inputs from here instead of from picocli-populated fields.
  *
  * <p>Built by the arg parser via {@link #builder()}.
  */

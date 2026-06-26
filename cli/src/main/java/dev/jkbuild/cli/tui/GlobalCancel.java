@@ -6,19 +6,18 @@ import dev.jkbuild.cli.theme.Theme;
 import org.jline.utils.Signals;
 
 /**
- * App-level SIGINT handler: prints {@code ‼ Canceled by user} in red, performs
- * an SGR reset, and halts with exit code 2.
+ * App-level SIGINT handler: prints {@code ‼ Canceled by user} in red, performs an SGR reset, and
+ * halts with exit code 2.
  *
- * <p>Wizards temporarily override this via
- * {@link org.jline.terminal.Terminal#handle} so Ctrl-C inside a wizard runs
- * the wizard's own cancel path instead. The wizard re-calls {@link #install}
- * from its {@code finally} block so the global default is restored on exit —
- * JLine's "previous handler" tracking doesn't reliably round-trip the
- * underlying {@code sun.misc.Signal} handler back into place.
+ * <p>Wizards temporarily override this via {@link org.jline.terminal.Terminal#handle} so Ctrl-C
+ * inside a wizard runs the wizard's own cancel path instead. The wizard re-calls {@link #install}
+ * from its {@code finally} block so the global default is restored on exit — JLine's "previous
+ * handler" tracking doesn't reliably round-trip the underlying {@code sun.misc.Signal} handler back
+ * into place.
  *
- * <p>Uses {@link Signals#register} (JLine's reflective wrapper around
- * {@code sun.misc.Signal}) instead of calling that class directly, so the
- * compiler doesn't emit "internal proprietary API" warnings.
+ * <p>Uses {@link Signals#register} (JLine's reflective wrapper around {@code sun.misc.Signal})
+ * instead of calling that class directly, so the compiler doesn't emit "internal proprietary API"
+ * warnings.
  */
 public final class GlobalCancel {
 

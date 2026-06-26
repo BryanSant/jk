@@ -21,9 +21,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
- * End-to-end tests for the jk install <file> → jk lock → jk build/check
- * pipeline. Verifies that locally-installed JARs are usable as compile-time
- * dependencies and that incremental compilation behaves correctly against them.
+ * End-to-end tests for the jk install <file> → jk lock → jk build/check pipeline. Verifies that
+ * locally-installed JARs are usable as compile-time dependencies and that incremental compilation
+ * behaves correctly against them.
  */
 class InstallAndBuildTest {
 
@@ -195,8 +195,8 @@ class InstallAndBuildTest {
     // --- helpers -----------------------------------------------------------
 
     /**
-     * Compile {@code fqcn → source} entries and package the resulting
-     * {@code .class} files into {@code workDir/<name>.jar}.
+     * Compile {@code fqcn → source} entries and package the resulting {@code .class} files into
+     * {@code workDir/<name>.jar}.
      */
     private static Path buildJar(Path workDir, String name, Map<String, String> sources) throws IOException {
         Path src = workDir.resolve("src");

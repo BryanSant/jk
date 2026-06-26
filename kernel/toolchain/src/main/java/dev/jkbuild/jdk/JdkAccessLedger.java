@@ -13,38 +13,39 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * Append-only journal of JDK usage events. Lives at
- * {@code $JK_JDKS_DIR/.access.log} (default: {@code ~/.jk/jdks/.access.log}).
+ * Append-only journal of JDK usage events. Lives at {@code $JK_JDKS_DIR/.access.log} (default:
+ * {@code ~/.jk/jdks/.access.log}).
  *
- * <p>Purpose: build the long-tail "which JDKs does this user actually
- * use, and how often" signal that future wizards lean on:
+ * <p>Purpose: build the long-tail "which JDKs does this user actually use, and how often" signal
+ * that future wizards lean on:
  *
  * <ul>
- *   <li>{@code jk jdk list --by-usage} — sort frequently-used first.</li>
- *   <li>{@code jk jdk default} wizard — surface preferences as defaults.</li>
- *   <li>{@code jk jdk uninstall} wizard — flag dormant installs as
- *       removal candidates ("last used N days ago").</li>
+ *   <li>{@code jk jdk list --by-usage} — sort frequently-used first.
+ *   <li>{@code jk jdk default} wizard — surface preferences as defaults.
+ *   <li>{@code jk jdk uninstall} wizard — flag dormant installs as removal candidates ("last used N
+ *       days ago").
  * </ul>
  *
- * <p>This commit only writes the journal. Wizard surfacing lands in
- * follow-ups so the data can build up first.
+ * <p>This commit only writes the journal. Wizard surfacing lands in follow-ups so the data can
+ * build up first.
  *
  * <p>Format (text, append-only):
+ *
  * <pre>{@code
- *   <epoch-millis>\t<event>\t<jdkIdentifier>
+ * <epoch-millis>\t<event>\t<jdkIdentifier>
  * }</pre>
  *
  * <p>Events:
+ *
  * <ul>
- *   <li>{@code resolve} — JDK was resolved for a project build / run / test
- *       (the "used" signal).</li>
- *   <li>{@code install} — JDK was just installed via {@code jk jdk install}.</li>
- *   <li>{@code default-set} — JDK was promoted to system default.</li>
- *   <li>{@code pin} — JDK was pinned via {@code jk jdk pin}.</li>
+ *   <li>{@code resolve} — JDK was resolved for a project build / run / test (the "used" signal).
+ *   <li>{@code install} — JDK was just installed via {@code jk jdk install}.
+ *   <li>{@code default-set} — JDK was promoted to system default.
+ *   <li>{@code pin} — JDK was pinned via {@code jk jdk pin}.
  * </ul>
  *
- * <p>Best-effort: every method swallows IO errors. A missed event just
- * means slightly worse usage signal; nothing breaks.
+ * <p>Best-effort: every method swallows IO errors. A missed event just means slightly worse usage
+ * signal; nothing breaks.
  */
 public final class JdkAccessLedger {
 
@@ -56,8 +57,8 @@ public final class JdkAccessLedger {
     private final Path file;
 
     /**
-     * Default-path constructor — writes under {@link JkDirs#jdksDir()}.
-     * Callers that need a custom path (tests) use {@link #JdkAccessLedger(Path)}.
+     * Default-path constructor — writes under {@link JkDirs#jdksDir()}. Callers that need a custom
+     * path (tests) use {@link #JdkAccessLedger(Path)}.
      */
     public static JdkAccessLedger atDefaultPath() {
         return new JdkAccessLedger(JkDirs.jdks().resolve(FILE_NAME));
@@ -68,8 +69,8 @@ public final class JdkAccessLedger {
     }
 
     /**
-     * Record that {@code identifier} was just accessed with {@code event}.
-     * Single-line append; no exceptions leak.
+     * Record that {@code identifier} was just accessed with {@code event}. Single-line append; no
+     * exceptions leak.
      */
     public void touch(String identifier, String event) {
         if (identifier == null || identifier.isBlank()) return;
@@ -111,8 +112,8 @@ public final class JdkAccessLedger {
     }
 
     /**
-     * Rewrite as one line per identifier (latest event + millis + total
-     * count). Idempotent; no-op below 1 MiB.
+     * Rewrite as one line per identifier (latest event + millis + total count). Idempotent; no-op
+     * below 1 MiB.
      */
     public long compactIfLarge() throws IOException {
         if (!Files.isRegularFile(file)) return 0;
@@ -152,9 +153,8 @@ public final class JdkAccessLedger {
     }
 
     /**
-     * One row in the rolled-up view. {@code count} is the number of
-     * times this identifier appears anywhere in the journal; {@code event}
-     * + {@code millis} are the latest occurrence.
+     * One row in the rolled-up view. {@code count} is the number of times this identifier appears
+     * anywhere in the journal; {@code event} + {@code millis} are the latest occurrence.
      */
     public record Entry(String identifier, String event, long millis, int count) {}
 }

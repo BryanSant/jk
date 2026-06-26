@@ -20,6 +20,7 @@ import java.util.Map;
  * Entry point for the {@code jk-image-runner} worker subprocess.
  *
  * <p>Receives a single argument: path to a line-oriented spec file:
+ *
  * <pre>
  * MAIN_JAR  /abs/path/to/app-1.0.jar
  * ARTIFACT  app
@@ -38,6 +39,7 @@ import java.util.Map;
  * </pre>
  *
  * <p>Streams {@value #PREFIX}-prefixed NDJSON to stdout:
+ *
  * <pre>
  * ##JKIM:{"t":"progress","msg":"building layers"}
  * ##JKIM:{"t":"result","ok":true,"ref":"registry/app:1.0"}

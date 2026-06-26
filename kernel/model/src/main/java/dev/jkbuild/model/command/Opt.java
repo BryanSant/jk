@@ -4,25 +4,26 @@ package dev.jkbuild.model.command;
 import java.util.List;
 
 /**
- * A command-line option (a {@code --flag} or {@code --name <value>}), declared
- * as data rather than a picocli annotation. The set of fields is exactly what
- * jk's commands relied on from {@code @Option}: multiple names, an optional
- * value (with label), boolean flags, repeatable + comma-split values, hidden,
- * negatable ({@code --no-x}), required, and an optional-argument fallback.
+ * A command-line option (a {@code --flag} or {@code --name <value>}), declared as data rather than
+ * a picocli annotation. The set of fields is exactly what jk's commands relied on from
+ * {@code @Option}: multiple names, an optional value (with label), boolean flags, repeatable +
+ * comma-split values, hidden, negatable ({@code --no-x}), required, and an optional-argument
+ * fallback.
  *
- * <p>Build instances with {@link #flag} / {@link #value} and the {@code with*}
- * tweaks, so a command's {@code options()} reads as a short declarative list.
+ * <p>Build instances with {@link #flag} / {@link #value} and the {@code with*} tweaks, so a
+ * command's {@code options()} reads as a short declarative list.
  *
- * @param names         option names, e.g. {@code ["-q", "--quiet"]}; the last is canonical
- * @param paramLabel    label for the value in help, or {@code null} for a boolean flag
- * @param description   help text
- * @param takesValue    true when the option consumes a value (false ⇒ boolean flag)
- * @param repeatable    true when the option may appear multiple times (List value)
- * @param split         delimiter to split a single value into many (e.g. {@code ","}), or {@code null}
- * @param hidden        true to omit from help
- * @param negatable     true when a {@code --no-<name>} form is also accepted
- * @param required      true when the option must be present
- * @param fallbackValue value used when the option appears without an argument (optional-arg), or {@code null}
+ * @param names option names, e.g. {@code ["-q", "--quiet"]}; the last is canonical
+ * @param paramLabel label for the value in help, or {@code null} for a boolean flag
+ * @param description help text
+ * @param takesValue true when the option consumes a value (false ⇒ boolean flag)
+ * @param repeatable true when the option may appear multiple times (List value)
+ * @param split delimiter to split a single value into many (e.g. {@code ","}), or {@code null}
+ * @param hidden true to omit from help
+ * @param negatable true when a {@code --no-<name>} form is also accepted
+ * @param required true when the option must be present
+ * @param fallbackValue value used when the option appears without an argument (optional-arg), or
+ *     {@code null}
  */
 public record Opt(
         List<String> names,

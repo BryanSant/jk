@@ -20,24 +20,23 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Locates the already-built jars (and their external transitive deps) of a
- * consumer's composite ({@code path} / branch-git) dependencies, WITHOUT
- * building anything — the build driver ({@link BuildGraph} + the pipeline) has
- * already built every composite unit by the time a consumer's classpath is
- * assembled. The composite analog of {@code WorkspaceClasspath} (which locates
- * sibling jars); the two run side by side and are deduped at the classpath.
+ * Locates the already-built jars (and their external transitive deps) of a consumer's composite
+ * ({@code path} / branch-git) dependencies, WITHOUT building anything — the build driver ({@link
+ * BuildGraph} + the pipeline) has already built every composite unit by the time a consumer's
+ * classpath is assembled. The composite analog of {@code WorkspaceClasspath} (which locates sibling
+ * jars); the two run side by side and are deduped at the classpath.
  *
- * <p>Seeded by the consumer's deps in {@code depScopes}; each target's own
- * {@code MAIN} composite deps propagate transitively (so a consumer of A which
- * path-depends on B gets both jars). Each target's external (Maven) deps come
- * from its on-disk {@code jk.lock} via {@link ClasspathResolver}.
+ * <p>Seeded by the consumer's deps in {@code depScopes}; each target's own {@code MAIN} composite
+ * deps propagate transitively (so a consumer of A which path-depends on B gets both jars). Each
+ * target's external (Maven) deps come from its on-disk {@code jk.lock} via {@link
+ * ClasspathResolver}.
  */
 public final class CompositeLocator {
 
     /**
-     * @param jars            built main jars of the consumer's composite deps (direct + transitive)
+     * @param jars built main jars of the consumer's composite deps (direct + transitive)
      * @param externalDepJars each target's external Maven deps (from its jk.lock)
-     * @param missing         coords whose jar isn't built yet (clear, like WorkspaceClasspath)
+     * @param missing coords whose jar isn't built yet (clear, like WorkspaceClasspath)
      */
     public record Located(List<Path> jars, List<Path> externalDepJars, List<String> missing) {
         public boolean isEmpty() {
@@ -48,21 +47,21 @@ public final class CompositeLocator {
     private CompositeLocator() {}
 
     /**
-     * A shared external coordinate resolved to different versions across the
-     * composite boundary — both jars land on the consumer's classpath (deduped by
-     * path, not coordinate), so they coexist unreconciled. {@code versionBySource}
-     * maps each project ({@code group:artifact}) to the version it locked.
+     * A shared external coordinate resolved to different versions across the composite boundary —
+     * both jars land on the consumer's classpath (deduped by path, not coordinate), so they coexist
+     * unreconciled. {@code versionBySource} maps each project ({@code group:artifact}) to the version
+     * it locked.
      *
-     * <p>jk surfaces what Gradle/Maven sidestep; the shape (coordinate + versions +
-     * who requires each) is exactly what an assisted reconciler would consume.
+     * <p>jk surfaces what Gradle/Maven sidestep; the shape (coordinate + versions + who requires
+     * each) is exactly what an assisted reconciler would consume.
      */
     public record VersionConflict(String coord, Map<String, String> versionBySource) {}
 
     /**
-     * Detect external-dependency version disagreements between the consumer and its
-     * composite ({@code path}/branch-git) targets (and among targets). Each project
-     * resolves its own {@code jk.lock} independently — there is no cross-boundary
-     * unification — so a shared coordinate can resolve to different versions.
+     * Detect external-dependency version disagreements between the consumer and its composite ({@code
+     * path}/branch-git) targets (and among targets). Each project resolves its own {@code jk.lock}
+     * independently — there is no cross-boundary unification — so a shared coordinate can resolve to
+     * different versions.
      */
     public static List<VersionConflict> conflicts(Path consumerDir, JkBuild consumer, Path gitRoot)
             throws IOException, InterruptedException {

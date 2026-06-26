@@ -27,28 +27,26 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * {@code jk jdk ensure <spec>} — guarantee that a JDK satisfying {@code <spec>}
- * is installed, downloading it from the JetBrains JDK feed when nothing on the
- * host already qualifies, then print where it lives.
+ * {@code jk jdk ensure <spec>} — guarantee that a JDK satisfying {@code <spec>} is installed,
+ * downloading it from the JetBrains JDK feed when nothing on the host already qualifies, then print
+ * where it lives.
  *
- * <p>Satisfaction is freshness-aware (unlike the project-scoped
- * {@link dev.jkbuild.runtime.JdkEnsure}, whose match is exact):
+ * <p>Satisfaction is freshness-aware (unlike the project-scoped {@link
+ * dev.jkbuild.runtime.JdkEnsure}, whose match is exact):
+ *
  * <ul>
- *   <li>a bare major ({@code 25}) is satisfied by <em>any</em> installed
- *       point release of that major;</li>
- *   <li>a full version ({@code 25.0.3}) is a <em>minimum</em> — an installed
- *       {@code 25.0.2} forces an install, {@code 25.0.4} satisfies it;</li>
- *   <li>{@code lts} / {@code stable} requires the <em>latest</em> LTS point
- *       release in the feed; {@code latest} the latest GA point release —
- *       an older installed copy forces an upgrade.</li>
- *   <li>{@code native} requires the latest <em>Oracle GraalVM</em> (the
- *       native-image build); satisfied by any installed GraalVM at that
- *       version.</li>
+ *   <li>a bare major ({@code 25}) is satisfied by <em>any</em> installed point release of that
+ *       major;
+ *   <li>a full version ({@code 25.0.3}) is a <em>minimum</em> — an installed {@code 25.0.2} forces
+ *       an install, {@code 25.0.4} satisfies it;
+ *   <li>{@code lts} / {@code stable} requires the <em>latest</em> LTS point release in the feed;
+ *       {@code latest} the latest GA point release — an older installed copy forces an upgrade.
+ *   <li>{@code native} requires the latest <em>Oracle GraalVM</em> (the native-image build);
+ *       satisfied by any installed GraalVM at that version.
  * </ul>
  *
- * <p>When the spec can't be satisfied from the feed at all (e.g. a major or
- * point release that doesn't exist), it warns and installs the latest LTS
- * instead, still exiting {@code 0}.
+ * <p>When the spec can't be satisfied from the feed at all (e.g. a major or point release that
+ * doesn't exist), it warns and installs the latest LTS instead, still exiting {@code 0}.
  */
 public final class JdkEnsureCommand implements CliCommand {
 
@@ -183,23 +181,33 @@ public final class JdkEnsureCommand implements CliCommand {
         Optional<JdkCatalog.Entry> entry = JdkKeywords.resolveToMajorSpec(catalog, "lts", os, arch)
                 .flatMap(majorSpec -> JdkSelector.select(catalog, JdkSpec.parse(majorSpec), os, arch));
         if (entry.isEmpty()) {
-            System.err.println("jk jdk ensure: no JDK matches " + spec + " and no LTS JDK is available for " + os + "/"
-                    + arch + ".");
+            System.err.println("jk jdk ensure: no JDK matches "
+                    + spec
+                    + " and no LTS JDK is available for "
+                    + os
+                    + "/"
+                    + arch
+                    + ".");
             return 1;
         }
         JdkCatalog.Entry e = entry.get();
         String head = Theme.colorize("‼", Theme.active().warning())
-                + " no JDK matches " + Theme.colorize(spec, Theme.active().cyan())
+                + " no JDK matches "
+                + Theme.colorize(spec, Theme.active().cyan())
                 + " in the JetBrains feed — ";
         Optional<JdkHit> hit = registry.findHitAtLeast(e.majorVersion(), e.version(), List.of());
         if (hit.isPresent()) {
-            System.out.println(head + "using the latest LTS "
-                    + Theme.colorize(label(e), Theme.active().cyan()) + " instead");
+            System.out.println(head
+                    + "using the latest LTS "
+                    + Theme.colorize(label(e), Theme.active().cyan())
+                    + " instead");
             report(JdkRender.displayName(hit.get()), hit.get().home(), false);
             return 0;
         }
-        String preface = head + "installing the latest LTS "
-                + Theme.colorize(label(e), Theme.active().cyan()) + " instead...";
+        String preface = head
+                + "installing the latest LTS "
+                + Theme.colorize(label(e), Theme.active().cyan())
+                + " instead...";
         report(label(e), installEntry(installer, e, preface));
         return 0;
     }
@@ -207,10 +215,9 @@ public final class JdkEnsureCommand implements CliCommand {
     // --- shared mechanics ---------------------------------------------------
 
     /**
-     * Install {@code entry} (skipping the download when it's already on disk),
-     * with a progress bar. {@code preface} is printed immediately before the
-     * download starts — but only when a download actually happens, so an
-     * already-present install stays silent.
+     * Install {@code entry} (skipping the download when it's already on disk), with a progress bar.
+     * {@code preface} is printed immediately before the download starts — but only when a download
+     * actually happens, so an already-present install stays silent.
      */
     private InstalledJdk installEntry(JdkInstaller installer, JdkCatalog.Entry entry, String preface)
             throws IOException, InterruptedException {
@@ -264,7 +271,9 @@ public final class JdkEnsureCommand implements CliCommand {
         return JdkSelector.versionKey(version).compareTo(JdkSelector.versionKey(floor)) >= 0;
     }
 
-    /** Build a selector input that targets the latest point release of {@code major}, honoring hints. */
+    /**
+     * Build a selector input that targets the latest point release of {@code major}, honoring hints.
+     */
     private static String hintsAndMajor(List<String> hints, int major) {
         String h = String.join("-", hints);
         return h.isEmpty() ? String.valueOf(major) : h + "-" + major;
@@ -273,7 +282,9 @@ public final class JdkEnsureCommand implements CliCommand {
     private boolean hostSupported() {
         if (HostPlatform.supported()) return true;
         System.err.println("jk jdk ensure: host "
-                + System.getProperty("os.name") + "/" + System.getProperty("os.arch")
+                + System.getProperty("os.name")
+                + "/"
+                + System.getProperty("os.arch")
                 + " is not covered by the JetBrains JDK feed. Set JAVA_HOME explicitly.");
         return false;
     }

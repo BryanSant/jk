@@ -8,9 +8,8 @@ import java.util.Objects;
 /**
  * The {@code image { ... }} block from {@code jk.toml} (PRD §22.2).
  *
- * <p>Sensible defaults: distroless Java 21 base, nonroot user, no exposed
- * ports, single {@code linux/amd64} platform. Override anything by
- * setting the matching field in jk.toml.
+ * <p>Sensible defaults: distroless Java 21 base, nonroot user, no exposed ports, single {@code
+ * linux/amd64} platform. Override anything by setting the matching field in jk.toml.
  */
 public record ImageConfig(
         String base,

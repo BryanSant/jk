@@ -9,10 +9,10 @@ import java.nio.file.Path;
 import java.util.Optional;
 
 /**
- * {@link RepoTransport} for {@code file://} repositories — a local directory
- * tree used as a Maven repo (offline mirrors, tests, air-gapped setups).
- * Reads and writes the filesystem directly; credentials are irrelevant and
- * ignored. A missing file is "not found" (empty), matching the HTTP 404 path.
+ * {@link RepoTransport} for {@code file://} repositories — a local directory tree used as a Maven
+ * repo (offline mirrors, tests, air-gapped setups). Reads and writes the filesystem directly;
+ * credentials are irrelevant and ignored. A missing file is "not found" (empty), matching the HTTP
+ * 404 path.
  */
 public final class FileTransport implements RepoTransport {
 

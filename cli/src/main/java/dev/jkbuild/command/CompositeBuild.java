@@ -27,19 +27,17 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 /**
- * Builds a project's transitive composite ({@code path} / branch-git) dependency
- * units from source — compile-only, via the SAME real pipeline as any project
- * ({@code BuildPipeline.coreBuilder}). jk's {@code includeBuild} analog, shared by
- * {@code jk build}, {@code jk run}, and {@code jk install} so each builds its
- * composite deps before the classpath that consumes them ({@code CompositeLocator}
- * then locates the jars).
+ * Builds a project's transitive composite ({@code path} / branch-git) dependency units from source
+ * — compile-only, via the SAME real pipeline as any project ({@code BuildPipeline.coreBuilder}).
+ * jk's {@code includeBuild} analog, shared by {@code jk build}, {@code jk run}, and {@code jk
+ * install} so each builds its composite deps before the classpath that consumes them ({@code
+ * CompositeLocator} then locates the jars).
  *
- * <p>Independent units build <em>in parallel</em> (a topo level-scheduled driver):
- * dependency units are compile-only, so parallelism never runs tests concurrently
- * (tests stay serial — that's a workspace-module concern). The CPU work inside
- * each unit shares the bounded {@link JkThreads#cpu()} pool, so node parallelism
- * doesn't oversubscribe. Each unit builds silently and reports a one-line result
- * (concurrent live progress bars can't share one terminal region).
+ * <p>Independent units build <em>in parallel</em> (a topo level-scheduled driver): dependency units
+ * are compile-only, so parallelism never runs tests concurrently (tests stay serial — that's a
+ * workspace-module concern). The CPU work inside each unit shares the bounded {@link
+ * JkThreads#cpu()} pool, so node parallelism doesn't oversubscribe. Each unit builds silently and
+ * reports a one-line result (concurrent live progress bars can't share one terminal region).
  */
 final class CompositeBuild {
 
@@ -48,10 +46,9 @@ final class CompositeBuild {
     private CompositeBuild() {}
 
     /**
-     * Resolve the composite graph rooted at {@code entryDir}/{@code entry} and build
-     * each dependency unit (compile-only, independent units in parallel). Returns 0
-     * on success, else an exit code (errors already printed). A no-op when no
-     * composite deps exist.
+     * Resolve the composite graph rooted at {@code entryDir}/{@code entry} and build each dependency
+     * unit (compile-only, independent units in parallel). Returns 0 on success, else an exit code
+     * (errors already printed). A no-op when no composite deps exist.
      */
     static int buildDependencies(
             Path entryDir, JkBuild entry, Path cache, Path jdksDir, String profileName, GlobalOptions global)
@@ -69,9 +66,13 @@ final class CompositeBuild {
         Set<Path> depDirs = deps.stream().map(BuildGraph.BuildUnit::dir).collect(Collectors.toSet());
         Map<Path, Set<Path>> edges = graph.edges();
         if (!global.outputIsJson()) {
-            System.out.println("Building " + deps.size() + " composite dependenc"
-                    + (deps.size() == 1 ? "y" : "ies") + " from source"
-                    + (deps.size() > 1 ? " (parallel)" : "") + "…");
+            System.out.println("Building "
+                    + deps.size()
+                    + " composite dependenc"
+                    + (deps.size() == 1 ? "y" : "ies")
+                    + " from source"
+                    + (deps.size() > 1 ? " (parallel)" : "")
+                    + "…");
         }
 
         // Topo level-scheduled: build all units whose composite prereqs are done,
@@ -105,10 +106,10 @@ final class CompositeBuild {
     }
 
     /**
-     * Record what each composite target built — coordinate, origin, dir, and the
-     * jar's content hash — to {@code <entryDir>/target/jk-composite-audit.json}.
-     * A gitignored build-output file (not {@code jk.lock}, which would churn for a
-     * mutable source) giving "exactly what this build used" provenance. Best-effort.
+     * Record what each composite target built — coordinate, origin, dir, and the jar's content hash —
+     * to {@code <entryDir>/target/jk-composite-audit.json}. A gitignored build-output file (not
+     * {@code jk.lock}, which would churn for a mutable source) giving "exactly what this build used"
+     * provenance. Best-effort.
      */
     private static void writeAudit(Path entryDir, List<BuildGraph.BuildUnit> deps) {
         try {

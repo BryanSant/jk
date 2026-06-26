@@ -20,14 +20,13 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * {@code jk explain} — forecast the build (the same {@link BuildGraph} the build
- * driver uses): every module (workspace root + modules + transitive {@code path} /
- * branch-git deps) in dependency order, its origin and edges, and — via
- * {@link BuildPlanForecast} — what each of its phases (compile → test → package)
- * would do when {@code jk build} runs: restore from cache or do real work.
- * Fully-cached modules collapse to a summary line; modules that will rebuild expand
- * to their phase sub-tree ({@code --verbose} expands all). {@code --run} executes
- * the plan ({@code jk build}). Per PRD §25.1.
+ * {@code jk explain} — forecast the build (the same {@link BuildGraph} the build driver uses):
+ * every module (workspace root + modules + transitive {@code path} / branch-git deps) in dependency
+ * order, its origin and edges, and — via {@link BuildPlanForecast} — what each of its phases
+ * (compile → test → package) would do when {@code jk build} runs: restore from cache or do real
+ * work. Fully-cached modules collapse to a summary line; modules that will rebuild expand to their
+ * phase sub-tree ({@code --verbose} expands all). {@code --run} executes the plan ({@code jk
+ * build}). Per PRD §25.1.
  */
 public final class ExplainCommand implements CliCommand {
 
@@ -149,7 +148,9 @@ public final class ExplainCommand implements CliCommand {
         System.out.println();
         System.out.println(header + " " + estimate);
         // Root node: ● bullet, then the entry project's group:artifact in bold.
-        System.out.println(" " + Theme.colorize("●", t.darkGray()) + " "
+        System.out.println(" "
+                + Theme.colorize("●", t.darkGray())
+                + " "
                 + boldCoord(entry.project().group() + ":" + entry.project().name(), t));
 
         // Workspace-wide stats directly under the root bullet.
@@ -182,7 +183,8 @@ public final class ExplainCommand implements CliCommand {
 
         if (!cachedIdx.isEmpty()) {
             boolean lastSection = dirtyIdx.isEmpty();
-            System.out.println(" " + Theme.colorize(lastSection ? "╰─" : "├─", t.darkGray())
+            System.out.println(" "
+                    + Theme.colorize(lastSection ? "╰─" : "├─", t.darkGray())
                     + dev.jkbuild.cli.tui.Badge.pill("Fully Cached", nerdfont));
             String childPrefix = " " + Theme.colorize(lastSection ? "   " : "│  ", t.darkGray());
             if (verbose) {
@@ -232,7 +234,9 @@ public final class ExplainCommand implements CliCommand {
                 System.out.println(
                         secPfx + "Packages: " + fmtCount(dirtyJars, "jar", "jars") + pct(dirtyJars, totalJars));
             if (totalImages > 0)
-                System.out.println(secPfx + "Containers: " + fmtCount(dirtyImages, "image", "images")
+                System.out.println(secPfx
+                        + "Containers: "
+                        + fmtCount(dirtyImages, "image", "images")
                         + pct(dirtyImages, totalImages));
             for (int j = 0; j < dirtyIdx.size(); j++) {
                 int i = dirtyIdx.get(j);
@@ -254,10 +258,10 @@ public final class ExplainCommand implements CliCommand {
     private static final int PHASE_COL = 14;
 
     /**
-     * Render one module row under a section: {@code prefix} + connector + index badge +
-     * coordinate, then its phase sub-tree. The verdict is implied by the enclosing section
-     * (Fully Cached / Rebuild) and the origin / dependency edges are omitted as noise.
-     * Phases render when the module rebuilds, or always under {@code verbose}.
+     * Render one module row under a section: {@code prefix} + connector + index badge + coordinate,
+     * then its phase sub-tree. The verdict is implied by the enclosing section (Fully Cached /
+     * Rebuild) and the origin / dependency edges are omitted as noise. Phases render when the module
+     * rebuilds, or always under {@code verbose}.
      */
     private static void renderModuleRow(
             BuildPlanForecast.Module m,
@@ -283,9 +287,11 @@ public final class ExplainCommand implements CliCommand {
             }
             for (int k = 0; k < ph.size(); k++) {
                 boolean lp = k == ph.size() - 1;
-                System.out.println(spine + Theme.colorize(lp ? "╰─ " : "├─ ", t.darkGray())
+                System.out.println(spine
+                        + Theme.colorize(lp ? "╰─ " : "├─ ", t.darkGray())
                         + Theme.colorize(padRight(ph.get(k).name(), PHASE_COL), t.brightWhite())
-                        + "  " + renderStatus(ph.get(k), verbCol, t));
+                        + "  "
+                        + renderStatus(ph.get(k), verbCol, t));
             }
         }
     }
@@ -300,7 +306,8 @@ public final class ExplainCommand implements CliCommand {
     private static String boldCoord(String coord, Theme t) {
         int colon = coord.indexOf(':');
         if (colon < 0) return Theme.colorize(coord, t.coordName().bold());
-        return Theme.colorize(coord.substring(0, colon), t.coordGroup().bold()) + ":"
+        return Theme.colorize(coord.substring(0, colon), t.coordGroup().bold())
+                + ":"
                 + Theme.colorize(coord.substring(colon + 1), t.coordName().bold());
     }
 
@@ -329,10 +336,9 @@ public final class ExplainCommand implements CliCommand {
     }
 
     /**
-     * A phase's status: {@code ✓ cached <key> · detail} (green) when cached, otherwise
-     * {@code □ <verb> · <detail>} with the verb in yellow (padded to {@code verbCol} so
-     * the {@code ·} lines up across the module's phases), the {@code ·} bright-black, and
-     * the trailing detail in italic.
+     * A phase's status: {@code ✓ cached <key> · detail} (green) when cached, otherwise {@code □
+     * <verb> · <detail>} with the verb in yellow (padded to {@code verbCol} so the {@code ·} lines up
+     * across the module's phases), the {@code ·} bright-black, and the trailing detail in italic.
      */
     private static String renderStatus(BuildPlanForecast.Phase p, int verbCol, Theme t) {
         if (p.cached()) {
@@ -374,16 +380,16 @@ public final class ExplainCommand implements CliCommand {
     private static String coloredCoord(String coord, Theme t) {
         int colon = coord.indexOf(':');
         if (colon < 0) return Theme.colorize(coord, t.coordName());
-        return Theme.colorize(coord.substring(0, colon), t.coordGroup()) + ":"
+        return Theme.colorize(coord.substring(0, colon), t.coordGroup())
+                + ":"
                 + Theme.colorize(coord.substring(colon + 1), t.coordName());
     }
 
     /**
-     * Join {@code units} with {@code ", "} to fit {@code available} visible columns.
-     * When the full list is too wide, show as many leading units as fit followed by a
-     * {@code …+N more…} marker, where {@code N} is the count of remaining units that
-     * didn't fit. {@code available} is effectively unbounded on a non-TTY, so the full
-     * list is shown there.
+     * Join {@code units} with {@code ", "} to fit {@code available} visible columns. When the full
+     * list is too wide, show as many leading units as fit followed by a {@code …+N more…} marker,
+     * where {@code N} is the count of remaining units that didn't fit. {@code available} is
+     * effectively unbounded on a non-TTY, so the full list is shown there.
      */
     static String elideDeps(List<String> units, int available) {
         String full = String.join(", ", units);
@@ -398,10 +404,9 @@ public final class ExplainCommand implements CliCommand {
     }
 
     /**
-     * Greedily pack {@code tokens} into {@code ", "}-joined lines, each at most
-     * {@code avail} visible columns wide (the wrap point drops the separator rather
-     * than leaving a trailing comma). On a non-TTY {@code avail} is effectively
-     * unbounded, so the whole list lands on one line.
+     * Greedily pack {@code tokens} into {@code ", "}-joined lines, each at most {@code avail} visible
+     * columns wide (the wrap point drops the separator rather than leaving a trailing comma). On a
+     * non-TTY {@code avail} is effectively unbounded, so the whole list lands on one line.
      */
     static List<String> wrapNames(List<String> tokens, int avail) {
         List<String> lines = new ArrayList<>();

@@ -12,15 +12,13 @@ import java.util.Optional;
 import java.util.stream.Stream;
 
 /**
- * Homebrew on macOS keeps real installs under
- * {@code /opt/homebrew/Cellar/<formula>/<version>/} (Apple Silicon)
- * or {@code /usr/local/Cellar/<formula>/<version>/} (Intel). The Cellar
- * version dir contains a {@code libexec/} child that's the actual
- * {@code <home>} for Maven/Gradle/Kotlin; for OpenJDK it's
- * {@code libexec/openjdk.jdk/Contents/Home}.
+ * Homebrew on macOS keeps real installs under {@code /opt/homebrew/Cellar/<formula>/<version>/}
+ * (Apple Silicon) or {@code /usr/local/Cellar/<formula>/<version>/} (Intel). The Cellar version dir
+ * contains a {@code libexec/} child that's the actual {@code <home>} for Maven/Gradle/Kotlin; for
+ * OpenJDK it's {@code libexec/openjdk.jdk/Contents/Home}.
  *
- * <p>JDK formulae use {@code openjdk@21} naming; build-tool formulae
- * are {@code maven} / {@code gradle} / {@code kotlin}.
+ * <p>JDK formulae use {@code openjdk@21} naming; build-tool formulae are {@code maven} / {@code
+ * gradle} / {@code kotlin}.
  *
  * <p>Skipped silently on non-macOS hosts.
  */

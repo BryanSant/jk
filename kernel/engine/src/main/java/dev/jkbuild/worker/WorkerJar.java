@@ -11,23 +11,22 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 /**
- * The single registry of jk's child-JVM worker jars, and the one place that
- * locates one on disk.
+ * The single registry of jk's child-JVM worker jars, and the one place that locates one on disk.
  *
- * <p>Each worker is jk's own tooling — pinned to jk's version, not a project
- * dependency — and is addressed by the SHA-256 this build of jk was paired
- * with (emitted as a {@code /META-INF/<artifact>-sha256.txt} resource by the
- * worker module's Gradle wiring). Location order is uniform:
+ * <p>Each worker is jk's own tooling — pinned to jk's version, not a project dependency — and is
+ * addressed by the SHA-256 this build of jk was paired with (emitted as a {@code
+ * /META-INF/<artifact>-sha256.txt} resource by the worker module's Gradle wiring). Location order
+ * is uniform:
+ *
  * <ol>
- *   <li>the {@code -D<jarProperty>} override (tests / dev), then</li>
- *   <li>the local CAS, keyed by the expected SHA (populated by {@code jk sync}
- *       once the worker is published, or {@code ./gradlew <module>:installLocalCas}
- *       in jk's own tree).</li>
+ *   <li>the {@code -D<jarProperty>} override (tests / dev), then
+ *   <li>the local CAS, keyed by the expected SHA (populated by {@code jk sync} once the worker is
+ *       published, or {@code ./gradlew <module>:installLocalCas} in jk's own tree).
  * </ol>
  *
- * <p>This enum replaces the seven near-identical {@code *WorkerSetup} locator
- * classes and {@code JkWorkerSync}'s hand-maintained worker list — one source
- * of truth for the property name, the SHA resource, and the side-load hint.
+ * <p>This enum replaces the seven near-identical {@code *WorkerSetup} locator classes and {@code
+ * JkWorkerSync}'s hand-maintained worker list — one source of truth for the property name, the SHA
+ * resource, and the side-load hint.
  */
 public enum WorkerJar {
     TEST_RUNNER("jk-test-runner", "jk.test.runner.jar", ":test-runner:installLocalCas"),
@@ -68,8 +67,8 @@ public enum WorkerJar {
     }
 
     /**
-     * The expected SHA-256 this jk build was paired with, or {@code null} when
-     * the resource is absent (a jk build that didn't bundle this worker).
+     * The expected SHA-256 this jk build was paired with, or {@code null} when the resource is absent
+     * (a jk build that didn't bundle this worker).
      */
     public String expectedShaOrNull() {
         try (InputStream in = WorkerJar.class.getResourceAsStream(shaResource)) {
@@ -90,9 +89,9 @@ public enum WorkerJar {
     }
 
     /**
-     * Locate the worker jar against {@code cas}: {@code -D<jarProperty>} override
-     * first, then the CAS by expected SHA. Throws {@link IllegalStateException}
-     * with side-load instructions if neither resolves.
+     * Locate the worker jar against {@code cas}: {@code -D<jarProperty>} override first, then the CAS
+     * by expected SHA. Throws {@link IllegalStateException} with side-load instructions if neither
+     * resolves.
      */
     public Path locate(Cas cas) {
         String override = System.getProperty(jarProperty);

@@ -13,31 +13,28 @@ import java.util.Set;
 import java.util.TreeSet;
 
 /**
- * Per-project reachability manifest written by {@code jk sync}. Lives
- * under {@code actions/synced/<projectFingerprint>} so a sweep can treat
- * each project's synced deps as a root.
+ * Per-project reachability manifest written by {@code jk sync}. Lives under {@code
+ * actions/synced/<projectFingerprint>} so a sweep can treat each project's synced deps as a root.
  *
- * <p>Why this matters: between {@code jk sync} and the project's first
- * {@code jk build}, dep jars sit in the CAS with no action record naming
- * them. A naive mark-and-sweep would collect them as garbage. The sync
- * manifest closes that gap — sync stamps "these shas belong to this
- * project's locked deps" and the sweep treats them as live as long as
- * the manifest exists. The manifest itself ages out via the standard
- * action-record TTL, so stale projects' deps eventually become
+ * <p>Why this matters: between {@code jk sync} and the project's first {@code jk build}, dep jars
+ * sit in the CAS with no action record naming them. A naive mark-and-sweep would collect them as
+ * garbage. The sync manifest closes that gap — sync stamps "these shas belong to this project's
+ * locked deps" and the sweep treats them as live as long as the manifest exists. The manifest
+ * itself ages out via the standard action-record TTL, so stale projects' deps eventually become
  * collectible.
  *
  * <p>On-disk format (plain text, one directive per line):
+ *
  * <pre>{@code
- *   PROJECT  <fingerprint>          # matches the filename
- *   LOCKFILE <absolute-path>        # debug aid; not load-bearing
- *   STAMP    <epoch-millis>         # when the manifest was written
- *   REF      <sha256>               # one per locked dep with a checksum
+ * PROJECT  <fingerprint>          # matches the filename
+ * LOCKFILE <absolute-path>        # debug aid; not load-bearing
+ * STAMP    <epoch-millis>         # when the manifest was written
+ * REF      <sha256>               # one per locked dep with a checksum
  * }</pre>
  *
- * <p>{@code REF} entries are deduplicated and sorted on write so two
- * runs of {@code jk sync} against the same lockfile produce byte-
- * identical manifests (useful for CI diffs, and incidentally cheap to
- * deduplicate in memory).
+ * <p>{@code REF} entries are deduplicated and sorted on write so two runs of {@code jk sync}
+ * against the same lockfile produce byte- identical manifests (useful for CI diffs, and
+ * incidentally cheap to deduplicate in memory).
  */
 public final class SyncManifest {
 
@@ -45,9 +42,8 @@ public final class SyncManifest {
     private SyncManifest() {}
 
     /**
-     * Write a manifest for {@code lock} into the standard location.
-     * {@code actionRoot} is the parent of {@code keys/} —
-     * {@link Sweep#SYNCED_SUBDIR} sits beside it.
+     * Write a manifest for {@code lock} into the standard location. {@code actionRoot} is the parent
+     * of {@code keys/} — {@link Sweep#SYNCED_SUBDIR} sits beside it.
      */
     public static Path write(Path actionRoot, Path lockFile, Lockfile lock) throws IOException {
         Path syncedDir = actionRoot.resolve(Sweep.SYNCED_SUBDIR);
@@ -95,9 +91,8 @@ public final class SyncManifest {
     }
 
     /**
-     * In-memory view. Mirrors the on-disk shape; intentionally small —
-     * sweep callers only need {@link #refs} once a {@code MIN_AGE} check
-     * has passed on the file's mtime.
+     * In-memory view. Mirrors the on-disk shape; intentionally small — sweep callers only need {@link
+     * #refs} once a {@code MIN_AGE} check has passed on the file's mtime.
      */
     public record Manifest(String projectFingerprint, Path lockFile, long stampMillis, List<String> refs) {
         public Manifest {
@@ -106,8 +101,8 @@ public final class SyncManifest {
     }
 
     /**
-     * Pull every package's sha256 out of the lockfile. Packages without a
-     * checksum (POM-only / path / git) contribute nothing.
+     * Pull every package's sha256 out of the lockfile. Packages without a checksum (POM-only / path /
+     * git) contribute nothing.
      */
     private static Set<String> collectRefs(Lockfile lock) {
         Set<String> sorted = new TreeSet<>();

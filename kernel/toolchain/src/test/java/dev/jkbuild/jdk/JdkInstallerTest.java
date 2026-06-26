@@ -283,10 +283,9 @@ class JdkInstallerTest {
     }
 
     /**
-     * Build a gzipped tar in-memory using Commons Compress — same library
-     * the installer reads with — so the fixture matches what foojay serves
-     * without depending on a system {@code tar} binary (or its
-     * platform-specific quirks, e.g. macOS AppleDouble sidecars).
+     * Build a gzipped tar in-memory using Commons Compress — same library the installer reads with —
+     * so the fixture matches what foojay serves without depending on a system {@code tar} binary (or
+     * its platform-specific quirks, e.g. macOS AppleDouble sidecars).
      */
     private static byte[] buildTarGz(String topLevelDir, Map<String, String> entries) throws IOException {
         String[][] raw = new String[entries.size() + 1][];
@@ -299,12 +298,12 @@ class JdkInstallerTest {
     }
 
     /**
-     * Build a tar.gz with entries written verbatim — no implicit top-level
-     * dir wrapping. Entry value {@code null} means a directory entry.
+     * Build a tar.gz with entries written verbatim — no implicit top-level dir wrapping. Entry value
+     * {@code null} means a directory entry.
      */
     /**
-     * Build a tar.gz using hand-rolled 512-byte TAR blocks — no external library.
-     * {@code null} body = directory entry.
+     * Build a tar.gz using hand-rolled 512-byte TAR blocks — no external library. {@code null} body =
+     * directory entry.
      */
     private static byte[] buildTarGzRaw(String[][] rawEntries) throws IOException {
         ByteArrayOutputStream raw = new ByteArrayOutputStream();

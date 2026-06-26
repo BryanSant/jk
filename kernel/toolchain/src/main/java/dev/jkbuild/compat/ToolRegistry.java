@@ -12,11 +12,10 @@ import java.util.Optional;
 import java.util.stream.Stream;
 
 /**
- * Catalog of Maven and Gradle distributions installed under
- * {@code $JK_CACHE_DIR/tools/}. Layout:
- * {@code $JK_CACHE_DIR/tools/<slug>/<version>/}, where {@code <slug>} is
- * {@code maven} or {@code gradle} and {@code <version>} is the upstream
- * distribution version (e.g. {@code 3.9.9}, {@code 9.5.1}).
+ * Catalog of Maven and Gradle distributions installed under {@code $JK_CACHE_DIR/tools/}. Layout:
+ * {@code $JK_CACHE_DIR/tools/<slug>/<version>/}, where {@code <slug>} is {@code maven} or {@code
+ * gradle} and {@code <version>} is the upstream distribution version (e.g. {@code 3.9.9}, {@code
+ * 9.5.1}).
  */
 public final class ToolRegistry {
 

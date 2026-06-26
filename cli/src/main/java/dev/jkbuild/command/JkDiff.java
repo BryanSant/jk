@@ -7,25 +7,25 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * Records what the previous {@code jk hook-env} call did so the next one can
- * undo it. Stored in the {@code __JK_DIFF} env var as a compact, base64-encoded
- * text payload.
+ * Records what the previous {@code jk hook-env} call did so the next one can undo it. Stored in the
+ * {@code __JK_DIFF} env var as a compact, base64-encoded text payload.
  *
- * <p>Each entry holds {@code KEY -> previousValue}. {@code previousValue} is
- * the value the env var held <em>before</em> jk overrode it — empty when the
- * key was unset originally (distinguished via the {@link #UNSET_SENTINEL}).
+ * <p>Each entry holds {@code KEY -> previousValue}. {@code previousValue} is the value the env var
+ * held <em>before</em> jk overrode it — empty when the key was unset originally (distinguished via
+ * the {@link #UNSET_SENTINEL}).
  *
  * <p>On the next hook-env call:
+ *
  * <ul>
- *   <li>If the new target also overrides the key: emit {@code export} with
- *       the new value (the {@code previousValue} stays unchanged in the diff
- *       so a later deactivation still restores correctly).</li>
- *   <li>If the new target no longer overrides the key: restore the previous
- *       value, or {@code unset} the key when the sentinel was recorded.</li>
+ *   <li>If the new target also overrides the key: emit {@code export} with the new value (the
+ *       {@code previousValue} stays unchanged in the diff so a later deactivation still restores
+ *       correctly).
+ *   <li>If the new target no longer overrides the key: restore the previous value, or {@code unset}
+ *       the key when the sentinel was recorded.
  * </ul>
  *
- * <p>Format: one line per entry, {@code KEY\0value\n}, then base64-encoded.
- * Null byte is illegal in env var keys, so it's a safe separator.
+ * <p>Format: one line per entry, {@code KEY\0value\n}, then base64-encoded. Null byte is illegal in
+ * env var keys, so it's a safe separator.
  */
 public final class JkDiff {
 
@@ -43,8 +43,8 @@ public final class JkDiff {
     }
 
     /**
-     * Parse a base64-encoded diff payload. Empty or malformed input yields an
-     * empty diff (we never want a bad serialization to wedge the shell).
+     * Parse a base64-encoded diff payload. Empty or malformed input yields an empty diff (we never
+     * want a bad serialization to wedge the shell).
      */
     public static JkDiff parse(String encoded) {
         if (encoded == null || encoded.isBlank()) return empty();
@@ -77,9 +77,8 @@ public final class JkDiff {
     }
 
     /**
-     * Previous value for {@code key}; {@code null} if the diff has no entry,
-     * or the {@link #UNSET_SENTINEL} when the key was unset in the original
-     * environment.
+     * Previous value for {@code key}; {@code null} if the diff has no entry, or the {@link
+     * #UNSET_SENTINEL} when the key was unset in the original environment.
      */
     public String previousValue(String key) {
         return previous.get(key);
@@ -91,10 +90,9 @@ public final class JkDiff {
     }
 
     /**
-     * Build the diff that will be stored after applying {@code target}: the
-     * union of previously-tracked keys and the keys {@code target} overrides,
-     * each carrying the value the env held <em>before</em> {@code jk}
-     * touched it.
+     * Build the diff that will be stored after applying {@code target}: the union of
+     * previously-tracked keys and the keys {@code target} overrides, each carrying the value the env
+     * held <em>before</em> {@code jk} touched it.
      */
     public JkDiff next(JkEnv.Target target, EnvSnapshot current) {
         var combined = new LinkedHashMap<String, String>();

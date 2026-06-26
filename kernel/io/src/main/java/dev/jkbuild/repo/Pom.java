@@ -6,10 +6,9 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * The parsed contents of a single Maven POM. Property substitution within
- * the POM's own scope ({@code ${project.*}} and {@code <properties>}) has
- * already been applied; cross-POM concerns (parent inheritance, BOM
- * imports, external properties) are the resolver's job.
+ * The parsed contents of a single Maven POM. Property substitution within the POM's own scope
+ * ({@code ${project.*}} and {@code <properties>}) has already been applied; cross-POM concerns
+ * (parent inheritance, BOM imports, external properties) are the resolver's job.
  */
 public record Pom(
         String groupId,
@@ -45,9 +44,8 @@ public record Pom(
     }
 
     /**
-     * A {@code <dependency>} entry. Maven's {@code system} scope is captured
-     * as a raw string here so the parser stays lossless; jk's higher layers
-     * reject it per PRD §7.2.
+     * A {@code <dependency>} entry. Maven's {@code system} scope is captured as a raw string here so
+     * the parser stays lossless; jk's higher layers reject it per PRD §7.2.
      */
     public record Dep(
             String groupId,

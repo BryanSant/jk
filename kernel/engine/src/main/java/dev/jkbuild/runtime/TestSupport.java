@@ -18,20 +18,18 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Test-phase building blocks shared by the build pipeline and the {@code test}
- * verb. Coupled only to {@link PhaseContext} (the view-agnostic progress
- * callback), so it lives in {@code :runtime} and embedders can drive it without
- * the CLI/TUI.
+ * Test-phase building blocks shared by the build pipeline and the {@code test} verb. Coupled only
+ * to {@link PhaseContext} (the view-agnostic progress callback), so it lives in {@code :runtime}
+ * and embedders can drive it without the CLI/TUI.
  */
 public final class TestSupport {
 
     private TestSupport() {}
 
     /**
-     * Render a failed test run as console lines — each failing test's name
-     * followed by its full stack trace, indented. Mirrors what Maven/Gradle
-     * print on failure so {@code jk} doesn't just report a count. Returns an
-     * empty list when nothing failed.
+     * Render a failed test run as console lines — each failing test's name followed by its full stack
+     * trace, indented. Mirrors what Maven/Gradle print on failure so {@code jk} doesn't just report a
+     * count. Returns an empty list when nothing failed.
      */
     public static List<String> renderFailures(JUnitLauncher.Result result) {
         List<String> out = new ArrayList<>();
@@ -60,14 +58,13 @@ public final class TestSupport {
     /**
      * Adapt the JUnit runner's events onto a {@link PhaseContext}.
      *
-     * <p>The runTests phase is built with its scope baked in from an upfront
-     * lexical scan, so the goal's denominator is fixed before any phase runs.
-     * We don't react to the runner's {@code discovery_total} (that would reshape
-     * the bar after early phases moved). The numerator ticks only for tests that
-     * were in the static plan ({@code wasStatic=true}); dynamic invocations run
-     * and are counted in the pass/fail tally but never advance the bar — for
-     * parameterized-heavy suites the bar saturates near 99% before execution
-     * ends and phase-end auto-fill snaps it to 100% on success.
+     * <p>The runTests phase is built with its scope baked in from an upfront lexical scan, so the
+     * goal's denominator is fixed before any phase runs. We don't react to the runner's {@code
+     * discovery_total} (that would reshape the bar after early phases moved). The numerator ticks
+     * only for tests that were in the static plan ({@code wasStatic=true}); dynamic invocations run
+     * and are counted in the pass/fail tally but never advance the bar — for parameterized-heavy
+     * suites the bar saturates near 99% before execution ends and phase-end auto-fill snaps it to
+     * 100% on success.
      */
     public static TestProgressListener bridgeListener(PhaseContext ctx, int workerCount, boolean verbose) {
         return new TestProgressListener() {
@@ -117,12 +114,11 @@ public final class TestSupport {
     }
 
     /**
-     * Compile test sources with action-cache lookup. Mirrors the compile-main
-     * phase: same task ID / classpath / output-dir shape, and — crucially — the
-     * same {@code processorPath} + {@link dev.jkbuild.task.JavaIncrementalCompile.ApSetup}
-     * wiring, so annotation processors (Lombok, Immutables, …) run over test
-     * sources too. Modern javac only runs processors named by {@code -processorpath};
-     * without it, a test class using {@code @Getter} would fail to find its
+     * Compile test sources with action-cache lookup. Mirrors the compile-main phase: same task ID /
+     * classpath / output-dir shape, and — crucially — the same {@code processorPath} + {@link
+     * dev.jkbuild.task.JavaIncrementalCompile.ApSetup} wiring, so annotation processors (Lombok,
+     * Immutables, …) run over test sources too. Modern javac only runs processors named by {@code
+     * -processorpath}; without it, a test class using {@code @Getter} would fail to find its
      * generated modules even though main compilation handled the same annotation.
      */
     public static boolean compileWithCache(

@@ -12,14 +12,13 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Enumerates every JDK installed on the host for the {@code jk init} wizard's
- * "Select a JDK" step. Sourced from {@link JdkRegistry#listHits()}, which
- * runs the full probe chain (jk's managed dir, env vars, sdkman, jbang, mise,
- * asdf, jenv, homebrew, system paths) and deduplicates by canonical home path.
+ * Enumerates every JDK installed on the host for the {@code jk init} wizard's "Select a JDK" step.
+ * Sourced from {@link JdkRegistry#listHits()}, which runs the full probe chain (jk's managed dir,
+ * env vars, sdkman, jbang, mise, asdf, jenv, homebrew, system paths) and deduplicates by canonical
+ * home path.
  *
- * <p>Each {@link Option} carries a parsed {@code major} version so the
- * scaffolder can decide whether to emit Java 25's instance-{@code main}
- * syntax.
+ * <p>Each {@link Option} carries a parsed {@code major} version so the scaffolder can decide
+ * whether to emit Java 25's instance-{@code main} syntax.
  */
 public final class NewJdkOptions {
 
@@ -82,9 +81,9 @@ public final class NewJdkOptions {
     }
 
     /**
-     * Parse the JDK major-version digit from a JetBrains-feed install folder
-     * name like {@code temurin-25.0.1} or {@code corretto-21}. Returns empty
-     * when the identifier has no recognizable digit cluster.
+     * Parse the JDK major-version digit from a JetBrains-feed install folder name like {@code
+     * temurin-25.0.1} or {@code corretto-21}. Returns empty when the identifier has no recognizable
+     * digit cluster.
      */
     static java.util.Optional<Integer> parseMajorFromIdentifier(String identifier) {
         int dash = identifier.lastIndexOf('-');
@@ -93,9 +92,8 @@ public final class NewJdkOptions {
     }
 
     /**
-     * Parse the leading major version out of a Java version string. Handles
-     * both the JDK 9+ form ({@code 25.0.1} → 25) and the legacy JDK 8 form
-     * ({@code 1.8.0_412} → 8).
+     * Parse the leading major version out of a Java version string. Handles both the JDK 9+ form
+     * ({@code 25.0.1} → 25) and the legacy JDK 8 form ({@code 1.8.0_412} → 8).
      */
     static java.util.Optional<Integer> parseMajor(String version) {
         if (version == null || version.isEmpty()) return java.util.Optional.empty();
@@ -181,10 +179,9 @@ public final class NewJdkOptions {
     }
 
     /**
-     * Stable id for a discovered (non-jk) JDK. Used as the wizard answer
-     * key; we ultimately ignore it in favor of the {@code major} when
-     * writing {@code jk.toml}, but a unique id is required by the radio
-     * step so each row is selectable.
+     * Stable id for a discovered (non-jk) JDK. Used as the wizard answer key; we ultimately ignore it
+     * in favor of the {@code major} when writing {@code jk.toml}, but a unique id is required by the
+     * radio step so each row is selectable.
      */
     private static String idFor(JdkHit hit, int major) {
         // home path is stable and unique by construction (deduped above).

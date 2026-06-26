@@ -23,9 +23,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
- * End-to-end incremental Java compilation (real subprocess javac). A recording
- * strategy captures exactly which sources each pass compiled, so we can assert
- * the precise dirty set — the whole point of the multi-pass orchestrator.
+ * End-to-end incremental Java compilation (real subprocess javac). A recording strategy captures
+ * exactly which sources each pass compiled, so we can assert the precise dirty set — the whole
+ * point of the multi-pass orchestrator.
  */
 class JavaIncrementalCompileTest {
 

@@ -12,17 +12,17 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Guesses a sensible {@code groupId} default for {@code jk init} by walking
- * up from the current directory, looking for a {@code .gitconfig} (then
- * falling back to {@code ~/.gitconfig}), reading {@code [user] email}, and
- * mapping the email domain to a Maven group:
+ * Guesses a sensible {@code groupId} default for {@code jk init} by walking up from the current
+ * directory, looking for a {@code .gitconfig} (then falling back to {@code ~/.gitconfig}), reading
+ * {@code [user] email}, and mapping the email domain to a Maven group:
+ *
  * <ul>
- *   <li>{@code @github.com} / {@code @github.io} → {@code io.github.<local-part>}.</li>
- *   <li>Well-known free-mail providers ({@code gmail.com}, {@code outlook.com},
- *       {@code hotmail.com}, {@code proton.me}, {@code yahoo.com}, …) →
- *       {@code com.example}.</li>
- *   <li>Any other domain → reversed: {@code modmed.com} → {@code com.modmed}.</li>
+ *   <li>{@code @github.com} / {@code @github.io} → {@code io.github.<local-part>}.
+ *   <li>Well-known free-mail providers ({@code gmail.com}, {@code outlook.com}, {@code
+ *       hotmail.com}, {@code proton.me}, {@code yahoo.com}, …) → {@code com.example}.
+ *   <li>Any other domain → reversed: {@code modmed.com} → {@code com.modmed}.
  * </ul>
+ *
  * The empty/missing cases collapse to {@code "com.example"}.
  */
 public final class NewGroupGuess {
@@ -85,9 +85,9 @@ public final class NewGroupGuess {
     }
 
     /**
-     * GitHub's noreply emails look like {@code 12345+username@users.noreply.github.com}
-     * (with the leading digits as the user id). Strip the {@code <digits>+} prefix
-     * so the resulting group lands on the username, not the user id.
+     * GitHub's noreply emails look like {@code 12345+username@users.noreply.github.com} (with the
+     * leading digits as the user id). Strip the {@code <digits>+} prefix so the resulting group lands
+     * on the username, not the user id.
      */
     private static String stripNoreplyPrefix(String localPart) {
         int plus = localPart.indexOf('+');
@@ -110,10 +110,9 @@ public final class NewGroupGuess {
     }
 
     /**
-     * Drop characters that can't appear in a Java package segment, and prefix
-     * an underscore if the segment now starts with a digit. Belt-and-suspenders
-     * — a domain label like {@code 3com} would otherwise produce
-     * {@code com.3com}, which is invalid.
+     * Drop characters that can't appear in a Java package segment, and prefix an underscore if the
+     * segment now starts with a digit. Belt-and-suspenders — a domain label like {@code 3com} would
+     * otherwise produce {@code com.3com}, which is invalid.
      */
     private static String sanitizeIdentifier(String label) {
         var sb = new StringBuilder();
@@ -127,9 +126,8 @@ public final class NewGroupGuess {
     }
 
     /**
-     * Walk from {@code cwd} up to the filesystem root looking for a
-     * {@code .gitconfig}; if none, try {@code ~/.gitconfig}. Return the
-     * first {@code user.email} found.
+     * Walk from {@code cwd} up to the filesystem root looking for a {@code .gitconfig}; if none, try
+     * {@code ~/.gitconfig}. Return the first {@code user.email} found.
      */
     static Optional<String> readEmail(Path cwd, Path home) {
         for (Path p = cwd; p != null; p = p.getParent()) {

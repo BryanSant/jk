@@ -11,6 +11,7 @@ import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.jar.Attributes;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
@@ -107,7 +108,7 @@ class JarPackagerTest {
         new JarPackager()
                 .packageJar(JarPackager.JarRequest.of(input, jar)
                         .withMainClass("com.example.Main")
-                        .withAttributes(java.util.Map.of(
+                        .withAttributes(Map.of(
                                 "Implementation-Title", "widget",
                                 "Implementation-Version", "1.0.0")));
 

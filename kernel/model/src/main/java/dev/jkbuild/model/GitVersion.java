@@ -8,33 +8,28 @@ import java.util.Locale;
 import java.util.Optional;
 
 /**
- * Derives a Maven/SemVer version string from a git ref, for git-source
- * dependencies (see docs/git-source-deps.md).
+ * Derives a Maven/SemVer version string from a git ref, for git-source dependencies (see
+ * docs/git-source-deps.md).
  *
- * <p><b>Why the formats look the way they do:</b> jk orders versions with
- * Maven's {@code ComparableVersion} (see {@code resolver.Versions}). Under that
- * ordering a <em>hex</em> qualifier like {@code -g3f2a9c1} is "unknown" and
- * sorts <em>above</em> the release — wrong for a pre-release commit. The
- * resolved-snapshot <em>timestamp</em> form ({@code 1.2.4-20260601.134752-1}),
- * by contrast, is recognised as a snapshot and sorts below the release and
- * chronologically. So the pseudo-version uses the timestamp form and the commit
- * SHA is recorded in {@code jk.lock} (and surfaced in logs) rather than baked
- * into the version string.
+ * <p><b>Why the formats look the way they do:</b> jk orders versions with Maven's {@code
+ * ComparableVersion} (see {@code resolver.Versions}). Under that ordering a <em>hex</em> qualifier
+ * like {@code -g3f2a9c1} is "unknown" and sorts <em>above</em> the release — wrong for a
+ * pre-release commit. The resolved-snapshot <em>timestamp</em> form ({@code
+ * 1.2.4-20260601.134752-1}), by contrast, is recognised as a snapshot and sorts below the release
+ * and chronologically. So the pseudo-version uses the timestamp form and the commit SHA is recorded
+ * in {@code jk.lock} (and surfaced in logs) rather than baked into the version string.
  *
  * <ul>
- *   <li><b>tag</b> → coerced SemVer ({@code v1.2.3} → {@code 1.2.3}); raw tag
- *       string as a permissive fallback when it can't be coerced.</li>
- *   <li><b>branch</b> → {@code <branch>-SNAPSHOT} (mutable; the SHA is pinned in
- *       the lockfile).</li>
- *   <li><b>untagged commit</b> → pseudo-version built from the nearest
- *       reachable tag plus the commit's timestamp and short SHA:
- *       {@code <nearest-tag>-<yyyyMMdd.HHmmss>-<shortsha>} (no tag →
- *       {@code 0.0.0-…}). Under {@code ComparableVersion}, a numeric
- *       (timestamp) qualifier sorts <em>above</em> the same-core release but
- *       <em>below</em> a higher core — so {@code 1.2.3-20260601.134752-3f2a9c1b}
- *       lands between {@code 1.2.3} and {@code 1.2.4}, sorts chronologically,
- *       and carries the SHA for traceability. (We attach to the prior tag's
- *       core rather than bumping the patch precisely because of that rule.)</li>
+ *   <li><b>tag</b> → coerced SemVer ({@code v1.2.3} → {@code 1.2.3}); raw tag string as a
+ *       permissive fallback when it can't be coerced.
+ *   <li><b>branch</b> → {@code <branch>-SNAPSHOT} (mutable; the SHA is pinned in the lockfile).
+ *   <li><b>untagged commit</b> → pseudo-version built from the nearest reachable tag plus the
+ *       commit's timestamp and short SHA: {@code <nearest-tag>-<yyyyMMdd.HHmmss>-<shortsha>} (no
+ *       tag → {@code 0.0.0-…}). Under {@code ComparableVersion}, a numeric (timestamp) qualifier
+ *       sorts <em>above</em> the same-core release but <em>below</em> a higher core — so {@code
+ *       1.2.3-20260601.134752-3f2a9c1b} lands between {@code 1.2.3} and {@code 1.2.4}, sorts
+ *       chronologically, and carries the SHA for traceability. (We attach to the prior tag's core
+ *       rather than bumping the patch precisely because of that rule.)
  * </ul>
  */
 public final class GitVersion {
@@ -57,12 +52,11 @@ public final class GitVersion {
     }
 
     /**
-     * Pseudo-version for an untagged commit: {@code <base>-<ts>-<shortSha>},
-     * where {@code base} is the coerced nearest reachable tag (or {@code 0.0.0}
-     * when there's none), {@code ts} is the commit's UTC time as
-     * {@code yyyyMMdd.HHmmss}, and {@code shortSha} is the abbreviated commit
-     * hash. The numeric timestamp makes it sort above the base tag and below the
-     * next release; the SHA tie-breaks and aids traceability.
+     * Pseudo-version for an untagged commit: {@code <base>-<ts>-<shortSha>}, where {@code base} is
+     * the coerced nearest reachable tag (or {@code 0.0.0} when there's none), {@code ts} is the
+     * commit's UTC time as {@code yyyyMMdd.HHmmss}, and {@code shortSha} is the abbreviated commit
+     * hash. The numeric timestamp makes it sort above the base tag and below the next release; the
+     * SHA tie-breaks and aids traceability.
      */
     public static String pseudo(Optional<String> nearestTag, Instant commitTime, String shortSha) {
         String base = nearestTag.map(GitVersion::coerce).filter(c -> c != null).orElse("0.0.0");
@@ -70,10 +64,10 @@ public final class GitVersion {
     }
 
     /**
-     * Coerce a tag to {@code major.minor.patch[-prerelease][+build]}: strip a
-     * leading non-digit prefix (a {@code v}, {@code release-}, {@code <name>-},
-     * …), require a numeric core, pad to three components. Returns null when the
-     * tag has no version-like core so the caller can fall back to the raw tag.
+     * Coerce a tag to {@code major.minor.patch[-prerelease][+build]}: strip a leading non-digit
+     * prefix (a {@code v}, {@code release-}, {@code <name>-}, …), require a numeric core, pad to
+     * three components. Returns null when the tag has no version-like core so the caller can fall
+     * back to the raw tag.
      */
     static String coerce(String tag) {
         if (tag == null) return null;

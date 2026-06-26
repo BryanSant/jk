@@ -14,20 +14,18 @@ import java.net.URI;
 import java.nio.file.Path;
 
 /**
- * Pulls jk's own child-JVM worker jars ({@code jk-test-runner},
- * {@code jk-kotlin-compiler}) into the local CAS so {@code jk test} / Kotlin
- * builds can locate them by SHA without a manual {@code installLocalCas}.
+ * Pulls jk's own child-JVM worker jars ({@code jk-test-runner}, {@code jk-kotlin-compiler}) into
+ * the local CAS so {@code jk test} / Kotlin builds can locate them by SHA without a manual {@code
+ * installLocalCas}.
  *
- * <p>These aren't project dependencies — they're jk's tooling, pinned to jk's
- * own version. Until they're published to Maven Central, {@code jk sync} fetches
- * them from the local Maven repository ({@code ~/.m2/repository}, populated by
- * {@code ./gradlew publishToMavenLocal} in jk's tree). The jar lands in the CAS
- * keyed by its content SHA, which must match the expected-SHA resource this jk
+ * <p>These aren't project dependencies — they're jk's tooling, pinned to jk's own version. Until
+ * they're published to Maven Central, {@code jk sync} fetches them from the local Maven repository
+ * ({@code ~/.m2/repository}, populated by {@code ./gradlew publishToMavenLocal} in jk's tree). The
+ * jar lands in the CAS keyed by its content SHA, which must match the expected-SHA resource this jk
  * build was paired with (see {@code writeRunnerSha} / {@code writeKotlinWorkerSha}).
  *
- * <p>Best-effort: a worker already in the CAS is left alone, and a worker absent
- * from {@code ~/.m2} is reported but doesn't fail the sync (the project may not
- * use Kotlin or tests).
+ * <p>Best-effort: a worker already in the CAS is left alone, and a worker absent from {@code ~/.m2}
+ * is reported but doesn't fail the sync (the project may not use Kotlin or tests).
  */
 public final class JkWorkerSync {
 

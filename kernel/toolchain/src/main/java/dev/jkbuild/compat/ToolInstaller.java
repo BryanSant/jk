@@ -22,17 +22,16 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
 /**
- * Downloads a {@link ToolDistribution} and extracts it under
- * {@code $JK_CACHE_DIR/tools/<slug>/<version>/}.
+ * Downloads a {@link ToolDistribution} and extracts it under {@code
+ * $JK_CACHE_DIR/tools/<slug>/<version>/}.
  *
  * <ul>
- *   <li>{@code zip} — {@link ZipInputStream}; the launcher under
- *       {@code bin/} is chmod +x'd on POSIX since zip carries no mode bits
- *       in the JDK stdlib.</li>
- *   <li>{@code tar.gz} — {@link TarArchiveInputStream} over
- *       {@link GZIPInputStream}; POSIX permissions preserved.</li>
- *   <li>SHA-256 verified against {@link ToolDistribution#sha256()} when
- *       present; mismatch aborts with no install dir left behind.</li>
+ *   <li>{@code zip} — {@link ZipInputStream}; the launcher under {@code bin/} is chmod +x'd on
+ *       POSIX since zip carries no mode bits in the JDK stdlib.
+ *   <li>{@code tar.gz} — {@link TarArchiveInputStream} over {@link GZIPInputStream}; POSIX
+ *       permissions preserved.
+ *   <li>SHA-256 verified against {@link ToolDistribution#sha256()} when present; mismatch aborts
+ *       with no install dir left behind.
  * </ul>
  */
 public final class ToolInstaller {
@@ -63,8 +62,12 @@ public final class ToolInstaller {
             if (dist.sha256() != null && !dist.sha256().isEmpty()) {
                 String actual = Hashing.sha256Hex(body);
                 if (!actual.equalsIgnoreCase(dist.sha256())) {
-                    throw new IOException("sha256 mismatch for " + dist.downloadUri() + " — expected " + dist.sha256()
-                            + ", got " + actual);
+                    throw new IOException("sha256 mismatch for "
+                            + dist.downloadUri()
+                            + " — expected "
+                            + dist.sha256()
+                            + ", got "
+                            + actual);
                 }
             }
             Files.write(archive, body);
@@ -138,9 +141,8 @@ public final class ToolInstaller {
     }
 
     /**
-     * Zip archives carry no Unix mode bits, so {@code bin/mvn} or
-     * {@code bin/gradle} arrives without the +x bit. Set it explicitly so
-     * {@code ProcessBuilder} can exec the launcher.
+     * Zip archives carry no Unix mode bits, so {@code bin/mvn} or {@code bin/gradle} arrives without
+     * the +x bit. Set it explicitly so {@code ProcessBuilder} can exec the launcher.
      */
     private static void ensureBinaryExecutable(Path home, BuildTool tool) {
         Path bin = home.resolve("bin").resolve(tool.binaryName());
@@ -157,9 +159,8 @@ public final class ToolInstaller {
     }
 
     /**
-     * Maven and Gradle archives unpack into a single top-level directory
-     * (e.g. {@code apache-maven-3.9.9/}, {@code gradle-9.5.1/}). Strip it
-     * so {@code home/bin/} is reachable.
+     * Maven and Gradle archives unpack into a single top-level directory (e.g. {@code
+     * apache-maven-3.9.9/}, {@code gradle-9.5.1/}). Strip it so {@code home/bin/} is reachable.
      */
     private static Path flattenedRoot(Path stagingDir) throws IOException {
         List<Path> children = new ArrayList<>();

@@ -2,9 +2,8 @@
 package dev.jkbuild.model.command;
 
 /**
- * How many values a positional parameter accepts. Mirrors the picocli arity
- * strings the commands used ({@code "0..1"}, {@code "1"}, {@code "1..*"},
- * {@code "0..*"}) without dragging in picocli.
+ * How many values a positional parameter accepts. Mirrors the picocli arity strings the commands
+ * used ({@code "0..1"}, {@code "1"}, {@code "1..*"}, {@code "0..*"}) without dragging in picocli.
  */
 public enum Arity {
     /** Optional single value: {@code 0..1}. */

@@ -11,16 +11,15 @@ import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 
 /**
- * Computes a stable hash of a compiled class's <em>ABI</em> — the surface a
- * dependent compiles against: class modifiers/super/interfaces and every
- * non-private field and method signature (plus {@code static final} constant
- * values, which javac inlines into dependents). Method bodies, private members,
- * debug info, and the class-file version are excluded, so a body-only edit
- * leaves the ABI hash unchanged and dependents need not recompile.
+ * Computes a stable hash of a compiled class's <em>ABI</em> — the surface a dependent compiles
+ * against: class modifiers/super/interfaces and every non-private field and method signature (plus
+ * {@code static final} constant values, which javac inlines into dependents). Method bodies,
+ * private members, debug info, and the class-file version are excluded, so a body-only edit leaves
+ * the ABI hash unchanged and dependents need not recompile.
  *
- * <p>Annotations are intentionally <em>not</em> part of the ABI for v1: an
- * annotation-only change on a type doesn't change how a caller compiles against
- * it. (Revisit if/when annotation-driven dependents need finer tracking.)
+ * <p>Annotations are intentionally <em>not</em> part of the ABI for v1: an annotation-only change
+ * on a type doesn't change how a caller compiles against it. (Revisit if/when annotation-driven
+ * dependents need finer tracking.)
  */
 public final class ClassAbi {
 
@@ -37,9 +36,9 @@ public final class ClassAbi {
     }
 
     /**
-     * True if the class exposes a non-private {@code static final} field with a
-     * constant value. javac inlines such constants into dependents, leaving no
-     * bytecode edge, so a change to one must be handled conservatively.
+     * True if the class exposes a non-private {@code static final} field with a constant value. javac
+     * inlines such constants into dependents, leaving no bytecode edge, so a change to one must be
+     * handled conservatively.
      */
     public static boolean definesInlinableConstant(byte[] classBytes) {
         boolean[] found = {false};
@@ -103,7 +102,15 @@ public final class ClassAbi {
         @Override
         public FieldVisitor visitField(int access, String name, String descriptor, String signature, Object value) {
             if ((access & Opcodes.ACC_PRIVATE) != 0) return null;
-            members.add("F " + access + ' ' + name + ' ' + descriptor + ' ' + nz(signature) + ' '
+            members.add("F "
+                    + access
+                    + ' '
+                    + name
+                    + ' '
+                    + descriptor
+                    + ' '
+                    + nz(signature)
+                    + ' '
                     + (value == null ? "" : value));
             return null;
         }

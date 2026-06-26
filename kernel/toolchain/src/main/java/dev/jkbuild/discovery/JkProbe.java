@@ -13,15 +13,12 @@ import java.util.Optional;
 import java.util.stream.Stream;
 
 /**
- * Surfaces JDKs that {@code jk jdk install} placed under
- * {@link JkDirs#jdks()} (default {@code ~/.jk/jdks/}; overridable via
- * {@code JK_JDKS_DIR} or {@code JK_HOME}).
+ * Surfaces JDKs that {@code jk jdk install} placed under {@link JkDirs#jdks()} (default {@code
+ * ~/.jk/jdks/}; overridable via {@code JK_JDKS_DIR} or {@code JK_HOME}).
  *
- * <p>The macOS {@code Contents/Home} bundle unwrap is applied via
- * {@link IntellijJdkDir#javaHome} before the path is handed to
- * {@link ProbeSupport#discoverJdk}, so jk-installed macOS tarballs that
- * ship as {@code .jdk} bundles work the same as flat Linux/Windows
- * installs.
+ * <p>The macOS {@code Contents/Home} bundle unwrap is applied via {@link IntellijJdkDir#javaHome}
+ * before the path is handed to {@link ProbeSupport#discoverJdk}, so jk-installed macOS tarballs
+ * that ship as {@code .jdk} bundles work the same as flat Linux/Windows installs.
  */
 public final class JkProbe implements LocalToolProbe {
 

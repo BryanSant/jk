@@ -16,11 +16,10 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * {@code jk export maven} — translate {@code jk.toml} (+ {@code jk.lock}) into a
- * runnable Maven build: a {@code pom.xml} for a single project, or a
- * {@code <packaging>pom</packaging>} reactor root plus a child {@code pom.xml}
- * per workspace module. JDK toolchains map to {@code maven.compiler.release} +
- * the foojay-backed {@code toolchains-maven-plugin}.
+ * {@code jk export maven} — translate {@code jk.toml} (+ {@code jk.lock}) into a runnable Maven
+ * build: a {@code pom.xml} for a single project, or a {@code <packaging>pom</packaging>} reactor
+ * root plus a child {@code pom.xml} per workspace module. JDK toolchains map to {@code
+ * maven.compiler.release} + the foojay-backed {@code toolchains-maven-plugin}.
  */
 public final class ExportMavenCommand implements CliCommand {
 

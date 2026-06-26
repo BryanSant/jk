@@ -6,19 +6,19 @@ import java.util.Locale;
 import java.util.Optional;
 
 /**
- * Per-shell syntax for environment-modification commands emitted by
- * {@code jk hook-env}. Each {@link Shell} returns a single newline-terminated
- * line that the shell can {@code eval} / {@code source} verbatim.
+ * Per-shell syntax for environment-modification commands emitted by {@code jk hook-env}. Each
+ * {@link Shell} returns a single newline-terminated line that the shell can {@code eval} / {@code
+ * source} verbatim.
  *
- * <p>Modelled on mise's {@code Shell} trait but trimmed to the four shells we
- * target: bash, zsh, fish, PowerShell. Other shells (xonsh, nushell, elvish)
- * are intentionally absent — adding them is the obvious extension.
+ * <p>Modelled on mise's {@code Shell} trait but trimmed to the four shells we target: bash, zsh,
+ * fish, PowerShell. Other shells (xonsh, nushell, elvish) are intentionally absent — adding them is
+ * the obvious extension.
  */
 public sealed interface Shell permits BashShell, ZshShell, FishShell, PwshShell {
 
     /**
-     * Canonical short name used both as the picocli value and in serialized
-     * state (e.g. {@code __JK_SHELL=bash}).
+     * Canonical short name used both as the picocli value and in serialized state (e.g. {@code
+     * __JK_SHELL=bash}).
      */
     String name();
 
@@ -29,9 +29,8 @@ public sealed interface Shell permits BashShell, ZshShell, FishShell, PwshShell 
     String unsetEnv(String key);
 
     /**
-     * Render the activation hook script (the long output of {@code jk activate}).
-     * {@code jkExe} is the resolved absolute path to the {@code jk} binary,
-     * pre-quoted for the target shell.
+     * Render the activation hook script (the long output of {@code jk activate}). {@code jkExe} is
+     * the resolved absolute path to the {@code jk} binary, pre-quoted for the target shell.
      */
     String activateScript(String jkExe);
 
@@ -39,10 +38,9 @@ public sealed interface Shell permits BashShell, ZshShell, FishShell, PwshShell 
     String deactivateScript();
 
     /**
-     * RC file the activation line should be appended to. This is the file
-     * the user's interactive shell sources at startup — {@code .zshrc} (not
-     * {@code .zshenv}), {@code .bashrc}, {@code config/fish/config.fish},
-     * {@code $PROFILE} on PowerShell.
+     * RC file the activation line should be appended to. This is the file the user's interactive
+     * shell sources at startup — {@code .zshrc} (not {@code .zshenv}), {@code .bashrc}, {@code
+     * config/fish/config.fish}, {@code $PROFILE} on PowerShell.
      */
     Path rcFile(Path home);
 
@@ -50,10 +48,9 @@ public sealed interface Shell permits BashShell, ZshShell, FishShell, PwshShell 
     String rcFileDisplay();
 
     /**
-     * Line to append to {@link #rcFile} so the shell sources the activation
-     * script on startup. Each shell has its own idiom — {@code eval} for
-     * POSIX shells, pipe-to-source for fish, {@code Invoke-Expression} for
-     * PowerShell.
+     * Line to append to {@link #rcFile} so the shell sources the activation script on startup. Each
+     * shell has its own idiom — {@code eval} for POSIX shells, pipe-to-source for fish, {@code
+     * Invoke-Expression} for PowerShell.
      */
     String activationLine(String jkExe);
 

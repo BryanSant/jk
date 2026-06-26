@@ -24,8 +24,8 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * {@code jk import <file>} — convert a Maven or Gradle build to {@code jk.toml}
- * via the {@code jk-compat-runner} worker subprocess (PRD §24.2 / §24.3).
+ * {@code jk import <file>} — convert a Maven or Gradle build to {@code jk.toml} via the {@code
+ * jk-compat-runner} worker subprocess (PRD §24.2 / §24.3).
  */
 public final class ImportCommand implements CliCommand {
 
@@ -67,7 +67,8 @@ public final class ImportCommand implements CliCommand {
         if (source == null) {
             source = autoDetectSource(baseDir);
             if (source == null) {
-                System.err.println("jk import: no build file found in " + baseDir
+                System.err.println("jk import: no build file found in "
+                        + baseDir
                         + " (looked for build.gradle.kts, build.gradle, pom.xml).");
                 return 66;
             }
@@ -147,8 +148,8 @@ public final class ImportCommand implements CliCommand {
     }
 
     /**
-     * Pick {@code <tmpDir>/<coord>-<n>-<sourceFile>-import.md}, incrementing
-     * {@code n} past any existing file.
+     * Pick {@code <tmpDir>/<coord>-<n>-<sourceFile>-import.md}, incrementing {@code n} past any
+     * existing file.
      */
     static Path defaultReportPath(Path tmpDir, String coord, String sourceFileName) {
         for (int n = 1; ; n++) {

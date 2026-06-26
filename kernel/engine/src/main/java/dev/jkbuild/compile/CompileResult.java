@@ -25,11 +25,10 @@ public record CompileResult(boolean success, List<Diagnostic> diagnostics) {
         }
 
         /**
-         * The diagnostic as it should reach the console: the compiler's full
-         * verbatim block (header {@code src/Foo.java:12: error: …} plus any
-         * source snippet, caret, and {@code symbol:}/{@code location:} lines).
-         * The CLI relativizes paths and adds color on top, so this stays a
-         * faithful copy of what javac/kotlinc emitted.
+         * The diagnostic as it should reach the console: the compiler's full verbatim block (header
+         * {@code src/Foo.java:12: error: …} plus any source snippet, caret, and {@code symbol:}/{@code
+         * location:} lines). The CLI relativizes paths and adds color on top, so this stays a faithful
+         * copy of what javac/kotlinc emitted.
          */
         public String describe() {
             return message;

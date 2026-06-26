@@ -9,9 +9,8 @@ import java.io.PrintStream;
 import java.time.Duration;
 
 /**
- * Emit one JSON object per event to stdout. Triggered by
- * {@code --output json}; consumed by CI scripts, log aggregators, and
- * other tooling. Wire format is defined by {@link NdjsonShape}.
+ * Emit one JSON object per event to stdout. Triggered by {@code --output json}; consumed by CI
+ * scripts, log aggregators, and other tooling. Wire format is defined by {@link NdjsonShape}.
  */
 public final class NdjsonListener implements GoalListener {
 

@@ -4,6 +4,7 @@ package dev.jkbuild.command;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import dev.jkbuild.cli.Jk;
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
@@ -12,6 +13,7 @@ import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.function.Supplier;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -190,9 +192,9 @@ class CacheCommandTest {
     }
 
     /** Run {@code body} with {@code System.in} fed from {@code input}. */
-    private static String withStdin(String input, java.util.function.Supplier<String> body) {
+    private static String withStdin(String input, Supplier<String> body) {
         var original = System.in;
-        System.setIn(new java.io.ByteArrayInputStream(input.getBytes(StandardCharsets.UTF_8)));
+        System.setIn(new ByteArrayInputStream(input.getBytes(StandardCharsets.UTF_8)));
         try {
             return body.get();
         } finally {

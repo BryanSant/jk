@@ -26,24 +26,23 @@ import java.util.jar.Manifest;
 import java.util.stream.Stream;
 
 /**
- * Packages a project's compiled classes plus all of its runtime dependency
- * jars into a single self-contained "shadow" (fat / uber) jar, the way
- * Gradle's shadow plugin or the Maven shade plugin do.
+ * Packages a project's compiled classes plus all of its runtime dependency jars into a single
+ * self-contained "shadow" (fat / uber) jar, the way Gradle's shadow plugin or the Maven shade
+ * plugin do.
  *
  * <p>Merge rules, chosen to be safe across real-world jars:
+ *
  * <ul>
- *   <li>Project classes/resources are written first and <em>win</em> on
- *       conflict; a duplicate path from a later jar is skipped (first wins,
- *       deps processed in the given order).</li>
- *   <li>We write our own manifest (Main-Class + any {@code [manifest]}
- *       attributes); per-jar {@code META-INF/MANIFEST.MF} are dropped.</li>
- *   <li>Signature files ({@code META-INF/*.SF|*.RSA|*.DSA|*.EC},
- *       {@code META-INF/SIG-*}) are dropped — they're invalid once classes
- *       from other jars are merged in.</li>
- *   <li>{@code META-INF/services/*} provider files are <em>concatenated</em>
- *       across all inputs rather than letting one shadow the others.</li>
- *   <li>Entries are written in sorted order with a fixed timestamp, so the
- *       output is reproducible (mirrors {@link JarPackager}).</li>
+ *   <li>Project classes/resources are written first and <em>win</em> on conflict; a duplicate path
+ *       from a later jar is skipped (first wins, deps processed in the given order).
+ *   <li>We write our own manifest (Main-Class + any {@code [manifest]} attributes); per-jar {@code
+ *       META-INF/MANIFEST.MF} are dropped.
+ *   <li>Signature files ({@code META-INF/*.SF|*.RSA|*.DSA|*.EC}, {@code META-INF/SIG-*}) are
+ *       dropped — they're invalid once classes from other jars are merged in.
+ *   <li>{@code META-INF/services/*} provider files are <em>concatenated</em> across all inputs
+ *       rather than letting one shadow the others.
+ *   <li>Entries are written in sorted order with a fixed timestamp, so the output is reproducible
+ *       (mirrors {@link JarPackager}).
  * </ul>
  */
 public final class ShadowPackager {

@@ -12,9 +12,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
 /**
- * Per-phase progress with one line per phase, like Cargo / uv.
- * Activated by {@code --verbose}. Phases scroll up as they complete;
- * the active phase shows its current label.
+ * Per-phase progress with one line per phase, like Cargo / uv. Activated by {@code --verbose}.
+ * Phases scroll up as they complete; the active phase shows its current label.
  */
 public final class VerboseListener implements GoalListener {
 
@@ -30,9 +29,13 @@ public final class VerboseListener implements GoalListener {
     @Override
     public void goalStart(GoalView view) {
         out.println(Theme.colorize("▶", Theme.active().activeStep())
-                + " " + Theme.colorize(view.goalName(), Theme.active().focused())
-                + " (" + view.phasesTotal() + " phase"
-                + (view.phasesTotal() == 1 ? "" : "s") + ")");
+                + " "
+                + Theme.colorize(view.goalName(), Theme.active().focused())
+                + " ("
+                + view.phasesTotal()
+                + " phase"
+                + (view.phasesTotal() == 1 ? "" : "s")
+                + ")");
     }
 
     @Override
@@ -59,7 +62,11 @@ public final class VerboseListener implements GoalListener {
                     case CANCELLED -> Theme.colorize("·", Theme.active().normalGray());
                     default -> "·";
                 };
-        out.println("  " + glyph + " " + phase + "  "
+        out.println("  "
+                + glyph
+                + " "
+                + phase
+                + "  "
                 + Theme.colorize(
                         ConsoleSpec.fmtDuration(duration), Theme.active().darkGray()));
     }

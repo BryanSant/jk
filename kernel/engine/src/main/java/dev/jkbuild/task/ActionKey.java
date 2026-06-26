@@ -17,14 +17,14 @@ import java.util.Map;
  * Builds {@code SHA-256(action) → outputs} keys for the {@link ActionCache}.
  *
  * <p>The action key for a javac invocation is a stable hash of:
+ *
  * <ul>
- *   <li>the task identifier (e.g. {@code "compile-main"})</li>
- *   <li>jk version</li>
- *   <li>{@code --release} and any extra javac options</li>
- *   <li>each source file's SHA-256 (so editing a file invalidates the key)</li>
- *   <li>each classpath entry's path — CAS paths already incorporate the
- *       content hash, so the file name itself is enough to capture the
- *       dependency.</li>
+ *   <li>the task identifier (e.g. {@code "compile-main"})
+ *   <li>jk version
+ *   <li>{@code --release} and any extra javac options
+ *   <li>each source file's SHA-256 (so editing a file invalidates the key)
+ *   <li>each classpath entry's path — CAS paths already incorporate the content hash, so the file
+ *       name itself is enough to capture the dependency.
  * </ul>
  */
 public final class ActionKey {
@@ -72,11 +72,10 @@ public final class ActionKey {
     }
 
     /**
-     * Action key for a Kotlin worker invocation. Same shape as {@link #forJavac}:
-     * task + jk version + jvm target + sorted free args + each source's content
-     * hash + classpath paths (both the compilation classpath and the worker's
-     * Build Tools API closure — whose CAS paths encode the compiler version, so
-     * a compiler bump invalidates the key).
+     * Action key for a Kotlin worker invocation. Same shape as {@link #forJavac}: task + jk version +
+     * jvm target + sorted free args + each source's content hash + classpath paths (both the
+     * compilation classpath and the worker's Build Tools API closure — whose CAS paths encode the
+     * compiler version, so a compiler bump invalidates the key).
      */
     public static String forKotlinc(String taskId, KotlincRequest request, String jkVersion) throws IOException {
         StringBuilder sb = new StringBuilder();
@@ -108,12 +107,11 @@ public final class ActionKey {
     }
 
     /**
-     * Action key for a packaging artifact (jar, fat-jar, native binary, OCI
-     * tarball, …). A stable hash of the task id, jk version, and a set of
-     * pre-computed input tokens — typically {@link ClasspathFingerprint} hashes
-     * of the input classes/jars plus config strings (main-class, manifest, build
-     * args, toolchain version, …). The caller MUST include every input that
-     * affects the produced bytes; a missing token risks serving a stale artifact.
+     * Action key for a packaging artifact (jar, fat-jar, native binary, OCI tarball, …). A stable
+     * hash of the task id, jk version, and a set of pre-computed input tokens — typically {@link
+     * ClasspathFingerprint} hashes of the input classes/jars plus config strings (main-class,
+     * manifest, build args, toolchain version, …). The caller MUST include every input that affects
+     * the produced bytes; a missing token risks serving a stale artifact.
      */
     public static String forArtifact(String taskId, String jkVersion, List<String> inputTokens) {
         StringBuilder sb = new StringBuilder();
@@ -144,11 +142,10 @@ public final class ActionKey {
     }
 
     /**
-     * Qualify a base task id (e.g. {@code compile-main}) with a stable tag
-     * derived from a module-unique directory (the compile output dir), so the
-     * {@link ActionCache} {@code tasks/<taskId>} pointer doesn't collide across
-     * projects or workspace modules that share the same base task name. The
-     * action key itself is already project-unique (it hashes absolute source
+     * Qualify a base task id (e.g. {@code compile-main}) with a stable tag derived from a
+     * module-unique directory (the compile output dir), so the {@link ActionCache} {@code
+     * tasks/<taskId>} pointer doesn't collide across projects or workspace modules that share the
+     * same base task name. The action key itself is already project-unique (it hashes absolute source
      * and classpath paths); this only disambiguates the per-task pointer.
      */
     public static String qualifiedTaskId(String base, Path moduleDir) {

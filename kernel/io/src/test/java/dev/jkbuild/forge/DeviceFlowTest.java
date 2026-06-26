@@ -4,6 +4,7 @@ package dev.jkbuild.forge;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import dev.jkbuild.http.Http;
 import java.io.IOException;
@@ -47,7 +48,7 @@ class DeviceFlowTest {
                 });
     }
 
-    private void respond(com.sun.net.httpserver.HttpExchange exchange, int status, String json) throws IOException {
+    private void respond(HttpExchange exchange, int status, String json) throws IOException {
         byte[] body = json.getBytes(StandardCharsets.UTF_8);
         exchange.getResponseHeaders().add("Content-Type", "application/json");
         exchange.sendResponseHeaders(status, body.length);

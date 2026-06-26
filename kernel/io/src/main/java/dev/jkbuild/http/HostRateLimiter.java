@@ -7,24 +7,23 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.Semaphore;
 
 /**
- * Bounded per-host concurrency for outgoing HTTP. Each distinct host gets
- * its own {@link Semaphore} so we can fire many independent fetches
- * concurrently across different repos (Maven Central, OSV, JetBrains) but
- * stay polite to any one of them — exceeding 6–8 concurrent requests to
- * Maven Central in particular gets you rate-limited or DNS-throttled
- * within seconds.
+ * Bounded per-host concurrency for outgoing HTTP. Each distinct host gets its own {@link Semaphore}
+ * so we can fire many independent fetches concurrently across different repos (Maven Central, OSV,
+ * JetBrains) but stay polite to any one of them — exceeding 6–8 concurrent requests to Maven
+ * Central in particular gets you rate-limited or DNS-throttled within seconds.
  *
- * <p>Default capacity per host is {@value #DEFAULT_PERMITS}. Overrides
- * (for tests or unusually permissive mirrors) are explicit at construction.
+ * <p>Default capacity per host is {@value #DEFAULT_PERMITS}. Overrides (for tests or unusually
+ * permissive mirrors) are explicit at construction.
  *
  * <p>Typical usage:
+ *
  * <pre>{@code
- *   HostRateLimiter limiter = HostRateLimiter.shared();
- *   limiter.run(url, () -> http.get(url));
+ * HostRateLimiter limiter = HostRateLimiter.shared();
+ * limiter.run(url, () -> http.get(url));
  * }</pre>
  *
- * The semaphore is acquired before the lambda runs and released in a
- * {@code finally} block — exceptions don't leak permits.
+ * The semaphore is acquired before the lambda runs and released in a {@code finally} block —
+ * exceptions don't leak permits.
  */
 public final class HostRateLimiter {
 

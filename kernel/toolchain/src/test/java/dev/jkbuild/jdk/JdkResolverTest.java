@@ -57,7 +57,10 @@ class JdkResolverTest {
         return new JdkRegistry(root, List.of(new JkProbe(root)));
     }
 
-    /** Realistic install dir: {@code bin/java} + a {@code release} file so probe-based discovery picks it up. */
+    /**
+     * Realistic install dir: {@code bin/java} + a {@code release} file so probe-based discovery picks
+     * it up.
+     */
     private static void makeJdkInstall(Path home, String version) throws IOException {
         Files.createDirectories(home.resolve("bin"));
         Files.writeString(home.resolve("bin").resolve("java"), "#!/fake");

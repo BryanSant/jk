@@ -35,10 +35,9 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * {@code jk image} — build an OCI image for the project (PRD §22). Runs the
- * full build pipeline (compile → test → package) in-process, then forks the
- * {@code jk-image-runner} worker for the Jib-backed image step so Jib, Guava,
- * and the Google HTTP stack never load in the main jk process.
+ * {@code jk image} — build an OCI image for the project (PRD §22). Runs the full build pipeline
+ * (compile → test → package) in-process, then forks the {@code jk-image-runner} worker for the
+ * Jib-backed image step so Jib, Guava, and the Google HTTP stack never load in the main jk process.
  */
 public final class ImageCommand implements CliCommand {
 

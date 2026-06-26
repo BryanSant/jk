@@ -17,9 +17,8 @@ import java.util.List;
 import java.util.stream.Stream;
 
 /**
- * {@code jk doctor} — repair the build-tool install tree under
- * {@code $JK_CACHE_DIR/tools/<slug>/} (mvn, gradle, kotlin). Walks every
- * registered build tool, prunes broken symlinks, and optionally
+ * {@code jk doctor} — repair the build-tool install tree under {@code $JK_CACHE_DIR/tools/<slug>/}
+ * (mvn, gradle, kotlin). Walks every registered build tool, prunes broken symlinks, and optionally
  * fingerprints linked installs with {@code --verify-linked}.
  */
 public final class DoctorCommand implements CliCommand {
@@ -75,7 +74,8 @@ public final class DoctorCommand implements CliCommand {
             }
         }
         System.out.println("---");
-        System.out.println(healthy + " healthy"
+        System.out.println(healthy
+                + " healthy"
                 + (pruned > 0 ? ", " + pruned + " pruned" : "")
                 + (verified > 0 ? ", " + verified + " fingerprinted" : ""));
         return 0;

@@ -9,12 +9,12 @@ import java.nio.file.Path;
 import java.util.Comparator;
 
 /**
- * Helpers for the link side of the discover-and-link pattern. Splits out
- * so {@code JdkRegistry} and the Maven/Gradle/Kotlin {@code ToolRegistry}
- * can share the same Windows guard and the same link-vs-real semantics.
+ * Helpers for the link side of the discover-and-link pattern. Splits out so {@code JdkRegistry} and
+ * the Maven/Gradle/Kotlin {@code ToolRegistry} can share the same Windows guard and the same
+ * link-vs-real semantics.
  *
- * <p>Per the goal: never symlink on Windows — {@link #canSymlink()}
- * short-circuits there. Callers fall back to a regular download path.
+ * <p>Per the goal: never symlink on Windows — {@link #canSymlink()} short-circuits there. Callers
+ * fall back to a regular download path.
  */
 public final class SymlinkProvisioner {
 
@@ -26,11 +26,11 @@ public final class SymlinkProvisioner {
     }
 
     /**
-     * Create a symbolic link {@code target → source}. Caller has already
-     * checked {@link #canSymlink()}; this method throws on Windows.
+     * Create a symbolic link {@code target → source}. Caller has already checked {@link
+     * #canSymlink()}; this method throws on Windows.
      *
-     * <p>{@code target}'s parent is created if missing. Pre-existing
-     * entries at {@code target} are removed first (idempotent).
+     * <p>{@code target}'s parent is created if missing. Pre-existing entries at {@code target} are
+     * removed first (idempotent).
      */
     public static void link(Path target, Path source) throws IOException {
         if (!canSymlink()) {
@@ -45,19 +45,15 @@ public final class SymlinkProvisioner {
     }
 
     /**
-     * True when the path is a symlink whose target no longer resolves to
-     * an existing entry. Useful for the broken-link healthcheck before
-     * exec.
+     * True when the path is a symlink whose target no longer resolves to an existing entry. Useful
+     * for the broken-link healthcheck before exec.
      */
     public static boolean isBrokenLink(Path path) {
         if (!Files.isSymbolicLink(path)) return false;
         return !Files.exists(path); // follows the link by default
     }
 
-    /**
-     * Remove the link itself (not its target). Safe even when the target
-     * has gone away.
-     */
+    /** Remove the link itself (not its target). Safe even when the target has gone away. */
     public static void unlink(Path path) throws IOException {
         if (Files.isSymbolicLink(path)) {
             Files.deleteIfExists(path);
@@ -65,8 +61,8 @@ public final class SymlinkProvisioner {
     }
 
     /**
-     * Recursively delete a directory tree, or unlink a symlink. Used when
-     * we're about to overwrite a jk-managed entry with a fresh link.
+     * Recursively delete a directory tree, or unlink a symlink. Used when we're about to overwrite a
+     * jk-managed entry with a fresh link.
      */
     private static void removeRecursivelyOrUnlink(Path path) throws IOException {
         if (Files.isSymbolicLink(path)) {

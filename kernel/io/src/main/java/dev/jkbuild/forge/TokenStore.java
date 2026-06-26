@@ -13,15 +13,14 @@ import java.nio.file.attribute.PosixFilePermissions;
 import java.util.Locale;
 
 /**
- * Persists forge tokens, keyed by host, under {@code ~/.jk/credentials/}.
- * One file per host (filename = sanitized host), each containing just the
- * token. This generalizes the original single-file {@code ~/.jk/github-token}
- * design to the multi-provider, multi-host world: a developer can be logged
- * into {@code github.com}, a private GHE, and {@code codeberg.org} at once.
+ * Persists forge tokens, keyed by host, under {@code ~/.jk/credentials/}. One file per host
+ * (filename = sanitized host), each containing just the token. This generalizes the original
+ * single-file {@code ~/.jk/github-token} design to the multi-provider, multi-host world: a
+ * developer can be logged into {@code github.com}, a private GHE, and {@code codeberg.org} at once.
  *
- * <p>The directory is created {@code rwx------} and each token file
- * {@code rw-------} on POSIX; on Windows the permission tightening is a
- * best-effort no-op (the user profile dir is already per-user).
+ * <p>The directory is created {@code rwx------} and each token file {@code rw-------} on POSIX; on
+ * Windows the permission tightening is a best-effort no-op (the user profile dir is already
+ * per-user).
  */
 public final class TokenStore {
 

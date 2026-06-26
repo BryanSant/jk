@@ -6,12 +6,10 @@ import dev.jkbuild.model.command.Invocation;
 import java.util.List;
 
 /**
- * {@code jk repo} parent verb — manage artifact-repository credentials (the
- * package/artifact plane, distinct from {@code jk auth}'s git-forge plane).
- * Stores credentials keyed by repository id under {@code ~/.jk/repo-credentials/}
- * for use when resolving from / publishing to private Nexus, Artifactory,
- * WebDAV, and other authenticated Maven repositories. See
- * docs/artifact-repos.md.
+ * {@code jk repo} parent verb — manage artifact-repository credentials (the package/artifact plane,
+ * distinct from {@code jk auth}'s git-forge plane). Stores credentials keyed by repository id under
+ * {@code ~/.jk/repo-credentials/} for use when resolving from / publishing to private Nexus,
+ * Artifactory, WebDAV, and other authenticated Maven repositories. See docs/artifact-repos.md.
  */
 public final class RepoCommand implements CliCommand {
 

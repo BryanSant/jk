@@ -12,9 +12,9 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 /**
- * The model-driven help path: a {@link CliCommand} → {@link CommandModel}
- * (via {@link CommandModels}) → rendered screen (via
- * {@link HelpRenderer#renderHelp}). Ansi off for deterministic assertions.
+ * The model-driven help path: a {@link CliCommand} → {@link CommandModel} (via {@link
+ * CommandModels}) → rendered screen (via {@link HelpRenderer#renderHelp}). Ansi off for
+ * deterministic assertions.
  */
 class CommandHelpRenderTest {
 

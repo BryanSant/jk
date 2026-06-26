@@ -17,8 +17,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
- * End-to-end (offline) materialization: build a local git "library" repo with
- * a jk.toml project, then clone → derive version → build → local-publish.
+ * End-to-end (offline) materialization: build a local git "library" repo with a jk.toml project,
+ * then clone → derive version → build → local-publish.
  */
 class GitSourceMaterializerTest {
 

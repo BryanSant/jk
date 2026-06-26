@@ -17,9 +17,8 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * {@code jk gradle ...} — passthrough to Gradle (PRD §24.1). Mirrors
- * {@link MvnCommand}: provisions via {@code jk-compat-runner}, then execs
- * {@code bin/gradle} directly.
+ * {@code jk gradle ...} — passthrough to Gradle (PRD §24.1). Mirrors {@link MvnCommand}: provisions
+ * via {@code jk-compat-runner}, then execs {@code bin/gradle} directly.
  */
 public final class GradleCommand implements CliCommand {
 

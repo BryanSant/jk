@@ -4,11 +4,10 @@ package dev.jkbuild.model.command;
 import java.util.List;
 
 /**
- * An executable, CLI-presentable {@link Command}: it can have aliases and
- * subcommands, and it runs against a parsed {@link Invocation}, returning the
- * process exit code. Replaces the picocli {@code @Command} + {@code Callable<Integer>}
- * shape — leaf verbs implement {@link #run}, parent verbs return subcommands
- * (and typically {@code run} prints help).
+ * An executable, CLI-presentable {@link Command}: it can have aliases and subcommands, and it runs
+ * against a parsed {@link Invocation}, returning the process exit code. Replaces the picocli
+ * {@code @Command} + {@code Callable<Integer>} shape — leaf verbs implement {@link #run}, parent
+ * verbs return subcommands (and typically {@code run} prints help).
  */
 public interface CliCommand extends Command {
 
@@ -33,18 +32,17 @@ public interface CliCommand extends Command {
     }
 
     /**
-     * True when unrecognized options should be forwarded as positional arguments
-     * rather than treated as errors — needed for passthrough commands like
-     * {@code jk mvn} / {@code jk gradle} that relay unknown flags to a child process.
+     * True when unrecognized options should be forwarded as positional arguments rather than treated
+     * as errors — needed for passthrough commands like {@code jk mvn} / {@code jk gradle} that relay
+     * unknown flags to a child process.
      */
     default boolean passthrough() {
         return false;
     }
 
     /**
-     * Execute with the parsed arguments; return the process exit code
-     * (0 = success). Parent commands typically print help and return a usage
-     * exit code when invoked without a subcommand.
+     * Execute with the parsed arguments; return the process exit code (0 = success). Parent commands
+     * typically print help and return a usage exit code when invoked without a subcommand.
      */
     int run(Invocation in) throws Exception;
 }

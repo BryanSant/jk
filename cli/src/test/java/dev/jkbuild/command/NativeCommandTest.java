@@ -10,9 +10,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
- * Native builds are opt-in: {@code jk native} only builds modules that set
- * {@code native = true}. A project without it is refused up front (before any
- * build), so we can assert the guard without needing GraalVM in tests.
+ * Native builds are opt-in: {@code jk native} only builds modules that set {@code native = true}. A
+ * project without it is refused up front (before any build), so we can assert the guard without
+ * needing GraalVM in tests.
  */
 class NativeCommandTest {
 

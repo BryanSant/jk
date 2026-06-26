@@ -7,34 +7,35 @@ import dev.jkbuild.cli.theme.Theme;
 import org.jline.utils.AttributedStyle;
 
 /**
- * Pure, embeddable segmented progress bar — a <em>string renderer</em>, not a
- * widget. It owns no cursor, no terminal, no threads, and emits no OSC: given a
- * {@code (numerator, denominator)} it returns one line of colored text:
+ * Pure, embeddable segmented progress bar — a <em>string renderer</em>, not a widget. It owns no
+ * cursor, no terminal, no threads, and emits no OSC: given a {@code (numerator, denominator)} it
+ * returns one line of colored text:
  *
  * <pre>
  *   ████████▍                                19%
  * </pre>
  *
- * <p>The caller (the goal-oriented {@code CommandManager} view) places this line
- * inside its multi-line live region and repaints the whole region, so this class
- * deliberately does <em>not</em> manage screen state. The single-line, cursor-
- * owning widget lives in {@link SpinnerProgressBar}.
+ * <p>The caller (the goal-oriented {@code CommandManager} view) places this line inside its
+ * multi-line live region and repaints the whole region, so this class deliberately does
+ * <em>not</em> manage screen state. The single-line, cursor- owning widget lives in {@link
+ * SpinnerProgressBar}.
  *
- * <p>The fill is drawn with block glyphs — solid full blocks ({@code █}) with one
- * fractional eighth-block ({@code ▏▎▍▌▋▊▉}) at the frontier, so the bar models the
- * percentage to a fraction of a cell. Unreached cells are <em>spaces</em> rather
- * than a dim glyph; every cell — filled, fractional, and empty alike — is
- * underlined, so the unreached run reads as an underscored track in the gradient's
- * brightest (right-most) color. Filled cells use the same <em>moving</em> gradient
- * as {@link SpinnerProgressBar}: the right-most filled glyph is pinned to the
- * gradient end and the band trails back toward the start, so the color looks
- * pushed rightward as the bar fills. The percent trails the bar, plain.
+ * <p>The fill is drawn with block glyphs — solid full blocks ({@code █}) with one fractional
+ * eighth-block ({@code ▏▎▍▌▋▊▉}) at the frontier, so the bar models the percentage to a fraction of
+ * a cell. Unreached cells are <em>spaces</em> rather than a dim glyph; every cell — filled,
+ * fractional, and empty alike — is underlined, so the unreached run reads as an underscored track
+ * in the gradient's brightest (right-most) color. Filled cells use the same <em>moving</em>
+ * gradient as {@link SpinnerProgressBar}: the right-most filled glyph is pinned to the gradient end
+ * and the band trails back toward the start, so the color looks pushed rightward as the bar fills.
+ * The percent trails the bar, plain.
  */
 public final class ProgressBar {
 
     public static final int SEGMENTS = 40;
+
     /** Solid cell for the filled run. */
     static final char FULL_BLOCK = '█';
+
     // Legacy medium-square glyphs, kept for the suffix-less {@link #renderBar} used
     // by static utilization tables (e.g. {@code jk cache}).
     static final char FILLED_CHAR = '▰';
@@ -72,8 +73,8 @@ public final class ProgressBar {
     }
 
     /**
-     * Render one bar line for {@code (numerator, denominator)} — the underlined
-     * block bar followed by a plain white {@code  NN%} trailing the bar.
+     * Render one bar line for {@code (numerator, denominator)} — the underlined block bar followed by
+     * a plain white {@code NN%} trailing the bar.
      */
     public String render(long numerator, long denominator) {
         StringBuilder sb = new StringBuilder();
@@ -85,9 +86,9 @@ public final class ProgressBar {
     }
 
     /**
-     * Append the {@link #SEGMENTS}-wide underlined bar: solid blocks for the whole
-     * cells, one eighth-block at the fractional frontier, and brightest-color
-     * underlined spaces for the unreached cells. Every cell is underlined.
+     * Append the {@link #SEGMENTS}-wide underlined bar: solid blocks for the whole cells, one
+     * eighth-block at the fractional frontier, and brightest-color underlined spaces for the
+     * unreached cells. Every cell is underlined.
      */
     private void appendBar(StringBuilder sb, long numerator, long denominator) {
         int[] cells = cells(numerator, denominator);
@@ -111,8 +112,8 @@ public final class ProgressBar {
     }
 
     /**
-     * The bar's first-cell color — the lead color the goal-header's powerline cap
-     * blends into. Mirrors {@link #appendBar}'s coloring for cell 0.
+     * The bar's first-cell color — the lead color the goal-header's powerline cap blends into.
+     * Mirrors {@link #appendBar}'s coloring for cell 0.
      */
     public Rgb leadColor(long numerator, long denominator) {
         int fill = cells(numerator, denominator)[2];
@@ -122,8 +123,8 @@ public final class ProgressBar {
     }
 
     /**
-     * Decompose a ratio into {@code {full, eighths, fill}}: whole filled cells, the
-     * fractional frontier in eighths (0–7), and the count of non-empty cells.
+     * Decompose a ratio into {@code {full, eighths, fill}}: whole filled cells, the fractional
+     * frontier in eighths (0–7), and the count of non-empty cells.
      */
     private static int[] cells(long numerator, long denominator) {
         double exact = fraction(numerator, denominator) * SEGMENTS;
@@ -141,10 +142,10 @@ public final class ProgressBar {
     }
 
     /**
-     * Just the colored segment bar at an explicit width — no percent and no
-     * {@code [n of d]} suffix. For embedding a fixed-width bar inside another
-     * widget (e.g. a boxed table's utilization row). The gradient is rebuilt at
-     * the requested width so the moving-fill look is preserved at any size.
+     * Just the colored segment bar at an explicit width — no percent and no {@code [n of d]} suffix.
+     * For embedding a fixed-width bar inside another widget (e.g. a boxed table's utilization row).
+     * The gradient is rebuilt at the requested width so the moving-fill look is preserved at any
+     * size.
      */
     public String renderBar(long numerator, long denominator, int segments) {
         if (segments <= 0) return "";

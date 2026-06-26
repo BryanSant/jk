@@ -15,13 +15,12 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * Tiny client over <a href="https://api.osv.dev/v1/querybatch">OSV v1 batch
- * query API</a> (PRD §23.5). One round trip per lockfile.
+ * Tiny client over <a href="https://api.osv.dev/v1/querybatch">OSV v1 batch query API</a> (PRD
+ * §23.5). One round trip per lockfile.
  *
- * <p>OSV is the federated source that aggregates GHSA, RustSec, PyPA, etc.
- * Each query asks "is this {ecosystem,name,version} affected?" and the
- * response lists vulnerability IDs. The client deliberately does not pull
- * the full vuln details — those are fetched only when the audit verb
+ * <p>OSV is the federated source that aggregates GHSA, RustSec, PyPA, etc. Each query asks "is this
+ * {ecosystem,name,version} affected?" and the response lists vulnerability IDs. The client
+ * deliberately does not pull the full vuln details — those are fetched only when the audit verb
  * needs them, keeping the default-path payload small.
  */
 public final class OsvClient {
@@ -141,7 +140,11 @@ public final class OsvClient {
                 out.add(new Result(ids));
             }
             if (out.size() != expectedSize) {
-                throw new IOException("OSV returned " + out.size() + " result(s) for " + expectedSize + " quer"
+                throw new IOException("OSV returned "
+                        + out.size()
+                        + " result(s) for "
+                        + expectedSize
+                        + " quer"
                         + (expectedSize == 1 ? "y" : "ies"));
             }
             return out;

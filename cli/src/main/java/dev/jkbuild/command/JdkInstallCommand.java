@@ -36,18 +36,15 @@ import org.jline.terminal.Terminal;
 import org.jline.utils.AttributedStyle;
 
 /**
- * {@code jk jdk install [<spec>]} — pull a JDK from the JetBrains JDK feed
- * and unpack it into the IntelliJ JDK directory ({@code ~/.jdks/} or
- * {@code ~/Library/Java/JavaVirtualMachines/}).
+ * {@code jk jdk install [<spec>]} — pull a JDK from the JetBrains JDK feed and unpack it into the
+ * IntelliJ JDK directory ({@code ~/.jdks/} or {@code ~/Library/Java/JavaVirtualMachines/}).
  *
- * <p>Goal shape: {@code fetch-catalog} (IO) → {@code select} (SYNC; runs
- * the wizard when no spec was given) → {@code download} (IO; uses the
- * inline progress bar) → {@code extract} (IO; uses the inline spinner)
- * → {@code set-default} (SYNC; only when {@code --make-default}).
+ * <p>Goal shape: {@code fetch-catalog} (IO) → {@code select} (SYNC; runs the wizard when no spec
+ * was given) → {@code download} (IO; uses the inline progress bar) → {@code extract} (IO; uses the
+ * inline spinner) → {@code set-default} (SYNC; only when {@code --make-default}).
  *
- * <p>Marked interactive so the framework's progress widget stays out of
- * the way of the wizard, SpinnerProgressBar and Spinner — those keep ownership
- * of the rendered output.
+ * <p>Marked interactive so the framework's progress widget stays out of the way of the wizard,
+ * SpinnerProgressBar and Spinner — those keep ownership of the rendered output.
  */
 public final class JdkInstallCommand implements CliCommand {
 
@@ -103,6 +100,7 @@ public final class JdkInstallCommand implements CliCommand {
             GoalKey.of("archive", JdkInstaller.DownloadedArchive.class);
     private static final GoalKey<InstalledJdk> INSTALLED = GoalKey.of("installed", InstalledJdk.class);
     private static final GoalKey<Boolean> WANT_DEFAULT = GoalKey.of("want-default", Boolean.class);
+
     /** True when the interactive wizard ran — it already settled the default decision. */
     private static final GoalKey<Boolean> WIZARD_RAN = GoalKey.of("wizard-ran", Boolean.class);
 
@@ -118,7 +116,9 @@ public final class JdkInstallCommand implements CliCommand {
 
         if (!HostPlatform.supported()) {
             System.err.println("jk jdk install: host "
-                    + System.getProperty("os.name") + "/" + System.getProperty("os.arch")
+                    + System.getProperty("os.name")
+                    + "/"
+                    + System.getProperty("os.arch")
                     + " is not covered by the JetBrains JDK feed. Set JAVA_HOME explicitly.");
             return 1;
         }
@@ -202,9 +202,19 @@ public final class JdkInstallCommand implements CliCommand {
                     ctx.put(ENTRY, entry);
                     ctx.put(WANT_DEFAULT, wantDefault);
                     if (global != null && global.verbose) {
-                        System.err.println("jk jdk install: resolved spec='" + effective + "' to "
-                                + entry.installFolderName() + " (" + entry.vendor() + " "
-                                + entry.product() + ", " + os + "/" + arch + ")");
+                        System.err.println("jk jdk install: resolved spec='"
+                                + effective
+                                + "' to "
+                                + entry.installFolderName()
+                                + " ("
+                                + entry.vendor()
+                                + " "
+                                + entry.product()
+                                + ", "
+                                + os
+                                + "/"
+                                + arch
+                                + ")");
                     }
                     ctx.progress(1);
                 })
@@ -291,7 +301,8 @@ public final class JdkInstallCommand implements CliCommand {
                     dev.jkbuild.jdk.JdkAccessLedger.atDefaultPath().touch(installed.identifier(), "default-set");
                     System.out.println();
                     System.out.println(Theme.colorize("➜", Theme.active().brightGreen())
-                            + " " + Theme.colorize(installed.identifier(), AttributedStyle.DEFAULT.bold())
+                            + " "
+                            + Theme.colorize(installed.identifier(), AttributedStyle.DEFAULT.bold())
                             + " is now the "
                             + Theme.colorize("default", Theme.active().focused())
                             + " JDK");
@@ -338,7 +349,9 @@ public final class JdkInstallCommand implements CliCommand {
         return 0;
     }
 
-    /** Prompt to make {@code jdk} the default JDK and/or default GraalVM when it's ≥ the current ones. */
+    /**
+     * Prompt to make {@code jdk} the default JDK and/or default GraalVM when it's ≥ the current ones.
+     */
     private void offerDefaults(InstalledJdk jdk, boolean alreadyMadeDefault) {
         int newMajor = JdkListCommand.parseMajor(jdk.identifier());
         if (newMajor == 0 || !Confirm.isInteractiveTerminal()) return;
@@ -385,14 +398,13 @@ public final class JdkInstallCommand implements CliCommand {
     }
 
     /**
-     * Translate the keyword specs ({@code lts}, {@code stable}, {@code latest})
-     * into a concrete {@code temurin-<major>} spec string. Returns {@code null}
-     * when {@code raw} is not a keyword — the caller treats it as a normal
-     * denormalized spec in that case.
+     * Translate the keyword specs ({@code lts}, {@code stable}, {@code latest}) into a concrete
+     * {@code temurin-<major>} spec string. Returns {@code null} when {@code raw} is not a keyword —
+     * the caller treats it as a normal denormalized spec in that case.
      *
-     * <p>The Temurin bias matches the user's mental model of "the default LTS
-     * JDK"; if Temurin isn't shipped at that major for this host, the flexible
-     * selector falls back to the catalog's default-for-major.
+     * <p>The Temurin bias matches the user's mental model of "the default LTS JDK"; if Temurin isn't
+     * shipped at that major for this host, the flexible selector falls back to the catalog's
+     * default-for-major.
      */
     private String resolveKeyword(String raw, JdkCatalog catalog, String os, String arch) {
         if (!JdkKeywords.isKeyword(raw)) return null;
@@ -400,23 +412,32 @@ public final class JdkInstallCommand implements CliCommand {
         if (resolved == null) {
             // A keyword resolved to nothing: lts/stable with no LTS major, or
             // `native` with no Oracle GraalVM, for this host.
-            System.err.println("jk jdk install: could not resolve `" + raw.trim() + "` against the JetBrains feed for "
-                    + os + "/" + arch + ".");
+            System.err.println("jk jdk install: could not resolve `"
+                    + raw.trim()
+                    + "` against the JetBrains feed for "
+                    + os
+                    + "/"
+                    + arch
+                    + ".");
         }
         return resolved;
     }
 
     /**
      * Render the post-install summary line:
+     *
      * <pre>
      *   ✓ &lt;label&gt; &lt;verb&gt; &lt;~/path&gt;
      * </pre>
      */
     private static String doneLine(String label, Path home, String verb) {
         return Theme.colorize("✓", Theme.active().completedStep())
-                + " " + Theme.colorize(label, Theme.active().focused())
-                + " " + emphasizeInstalled(verb)
-                + " " + Theme.colorize(tildeCollapse(home), Theme.active().path());
+                + " "
+                + Theme.colorize(label, Theme.active().focused())
+                + " "
+                + emphasizeInstalled(verb)
+                + " "
+                + Theme.colorize(tildeCollapse(home), Theme.active().path());
     }
 
     /** Render {@code verb} in normal-gray with the word "installed" promoted to bold-white. */

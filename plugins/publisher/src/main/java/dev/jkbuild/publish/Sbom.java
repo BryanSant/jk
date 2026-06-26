@@ -8,19 +8,16 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * Generates CycloneDX 1.6 and SPDX 2.3 SBOM JSON for a published artifact
- * (PRD §21.2, §23.9).
+ * Generates CycloneDX 1.6 and SPDX 2.3 SBOM JSON for a published artifact (PRD §21.2, §23.9).
  *
- * <p>The component graph comes from a project's {@link JkBuild} for the
- * root + an optional {@link Lockfile} for the resolved transitives (with
- * versions and SHA-256 hashes). When no lockfile is supplied, just the
- * root is emitted — a degraded but valid SBOM that still satisfies the
- * "ship something" Central guidance.
+ * <p>The component graph comes from a project's {@link JkBuild} for the root + an optional {@link
+ * Lockfile} for the resolved transitives (with versions and SHA-256 hashes). When no lockfile is
+ * supplied, just the root is emitted — a degraded but valid SBOM that still satisfies the "ship
+ * something" Central guidance.
  *
- * <p>Hand-rolled JSON for both formats. The schemas are stable, the field
- * set we need is small, and avoiding cyclonedx-core-java + java-spdx-library
- * here keeps the binary lean. The official libraries can step in when we
- * need richer features (deep dependency edges, license normalisation,
+ * <p>Hand-rolled JSON for both formats. The schemas are stable, the field set we need is small, and
+ * avoiding cyclonedx-core-java + java-spdx-library here keeps the binary lean. The official
+ * libraries can step in when we need richer features (deep dependency edges, license normalisation,
  * tool model tracking).
  */
 public final class Sbom {
@@ -82,9 +79,14 @@ public final class Sbom {
 
     /** Render an SPDX 2.3 JSON SBOM. */
     public static byte[] spdx(JkBuild project, Lockfile lock) {
-        String docNamespace = "https://buildjk.dev/sbom/" + project.project().group() + "/"
-                + project.project().name() + "/" + project.project().version()
-                + "/" + UUID.randomUUID();
+        String docNamespace = "https://buildjk.dev/sbom/"
+                + project.project().group()
+                + "/"
+                + project.project().name()
+                + "/"
+                + project.project().version()
+                + "/"
+                + UUID.randomUUID();
         StringBuilder sb = new StringBuilder(512);
         sb.append('{');
         kv(sb, "spdxVersion", "SPDX-2.3");

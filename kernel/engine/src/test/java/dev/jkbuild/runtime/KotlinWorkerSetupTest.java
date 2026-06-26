@@ -15,10 +15,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
- * Worker-jar location: system-property override → CAS-by-SHA → clear error.
- * (Runtime's test JVM doesn't set the property, so the CAS path is exercised
- * directly; the worker jar's content is irrelevant to location, only its
- * presence at {@code cas.pathFor(expectedSha)}.)
+ * Worker-jar location: system-property override → CAS-by-SHA → clear error. (Runtime's test JVM
+ * doesn't set the property, so the CAS path is exercised directly; the worker jar's content is
+ * irrelevant to location, only its presence at {@code cas.pathFor(expectedSha)}.)
  */
 class KotlinWorkerSetupTest {
 

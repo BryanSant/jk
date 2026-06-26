@@ -11,28 +11,28 @@ import java.util.Objects;
  * Centralized path decisions for jk's build output layout.
  *
  * <p>Everything lives directly under {@code <moduleRoot>/target/}:
+ *
  * <ul>
- *   <li><b>Build intermediates</b> — {@code classes/}, {@code kotlin/},
- *       {@code resources/}, {@code generated/}, {@code tmp/}</li>
- *   <li><b>Test results</b> — XML/HTML files in {@code test-results/};
- *       the human-readable {@code test-results.md} at the top of {@code target/}</li>
- *   <li><b>Final artifacts</b> — jars, native binaries, OCI tarballs directly
- *       under {@code target/}</li>
+ *   <li><b>Build intermediates</b> — {@code classes/}, {@code kotlin/}, {@code resources/}, {@code
+ *       generated/}, {@code tmp/}
+ *   <li><b>Test results</b> — XML/HTML files in {@code test-results/}; the human-readable {@code
+ *       test-results.md} at the top of {@code target/}
+ *   <li><b>Final artifacts</b> — jars, native binaries, OCI tarballs directly under {@code target/}
  * </ul>
  *
- * <p>For a single-project (no {@code [workspace]} block), workspace root and
- * module root are the same directory, so everything sits under one {@code target/}.
+ * <p>For a single-project (no {@code [workspace]} block), workspace root and module root are the
+ * same directory, so everything sits under one {@code target/}.
  *
- * <p>Compiler output is split by toolchain to prevent the Kotlin incremental
- * compiler from pruning Java-compiled classes (it owns and prunes its directory):
+ * <p>Compiler output is split by toolchain to prevent the Kotlin incremental compiler from pruning
+ * Java-compiled classes (it owns and prunes its directory):
+ *
  * <ul>
- *   <li>{@code target/kotlin/main} — kotlinc incremental workspace</li>
- *   <li>{@code target/classes/main} — javac output <em>and</em> the final
- *       assembled classes (kotlinc output is merged here after compilation)</li>
+ *   <li>{@code target/kotlin/main} — kotlinc incremental workspace
+ *   <li>{@code target/classes/main} — javac output <em>and</em> the final assembled classes
+ *       (kotlinc output is merged here after compilation)
  * </ul>
  *
- * <p>This class is a pure value object — every method is pure, no directories
- * are created.
+ * <p>This class is a pure value object — every method is pure, no directories are created.
  */
 public final class BuildLayout {
 
@@ -102,8 +102,8 @@ public final class BuildLayout {
     /**
      * {@code target/} — root of all per-module build intermediates.
      *
-     * <p>Previously {@code target/build/}; all outputs now sit directly
-     * under {@code target/} alongside the final artifacts.
+     * <p>Previously {@code target/build/}; all outputs now sit directly under {@code target/}
+     * alongside the final artifacts.
      */
     public Path buildDir() {
         return moduleTargetDir();
@@ -112,11 +112,10 @@ public final class BuildLayout {
     /**
      * {@code target/classes/main/} — final assembled main classes.
      *
-     * <p>Both javac output and (after assembly) kotlinc output land here.
-     * This is the directory the JAR packager reads from, so it contains
-     * all compiled classes regardless of which compiler produced them.
-     * The Kotlin incremental compiler writes to {@link #kotlinClassesDir()}
-     * first, then jk merges the result here.
+     * <p>Both javac output and (after assembly) kotlinc output land here. This is the directory the
+     * JAR packager reads from, so it contains all compiled classes regardless of which compiler
+     * produced them. The Kotlin incremental compiler writes to {@link #kotlinClassesDir()} first,
+     * then jk merges the result here.
      */
     public Path classesDir() {
         return buildDir().resolve("classes").resolve("main");
@@ -130,10 +129,9 @@ public final class BuildLayout {
     /**
      * {@code target/kotlin/main/} — kotlinc incremental workspace for main sources.
      *
-     * <p>The Kotlin BTA incremental compiler owns this directory and prunes
-     * any {@code .class} file it did not produce. It must never share a dir
-     * with javac's output. After kotlinc finishes, jk merges the output into
-     * {@link #classesDir()}.
+     * <p>The Kotlin BTA incremental compiler owns this directory and prunes any {@code .class} file
+     * it did not produce. It must never share a dir with javac's output. After kotlinc finishes, jk
+     * merges the output into {@link #classesDir()}.
      */
     public Path kotlinClassesDir() {
         return buildDir().resolve("kotlin").resolve("main");
@@ -160,9 +158,9 @@ public final class BuildLayout {
     }
 
     /**
-     * {@code target/generated/sources/<processor>/<sourceSet>/} — annotation-processor
-     * output for a given source set ({@code main} or {@code test}). Test processing must
-     * not share a directory with main, or the two would clobber each other's generated files.
+     * {@code target/generated/sources/<processor>/<sourceSet>/} — annotation-processor output for a
+     * given source set ({@code main} or {@code test}). Test processing must not share a directory
+     * with main, or the two would clobber each other's generated files.
      */
     public Path generatedSourcesDir(String processor, String sourceSet) {
         Objects.requireNonNull(processor, "processor");
@@ -196,8 +194,8 @@ public final class BuildLayout {
     }
 
     /**
-     * {@code target/test-results.md} — human-readable markdown test results,
-     * written at the top of {@code target/} rather than inside {@code test-results/}.
+     * {@code target/test-results.md} — human-readable markdown test results, written at the top of
+     * {@code target/} rather than inside {@code test-results/}.
      */
     public Path markdownTestResults() {
         return moduleTargetDir().resolve("test-results.md");
@@ -208,8 +206,8 @@ public final class BuildLayout {
     /**
      * {@code <moduleRoot>/target/} — this module's final artifacts.
      *
-     * <p>Each project owns its own {@code target/} directory. The workspace root
-     * only gets a {@code target/} if it has its own source code to build.
+     * <p>Each project owns its own {@code target/} directory. The workspace root only gets a {@code
+     * target/} if it has its own source code to build.
      */
     public Path targetDir() {
         return moduleRoot.resolve("target");
@@ -241,10 +239,9 @@ public final class BuildLayout {
     }
 
     /**
-     * {@code target/lib<artifact>} — base path for a GraalVM-compiled native
-     * shared library ({@code native-image --shared}). This is the {@code -o}
-     * basename only; native-image appends the platform extension
-     * ({@code .so}/{@code .dylib}/{@code .dll}) and emits C headers alongside it.
+     * {@code target/lib<artifact>} — base path for a GraalVM-compiled native shared library ({@code
+     * native-image --shared}). This is the {@code -o} basename only; native-image appends the
+     * platform extension ({@code .so}/{@code .dylib}/{@code .dll}) and emits C headers alongside it.
      */
     public Path nativeLibrary() {
         return targetDir().resolve("lib" + artifact);

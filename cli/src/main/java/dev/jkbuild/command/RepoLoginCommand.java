@@ -15,12 +15,12 @@ import java.nio.file.Path;
 import java.util.List;
 
 /**
- * {@code jk repo login <id>} — store credentials for an artifact repository,
- * keyed by the repository id used in {@code jk.toml} / {@code settings.xml}.
+ * {@code jk repo login <id>} — store credentials for an artifact repository, keyed by the
+ * repository id used in {@code jk.toml} / {@code settings.xml}.
  *
- * <p>The secret is read from stdin (never an argv flag, so it stays out of
- * shell history and process listings). With {@code --username} the secret is
- * treated as a password (HTTP Basic); otherwise it's a bearer token.
+ * <p>The secret is read from stdin (never an argv flag, so it stays out of shell history and
+ * process listings). With {@code --username} the secret is treated as a password (HTTP Basic);
+ * otherwise it's a bearer token.
  */
 public final class RepoLoginCommand implements CliCommand {
 

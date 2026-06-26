@@ -18,11 +18,10 @@ import org.jline.terminal.impl.DumbTerminal;
 import org.junit.jupiter.api.Test;
 
 /**
- * Drives the wizard against JLine's {@link DumbTerminal}. The terminal is
- * fed bytes through a {@link PipedOutputStream}; the wizard reads via its
- * normal {@code term.reader()} path. Raw-mode signal/attribute integration
- * is exercised manually in Task 7 — DumbTerminal's no-op {@code enterRawMode}
- * is enough to verify the state machine.
+ * Drives the wizard against JLine's {@link DumbTerminal}. The terminal is fed bytes through a
+ * {@link PipedOutputStream}; the wizard reads via its normal {@code term.reader()} path. Raw-mode
+ * signal/attribute integration is exercised manually in Task 7 — DumbTerminal's no-op {@code
+ * enterRawMode} is enough to verify the state machine.
  */
 class WizardTest {
 

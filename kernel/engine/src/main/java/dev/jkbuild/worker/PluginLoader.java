@@ -9,18 +9,16 @@ import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
 /**
- * Forks a jk plugin worker JVM and bridges its NDJSON event stream back to the
- * caller. A worker is launched as
- * {@code <java> <jvmFlags> -cp <classpath> dev.jkbuild.plugin.worker.PluginWorkerMain <args>}:
- * {@code PluginWorkerMain} {@code ServiceLoader}-loads the single
- * {@link dev.jkbuild.plugin.Plugin} on that classpath, runs it, and the plugin
- * emits {@code <prefix>}-tagged protocol lines on stdout.
+ * Forks a jk plugin worker JVM and bridges its NDJSON event stream back to the caller. A worker is
+ * launched as {@code <java> <jvmFlags> -cp <classpath> dev.jkbuild.plugin.worker.PluginWorkerMain
+ * <args>}: {@code PluginWorkerMain} {@code ServiceLoader}-loads the single {@link
+ * dev.jkbuild.plugin.Plugin} on that classpath, runs it, and the plugin emits {@code
+ * <prefix>}-tagged protocol lines on stdout.
  *
- * <p>jk has no host JVM and the CLI is a closed-world native image, so plugins
- * never run in-process — every worker is its own JVM, dispatched directly. The
- * caller supplies the worker's classpath (which must carry the plugin jar plus
- * whatever it needs — e.g. the user's test classes + engines for the test
- * runner), the JVM tuning flags ({@link dev.jkbuild.worker.JvmOptions}), and the
+ * <p>jk has no host JVM and the CLI is a closed-world native image, so plugins never run in-process
+ * — every worker is its own JVM, dispatched directly. The caller supplies the worker's classpath
+ * (which must carry the plugin jar plus whatever it needs — e.g. the user's test classes + engines
+ * for the test runner), the JVM tuning flags ({@link dev.jkbuild.worker.JvmOptions}), and the
  * protocol prefix the plugin emits.
  */
 public final class PluginLoader {
@@ -33,11 +31,11 @@ public final class PluginLoader {
     /**
      * Fork a worker and stream its events. Returns the worker's exit code.
      *
-     * @param javaExe     the JVM to launch (the project-pinned JDK's {@code java})
-     * @param classpath   the worker's classpath (must include the plugin jar)
-     * @param jvmFlags    heap/GC/etc. tuning flags (see {@link dev.jkbuild.worker.JvmOptions})
-     * @param prefix      the protocol-line marker the plugin emits (its manifest prefix)
-     * @param args        program args passed after {@code PluginWorkerMain}
+     * @param javaExe the JVM to launch (the project-pinned JDK's {@code java})
+     * @param classpath the worker's classpath (must include the plugin jar)
+     * @param jvmFlags heap/GC/etc. tuning flags (see {@link dev.jkbuild.worker.JvmOptions})
+     * @param prefix the protocol-line marker the plugin emits (its manifest prefix)
+     * @param args program args passed after {@code PluginWorkerMain}
      */
     public static int run(
             Path javaExe,
@@ -52,9 +50,9 @@ public final class PluginLoader {
     }
 
     /**
-     * As {@link #run}, but drives a two-way conversation (pull protocol): each
-     * protocol line arrives with a {@link WorkerProcess.Conversation} the caller
-     * can use to send commands back to the worker's stdin.
+     * As {@link #run}, but drives a two-way conversation (pull protocol): each protocol line arrives
+     * with a {@link WorkerProcess.Conversation} the caller can use to send commands back to the
+     * worker's stdin.
      */
     public static int converse(
             Path javaExe,

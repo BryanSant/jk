@@ -9,30 +9,27 @@ import java.util.List;
 import java.util.regex.Pattern;
 
 /**
- * Scans a script's leading comment block for jk and JBang directives
- * (PRD §19.1 / §19.2).
+ * Scans a script's leading comment block for jk and JBang directives (PRD §19.1 / §19.2).
  *
  * <p>Recognised forms:
+ *
  * <ul>
- *   <li>{@code //jk dep group:artifact:version} — pinned, single coord per line.</li>
- *   <li>{@code //jk dep group:artifact@version} — floating constraint
- *       (preferred); decorations like {@code @^1.2}, {@code @~1.2.3},
- *       {@code @>=1,<2}, {@code @latest} are honored.</li>
- *   <li>{@code //jk jdk N} — JDK release (e.g. {@code //jk jdk 21}).</li>
- *   <li>{@code //jk repo https://...} — add a Maven repository.</li>
- *   <li>{@code //jk feature name} — enable a feature.</li>
- *   <li>{@code //jk javac-options ...} / {@code //jk java-options ...}.</li>
- *   <li>{@code //DEPS g:a:v g2:a2@v2 ...} — JBang multi-dep line; both
- *       separators accepted.</li>
- *   <li>{@code //JAVA 21} — JBang JDK selector.</li>
- *   <li>{@code //JAVAC_OPTIONS -parameters --enable-preview}.</li>
- *   <li>{@code //JAVA_OPTIONS -Xmx512m}.</li>
- *   <li>{@code //SOURCES Other.java [More.java ...]}.</li>
+ *   <li>{@code //jk dep group:artifact:version} — pinned, single coord per line.
+ *   <li>{@code //jk dep group:artifact@version} — floating constraint (preferred); decorations like
+ *       {@code @^1.2}, {@code @~1.2.3}, {@code @>=1,<2}, {@code @latest} are honored.
+ *   <li>{@code //jk jdk N} — JDK release (e.g. {@code //jk jdk 21}).
+ *   <li>{@code //jk repo https://...} — add a Maven repository.
+ *   <li>{@code //jk feature name} — enable a feature.
+ *   <li>{@code //jk javac-options ...} / {@code //jk java-options ...}.
+ *   <li>{@code //DEPS g:a:v g2:a2@v2 ...} — JBang multi-dep line; both separators accepted.
+ *   <li>{@code //JAVA 21} — JBang JDK selector.
+ *   <li>{@code //JAVAC_OPTIONS -parameters --enable-preview}.
+ *   <li>{@code //JAVA_OPTIONS -Xmx512m}.
+ *   <li>{@code //SOURCES Other.java [More.java ...]}.
  * </ul>
  *
- * <p>Parsing stops at the first non-blank, non-comment line — the
- * compilation body starts there. A {@code ///usr/bin/env jk run "$0"; exit $?}
- * shebang shim on line 1 is silently skipped.
+ * <p>Parsing stops at the first non-blank, non-comment line — the compilation body starts there. A
+ * {@code ///usr/bin/env jk run "$0"; exit $?} shebang shim on line 1 is silently skipped.
  */
 public final class ScriptHeaderParser {
 
@@ -119,7 +116,8 @@ public final class ScriptHeaderParser {
         int firstColon = spec.indexOf(':');
         if (firstColon < 0) {
             throw new IllegalArgumentException("script dependency must be `group:artifact:version` or "
-                    + "`group:artifact@version`, got: " + coord);
+                    + "`group:artifact@version`, got: "
+                    + coord);
         }
         int nextColon = spec.indexOf(':', firstColon + 1);
         int atSign = spec.indexOf('@', firstColon + 1);
@@ -155,8 +153,13 @@ public final class ScriptHeaderParser {
                     || trimmed.startsWith("<")
                     || trimmed.contains(",")
                     || "latest".equalsIgnoreCase(trimmed)) {
-                throw new IllegalArgumentException(coord + " — the `:` form is for pinned versions only. " + "Use `"
-                        + module + "@" + versionPart + "` for a floating constraint.");
+                throw new IllegalArgumentException(coord
+                        + " — the `:` form is for pinned versions only. "
+                        + "Use `"
+                        + module
+                        + "@"
+                        + versionPart
+                        + "` for a floating constraint.");
             }
             selector = VersionSelector.parse(versionPart);
         }

@@ -109,7 +109,7 @@ class JdkCatalogClientTest {
         jsonBody = multiMajorFeed().getBytes(StandardCharsets.UTF_8);
         JdkCatalogClient client = new JdkCatalogClient(new Http(), feed, tempDir.resolve("jdks.json"), Duration.ZERO);
 
-        assertThat(client.fetch(false, /* firstClassOnly = */ false).entries())
+        assertThat(client.fetch(false, /* firstClassOnly= */ false).entries())
                 .extracting(JdkCatalog.Entry::majorVersion)
                 .containsExactlyInAnyOrder(19, 21, 26) // 11 still dropped (below 17)
                 .doesNotContain(11);

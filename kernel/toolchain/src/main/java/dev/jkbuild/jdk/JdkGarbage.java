@@ -13,19 +13,17 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Deferred deletion of superseded JDK installs, recorded in
- * {@code ~/.jk/jdks/.to-be-removed} (one absolute path per line).
+ * Deferred deletion of superseded JDK installs, recorded in {@code ~/.jk/jdks/.to-be-removed} (one
+ * absolute path per line).
  *
- * <p>On Windows a running {@code java.exe} keeps its install directory locked,
- * so {@code jk jdk update} can't delete the old patch inline after repointing
- * the {@link StableJdkPointer}. Instead it {@link #enqueue}s the dir; every JDK
- * command then {@link #drain}s the queue, deleting whatever is no longer in use
- * and keeping the rest for next time. On POSIX deletion succeeds immediately, so
- * the queue drains on the very next run — the same code path, no platform fork.
+ * <p>On Windows a running {@code java.exe} keeps its install directory locked, so {@code jk jdk
+ * update} can't delete the old patch inline after repointing the {@link StableJdkPointer}. Instead
+ * it {@link #enqueue}s the dir; every JDK command then {@link #drain}s the queue, deleting whatever
+ * is no longer in use and keeping the rest for next time. On POSIX deletion succeeds immediately,
+ * so the queue drains on the very next run — the same code path, no platform fork.
  *
- * <p>Best-effort throughout: a locked dir, an unreadable queue, or a concurrent
- * {@code jk} draining the same file never raises — the worst case is an entry
- * surviving an extra round.
+ * <p>Best-effort throughout: a locked dir, an unreadable queue, or a concurrent {@code jk} draining
+ * the same file never raises — the worst case is an entry surviving an extra round.
  */
 public final class JdkGarbage {
 
@@ -100,7 +98,10 @@ public final class JdkGarbage {
         return canonical(jdksRoot);
     }
 
-    /** Resolve symlinks when the path exists (macOS {@code /var}→{@code /private/var}); else normalize. */
+    /**
+     * Resolve symlinks when the path exists (macOS {@code /var}→{@code /private/var}); else
+     * normalize.
+     */
     private static Path canonical(Path p) {
         try {
             return p.toRealPath();

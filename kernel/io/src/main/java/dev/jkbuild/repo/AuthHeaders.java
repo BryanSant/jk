@@ -7,9 +7,8 @@ import java.util.Base64;
 import java.util.Map;
 
 /**
- * Renders a {@link RepoCredential} to the HTTP request headers a transport
- * sends. Lives in {@code :io} (next to the transports) so {@code :core}'s
- * credential model stays free of HTTP concerns.
+ * Renders a {@link RepoCredential} to the HTTP request headers a transport sends. Lives in {@code
+ * :io} (next to the transports) so {@code :core}'s credential model stays free of HTTP concerns.
  */
 public final class AuthHeaders {
 

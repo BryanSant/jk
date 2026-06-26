@@ -13,24 +13,22 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Writes a launcher script for an application installed by {@code jk install}
- * (the {@code make install} step). Unlike {@link ToolLauncher} — which embeds
- * CAS paths and writes {@code env.json} — this launcher points at an explicit
- * set of jars under {@code ~/.jk/libexec} (the app jar plus its hard-linked
- * runtime dependencies, or a single fat jar).
+ * Writes a launcher script for an application installed by {@code jk install} (the {@code make
+ * install} step). Unlike {@link ToolLauncher} — which embeds CAS paths and writes {@code env.json}
+ * — this launcher points at an explicit set of jars under {@code ~/.jk/libexec} (the app jar plus
+ * its hard-linked runtime dependencies, or a single fat jar).
  *
- * <p>The classpath is written out as an explicit jar list (not a
- * {@code libexec/*} glob) so multiple installed apps sharing the flat libexec
- * directory never cross-contaminate each other's classpath.
+ * <p>The classpath is written out as an explicit jar list (not a {@code libexec/*} glob) so
+ * multiple installed apps sharing the flat libexec directory never cross-contaminate each other's
+ * classpath.
  */
 public final class AppLauncher {
 
     private AppLauncher() {}
 
     /**
-     * Write {@code ~/.jk/bin/<binName>} (POSIX) or {@code <binName>.cmd}
-     * (Windows) launching {@code mainClass} with {@code classpathJars} on the
-     * classpath. Returns the launcher path.
+     * Write {@code ~/.jk/bin/<binName>} (POSIX) or {@code <binName>.cmd} (Windows) launching {@code
+     * mainClass} with {@code classpathJars} on the classpath. Returns the launcher path.
      */
     public static Path install(Path binDir, Path javaHome, String binName, String mainClass, List<Path> classpathJars)
             throws IOException {

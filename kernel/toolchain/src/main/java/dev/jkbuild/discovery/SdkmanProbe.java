@@ -11,13 +11,12 @@ import java.util.Optional;
 import java.util.stream.Stream;
 
 /**
- * {@code ~/.sdkman/candidates/<kind>/<version>/} (and, for JDKs, also
- * {@code ~/.sdkman/candidates/java/<version>-<dist>/} per SDKMAN's
- * identifier scheme).
+ * {@code ~/.sdkman/candidates/<kind>/<version>/} (and, for JDKs, also {@code
+ * ~/.sdkman/candidates/java/<version>-<dist>/} per SDKMAN's identifier scheme).
  *
- * <p>SDKMAN's {@code current} symlink is intentionally NOT followed —
- * we resolve to the real version dir so the link from jk stays stable
- * even when the user {@code sdk default}s a different version.
+ * <p>SDKMAN's {@code current} symlink is intentionally NOT followed — we resolve to the real
+ * version dir so the link from jk stays stable even when the user {@code sdk default}s a different
+ * version.
  */
 public final class SdkmanProbe implements LocalToolProbe {
 

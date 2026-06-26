@@ -24,17 +24,16 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Best-effort scanner for {@code build.gradle} / {@code build.gradle.kts}
- * (PRD §24.3). Recognises declarative idioms — {@code plugins { id("...") }},
- * {@code dependencies { implementation("g:a:v") }}, {@code java { toolchain }},
- * {@code repositories { maven { url ... } }}, top-level {@code group} /
- * {@code version} — and emits {@link ImportReport} entries for anything that
- * looks like programmatic Gradle (custom tasks, {@code subprojects {}},
- * {@code afterEvaluate}, configuration injection).
+ * Best-effort scanner for {@code build.gradle} / {@code build.gradle.kts} (PRD §24.3). Recognises
+ * declarative idioms — {@code plugins { id("...") }}, {@code dependencies { implementation("g:a:v")
+ * }}, {@code java { toolchain }}, {@code repositories { maven { url ... } }}, top-level {@code
+ * group} / {@code version} — and emits {@link ImportReport} entries for anything that looks like
+ * programmatic Gradle (custom tasks, {@code subprojects {}}, {@code afterEvaluate}, configuration
+ * injection).
  *
- * <p>No Gradle script is actually evaluated; this is a string-level matcher.
- * The slice C/D Maven importer is the truth-table side of jk import; this
- * side openly admits it can't faithfully convert arbitrary Gradle.
+ * <p>No Gradle script is actually evaluated; this is a string-level matcher. The slice C/D Maven
+ * importer is the truth-table side of jk import; this side openly admits it can't faithfully
+ * convert arbitrary Gradle.
  */
 public final class GradleImporter {
 
@@ -79,7 +78,8 @@ public final class GradleImporter {
     // dependencies entries: implementation("g:a:v"), testImplementation 'g:a:v',
     // or the unquoted Groovy catalog form `implementation libs.junit.jupiter`.
     private static final Pattern DEP_ENTRY = Pattern.compile("(?m)^\\s*(?<config>[a-zA-Z][a-zA-Z0-9_]*)\\s*"
-            + "(?:\\(\\s*(?<paren>.+?)\\s*\\)|" + STR
+            + "(?:\\(\\s*(?<paren>.+?)\\s*\\)|"
+            + STR
             + "|(?<accessor>[A-Za-z][A-Za-z0-9_]*(?:\\.[A-Za-z0-9_]+)+))"
             + "\\s*$");
 
@@ -136,7 +136,9 @@ public final class GradleImporter {
                     // implicit in jk — nothing to say.
                 }
                 default ->
-                    report.warning("Gradle plugin `" + pluginId + "` not yet mapped."
+                    report.warning("Gradle plugin `"
+                            + pluginId
+                            + "` not yet mapped."
                             + " Plugin-aware mappings (Spring Boot, Quarkus, Spotless, ...) arrive in a later slice.");
             }
         }
@@ -172,14 +174,13 @@ public final class GradleImporter {
     }
 
     /**
-     * Parse manifest attributes from a {@code manifest { attributes(...) }}
-     * block (inside {@code jar}/{@code tasks.jar}/{@code tasks.named("jar")}).
-     * Supports Kotlin ({@code "K" to V}) and Groovy ({@code "K": V}) forms.
-     * String-literal values pass through; the common Gradle expressions
-     * {@code project.version}/{@code name}/{@code group} resolve to the imported
-     * coordinates; other expressions are skipped with a report note. The
-     * returned map preserves declaration order and may contain {@code Main-Class}
-     * (the caller routes it to {@code project.main}).
+     * Parse manifest attributes from a {@code manifest { attributes(...) }} block (inside {@code
+     * jar}/{@code tasks.jar}/{@code tasks.named("jar")}). Supports Kotlin ({@code "K" to V}) and
+     * Groovy ({@code "K": V}) forms. String-literal values pass through; the common Gradle
+     * expressions {@code project.version}/{@code name}/{@code group} resolve to the imported
+     * coordinates; other expressions are skipped with a report note. The returned map preserves
+     * declaration order and may contain {@code Main-Class} (the caller routes it to {@code
+     * project.main}).
      */
     private static Map<String, String> detectManifestAttributes(
             String text, String group, String artifact, String version, ImportReport.Builder report) {
@@ -197,8 +198,11 @@ public final class GradleImporter {
                 String expr = m.group(5);
                 value = resolveGradleExpr(expr, group, artifact, version);
                 if (value == null) {
-                    report.warning("manifest attribute `" + key + "` uses the Gradle expression `"
-                            + expr + "`, which jk import can't resolve; the attribute was dropped."
+                    report.warning("manifest attribute `"
+                            + key
+                            + "` uses the Gradle expression `"
+                            + expr
+                            + "`, which jk import can't resolve; the attribute was dropped."
                             + " Add it to the [manifest] table in jk.toml if needed.");
                     continue;
                 }
@@ -219,12 +223,11 @@ public final class GradleImporter {
     }
 
     /**
-     * Detect the Kotlin compiler version from the {@code plugins {}} block.
-     * Recognises {@code kotlin("jvm") version "X"} and
-     * {@code id("org.jetbrains.kotlin.jvm") version "X"}. When the Kotlin plugin
-     * is applied without an explicit version, defaults to a floating
-     * {@link KotlinResolver#DEFAULT_VERSION} (pinned later by {@code jk lock}).
-     * Returns {@code null} for a non-Kotlin (Java) project.
+     * Detect the Kotlin compiler version from the {@code plugins {}} block. Recognises {@code
+     * kotlin("jvm") version "X"} and {@code id("org.jetbrains.kotlin.jvm") version "X"}. When the
+     * Kotlin plugin is applied without an explicit version, defaults to a floating {@link
+     * KotlinResolver#DEFAULT_VERSION} (pinned later by {@code jk lock}). Returns {@code null} for a
+     * non-Kotlin (Java) project.
      */
     private static VersionSelector detectKotlinVersion(String pluginsBody, ImportReport.Builder report) {
         Matcher m = KOTLIN_PLUGIN_VERSION.matcher(pluginsBody);
@@ -239,7 +242,9 @@ public final class GradleImporter {
                 || KOTLIN_ID.matcher(pluginsBody).find();
         if (kotlinApplied) {
             report.warning("Kotlin plugin recognised without an explicit version; defaulted"
-                    + " project.kotlin to " + KotlinResolver.DEFAULT_VERSION + " (floating)."
+                    + " project.kotlin to "
+                    + KotlinResolver.DEFAULT_VERSION
+                    + " (floating)."
                     + " `jk lock` pins it — edit jk.toml to change.");
             return VersionSelector.parseFloating(KotlinResolver.DEFAULT_VERSION);
         }
@@ -247,9 +252,9 @@ public final class GradleImporter {
     }
 
     /**
-     * Extract the application main class from {@code application { mainClass.set("X") }}
-     * / {@code mainClass = "X"} (Kotlin DSL) or a top-level {@code mainClassName = "X"}
-     * (Groovy). Returns {@code null} when none is declared.
+     * Extract the application main class from {@code application { mainClass.set("X") }} / {@code
+     * mainClass = "X"} (Kotlin DSL) or a top-level {@code mainClassName = "X"} (Groovy). Returns
+     * {@code null} when none is declared.
      */
     private static String detectMainClass(String text) {
         String appBody = extractBlock(text, "application").orElse(null);
@@ -294,7 +299,8 @@ public final class GradleImporter {
             Matcher m = DEP_ENTRY.matcher(line);
             if (!m.matches()) {
                 if (!line.equals("{") && !line.equals("}")) {
-                    report.error("dependencies entry not understood: `" + line
+                    report.error("dependencies entry not understood: `"
+                            + line
                             + "` — jk import is best-effort and only handles string-form deps."
                             + " Re-state the dep in jk.toml as `dependencies.main { \"g:a\" = \"=v\" }`.");
                 }
@@ -309,8 +315,11 @@ public final class GradleImporter {
 
             Scope scope = mapConfiguration(configuration);
             if (scope == null) {
-                report.error("Gradle configuration `" + configuration
-                        + "` is not a recognised jk scope; entry dropped (`" + line + "`).");
+                report.error("Gradle configuration `"
+                        + configuration
+                        + "` is not a recognised jk scope; entry dropped (`"
+                        + line
+                        + "`).");
                 continue;
             }
 
@@ -340,7 +349,10 @@ public final class GradleImporter {
                 if (project.find()) {
                     String path = firstNonNull(project.group(1), project.group(2));
                     report.warning(
-                            "Project dependency `" + path + "` on configuration `" + configuration
+                            "Project dependency `"
+                                    + path
+                                    + "` on configuration `"
+                                    + configuration
                                     + "` was not mapped. Convert via a jk workspace module reference once you import the sibling module.");
                     continue;
                 }
@@ -348,8 +360,12 @@ public final class GradleImporter {
                         Pattern.compile("kotlin\\s*\\(\\s*" + STR + "\\s*\\)").matcher(paren);
                 if (kotlinShortcut.find()) {
                     String token = firstNonNull(kotlinShortcut.group(1), kotlinShortcut.group(2));
-                    report.warning("Kotlin shortcut `kotlin(\"" + token + "\")` was not mapped to a concrete coord."
-                            + " Add the explicit `org.jetbrains.kotlin:kotlin-" + token + ":<version>` to jk.toml.");
+                    report.warning("Kotlin shortcut `kotlin(\""
+                            + token
+                            + "\")` was not mapped to a concrete coord."
+                            + " Add the explicit `org.jetbrains.kotlin:kotlin-"
+                            + token
+                            + ":<version>` to jk.toml.");
                     continue;
                 }
                 Matcher bareString = Pattern.compile("^\\s*" + STR + "\\s*$").matcher(paren);
@@ -363,7 +379,9 @@ public final class GradleImporter {
                     resolveCatalogAccessor(paren.trim(), scope, byScope, catalog, report);
                     continue;
                 }
-                report.error("complex dependency expression `" + line + "` not understood;"
+                report.error("complex dependency expression `"
+                        + line
+                        + "` not understood;"
                         + " re-state as a string-form coord in jk.toml.");
             } else if (quoted != null) {
                 addDependency(byScope, scope, quoted, report);
@@ -388,8 +406,12 @@ public final class GradleImporter {
             report.warning("classifier/type on `" + coord + "` dropped; jk support arrives in a later slice.");
         }
         if (versionToken.contains("$")) {
-            report.warning("dependency `" + coord + "` uses a Gradle variable for its version;" + " jk wrote `"
-                    + versionToken + "` verbatim — resolve the variable manually.");
+            report.warning("dependency `"
+                    + coord
+                    + "` uses a Gradle variable for its version;"
+                    + " jk wrote `"
+                    + versionToken
+                    + "` verbatim — resolve the variable manually.");
         }
         VersionSelector selector = VersionSelector.parse(versionToken);
         // Default the v0.7 short `name` to the Gradle dep's artifactId.
@@ -397,11 +419,11 @@ public final class GradleImporter {
     }
 
     /**
-     * Resolve a version-catalog accessor (e.g. {@code libs.junit.platform.launcher}
-     * or {@code libs.bundles.testing}) against the located catalog and add the
-     * resulting coordinate(s). The leading segment is the catalog name and is
-     * stripped before lookup. Unresolvable accessors — missing catalog, unknown
-     * alias, or a version/plugin accessor that isn't a dependency — are reported.
+     * Resolve a version-catalog accessor (e.g. {@code libs.junit.platform.launcher} or {@code
+     * libs.bundles.testing}) against the located catalog and add the resulting coordinate(s). The
+     * leading segment is the catalog name and is stripped before lookup. Unresolvable accessors —
+     * missing catalog, unknown alias, or a version/plugin accessor that isn't a dependency — are
+     * reported.
      */
     private static void resolveCatalogAccessor(
             String accessor,
@@ -410,7 +432,9 @@ public final class GradleImporter {
             GradleVersionCatalog catalog,
             ImportReport.Builder report) {
         if (catalog == null) {
-            report.error("dependency `" + accessor + "` references a Gradle version catalog, but no"
+            report.error("dependency `"
+                    + accessor
+                    + "` references a Gradle version catalog, but no"
                     + " gradle/libs.versions.toml was found (searched the project dir and its parent)."
                     + " Declare the coordinate directly in jk.toml.");
             return;
@@ -422,7 +446,9 @@ public final class GradleImporter {
             String bundle = rest.substring("bundles.".length());
             Optional<List<String>> coords = catalog.resolveBundle(bundle);
             if (coords.isEmpty() || coords.get().isEmpty()) {
-                report.error("bundle `" + accessor + "` was not found in the version catalog"
+                report.error("bundle `"
+                        + accessor
+                        + "` was not found in the version catalog"
                         + " (or none of its libraries resolved); dropped.");
                 return;
             }
@@ -432,14 +458,18 @@ public final class GradleImporter {
             return;
         }
         if (rest.startsWith("versions.") || rest.startsWith("plugins.")) {
-            report.warning("catalog accessor `" + accessor + "` refers to a version/plugin, not a"
+            report.warning("catalog accessor `"
+                    + accessor
+                    + "` refers to a version/plugin, not a"
                     + " library; jk import only maps library and bundle accessors. Skipped.");
             return;
         }
 
         Optional<String> coord = catalog.resolveLibrary(rest);
         if (coord.isEmpty()) {
-            report.error("library `" + accessor + "` was not found in the version catalog"
+            report.error("library `"
+                    + accessor
+                    + "` was not found in the version catalog"
                     + " (or has no resolvable version); dropped. Declare it directly in jk.toml.");
             return;
         }
@@ -517,7 +547,8 @@ public final class GradleImporter {
     private static void warnUnsupportedSections(String text, ImportReport.Builder report) {
         for (String kw : TIER3_KEYWORDS) {
             if (text.contains(kw)) {
-                report.error("script uses `" + kw.trim()
+                report.error("script uses `"
+                        + kw.trim()
                         + "` — programmatic Gradle blocks cannot be imported automatically."
                         + " Convert the intent to a jk profile/feature/task by hand.");
             }
@@ -527,9 +558,9 @@ public final class GradleImporter {
     // --- helpers ------------------------------------------------------------
 
     /**
-     * Strip {@code //} line comments and {@code /* * /} block comments while
-     * leaving string literals untouched. A regex-based pass would mis-eat the
-     * {@code //} inside URL strings like {@code "https://example.com"}.
+     * Strip {@code //} line comments and {@code /* * /} block comments while leaving string literals
+     * untouched. A regex-based pass would mis-eat the {@code //} inside URL strings like {@code
+     * "https://example.com"}.
      */
     private static String stripComments(String text) {
         StringBuilder out = new StringBuilder(text.length());

@@ -8,15 +8,14 @@ import java.io.IOException;
 import java.nio.file.Path;
 
 /**
- * Builds a checked-out {@code jk.toml} project into a jar + POM headlessly —
- * the engine of git-source dependencies (docs/git-source-deps.md). A thin
- * adapter over the general {@link LocalProjectBuilder} (resolve → compile →
- * jar → POM, no CLI machinery), kept as the git-specific entry point so
- * {@link GitSourceMaterializer} and its test stay unchanged.
+ * Builds a checked-out {@code jk.toml} project into a jar + POM headlessly — the engine of
+ * git-source dependencies (docs/git-source-deps.md). A thin adapter over the general {@link
+ * LocalProjectBuilder} (resolve → compile → jar → POM, no CLI machinery), kept as the git-specific
+ * entry point so {@link GitSourceMaterializer} and its test stay unchanged.
  *
- * <p>Build scope (Java + Kotlin, layout-aware, the project's own Maven deps)
- * lives in {@link LocalProjectBuilder}; test execution, native image, and
- * signing remain out — a git dependency just needs its main artifact + POM.
+ * <p>Build scope (Java + Kotlin, layout-aware, the project's own Maven deps) lives in {@link
+ * LocalProjectBuilder}; test execution, native image, and signing remain out — a git dependency
+ * just needs its main artifact + POM.
  */
 public final class GitProjectBuilder {
 
@@ -30,10 +29,9 @@ public final class GitProjectBuilder {
     }
 
     /**
-     * Build {@code project} (rooted at {@code projectDir}) and produce the jar +
-     * POM for coordinate {@code group:artifact:version}. Resolves the project's
-     * own dependencies through {@code repos} (no network when it declares none);
-     * compiles with {@code javaHome}.
+     * Build {@code project} (rooted at {@code projectDir}) and produce the jar + POM for coordinate
+     * {@code group:artifact:version}. Resolves the project's own dependencies through {@code repos}
+     * (no network when it declares none); compiles with {@code javaHome}.
      */
     static Built build(
             Path projectDir,

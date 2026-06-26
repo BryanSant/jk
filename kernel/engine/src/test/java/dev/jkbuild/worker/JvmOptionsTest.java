@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import dev.jkbuild.worker.JvmOptions.Settings;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -25,7 +26,7 @@ class JvmOptionsTest {
 
     @Test
     void explicit_settings_win_and_extra_args_append() {
-        Settings s = new Settings(70.0, "g1", false, java.util.List.of("-XX:+AlwaysPreTouch"));
+        Settings s = new Settings(70.0, "g1", false, List.of("-XX:+AlwaysPreTouch"));
         assertThat(JvmOptions.flags(s, 1))
                 .containsExactly("-XX:MaxRAMPercentage=70", "-XX:+UseG1GC", "-XX:+AlwaysPreTouch");
         // string-dedup=false → no dedup flag; gc=g1 → G1, not ZGC.
@@ -33,7 +34,7 @@ class JvmOptionsTest {
 
     @Test
     void gc_none_emits_no_collector_and_no_dedup() {
-        Settings s = new Settings(null, "none", true, java.util.List.of());
+        Settings s = new Settings(null, "none", true, List.of());
         assertThat(JvmOptions.flags(s, 1)).containsExactly("-XX:MaxRAMPercentage=50");
     }
 
@@ -41,7 +42,7 @@ class JvmOptionsTest {
     void process_settings_drive_worker_flags() {
         try {
             // The CLI stashes resolved settings; worker forks read them back.
-            JvmOptions.setProcessSettings(new Settings(80.0, "g1", false, java.util.List.of()));
+            JvmOptions.setProcessSettings(new Settings(80.0, "g1", false, List.of()));
             assertThat(JvmOptions.workerFlags(1)).containsExactly("-XX:MaxRAMPercentage=80", "-XX:+UseG1GC");
             // Concurrency still divides the resolved cap.
             assertThat(JvmOptions.workerFlags(4)).contains("-XX:MaxRAMPercentage=20");
@@ -67,7 +68,7 @@ class JvmOptionsTest {
     @Test
     void absolute_flags_skip_softmax_for_serial_gc() {
         HeapPlan.Plan plan = new HeapPlan.Plan(1, 64L << 20, 256L << 20, 256L << 20, null);
-        Settings serial = new Settings(null, "none", false, java.util.List.of());
+        Settings serial = new Settings(null, "none", false, List.of());
         assertThat(JvmOptions.absoluteFlags(plan, serial))
                 .containsExactly("-Xms64m", "-Xmx256m"); // no SoftMaxHeapSize, no collector
     }
@@ -75,9 +76,9 @@ class JvmOptionsTest {
     @Test
     void auto_heap_disabled_when_user_pins_a_heap_flag() {
         try {
-            JvmOptions.setProcessSettings(new Settings(null, null, null, java.util.List.of("-Xmx2g")));
+            JvmOptions.setProcessSettings(new Settings(null, null, null, List.of("-Xmx2g")));
             assertThat(JvmOptions.autoHeapEnabled()).isFalse();
-            JvmOptions.setProcessSettings(new Settings(50.0, null, null, java.util.List.of()));
+            JvmOptions.setProcessSettings(new Settings(50.0, null, null, List.of()));
             assertThat(JvmOptions.autoHeapEnabled()).isFalse();
             JvmOptions.setProcessSettings(Settings.NONE);
             assertThat(JvmOptions.autoHeapEnabled()).isTrue();
@@ -126,7 +127,7 @@ class JvmOptionsTest {
                 max-ram-percent = 30
                 """);
         // CLI maxRam is non-null → wins over the toml layer regardless of env.
-        Settings cli = new Settings(80.0, null, null, java.util.List.of());
+        Settings cli = new Settings(80.0, null, null, List.of());
         Settings eff = JvmOptions.resolve(cli, dir);
         assertThat(eff.maxRamPercent()).isEqualTo(80.0);
     }

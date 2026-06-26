@@ -30,24 +30,22 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
 /**
- * Downloads a {@link JdkPackage} and extracts it under the IntelliJ JDK
- * directory (see {@link IntellijJdkDir}).
+ * Downloads a {@link JdkPackage} and extracts it under the IntelliJ JDK directory (see {@link
+ * IntellijJdkDir}).
  *
  * <ul>
- *   <li>{@code .tar.gz} / {@code .tgz} — {@link TarArchiveInputStream}
- *       over {@link GZIPInputStream}. POSIX permissions and symlinks
- *       preserved.</li>
- *   <li>{@code .tar} — {@link TarArchiveInputStream} directly.</li>
- *   <li>{@code .zip} — {@link ZipFile} (random-access; entries extract in parallel).</li>
- *   <li>SHA-256 verified against {@link JdkPackage#sha256()} when present;
- *       mismatch aborts with no install dir left behind.</li>
+ *   <li>{@code .tar.gz} / {@code .tgz} — {@link TarArchiveInputStream} over {@link
+ *       GZIPInputStream}. POSIX permissions and symlinks preserved.
+ *   <li>{@code .tar} — {@link TarArchiveInputStream} directly.
+ *   <li>{@code .zip} — {@link ZipFile} (random-access; entries extract in parallel).
+ *   <li>SHA-256 verified against {@link JdkPackage#sha256()} when present; mismatch aborts with no
+ *       install dir left behind.
  * </ul>
  *
- * <p>The {@link JdkCatalog.Entry} path is split into {@link #download} and
- * {@link #extractInstalled} so callers can wrap each phase with their own
- * UI (e.g. a progress bar during the download, a spinner during extract).
- * {@link #install(JdkCatalog.Entry)} stitches them together for the
- * no-progress case.
+ * <p>The {@link JdkCatalog.Entry} path is split into {@link #download} and {@link
+ * #extractInstalled} so callers can wrap each phase with their own UI (e.g. a progress bar during
+ * the download, a spinner during extract). {@link #install(JdkCatalog.Entry)} stitches them
+ * together for the no-progress case.
  */
 public final class JdkInstaller {
 
@@ -63,11 +61,10 @@ public final class JdkInstaller {
     private static final String DOWNLOAD_PREFIX = "jk-jdk-";
 
     /**
-     * A partial archive older than this is treated as orphaned — left by a
-     * Ctrl-C'd download, which calls {@code Runtime.halt} and so skips the
-     * finally-block cleanup in {@link #download} — and removed by
-     * {@link #sweepStaleDownloads}. Comfortably longer than any realistic
-     * download so an in-flight one from a concurrent run is never deleted.
+     * A partial archive older than this is treated as orphaned — left by a Ctrl-C'd download, which
+     * calls {@code Runtime.halt} and so skips the finally-block cleanup in {@link #download} — and
+     * removed by {@link #sweepStaleDownloads}. Comfortably longer than any realistic download so an
+     * in-flight one from a concurrent run is never deleted.
      */
     private static final long STALE_DOWNLOAD_AGE_MILLIS = Duration.ofHours(6).toMillis();
 
@@ -90,20 +87,19 @@ public final class JdkInstaller {
     }
 
     /**
-     * Install a {@link JdkCatalog.Entry} from the JetBrains feed. Uses the
-     * feed's {@code install_folder_name} for the directory and resolves
-     * JAVA_HOME via {@code package_to_java_home_prefix} (e.g.
-     * {@code Contents/Home} on macOS) so callers always get a working
-     * {@link InstalledJdk#home()}.
+     * Install a {@link JdkCatalog.Entry} from the JetBrains feed. Uses the feed's {@code
+     * install_folder_name} for the directory and resolves JAVA_HOME via {@code
+     * package_to_java_home_prefix} (e.g. {@code Contents/Home} on macOS) so callers always get a
+     * working {@link InstalledJdk#home()}.
      */
     public InstalledJdk install(JdkCatalog.Entry entry) throws IOException, InterruptedException {
         return install(entry, b -> {});
     }
 
     /**
-     * Same as {@link #install(JdkCatalog.Entry)} but emits cumulative
-     * bytes-read to {@code onBytesRead} as the download streams. Total
-     * size is available on the entry itself ({@link JdkCatalog.Entry#archiveSize()}).
+     * Same as {@link #install(JdkCatalog.Entry)} but emits cumulative bytes-read to {@code
+     * onBytesRead} as the download streams. Total size is available on the entry itself ({@link
+     * JdkCatalog.Entry#archiveSize()}).
      */
     public InstalledJdk install(JdkCatalog.Entry entry, LongConsumer onBytesRead)
             throws IOException, InterruptedException {
@@ -117,9 +113,8 @@ public final class JdkInstaller {
     }
 
     /**
-     * Fast path: if the target directory already exists, return the
-     * existing install descriptor without touching the network or disk.
-     * Returns {@code null} when nothing's installed yet.
+     * Fast path: if the target directory already exists, return the existing install descriptor
+     * without touching the network or disk. Returns {@code null} when nothing's installed yet.
      */
     public InstalledJdk alreadyInstalled(JdkCatalog.Entry entry) {
         String installName = installName(entry);
@@ -129,9 +124,9 @@ public final class JdkInstaller {
     }
 
     /**
-     * Stream the JDK archive to a temp file, verifying SHA-256 incrementally.
-     * {@code onBytesRead} receives the cumulative byte count after every
-     * chunk; the total is on {@link JdkCatalog.Entry#archiveSize()}.
+     * Stream the JDK archive to a temp file, verifying SHA-256 incrementally. {@code onBytesRead}
+     * receives the cumulative byte count after every chunk; the total is on {@link
+     * JdkCatalog.Entry#archiveSize()}.
      */
     public DownloadedArchive download(JdkCatalog.Entry entry, LongConsumer onBytesRead)
             throws IOException, InterruptedException {
@@ -149,9 +144,9 @@ public final class JdkInstaller {
     }
 
     /**
-     * Extract a {@link DownloadedArchive} into the JDK root and return the
-     * resulting {@link InstalledJdk}. The temp archive is deleted on
-     * success or failure — the caller does not need to clean it up.
+     * Extract a {@link DownloadedArchive} into the JDK root and return the resulting {@link
+     * InstalledJdk}. The temp archive is deleted on success or failure — the caller does not need to
+     * clean it up.
      */
     public InstalledJdk extractInstalled(JdkCatalog.Entry entry, DownloadedArchive dl) throws IOException {
         String installName = installName(entry);
@@ -212,7 +207,9 @@ public final class JdkInstaller {
                 .orElseGet(() -> stripTrailingMajor(e.suggestedSdkName()));
     }
 
-    /** {@code "graalvm-jdk-25"} → {@code "graalvm-jdk"}; leaves names without a trailing major intact. */
+    /**
+     * {@code "graalvm-jdk-25"} → {@code "graalvm-jdk"}; leaves names without a trailing major intact.
+     */
     private static String stripTrailingMajor(String suggested) {
         int dash = suggested.lastIndexOf('-');
         if (dash > 0) {
@@ -225,9 +222,8 @@ public final class JdkInstaller {
     }
 
     /**
-     * Buffered download path used by the {@link JdkPackage} flow.
-     * Smaller scope (no progress, no streaming) — kept for the test
-     * fixtures that go through the {@link JdkPackage} API.
+     * Buffered download path used by the {@link JdkPackage} flow. Smaller scope (no progress, no
+     * streaming) — kept for the test fixtures that go through the {@link JdkPackage} API.
      */
     private void downloadAndExtractBuffered(URI uri, String sha256, String displayName, String archiveType, Path target)
             throws IOException, InterruptedException {
@@ -269,13 +265,12 @@ public final class JdkInstaller {
     }
 
     /**
-     * Ensure the download scratch dir exists and sweep any orphaned partials
-     * from previously-canceled downloads, returning the dir to stream into.
+     * Ensure the download scratch dir exists and sweep any orphaned partials from previously-canceled
+     * downloads, returning the dir to stream into.
      *
-     * <p>The dir is {@code <jdksRoot>/.downloads}: under the JDK root so the
-     * archive shares a filesystem with the install target, and dot-prefixed so
-     * {@link dev.jkbuild.discovery.JkProbe} (which skips dot dirs) never mistakes
-     * it for an installed JDK.
+     * <p>The dir is {@code <jdksRoot>/.downloads}: under the JDK root so the archive shares a
+     * filesystem with the install target, and dot-prefixed so {@link dev.jkbuild.discovery.JkProbe}
+     * (which skips dot dirs) never mistakes it for an installed JDK.
      */
     private Path prepareDownloadDir() throws IOException {
         Path dir = registry.jdksRoot().resolve(DOWNLOAD_DIR);
@@ -285,13 +280,11 @@ public final class JdkInstaller {
     }
 
     /**
-     * Delete partial archives orphaned by a canceled download under
-     * {@code <jdksRoot>/.downloads}. The download path runs this automatically,
-     * but it's also the public entry point for {@code jk jdk} commands that
-     * don't download (uninstall) or may early-return before downloading (install
-     * /update when the target is already present) — call it once per command so
-     * a leftover partial never outlives the user's next {@code jk jdk} action.
-     * No-op when the scratch dir is absent.
+     * Delete partial archives orphaned by a canceled download under {@code <jdksRoot>/.downloads}.
+     * The download path runs this automatically, but it's also the public entry point for {@code jk
+     * jdk} commands that don't download (uninstall) or may early-return before downloading (install
+     * /update when the target is already present) — call it once per command so a leftover partial
+     * never outlives the user's next {@code jk jdk} action. No-op when the scratch dir is absent.
      */
     public static void sweepStaleDownloads(Path jdksRoot) {
         Path dir = jdksRoot.resolve(DOWNLOAD_DIR);
@@ -299,13 +292,12 @@ public final class JdkInstaller {
     }
 
     /**
-     * Delete partial archives orphaned by a canceled download. Ctrl-C triggers
-     * {@code Runtime.halt}, which terminates the JVM without running the
-     * finally-block cleanup in {@link #download}, so the partial archive is left
-     * behind; the next {@code jk jdk} command sweeps it. Only files older than
-     * {@link #STALE_DOWNLOAD_AGE_MILLIS} are removed, so a download in flight
-     * from a concurrent {@code jk jdk install} is never yanked out from under it.
-     * Best-effort: unreadable or vanished entries are left for the next sweep.
+     * Delete partial archives orphaned by a canceled download. Ctrl-C triggers {@code Runtime.halt},
+     * which terminates the JVM without running the finally-block cleanup in {@link #download}, so the
+     * partial archive is left behind; the next {@code jk jdk} command sweeps it. Only files older
+     * than {@link #STALE_DOWNLOAD_AGE_MILLIS} are removed, so a download in flight from a concurrent
+     * {@code jk jdk install} is never yanked out from under it. Best-effort: unreadable or vanished
+     * entries are left for the next sweep.
      */
     private static void sweepDir(Path downloadDir) {
         long cutoff = System.currentTimeMillis() - STALE_DOWNLOAD_AGE_MILLIS;
@@ -326,9 +318,9 @@ public final class JdkInstaller {
     }
 
     /**
-     * Stream {@code uri} into {@code archive} while updating a SHA-256 digest
-     * and forwarding cumulative byte counts to {@code onBytesRead}. Verifies
-     * the digest against {@code expectedSha256} on completion (when set).
+     * Stream {@code uri} into {@code archive} while updating a SHA-256 digest and forwarding
+     * cumulative byte counts to {@code onBytesRead}. Verifies the digest against {@code
+     * expectedSha256} on completion (when set).
      */
     private long streamingDownload(
             URI uri, String expectedSha256, String displayName, Path archive, LongConsumer onBytesRead)
@@ -419,13 +411,12 @@ public final class JdkInstaller {
     }
 
     /**
-     * Parallel ZIP extraction. ZIP's Central Directory lets us seek to any
-     * entry's deflate stream independently, so we fan out across
-     * {@link JkThreads#cpu()} workers — meaningful on JDK zips with several
-     * thousand entries (Windows JDK builds typically ship as zip).
+     * Parallel ZIP extraction. ZIP's Central Directory lets us seek to any entry's deflate stream
+     * independently, so we fan out across {@link JkThreads#cpu()} workers — meaningful on JDK zips
+     * with several thousand entries (Windows JDK builds typically ship as zip).
      *
-     * <p>Tar.gz can't be parallelized this way: gunzip is a single sequential
-     * stream and the tar metadata is interleaved with the file data.
+     * <p>Tar.gz can't be parallelized this way: gunzip is a single sequential stream and the tar
+     * metadata is interleaved with the file data.
      */
     private static void unzip(Path archive, Path destDir) throws IOException {
         try (ZipFile zip = new ZipFile(archive.toFile())) {
@@ -477,9 +468,8 @@ public final class JdkInstaller {
     }
 
     /**
-     * JDK archives usually unpack to a single top-level directory
-     * ({@code jdk-21.0.5+11}) — if so, return that. Otherwise return
-     * the staging dir.
+     * JDK archives usually unpack to a single top-level directory ({@code jdk-21.0.5+11}) — if so,
+     * return that. Otherwise return the staging dir.
      */
     private static Path flattenedRoot(Path stagingDir) throws IOException {
         List<Path> children = new ArrayList<>();

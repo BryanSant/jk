@@ -17,13 +17,11 @@ import java.util.jar.JarFile;
 import java.util.stream.Stream;
 
 /**
- * ABI snapshot of a compile classpath — every dependency class's
- * {@link ClassAbi} hash + inlinable-constant flag — so the incremental compiler
- * can tell which dependency classes actually changed when the classpath moves,
- * and recompile only the sources that reference them (instead of a full rebuild
- * on any classpath change). The union also covers directory entries (e.g. a
- * mixed module's Kotlin output dir), giving Java incremental awareness of
- * cross-language ABI changes.
+ * ABI snapshot of a compile classpath — every dependency class's {@link ClassAbi} hash +
+ * inlinable-constant flag — so the incremental compiler can tell which dependency classes actually
+ * changed when the classpath moves, and recompile only the sources that reference them (instead of
+ * a full rebuild on any classpath change). The union also covers directory entries (e.g. a mixed
+ * module's Kotlin output dir), giving Java incremental awareness of cross-language ABI changes.
  */
 public final class JavaClasspathAbi {
 
@@ -32,7 +30,9 @@ public final class JavaClasspathAbi {
     /** Per-class facts for a dependency: ABI hash + whether it inlines constants. */
     public record DepFacts(String abi, boolean constants) {}
 
-    /** Union of every classpath entry's {@code internalName → DepFacts} (later entries win on dups). */
+    /**
+     * Union of every classpath entry's {@code internalName → DepFacts} (later entries win on dups).
+     */
     public static Map<String, DepFacts> union(java.util.List<Path> classpath, Cas cas, Path cacheDir)
             throws IOException {
         Map<String, DepFacts> all = new TreeMap<>();

@@ -11,10 +11,9 @@ import dev.jkbuild.model.VersionSelector;
 import org.junit.jupiter.api.Test;
 
 /**
- * Tests the surgical text editor against the v0.7 name-as-key sub-table
- * format. Each test round-trips the edited content through
- * {@link JkBuildParser} to confirm the file is both valid TOML and a
- * well-formed {@code jk.toml}.
+ * Tests the surgical text editor against the v0.7 name-as-key sub-table format. Each test
+ * round-trips the edited content through {@link JkBuildParser} to confirm the file is both valid
+ * TOML and a well-formed {@code jk.toml}.
  */
 class JkBuildEditorTest {
 

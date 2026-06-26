@@ -24,9 +24,8 @@ final class ExportSupport {
     /**
      * A loaded project (or workspace root) ready to export.
      *
-     * @param locked merged {@code group:artifact}→version across the root and
-     *               every module lock — unified workspace resolution means one
-     *               version per module, so a flat map is faithful.
+     * @param locked merged {@code group:artifact}→version across the root and every module lock —
+     *     unified workspace resolution means one version per module, so a flat map is faithful.
      */
     record Loaded(Path rootDir, JkBuild root, Map<Path, JkBuild> modules, Map<String, String> locked) {
         boolean isWorkspace() {
@@ -43,7 +42,10 @@ final class ExportSupport {
             return out;
         }
 
-        /** Concrete (AUTO-resolved) source layout per project, keyed like {@link #modulesByRelPath()} (root = ""). */
+        /**
+         * Concrete (AUTO-resolved) source layout per project, keyed like {@link #modulesByRelPath()}
+         * (root = "").
+         */
         Map<String, JkBuild.Layout> layoutByRelPath() {
             Map<String, JkBuild.Layout> out = new LinkedHashMap<>();
             out.put("", resolveLayout(rootDir, root));
@@ -61,10 +63,9 @@ final class ExportSupport {
     }
 
     /**
-     * Parse the project at {@code startDir}; if it's a workspace root, also load
-     * its modules. Versions come from {@code jk.lock} (root + each module) when
-     * present. Returns {@code null} after printing an error when there's no
-     * {@code jk.toml}.
+     * Parse the project at {@code startDir}; if it's a workspace root, also load its modules.
+     * Versions come from {@code jk.lock} (root + each module) when present. Returns {@code null}
+     * after printing an error when there's no {@code jk.toml}.
      */
     static Loaded load(Path startDir, String cmd) throws IOException {
         Path toml = startDir.resolve("jk.toml");
@@ -104,7 +105,10 @@ final class ExportSupport {
         }
     }
 
-    /** True if it's safe to write {@code target} (doesn't exist, or {@code force}); else prints + false. */
+    /**
+     * True if it's safe to write {@code target} (doesn't exist, or {@code force}); else prints +
+     * false.
+     */
     static boolean canWrite(Path target, boolean force, String cmd) {
         if (Files.exists(target) && !force) {
             System.err.println(cmd + ": refusing to overwrite " + PathDisplay.styled(target) + " (use --force).");

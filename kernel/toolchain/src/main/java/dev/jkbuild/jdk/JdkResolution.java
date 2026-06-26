@@ -8,31 +8,30 @@ import java.util.Optional;
 import java.util.function.Function;
 
 /**
- * The single canonical JDK resolution order, shared by the build pipeline
- * ({@code JdkEnsure} / {@code CompileToolchain}) and the {@code jk activate}
- * shell hook ({@code JkEnv}) so they can't diverge. Tiers, highest first:
+ * The single canonical JDK resolution order, shared by the build pipeline ({@code JdkEnsure} /
+ * {@code CompileToolchain}) and the {@code jk activate} shell hook ({@code JkEnv}) so they can't
+ * diverge. Tiers, highest first:
  *
  * <ol>
- *   <li>{@code --jdk} switch</li>
- *   <li>{@code JK_JDK} env var</li>
- *   <li>{@code .jdk-version} file (strict {@code <vendor>-<major>})</li>
- *   <li>{@code jk.lock} recorded jdk identifier</li>
- *   <li>{@code jk.toml} {@code project.jdk}</li>
- *   <li>{@code project.java} floor — when no jdk is pinned and the requested
- *       language level exceeds the latest LTS, an implied {@code >=<release>}</li>
- *   <li>current ({@link GlobalDefaultJdk} current pointer)</li>
- *   <li>default ({@link GlobalDefaultJdk} default, else the {@link DefaultJdkPolicy}
- *       de-facto default among installed JDKs)</li>
- *   <li>{@code JAVA_HOME}</li>
- *   <li>{@code GRAALVM_HOME}</li>
- *   <li>first {@code javac} on {@code PATH}</li>
+ *   <li>{@code --jdk} switch
+ *   <li>{@code JK_JDK} env var
+ *   <li>{@code .jdk-version} file (strict {@code <vendor>-<major>})
+ *   <li>{@code jk.lock} recorded jdk identifier
+ *   <li>{@code jk.toml} {@code project.jdk}
+ *   <li>{@code project.java} floor — when no jdk is pinned and the requested language level exceeds
+ *       the latest LTS, an implied {@code >=<release>}
+ *   <li>current ({@link GlobalDefaultJdk} current pointer)
+ *   <li>default ({@link GlobalDefaultJdk} default, else the {@link DefaultJdkPolicy} de-facto
+ *       default among installed JDKs)
+ *   <li>{@code JAVA_HOME}
+ *   <li>{@code GRAALVM_HOME}
+ *   <li>first {@code javac} on {@code PATH}
  * </ol>
  *
- * <p>{@link #resolve} is for the build path: a <em>named</em> pin (tiers 1-6)
- * that isn't installed stops the walk and reports {@code wouldInstall} so the
- * caller can download it. {@link #resolveForHook} never installs — an
- * uninstalled pin falls through to the lower tiers so an activated shell always
- * gets a working {@code JAVA_HOME}.
+ * <p>{@link #resolve} is for the build path: a <em>named</em> pin (tiers 1-6) that isn't installed
+ * stops the walk and reports {@code wouldInstall} so the caller can download it. {@link
+ * #resolveForHook} never installs — an uninstalled pin falls through to the lower tiers so an
+ * activated shell always gets a working {@code JAVA_HOME}.
  */
 public final class JdkResolution {
 
@@ -82,20 +81,19 @@ public final class JdkResolution {
     private JdkResolution() {}
 
     /**
-     * Build-time resolution: an uninstalled named pin yields {@code wouldInstall},
-     * and the ambient {@code JAVA_HOME}/{@code GRAALVM_HOME}/{@code PATH} are
-     * valid last-resort tiers (a build must find <em>some</em> JDK).
+     * Build-time resolution: an uninstalled named pin yields {@code wouldInstall}, and the ambient
+     * {@code JAVA_HOME}/{@code GRAALVM_HOME}/{@code PATH} are valid last-resort tiers (a build must
+     * find <em>some</em> JDK).
      */
     public static Resolved resolve(Request req, JdkRegistry registry, GlobalDefaultJdk defaults, int latestLtsMajor) {
         return walk(req, registry, defaults, latestLtsMajor, true, true);
     }
 
     /**
-     * Resolution for the {@code jk activate} shell hook: never installs and
-     * never falls back to the ambient {@code JAVA_HOME}/{@code PATH} — it only
-     * activates an explicit jk pin or the (de-facto) default, so outside a jk
-     * project with no default the shell keeps its own environment. The de-facto
-     * default is LTS-aware via {@link JdkLts#OFFLINE_LATEST_LTS}.
+     * Resolution for the {@code jk activate} shell hook: never installs and never falls back to the
+     * ambient {@code JAVA_HOME}/{@code PATH} — it only activates an explicit jk pin or the (de-facto)
+     * default, so outside a jk project with no default the shell keeps its own environment. The
+     * de-facto default is LTS-aware via {@link JdkLts#OFFLINE_LATEST_LTS}.
      */
     public static Resolved resolveForHook(Request req, JdkRegistry registry, GlobalDefaultJdk defaults) {
         return walk(req, registry, defaults, JdkLts.OFFLINE_LATEST_LTS, false, false);

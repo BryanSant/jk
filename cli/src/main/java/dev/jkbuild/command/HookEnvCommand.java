@@ -10,14 +10,13 @@ import java.util.LinkedHashSet;
 import java.util.List;
 
 /**
- * {@code jk hook-env -s <shell>} (hidden) — emitted by the activation script
- * on every prompt/cd. Outputs the shell commands needed to bring
- * {@code JAVA_HOME} / {@code PATH} into sync with the project at the current
- * working directory.
+ * {@code jk hook-env -s <shell>} (hidden) — emitted by the activation script on every prompt/cd.
+ * Outputs the shell commands needed to bring {@code JAVA_HOME} / {@code PATH} into sync with the
+ * project at the current working directory.
  *
- * <p>Diffing logic mirrors mise's hook-env: track previously-set keys in
- * {@code __JK_DIFF} so leaving a project (or switching projects) can restore
- * the original values rather than appending forever.
+ * <p>Diffing logic mirrors mise's hook-env: track previously-set keys in {@code __JK_DIFF} so
+ * leaving a project (or switching projects) can restore the original values rather than appending
+ * forever.
  */
 public final class HookEnvCommand implements CliCommand {
 
@@ -63,9 +62,8 @@ public final class HookEnvCommand implements CliCommand {
     }
 
     /**
-     * Compute the diff between {@code prevDiff}'s tracked keys and
-     * {@code target}'s desired state, append shell commands to {@code out},
-     * and write the updated {@code __JK_DIFF}.
+     * Compute the diff between {@code prevDiff}'s tracked keys and {@code target}'s desired state,
+     * append shell commands to {@code out}, and write the updated {@code __JK_DIFF}.
      *
      * <p>Package-private so tests can drive it without a real shell.
      */

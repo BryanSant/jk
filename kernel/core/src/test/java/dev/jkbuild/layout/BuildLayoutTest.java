@@ -4,6 +4,8 @@ package dev.jkbuild.layout;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import dev.jkbuild.model.JkBuild;
+import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -71,8 +73,8 @@ class BuildLayoutTest {
     }
 
     @Test
-    void of_auto_discovers_enclosing_workspace_root(@TempDir Path workspace) throws java.io.IOException {
-        java.nio.file.Files.writeString(workspace.resolve("jk.toml"), """
+    void of_auto_discovers_enclosing_workspace_root(@TempDir Path workspace) throws IOException {
+        Files.writeString(workspace.resolve("jk.toml"), """
                 [project]
                 group    = "com.example"
                 name     = "ws-root"
@@ -82,8 +84,8 @@ class BuildLayoutTest {
                 modules = ["core"]
                 """);
         Path module = workspace.resolve("core");
-        java.nio.file.Files.createDirectories(module);
-        java.nio.file.Files.writeString(module.resolve("jk.toml"), """
+        Files.createDirectories(module);
+        Files.writeString(module.resolve("jk.toml"), """
                 [project]
                 group    = "com.example"
                 name     = "core"

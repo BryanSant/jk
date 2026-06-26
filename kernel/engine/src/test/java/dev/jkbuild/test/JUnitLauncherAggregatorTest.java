@@ -6,9 +6,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import org.junit.jupiter.api.Test;
 
 /**
- * Whitebox tests for {@link JUnitLauncher.ResultAggregator}. The aggregator
- * processes the NDJSON event stream the workers emit; we feed it raw lines
- * here rather than spinning up a real fork.
+ * Whitebox tests for {@link JUnitLauncher.ResultAggregator}. The aggregator processes the NDJSON
+ * event stream the workers emit; we feed it raw lines here rather than spinning up a real fork.
  */
 class JUnitLauncherAggregatorTest {
 

@@ -17,31 +17,27 @@ import java.util.Set;
 import java.util.stream.Stream;
 
 /**
- * A materialised Maven local repository under {@code <cache>/repo/}, the
- * offline counterpart to the {@link Cas}.
+ * A materialised Maven local repository under {@code <cache>/repo/}, the offline counterpart to the
+ * {@link Cas}.
  *
- * <p>The CAS is keyed by SHA-256 only, so given a Maven coordinate there's no
- * way to find the blob we hold for it — which makes offline resolution
- * impossible. This repo closes that gap by mirroring the standard m2 layout
- * ({@code <group-as-dirs>/<artifact>/<version>/<artifact>-<version>[-<classifier>].<ext>})
- * and <em>hard-linking</em> each fetched POM, JAR, and sources JAR back to its
- * CAS blob. One inode, two paths: no second copy on disk, but the artifact is
- * now addressable by coordinate and the bytes survive a CAS sweep until both
- * links are gone.
+ * <p>The CAS is keyed by SHA-256 only, so given a Maven coordinate there's no way to find the blob
+ * we hold for it — which makes offline resolution impossible. This repo closes that gap by
+ * mirroring the standard m2 layout ({@code
+ * <group-as-dirs>/<artifact>/<version>/<artifact>-<version>[-<classifier>].<ext>}) and
+ * <em>hard-linking</em> each fetched POM, JAR, and sources JAR back to its CAS blob. One inode, two
+ * paths: no second copy on disk, but the artifact is now addressable by coordinate and the bytes
+ * survive a CAS sweep until both links are gone.
  *
- * <p>Hard links (not symlinks) are used deliberately — {@link Linking} falls
- * back to a byte copy when the filesystem can't link, so this works on
- * Windows without Developer Mode and across filesystem boundaries on
- * Linux/macOS, none of it requiring elevated privileges.
+ * <p>Hard links (not symlinks) are used deliberately — {@link Linking} falls back to a byte copy
+ * when the filesystem can't link, so this works on Windows without Developer Mode and across
+ * filesystem boundaries on Linux/macOS, none of it requiring elevated privileges.
  *
- * <p>{@code maven-metadata.xml} is deliberately not mirrored — it has no
- * version key and is stale offline; version enumeration comes from the
- * directory listing instead.
+ * <p>{@code maven-metadata.xml} is deliberately not mirrored — it has no version key and is stale
+ * offline; version enumeration comes from the directory listing instead.
  *
- * <p>Mirroring is best-effort: it must never fail a successful fetch, so
- * {@link #materialize} swallows IO errors and read paths degrade to "not
- * present". The repo lives under the cache so a cache wipe invalidates it
- * together — it is a derived index, rebuilt by fetching online.
+ * <p>Mirroring is best-effort: it must never fail a successful fetch, so {@link #materialize}
+ * swallows IO errors and read paths degrade to "not present". The repo lives under the cache so a
+ * cache wipe invalidates it together — it is a derived index, rebuilt by fetching online.
  */
 public final class JkMavenLocalRepo {
 
@@ -55,7 +51,9 @@ public final class JkMavenLocalRepo {
         this.root = null;
     }
 
-    /** @param cacheRoot the jk cache directory (e.g. {@code ~/.jk/cache}). */
+    /**
+     * @param cacheRoot the jk cache directory (e.g. {@code ~/.jk/cache}).
+     */
     public JkMavenLocalRepo(Path cacheRoot) {
         Objects.requireNonNull(cacheRoot, "cacheRoot");
         this.root = cacheRoot.resolve("repo");
@@ -74,10 +72,9 @@ public final class JkMavenLocalRepo {
     }
 
     /**
-     * Mirror the CAS blob at {@code casBlob} into the repo under the given
-     * Maven-layout relative path (as produced by {@link MavenLayout}). The
-     * link shares the CAS inode; if the repo entry already exists it is left
-     * untouched. Never throws — a mirror failure must not fail a fetch.
+     * Mirror the CAS blob at {@code casBlob} into the repo under the given Maven-layout relative path
+     * (as produced by {@link MavenLayout}). The link shares the CAS inode; if the repo entry already
+     * exists it is left untouched. Never throws — a mirror failure must not fail a fetch.
      */
     public void materialize(String relativePath, Path casBlob) {
         if (root == null) return;
@@ -98,10 +95,9 @@ public final class JkMavenLocalRepo {
     }
 
     /**
-     * Versions of {@code group:artifact} present locally — the names of the
-     * version directories that hold at least one artifact file. Empty (not an
-     * error) when nothing is mirrored. Order is unspecified; callers that need
-     * newest-first should sort.
+     * Versions of {@code group:artifact} present locally — the names of the version directories that
+     * hold at least one artifact file. Empty (not an error) when nothing is mirrored. Order is
+     * unspecified; callers that need newest-first should sort.
      */
     public List<String> versions(String group, String artifact) {
         if (root == null) return List.of();
@@ -117,10 +113,9 @@ public final class JkMavenLocalRepo {
     }
 
     /**
-     * Every {@code group:artifact} present in the repo, with the versions held
-     * locally for each. Powers local cache search ({@code jk cache search}).
-     * Empty for {@link #NONE} or a cold cache. Versions are in directory
-     * order — callers that want newest-first should sort.
+     * Every {@code group:artifact} present in the repo, with the versions held locally for each.
+     * Powers local cache search ({@code jk cache search}). Empty for {@link #NONE} or a cold cache.
+     * Versions are in directory order — callers that want newest-first should sort.
      */
     public List<Module> modules() {
         if (root == null || !Files.isDirectory(root)) return List.of();
@@ -157,10 +152,9 @@ public final class JkMavenLocalRepo {
     }
 
     /**
-     * Remove every repo entry whose content hashes to one of {@code shas},
-     * pruning directories left empty. Used by the cache GC / sweep / LRU
-     * evictor to keep the mirror in lock-step with the CAS — a hard link left
-     * behind would keep the inode (and its bytes) alive after the CAS blob is
+     * Remove every repo entry whose content hashes to one of {@code shas}, pruning directories left
+     * empty. Used by the cache GC / sweep / LRU evictor to keep the mirror in lock-step with the CAS
+     * — a hard link left behind would keep the inode (and its bytes) alive after the CAS blob is
      * deleted. Returns the number of repo files removed. Never throws.
      */
     public int removeShas(Set<String> shas, boolean dryRun) {
@@ -184,9 +178,9 @@ public final class JkMavenLocalRepo {
     }
 
     /**
-     * Index the repo by the SHA-256 of each file's content. The m2 filename
-     * encodes the coordinate, not the hash, so we re-hash — done only when
-     * something is actually being purged, so the cost is paid rarely.
+     * Index the repo by the SHA-256 of each file's content. The m2 filename encodes the coordinate,
+     * not the hash, so we re-hash — done only when something is actually being purged, so the cost is
+     * paid rarely.
      */
     public Map<String, List<Path>> indexBySha() {
         Map<String, List<Path>> out = new HashMap<>();

@@ -20,18 +20,15 @@ import java.util.jar.Manifest;
 import java.util.stream.Stream;
 
 /**
- * Packages a directory of compiled classes + resources into a reproducible
- * jar. PRD §23.7 hermeticity defaults:
+ * Packages a directory of compiled classes + resources into a reproducible jar. PRD §23.7
+ * hermeticity defaults:
  *
  * <ul>
- *   <li>Entries written in sorted order so the byte layout is stable.</li>
- *   <li>Every entry's timestamp set to {@code SOURCE_DATE_EPOCH} (or
- *       the Unix epoch when unset).</li>
- *   <li>Manifest contains only what we set — no
- *       {@code Created-By} / {@code Build-Jdk} pollution.</li>
- *   <li>File modes left to the platform default; explicit modes (0644
- *       for data, 0755 for scripts) come once we ship anything beyond
- *       class files inside the jar.</li>
+ *   <li>Entries written in sorted order so the byte layout is stable.
+ *   <li>Every entry's timestamp set to {@code SOURCE_DATE_EPOCH} (or the Unix epoch when unset).
+ *   <li>Manifest contains only what we set — no {@code Created-By} / {@code Build-Jdk} pollution.
+ *   <li>File modes left to the platform default; explicit modes (0644 for data, 0755 for scripts)
+ *       come once we ship anything beyond class files inside the jar.
  * </ul>
  */
 public final class JarPackager {

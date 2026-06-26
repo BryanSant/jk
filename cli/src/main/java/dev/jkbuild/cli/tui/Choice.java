@@ -7,21 +7,19 @@ import org.jline.utils.AttributedString;
 /**
  * One option in a radio or multi-select step.
  *
- * <p>{@code hint} is an optional dark-gray suffix rendered after {@code label}
- * — useful for showing a secondary identifier (e.g., the concrete package
- * name behind a friendly vendor label) without competing visually with the
- * primary choice text.
+ * <p>{@code hint} is an optional dark-gray suffix rendered after {@code label} — useful for showing
+ * a secondary identifier (e.g., the concrete package name behind a friendly vendor label) without
+ * competing visually with the primary choice text.
  *
- * <p>{@code hintFn}, when non-null, computes the hint from the current
- * {@link Answers} at render time so options can reflect choices made on
- * earlier steps. {@code hintFn} wins over the static {@code hint}.
+ * <p>{@code hintFn}, when non-null, computes the hint from the current {@link Answers} at render
+ * time so options can reflect choices made on earlier steps. {@code hintFn} wins over the static
+ * {@code hint}.
  *
- * <p>{@code richLabelFn}, when non-null, builds the choice's label as a
- * multi-style {@link AttributedString}. The {@code Boolean} argument is
- * {@code true} when this row is currently focused, so callers can vary
- * intensity (e.g. bold the focused row, ordinary weight on the rest)
- * while keeping the same colors. Set this when one label needs to mix
- * multiple foreground styles in one row.
+ * <p>{@code richLabelFn}, when non-null, builds the choice's label as a multi-style {@link
+ * AttributedString}. The {@code Boolean} argument is {@code true} when this row is currently
+ * focused, so callers can vary intensity (e.g. bold the focused row, ordinary weight on the rest)
+ * while keeping the same colors. Set this when one label needs to mix multiple foreground styles in
+ * one row.
  */
 public record Choice(
         String id,

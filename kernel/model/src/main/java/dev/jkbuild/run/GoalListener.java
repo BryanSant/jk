@@ -4,20 +4,16 @@ package dev.jkbuild.run;
 import java.time.Duration;
 
 /**
- * Callbacks the Goal scheduler emits as phases progress. Every method
- * has a no-op default — implementations override only the ones they
- * care about (a JSON emitter cares about all events; a quiet log
- * listener cares only about {@code goalFinish}).
+ * Callbacks the Goal scheduler emits as phases progress. Every method has a no-op default —
+ * implementations override only the ones they care about (a JSON emitter cares about all events; a
+ * quiet log listener cares only about {@code goalFinish}).
  *
- * <p>Threading: listeners are invoked on whatever thread emitted the
- * event. For async phases that means a worker thread; for sync phases
- * the goal's caller thread. Listeners that need ordered access to
- * shared state (terminal rendering, file writes) must synchronise
- * internally.
+ * <p>Threading: listeners are invoked on whatever thread emitted the event. For async phases that
+ * means a worker thread; for sync phases the goal's caller thread. Listeners that need ordered
+ * access to shared state (terminal rendering, file writes) must synchronise internally.
  *
- * <p>Order guarantees: within a single phase, events are ordered as
- * emitted. Across phases, no ordering is guaranteed beyond
- * {@code phaseStart} preceding any of that phase's other events and
+ * <p>Order guarantees: within a single phase, events are ordered as emitted. Across phases, no
+ * ordering is guaranteed beyond {@code phaseStart} preceding any of that phase's other events and
  * {@code phaseFinish} following them.
  */
 public interface GoalListener {
@@ -33,10 +29,9 @@ public interface GoalListener {
     default void label(String phase, String label) {}
 
     /**
-     * Free-form passthrough output line from a phase (forwarded subprocess
-     * stdout under {@code --verbose}, a provisioning notice, …). Renderers
-     * print it above any pinned progress region; structured listeners record
-     * it as an output event.
+     * Free-form passthrough output line from a phase (forwarded subprocess stdout under {@code
+     * --verbose}, a provisioning notice, …). Renderers print it above any pinned progress region;
+     * structured listeners record it as an output event.
      */
     default void output(String phase, String line) {}
 
@@ -45,11 +40,10 @@ public interface GoalListener {
     default void error(String phase, String code, String message) {}
 
     /**
-     * Error carrying discrete {@code test} / {@code exceptionClass} detail
-     * (see {@link PhaseContext#error(String, String, String, String)}).
-     * Defaults to the plain {@link #error(String, String, String)} so
-     * listeners that don't model the structured form still receive the
-     * diagnostic with its message.
+     * Error carrying discrete {@code test} / {@code exceptionClass} detail (see {@link
+     * PhaseContext#error(String, String, String, String)}). Defaults to the plain {@link
+     * #error(String, String, String)} so listeners that don't model the structured form still receive
+     * the diagnostic with its message.
      */
     default void error(String phase, String code, String message, String test, String exceptionClass) {
         error(phase, code, message);

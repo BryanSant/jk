@@ -16,14 +16,14 @@ import java.util.TreeMap;
 import java.util.TreeSet;
 
 /**
- * Drives the {@code jk-java-compiler} worker: runs javac in-process (under the
- * project's JDK) with annotation processors wrapped for provenance capture, and
- * returns the diagnostics plus the generated-file → originating-source mapping
- * the incremental compiler needs for annotation-processor incrementality.
+ * Drives the {@code jk-java-compiler} worker: runs javac in-process (under the project's JDK) with
+ * annotation processors wrapped for provenance capture, and returns the diagnostics plus the
+ * generated-file → originating-source mapping the incremental compiler needs for
+ * annotation-processor incrementality.
  *
  * <p>Launched as {@code <javaHome>/bin/java -cp <workerJar>
- * dev.jkbuild.java.compiler.JavaCompilerWorker @<spec>}; the worker streams
- * {@value #PREFIX} NDJSON back on stdout. Mirrors {@link KotlincDriver}.
+ * dev.jkbuild.java.compiler.JavaCompilerWorker @<spec>}; the worker streams {@value #PREFIX} NDJSON
+ * back on stdout. Mirrors {@link KotlincDriver}.
  */
 public final class WorkerJavac {
 
@@ -31,7 +31,9 @@ public final class WorkerJavac {
 
     private WorkerJavac() {}
 
-    /** @param generated generated source file → the input source file(s) it originated from */
+    /**
+     * @param generated generated source file → the input source file(s) it originated from
+     */
     public record Result(boolean success, List<CompileResult.Diagnostic> diagnostics, Map<Path, Set<Path>> generated) {
         public Result {
             diagnostics = List.copyOf(diagnostics);

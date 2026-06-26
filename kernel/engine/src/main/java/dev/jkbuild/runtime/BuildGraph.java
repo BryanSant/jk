@@ -21,22 +21,19 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Resolves the full <em>composite build graph</em> for an entry project: the
- * workspace root + its modules + every transitive {@code path =} and
- * <em>branch</em> git dependency, as one topologically-sorted list of build
- * units. The single source of truth that both the build driver and
- * {@code jk explain} consume, so they agree on exactly what builds and in what
- * order.
+ * Resolves the full <em>composite build graph</em> for an entry project: the workspace root + its
+ * modules + every transitive {@code path =} and <em>branch</em> git dependency, as one
+ * topologically-sorted list of build units. The single source of truth that both the build driver
+ * and {@code jk explain} consume, so they agree on exactly what builds and in what order.
  *
- * <p>Every unit is a real {@code jk.toml} project built by the normal pipeline
- * ({@code BuildPipeline.coreBuilder}); dependency units (PATH / BRANCH_GIT) are
- * compile-only. Immutable (tag/rev) git deps are NOT units here — they stay on
- * the lock-pinned {@link GitSourceResolution} path. Edges point from a unit to
- * the units that must build before it (prereqs), unifying workspace module
- * order ({@code [build].order-after} + sibling deps) with composite edges.
+ * <p>Every unit is a real {@code jk.toml} project built by the normal pipeline ({@code
+ * BuildPipeline.coreBuilder}); dependency units (PATH / BRANCH_GIT) are compile-only. Immutable
+ * (tag/rev) git deps are NOT units here — they stay on the lock-pinned {@link GitSourceResolution}
+ * path. Edges point from a unit to the units that must build before it (prereqs), unifying
+ * workspace module order ({@code [build].order-after} + sibling deps) with composite edges.
  *
- * <p>Cycles (e.g. git1→git2→git1, path loops, or module cycles) and chains
- * deeper than {@link #MAX_DEPTH} are reported as errors before any build runs.
+ * <p>Cycles (e.g. git1→git2→git1, path loops, or module cycles) and chains deeper than {@link
+ * #MAX_DEPTH} are reported as errors before any build runs.
  */
 public final class BuildGraph {
 
@@ -51,8 +48,8 @@ public final class BuildGraph {
     }
 
     /**
-     * One project to build. {@code dir} is canonical (real path) — the identity key.
-     * {@code gitSource} is non-null only for {@link Origin#BRANCH_GIT}.
+     * One project to build. {@code dir} is canonical (real path) — the identity key. {@code
+     * gitSource} is non-null only for {@link Origin#BRANCH_GIT}.
      */
     public record BuildUnit(Path dir, JkBuild manifest, String coord, Origin origin, GitSource gitSource) {
         /** Dependency units are compile-only; root/modules run their own tests. */
@@ -63,8 +60,8 @@ public final class BuildGraph {
 
     /**
      * @param topoOrder dependency-first build order ({@code errors} empty ⇒ valid)
-     * @param edges     unit dir → dirs that must build before it
-     * @param errors    cycle / depth-cap / coordinate-mismatch / missing-jk.toml
+     * @param edges unit dir → dirs that must build before it
+     * @param errors cycle / depth-cap / coordinate-mismatch / missing-jk.toml
      */
     public record Result(List<BuildUnit> topoOrder, Map<Path, Set<Path>> edges, List<String> errors) {
         public boolean hasErrors() {
@@ -75,9 +72,9 @@ public final class BuildGraph {
     private BuildGraph() {}
 
     /**
-     * Resolve the graph rooted at {@code entryDir}/{@code entry}. {@code gitRoot}
-     * is the git checkout cache ({@code $JK_CACHE/git}) used to clone branch git
-     * targets during discovery (the clone reveals a target's edges).
+     * Resolve the graph rooted at {@code entryDir}/{@code entry}. {@code gitRoot} is the git checkout
+     * cache ({@code $JK_CACHE/git}) used to clone branch git targets during discovery (the clone
+     * reveals a target's edges).
      */
     public static Result resolve(Path entryDir, JkBuild entry, Path gitRoot) throws IOException, InterruptedException {
         Builder b = new Builder(gitRoot);
@@ -95,7 +92,10 @@ public final class BuildGraph {
         return new Result(order, b.edges, b.errors);
     }
 
-    /** The composite (path / branch-git) deps of {@code project} across MAIN+RUNTIME+TEST, deduped by module. */
+    /**
+     * The composite (path / branch-git) deps of {@code project} across MAIN+RUNTIME+TEST, deduped by
+     * module.
+     */
     static List<Dependency> compositeDeps(JkBuild project) {
         List<Dependency> out = new ArrayList<>();
         Set<String> seen = new LinkedHashSet<>();
@@ -112,10 +112,9 @@ public final class BuildGraph {
     }
 
     /**
-     * Resolve a composite dependency's project directory: a {@code path} dep's
-     * normalized dir, or a branch git dep's checkout dir (cloned via
-     * {@link GitFetcher}, cached). Shared with {@code CompositeLocator} and
-     * {@code jk idea}.
+     * Resolve a composite dependency's project directory: a {@code path} dep's normalized dir, or a
+     * branch git dep's checkout dir (cloned via {@link GitFetcher}, cached). Shared with {@code
+     * CompositeLocator} and {@code jk idea}.
      */
     public static Path targetDir(Path fromDir, Dependency dep, Path gitRoot) throws IOException, InterruptedException {
         if (dep.isPath()) {
@@ -150,7 +149,9 @@ public final class BuildGraph {
                 edges.computeIfAbsent(from, k -> new LinkedHashSet<>()).add(prereq);
         }
 
-        /** Add every module of a workspace as a unit, wire module-order edges, then descend composites. */
+        /**
+         * Add every module of a workspace as a unit, wire module-order edges, then descend composites.
+         */
         void addWorkspace(Path wsRoot, JkBuild root, Origin moduleOrigin) throws IOException, InterruptedException {
             Map<Path, JkBuild> modules = WorkspaceLoader.loadModules(wsRoot, root);
             // Index by coord + bare name for sibling/order-after edge resolution.
@@ -173,7 +174,10 @@ public final class BuildGraph {
             }
         }
 
-        /** Sibling-dep + {@code [build].order-after} prereq edges (lifted from BuildCommand.topoSortModules). */
+        /**
+         * Sibling-dep + {@code [build].order-after} prereq edges (lifted from
+         * BuildCommand.topoSortModules).
+         */
         private void addModuleEdges(
                 Path moduleDir, JkBuild m, Map<String, Path> dirByCoord, Map<String, Path> dirByName) {
             for (Scope scope : Scope.values()) {
@@ -196,7 +200,8 @@ public final class BuildGraph {
         /** Discover the composite (path / branch-git) deps of a unit; recurse depth-first. */
         void discoverComposites(Path fromDir, JkBuild from, int depth) throws IOException, InterruptedException {
             if (depth > MAX_DEPTH) {
-                errors.add("composite dependency chain exceeds " + MAX_DEPTH
+                errors.add("composite dependency chain exceeds "
+                        + MAX_DEPTH
                         + " levels (likely a cycle through symlinks)");
                 return;
             }
@@ -220,14 +225,24 @@ public final class BuildGraph {
                 try {
                     target = JkBuildParser.parse(Files.readString(toml));
                 } catch (RuntimeException e) {
-                    errors.add("composite dependency `" + dep.module() + "` failed to parse " + toml + ": "
+                    errors.add("composite dependency `"
+                            + dep.module()
+                            + "` failed to parse "
+                            + toml
+                            + ": "
                             + e.getMessage());
                     continue;
                 }
                 String coord = target.project().group() + ":" + target.project().name();
                 if (!coord.equals(dep.module())) {
-                    errors.add("composite dependency `" + dep.module() + "` points at a project whose "
-                            + "coordinate is `" + coord + "` (" + targetDir + "); they must match");
+                    errors.add("composite dependency `"
+                            + dep.module()
+                            + "` points at a project whose "
+                            + "coordinate is `"
+                            + coord
+                            + "` ("
+                            + targetDir
+                            + "); they must match");
                     continue;
                 }
                 Origin origin = dep.isPath() ? Origin.PATH : Origin.BRANCH_GIT;
@@ -262,7 +277,8 @@ public final class BuildGraph {
                 }
             }
             if (sorted.size() != units.size()) {
-                errors.add("composite/workspace build graph has a cycle among " + (units.size() - sorted.size())
+                errors.add("composite/workspace build graph has a cycle among "
+                        + (units.size() - sorted.size())
                         + " unit(s)");
                 return List.of();
             }

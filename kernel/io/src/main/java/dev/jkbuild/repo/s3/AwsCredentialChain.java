@@ -14,19 +14,16 @@ import java.util.function.Function;
  * Resolves AWS credentials the way the AWS SDKs/CLI do (the subset jk needs):
  *
  * <ol>
- *   <li>environment — {@code AWS_ACCESS_KEY_ID} / {@code AWS_SECRET_ACCESS_KEY}
- *       / {@code AWS_SESSION_TOKEN}, region from {@code AWS_REGION} then
- *       {@code AWS_DEFAULT_REGION};</li>
- *   <li>shared files — {@code ~/.aws/credentials} (keys) and
- *       {@code ~/.aws/config} (region), under the profile named by
- *       {@code AWS_PROFILE} (default {@code default}).</li>
+ *   <li>environment — {@code AWS_ACCESS_KEY_ID} / {@code AWS_SECRET_ACCESS_KEY} / {@code
+ *       AWS_SESSION_TOKEN}, region from {@code AWS_REGION} then {@code AWS_DEFAULT_REGION};
+ *   <li>shared files — {@code ~/.aws/credentials} (keys) and {@code ~/.aws/config} (region), under
+ *       the profile named by {@code AWS_PROFILE} (default {@code default}).
  * </ol>
  *
- * <p>Instance/container role providers (IMDS, ECS, web-identity) are out of
- * scope for now. Env and the {@code ~/.aws} dir are injected so this is
- * unit-testable without touching the real environment. Returns empty when no
- * keys are found — the S3 transport then issues unsigned (anonymous) requests,
- * which work for public buckets.
+ * <p>Instance/container role providers (IMDS, ECS, web-identity) are out of scope for now. Env and
+ * the {@code ~/.aws} dir are injected so this is unit-testable without touching the real
+ * environment. Returns empty when no keys are found — the S3 transport then issues unsigned
+ * (anonymous) requests, which work for public buckets.
  */
 public final class AwsCredentialChain {
 

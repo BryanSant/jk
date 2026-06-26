@@ -59,16 +59,14 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Routes verbs that have been ported off picocli through jk's own
- * {@link ArgParser} + {@link HelpRenderer}; everything else falls back to
- * picocli. This is the coexistence seam for Phase 3 (docs/plugin-refactor.md §5):
- * commands move into the registry below one tranche at a time, and picocli is
- * deleted once it's empty on the other side.
+ * Routes verbs that have been ported off picocli through jk's own {@link ArgParser} + {@link
+ * HelpRenderer}; everything else falls back to picocli. This is the coexistence seam for Phase 3
+ * (docs/plugin-refactor.md §5): commands move into the registry below one tranche at a time, and
+ * picocli is deleted once it's empty on the other side.
  *
- * <p>Handles both leaf verbs and parent groups (a {@link CliCommand} with
- * subcommands) — {@code jk jdk install …} descends into the parent, finds the
- * sub-verb, and dispatches it; {@code jk jdk}/{@code jk jdk --help} prints the
- * parent's command list.
+ * <p>Handles both leaf verbs and parent groups (a {@link CliCommand} with subcommands) — {@code jk
+ * jdk install …} descends into the parent, finds the sub-verb, and dispatches it; {@code jk
+ * jdk}/{@code jk jdk --help} prints the parent's command list.
  */
 public final class CommandDispatch {
 
@@ -133,9 +131,9 @@ public final class CommandDispatch {
     }
 
     /**
-     * If the verb names a ported command, parse and run it (descending through
-     * subcommands as needed), returning the exit code; otherwise return
-     * {@code null} so the caller falls back to picocli.
+     * If the verb names a ported command, parse and run it (descending through subcommands as
+     * needed), returning the exit code; otherwise return {@code null} so the caller falls back to
+     * picocli.
      */
     public static Integer tryDispatch(String[] args) {
         List<String> all = List.of(args);
@@ -252,7 +250,8 @@ public final class CommandDispatch {
                 switch (e.kind()) {
                     case UNKNOWN_OPTION ->
                         "unrecognized option '"
-                                + HelpRenderer.paint(e.token(), Theme.active().highlight(), ansi) + "'";
+                                + HelpRenderer.paint(e.token(), Theme.active().highlight(), ansi)
+                                + "'";
                     case MISSING_REQUIRED ->
                         "missing required argument "
                                 + HelpRenderer.paint(e.token(), Theme.active().highlight(), ansi);
@@ -268,7 +267,8 @@ public final class CommandDispatch {
     private static void printUnknownSubcommand(CliCommand parent, String qualified, String sub, boolean ansi) {
         System.err.println(HelpRenderer.paint("error:", Theme.active().errorLabel(), ansi)
                 + " unrecognized subcommand '"
-                + HelpRenderer.paint(sub, Theme.active().highlight(), ansi) + "'");
+                + HelpRenderer.paint(sub, Theme.active().highlight(), ansi)
+                + "'");
         System.err.println();
         System.err.println(usageLine(parent, qualified, ansi));
         System.err.println();
@@ -287,7 +287,8 @@ public final class CommandDispatch {
         }
         suffix.append(" [OPTIONS]");
         if (ansi) {
-            return HelpRenderer.paint("Usage:", Theme.active().sectionHeading(), true) + " "
+            return HelpRenderer.paint("Usage:", Theme.active().sectionHeading(), true)
+                    + " "
                     + HelpRenderer.paint(qualified, Theme.active().commandName(), true)
                     + HelpRenderer.paint(suffix.toString(), Theme.active().paramLabel(), true);
         }
@@ -301,9 +302,9 @@ public final class CommandDispatch {
     }
 
     /**
-     * Index of the verb — the first non-option token, skipping any leading
-     * global options (and the value of a value-taking one, e.g. {@code -C dir}).
-     * Returns -1 when there's none (bare {@code jk}, or {@code jk --help}).
+     * Index of the verb — the first non-option token, skipping any leading global options (and the
+     * value of a value-taking one, e.g. {@code -C dir}). Returns -1 when there's none (bare {@code
+     * jk}, or {@code jk --help}).
      */
     static int verbIndex(List<String> args) {
         Set<String> valueGlobals = new LinkedHashSet<>();

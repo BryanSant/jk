@@ -14,8 +14,8 @@ import java.nio.file.Path;
 import java.util.List;
 
 /**
- * {@code jk init} — initialize a jk project in the current directory.
- * Delegates to {@link NewCommand} with directory pinned to {@code "."}.
+ * {@code jk init} — initialize a jk project in the current directory. Delegates to {@link
+ * NewCommand} with directory pinned to {@code "."}.
  */
 public final class InitCommand implements CliCommand {
 
@@ -71,7 +71,8 @@ public final class InitCommand implements CliCommand {
             JkBuild project = JkBuildParser.parse(buildFile);
             String g = project.project().group();
             String a = project.project().name();
-            return Theme.colorize(g, Theme.active().activeStep()) + ":"
+            return Theme.colorize(g, Theme.active().activeStep())
+                    + ":"
                     + Theme.colorize(a, Theme.active().activeStep().bold());
         } catch (Exception ignored) {
             return Theme.colorize("this project", Theme.active().activeStep().bold());

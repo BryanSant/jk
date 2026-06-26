@@ -4,27 +4,26 @@ package dev.jkbuild.model;
 import java.util.Objects;
 
 /**
- * A declared dependency in {@code jk.toml} (or a {@code //jk dep} script
- * directive). Carries the user-chosen short {@code library} handle (the
- * manifest key), the resolved {@code module} (group:artifact), a version
- * selector, and an optional source override (git or local path).
+ * A declared dependency in {@code jk.toml} (or a {@code //jk dep} script directive). Carries the
+ * user-chosen short {@code library} handle (the manifest key), the resolved {@code module}
+ * (group:artifact), a version selector, and an optional source override (git or local path).
  *
- * <p>Terminology: {@code library} is the short local handle the user types; the
- * Maven artifactId segment of {@code module} is exposed as {@link #name()}
- * (Gradle's "name" for that coordinate segment).
+ * <p>Terminology: {@code library} is the short local handle the user types; the Maven artifactId
+ * segment of {@code module} is exposed as {@link #name()} (Gradle's "name" for that coordinate
+ * segment).
  *
- * <p>For git deps the version field carries the synthetic marker
- * {@code "git"} so the record's non-null invariant holds; consumers
- * gate on {@link #isGit()} rather than reading the marker.
+ * <p>For git deps the version field carries the synthetic marker {@code "git"} so the record's
+ * non-null invariant holds; consumers gate on {@link #isGit()} rather than reading the marker.
  *
- * <p>For local-path deps the version field carries the synthetic marker
- * {@code "path"}; consumers gate on {@link #isPath()}.
+ * <p>For local-path deps the version field carries the synthetic marker {@code "path"}; consumers
+ * gate on {@link #isPath()}.
  *
  * <p>The {@code pinned} flag is <b>derived</b> from the resolution mode:
+ *
  * <ul>
- *   <li>Exact selector ({@code =1.2.3}) → pinned.</li>
- *   <li>Git source / path source → pinned (the source itself is the pin).</li>
- *   <li>Caret, Tilde, Range, Latest → floating.</li>
+ *   <li>Exact selector ({@code =1.2.3}) → pinned.
+ *   <li>Git source / path source → pinned (the source itself is the pin).
+ *   <li>Caret, Tilde, Range, Latest → floating.
  * </ul>
  */
 public record Dependency(
@@ -55,9 +54,8 @@ public record Dependency(
     }
 
     /**
-     * Back-compat constructor for the pre-{@code optional} 7-arg shape — every
-     * existing factory and caller routes through here, defaulting to a
-     * non-optional (always-resolved) dependency.
+     * Back-compat constructor for the pre-{@code optional} 7-arg shape — every existing factory and
+     * caller routes through here, defaulting to a non-optional (always-resolved) dependency.
      */
     public Dependency(
             String library,
@@ -81,9 +79,8 @@ public record Dependency(
     }
 
     /**
-     * Legacy three-arg constructor preserved for non-core callers that
-     * passed an explicit {@code pinned} flag. The flag is now derived, so
-     * the parameter is ignored.
+     * Legacy three-arg constructor preserved for non-core callers that passed an explicit {@code
+     * pinned} flag. The flag is now derived, so the parameter is ignored.
      */
     public Dependency(String module, VersionSelector version, boolean pinnedIgnored) {
         this(artifactOf(module), module, version, null, null, null, false);

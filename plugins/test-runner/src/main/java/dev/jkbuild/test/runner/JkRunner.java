@@ -23,24 +23,20 @@ import org.junit.platform.launcher.listeners.SummaryGeneratingListener;
  * Child-JVM entry point for {@code jk test}. Three modes, selected by flags:
  *
  * <ol>
- *   <li><b>One-shot</b> (default): {@code --scan-classpath=<dir>} — discover
- *       and execute everything under the classpath root. Used when the parent
- *       wants a single fork with no work-stealing.</li>
- *   <li><b>Discovery</b>: {@code --list-only --scan-classpath=<dir>} — walk
- *       the test plan but execute nothing. Emit one {@link EventType#DISCOVERED}
- *       per top-level test class then exit. The parent uses this list to seed
- *       the pull-queue for parallel runs.</li>
- *   <li><b>Pull worker</b>: {@code --pull --worker=N --scan-classpath=<dir>}
- *       — open a long-lived {@link LauncherSession}, then loop on stdin:
- *       {@code RUN <fqcn>} runs that class via {@link Launcher#execute},
- *       {@code DONE} or EOF exits. After each class we emit
- *       {@link EventType#READY} so the parent knows to send the next.</li>
+ *   <li><b>One-shot</b> (default): {@code --scan-classpath=<dir>} — discover and execute everything
+ *       under the classpath root. Used when the parent wants a single fork with no work-stealing.
+ *   <li><b>Discovery</b>: {@code --list-only --scan-classpath=<dir>} — walk the test plan but
+ *       execute nothing. Emit one {@link EventType#DISCOVERED} per top-level test class then exit.
+ *       The parent uses this list to seed the pull-queue for parallel runs.
+ *   <li><b>Pull worker</b>: {@code --pull --worker=N --scan-classpath=<dir>} — open a long-lived
+ *       {@link LauncherSession}, then loop on stdin: {@code RUN <fqcn>} runs that class via {@link
+ *       Launcher#execute}, {@code DONE} or EOF exits. After each class we emit {@link
+ *       EventType#READY} so the parent knows to send the next.
  * </ol>
  *
- * <p>Exit codes: 0 = success, 1 = at least one test failed, 2 = arg/launcher
- * error. The wire protocol on stdout matches the schema described in
- * {@link EventType}; lines without the worker's protocol prefix are user test
- * output and pass through to the parent's stdout.
+ * <p>Exit codes: 0 = success, 1 = at least one test failed, 2 = arg/launcher error. The wire
+ * protocol on stdout matches the schema described in {@link EventType}; lines without the worker's
+ * protocol prefix are user test output and pass through to the parent's stdout.
  */
 public final class JkRunner implements Plugin {
 
@@ -79,7 +75,9 @@ public final class JkRunner implements Plugin {
             String where = String.valueOf(e.getMessage());
             if (where.contains("junit/platform") || where.contains("junit.platform")) {
                 System.err.println("jk-test-runner: incompatible JUnit Platform on the test classpath — "
-                        + e.getClass().getSimpleName() + ": " + e.getMessage());
+                        + e.getClass().getSimpleName()
+                        + ": "
+                        + e.getMessage());
                 System.err.println("  jk drives the JUnit Platform Launcher API; ensure "
                         + "org.junit.platform:junit-platform-launcher resolves to a recent release "
                         + "(jk defaults to the latest stable when no test dependencies are declared).");
@@ -98,8 +96,8 @@ public final class JkRunner implements Plugin {
     // --- mode 1: one-shot ----------------------------------------------------
 
     /**
-     * Discover + execute everything reachable from {@code --scan-classpath},
-     * emitting events as we go. Returns the exit code (0 on green).
+     * Discover + execute everything reachable from {@code --scan-classpath}, emitting events as we
+     * go. Returns the exit code (0 on green).
      */
     private static int runOneShot(Args args, JsonEventWriter writer) {
         var streaming = new StreamingListener(writer, args.workerId);
@@ -121,11 +119,9 @@ public final class JkRunner implements Plugin {
     // --- mode 2: discovery ---------------------------------------------------
 
     /**
-     * Walk the test plan and emit one {@link EventType#DISCOVERED} per
-     * top-level test class, plus a {@link EventType#DISCOVERY_TOTAL} with
-     * the {@code (classes, tests)} totals. Uses {@link Launcher#discover}
-     * (not {@code execute}) so this completes in 100–300 ms even for big
-     * suites.
+     * Walk the test plan and emit one {@link EventType#DISCOVERED} per top-level test class, plus a
+     * {@link EventType#DISCOVERY_TOTAL} with the {@code (classes, tests)} totals. Uses {@link
+     * Launcher#discover} (not {@code execute}) so this completes in 100–300 ms even for big suites.
      */
     private static void runListOnly(Args args, JsonEventWriter writer) {
         var streaming = new StreamingListener(writer, args.workerId);
@@ -136,10 +132,9 @@ public final class JkRunner implements Plugin {
     }
 
     /**
-     * Shared discovery emission used by both one-shot and list-only modes:
-     * walk the test plan once, emit a DISCOVERED per class, then a
-     * DISCOVERY_TOTAL with cumulative counts. Single source of truth so the
-     * wire shape is identical regardless of which mode invoked it.
+     * Shared discovery emission used by both one-shot and list-only modes: walk the test plan once,
+     * emit a DISCOVERED per class, then a DISCOVERY_TOTAL with cumulative counts. Single source of
+     * truth so the wire shape is identical regardless of which mode invoked it.
      */
     private static void emitDiscovery(
             Launcher launcher,
@@ -154,10 +149,10 @@ public final class JkRunner implements Plugin {
     }
 
     /**
-     * Depth-first walk over the TestPlan. Emits a DISCOVERED event for every
-     * class-shaped CONTAINER and bumps the test counter for every TEST leaf.
-     * Counts mirror what {@code SummaryGeneratingListener.getTestsFoundCount}
-     * would report after a full execution, but without running anything.
+     * Depth-first walk over the TestPlan. Emits a DISCOVERED event for every class-shaped CONTAINER
+     * and bumps the test counter for every TEST leaf. Counts mirror what {@code
+     * SummaryGeneratingListener.getTestsFoundCount} would report after a full execution, but without
+     * running anything.
      */
     private static void walkAndEmit(TestPlan plan, TestIdentifier node, StreamingListener listener, int[] counts) {
         boolean isContainer = node.getType() == org.junit.platform.engine.TestDescriptor.Type.CONTAINER;
@@ -177,9 +172,9 @@ public final class JkRunner implements Plugin {
     // --- mode 3: pull worker -------------------------------------------------
 
     /**
-     * Long-lived worker. Reuses one {@link LauncherSession} for the whole
-     * lifetime so JIT/heap stay warm across the classes the parent feeds us.
-     * Protocol on stdin (one line per command):
+     * Long-lived worker. Reuses one {@link LauncherSession} for the whole lifetime so JIT/heap stay
+     * warm across the classes the parent feeds us. Protocol on stdin (one line per command):
+     *
      * <pre>
      *   RUN com.example.FooTest
      *   DONE

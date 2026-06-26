@@ -4,17 +4,16 @@ package dev.jkbuild.cli;
 /**
  * Centralized ANSI escape-sequence primitives for the whole {@code :cli} module.
  *
- * <p>This class owns the raw control-sequence mechanics — the {@link #ESC} and
- * {@link #BEL} characters, the CSI/OSC introducers, the {@link #ST} terminator,
- * the SGR {@link #RESET}, cursor movement, line erasure, OSC&nbsp;8 hyperlinks,
- * and OSC&nbsp;9;4 taskbar progress. Nothing here knows about <em>colors</em>:
- * color choices live in the theme layer (see {@code dev.jkbuild.cli.theme.Theme}),
- * which uses {@link #RESET} (and the SGR helpers) to emit styled text.
+ * <p>This class owns the raw control-sequence mechanics — the {@link #ESC} and {@link #BEL}
+ * characters, the CSI/OSC introducers, the {@link #ST} terminator, the SGR {@link #RESET}, cursor
+ * movement, line erasure, OSC&nbsp;8 hyperlinks, and OSC&nbsp;9;4 taskbar progress. Nothing here
+ * knows about <em>colors</em>: color choices live in the theme layer (see {@code
+ * dev.jkbuild.cli.theme.Theme}), which uses {@link #RESET} (and the SGR helpers) to emit styled
+ * text.
  *
- * <p>Keeping every escape in one place means a single audited definition of
- * {@code "\033[K"}, {@code "\033]9;4;…\007"}, etc., instead of the literals
- * that used to be scattered across the help renderer, the progress bars, the
- * spinner, the wizard, and individual commands.
+ * <p>Keeping every escape in one place means a single audited definition of {@code "\033[K"},
+ * {@code "\033]9;4;…\007"}, etc., instead of the literals that used to be scattered across the help
+ * renderer, the progress bars, the spinner, the wizard, and individual commands.
  */
 public final class Ansi {
 
@@ -22,13 +21,16 @@ public final class Ansi {
 
     /** Escape, {@code U+001B}. The lead byte of every CSI/OSC/SS sequence. */
     public static final char ESC = '\033';
+
     /** Bell, {@code U+0007}. Doubles as the legacy OSC string terminator. */
     public static final char BEL = '\007';
 
     /** Control Sequence Introducer: {@code ESC [}. */
     public static final String CSI = ESC + "[";
+
     /** Operating System Command introducer: {@code ESC ]}. */
     public static final String OSC = ESC + "]";
+
     /** String Terminator: {@code ESC \}. The spec-correct closer for OSC strings. */
     public static final String ST = ESC + "\\";
 
@@ -43,7 +45,10 @@ public final class Ansi {
         return CSI + body + "m";
     }
 
-    /** Truecolor foreground SGR body, e.g. {@code "38;2;r;g;b"} (no leading {@code ESC[}, no trailing {@code m}). */
+    /**
+     * Truecolor foreground SGR body, e.g. {@code "38;2;r;g;b"} (no leading {@code ESC[}, no trailing
+     * {@code m}).
+     */
     public static String fgBody(int r, int g, int b) {
         return "38;2;" + r + ";" + g + ";" + b;
     }
@@ -57,13 +62,16 @@ public final class Ansi {
 
     /** Hide the cursor (DECTCEM). */
     public static final String HIDE_CURSOR = CSI + "?25l";
+
     /** Show the cursor (DECTCEM). */
     public static final String SHOW_CURSOR = CSI + "?25h";
 
     /** Erase from the cursor to the end of the current line (EL 0). */
     public static final String ERASE_LINE_TO_END = CSI + "K";
+
     /** Erase from the cursor to the end of the display (ED 0). */
     public static final String ERASE_DISPLAY_TO_END = CSI + "0J";
+
     /** Carriage return followed by erase-to-end — the common "redraw this line" prefix. */
     public static final String CLEAR_LINE = "\r" + ERASE_LINE_TO_END;
 
@@ -100,9 +108,8 @@ public final class Ansi {
     // --- OSC 8 hyperlinks -------------------------------------------------
 
     /**
-     * Wrap {@code text} in an OSC&nbsp;8 hyperlink to {@code url}. Terminals that
-     * don't support it render {@code text} plainly. Uses {@link #BEL} as the
-     * terminator (the widely-supported form).
+     * Wrap {@code text} in an OSC&nbsp;8 hyperlink to {@code url}. Terminals that don't support it
+     * render {@code text} plainly. Uses {@link #BEL} as the terminator (the widely-supported form).
      */
     public static String hyperlink(String url, String text) {
         return OSC + "8;;" + url + BEL + text + OSC + "8;;" + BEL;

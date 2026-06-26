@@ -18,15 +18,14 @@ import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * Reconciles the on-disk content-addressed cache against a {@link Lockfile}.
- * For each locked package with a recorded sha256, ensures the blob is in
- * the CAS — downloading from the source URL recorded in the lockfile entry
- * if missing. Verifies the downloaded sha256 matches what the lockfile
- * promised (mismatches are reported, never silently accepted).
+ * Reconciles the on-disk content-addressed cache against a {@link Lockfile}. For each locked
+ * package with a recorded sha256, ensures the blob is in the CAS — downloading from the source URL
+ * recorded in the lockfile entry if missing. Verifies the downloaded sha256 matches what the
+ * lockfile promised (mismatches are reported, never silently accepted).
  *
- * <p>Fetches run concurrently on {@link JkThreads#io()} with per-host
- * concurrency capped by {@link HostRateLimiter}, so a cold cache against
- * Maven Central populates in parallel without getting throttled.
+ * <p>Fetches run concurrently on {@link JkThreads#io()} with per-host concurrency capped by {@link
+ * HostRateLimiter}, so a cold cache against Maven Central populates in parallel without getting
+ * throttled.
  */
 public final class CacheSync {
 
@@ -58,16 +57,13 @@ public final class CacheSync {
     }
 
     /**
-     * Sync with per-package progress reporting. {@code observer} is
-     * notified as each package's outcome resolves — synchronously for
-     * already-cached / POM-only packages, on the fetcher's completion
-     * thread for fetched / failed packages. Use this to drive a
-     * Goal-style progress bar where the numerator climbs one tick per
-     * package processed.
+     * Sync with per-package progress reporting. {@code observer} is notified as each package's
+     * outcome resolves — synchronously for already-cached / POM-only packages, on the fetcher's
+     * completion thread for fetched / failed packages. Use this to drive a Goal-style progress bar
+     * where the numerator climbs one tick per package processed.
      *
-     * <p>When {@code refresh} is true the CAS presence check is skipped
-     * and every artifact is re-downloaded from its source, regardless of
-     * whether a local copy already exists.
+     * <p>When {@code refresh} is true the CAS presence check is skipped and every artifact is
+     * re-downloaded from its source, regardless of whether a local copy already exists.
      */
     public Report sync(Lockfile lock, ProgressObserver observer, boolean refresh)
             throws IOException, InterruptedException {
@@ -135,9 +131,8 @@ public final class CacheSync {
     }
 
     /**
-     * Fetch sources JARs for every locked package that has a
-     * {@code sources-checksum} field. Already-cached sources are skipped.
-     * Packages without a sources checksum are silently ignored.
+     * Fetch sources JARs for every locked package that has a {@code sources-checksum} field.
+     * Already-cached sources are skipped. Packages without a sources checksum are silently ignored.
      *
      * @return count of sources JARs fetched (not counting those already cached)
      */
@@ -205,9 +200,9 @@ public final class CacheSync {
     }
 
     /**
-     * Per-package callback driven by {@link #sync(Lockfile, ProgressObserver)}.
-     * Methods are invoked once per package, on whatever thread resolved
-     * that package's outcome. Implementations need to be thread-safe.
+     * Per-package callback driven by {@link #sync(Lockfile, ProgressObserver)}. Methods are invoked
+     * once per package, on whatever thread resolved that package's outcome. Implementations need to
+     * be thread-safe.
      */
     public interface ProgressObserver {
         ProgressObserver NOOP = new ProgressObserver() {};
@@ -227,9 +222,13 @@ public final class CacheSync {
             URI host = p.repo.baseUrl();
             MavenRepo.Fetched f = limiter.run(host, () -> p.repo.fetchArtifact(coord));
             if (!f.sha256().equals(p.expectedHex)) {
-                return FetchResult.failure(p.pkg.name() + " v" + p.pkg.version()
-                        + ": checksum mismatch — lock says " + p.expectedHex
-                        + ", got " + f.sha256());
+                return FetchResult.failure(p.pkg.name()
+                        + " v"
+                        + p.pkg.version()
+                        + ": checksum mismatch — lock says "
+                        + p.expectedHex
+                        + ", got "
+                        + f.sha256());
             }
             return FetchResult.ok();
         } catch (IOException e) {

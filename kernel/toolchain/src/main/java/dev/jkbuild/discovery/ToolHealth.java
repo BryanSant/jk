@@ -21,21 +21,19 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
 /**
- * Structural + version checks on a tool install root. Used by probes
- * (to validate candidates before reporting them) and by provisioners
- * (to detect broken symlinks before reusing a cached entry).
+ * Structural + version checks on a tool install root. Used by probes (to validate candidates before
+ * reporting them) and by provisioners (to detect broken symlinks before reusing a cached entry).
  *
- * <p>All checks are filesystem-only — no subprocesses. Reading a
- * {@code release} file or a jar's {@code MANIFEST.MF} is cheap and
- * doesn't depend on the tool being runnable on the current host.
+ * <p>All checks are filesystem-only — no subprocesses. Reading a {@code release} file or a jar's
+ * {@code MANIFEST.MF} is cheap and doesn't depend on the tool being runnable on the current host.
  */
 public final class ToolHealth {
 
     private ToolHealth() {}
 
     /**
-     * Does {@code home} contain a working install matching {@code spec}?
-     * Follows symlinks; a broken link returns false.
+     * Does {@code home} contain a working install matching {@code spec}? Follows symlinks; a broken
+     * link returns false.
      */
     public static boolean isHealthy(ToolSpec spec, Path home) {
         if (!Files.isDirectory(home)) return false;
@@ -66,13 +64,12 @@ public final class ToolHealth {
     }
 
     /**
-     * Read the SDKMAN distribution suffix for a JDK install (e.g. {@code "tem"},
-     * {@code "amzn"}), or empty for non-JDKs / unknown vendors.
+     * Read the SDKMAN distribution suffix for a JDK install (e.g. {@code "tem"}, {@code "amzn"}), or
+     * empty for non-JDKs / unknown vendors.
      *
-     * <p>Delegates to {@link JdkVendor#fromRelease} for the IMPLEMENTOR lookup
-     * and returns its {@link JdkVendor#sdkmanSuffix()} so this method's
-     * historical contract (matching {@link ToolSpec#distribution()} on
-     * {@code find()}) is preserved.
+     * <p>Delegates to {@link JdkVendor#fromRelease} for the IMPLEMENTOR lookup and returns its {@link
+     * JdkVendor#sdkmanSuffix()} so this method's historical contract (matching {@link
+     * ToolSpec#distribution()} on {@code find()}) is preserved.
      */
     public static Optional<String> detectDistribution(ToolSpec spec, Path home) {
         if (!"java".equals(spec.kind())) return Optional.empty();
@@ -192,8 +189,8 @@ public final class ToolHealth {
     }
 
     /**
-     * Read up to {@code limit} bytes from a UTF-8 file. Convenience for
-     * probe implementations that want to grep version strings.
+     * Read up to {@code limit} bytes from a UTF-8 file. Convenience for probe implementations that
+     * want to grep version strings.
      */
     @SuppressWarnings("unused")
     static String readFirstBytes(Path file, int limit) throws IOException {

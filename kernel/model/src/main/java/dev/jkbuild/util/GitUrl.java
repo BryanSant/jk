@@ -10,19 +10,16 @@ import java.util.Map;
  * URL canonicalization for git deps (PRD §11.5). Two-headed:
  *
  * <ol>
- *   <li>Expand host shorthands: {@code gh:foo/bar} → {@code https://github.com/foo/bar},
- *       {@code gl:foo/bar} → {@code https://gitlab.com/foo/bar},
- *       {@code bb:foo/bar} → {@code https://bitbucket.org/foo/bar},
- *       {@code sr:~foo/bar} → {@code https://git.sr.ht/~foo/bar}.</li>
- *   <li>Canonicalize the URL so two declarations of the same repository
- *       hash the same: lowercase scheme + host, strip default ports
- *       (80/443/22), strip a trailing {@code .git}, normalize trailing
- *       slashes off the path.</li>
+ *   <li>Expand host shorthands: {@code gh:foo/bar} → {@code https://github.com/foo/bar}, {@code
+ *       gl:foo/bar} → {@code https://gitlab.com/foo/bar}, {@code bb:foo/bar} → {@code
+ *       https://bitbucket.org/foo/bar}, {@code sr:~foo/bar} → {@code https://git.sr.ht/~foo/bar}.
+ *   <li>Canonicalize the URL so two declarations of the same repository hash the same: lowercase
+ *       scheme + host, strip default ports (80/443/22), strip a trailing {@code .git}, normalize
+ *       trailing slashes off the path.
  * </ol>
  *
- * <p>SSH form ({@code git@host:owner/repo.git}) is normalised to the
- * equivalent {@code ssh://git@host/owner/repo} so cache keys match the
- * HTTPS form's structure.
+ * <p>SSH form ({@code git@host:owner/repo.git}) is normalised to the equivalent {@code
+ * ssh://git@host/owner/repo} so cache keys match the HTTPS form's structure.
  */
 public final class GitUrl {
 
@@ -35,9 +32,8 @@ public final class GitUrl {
     private GitUrl() {}
 
     /**
-     * Expand shorthand and return the user-facing URL (preserves scheme +
-     * host capitalisation). Use this when interacting with the user;
-     * use {@link #canonicalize(String)} for cache keys.
+     * Expand shorthand and return the user-facing URL (preserves scheme + host capitalisation). Use
+     * this when interacting with the user; use {@link #canonicalize(String)} for cache keys.
      */
     public static String expand(String input) {
         String s = input.trim();
@@ -53,9 +49,8 @@ public final class GitUrl {
     }
 
     /**
-     * Return the canonical form of {@code input} — host-shorthands
-     * expanded, ssh scp-form normalised to {@code ssh://}, lowercased
-     * scheme + host, default ports dropped, trailing {@code .git}
+     * Return the canonical form of {@code input} — host-shorthands expanded, ssh scp-form normalised
+     * to {@code ssh://}, lowercased scheme + host, default ports dropped, trailing {@code .git}
      * stripped, trailing slashes off path.
      */
     public static String canonicalize(String input) {
@@ -98,9 +93,8 @@ public final class GitUrl {
     }
 
     /**
-     * Convert SCP-style {@code user@host:path} to {@code ssh://user@host/path}
-     * so the rest of the canonicalisation pipeline can use a real
-     * {@link URI}.
+     * Convert SCP-style {@code user@host:path} to {@code ssh://user@host/path} so the rest of the
+     * canonicalisation pipeline can use a real {@link URI}.
      */
     private static String normalizeScpForm(String input) {
         // SCP form has no `://` and the FIRST `:` is the host/path separator.

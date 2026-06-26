@@ -2,8 +2,8 @@
 package dev.jkbuild.model;
 
 /**
- * Dependency scope per PRD §7.2. Maven scope names retained.
- * {@code system} is intentionally absent — rejected on import.
+ * Dependency scope per PRD §7.2. Maven scope names retained. {@code system} is intentionally absent
+ * — rejected on import.
  */
 public enum Scope {
     EXPORT,

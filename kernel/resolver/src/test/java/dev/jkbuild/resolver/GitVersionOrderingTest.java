@@ -9,11 +9,10 @@ import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
 /**
- * The load-bearing test for git-source version derivation: the derived
- * pseudo-versions must order correctly under jk's actual comparator
- * ({@link Versions#compare}, Maven {@code ComparableVersion}) — that's what the
- * resolver, lockfile dedup, and range checks use. If this fails, the
- * {@link GitVersion} format is wrong, not the test.
+ * The load-bearing test for git-source version derivation: the derived pseudo-versions must order
+ * correctly under jk's actual comparator ({@link Versions#compare}, Maven {@code
+ * ComparableVersion}) — that's what the resolver, lockfile dedup, and range checks use. If this
+ * fails, the {@link GitVersion} format is wrong, not the test.
  */
 class GitVersionOrderingTest {
 

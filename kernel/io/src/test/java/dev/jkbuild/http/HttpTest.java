@@ -14,6 +14,9 @@ import java.net.http.HttpClient;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.zip.GZIPOutputStream;
@@ -104,10 +107,10 @@ class HttpTest {
     void offline_short_circuits_with_offline_exception() {
         var prev = dev.jkbuild.config.ActiveConfig.get();
         dev.jkbuild.config.ActiveConfig.install(prev.mergedWith(new dev.jkbuild.config.JkConfig(
-                java.util.Optional.empty(), java.util.Optional.of(true),
-                java.util.Optional.empty(), java.util.Optional.empty(),
-                java.util.Optional.empty(), java.util.Optional.empty(),
-                java.util.Optional.empty(), java.util.Optional.empty())));
+                Optional.empty(), Optional.of(true),
+                Optional.empty(), Optional.empty(),
+                Optional.empty(), Optional.empty(),
+                Optional.empty(), Optional.empty())));
         try {
             assertThatThrownBy(() -> http().get(base.resolve("/anything")))
                     .isInstanceOf(OfflineException.class)
@@ -176,7 +179,7 @@ class HttpTest {
             exchange.close();
         });
 
-        http().get(base.resolve("/hello"), java.util.Map.of("Accept-Encoding", "identity"));
+        http().get(base.resolve("/hello"), Map.of("Accept-Encoding", "identity"));
         assertThat(seenAcceptEncoding.get()).isEqualTo("identity");
     }
 
@@ -214,7 +217,7 @@ class HttpTest {
         });
 
         // LinkedHashMap to keep the encoded order deterministic for the assertion.
-        var form = new java.util.LinkedHashMap<String, String>();
+        var form = new LinkedHashMap<String, String>();
         form.put("client_id", "Iv1.abc");
         form.put("scope", "read:packages");
         HttpResponse<byte[]> response = http().postForm(base.resolve("/device/code"), form);
@@ -239,7 +242,7 @@ class HttpTest {
         });
 
         HttpResponse<byte[]> response =
-                http().postForm(base.resolve("/device/token"), java.util.Map.of("grant_type", "device_code"));
+                http().postForm(base.resolve("/device/token"), Map.of("grant_type", "device_code"));
         assertThat(response.statusCode()).isEqualTo(400);
         assertThat(new String(response.body(), StandardCharsets.UTF_8)).contains("authorization_pending");
         assertThat(calls.get()).isEqualTo(1); // 4xx is not retried
@@ -263,8 +266,7 @@ class HttpTest {
             exchange.close();
         });
 
-        HttpResponse<byte[]> response =
-                http().postForm(base.resolve("/flaky-post"), java.util.Map.of("client_id", "Iv1.abc"));
+        HttpResponse<byte[]> response = http().postForm(base.resolve("/flaky-post"), Map.of("client_id", "Iv1.abc"));
         assertThat(response.statusCode()).isEqualTo(200);
         assertThat(calls.get()).isEqualTo(3);
     }
@@ -286,7 +288,7 @@ class HttpTest {
         HttpResponse<byte[]> response = http().put(
                         base.resolve("/repo/artifact.jar"),
                         payload,
-                        java.util.Map.of("Authorization", "Basic dTpw", "Content-Type", "application/java-archive"));
+                        Map.of("Authorization", "Basic dTpw", "Content-Type", "application/java-archive"));
 
         assertThat(response.statusCode()).isEqualTo(201);
         assertThat(seenMethod.get()).isEqualTo("PUT");
@@ -304,8 +306,7 @@ class HttpTest {
             exchange.close();
         });
 
-        HttpResponse<byte[]> response =
-                http().put(base.resolve("/repo/denied.jar"), new byte[] {1, 2, 3}, java.util.Map.of());
+        HttpResponse<byte[]> response = http().put(base.resolve("/repo/denied.jar"), new byte[] {1, 2, 3}, Map.of());
         assertThat(response.statusCode()).isEqualTo(401);
         assertThat(calls.get()).isEqualTo(1); // 4xx is not retried
     }
@@ -325,7 +326,7 @@ class HttpTest {
             exchange.close();
         });
 
-        HttpResponse<byte[]> response = http().put(base.resolve("/repo/flaky.jar"), new byte[] {9}, java.util.Map.of());
+        HttpResponse<byte[]> response = http().put(base.resolve("/repo/flaky.jar"), new byte[] {9}, Map.of());
         assertThat(response.statusCode()).isEqualTo(201);
         assertThat(calls.get()).isEqualTo(3);
     }

@@ -6,34 +6,32 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * The canonical codec for jk's host&lt;-&gt;plugin wire protocol: the simple
- * flat JSON objects plugins (today's "runner" workers) emit as NDJSON
- * ({@code ##PREFIX:{...}}).
+ * The canonical codec for jk's host&lt;-&gt;plugin wire protocol: the simple flat JSON objects
+ * plugins (today's "runner" workers) emit as NDJSON ({@code ##PREFIX:{...}}).
  *
- * <p>Two halves, both dependency-free so the codec can be bundled into a tiny
- * plugin jar without dragging in Jackson or any jk internals:
+ * <p>Two halves, both dependency-free so the codec can be bundled into a tiny plugin jar without
+ * dragging in Jackson or any jk internals:
+ *
  * <ul>
- *   <li><b>Reader</b> — {@link #str}, {@link #intValue}, {@link #bool},
- *       {@link #has}, {@link #strArray}, {@link #nested}: pull fields out of a
- *       single JSON object line (the parent side, after the prefix is stripped).
- *   <li><b>Writer</b> — {@link #quote}: escape a string into a JSON string
- *       literal (the plugin side, building a line to emit).
+ *   <li><b>Reader</b> — {@link #str}, {@link #intValue}, {@link #bool}, {@link #has}, {@link
+ *       #strArray}, {@link #nested}: pull fields out of a single JSON object line (the parent side,
+ *       after the prefix is stripped).
+ *   <li><b>Writer</b> — {@link #quote}: escape a string into a JSON string literal (the plugin
+ *       side, building a line to emit).
  * </ul>
  *
- * <p>The reader treats a missing or malformed field as the supplied default
- * (or {@code null}) rather than throwing, matching the contract callers already
- * relied on from Jackson's {@code node.path("x").asString()}. It handles string,
- * integer, boolean, string-array, and nested-object fields; it does not parse
- * nested arrays or non-string array elements.
+ * <p>The reader treats a missing or malformed field as the supplied default (or {@code null})
+ * rather than throwing, matching the contract callers already relied on from Jackson's {@code
+ * node.path("x").asString()}. It handles string, integer, boolean, string-array, and nested-object
+ * fields; it does not parse nested arrays or non-string array elements.
  */
 public final class Ndjson {
 
     private Ndjson() {}
 
     /**
-     * Extract a JSON string field value, handling basic escape sequences
-     * ({@code \"}, {@code \\}, {@code \n}, {@code \r}, {@code \t}).
-     * Returns {@code null} when the key is absent.
+     * Extract a JSON string field value, handling basic escape sequences ({@code \"}, {@code \\},
+     * {@code \n}, {@code \r}, {@code \t}). Returns {@code null} when the key is absent.
      */
     public static String str(String json, String key) {
         if (json == null) return null;
@@ -126,9 +124,9 @@ public final class Ndjson {
     }
 
     /**
-     * Extract a JSON string-array field ({@code "key":["a","b","c"]}).
-     * Returns an empty list when the key is absent or the value is not an array.
-     * Does not handle nested arrays or non-string elements.
+     * Extract a JSON string-array field ({@code "key":["a","b","c"]}). Returns an empty list when the
+     * key is absent or the value is not an array. Does not handle nested arrays or non-string
+     * elements.
      */
     public static List<String> strArray(String json, String key) {
         if (json == null) return Collections.emptyList();
@@ -174,9 +172,9 @@ public final class Ndjson {
     }
 
     /**
-     * Extract the raw JSON for a nested object field ({@code "key":{...}}).
-     * Returns the {@code {...}} string (suitable for passing back to other
-     * {@code Ndjson} methods), or {@code null} when absent.
+     * Extract the raw JSON for a nested object field ({@code "key":{...}}). Returns the {@code {...}}
+     * string (suitable for passing back to other {@code Ndjson} methods), or {@code null} when
+     * absent.
      */
     public static String nested(String json, String key) {
         if (json == null) return null;
@@ -213,16 +211,14 @@ public final class Ndjson {
     }
 
     /**
-     * Escape a string into a JSON string literal, surrounding quotes included
-     * ({@code foo"bar} → {@code "foo\"bar"}). Control characters below 0x20 are
-     * emitted as {@code \\uXXXX}. The inverse of {@link #str} for the escape
-     * sequences both sides handle.
+     * Escape a string into a JSON string literal, surrounding quotes included ({@code foo"bar} →
+     * {@code "foo\"bar"}). Control characters below 0x20 are emitted as {@code \\uXXXX}. The inverse
+     * of {@link #str} for the escape sequences both sides handle.
      *
-     * <p>This is the writer half: a plugin building a protocol line uses it to
-     * encode arbitrary string values (diagnostics, paths, messages). A
-     * {@code null} value encodes as the bare JSON literal {@code null} (not a
-     * quoted string), so {@code "msg":} + {@code quote(maybeNull)} is always
-     * valid JSON.
+     * <p>This is the writer half: a plugin building a protocol line uses it to encode arbitrary
+     * string values (diagnostics, paths, messages). A {@code null} value encodes as the bare JSON
+     * literal {@code null} (not a quoted string), so {@code "msg":} + {@code quote(maybeNull)} is
+     * always valid JSON.
      */
     public static String quote(String s) {
         if (s == null) return "null";

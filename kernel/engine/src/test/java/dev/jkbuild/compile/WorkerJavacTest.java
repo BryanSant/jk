@@ -16,10 +16,10 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
- * End-to-end of the launcher → worker subprocess round-trip: launches the real
- * {@code jk-java-compiler} jar (path from the {@code jk.java.worker.jar} property
- * the Gradle test task sets), compiles a source with a real annotation processor,
- * and asserts the parsed generated → originating provenance.
+ * End-to-end of the launcher → worker subprocess round-trip: launches the real {@code
+ * jk-java-compiler} jar (path from the {@code jk.java.worker.jar} property the Gradle test task
+ * sets), compiles a source with a real annotation processor, and asserts the parsed generated →
+ * originating provenance.
  */
 class WorkerJavacTest {
 

@@ -14,9 +14,8 @@ import org.tomlj.TomlParseResult;
 import org.tomlj.TomlTable;
 
 /**
- * Parses the {@code [image]} block (PRD §22.2). Returns plain data —
- * concrete {@code ImageConfig} construction lives in the {@code :image}
- * module so :core stays free of jib-core dependencies.
+ * Parses the {@code [image]} block (PRD §22.2). Returns plain data — concrete {@code ImageConfig}
+ * construction lives in the {@code :image} module so :core stays free of jib-core dependencies.
  */
 public final class ImageConfigParser {
 

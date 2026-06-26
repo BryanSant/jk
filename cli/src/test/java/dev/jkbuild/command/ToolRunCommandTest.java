@@ -23,10 +23,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
- * {@code jk tool run <file>} — file-execution modes (.java/.kt/.kts/.jar).
- * (Coordinate-target behavior lives alongside the tool-install integration
- * tests.) These moved here from {@code RunCommandTest} when {@code jk run}
- * stopped interpreting file arguments.
+ * {@code jk tool run <file>} — file-execution modes (.java/.kt/.kts/.jar). (Coordinate-target
+ * behavior lives alongside the tool-install integration tests.) These moved here from {@code
+ * RunCommandTest} when {@code jk run} stopped interpreting file arguments.
  */
 class ToolRunCommandTest {
 
@@ -259,7 +258,7 @@ class ToolRunCommandTest {
     @Test
     void runs_a_self_contained_jar(@TempDir Path tempDir) throws Exception {
         // Build a tiny runnable jar with Main-Class set.
-        Path jar = buildExitJar(tempDir, "RunMe", /*exitCode=*/ 0);
+        Path jar = buildExitJar(tempDir, "RunMe", /* exitCode= */ 0);
 
         int exit = run(
                 "tool",
@@ -274,7 +273,7 @@ class ToolRunCommandTest {
 
     @Test
     void jar_exit_code_is_propagated(@TempDir Path tempDir) throws Exception {
-        Path jar = buildExitJar(tempDir, "RunMe", /*exitCode=*/ 7);
+        Path jar = buildExitJar(tempDir, "RunMe", /* exitCode= */ 7);
 
         int exit = run(
                 "tool",
@@ -341,14 +340,17 @@ class ToolRunCommandTest {
     }
 
     /**
-     * Build a runnable jar whose {@code Main-Class} calls
-     * {@code System.exit(exitCode)}. Used by .jar mode integration tests.
+     * Build a runnable jar whose {@code Main-Class} calls {@code System.exit(exitCode)}. Used by .jar
+     * mode integration tests.
      */
     private static Path buildExitJar(Path tempDir, String className, int exitCode) throws Exception {
         Path src = tempDir.resolve(className + ".java");
         Files.writeString(
                 src,
-                "public class " + className + " { public static void main(String[] a) { System.exit(" + exitCode
+                "public class "
+                        + className
+                        + " { public static void main(String[] a) { System.exit("
+                        + exitCode
                         + "); } }\n");
         javax.tools.JavaCompiler compiler = javax.tools.ToolProvider.getSystemJavaCompiler();
         int rc = compiler.run(null, null, null, src.toString());
@@ -408,9 +410,8 @@ class ToolRunCommandTest {
     }
 
     /**
-     * Build a jar containing {@code com.example.Greeter} with an
-     * {@code exitCode()} method returning 17, used by the dep-resolution
-     * test as something the script can call.
+     * Build a jar containing {@code com.example.Greeter} with an {@code exitCode()} method returning
+     * 17, used by the dep-resolution test as something the script can call.
      */
     private static Path buildGreeterJar(Path tempDir) throws Exception {
         Path src = tempDir.resolve("Greeter.java");
@@ -441,7 +442,17 @@ class ToolRunCommandTest {
     }
 
     private static String mavenPath(String group, String artifact, String version, String ext) {
-        return "/" + group.replace('.', '/') + "/" + artifact + "/" + version + "/" + artifact + "-" + version + "."
+        return "/"
+                + group.replace('.', '/')
+                + "/"
+                + artifact
+                + "/"
+                + version
+                + "/"
+                + artifact
+                + "-"
+                + version
+                + "."
                 + ext;
     }
 

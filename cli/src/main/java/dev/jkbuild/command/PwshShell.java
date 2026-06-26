@@ -4,8 +4,8 @@ package dev.jkbuild.command;
 import java.nio.file.Path;
 
 /**
- * PowerShell flavour. Single-quoted strings with backtick escaping for
- * embedded quotes, newlines, and tabs.
+ * PowerShell flavour. Single-quoted strings with backtick escaping for embedded quotes, newlines,
+ * and tabs.
  */
 public final class PwshShell implements Shell {
 
@@ -55,9 +55,8 @@ public final class PwshShell implements Shell {
     }
 
     /**
-     * PowerShell single-quoted string escape: doubles embedded single quotes
-     * and replaces common control characters with backtick escapes that work
-     * inside single-quoted strings.
+     * PowerShell single-quoted string escape: doubles embedded single quotes and replaces common
+     * control characters with backtick escapes that work inside single-quoted strings.
      */
     static String pwshEscape(String value) {
         var sb = new StringBuilder(value.length() + 2);

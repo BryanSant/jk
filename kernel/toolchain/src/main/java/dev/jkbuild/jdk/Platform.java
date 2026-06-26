@@ -6,9 +6,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 /**
- * Maps the current JVM's {@code os.arch} / {@code os.name} properties onto
- * the strings the foojay Disco API uses. Encapsulated so the JDK
- * subsystem can be tested with synthetic platforms.
+ * Maps the current JVM's {@code os.arch} / {@code os.name} properties onto the strings the foojay
+ * Disco API uses. Encapsulated so the JDK subsystem can be tested with synthetic platforms.
  */
 public final class Platform {
 
@@ -27,16 +26,13 @@ public final class Platform {
     }
 
     /**
-     * The host's C runtime, in foojay's {@code lib_c_type} vocabulary
-     * ({@code glibc} / {@code musl} / {@code libc} / {@code c_std_lib}).
-     * Without this filter, foojay can return a musl-linked JDK to a
-     * glibc host (or vice versa); the binary then fails to exec with
-     * "no such file or directory" because the dynamic linker doesn't
-     * exist.
+     * The host's C runtime, in foojay's {@code lib_c_type} vocabulary ({@code glibc} / {@code musl} /
+     * {@code libc} / {@code c_std_lib}). Without this filter, foojay can return a musl-linked JDK to
+     * a glibc host (or vice versa); the binary then fails to exec with "no such file or directory"
+     * because the dynamic linker doesn't exist.
      *
-     * <p>Detection is filesystem-based: on Linux, the presence of
-     * {@code /lib/ld-musl-*} marks the host as musl (Alpine and a few
-     * derivatives). Everything else under Linux is treated as glibc.
+     * <p>Detection is filesystem-based: on Linux, the presence of {@code /lib/ld-musl-*} marks the
+     * host as musl (Alpine and a few derivatives). Everything else under Linux is treated as glibc.
      * macOS reports {@code libc}, Windows reports {@code c_std_lib}.
      */
     public static String currentLibCType() {

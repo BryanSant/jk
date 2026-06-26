@@ -10,21 +10,19 @@ import java.util.OptionalInt;
 import java.util.TreeSet;
 
 /**
- * Resolves the keyword specs ({@code lts}, {@code stable}, {@code latest},
- * {@code native}) into a concrete vendor-qualified {@code <vendor>-<major>}
- * spec string, driven by whichever entries the JetBrains JDK feed actually
- * publishes for the host.
+ * Resolves the keyword specs ({@code lts}, {@code stable}, {@code latest}, {@code native}) into a
+ * concrete vendor-qualified {@code <vendor>-<major>} spec string, driven by whichever entries the
+ * JetBrains JDK feed actually publishes for the host.
  *
- * <p>Shared by {@code jk jdk install} and {@code jk jdk ensure} so the
- * "what does lts/latest/native mean right now" answer lives in one place.
+ * <p>Shared by {@code jk jdk install} and {@code jk jdk ensure} so the "what does lts/latest/native
+ * mean right now" answer lives in one place.
  *
  * <ul>
- *   <li>{@code lts} / {@code stable} / {@code latest} → {@code temurin-<major>}.
- *       The Temurin bias matches the "default JDK" mental model; if Temurin
- *       isn't shipped at that major the {@link JdkSelector} flexible fallback
- *       picks the catalog's default-for-major.</li>
- *   <li>{@code native} → the latest <b>Oracle GraalVM</b> ({@code graalvm-jdk-<major>}),
- *       the native-image-capable build.</li>
+ *   <li>{@code lts} / {@code stable} / {@code latest} → {@code temurin-<major>}. The Temurin bias
+ *       matches the "default JDK" mental model; if Temurin isn't shipped at that major the {@link
+ *       JdkSelector} flexible fallback picks the catalog's default-for-major.
+ *   <li>{@code native} → the latest <b>Oracle GraalVM</b> ({@code graalvm-jdk-<major>}), the
+ *       native-image-capable build.
  * </ul>
  */
 public final class JdkKeywords {
@@ -42,15 +40,13 @@ public final class JdkKeywords {
     }
 
     /**
-     * Translate a keyword into a concrete vendor-qualified spec for the host.
-     * Returns empty when:
+     * Translate a keyword into a concrete vendor-qualified spec for the host. Returns empty when:
+     *
      * <ul>
-     *   <li>{@code raw} is not a keyword (the caller treats it as a normal
-     *       denormalized spec),</li>
-     *   <li>the feed publishes no (non-preview) majors for this host,</li>
-     *   <li>{@code lts}/{@code stable} was asked for but no LTS major is present, or</li>
-     *   <li>{@code native} was asked for but the feed has no Oracle GraalVM
-     *       for this host.</li>
+     *   <li>{@code raw} is not a keyword (the caller treats it as a normal denormalized spec),
+     *   <li>the feed publishes no (non-preview) majors for this host,
+     *   <li>{@code lts}/{@code stable} was asked for but no LTS major is present, or
+     *   <li>{@code native} was asked for but the feed has no Oracle GraalVM for this host.
      * </ul>
      */
     public static Optional<String> resolveToMajorSpec(JdkCatalog catalog, String raw, String os, String arch) {
@@ -81,24 +77,25 @@ public final class JdkKeywords {
     }
 
     /**
-     * Vendor hints an <em>installed</em> JDK must satisfy for the keyword to be
-     * considered already met. {@code native} requires a GraalVM; {@code lts} /
-     * {@code latest} are vendor-agnostic (any vendor's current release counts),
-     * so they return an empty list.
+     * Vendor hints an <em>installed</em> JDK must satisfy for the keyword to be considered already
+     * met. {@code native} requires a GraalVM; {@code lts} / {@code latest} are vendor-agnostic (any
+     * vendor's current release counts), so they return an empty list.
      */
     public static List<String> satisfactionHints(String raw) {
         return raw != null && raw.trim().equalsIgnoreCase(NATIVE) ? List.of("graalvm") : List.of();
     }
 
     /**
-     * Resolve a keyword against an already-installed set of JDK hits — no
-     * catalog or network access needed. Returns the best match:
+     * Resolve a keyword against an already-installed set of JDK hits — no catalog or network access
+     * needed. Returns the best match:
+     *
      * <ul>
-     *   <li>{@code lts}/{@code stable}: newest installed LTS major, Temurin preferred.</li>
-     *   <li>{@code latest}: newest installed major of any vendor, Temurin preferred.</li>
+     *   <li>{@code lts}/{@code stable}: newest installed LTS major, Temurin preferred.
+     *   <li>{@code latest}: newest installed major of any vendor, Temurin preferred.
      * </ul>
-     * Returns empty for the {@code native} keyword (use
-     * {@link #resolveToMajorSpec} for that) or when no hits qualify.
+     *
+     * Returns empty for the {@code native} keyword (use {@link #resolveToMajorSpec} for that) or when
+     * no hits qualify.
      */
     public static Optional<JdkHit> bestInstalledMatch(String keyword, List<JdkHit> hits) {
         if (!isKeyword(keyword) || keyword.trim().equalsIgnoreCase(NATIVE)) return Optional.empty();
@@ -120,7 +117,10 @@ public final class JdkKeywords {
         return Optional.of(candidates.get(0));
     }
 
-    /** Parse the leading digit sequence of a JDK version string (e.g. {@code "25"} from {@code "25.0.3"}). */
+    /**
+     * Parse the leading digit sequence of a JDK version string (e.g. {@code "25"} from {@code
+     * "25.0.3"}).
+     */
     public static Integer leadingMajor(String version) {
         if (version == null || version.isEmpty()) return null;
         int end = 0;
@@ -148,7 +148,9 @@ public final class JdkKeywords {
         return best == null ? Optional.empty() : Optional.of(best.suggestedSdkName());
     }
 
-    /** Oracle GraalVM ({@code graalvm-jdk-*}), as opposed to the community {@code graalvm-ce-*} line. */
+    /**
+     * Oracle GraalVM ({@code graalvm-jdk-*}), as opposed to the community {@code graalvm-ce-*} line.
+     */
     private static boolean isOracleGraalVm(JdkCatalog.Entry e) {
         return e.vendor().equalsIgnoreCase("Oracle") && e.product().equalsIgnoreCase("GraalVM");
     }

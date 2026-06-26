@@ -11,15 +11,14 @@ import java.util.Objects;
 /**
  * Hand-rolled SLSA v1 in-toto Statement JSON (PRD §23.4, impl-plan §4).
  *
- * <p>Schema: {@code https://in-toto.io/Statement/v1} carrying a
- * {@code https://slsa.dev/provenance/v1} predicate. Output is unsigned —
- * Sigstore-bundling the statement (DSSE envelope inside a Sigstore Bundle)
- * is layered on top by passing the same statement bytes through a
- * {@link SigstoreSigner}, but jk emits the bare statement first so it
- * round-trips with non-Sigstore consumers.
+ * <p>Schema: {@code https://in-toto.io/Statement/v1} carrying a {@code
+ * https://slsa.dev/provenance/v1} predicate. Output is unsigned — Sigstore-bundling the statement
+ * (DSSE envelope inside a Sigstore Bundle) is layered on top by passing the same statement bytes
+ * through a {@link SigstoreSigner}, but jk emits the bare statement first so it round-trips with
+ * non-Sigstore consumers.
  *
- * <p>The schema is small and frozen; using a library buys little. Each
- * field that goes into the JSON is escaped per the JSON spec.
+ * <p>The schema is small and frozen; using a library buys little. Each field that goes into the
+ * JSON is escaped per the JSON spec.
  */
 public final class SlsaProvenance {
 
@@ -31,7 +30,10 @@ public final class SlsaProvenance {
         }
     }
 
-    /** All parameters the statement encodes. {@link #externalParameters} / {@link #internalParameters} may be empty. */
+    /**
+     * All parameters the statement encodes. {@link #externalParameters} / {@link #internalParameters}
+     * may be empty.
+     */
     public record BuildContext(
             String builderId,
             String buildType,

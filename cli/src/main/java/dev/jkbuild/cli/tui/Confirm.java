@@ -12,16 +12,15 @@ import org.jline.terminal.Terminal;
 import org.jline.utils.NonBlockingReader;
 
 /**
- * A single-line yes/no confirmation, styled like {@link Wizard} and driven by a
- * single keystroke (no Enter required): {@code y}/{@code n}, with Enter taking
- * the default and Ctrl-C / Esc declining. On an interactive terminal it briefly
- * enters raw mode (mirroring the Wizard's terminal lifecycle); on a non-TTY it
- * falls back to a cooked {@code readLine()} so piped / CI input keeps working.
+ * A single-line yes/no confirmation, styled like {@link Wizard} and driven by a single keystroke
+ * (no Enter required): {@code y}/{@code n}, with Enter taking the default and Ctrl-C / Esc
+ * declining. On an interactive terminal it briefly enters raw mode (mirroring the Wizard's terminal
+ * lifecycle); on a non-TTY it falls back to a cooked {@code readLine()} so piped / CI input keeps
+ * working.
  *
- * <p>Renders {@code <question> [Y/n]} (default-yes) or {@code <question> [y/N]}
- * (default-no) with the brackets and slash dimmed. Once answered, the
- * {@code [Y/n]} hint is overwritten in place with a green {@code Yes} or a red
- * {@code No}, so the settled line reads e.g. {@code <question> Yes}.
+ * <p>Renders {@code <question> [Y/n]} (default-yes) or {@code <question> [y/N]} (default-no) with
+ * the brackets and slash dimmed. Once answered, the {@code [Y/n]} hint is overwritten in place with
+ * a green {@code Yes} or a red {@code No}, so the settled line reads e.g. {@code <question> Yes}.
  */
 public final class Confirm {
 
@@ -46,8 +45,8 @@ public final class Confirm {
     }
 
     /**
-     * Ask, opening and closing our own terminal. On a non-interactive stdin,
-     * reads a cooked line instead (EOF → {@code false}).
+     * Ask, opening and closing our own terminal. On a non-interactive stdin, reads a cooked line
+     * instead (EOF → {@code false}).
      */
     public boolean ask() {
         if (!isInteractiveTerminal()) {
@@ -65,9 +64,9 @@ public final class Confirm {
     }
 
     /**
-     * Ask on an already-open terminal — for callers running inside a Wizard's
-     * terminal lifecycle. Enters raw mode for the single keystroke and restores
-     * cooked/echo mode afterward (so later {@code System.in} reads still work).
+     * Ask on an already-open terminal — for callers running inside a Wizard's terminal lifecycle.
+     * Enters raw mode for the single keystroke and restores cooked/echo mode afterward (so later
+     * {@code System.in} reads still work).
      */
     public boolean ask(Terminal terminal) {
         // Render via System.out (cooked, before raw mode) so any context the

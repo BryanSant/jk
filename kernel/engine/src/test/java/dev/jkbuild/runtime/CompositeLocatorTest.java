@@ -19,9 +19,7 @@ import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-/**
- * {@link CompositeLocator} finds already-built composite jars without building.
- */
+/** {@link CompositeLocator} finds already-built composite jars without building. */
 class CompositeLocatorTest {
 
     private static JkBuild project(Path dir, String name, String... pathDeps) throws IOException {

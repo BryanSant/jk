@@ -12,22 +12,20 @@ import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
 /**
- * The shared parent-side mechanics for driving a child-JVM worker: fork the
- * process, read its merged stdout/stderr line by line, split structured
- * protocol lines (those carrying the worker's {@code prefix}) from passthrough
- * chatter, and wait for exit.
+ * The shared parent-side mechanics for driving a child-JVM worker: fork the process, read its
+ * merged stdout/stderr line by line, split structured protocol lines (those carrying the worker's
+ * {@code prefix}) from passthrough chatter, and wait for exit.
  *
- * <p>This collapses the fork + read-loop that each launch site used to
- * hand-roll. Callers build the command (the codec, spec format, and per-message
- * handling stay theirs) and supply line callbacks.
+ * <p>This collapses the fork + read-loop that each launch site used to hand-roll. Callers build the
+ * command (the codec, spec format, and per-message handling stay theirs) and supply line callbacks.
  *
  * <p>Two shapes:
+ *
  * <ul>
- *   <li>{@link #run} — fire-and-read: the parent only consumes output.</li>
- *   <li>{@link #converse} — two-way: each protocol line is handed a
- *       {@link Conversation} the callback can use to send commands back to the
- *       worker's stdin (e.g. a pull-queue feeding {@code RUN}/{@code DONE} in
- *       response to the worker's {@code ready} events).</li>
+ *   <li>{@link #run} — fire-and-read: the parent only consumes output.
+ *   <li>{@link #converse} — two-way: each protocol line is handed a {@link Conversation} the
+ *       callback can use to send commands back to the worker's stdin (e.g. a pull-queue feeding
+ *       {@code RUN}/{@code DONE} in response to the worker's {@code ready} events).
  * </ul>
  */
 public final class WorkerProcess {
@@ -44,12 +42,12 @@ public final class WorkerProcess {
     }
 
     /**
-     * Fork {@code command}, stream its output, and return the process exit code.
-     * The parent only reads — there is no stdin interaction.
+     * Fork {@code command}, stream its output, and return the process exit code. The parent only
+     * reads — there is no stdin interaction.
      *
-     * @param command       full process command line (java exe, classpath/jar, main, args)
-     * @param prefix        marker identifying protocol lines (e.g. {@code "##JKGIT:"})
-     * @param onProtocol    receives each protocol line with the prefix stripped
+     * @param command full process command line (java exe, classpath/jar, main, args)
+     * @param prefix marker identifying protocol lines (e.g. {@code "##JKGIT:"})
+     * @param onProtocol receives each protocol line with the prefix stripped
      * @param onPassthrough receives each non-protocol line verbatim; may be {@code null} to drop them
      */
     public static int run(
@@ -58,7 +56,10 @@ public final class WorkerProcess {
         return run(command, java.util.Map.of(), prefix, onProtocol, onPassthrough);
     }
 
-    /** As {@link #run(List, String, Consumer, Consumer)}, adding {@code extraEnv} to the child's environment. */
+    /**
+     * As {@link #run(List, String, Consumer, Consumer)}, adding {@code extraEnv} to the child's
+     * environment.
+     */
     public static int run(
             List<String> command,
             java.util.Map<String, String> extraEnv,
@@ -70,14 +71,13 @@ public final class WorkerProcess {
     }
 
     /**
-     * Fork {@code command} and drive a two-way conversation: each protocol line
-     * is delivered to {@code onProtocol} along with a {@link Conversation} for
-     * sending commands back to the worker's stdin.
+     * Fork {@code command} and drive a two-way conversation: each protocol line is delivered to
+     * {@code onProtocol} along with a {@link Conversation} for sending commands back to the worker's
+     * stdin.
      *
-     * <p>Reading stdout and writing stdin both happen on the calling thread, so
-     * the worker must alternate (await input → emit → await input) rather than
-     * flood stdout while blocked on stdin — which the pull protocol does
-     * (it emits {@code ready}, then waits for the next command). Run one
+     * <p>Reading stdout and writing stdin both happen on the calling thread, so the worker must
+     * alternate (await input → emit → await input) rather than flood stdout while blocked on stdin —
+     * which the pull protocol does (it emits {@code ready}, then waits for the next command). Run one
      * {@code converse} per worker on its own thread for parallel pull queues.
      *
      * @param onPassthrough receives each non-protocol line; may be {@code null} to drop
@@ -91,7 +91,10 @@ public final class WorkerProcess {
         return converse(command, java.util.Map.of(), prefix, onProtocol, onPassthrough);
     }
 
-    /** As {@link #converse(List, String, BiConsumer, Consumer)}, adding {@code extraEnv} to the child's environment. */
+    /**
+     * As {@link #converse(List, String, BiConsumer, Consumer)}, adding {@code extraEnv} to the
+     * child's environment.
+     */
     public static int converse(
             List<String> command,
             java.util.Map<String, String> extraEnv,

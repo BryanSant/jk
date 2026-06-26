@@ -115,8 +115,8 @@ class WorkspaceMergeTest {
     }
 
     /**
-     * Mirrors what {@code JkBuildParser} emits for {@code <name>.workspace = true}
-     * when there is no matching [workspace.dependencies] entry at parse time.
+     * Mirrors what {@code JkBuildParser} emits for {@code <name>.workspace = true} when there is no
+     * matching [workspace.dependencies] entry at parse time.
      */
     private static Dependency workspacePlaceholder(String name) {
         return new Dependency(

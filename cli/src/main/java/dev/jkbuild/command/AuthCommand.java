@@ -13,8 +13,8 @@ import java.nio.file.Path;
 import java.util.List;
 
 /**
- * {@code jk auth} parent verb — authenticate jk against a git forge so it
- * can call that forge's API.
+ * {@code jk auth} parent verb — authenticate jk against a git forge so it can call that forge's
+ * API.
  */
 public final class AuthCommand implements CliCommand {
 
@@ -42,7 +42,8 @@ public final class AuthCommand implements CliCommand {
     /** Resolve a provider id to a {@link ForgeKind}, throwing on unknown. */
     static ForgeKind requireKind(String raw) {
         return ForgeKind.fromId(raw)
-                .orElseThrow(() -> new IllegalArgumentException("Unknown provider '" + raw
+                .orElseThrow(() -> new IllegalArgumentException("Unknown provider '"
+                        + raw
                         + "'. Expected one of: github, gitlab, gitea (forgejo/codeberg), bitbucket."));
     }
 

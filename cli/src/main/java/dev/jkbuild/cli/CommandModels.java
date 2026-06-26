@@ -9,18 +9,17 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Builds the render-ready {@link CommandModel} from jk's own {@link Command}
- * model — the picocli-free counterpart to {@link CommandModelExtractor} (which
- * builds the same {@code CommandModel} from a picocli {@code CommandSpec}). Both
- * feed {@link HelpRenderer}, so a command renders identically whether it's been
- * ported off picocli yet or not.
+ * Builds the render-ready {@link CommandModel} from jk's own {@link Command} model — the
+ * picocli-free counterpart to {@link CommandModelExtractor} (which builds the same {@code
+ * CommandModel} from a picocli {@code CommandSpec}). Both feed {@link HelpRenderer}, so a command
+ * renders identically whether it's been ported off picocli yet or not.
  */
 public final class CommandModels {
 
     private CommandModels() {}
 
     /**
-     * @param command       the command to model
+     * @param command the command to model
      * @param qualifiedName fully-qualified name for the synopsis (e.g. {@code "jk tool install"})
      * @param globalOptions the shared global options to show in the "Global options" section
      */

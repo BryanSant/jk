@@ -15,19 +15,19 @@ import java.util.TreeSet;
 import java.util.stream.Collectors;
 
 /**
- * Inverse dependency walker. Given a lockfile, lists every path from a
- * declared root down to a target module — the data behind {@code jk why}.
+ * Inverse dependency walker. Given a lockfile, lists every path from a declared root down to a
+ * target module — the data behind {@code jk why}.
  *
- * <p>Paths are emitted leaf-up: each {@link Path} starts at a root the
- * user declared in {@code jk.toml} and ends at the target module.
+ * <p>Paths are emitted leaf-up: each {@link Path} starts at a root the user declared in {@code
+ * jk.toml} and ends at the target module.
  */
 public final class Provenance {
 
     private Provenance() {}
 
     /**
-     * @return list of paths from declared roots to {@code targetModule}.
-     *         Empty if the target isn't in the lockfile or is unreachable.
+     * @return list of paths from declared roots to {@code targetModule}. Empty if the target isn't in
+     *     the lockfile or is unreachable.
      */
     public static List<Path> pathsTo(JkBuild project, Lockfile lock, String targetModule) {
         Objects.requireNonNull(targetModule, "targetModule");

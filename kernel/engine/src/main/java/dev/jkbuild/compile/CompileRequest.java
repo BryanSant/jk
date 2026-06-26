@@ -6,13 +6,11 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Input to {@link JavacDriver#compile(CompileRequest)}: where to find
- * sources, what to put on the classpath, what release to target, and
- * (optionally) where to write {@code .class} files.
+ * Input to {@link JavacDriver#compile(CompileRequest)}: where to find sources, what to put on the
+ * classpath, what release to target, and (optionally) where to write {@code .class} files.
  *
- * <p>When {@link #outputDir()} is {@code null}, the driver runs in
- * "check" mode — diagnostics are still produced but no output is
- * written. Backs {@code jk check}.
+ * <p>When {@link #outputDir()} is {@code null}, the driver runs in "check" mode — diagnostics are
+ * still produced but no output is written. Backs {@code jk check}.
  */
 public record CompileRequest(
         List<Path> sources,

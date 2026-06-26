@@ -8,17 +8,16 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Renders a compiler's (javac/kotlinc) verbatim diagnostic block — header,
- * source snippet, caret, and {@code symbol:}/{@code location:} trailers — with
- * relative paths and color, without altering the text itself. Stripping the
- * ANSI codes yields exactly what the compiler printed, only with the absolute
- * path shortened (see {@link PathDisplay}), so the output stays paste-friendly
- * for agents and greppable for humans.
+ * Renders a compiler's (javac/kotlinc) verbatim diagnostic block — header, source snippet, caret,
+ * and {@code symbol:}/{@code location:} trailers — with relative paths and color, without altering
+ * the text itself. Stripping the ANSI codes yields exactly what the compiler printed, only with the
+ * absolute path shortened (see {@link PathDisplay}), so the output stays paste-friendly for agents
+ * and greppable for humans.
  *
- * <p>Color map: path {@link Theme#highlight() yellow}, line/column
- * {@link Theme#cyan() cyan}, {@code key: value} trailer values cyan, and the
- * source line above a {@code ^} caret syntax-highlighted (see
- * {@link SyntaxHighlight}) with the caret's character additionally underlined.
+ * <p>Color map: path {@link Theme#highlight() yellow}, line/column {@link Theme#cyan() cyan},
+ * {@code key: value} trailer values cyan, and the source line above a {@code ^} caret
+ * syntax-highlighted (see {@link SyntaxHighlight}) with the caret's character additionally
+ * underlined.
  */
 public final class CompilerDiagnostic {
 
@@ -81,9 +80,9 @@ public final class CompilerDiagnostic {
     }
 
     /**
-     * Syntax-highlight the source line and underline the single character the
-     * caret points at. A misaligned caret (out of range) still highlights the
-     * line, just without an underline — {@link SyntaxHighlight} handles both.
+     * Syntax-highlight the source line and underline the single character the caret points at. A
+     * misaligned caret (out of range) still highlights the line, just without an underline — {@link
+     * SyntaxHighlight} handles both.
      */
     private static String sourceWithCaret(String src, String caretLine, SyntaxHighlight.Language lang) {
         return SyntaxHighlight.highlight(src, caretLine.indexOf('^'), lang);

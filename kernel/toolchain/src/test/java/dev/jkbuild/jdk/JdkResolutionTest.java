@@ -7,6 +7,7 @@ import dev.jkbuild.discovery.JkProbe;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -156,7 +157,7 @@ class JdkResolutionTest {
         private final Path projectDir;
         private String switchSpec, envSpec, lockJdkId, projectJdkSpec;
         private int projectJavaRelease;
-        private final Map<String, String> env = new java.util.HashMap<>();
+        private final Map<String, String> env = new HashMap<>();
 
         ReqBuilder(Path projectDir) {
             this.projectDir = projectDir;

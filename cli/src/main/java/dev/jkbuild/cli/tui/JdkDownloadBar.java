@@ -8,17 +8,15 @@ import java.io.PrintStream;
 import org.jline.utils.AttributedStyle;
 
 /**
- * Animated JDK download progress bar styled like the {@code jk build} goal
- * header: the blue goal chip ({@code  ✷ JDK ▶}), a block-bar fill, a white
- * percent, and the download label — all on one carriage-returned line.
+ * Animated JDK download progress bar styled like the {@code jk build} goal header: the blue goal
+ * chip ({@code ✷ JDK ▶}), a block-bar fill, a white percent, and the download label — all on one
+ * carriage-returned line.
  *
- * <p>On completion, the bar is wiped and replaced with a
- * {@link GoalWedge} check-chip result line:
- * {@code  ✓ JDK ▶ Finished downloading [bold]Eclipse Temurin 26[/]}.
+ * <p>On completion, the bar is wiped and replaced with a {@link GoalWedge} check-chip result line:
+ * {@code ✓ JDK ▶ Finished downloading [bold]Eclipse Temurin 26[/]}.
  *
- * <p>Registers as the active {@link LiveRegion} so the global Ctrl-C handler
- * can repaint it on cancel. Thread-safe: the download callback may call
- * {@link #update} from any thread.
+ * <p>Registers as the active {@link LiveRegion} so the global Ctrl-C handler can repaint it on
+ * cancel. Thread-safe: the download callback may call {@link #update} from any thread.
  */
 public final class JdkDownloadBar implements AutoCloseable, LiveRegion {
 
@@ -49,8 +47,8 @@ public final class JdkDownloadBar implements AutoCloseable, LiveRegion {
     }
 
     /**
-     * Start a new download bar for {@code displayName} (e.g. "Eclipse Temurin 26").
-     * If {@code --no-progress} is set, returns a silent no-op instance.
+     * Start a new download bar for {@code displayName} (e.g. "Eclipse Temurin 26"). If {@code
+     * --no-progress} is set, returns a silent no-op instance.
      */
     public static JdkDownloadBar show(PrintStream out, String displayName) {
         boolean silent = dev.jkbuild.config.ActiveConfig.get().noProgressOr(false);
@@ -76,9 +74,9 @@ public final class JdkDownloadBar implements AutoCloseable, LiveRegion {
     }
 
     /**
-     * Wipe the bar line and restore the cursor. The caller is responsible for
-     * printing the final result line (e.g. "available at …"), which naturally
-     * takes the place of the cleared bar on screen.
+     * Wipe the bar line and restore the cursor. The caller is responsible for printing the final
+     * result line (e.g. "available at …"), which naturally takes the place of the cleared bar on
+     * screen.
      */
     public synchronized void finish() {
         if (closed) return;
@@ -170,12 +168,18 @@ public final class JdkDownloadBar implements AutoCloseable, LiveRegion {
                     + Theme.colorize(" ", chip)
                     + Theme.colorize(Glyphs.SEGMENT_END_NERD, cap)
                     + bar.render(numerator, denominator)
-                    + " " + dim + " " + label;
+                    + " "
+                    + dim
+                    + " "
+                    + label;
         } else {
             return Theme.colorize(FRAMES[frame], frameColors[frame])
                     + " JDK "
                     + bar.render(numerator, denominator)
-                    + " " + dim + " " + label;
+                    + " "
+                    + dim
+                    + " "
+                    + label;
         }
     }
 }

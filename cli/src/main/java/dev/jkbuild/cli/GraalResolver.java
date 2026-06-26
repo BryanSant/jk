@@ -21,25 +21,21 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * Resolves the GraalVM home whose {@code bin/native-image} {@code jk native}
- * (and {@code jk install} of a native app) uses. Resolution mirrors
- * {@code project.jdk}:
+ * Resolves the GraalVM home whose {@code bin/native-image} {@code jk native} (and {@code jk
+ * install} of a native app) uses. Resolution mirrors {@code project.jdk}:
  *
  * <ol>
- *   <li>{@code project.graal} set → an already-installed GraalVM matching the
- *       spec, else auto-install it (no prompt — the pin is explicit intent,
- *       same as {@code project.jdk}).</li>
- *   <li>{@code project.graal} unset → the current {@code native-image} search
- *       (project JDK → {@code $GRAALVM_HOME} → {@code PATH}).</li>
- *   <li>Still missing → offer to install Oracle GraalVM: prompt with the
- *       {@link Confirm} widget on a TTY, install silently with {@code --yes},
- *       or fail with an actionable hint on a non-TTY.</li>
+ *   <li>{@code project.graal} set → an already-installed GraalVM matching the spec, else
+ *       auto-install it (no prompt — the pin is explicit intent, same as {@code project.jdk}).
+ *   <li>{@code project.graal} unset → the current {@code native-image} search (project JDK → {@code
+ *       $GRAALVM_HOME} → {@code PATH}).
+ *   <li>Still missing → offer to install Oracle GraalVM: prompt with the {@link Confirm} widget on
+ *       a TTY, install silently with {@code --yes}, or fail with an actionable hint on a non-TTY.
  * </ol>
  *
- * <p>Must run <em>before</em> the progress UI ({@code CommandManager}) opens —
- * prompting/installing inside a captured-output region corrupts the display.
- * Results are memoized by spec so a workspace with many native modules fetches
- * the catalog and installs at most once per distinct spec.
+ * <p>Must run <em>before</em> the progress UI ({@code CommandManager}) opens — prompting/installing
+ * inside a captured-output region corrupts the display. Results are memoized by spec so a workspace
+ * with many native modules fetches the catalog and installs at most once per distinct spec.
  */
 public final class GraalResolver {
 
@@ -53,10 +49,9 @@ public final class GraalResolver {
     }
 
     /**
-     * The GraalVM home to use for {@code projectDir}, or empty when it couldn't
-     * be resolved (an actionable message has already been printed — the caller
-     * should abort the native build). A non-empty result is suitable to pass as
-     * {@code graalHome} to {@code BuildPipeline.nativePhase}.
+     * The GraalVM home to use for {@code projectDir}, or empty when it couldn't be resolved (an
+     * actionable message has already been printed — the caller should abort the native build). A
+     * non-empty result is suitable to pass as {@code graalHome} to {@code BuildPipeline.nativePhase}.
      */
     public Optional<Path> resolve(Path projectDir, String graalSpec) {
         String key = graalSpec == null ? "" : graalSpec;
@@ -164,7 +159,10 @@ public final class GraalResolver {
         String os = HostPlatform.currentOs();
         String arch = HostPlatform.currentArch();
         if (!HostPlatform.supported()) {
-            System.err.println("jk native: this host (" + os + "/" + arch
+            System.err.println("jk native: this host ("
+                    + os
+                    + "/"
+                    + arch
                     + ") has no installable GraalVM; set $GRAALVM_HOME instead.");
             return null;
         }
@@ -183,7 +181,10 @@ public final class GraalResolver {
             JdkCatalog.Entry e = entry.get();
             System.out.println(Theme.colorize("⬇", Theme.active().cyan())
                     + " Installing GraalVM "
-                    + Theme.colorize(e.installFolderName(), Theme.active().focused()) + " (" + announce + ")…");
+                    + Theme.colorize(e.installFolderName(), Theme.active().focused())
+                    + " ("
+                    + announce
+                    + ")…");
             InstalledJdk installed = new JdkInstaller(new Http(), registry).install(e);
             System.out.println(Theme.colorize("✓", Theme.active().success()) + " GraalVM ready: " + installed.home());
             return installed.home();

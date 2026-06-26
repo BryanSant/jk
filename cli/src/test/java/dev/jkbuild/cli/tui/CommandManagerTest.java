@@ -8,6 +8,7 @@ import dev.jkbuild.cli.theme.Theme;
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import org.jline.utils.AttributedStyle;
 import org.junit.jupiter.api.Test;
 
@@ -46,8 +47,7 @@ class CommandManagerTest {
         var buf = new ByteArrayOutputStream();
         var cm = new CommandManager(stream(buf), false); // pipe / --quiet
         cm.label("Build");
-        cm.finishSuccess(
-                "built 17 modules", java.util.List.of("‼ Warning [compile-test]:", "  deprecation in Foo.java"));
+        cm.finishSuccess("built 17 modules", List.of("‼ Warning [compile-test]:", "  deprecation in Foo.java"));
 
         String visible = stripAnsi(buf.toString(StandardCharsets.UTF_8));
         int warn = visible.indexOf("‼ Warning [compile-test]:");
@@ -67,7 +67,7 @@ class CommandManagerTest {
         cm.tick(); // paint the live region
         buf.reset();
 
-        cm.finishSuccess("built 17 modules", java.util.List.of("‼ Warning [compile-test]:"));
+        cm.finishSuccess("built 17 modules", List.of("‼ Warning [compile-test]:"));
 
         String visible = stripAnsi(buf.toString(StandardCharsets.UTF_8));
         int warn = visible.indexOf("‼ Warning [compile-test]:");
@@ -352,7 +352,7 @@ class CommandManagerTest {
         cm.tick();
         buf.reset();
 
-        java.io.PrintStream original = System.out;
+        PrintStream original = System.out;
         try (var scope = cm.captureOutput()) {
             System.out.println("from a phase");
         }
@@ -384,7 +384,7 @@ class CommandManagerTest {
         assertThat(CommandManager.truncateVisible("plain", 10)).isEqualTo("plain");
     }
 
-    private static java.util.List<String> stripAll(java.util.List<String> lines) {
+    private static List<String> stripAll(List<String> lines) {
         return lines.stream().map(CommandManagerTest::stripAnsi).toList();
     }
 

@@ -7,16 +7,15 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 /**
- * Container-aware host memory, read from the OS rather than a JVM bean so it
- * works the same in the native {@code jk} binary as on a hosted JVM.
+ * Container-aware host memory, read from the OS rather than a JVM bean so it works the same in the
+ * native {@code jk} binary as on a hosted JVM.
  *
- * <p>On Linux it reads {@code /proc/meminfo} and the cgroup memory controller
- * (v2 {@code memory.max}/{@code memory.current}, v1
- * {@code memory.limit_in_bytes}/{@code memory.usage_in_bytes}), so a build
- * running under a container limit sees the limit — not the host's RAM.
- * Elsewhere (macOS, no {@code /proc}) it falls back to the
- * {@code com.sun.management} OS bean. Every probe is best-effort and never
- * throws; on total failure it reports a conservative {@link #FALLBACK_TOTAL}.
+ * <p>On Linux it reads {@code /proc/meminfo} and the cgroup memory controller (v2 {@code
+ * memory.max}/{@code memory.current}, v1 {@code memory.limit_in_bytes}/{@code
+ * memory.usage_in_bytes}), so a build running under a container limit sees the limit — not the
+ * host's RAM. Elsewhere (macOS, no {@code /proc}) it falls back to the {@code com.sun.management}
+ * OS bean. Every probe is best-effort and never throws; on total failure it reports a conservative
+ * {@link #FALLBACK_TOTAL}.
  */
 public final class MemoryProbe {
 
@@ -24,6 +23,7 @@ public final class MemoryProbe {
 
     /** Conservative last-resort total when nothing else can be read. */
     static final long FALLBACK_TOTAL = 2L << 30; // 2 GiB
+
     /** A cgroup limit at/above this is treated as "unlimited" (kernel sentinel). */
     static final long CGROUP_UNLIMITED = Long.MAX_VALUE / 2;
 
@@ -106,7 +106,7 @@ public final class MemoryProbe {
         }
     }
 
-    /** Parse a {@code /proc/meminfo} line ("MemTotal:  16004 kB") to bytes; {@code -1} if absent. */
+    /** Parse a {@code /proc/meminfo} line ("MemTotal: 16004 kB") to bytes; {@code -1} if absent. */
     static long meminfoValueBytes(String meminfo, String key) {
         for (String line : meminfo.split("\n")) {
             if (!line.startsWith(key + ":")) continue;

@@ -10,10 +10,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * The compile request jk hands the worker, parsed from a line-oriented spec
- * file. One {@code KEY value} per line; the key is the text up to the first
- * space, the value is the remainder verbatim (so paths may contain spaces).
- * Blank lines and {@code #} comments are ignored. Repeatable keys accumulate.
+ * The compile request jk hands the worker, parsed from a line-oriented spec file. One {@code KEY
+ * value} per line; the key is the text up to the first space, the value is the remainder verbatim
+ * (so paths may contain spaces). Blank lines and {@code #} comments are ignored. Repeatable keys
+ * accumulate.
  *
  * <pre>
  *   OUTPUT &lt;dir&gt;            compiled .class destination (required)
@@ -29,8 +29,8 @@ import java.util.List;
  *   ARG &lt;raw&gt;               a free compiler argument, appended verbatim (repeatable)
  * </pre>
  *
- * <p>The worker stays policy-free: anything jk wants to control (e.g.
- * {@code -no-stdlib}) it passes as an {@code ARG}.
+ * <p>The worker stays policy-free: anything jk wants to control (e.g. {@code -no-stdlib}) it passes
+ * as an {@code ARG}.
  */
 final class CompileSpec {
 

@@ -11,14 +11,14 @@ import org.tomlj.TomlParseResult;
 import org.tomlj.TomlTable;
 
 /**
- * Forge OAuth-app client IDs sourced from {@code jk.toml} config files. This
- * lets a self-hosted GitHub Enterprise / GitLab / Gitea instance supply its
- * own registered OAuth app, since the public {@code client_id} differs per
- * deployment. A focused slice parser (like {@link JkCacheConfig}) rather than
- * a field on the scalar {@link JkConfig} record — client IDs are a host-keyed
- * map, not a CLI-wide toggle.
+ * Forge OAuth-app client IDs sourced from {@code jk.toml} config files. This lets a self-hosted
+ * GitHub Enterprise / GitLab / Gitea instance supply its own registered OAuth app, since the public
+ * {@code client_id} differs per deployment. A focused slice parser (like {@link JkCacheConfig})
+ * rather than a field on the scalar {@link JkConfig} record — client IDs are a host-keyed map, not
+ * a CLI-wide toggle.
  *
  * <p>TOML shape (all optional), under a top-level {@code [forge]} table:
+ *
  * <pre>
  *   # default client id per provider
  *   [forge.github]
@@ -34,10 +34,9 @@ import org.tomlj.TomlTable;
  *   client-id = "Iv1.fedcba9876543210"
  * </pre>
  *
- * <p>Precedence mirrors {@link JkConfigLoader} via the shared
- * {@link ConfigSources}: user-global {@code ~/.jk/config.toml} &lt; project
- * {@code jk.toml} (or explicit {@code --config-file}). The environment variable
- * {@code JK_<PROVIDER>_OAUTH_CLIENT_ID} sits above all of these and is applied
+ * <p>Precedence mirrors {@link JkConfigLoader} via the shared {@link ConfigSources}: user-global
+ * {@code ~/.jk/config.toml} &lt; project {@code jk.toml} (or explicit {@code --config-file}). The
+ * environment variable {@code JK_<PROVIDER>_OAUTH_CLIENT_ID} sits above all of these and is applied
  * by the caller, not here.
  */
 public final class ForgeAuthConfig {
@@ -60,10 +59,9 @@ public final class ForgeAuthConfig {
     }
 
     /**
-     * Resolve the client ID for a provider on a host: a per-host override
-     * wins over the provider default. {@code providerId} is the
-     * {@code ForgeKind.id()} string (github / gitlab / gitea / bitbucket);
-     * {@code host} may be null when only the provider default is wanted.
+     * Resolve the client ID for a provider on a host: a per-host override wins over the provider
+     * default. {@code providerId} is the {@code ForgeKind.id()} string (github / gitlab / gitea /
+     * bitbucket); {@code host} may be null when only the provider default is wanted.
      */
     public Optional<String> oauthClientId(String providerId, String host) {
         if (host != null) {
@@ -88,11 +86,10 @@ public final class ForgeAuthConfig {
     }
 
     /**
-     * Discover and merge client-id config across the standard layers, matching
-     * {@link JkConfigLoader#load}'s precedence via the shared
-     * {@link ConfigSources}: user-global {@code ~/.jk/config.toml} &lt; project
-     * {@code jk.toml} (or explicit {@code --config-file}). {@code noConfig}
-     * short-circuits all file layers.
+     * Discover and merge client-id config across the standard layers, matching {@link
+     * JkConfigLoader#load}'s precedence via the shared {@link ConfigSources}: user-global {@code
+     * ~/.jk/config.toml} &lt; project {@code jk.toml} (or explicit {@code --config-file}). {@code
+     * noConfig} short-circuits all file layers.
      */
     public static ForgeAuthConfig discover(Path startDir, boolean noConfig, Optional<Path> explicitConfigFile) {
         ForgeAuthConfig out = empty();

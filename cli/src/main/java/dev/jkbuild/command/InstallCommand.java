@@ -62,29 +62,23 @@ import java.util.Set;
  * {@code jk install [<source>]} — install a jk artifact. Three modes:
  *
  * <ul>
- *   <li><b>No source:</b> build the current project (per {@code jk.toml}) and
- *       install it. Always performs a <em>cache install</em> (jar + generated
- *       pom into jk's CAS + m2 local repo — the {@code mvn install} equivalent — so
- *       other local projects can depend on it; also into {@code ~/.m2} when
- *       {@code project.m2install} is set). When the project is an
- *       <em>application</em> ({@code project.application}, default true when a
- *       {@code main} is set) it additionally does a <em>make install</em>: a
- *       native binary into {@code ~/.jk/bin}; a shadow jar into
- *       {@code ~/.jk/libexec} with a launcher; or a normal jar into
- *       {@code ~/.jk/libexec} alongside its hard-linked runtime deps with a
- *       launcher in {@code ~/.jk/bin}.</li>
- *   <li><b>Maven coord (g:a:v):</b> download the pre-built jar from declared
- *       Maven repositories and install a launcher (the legacy
- *       {@code jk tool install} behavior).</li>
- *   <li><b>Git / HTTPS URL:</b> clone, build, install. The URL may carry an
- *       optional {@code @<ref>} or {@code #<ref>} suffix selecting a tag or
- *       branch (default: {@code main}). Host shorthands {@code gh:owner/repo}
- *       etc. are accepted.</li>
+ *   <li><b>No source:</b> build the current project (per {@code jk.toml}) and install it. Always
+ *       performs a <em>cache install</em> (jar + generated pom into jk's CAS + m2 local repo — the
+ *       {@code mvn install} equivalent — so other local projects can depend on it; also into {@code
+ *       ~/.m2} when {@code project.m2install} is set). When the project is an <em>application</em>
+ *       ({@code project.application}, default true when a {@code main} is set) it additionally does
+ *       a <em>make install</em>: a native binary into {@code ~/.jk/bin}; a shadow jar into {@code
+ *       ~/.jk/libexec} with a launcher; or a normal jar into {@code ~/.jk/libexec} alongside its
+ *       hard-linked runtime deps with a launcher in {@code ~/.jk/bin}.
+ *   <li><b>Maven coord (g:a:v):</b> download the pre-built jar from declared Maven repositories and
+ *       install a launcher (the legacy {@code jk tool install} behavior).
+ *   <li><b>Git / HTTPS URL:</b> clone, build, install. The URL may carry an optional {@code @<ref>}
+ *       or {@code #<ref>} suffix selecting a tag or branch (default: {@code main}). Host shorthands
+ *       {@code gh:owner/repo} etc. are accepted.
  * </ul>
  *
- * <p>Each mode is its own Goal. Like {@code jk run}, the work that
- * "shells out" to a nested {@code jk build} happens inside the
- * {@code ensure-built} phase; the nested progress widget overlaps
+ * <p>Each mode is its own Goal. Like {@code jk run}, the work that "shells out" to a nested {@code
+ * jk build} happens inside the {@code ensure-built} phase; the nested progress widget overlaps
  * briefly with the outer one, a known UX wrinkle.
  */
 public final class InstallCommand implements CliCommand {
@@ -198,12 +192,10 @@ public final class InstallCommand implements CliCommand {
     // --- mode 2: local file ----------------------------------------------
 
     /**
-     * Store a local file in the CAS and mirror it into the m2 local repo under
-     * its Maven coordinate (the {@code mvn install} equivalent for pre-built
-     * artifacts). The coordinate is auto-detected from
-     * {@code META-INF/maven/.../pom.properties} for {@code .jar} files;
-     * {@code --group}, {@code --name}, and {@code --ver} override or supply
-     * missing fields.
+     * Store a local file in the CAS and mirror it into the m2 local repo under its Maven coordinate
+     * (the {@code mvn install} equivalent for pre-built artifacts). The coordinate is auto-detected
+     * from {@code META-INF/maven/.../pom.properties} for {@code .jar} files; {@code --group}, {@code
+     * --name}, and {@code --ver} override or supply missing fields.
      */
     private int installFromFile(Path filePath) throws IOException {
         if (!Files.exists(filePath)) {
@@ -413,7 +405,8 @@ public final class InstallCommand implements CliCommand {
         JkBuild proj = JkBuildParser.parse(projectDir.resolve("jk.toml"));
         var pj = proj.project();
         if (pj.isApplication() && pj.nativeMode() == JkBuild.NativeMode.DISABLED && pj.main() == null) {
-            System.err.println("jk install: application project at " + dev.jkbuild.cli.PathDisplay.styledRaw(projectDir)
+            System.err.println("jk install: application project at "
+                    + dev.jkbuild.cli.PathDisplay.styledRaw(projectDir)
                     + " has no `main` class set in [project]");
             return 64;
         }
@@ -531,11 +524,9 @@ public final class InstallCommand implements CliCommand {
     }
 
     /**
-     * The {@code mvn install} equivalent: hash the built jar and a generated
-     * pom into jk's CAS and mirror them into the m2 local repo as a
-     * {@code local} source so other local jk projects resolve them. When
-     * {@code m2install} is set, also materialise jar+pom into
-     * {@code ~/.m2/repository}.
+     * The {@code mvn install} equivalent: hash the built jar and a generated pom into jk's CAS and
+     * mirror them into the m2 local repo as a {@code local} source so other local jk projects resolve
+     * them. When {@code m2install} is set, also materialise jar+pom into {@code ~/.m2/repository}.
      */
     private void cacheInstallArtifact(JkBuild project, BuildLayout layout, Path cacheDir) throws IOException {
         var p = project.project();
@@ -567,12 +558,11 @@ public final class InstallCommand implements CliCommand {
     }
 
     /**
-     * The {@code make install} step for applications. Dispatches by artifact
-     * type: a native binary goes straight into {@code ~/.jk/bin}; a shadow jar
-     * goes into {@code ~/.jk/libexec} with a launcher; a normal jar goes into
-     * {@code libexec} alongside its hard-linked runtime dependency jars, with a
-     * launcher whose classpath lists exactly those jars. Returns the launcher
-     * (or the binary) path.
+     * The {@code make install} step for applications. Dispatches by artifact type: a native binary
+     * goes straight into {@code ~/.jk/bin}; a shadow jar goes into {@code ~/.jk/libexec} with a
+     * launcher; a normal jar goes into {@code libexec} alongside its hard-linked runtime dependency
+     * jars, with a launcher whose classpath lists exactly those jars. Returns the launcher (or the
+     * binary) path.
      */
     private Path makeInstallApp(
             Path projectDir, JkBuild project, BuildLayout layout, Path cacheDir, Path binDir, Path libexecDir)
@@ -681,9 +671,9 @@ public final class InstallCommand implements CliCommand {
     // --- helpers ---------------------------------------------------------
 
     /**
-     * Maps a failed install goal to exit code 1. Kept as a named helper so
-     * the various call sites read uniformly; the listener already printed
-     * the "✗ Error" diagnostic so we don't repeat ourselves.
+     * Maps a failed install goal to exit code 1. Kept as a named helper so the various call sites
+     * read uniformly; the listener already printed the "✗ Error" diagnostic so we don't repeat
+     * ourselves.
      */
     private static int failureExit(GoalResult result, String label, Path cache) {
         return 1;
@@ -730,10 +720,9 @@ public final class InstallCommand implements CliCommand {
     }
 
     /**
-     * True when {@code source} resolves to an existing regular file on disk.
-     * Checked after git-URL detection so {@code file://...} URIs are handled
-     * by the git path. Uses filesystem existence as the discriminator: Maven
-     * coords ({@code g:a:v}) and bare names never match an actual file.
+     * True when {@code source} resolves to an existing regular file on disk. Checked after git-URL
+     * detection so {@code file://...} URIs are handled by the git path. Uses filesystem existence as
+     * the discriminator: Maven coords ({@code g:a:v}) and bare names never match an actual file.
      */
     private static boolean looksLikeFilePath(String source) {
         try {

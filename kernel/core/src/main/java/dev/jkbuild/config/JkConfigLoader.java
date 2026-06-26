@@ -10,12 +10,13 @@ import org.tomlj.TomlParseResult;
 import org.tomlj.TomlTable;
 
 /**
- * Discovers and merges configuration into a single {@link JkConfig} per the
- * precedence documented on that record. CLI-flag values are applied <em>by the
- * caller after</em> {@link #load} returns — this class folds the file layers
- * (from {@link ConfigSources}) and the {@code JK_*} environment layer.
+ * Discovers and merges configuration into a single {@link JkConfig} per the precedence documented
+ * on that record. CLI-flag values are applied <em>by the caller after</em> {@link #load} returns —
+ * this class folds the file layers (from {@link ConfigSources}) and the {@code JK_*} environment
+ * layer.
  *
  * <p>Toml shape (all sections optional):
+ *
  * <pre>
  *   [config]
  *   color = "auto" | "always" | "never"
@@ -26,16 +27,14 @@ import org.tomlj.TomlTable;
  *   directory = "/some/path"   # rarely set here; mostly CLI-only
  * </pre>
  *
- * <p>File discovery and precedence live in {@link ConfigSources}: the
- * user-global {@code ~/.jk/config.toml} then the project {@code jk.toml} (or an
- * explicit {@code --config-file}). There is no {@code /etc/jk} system layer and
- * jk never reads {@code ~/.config}. The config layer extracts only the
- * {@code [config]} table; the rest of a {@code jk.toml} is consumed by
- * {@code JkBuildParser}.
+ * <p>File discovery and precedence live in {@link ConfigSources}: the user-global {@code
+ * ~/.jk/config.toml} then the project {@code jk.toml} (or an explicit {@code --config-file}). There
+ * is no {@code /etc/jk} system layer and jk never reads {@code ~/.config}. The config layer
+ * extracts only the {@code [config]} table; the rest of a {@code jk.toml} is consumed by {@code
+ * JkBuildParser}.
  *
- * <p>{@code --no-config} short-circuits the file layers; env vars still apply.
- * {@code --config-file <path>} replaces the project layer exclusively (the
- * user-global layer still merges underneath).
+ * <p>{@code --no-config} short-circuits the file layers; env vars still apply. {@code --config-file
+ * <path>} replaces the project layer exclusively (the user-global layer still merges underneath).
  */
 public final class JkConfigLoader {
 
@@ -53,12 +52,12 @@ public final class JkConfigLoader {
     private JkConfigLoader() {}
 
     /**
-     * Load and merge config layers. {@code startDir} is the search root for the
-     * project {@code jk.toml}; pass the current working directory in normal use.
+     * Load and merge config layers. {@code startDir} is the search root for the project {@code
+     * jk.toml}; pass the current working directory in normal use.
      *
-     * <p>The returned config does NOT include CLI-flag values — the caller
-     * should call {@link JkConfig#mergedWith(JkConfig)} with the CLI-derived
-     * layer last to enforce the documented precedence.
+     * <p>The returned config does NOT include CLI-flag values — the caller should call {@link
+     * JkConfig#mergedWith(JkConfig)} with the CLI-derived layer last to enforce the documented
+     * precedence.
      */
     public static JkConfig load(Path startDir, boolean noConfig, Optional<Path> explicitConfigFile) throws IOException {
         // File layers, lowest precedence first, then the env layer on top.

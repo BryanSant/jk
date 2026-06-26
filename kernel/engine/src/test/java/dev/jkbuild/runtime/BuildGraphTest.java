@@ -13,9 +13,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
- * Graph-resolution coverage for the unified composite build graph (path deps;
- * branch-git shares the code path once cloned). No building happens here —
- * {@link BuildGraph#resolve} only resolves units + order.
+ * Graph-resolution coverage for the unified composite build graph (path deps; branch-git shares the
+ * code path once cloned). No building happens here — {@link BuildGraph#resolve} only resolves units
+ * + order.
  */
 class BuildGraphTest {
 

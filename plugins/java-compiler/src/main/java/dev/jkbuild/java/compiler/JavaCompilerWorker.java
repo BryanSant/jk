@@ -18,14 +18,14 @@ import java.util.Set;
 import javax.annotation.processing.Processor;
 
 /**
- * Child-JVM entry point that runs {@link InProcessJavac} under the project's JDK
- * and streams the result — diagnostics, annotation-processing provenance, and a
- * terminal status — back to jk as NDJSON ({@value #PREFIX}).
+ * Child-JVM entry point that runs {@link InProcessJavac} under the project's JDK and streams the
+ * result — diagnostics, annotation-processing provenance, and a terminal status — back to jk as
+ * NDJSON ({@value #PREFIX}).
  *
  * <p>jk launches it as {@code <javaHome>/bin/java -cp <worker.jar>
- * dev.jkbuild.java.compiler.JavaCompilerWorker @<spec>}. Processors are
- * discovered from the spec's processor path (the same ServiceLoader mechanism
- * javac uses) so they can be wrapped for Filer provenance capture.
+ * dev.jkbuild.java.compiler.JavaCompilerWorker @<spec>}. Processors are discovered from the spec's
+ * processor path (the same ServiceLoader mechanism javac uses) so they can be wrapped for Filer
+ * provenance capture.
  *
  * <pre>
  *   CLASSOUTPUT &lt;dir&gt;     compiled .class destination (required)
@@ -64,7 +64,10 @@ public final class JavaCompilerWorker implements Plugin {
                 spec.sources, spec.classpath, spec.classOutput, spec.sourceOutput, spec.release, spec.args, processors);
 
         for (InProcessJavac.Diag d : r.diagnostics()) {
-            out.emit("{\"t\":\"diag\",\"sev\":" + Ndjson.quote(d.kind()) + ",\"msg\":" + Ndjson.quote(d.message())
+            out.emit("{\"t\":\"diag\",\"sev\":"
+                    + Ndjson.quote(d.kind())
+                    + ",\"msg\":"
+                    + Ndjson.quote(d.message())
                     + "}");
         }
         for (Map.Entry<Path, Set<Path>> e : r.generated().entrySet()) {

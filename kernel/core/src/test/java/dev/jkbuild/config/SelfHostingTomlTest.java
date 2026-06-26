@@ -11,19 +11,18 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 /**
- * Sanity-checks the workspace's {@code jk.toml} files. Failing here means
- * the manifests have drifted from what the parser accepts — fix the
- * manifest (or the parser) before flipping the build.
+ * Sanity-checks the workspace's {@code jk.toml} files. Failing here means the manifests have
+ * drifted from what the parser accepts — fix the manifest (or the parser) before flipping the
+ * build.
  */
 class SelfHostingTomlTest {
 
     /**
-     * Walk up from the test class's own location until we find a
-     * {@code jk.toml} whose {@code [workspace]} table claims this
-     * directory as a module. That root is the repo. This is more robust
-     * than relying on the JVM's cwd, which differs between the Gradle
-     * test launcher (per-module cwd) and a forked test JVM under
-     * {@code jk test} (typically inherits the parent process's cwd).
+     * Walk up from the test class's own location until we find a {@code jk.toml} whose {@code
+     * [workspace]} table claims this directory as a module. That root is the repo. This is more
+     * robust than relying on the JVM's cwd, which differs between the Gradle test launcher
+     * (per-module cwd) and a forked test JVM under {@code jk test} (typically inherits the parent
+     * process's cwd).
      */
     private static final Path REPO = findRepoRoot();
 

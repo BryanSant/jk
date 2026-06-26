@@ -25,20 +25,16 @@ import java.util.Set;
 import java.util.concurrent.ExecutionException;
 
 /**
- * Jib-core-backed OCI image builder (PRD §22). Wraps {@link Jib}
- * sufficiently to:
+ * Jib-core-backed OCI image builder (PRD §22). Wraps {@link Jib} sufficiently to:
  *
  * <ul>
- *   <li>Pull a base image from a registry (PRD §22.1 default is
- *       distroless java21).</li>
- *   <li>Layer dependency jars under {@code /app/libs/}, the project
- *       jar under {@code /app/classpath/}, classpath ordering preserved.</li>
- *   <li>Apply {@link ImageConfig} entrypoint / user / env / labels /
- *       ports / platforms.</li>
- *   <li>Push to a registry, or stream to a local tarball
- *       ({@code --tarball} mode for hermetic tests).</li>
- *   <li>Stamp deterministic timestamps so two runs produce
- *       byte-identical layers.</li>
+ *   <li>Pull a base image from a registry (PRD §22.1 default is distroless java21).
+ *   <li>Layer dependency jars under {@code /app/libs/}, the project jar under {@code
+ *       /app/classpath/}, classpath ordering preserved.
+ *   <li>Apply {@link ImageConfig} entrypoint / user / env / labels / ports / platforms.
+ *   <li>Push to a registry, or stream to a local tarball ({@code --tarball} mode for hermetic
+ *       tests).
+ *   <li>Stamp deterministic timestamps so two runs produce byte-identical layers.
  * </ul>
  */
 public final class ImageBuilder {

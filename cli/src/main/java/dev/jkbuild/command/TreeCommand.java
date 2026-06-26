@@ -120,18 +120,18 @@ public final class TreeCommand implements CliCommand {
     }
 
     /**
-     * The {@code exec}/{@code run} meta-scope: the scopes that form the classpath
-     * needed to run the project, in display order. Sourced from
-     * {@link ClasspathResolver#RUNTIME} so it stays in sync with the real run classpath.
+     * The {@code exec}/{@code run} meta-scope: the scopes that form the classpath needed to run the
+     * project, in display order. Sourced from {@link ClasspathResolver#RUNTIME} so it stays in sync
+     * with the real run classpath.
      */
     private static final List<Scope> EXEC_SCOPES = Arrays.stream(Scope.values())
             .filter(ClasspathResolver.RUNTIME::contains)
             .toList();
 
     /**
-     * Resolve a user-supplied scope token (case-insensitive) to one or more scopes:
-     * {@code exec}/{@code run} expand to the run classpath; any other token is a single
-     * scope. Returns null if the token is not a valid scope or meta-scope.
+     * Resolve a user-supplied scope token (case-insensitive) to one or more scopes: {@code
+     * exec}/{@code run} expand to the run classpath; any other token is a single scope. Returns null
+     * if the token is not a valid scope or meta-scope.
      */
     private static List<Scope> resolveScopeToken(String token) {
         String t = token.toLowerCase(Locale.ROOT);
@@ -141,7 +141,9 @@ public final class TreeCommand implements CliCommand {
         return scope == null ? null : List.of(scope);
     }
 
-    /** Coerce a user-supplied scope token (case-insensitive) to a {@link Scope}, or null if invalid. */
+    /**
+     * Coerce a user-supplied scope token (case-insensitive) to a {@link Scope}, or null if invalid.
+     */
     private static Scope coerceScope(String token) {
         try {
             return Scope.valueOf(token.toUpperCase(Locale.ROOT));
@@ -150,7 +152,10 @@ public final class TreeCommand implements CliCommand {
         }
     }
 
-    /** Comma-separated list of valid scope names (incl. the {@code exec}/{@code run}/{@code all} meta-scopes). */
+    /**
+     * Comma-separated list of valid scope names (incl. the {@code exec}/{@code run}/{@code all}
+     * meta-scopes).
+     */
     private static String validScopes() {
         return Arrays.stream(Scope.values())
                         .map(s -> s.name().toLowerCase(Locale.ROOT))
@@ -159,9 +164,9 @@ public final class TreeCommand implements CliCommand {
     }
 
     /**
-     * Indents every line below the root node by one space, so the tree body sits
-     * one column in from the {@code ●} root bullet. The first line (the root coord)
-     * and any blank lines are left untouched.
+     * Indents every line below the root node by one space, so the tree body sits one column in from
+     * the {@code ●} root bullet. The first line (the root coord) and any blank lines are left
+     * untouched.
      */
     private static String indentBody(String rendered) {
         String[] lines = rendered.split("\n", -1);
@@ -175,12 +180,11 @@ public final class TreeCommand implements CliCommand {
     }
 
     /**
-     * Color pattern for the Maven coordinate — the canonical
-     * {@code [blue]group[/]:[cyan]artifact[/]:[bright-blue]version[/]} from
-     * {@link Coords}. Rails get the same dim dark-gray the wizard uses for its
-     * settled rails. {@link Theme#colorize} respects {@code --color} /
-     * {@code NO_COLOR} / dumb terminals, so escapes are dropped cleanly when
-     * color is off.
+     * Color pattern for the Maven coordinate — the canonical {@code
+     * [blue]group[/]:[cyan]artifact[/]:[bright-blue]version[/]} from {@link Coords}. Rails get the
+     * same dim dark-gray the wizard uses for its settled rails. {@link Theme#colorize} respects
+     * {@code --color} / {@code NO_COLOR} / dumb terminals, so escapes are dropped cleanly when color
+     * is off.
      */
     private static DependencyTree.Styling styling(boolean nerdfont) {
         // Scope section badge: a black-on-bright-black chip (a rounded pill with a
@@ -198,16 +202,18 @@ public final class TreeCommand implements CliCommand {
     }
 
     /**
-     * The root project coordinate in bold — {@code group:artifact:version}, each
-     * segment bold and in its usual {@link Coords} color. Bold must be baked into
-     * each segment's style (a wrapping bold escape is cancelled by every segment's
-     * color reset). Input is the plain {@code group:artifact:version}.
+     * The root project coordinate in bold — {@code group:artifact:version}, each segment bold and in
+     * its usual {@link Coords} color. Bold must be baked into each segment's style (a wrapping bold
+     * escape is cancelled by every segment's color reset). Input is the plain {@code
+     * group:artifact:version}.
      */
     private static String boldCoord(String gav) {
         String[] p = gav.split(":", 3);
         if (p.length < 3) return Theme.colorize(gav, Coords.groupStyle().bold());
-        return Theme.colorize(p[0], Coords.groupStyle().bold()) + ":"
-                + Theme.colorize(p[1], Coords.artifactStyle().bold()) + ":"
+        return Theme.colorize(p[0], Coords.groupStyle().bold())
+                + ":"
+                + Theme.colorize(p[1], Coords.artifactStyle().bold())
+                + ":"
                 + Theme.colorize(p[2], Coords.versionStyle().bold());
     }
 }

@@ -5,9 +5,9 @@ import dev.jkbuild.model.Coordinate;
 import org.jline.utils.AttributedStyle;
 
 /**
- * Canonical terminal rendering of Maven coordinates. Every command that prints a
- * {@code group:artifact[:version]} coordinate routes through here so the colors
- * stay identical across the CLI:
+ * Canonical terminal rendering of Maven coordinates. Every command that prints a {@code
+ * group:artifact[:version]} coordinate routes through here so the colors stay identical across the
+ * CLI:
  *
  * <pre>
  *   [blue]group[/]:[cyan]artifact[/]:[bright-blue]version[/]
@@ -16,16 +16,17 @@ import org.jline.utils.AttributedStyle;
  * and artifact short-names (dependency libraries) render as {@code [bright-cyan]}.
  *
  * <p>The four roles map onto the active {@link Theme} palette:
+ *
  * <ul>
- *   <li><b>group</b> — {@link Theme#primary()} (the Jk Dark indigo / normal blue)</li>
- *   <li><b>artifact</b> — {@link Theme#cyan()} (normal cyan)</li>
- *   <li><b>version</b> — {@link Theme#blue()} (bright blue)</li>
- *   <li><b>short-name</b> — {@link Theme#brightCyan()} (bright cyan)</li>
+ *   <li><b>group</b> — {@link Theme#primary()} (the Jk Dark indigo / normal blue)
+ *   <li><b>artifact</b> — {@link Theme#cyan()} (normal cyan)
+ *   <li><b>version</b> — {@link Theme#blue()} (bright blue)
+ *   <li><b>short-name</b> — {@link Theme#brightCyan()} (bright cyan)
  * </ul>
  *
- * <p>{@link Theme#colorize} honours {@code --color} / {@code NO_COLOR} / dumb
- * terminals, so the escapes drop out cleanly and the plain text stays the
- * canonical {@code group:artifact:version} that tooling and tests expect.
+ * <p>{@link Theme#colorize} honours {@code --color} / {@code NO_COLOR} / dumb terminals, so the
+ * escapes drop out cleanly and the plain text stays the canonical {@code group:artifact:version}
+ * that tooling and tests expect.
  */
 public final class Coords {
 
@@ -77,10 +78,9 @@ public final class Coords {
     }
 
     /**
-     * Color a module key with an optional version. The key is the usual
-     * {@code group:artifact} form; a key with no {@code ':'} is treated as an
-     * artifact short-name and rendered in bright-cyan. A {@code null}/blank
-     * version omits the version segment.
+     * Color a module key with an optional version. The key is the usual {@code group:artifact} form;
+     * a key with no {@code ':'} is treated as an artifact short-name and rendered in bright-cyan. A
+     * {@code null}/blank version omits the version segment.
      */
     public static String module(String moduleKey, String version) {
         int colon = moduleKey.indexOf(':');

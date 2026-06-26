@@ -12,20 +12,18 @@ import java.util.function.Function;
 import java.util.stream.Stream;
 
 /**
- * <a href="https://mise.jdx.dev">mise</a> (formerly rtx) keeps installs
- * under {@code <data-dir>/installs/<kind>/<version>/}. The data dir
- * resolves in priority order:
+ * <a href="https://mise.jdx.dev">mise</a> (formerly rtx) keeps installs under {@code
+ * <data-dir>/installs/<kind>/<version>/}. The data dir resolves in priority order:
  *
  * <ol>
- *   <li>{@code $MISE_DATA_DIR} if set</li>
- *   <li>{@code $XDG_DATA_HOME/mise} if {@code XDG_DATA_HOME} is set</li>
- *   <li>{@code ~/.local/share/mise} (the documented default)</li>
+ *   <li>{@code $MISE_DATA_DIR} if set
+ *   <li>{@code $XDG_DATA_HOME/mise} if {@code XDG_DATA_HOME} is set
+ *   <li>{@code ~/.local/share/mise} (the documented default)
  * </ol>
  *
- * <p>mise's JDK identifiers vary by request style — {@code 21.0.5},
- * {@code temurin-21.0.5}, {@code corretto-21.0.5} all appear as direct
- * subdir names. {@link ProbeSupport#discoverJdk} treats each as opaque and
- * reads the {@code release} file for the actual version + vendor.
+ * <p>mise's JDK identifiers vary by request style — {@code 21.0.5}, {@code temurin-21.0.5}, {@code
+ * corretto-21.0.5} all appear as direct subdir names. {@link ProbeSupport#discoverJdk} treats each
+ * as opaque and reads the {@code release} file for the actual version + vendor.
  */
 public final class MiseProbe implements LocalToolProbe {
 
@@ -78,7 +76,10 @@ public final class MiseProbe implements LocalToolProbe {
         return hits;
     }
 
-    /** Resolve mise's data dir per <a href="https://mise.jdx.dev/configuration.html">mise's config docs</a>. */
+    /**
+     * Resolve mise's data dir per <a href="https://mise.jdx.dev/configuration.html">mise's config
+     * docs</a>.
+     */
     static Path resolveDataDir(Function<String, String> env, String userHome) {
         String miseData = env.apply("MISE_DATA_DIR");
         if (miseData != null && !miseData.isBlank()) return Path.of(miseData);

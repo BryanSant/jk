@@ -16,21 +16,18 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * A single Maven-style repository. Fetches POMs and artifacts over HTTP,
- * deposits them into a {@link Cas}, and returns {@link Fetched} records
- * describing both the on-disk path and the SHA-256 of the bytes — the
- * resolver needs both to populate {@code jk.lock}.
+ * A single Maven-style repository. Fetches POMs and artifacts over HTTP, deposits them into a
+ * {@link Cas}, and returns {@link Fetched} records describing both the on-disk path and the SHA-256
+ * of the bytes — the resolver needs both to populate {@code jk.lock}.
  *
- * <p>Every successful fetch is also mirrored into the {@link JkMavenLocalRepo}
- * (an m2 hard-link back to the CAS blob) so the artifact is later addressable
- * by coordinate. When {@code --offline} is in effect, fetches are served from
- * that local repo instead of the network; a coordinate that isn't mirrored
- * surfaces as {@link ArtifactNotFoundException}, so {@link RepoGroup}'s
- * try-each and the resolver get a clean "not found" rather than a network
- * error.
+ * <p>Every successful fetch is also mirrored into the {@link JkMavenLocalRepo} (an m2 hard-link
+ * back to the CAS blob) so the artifact is later addressable by coordinate. When {@code --offline}
+ * is in effect, fetches are served from that local repo instead of the network; a coordinate that
+ * isn't mirrored surfaces as {@link ArtifactNotFoundException}, so {@link RepoGroup}'s try-each and
+ * the resolver get a clean "not found" rather than a network error.
  *
- * <p>HTTPS only by default per PRD §10.5; the constructor will reject
- * {@code http://} URIs unless explicitly marked insecure (deferred).
+ * <p>HTTPS only by default per PRD §10.5; the constructor will reject {@code http://} URIs unless
+ * explicitly marked insecure (deferred).
  */
 public final class MavenRepo {
 
@@ -40,6 +37,7 @@ public final class MavenRepo {
     private final Cas cas;
     private final JkMavenLocalRepo localRepo;
     private final RepoCredential credential;
+
     /** TTL + conditional-GET cache for maven-metadata.xml; null for non-HTTP transports. */
     private final MavenMetadataCache metadataCache;
 
@@ -53,10 +51,9 @@ public final class MavenRepo {
     }
 
     /**
-     * HTTP convenience constructor: selects an {@link HttpTransport} for the
-     * URL's scheme via {@link RepoTransports} (which rejects non-http(s)), and
-     * authenticates with {@code credential} (anonymous repos pass
-     * {@link RepoCredential#ANONYMOUS}).
+     * HTTP convenience constructor: selects an {@link HttpTransport} for the URL's scheme via {@link
+     * RepoTransports} (which rejects non-http(s)), and authenticates with {@code credential}
+     * (anonymous repos pass {@link RepoCredential#ANONYMOUS}).
      */
     public MavenRepo(
             String name, URI baseUrl, Http http, Cas cas, JkMavenLocalRepo localRepo, RepoCredential credential) {
@@ -71,9 +68,9 @@ public final class MavenRepo {
     }
 
     /**
-     * General constructor over any {@link RepoTransport} — the entry point for
-     * non-HTTP backends (s3://, file://, …) selected by the caller. These don't
-     * get the HTTP metadata cache (it has no status/headers to revalidate against).
+     * General constructor over any {@link RepoTransport} — the entry point for non-HTTP backends
+     * (s3://, file://, …) selected by the caller. These don't get the HTTP metadata cache (it has no
+     * status/headers to revalidate against).
      */
     public MavenRepo(
             String name,
@@ -86,9 +83,8 @@ public final class MavenRepo {
     }
 
     /**
-     * Field-setting constructor. {@code httpOrNull} is the HTTP client when the
-     * repo is http(s) (enabling the metadata cache), or {@code null} for a
-     * non-HTTP transport.
+     * Field-setting constructor. {@code httpOrNull} is the HTTP client when the repo is http(s)
+     * (enabling the metadata cache), or {@code null} for a non-HTTP transport.
      */
     private MavenRepo(
             String name,
@@ -140,12 +136,11 @@ public final class MavenRepo {
     }
 
     /**
-     * Versions of this coordinate's {@code group:artifact} available here.
-     * Online: parses {@code maven-metadata.xml}, served through the
-     * {@link MavenMetadataCache} (TTL + conditional GET) for HTTP repos so
-     * back-to-back resolves don't re-download the index. Offline: lists what the
-     * local repo holds. A missing artifact yields an empty list rather than an
-     * error so {@link RepoGroup} can union across repos.
+     * Versions of this coordinate's {@code group:artifact} available here. Online: parses {@code
+     * maven-metadata.xml}, served through the {@link MavenMetadataCache} (TTL + conditional GET) for
+     * HTTP repos so back-to-back resolves don't re-download the index. Offline: lists what the local
+     * repo holds. A missing artifact yields an empty list rather than an error so {@link RepoGroup}
+     * can union across repos.
      */
     public List<String> availableVersions(Coordinate coord) throws IOException, InterruptedException {
         if (ActiveConfig.get().offlineOr(false)) {
@@ -184,10 +179,9 @@ public final class MavenRepo {
     }
 
     /**
-     * Serve a fetch from the local repo. The mirrored file <em>is</em> the
-     * artifact (a hard link to the CAS blob), so a present entry is served
-     * directly; a coordinate that was never mirrored is treated as not-found
-     * and the resolver falls through cleanly.
+     * Serve a fetch from the local repo. The mirrored file <em>is</em> the artifact (a hard link to
+     * the CAS blob), so a present entry is served directly; a coordinate that was never mirrored is
+     * treated as not-found and the resolver falls through cleanly.
      */
     private Fetched fetchOffline(Coordinate coord, String relativePath) throws IOException {
         Optional<Path> found = localRepo.locate(relativePath);

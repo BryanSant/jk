@@ -22,37 +22,34 @@ import java.util.function.UnaryOperator;
 import java.util.stream.Stream;
 
 /**
- * Renders a Cargo-style dependency tree from a {@link JkBuild} project and
- * its resolved {@link Lockfile}. Revisited subtrees are marked with an
- * up-arrow ({@code ⎋}) so diamond-shaped graphs don't explode the output —
- * the arrow points the reader back to the earlier expansion.
+ * Renders a Cargo-style dependency tree from a {@link JkBuild} project and its resolved {@link
+ * Lockfile}. Revisited subtrees are marked with an up-arrow ({@code ⎋}) so diamond-shaped graphs
+ * don't explode the output — the arrow points the reader back to the earlier expansion.
  */
 public final class DependencyTree {
 
     /**
-     * Suffix appended to a node whose module has no resolved {@link Lockfile.Artifact}
-     * — it is present in the graph but absent from the lockfile/local cache. Callers
-     * can scan rendered output for this marker to decide whether to surface a hint.
+     * Suffix appended to a node whose module has no resolved {@link Lockfile.Artifact} — it is
+     * present in the graph but absent from the lockfile/local cache. Callers can scan rendered output
+     * for this marker to decide whether to surface a hint.
      */
     public static final String MISSING_SUFFIX = " (missing)";
 
     /**
-     * Optional ANSI styling for tree output. Each operator wraps the
-     * matching piece of text with whatever escape sequence the caller
-     * prefers. Defaults to {@link #plain()} (identity everywhere) so
-     * tests and non-color consumers get raw ASCII back.
+     * Optional ANSI styling for tree output. Each operator wraps the matching piece of text with
+     * whatever escape sequence the caller prefers. Defaults to {@link #plain()} (identity everywhere)
+     * so tests and non-color consumers get raw ASCII back.
      *
      * <p>The fields map directly to the rendered shape:
+     *
      * <pre>
      *   {rail}└─ {/rail}{group}{group}{/group}:{artifact}{artifact}{/artifact}:{version}{version}{/version}
      * </pre>
      *
-     * <p>{@code reference} styles a whole already-shown row (the {@code ⎋}
-     * back-reference lines): the connector, coordinate, and marker are dimmed as
-     * one unit so the reader sees at a glance it's a pointer to an earlier
-     * expansion, not a fresh node. {@code scopeBadge} styles a scope section
-     * header (the {@code Main} / {@code Test} / … badges grouping a project's
-     * direct dependencies).
+     * <p>{@code reference} styles a whole already-shown row (the {@code ⎋} back-reference lines): the
+     * connector, coordinate, and marker are dimmed as one unit so the reader sees at a glance it's a
+     * pointer to an earlier expansion, not a fresh node. {@code scopeBadge} styles a scope section
+     * header (the {@code Main} / {@code Test} / … badges grouping a project's direct dependencies).
      */
     public record Styling(
             UnaryOperator<String> rail,
@@ -64,8 +61,8 @@ public final class DependencyTree {
             UnaryOperator<String> boldCoord) {
 
         /**
-         * Back-compat 6-arg form (no {@code boldCoord}): the root project coordinate
-         * renders with the same {@code group/artifact/version} stylers as any other.
+         * Back-compat 6-arg form (no {@code boldCoord}): the root project coordinate renders with the
+         * same {@code group/artifact/version} stylers as any other.
          */
         public Styling(
                 UnaryOperator<String> rail,
@@ -114,11 +111,10 @@ public final class DependencyTree {
     }
 
     /**
-     * Render with full styling. Labels are emitted in {@code group:artifact:version}
-     * shape (the Maven coordinate convention Java developers expect), with each
-     * segment passed through its corresponding {@link Styling} operator. Rail
-     * connectors ({@code ├─ }, {@code └─ }, {@code │  }, {@code "   "}) are
-     * passed through {@link Styling#rail}.
+     * Render with full styling. Labels are emitted in {@code group:artifact:version} shape (the Maven
+     * coordinate convention Java developers expect), with each segment passed through its
+     * corresponding {@link Styling} operator. Rail connectors ({@code ├─ }, {@code └─ }, {@code │ },
+     * {@code " "}) are passed through {@link Styling#rail}.
      */
     public static String render(JkBuild project, Lockfile lock, int maxDepth, Styling styling) {
         Map<String, Lockfile.Artifact> byModule = indexByModule(lock);
@@ -140,20 +136,18 @@ public final class DependencyTree {
     }
 
     /**
-     * Composite-aware render: walks the full graph including {@code path} (and
-     * <em>branch</em> git) dependencies, not just lockfile Maven coords.
-     * {@code projectDir} anchors {@code path} deps; each path target's own tree
-     * (its {@code jk.toml} + {@code jk.lock}) is recursed into. Branch git deps
-     * are annotated but not recursed (resolving them needs a clone). Immutable
-     * (tag/rev) git deps are materialized into the lock and render normally.
+     * Composite-aware render: walks the full graph including {@code path} (and <em>branch</em> git)
+     * dependencies, not just lockfile Maven coords. {@code projectDir} anchors {@code path} deps;
+     * each path target's own tree (its {@code jk.toml} + {@code jk.lock}) is recursed into. Branch
+     * git deps are annotated but not recursed (resolving them needs a clone). Immutable (tag/rev) git
+     * deps are materialized into the lock and render normally.
      *
-     * <p>When {@code project} is a <em>workspace root</em>, the scope sections
-     * ({@code main}/{@code test}/…) are the top-level nodes. Under each scope sit
-     * the workspace modules that declare at least one dependency in that scope, and
-     * each such module node expands into its own deps for that scope (read from the
-     * module's {@code jk.toml} + {@code jk.lock}). Workspace-sibling deps (a module's
-     * {@code <name>.workspace = true} entries, which point at another module) are
-     * shown as a collapsed {@code [workspace]} reference rather than re-expanded.
+     * <p>When {@code project} is a <em>workspace root</em>, the scope sections ({@code main}/{@code
+     * test}/…) are the top-level nodes. Under each scope sit the workspace modules that declare at
+     * least one dependency in that scope, and each such module node expands into its own deps for
+     * that scope (read from the module's {@code jk.toml} + {@code jk.lock}). Workspace-sibling deps
+     * (a module's {@code <name>.workspace = true} entries, which point at another module) are shown
+     * as a collapsed {@code [workspace]} reference rather than re-expanded.
      */
     public static String render(JkBuild project, Lockfile lock, Path projectDir, int maxDepth, Styling styling) {
         return render(project, lock, projectDir, maxDepth, styling, false);
@@ -176,13 +170,13 @@ public final class DependencyTree {
     }
 
     /**
-     * Composite-aware render with optional {@code flatten} / {@code stack} modes and an
-     * explicit {@code scopeOrder}. {@code flatten} replaces each scope's nested tree with
-     * the deduplicated, sorted set of all its (transitive) dependencies; {@code maxDepth}
-     * is ignored when flattening. {@code stack} collapses the per-scope sections into a
-     * single header showing every scope badge on one line, with all dependencies blended
-     * (regardless of scope) into one tree. When {@code scopeOrder} is non-null, only those
-     * scopes are shown, in exactly that order, instead of the default {@link #SCOPE_SECTIONS}.
+     * Composite-aware render with optional {@code flatten} / {@code stack} modes and an explicit
+     * {@code scopeOrder}. {@code flatten} replaces each scope's nested tree with the deduplicated,
+     * sorted set of all its (transitive) dependencies; {@code maxDepth} is ignored when flattening.
+     * {@code stack} collapses the per-scope sections into a single header showing every scope badge
+     * on one line, with all dependencies blended (regardless of scope) into one tree. When {@code
+     * scopeOrder} is non-null, only those scopes are shown, in exactly that order, instead of the
+     * default {@link #SCOPE_SECTIONS}.
      */
     public static String render(
             JkBuild project,
@@ -200,8 +194,10 @@ public final class DependencyTree {
                 .append(styling.rail().apply("●"))
                 .append(' ')
                 .append(styling.boldCoord()
-                        .apply(project.project().group() + ":"
-                                + project.project().name() + ":"
+                        .apply(project.project().group()
+                                + ":"
+                                + project.project().name()
+                                + ":"
                                 + project.project().version()))
                 .append('\n');
         Set<String> seenModules = new HashSet<>();
@@ -255,9 +251,9 @@ public final class DependencyTree {
     }
 
     /**
-     * Map of each workspace module's short name → its full {@code group:artifact}
-     * coord, used to resolve a sibling's {@code workspace:<name>} dep reference back
-     * to a readable coordinate when collapsing it in a module's subtree.
+     * Map of each workspace module's short name → its full {@code group:artifact} coord, used to
+     * resolve a sibling's {@code workspace:<name>} dep reference back to a readable coordinate when
+     * collapsing it in a module's subtree.
      */
     private static Map<String, String> workspaceModulesByName(List<String> modules, Path rootDir) {
         Map<String, String> byName = new HashMap<>();
@@ -279,11 +275,10 @@ public final class DependencyTree {
     private record LoadedModule(JkBuild build, Lockfile lock, Path dir) {}
 
     /**
-     * Workspace-root view: scope sections (main/test/…) are the top-level nodes.
-     * Under each scope sit the workspace modules that declare at least one
-     * dependency in that scope, in declaration (build) order; each module node
-     * expands into its own deps for that scope, with sibling modules collapsed to
-     * a {@code [workspace]} reference.
+     * Workspace-root view: scope sections (main/test/…) are the top-level nodes. Under each scope sit
+     * the workspace modules that declare at least one dependency in that scope, in declaration
+     * (build) order; each module node expands into its own deps for that scope, with sibling modules
+     * collapsed to a {@code [workspace]} reference.
      */
     private static void renderWorkspaceScopes(
             JkBuild root,
@@ -409,8 +404,8 @@ public final class DependencyTree {
     };
 
     /**
-     * Single-project view: scope sections (Main, Test, …) are nodes, each listing
-     * its direct dependencies. A scope section only appears when it has ≥1 dep.
+     * Single-project view: scope sections (Main, Test, …) are nodes, each listing its direct
+     * dependencies. A scope section only appears when it has ≥1 dep.
      */
     private static void renderScopeSections(
             JkBuild project,
@@ -483,9 +478,9 @@ public final class DependencyTree {
     }
 
     /**
-     * Render {@code project}'s direct dependencies across {@code scopes} (deduped, sorted)
-     * under {@code prefix}, each expanded transitively via {@code lock}. With a single scope
-     * this is one section's deps; with several it blends them (the {@code --stack} view).
+     * Render {@code project}'s direct dependencies across {@code scopes} (deduped, sorted) under
+     * {@code prefix}, each expanded transitively via {@code lock}. With a single scope this is one
+     * section's deps; with several it blends them (the {@code --stack} view).
      */
     private static void renderScopeDepList(
             JkBuild project,
@@ -540,7 +535,10 @@ public final class DependencyTree {
         return composite;
     }
 
-    /** Load each workspace module (declaration order); a module whose jk.toml can't be parsed is dropped. */
+    /**
+     * Load each workspace module (declaration order); a module whose jk.toml can't be parsed is
+     * dropped.
+     */
     private static List<LoadedModule> loadModules(List<String> moduleRels, Path rootDir) {
         List<LoadedModule> modules = new ArrayList<>();
         for (String rel : moduleRels) {
@@ -678,7 +676,9 @@ public final class DependencyTree {
         }
     }
 
-    /** Walk a dependency and its transitive closure, accumulating distinct coords into {@code out}. */
+    /**
+     * Walk a dependency and its transitive closure, accumulating distinct coords into {@code out}.
+     */
     private static void collectFlat(
             String module,
             Map<String, Dependency> composite,
@@ -741,7 +741,9 @@ public final class DependencyTree {
                 : formatCoord(groupId, artifactId, version, styling);
     }
 
-    /** Render one direct dependency, dispatching on its kind (maven / workspace / path / branch-git). */
+    /**
+     * Render one direct dependency, dispatching on its kind (maven / workspace / path / branch-git).
+     */
     private static void renderDep(
             String module,
             Map<String, Dependency> composite,
@@ -788,8 +790,10 @@ public final class DependencyTree {
         }
     }
 
-    /** The bare lowercase scope name for a section badge: {@code MAIN} → {@code "main"}.
-     *  The {@link Styling#scopeBadge} styler decides padding vs. pill caps. */
+    /**
+     * The bare lowercase scope name for a section badge: {@code MAIN} → {@code "main"}. The {@link
+     * Styling#scopeBadge} styler decides padding vs. pill caps.
+     */
     private static String scopeLabel(Scope s) {
         return s.name().toLowerCase(java.util.Locale.ROOT);
     }
@@ -927,8 +931,10 @@ public final class DependencyTree {
 
     private static String formatCoord(String group, String artifact, String version, Styling styling) {
         return styling.group().apply(group)
-                + ":" + styling.artifact().apply(artifact)
-                + ":" + styling.version().apply(version);
+                + ":"
+                + styling.artifact().apply(artifact)
+                + ":"
+                + styling.version().apply(version);
     }
 
     static Map<String, Lockfile.Artifact> indexByModule(Lockfile lock) {

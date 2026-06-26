@@ -11,18 +11,16 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * PubGrub solver. Given a root project, its declared dependencies, and a
- * {@link PackageSource} for the rest of the universe, returns a map of
- * package → resolved version.
+ * PubGrub solver. Given a root project, its declared dependencies, and a {@link PackageSource} for
+ * the rest of the universe, returns a map of package → resolved version.
  *
- * <p>Stage 2: handles conflict-free graphs end-to-end. On the first true
- * conflict (an incompatibility whose every term is already satisfied),
- * throws {@link UnsatisfiableException}. Stage 3 will replace the throw
- * with proper conflict resolution + backtracking.
+ * <p>Stage 2: handles conflict-free graphs end-to-end. On the first true conflict (an
+ * incompatibility whose every term is already satisfied), throws {@link UnsatisfiableException}.
+ * Stage 3 will replace the throw with proper conflict resolution + backtracking.
  *
- * <p>The implementation follows the structure described in
- * <a href="https://nex3.medium.com/pubgrub-2fb6470504f">"PubGrub: Next-
- * Generation Version Solving"</a> and the Dart pub solver reference.
+ * <p>The implementation follows the structure described in <a
+ * href="https://nex3.medium.com/pubgrub-2fb6470504f">"PubGrub: Next- Generation Version
+ * Solving"</a> and the Dart pub solver reference.
  */
 public class PubGrubSolver {
 
@@ -36,9 +34,9 @@ public class PubGrubSolver {
     }
 
     /**
-     * @param rootPkg     name of the root project (e.g. {@code com.example:widget})
+     * @param rootPkg name of the root project (e.g. {@code com.example:widget})
      * @param rootVersion version of the root project
-     * @param rootDeps    positive {@link Term}s — the user-declared dependencies
+     * @param rootDeps positive {@link Term}s — the user-declared dependencies
      */
     public Map<String, String> solve(String rootPkg, String rootVersion, List<Term> rootDeps)
             throws IOException, InterruptedException {
@@ -94,13 +92,12 @@ public class PubGrubSolver {
     /**
      * Conflict resolution + backtracking, per PubGrub paper §6.
      *
-     * <p>Walks back through the partial solution to find the assignment that
-     * "caused" the conflict, derives a new incompatibility by resolving the
-     * conflict against that assignment's cause, and repeats until either the
-     * new incompatibility is unresolvable (failure) or has only one term at
-     * the current decision level. In the latter case we backtrack to the
-     * decision level at which the new incompatibility becomes almost-
-     * satisfied, then propagation on it derives the saved constraint.
+     * <p>Walks back through the partial solution to find the assignment that "caused" the conflict,
+     * derives a new incompatibility by resolving the conflict against that assignment's cause, and
+     * repeats until either the new incompatibility is unresolvable (failure) or has only one term at
+     * the current decision level. In the latter case we backtrack to the decision level at which the
+     * new incompatibility becomes almost- satisfied, then propagation on it derives the saved
+     * constraint.
      */
     protected void handleConflict(Incompatibility inco) {
         Incompatibility current = inco;
@@ -146,10 +143,9 @@ public class PubGrubSolver {
     }
 
     /**
-     * Earliest assignment that, together with strictly-earlier assignments
-     * about the same package, forces {@code term}'s effective version set
-     * to be a superset of the current allowed range. Throws if {@code term}
-     * isn't actually satisfied by the current solution (a programmer error).
+     * Earliest assignment that, together with strictly-earlier assignments about the same package,
+     * forces {@code term}'s effective version set to be a superset of the current allowed range.
+     * Throws if {@code term} isn't actually satisfied by the current solution (a programmer error).
      */
     private PartialSolution.Assignment findSatisfier(Term term) {
         VersionSet accumulated = VersionSet.ALL;
@@ -164,10 +160,9 @@ public class PubGrubSolver {
     }
 
     /**
-     * Standard CDCL resolution: remove the shared {@code pivot} term from
-     * both incompatibilities, take the (deduplicated, intersected) union of
-     * the remaining terms, and record the derivation in the new
-     * incompatibility's cause.
+     * Standard CDCL resolution: remove the shared {@code pivot} term from both incompatibilities,
+     * take the (deduplicated, intersected) union of the remaining terms, and record the derivation in
+     * the new incompatibility's cause.
      */
     private Incompatibility resolveIncompatibilities(Incompatibility a, Incompatibility b, Term pivot) {
         LinkedHashMap<String, Term> merged = new LinkedHashMap<>();

@@ -5,10 +5,9 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 
 /**
- * Thin facade kept for backward compatibility with existing callers. The
- * real work happens in whichever {@link JavaCompileStrategy} is resolved
- * by {@link JavaCompileStrategies} (subprocess by default; an IDE plugin
- * can register its own via {@link java.util.ServiceLoader}).
+ * Thin facade kept for backward compatibility with existing callers. The real work happens in
+ * whichever {@link JavaCompileStrategy} is resolved by {@link JavaCompileStrategies} (subprocess by
+ * default; an IDE plugin can register its own via {@link java.util.ServiceLoader}).
  */
 public final class JavacDriver {
 

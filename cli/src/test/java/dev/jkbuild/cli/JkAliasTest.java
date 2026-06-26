@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -50,7 +51,7 @@ class JkAliasTest {
     void help_screen_does_not_list_any_aliases() {
         // Verbs in --help are listed under one or more "<Section> commands:"
         // headings. Within a section, each row is "  <name>   <description>".
-        List<String> verbNames = new java.util.ArrayList<>();
+        List<String> verbNames = new ArrayList<>();
         boolean inSection = false;
         for (String raw : renderHelp().split("\\R")) {
             // Section headings are rendered in bright green; strip SGR codes before parsing.

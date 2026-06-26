@@ -24,15 +24,13 @@ import org.xml.sax.SAXException;
 /**
  * Parses Maven POM XML into a {@link Pom}.
  *
- * <p>Scope (v0.1): single-POM parsing with intra-POM property substitution
- * ({@code ${project.*}} and entries from {@code <properties>}). Parent
- * inheritance, BOM import, external system properties, and profile
- * activation are not in this layer — they're resolver-stage concerns.
+ * <p>Scope (v0.1): single-POM parsing with intra-POM property substitution ({@code ${project.*}}
+ * and entries from {@code <properties>}). Parent inheritance, BOM import, external system
+ * properties, and profile activation are not in this layer — they're resolver-stage concerns.
  *
- * <p>XML namespaces in POMs are ignored: real-world POMs declare the
- * Maven namespace but never use a prefix for anything, so namespace-aware
- * parsing only complicates element lookup. The parser also disables XXE
- * by setting the standard secure-processing features.
+ * <p>XML namespaces in POMs are ignored: real-world POMs declare the Maven namespace but never use
+ * a prefix for anything, so namespace-aware parsing only complicates element lookup. The parser
+ * also disables XXE by setting the standard secure-processing features.
  */
 public final class PomParser {
 

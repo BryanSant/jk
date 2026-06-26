@@ -8,15 +8,14 @@ import dev.jkbuild.run.GoalView;
 import java.io.PrintStream;
 
 /**
- * Console listener for simple-task commands: drives a {@link CommandManager} in
- * simple mode — an animated spinner + verb on a TTY, then a {@code ✓}/{@code ✗}
- * result line built from the {@link ConsoleSpec} mappers. On a pipe / under
- * {@code --quiet} ({@code animate == false}) it skips the spinner but still
- * prints the result line, so non-interactive consumers keep a summary.
+ * Console listener for simple-task commands: drives a {@link CommandManager} in simple mode — an
+ * animated spinner + verb on a TTY, then a {@code ✓}/{@code ✗} result line built from the {@link
+ * ConsoleSpec} mappers. On a pipe / under {@code --quiet} ({@code animate == false}) it skips the
+ * spinner but still prints the result line, so non-interactive consumers keep a summary.
  *
- * <p>Diagnostics are read from the final {@link GoalResult} and printed once, at
- * {@code goalFinish}, <em>after</em> the spinner has been stopped — never
- * mid-run — so nothing interleaves with the live animation.
+ * <p>Diagnostics are read from the final {@link GoalResult} and printed once, at {@code
+ * goalFinish}, <em>after</em> the spinner has been stopped — never mid-run — so nothing interleaves
+ * with the live animation.
  */
 public final class SimpleTaskListener implements GoalListener {
 

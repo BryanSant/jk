@@ -9,11 +9,9 @@ import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
 /**
- * Lightweight smoke tests against the host's real SDKMAN / Homebrew /
- * system layouts. Each test silently passes when the layout isn't
- * present — these are "probe doesn't blow up on real input" checks, not
- * portable assertions. Synthetic-fixture tests live in
- * {@code ProbesTest}.
+ * Lightweight smoke tests against the host's real SDKMAN / Homebrew / system layouts. Each test
+ * silently passes when the layout isn't present — these are "probe doesn't blow up on real input"
+ * checks, not portable assertions. Synthetic-fixture tests live in {@code ProbesTest}.
  */
 class ProbeSmokeTest {
 

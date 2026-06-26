@@ -21,8 +21,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
- * Verifies the verbose gate on test-process stdout/stderr forwarding
- * and the Goal-framework wiring of the bridge listener.
+ * Verifies the verbose gate on test-process stdout/stderr forwarding and the Goal-framework wiring
+ * of the bridge listener.
  */
 class TestCommandUserOutputTest {
 

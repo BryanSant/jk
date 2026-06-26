@@ -8,15 +8,14 @@ import org.jline.utils.AttributedStringBuilder;
 import org.jline.utils.AttributedStyle;
 
 /**
- * The "Jk Dark" color scheme — a Material Indigo/Pink dark palette, and the
- * default {@link Theme} implementation. The palette constants map jk's semantic
- * roles (error, success, active accent, …) onto named colors; the instance
- * methods turn those roles into {@link AttributedStyle}s. jk emits foreground
- * colors only, so {@link #BACKGROUND}, {@link #CURSOR}, and the selection colors
- * are carried for completeness but not applied by current output.
+ * The "Jk Dark" color scheme — a Material Indigo/Pink dark palette, and the default {@link Theme}
+ * implementation. The palette constants map jk's semantic roles (error, success, active accent, …)
+ * onto named colors; the instance methods turn those roles into {@link AttributedStyle}s. jk emits
+ * foreground colors only, so {@link #BACKGROUND}, {@link #CURSOR}, and the selection colors are
+ * carried for completeness but not applied by current output.
  *
- * <p>Truecolor RGB everywhere; terminals without 24-bit color degrade to the
- * nearest indexed color via JLine's renderer.
+ * <p>Truecolor RGB everywhere; terminals without 24-bit color degrade to the nearest indexed color
+ * via JLine's renderer.
  */
 public final class JkDarkTheme implements Theme {
 
@@ -79,13 +78,16 @@ public final class JkDarkTheme implements Theme {
     // 50% darker → 50% brighter.
     /** Gradient for {@code jk init}/wizard titles — Jk Dark bright-blue → accent. */
     private static final Gradient TITLE_GRADIENT = new Gradient(BRIGHT_BLUE, ACCENT);
+
     /**
-     * Gradient for the progress-bar fill — indigo → bright-magenta, so the fill
-     * starts deep indigo and warms toward magenta; the empty track reads bright-magenta.
+     * Gradient for the progress-bar fill — indigo → bright-magenta, so the fill starts deep indigo
+     * and warms toward magenta; the empty track reads bright-magenta.
      */
     private static final Gradient PROGRESS_GRADIENT = new Gradient(PRIMARY, BRIGHT_MAGENTA);
+
     /** Gradient for the spinner frames — Jk Dark primary → accent. */
     private static final Gradient SPINNER_GRADIENT = new Gradient(PRIMARY, ACCENT);
+
     /** Gradient a failed progress bar repaints in: dark red #7f1d1d → bright red #ef4444. */
     private static final Gradient FAILURE_GRADIENT = new Gradient(Rgb.hex(0x7f1d1d), Rgb.hex(0xef4444));
 

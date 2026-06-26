@@ -18,14 +18,13 @@ import java.nio.file.Path;
 import java.util.List;
 
 /**
- * {@code jk compile} — lock, sync, then compile this project's sources to
- * {@code target/classes} (no resources, tests, or packaging). It runs the
- * shared {@link BuildPipeline} in compile-only mode, so it auto-locks and
- * syncs on first run, re-locks when {@code jk.toml} changed, and reuses the
- * same incremental compile cache as {@code jk build}/{@code jk test}.
+ * {@code jk compile} — lock, sync, then compile this project's sources to {@code target/classes}
+ * (no resources, tests, or packaging). It runs the shared {@link BuildPipeline} in compile-only
+ * mode, so it auto-locks and syncs on first run, re-locks when {@code jk.toml} changed, and reuses
+ * the same incremental compile cache as {@code jk build}/{@code jk test}.
  *
- * <p>Was {@code jk check} pre-v1.0; {@code check} remains a hidden alias
- * (see {@code docs/aliases.md}).
+ * <p>Was {@code jk check} pre-v1.0; {@code check} remains a hidden alias (see {@code
+ * docs/aliases.md}).
  */
 public final class CompileCommand implements CliCommand {
 

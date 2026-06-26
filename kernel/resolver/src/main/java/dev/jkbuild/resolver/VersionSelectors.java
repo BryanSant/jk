@@ -5,12 +5,12 @@ import dev.jkbuild.model.VersionSelector;
 import dev.jkbuild.resolver.pubgrub.VersionSet;
 
 /**
- * Converts jk's {@link VersionSelector} (caret-by-default semantics from
- * {@code jk.toml}) into the resolver's {@link VersionSet}.
+ * Converts jk's {@link VersionSelector} (caret-by-default semantics from {@code jk.toml}) into the
+ * resolver's {@link VersionSet}.
  *
- * <p>v0.1 coverage: Caret and Exact. Tilde and Range fall back to Exact
- * pending proper Maven-version parsing; Latest maps to {@link VersionSet#ALL}.
- * The resolver simply picks the highest matching available version.
+ * <p>v0.1 coverage: Caret and Exact. Tilde and Range fall back to Exact pending proper
+ * Maven-version parsing; Latest maps to {@link VersionSet#ALL}. The resolver simply picks the
+ * highest matching available version.
  */
 public final class VersionSelectors {
 
@@ -27,9 +27,8 @@ public final class VersionSelectors {
     }
 
     /**
-     * Parse a range expression. Accepts both Maven-bracket syntax
-     * ({@code [1.0,2.0)}, {@code [1.0]}, {@code (,2.0]}) and a
-     * comma-separated comparator list ({@code ">=1.0, <2.0"}).
+     * Parse a range expression. Accepts both Maven-bracket syntax ({@code [1.0,2.0)}, {@code [1.0]},
+     * {@code (,2.0]}) and a comma-separated comparator list ({@code ">=1.0, <2.0"}).
      */
     public static VersionSet parseRange(String spec) {
         String trimmed = spec.trim();
@@ -80,10 +79,9 @@ public final class VersionSelectors {
     }
 
     /**
-     * Cargo-style caret semantics: increment the leading non-zero segment,
-     * zero out everything after it, exclusive upper. {@code 1.2.3 → [1.2.3, 2.0.0)},
-     * {@code 0.2.3 → [0.2.3, 0.3.0)}, {@code 0.0.3 → [0.0.3, 0.0.4)}.
-     * Non-numeric versions fall back to an exact match.
+     * Cargo-style caret semantics: increment the leading non-zero segment, zero out everything after
+     * it, exclusive upper. {@code 1.2.3 → [1.2.3, 2.0.0)}, {@code 0.2.3 → [0.2.3, 0.3.0)}, {@code
+     * 0.0.3 → [0.0.3, 0.0.4)}. Non-numeric versions fall back to an exact match.
      */
     static VersionSet caretRange(String version) {
         String[] parts = version.split("\\.");
@@ -103,9 +101,8 @@ public final class VersionSelectors {
     }
 
     /**
-     * Cargo-style tilde semantics: lock the major (and minor, if present),
-     * allow patches. {@code ~1.2.3 → [1.2.3, 1.3.0)}, {@code ~1.2 → [1.2, 1.3.0)},
-     * {@code ~1 → [1, 2.0.0)}.
+     * Cargo-style tilde semantics: lock the major (and minor, if present), allow patches. {@code
+     * ~1.2.3 → [1.2.3, 1.3.0)}, {@code ~1.2 → [1.2, 1.3.0)}, {@code ~1 → [1, 2.0.0)}.
      */
     static VersionSet tildeRange(String version) {
         String[] parts = version.split("\\.");

@@ -18,23 +18,22 @@ import org.tomlj.TomlTable;
 /**
  * Parses {@code jk.lock} (TOML) into a {@link Lockfile}.
  *
- * <p>Strict: rejects unknown top-level keys, missing required keys, or a
- * lockfile-version we don't know how to read. Forward compatibility is
- * deliberately a non-feature (PRD §9.1 schema-versioning policy).
+ * <p>Strict: rejects unknown top-level keys, missing required keys, or a lockfile-version we don't
+ * know how to read. Forward compatibility is deliberately a non-feature (PRD §9.1 schema-versioning
+ * policy).
  */
 public final class LockfileReader {
 
     private LockfileReader() {}
 
     /**
-     * Memoises {@link #read(Path)} results for the life of the process, keyed by
-     * file identity (absolute path + size + mtime). jk is single-shot and the
-     * lockfile does not change during a build: the engine reads {@code jk.lock}
-     * from several places (parse-build scope, parse-build execute, sync-deps scope,
-     * predictSync in EffortWeights, sibling-lockfile loops) that all resolve to the
-     * same bytes on disk. Caching collapses those repeated TOML parses to a single
-     * read per distinct file per process. Keying on size + mtime means an
-     * auto-lock update (which rewrites the file) gets a fresh parse.
+     * Memoises {@link #read(Path)} results for the life of the process, keyed by file identity
+     * (absolute path + size + mtime). jk is single-shot and the lockfile does not change during a
+     * build: the engine reads {@code jk.lock} from several places (parse-build scope, parse-build
+     * execute, sync-deps scope, predictSync in EffortWeights, sibling-lockfile loops) that all
+     * resolve to the same bytes on disk. Caching collapses those repeated TOML parses to a single
+     * read per distinct file per process. Keying on size + mtime means an auto-lock update (which
+     * rewrites the file) gets a fresh parse.
      */
     private static final ConcurrentHashMap<CacheKey, Lockfile> READ_CACHE = new ConcurrentHashMap<>();
 
@@ -72,9 +71,13 @@ public final class LockfileReader {
         }
         int lockVersion = lockVersionLong.intValue();
         if (lockVersion < Lockfile.MIN_SUPPORTED_VERSION || lockVersion > Lockfile.CURRENT_VERSION) {
-            throw new IllegalArgumentException(
-                    "jk.lock schema version " + lockVersion + " is not supported (this jk reads v"
-                            + Lockfile.MIN_SUPPORTED_VERSION + "-v" + Lockfile.CURRENT_VERSION + ")");
+            throw new IllegalArgumentException("jk.lock schema version "
+                    + lockVersion
+                    + " is not supported (this jk reads v"
+                    + Lockfile.MIN_SUPPORTED_VERSION
+                    + "-v"
+                    + Lockfile.CURRENT_VERSION
+                    + ")");
         }
         String generatedBy = requireString(result, "generated-by");
         String resolutionAlgorithm = requireString(result, "resolution-algorithm");

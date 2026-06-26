@@ -14,14 +14,13 @@ import org.junit.platform.launcher.TestIdentifier;
 import org.junit.platform.launcher.TestPlan;
 
 /**
- * {@link TestExecutionListener} that translates JUnit Platform callbacks
- * into protocol events on a {@link EventWriter}. Stateful enough to track
- * per-test timing (JUnit's listener API gives us "started" / "finished"
- * but no built-in duration).
+ * {@link TestExecutionListener} that translates JUnit Platform callbacks into protocol events on a
+ * {@link EventWriter}. Stateful enough to track per-test timing (JUnit's listener API gives us
+ * "started" / "finished" but no built-in duration).
  *
- * <p>Throwables are flattened to {@code {class, message, stack[]}} maps —
- * a {@link Throwable} can't safely cross classpaths intact, and the parent
- * jk process doesn't need a live exception, just its rendered form.
+ * <p>Throwables are flattened to {@code {class, message, stack[]}} maps — a {@link Throwable} can't
+ * safely cross classpaths intact, and the parent jk process doesn't need a live exception, just its
+ * rendered form.
  */
 final class StreamingListener implements TestExecutionListener {
 
@@ -111,9 +110,8 @@ final class StreamingListener implements TestExecutionListener {
     }
 
     /**
-     * Render a throwable in a form the parent process can display without
-     * needing the failure's classes on its own classpath. Includes the
-     * type, message, and stack trace lines.
+     * Render a throwable in a form the parent process can display without needing the failure's
+     * classes on its own classpath. Includes the type, message, and stack trace lines.
      */
     private static Map<String, Object> flatten(Throwable t) {
         var sw = new StringWriter();
@@ -126,8 +124,8 @@ final class StreamingListener implements TestExecutionListener {
     }
 
     /**
-     * Pull the engine identifier out of a uniqueId like {@code [engine:junit-jupiter]}.
-     * Returns the raw string when the pattern doesn't match — safe fallback.
+     * Pull the engine identifier out of a uniqueId like {@code [engine:junit-jupiter]}. Returns the
+     * raw string when the pattern doesn't match — safe fallback.
      */
     private static String displayEngine(String uniqueId) {
         var prefix = "[engine:";
@@ -165,8 +163,8 @@ final class StreamingListener implements TestExecutionListener {
     }
 
     /**
-     * Discovery helper: emit the up-front totals so the parent can populate
-     * a {@code [n of N]} progress display before the first test runs.
+     * Discovery helper: emit the up-front totals so the parent can populate a {@code [n of N]}
+     * progress display before the first test runs.
      */
     void emitDiscoveryTotal(int classes, int tests) {
         var payload = new LinkedHashMap<String, Object>();

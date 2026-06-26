@@ -5,9 +5,9 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Immutable typed view over a wizard's accumulated answers. Strings come from
- * input/radio steps; lists come from multi-select steps. Construction copies
- * the map defensively so callers cannot mutate state after the wizard returns.
+ * Immutable typed view over a wizard's accumulated answers. Strings come from input/radio steps;
+ * lists come from multi-select steps. Construction copies the map defensively so callers cannot
+ * mutate state after the wizard returns.
  */
 public final class Answers {
 
@@ -36,9 +36,8 @@ public final class Answers {
     }
 
     /**
-     * True iff the key is present AND its value is meaningful: non-blank for
-     * strings, non-empty for lists. This is the predicate used by step
-     * {@code when()} conditions.
+     * True iff the key is present AND its value is meaningful: non-blank for strings, non-empty for
+     * lists. This is the predicate used by step {@code when()} conditions.
      */
     public boolean has(String key) {
         var v = values.get(key);

@@ -25,28 +25,23 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.LongAdder;
 
 /**
- * One {@code jk} invocation's orchestration: a named DAG of
- * {@link Phase}s with collected progress, warnings, errors, and a
- * terminal {@link GoalResult}.
+ * One {@code jk} invocation's orchestration: a named DAG of {@link Phase}s with collected progress,
+ * warnings, errors, and a terminal {@link GoalResult}.
  *
  * <p>Lifecycle:
+ *
  * <ol>
- *   <li><b>Initialize.</b> Topologically order phases, compute initial
- *       scope (sum of {@link Phase#estimateScope} across all phases,
- *       gathered in parallel on {@link JkThreads#io()}).</li>
- *   <li><b>Run.</b> Walk the DAG by readiness levels. Within each
- *       level, dispatch IO phases to {@link JkThreads#io()}, CPU
- *       phases to {@link JkThreads#cpu()}, and run SYNC phases on the
- *       caller's thread sequentially. Wait for the level to complete
- *       before opening the next.</li>
- *   <li><b>Report.</b> Build a {@link GoalResult} listing every
- *       phase's status + duration plus the accumulated diagnostics.
- *       Emit {@link GoalListener#goalFinish} and return.</li>
+ *   <li><b>Initialize.</b> Topologically order phases, compute initial scope (sum of {@link
+ *       Phase#estimateScope} across all phases, gathered in parallel on {@link JkThreads#io()}).
+ *   <li><b>Run.</b> Walk the DAG by readiness levels. Within each level, dispatch IO phases to
+ *       {@link JkThreads#io()}, CPU phases to {@link JkThreads#cpu()}, and run SYNC phases on the
+ *       caller's thread sequentially. Wait for the level to complete before opening the next.
+ *   <li><b>Report.</b> Build a {@link GoalResult} listing every phase's status + duration plus the
+ *       accumulated diagnostics. Emit {@link GoalListener#goalFinish} and return.
  * </ol>
  *
- * <p>Cancellation is cooperative — failures or external requests set
- * a flag the running phases poll. A 200ms grace period is enforced via
- * thread interrupt after the flag flips.
+ * <p>Cancellation is cooperative — failures or external requests set a flag the running phases
+ * poll. A 200ms grace period is enforced via thread interrupt after the flag flips.
  */
 public final class Goal {
 
@@ -55,11 +50,12 @@ public final class Goal {
 
     /** How often the interpolation ticker eases opaque phases forward. */
     private static final long INTERP_TICK_MS = 100;
+
     /**
-     * Expected wall-clock per unit of phase weight, the divisor for time-based
-     * interpolation. Weights are tuned as rough time shares, so treating a weight
-     * unit as a fixed slice of time gives each opaque phase a plausible duration;
-     * the {@code INTERP_CAP} ceiling absorbs the inevitable misestimate.
+     * Expected wall-clock per unit of phase weight, the divisor for time-based interpolation. Weights
+     * are tuned as rough time shares, so treating a weight unit as a fixed slice of time gives each
+     * opaque phase a plausible duration; the {@code INTERP_CAP} ceiling absorbs the inevitable
+     * misestimate.
      */
     private static final long INTERP_NANOS_PER_WEIGHT = 150_000_000L; // ~150ms
 
@@ -77,12 +73,10 @@ public final class Goal {
     private final AtomicBoolean cancelled = new AtomicBoolean(false);
 
     /**
-     * True only when {@link #requestCancel} was invoked by the host
-     * (typically the SIGINT bridge). The {@link #cancelled} flag is
-     * also flipped internally when a phase fails so still-pending
-     * phases get torn down — so {@code cancelled} alone can't tell us
-     * "the user asked to abort" vs "a phase failed and we're winding
-     * the others down." Listeners need that distinction to pick the
+     * True only when {@link #requestCancel} was invoked by the host (typically the SIGINT bridge).
+     * The {@link #cancelled} flag is also flipped internally when a phase fails so still-pending
+     * phases get torn down — so {@code cancelled} alone can't tell us "the user asked to abort" vs "a
+     * phase failed and we're winding the others down." Listeners need that distinction to pick the
      * right end-of-goal rendering.
      */
     private final AtomicBoolean userRequestedCancel = new AtomicBoolean(false);
@@ -91,6 +85,7 @@ public final class Goal {
     private final List<GoalResult.Diagnostic> warnings = Collections.synchronizedList(new ArrayList<>());
     private final List<GoalResult.Diagnostic> errors = Collections.synchronizedList(new ArrayList<>());
     private final List<GoalResult.PhaseReport> reports = Collections.synchronizedList(new ArrayList<>());
+
     /** Cross-phase shared state — typed via {@link GoalKey}. Reads happen via PhaseContext. */
     private final ConcurrentHashMap<String, Object> state = new ConcurrentHashMap<>();
 
@@ -131,11 +126,10 @@ public final class Goal {
     }
 
     /**
-     * Sum of every phase's {@link Phase#estimateWeight} <em>without running the
-     * goal</em> — the same total {@link #run()} sets as the denominator at start.
-     * Used to pre-calibrate a workspace's cumulative progress bar to the aggregate
-     * tick total before any module builds, and as each module's slice of it. A
-     * phase whose estimate throws contributes 0, mirroring {@code run()}.
+     * Sum of every phase's {@link Phase#estimateWeight} <em>without running the goal</em> — the same
+     * total {@link #run()} sets as the denominator at start. Used to pre-calibrate a workspace's
+     * cumulative progress bar to the aggregate tick total before any module builds, and as each
+     * module's slice of it. A phase whose estimate throws contributes 0, mirroring {@code run()}.
      */
     public int estimatedTotalWeight() {
         List<CompletableFuture<Integer>> futures = new ArrayList<>(phases.size());
@@ -154,9 +148,8 @@ public final class Goal {
     }
 
     /**
-     * Run the goal. Blocks until every phase reaches a terminal state.
-     * Throws no checked exceptions — phase failures are folded into
-     * {@link GoalResult#success()}.
+     * Run the goal. Blocks until every phase reaches a terminal state. Throws no checked exceptions —
+     * phase failures are folded into {@link GoalResult#success()}.
      */
     public GoalResult run() {
         Instant goalStart = Instant.now();
@@ -259,9 +252,9 @@ public final class Goal {
     // --- Scheduling ----------------------------------------------------
 
     /**
-     * Start the daemon ticker that eases interpolated phases forward over time,
-     * or return {@code null} when no phase opts into interpolation (so the common
-     * case spins up no thread). The caller shuts it down when the run finishes.
+     * Start the daemon ticker that eases interpolated phases forward over time, or return {@code
+     * null} when no phase opts into interpolation (so the common case spins up no thread). The caller
+     * shuts it down when the run finishes.
      */
     private ScheduledExecutorService startInterpolationTicker() {
         if (phases.stream().noneMatch(Phase::interpolated)) return null;
@@ -288,10 +281,9 @@ public final class Goal {
     }
 
     /**
-     * Dispatch one readiness level. SYNC phases run inline (sequentially);
-     * IO/CPU phases run in parallel on their respective pools. Returns
-     * true when every phase in the level succeeded; false on the first
-     * fail (triggers cooperative cancellation).
+     * Dispatch one readiness level. SYNC phases run inline (sequentially); IO/CPU phases run in
+     * parallel on their respective pools. Returns true when every phase in the level succeeded; false
+     * on the first fail (triggers cooperative cancellation).
      */
     private boolean runLevel(List<Phase> ready, Map<String, Integer> initialScope, Map<String, Integer> weights) {
         List<CompletableFuture<PhaseStatus>> futures = new ArrayList<>();
@@ -439,17 +431,20 @@ public final class Goal {
     }
 
     /**
-     * Read a phase-stashed value after {@link #run} has returned.
-     * Command bodies use this to surface state phases produced —
-     * resolved lockfile, JDK outcome, etc. — into their summary
-     * output without needing a separate holder object.
+     * Read a phase-stashed value after {@link #run} has returned. Command bodies use this to surface
+     * state phases produced — resolved lockfile, JDK outcome, etc. — into their summary output
+     * without needing a separate holder object.
      */
     public <T> java.util.Optional<T> get(GoalKey<T> key) {
         Object raw = state.get(key.name());
         if (raw == null) return java.util.Optional.empty();
         if (!key.type().isInstance(raw)) {
-            throw new ClassCastException("goal state '" + key.name() + "' is "
-                    + raw.getClass().getName() + " not " + key.type().getName());
+            throw new ClassCastException("goal state '"
+                    + key.name()
+                    + "' is "
+                    + raw.getClass().getName()
+                    + " not "
+                    + key.type().getName());
         }
         return java.util.Optional.of(key.type().cast(raw));
     }
@@ -524,9 +519,8 @@ public final class Goal {
         }
 
         /**
-         * Interactive goals (wizards, prompts) suppress automatic
-         * progress visualization — the foreground UI owns the terminal.
-         * Listeners still get every event; only the default
+         * Interactive goals (wizards, prompts) suppress automatic progress visualization — the
+         * foreground UI owns the terminal. Listeners still get every event; only the default
          * progress-bar consumer respects this flag.
          */
         public Builder interactive(boolean v) {
@@ -540,9 +534,8 @@ public final class Goal {
         }
 
         /**
-         * Append every phase from {@code more} whose name is not already
-         * present — ordered-set semantics. Use this to compose a goal from
-         * multiple phase sequences without duplicate phases.
+         * Append every phase from {@code more} whose name is not already present — ordered-set
+         * semantics. Use this to compose a goal from multiple phase sequences without duplicate phases.
          */
         public Builder addAllPhases(java.util.Collection<Phase> more) {
             java.util.Set<String> existing = new java.util.HashSet<>();

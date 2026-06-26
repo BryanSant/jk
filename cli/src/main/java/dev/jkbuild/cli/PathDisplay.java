@@ -8,16 +8,14 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 /**
- * Renders filesystem paths for human-facing output. Virtually every path jk
- * prints should be relative to a familiar anchor — the directory the command
- * was run from, the enclosing workspace root (root {@code jk.toml}), or the
- * git repo root — so output stays short and recognizable.
+ * Renders filesystem paths for human-facing output. Virtually every path jk prints should be
+ * relative to a familiar anchor — the directory the command was run from, the enclosing workspace
+ * root (root {@code jk.toml}), or the git repo root — so output stays short and recognizable.
  *
- * <p>{@link #of} relativizes against whichever of those three anchors sits
- * <em>closest above</em> the target (the deepest ancestor), which keeps paths
- * short and guarantees no {@code ../} escapes. A path is shown absolute only
- * when it falls outside all three scopes, where a relative form would be
- * meaningless.
+ * <p>{@link #of} relativizes against whichever of those three anchors sits <em>closest above</em>
+ * the target (the deepest ancestor), which keeps paths short and guarantees no {@code ../} escapes.
+ * A path is shown absolute only when it falls outside all three scopes, where a relative form would
+ * be meaningless.
  */
 public final class PathDisplay {
 
@@ -34,27 +32,26 @@ public final class PathDisplay {
     }
 
     /**
-     * Paint an already-rendered path string in the theme's {@code path} color,
-     * <em>without</em> relativizing — for error/context messages whose path is
-     * the working directory itself (relativizing it to "." would be useless).
+     * Paint an already-rendered path string in the theme's {@code path} color, <em>without</em>
+     * relativizing — for error/context messages whose path is the working directory itself
+     * (relativizing it to "." would be useless).
      */
     public static String styledRaw(Object pathLike) {
         return Theme.colorize(String.valueOf(pathLike), Theme.active().path());
     }
 
     /**
-     * Display {@code target} relative to the closest of {the working dir,
-     * workspace root, git repo root} that contains it, else absolute.
+     * Display {@code target} relative to the closest of {the working dir, workspace root, git repo
+     * root} that contains it, else absolute.
      *
-     * @param target     the path to render (relative paths resolve against the JVM cwd)
-     * @param workingDir the command's working directory (see {@link GlobalOptions#workingDir()});
-     *                   may be {@code null} to use the JVM cwd
+     * @param target the path to render (relative paths resolve against the JVM cwd)
+     * @param workingDir the command's working directory (see {@link GlobalOptions#workingDir()}); may
+     *     be {@code null} to use the JVM cwd
      */
     /**
-     * Display {@code target} relative to the closest anchor, using the JVM
-     * working directory as the "working dir" anchor. Convenient for static
-     * helpers with no {@link GlobalOptions} in scope — the workspace-root and
-     * git-root anchors don't depend on the working dir, so a path inside the
+     * Display {@code target} relative to the closest anchor, using the JVM working directory as the
+     * "working dir" anchor. Convenient for static helpers with no {@link GlobalOptions} in scope —
+     * the workspace-root and git-root anchors don't depend on the working dir, so a path inside the
      * project still renders relative regardless.
      */
     public static String of(Path target) {

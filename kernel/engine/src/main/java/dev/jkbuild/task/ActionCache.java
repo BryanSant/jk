@@ -19,22 +19,21 @@ import java.util.TreeMap;
 import java.util.stream.Stream;
 
 /**
- * Persistent action cache (PRD §17.1). Maps an {@link ActionKey}-style
- * hash to the file outputs the action produced. Outputs themselves live
- * in the {@link Cas}; this class stores the {@code action_key → outputs}
- * mapping alongside a {@code task → action_key} pointer so a future
- * {@code jk why-rebuilt} can diff a task's current inputs against its
- * most recent recorded run.
+ * Persistent action cache (PRD §17.1). Maps an {@link ActionKey}-style hash to the file outputs the
+ * action produced. Outputs themselves live in the {@link Cas}; this class stores the {@code
+ * action_key → outputs} mapping alongside a {@code task → action_key} pointer so a future {@code jk
+ * why-rebuilt} can diff a task's current inputs against its most recent recorded run.
  *
  * <p>On-disk layout:
+ *
  * <pre>{@code
- *   <root>/keys/<actionKey>     one ActionRecord per cached action
- *   <root>/tasks/<taskId>       plain text — the most recent actionKey
+ * <root>/keys/<actionKey>     one ActionRecord per cached action
+ * <root>/tasks/<taskId>       plain text — the most recent actionKey
  * }</pre>
  *
- * <p>{@code taskId} is expected to be project-qualified by the caller (see
- * {@link ActionKey#qualifiedTaskId}) so the {@code tasks/} pointer for, say,
- * {@code compile-main} doesn't collide across projects / workspace modules.
+ * <p>{@code taskId} is expected to be project-qualified by the caller (see {@link
+ * ActionKey#qualifiedTaskId}) so the {@code tasks/} pointer for, say, {@code compile-main} doesn't
+ * collide across projects / workspace modules.
  */
 public final class ActionCache {
 
@@ -60,9 +59,9 @@ public final class ActionCache {
     }
 
     /**
-     * Compute output hashes from {@code outputDir}, deposit each file in
-     * the CAS, and write the {@link ActionRecord}. After this, callers
-     * can later restore the same outputs via {@link #restore}.
+     * Compute output hashes from {@code outputDir}, deposit each file in the CAS, and write the
+     * {@link ActionRecord}. After this, callers can later restore the same outputs via {@link
+     * #restore}.
      */
     public ActionRecord store(String taskId, String actionKey, Map<String, String> inputs, Path outputDir)
             throws IOException {
@@ -93,11 +92,9 @@ public final class ActionCache {
     }
 
     /**
-     * Write an action record using a pre-computed {@code outputs} map —
-     * used by callers that already CAS'd the files via {@link CasPrewriter}
-     * (or anything else that hashed + hard-linked while the action was
-     * still running). Skips the output-dir walk; just writes the manifest
-     * and pointer.
+     * Write an action record using a pre-computed {@code outputs} map — used by callers that already
+     * CAS'd the files via {@link CasPrewriter} (or anything else that hashed + hard-linked while the
+     * action was still running). Skips the output-dir walk; just writes the manifest and pointer.
      */
     public ActionRecord storeWithOutputs(
             String taskId, String actionKey, Map<String, String> inputs, Map<String, String> outputs)
@@ -122,9 +119,8 @@ public final class ActionCache {
     }
 
     /**
-     * Clear the contents of {@code outputDir} and copy each cached output
-     * back from the CAS. Stale files from a prior compile are removed
-     * before restoring.
+     * Clear the contents of {@code outputDir} and copy each cached output back from the CAS. Stale
+     * files from a prior compile are removed before restoring.
      */
     public void restore(ActionRecord record, Path outputDir) throws IOException {
         // Build-host compile freshness stamps (.jstamp/.kstamp) live inside the
@@ -159,11 +155,10 @@ public final class ActionCache {
     }
 
     /**
-     * Restore recorded outputs by hard-linking them into {@code baseDir} WITHOUT
-     * clearing it first — for single/few-file artifact tasks (jars, fat-jars,
-     * native binaries) whose output dir ({@code target/}) holds unrelated files.
-     * Overwrites a stale artifact already at the path. Returns {@code false}
-     * (restoring nothing) if any cached blob is missing, so the caller rebuilds.
+     * Restore recorded outputs by hard-linking them into {@code baseDir} WITHOUT clearing it first —
+     * for single/few-file artifact tasks (jars, fat-jars, native binaries) whose output dir ({@code
+     * target/}) holds unrelated files. Overwrites a stale artifact already at the path. Returns
+     * {@code false} (restoring nothing) if any cached blob is missing, so the caller rebuilds.
      */
     public boolean restoreArtifacts(ActionRecord record, Path baseDir) throws IOException {
         if (record.outputs().isEmpty()) return false;
@@ -182,10 +177,10 @@ public final class ActionCache {
     }
 
     /**
-     * CAS-store already-produced {@code artifacts} (hard-linking each into the
-     * CAS) and write an {@link ActionRecord} keyed by {@code actionKey}, with
-     * each artifact's {@code baseDir}-relative path as its output key. The
-     * companion of {@link #restoreArtifacts} for single/few-file packaging.
+     * CAS-store already-produced {@code artifacts} (hard-linking each into the CAS) and write an
+     * {@link ActionRecord} keyed by {@code actionKey}, with each artifact's {@code baseDir}-relative
+     * path as its output key. The companion of {@link #restoreArtifacts} for single/few-file
+     * packaging.
      */
     public ActionRecord storeArtifacts(
             String taskId, String actionKey, Map<String, String> inputs, Path baseDir, List<Path> artifacts)

@@ -10,8 +10,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
- * {@link PathDisplay} renders paths relative to the closest of {working dir,
- * workspace root, git root}, and absolute only when outside all three.
+ * {@link PathDisplay} renders paths relative to the closest of {working dir, workspace root, git
+ * root}, and absolute only when outside all three.
  */
 class PathDisplayTest {
 

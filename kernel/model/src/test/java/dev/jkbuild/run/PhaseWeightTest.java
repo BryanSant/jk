@@ -8,11 +8,10 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 /**
- * A phase's {@code weight} is its share of the progress bar — time-proportional,
- * decoupled from its {@code scope} (internal unit count). The goal denominator
- * sums weights, and a phase's own 0→scope progress is scaled into its weight, so
- * a file-count-scoped compile can't dominate the bar. Phases without an explicit
- * weight keep the legacy 1:1 (weight tracks scope) behaviour.
+ * A phase's {@code weight} is its share of the progress bar — time-proportional, decoupled from its
+ * {@code scope} (internal unit count). The goal denominator sums weights, and a phase's own 0→scope
+ * progress is scaled into its weight, so a file-count-scoped compile can't dominate the bar. Phases
+ * without an explicit weight keep the legacy 1:1 (weight tracks scope) behaviour.
  */
 class PhaseWeightTest {
 

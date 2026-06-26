@@ -7,29 +7,27 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Bridge record consumed by {@link NewScaffolder}. Both the picocli flag path
- * and the {@code tui.Wizard} interactive path converge on this type so the
- * scaffolder doesn't care how the user supplied the answers.
+ * Bridge record consumed by {@link NewScaffolder}. Both the picocli flag path and the {@code
+ * tui.Wizard} interactive path converge on this type so the scaffolder doesn't care how the user
+ * supplied the answers.
  *
  * <p>Field reminder:
+ *
  * <ul>
- *   <li>{@code name} — project name; the target directory's leaf and the
- *       value written as {@code [project].name} in {@code jk.toml}.</li>
- *   <li>{@code jdk} — the exact string written as {@code [project].jdk}: a bare
- *       major ({@code "25"}) in almost every case, or a vendor-hinted pin
- *       ({@code "corretto-25"}) only when the user passed an explicit
- *       {@code --jdk <vendor>-<major>}. The wizard never emits a vendor.</li>
- *   <li>{@code jdkMajor} — the JDK toolchain feature-release (which JDK runs
- *       the build), parsed from {@code jdk}. Defaults to the parent's for a
- *       module; user-pickable.</li>
- *   <li>{@code javaRelease} — the {@code java = N} compile target. Usually
- *       equal to {@code jdkMajor}, but a workspace module inherits the parent's
- *       release even when it diverges (e.g. {@code jdk = 25}, {@code java = 17}).
- *       Drives the instance-{@code main} syntax decision.</li>
+ *   <li>{@code name} — project name; the target directory's leaf and the value written as {@code
+ *       [project].name} in {@code jk.toml}.
+ *   <li>{@code jdk} — the exact string written as {@code [project].jdk}: a bare major ({@code
+ *       "25"}) in almost every case, or a vendor-hinted pin ({@code "corretto-25"}) only when the
+ *       user passed an explicit {@code --jdk <vendor>-<major>}. The wizard never emits a vendor.
+ *   <li>{@code jdkMajor} — the JDK toolchain feature-release (which JDK runs the build), parsed
+ *       from {@code jdk}. Defaults to the parent's for a module; user-pickable.
+ *   <li>{@code javaRelease} — the {@code java = N} compile target. Usually equal to {@code
+ *       jdkMajor}, but a workspace module inherits the parent's release even when it diverges (e.g.
+ *       {@code jdk = 25}, {@code java = 17}). Drives the instance-{@code main} syntax decision.
  *   <li>{@code layout} — "simple" for flat ./src + ./test layout, "traditional" for Maven layout,
- *       or null/"auto" for auto-detection. Emitted as project.layout in jk.toml.</li>
- *   <li>{@code kotlinModuleName} — when present, written as
- *       {@code module = "..."} under {@code [project]}.</li>
+ *       or null/"auto" for auto-detection. Emitted as project.layout in jk.toml.
+ *   <li>{@code kotlinModuleName} — when present, written as {@code module = "..."} under {@code
+ *       [project]}.
  * </ul>
  */
 public record NewInputs(
@@ -61,9 +59,7 @@ public record NewInputs(
         deps = List.copyOf(deps);
     }
 
-    /**
-     * Back-compat constructor: {@code javaRelease} defaults to {@code jdkMajor}.
-     */
+    /** Back-compat constructor: {@code javaRelease} defaults to {@code jdkMajor}. */
     public NewInputs(
             String group,
             String name,

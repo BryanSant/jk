@@ -7,10 +7,9 @@ import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 
 /**
- * Exercise the source → command-line mapping. We can't safely run the real
- * subprocesses in a unit test (they'd mutate the host's actual SDKMAN /
- * mise / etc. state), so this test pokes at the static command shapes the
- * helper builds — enough to lock the contract for each tool and catch
+ * Exercise the source → command-line mapping. We can't safely run the real subprocesses in a unit
+ * test (they'd mutate the host's actual SDKMAN / mise / etc. state), so this test pokes at the
+ * static command shapes the helper builds — enough to lock the contract for each tool and catch
  * accidental flag drift.
  */
 class JdkToolUninstallerTest {

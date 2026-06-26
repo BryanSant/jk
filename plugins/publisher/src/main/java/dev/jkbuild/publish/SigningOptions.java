@@ -2,9 +2,9 @@
 package dev.jkbuild.publish;
 
 /**
- * Bundle of optional signing strategies applied per artifact during a
- * {@link MavenPublisher#publish} call. Either field can be {@code null};
- * if both are, no signatures are produced (the {@link #none()} factory).
+ * Bundle of optional signing strategies applied per artifact during a {@link
+ * MavenPublisher#publish} call. Either field can be {@code null}; if both are, no signatures are
+ * produced (the {@link #none()} factory).
  */
 public record SigningOptions(GpgSigner gpg, SigstoreSigner sigstore) {
 

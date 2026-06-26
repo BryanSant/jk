@@ -2,14 +2,13 @@
 package dev.jkbuild.credential;
 
 /**
- * A credential for an artifact repository, resolved by the credential chain
- * (see docs/artifact-repos.md). A pure data type — rendering to an HTTP
- * {@code Authorization} header or to a cloud signing key lives with the
- * transport in {@code :io}, so {@code :core} stays free of HTTP/signing deps.
+ * A credential for an artifact repository, resolved by the credential chain (see
+ * docs/artifact-repos.md). A pure data type — rendering to an HTTP {@code Authorization} header or
+ * to a cloud signing key lives with the transport in {@code :io}, so {@code :core} stays free of
+ * HTTP/signing deps.
  *
- * <p>Phase 1 covers the HTTP cases ({@link Anonymous}, {@link Basic},
- * {@link Bearer}); object-store credential shapes (AWS SigV4 keys, Azure
- * SharedKey) are added with their transports.
+ * <p>Phase 1 covers the HTTP cases ({@link Anonymous}, {@link Basic}, {@link Bearer}); object-store
+ * credential shapes (AWS SigV4 keys, Azure SharedKey) are added with their transports.
  */
 public sealed interface RepoCredential permits RepoCredential.Anonymous, RepoCredential.Basic, RepoCredential.Bearer {
 

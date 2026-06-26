@@ -77,8 +77,11 @@ public final class JdkDefaultCommand implements CliCommand {
                 ? dev.jkbuild.jdk.JdkKeywords.bestInstalledMatch(spec, registry.listHits())
                 : registry.findHitBySpec(spec);
         if (match.isEmpty()) {
-            System.err.println("jk jdk default: no installed JDK matches `" + spec
-                    + "` (try `jk jdk list` or `jk jdk install " + spec + "`)");
+            System.err.println("jk jdk default: no installed JDK matches `"
+                    + spec
+                    + "` (try `jk jdk list` or `jk jdk install "
+                    + spec
+                    + "`)");
             return 1;
         }
         applyDefault(match.get(), defaults, System.out);

@@ -12,18 +12,16 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Best-effort detection of which forge a project lives on, by reading its git
- * {@code origin} remote and mapping the host to a {@link ForgeKind}. Mirrors
- * the file-walking approach of {@code NewGroupGuess} (which reads
- * {@code .gitconfig} for {@code jk new}) — no shell-out, no live git needed,
- * so it stays unit-testable.
+ * Best-effort detection of which forge a project lives on, by reading its git {@code origin} remote
+ * and mapping the host to a {@link ForgeKind}. Mirrors the file-walking approach of {@code
+ * NewGroupGuess} (which reads {@code .gitconfig} for {@code jk new}) — no shell-out, no live git
+ * needed, so it stays unit-testable.
  *
- * <p>SSH host aliases are resolved through {@code ~/.ssh/config}: a remote
- * like {@code git@work-gh:org/repo} whose {@code Host work-gh} block sets
- * {@code HostName github.com} is detected as GitHub. Only well-known public
- * hosts map to a provider (see {@link ForgeKind#inferFromHost}); a self-hosted
- * instance on an unrecognised domain yields empty, and the caller asks the
- * user to name the provider explicitly.
+ * <p>SSH host aliases are resolved through {@code ~/.ssh/config}: a remote like {@code
+ * git@work-gh:org/repo} whose {@code Host work-gh} block sets {@code HostName github.com} is
+ * detected as GitHub. Only well-known public hosts map to a provider (see {@link
+ * ForgeKind#inferFromHost}); a self-hosted instance on an unrecognised domain yields empty, and the
+ * caller asks the user to name the provider explicitly.
  */
 public final class GitForgeDetector {
 
@@ -89,9 +87,9 @@ public final class GitForgeDetector {
     }
 
     /**
-     * Locate the git config file by walking up from {@code startDir}. Handles
-     * the normal {@code .git/} directory and the {@code .git} file form
-     * (worktrees / submodules) that points at the real git dir.
+     * Locate the git config file by walking up from {@code startDir}. Handles the normal {@code
+     * .git/} directory and the {@code .git} file form (worktrees / submodules) that points at the
+     * real git dir.
      */
     private static Path findGitConfig(Path startDir) {
         if (startDir == null) return null;
@@ -145,10 +143,9 @@ public final class GitForgeDetector {
     // -- ~/.ssh/config alias resolution ----------------------------------
 
     /**
-     * If {@code host} is an alias defined by a {@code Host} block in
-     * {@code sshConfig}, return its {@code HostName}. Exact (case-insensitive)
-     * pattern match only — wildcard patterns are ignored, so detection stays
-     * predictable. Empty when the file is missing or has no matching alias.
+     * If {@code host} is an alias defined by a {@code Host} block in {@code sshConfig}, return its
+     * {@code HostName}. Exact (case-insensitive) pattern match only — wildcard patterns are ignored,
+     * so detection stays predictable. Empty when the file is missing or has no matching alias.
      */
     static Optional<String> resolveSshAlias(String host, Path sshConfig) {
         if (sshConfig == null || !Files.isRegularFile(sshConfig)) return Optional.empty();

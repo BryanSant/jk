@@ -29,11 +29,11 @@ import java.util.Map;
 /**
  * Entry point for the {@code jk-compat-runner} worker subprocess.
  *
- * <p>Handles four commands — {@code import}, {@code export},
- * {@code provision_mvn}, {@code provision_gradle} — selected by the
- * {@code COMMAND} line in the spec file.
+ * <p>Handles four commands — {@code import}, {@code export}, {@code provision_mvn}, {@code
+ * provision_gradle} — selected by the {@code COMMAND} line in the spec file.
  *
  * <p>Streams {@value #PREFIX}-prefixed NDJSON to stdout:
+ *
  * <pre>
  * ##JKCMP:{"t":"wrote","path":"/path/jk.toml"}
  * ##JKCMP:{"t":"note","msg":"3 import notes"}
@@ -145,7 +145,8 @@ public final class CompatRunner implements Plugin {
             for (Map.Entry<String, JkBuild> e : modules.entrySet()) {
                 Path moduleJkBuild = effectiveBaseDir.resolve(e.getKey()).resolve("jk.toml");
                 if (Files.exists(moduleJkBuild) && !force) {
-                    out.emit("{\"t\":\"result\",\"ok\":false,\"error\":\"would overwrite " + moduleJkBuild
+                    out.emit("{\"t\":\"result\",\"ok\":false,\"error\":\"would overwrite "
+                            + moduleJkBuild
                             + " — pass --force\"}");
                     return 73;
                 }
@@ -196,10 +197,14 @@ public final class CompatRunner implements Plugin {
             ToolProvisioning.Result result = ToolProvisioning.provision(dist, registry, new Http(), noDiscover);
             InstalledTool tool = result.tool();
             out.emit("{\"t\":\"result\",\"ok\":true"
-                    + ",\"bin\":" + Ndjson.quote(tool.binary().toString())
-                    + ",\"home\":" + Ndjson.quote(tool.home().toString())
-                    + ",\"version\":" + Ndjson.quote(dist.version())
-                    + ",\"source\":" + Ndjson.quote(result.source().name())
+                    + ",\"bin\":"
+                    + Ndjson.quote(tool.binary().toString())
+                    + ",\"home\":"
+                    + Ndjson.quote(tool.home().toString())
+                    + ",\"version\":"
+                    + Ndjson.quote(dist.version())
+                    + ",\"source\":"
+                    + Ndjson.quote(result.source().name())
                     + "}");
             return 0;
         } catch (IOException | InterruptedException e) {

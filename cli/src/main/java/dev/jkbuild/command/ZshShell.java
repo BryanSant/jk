@@ -4,9 +4,8 @@ package dev.jkbuild.command;
 import java.nio.file.Path;
 
 /**
- * Zsh flavour. Uses {@code precmd} + {@code chpwd} hooks via
- * {@code add-zsh-hook} so directory changes update env immediately and a
- * background-spawned tool can refresh on the next prompt.
+ * Zsh flavour. Uses {@code precmd} + {@code chpwd} hooks via {@code add-zsh-hook} so directory
+ * changes update env immediately and a background-spawned tool can refresh on the next prompt.
  */
 public final class ZshShell implements Shell {
 

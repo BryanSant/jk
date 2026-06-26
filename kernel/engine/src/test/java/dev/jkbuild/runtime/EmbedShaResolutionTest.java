@@ -13,9 +13,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
- * {@link BuildPipeline#siblingMainJars} — the lookup the {@code embed-sha} phase
- * uses to find a {@code [build.embed-sha]} module's output jar. Keyed by both
- * project name and {@code group:artifact} coord.
+ * {@link BuildPipeline#siblingMainJars} — the lookup the {@code embed-sha} phase uses to find a
+ * {@code [build.embed-sha]} module's output jar. Keyed by both project name and {@code
+ * group:artifact} coord.
  */
 class EmbedShaResolutionTest {
 

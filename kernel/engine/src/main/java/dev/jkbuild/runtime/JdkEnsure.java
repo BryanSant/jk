@@ -20,30 +20,26 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * "Make a JDK available for this project" — the resolve-or-install step that
- * {@code jk sync} runs before (or in parallel with) dependency fetching.
+ * "Make a JDK available for this project" — the resolve-or-install step that {@code jk sync} runs
+ * before (or in parallel with) dependency fetching.
  *
- * <p>Resolution is delegated to {@link dev.jkbuild.jdk.JdkResolution}, the one
- * canonical order shared with the compile toolchain and the {@code jk activate}
- * shell hook ({@code --jdk} / {@code JK_JDK} / {@code .jdk-version} / {@code jk.lock}
- * / {@code [project].jdk} / {@code project.java} floor / current / default /
- * {@code JAVA_HOME} / {@code GRAALVM_HOME} / {@code PATH}). When a named pin isn't
- * installed — or no JDK exists at all — this step installs from the JetBrains
- * feed; a bootstrap install (nothing was configured) becomes the persisted
- * default. See {@code docs/jdk-resolution.md}.
+ * <p>Resolution is delegated to {@link dev.jkbuild.jdk.JdkResolution}, the one canonical order
+ * shared with the compile toolchain and the {@code jk activate} shell hook ({@code --jdk} / {@code
+ * JK_JDK} / {@code .jdk-version} / {@code jk.lock} / {@code [project].jdk} / {@code project.java}
+ * floor / current / default / {@code JAVA_HOME} / {@code GRAALVM_HOME} / {@code PATH}). When a
+ * named pin isn't installed — or no JDK exists at all — this step installs from the JetBrains feed;
+ * a bootstrap install (nothing was configured) becomes the persisted default. See {@code
+ * docs/jdk-resolution.md}.
  *
- * <p>Returns {@link Outcome} describing what happened — the resolved JDK plus
- * a flag for whether an install actually ran — so callers can word their
- * status output accordingly.
+ * <p>Returns {@link Outcome} describing what happened — the resolved JDK plus a flag for whether an
+ * install actually ran — so callers can word their status output accordingly.
  *
- * <p><b>Note:</b> JDK lifecycle is deliberately decoupled from
- * {@code --refresh}. Build caches (deps, action cache, git checkouts, tool
- * downloads) get cleared when the user passes the flag; JDK installs do
- * not. JDKs are large (~200 MB), discovered by probes that often share
- * with IntelliJ, and have a dedicated lifecycle under {@code jk jdk
- * install/uninstall}. This file must not accept a {@code refresh}
- * parameter — anything that wants to re-resolve a JDK should remove the
- * install explicitly (e.g. {@code jk jdk uninstall}).
+ * <p><b>Note:</b> JDK lifecycle is deliberately decoupled from {@code --refresh}. Build caches
+ * (deps, action cache, git checkouts, tool downloads) get cleared when the user passes the flag;
+ * JDK installs do not. JDKs are large (~200 MB), discovered by probes that often share with
+ * IntelliJ, and have a dedicated lifecycle under {@code jk jdk install/uninstall}. This file must
+ * not accept a {@code refresh} parameter — anything that wants to re-resolve a JDK should remove
+ * the install explicitly (e.g. {@code jk jdk uninstall}).
  */
 public final class JdkEnsure {
 
@@ -95,7 +91,9 @@ public final class JdkEnsure {
 
         // A named pin (or the bootstrap latest-LTS) isn't on disk — install it.
         if (!HostPlatform.supported()) {
-            throw new IOException("host " + System.getProperty("os.name") + "/"
+            throw new IOException("host "
+                    + System.getProperty("os.name")
+                    + "/"
                     + System.getProperty("os.arch")
                     + " is not covered by the JetBrains JDK feed (set JAVA_HOME explicitly)");
         }

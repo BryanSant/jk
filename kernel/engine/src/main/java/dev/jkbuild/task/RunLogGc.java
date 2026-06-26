@@ -10,13 +10,11 @@ import java.util.List;
 import java.util.stream.Stream;
 
 /**
- * Delete {@code <cacheRoot>/runs/*.ndjson} entries older than
- * {@link #DEFAULT_TTL} (7 days). Invoked by {@code jk cache prune}
- * alongside the other phases.
+ * Delete {@code <cacheRoot>/runs/*.ndjson} entries older than {@link #DEFAULT_TTL} (7 days).
+ * Invoked by {@code jk cache prune} alongside the other phases.
  *
- * <p>Run logs are best-effort diagnostic artefacts — the data is
- * useful for "what happened in last week's build?" but doesn't need
- * to persist forever. A weekly cadence keeps the directory bounded
+ * <p>Run logs are best-effort diagnostic artefacts — the data is useful for "what happened in last
+ * week's build?" but doesn't need to persist forever. A weekly cadence keeps the directory bounded
  * without requiring user attention.
  */
 public final class RunLogGc {
@@ -29,8 +27,8 @@ public final class RunLogGc {
     public record Report(int deleted, long freedBytes) {}
 
     /**
-     * Walk {@code <cacheRoot>/runs/} and delete files older than
-     * {@code ttl}. Returns counts for the prune summary line.
+     * Walk {@code <cacheRoot>/runs/} and delete files older than {@code ttl}. Returns counts for the
+     * prune summary line.
      */
     public static Report sweep(Path cacheRoot, Duration ttl, boolean dryRun) throws IOException {
         Path runsDir = cacheRoot.resolve("runs");

@@ -348,8 +348,12 @@ class JdkEnsureCommandTest {
         Files.writeString(home.resolve("bin").resolve("java"), "#!/fake");
         Files.writeString(
                 home.resolve("release"),
-                "JAVA_VERSION=\"" + version + "\"\nIMPLEMENTOR=\"Oracle Corporation\"\n" + "GRAALVM_VERSION=\""
-                        + version + "\"\n");
+                "JAVA_VERSION=\""
+                        + version
+                        + "\"\nIMPLEMENTOR=\"Oracle Corporation\"\n"
+                        + "GRAALVM_VERSION=\""
+                        + version
+                        + "\"\n");
     }
 
     private static int run(String... args) {

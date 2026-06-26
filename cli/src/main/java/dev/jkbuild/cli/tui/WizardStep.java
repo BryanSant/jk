@@ -9,8 +9,8 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 
 /**
- * Sealed step model. Each variant is an immutable record built via a small
- * mutable builder reachable from a static factory ({@code .of(...)}).
+ * Sealed step model. Each variant is an immutable record built via a small mutable builder
+ * reachable from a static factory ({@code .of(...)}).
  */
 public sealed interface WizardStep
         permits WizardStep.InputStep, WizardStep.RadioStep, WizardStep.MultiSelectStep, WizardStep.OutputStep {
@@ -40,10 +40,9 @@ public sealed interface WizardStep
         }
 
         /**
-         * Seed value the wizard injects into the input buffer when the step
-         * opens, derived from the answers collected so far. Returns
-         * {@code ""} when no function was configured, so callers can treat
-         * the result uniformly.
+         * Seed value the wizard injects into the input buffer when the step opens, derived from the
+         * answers collected so far. Returns {@code ""} when no function was configured, so callers can
+         * treat the result uniformly.
          */
         public String initialValueFor(Answers answers) {
             return initialValueFn != null ? initialValueFn.apply(answers) : "";
@@ -74,9 +73,8 @@ public sealed interface WizardStep
             }
 
             /**
-             * Derive the initial input-buffer contents from earlier wizard
-             * answers (e.g., pre-populate "artifactId" with the project
-             * name). Applied only when the wizard has no prior answer for
+             * Derive the initial input-buffer contents from earlier wizard answers (e.g., pre-populate
+             * "artifactId" with the project name). Applied only when the wizard has no prior answer for
              * this step's key.
              */
             public Builder initialValueFn(Function<Answers, String> fn) {
@@ -117,21 +115,19 @@ public sealed interface WizardStep
         }
 
         /**
-         * Whether this step appends a free-form "enter your own" row after the
-         * fixed choices. Only honored for {@link Orientation#VERTICAL} lists.
-         * When selected, the typed text becomes the answer verbatim (in place
-         * of a choice id).
+         * Whether this step appends a free-form "enter your own" row after the fixed choices. Only
+         * honored for {@link Orientation#VERTICAL} lists. When selected, the typed text becomes the
+         * answer verbatim (in place of a choice id).
          */
         public boolean hasCustomOption() {
             return !customPlaceholder.isEmpty();
         }
 
         /**
-         * Returns the rendered choice list for the current answers. When a
-         * {@code choicesFn} was supplied it wins; otherwise the static
-         * {@code choices} list is returned. Used by the wizard runtime so
-         * a step can re-derive its options from prior answers (e.g., "pick
-         * a survivor" after a multi-select earlier in the same wizard).
+         * Returns the rendered choice list for the current answers. When a {@code choicesFn} was
+         * supplied it wins; otherwise the static {@code choices} list is returned. Used by the wizard
+         * runtime so a step can re-derive its options from prior answers (e.g., "pick a survivor" after
+         * a multi-select earlier in the same wizard).
          */
         public List<Choice> choicesFor(Answers answers) {
             return choicesFn != null ? List.copyOf(choicesFn.apply(answers)) : choices;
@@ -181,10 +177,9 @@ public sealed interface WizardStep
             }
 
             /**
-             * Append a free-form text row after the fixed choices (vertical
-             * lists only). {@code placeholder} is shown as dim example text
-             * the user can type over, like an input step. Selecting this row
-             * stores the typed text as the answer instead of a choice id.
+             * Append a free-form text row after the fixed choices (vertical lists only). {@code
+             * placeholder} is shown as dim example text the user can type over, like an input step.
+             * Selecting this row stores the typed text as the answer instead of a choice id.
              */
             public Builder customOption(String placeholder) {
                 this.customPlaceholder = placeholder == null ? "" : placeholder;
@@ -192,9 +187,8 @@ public sealed interface WizardStep
             }
 
             /**
-             * Supply a function that derives the choice list from the
-             * wizard's current answers. Wins over any static {@code .choice()}
-             * calls. Useful when later-step options depend on earlier-step
+             * Supply a function that derives the choice list from the wizard's current answers. Wins over
+             * any static {@code .choice()} calls. Useful when later-step options depend on earlier-step
              * picks (e.g., "pick a survivor" after a multi-select).
              */
             public Builder choicesFn(Function<Answers, List<Choice>> fn) {
@@ -239,10 +233,9 @@ public sealed interface WizardStep
         }
 
         /**
-         * Whether this step appends a free-form "enter your own" checkbox row
-         * after the fixed choices (vertical lists only). The row counts as
-         * checked while it holds text; that text is appended to the selected
-         * list verbatim on commit.
+         * Whether this step appends a free-form "enter your own" checkbox row after the fixed choices
+         * (vertical lists only). The row counts as checked while it holds text; that text is appended
+         * to the selected list verbatim on commit.
          */
         public boolean hasCustomOption() {
             return !customPlaceholder.isEmpty();
@@ -303,9 +296,8 @@ public sealed interface WizardStep
             }
 
             /**
-             * Append a free-form text checkbox row after the fixed choices
-             * (vertical lists only). {@code placeholder} is shown as dim
-             * example text the user can type over. When non-blank on commit,
+             * Append a free-form text checkbox row after the fixed choices (vertical lists only). {@code
+             * placeholder} is shown as dim example text the user can type over. When non-blank on commit,
              * the typed text is appended to the selected list verbatim.
              */
             public Builder customOption(String placeholder) {

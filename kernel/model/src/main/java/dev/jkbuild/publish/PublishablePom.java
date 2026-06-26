@@ -12,19 +12,18 @@ import java.util.Objects;
  * Renders a publish-grade {@code pom.xml} per PRD §21.2:
  *
  * <ul>
- *   <li>Coords + packaging ({@code jar}).</li>
- *   <li>Standard scopes (compile / runtime / provided / test).</li>
- *   <li>{@code <dependencyManagement>} for {@code PLATFORM} (BOM import).</li>
- *   <li><b>No</b> {@code <repositories>}, {@code <build>}, {@code <profiles>}.</li>
- *   <li>Optional {@code <name>}, {@code <description>}, {@code <url>},
- *       {@code <licenses>}, {@code <developers>}, {@code <scm>}.</li>
- *   <li>{@code PROCESSOR} deps are silently dropped — consumer-side
- *       compile-time only and not part of the artifact's surface.</li>
+ *   <li>Coords + packaging ({@code jar}).
+ *   <li>Standard scopes (compile / runtime / provided / test).
+ *   <li>{@code <dependencyManagement>} for {@code PLATFORM} (BOM import).
+ *   <li><b>No</b> {@code <repositories>}, {@code <build>}, {@code <profiles>}.
+ *   <li>Optional {@code <name>}, {@code <description>}, {@code <url>}, {@code <licenses>}, {@code
+ *       <developers>}, {@code <scm>}.
+ *   <li>{@code PROCESSOR} deps are silently dropped — consumer-side compile-time only and not part
+ *       of the artifact's surface.
  * </ul>
  *
- * <p>Companion to (but lighter than) {@code PomExporter} in {@code :compat},
- * which produces a developer-facing POM that round-trips back through
- * {@code jk import}.
+ * <p>Companion to (but lighter than) {@code PomExporter} in {@code :compat}, which produces a
+ * developer-facing POM that round-trips back through {@code jk import}.
  */
 public final class PublishablePom {
 

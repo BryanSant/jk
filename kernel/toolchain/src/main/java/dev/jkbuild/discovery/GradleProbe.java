@@ -12,12 +12,11 @@ import java.util.Optional;
 import java.util.stream.Stream;
 
 /**
- * Surfaces JDKs that Gradle's toolchain auto-provisioning placed under
- * {@code ~/.gradle/jdks/}. Unlike {@code ~/.jk/jdks} (flat), Gradle nests each
- * install one level down — {@code ~/.gradle/jdks/<vendor-os-arch-hash>/<jdk-dir>/}
- * — so this probe walks two levels and applies the macOS {@code Contents/Home}
- * unwrap ({@link IntellijJdkDir#javaHome}) before discovery. Source label
- * {@code "gradle"}.
+ * Surfaces JDKs that Gradle's toolchain auto-provisioning placed under {@code ~/.gradle/jdks/}.
+ * Unlike {@code ~/.jk/jdks} (flat), Gradle nests each install one level down — {@code
+ * ~/.gradle/jdks/<vendor-os-arch-hash>/<jdk-dir>/} — so this probe walks two levels and applies the
+ * macOS {@code Contents/Home} unwrap ({@link IntellijJdkDir#javaHome}) before discovery. Source
+ * label {@code "gradle"}.
  */
 public final class GradleProbe implements LocalToolProbe {
 

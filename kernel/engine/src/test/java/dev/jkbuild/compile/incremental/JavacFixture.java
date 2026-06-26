@@ -13,12 +13,17 @@ import java.util.stream.Stream;
 import javax.tools.JavaCompiler;
 import javax.tools.ToolProvider;
 
-/** Compiles small Java sources to {@code .class} bytes via the in-JVM javac (tests run under a JDK). */
+/**
+ * Compiles small Java sources to {@code .class} bytes via the in-JVM javac (tests run under a JDK).
+ */
 public final class JavacFixture {
 
     private JavacFixture() {}
 
-    /** Compile {@code fqcn → source} together; return {@code fqcn → class bytes} for every produced class. */
+    /**
+     * Compile {@code fqcn → source} together; return {@code fqcn → class bytes} for every produced
+     * class.
+     */
     public static Map<String, byte[]> compile(Path work, Map<String, String> sources) throws IOException {
         Path src = work.resolve("src");
         Path out = work.resolve("out");

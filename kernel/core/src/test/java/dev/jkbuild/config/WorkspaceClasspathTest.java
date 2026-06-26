@@ -14,8 +14,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
- * Workspace-internal classpath resolution, focused on {@code [dependencies.export]}
- * acting like a main dependency that also rides transitively to consumers.
+ * Workspace-internal classpath resolution, focused on {@code [dependencies.export]} acting like a
+ * main dependency that also rides transitively to consumers.
  */
 class WorkspaceClasspathTest {
 
@@ -40,7 +40,7 @@ class WorkspaceClasspathTest {
         assertThat(names).anyMatch(n -> n.startsWith("lib-"));
     }
 
-    /** lib  ←(export)— app  ←(main)— top */
+    /** lib ←(export)— app ←(main)— top */
     private static void scaffold(Path root) throws IOException {
         Files.writeString(root.resolve("jk.toml"), """
                 [project]

@@ -11,6 +11,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
+import java.util.Comparator;
 import java.util.function.IntSupplier;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -72,7 +73,7 @@ class BuildCacheTest {
     private static void deleteRecursively(Path root) throws IOException {
         if (!Files.exists(root)) return;
         try (var stream = Files.walk(root)) {
-            for (Path p : stream.sorted(java.util.Comparator.reverseOrder()).toList()) {
+            for (Path p : stream.sorted(Comparator.reverseOrder()).toList()) {
                 Files.deleteIfExists(p);
             }
         }

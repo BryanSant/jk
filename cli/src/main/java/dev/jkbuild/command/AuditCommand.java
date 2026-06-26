@@ -29,16 +29,15 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * {@code jk audit} — scan the lockfile against OSV (PRD §23.5). Exits
- * non-zero when any finding at or above the configured severity threshold
- * is present.
+ * {@code jk audit} — scan the lockfile against OSV (PRD §23.5). Exits non-zero when any finding at
+ * or above the configured severity threshold is present.
  *
- * <p>The OSV query runs in the {@code jk-audit-runner} worker subprocess so
- * Jackson and the OSV HTTP client are isolated from the main jk binary.
+ * <p>The OSV query runs in the {@code jk-audit-runner} worker subprocess so Jackson and the OSV
+ * HTTP client are isolated from the main jk binary.
  *
- * <p>Three phases: {@code read-lock} (SYNC) validates jk.lock exists;
- * {@code query-osv} (IO) forks the worker and streams NDJSON findings back;
- * {@code evaluate} (SYNC) applies the severity threshold.
+ * <p>Three phases: {@code read-lock} (SYNC) validates jk.lock exists; {@code query-osv} (IO) forks
+ * the worker and streams NDJSON findings back; {@code evaluate} (SYNC) applies the severity
+ * threshold.
  */
 public final class AuditCommand implements CliCommand {
 
@@ -77,7 +76,8 @@ public final class AuditCommand implements CliCommand {
         Path projectDir = global.workingDir();
         Path lockPath = projectDir.resolve("jk.lock");
         if (!Files.exists(lockPath)) {
-            System.err.println("jk audit: no jk.lock in " + dev.jkbuild.cli.PathDisplay.styledRaw(projectDir)
+            System.err.println("jk audit: no jk.lock in "
+                    + dev.jkbuild.cli.PathDisplay.styledRaw(projectDir)
                     + " (run `jk lock` first).");
             return 2;
         }
@@ -151,9 +151,8 @@ public final class AuditCommand implements CliCommand {
     }
 
     /**
-     * Fork the {@code jk-audit-runner} worker and collect its NDJSON
-     * findings. Uses a hand-rolled field extractor — no Jackson required in
-     * the driver.
+     * Fork the {@code jk-audit-runner} worker and collect its NDJSON findings. Uses a hand-rolled
+     * field extractor — no Jackson required in the driver.
      */
     private List<AuditReport.Finding> runWorker(Path lockPath, Path cache) throws IOException, InterruptedException {
         Path workerJar = WorkerJar.AUDITOR.locate(new Cas(cache));
@@ -208,7 +207,7 @@ public final class AuditCommand implements CliCommand {
     }
 
     /**
-     * Extract a JSON string field value from a simple NDJSON object without a
-     * full parser. Handles basic backslash escapes but not surrogate pairs.
+     * Extract a JSON string field value from a simple NDJSON object without a full parser. Handles
+     * basic backslash escapes but not surrogate pairs.
      */
 }

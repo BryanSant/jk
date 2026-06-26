@@ -14,16 +14,14 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Thread-safe accumulator for per-test results that writes one Gradle-compatible
- * {@code TEST-<classname>.xml} file per test class to a target directory.
+ * Thread-safe accumulator for per-test results that writes one Gradle-compatible {@code
+ * TEST-<classname>.xml} file per test class to a target directory.
  *
- * <p>In parallel mode all workers share one instance; synchronization is on
- * the entry list. {@link #writeAll(Path)} is called once after all workers
- * have joined.
+ * <p>In parallel mode all workers share one instance; synchronization is on the entry list. {@link
+ * #writeAll(Path)} is called once after all workers have joined.
  *
- * <p>The output format matches Gradle's JUnit XML report schema so the files
- * are consumable by CI dashboards, IntelliJ, and test-aggregation tools without
- * additional configuration.
+ * <p>The output format matches Gradle's JUnit XML report schema so the files are consumable by CI
+ * dashboards, IntelliJ, and test-aggregation tools without additional configuration.
  */
 public final class XmlTestReport {
 
@@ -52,9 +50,9 @@ public final class XmlTestReport {
     }
 
     /**
-     * Record a finished test (passed, failed, or aborted).
-     * {@code throwableJson} is the raw nested JSON object from the protocol
-     * event's {@code throwable} field — {@code null} for a passing test.
+     * Record a finished test (passed, failed, or aborted). {@code throwableJson} is the raw nested
+     * JSON object from the protocol event's {@code throwable} field — {@code null} for a passing
+     * test.
      */
     public synchronized void recordFinished(String uniqueId, String display, long durationMs, String throwableJson) {
         String className = classNameFrom(uniqueId);
@@ -68,8 +66,7 @@ public final class XmlTestReport {
     }
 
     /**
-     * Record a skipped test.
-     * {@code reason} is the skip reason from the protocol event, may be null.
+     * Record a skipped test. {@code reason} is the skip reason from the protocol event, may be null.
      */
     public synchronized void recordSkipped(String uniqueId, String display, String reason) {
         String className = classNameFrom(uniqueId);
@@ -77,8 +74,8 @@ public final class XmlTestReport {
     }
 
     /**
-     * Write one {@code TEST-<classname>.xml} per accumulated class into {@code dir},
-     * creating the directory if needed. Silently no-ops when no test events were recorded.
+     * Write one {@code TEST-<classname>.xml} per accumulated class into {@code dir}, creating the
+     * directory if needed. Silently no-ops when no test events were recorded.
      */
     public synchronized void writeAll(Path dir) throws IOException {
         if (entries.isEmpty()) return;
@@ -146,9 +143,8 @@ public final class XmlTestReport {
     }
 
     /**
-     * Extract the fully-qualified class name from a JUnit Platform uniqueId.
-     * Example: {@code [engine:junit-jupiter][class:com.example.FooTest][method:bar()]}
-     * → {@code com.example.FooTest}.
+     * Extract the fully-qualified class name from a JUnit Platform uniqueId. Example: {@code
+     * [engine:junit-jupiter][class:com.example.FooTest][method:bar()]} → {@code com.example.FooTest}.
      * Falls back to the raw uniqueId when the {@code [class:...]} segment is absent.
      */
     static String classNameFrom(String uniqueId) {
