@@ -41,28 +41,28 @@ import org.openrewrite.java.JavaParser;
 import org.openrewrite.java.ShortenFullyQualifiedTypeReferences;
 
 /**
- * The {@code jk-formatter} worker: formats Java/Kotlin sources through an optional
- * OpenRewrite pass (import optimisation) followed by the Spotless engine. The host
- * forks it with a single spec-file path; the spec is tab-delimited records:
+ * The {@code jk-formatter} worker: formats Java/Kotlin sources through an optional OpenRewrite pass
+ * (import optimisation) followed by the Spotless engine. The host forks it with a single spec-file
+ * path; the spec is tab-delimited records:
  *
  * <pre>{@code
- *   mode          <apply|check>
- *   java          <style>  <version>  <jarPathsJoinedByPathSeparator>
- *   kotlin        <style>  <version>  <maxWidth>  <jarPaths>
- *   rewrite-flags optimize-imports=<bool>
- *   rewrite-config  <absolutePathToConfigFile>   (optional)
- *   f             <java|kotlin>  <absoluteFilePath>
+ * mode          <apply|check>
+ * java          <style>  <version>  <jarPathsJoinedByPathSeparator>
+ * kotlin        <style>  <version>  <maxWidth>  <jarPaths>
+ * rewrite-flags optimize-imports=<bool>
+ * rewrite-config  <absolutePathToConfigFile>   (optional)
+ * cache-dir     <absolutePathToCacheRoot>       (optional)
+ * f             <java|kotlin>  <absoluteFilePath>
  * }</pre>
  *
- * <p>The OpenRewrite pass runs first (when requested), writing changes to disk in
- * apply mode or detecting would-be changes in check mode. Spotless then reads the
- * (possibly OpenRewrite-modified) files for its own formatting step.
+ * <p>The OpenRewrite pass runs first (when requested), writing changes to disk in apply mode or
+ * detecting would-be changes in check mode. Spotless then reads the (possibly OpenRewrite-modified)
+ * files for its own formatting step.
  *
- * <p>The formatter implementation jars (palantir-java-format, ktfmt) are resolved by
- * jk and passed in — the worker serves them to Spotless via a classpath
- * {@link Provisioner}, so nothing is downloaded here. OpenRewrite's engine is bundled
- * directly in this fat JAR. Emits one NDJSON record per file plus a final summary, all
- * prefixed with {@code ##JKFMT:}.
+ * <p>The formatter implementation jars (palantir-java-format, ktfmt) are resolved by jk and passed
+ * in — the worker serves them to Spotless via a classpath {@link Provisioner}, so nothing is
+ * downloaded here. OpenRewrite's engine is bundled directly in this fat JAR. Emits one NDJSON
+ * record per file plus a final summary, all prefixed with {@code ##JKFMT:}.
  */
 public final class FormatPlugin implements Plugin {
 
@@ -78,6 +78,21 @@ public final class FormatPlugin implements Plugin {
             return 2;
         }
         Spec spec = Spec.parse(Path.of(args.get(0)));
+
+        // Per-file stamp cache — skips unchanged files without running the formatter.
+        FormatStampCache stampCache =
+                spec.cacheDir != null ? new FormatStampCache(spec.cacheDir.resolve("format-stamps")) : null;
+        // Config descriptor is the same for every file in this run; compute once.
+        String configDesc = stampCache != null
+                ? FormatStamp.configDescriptor(
+                        spec.javaStyle,
+                        spec.javaVersion,
+                        spec.kotlinStyle,
+                        spec.kotlinVersion,
+                        spec.optimizeImports,
+                        FormatStamp.workerJarSha(),
+                        spec.rewriteConfigFile != null ? spec.rewriteConfigFile.toPath() : null)
+                : null;
 
         // Build the OpenRewrite recipe once (null when no rewrite is requested).
         Recipe rewriteRecipe = spec.hasRewrite() ? buildRecipe(spec) : null;
@@ -115,6 +130,19 @@ public final class FormatPlugin implements Plugin {
                     continue;
                 }
                 try {
+                    // --- Stamp check -------------------------------------------------
+                    // Read file bytes once — used for both the stamp key and handed to
+                    // OpenRewrite/Spotless on a miss (OS cache makes the 2nd read free).
+                    byte[] originalBytes = stampCache != null ? Files.readAllBytes(ref.file.toPath()) : null;
+                    String stampKey = originalBytes != null ? FormatStamp.computeKey(originalBytes, configDesc) : null;
+
+                    if (stampKey != null && stampCache.contains(stampKey)) {
+                        // Stamp hit: file content is known clean under this config.
+                        clean++;
+                        emitFile(out, ref.file, "clean", null);
+                        continue;
+                    }
+
                     // --- OpenRewrite pass (Java only) --------------------------------
                     boolean rewriteChanged = false;
                     if (!ref.kotlin && rewriteRecipe != null) {
@@ -132,9 +160,18 @@ public final class FormatPlugin implements Plugin {
                         changed++;
                         if (spec.apply && spotlessChanged) state.writeCanonicalTo(ref.file);
                         emitFile(out, ref.file, "changed", null);
+                        // In apply mode: stamp the newly formatted content so next run
+                        // skips it. (In check mode the file wasn't written, so no stamp.)
+                        if (spec.apply && stampCache != null) {
+                            byte[] finalBytes = Files.readAllBytes(ref.file.toPath());
+                            String finalKey = FormatStamp.computeKey(finalBytes, configDesc);
+                            if (finalKey != null) stampCache.record(finalKey);
+                        }
                     } else {
+                        // File is already clean — stamp current content to skip next time.
                         clean++;
                         emitFile(out, ref.file, "clean", null);
+                        if (stampKey != null) stampCache.record(stampKey);
                     }
                 } catch (Exception e) {
                     errors++;
@@ -158,10 +195,9 @@ public final class FormatPlugin implements Plugin {
     // -------------------------------------------------------------------------
 
     /**
-     * Assemble the composite OpenRewrite recipe from flags + optional YAML config.
-     * Flag-driven built-ins come first; the config file layers additional recipes on
-     * top. Returns a single Recipe that represents all active transformations, or
-     * {@code null} if nothing is active.
+     * Assemble the composite OpenRewrite recipe from flags + optional YAML config. Flag-driven
+     * built-ins come first; the config file layers additional recipes on top. Returns a single Recipe
+     * that represents all active transformations, or {@code null} if nothing is active.
      */
     private static Recipe buildRecipe(Spec spec) throws IOException {
         List<Recipe> recipes = new ArrayList<>();
@@ -180,9 +216,8 @@ public final class FormatPlugin implements Plugin {
     }
 
     /**
-     * Run the recipe against a single Java file. In apply mode the file is written
-     * back if the recipe produced changes. Returns whether the file was (or would be)
-     * changed.
+     * Run the recipe against a single Java file. In apply mode the file is written back if the recipe
+     * produced changes. Returns whether the file was (or would be) changed.
      */
     private static boolean applyRewrite(Recipe recipe, File file, boolean apply) throws IOException {
         ExecutionContext ctx = new InMemoryExecutionContext(e -> {});
@@ -227,9 +262,9 @@ public final class FormatPlugin implements Plugin {
     }
 
     /**
-     * The Java step for the chosen style: {@code palantir} → palantir-java-format
-     * (PALANTIR); {@code google}/{@code aosp} → google-java-format (GOOGLE/AOSP). The
-     * version is whatever jk resolved and put in the spec.
+     * The Java step for the chosen style: {@code palantir} → palantir-java-format (PALANTIR); {@code
+     * google}/{@code aosp} → google-java-format (GOOGLE/AOSP). The version is whatever jk resolved
+     * and put in the spec.
      */
     private static FormatterStep javaStep(Spec spec) {
         Provisioner prov = provisioner(spec.javaJars);
@@ -286,6 +321,8 @@ public final class FormatPlugin implements Plugin {
         // OpenRewrite fields
         boolean optimizeImports = false;
         File rewriteConfigFile = null;
+        // Stamp cache: null when the host didn't pass a cache-dir (no caching).
+        Path cacheDir = null;
         final List<FileRef> files = new ArrayList<>();
 
         boolean hasRewrite() {
@@ -320,6 +357,7 @@ public final class FormatPlugin implements Plugin {
                         }
                     }
                     case "rewrite-config" -> s.rewriteConfigFile = new File(p[1]);
+                    case "cache-dir" -> s.cacheDir = Path.of(p[1]);
                     case "f" -> s.files.add(new FileRef("kotlin".equals(p[1]), new File(p[2])));
                     default -> {
                         /* ignore unknown records for forward-compat */

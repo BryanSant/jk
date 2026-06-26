@@ -35,22 +35,22 @@ import java.util.List;
 import java.util.stream.Stream;
 
 /**
- * {@code jk format} — format the project's Java/Kotlin sources via the
- * {@code jk-formatter} worker (Spotless + optional OpenRewrite import optimisation).
+ * {@code jk format} — format the project's Java/Kotlin sources via the {@code jk-formatter} worker
+ * (Spotless + optional OpenRewrite import optimisation).
  *
- * <p>On an interactive TTY (apply mode, non-quiet) the command runs a silent stealth
- * check first to count how many files need formatting, then renders a live
- * {@link CommandManager} progress view as files are processed. On a pipe / under
- * {@code --quiet} / in {@code --check} mode it falls back to plain println output.
+ * <p>On an interactive TTY (apply mode, non-quiet) the command runs a silent stealth check first to
+ * count how many files need formatting, then renders a live {@link CommandManager} progress view as
+ * files are processed. On a pipe / under {@code --quiet} / in {@code --check} mode it falls back to
+ * plain println output.
  *
- * <p>Defaults to Palantir (Java) + ktfmt KOTLINLANG (Kotlin), both 4-space / 120-col.
- * {@code --java-style}/{@code --kotlin-style}/{@code --style} and the {@code [format]}
- * block override (see {@link FormatStyles}). {@code --check} verifies without writing
- * and exits non-zero if anything is unformatted.
+ * <p>Defaults to Palantir (Java) + ktfmt KOTLINLANG (Kotlin), both 4-space / 120-col. {@code
+ * --java-style}/{@code --kotlin-style}/{@code --style} and the {@code [format]} block override (see
+ * {@link FormatStyles}). {@code --check} verifies without writing and exits non-zero if anything is
+ * unformatted.
  *
- * <p>The formatter implementation jars (palantir-java-format / google-java-format /
- * ktfmt) are resolved on demand through jk's own resolver into the CAS and handed to
- * the worker, so they never enter the main jk binary.
+ * <p>The formatter implementation jars (palantir-java-format / google-java-format / ktfmt) are
+ * resolved on demand through jk's own resolver into the CAS and handed to the worker, so they never
+ * enter the main jk binary.
  */
 public final class FormatCommand implements CliCommand {
 
@@ -165,7 +165,7 @@ public final class FormatCommand implements CliCommand {
                             .classpath();
             List<String> workerCmd = buildWorkerCmd(cas, !javaFiles.isEmpty());
             Path spec = writeSpec(
-                    check, styles, javaFiles, javaJars, kotlinFiles, kotlinJars, optimizeImports, rewriteConfig);
+                    check, styles, javaFiles, javaJars, kotlinFiles, kotlinJars, optimizeImports, rewriteConfig, cache);
             try {
                 return runPlain(workerCmd, spec, check, global, startMs, projectDir);
             } finally {
@@ -205,7 +205,7 @@ public final class FormatCommand implements CliCommand {
             List<String> workerCmd = buildWorkerCmd(cas, !javaFiles.isEmpty());
 
             Path applySpec = writeSpec(
-                    false, styles, javaFiles, javaJars, kotlinFiles, kotlinJars, optimizeImports, rewriteConfig);
+                    false, styles, javaFiles, javaJars, kotlinFiles, kotlinJars, optimizeImports, rewriteConfig, cache);
             try {
                 return runAnimated(cm, workerCmd, applySpec, global, startMs, projectDir, totalFiles);
             } finally {
@@ -316,7 +316,10 @@ public final class FormatCommand implements CliCommand {
                         } else if ("error".equals(status)) {
                             counts[2]++;
                             cm.writeAbove(
-                                    Theme.colorize("  error", Theme.active().error()) + "  " + path + ": "
+                                    Theme.colorize("  error", Theme.active().error())
+                                            + "  "
+                                            + path
+                                            + ": "
                                             + Ndjson.str(json, "msg"));
                         } else {
                             counts[1]++;
@@ -338,7 +341,10 @@ public final class FormatCommand implements CliCommand {
                         Theme.colorize("Already clean", Theme.active().success()) + " " + took);
             } else {
                 // N formatted, M already clean.
-                String formatted = Theme.colorize("Formatted", Theme.active().success()) + " " + counts[0] + " file"
+                String formatted = Theme.colorize("Formatted", Theme.active().success())
+                        + " "
+                        + counts[0]
+                        + " file"
                         + (counts[0] == 1 ? "" : "s");
                 String clean = counts[1] > 0 ? ", " + counts[1] + " already clean" : "";
                 cm.finishGoalSuccess(formatted + clean + "  " + took);
@@ -350,7 +356,8 @@ public final class FormatCommand implements CliCommand {
     /** Format a single completion line: {@code ✓ path/to/File.java}. */
     private static String completionLine(String absPath, Path projectDir) {
         Theme t = Theme.active();
-        return Theme.colorize(Glyphs.CHECK, t.success()) + " "
+        return Theme.colorize(Glyphs.CHECK, t.success())
+                + " "
                 + Theme.colorize(PathDisplay.of(Path.of(absPath), projectDir), t.path());
     }
 
@@ -390,7 +397,8 @@ public final class FormatCommand implements CliCommand {
             List<Path> kotlinFiles,
             List<Path> kotlinJars,
             boolean optimizeImports,
-            Path rewriteConfig)
+            Path rewriteConfig,
+            Path cacheDir)
             throws IOException {
         List<String> lines = new ArrayList<>();
         lines.add("mode\t" + (check ? "check" : "apply"));
@@ -398,7 +406,13 @@ public final class FormatCommand implements CliCommand {
             lines.add("java\t" + styles.java() + "\t" + javaVersion(styles.java()) + "\t" + joinJars(javaJars));
         }
         if (!kotlinFiles.isEmpty()) {
-            lines.add("kotlin\t" + styles.kotlin() + "\t" + KTFMT_VERSION + "\t" + KOTLIN_MAX_WIDTH + "\t"
+            lines.add("kotlin\t"
+                    + styles.kotlin()
+                    + "\t"
+                    + KTFMT_VERSION
+                    + "\t"
+                    + KOTLIN_MAX_WIDTH
+                    + "\t"
                     + joinJars(kotlinJars));
         }
         boolean anyRewrite = (optimizeImports || rewriteConfig != null) && !javaFiles.isEmpty();
@@ -407,6 +421,10 @@ public final class FormatCommand implements CliCommand {
             if (rewriteConfig != null) {
                 lines.add("rewrite-config\t" + rewriteConfig.toAbsolutePath());
             }
+        }
+        // Pass the cache root so the worker can read/write per-file format stamps.
+        if (cacheDir != null) {
+            lines.add("cache-dir\t" + cacheDir.toAbsolutePath());
         }
         for (Path f : javaFiles) lines.add("f\tjava\t" + f.toAbsolutePath());
         for (Path f : kotlinFiles) lines.add("f\tkotlin\t" + f.toAbsolutePath());
