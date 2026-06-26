@@ -223,33 +223,63 @@ public final class BuildCommand implements CliCommand {
      */
     private int runGraphParallel(Path entryDir, JkBuild entryBuild) throws Exception {
         Path cache = cacheDir != null ? cacheDir : JkDirs.cache();
+
+        // Detect mode first (zero I/O) so we can branch before touching the disk.
+        GoalConsole.Mode mode = GoalConsole.modeFor(global);
+        boolean live = mode == GoalConsole.Mode.AUTO || mode == GoalConsole.Mode.QUIET;
+
+        if (!live) {
+            // --output json / --verbose: buffered, non-animated path.  Resolve the
+            // graph normally (no TUI to show during it) then run plain.
+            BuildGraph.Result graph;
+            try {
+                graph = BuildGraph.resolve(entryDir, entryBuild, cache.resolve("git"));
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                System.err.println("jk build: interrupted resolving the build graph");
+                return 2;
+            }
+            if (graph.hasErrors()) {
+                for (String err : graph.errors()) System.err.println(ConsoleSpec.errorLine("composite", err));
+                return 2;
+            }
+            List<BuildGraph.BuildUnit> units = graph.topoOrder();
+            if (units.isEmpty()) {
+                System.out.println("(workspace declares no modules)");
+                return 0;
+            }
+            applyMemoryPlan(Math.min(maxReadyWidth(units, graph.edges()), JkThreads.CPU_THREADS));
+            return runGraphPlain(units, graph.edges());
+        }
+
+        // Live path (AUTO / QUIET): start the TUI *before* any I/O so the spinner
+        // is visible while BuildGraph.resolve() and forecastDirty() run.
+        boolean animate = mode == GoalConsole.Mode.AUTO && GoalConsole.isInteractiveTerminal();
+        CommandManager view = CommandManager.goal(System.out, "Build", animate);
+
         BuildGraph.Result graph;
         try {
             graph = BuildGraph.resolve(entryDir, entryBuild, cache.resolve("git"));
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            System.err.println("jk build: interrupted resolving the build graph");
+            view.finishGoalFailure("interrupted resolving the build graph");
             return 2;
         }
         if (graph.hasErrors()) {
-            for (String err : graph.errors()) System.err.println(ConsoleSpec.errorLine("composite", err));
+            for (String err : graph.errors()) view.writeAbove(ConsoleSpec.errorLine("composite", err));
+            view.finishGoalFailure("dependency resolution failed");
             return 2;
         }
         List<BuildGraph.BuildUnit> units = graph.topoOrder();
         if (units.isEmpty()) {
-            System.out.println("(workspace declares no modules)");
+            view.finishGoalSuccess("workspace declares no modules");
             return 0;
         }
         // Size worker concurrency + heaps to the graph's peak parallelism before
         // any unit forks (caps the JVM slot pool the scheduler draws from).
         applyMemoryPlan(Math.min(maxReadyWidth(units, graph.edges()), JkThreads.CPU_THREADS));
-        // --output json / --verbose keep the buffered, non-live path (NDJSON streams
-        // / full per-phase logs); AUTO/QUIET get the live aggregate view (a single
-        // spinner header + bar + a tree of the modules building right now).
-        GoalConsole.Mode mode = GoalConsole.modeFor(global);
-        return (mode == GoalConsole.Mode.AUTO || mode == GoalConsole.Mode.QUIET)
-                ? runGraphLive(units, graph.edges(), forecastDirty(graph, cache), cache, mode)
-                : runGraphPlain(units, graph.edges());
+        // forecastDirty also runs under the spinner — CAS scan, typically <200ms.
+        return runGraphLive(view, units, graph.edges(), forecastDirty(graph, cache), cache);
     }
 
     /**
@@ -322,16 +352,14 @@ public final class BuildCommand implements CliCommand {
      * terminal nothing animates; the same blocks + lines print append-only.
      */
     private int runGraphLive(
+            CommandManager view,
             List<BuildGraph.BuildUnit> units,
             Map<Path, Set<Path>> edges,
             Set<Path> dirtyDirs,
-            Path cache,
-            GoalConsole.Mode mode)
+            Path cache)
             throws Exception {
         Set<Path> unitDirs = new java.util.HashSet<>();
         for (BuildGraph.BuildUnit u : units) unitDirs.add(u.dir());
-        boolean animate = mode == GoalConsole.Mode.AUTO && GoalConsole.isInteractiveTerminal();
-        CommandManager view = CommandManager.goal(System.out, "Build", animate);
         AggregateContext agg = new AggregateContext(view);
         long start = System.nanoTime();
         int total = units.size();
