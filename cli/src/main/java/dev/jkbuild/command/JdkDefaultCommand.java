@@ -54,7 +54,9 @@ public final class JdkDefaultCommand implements CliCommand {
             return applyLts(registry, defaults, System.out, System.err) ? 0 : 1;
         }
         if (spec == null || spec.isBlank()) { System.err.println("jk jdk default: <spec> required (or pass --lts)."); return 64; }
-        Optional<JdkHit> match = registry.findHitBySpec(spec);
+        Optional<JdkHit> match = dev.jkbuild.jdk.JdkKeywords.isKeyword(spec)
+                ? dev.jkbuild.jdk.JdkKeywords.bestInstalledMatch(spec, registry.listHits())
+                : registry.findHitBySpec(spec);
         if (match.isEmpty()) {
             System.err.println("jk jdk default: no installed JDK matches `" + spec + "` (try `jk jdk list` or `jk jdk install " + spec + "`)"); return 1;
         }

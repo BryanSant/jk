@@ -92,6 +92,15 @@ public final class JdkUpdateCommand implements CliCommand {
         // Reclaim any partial archive left by a previously canceled download.
         JdkInstaller.sweepStaleDownloads(registry.jdksRoot());
 
+        // Keyword specs → resolve to the major of the best installed match so
+        // managedHits() can filter by that major (e.g. "lts" → "21").
+        if (dev.jkbuild.jdk.JdkKeywords.isKeyword(spec)) {
+            var kw = dev.jkbuild.jdk.JdkKeywords.bestInstalledMatch(spec, registry.managedHits(null));
+            spec = kw.map(h -> {
+                Integer m = dev.jkbuild.jdk.JdkKeywords.leadingMajor(h.version());
+                return m != null ? String.valueOf(m) : JdkRegistry.identifierFor(h.home());
+            }).orElse(spec);
+        }
         List<JdkHit> managed = registry.managedHits(spec);
         if (managed.isEmpty()) {
             System.out.println(spec == null || spec.isBlank()

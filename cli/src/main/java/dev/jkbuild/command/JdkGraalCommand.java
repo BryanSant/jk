@@ -57,7 +57,9 @@ public final class JdkGraalCommand implements CliCommand {
         if (spec == null || spec.isBlank()) {
             chosen = graals.stream().sorted(byGraalPreference()).findFirst().orElseThrow();
         } else {
-            Optional<JdkHit> match = registry.findHitBySpec(spec).filter(JdkGraalCommand::isGraal);
+            Optional<JdkHit> match = dev.jkbuild.jdk.JdkKeywords.isKeyword(spec)
+                    ? dev.jkbuild.jdk.JdkKeywords.bestInstalledMatch(spec, graals)
+                    : registry.findHitBySpec(spec).filter(JdkGraalCommand::isGraal);
             if (match.isEmpty()) {
                 System.err.println("jk jdk graal: no installed GraalVM matches `" + spec
                         + "` (try `jk jdk list`).");

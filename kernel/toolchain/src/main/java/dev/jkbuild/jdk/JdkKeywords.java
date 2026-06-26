@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.jdk;
 
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
@@ -90,6 +92,47 @@ public final class JdkKeywords {
         return raw != null && raw.trim().equalsIgnoreCase(NATIVE)
                 ? List.of("graalvm")
                 : List.of();
+    }
+
+    /**
+     * Resolve a keyword against an already-installed set of JDK hits — no
+     * catalog or network access needed. Returns the best match:
+     * <ul>
+     *   <li>{@code lts}/{@code stable}: newest installed LTS major, Temurin preferred.</li>
+     *   <li>{@code latest}: newest installed major of any vendor, Temurin preferred.</li>
+     * </ul>
+     * Returns empty for the {@code native} keyword (use
+     * {@link #resolveToMajorSpec} for that) or when no hits qualify.
+     */
+    public static Optional<JdkHit> bestInstalledMatch(String keyword, List<JdkHit> hits) {
+        if (!isKeyword(keyword) || keyword.trim().equalsIgnoreCase(NATIVE)) return Optional.empty();
+        boolean wantLts = keyword.trim().equalsIgnoreCase("lts")
+                || keyword.trim().equalsIgnoreCase("stable");
+        var candidates = new ArrayList<JdkHit>();
+        for (JdkHit h : hits) {
+            Integer m = leadingMajor(h.version());
+            if (m == null) continue;
+            if (wantLts && !JdkLts.isLtsMajor(m)) continue;
+            candidates.add(h);
+        }
+        if (candidates.isEmpty()) return Optional.empty();
+        candidates.sort(Comparator
+                .<JdkHit, Integer>comparing(h -> leadingMajor(h.version()) == null ? 0 : leadingMajor(h.version()),
+                        Comparator.reverseOrder())
+                .thenComparing(h -> h.vendor() == JdkVendor.TEMURIN ? 0 : 1)
+                .thenComparing(h -> h.version() == null ? "" : h.version(),
+                        Comparator.reverseOrder()));
+        return Optional.of(candidates.get(0));
+    }
+
+    /** Parse the leading digit sequence of a JDK version string (e.g. {@code "25"} from {@code "25.0.3"}). */
+    public static Integer leadingMajor(String version) {
+        if (version == null || version.isEmpty()) return null;
+        int end = 0;
+        while (end < version.length() && Character.isDigit(version.charAt(end))) end++;
+        if (end == 0) return null;
+        try { return Integer.parseInt(version.substring(0, end)); }
+        catch (NumberFormatException e) { return null; }
     }
 
     /** The {@code suggested_sdk_name} of the highest-versioned Oracle GraalVM on the host. */

@@ -158,12 +158,17 @@ public final class JdkUninstallCommand implements CliCommand {
                 return 64;
             }
         }
-        if (spec.matches("\\d+")) {
-            String prefix = source != null ? source + "/" : "";
-            System.err.println("jk jdk uninstall: `" + prefix + spec
-                    + "` — full spec required (e.g. `" + prefix + "temurin-" + spec
-                    + ".0.1`), not a bare major.");
-            return 64;
+        // Keyword specs (lts, stable, latest) → resolve to best installed match.
+        if (dev.jkbuild.jdk.JdkKeywords.isKeyword(spec)) {
+            var hits = source != null
+                    ? registry.listHits().stream().filter(h -> source.equals(h.source())).toList()
+                    : registry.listHits();
+            var kw = dev.jkbuild.jdk.JdkKeywords.bestInstalledMatch(spec, hits);
+            if (kw.isEmpty()) {
+                System.err.println("jk jdk uninstall: no installed JDK matches `" + spec + "` (try `jk jdk list`).");
+                return 1;
+            }
+            spec = JdkRegistry.identifierFor(kw.get().home());
         }
 
         // Source-qualified → that probe only; bare spec → first match in

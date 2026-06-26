@@ -38,7 +38,9 @@ public final class JdkPinCommand implements CliCommand {
         Path jdksDir = in.value("jdks-dir").map(Path::of).orElse(null);
         Path projectDir = GlobalOptions.from(in).workingDir();
         JdkRegistry registry = jdksDir != null ? new JdkRegistry(jdksDir) : new JdkRegistry();
-        Optional<JdkHit> hit = registry.findHitBySpec(spec);
+        Optional<JdkHit> hit = dev.jkbuild.jdk.JdkKeywords.isKeyword(spec)
+                ? dev.jkbuild.jdk.JdkKeywords.bestInstalledMatch(spec, registry.listHits())
+                : registry.findHitBySpec(spec);
         if (hit.isEmpty()) {
             System.err.println("jk jdk pin: no installed JDK matches `" + spec + "` (try `jk jdk list`)"); return 1;
         }

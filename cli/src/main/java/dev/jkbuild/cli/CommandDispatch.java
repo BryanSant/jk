@@ -215,9 +215,7 @@ public final class CommandDispatch {
     }
 
     private static String renderHelp(CliCommand cmd, String qualified, boolean ansi) {
-        List<OptionModel> globals = GlobalOptions.globalOpts().stream()
-                .filter(o -> !o.hidden()).map(CommandModels::option).toList();
-        CommandModel model = CommandModels.from(cmd, qualified, globals);
+        CommandModel model = CommandModels.from(cmd, qualified, List.of());
         return HelpRenderer.renderHelp(model, ansi);
     }
 
