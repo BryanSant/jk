@@ -27,13 +27,9 @@ junit-platform-launcher = { group = "org.junit.platform", name = "junit-platform
 # the RUNNING jk's worker identity instead:
 #  - test-worker-jars: GitSource{Resolution,Materializer}Test fork the git-client
 #    worker, injected as -Djk.git-client.worker.jar (located from the running jk's
-#    CAS; requires it present via `jk sync` / `./gradlew :git-client:installLocalCas`).
-#  - embed-sha: KotlinWorkerSetupTest exercises the CAS-by-sha path, so it needs
-#    /META-INF/jk-kotlin-compiler-sha256.txt on the test classpath; embed-sha writes
-#    the running jk's paired sha. (kotlin stays OUT of test-worker-jars on purpose,
-#    so that test isn't short-circuited by a -D override.)
+#    repos/local/ store; requires `./gradlew :git-client:installLocal`).
+# [build.embed-sha] is removed: SHA-embedding was the old CAS-by-hash location
+# mechanism. WorkerJar now uses coordinate-based lookup (repos/local/ then
+# repos/central/), so no SHA resources need to be baked into the engine JAR.
 [build]
 test-worker-jars = ["git-client"]
-
-[build.embed-sha]
-"jk-kotlin-compiler" = "kotlin-compiler"
