@@ -137,34 +137,33 @@ public final class FormatCommand implements CliCommand {
         boolean optimizeImports = styles.optimizeImports()
                 || (rewriteConfig != null && cliOptimize == null && envBool("JK_FORMAT_OPTIMIZE_IMPORTS") == null);
 
-        List<Path> javaFiles = collectSources(projectDir, ".java");
-        List<Path> kotlinFiles = collectSources(projectDir, ".kt");
-        if (javaFiles.isEmpty() && kotlinFiles.isEmpty()) {
-            if (!global.outputIsJson()) System.out.println("jk format: no Java or Kotlin sources found.");
-            return 0;
-        }
-
-        Path cache = JkDirs.cache();
-        var cas = new Cas(cache);
-        var resolver = ToolResolver.mavenCentral(new Http(), cas);
-
-        List<Path> javaJars = javaFiles.isEmpty()
-                ? List.of()
-                : resolver.resolve(javaCoord(styles.java()), "java-format", "ignored")
-                        .classpath();
-        List<Path> kotlinJars = kotlinFiles.isEmpty()
-                ? List.of()
-                : resolver.resolve(Coordinate.of("com.facebook", "ktfmt", KTFMT_VERSION), "ktfmt", "ignored")
-                        .classpath();
-
-        // Build the worker command once.
-        List<String> workerCmd = buildWorkerCmd(cas, !javaFiles.isEmpty());
-
-        // Animated TUI: apply mode on an interactive TTY without --quiet/--json.
+        // Detect animate mode here — pure flag checks, zero I/O.  Everything below
+        // this line that touches the filesystem (collectSources, resolver.resolve,
+        // WorkerJar.locate, writeSpec) will block until it completes.  On the plain
+        // path that is fine.  On the animated path we must start the TUI *before*
+        // any of that work so the spinner is visible immediately.
         boolean animate = !check && !global.outputIsJson() && !global.noProgress && GoalConsole.isInteractiveTerminal();
 
         if (!animate) {
-            // Plain path: --check mode, piped output, CI, or --no-progress.
+            // Plain path: --check, piped output, CI, --no-progress.
+            List<Path> javaFiles = collectSources(projectDir, ".java");
+            List<Path> kotlinFiles = collectSources(projectDir, ".kt");
+            if (javaFiles.isEmpty() && kotlinFiles.isEmpty()) {
+                if (!global.outputIsJson()) System.out.println("jk format: no Java or Kotlin sources found.");
+                return 0;
+            }
+            Path cache = JkDirs.cache();
+            var cas = new Cas(cache);
+            var resolver = ToolResolver.mavenCentral(new Http(), cas);
+            List<Path> javaJars = javaFiles.isEmpty()
+                    ? List.of()
+                    : resolver.resolve(javaCoord(styles.java()), "java-format", "ignored")
+                            .classpath();
+            List<Path> kotlinJars = kotlinFiles.isEmpty()
+                    ? List.of()
+                    : resolver.resolve(Coordinate.of("com.facebook", "ktfmt", KTFMT_VERSION), "ktfmt", "ignored")
+                            .classpath();
+            List<String> workerCmd = buildWorkerCmd(cas, !javaFiles.isEmpty());
             Path spec = writeSpec(
                     check, styles, javaFiles, javaJars, kotlinFiles, kotlinJars, optimizeImports, rewriteConfig);
             try {
@@ -174,18 +173,44 @@ public final class FormatCommand implements CliCommand {
             }
         }
 
-        // Animated path — single pass, no stealth check.
-        // The denominator is total source files; progress advances on every file
-        // processed (changed or clean). The TUI starts immediately so the spinner
-        // is visible while the worker JVM warms up (~0.5s), eliminating the blank
-        // wait that the old stealth-check approach caused.
-        int totalFiles = javaFiles.size() + kotlinFiles.size();
-        Path applySpec =
-                writeSpec(false, styles, javaFiles, javaJars, kotlinFiles, kotlinJars, optimizeImports, rewriteConfig);
-        try {
-            return runAnimated(workerCmd, applySpec, global, startMs, projectDir, totalFiles, optimizeImports);
-        } finally {
-            Files.deleteIfExists(applySpec);
+        // Animated path — start the TUI *first*, then do I/O under the spinner.
+        String subtitle = optimizeImports ? "Examining source files & optimizing imports" : "Examining source files";
+        try (CommandManager cm = CommandManager.goal(System.out, "Format", true)) {
+            cm.addPhaseLabeled("", "fmt", subtitle);
+            cm.phaseRunning("", "fmt");
+
+            // Heavy I/O — all runs with the spinner already animating.
+            List<Path> javaFiles = collectSources(projectDir, ".java");
+            List<Path> kotlinFiles = collectSources(projectDir, ".kt");
+            if (javaFiles.isEmpty() && kotlinFiles.isEmpty()) {
+                cm.phaseDone("", "fmt", true);
+                cm.finishGoalSuccess("no sources found");
+                return 0;
+            }
+
+            int totalFiles = javaFiles.size() + kotlinFiles.size();
+            cm.progress(0, totalFiles);
+
+            Path cache = JkDirs.cache();
+            var cas = new Cas(cache);
+            var resolver = ToolResolver.mavenCentral(new Http(), cas);
+            List<Path> javaJars = javaFiles.isEmpty()
+                    ? List.of()
+                    : resolver.resolve(javaCoord(styles.java()), "java-format", "ignored")
+                            .classpath();
+            List<Path> kotlinJars = kotlinFiles.isEmpty()
+                    ? List.of()
+                    : resolver.resolve(Coordinate.of("com.facebook", "ktfmt", KTFMT_VERSION), "ktfmt", "ignored")
+                            .classpath();
+            List<String> workerCmd = buildWorkerCmd(cas, !javaFiles.isEmpty());
+
+            Path applySpec = writeSpec(
+                    false, styles, javaFiles, javaJars, kotlinFiles, kotlinJars, optimizeImports, rewriteConfig);
+            try {
+                return runAnimated(cm, workerCmd, applySpec, global, startMs, projectDir, totalFiles);
+            } finally {
+                Files.deleteIfExists(applySpec);
+            }
         }
     }
 
@@ -263,25 +288,16 @@ public final class FormatCommand implements CliCommand {
     // -------------------------------------------------------------------------
 
     private int runAnimated(
+            CommandManager cm,
             List<String> baseCmd,
             Path applySpec,
             GlobalOptions global,
             long startMs,
             Path projectDir,
-            int totalFiles,
-            boolean optimizeImports)
+            int totalFiles)
             throws IOException, InterruptedException {
         List<String> cmd = withSpec(baseCmd, applySpec);
-        // Subtitle communicates what the single pass is doing.
-        String subtitle = optimizeImports ? "Examining source files & optimizing imports" : "Examining source files";
-
-        // Start the TUI immediately — the spinner runs on its daemon thread while the
-        // worker JVM starts in its own process, so there is no blank wait before output.
-        try (CommandManager cm = CommandManager.goal(System.out, "Format", true)) {
-            cm.progress(0, totalFiles);
-            cm.addPhaseLabeled("", "fmt", subtitle);
-            cm.phaseRunning("", "fmt");
-
+        {
             int[] scanned = {0};
             int[] counts = {0, 0, 0}; // changed, clean, errors
             int exit = WorkerProcess.run(
