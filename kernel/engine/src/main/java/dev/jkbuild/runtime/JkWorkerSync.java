@@ -2,30 +2,28 @@
 package dev.jkbuild.runtime;
 
 import dev.jkbuild.cache.Cas;
-import dev.jkbuild.http.Http;
-import dev.jkbuild.model.Coordinate;
-import dev.jkbuild.repo.JkMavenLocalRepo;
-import dev.jkbuild.repo.MavenRepo;
-import dev.jkbuild.repo.RepoGroup;
+import dev.jkbuild.repo.RepoArtifactStore;
 import dev.jkbuild.util.JkVersion;
 import dev.jkbuild.worker.WorkerJar;
+import dev.jkbuild.worker.WorkerJarNotFoundException;
 import java.io.IOException;
-import java.net.URI;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.util.HexFormat;
 
 /**
- * Pulls jk's own child-JVM worker jars ({@code jk-test-runner}, {@code jk-kotlin-compiler}) into
- * the local CAS so {@code jk test} / Kotlin builds can locate them by SHA without a manual {@code
- * installLocalCas}.
+ * Ensures jk's own child-JVM worker jars ({@code jk-test-runner}, {@code jk-kotlin-compiler}, …)
+ * are present in {@code repos/local/} so {@link WorkerJar#locate()} can find them by Maven
+ * coordinate.
  *
  * <p>These aren't project dependencies — they're jk's tooling, pinned to jk's own version. Until
- * they're published to Maven Central, {@code jk sync} fetches them from the local Maven repository
- * ({@code ~/.m2/repository}, populated by {@code ./gradlew publishToMavenLocal} in jk's tree). The
- * jar lands in the CAS keyed by its content SHA, which must match the expected-SHA resource this jk
- * build was paired with (see {@code writeRunnerSha} / {@code writeKotlinWorkerSha}).
+ * they're published to Maven Central, {@code jk sync} copies them from the local Maven repository
+ * ({@code ~/.m2/repository}, populated by {@code ./gradlew publishToMavenLocal} in jk's tree) into
+ * {@code <cache>/repos/local/} in the m2 layout that {@link RepoArtifactStore} understands.
  *
- * <p>Best-effort: a worker already in the CAS is left alone, and a worker absent from {@code ~/.m2}
- * is reported but doesn't fail the sync (the project may not use Kotlin or tests).
+ * <p>Best-effort: a worker already in {@code repos/local/} or {@code repos/central/} is skipped,
+ * and a worker absent from {@code ~/.m2} is reported but doesn't fail the sync.
  */
 public final class JkWorkerSync {
 
@@ -47,57 +45,51 @@ public final class JkWorkerSync {
 
     public static Result ensureInCas(Cas cas, Observer obs) throws IOException, InterruptedException {
         Path m2 = Path.of(System.getProperty("user.home"), ".m2", "repository");
-        RepoGroup mavenLocal = null; // built lazily, only if something's missing
+        Path cacheRoot = cas.root();
+        RepoArtifactStore localStore = new RepoArtifactStore(cacheRoot, "local");
+        RepoArtifactStore centralStore = new RepoArtifactStore(cacheRoot, "central");
         int present = 0;
         int fetched = 0;
         int missing = 0;
 
         for (WorkerJar w : WorkerJar.values()) {
-            String expectedSha = w.expectedShaOrNull();
-            if (expectedSha == null || expectedSha.isBlank()) {
-                continue; // this jk build didn't bundle the resource — nothing to pin to
-            }
-            if (cas.contains(expectedSha)) {
+            String relPath = relativeM2Path(w.artifactId());
+
+            // Already in local or central repos?
+            if (localStore.locate(relPath).isPresent() || centralStore.locate(relPath).isPresent()) {
                 present++;
                 obs.present(w.artifactId());
                 continue;
             }
-            if (mavenLocal == null) mavenLocal = mavenLocal(m2, cas);
-            Coordinate coord = Coordinate.of(GROUP, w.artifactId(), JkVersion.VERSION);
-            String got;
+
+            // Try to copy from ~/.m2/repository into repos/local/
+            Path m2Jar = m2.resolve(relPath.replace('/', java.io.File.separatorChar));
+            if (!Files.isRegularFile(m2Jar)) {
+                missing++;
+                obs.missing(w.artifactId(), "not found in ~/.m2 or cache");
+                continue;
+            }
+
             try {
-                var hit = mavenLocal.tryFetchArtifact(coord);
-                if (hit.isEmpty()) {
-                    missing++;
-                    obs.missing(w.artifactId(), "not found in cache");
-                    continue;
-                }
-                got = hit.get().fetched().sha256();
-            } catch (IOException e) {
+                byte[] jarBytes = Files.readAllBytes(m2Jar);
+                byte[] digest = MessageDigest.getInstance("SHA-256").digest(jarBytes);
+                String hex = HexFormat.of().formatHex(digest);
+                // Put into CAS first (hard-link source for materialize), then materialize into repos/local/
+                Path casBlob = cas.put(jarBytes);
+                localStore.materialize(relPath, casBlob, hex);
+                fetched++;
+                obs.fetched(w.artifactId());
+            } catch (Exception e) {
                 missing++;
                 obs.missing(w.artifactId(), e.getMessage());
-                continue;
             }
-            if (!got.equals(expectedSha)) {
-                // The published jar is a different build than this jk — it landed
-                // at the wrong CAS key, so the expected one still isn't satisfied.
-                missing++;
-                obs.missing(w.artifactId(), "not found in cache");
-                continue;
-            }
-            fetched++;
-            obs.fetched(w.artifactId());
         }
         return new Result(present, fetched, missing);
     }
 
-    private static RepoGroup mavenLocal(Path m2, Cas cas) {
-        URI base = m2.toUri(); // file:///<home>/.m2/repository/
-        JkMavenLocalRepo localRepo = new JkMavenLocalRepo(cas.root());
-        return RepoGroup.of(new MavenRepo("mavenLocal", base, new Http(), cas, localRepo));
-    }
-
-    private static String shortSha(String sha) {
-        return sha.length() >= 8 ? sha.substring(0, 8) : sha;
+    /** The m2-layout relative path for a worker artifact at the current jk version. */
+    private static String relativeM2Path(String artifactId) {
+        String version = JkVersion.VERSION;
+        return "dev/jkbuild/" + artifactId + "/" + version + "/" + artifactId + "-" + version + ".jar";
     }
 }

@@ -235,12 +235,13 @@ public final class CommandDispatch {
         Theme t = Theme.active();
         String label = HelpRenderer.paint("‼ Error:", t.errorLabel(), ansi);
         String jar = HelpRenderer.paint(e.artifactId() + ".jar", t.warning(), ansi);
-        String sha = HelpRenderer.paint(e.sha(), t.cyan(), ansi);
-        String path = HelpRenderer.paint(e.path().toString(), t.path(), ansi);
+        String coord = HelpRenderer.paint(e.coordinate(), t.cyan(), ansi);
         String jk = ansi ? Ansi.sgr(t.helpHint()) + "jk" + Ansi.RESET : "jk";
-        System.err.println(label + " " + jar + " is not in the CAS.");
-        System.err.println("  Expected sha256: " + sha);
-        System.err.println("  Expected path:   " + path);
+        System.err.println(label + " " + jar + " not found.");
+        System.err.println("  Coordinate: " + coord);
+        for (java.nio.file.Path p : e.pathsChecked()) {
+            System.err.println("  Checked:    " + HelpRenderer.paint(p.toString(), t.path(), ansi));
+        }
         System.err.println("  Reinstall " + jk + " or set -D" + e.jarProperty() + "=<path>");
     }
 

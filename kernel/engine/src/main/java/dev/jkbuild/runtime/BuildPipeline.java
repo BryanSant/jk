@@ -1247,23 +1247,6 @@ public final class BuildPipeline {
                         String sha;
                         if (built) {
                             sha = dev.jkbuild.util.Hashing.sha256Hex(jar);
-                        } else if (worker.isPresent()) {
-                            // Not a built sibling. Gradle-only workers (kotlin-compiler,
-                            // git-client, …) aren't jk modules, so self-host by reusing the
-                            // RUNNING jk's worker identity — the sha this jk was paired with.
-                            sha = worker.get().expectedShaOrNull();
-                            if (sha == null) {
-                                ctx.error(
-                                        "embed-sha",
-                                        "worker '"
-                                                + key
-                                                + "' is known but its sha "
-                                                + "resource isn't bundled in this jk build — rebuild jk so its "
-                                                + "image includes META-INF/"
-                                                + key
-                                                + "-sha256.txt");
-                                throw new RuntimeException("embed-sha: missing worker sha for '" + key + "'");
-                            }
                         } else if (jar != null) {
                             skipped++;
                             continue; // declared module, not built in this (scoped) run
@@ -1887,8 +1870,6 @@ public final class BuildPipeline {
     private static List<String> testStampExtras(Map<String, String> workerJars) {
         List<String> extras = new ArrayList<>();
         extras.add("jk:" + dev.jkbuild.util.JkVersion.VERSION);
-        String runnerSha = dev.jkbuild.worker.WorkerJar.TEST_RUNNER.expectedShaOrNull();
-        if (runnerSha != null) extras.add("runner:" + runnerSha);
         // Worker jars by content — a worker change retests the module that forks it.
         for (Map.Entry<String, String> e : workerJars.entrySet()) {
             String fp;

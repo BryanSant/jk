@@ -2,53 +2,52 @@
 package dev.jkbuild.worker;
 
 import dev.jkbuild.cache.Cas;
+import dev.jkbuild.repo.RepoArtifactStore;
 import dev.jkbuild.util.JkDirs;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.UncheckedIOException;
-import java.nio.charset.StandardCharsets;
+import dev.jkbuild.util.JkVersion;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * The single registry of jk's child-JVM worker jars, and the one place that locates one on disk.
  *
  * <p>Each worker is jk's own tooling — pinned to jk's version, not a project dependency — and is
- * addressed by the SHA-256 this build of jk was paired with (emitted as a {@code
- * /META-INF/<artifact>-sha256.txt} resource by the worker module's Gradle wiring). Location order
+ * addressed by its Maven coordinate ({@code dev.jkbuild:<artifactId>:<version>}). Location order
  * is uniform:
  *
  * <ol>
  *   <li>the {@code -D<jarProperty>} override (tests / dev), then
- *   <li>the local CAS, keyed by the expected SHA (populated by {@code jk sync} once the worker is
- *       published, or {@code ./gradlew <module>:installLocalCas} in jk's own tree).
+ *   <li>{@code repos/local/} in the jk cache (populated by {@code ./gradlew <module>:installLocal}
+ *       in jk's own tree), then
+ *   <li>{@code repos/central/} in the jk cache (populated by {@code jk sync} once the worker is
+ *       published).
  * </ol>
  *
  * <p>This enum replaces the seven near-identical {@code *WorkerSetup} locator classes and {@code
- * JkWorkerSync}'s hand-maintained worker list — one source of truth for the property name, the SHA
- * resource, and the side-load hint.
+ * JkWorkerSync}'s hand-maintained worker list — one source of truth for the property name, the
+ * coordinate, and the side-load hint.
  */
 public enum WorkerJar {
-    TEST_RUNNER("jk-test-runner", "jk.test.runner.jar", ":test-runner:installLocalCas"),
-    KOTLIN_COMPILER("jk-kotlin-compiler", "jk.kotlin.worker.jar", ":kotlin-compiler:installLocalCas"),
-    JAVA_COMPILER("jk-java-compiler", "jk.java.worker.jar", ":java-compiler:installLocalCas"),
-    AUDITOR("jk-auditor", "jk.auditor.worker.jar", ":auditor:installLocalCas"),
-    PUBLISHER("jk-publisher", "jk.publisher.worker.jar", ":publisher:installLocalCas"),
-    IMAGE_BUILDER("jk-image-builder", "jk.image-builder.worker.jar", ":image-builder:installLocalCas"),
-    COMPAT_BRIDGE("jk-compat-bridge", "jk.compat-bridge.worker.jar", ":compat-bridge:installLocalCas"),
-    GIT_CLIENT("jk-git-client", "jk.git-client.worker.jar", ":git-client:installLocalCas"),
-    FORMATTER("jk-formatter", "jk.formatter.worker.jar", ":formatter:installLocalCas");
+    TEST_RUNNER("jk-test-runner", "jk.test.runner.jar", ":test-runner:installLocal"),
+    KOTLIN_COMPILER("jk-kotlin-compiler", "jk.kotlin.worker.jar", ":kotlin-compiler:installLocal"),
+    JAVA_COMPILER("jk-java-compiler", "jk.java.worker.jar", ":java-compiler:installLocal"),
+    AUDITOR("jk-auditor", "jk.auditor.worker.jar", ":auditor:installLocal"),
+    PUBLISHER("jk-publisher", "jk.publisher.worker.jar", ":publisher:installLocal"),
+    IMAGE_BUILDER("jk-image-builder", "jk.image-builder.worker.jar", ":image-builder:installLocal"),
+    COMPAT_BRIDGE("jk-compat-bridge", "jk.compat-bridge.worker.jar", ":compat-bridge:installLocal"),
+    GIT_CLIENT("jk-git-client", "jk.git-client.worker.jar", ":git-client:installLocal"),
+    FORMATTER("jk-formatter", "jk.formatter.worker.jar", ":formatter:installLocal");
 
     private final String artifactId;
     private final String jarProperty;
     private final String installTask;
-    private final String shaResource;
 
     WorkerJar(String artifactId, String jarProperty, String installTask) {
         this.artifactId = artifactId;
         this.jarProperty = jarProperty;
         this.installTask = installTask;
-        this.shaResource = "/META-INF/" + artifactId + "-sha256.txt";
     }
 
     /** Maven artifactId the worker publishes under (group is always {@code dev.jkbuild}). */
@@ -61,37 +60,24 @@ public enum WorkerJar {
         return jarProperty;
     }
 
-    /** Classpath resource holding the expected SHA-256 this jk build was paired with. */
-    public String shaResource() {
-        return shaResource;
+    /** The Gradle task that installs this worker into the local repo. */
+    public String installTask() {
+        return installTask;
     }
 
     /**
-     * The expected SHA-256 this jk build was paired with, or {@code null} when the resource is absent
-     * (a jk build that didn't bundle this worker).
+     * The m2-layout relative path for this worker at its current version.
+     * E.g. {@code dev/jkbuild/jk-formatter/0.1.0-SNAPSHOT/jk-formatter-0.1.0-SNAPSHOT.jar}.
      */
-    public String expectedShaOrNull() {
-        try (InputStream in = WorkerJar.class.getResourceAsStream(shaResource)) {
-            if (in == null) return null;
-            return new String(in.readAllBytes(), StandardCharsets.UTF_8).trim();
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
-    }
-
-    private String expectedSha() {
-        String sha = expectedShaOrNull();
-        if (sha == null || sha.isBlank()) {
-            throw new IllegalStateException(
-                    shaResource + " missing from this jk build (the worker-sha resource wasn't generated)");
-        }
-        return sha;
+    private String relativePath() {
+        String version = JkVersion.VERSION;
+        return "dev/jkbuild/" + artifactId + "/" + version + "/" + artifactId + "-" + version + ".jar";
     }
 
     /**
-     * Locate the worker jar against {@code cas}: {@code -D<jarProperty>} override first, then the CAS
-     * by expected SHA. Throws {@link IllegalStateException} with side-load instructions if neither
-     * resolves.
+     * Locate the worker jar: {@code -D<jarProperty>} override first, then {@code repos/local/},
+     * then {@code repos/central/}. Throws {@link WorkerJarNotFoundException} with side-load
+     * instructions if none resolves.
      */
     public Path locate(Cas cas) {
         String override = System.getProperty(jarProperty);
@@ -101,10 +87,21 @@ public enum WorkerJar {
             throw new IllegalStateException(
                     "-D" + jarProperty + " is set to '" + override + "' but no file exists there.");
         }
-        String expectedHash = expectedSha();
-        Path target = cas.pathFor(expectedHash);
-        if (Files.isRegularFile(target)) return target;
-        throw new WorkerJarNotFoundException(artifactId, expectedHash, target, jarProperty);
+
+        Path cacheRoot = cas.root(); // cas root is the jk cache directory (e.g. ~/.jk/cache)
+        String relPath = relativePath();
+        String coordinate = "dev.jkbuild:" + artifactId + ":" + JkVersion.VERSION;
+        List<Path> checked = new ArrayList<>();
+
+        for (String repoName : List.of("local", "central")) {
+            RepoArtifactStore store = new RepoArtifactStore(cacheRoot, repoName);
+            var result = store.locate(relPath);
+            if (result.isPresent()) return result.get();
+            // Record the path that was checked (the artifact path, not the sidecar)
+            checked.add(cacheRoot.resolve("repos").resolve(repoName).resolve(relPath));
+        }
+
+        throw new WorkerJarNotFoundException(artifactId, coordinate, checked, jarProperty);
     }
 
     /** Locate using the default jk CAS ({@code $JK_CACHE_DIR}). */
