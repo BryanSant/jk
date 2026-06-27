@@ -6,6 +6,8 @@ import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.run.ConsoleSpec;
 import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.config.ImageConfigParser;
+import dev.jkbuild.cli.theme.Coords;
+import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.config.WorkspaceLoader;
 import dev.jkbuild.util.JkDirs;
@@ -220,7 +222,11 @@ public final class ImageCommand implements CliCommand {
         builder.addPhase(imagePlan).addPhase(writeImage);
         Goal goal = builder.build();
 
-        ConsoleSpec spec = new ConsoleSpec("Image", r -> "Built image", r -> "Image build failed");
+        ConsoleSpec spec = new ConsoleSpec(
+                "Image",
+                r -> imageSuccessTail(goal),
+                r -> "Image build failed",
+                true);
         GoalResult result = GoalConsole.runGoal(
                 goal, GoalConsole.modeFor(global), cache, spec, BuildCommand.buildTarget(jkBuildPath, projectDir));
 
@@ -232,27 +238,43 @@ public final class ImageCommand implements CliCommand {
             if (testResult != null && !testResult.allPassed()) return 4;
             return 1;
         }
-
-        if (!global.outputIsJson()) {
-            JkBuild project = goal.get(BuildPipeline.PROJECT).orElseThrow();
-            Path tarballPath = goal.get(TARBALL_PATH).orElse(null);
-            ImageConfig cfg = goal.get(CONFIG).orElse(null);
-            if (tarballPath != null) {
-                System.out.println("Wrote OCI tarball " + tarballPath);
-            } else if (cfg != null && (cfg.registry() == null || cfg.registry().isBlank())) {
-                String ref = goal.get(IMAGE_REF)
-                        .orElse(cfg.targetReference(project.project().name(), project.project().version()));
-                String exe = cfg.dockerExecutable() != null ? cfg.dockerExecutable() : "docker";
-                System.out.println("Loaded " + ref + " into " + exe);
-            } else {
-                String ref = goal.get(IMAGE_REF)
-                        .orElse(cfg != null
-                                ? cfg.targetReference(project.project().name(), project.project().version())
-                                : "");
-                System.out.println("Pushed " + ref);
-            }
-        }
         return 0;
+    }
+
+    /**
+     * Success tail for the Image chip line. Reads mode from the finished goal:
+     * <ul>
+     *   <li>Tarball: {@code Wrote OCI tarball <path>}
+     *   <li>Daemon load: {@code Loaded OCI image <name>:<version> into <docker|podman>}
+     *   <li>Registry push: {@code Pushed <ref>}
+     * </ul>
+     * The framework appends {@code took Xs} automatically.
+     */
+    private static String imageSuccessTail(Goal goal) {
+        JkBuild project = goal.get(BuildPipeline.PROJECT).orElse(null);
+        ImageConfig cfg = goal.get(CONFIG).orElse(null);
+        Path tarballPath = goal.get(TARBALL_PATH).orElse(null);
+
+        if (tarballPath != null) {
+            return "Wrote OCI tarball "
+                    + Theme.colorize(tarballPath.toString(), Theme.active().path());
+        }
+        String name = project != null ? project.project().name() : "";
+        String version = project != null ? project.project().version() : "";
+        boolean daemonMode = cfg == null || cfg.registry() == null || cfg.registry().isBlank();
+        if (daemonMode) {
+            String exe = cfg != null && cfg.dockerExecutable() != null ? cfg.dockerExecutable() : "docker";
+            return "Loaded OCI image "
+                    + Theme.colorize(name, Coords.artifactStyle())
+                    + ":"
+                    + Theme.colorize(version, Coords.versionStyle())
+                    + " into "
+                    + exe;
+        }
+        // Push mode — use the resolved reference.
+        String ref = goal.get(IMAGE_REF)
+                .orElse(cfg != null ? cfg.targetReference(name, version) : "");
+        return "Pushed " + Theme.colorize(ref, Theme.active().path());
     }
 
     /** Stable serialization of the image config for the packaging cache key. */
