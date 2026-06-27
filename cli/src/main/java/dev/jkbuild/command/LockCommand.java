@@ -7,6 +7,10 @@ import dev.jkbuild.cli.Jk;
 import dev.jkbuild.cli.run.ConsoleSpec;
 import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.cli.theme.Coords;
+import dev.jkbuild.cli.theme.Theme;
+import dev.jkbuild.cli.tui.CommandManager;
+import dev.jkbuild.cli.tui.Glyphs;
+import dev.jkbuild.config.GlobalConfig;
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.config.WorkspaceLoader;
 import dev.jkbuild.config.WorkspaceLocator;
@@ -23,6 +27,7 @@ import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.repo.RepoGroup;
 import dev.jkbuild.resolver.LockOrchestrator;
+import dev.jkbuild.resolver.ResolveObserver;
 import dev.jkbuild.resolver.VersionSelectors;
 import dev.jkbuild.resolver.Versions;
 import dev.jkbuild.resolver.pubgrub.UnsatisfiableException;
@@ -40,6 +45,8 @@ import dev.jkbuild.util.JkDirs;
 import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -120,64 +127,383 @@ public final class LockCommand implements CliCommand {
             return 2;
         }
 
-        // When locking a workspace module directly, apply workspace context:
-        // resolve workspace: placeholders and filter sibling-internal deps so
-        // the solver only sees external Maven coords.
         JkBuild effectiveRoot = applyWorkspaceContextIfModule(dir, root);
 
-        // Lock the current directory (root or standalone project).
-        int result = lockSingleProject(dir, effectiveRoot, cache, "Lock");
-        if (result != 0) return result;
+        GoalConsole.Mode mode = GoalConsole.modeFor(global);
+        boolean live = mode == GoalConsole.Mode.AUTO || mode == GoalConsole.Mode.QUIET;
 
-        // Cascade: lock each declared workspace module in declaration order.
+        if (!live) {
+            // --verbose / --output json: existing simple-task rendering.
+            int result = lockSingleProject(dir, effectiveRoot, cache, "Lock");
+            if (result != 0) return result;
+            if (effectiveRoot.isWorkspaceRoot()) {
+                Map<Path, JkBuild> modules;
+                try {
+                    modules = WorkspaceLoader.loadModules(dir, effectiveRoot);
+                } catch (RuntimeException e) {
+                    System.err.println("jk lock: " + e.getMessage());
+                    return 2;
+                }
+                for (Map.Entry<Path, JkBuild> entry : modules.entrySet()) {
+                    Path moduleDir = entry.getKey();
+                    JkBuild rawModule = entry.getValue();
+                    JkBuild effectiveModule =
+                            WorkspaceMerge.applyToModule(effectiveRoot, rawModule, modules.values());
+                    String moduleLabel = dir.getFileName() + "/" + dir.relativize(moduleDir);
+                    int moduleResult = lockSingleProject(moduleDir, effectiveModule, cache, moduleLabel);
+                    if (moduleResult != 0) return moduleResult;
+                }
+            }
+            return 0;
+        }
+
+        // Live goal-mode TUI: one shared CommandManager spanning root + all workspace modules.
+        boolean animate = mode == GoalConsole.Mode.AUTO && GoalConsole.isInteractiveTerminal();
+        return runLive(dir, effectiveRoot, cache, animate);
+    }
+
+    // ---- live goal-mode TUI ------------------------------------------------
+
+    /**
+     * Live path: one {@link CommandManager} in goal mode, one row per module, a shared progress bar
+     * calibrated to total packages across all modules, and a completed-package tail.
+     */
+    private int runLive(Path dir, JkBuild effectiveRoot, Path cache, boolean animate) throws Exception {
+        CommandManager view = CommandManager.goal(System.out, "Lock", animate);
+        long start = System.nanoTime();
+
+        // Shared counters across all modules.
+        AtomicInteger globalLocked = new AtomicInteger(0);
+        AtomicInteger globalTotal = new AtomicInteger(0);
+        List<String> errorLines = new ArrayList<>();
+
+        String rootCoord = coordLabel(effectiveRoot, dir);
+        int exit = lockModuleLive(dir, effectiveRoot, cache, rootCoord, view, globalLocked, globalTotal, errorLines);
+        if (exit != 0) {
+            view.finishGoalFailure(lockFailTail(), errorLines);
+            return exit;
+        }
+
         if (effectiveRoot.isWorkspaceRoot()) {
             Map<Path, JkBuild> modules;
             try {
                 modules = WorkspaceLoader.loadModules(dir, effectiveRoot);
             } catch (RuntimeException e) {
-                System.err.println("jk lock: " + e.getMessage());
+                errorLines.add(e.getMessage());
+                view.finishGoalFailure(lockFailTail(), errorLines);
                 return 2;
             }
             for (Map.Entry<Path, JkBuild> entry : modules.entrySet()) {
                 Path moduleDir = entry.getKey();
                 JkBuild rawModule = entry.getValue();
-                // Resolve workspace:* placeholders and filter sibling-internal deps
-                // so the module's lock only contains resolvable external coords.
-                JkBuild effectiveModule = WorkspaceMerge.applyToModule(effectiveRoot, rawModule, modules.values());
-                String moduleLabel = dir.getFileName() + "/" + dir.relativize(moduleDir);
-                int moduleResult = lockSingleProject(moduleDir, effectiveModule, cache, moduleLabel);
-                if (moduleResult != 0) return moduleResult;
+                JkBuild effectiveModule =
+                        WorkspaceMerge.applyToModule(effectiveRoot, rawModule, modules.values());
+                String moduleCoord = coordLabel(rawModule, moduleDir);
+                exit = lockModuleLive(
+                        moduleDir, effectiveModule, cache, moduleCoord, view, globalLocked, globalTotal, errorLines);
+                if (exit != 0) {
+                    view.finishGoalFailure(lockFailTail(), errorLines);
+                    return exit;
+                }
             }
         }
+
+        int pkgs = globalLocked.get();
+        String depStr = "Resolved " + pkgs + " dependenc" + (pkgs == 1 ? "y" : "ies");
+        view.finishGoalSuccess(
+                Theme.colorize("Lock successful", Theme.active().success())
+                        + ", "
+                        + depStr
+                        + " "
+                        + ConsoleSpec.took(Duration.ofMillis((System.nanoTime() - start) / 1_000_000)));
         return 0;
     }
 
     /**
-     * When invoked from a workspace module (not the root), discover the enclosing workspace and apply
-     * module context: resolve {@code workspace:} placeholders and filter out sibling-internal dep
-     * coords so the solver only sees external Maven coordinates. Returns {@code project} unchanged if
-     * it is a workspace root or no enclosing workspace is found.
+     * Lock one module with the goal-mode TUI. Registers an active row in {@code view}, runs the full
+     * lock goal (parse → resolve → lock-plugins → write), feeds per-package completions into the
+     * tail, then marks the row done. Returns 0 on success, or a non-zero exit code on failure
+     * (errors collected into {@code errorLines} for the caller to print above the failure chip).
      */
-    private static JkBuild applyWorkspaceContextIfModule(Path dir, JkBuild project) {
-        if (project.isWorkspaceRoot()) return project;
+    private int lockModuleLive(
+            Path dir,
+            JkBuild effective,
+            Path cache,
+            String coord,
+            CommandManager view,
+            AtomicInteger globalLocked,
+            AtomicInteger globalTotal,
+            List<String> errorLines)
+            throws Exception {
+        // Register and activate this module's row.
+        view.addPhaseLabeled(coord, "lock", coord);
+        view.phaseRunning(coord, "lock");
+
+        Path lockFile = dir.resolve("jk.lock");
+
+        // Estimate this module's scope and add it to the global denominator.
+        AtomicInteger moduleTotal = new AtomicInteger(scopeEstimate(effective, lockFile));
+        globalTotal.addAndGet(moduleTotal.get());
+        view.progress(globalLocked.get(), globalTotal.get());
+
+        // Observer: feeds per-package completions + updates the bar.
+        ResolveObserver observer = new ResolveObserver() {
+            @Override
+            public void onTotal(int total) {
+                // Adjust global denominator by the delta from our estimate.
+                int delta = total - moduleTotal.getAndSet(total);
+                if (delta != 0) globalTotal.addAndGet(delta);
+                view.progress(globalLocked.get(), Math.max(globalTotal.get(), globalLocked.get()));
+            }
+
+            @Override
+            public void onPackage(String module, String version) {
+                // Update active-row label with the coord just resolved.
+                view.phaseMessage(coord, "lock", Coords.module(module, version));
+                int gn = globalLocked.incrementAndGet();
+                int gt = Math.max(globalTotal.get(), gn);
+                view.progress(gn, gt);
+                // Add to the completion tail (newest-first, capped by MAX_COMPLETIONS).
+                String line = lockCompletionLine(gn, gt, module, version);
+                if (view.animating()) {
+                    view.addCompletion(line);
+                } else {
+                    view.writeAbove("    " + line);
+                }
+            }
+        };
+
+        // Build and run the lock goal directly (no GoalConsole wrapper).
+        Goal goal = buildLockGoal(dir, effective, cache, lockFile, moduleTotal, observer);
+        GoalResult result = goal.run();
+
+        if (result.success()) {
+            view.phaseDone(coord, "lock", true);
+            return 0;
+        }
+
+        // Failure: collect diagnostics, mark row failed.
+        view.phaseDone(coord, "lock", false);
+        for (GoalResult.Diagnostic d : result.errors()) {
+            errorLines.add(ConsoleSpec.renderError(d));
+        }
+        // Mirror the exit-code logic from the plain path.
+        boolean resolveFailed = result.phases().stream()
+                .filter(p -> p.status() == PhaseStatus.FAIL)
+                .map(GoalResult.PhaseReport::name)
+                .anyMatch("resolve"::equals);
+        return resolveFailed ? 6 : 2;
+    }
+
+    /** Failure result tail for the Lock chip. */
+    private static String lockFailTail() {
+        return "Failed to lock dependencies";
+    }
+
+    /**
+     * A single package's completion line:
+     * {@code ✓ [N of Total] group:artifact:version}
+     */
+    private static String lockCompletionLine(int n, int total, String module, String version) {
+        var th = Theme.active();
+        String check = Theme.colorize(Glyphs.CHECK + "", th.success());
+        String num = String.format("%0" + Integer.toString(Math.max(total, n)).length() + "d", n);
+        String count = Theme.colorize("[", th.darkGray())
+                + num
+                + " of "
+                + total
+                + Theme.colorize("]", th.darkGray());
+        return check + " " + count + " Locked " + Coords.module(module, version);
+    }
+
+    /**
+     * Best-effort scope estimate for a module: the existing lockfile size (re-run) or declared deps ×
+     * transitive expansion factor.
+     */
+    private static int scopeEstimate(JkBuild effective, Path lockFile) {
         try {
-            var rootOpt = WorkspaceLocator.findRoot(dir);
-            if (rootOpt.isEmpty()) return project;
-            Path wsRoot = rootOpt.get();
-            JkBuild wsRootBuild = JkBuildParser.parse(wsRoot.resolve("jk.toml"));
-            if (!wsRootBuild.isWorkspaceRoot()) return project;
-            var siblings = WorkspaceLoader.loadModules(wsRoot, wsRootBuild);
-            return WorkspaceMerge.applyToModule(wsRootBuild, project, siblings.values());
+            int n = LockfileReader.read(lockFile).artifacts().size();
+            if (n > 0) return n;
         } catch (Exception ignored) {
-            // Workspace discovery is best-effort; fall through to a direct lock.
-            return project;
+        }
+        try {
+            int declared = effective.dependencies().byScope().values().stream()
+                    .mapToInt(List::size)
+                    .sum();
+            return Math.max(5, declared * 8);
+        } catch (Exception ignored) {
+        }
+        return 20;
+    }
+
+    /**
+     * Display coordinate for a module: {@code group:artifact} from its {@code [project]}, falling
+     * back to the directory name.
+     */
+    private static String coordLabel(JkBuild build, Path dir) {
+        try {
+            var p = build.project();
+            return p.group() + ":" + p.name();
+        } catch (Exception e) {
+            return dir.getFileName() == null ? dir.toString() : dir.getFileName().toString();
         }
     }
 
     /**
-     * Run the three-phase lock pipeline (parse → resolve → write) for one project directory. {@code
-     * effective} is the pre-parsed {@link JkBuild} with any {@code workspace:} placeholders already
-     * resolved.
+     * Build the lock goal phases for one module. The {@code observer} feeds per-package events into
+     * the caller (either the TUI or a plain observer). The {@code moduleTotal} is updated by the
+     * resolve phase's {@code onTotal} callback so the caller can adjust the global bar denominator.
+     */
+    private Goal buildLockGoal(
+            Path dir,
+            JkBuild effective,
+            Path cache,
+            Path lockFile,
+            AtomicInteger resolveEstimate,
+            ResolveObserver observer) {
+
+        Phase parseBuild = Phase.builder("parse-build")
+                .scope(1)
+                .execute(ctx -> {
+                    ctx.label("parse jk.toml");
+                    ctx.put(EFFECTIVE, effective);
+                    ctx.progress(1);
+                })
+                .build();
+
+        Phase resolve = Phase.builder("resolve")
+                .label("Resolving")
+                .kind(PhaseKind.IO)
+                .requires("parse-build")
+                .scope(resolveEstimate::get)
+                .execute(ctx -> {
+                    ctx.label("Resolving");
+                    JkBuild eff = ctx.require(EFFECTIVE);
+                    Cas cas = new Cas(cache);
+                    if (global.offline && Files.exists(lockFile)) {
+                        try {
+                            Lockfile existing = LockfileReader.read(lockFile);
+                            requireOfflineSatisfiable(eff, existing, cas);
+                            ctx.progress(existing.artifacts().size());
+                            ctx.put(LOCKFILE, existing);
+                            return;
+                        } catch (Exception e) {
+                            ctx.error("resolve", e.getMessage());
+                            throw new RuntimeException(e);
+                        }
+                    }
+                    RepoGroup baseRepos = RepoGroupBuilder.buildFor(eff, repoUrl, cas);
+                    Map<String, String> lockedShas = Map.of();
+                    if (Files.exists(lockFile)) {
+                        try {
+                            lockedShas = GitSourceResolution.lockedImmutableShas(LockfileReader.read(lockFile));
+                        } catch (Exception ignored) {
+                        }
+                    }
+                    GitSourceResolution.Prepared prep;
+                    try {
+                        prep = GitSourceResolution.prepare(
+                                eff, baseRepos, cas, CompileToolchain.resolveJavaHome(dir), Jk.VERSION, lockedShas);
+                    } catch (Exception e) {
+                        ctx.error("resolve", e.getMessage());
+                        throw new RuntimeException(e);
+                    }
+                    RepoGroup repos = prep.repos();
+                    LockOrchestrator orchestrator = new LockOrchestrator(repos);
+                    // Wrap the caller's observer so it also drives ctx.label/progress
+                    // (needed for the bar when running under GoalConsole).
+                    ResolveObserver wrappedObserver = new ResolveObserver() {
+                        @Override
+                        public void onTotal(int total) {
+                            int delta = total - resolveEstimate.getAndSet(total);
+                            if (delta > 0) ctx.updateScope(delta);
+                            observer.onTotal(total);
+                        }
+
+                        @Override
+                        public void onPackage(String module, String version) {
+                            ctx.label("Resolved " + Coords.module(module, version));
+                            ctx.progress(1);
+                            observer.onPackage(module, version);
+                        }
+                    };
+                    try {
+                        Lockfile lock = sources
+                                ? orchestrator.lockWithSources(
+                                        prep.project(), Jk.VERSION, features, !noDefaultFeatures, wrappedObserver)
+                                : orchestrator.lock(
+                                        prep.project(), Jk.VERSION, features, !noDefaultFeatures, wrappedObserver);
+                        lock = GitSourceResolution.stamp(lock, prep.gitInfoByKey());
+                        String kotlinVersion = resolveKotlinVersion(eff, repos);
+                        if (kotlinVersion != null) {
+                            ctx.label("resolved kotlin " + kotlinVersion);
+                            lock = lock.withKotlin(kotlinVersion);
+                        }
+                        ctx.put(LOCKFILE, lock);
+                    } catch (UnsatisfiableException e) {
+                        ctx.error("verbatim", e.getMessage());
+                        throw new RuntimeException(e);
+                    } catch (Exception e) {
+                        ctx.error("resolve", e.getMessage());
+                        throw new RuntimeException(e);
+                    }
+                })
+                .build();
+
+        Phase lockPlugins = Phase.builder("lock-plugins")
+                .kind(PhaseKind.IO)
+                .requires("resolve")
+                .scope(() -> effective.plugins().isEmpty() ? 0 : effective.plugins().size())
+                .execute(ctx -> {
+                    var decls = effective.plugins();
+                    if (decls.isEmpty()) return;
+                    ctx.label("lock plugins");
+                    Cas cas = new Cas(cache);
+                    RepoGroup repos = RepoGroupBuilder.buildFor(effective, repoUrl, cas);
+                    var entries = new ArrayList<Lockfile.PluginEntry>();
+                    for (var pd : decls) {
+                        ctx.label("lock " + pd.coordinate());
+                        var coord = Coordinate.of(pd.group(), pd.name(), pd.version());
+                        try {
+                            var fetched = repos.tryFetchArtifact(coord)
+                                    .orElseThrow(() -> new RuntimeException(
+                                            pd.coordinateWithVersion() + " not found in any repo"));
+                            entries.add(new Lockfile.PluginEntry(
+                                    pd.coordinate(), pd.version(), "sha256:" + fetched.fetched().sha256()));
+                        } catch (Exception e) {
+                            ctx.error("plugin", pd.coordinate() + " — " + e.getMessage());
+                            throw new RuntimeException(e);
+                        }
+                        ctx.progress(1);
+                    }
+                    ctx.put(LOCKFILE, ctx.require(LOCKFILE).withPlugins(entries));
+                })
+                .build();
+
+        Phase write = Phase.builder("write-lockfile")
+                .requires("lock-plugins")
+                .scope(1)
+                .execute(ctx -> {
+                    ctx.label("write " + lockFile.getFileName());
+                    LockfileWriter.write(ctx.require(LOCKFILE), lockFile);
+                    ctx.progress(1);
+                })
+                .build();
+
+        return Goal.builder("lock")
+                .addPhase(parseBuild)
+                .addPhase(resolve)
+                .addPhase(lockPlugins)
+                .addPhase(write)
+                .build();
+    }
+
+    // ---- plain (non-live) path: unchanged ----------------------------------
+
+    /**
+     * Run the three-phase lock pipeline (parse → resolve → write) for one project directory. Used by
+     * the non-live path (--verbose / --output json). {@code effective} is the pre-parsed {@link
+     * JkBuild} with any {@code workspace:} placeholders already resolved.
      */
     private int lockSingleProject(Path dir, JkBuild effective, Path cache, String label) throws Exception {
         Path lockFile = dir.resolve("jk.lock");
@@ -198,7 +524,6 @@ public final class LockCommand implements CliCommand {
                 .kind(PhaseKind.IO)
                 .requires("parse-build")
                 .scope(() -> {
-                    // Best case: existing lockfile is accurate (re-runs).
                     try {
                         int n = LockfileReader.read(lockFile).artifacts().size();
                         if (n > 0) {
@@ -207,7 +532,6 @@ public final class LockCommand implements CliCommand {
                         }
                     } catch (Exception ignored) {
                     }
-                    // Fallback: declared deps × rough transitive expansion.
                     try {
                         int declared = effective.dependencies().byScope().values().stream()
                                 .mapToInt(List::size)
@@ -242,7 +566,6 @@ public final class LockCommand implements CliCommand {
                         try {
                             lockedShas = GitSourceResolution.lockedImmutableShas(LockfileReader.read(lockFile));
                         } catch (Exception ignored) {
-                            // Unreadable prior lock → nothing to verify against.
                         }
                     }
                     GitSourceResolution.Prepared prep;
@@ -255,7 +578,7 @@ public final class LockCommand implements CliCommand {
                     }
                     RepoGroup repos = prep.repos();
                     LockOrchestrator orchestrator = new LockOrchestrator(repos);
-                    dev.jkbuild.resolver.ResolveObserver observer = new dev.jkbuild.resolver.ResolveObserver() {
+                    ResolveObserver observer = new ResolveObserver() {
                         @Override
                         public void onTotal(int total) {
                             int delta = total - resolveEstimate.get();
@@ -290,12 +613,10 @@ public final class LockCommand implements CliCommand {
                 })
                 .build();
 
-        // Resolve declared plugin jars (fetch from Maven, pin SHA to lockfile).
         Phase lockPlugins = Phase.builder("lock-plugins")
                 .kind(PhaseKind.IO)
                 .requires("resolve")
-                .scope(() ->
-                        effective.plugins().isEmpty() ? 0 : effective.plugins().size())
+                .scope(() -> effective.plugins().isEmpty() ? 0 : effective.plugins().size())
                 .execute(ctx -> {
                     var decls = effective.plugins();
                     if (decls.isEmpty()) return;
@@ -369,13 +690,32 @@ public final class LockCommand implements CliCommand {
         return 0;
     }
 
+    // ---- shared helpers ----------------------------------------------------
+
     /**
-     * Resolve the project's {@code kotlin} version selector to a concrete Kotlin compiler release,
-     * the same way a dependency version is resolved: an {@code =}-pin short-circuits; a floating
-     * selector is matched against the versions of {@code kotlin-compiler-embeddable} on Maven
-     * Central, and the highest match wins. Returns {@code null} for a Java project, or when
-     * resolution can't complete (offline with nothing cached, or no match) — the build then falls
-     * back to its default Kotlin version.
+     * When invoked from a workspace module (not the root), discover the enclosing workspace and apply
+     * module context: resolve {@code workspace:} placeholders and filter out sibling-internal dep
+     * coords so the solver only sees external Maven coordinates. Returns {@code project} unchanged if
+     * it is a workspace root or no enclosing workspace is found.
+     */
+    private static JkBuild applyWorkspaceContextIfModule(Path dir, JkBuild project) {
+        if (project.isWorkspaceRoot()) return project;
+        try {
+            var rootOpt = WorkspaceLocator.findRoot(dir);
+            if (rootOpt.isEmpty()) return project;
+            Path wsRoot = rootOpt.get();
+            JkBuild wsRootBuild = JkBuildParser.parse(wsRoot.resolve("jk.toml"));
+            if (!wsRootBuild.isWorkspaceRoot()) return project;
+            var siblings = WorkspaceLoader.loadModules(wsRoot, wsRootBuild);
+            return WorkspaceMerge.applyToModule(wsRootBuild, project, siblings.values());
+        } catch (Exception ignored) {
+            return project;
+        }
+    }
+
+    /**
+     * Resolve the project's {@code kotlin} version selector to a concrete Kotlin compiler release.
+     * Returns {@code null} for a Java project or when resolution can't complete.
      */
     private static String resolveKotlinVersion(JkBuild effective, RepoGroup repos) {
         if (!effective.project().isKotlin()) return null;
@@ -394,8 +734,6 @@ public final class LockCommand implements CliCommand {
             Thread.currentThread().interrupt();
             return null;
         }
-        // Prefer the highest stable match; fall back to a pre-release only when
-        // no stable version satisfies (consistent with dependency resolution).
         return available.stream()
                 .filter(set::contains)
                 .filter(Versions::isStable)
@@ -405,9 +743,7 @@ public final class LockCommand implements CliCommand {
     }
 
     /**
-     * Throw if an existing lockfile can't be honored entirely from the local CAS while offline: every
-     * declared (non-platform) coordinate must be a locked package, and every checksummed package's
-     * blob must be present.
+     * Throw if an existing lockfile can't be honored entirely from the local CAS while offline.
      */
     private static void requireOfflineSatisfiable(JkBuild effective, Lockfile lock, Cas cas) {
         java.util.Set<String> locked = new java.util.HashSet<>();
@@ -415,7 +751,7 @@ public final class LockCommand implements CliCommand {
             locked.add(pkg.name());
         }
         for (var entry : effective.dependencies().byScope().entrySet()) {
-            if (entry.getKey() == Scope.PLATFORM) continue; // BOMs aren't resolved packages
+            if (entry.getKey() == Scope.PLATFORM) continue;
             for (var dep : entry.getValue()) {
                 if (!locked.contains(dep.module())) {
                     throw new IllegalStateException("offline: "
