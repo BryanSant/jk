@@ -954,8 +954,13 @@ public final class NewCommand implements CliCommand {
                 .when(a -> NewJdkPlan.shouldPrompt(module, hasDefaultJdk, candidates, jdkFloor(a, parent)))
                 .defaultChoice(defaultJdkId);
 
+        String wizardSubtitle = module
+                ? "Create a new Module for "
+                        + Theme.colorize(parent.displayName(), Theme.active().brightCyan())
+                : "Create a new Project";
         return Wizard.builder()
-                .title(module ? "Create a New Module for " + parent.displayName() : "Create a New Project")
+                .verb("New")
+                .subtitle(wizardSubtitle)
                 .step(WizardStep.InputStep.of("name", module ? "Module name:" : "Project name:")
                         .placeholder("untitled")
                         .defaultValue("untitled")

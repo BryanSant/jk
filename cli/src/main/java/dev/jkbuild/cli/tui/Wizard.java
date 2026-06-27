@@ -3,6 +3,7 @@ package dev.jkbuild.cli.tui;
 
 import dev.jkbuild.cli.Ansi;
 import dev.jkbuild.cli.theme.Theme;
+import dev.jkbuild.config.GlobalConfig;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.ArrayList;
@@ -48,11 +49,15 @@ public final class Wizard {
     private static final long KEY_POLL_MS = 75L;
 
     private final String title;
+    private final String verb;
+    private final String subtitle;
     private final List<WizardStep> steps;
     private volatile boolean cancelled;
 
-    Wizard(String title, List<WizardStep> steps) {
+    Wizard(String title, String verb, String subtitle, List<WizardStep> steps) {
         this.title = title;
+        this.verb = verb;
+        this.subtitle = subtitle;
         this.steps = steps;
     }
 
@@ -359,18 +364,30 @@ public final class Wizard {
     }
 
     /**
-     * Build the header: the dark-gray {@code ╭──} corner, then the title on a bright-black chip
-     * (pure-black text), space-padded so it reads as a badge. The chip's leading pad doubles as the
-     * gap after the corner dashes.
+     * Build the wizard header.
+     *
+     * <p>When {@code verb} + {@code subtitle} are set (the modern path), renders as a goal chip
+     * matching the build TUI: {@code " ● New "} on the plan-blue chip, closed by a powerline cap
+     * (Nerd Font) or a double space (plain), followed by the pre-styled subtitle.
+     *
+     * <p>Legacy (title-only): the original indigo-badge style with a {@code ╭──} rail opener.
      */
     private String headerLine(Terminal terminal) {
         Theme t = Theme.active();
+        if (!verb.isEmpty()) {
+            boolean nf = GlobalConfig.nerdfont();
+            String chipStr = GoalWedge.chip("●", verb, t.goalChip());
+            String capStr = GoalWedge.cap(t.planBadgeColor(), nf);
+            String sep = nf ? " " : "  ";
+            return chipStr + capStr + sep + subtitle;
+        }
+        // Legacy indigo-badge header.
         String text = title.isEmpty() ? "Wizard" : title;
         return new AttributedStringBuilder()
                 .append("╭──", t.railStyle(Rail.StepState.INACTIVE, Rail.RailGlyph.OPEN))
-                .append("", t.bright(t.indigoBadgeColor()))
+                .append("", t.bright(t.indigoBadgeColor()))
                 .append(" " + text + " ", t.indigoBadge())
-                .append("", t.bright(t.indigoBadgeColor()))
+                .append("", t.bright(t.indigoBadgeColor()))
                 .toAttributedString()
                 .toAnsi(terminal);
     }
