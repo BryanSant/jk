@@ -136,13 +136,17 @@ public final class ImageCommand implements CliCommand {
                     if (tarballPath != null) ctx.put(TARBALL_PATH, tarballPath);
                     ImageConfig config = buildConfig(jkBuildPath, project);
                     ctx.put(CONFIG, config);
-                    String chosen = resolveMainClass(mainClass, config, project, projectDir);
-                    if (chosen == null || chosen.isBlank()) {
-                        ctx.error("no-main",
-                                "no main class — pass --main, set image.main, or set project.main.");
-                        throw new RuntimeException("missing main class");
+                    boolean dockerfileMode = config.dockerFile() != null && !config.dockerFile().isBlank();
+                    if (!dockerfileMode) {
+                        // Jib mode: main class required; load dep jars for classpath layering.
+                        String chosen = resolveMainClass(mainClass, config, project, projectDir);
+                        if (chosen == null || chosen.isBlank()) {
+                            ctx.error("no-main",
+                                    "no main class — pass --main, set image.main, or set project.main.");
+                            throw new RuntimeException("missing main class");
+                        }
+                        ctx.put(DEP_JARS, loadDependencyJars(projectDir, cache));
                     }
-                    ctx.put(DEP_JARS, loadDependencyJars(projectDir, cache));
                     ctx.progress(1);
                 })
                 .build();
@@ -157,6 +161,25 @@ public final class ImageCommand implements CliCommand {
                     BuildLayout layout = ctx.require(BuildPipeline.LAYOUT);
                     ImageConfig config = ctx.require(CONFIG);
                     Path tarballPath = ctx.get(TARBALL_PATH).orElse(null);
+
+                    // Dockerfile mode: shell out to docker/podman build; skip Jib entirely.
+                    if (config.dockerFile() != null && !config.dockerFile().isBlank()) {
+                        boolean daemonMode = tarballPath == null
+                                && (config.registry() == null || config.registry().isBlank());
+                        String exe = config.dockerExecutable() != null ? config.dockerExecutable() : "docker";
+                        ctx.label((daemonMode ? "build into " : "build + push via ") + exe
+                                + " (" + config.dockerFile() + ")");
+                        try {
+                            String ref = runDockerfileBuild(ctx, config, projectDir, tarballPath, project);
+                            ctx.put(IMAGE_REF, ref);
+                        } catch (RuntimeException e) {
+                            ctx.error("image", e.getMessage());
+                            throw e;
+                        }
+                        ctx.progress(1);
+                        return;
+                    }
+
                     @SuppressWarnings("unchecked")
                     List<Path> depJars = (List<Path>) ctx.require(DEP_JARS);
 
@@ -418,7 +441,74 @@ public final class ImageCommand implements CliCommand {
                 tag != null ? tag : data.tag(),
                 data.platforms(),
                 data.main(),
-                dockerExe);
+                dockerExe,
+                data.dockerFile());
+    }
+
+    /**
+     * Build an OCI image using the project's Dockerfile. Runs {@code docker build -f <file> -t
+     * <ref> [--platform <p>]* <projectDir>}, then (for tarball mode) {@code docker save}, or (for
+     * push mode) {@code docker push}. Daemon mode requires no extra step — the build loads directly
+     * into the local runtime. Build output is streamed above the TUI via {@code ctx.output()}.
+     */
+    private static String runDockerfileBuild(
+            dev.jkbuild.run.PhaseContext ctx,
+            ImageConfig config,
+            Path projectDir,
+            Path tarballPath,
+            JkBuild project)
+            throws IOException, InterruptedException {
+        String exe = config.dockerExecutable() != null ? config.dockerExecutable() : "docker";
+        Path dockerfile = projectDir.resolve(config.dockerFile()).normalize();
+        String name = project.project().name();
+        String version = project.project().version();
+        String ref = config.targetReference(name, version);
+
+        // docker build -f <dockerfile> -t <ref> [--platform <p>]* <context>
+        List<String> buildCmd = new java.util.ArrayList<>();
+        buildCmd.add(exe);
+        buildCmd.add("build");
+        buildCmd.add("-f");
+        buildCmd.add(dockerfile.toString());
+        buildCmd.add("-t");
+        buildCmd.add(ref);
+        for (String platform : config.platforms()) {
+            buildCmd.add("--platform");
+            buildCmd.add(platform);
+        }
+        buildCmd.add(projectDir.toString());
+
+        runSubprocess(ctx, buildCmd, projectDir);
+
+        if (tarballPath != null) {
+            Files.createDirectories(tarballPath.getParent());
+            runSubprocess(ctx, List.of(exe, "save", "-o", tarballPath.toString(), ref), projectDir);
+        } else if (config.registry() != null && !config.registry().isBlank()) {
+            runSubprocess(ctx, List.of(exe, "push", ref), projectDir);
+        }
+        return ref;
+    }
+
+    /** Run a subprocess, streaming each output line above the TUI via {@code ctx.output()}. */
+    private static void runSubprocess(
+            dev.jkbuild.run.PhaseContext ctx, List<String> cmd, Path cwd)
+            throws IOException, InterruptedException {
+        Process p = new ProcessBuilder(cmd)
+                .directory(cwd.toFile())
+                .redirectErrorStream(true)
+                .start();
+        try (var reader = new java.io.BufferedReader(
+                new java.io.InputStreamReader(p.getInputStream(), java.nio.charset.StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                ctx.output(line);
+            }
+        }
+        int exit = p.waitFor();
+        if (exit != 0) {
+            throw new RuntimeException(
+                    cmd.get(0) + " " + cmd.get(1) + " failed (exit " + exit + ")");
+        }
     }
 
     /**

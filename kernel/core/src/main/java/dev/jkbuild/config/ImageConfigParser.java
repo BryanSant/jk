@@ -30,7 +30,9 @@ public final class ImageConfigParser {
             List<String> platforms,
             String main,
             /** {@code image.docker-executable} — override for the docker/podman CLI. */
-            String dockerExecutable) {}
+            String dockerExecutable,
+            /** {@code image.docker-file} — relative path to a Dockerfile; enables Dockerfile mode. */
+            String dockerFile) {}
 
     private ImageConfigParser() {}
 
@@ -53,8 +55,10 @@ public final class ImageConfigParser {
         labels.putAll(project.labels());
         String dockerExecutable = nonBlank(project.dockerExecutable()) != null
                 ? project.dockerExecutable() : global.dockerExecutable();
+        String dockerFile = nonBlank(project.dockerFile()) != null
+                ? project.dockerFile() : global.dockerFile();
         return new ImageConfigData(base, user, ports, Map.copyOf(env), Map.copyOf(labels),
-                registry, tag, platforms, main, dockerExecutable);
+                registry, tag, platforms, main, dockerExecutable, dockerFile);
     }
 
     private static String nonBlank(String s) {
@@ -73,7 +77,7 @@ public final class ImageConfigParser {
         }
         TomlTable image = result.getTable("image");
         if (image == null) {
-            return new ImageConfigData(null, null, List.of(), Map.of(), Map.of(), null, null, List.of(), null, null);
+            return new ImageConfigData(null, null, List.of(), Map.of(), Map.of(), null, null, List.of(), null, null, null);
         }
         return new ImageConfigData(
                 image.getString("base"),
@@ -85,7 +89,8 @@ public final class ImageConfigParser {
                 image.getString("tag"),
                 optionalStringList(image, "platforms"),
                 image.getString("main"),
-                image.getString("docker-executable"));
+                image.getString("docker-executable"),
+                image.getString("docker-file"));
     }
 
     private static List<String> optionalStringList(TomlTable table, String key) {

@@ -127,7 +127,7 @@ public final class ImageRunner implements Plugin {
 
         ImageConfig config = new ImageConfig(
                 base, user, ports, env, labels, registry, tag,
-                platforms.isEmpty() ? null : platforms, mainClass, dockerExecutable);
+                platforms.isEmpty() ? null : platforms, mainClass, dockerExecutable, null);
         ImageBuilder.Plan plan = new ImageBuilder.Plan(config, artifact, version, mainClass, mainJar, depJars);
         Path dockerExePath = dockerExecutable != null ? Path.of(dockerExecutable) : null;
 
