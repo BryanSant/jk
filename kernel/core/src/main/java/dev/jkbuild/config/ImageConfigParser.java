@@ -32,6 +32,31 @@ public final class ImageConfigParser {
 
     private ImageConfigParser() {}
 
+    /**
+     * Merge two {@link ImageConfigData} layers: {@code project} wins over {@code global} for every
+     * field. String fields use the project value when non-blank; list fields use the project value
+     * when non-empty; map fields are union-merged with project keys overriding global keys.
+     */
+    public static ImageConfigData merge(ImageConfigData project, ImageConfigData global) {
+        String base = nonBlank(project.base()) != null ? project.base() : global.base();
+        String user = nonBlank(project.user()) != null ? project.user() : global.user();
+        String registry = nonBlank(project.registry()) != null ? project.registry() : global.registry();
+        String tag = nonBlank(project.tag()) != null ? project.tag() : global.tag();
+        String main = nonBlank(project.main()) != null ? project.main() : global.main();
+        List<Integer> ports = !project.ports().isEmpty() ? project.ports() : global.ports();
+        List<String> platforms = !project.platforms().isEmpty() ? project.platforms() : global.platforms();
+        Map<String, String> env = new LinkedHashMap<>(global.env());
+        env.putAll(project.env());
+        Map<String, String> labels = new LinkedHashMap<>(global.labels());
+        labels.putAll(project.labels());
+        return new ImageConfigData(base, user, ports, Map.copyOf(env), Map.copyOf(labels),
+                registry, tag, platforms, main);
+    }
+
+    private static String nonBlank(String s) {
+        return (s != null && !s.isBlank()) ? s : null;
+    }
+
     public static ImageConfigData parse(Path file) throws IOException {
         return parse(Files.readString(file));
     }

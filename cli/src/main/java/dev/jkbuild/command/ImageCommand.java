@@ -8,6 +8,7 @@ import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.config.ImageConfigParser;
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.config.WorkspaceLoader;
+import dev.jkbuild.util.JkDirs;
 import dev.jkbuild.image.ImageConfig;
 import dev.jkbuild.jdk.HostPlatform;
 import dev.jkbuild.layout.BuildLayout;
@@ -128,7 +129,7 @@ public final class ImageCommand implements CliCommand {
                     BuildLayout layout = ctx.require(BuildPipeline.LAYOUT);
                     Path tarballPath = resolveTarballPath(layout);
                     if (tarballPath != null) ctx.put(TARBALL_PATH, tarballPath);
-                    ImageConfig config = buildConfig(jkBuildPath);
+                    ImageConfig config = buildConfig(jkBuildPath, project);
                     ctx.put(CONFIG, config);
                     String chosen = resolveMainClass(mainClass, config, project, projectDir);
                     if (chosen == null || chosen.isBlank()) {
@@ -323,18 +324,58 @@ public final class ImageCommand implements CliCommand {
         return Path.of(tarballArg);
     }
 
-    private ImageConfig buildConfig(Path jkBuild) throws IOException {
-        ImageConfigParser.ImageConfigData parsed = ImageConfigParser.parse(jkBuild);
+    /**
+     * The base image template used when no {@code image.base} is set in the project or global
+     * config. {@code {java-major-version}} is replaced with the project's resolved JDK major.
+     */
+    static final String DEFAULT_BASE_TEMPLATE =
+            "bellsoft/hardened-liberica-runtime-container:jre-{java-major-version}-slim-glibc";
+
+    /**
+     * Build the resolved {@link ImageConfig} for this invocation.
+     *
+     * <ol>
+     *   <li>Parse project-local {@code [image]} from {@code jk.toml}.
+     *   <li>Parse user-global {@code [image]} from {@code ~/.jk/config.toml} (if present).
+     *   <li>Merge: project values win over global values.
+     *   <li>Substitute {@code {java-major-version}} in {@code image.base} with the project's JDK
+     *       major (falling back to 21 when undeclared).
+     *   <li>Apply {@link #DEFAULT_BASE_TEMPLATE} when no base is set after all layers.
+     * </ol>
+     */
+    private ImageConfig buildConfig(Path jkBuild, JkBuild project) throws IOException {
+        ImageConfigParser.ImageConfigData data = ImageConfigParser.parse(jkBuild);
+
+        // Merge user-global [image] from ~/.jk/config.toml underneath the project layer.
+        Path globalConfig = JkDirs.userConfigFile();
+        if (java.nio.file.Files.isRegularFile(globalConfig)) {
+            try {
+                ImageConfigParser.ImageConfigData global = ImageConfigParser.parse(globalConfig);
+                data = ImageConfigParser.merge(data, global);
+            } catch (Exception ignored) {
+                // malformed global config → proceed with project layer only
+            }
+        }
+
+        // Resolve the java major version for template substitution.
+        int javaMajor = project.project().javaRelease();
+        if (javaMajor <= 0) javaMajor = 21; // LTS fallback
+
+        // Apply {java-major-version} substitution and default base.
+        String base = data.base();
+        if (base == null || base.isBlank()) base = DEFAULT_BASE_TEMPLATE;
+        base = base.replace("{java-major-version}", String.valueOf(javaMajor));
+
         return new ImageConfig(
-                parsed.base(),
-                parsed.user(),
-                parsed.ports(),
-                parsed.env(),
-                parsed.labels(),
-                registry != null ? registry : parsed.registry(),
-                tag != null ? tag : parsed.tag(),
-                parsed.platforms(),
-                parsed.main());
+                base,
+                data.user(),
+                data.ports(),
+                data.env(),
+                data.labels(),
+                registry != null ? registry : data.registry(),
+                tag != null ? tag : data.tag(),
+                data.platforms(),
+                data.main());
     }
 
     /**

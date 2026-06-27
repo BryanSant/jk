@@ -6,10 +6,13 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * The {@code image { ... }} block from {@code jk.toml} (PRD §22.2).
+ * The resolved {@code [image]} configuration for {@code jk image}. Merged from the project's
+ * {@code jk.toml} and the user-global {@code ~/.jk/config.toml} by {@code ImageCommand} before
+ * construction, with {@code {java-major-version}} substituted in {@code base}.
  *
- * <p>Sensible defaults: distroless Java 21 base, nonroot user, no exposed ports, single {@code
- * linux/amd64} platform. Override anything by setting the matching field in jk.toml.
+ * <p>{@code base} is always non-null by the time this record reaches the image worker — the CLI
+ * resolves it to {@code "bellsoft/hardened-liberica-runtime-container:jre-<N>-slim-glibc"} when
+ * no base is declared in either config layer.
  */
 public record ImageConfig(
         String base,
@@ -22,20 +25,12 @@ public record ImageConfig(
         List<String> platforms,
         String main) {
 
-    public static final String DEFAULT_BASE = "gcr.io/distroless/java21-debian12:nonroot";
-
     public ImageConfig {
-        if (base == null || base.isBlank()) base = DEFAULT_BASE;
         ports = ports == null ? List.of() : List.copyOf(ports);
         env = env == null ? Map.of() : Map.copyOf(env);
         labels = labels == null ? Map.of() : Map.copyOf(labels);
         platforms = (platforms == null || platforms.isEmpty()) ? List.of("linux/amd64") : List.copyOf(platforms);
-        // user, registry, tag, main may be null
-    }
-
-    public static ImageConfig defaults() {
-        return new ImageConfig(
-                DEFAULT_BASE, "nonroot", List.of(), Map.of(), Map.of(), null, null, List.of("linux/amd64"), null);
+        // base, user, registry, tag, main may be null — caller is responsible for resolution
     }
 
     /** Resolve the final {@code <registry>/<image>:<tag>} target. */
