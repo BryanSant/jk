@@ -23,14 +23,16 @@ public record ImageConfig(
         String registry,
         String tag,
         List<String> platforms,
-        String main) {
+        String main,
+        /** Docker/Podman executable override; {@code null} → auto-detect at build time. */
+        String dockerExecutable) {
 
     public ImageConfig {
         ports = ports == null ? List.of() : List.copyOf(ports);
         env = env == null ? Map.of() : Map.copyOf(env);
         labels = labels == null ? Map.of() : Map.copyOf(labels);
         platforms = (platforms == null || platforms.isEmpty()) ? List.of("linux/amd64") : List.copyOf(platforms);
-        // base, user, registry, tag, main may be null — caller is responsible for resolution
+        // base, user, registry, tag, main, dockerExecutable may be null
     }
 
     /** Resolve the final {@code <registry>/<image>:<tag>} target. */

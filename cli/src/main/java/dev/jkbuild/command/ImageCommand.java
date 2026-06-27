@@ -62,6 +62,7 @@ public final class ImageCommand implements CliCommand {
                 Opt.value("<tag>", "Override image.tag from jk.toml.", "--tag"),
                 Opt.value("<path>", "Write an OCI tarball instead of pushing.", "--tarball")
                         .withFallback(""),
+                Opt.value("<exe>", "Docker/Podman executable (default: auto-detect).", "--docker-executable"),
                 Opt.value("<dir>", "Override the jk cache directory.", "--cache-dir")
                         .hide(),
                 Opt.value("<dir>", "Override the JDK install root.", "--jdks-dir")
@@ -73,6 +74,7 @@ public final class ImageCommand implements CliCommand {
     String registry;
     String tag;
     String tarballArg;
+    String dockerExecutableArg;
     Path cacheDirOverride;
     Path jdksDir;
     dev.jkbuild.cli.BuildOptions buildOpts;
@@ -92,6 +94,7 @@ public final class ImageCommand implements CliCommand {
         this.registry = in.value("registry").orElse(null);
         this.tag = in.value("tag").orElse(null);
         this.tarballArg = in.value("tarball").orElse(null);
+        this.dockerExecutableArg = in.value("docker-executable").orElse(null);
         this.cacheDirOverride = in.value("cache-dir").map(Path::of).orElse(null);
         this.jdksDir = in.value("jdks-dir").map(Path::of).orElse(null);
         this.buildOpts = new dev.jkbuild.cli.BuildOptions();
@@ -187,13 +190,18 @@ public final class ImageCommand implements CliCommand {
                             }
                         }
                     }
-                    ctx.label(
-                            tarballPath != null
-                                    ? "write OCI tarball " + tarballPath.getFileName()
-                                    : "push to "
-                                            + config.targetReference(
-                                                    project.project().name(),
-                                                    project.project().version()));
+                    boolean daemonMode = tarballPath == null
+                            && (config.registry() == null || config.registry().isBlank());
+                    if (tarballPath != null) {
+                        ctx.label("write OCI tarball " + tarballPath.getFileName());
+                    } else if (daemonMode) {
+                        ctx.label("load into local daemon ("
+                                + (config.dockerExecutable() != null ? config.dockerExecutable() : "docker/podman")
+                                + ")");
+                    } else {
+                        ctx.label("push to " + config.targetReference(
+                                project.project().name(), project.project().version()));
+                    }
                     try {
                         String ref = runImageWorker(cache, project, layout, config, chosen, depJars, tarballPath);
                         ctx.put(IMAGE_REF, ref);
@@ -228,15 +236,19 @@ public final class ImageCommand implements CliCommand {
         if (!global.outputIsJson()) {
             JkBuild project = goal.get(BuildPipeline.PROJECT).orElseThrow();
             Path tarballPath = goal.get(TARBALL_PATH).orElse(null);
+            ImageConfig cfg = goal.get(CONFIG).orElse(null);
             if (tarballPath != null) {
                 System.out.println("Wrote OCI tarball " + tarballPath);
+            } else if (cfg != null && (cfg.registry() == null || cfg.registry().isBlank())) {
+                String ref = goal.get(IMAGE_REF)
+                        .orElse(cfg.targetReference(project.project().name(), project.project().version()));
+                String exe = cfg.dockerExecutable() != null ? cfg.dockerExecutable() : "docker";
+                System.out.println("Loaded " + ref + " into " + exe);
             } else {
                 String ref = goal.get(IMAGE_REF)
-                        .orElse(goal.get(CONFIG)
-                                .map(c -> c.targetReference(
-                                        project.project().name(),
-                                        project.project().version()))
-                                .orElse(""));
+                        .orElse(cfg != null
+                                ? cfg.targetReference(project.project().name(), project.project().version())
+                                : "");
                 System.out.println("Pushed " + ref);
             }
         }
@@ -267,16 +279,20 @@ public final class ImageCommand implements CliCommand {
             Path tarballPath)
             throws IOException, InterruptedException {
         Path workerJar = WorkerJar.IMAGE_BUILDER.locate(new Cas(cache));
+        boolean daemonMode = tarballPath == null
+                && (config.registry() == null || config.registry().isBlank());
         List<String> lines = new ArrayList<>();
         lines.add("MAIN_JAR " + layout.mainJar().toAbsolutePath());
         lines.add("ARTIFACT " + project.project().name());
         lines.add("VERSION " + project.project().version());
         lines.add("MAIN_CLASS " + chosen);
+        lines.add("MODE " + (tarballPath != null ? "tarball" : daemonMode ? "daemon" : "push"));
         if (config.base() != null) lines.add("BASE " + config.base());
         if (config.user() != null) lines.add("USER " + config.user());
         if (config.registry() != null) lines.add("REGISTRY " + config.registry());
         if (config.tag() != null) lines.add("TAG " + config.tag());
         if (tarballPath != null) lines.add("TARBALL " + tarballPath.toAbsolutePath());
+        if (config.dockerExecutable() != null) lines.add("DOCKER_EXECUTABLE " + config.dockerExecutable());
         for (int p : config.ports()) lines.add("PORT " + p);
         for (var e : config.env().entrySet()) lines.add("ENV " + e.getKey() + "=" + e.getValue());
         for (var e : config.labels().entrySet()) lines.add("LABEL " + e.getKey() + "=" + e.getValue());
@@ -366,6 +382,10 @@ public final class ImageCommand implements CliCommand {
         if (base == null || base.isBlank()) base = DEFAULT_BASE_TEMPLATE;
         base = base.replace("{java-major-version}", String.valueOf(javaMajor));
 
+        // Docker/Podman executable: CLI flag > image.docker-executable > auto-detect.
+        String dockerExe = dockerExecutableArg != null ? dockerExecutableArg : data.dockerExecutable();
+        if (dockerExe == null || dockerExe.isBlank()) dockerExe = detectDockerExecutable();
+
         return new ImageConfig(
                 base,
                 data.user(),
@@ -375,7 +395,29 @@ public final class ImageCommand implements CliCommand {
                 registry != null ? registry : data.registry(),
                 tag != null ? tag : data.tag(),
                 data.platforms(),
-                data.main());
+                data.main(),
+                dockerExe);
+    }
+
+    /**
+     * Auto-detect the local container runtime by probing {@code docker} then {@code podman} on
+     * {@code PATH}. Falls back to {@code "docker"} if neither responds — the worker will fail with a
+     * clear error in that case rather than silently choosing wrong.
+     */
+    private static String detectDockerExecutable() {
+        for (String candidate : new String[]{"docker", "podman"}) {
+            try {
+                Process p = new ProcessBuilder(candidate, "--version")
+                        .redirectOutput(ProcessBuilder.Redirect.DISCARD)
+                        .redirectError(ProcessBuilder.Redirect.DISCARD)
+                        .start();
+                if (p.waitFor(2, java.util.concurrent.TimeUnit.SECONDS) && p.exitValue() == 0) {
+                    return candidate;
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        return "docker";
     }
 
     /**

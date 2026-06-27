@@ -28,7 +28,9 @@ public final class ImageConfigParser {
             String registry,
             String tag,
             List<String> platforms,
-            String main) {}
+            String main,
+            /** {@code image.docker-executable} — override for the docker/podman CLI. */
+            String dockerExecutable) {}
 
     private ImageConfigParser() {}
 
@@ -49,8 +51,10 @@ public final class ImageConfigParser {
         env.putAll(project.env());
         Map<String, String> labels = new LinkedHashMap<>(global.labels());
         labels.putAll(project.labels());
+        String dockerExecutable = nonBlank(project.dockerExecutable()) != null
+                ? project.dockerExecutable() : global.dockerExecutable();
         return new ImageConfigData(base, user, ports, Map.copyOf(env), Map.copyOf(labels),
-                registry, tag, platforms, main);
+                registry, tag, platforms, main, dockerExecutable);
     }
 
     private static String nonBlank(String s) {
@@ -69,7 +73,7 @@ public final class ImageConfigParser {
         }
         TomlTable image = result.getTable("image");
         if (image == null) {
-            return new ImageConfigData(null, null, List.of(), Map.of(), Map.of(), null, null, List.of(), null);
+            return new ImageConfigData(null, null, List.of(), Map.of(), Map.of(), null, null, List.of(), null, null);
         }
         return new ImageConfigData(
                 image.getString("base"),
@@ -80,7 +84,8 @@ public final class ImageConfigParser {
                 image.getString("registry"),
                 image.getString("tag"),
                 optionalStringList(image, "platforms"),
-                image.getString("main"));
+                image.getString("main"),
+                image.getString("docker-executable"));
     }
 
     private static List<String> optionalStringList(TomlTable table, String key) {

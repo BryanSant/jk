@@ -70,6 +70,7 @@ public final class ImageRunner implements Plugin {
         Path mainJar = null, tarball = null;
         String artifact = null, version = null, mainClass = null;
         String base = null, user = null, registry = null, tag = null;
+        String mode = null, dockerExecutable = null;
         List<Path> depJars = new ArrayList<>();
         List<Integer> ports = new ArrayList<>();
         Map<String, String> env = new HashMap<>();
@@ -94,6 +95,8 @@ public final class ImageRunner implements Plugin {
                     case "TARBALL" -> tarball = Path.of(val);
                     case "REGISTRY" -> registry = val;
                     case "TAG" -> tag = val;
+                    case "MODE" -> mode = val;
+                    case "DOCKER_EXECUTABLE" -> dockerExecutable = val;
                     case "DEP_JAR" -> depJars.add(Path.of(val));
                     case "PLATFORM" -> platforms.add(val);
                     case "PORT" -> {
@@ -123,8 +126,10 @@ public final class ImageRunner implements Plugin {
         }
 
         ImageConfig config = new ImageConfig(
-                base, user, ports, env, labels, registry, tag, platforms.isEmpty() ? null : platforms, mainClass);
+                base, user, ports, env, labels, registry, tag,
+                platforms.isEmpty() ? null : platforms, mainClass, dockerExecutable);
         ImageBuilder.Plan plan = new ImageBuilder.Plan(config, artifact, version, mainClass, mainJar, depJars);
+        Path dockerExePath = dockerExecutable != null ? Path.of(dockerExecutable) : null;
 
         try {
             if (tarball != null) {
@@ -132,6 +137,12 @@ public final class ImageRunner implements Plugin {
                 Files.createDirectories(tarball.getParent());
                 ImageBuilder.writeToTarball(plan, tarball);
                 out.emit("{\"t\":\"result\",\"ok\":true,\"tarball\":" + Ndjson.quote(tarball.toString()) + "}");
+            } else if ("daemon".equals(mode)) {
+                String ref = config.targetReference(artifact, version);
+                String exe = dockerExecutable != null ? dockerExecutable : "docker";
+                out.emit("{\"t\":\"progress\",\"msg\":\"loading " + ref + " into " + exe + "\"}");
+                ImageBuilder.loadToLocalDaemon(plan, dockerExePath);
+                out.emit("{\"t\":\"result\",\"ok\":true,\"ref\":" + Ndjson.quote(ref) + ",\"daemon\":true}");
             } else {
                 String ref = config.targetReference(artifact, version);
                 out.emit("{\"t\":\"progress\",\"msg\":\"pushing " + ref + "\"}");

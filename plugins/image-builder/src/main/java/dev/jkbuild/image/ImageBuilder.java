@@ -3,6 +3,7 @@ package dev.jkbuild.image;
 
 import com.google.cloud.tools.jib.api.CacheDirectoryCreationException;
 import com.google.cloud.tools.jib.api.Containerizer;
+import com.google.cloud.tools.jib.api.DockerDaemonImage;
 import com.google.cloud.tools.jib.api.InvalidImageReferenceException;
 import com.google.cloud.tools.jib.api.Jib;
 import com.google.cloud.tools.jib.api.JibContainer;
@@ -65,6 +66,26 @@ public final class ImageBuilder {
     public static Result pushToRegistry(Plan plan) throws IOException, InterruptedException {
         try {
             JibContainer container = run(plan, Containerizer.to(registryTarget(plan)));
+            return new Result(
+                    plan.config().targetReference(plan.artifact(), plan.version()),
+                    container.getDigest().toString());
+        } catch (InvalidImageReferenceException e) {
+            throw new IOException("invalid target image reference: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Load the image directly into the local Docker/Podman daemon. {@code dockerExecutable} is the
+     * resolved CLI path (e.g. {@code "docker"} or {@code "podman"}, or an absolute path); pass
+     * {@code null} to let Jib auto-detect via {@code PATH}.
+     */
+    public static Result loadToLocalDaemon(Plan plan, Path dockerExecutable)
+            throws IOException, InterruptedException {
+        try {
+            DockerDaemonImage target = DockerDaemonImage.named(
+                    plan.config().targetReference(plan.artifact(), plan.version()));
+            if (dockerExecutable != null) target = target.setDockerExecutable(dockerExecutable);
+            JibContainer container = run(plan, Containerizer.to(target));
             return new Result(
                     plan.config().targetReference(plan.artifact(), plan.version()),
                     container.getDigest().toString());
