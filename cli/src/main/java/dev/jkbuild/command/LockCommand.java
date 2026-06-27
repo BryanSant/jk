@@ -212,7 +212,7 @@ public final class LockCommand implements CliCommand {
         String depStr = "Resolved " + pkgs + " dependenc" + (pkgs == 1 ? "y" : "ies");
         view.finishGoalSuccess(
                 Theme.colorize("Lock successful", Theme.active().success())
-                        + " · "
+                        + " " + Theme.colorize("·", Theme.active().darkGray()) + " "
                         + depStr
                         + " "
                         + ConsoleSpec.took(Duration.ofMillis((System.nanoTime() - start) / 1_000_000)));
