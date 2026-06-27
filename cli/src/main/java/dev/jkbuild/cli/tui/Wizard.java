@@ -373,7 +373,7 @@ public final class Wizard {
      * Build the wizard header.
      *
      * <p>When {@code verb} + {@code subtitle} are set (the modern path), renders as a goal chip
-     * matching the build TUI: {@code " ● New "} on the plan-blue chip, closed by a powerline cap
+     * matching the build TUI: {@code " · New Project "} on the plan-blue chip, closed by a powerline cap
      * (Nerd Font) or a double space (plain), followed by the pre-styled subtitle.
      *
      * <p>Legacy (title-only): the original indigo-badge style with a {@code ╭──} rail opener.
@@ -382,7 +382,7 @@ public final class Wizard {
         Theme t = Theme.active();
         if (!verb.isEmpty()) {
             boolean nf = GlobalConfig.nerdfont();
-            String chipStr = GoalWedge.chip("●", verb, t.goalChip());
+            String chipStr = GoalWedge.chip("·", verb, t.goalChip());
             String capStr = GoalWedge.cap(t.planBadgeColor(), nf);
             String sep = nf ? " " : "  ";
             return chipStr + capStr + sep + subtitle;

@@ -955,11 +955,11 @@ public final class NewCommand implements CliCommand {
                 .defaultChoice(defaultJdkId);
 
         String wizardSubtitle = module
-                ? "Create a new Module for "
+                ? "Create a new module for "
                         + Theme.colorize(parent.displayName(), Theme.active().brightCyan())
-                : "Create a new Project";
+                : "Create a new project";
         return Wizard.builder()
-                .verb("New")
+                .verb(module ? "New Module" : "New Project")
                 .subtitle(wizardSubtitle)
                 .step(WizardStep.InputStep.of("name", module ? "Module name:" : "Project name:")
                         .placeholder("untitled")
