@@ -63,7 +63,8 @@ public final class ToolRunCommand implements CliCommand {
                         .hide(),
                 Opt.value("<url>", "Override the Maven repository URL (for tests).", "--repo-url")
                         .hide(),
-                Opt.flag("Ignore cached classes and recompile (file targets only).", "--force-recompile"));
+                Opt.flag("Ignore cached classes and recompile (file targets only).", "--force-recompile")
+                        .hide()); // --force-recompile hidden; global --force covers this
     }
 
     @Override
@@ -92,7 +93,8 @@ public final class ToolRunCommand implements CliCommand {
         this.cacheDirOverride = in.value("cache-dir").map(Path::of).orElse(null);
         this.stateDirOverride = in.value("state-dir").map(Path::of).orElse(null);
         this.repoUrl = in.value("repo-url").map(URI::create).orElse(null);
-        this.forceRecompile = in.isSet("force-recompile");
+        // --force (global) and legacy --force-recompile both force recompilation.
+        this.forceRecompile = in.isSet("force") || in.isSet("force-recompile");
         this.global = GlobalOptions.from(in);
         // A file target (by extension) is compiled/run by ScriptRunner; the
         // extension is the signal even when the file is missing, so the user

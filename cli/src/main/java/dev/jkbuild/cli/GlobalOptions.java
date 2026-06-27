@@ -20,11 +20,8 @@ public final class GlobalOptions {
     public String color;
     public boolean offline;
 
-    /** {@code --rerun}: re-run build outputs (compile/test/package), honoring cached deps. */
-    public boolean rerun;
-
-    /** {@code --refresh}: re-validate deps against their remotes (re-download if changed). */
-    public boolean refresh;
+    /** {@code --force}: bypass all caching — rerun outputs AND re-fetch remote resources. */
+    public boolean force;
 
     public boolean noProgress;
 
@@ -96,8 +93,7 @@ public final class GlobalOptions {
         g.verbose = in.isSet("verbose");
         g.color = in.value("color").orElse(null);
         g.offline = in.isSet("offline");
-        g.rerun = in.isSet("rerun");
-        g.refresh = in.isSet("refresh");
+        g.force = in.isSet("force");
         g.noProgress = in.isSet("no-progress");
         g.output = in.value("output").orElse(null);
         g.configFile = in.value("config-file").map(Path::of).orElse(null);
@@ -149,8 +145,7 @@ public final class GlobalOptions {
                 Opt.flag("Print additional diagnostic output", "-v", "--verbose"),
                 Opt.value("<WHEN>", "When to colorize output: auto, always, never", "--color"),
                 Opt.flag("Disable network access for this run", "--offline"),
-                Opt.flag("Re-run build steps, reusing cached deps", "--rerun"),
-                Opt.flag("Re-validate deps vs remotes (redownload)", "--refresh"),
+                Opt.flag("Bypass jk's caching and redo this operation", "--force"),
                 Opt.flag("Disable all progress bars and spinners", "--no-progress"),
                 Opt.value("<FORMAT>", "Output format: text (default) or json", "--output"),
                 Opt.value("<FILE>", "Use this jk.toml for configuration", "--config-file"),

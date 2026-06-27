@@ -36,7 +36,13 @@ public record JkConfig(
         Optional<Boolean> noProgress,
         Optional<Boolean> quiet,
         Optional<Boolean> verbose,
-        Optional<Path> directory) {
+        Optional<Path> directory,
+        /**
+         * {@code --force} / {@code JK_FORCE} — bypass all of jk's caching for this invocation.
+         * Supersedes both {@code rerun} and {@code refresh}: any code that checks either of those
+         * will also see {@code true} when {@code force} is set.
+         */
+        Optional<Boolean> force) {
 
     public enum ColorChoice {
         AUTO,
@@ -63,11 +69,13 @@ public record JkConfig(
         Objects.requireNonNull(quiet, "quiet");
         Objects.requireNonNull(verbose, "verbose");
         Objects.requireNonNull(directory, "directory");
+        Objects.requireNonNull(force, "force");
     }
 
     /** Empty config — every setting unset. Used as the seed before layers merge. */
     public static JkConfig empty() {
         return new JkConfig(
+                Optional.empty(),
                 Optional.empty(),
                 Optional.empty(),
                 Optional.empty(),
@@ -91,7 +99,8 @@ public record JkConfig(
                 over.noProgress.or(() -> this.noProgress),
                 over.quiet.or(() -> this.quiet),
                 over.verbose.or(() -> this.verbose),
-                over.directory.or(() -> this.directory));
+                over.directory.or(() -> this.directory),
+                over.force.or(() -> this.force));
     }
 
     /** Convenience: color with a fallback when empty. */
@@ -103,14 +112,25 @@ public record JkConfig(
         return offline.orElse(fallback);
     }
 
-    /** Re-run build outputs (compile/test/package), honoring cached deps. */
+    /**
+     * True when {@code --force} (or the legacy {@code --rerun}) was set. {@code --force} is the
+     * canonical flag; {@code --rerun} is accepted for backward compatibility.
+     */
     public boolean rerunOr(boolean fallback) {
-        return rerun.orElse(fallback);
+        return force.or(() -> rerun).orElse(fallback);
     }
 
-    /** Re-validate dependencies against their remotes (re-download if changed). */
+    /**
+     * True when {@code --force} (or the legacy {@code --refresh}) was set. {@code --force} is the
+     * canonical flag; {@code --refresh} is accepted for backward compatibility.
+     */
     public boolean refreshOr(boolean fallback) {
-        return refresh.orElse(fallback);
+        return force.or(() -> refresh).orElse(fallback);
+    }
+
+    /** True when {@code --force} / {@code JK_FORCE} was set for this invocation. */
+    public boolean forceOr(boolean fallback) {
+        return force.orElse(fallback);
     }
 
     public boolean noProgressOr(boolean fallback) {
