@@ -295,9 +295,9 @@ public final class LockCommand implements CliCommand {
         return resolveFailed ? 6 : 2;
     }
 
-    /** Failure result tail for the Lock chip. */
+    /** Failure result tail for the Lock chip (GoalWedge prepends "Failed to lock"). */
     private static String lockFailTail() {
-        return "Failed to lock dependencies";
+        return "dependencies";
     }
 
     /**
