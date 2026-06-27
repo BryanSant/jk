@@ -733,7 +733,7 @@ public final class Wizard {
                             isFocused
                                     ? Theme.active().completedStep()
                                     : Theme.active().darkGray());
-                    sb.append(" ");
+                    sb.append("  ");
                     sb.append(
                             c.label(),
                             isFocused
@@ -755,7 +755,7 @@ public final class Wizard {
                                     isFocused
                                             ? Theme.active().completedStep()
                                             : Theme.active().darkGray())
-                            .append(" ")
+                            .append("  ")
                             .append(
                                     c.label(),
                                     isFocused
@@ -772,7 +772,7 @@ public final class Wizard {
                                     isFocused
                                             ? Theme.active().completedStep()
                                             : Theme.active().darkGray())
-                            .append(" ");
+                            .append("  ");
                     appendCustomField(sb, isFocused, rs.customPlaceholder());
                     lines.add(sb.toAttributedString());
                     appendError(lines);
@@ -827,7 +827,7 @@ public final class Wizard {
                             : Theme.active().darkGray();
                     var sb = new AttributedStringBuilder()
                             .append(glyph, glyphStyle)
-                            .append(" ");
+                            .append("  ");
                     if (c.richLabelFn() != null) {
                         sb.append(c.richLabelFn().apply(isFocused));
                     } else {
@@ -847,7 +847,7 @@ public final class Wizard {
                                     : Theme.active().darkGray());
                     var sb = new AttributedStringBuilder()
                             .append(glyph, glyphStyle)
-                            .append(" ");
+                            .append("  ");
                     appendCustomField(sb, isFocused, ms.customPlaceholder());
                     lines.add(sb.toAttributedString());
                 }
@@ -866,7 +866,7 @@ public final class Wizard {
                             ? Theme.active().focused()
                             : Theme.active().darkGray();
                     sb.append(isChecked ? Rail.CHECKBOX_ON : Rail.CHECKBOX_OFF, glyphStyle);
-                    sb.append(" ");
+                    sb.append("  ");
                     sb.append(c.label(), labelStyle);
                     appendHint(sb, c.hintFor(snapshot));
                     if (i < ms.choices().size() - 1) {
