@@ -382,7 +382,7 @@ public final class Wizard {
         Theme t = Theme.active();
         if (!verb.isEmpty()) {
             boolean nf = GlobalConfig.nerdfont();
-            String chipStr = GoalWedge.chip("·", verb, t.goalChip());
+            String chipStr = GoalWedge.chip("●", verb, t.goalChip());
             String capStr = GoalWedge.cap(t.planBadgeColor(), nf);
             String sep = nf ? " " : "  ";
             return chipStr + capStr + sep + subtitle;
