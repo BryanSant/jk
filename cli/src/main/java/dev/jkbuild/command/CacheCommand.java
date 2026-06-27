@@ -473,8 +473,8 @@ public final class CacheCommand implements CliCommand {
                 var runLogReport = dev.jkbuild.task.RunLogGc.sweep(root, dev.jkbuild.task.RunLogGc.DEFAULT_TTL, dryRun);
                 var formatStampReport =
                         dev.jkbuild.task.FormatStampGc.sweep(root, dev.jkbuild.task.FormatStampGc.DEFAULT_TTL, dryRun);
-                var m2LocalSidecarReport =
-                        dev.jkbuild.task.M2LocalSidecarGc.sweep(root, dev.jkbuild.task.M2LocalSidecarGc.DEFAULT_TTL, dryRun);
+                var m2LocalSidecarReport = dev.jkbuild.task.M2LocalSidecarGc.sweep(
+                        root, dev.jkbuild.task.M2LocalSidecarGc.DEFAULT_TTL, dryRun);
                 var timingsReport = dev.jkbuild.runtime.PhaseTimings.prune(
                         root,
                         dev.jkbuild.runtime.PhaseTimings.Limits.resolve(

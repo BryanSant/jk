@@ -168,7 +168,8 @@ public final class ImageCommand implements CliCommand {
                                 "deps:" + dev.jkbuild.task.ClasspathFingerprint.of(depJars),
                                 "main:" + chosen,
                                 "cfg:" + imageConfigToken(config),
-                                "worker:" + WorkerJar.IMAGE_BUILDER.artifactId() + ":" + dev.jkbuild.util.JkVersion.VERSION);
+                                "worker:" + WorkerJar.IMAGE_BUILDER.artifactId() + ":"
+                                        + dev.jkbuild.util.JkVersion.VERSION);
                         imgTask = dev.jkbuild.task.ActionKey.qualifiedTaskId("write-image", tarballPath);
                         imgKey = dev.jkbuild.task.ActionKey.forArtifact(
                                 imgTask, dev.jkbuild.util.JkVersion.VERSION, tokens);

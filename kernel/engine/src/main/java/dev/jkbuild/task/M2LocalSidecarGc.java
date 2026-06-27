@@ -61,9 +61,8 @@ public final class M2LocalSidecarGc {
         // After deleting expired sidecars, remove any now-empty directories
         // (walk deepest-first so children are removed before parents).
         if (!dryRun && deleted > 0) {
-            try (Stream<Path> dirs = Files.walk(m2LocalDir)
-                    .filter(Files::isDirectory)
-                    .sorted(Comparator.reverseOrder())) {
+            try (Stream<Path> dirs =
+                    Files.walk(m2LocalDir).filter(Files::isDirectory).sorted(Comparator.reverseOrder())) {
                 for (Path dir : (Iterable<Path>) dirs::iterator) {
                     if (dir.equals(m2LocalDir)) continue;
                     try (Stream<Path> contents = Files.list(dir)) {

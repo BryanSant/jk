@@ -420,9 +420,13 @@ public final class JdkListCommand implements CliCommand {
             int pad = Math.max(0, availForBanner - title.length());
             String innerBanner = " ".repeat(pad / 2) + title + " ".repeat(pad - pad / 2);
             return rail
-                    + Theme.colorize(dev.jkbuild.cli.tui.Glyphs.PILL_LEFT_NERD, Theme.active().bright(chipColor))
+                    + Theme.colorize(
+                            dev.jkbuild.cli.tui.Glyphs.PILL_LEFT_NERD,
+                            Theme.active().bright(chipColor))
                     + Theme.colorize(innerBanner, Theme.active().goalChip())
-                    + Theme.colorize(dev.jkbuild.cli.tui.Glyphs.PILL_RIGHT_NERD, Theme.active().bright(chipColor))
+                    + Theme.colorize(
+                            dev.jkbuild.cli.tui.Glyphs.PILL_RIGHT_NERD,
+                            Theme.active().bright(chipColor))
                     + rail;
         }
         return rail + Theme.colorize(banner, Theme.active().goalChip()) + rail;
@@ -466,10 +470,14 @@ public final class JdkListCommand implements CliCommand {
         // leftPad / rightPad: normally a single (possibly banded) space; with nerdfont+band
         // becomes the pill cap (foreground = band color, no background — it IS the cap).
         String leftPad = (nerdfont && band != null)
-                ? Theme.colorize(dev.jkbuild.cli.tui.Glyphs.PILL_LEFT_NERD, Theme.active().bright(band))
+                ? Theme.colorize(
+                        dev.jkbuild.cli.tui.Glyphs.PILL_LEFT_NERD,
+                        Theme.active().bright(band))
                 : sp;
         String rightPad = (nerdfont && band != null)
-                ? Theme.colorize(dev.jkbuild.cli.tui.Glyphs.PILL_RIGHT_NERD, Theme.active().bright(band))
+                ? Theme.colorize(
+                        dev.jkbuild.cli.tui.Glyphs.PILL_RIGHT_NERD,
+                        Theme.active().bright(band))
                 : sp;
 
         String versionCell =

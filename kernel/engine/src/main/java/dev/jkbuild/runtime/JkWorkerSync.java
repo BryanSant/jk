@@ -5,7 +5,6 @@ import dev.jkbuild.cache.Cas;
 import dev.jkbuild.repo.RepoArtifactStore;
 import dev.jkbuild.util.JkVersion;
 import dev.jkbuild.worker.WorkerJar;
-import dev.jkbuild.worker.WorkerJarNotFoundException;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -56,7 +55,8 @@ public final class JkWorkerSync {
             String relPath = relativeM2Path(w.artifactId());
 
             // Already in local or central repos?
-            if (localStore.locate(relPath).isPresent() || centralStore.locate(relPath).isPresent()) {
+            if (localStore.locate(relPath).isPresent()
+                    || centralStore.locate(relPath).isPresent()) {
                 present++;
                 obs.present(w.artifactId());
                 continue;

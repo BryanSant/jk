@@ -23,7 +23,10 @@ public final class WorkerJarNotFoundException extends RuntimeException {
     private static String buildMessage(
             String artifactId, String coordinate, List<Path> pathsChecked, String jarProperty) {
         var sb = new StringBuilder();
-        sb.append(artifactId).append(".jar not found for coordinate ").append(coordinate).append('\n');
+        sb.append(artifactId)
+                .append(".jar not found for coordinate ")
+                .append(coordinate)
+                .append('\n');
         sb.append("Paths checked:\n");
         for (Path p : pathsChecked) {
             sb.append("  ").append(p).append('\n');
