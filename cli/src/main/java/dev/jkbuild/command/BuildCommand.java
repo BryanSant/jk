@@ -277,8 +277,15 @@ public final class BuildCommand implements CliCommand {
         // Size worker concurrency + heaps to the graph's peak parallelism before
         // any unit forks (caps the JVM slot pool the scheduler draws from).
         applyMemoryPlan(Math.min(maxReadyWidth(units, graph.edges()), JkThreads.CPU_THREADS));
-        // forecastDirty also runs under the spinner — CAS scan, typically <200ms.
-        return runGraphLive(view, units, graph.edges(), forecastDirty(graph, cache), cache);
+        // forecastDirty also runs under the spinner — stat/CAS-only scan, typically <200ms.
+        long buildStart = System.nanoTime();
+        Set<Path> dirtyDirs = forecastDirty(graph, cache);
+        if (dirtyDirs.isEmpty()) {
+            // Nothing to rebuild — settle with the chip line immediately; no progress bar flash.
+            view.finishGoalSuccess(upToDateTail("all modules", buildStart));
+            return 0;
+        }
+        return runGraphLive(view, units, graph.edges(), dirtyDirs, cache, buildStart);
     }
 
     /**
@@ -353,12 +360,12 @@ public final class BuildCommand implements CliCommand {
             List<BuildGraph.BuildUnit> units,
             Map<Path, Set<Path>> edges,
             Set<Path> dirtyDirs,
-            Path cache)
+            Path cache,
+            long start)
             throws Exception {
         Set<Path> unitDirs = new java.util.HashSet<>();
         for (BuildGraph.BuildUnit u : units) unitDirs.add(u.dir());
         AggregateContext agg = new AggregateContext(view);
-        long start = System.nanoTime();
         int total = units.size();
 
         // Pre-scan: prepare every unit's goal and sum its estimated weight so the
@@ -689,7 +696,7 @@ public final class BuildCommand implements CliCommand {
                 PreparedModule pm = prepared.get(moduleDir);
                 int exit;
                 try {
-                    exit = runPrepared(pm, agg);
+                    exit = runPrepared(pm, agg, buildStart);
                 } catch (Exception e) {
                     view.finishFailure(buildFailedAt(module, buildStart));
                     throw e;
@@ -817,12 +824,13 @@ public final class BuildCommand implements CliCommand {
      * events feed the shared aggregate view rather than a per-module progress display.
      */
     private int runForDir(Path dir, AggregateContext agg) throws Exception {
+        long startNanos = System.nanoTime(); // captured before prepareModule so timing includes the predict
         Path buildFile = dir.resolve("jk.toml");
         if (!Files.exists(buildFile)) {
             System.err.println("jk build: no jk.toml in " + dev.jkbuild.cli.PathDisplay.styledRaw(dir));
             return 2;
         }
-        return runPrepared(prepareModule(dir), agg);
+        return runPrepared(prepareModule(dir), agg, startNanos);
     }
 
     /**
@@ -875,6 +883,26 @@ public final class BuildCommand implements CliCommand {
                 jdksDir,
                 skipTests,
                 global.verbose);
+        // Quick pre-check: is every work phase already cached? Uses only stat/CAS
+        // lookups — the same operations the parse-build phase would run lazily.
+        // Doubles as a gate for the single-module TUI bypass in runPrepared().
+        boolean fullyCached = false;
+        if (!forceRebuild) {
+            try {
+                dev.jkbuild.cache.Cas cas = new dev.jkbuild.cache.Cas(inputs.cache());
+                JkBuild build = JkBuildParser.parse(buildFile); // memoized; effectively free
+                dev.jkbuild.runtime.CompileSupport.Languages langs =
+                        dev.jkbuild.runtime.CompileSupport.resolveLanguages(build.project(), dir);
+                boolean useJava = langs.java();
+                boolean useKotlin = langs.kotlin();
+                boolean compact = dev.jkbuild.runtime.CompileSupport.isSimpleLayout(build.project(), dir);
+                dev.jkbuild.runtime.EffortWeights.Plan plan =
+                        dev.jkbuild.runtime.EffortWeights.predict(inputs, cas, compact, useJava, useKotlin);
+                fullyCached = plan.fullyCached();
+            } catch (Exception ignored) {
+                // best-effort; proceed normally if prediction throws
+            }
+        }
         Goal.Builder builder = BuildPipeline.coreBuilder(inputs, forceRebuild);
         BuildPipeline.appendDeclaredTails(builder, inputs);
         Goal goal = builder.build();
@@ -882,12 +910,24 @@ public final class BuildCommand implements CliCommand {
         // these into the calibrated total, and the same value is the module's slice
         // of the aggregate bar (see AggregateModuleListener). Computing it once
         // keeps the slice byte-for-byte equal to what was summed into `total`.
-        return new PreparedModule(dir, buildTarget(buildFile, dir), cache, goal, goal.estimatedTotalWeight());
+        return new PreparedModule(
+                dir, buildTarget(buildFile, dir), cache, goal, goal.estimatedTotalWeight(), fullyCached);
     }
 
     /** Run an already-built module goal and map its result to an exit code. */
-    private int runPrepared(PreparedModule pm, AggregateContext agg) {
+    private int runPrepared(PreparedModule pm, AggregateContext agg, long startNanos) {
         Goal goal = pm.goal();
+        // Single-module fast path: skip the TUI entirely when every work phase is already
+        // cached. The pre-check in prepareModule() confirmed this with stat/CAS lookups only.
+        // Workspace modules (agg != null) always run so the aggregate view stays consistent.
+        if (agg == null && pm.fullyCached() && GoalConsole.isInteractiveTerminal() && !global.outputIsJson()) {
+            System.out.println(dev.jkbuild.cli.tui.GoalWedge.chipLine(
+                    dev.jkbuild.cli.tui.Glyphs.CHECK,
+                    "Build",
+                    dev.jkbuild.config.GlobalConfig.nerdfont(),
+                    buildOk() + ", project up to date " + elapsedSince(startNanos)));
+            return 0;
+        }
         GoalResult result;
         if (agg != null) {
             // Workspace module: feed the one shared aggregate view, scaling this
@@ -919,7 +959,8 @@ public final class BuildCommand implements CliCommand {
      * A workspace module's goal, built and ready to run, paired with its pre-scan bar weight — the
      * module's slice of the calibrated aggregate total.
      */
-    private record PreparedModule(Path dir, String target, Path cache, Goal goal, long barWeight) {}
+    private record PreparedModule(
+            Path dir, String target, Path cache, Goal goal, long barWeight, boolean fullyCached) {}
 
     // ---- success summary -----------------------------------------------
 
