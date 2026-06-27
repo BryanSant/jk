@@ -406,12 +406,18 @@ public final class JdkListCommand implements CliCommand {
         int left = total / 2;
         int right = total - left;
         String banner = " ".repeat(left) + title + " ".repeat(right);
-        // The │ rails carry the same chip background so the title band spans edge-to-edge.
-        AttributedStyle chipRail = Theme.active()
-                .withBackground(Theme.active().darkGray(), Theme.active().goalChipColor());
-        return Theme.colorize("│", chipRail)
-                + Theme.colorize(banner, Theme.active().goalChip())
-                + Theme.colorize("│", chipRail);
+        // With a Nerd Font: replace the │ rails with pill-cap glyphs whose foreground
+        // matches the chip color, giving the banner rounded edges (same as badge chips).
+        // Without: plain │ rails in dark gray.
+        Rgb chipColor = Theme.active().goalChipColor();
+        boolean nerdfont = dev.jkbuild.config.GlobalConfig.nerdfont();
+        String leftRail = nerdfont
+                ? Theme.colorize(dev.jkbuild.cli.tui.Glyphs.PILL_LEFT_NERD, Theme.active().bright(chipColor))
+                : Theme.colorize("│", Theme.active().darkGray());
+        String rightRail = nerdfont
+                ? Theme.colorize(dev.jkbuild.cli.tui.Glyphs.PILL_RIGHT_NERD, Theme.active().bright(chipColor))
+                : Theme.colorize("│", Theme.active().darkGray());
+        return leftRail + Theme.colorize(banner, Theme.active().goalChip()) + rightRail;
     }
 
     private static String headerRow(int[] widths) {
@@ -440,8 +446,15 @@ public final class JdkListCommand implements CliCommand {
         // everything between the outer rails (cells, padding, inner separators).
         Rgb band = active ? Theme.active().darkBlackColor() : null;
 
-        // The outer rails carry the band background when active, capping the highlight edge-to-edge.
-        String outerBar = Theme.colorize("│", banded(Theme.active().darkGray(), band));
+        // With a Nerd Font: replace the outer │ rails with pill-cap glyphs on banded rows
+        // so the highlight has rounded edges matching the badge style. Plain │ otherwise.
+        boolean nerdfont = dev.jkbuild.config.GlobalConfig.nerdfont();
+        String outerBar = (nerdfont && band != null)
+                ? Theme.colorize(dev.jkbuild.cli.tui.Glyphs.PILL_LEFT_NERD, Theme.active().bright(band))
+                : Theme.colorize("│", Theme.active().darkGray());
+        String outerBarRight = (nerdfont && band != null)
+                ? Theme.colorize(dev.jkbuild.cli.tui.Glyphs.PILL_RIGHT_NERD, Theme.active().bright(band))
+                : Theme.colorize("│", Theme.active().darkGray());
         String innerBar = band == null
                 ? outerBar
                 : Theme.colorize("│", banded(Theme.active().darkGray(), band));
@@ -489,7 +502,7 @@ public final class JdkListCommand implements CliCommand {
                 + sp
                 + locStyled
                 + sp
-                + outerBar;
+                + outerBarRight;
     }
 
     /** Layer the active-row indigo band background onto a cell style (no-op when not banded). */
