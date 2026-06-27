@@ -329,7 +329,7 @@ public final class ImageCommand implements CliCommand {
      * config. {@code {java-major-version}} is replaced with the project's resolved JDK major.
      */
     static final String DEFAULT_BASE_TEMPLATE =
-            "bellsoft/hardened-liberica-runtime-container:jre-{java-major-version}-slim-glibc";
+            "bellsoft/liberica-runtime-container:jre-{java-major-version}-slim-glibc";
 
     /**
      * Build the resolved {@link ImageConfig} for this invocation.
