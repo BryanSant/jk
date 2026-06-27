@@ -191,7 +191,7 @@ public final class EffortWeights {
             boolean compileRun = javaRun || ktRun;
 
             // Tests + packaging consume the compiled output: if a compile ran (or
-            // --rerun), they run. The precise test skip is decided at run-tests via
+            // --force), they run. The precise test skip is decided at run-tests via
             // the CAS marker (which survives `jk clean`); that phase reweights down
             // to SKIP there, so a fully-cached run lands right with no up-front guess.
             List<Path> testSrc = new ArrayList<>();
@@ -262,7 +262,7 @@ public final class EffortWeights {
     }
 
     /**
-     * Fat/shadow jar present and at least as new as the main jar (and not {@code --rerun}) → skip.
+     * Fat/shadow jar present and at least as new as the main jar (and not {@code --force}) → skip.
      */
     public static int shadowWeight(Path dir) {
         return artifactFresh(dir, BuildLayout::shadowJar) ? SKIP : SHADOW_RUN;
@@ -282,7 +282,7 @@ public final class EffortWeights {
 
     /**
      * True when the artifact selected by {@code artifact} exists, isn't being forced by {@code
-     * --rerun}, and is at least as new as the main jar it's derived from — a cheap "this output is
+     * --force}, and is at least as new as the main jar it's derived from — a cheap "this output is
      * up-to-date" proxy for the artifact-cache skip the phase itself performs.
      */
     private static boolean artifactFresh(Path dir, java.util.function.Function<BuildLayout, Path> artifact) {
@@ -301,7 +301,7 @@ public final class EffortWeights {
         }
     }
 
-    /** Fetch weight: 8 per artifact not already in the CAS (all of them under {@code --refresh}). */
+    /** Fetch weight: 8 per artifact not already in the CAS (all of them under {@code  --force}). */
     private static int predictSync(BuildPipeline.Inputs in, Cas cas, boolean refresh) {
         try {
             if (!Files.exists(in.lockFile())) return ARTIFACT_FETCH; // first run resolves+fetches

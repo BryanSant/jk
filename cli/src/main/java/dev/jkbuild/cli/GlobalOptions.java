@@ -20,7 +20,7 @@ public final class GlobalOptions {
     public String color;
     public boolean offline;
 
-    /** {@code --force}: bypass all caching — rerun outputs AND re-fetch remote resources. */
+    /** {@code --force}: bypass all of jk's caching for this invocation. */
     public boolean force;
 
     public boolean noProgress;

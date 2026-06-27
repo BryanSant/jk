@@ -62,8 +62,9 @@ public final class CacheSync {
      * completion thread for fetched / failed packages. Use this to drive a Goal-style progress bar
      * where the numerator climbs one tick per package processed.
      *
-     * <p>When {@code refresh} is true the CAS presence check is skipped and every artifact is
-     * re-downloaded from its source, regardless of whether a local copy already exists.
+     * <p>When {@code refresh} is true (set by {@code --force}) the CAS presence check is skipped
+     * and every artifact is re-downloaded from its source, regardless of whether a local copy
+     * already exists.
      */
     public Report sync(Lockfile lock, ProgressObserver observer, boolean refresh)
             throws IOException, InterruptedException {

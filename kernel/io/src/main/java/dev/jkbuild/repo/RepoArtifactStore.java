@@ -92,7 +92,7 @@ public final class RepoArtifactStore {
      * <p>For index-only repos: applies an <em>mtime guard</em>. If the {@code ~/.m2} artifact is
      * newer than the sidecar (e.g. Maven updated the file), the sidecar is re-hashed and
      * overwritten. A lockfile checksum mismatch surfaces on the next {@code jk build}; run
-     * {@code jk lock --refresh} to re-pin.
+     * {@code jk lock --force} to re-pin.
      */
     public Optional<Path> locate(String relativePath) {
         if (root == null) return Optional.empty();

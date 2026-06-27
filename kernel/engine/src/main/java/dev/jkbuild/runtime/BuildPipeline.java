@@ -973,7 +973,7 @@ public final class BuildPipeline {
                     String stampKey = dev.jkbuild.task.TestStamp.computeKey(
                             testSrcs, ctx.require(MAIN_CLASSES), in.lockFile(), testRtCp, testStampExtras(workerJars));
                     String testTaskId = ActionKey.qualifiedTaskId("run-tests", testClassesForStamp);
-                    // --rerun forces a real test run, matching the compile/package
+                    // --force forces a real test run, matching the compile/package
                     // freshness checks above (which all guard on !rerun). Without
                     // this guard the action record would skip the runner even when
                     // the user explicitly asked to bypass build caches.
@@ -1811,7 +1811,7 @@ public final class BuildPipeline {
     /**
      * Packaging cache (mirrors the compile {@link ActionCache} path, for artifacts). Returns {@code
      * true} when a cached artifact for {@code key} was hard-linked back into {@code baseDir} — the
-     * caller then skips the (re)packaging work. Honors {@code --rerun}.
+     * caller then skips the (re)packaging work. Honors {@code --force}.
      */
     private static boolean restorePackaged(Path cacheRoot, String key, Path baseDir) throws IOException {
         if (dev.jkbuild.config.ActiveConfig.get().rerunOr(false)) return false;
