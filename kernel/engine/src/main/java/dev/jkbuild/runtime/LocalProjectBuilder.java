@@ -171,6 +171,7 @@ public final class LocalProjectBuilder {
                 p.main(),
                 p.shadow(),
                 p.nativeMode(),
+                p.sourcesMode(),
                 p.description(),
                 p.application(),
                 p.m2install(),

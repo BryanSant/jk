@@ -226,6 +226,18 @@ public final class JkBuildParser {
             // absent → SUPPORTED: eligible for `jk native` cascade but not auto-built
             nativeMode = JkBuild.NativeMode.SUPPORTED;
         }
+        // sources = true        → PUBLISH  (assembled during `jk publish` only)
+        // sources = "always"   → ALWAYS   (built as package-sources phase + published)
+        // sources absent/false → DISABLED (no sources jar)
+        Object sourcesRaw = project.get("sources");
+        JkBuild.SourcesMode sourcesMode;
+        if ("always".equalsIgnoreCase(sourcesRaw instanceof String s ? s : "")) {
+            sourcesMode = JkBuild.SourcesMode.ALWAYS;
+        } else if (Boolean.TRUE.equals(sourcesRaw)) {
+            sourcesMode = JkBuild.SourcesMode.PUBLISH;
+        } else {
+            sourcesMode = JkBuild.SourcesMode.DISABLED;
+        }
         String description = project.getString("description");
         // application defaults to "has a main class"; an explicit key overrides
         // (e.g. application = false for a runnable project that shouldn't be
@@ -260,6 +272,7 @@ public final class JkBuildParser {
                 main,
                 shadow,
                 nativeMode,
+                sourcesMode,
                 description,
                 application,
                 m2install,

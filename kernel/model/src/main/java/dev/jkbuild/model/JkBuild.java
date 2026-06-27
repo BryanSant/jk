@@ -287,6 +287,31 @@ public record JkBuild(
         }
     }
 
+    /**
+     * Controls when a sources JAR is produced. TOML key {@code project.sources}.
+     *
+     * <ul>
+     *   <li>absent / {@code false} → {@code DISABLED}: no sources jar ever.
+     *   <li>{@code true} → {@code PUBLISH}: sources jar is assembled and uploaded during {@code jk
+     *       publish} but NOT written to {@code target/} by {@code jk build}.
+     *   <li>{@code "always"} → {@code ALWAYS}: sources jar is built as a {@code package-sources}
+     *       tail phase during {@code jk build} (written to {@code target/}) AND uploaded during
+     *       {@code jk publish}.
+     * </ul>
+     */
+    public enum SourcesMode {
+        /** Sources jar never produced. */
+        DISABLED,
+        /** Sources jar assembled during {@code jk publish} only. */
+        PUBLISH,
+        /** Sources jar built by {@code jk build} and sent by {@code jk publish}. */
+        ALWAYS;
+
+        public boolean publishSources() {
+            return this != DISABLED;
+        }
+    }
+
     public record Project(
             String group,
             String name,
@@ -298,6 +323,7 @@ public record JkBuild(
             String main,
             boolean shadow,
             NativeMode nativeMode,
+            SourcesMode sourcesMode,
             String description,
             boolean application,
             boolean m2install,
@@ -316,11 +342,12 @@ public record JkBuild(
             if (jdk != null && jdk.isBlank()) jdk = null;
             if (graal != null && graal.isBlank()) graal = null;
             if (nativeMode == null) nativeMode = NativeMode.DISABLED;
+            if (sourcesMode == null) sourcesMode = SourcesMode.DISABLED;
             if (layout == null) layout = Layout.AUTO;
             if (description != null && description.isBlank()) description = null;
         }
 
-        /** Back-compat constructor (pre-{@code layout}); bare-major {@code jdk} (0 → unset). */
+        /** Back-compat constructor (pre-{@code sourcesMode}/{@code layout}); bare-major {@code jdk}. */
         public Project(
                 String group,
                 String name,
@@ -345,15 +372,14 @@ public record JkBuild(
                     main,
                     shadow,
                     nativeMode,
+                    null,
                     description,
                     application,
                     m2install,
                     Layout.AUTO);
         }
 
-        /**
-         * Back-compat constructor (pre-{@code application}/{@code m2install}); bare-major {@code jdk}.
-         */
+        /** Back-compat constructor (pre-{@code application}/{@code m2install}); bare-major {@code jdk}. */
         public Project(
                 String group,
                 String name,
@@ -376,6 +402,7 @@ public record JkBuild(
                     main,
                     shadow,
                     nativeMode,
+                    null,
                     description,
                     main != null,
                     false,
@@ -395,6 +422,7 @@ public record JkBuild(
                     null,
                     false,
                     NativeMode.DISABLED,
+                    null,
                     null,
                     false,
                     false,

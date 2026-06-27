@@ -20,7 +20,7 @@ import dev.jkbuild.publish.Sbom;
 import dev.jkbuild.publish.SigningOptions;
 import dev.jkbuild.publish.SigstoreSigner;
 import dev.jkbuild.publish.SlsaProvenance;
-import dev.jkbuild.publish.SourcesJar;
+import dev.jkbuild.cache.SourcesJar;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -46,7 +46,6 @@ import java.util.UUID;
  * REPO_PASS   password          # basic only
  * REPO_TOKEN  token             # bearer only
  * DRY_RUN     false
- * NO_SOURCES  false
  * ALLOW_SNAPSHOT false
  * SLSA        false
  * SBOM        false
@@ -91,7 +90,7 @@ public final class PublishRunner implements Plugin {
         Path projectDir = null, jar = null;
         URI repoUrl = null;
         String repoAuthType = "anonymous", repoUser = null, repoPass = null, repoToken = null;
-        boolean dryRun = false, noSources = false, slsa = false, sbom = false;
+        boolean dryRun = false, slsa = false, sbom = false;
         boolean signGpg = false, signSigstore = false;
         Path gpgKeyFile = null;
         String gpgPassphrase = null;
@@ -114,7 +113,6 @@ public final class PublishRunner implements Plugin {
                     case "REPO_PASS" -> repoPass = val;
                     case "REPO_TOKEN" -> repoToken = val;
                     case "DRY_RUN" -> dryRun = "true".equalsIgnoreCase(val);
-                    case "NO_SOURCES" -> noSources = "true".equalsIgnoreCase(val);
                     case "SLSA" -> slsa = "true".equalsIgnoreCase(val);
                     case "SBOM" -> sbom = "true".equalsIgnoreCase(val);
                     case "SIGN_GPG" -> {
@@ -166,15 +164,32 @@ public final class PublishRunner implements Plugin {
                     + pomBytes.length
                     + "}");
 
-            if (!noSources) {
-                Path srcRoot = projectDir.resolve("src/main/java");
-                byte[] sourcesJar = SourcesJar.build(List.of(srcRoot));
-                artifacts.add(new MavenPublisher.Artifact("-sources.jar", sourcesJar));
+            if (project.project().sourcesMode().publishSources()) {
+                // ALWAYS: sources jar was already built by `jk build` and written to disk.
+                // PUBLISH: assemble it in-memory from the source tree now.
+                byte[] sourcesBytes;
+                dev.jkbuild.layout.BuildLayout layout =
+                        dev.jkbuild.layout.BuildLayout.of(projectDir, project);
+                Path onDisk = layout.sourcesJar();
+                if (Files.isRegularFile(onDisk)) {
+                    sourcesBytes = Files.readAllBytes(onDisk);
+                } else {
+                    // Simple layout (project.layout = "simple" or legacy compact = true): src/ is the root.
+                    // Traditional layout: src/main/java and src/main/kotlin.
+                    boolean compact = project.project().layout() == dev.jkbuild.model.JkBuild.Layout.SIMPLE;
+                    List<Path> sourceRoots = compact
+                            ? List.of(projectDir.resolve("src"))
+                            : List.of(
+                                    projectDir.resolve("src/main/java"),
+                                    projectDir.resolve("src/main/kotlin"));
+                    sourcesBytes = SourcesJar.build(sourceRoots);
+                }
+                artifacts.add(new MavenPublisher.Artifact("-sources.jar", sourcesBytes));
                 out.emit("{\"t\":\"artifact\",\"name\":"
                         + Ndjson.quote(project.project().name() + "-"
                                 + project.project().version() + "-sources.jar")
                         + ",\"size\":"
-                        + sourcesJar.length
+                        + sourcesBytes.length
                         + "}");
             }
 

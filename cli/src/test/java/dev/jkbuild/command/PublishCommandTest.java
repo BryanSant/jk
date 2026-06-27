@@ -102,16 +102,16 @@ class PublishCommandTest {
         writeJar(tempDir.resolve("target/widget-1.0.0-SNAPSHOT.jar"));
 
         int exit = run(
-                "publish", "-C", tempDir.toString(), "--repo-url", base.toString(), "--allow-snapshot", "--no-sources");
+                "publish", "-C", tempDir.toString(), "--repo-url", base.toString(), "--allow-snapshot");
         assertThat(exit).isEqualTo(0);
     }
 
     @Test
-    void no_sources_flag_skips_sources_jar(@TempDir Path tempDir) throws Exception {
+    void sources_disabled_by_default_no_sources_jar(@TempDir Path tempDir) throws Exception {
         writeJkBuild(tempDir);
         writeJar(tempDir.resolve("target/widget-1.0.0.jar"));
 
-        int exit = run("publish", "-C", tempDir.toString(), "--repo-url", base.toString(), "--no-sources");
+        int exit = run("publish", "-C", tempDir.toString(), "--repo-url", base.toString());
         assertThat(exit).isEqualTo(0);
         assertThat(received.keySet()).noneMatch(k -> k.contains("-sources.jar"));
     }
@@ -137,8 +137,7 @@ class PublishCommandTest {
                 tempDir.toString(),
                 "--repo-url",
                 base.toString(),
-                "--no-sources",
-                "--sign",
+                                "--sign",
                 "--key-file",
                 key.secretKeyFile().toString(),
                 "--key-passphrase",
@@ -155,7 +154,7 @@ class PublishCommandTest {
     void sign_without_key_file_errors(@TempDir Path tempDir) throws Exception {
         writeJkBuild(tempDir);
         writeJar(tempDir.resolve("target/widget-1.0.0.jar"));
-        int exit = run("publish", "-C", tempDir.toString(), "--repo-url", base.toString(), "--no-sources", "--sign");
+        int exit = run("publish", "-C", tempDir.toString(), "--repo-url", base.toString(), "--sign");
         // CommandLine propagates the runtime error as a non-zero exit.
         assertThat(exit).isNotZero();
     }
@@ -175,7 +174,7 @@ class PublishCommandTest {
         writeJkBuild(tempDir);
         writeJar(tempDir.resolve("target/widget-1.0.0.jar"));
 
-        int exit = run("publish", "-C", tempDir.toString(), "--repo-url", base.toString(), "--no-sources", "--slsa");
+        int exit = run("publish", "-C", tempDir.toString(), "--repo-url", base.toString(), "--slsa");
         assertThat(exit).isEqualTo(0);
 
         String stem = "/repo/com/example/widget/1.0.0/widget-1.0.0";
@@ -191,7 +190,7 @@ class PublishCommandTest {
         writeJkBuild(tempDir);
         writeJar(tempDir.resolve("target/widget-1.0.0.jar"));
 
-        int exit = run("publish", "-C", tempDir.toString(), "--repo-url", base.toString(), "--no-sources", "--sbom");
+        int exit = run("publish", "-C", tempDir.toString(), "--repo-url", base.toString(), "--sbom");
         assertThat(exit).isEqualTo(0);
 
         String stem = "/repo/com/example/widget/1.0.0/widget-1.0.0";

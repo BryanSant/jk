@@ -210,6 +210,7 @@ public final class BuildPipeline {
     static final int W_PACKAGE = 5;
     static final int W_STAMP = 1;
     static final int W_SHADOW = 10; // fat/shadow jar (vs 5 for a plain jar)
+    static final int W_SOURCES = 3; // sources jar is lightweight IO
     // A fully-cached module's whole always-run tail (parse + resources + stamps +
     // assemble) collapses to this single touch: it only re-parses the build file and
     // re-checks stamps (~30 ms), so reserving the full static tail (~10 weight ≈ 1.5 s)
@@ -1262,6 +1263,9 @@ public final class BuildPipeline {
             if (project.project().shadow()) {
                 b.addPhase(shadowPhase(in.cache(), in.lockFile()));
             }
+            if (project.project().sourcesMode() == JkBuild.SourcesMode.ALWAYS) {
+                b.addPhase(sourcesPhase(in.cache()));
+            }
         } catch (Exception ignored) {
         }
     }
@@ -1342,6 +1346,56 @@ public final class BuildPipeline {
                                     project.manifest(),
                                     0L));
                     storePackaged(cache, shTask, shKey, tokens, shadowJar.getParent(), List.of(shadowJar));
+                    ctx.progress(1);
+                })
+                .build();
+    }
+
+    /** Sources-jar packaging — writes {@code <artifact>-<version>-sources.jar} to the artifact dir. */
+    public static Phase sourcesPhase(Path cache) {
+        return Phase.builder("package-sources")
+                .label("Sources")
+                .kind(PhaseKind.CPU)
+                .requires("package-jar")
+                .weight(W_SOURCES)
+                .scope(1)
+                .execute(ctx -> {
+                    JkBuild project = ctx.require(PROJECT);
+                    BuildLayout layout = ctx.require(LAYOUT);
+                    Path moduleRoot = layout.moduleRoot();
+                    Path sourcesJar = layout.sourcesJar();
+                    // Source roots: simple layout uses src/, traditional uses src/main/java + src/main/kotlin.
+                    boolean compact = CompileSupport.isSimpleLayout(project.project(), moduleRoot);
+                    List<Path> sourceRoots = compact
+                            ? List.of(moduleRoot.resolve("src"))
+                            : List.of(
+                                    moduleRoot.resolve("src/main/java"),
+                                    moduleRoot.resolve("src/main/kotlin"));
+                    // Cache key: hash of all source roots' content.
+                    String srcHash = String.join(
+                            ";",
+                            sourceRoots.stream()
+                                    .map(r -> {
+                                        try {
+                                            return dev.jkbuild.task.ClasspathFingerprint.entry(r);
+                                        } catch (Exception e) {
+                                            return "";
+                                        }
+                                    })
+                                    .toList());
+                    List<String> tokens = List.of("sources:" + srcHash);
+                    String task = ActionKey.qualifiedTaskId("package-sources", sourcesJar);
+                    String key = ActionKey.forArtifact(task, dev.jkbuild.util.JkVersion.VERSION, tokens);
+                    if (restorePackaged(cache, key, sourcesJar.getParent())) {
+                        ctx.label(sourcesJar.getFileName() + " up-to-date");
+                        ctx.progress(1);
+                        return;
+                    }
+                    ctx.label("package " + sourcesJar.getFileName());
+                    byte[] bytes = dev.jkbuild.cache.SourcesJar.build(sourceRoots);
+                    Files.createDirectories(sourcesJar.getParent());
+                    Files.write(sourcesJar, bytes);
+                    storePackaged(cache, task, key, tokens, sourcesJar.getParent(), List.of(sourcesJar));
                     ctx.progress(1);
                 })
                 .build();

@@ -67,7 +67,6 @@ public final class PublishCommand implements CliCommand {
                 Opt.value("<REGION>", "Object-store region for s3:// / gs://.", "--region"),
                 Opt.value("<URL>", "Object-store endpoint override for s3://.", "--endpoint"),
                 Opt.value("<file>", "Override the main jar path.", "--jar"),
-                Opt.flag("Skip the sources jar.", "--no-sources"),
                 Opt.flag("Permit publishing -SNAPSHOT versions.", "--allow-snapshot"),
                 Opt.flag("Print the upload plan; no HTTP requests.", "--dry-run"),
                 Opt.flag("Detached .asc GPG signature per artifact.", "--sign"),
@@ -84,7 +83,6 @@ public final class PublishCommand implements CliCommand {
     String region;
     String endpoint;
     Path jarPath;
-    boolean noSources;
     boolean allowSnapshot;
     boolean dryRun;
     boolean sign;
@@ -107,7 +105,6 @@ public final class PublishCommand implements CliCommand {
         this.region = in.value("region").orElse(null);
         this.endpoint = in.value("endpoint").orElse(null);
         this.jarPath = in.value("jar").map(Path::of).orElse(null);
-        this.noSources = in.isSet("no-sources");
         this.allowSnapshot = in.isSet("allow-snapshot");
         this.dryRun = in.isSet("dry-run");
         this.sign = in.isSet("sign");
@@ -262,7 +259,6 @@ public final class PublishCommand implements CliCommand {
         lines.add("JAR " + jar.toAbsolutePath());
         lines.add("REPO_URL " + repoUrl);
         lines.add("DRY_RUN " + dryRun);
-        lines.add("NO_SOURCES " + noSources);
         lines.add("SLSA " + slsa);
         lines.add("SBOM " + sbom);
         lines.add("SIGN_SIGSTORE " + sigstore);

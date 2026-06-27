@@ -961,8 +961,22 @@ class JkBuildParserTest {
     }
 
     @Test
-    void m2install_parsed_default_false() {
-        assertThat(JkBuildParser.parse(PROJECT).project().m2install()).isFalse();
+    void sources_mode_parsed() {
+        assertThat(JkBuildParser.parse(PROJECT).project().sourcesMode())
+                .isEqualTo(dev.jkbuild.model.JkBuild.SourcesMode.DISABLED);
+        assertThat(JkBuildParser.parse(PROJECT + "sources = true\n").project().sourcesMode())
+                .isEqualTo(dev.jkbuild.model.JkBuild.SourcesMode.PUBLISH);
+        assertThat(JkBuildParser.parse(PROJECT + "sources = \"always\"\n").project().sourcesMode())
+                .isEqualTo(dev.jkbuild.model.JkBuild.SourcesMode.ALWAYS);
+        assertThat(JkBuildParser.parse(PROJECT + "sources = false\n").project().sourcesMode())
+                .isEqualTo(dev.jkbuild.model.JkBuild.SourcesMode.DISABLED);
+    }
+
+    @Test
+    void m2install_defaults_true_explicit_false_opts_out() {
+        assertThat(JkBuildParser.parse(PROJECT).project().m2install()).isTrue();
+        assertThat(JkBuildParser.parse(PROJECT + "m2install = false\n").project().m2install())
+                .isFalse();
         assertThat(JkBuildParser.parse(PROJECT + "m2install = true\n").project().m2install())
                 .isTrue();
     }
