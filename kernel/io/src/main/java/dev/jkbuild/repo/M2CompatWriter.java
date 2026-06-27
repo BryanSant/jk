@@ -118,6 +118,30 @@ public final class M2CompatWriter {
     }
 
     /**
+     * Write {@code content} bytes to {@code target} atomically and return the Maven hashes.
+     * Equivalent to {@link #copyToM2AndHash} but for in-memory content (e.g. a generated POM).
+     */
+    public static MavenHashes writeBytesToM2(byte[] content, Path target) throws IOException {
+        Files.createDirectories(target.getParent());
+        Path tmp = target.resolveSibling(target.getFileName() + ".part");
+        MessageDigest sha1 = newDigest("SHA-1");
+        MessageDigest md5 = newDigest("MD5");
+        sha1.update(content);
+        md5.update(content);
+        try {
+            Files.write(tmp, content);
+            Files.move(tmp, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+        } catch (IOException | RuntimeException e) {
+            try {
+                Files.deleteIfExists(tmp);
+            } catch (IOException ignored) {
+            }
+            throw e instanceof IOException ie ? ie : new IOException(e);
+        }
+        return new MavenHashes(hex(sha1.digest()), hex(md5.digest()));
+    }
+
+    /**
      * Maven-compatible hashes computed from an existing file: SHA-1 and MD5. Both are needed for
      * the {@code .sha1} / {@code .md5} sidecar files that Maven and Gradle expect.
      */

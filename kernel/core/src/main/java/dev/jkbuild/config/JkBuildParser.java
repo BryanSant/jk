@@ -229,10 +229,11 @@ public final class JkBuildParser {
         String description = project.getString("description");
         // application defaults to "has a main class"; an explicit key overrides
         // (e.g. application = false for a runnable project that shouldn't be
-        // make-installed). m2install defaults to false.
+        // make-installed). m2install defaults to true: ~/.m2 is the primary artifact store.
+        // Set m2install = false for jk-internal worker modules that must land in repos/local/.
         boolean application =
                 project.contains("application") ? Boolean.TRUE.equals(project.getBoolean("application")) : main != null;
-        boolean m2install = Boolean.TRUE.equals(project.getBoolean("m2install"));
+        boolean m2install = !Boolean.FALSE.equals(project.getBoolean("m2install"));
         // project.layout = "simple"|"traditional"|"auto" (preferred).
         // Legacy: compact = true → "simple", compact = false → keep auto-detect.
         JkBuild.Layout layout;

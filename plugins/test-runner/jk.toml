@@ -1,4 +1,5 @@
 [project]
+m2install = false
 group    = "jk"
 name     = "test-runner"
 version  = "0.1.0"

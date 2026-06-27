@@ -26,8 +26,6 @@ import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.model.command.Param;
-import dev.jkbuild.publish.PublishablePom;
-import dev.jkbuild.repo.JkMavenLocalRepo;
 import dev.jkbuild.repo.MavenLayout;
 import dev.jkbuild.repo.MavenRepo;
 import dev.jkbuild.repo.RepoGroup;
@@ -49,7 +47,6 @@ import dev.jkbuild.util.Hashing;
 import dev.jkbuild.util.JkDirs;
 import java.io.IOException;
 import java.net.URI;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.PosixFilePermission;
@@ -235,12 +232,10 @@ public final class InstallCommand implements CliCommand {
 
         Path cache = cacheDir();
         Files.createDirectories(cache);
-        byte[] bytes = Files.readAllBytes(filePath);
-        String sha256 = Hashing.sha256Hex(bytes);
-        Cas cas = new Cas(cache);
-        cas.putByLink(filePath, sha256);
         Coordinate coord = Coordinate.of(group, artifact, version);
-        new JkMavenLocalRepo(cache).materialize(MavenLayout.artifactPath(coord), cas.pathFor(sha256));
+        // File-install writes directly to repos/local/ (the JAR is already on disk, no project
+        // metadata for a POM, so ~/.m2 write is not appropriate here).
+        writeToLocalStore(cache, MavenLayout.artifactPath(coord), filePath);
 
         if (!global.outputIsJson()) {
             System.out.println("Installed " + dev.jkbuild.cli.theme.Coords.gav(coord) + " to the local cache");
@@ -524,37 +519,92 @@ public final class InstallCommand implements CliCommand {
     }
 
     /**
-     * The {@code mvn install} equivalent: hash the built jar and a generated pom into jk's CAS and
-     * mirror them into the m2 local repo as a {@code local} source so other local jk projects resolve
-     * them. When {@code m2install} is set, also materialise jar+pom into {@code ~/.m2/repository}.
+     * Install the built JAR and a generated POM into the artifact store.
+     *
+     * <ul>
+     *   <li><b>m2install = true (default)</b> — {@code ~/.m2/repository} is primary. The JAR and
+     *       POM are written there with full Maven-compatible {@code .sha1}/{@code .md5} sidecars and
+     *       a {@code _remote.repositories} hint. jk records a {@code .sha256} index sidecar in
+     *       {@code repos/local/} so the artifact is discoverable via the local index.</li>
+     *   <li><b>m2install = false</b> — {@code repos/local/} is primary (used for jk's own worker
+     *       modules that must be found by {@link dev.jkbuild.worker.WorkerJar#locate} without going
+     *       through {@code ~/.m2}).</li>
+     * </ul>
      */
     private void cacheInstallArtifact(JkBuild project, BuildLayout layout, Path cacheDir) throws IOException {
         var p = project.project();
         Coordinate coord = Coordinate.of(p.group(), p.name(), p.version());
-        Cas cas = new Cas(cacheDir);
-        JkMavenLocalRepo localRepo = new JkMavenLocalRepo(cacheDir);
-
         Path jar = layout.mainJar();
-        byte[] jarBytes = Files.readAllBytes(jar);
-        String jarHex = Hashing.sha256Hex(jarBytes);
-        cas.putByLink(jar, jarHex);
-        localRepo.materialize(MavenLayout.artifactPath(coord), cas.pathFor(jarHex));
-
-        String pomXml = PublishablePom.render(project, null).xml();
-        byte[] pomBytes = pomXml.getBytes(StandardCharsets.UTF_8);
-        String pomHex = Hashing.sha256Hex(pomBytes);
-        cas.put(pomBytes);
-        localRepo.materialize(MavenLayout.pomPath(coord), cas.pathFor(pomHex));
+        String jarRelPath = dev.jkbuild.repo.MavenLayout.artifactPath(coord);
+        String pomRelPath = dev.jkbuild.repo.MavenLayout.pomPath(coord);
+        String pomXml = dev.jkbuild.publish.PublishablePom.render(project, null).xml();
+        byte[] pomBytes = pomXml.getBytes(java.nio.charset.StandardCharsets.UTF_8);
 
         if (p.m2install()) {
-            Path dir = m2Dir().resolve("repository");
-            for (String seg : p.group().split("\\.")) dir = dir.resolve(seg);
-            dir = dir.resolve(p.name()).resolve(p.version());
-            Files.createDirectories(dir);
-            String base = p.name() + "-" + p.version();
-            Linking.linkOrCopy(jar, dir.resolve(base + ".jar"));
-            Files.writeString(dir.resolve(base + ".pom"), pomXml, StandardCharsets.UTF_8);
+            // ~/.m2 is primary.
+            Path m2Root = dev.jkbuild.repo.M2Dirs.localRepository();
+
+            // JAR → ~/.m2 with .sha1, .md5, _remote.repositories
+            Path m2Jar = m2Root.resolve(jarRelPath);
+            dev.jkbuild.repo.M2CompatWriter.MavenHashes jarH =
+                    dev.jkbuild.repo.M2CompatWriter.copyToM2AndHash(jar, m2Jar);
+            dev.jkbuild.repo.M2CompatWriter.writeMavenSidecars(m2Jar, jarH.sha1(), jarH.md5());
+            dev.jkbuild.repo.M2CompatWriter.writeRemoteRepositories(
+                    m2Jar.getParent(), "local", m2Jar.getFileName().toString());
+
+            // POM → ~/.m2 with .sha1, .md5
+            Path m2Pom = m2Root.resolve(pomRelPath);
+            dev.jkbuild.repo.M2CompatWriter.MavenHashes pomH =
+                    dev.jkbuild.repo.M2CompatWriter.writeBytesToM2(pomBytes, m2Pom);
+            dev.jkbuild.repo.M2CompatWriter.writeMavenSidecars(m2Pom, pomH.sha1(), pomH.md5());
+
+            // Index sidecars in repos/local/ (jk's O(1) lookup, pointing to ~/.m2)
+            writeLocalIndexSidecar(cacheDir, jarRelPath, Hashing.sha256Hex(jar));
+            writeLocalIndexSidecar(cacheDir, pomRelPath, Hashing.sha256Hex(pomBytes));
+        } else {
+            // repos/local/ is primary (worker JARs, jk-internal use).
+            writeToLocalStore(cacheDir, jarRelPath, jar);
+            writeContentToLocalStore(cacheDir, pomRelPath, pomBytes);
         }
+    }
+
+    /** Write a sidecar-only entry in {@code repos/local/} pointing to an artifact in {@code ~/.m2}. */
+    private static void writeLocalIndexSidecar(Path cacheDir, String relativePath, String sha256) {
+        try {
+            Path sidecar = cacheDir.resolve("repos/local/" + relativePath + ".sha256");
+            Files.createDirectories(sidecar.getParent());
+            if (!Files.exists(sidecar)) Files.writeString(sidecar, sha256);
+        } catch (IOException ignored) {
+        }
+    }
+
+    /** Write a file directly into {@code repos/local/} as a full-store entry (actual JAR on disk). */
+    private static void writeToLocalStore(Path cacheDir, String relativePath, Path source) throws IOException {
+        Path target = cacheDir.resolve("repos/local/" + relativePath);
+        Files.createDirectories(target.getParent());
+        Path tmp = target.resolveSibling(target.getFileName() + ".part");
+        Files.copy(source, tmp, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        Files.move(
+                tmp,
+                target,
+                java.nio.file.StandardCopyOption.ATOMIC_MOVE,
+                java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        Files.writeString(Path.of(target + ".sha256"), Hashing.sha256Hex(target));
+    }
+
+    /** Write byte content directly into {@code repos/local/} as a full-store entry. */
+    private static void writeContentToLocalStore(Path cacheDir, String relativePath, byte[] content)
+            throws IOException {
+        Path target = cacheDir.resolve("repos/local/" + relativePath);
+        Files.createDirectories(target.getParent());
+        Path tmp = target.resolveSibling(target.getFileName() + ".part");
+        Files.write(tmp, content);
+        Files.move(
+                tmp,
+                target,
+                java.nio.file.StandardCopyOption.ATOMIC_MOVE,
+                java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        Files.writeString(Path.of(target + ".sha256"), Hashing.sha256Hex(content));
     }
 
     /**
