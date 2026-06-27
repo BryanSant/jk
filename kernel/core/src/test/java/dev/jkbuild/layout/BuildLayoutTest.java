@@ -12,8 +12,21 @@ import org.junit.jupiter.api.io.TempDir;
 
 class BuildLayoutTest {
 
+    /** Library project: no {@code project.main}. Artifacts land in {@code target/lib/}. */
     private static JkBuild project(String artifact, String version) {
         return JkBuild.of(new JkBuild.Project("com.acme", artifact, version, 25));
+    }
+
+    /** Application project: has {@code project.main}. Artifacts land in {@code target/}. */
+    private static JkBuild appProject(String artifact, String version) {
+        return dev.jkbuild.config.JkBuildParser.parse("""
+                [project]
+                group   = "com.acme"
+                name    = "%s"
+                version = "%s"
+                java    = 25
+                main    = "com.acme.Main"
+                """.formatted(artifact, version));
     }
 
     @Test
@@ -44,19 +57,33 @@ class BuildLayoutTest {
     }
 
     @Test
-    void final_artifacts_live_under_target(@TempDir Path dir) {
+    void library_artifacts_live_under_target_lib(@TempDir Path dir) {
+        // No project.main → library; all deliverables go to target/lib/
         BuildLayout layout = BuildLayout.of(dir, project("widget", "1.2.3"));
 
+        assertThat(layout.artifactDir()).isEqualTo(dir.resolve("target/lib"));
+        assertThat(layout.mainJar()).isEqualTo(dir.resolve("target/lib/widget-1.2.3.jar"));
+        assertThat(layout.sourcesJar()).isEqualTo(dir.resolve("target/lib/widget-1.2.3-sources.jar"));
+        assertThat(layout.javadocJar()).isEqualTo(dir.resolve("target/lib/widget-1.2.3-javadoc.jar"));
+        assertThat(layout.nativeBinary()).isEqualTo(dir.resolve("target/lib/widget"));
+        // Shared-library base: lib<artifact> in target/lib/, no extension (native-image adds it).
+        assertThat(layout.nativeLibrary()).isEqualTo(dir.resolve("target/lib/libwidget"));
+        assertThat(layout.ociImageTar()).isEqualTo(dir.resolve("target/lib/widget.oci.tar"));
+        assertThat(layout.testReportsDir("core")).isEqualTo(dir.resolve("target/reports/core"));
+        assertThat(layout.sbomDir()).isEqualTo(dir.resolve("target/lib/widget-1.2.3-sbom"));
+        assertThat(layout.provenanceDir()).isEqualTo(dir.resolve("target/lib/widget-1.2.3-provenance"));
+    }
+
+    @Test
+    void application_artifacts_live_under_target(@TempDir Path dir) {
+        // project.main declared → application; all deliverables go to target/
+        BuildLayout layout = BuildLayout.of(dir, appProject("widget", "1.2.3"));
+
+        assertThat(layout.artifactDir()).isEqualTo(dir.resolve("target"));
         assertThat(layout.mainJar()).isEqualTo(dir.resolve("target/widget-1.2.3.jar"));
         assertThat(layout.sourcesJar()).isEqualTo(dir.resolve("target/widget-1.2.3-sources.jar"));
-        assertThat(layout.javadocJar()).isEqualTo(dir.resolve("target/widget-1.2.3-javadoc.jar"));
         assertThat(layout.nativeBinary()).isEqualTo(dir.resolve("target/widget"));
-        // Shared-library base: lib<artifact>, no extension (native-image adds it).
-        assertThat(layout.nativeLibrary()).isEqualTo(dir.resolve("target/libwidget"));
         assertThat(layout.ociImageTar()).isEqualTo(dir.resolve("target/widget.oci.tar"));
-        assertThat(layout.testReportsDir("core")).isEqualTo(dir.resolve("target/reports/core"));
-        assertThat(layout.sbomDir()).isEqualTo(dir.resolve("target/widget-1.2.3-sbom"));
-        assertThat(layout.provenanceDir()).isEqualTo(dir.resolve("target/widget-1.2.3-provenance"));
     }
 
     @Test
@@ -67,9 +94,9 @@ class BuildLayoutTest {
 
         // Intermediates stay with the module (under module/target/).
         assertThat(layout.classesDir()).isEqualTo(module.resolve("target/classes/main"));
-        // Final artifacts also land under the module's own target/.
-        assertThat(layout.mainJar()).isEqualTo(module.resolve("target/jk-core-0.7.0.jar"));
-        assertThat(layout.nativeBinary()).isEqualTo(module.resolve("target/jk-core"));
+        // No main → library; artifacts under module/target/lib/.
+        assertThat(layout.mainJar()).isEqualTo(module.resolve("target/lib/jk-core-0.7.0.jar"));
+        assertThat(layout.nativeBinary()).isEqualTo(module.resolve("target/lib/jk-core"));
     }
 
     @Test
@@ -97,8 +124,8 @@ class BuildLayoutTest {
 
         assertThat(layout.workspaceRoot()).isEqualTo(workspace.toAbsolutePath().normalize());
         assertThat(layout.moduleRoot()).isEqualTo(module);
-        // Each module owns its own target/ — the jar lives with the module.
-        assertThat(layout.mainJar()).isEqualTo(module.resolve("target/core-1.0.0.jar"));
+        // Each module owns its own target/ — no main → library, jar in target/lib/.
+        assertThat(layout.mainJar()).isEqualTo(module.resolve("target/lib/core-1.0.0.jar"));
         // Intermediates stay module-local (module/target/).
         assertThat(layout.classesDir()).isEqualTo(module.resolve("target/classes/main"));
     }
@@ -108,7 +135,8 @@ class BuildLayoutTest {
         BuildLayout layout = BuildLayout.of(workspace, workspaceRootProject("ws-root", "1.0.0"));
         assertThat(layout.workspaceRoot()).isEqualTo(workspace);
         assertThat(layout.moduleRoot()).isEqualTo(workspace);
-        assertThat(layout.mainJar()).isEqualTo(workspace.resolve("target/ws-root-1.0.0.jar"));
+        // No main → library; jar under target/lib/.
+        assertThat(layout.mainJar()).isEqualTo(workspace.resolve("target/lib/ws-root-1.0.0.jar"));
     }
 
     private static JkBuild workspaceRootProject(String artifact, String version) {

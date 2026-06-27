@@ -17,7 +17,7 @@ import java.util.Objects;
  *       generated/}, {@code tmp/}
  *   <li><b>Test results</b> — JUnit XML files under {@code reports/test-results/}; the
  *       human-readable {@code reports/test-results.md} alongside them
- *   <li><b>Final artifacts</b> — jars, native binaries, OCI tarballs directly under {@code target/}
+ *   <li><b>Final artifacts</b> — under {@code target/} for applications (project.main set), under {@code target/lib/} for libraries
  * </ul>
  *
  * <p>For a single-project (no {@code [workspace]} block), workspace root and module root are the
@@ -40,12 +40,16 @@ public final class BuildLayout {
     private final Path moduleRoot;
     private final String artifact;
     private final String version;
+    /** True when the project declares a {@code project.main} class (i.e. it is an application). */
+    private final boolean hasMain;
 
-    private BuildLayout(Path workspaceRoot, Path moduleRoot, String artifact, String version) {
+    private BuildLayout(
+            Path workspaceRoot, Path moduleRoot, String artifact, String version, boolean hasMain) {
         this.workspaceRoot = Objects.requireNonNull(workspaceRoot, "workspaceRoot");
         this.moduleRoot = Objects.requireNonNull(moduleRoot, "moduleRoot");
         this.artifact = Objects.requireNonNull(artifact, "artifact");
         this.version = Objects.requireNonNull(version, "version");
+        this.hasMain = hasMain;
     }
 
     public static BuildLayout of(Path projectDir, JkBuild project) {
@@ -62,7 +66,8 @@ public final class BuildLayout {
                 workspaceRoot,
                 projectDir,
                 project.project().name(),
-                project.project().version());
+                project.project().version(),
+                hasMain(project));
     }
 
     public static BuildLayout of(Path workspaceRoot, Path moduleRoot, JkBuild project) {
@@ -71,7 +76,13 @@ public final class BuildLayout {
                 workspaceRoot,
                 moduleRoot,
                 project.project().name(),
-                project.project().version());
+                project.project().version(),
+                hasMain(project));
+    }
+
+    private static boolean hasMain(JkBuild project) {
+        String main = project.project().main();
+        return main != null && !main.isBlank();
     }
 
     // ---- Roots --------------------------------------------------------
@@ -201,10 +212,10 @@ public final class BuildLayout {
         return reportsDir().resolve("test-results.md");
     }
 
-    // ---- Final artifacts (under moduleRoot/target/) -------------------------
+    // ---- Final artifacts -------------------------------------------------------
 
     /**
-     * {@code <moduleRoot>/target/} — this module's final artifacts.
+     * {@code <moduleRoot>/target/} — root of all build output for this module.
      *
      * <p>Each project owns its own {@code target/} directory. The workspace root only gets a {@code
      * target/} if it has its own source code to build.
@@ -213,52 +224,69 @@ public final class BuildLayout {
         return moduleRoot.resolve("target");
     }
 
-    /** {@code target/<artifact>-<version>.jar} — the main jar. */
+    /**
+     * Destination directory for deliverable artifacts (jars, binaries, OCI images).
+     *
+     * <ul>
+     *   <li>{@code target/} when the project declares {@code project.main} — it is an application
+     *       and its packaged output is a directly-runnable artifact.
+     *   <li>{@code target/lib/} when no {@code project.main} is declared — it is a library whose
+     *       packaged output is consumed by other projects, not run directly.
+     * </ul>
+     *
+     * <p>This rule also applies to native shared-library outputs ({@code .so}, {@code .dylib},
+     * {@code .dll}) produced by GraalVM {@code native-image --shared}.
+     */
+    public Path artifactDir() {
+        return hasMain ? targetDir() : targetDir().resolve("lib");
+    }
+
+    /** {@code <artifactDir>/<artifact>-<version>.jar} — the main jar. */
     public Path mainJar() {
-        return targetDir().resolve(artifact + "-" + version + ".jar");
+        return artifactDir().resolve(artifact + "-" + version + ".jar");
     }
 
-    /** {@code target/<artifact>-<version>-all.jar} — the shadow (fat) jar. */
+    /** {@code <artifactDir>/<artifact>-<version>-all.jar} — the shadow (fat) jar. */
     public Path shadowJar() {
-        return targetDir().resolve(artifact + "-" + version + "-all.jar");
+        return artifactDir().resolve(artifact + "-" + version + "-all.jar");
     }
 
-    /** {@code target/<artifact>-<version>-sources.jar}. */
+    /** {@code <artifactDir>/<artifact>-<version>-sources.jar}. */
     public Path sourcesJar() {
-        return targetDir().resolve(artifact + "-" + version + "-sources.jar");
+        return artifactDir().resolve(artifact + "-" + version + "-sources.jar");
     }
 
-    /** {@code target/<artifact>-<version>-javadoc.jar}. */
+    /** {@code <artifactDir>/<artifact>-<version>-javadoc.jar}. */
     public Path javadocJar() {
-        return targetDir().resolve(artifact + "-" + version + "-javadoc.jar");
+        return artifactDir().resolve(artifact + "-" + version + "-javadoc.jar");
     }
 
-    /** {@code target/<artifact>} — GraalVM-compiled native executable. */
+    /** {@code <artifactDir>/<artifact>} — GraalVM-compiled native executable. */
     public Path nativeBinary() {
-        return targetDir().resolve(artifact);
+        return artifactDir().resolve(artifact);
     }
 
     /**
-     * {@code target/lib<artifact>} — base path for a GraalVM-compiled native shared library ({@code
-     * native-image --shared}). This is the {@code -o} basename only; native-image appends the
-     * platform extension ({@code .so}/{@code .dylib}/{@code .dll}) and emits C headers alongside it.
+     * {@code <artifactDir>/lib<artifact>} — base path for a GraalVM-compiled native shared library
+     * ({@code native-image --shared}). This is the {@code -o} basename only; native-image appends
+     * the platform extension ({@code .so}/{@code .dylib}/{@code .dll}) and emits C headers alongside.
      */
     public Path nativeLibrary() {
-        return targetDir().resolve("lib" + artifact);
+        return artifactDir().resolve("lib" + artifact);
     }
 
-    /** {@code target/<artifact>.oci.tar} — default Jib OCI tarball. */
+    /** {@code <artifactDir>/<artifact>.oci.tar} — default Jib OCI tarball. */
     public Path ociImageTar() {
-        return targetDir().resolve(artifact + ".oci.tar");
+        return artifactDir().resolve(artifact + ".oci.tar");
     }
 
-    /** {@code target/<artifact>-<version>-sbom/} — CycloneDX / SPDX outputs. */
+    /** {@code <artifactDir>/<artifact>-<version>-sbom/} — CycloneDX / SPDX outputs. */
     public Path sbomDir() {
-        return targetDir().resolve(artifact + "-" + version + "-sbom");
+        return artifactDir().resolve(artifact + "-" + version + "-sbom");
     }
 
-    /** {@code target/<artifact>-<version>-provenance/} — SLSA in-toto attestations. */
+    /** {@code <artifactDir>/<artifact>-<version>-provenance/} — SLSA in-toto attestations. */
     public Path provenanceDir() {
-        return targetDir().resolve(artifact + "-" + version + "-provenance");
+        return artifactDir().resolve(artifact + "-" + version + "-provenance");
     }
 }
