@@ -39,8 +39,8 @@ class BuildLayoutTest {
         assertThat(layout.tmpDir()).isEqualTo(dir.resolve("target/tmp"));
         assertThat(layout.generatedSourcesDir("immutables"))
                 .isEqualTo(dir.resolve("target/generated/sources/immutables/main"));
-        assertThat(layout.testResultsDir()).isEqualTo(dir.resolve("target/test-results"));
-        assertThat(layout.markdownTestResults()).isEqualTo(dir.resolve("target/test-results.md"));
+        assertThat(layout.testResultsDir()).isEqualTo(dir.resolve("target/reports/test-results"));
+        assertThat(layout.markdownTestResults()).isEqualTo(dir.resolve("target/reports/test-results.md"));
     }
 
     @Test

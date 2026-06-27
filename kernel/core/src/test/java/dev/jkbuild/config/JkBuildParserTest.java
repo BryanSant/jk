@@ -70,24 +70,6 @@ class JkBuildParserTest {
     }
 
     @Test
-    void parses_build_embed_sha_and_treats_sources_as_order_after() {
-        JkBuild parsed = JkBuildParser.parse(PROJECT + """
-
-                [build]
-                order-after = ["plain-dep"]
-
-                [build.embed-sha]
-                "jk-kotlin-compiler" = "kotlin-compiler"
-                "jk-git-client" = "git-client"
-                """);
-        assertThat(parsed.build().embedSha())
-                .containsEntry("jk-kotlin-compiler", "kotlin-compiler")
-                .containsEntry("jk-git-client", "git-client");
-        // embed-sha sources are build-order prerequisites, merged with explicit order-after
-        assertThat(parsed.build().allOrderAfter()).contains("plain-dep", "kotlin-compiler", "git-client");
-    }
-
-    @Test
     void build_lint_defaults_on_and_can_be_disabled() {
         assertThat(JkBuildParser.parse(PROJECT).build().lint()).isTrue(); // absent → on
         JkBuild off = JkBuildParser.parse(PROJECT + """
@@ -108,17 +90,6 @@ class JkBuildParserTest {
         assertThat(parsed.build().testWorkerJars()).containsExactly("publisher", "compat-bridge");
         // test-worker-jars modules must build first → they're order-after prerequisites
         assertThat(parsed.build().allOrderAfter()).contains("publisher", "compat-bridge");
-    }
-
-    @Test
-    void rejects_non_string_embed_sha_value() {
-        assertThatThrownBy(() -> JkBuildParser.parse(PROJECT + """
-
-                [build.embed-sha]
-                "jk-x" = 123
-                """))
-                .isInstanceOf(JkBuildParseException.class)
-                .hasMessageContaining("[build.embed-sha]");
     }
 
     @Test

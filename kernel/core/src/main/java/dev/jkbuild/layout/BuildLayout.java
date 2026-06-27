@@ -15,8 +15,8 @@ import java.util.Objects;
  * <ul>
  *   <li><b>Build intermediates</b> — {@code classes/}, {@code kotlin/}, {@code resources/}, {@code
  *       generated/}, {@code tmp/}
- *   <li><b>Test results</b> — XML/HTML files in {@code test-results/}; the human-readable {@code
- *       test-results.md} at the top of {@code target/}
+ *   <li><b>Test results</b> — JUnit XML files under {@code reports/test-results/}; the
+ *       human-readable {@code reports/test-results.md} alongside them
  *   <li><b>Final artifacts</b> — jars, native binaries, OCI tarballs directly under {@code target/}
  * </ul>
  *
@@ -188,17 +188,17 @@ public final class BuildLayout {
         return reportsDir().resolve(module);
     }
 
-    /** {@code target/test-results/} — JUnit XML (and future HTML) test results. */
+    /** {@code target/reports/test-results/} — JUnit XML test results. */
     public Path testResultsDir() {
-        return buildDir().resolve("test-results");
+        return reportsDir().resolve("test-results");
     }
 
     /**
-     * {@code target/test-results.md} — human-readable markdown test results, written at the top of
-     * {@code target/} rather than inside {@code test-results/}.
+     * {@code target/reports/test-results.md} — human-readable markdown test results, written
+     * alongside the XML files in {@code target/reports/}.
      */
     public Path markdownTestResults() {
-        return moduleTargetDir().resolve("test-results.md");
+        return reportsDir().resolve("test-results.md");
     }
 
     // ---- Final artifacts (under moduleRoot/target/) -------------------------
