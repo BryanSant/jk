@@ -42,8 +42,14 @@ public final class Wizard {
     private static final String RESET_SGR = Ansi.RESET;
     private static final String CLEAR_TO_END = Ansi.ERASE_DISPLAY_TO_END;
 
-    /** Display width of the rail prefix "│ " in columns. */
+    /** Display width of the rail prefix "│  " in columns. */
     private static final int RAIL_PREFIX_WIDTH = 3;
+
+    /** One-space indent applied to every line below the header, matching the build TUI style. */
+    private static final String INDENT = " ";
+
+    /** Column count of {@link #INDENT}. */
+    private static final int INDENT_COLS = 1;
 
     /** Poll interval for keys; lets the loop observe async cancellation flag. */
     private static final long KEY_POLL_MS = 75L;
@@ -185,7 +191,7 @@ public final class Wizard {
     public static void printCancellation(Terminal terminal, String message) {
         var writer = terminal.writer();
         writer.print(Ansi.cursorPrevLine(2)); // up 2 lines, col 1 — lands at the active ╰
-        writer.print(Ansi.cursorForward(RAIL_PREFIX_WIDTH)); // skip past "╰──"
+        writer.print(Ansi.cursorForward(INDENT_COLS + RAIL_PREFIX_WIDTH)); // skip past "╰──"
         writer.print(Ansi.ERASE_DISPLAY_TO_END); // erase residue beyond
         var line = new AttributedStringBuilder()
                 .append(" " + message, Theme.active().error()) // leading space separates from ╰──
@@ -244,7 +250,7 @@ public final class Wizard {
             // Pre-seeded answers skip the interactive prompt but still render
             // as settled so the user can see what was inferred up front.
             if (answers.containsKey(step.key()) && preset.has(step.key())) {
-                writer.println(Rail.midBlank(Rail.StepState.COMPLETED).toAnsi(terminal));
+                writer.println(INDENT + Rail.midBlank(Rail.StepState.COMPLETED).toAnsi(terminal));
                 renderSettledRegion(terminal, step, answers);
                 writer.flush();
                 continue;
@@ -252,7 +258,7 @@ public final class Wizard {
             if (!step.shouldRun().test(Answers.of(answers))) {
                 continue;
             }
-            writer.println(Rail.midBlank(Rail.StepState.COMPLETED).toAnsi(terminal));
+            writer.println(INDENT + Rail.midBlank(Rail.StepState.COMPLETED).toAnsi(terminal));
 
             var state = new ActiveState(step, answers);
             var regionLines = renderActiveRegion(terminal, step, state);
@@ -294,7 +300,7 @@ public final class Wizard {
         // between the wizard and whatever the caller emits next (progress bar,
         // confirmation prompt, etc.). The `finally` block writes a second \r\n
         // that lands the cursor on the fresh line where the caller starts.
-        writer.print(Rail.closer("Done", Theme.active().success()).toAnsi(terminal));
+        writer.print(INDENT + Rail.closer("Done", Theme.active().success()).toAnsi(terminal));
         writer.print("\r\n");
         writer.flush();
         return Answers.of(Map.copyOf(answers));
@@ -302,24 +308,24 @@ public final class Wizard {
 
     private int renderActiveRegion(Terminal terminal, WizardStep step, ActiveState state) {
         var writer = terminal.writer();
-        writer.println(Rail.stepBullet(Rail.StepState.ACTIVE, step.prompt()).toAnsi(terminal));
+        writer.println(INDENT + Rail.stepBullet(Rail.StepState.ACTIVE, step.prompt()).toAnsi(terminal));
         var interactive = state.render();
         for (var line : interactive) {
-            writer.println(Rail.mid(line, Rail.StepState.ACTIVE).toAnsi(terminal));
+            writer.println(INDENT + Rail.mid(line, Rail.StepState.ACTIVE).toAnsi(terminal));
         }
         // └ hook one line below the interactive content; gets erased on commit
         // and re-emitted (with the next step's content above it) on each step.
         // Cyan matches the active rail above it.
         writer.println(
-                Rail.closer("", Theme.active().dim(), Rail.StepState.ACTIVE).toAnsi(terminal));
+                INDENT + Rail.closer("", Theme.active().dim(), Rail.StepState.ACTIVE).toAnsi(terminal));
         return 1 + interactive.size() + 1;
     }
 
     private void renderSettledRegion(Terminal terminal, WizardStep step, Map<String, Object> answers) {
         var writer = terminal.writer();
-        writer.println(Rail.stepBullet(Rail.StepState.COMPLETED, step.prompt()).toAnsi(terminal));
+        writer.println(INDENT + Rail.stepBullet(Rail.StepState.COMPLETED, step.prompt()).toAnsi(terminal));
         for (var line : summarize(step, answers)) {
-            writer.println(Rail.mid(line, Rail.StepState.COMPLETED).toAnsi(terminal));
+            writer.println(INDENT + Rail.mid(line, Rail.StepState.COMPLETED).toAnsi(terminal));
         }
     }
 
@@ -357,7 +363,7 @@ public final class Wizard {
         if (linesUp > 0) {
             writer.print(Ansi.cursorUp(linesUp));
         }
-        var col = RAIL_PREFIX_WIDTH + state.input.length() + 1;
+        var col = INDENT_COLS + RAIL_PREFIX_WIDTH + state.input.length() + 1;
         writer.print(Ansi.cursorToColumn(col));
         writer.print(SHOW_CURSOR);
         return 1;
