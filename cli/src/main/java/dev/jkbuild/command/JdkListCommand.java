@@ -406,18 +406,24 @@ public final class JdkListCommand implements CliCommand {
         int left = total / 2;
         int right = total - left;
         String banner = " ".repeat(left) + title + " ".repeat(right);
-        // With a Nerd Font: replace the │ rails with pill-cap glyphs whose foreground
-        // matches the chip color, giving the banner rounded edges (same as badge chips).
-        // Without: plain │ rails in dark gray.
+        // The │ rails always stay. With a Nerd Font: pill-cap glyphs sit immediately
+        // inside each rail (replacing the 1-char padding), so the chip background
+        // tapers into the terminal background with rounded edges — same as GoalWedge.
+        // The caps take 1 char each, so the banner gets inner-2 chars when nerdfont is on.
         Rgb chipColor = Theme.active().goalChipColor();
         boolean nerdfont = dev.jkbuild.config.GlobalConfig.nerdfont();
-        String leftRail = nerdfont
-                ? Theme.colorize(dev.jkbuild.cli.tui.Glyphs.PILL_LEFT_NERD, Theme.active().bright(chipColor))
-                : Theme.colorize("│", Theme.active().darkGray());
-        String rightRail = nerdfont
-                ? Theme.colorize(dev.jkbuild.cli.tui.Glyphs.PILL_RIGHT_NERD, Theme.active().bright(chipColor))
-                : Theme.colorize("│", Theme.active().darkGray());
-        return leftRail + Theme.colorize(banner, Theme.active().goalChip()) + rightRail;
+        String rail = Theme.colorize("│", Theme.active().darkGray());
+        if (nerdfont) {
+            int availForBanner = Math.max(0, inner - 2);
+            int pad = Math.max(0, availForBanner - title.length());
+            String innerBanner = " ".repeat(pad / 2) + title + " ".repeat(pad - pad / 2);
+            return rail
+                    + Theme.colorize(dev.jkbuild.cli.tui.Glyphs.PILL_LEFT_NERD, Theme.active().bright(chipColor))
+                    + Theme.colorize(innerBanner, Theme.active().goalChip())
+                    + Theme.colorize(dev.jkbuild.cli.tui.Glyphs.PILL_RIGHT_NERD, Theme.active().bright(chipColor))
+                    + rail;
+        }
+        return rail + Theme.colorize(banner, Theme.active().goalChip()) + rail;
     }
 
     private static String headerRow(int[] widths) {
@@ -446,19 +452,23 @@ public final class JdkListCommand implements CliCommand {
         // everything between the outer rails (cells, padding, inner separators).
         Rgb band = active ? Theme.active().darkBlackColor() : null;
 
-        // With a Nerd Font: replace the outer │ rails with pill-cap glyphs on banded rows
-        // so the highlight has rounded edges matching the badge style. Plain │ otherwise.
+        // The │ rails always stay. On a Nerd-Font banded row, pill-cap glyphs replace
+        // the single padding space immediately inside each rail, so the background band
+        // tapers into the terminal background with rounded edges — same as GoalWedge.cap().
         boolean nerdfont = dev.jkbuild.config.GlobalConfig.nerdfont();
-        String outerBar = (nerdfont && band != null)
-                ? Theme.colorize(dev.jkbuild.cli.tui.Glyphs.PILL_LEFT_NERD, Theme.active().bright(band))
-                : Theme.colorize("│", Theme.active().darkGray());
-        String outerBarRight = (nerdfont && band != null)
-                ? Theme.colorize(dev.jkbuild.cli.tui.Glyphs.PILL_RIGHT_NERD, Theme.active().bright(band))
-                : Theme.colorize("│", Theme.active().darkGray());
+        String outerBar = Theme.colorize("│", Theme.active().darkGray());
         String innerBar = band == null
                 ? outerBar
                 : Theme.colorize("│", banded(Theme.active().darkGray(), band));
         String sp = bandSpaces(1, band);
+        // leftPad / rightPad: normally a single (possibly banded) space; with nerdfont+band
+        // becomes the pill cap (foreground = band color, no background — it IS the cap).
+        String leftPad = (nerdfont && band != null)
+                ? Theme.colorize(dev.jkbuild.cli.tui.Glyphs.PILL_LEFT_NERD, Theme.active().bright(band))
+                : sp;
+        String rightPad = (nerdfont && band != null)
+                ? Theme.colorize(dev.jkbuild.cli.tui.Glyphs.PILL_RIGHT_NERD, Theme.active().bright(band))
+                : sp;
 
         String versionCell =
                 Theme.colorize(center(version, widths[0]), banded(deco(AttributedStyle.DEFAULT, italic, bold), band));
@@ -483,7 +493,7 @@ public final class JdkListCommand implements CliCommand {
                     + bandSpaces(widths[4] - location.length(), band);
         }
         return outerBar
-                + sp
+                + leftPad
                 + versionCell
                 + sp
                 + innerBar
@@ -501,8 +511,8 @@ public final class JdkListCommand implements CliCommand {
                 + innerBar
                 + sp
                 + locStyled
-                + sp
-                + outerBarRight;
+                + rightPad
+                + outerBar;
     }
 
     /** Layer the active-row indigo band background onto a cell style (no-op when not banded). */
