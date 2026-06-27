@@ -166,8 +166,7 @@ public final class ImageBuilder {
             }
             builder = builder.setPlatforms(platforms);
         }
-        // Reproducible timestamps (PRD §22.1).
-        builder = builder.setCreationTime(Instant.EPOCH);
+        builder = builder.setCreationTime(Instant.now());
 
         try {
             return builder.containerize(containerizer);
