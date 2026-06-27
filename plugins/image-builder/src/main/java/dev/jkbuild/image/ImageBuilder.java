@@ -166,7 +166,17 @@ public final class ImageBuilder {
             }
             builder = builder.setPlatforms(platforms);
         }
-        builder = builder.setCreationTime(Instant.now());
+        // Creation time = mtime of the primary payload jar. If the jar was restored
+        // from the CAS (cache hit), its mtime is preserved by hard-link / COPY_ATTRIBUTES,
+        // so the timestamp reflects "when this content was first produced" — stable across
+        // repeated builds of unchanged code, accurate when code changes, and git-independent.
+        Instant creationTime;
+        try {
+            creationTime = java.nio.file.Files.getLastModifiedTime(plan.mainJar()).toInstant();
+        } catch (IOException ignored) {
+            creationTime = Instant.now();
+        }
+        builder = builder.setCreationTime(creationTime);
 
         try {
             return builder.containerize(containerizer);
