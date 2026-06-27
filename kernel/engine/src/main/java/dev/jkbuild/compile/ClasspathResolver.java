@@ -80,7 +80,9 @@ public final class ClasspathResolver {
         dev.jkbuild.model.Coordinate coord = dev.jkbuild.model.Coordinate.of(
                 pkg.name().substring(0, colon), pkg.name().substring(colon + 1), pkg.version());
         String m2Path = dev.jkbuild.repo.MavenLayout.artifactPath(coord);
-        dev.jkbuild.repo.RepoArtifactStore store = new dev.jkbuild.repo.RepoArtifactStore(cas.root(), repoName);
+        // forRepoName() returns an index-only store for non-local repos so locate() gives the
+        // ~/.m2 artifact path (human-readable) rather than a sha256/AB/CD/… CAS path.
+        dev.jkbuild.repo.RepoArtifactStore store = dev.jkbuild.repo.RepoArtifactStore.forRepoName(cas.root(), repoName);
         return store.locate(m2Path).orElse(null);
     }
 }

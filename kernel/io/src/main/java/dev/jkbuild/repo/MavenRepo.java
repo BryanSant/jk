@@ -16,18 +16,20 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * A single Maven-style repository. Fetches POMs and artifacts over HTTP, deposits them into a
- * {@link Cas}, and returns {@link Fetched} records describing both the on-disk path and the SHA-256
- * of the bytes — the resolver needs both to populate {@code jk.lock}.
+ * A single Maven-style repository. Fetches POMs and artifacts over HTTP, writes them to
+ * {@code ~/.m2/repository} (via {@link M2CompatWriter}) and records a {@code .sha256} sidecar in
+ * {@code repos/<name>/} (via {@link RepoArtifactStore}). Also writes Maven-compatible {@code .sha1}
+ * and {@code .md5} sidecars and a {@code _remote.repositories} hint so Maven, Gradle, and IDEs
+ * find the artifacts without a separate download step.
  *
- * <p>Every successful fetch is also mirrored into the {@link JkMavenLocalRepo} (an m2 hard-link
- * back to the CAS blob) so the artifact is later addressable by coordinate. When {@code --offline}
- * is in effect, fetches are served from that local repo instead of the network; a coordinate that
- * isn't mirrored surfaces as {@link ArtifactNotFoundException}, so {@link RepoGroup}'s try-each and
- * the resolver get a clean "not found" rather than a network error.
+ * <p>The CAS is still written for backward compatibility: old lockfiles whose
+ * {@code ClasspathResolver} resolves via {@code sha256/AB/CD/…} paths continue to work until the
+ * project is re-locked. CAS blobs for Maven artifacts become unreferenced as lockfiles are
+ * regenerated and are collected by {@code jk cache prune --sweep}.
  *
- * <p>HTTPS only by default per PRD §10.5; the constructor will reject {@code http://} URIs unless
- * explicitly marked insecure (deferred).
+ * <p>When {@code --offline} is in effect, fetches are served from {@code ~/.m2/repository} via the
+ * {@link RepoArtifactStore} index; a coordinate that isn't present surfaces as
+ * {@link ArtifactNotFoundException} so {@link RepoGroup}'s try-each gives a clean "not found".
  */
 public final class MavenRepo {
 
@@ -35,8 +37,11 @@ public final class MavenRepo {
     private final URI baseUrl;
     private final RepoTransport transport;
     private final Cas cas;
-    private final JkMavenLocalRepo localRepo;
-    private final RepoArtifactStore repoStore;
+
+    @SuppressWarnings("deprecation")
+    private final JkMavenLocalRepo localRepo; // legacy m2 mirror; kept for backward compat GC
+
+    private final RepoArtifactStore repoStore; // index-only: .sha256 sidecars, JARs in ~/.m2
     private final RepoCredential credential;
 
     /** TTL + conditional-GET cache for maven-metadata.xml; null for non-HTTP transports. */
@@ -100,7 +105,8 @@ public final class MavenRepo {
         this.transport = Objects.requireNonNull(transport, "transport");
         this.cas = Objects.requireNonNull(cas, "cas");
         this.localRepo = Objects.requireNonNull(localRepo, "localRepo");
-        this.repoStore = new RepoArtifactStore(cas.root(), name);
+        // Index-only store for non-local repos: sidecars in repos/<name>/, JARs in ~/.m2.
+        this.repoStore = RepoArtifactStore.forRepoName(cas.root(), name);
         this.credential = Objects.requireNonNull(credential, "credential");
         // The metadata cache speaks HTTP directly (conditional GET), so it only
         // applies to http(s) repos — a file:// (or other) baseUrl can be paired
@@ -177,11 +183,19 @@ public final class MavenRepo {
             stored = cas.putStream(in);
         }
         if (mirror) {
-            // Write to the new named repo store (repos/<name>/<m2-path> + .sha256 sidecar) so
-            // subsequent lookups by coordinate skip the network entirely.
-            repoStore.materialize(relativePath, stored.path(), stored.sha256());
-            // Also maintain the legacy mirror for backward compatibility with old lockfiles
-            // whose ClasspathResolver still resolves CAS paths via sha256/AB/CD/….
+            // Write to ~/.m2 (primary store) and record the index sidecar in repos/<name>/.
+            Path m2Target = M2Dirs.localRepository().resolve(relativePath);
+            try {
+                M2CompatWriter.MavenHashes mavenHashes = M2CompatWriter.copyToM2AndHash(stored.path(), m2Target);
+                M2CompatWriter.writeMavenSidecars(m2Target, mavenHashes.sha1(), mavenHashes.md5());
+                M2CompatWriter.writeRemoteRepositories(
+                        m2Target.getParent(), name, m2Target.getFileName().toString());
+            } catch (IOException ignored) {
+                // Best-effort: the CAS blob is already written; a ~/.m2 failure is non-fatal.
+            }
+            repoStore.recordIndex(relativePath, stored.sha256());
+            // Legacy mirror: maintain the hard-link at repo/ so old lockfiles that reference
+            // CAS paths continue to work until re-locked.
             localRepo.materialize(relativePath, stored.path());
         }
         return new Fetched(uri, stored.path(), stored.sha256(), stored.size());

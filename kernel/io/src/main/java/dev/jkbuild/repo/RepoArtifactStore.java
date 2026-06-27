@@ -6,115 +6,164 @@ import dev.jkbuild.util.Hashing;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.FileTime;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Stream;
 
 /**
- * Per-named-repository artifact store under {@code <cache>/repos/<name>/}.
+ * Per-named-repository artifact index and (for {@code local}) artifact store.
  *
- * <p>Stores Maven artifacts in the standard m2 layout ({@code
- * <group-as-dirs>/<artifact>/<version>/<artifact>-<version>.<ext>}) and a tiny {@code .sha256}
- * sidecar alongside each artifact. The sidecar contains the 64-char hex SHA-256 of the artifact
- * and serves as both a completion marker and an integrity token:
+ * <h3>Two modes</h3>
+ * <dl>
+ *   <dt>Index-only (all named repos except {@code local})</dt>
+ *   <dd>The {@code .sha256} sidecar lives at {@code <cache>/repos/<name>/<m2-path>.sha256}; the
+ *       actual artifact bytes live in {@code ~/.m2/repository} (see {@link M2Dirs}). {@link
+ *       #locate} checks the sidecar and returns the {@code ~/.m2} path. An mtime guard
+ *       re-validates the sidecar hash when the {@code ~/.m2} file is newer than the sidecar.</dd>
+ *   <dt>Full store ({@code local} — worker JARs)</dt>
+ *   <dd>Both the artifact and the {@code .sha256} sidecar live under
+ *       {@code <cache>/repos/local/}. Written via {@link #materialize}.</dd>
+ * </dl>
  *
- * <ul>
- *   <li>Its <em>existence</em> is the single O(1) test for "do we have this artifact?" — a stat
- *       call, no content read.
- *   <li>Its <em>content</em> is the hash, enabling verification without re-hashing the JAR.
- *   <li>It is written <em>last</em>, after the artifact is fully on disk, so a partial download
- *       (crash mid-stream) never leaves a sidecar behind.
- * </ul>
- *
- * <p>Unlike the CAS ({@code sha256/AB/CD/…}), every path here is human-readable and m2-compatible,
- * making the entire {@code repos/} tree a valid exportable Maven repository. JVM classpath entries
- * produced from this store show real artifact names rather than opaque hashes.
- *
- * <p>Artifacts are stored as hard links to the CAS blob (same inode, two paths — no extra disk
- * usage), with the {@link Linking} fallback to a byte copy on Windows / cross-filesystem builds.
- *
- * <p>All write methods are best-effort and swallow IO errors — a materialisation failure must never
- * fail a successful network fetch.
+ * <h3>Sidecar invariant</h3>
+ * The sidecar is written <em>last</em>, after the artifact is fully on disk. Its existence is the
+ * single O(1) "fully stored" signal — a partial download never leaves a sidecar behind. Its
+ * content is the 64-char SHA-256 hex string.
  */
 public final class RepoArtifactStore {
 
     /** No-op store for callers that don't participate in per-repo storage. */
-    public static final RepoArtifactStore NONE = new RepoArtifactStore();
+    public static final RepoArtifactStore NONE = new RepoArtifactStore((Path) null, (Path) null);
 
-    /** Root of this repo's tree, or {@code null} for {@link #NONE}. */
-    private final Path root;
+    private final Path root; // <cache>/repos/<name>/
+    private final Path m2Root; // ~/.m2/repository if index-only, null if full store
 
-    private RepoArtifactStore() {
-        this.root = null;
+    private RepoArtifactStore(Path root, Path m2Root) {
+        this.root = root;
+        this.m2Root = m2Root;
     }
 
-    /**
-     * @param cacheRoot the jk cache directory (e.g. {@code ~/.jk/cache})
-     * @param repoName  the repository short name (e.g. {@code "central"}, {@code "google"})
-     */
+    /** Full store — artifact and sidecar both live under {@code repos/<repoName>/}. */
     public RepoArtifactStore(Path cacheRoot, String repoName) {
         Objects.requireNonNull(cacheRoot, "cacheRoot");
         Objects.requireNonNull(repoName, "repoName");
         this.root = cacheRoot.resolve("repos").resolve(repoName);
+        this.m2Root = null;
     }
 
     /**
-     * True when the artifact at {@code relativePath} (e.g.
-     * {@code org/apache/commons/commons-io/2.2/commons-io-2.2.jar}) has been fully stored — i.e.
-     * its {@code .sha256} sidecar exists. This is an O(1) stat; no content is read.
+     * Factory: choose the right mode for {@code repoName}. {@code local} gets a full store;
+     * everything else gets an index-only store pointing to {@link M2Dirs#localRepository()}.
+     */
+    public static RepoArtifactStore forRepoName(Path cacheRoot, String repoName) {
+        if ("local".equals(repoName)) {
+            return new RepoArtifactStore(cacheRoot, repoName);
+        }
+        Path root = cacheRoot.resolve("repos").resolve(repoName);
+        return new RepoArtifactStore(root, M2Dirs.localRepository());
+    }
+
+    /** True when this store only holds hash sidecars; actual JARs live in {@code ~/.m2}. */
+    public boolean isIndexOnly() {
+        return m2Root != null;
+    }
+
+    // -------------------------------------------------------------------------
+    // Presence and location
+    // -------------------------------------------------------------------------
+
+    /**
+     * True when the artifact at {@code relativePath} has been fully stored — sidecar exists AND the
+     * actual artifact file is present. Two O(1) stat calls; no content read.
      */
     public boolean contains(String relativePath) {
         if (root == null) return false;
-        return Files.exists(sidecarPath(relativePath));
+        if (!Files.isRegularFile(sidecarPath(relativePath))) return false;
+        return Files.isRegularFile(artifactPath(relativePath));
     }
 
     /**
-     * The stored artifact path if it has been fully materialised (sidecar present), else empty.
-     * The returned path is the JAR/POM itself, not the sidecar.
+     * The stored artifact path if fully materialised, else empty.
+     *
+     * <p>For index-only repos: applies an <em>mtime guard</em>. If the {@code ~/.m2} artifact is
+     * newer than the sidecar (e.g. Maven updated the file), the sidecar is re-hashed and
+     * overwritten. A lockfile checksum mismatch surfaces on the next {@code jk build}; run
+     * {@code jk lock --refresh} to re-pin.
      */
     public Optional<Path> locate(String relativePath) {
         if (root == null) return Optional.empty();
-        if (!Files.isRegularFile(sidecarPath(relativePath))) return Optional.empty();
-        Path artifact = root.resolve(relativePath);
-        return Files.isRegularFile(artifact) ? Optional.of(artifact) : Optional.empty();
+        Path sidecar = sidecarPath(relativePath);
+        if (!Files.isRegularFile(sidecar)) return Optional.empty();
+        Path artifact = artifactPath(relativePath);
+        if (!Files.isRegularFile(artifact)) return Optional.empty();
+        if (m2Root != null) {
+            try {
+                FileTime artifactMtime = Files.getLastModifiedTime(artifact);
+                FileTime sidecarMtime = Files.getLastModifiedTime(sidecar);
+                if (artifactMtime.compareTo(sidecarMtime) > 0) {
+                    String newHash = Hashing.sha256Hex(artifact);
+                    Files.writeString(sidecar, newHash);
+                }
+            } catch (IOException ignored) {
+            }
+        }
+        return Optional.of(artifact);
+    }
+
+    // -------------------------------------------------------------------------
+    // Write paths
+    // -------------------------------------------------------------------------
+
+    /**
+     * Index-only write: record that the artifact at {@code relativePath} was stored in
+     * {@code ~/.m2} with hash {@code sha256}. Writes only the sidecar. Idempotent; best-effort.
+     */
+    public void recordIndex(String relativePath, String sha256) {
+        if (root == null) return;
+        try {
+            Path sidecar = sidecarPath(relativePath);
+            if (Files.exists(sidecar)) return;
+            Files.createDirectories(sidecar.getParent());
+            Files.writeString(sidecar, sha256);
+        } catch (IOException | RuntimeException ignored) {
+        }
     }
 
     /**
-     * Hard-link {@code casBlob} to the m2 path for {@code relativePath} and write the {@code .sha256}
-     * sidecar. The sidecar is written last so its existence is a reliable "fully stored" signal.
-     * Idempotent — if the sidecar is already present the call is a no-op. Never throws.
+     * Full-store write: hard-link {@code casBlob} to {@code repos/<name>/} and write sidecar.
+     * Used only for the {@code local} repo (worker JARs). Idempotent; best-effort.
      */
     public void materialize(String relativePath, Path casBlob, String sha256) {
         if (root == null) return;
         try {
             Path sidecar = sidecarPath(relativePath);
-            if (Files.exists(sidecar)) return; // already stored
+            if (Files.exists(sidecar)) return;
             Path artifact = root.resolve(relativePath);
             Linking.linkOrCopy(casBlob, artifact);
             Files.createDirectories(sidecar.getParent());
-            // Write sidecar LAST — existence is the completion marker.
             Files.writeString(sidecar, sha256);
         } catch (IOException | RuntimeException ignored) {
-            // best-effort; a fetch must not fail because mirroring did
         }
     }
 
+    // -------------------------------------------------------------------------
+    // Offline helpers
+    // -------------------------------------------------------------------------
+
     /**
-     * Versions of {@code group:artifact} present in this store — the names of the version
-     * directories that hold at least one artifact file. Empty (not an error) when none are stored.
-     * Order is unspecified; callers that need newest-first should sort.
+     * Version directories present in this index — directories under
+     * {@code repos/<name>/<group>/<artifact>/} that hold at least one tracked sidecar.
      */
     public List<String> versions(String group, String artifact) {
         if (root == null) return List.of();
         Path dir = root.resolve(group.replace('.', '/')).resolve(artifact);
         if (!Files.isDirectory(dir)) return List.of();
         try (Stream<Path> entries = Files.list(dir)) {
-            return entries.filter(RepoArtifactStore::hasArtifactFile)
+            return entries.filter(this::hasTrackedFile)
                     .map(p -> p.getFileName().toString())
                     .toList();
         } catch (IOException e) {
@@ -122,11 +171,7 @@ public final class RepoArtifactStore {
         }
     }
 
-    /**
-     * Every stored artifact in this repo as a flat list of relative m2 paths (e.g.
-     * {@code org/apache/commons/commons-io/2.2/commons-io-2.2.jar}). Powers {@code jk cache info}
-     * and other introspection commands. Empty for {@link #NONE} or a cold store.
-     */
+    /** All relative m2 paths stored (non-sidecar files for full store). Empty for NONE. */
     public List<String> allRelativePaths() {
         if (root == null || !Files.isDirectory(root)) return List.of();
         List<String> result = new ArrayList<>();
@@ -139,91 +184,74 @@ public final class RepoArtifactStore {
         return result;
     }
 
-    /** The root directory of this store ({@code <cache>/repos/<name>}), or {@code null} for {@link #NONE}. */
-    public Path root() {
-        return root;
-    }
-
     /**
-     * Remove every artifact whose content SHA-256 is in {@code shas}, along with its {@code .sha256}
-     * sidecar, then prune any directories left empty. Used by the cache GC / sweep to keep the
-     * per-repo store in lock-step with the CAS — a hard link left behind would keep the inode (and
-     * its bytes) alive after the CAS blob is deleted. Returns the number of artifact files removed
-     * (not counting sidecars). Never throws.
+     * Remove entries whose sidecar hash matches one of {@code shas}. For index-only stores only
+     * the sidecar is removed (the {@code ~/.m2} JAR is left intact — jk doesn't GC Maven's store).
+     * For full stores, both the sidecar and the artifact file are removed. Returns count removed.
+     * Never throws.
      */
     public int removeShas(Set<String> shas, boolean dryRun) {
         if (root == null || shas.isEmpty() || !Files.isDirectory(root)) return 0;
         int removed = 0;
-        for (var entry : indexBySha().entrySet()) {
-            if (!shas.contains(entry.getKey())) continue;
-            for (Path artifact : entry.getValue()) {
+        try (Stream<Path> walk = Files.walk(root)) {
+            for (Path sidecar : (Iterable<Path>) walk.filter(p -> p.toString().endsWith(".sha256"))::iterator) {
                 try {
+                    String hash = Files.readString(sidecar).strip();
+                    if (!shas.contains(hash)) continue;
                     if (!dryRun) {
-                        Files.deleteIfExists(artifact);
-                        // Remove the paired .sha256 sidecar if it exists.
-                        Path sidecar = Path.of(artifact + ".sha256");
                         Files.deleteIfExists(sidecar);
-                        pruneEmptyParents(artifact.getParent());
+                        if (m2Root == null) {
+                            // Full store: also delete the artifact file
+                            String sp = sidecar.toString();
+                            Files.deleteIfExists(Path.of(sp.substring(0, sp.length() - ".sha256".length())));
+                        }
+                        pruneEmptyParents(sidecar.getParent());
                     }
                     removed++;
                 } catch (IOException ignored) {
-                    // best-effort; a stuck file just stays mirrored
                 }
             }
+        } catch (IOException ignored) {
         }
         return removed;
     }
 
-    /**
-     * Index the store by the SHA-256 of each non-sidecar file's content. Paths are the artifact
-     * files themselves (not the {@code .sha256} sidecars). Done only when something is being purged,
-     * so the rehashing cost is paid rarely.
-     */
-    public Map<String, List<Path>> indexBySha() {
-        Map<String, List<Path>> out = new HashMap<>();
-        if (root == null || !Files.isDirectory(root)) return out;
-        try (Stream<Path> walk = Files.walk(root)) {
-            for (Path p : (Iterable<Path>) walk::iterator) {
-                if (!Files.isRegularFile(p)) continue;
-                if (p.getFileName().toString().endsWith(".sha256")) continue;
-                try {
-                    String hex = Hashing.sha256Hex(Files.readAllBytes(p));
-                    out.computeIfAbsent(hex, k -> new ArrayList<>()).add(p);
-                } catch (IOException ignored) {
-                    // unreadable file — skip
-                }
-            }
-        } catch (IOException ignored) {
-            // walk failure — return what we have
-        }
-        return out;
+    /** The root directory ({@code <cache>/repos/<name>}), or {@code null} for {@link #NONE}. */
+    public Path root() {
+        return root;
     }
 
     // -------------------------------------------------------------------------
 
-    private void pruneEmptyParents(Path dir) {
-        Path cur = dir;
-        while (cur != null && cur.startsWith(root) && !cur.equals(root)) {
-            try {
-                Files.delete(cur); // throws if non-empty — stop climbing
-            } catch (IOException stop) {
-                return;
-            }
-            cur = cur.getParent();
-        }
+    private Path artifactPath(String relativePath) {
+        return m2Root != null ? m2Root.resolve(relativePath) : root.resolve(relativePath);
     }
 
     private Path sidecarPath(String relativePath) {
         return root.resolve(relativePath + ".sha256");
     }
 
-    private static boolean hasArtifactFile(Path versionDir) {
+    private boolean hasTrackedFile(Path versionDir) {
         if (!Files.isDirectory(versionDir)) return false;
         try (Stream<Path> entries = Files.list(versionDir)) {
-            return entries.anyMatch(
-                    p -> Files.isRegularFile(p) && !p.getFileName().toString().endsWith(".sha256"));
+            // Index-only: a .sha256 sidecar represents a tracked artifact
+            // Full store: look for non-sidecar files
+            return entries.anyMatch(p -> Files.isRegularFile(p)
+                    && (m2Root != null) == p.getFileName().toString().endsWith(".sha256"));
         } catch (IOException e) {
             return false;
+        }
+    }
+
+    private void pruneEmptyParents(Path dir) {
+        Path cur = dir;
+        while (cur != null && root != null && cur.startsWith(root) && !cur.equals(root)) {
+            try {
+                Files.delete(cur);
+            } catch (IOException stop) {
+                return;
+            }
+            cur = cur.getParent();
         }
     }
 }

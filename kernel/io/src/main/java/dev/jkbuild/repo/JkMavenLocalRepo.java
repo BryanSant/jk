@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.repo;
 
-import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cache.Linking;
 import dev.jkbuild.util.Hashing;
 import java.io.IOException;
@@ -39,6 +38,15 @@ import java.util.stream.Stream;
  * swallows IO errors and read paths degrade to "not present". The repo lives under the cache so a
  * cache wipe invalidates it together — it is a derived index, rebuilt by fetching online.
  */
+/**
+ * @deprecated Superseded by {@link RepoArtifactStore} (index-only mode pointing to
+ *             {@code ~/.m2/repository}) and direct Maven-compatible writes via
+ *             {@link M2CompatWriter}. Kept only for GC integration ({@link #removeShas} /
+ *             {@link #indexBySha}) which sweeps the legacy {@code <cache>/repo/} mirror tree
+ *             left by prior jk builds. Will be removed once all users have migrated their caches
+ *             (i.e. after running {@code jk cache prune --sweep}).
+ */
+@Deprecated
 public final class JkMavenLocalRepo {
 
     /** No-op repo for call sites that don't participate in offline resolve. */

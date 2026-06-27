@@ -255,7 +255,9 @@ public final class CacheSync {
         String repoName = source.substring(0, plus);
         Coordinate coord = toCoord(pkg);
         String m2Path = dev.jkbuild.repo.MavenLayout.artifactPath(coord);
-        dev.jkbuild.repo.RepoArtifactStore store = new dev.jkbuild.repo.RepoArtifactStore(cas.root(), repoName);
+        // forRepoName() creates an index-only store for non-local repos — contains() checks both
+        // the sidecar in repos/<name>/ AND the actual artifact in ~/.m2.
+        dev.jkbuild.repo.RepoArtifactStore store = dev.jkbuild.repo.RepoArtifactStore.forRepoName(cas.root(), repoName);
         return store.contains(m2Path);
     }
 
