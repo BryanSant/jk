@@ -305,6 +305,29 @@ public final class JdkRegistry {
         Path installDir = IntellijJdkDir.installDirOf(jdk.home());
         if (!Files.exists(installDir)) return false;
         deleteRecursively(installDir);
+        // Remove any symlinks in jdksRoot that now dangle to the deleted directory.
+        // Symlinks (POSIX) and junctions (Windows) are created by StableJdkPointer
+        // to give IntelliJ a stable vendor+major path; they become dangling after
+        // the install dir is removed. Windows junctions are cleaned up by the
+        // owning tools or left for the OS; only POSIX symlinks are removed here.
+        if (!HostPlatform.isWindows() && Files.isDirectory(jdksRoot)) {
+            Path canonical = installDir.toAbsolutePath().normalize();
+            try (Stream<Path> entries = Files.list(jdksRoot)) {
+                entries.filter(Files::isSymbolicLink).forEach(link -> {
+                    try {
+                        Path target = Files.readSymbolicLink(link);
+                        if (!target.isAbsolute()) target = link.getParent().resolve(target);
+                        if (target.toAbsolutePath().normalize().equals(canonical)) {
+                            Files.deleteIfExists(link);
+                        }
+                    } catch (IOException ignored) {
+                        // unreadable / already gone — skip
+                    }
+                });
+            } catch (IOException ignored) {
+                // best-effort; purge itself already succeeded
+            }
+        }
         return true;
     }
 
