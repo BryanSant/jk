@@ -406,9 +406,12 @@ public final class JdkListCommand implements CliCommand {
         int left = total / 2;
         int right = total - left;
         String banner = " ".repeat(left) + title + " ".repeat(right);
-        return Theme.colorize("│", Theme.active().darkGray())
+        // The │ rails carry the same chip background so the title band spans edge-to-edge.
+        AttributedStyle chipRail = Theme.active()
+                .withBackground(Theme.active().darkGray(), Theme.active().goalChipColor());
+        return Theme.colorize("│", chipRail)
                 + Theme.colorize(banner, Theme.active().goalChip())
-                + Theme.colorize("│", Theme.active().darkGray());
+                + Theme.colorize("│", chipRail);
     }
 
     private static String headerRow(int[] widths) {
@@ -437,7 +440,8 @@ public final class JdkListCommand implements CliCommand {
         // everything between the outer rails (cells, padding, inner separators).
         Rgb band = active ? Theme.active().darkBlackColor() : null;
 
-        String outerBar = Theme.colorize("│", Theme.active().darkGray());
+        // The outer rails carry the band background when active, capping the highlight edge-to-edge.
+        String outerBar = Theme.colorize("│", banded(Theme.active().darkGray(), band));
         String innerBar = band == null
                 ? outerBar
                 : Theme.colorize("│", banded(Theme.active().darkGray(), band));
