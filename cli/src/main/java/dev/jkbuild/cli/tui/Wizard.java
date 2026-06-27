@@ -317,7 +317,7 @@ public final class Wizard {
         // and re-emitted (with the next step's content above it) on each step.
         // Cyan matches the active rail above it.
         writer.println(
-                INDENT + Rail.closer("", Theme.active().dim(), Rail.StepState.ACTIVE).toAnsi(terminal));
+                INDENT + Rail.closer("", Theme.active().darkGray(), Rail.StepState.ACTIVE).toAnsi(terminal));
         return 1 + interactive.size() + 1;
     }
 
@@ -426,7 +426,7 @@ public final class Wizard {
             }
             case WizardStep.OutputStep os ->
                 os.render().apply(Answers.of(answers)).stream()
-                        .map(s -> plain(s, Theme.active().dim()))
+                        .map(s -> plain(s, Theme.active().darkGray()))
                         .toList();
         };
     }
@@ -705,7 +705,7 @@ public final class Wizard {
             var sb = new AttributedStringBuilder();
             if (input.length() == 0) {
                 if (!is.placeholder().isEmpty()) {
-                    sb.append(is.placeholder(), Theme.active().dim().italic());
+                    sb.append(is.placeholder(), Theme.active().darkGray().italic());
                 }
             } else {
                 sb.append(input.toString(), Theme.active().focused());
@@ -732,13 +732,13 @@ public final class Wizard {
                             isFocused ? Rail.RADIO_ON : Rail.RADIO_OFF,
                             isFocused
                                     ? Theme.active().completedStep()
-                                    : Theme.active().dim());
+                                    : Theme.active().darkGray());
                     sb.append(" ");
                     sb.append(
                             c.label(),
                             isFocused
                                     ? Theme.active().focused()
-                                    : Theme.active().dim());
+                                    : Theme.active().darkGray());
                     appendHint(sb, c.hintFor(snapshot));
                     if (i < choices.size() - 1) {
                         sb.append("  ");
@@ -754,13 +754,13 @@ public final class Wizard {
                                     isFocused ? Rail.RADIO_ON : Rail.RADIO_OFF,
                                     isFocused
                                             ? Theme.active().completedStep()
-                                            : Theme.active().dim())
+                                            : Theme.active().darkGray())
                             .append(" ")
                             .append(
                                     c.label(),
                                     isFocused
                                             ? Theme.active().focused()
-                                            : Theme.active().dim());
+                                            : Theme.active().darkGray());
                     appendHint(sb, c.hintFor(snapshot));
                     lines.add(sb.toAttributedString());
                 }
@@ -771,7 +771,7 @@ public final class Wizard {
                                     isFocused ? Rail.RADIO_ON : Rail.RADIO_OFF,
                                     isFocused
                                             ? Theme.active().completedStep()
-                                            : Theme.active().dim())
+                                            : Theme.active().darkGray())
                             .append(" ");
                     appendCustomField(sb, isFocused, rs.customPlaceholder());
                     lines.add(sb.toAttributedString());
@@ -787,11 +787,11 @@ public final class Wizard {
          */
         private void appendCustomField(AttributedStringBuilder sb, boolean focused, String placeholder) {
             if (input.length() == 0) {
-                sb.append(placeholder, Theme.active().dim().italic());
+                sb.append(placeholder, Theme.active().darkGray().italic());
             } else {
                 sb.append(
                         input.toString(),
-                        focused ? Theme.active().focused() : Theme.active().dim());
+                        focused ? Theme.active().focused() : Theme.active().darkGray());
             }
         }
 
@@ -821,10 +821,10 @@ public final class Wizard {
                             ? Theme.active().completedStep()
                             : (isFocused
                                     ? Theme.active().activeStep()
-                                    : Theme.active().dim());
+                                    : Theme.active().darkGray());
                     var labelStyle = isFocused
                             ? Theme.active().focused()
-                            : Theme.active().dim();
+                            : Theme.active().darkGray();
                     var sb = new AttributedStringBuilder()
                             .append(glyph, glyphStyle)
                             .append(" ");
@@ -844,7 +844,7 @@ public final class Wizard {
                             ? Theme.active().completedStep()
                             : (isFocused
                                     ? Theme.active().activeStep()
-                                    : Theme.active().dim());
+                                    : Theme.active().darkGray());
                     var sb = new AttributedStringBuilder()
                             .append(glyph, glyphStyle)
                             .append(" ");
@@ -861,10 +861,10 @@ public final class Wizard {
                             ? Theme.active().completedStep()
                             : (isFocused
                                     ? Theme.active().activeStep()
-                                    : Theme.active().dim());
+                                    : Theme.active().darkGray());
                     var labelStyle = isFocused
                             ? Theme.active().focused()
-                            : Theme.active().dim();
+                            : Theme.active().darkGray();
                     sb.append(isChecked ? Rail.CHECKBOX_ON : Rail.CHECKBOX_OFF, glyphStyle);
                     sb.append(" ");
                     sb.append(c.label(), labelStyle);
@@ -882,7 +882,7 @@ public final class Wizard {
             var pieces = os.render().apply(Answers.of(Map.of()));
             var lines = new ArrayList<AttributedString>();
             for (var s : pieces) {
-                lines.add(plain(s, Theme.active().dim()));
+                lines.add(plain(s, Theme.active().darkGray()));
             }
             return lines;
         }

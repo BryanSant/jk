@@ -117,7 +117,7 @@ public final class Rail {
                 switch (state) {
                     case ACTIVE -> Theme.active().focused();
                     case COMPLETED -> Theme.active().completedPrompt();
-                    case INACTIVE -> Theme.active().dim();
+                    case INACTIVE -> Theme.active().darkGray();
                 };
         var bullet = state == StepState.ACTIVE ? BULLET_CHAR : BULLET_CHAR_EMPTY;
         return new AttributedStringBuilder()
