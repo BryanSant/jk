@@ -285,7 +285,7 @@ public final class BuildCommand implements CliCommand {
             view.finishGoalSuccess(upToDateTail("all modules", buildStart));
             return 0;
         }
-        return runGraphLive(view, units, graph.edges(), dirtyDirs, cache, buildStart);
+        return runGraphLive(view, units, graph.edges(), dirtyDirs, cache, buildStart, entryDir);
     }
 
     /**
@@ -361,7 +361,8 @@ public final class BuildCommand implements CliCommand {
             Map<Path, Set<Path>> edges,
             Set<Path> dirtyDirs,
             Path cache,
-            long start)
+            long start,
+            Path workspaceRoot)
             throws Exception {
         Set<Path> unitDirs = new java.util.HashSet<>();
         for (BuildGraph.BuildUnit u : units) unitDirs.add(u.dir());
@@ -422,6 +423,10 @@ public final class BuildCommand implements CliCommand {
                         ? dev.jkbuild.runtime.EffortWeights.scheduleMillis(costs, concurrency, false, parallelTests)
                         : 0);
 
+        // Pre-compute workspace hard-link destinations for application modules so collision
+        // detection sees the full module set before any build starts.
+        Map<Path, Path> wsLinks = computeWorkspaceLinks(prepared.keySet(), workspaceRoot);
+
         Set<Path> done = java.util.concurrent.ConcurrentHashMap.newKeySet();
         List<BuildGraph.BuildUnit> remaining = new ArrayList<>(units);
         java.util.concurrent.atomic.AtomicInteger completed = new java.util.concurrent.atomic.AtomicInteger();
@@ -435,15 +440,21 @@ public final class BuildCommand implements CliCommand {
                             .allMatch(done::contains))
                     .toList();
             List<java.util.concurrent.CompletableFuture<UnitOutcome>> futures = new ArrayList<>();
+            List<Path> readyDirs = new ArrayList<>();
             for (BuildGraph.BuildUnit u : ready) {
                 PreparedModule pm = prepared.get(u.dir());
+                readyDirs.add(u.dir());
                 futures.add(java.util.concurrent.CompletableFuture.supplyAsync(
                         () -> buildUnitLive(u, pm, agg, view, completed, total, deferredOutput), JkThreads.io()));
             }
             UnitOutcome failure = null;
-            for (java.util.concurrent.CompletableFuture<UnitOutcome> f : futures) {
-                UnitOutcome o = f.join();
-                if (!o.success() && failure == null) failure = o;
+            for (int i = 0; i < futures.size(); i++) {
+                UnitOutcome o = futures.get(i).join();
+                if (o.success()) {
+                    linkModuleArtifacts(readyDirs.get(i), wsLinks);
+                } else if (failure == null) {
+                    failure = o;
+                }
             }
             if (failure != null) {
                 // Everything the build emitted prints ABOVE the result line, exactly
@@ -632,6 +643,8 @@ public final class BuildCommand implements CliCommand {
         if (dep != 0) return dep;
         List<Path> sorted = topoSortModules(modulesByDir);
         GoalConsole.Mode mode = GoalConsole.modeFor(global);
+        // Pre-compute workspace link map once (covers all modes) — needs the full sorted list.
+        Map<Path, Path> wsLinks = computeWorkspaceLinks(sorted, workspaceRoot);
 
         // --output json / --verbose keep per-module rendering (NDJSON streams,
         // verbose wants the full per-phase log). Banners separate the modules.
@@ -647,6 +660,7 @@ public final class BuildCommand implements CliCommand {
                             "jk build: " + workspaceRoot.relativize(moduleDir) + " failed (exit " + exit + ")");
                     return exit;
                 }
+                linkModuleArtifacts(moduleDir, wsLinks);
             }
             return 0;
         }
@@ -715,6 +729,7 @@ public final class BuildCommand implements CliCommand {
                     view.finishFailure(buildFailedAt(module, buildStart), above);
                     return exit;
                 }
+                linkModuleArtifacts(moduleDir, wsLinks);
                 built++;
             }
         }
@@ -1045,6 +1060,80 @@ public final class BuildCommand implements CliCommand {
             if (p != null && Files.isRegularFile(p)) return p;
         }
         return null;
+    }
+
+    /**
+     * Pre-computes hard-link destinations for all application module artifacts in a workspace.
+     * For each module dir (excluding {@code workspaceRoot} itself) with {@code project.main},
+     * maps each candidate artifact path to its link path under {@code workspaceRoot/target/}.
+     * When two or more modules produce the same filename the link name is prefixed with the
+     * module's group: {@code group-filename}.
+     */
+    private static Map<Path, Path> computeWorkspaceLinks(Iterable<Path> moduleDirs, Path workspaceRoot) {
+        Path wsRoot = workspaceRoot.toAbsolutePath().normalize();
+        Map<Path, List<Path>> moduleArtifacts = new LinkedHashMap<>();
+        Map<Path, String> moduleGroup = new LinkedHashMap<>();
+        for (Path moduleDir : moduleDirs) {
+            Path normalDir = moduleDir.toAbsolutePath().normalize();
+            if (normalDir.equals(wsRoot)) continue;
+            Path buildFile = moduleDir.resolve("jk.toml");
+            if (!Files.exists(buildFile)) continue;
+            JkBuild build;
+            try {
+                build = JkBuildParser.parse(buildFile);
+            } catch (Exception ignored) {
+                continue;
+            }
+            BuildLayout layout = BuildLayout.of(wsRoot, moduleDir, build);
+            if (!layout.hasMain()) continue;
+            List<Path> candidates = new ArrayList<>();
+            candidates.add(layout.mainJar());
+            candidates.add(layout.shadowJar());
+            candidates.add(layout.nativeBinary());
+            candidates.add(layout.nativeLibrary());
+            candidates.add(layout.ociImageTar());
+            moduleArtifacts.put(normalDir, candidates);
+            moduleGroup.put(normalDir, build.project().group());
+        }
+        // Count per filename across all modules to detect collisions.
+        Map<String, Long> filenameCounts = new java.util.HashMap<>();
+        for (List<Path> arts : moduleArtifacts.values()) {
+            for (Path art : arts) filenameCounts.merge(art.getFileName().toString(), 1L, Long::sum);
+        }
+        // Build the final src→linkDest map.
+        Path wsTarget = wsRoot.resolve("target");
+        Map<Path, Path> links = new LinkedHashMap<>();
+        for (var entry : moduleArtifacts.entrySet()) {
+            Path normalDir = entry.getKey();
+            String group = moduleGroup.get(normalDir);
+            for (Path art : entry.getValue()) {
+                String filename = art.getFileName().toString();
+                String linkName = filenameCounts.getOrDefault(filename, 0L) > 1
+                        ? group + "-" + filename : filename;
+                links.put(art, wsTarget.resolve(linkName));
+            }
+        }
+        return links;
+    }
+
+    /**
+     * Hard-links (or copies) any application artifacts that exist under {@code moduleDir} to their
+     * pre-computed workspace {@code target/} destinations. Best-effort — failures are swallowed
+     * because the build has already succeeded.
+     */
+    private static void linkModuleArtifacts(Path moduleDir, Map<Path, Path> workspaceLinks) {
+        if (workspaceLinks.isEmpty()) return;
+        Path normalDir = moduleDir.toAbsolutePath().normalize();
+        for (var entry : workspaceLinks.entrySet()) {
+            Path src = entry.getKey();
+            if (!src.startsWith(normalDir)) continue;
+            if (!Files.isRegularFile(src)) continue;
+            try {
+                dev.jkbuild.cache.Linking.linkOrCopy(src, entry.getValue());
+            } catch (java.io.IOException ignored) {
+                // best-effort
+            }
+        }
     }
 
     private static String relForDisplay(Path base, Path p) {

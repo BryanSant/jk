@@ -103,6 +103,11 @@ public final class BuildLayout {
         return version;
     }
 
+    /** True when this project declares {@code project.main} — i.e. it is an application. */
+    public boolean hasMain() {
+        return hasMain;
+    }
+
     // ---- Per-module output (under moduleRoot/target/) ----------------------
 
     /** {@code <moduleRoot>/target/} — root of this module's output tree. */

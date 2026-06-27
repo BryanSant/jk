@@ -152,6 +152,16 @@ class BuildLayoutTest {
     }
 
     @Test
+    void hasMain_false_for_library(@TempDir Path dir) {
+        assertThat(BuildLayout.of(dir, project("widget", "1.0.0")).hasMain()).isFalse();
+    }
+
+    @Test
+    void hasMain_true_for_application(@TempDir Path dir) {
+        assertThat(BuildLayout.of(dir, appProject("widget", "1.0.0")).hasMain()).isTrue();
+    }
+
+    @Test
     void artifact_and_version_are_exposed(@TempDir Path dir) {
         BuildLayout layout = BuildLayout.of(dir, project("alpha", "9.9.9-SNAPSHOT"));
 
