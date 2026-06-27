@@ -410,7 +410,9 @@ public final class JdkListCommand implements CliCommand {
         // inside each rail (replacing the 1-char padding), so the chip background
         // tapers into the terminal background with rounded edges — same as GoalWedge.
         // The caps take 1 char each, so the banner gets inner-2 chars when nerdfont is on.
-        Rgb chipColor = Theme.active().goalChipColor();
+        // planBadgeColor() is HEADER_BLUE — the same color used as goalChip()'s background.
+        // goalChipColor() is GOAL_GREEN (success chip), which is wrong here.
+        Rgb chipColor = Theme.active().planBadgeColor();
         boolean nerdfont = dev.jkbuild.config.GlobalConfig.nerdfont();
         String rail = Theme.colorize("│", Theme.active().darkGray());
         if (nerdfont) {
