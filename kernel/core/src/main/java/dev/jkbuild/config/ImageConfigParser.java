@@ -28,7 +28,7 @@ public final class ImageConfigParser {
             String registry,
             String tag,
             List<String> platforms,
-            String mainClass) {}
+            String main) {}
 
     private ImageConfigParser() {}
 
@@ -55,7 +55,7 @@ public final class ImageConfigParser {
                 image.getString("registry"),
                 image.getString("tag"),
                 optionalStringList(image, "platforms"),
-                image.getString("main-class"));
+                image.getString("main"));
     }
 
     private static List<String> optionalStringList(TomlTable table, String key) {

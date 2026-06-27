@@ -6,6 +6,8 @@ import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.run.ConsoleSpec;
 import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.config.ImageConfigParser;
+import dev.jkbuild.config.JkBuildParser;
+import dev.jkbuild.config.WorkspaceLoader;
 import dev.jkbuild.image.ImageConfig;
 import dev.jkbuild.jdk.HostPlatform;
 import dev.jkbuild.layout.BuildLayout;
@@ -128,9 +130,10 @@ public final class ImageCommand implements CliCommand {
                     if (tarballPath != null) ctx.put(TARBALL_PATH, tarballPath);
                     ImageConfig config = buildConfig(jkBuildPath);
                     ctx.put(CONFIG, config);
-                    String chosen = mainClass != null ? mainClass : config.mainClass();
+                    String chosen = resolveMainClass(mainClass, config, project, projectDir);
                     if (chosen == null || chosen.isBlank()) {
-                        ctx.error("no-main", "no main class — pass --main or set image.main-class.");
+                        ctx.error("no-main",
+                                "no main class — pass --main, set image.main, or set project.main.");
                         throw new RuntimeException("missing main class");
                     }
                     ctx.put(DEP_JARS, loadDependencyJars(projectDir, cache));
@@ -151,7 +154,7 @@ public final class ImageCommand implements CliCommand {
                     @SuppressWarnings("unchecked")
                     List<Path> depJars = (List<Path>) ctx.require(DEP_JARS);
 
-                    String chosen = mainClass != null ? mainClass : config.mainClass();
+                    String chosen = resolveMainClass(mainClass, config, project, projectDir);
 
                     // Packaging cache — tarball only. A registry push is a network
                     // side-effect (the remote's state is unknown), so it's never skipped.
@@ -331,7 +334,49 @@ public final class ImageCommand implements CliCommand {
                 registry != null ? registry : parsed.registry(),
                 tag != null ? tag : parsed.tag(),
                 parsed.platforms(),
-                parsed.mainClass());
+                parsed.main());
+    }
+
+    /**
+     * Resolve the main class to use for the OCI image entrypoint. Priority:
+     *
+     * <ol>
+     *   <li>{@code --main} CLI flag
+     *   <li>{@code image.main} in jk.toml
+     *   <li>{@code project.main} in jk.toml
+     *   <li>The sole {@code project.main} across all workspace modules (fails if more than one)
+     * </ol>
+     *
+     * Returns {@code null} when no main class can be determined.
+     */
+    private static String resolveMainClass(
+            String cliMain, ImageConfig config, JkBuild project, Path projectDir) {
+        if (cliMain != null && !cliMain.isBlank()) return cliMain;
+        if (config.main() != null && !config.main().isBlank()) return config.main();
+        if (project.project().main() != null && !project.project().main().isBlank()) {
+            return project.project().main();
+        }
+        // Workspace fallback: scan modules for a project.main.
+        if (!project.isWorkspaceRoot()) return null;
+        try {
+            var modules = WorkspaceLoader.loadModules(projectDir, project);
+            List<String> mains = modules.values().stream()
+                    .map(m -> m.project().main())
+                    .filter(m -> m != null && !m.isBlank())
+                    .distinct()
+                    .toList();
+            if (mains.size() == 1) return mains.get(0);
+            if (mains.size() > 1) {
+                throw new RuntimeException("Multiple main classes discovered. Set "
+                        + dev.jkbuild.cli.theme.Theme.colorize(
+                                "image.main", dev.jkbuild.cli.theme.Theme.active().focused())
+                        + " in jk.toml.");
+            }
+        } catch (RuntimeException e) {
+            throw e;
+        } catch (Exception ignored) {
+        }
+        return null;
     }
 
     private static List<Path> loadDependencyJars(Path projectDir, Path cache) throws IOException {

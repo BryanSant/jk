@@ -20,7 +20,7 @@ public record ImageConfig(
         String registry,
         String tag,
         List<String> platforms,
-        String mainClass) {
+        String main) {
 
     public static final String DEFAULT_BASE = "gcr.io/distroless/java21-debian12:nonroot";
 
@@ -30,7 +30,7 @@ public record ImageConfig(
         env = env == null ? Map.of() : Map.copyOf(env);
         labels = labels == null ? Map.of() : Map.copyOf(labels);
         platforms = (platforms == null || platforms.isEmpty()) ? List.of("linux/amd64") : List.copyOf(platforms);
-        // user, registry, tag, mainClass may be null
+        // user, registry, tag, main may be null
     }
 
     public static ImageConfig defaults() {

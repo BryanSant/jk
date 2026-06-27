@@ -54,7 +54,7 @@ public final class NativeCommand implements CliCommand {
     @Override
     public List<Opt> options() {
         return List.of(
-                Opt.value("<class>", "Main class. Default: jk.toml image.main-class.", "--main"),
+                Opt.value("<class>", "Main class. Default: jk.toml image.main or project.main.", "--main"),
                 Opt.value("<dir>", "Override the jk cache directory.", "--cache-dir")
                         .hide(),
                 Opt.value("<dir>", "Override the JDK install root.", "--jdks-dir")
@@ -384,9 +384,9 @@ public final class NativeCommand implements CliCommand {
             if (fromNative != null && !fromNative.isBlank()) return fromNative;
         } catch (Exception ignored) {
         }
-        // [image].main-class — backward compat (OCI image section was used historically).
+        // [image].main — fall back to the OCI image section.
         try {
-            String fromImage = ImageConfigParser.parse(buildFile).mainClass();
+            String fromImage = ImageConfigParser.parse(buildFile).main();
             if (fromImage != null && !fromImage.isBlank()) return fromImage;
         } catch (Exception ignored) {
         }
