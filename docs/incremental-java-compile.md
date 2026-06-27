@@ -119,7 +119,7 @@ State persisted in `stateDir` (per compile task): `source → classes`, a per-cl
 
 **`plan(PlanRequest{request, prior, stateDir})`:**
 
-1. Load persisted state. If absent (first build) or `--rerun` → full rebuild.
+1. Load persisted state. If absent (first build) or `--force` → full rebuild.
 2. Compute changed sources from `prior` input snapshot: modified / added / removed.
 3. Seed the dirty set with modified+added sources' classes. For each class whose
    **ABI hash changed**, add its **reverse-dependency closure** (walk the graph to
@@ -232,7 +232,7 @@ in-tree example of a processor whose handling we must get right.
 
 ## 8. Hard parts / fallbacks (explicit)
 
-- **First build / no state / `--rerun`:** full compile (exactly like BTA build 1).
+- **First build / no state / `--force`:** full compile (exactly like BTA build 1).
 - **Compile-time constants:** conservative recompile of referencers on a
   constant-defining class change (bytecode blind spot).
 - **Source-generating APs:** orphan-class detection → Filer isolating/aggregating
