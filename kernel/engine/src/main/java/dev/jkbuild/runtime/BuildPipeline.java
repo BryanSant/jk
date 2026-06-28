@@ -611,7 +611,11 @@ public final class BuildPipeline {
                     }
                     if (!rerun
                             && dev.jkbuild.task.FreshnessStamp.isFresh(
-                                    javaOut, dev.jkbuild.task.FreshnessStamp.JAVA_STAMP, sources, stampInputs)) {
+                                    javaOut,
+                                    dev.jkbuild.task.FreshnessStamp.JAVA_STAMP,
+                                    sources,
+                                    stampInputs,
+                                    ctx.require(RELEASE))) {
                         ctx.reweight(EffortWeights.SKIP); // nothing to compile this run
                         ctx.label("up to date");
                         ctx.put(BUILD_OUTCOME, "up-to-date");
@@ -754,7 +758,11 @@ public final class BuildPipeline {
                     boolean rerun = dev.jkbuild.config.ActiveConfig.get().rerunOr(false);
                     if (!rerun
                             && dev.jkbuild.task.FreshnessStamp.isFresh(
-                                    classes, dev.jkbuild.task.FreshnessStamp.KOTLIN_STAMP, freshInputs, classpath)) {
+                                    classes,
+                                    dev.jkbuild.task.FreshnessStamp.KOTLIN_STAMP,
+                                    freshInputs,
+                                    classpath,
+                                    ctx.require(RELEASE))) {
                         ctx.reweight(EffortWeights.SKIP); // nothing to compile this run
                         ctx.label("up to date");
                         ctx.put(KOTLIN_OUTCOME, "up-to-date");
@@ -1138,7 +1146,8 @@ public final class BuildPipeline {
                             "compile-main",
                             actionKey,
                             sources,
-                            classpath);
+                            classpath,
+                            ctx.require(RELEASE));
                     ctx.progress(1);
                 })
                 .build();
@@ -1171,7 +1180,8 @@ public final class BuildPipeline {
                             "compile-kotlin",
                             "",
                             freshInputs,
-                            classpath);
+                            classpath,
+                            ctx.require(RELEASE));
                     ctx.progress(1);
                 })
                 .build();

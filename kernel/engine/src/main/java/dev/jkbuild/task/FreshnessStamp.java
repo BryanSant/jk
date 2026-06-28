@@ -72,11 +72,15 @@ public final class FreshnessStamp {
      * Returns {@code true} when {@code outputDir} carries a stamp whose recorded source + classpath
      * sets match the current inputs and no input has been touched since the stamp was written.
      */
-    public static boolean isFresh(Path outputDir, String stampName, List<Path> sources, List<Path> classpath)
+    public static boolean isFresh(
+            Path outputDir, String stampName, List<Path> sources, List<Path> classpath, int release)
             throws IOException {
         Optional<Stamp> read = read(outputDir, stampName);
         if (read.isEmpty()) return false;
         Stamp stamp = read.get();
+
+        // A stamp written before release tracking was added has release=0; treat as stale.
+        if (stamp.release() != release) return false;
 
         Set<Path> currentSrc = normalise(sources);
         Set<Path> recordedSrc = normalise(stamp.sources());
@@ -122,7 +126,13 @@ public final class FreshnessStamp {
      * short-circuit.
      */
     public static void write(
-            Path outputDir, String stampName, String taskId, String actionKey, List<Path> sources, List<Path> classpath)
+            Path outputDir,
+            String stampName,
+            String taskId,
+            String actionKey,
+            List<Path> sources,
+            List<Path> classpath,
+            int release)
             throws IOException {
         Files.createDirectories(outputDir);
         long stampMillis = System.currentTimeMillis();
@@ -130,6 +140,7 @@ public final class FreshnessStamp {
         sb.append("TASK ").append(taskId).append('\n');
         sb.append("KEY ").append(actionKey).append('\n');
         sb.append("STAMP_MILLIS ").append(stampMillis).append('\n');
+        sb.append("RELEASE ").append(release).append('\n');
         for (Path src : sortedAbs(sources)) {
             sb.append("SOURCE ").append(src).append('\n');
         }
@@ -146,6 +157,7 @@ public final class FreshnessStamp {
         String taskId = null;
         String actionKey = null;
         long stampMillis = 0;
+        int release = 0;
         List<Path> sources = new ArrayList<>();
         List<Path> classpath = new ArrayList<>();
         for (String line : content.split("\n")) {
@@ -157,6 +169,8 @@ public final class FreshnessStamp {
             } else if (line.startsWith("STAMP_MILLIS ")) {
                 stampMillis =
                         Long.parseLong(line.substring("STAMP_MILLIS ".length()).trim());
+            } else if (line.startsWith("RELEASE ")) {
+                release = Integer.parseInt(line.substring("RELEASE ".length()).trim());
             } else if (line.startsWith("SOURCE ")) {
                 sources.add(Path.of(line.substring("SOURCE ".length()).trim()));
             } else if (line.startsWith("CP ")) {
@@ -164,10 +178,11 @@ public final class FreshnessStamp {
             }
         }
         if (taskId == null || actionKey == null) return Optional.empty();
-        return Optional.of(new Stamp(taskId, actionKey, stampMillis, sources, classpath));
+        return Optional.of(new Stamp(taskId, actionKey, stampMillis, release, sources, classpath));
     }
 
-    public record Stamp(String taskId, String actionKey, long stampMillis, List<Path> sources, List<Path> classpath) {
+    public record Stamp(
+            String taskId, String actionKey, long stampMillis, int release, List<Path> sources, List<Path> classpath) {
         public Stamp {
             Objects.requireNonNull(taskId, "taskId");
             Objects.requireNonNull(actionKey, "actionKey");
