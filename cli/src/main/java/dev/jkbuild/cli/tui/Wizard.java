@@ -194,7 +194,7 @@ public final class Wizard {
         writer.print(Ansi.cursorForward(INDENT_COLS + RAIL_PREFIX_WIDTH)); // skip past "╰──"
         writer.print(Ansi.ERASE_DISPLAY_TO_END); // erase residue beyond
         var line = new AttributedStringBuilder()
-                .append(" " + message, Theme.active().error()) // leading space separates from ╰──
+                .append(" " + Glyphs.CROSS + " " + message, Theme.active().error()) // leading space separates from ╰──
                 .toAttributedString();
         writer.print(line.toAnsi(terminal));
         writer.println();
@@ -740,7 +740,7 @@ public final class Wizard {
                     sb.append(
                             isFocused ? Rail.RADIO_ON : Rail.RADIO_OFF,
                             isFocused
-                                    ? Theme.active().completedStep()
+                                    ? Theme.active().activeStep()
                                     : Theme.active().darkGray());
                     sb.append("  ");
                     sb.append(
@@ -762,7 +762,7 @@ public final class Wizard {
                             .append(
                                     isFocused ? Rail.RADIO_ON : Rail.RADIO_OFF,
                                     isFocused
-                                            ? Theme.active().completedStep()
+                                            ? Theme.active().activeStep()
                                             : Theme.active().darkGray())
                             .append("  ")
                             .append(
@@ -779,7 +779,7 @@ public final class Wizard {
                             .append(
                                     isFocused ? Rail.RADIO_ON : Rail.RADIO_OFF,
                                     isFocused
-                                            ? Theme.active().completedStep()
+                                            ? Theme.active().activeStep()
                                             : Theme.active().darkGray())
                             .append("  ");
                     appendCustomField(sb, isFocused, rs.customPlaceholder());

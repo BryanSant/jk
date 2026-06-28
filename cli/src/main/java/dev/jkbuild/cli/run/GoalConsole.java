@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.cli.run;
 
+import dev.jkbuild.cli.tui.Glyphs;
 import dev.jkbuild.run.Goal;
 import dev.jkbuild.run.GoalListener;
 import dev.jkbuild.run.GoalResult;
@@ -157,12 +158,12 @@ public final class GoalConsole {
 
             @Override
             public synchronized void warn(String phase, String code, String message) {
-                lines.add("  ⚠ " + phase + ": " + message);
+                lines.add("  " + Glyphs.BANG + " " + phase + ": " + message);
             }
 
             @Override
             public synchronized void error(String phase, String code, String message) {
-                lines.add("  ✗ " + phase + ": " + message);
+                lines.add("  " + Glyphs.CROSS + " " + phase + ": " + message);
             }
         });
         GoalResult r = goal.run();

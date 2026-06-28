@@ -5,6 +5,7 @@ import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.cli.tui.Answers;
+import dev.jkbuild.cli.tui.Glyphs;
 import dev.jkbuild.cli.tui.Wizard;
 import dev.jkbuild.cli.tui.WizardStep;
 import dev.jkbuild.config.JkBuildEditor;
@@ -668,7 +669,7 @@ public final class NewCommand implements CliCommand {
         var warn = Theme.active().warning();
         var label = Theme.active().activeStep();
         var body = Theme.active().normalGray();
-        System.err.println(Theme.colorize("⚠", warn)
+        System.err.println(Theme.colorize(Glyphs.BANG, warn)
                 + " "
                 + Theme.colorize("Jk", label)
                 + Theme.colorize(": No JDKs found on this system. Run ", body)

@@ -4,6 +4,7 @@ package dev.jkbuild.cli;
 import dev.jkbuild.cli.args.ArgParser;
 import dev.jkbuild.cli.args.ParseException;
 import dev.jkbuild.cli.theme.Theme;
+import dev.jkbuild.cli.tui.Glyphs;
 import dev.jkbuild.command.ActivateCommand;
 import dev.jkbuild.command.AddCommand;
 import dev.jkbuild.command.AuditCommand;
@@ -233,7 +234,7 @@ public final class CommandDispatch {
 
     private static void printWorkerJarError(WorkerJarNotFoundException e, boolean ansi) {
         Theme t = Theme.active();
-        String label = HelpRenderer.paint("‼ Error:", t.errorLabel(), ansi);
+        String label = HelpRenderer.paint(Glyphs.CROSS + " Error:", t.errorLabel(), ansi);
         String jar = HelpRenderer.paint(e.artifactId() + ".jar", t.warning(), ansi);
         String coord = HelpRenderer.paint(e.coordinate(), t.cyan(), ansi);
         String jk = ansi ? Ansi.sgr(t.helpHint()) + "jk" + Ansi.RESET : "jk";

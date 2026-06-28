@@ -3,6 +3,7 @@ package dev.jkbuild.command;
 
 import dev.jkbuild.cli.PathDisplay;
 import dev.jkbuild.cli.theme.Theme;
+import dev.jkbuild.cli.tui.Glyphs;
 import dev.jkbuild.compat.ImportReport;
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.config.WorkspaceLoader;
@@ -129,6 +130,6 @@ final class ExportSupport {
     }
 
     static void wrote(Path path) {
-        System.out.println(Theme.colorize("✓", Theme.active().success()) + " Wrote " + PathDisplay.styled(path));
+        System.out.println(Theme.colorize(Glyphs.CHECK, Theme.active().success()) + " Wrote " + PathDisplay.styled(path));
     }
 }

@@ -2,6 +2,7 @@
 package dev.jkbuild.command;
 
 import dev.jkbuild.cli.theme.Theme;
+import dev.jkbuild.cli.tui.Glyphs;
 import dev.jkbuild.http.Http;
 import dev.jkbuild.jdk.GlobalDefaultJdk;
 import dev.jkbuild.jdk.HostPlatform;
@@ -156,7 +157,7 @@ public final class JdkUpdateCommand implements CliCommand {
         }
 
         if (updates.isEmpty()) {
-            System.out.println(Theme.colorize("✓", Theme.active().completedStep())
+            System.out.println(Theme.colorize(Glyphs.CHECK, Theme.active().completedStep())
                     + " All "
                     + managed.size()
                     + " jk-managed JDK"
@@ -209,7 +210,7 @@ public final class JdkUpdateCommand implements CliCommand {
                 if (currentDefault.isPresent() && currentDefault.get().equals(oldId)) {
                     defaults.set(newJdk);
                 }
-                System.out.println(Theme.colorize("✓", Theme.active().completedStep())
+                System.out.println(Theme.colorize(Glyphs.CHECK, Theme.active().completedStep())
                         + " Updated "
                         + Theme.colorize(oldId, Theme.active().cyan())
                         + " → "
@@ -217,7 +218,7 @@ public final class JdkUpdateCommand implements CliCommand {
                 updated++;
             } catch (IOException | InterruptedException e) {
                 if (e instanceof InterruptedException) Thread.currentThread().interrupt();
-                System.out.println(Theme.colorize("✗", Theme.active().error())
+                System.out.println(Theme.colorize(Glyphs.CROSS, Theme.active().error())
                         + " Failed to update "
                         + Theme.colorize(oldId, Theme.active().warning())
                         + ": "
@@ -314,7 +315,7 @@ public final class JdkUpdateCommand implements CliCommand {
                     + Theme.colorize(
                             u.target.installFolderName(), Theme.active().focused()));
         }
-        return dev.jkbuild.cli.tui.Confirm.of(Theme.colorize("‼", Theme.active().warning()) + " Proceed?", true)
+        return dev.jkbuild.cli.tui.Confirm.of(Theme.colorize(Glyphs.BANG, Theme.active().warning()) + " Proceed?", true)
                 .ask();
     }
 

@@ -6,6 +6,7 @@ import dev.jkbuild.cli.Ansi;
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.theme.Coords;
 import dev.jkbuild.cli.theme.Theme;
+import dev.jkbuild.cli.tui.Glyphs;
 import dev.jkbuild.config.JkBuildEditor;
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.config.WorkspaceLocator;
@@ -165,7 +166,7 @@ public final class AddCommand implements CliCommand {
             return 1;
         }
         Files.writeString(file, updated, StandardCharsets.UTF_8);
-        String check = Theme.colorize("✓", Theme.active().success());
+        String check = Theme.colorize(Glyphs.CHECK, Theme.active().success());
         System.out.println(check
                 + " Added "
                 + Coords.shortName(parsed.library())
@@ -370,7 +371,7 @@ public final class AddCommand implements CliCommand {
         }
         Files.writeString(tomlFile, updated, StandardCharsets.UTF_8);
 
-        String check = Theme.colorize("✓", Theme.active().success());
+        String check = Theme.colorize(Glyphs.CHECK, Theme.active().success());
         String shortSha = sha256.substring(0, Math.min(12, sha256.length()));
         System.out.println(check
                 + " Added "
@@ -531,12 +532,12 @@ public final class AddCommand implements CliCommand {
 
         if (response.statusCode() == 200) {
             URI artifactUri = repoBase.resolve(MavenLayout.artifactPath(coord));
-            System.out.println(Theme.colorize("✓", Theme.active().success()) + " " + coordStr + " is available.");
+            System.out.println(Theme.colorize(Glyphs.CHECK, Theme.active().success()) + " " + coordStr + " is available.");
             System.out.println(osc8Link(artifactUri.toString()));
             return 0;
         }
 
-        System.out.println(Theme.colorize("⚠", Theme.active().warning()) + " " + coordStr + " is unavailable.");
+        System.out.println(Theme.colorize(Glyphs.BANG, Theme.active().warning()) + " " + coordStr + " is unavailable.");
         System.out.println("Failed to find " + coordStr + " in any configured repo.");
         return 1;
     }

@@ -4,6 +4,7 @@ package dev.jkbuild.cli.run;
 import dev.jkbuild.cli.Ansi;
 import dev.jkbuild.cli.theme.Gradient;
 import dev.jkbuild.cli.theme.Theme;
+import dev.jkbuild.cli.tui.Glyphs;
 import dev.jkbuild.run.GoalListener;
 import dev.jkbuild.run.GoalResult;
 import dev.jkbuild.run.GoalView;
@@ -154,7 +155,7 @@ public final class ProgressBarListener implements GoalListener {
             writeAboveInternal(ConsoleSpec.compilerWarning(phase, message));
         } else {
             writeAboveInternal(
-                    renderDiagnostic("⚠ Warning", Theme.active().warning().bold(), phase, code, message));
+                    renderDiagnostic(Glyphs.BANG + " Warning", Theme.active().warning().bold(), phase, code, message));
         }
     }
 
@@ -170,7 +171,7 @@ public final class ProgressBarListener implements GoalListener {
             writeAboveInternal(ConsoleSpec.renderError(phase, code, message));
         } else {
             writeAboveInternal(
-                    renderDiagnostic("✗ Error", Theme.active().error().bold(), phase, code, message));
+                    renderDiagnostic(Glyphs.CROSS + " Error", Theme.active().error().bold(), phase, code, message));
         }
     }
 

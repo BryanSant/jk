@@ -2,6 +2,7 @@
 package dev.jkbuild.cli.run;
 
 import dev.jkbuild.cli.theme.Theme;
+import dev.jkbuild.cli.tui.Glyphs;
 import dev.jkbuild.run.GoalListener;
 import dev.jkbuild.run.GoalResult;
 import dev.jkbuild.run.GoalView;
@@ -57,7 +58,7 @@ public final class VerboseListener implements GoalListener {
     public void phaseFinish(String phase, PhaseStatus status, Duration duration) {
         String glyph =
                 switch (status) {
-                    case SUCCESS -> Theme.colorize("✓", Theme.active().completedStep());
+                    case SUCCESS -> Theme.colorize(Glyphs.CHECK, Theme.active().completedStep());
                     case FAIL -> Theme.colorize("𝘅", Theme.active().error());
                     case CANCELLED -> Theme.colorize("·", Theme.active().normalGray());
                     default -> "·";
@@ -74,7 +75,7 @@ public final class VerboseListener implements GoalListener {
     @Override
     public void warn(String phase, String code, String message) {
         String location = (code != null && !code.isBlank()) ? " " + phase + "/" + code : "";
-        err.println("    " + Theme.colorize("⚠", Theme.active().warning()) + location + ": " + message);
+        err.println("    " + Theme.colorize(Glyphs.BANG, Theme.active().warning()) + location + ": " + message);
     }
 
     @Override
@@ -83,14 +84,14 @@ public final class VerboseListener implements GoalListener {
             err.println(message);
         } else {
             err.println(
-                    "    " + Theme.colorize("✗", Theme.active().error()) + " " + phase + "/" + code + ": " + message);
+                    "    " + Theme.colorize(Glyphs.CROSS, Theme.active().error()) + " " + phase + "/" + code + ": " + message);
         }
     }
 
     @Override
     public void goalFinish(GoalResult result) {
         String summary = result.success()
-                ? Theme.colorize("✓ done", Theme.active().completedStep())
+                ? Theme.colorize(Glyphs.CHECK + " done", Theme.active().completedStep())
                 : Theme.colorize("𝘅 failed", Theme.active().error());
         out.println(summary + " (" + ConsoleSpec.fmtDuration(result.duration()) + ")");
     }

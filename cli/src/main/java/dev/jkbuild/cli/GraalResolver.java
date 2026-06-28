@@ -3,6 +3,7 @@ package dev.jkbuild.cli;
 
 import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.cli.tui.Confirm;
+import dev.jkbuild.cli.tui.Glyphs;
 import dev.jkbuild.http.Http;
 import dev.jkbuild.jdk.HostPlatform;
 import dev.jkbuild.jdk.InstalledJdk;
@@ -140,7 +141,7 @@ public final class GraalResolver {
             return null;
         }
         if (!assumeYes) {
-            String warn = Theme.colorize("‼", Theme.active().warning());
+            String warn = Theme.colorize(Glyphs.BANG, Theme.active().warning());
             boolean ok = Confirm.of(
                             warn + " native-image not found. " + "Install Oracle GraalVM to build native artifacts?",
                             true)
@@ -186,7 +187,7 @@ public final class GraalResolver {
                     + announce
                     + ")…");
             InstalledJdk installed = new JdkInstaller(new Http(), registry).install(e);
-            System.out.println(Theme.colorize("✓", Theme.active().success()) + " GraalVM ready: " + installed.home());
+            System.out.println(Theme.colorize(Glyphs.CHECK, Theme.active().success()) + " GraalVM ready: " + installed.home());
             return installed.home();
         } catch (InterruptedException ie) {
             Thread.currentThread().interrupt();

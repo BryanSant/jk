@@ -90,8 +90,11 @@ public final class JkDarkTheme implements Theme {
     /** Gradient for the spinner frames — Jk Dark primary → accent. */
     private static final Gradient SPINNER_GRADIENT = new Gradient(PRIMARY, ACCENT);
 
+    private static final Rgb FAILURE_GRADIENT_START = Rgb.hex(0x7F1D1D);
+    private static final Rgb FAILURE_GRADIENT_END = Rgb.hex(0xEF4444);
+
     /** Gradient a failed progress bar repaints in: dark red #7f1d1d → bright red #ef4444. */
-    private static final Gradient FAILURE_GRADIENT = new Gradient(Rgb.hex(0x7f1d1d), Rgb.hex(0xef4444));
+    private static final Gradient FAILURE_GRADIENT = new Gradient(FAILURE_GRADIENT_START, FAILURE_GRADIENT_END);
 
     /** Apply a foreground color unless the resolved {@code --color} choice disables it. */
     private static AttributedStyle withColor(AttributedStyle base, int r, int g, int b) {
@@ -248,7 +251,7 @@ public final class JkDarkTheme implements Theme {
 
     @Override
     public AttributedStyle planBadge() {
-        return withBg(withColor(AttributedStyle.DEFAULT, Rgb.hex(0xFFFFFF)), HEADER_BLUE);
+        return withBg(withColor(AttributedStyle.DEFAULT, CHIP_FG), HEADER_BLUE);
     }
 
     @Override
@@ -258,7 +261,7 @@ public final class JkDarkTheme implements Theme {
 
     @Override
     public AttributedStyle indigoBadge() {
-        return withBg(withColor(AttributedStyle.DEFAULT, Rgb.hex(0xFFFFFF)), PRIMARY);
+        return withBg(withColor(AttributedStyle.DEFAULT, CHIP_FG), PRIMARY);
     }
 
     @Override
@@ -269,19 +272,22 @@ public final class JkDarkTheme implements Theme {
     /** Pure black (#000000) — the text color for every chip/badge that sets a background. */
     private static final Rgb CHIP_TEXT = Rgb.hex(0x000000);
 
+    /** Pure white (#FFFFFF) — the foreground color for dark-background badge chips. */
+    private static final Rgb CHIP_FG = Rgb.hex(0xFFFFFF);
+
     @Override
     public AttributedStyle goalChip() {
-        return withBg(withColor(AttributedStyle.DEFAULT, Rgb.hex(0xFFFFFF)), HEADER_BLUE);
+        return withBg(withColor(AttributedStyle.DEFAULT, CHIP_FG), HEADER_BLUE);
     }
 
     @Override
     public AttributedStyle goalSuccessChip() {
-        return withBg(withColor(AttributedStyle.DEFAULT, Rgb.hex(0xFFFFFF)), GOAL_GREEN);
+        return withBg(withColor(AttributedStyle.DEFAULT, CHIP_FG), GOAL_GREEN);
     }
 
     @Override
     public AttributedStyle goalFailureChip() {
-        return withBg(withColor(AttributedStyle.DEFAULT, Rgb.hex(0xFFFFFF)), NORMAL_RED);
+        return withBg(withColor(AttributedStyle.DEFAULT, CHIP_FG), NORMAL_RED);
     }
 
     @Override
@@ -341,9 +347,12 @@ public final class JkDarkTheme implements Theme {
         return withColor(AttributedStyle.DEFAULT, PATH);
     }
 
+    /** Material Orange 500 — used for inline shell commands. */
+    public static final Rgb SHELL_ORANGE = Rgb.hex(0xFF9800);
+
     @Override
     public AttributedStyle shell() {
-        return withColor(AttributedStyle.DEFAULT, Rgb.hex(0xFF9800)); // Material Orange 500
+        return withColor(AttributedStyle.DEFAULT, SHELL_ORANGE); // Material Orange 500
     }
 
     // --- syntax-highlight styles -----------------------------------------

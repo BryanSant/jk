@@ -3,6 +3,7 @@ package dev.jkbuild.command;
 
 import dev.jkbuild.cli.theme.Coords;
 import dev.jkbuild.cli.theme.Theme;
+import dev.jkbuild.cli.tui.Glyphs;
 import dev.jkbuild.model.command.Arity;
 import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Invocation;
@@ -656,7 +657,7 @@ public final class CacheCommand implements CliCommand {
         /** Stern, default-to-no confirmation before wiping the whole cache. */
         private static boolean confirmPurge(Path root, Stats stats) {
             Theme t = Theme.active();
-            String bang = Theme.colorize("‼", t.error());
+            String bang = Theme.colorize(Glyphs.CROSS, t.error());
             System.out.println();
             System.out.println(
                     bang + " " + Theme.colorize("This permanently deletes the ENTIRE jk cache.", t.errorLabel()));

@@ -3,6 +3,7 @@ package dev.jkbuild.command;
 
 import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.cli.tui.Answers;
+import dev.jkbuild.cli.tui.Glyphs;
 import dev.jkbuild.cli.tui.Wizard;
 import dev.jkbuild.cli.tui.WizardStep;
 import dev.jkbuild.model.command.Arity;
@@ -84,7 +85,7 @@ public final class ActivateCommand implements CliCommand {
         if (Files.exists(rcFile)) {
             String existing = Files.readString(rcFile, StandardCharsets.UTF_8);
             if (existing.contains(activationLine)) {
-                System.out.println(Theme.colorize("✓", Theme.active().completedStep())
+                System.out.println(Theme.colorize(Glyphs.CHECK, Theme.active().completedStep())
                         + " jk activation is already wired up in "
                         + Theme.colorize(rcDisplay, Theme.active().focused()));
                 return 0;
@@ -116,7 +117,7 @@ public final class ActivateCommand implements CliCommand {
             return 0;
         }
         appendActivationLine(rcFile, activationLine);
-        System.out.println(Theme.colorize("✓", Theme.active().completedStep())
+        System.out.println(Theme.colorize(Glyphs.CHECK, Theme.active().completedStep())
                 + " appended jk activation to "
                 + Theme.colorize(rcDisplay, Theme.active().focused()));
         System.out.println("Open a new shell (or " + sourceHint(shell, rcDisplay) + ") to pick up the change.");

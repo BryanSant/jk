@@ -377,7 +377,7 @@ public final class JdkUninstallCommand implements CliCommand {
      */
     private boolean confirmDeletion(List<JdkHit> victims, Terminal terminal) {
         if (assumeYes) return true;
-        String warn = Theme.colorize("‼", Theme.active().warning());
+        String warn = Theme.colorize(Glyphs.BANG, Theme.active().warning());
         String question;
         if (victims.size() == 1) {
             question = "\n" + warn + " Are you sure you want to delete " + target(victims.getFirst()) + "?";

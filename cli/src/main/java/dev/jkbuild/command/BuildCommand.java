@@ -7,6 +7,7 @@ import dev.jkbuild.cli.run.ConsoleSpec;
 import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.cli.tui.CommandManager;
+import dev.jkbuild.cli.tui.Glyphs;
 import dev.jkbuild.cli.tui.GoalWedge;
 import dev.jkbuild.config.GlobalConfig;
 import dev.jkbuild.config.JkBuildParser;
@@ -593,7 +594,7 @@ public final class BuildCommand implements CliCommand {
      */
     private static String completionLine(boolean ok, int index, int total, String coord, long millis) {
         var th = Theme.active();
-        String mark = Theme.colorize(ok ? "✓" : "✗", ok ? th.success() : th.error());
+        String mark = Theme.colorize(ok ? Glyphs.CHECK : Glyphs.CROSS, ok ? th.success() : th.error());
         String num = String.format("%0" + Integer.toString(total).length() + "d", index);
         StringBuilder sb = new StringBuilder();
         sb.append(mark)

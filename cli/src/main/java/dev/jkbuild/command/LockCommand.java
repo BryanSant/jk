@@ -291,22 +291,6 @@ public final class LockCommand implements CliCommand {
     }
 
     /**
-     * A single package's completion line:
-     * {@code ✓ [N of Total] group:artifact:version}
-     */
-    private static String lockCompletionLine(int n, int total, String module, String version) {
-        var th = Theme.active();
-        String check = Theme.colorize(Glyphs.CHECK + "", th.success());
-        String num = String.format("%0" + Integer.toString(Math.max(total, n)).length() + "d", n);
-        String count = Theme.colorize("[", th.darkGray())
-                + num
-                + " of "
-                + total
-                + Theme.colorize("]", th.darkGray());
-        return check + " " + count + " Locked " + Coords.module(module, version);
-    }
-
-    /**
      * Best-effort scope estimate for a module: the existing lockfile size (re-run) or declared deps ×
      * transitive expansion factor.
      */

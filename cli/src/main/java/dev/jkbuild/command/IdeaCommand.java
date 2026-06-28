@@ -259,7 +259,7 @@ public final class IdeaCommand implements CliCommand {
         }
 
         Theme t = Theme.active();
-        String check = Theme.colorize("✓", t.success());
+        String check = Theme.colorize(Glyphs.CHECK, t.success());
 
         // Header chip: " ✓ IDEA ▶ The <project> project is ready".
         System.out.println(GoalWedge.chipLine(
@@ -287,7 +287,7 @@ public final class IdeaCommand implements CliCommand {
 
         System.out.println();
         System.out.println(" "
-                + Theme.colorize(Glyphs.CROSS + " Note", t.warning())
+                + Theme.colorize(Glyphs.BANG + " Note", t.warning())
                 + ": You may need to "
                 + Theme.colorize("restart your IDE", AttributedStyle.DEFAULT.italic())
                 + " for changes to take effect");

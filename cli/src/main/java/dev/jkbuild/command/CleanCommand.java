@@ -120,20 +120,18 @@ public final class CleanCommand implements CliCommand {
         try (Spinner spinner = Spinner.show(System.out, "Collecting cache...")) {
             report = CacheGc.run(JkDirs.cache(), false);
         }
-        String check = Theme.colorize("✓", Theme.active().success());
+        boolean nerdfont = GlobalConfig.nerdfont();
         if (report.purgedBlobs() == 0) {
-            System.out.println(check + " Cache GC: nothing idle past 90 days");
+            System.out.println(GoalWedge.chipLine(Glyphs.CHECK, "Cache GC", nerdfont, "nothing idle past 90 days"));
         } else {
-            String gc = Theme.colorize("Cache GC", Theme.active().focused());
-            System.out.printf(
-                    "%s %s: purged %,d blob%s (%s), %,d repo link%s%n",
-                    check,
-                    gc,
+            String msg = String.format(
+                    "purged %,d blob%s (%s), %,d repo link%s",
                     report.purgedBlobs(),
                     report.purgedBlobs() == 1 ? "" : "s",
                     CacheCommand.fmtBytes(report.freedBytes()),
                     report.repoLinksRemoved(),
                     report.repoLinksRemoved() == 1 ? "" : "s");
+            System.out.println(GoalWedge.chipLine(Glyphs.CHECK, "Cache GC", nerdfont, msg));
         }
     }
 

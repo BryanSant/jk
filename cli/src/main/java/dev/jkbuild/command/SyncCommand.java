@@ -402,7 +402,7 @@ public final class SyncCommand implements CliCommand {
             modules = WorkspaceLoader.loadModules(dir, root);
         } catch (Exception e) {
             if (!global.outputIsJson()) {
-                System.err.println("jk sync: skipping module sync — " + e.getMessage());
+                System.out.println("jk sync: skipping module sync — " + e.getMessage());
             }
             return;
         }
@@ -415,7 +415,7 @@ public final class SyncCommand implements CliCommand {
             Path moduleLock = moduleDir.resolve("jk.lock");
             if (!Files.exists(moduleLock)) {
                 if (!global.outputIsJson()) {
-                    System.err.println(
+                    System.out.println(
                             "jk sync: " + dir.relativize(moduleDir) + "/jk.lock not found — run `jk lock` first");
                 }
                 continue;

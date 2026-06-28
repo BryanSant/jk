@@ -327,7 +327,7 @@ public final class ExplainCommand implements CliCommand {
             if (p.matches("…\\+\\d+ more…")) {
                 sb.append(Theme.colorize(p, t.darkGray()));
             } else if (p.startsWith(":")) {
-                sb.append(Theme.colorize(":", t.darkGray())).append(Theme.colorize(p.substring(1), t.coordName()));
+                sb.append(":").append(Theme.colorize(p.substring(1), t.coordName()));
             } else {
                 sb.append(Theme.colorize(p, t.coordName()));
             }

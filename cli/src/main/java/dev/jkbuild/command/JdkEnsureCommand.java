@@ -2,6 +2,7 @@
 package dev.jkbuild.command;
 
 import dev.jkbuild.cli.theme.Theme;
+import dev.jkbuild.cli.tui.Glyphs;
 import dev.jkbuild.config.GlobalConfig;
 import dev.jkbuild.http.Http;
 import dev.jkbuild.jdk.HostPlatform;
@@ -191,7 +192,7 @@ public final class JdkEnsureCommand implements CliCommand {
             return 1;
         }
         JdkCatalog.Entry e = entry.get();
-        String head = Theme.colorize("‼", Theme.active().warning())
+        String head = Theme.colorize(Glyphs.BANG, Theme.active().warning())
                 + " no JDK matches "
                 + Theme.colorize(spec, Theme.active().cyan())
                 + " in the JetBrains feed — ";

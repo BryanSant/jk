@@ -13,8 +13,11 @@ public final class Glyphs {
     /** Success marker — heavy check mark. Paint with {@code Theme.success()}. */
     public static final String CHECK = "✓";
 
-    /** Failure / cancel marker — double exclamation. Paint with {@code Theme.error()}. */
-    public static final String CROSS = "‼";
+    /** Error marker — U+2718 heavy ballot X. Paint with {@code Theme.error()}. */
+    public static final String CROSS = "✘";
+
+    /** Warning marker — U+203C double exclamation. Paint with {@code Theme.warning()}. */
+    public static final String BANG = "‼";
 
     /** Pending / active phase-row marker — white medium square. */
     public static final String PENDING = "◻";

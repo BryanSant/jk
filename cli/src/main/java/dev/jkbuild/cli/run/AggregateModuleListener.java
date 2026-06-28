@@ -2,6 +2,7 @@
 package dev.jkbuild.cli.run;
 
 import dev.jkbuild.cli.tui.CommandManager;
+import dev.jkbuild.cli.tui.Glyphs;
 import dev.jkbuild.run.GoalListener;
 import dev.jkbuild.run.GoalResult;
 import dev.jkbuild.run.GoalView;
@@ -104,7 +105,7 @@ public final class AggregateModuleListener implements GoalListener {
             emit(ConsoleSpec.compilerWarning(phase, message));
         } else {
             emit(ProgressBarListener.renderDiagnostic(
-                    "⚠ Warning", dev.jkbuild.cli.theme.Theme.active().warning().bold(), phase, code, message));
+                    Glyphs.BANG + " Warning", dev.jkbuild.cli.theme.Theme.active().warning().bold(), phase, code, message));
         }
     }
 

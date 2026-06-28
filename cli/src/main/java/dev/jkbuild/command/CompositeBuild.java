@@ -5,6 +5,7 @@ import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.run.ConsoleSpec;
 import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.cli.theme.Theme;
+import dev.jkbuild.cli.tui.Glyphs;
 import dev.jkbuild.layout.BuildLayout;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.plugin.protocol.Ndjson;
@@ -192,9 +193,9 @@ final class CompositeBuild {
                         ? "up to date"
                         : ur.millis + "ms";
                 System.out.println(
-                        "  " + Theme.colorize("✓", t.success()) + " " + ur.unit.coord() + " (" + detail + ")");
+                        "  " + Theme.colorize(Glyphs.CHECK, t.success()) + " " + ur.unit.coord() + " (" + detail + ")");
             } else {
-                System.out.println("  " + Theme.colorize("✗", t.error()) + " " + ur.unit.coord() + " — " + ur.outcome);
+                System.out.println("  " + Theme.colorize(Glyphs.CROSS, t.error()) + " " + ur.unit.coord() + " — " + ur.outcome);
             }
         }
     }

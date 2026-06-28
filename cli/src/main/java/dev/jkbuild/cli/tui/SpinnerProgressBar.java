@@ -208,7 +208,7 @@ public final class SpinnerProgressBar implements AutoCloseable, LiveRegion {
         if (silent) return;
         AttributedStyle strikeStyle = Theme.active().dim().crossedOut();
         out.print("\r");
-        out.print(Theme.colorize("✗ Failed", Theme.active().error().bold()));
+        out.print(Theme.colorize(Glyphs.CROSS + " Failed", Theme.active().error().bold()));
         out.print(" ");
         // Every segment painted with the dark-red→bright-red gradient.
         // We don't care about filled vs empty here — the bar's role at

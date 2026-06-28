@@ -3,6 +3,7 @@ package dev.jkbuild.command;
 
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.theme.Theme;
+import dev.jkbuild.cli.tui.Glyphs;
 import dev.jkbuild.config.JkBuildEditor;
 import dev.jkbuild.model.Scope;
 import dev.jkbuild.model.command.Arity;
@@ -94,7 +95,7 @@ public final class RemoveCommand implements CliCommand {
             return 1;
         }
         Files.writeString(file, updated, StandardCharsets.UTF_8);
-        System.out.println(Theme.colorize("✗", Theme.active().darkGray())
+        System.out.println(Theme.colorize(Glyphs.CROSS, Theme.active().darkGray())
                 + " Removed "
                 + Theme.colorize(name, Theme.active().activeStep())
                 + " from "

@@ -5,6 +5,7 @@ import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.cli.tui.Confirm;
+import dev.jkbuild.cli.tui.Glyphs;
 import dev.jkbuild.cli.tui.Spinner;
 import dev.jkbuild.cli.tui.Wizard;
 import dev.jkbuild.http.Http;
@@ -431,7 +432,7 @@ public final class JdkInstallCommand implements CliCommand {
      * </pre>
      */
     private static String doneLine(String label, Path home, String verb) {
-        return Theme.colorize("✓", Theme.active().completedStep())
+        return Theme.colorize(Glyphs.CHECK, Theme.active().completedStep())
                 + " "
                 + Theme.colorize(label, Theme.active().focused())
                 + " "
