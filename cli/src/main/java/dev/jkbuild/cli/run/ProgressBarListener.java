@@ -261,7 +261,7 @@ public final class ProgressBarListener implements GoalListener {
         out.print(sep);
         out.print(" ");
         String phaseDisplay = phaseLabels.getOrDefault(phase, phase);
-        out.print(Theme.colorize(phaseDisplay, AttributedStyle.DEFAULT.bold()));
+        out.print(Theme.colorize(phaseDisplay, Theme.active().focused()));
         if (!stepMsg.isEmpty()) {
             out.print(" ");
             out.print(Theme.colorize(stepMsg, Theme.active().normalGray()));

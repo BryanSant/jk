@@ -450,7 +450,7 @@ public final class JdkUninstallCommand implements CliCommand {
                                 survivors.getFirst().identifier(),
                                 Theme.active().focused())
                         + " "
-                        + Theme.colorize("(non-LTS fallback)", Theme.active().darkGray()));
+                        + Theme.colorize(Glyphs.BANG + " (non-LTS fallback)", Theme.active().warning()));
             }
         }
     }

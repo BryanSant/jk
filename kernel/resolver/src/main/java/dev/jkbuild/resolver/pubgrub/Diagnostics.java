@@ -48,13 +48,12 @@ public final class Diagnostics {
             String reset, String header, String rail, String group, String name, String version) {
 
         /** Default palette — hardcoded to match {@code JkDarkTheme}. Used when no palette is injected. */
-        public static final Palette DEFAULT = new Palette(
-                "\033[m",
-                "\033[38;2;233;30;99m",   // NORMAL_RED   — ‼ header
-                "\033[38;2;84;110;122m",   // BRIGHT_BLACK — │ rail
-                "\033[38;2;0;188;212m",    // NORMAL_CYAN  — coordGroup
-                "\033[38;2;24;255;255m",   // BRIGHT_CYAN  — coordName
-                "\033[38;2;193;251;252m"); // COORD_VERSION — coordVersion (#C1FBFC)
+        public static final Palette DEFAULT = fromRgb(
+                0x00, 0xBC, 0xD4,   // NORMAL_CYAN  — coordGroup
+                0x18, 0xFF, 0xFF,   // BRIGHT_CYAN  — coordName
+                0xC1, 0xFB, 0xFC,   // COORD_VERSION — coordVersion (#C1FBFC)
+                0xE9, 0x1E, 0x63,   // NORMAL_RED   — ‼ header
+                0x54, 0x6E, 0x7A);  // BRIGHT_BLACK — │ rail
 
         /** Plain palette — no colors. */
         public static final Palette PLAIN = new Palette("", "", "", "", "", "");
@@ -63,11 +62,13 @@ public final class Diagnostics {
         public static Palette fromRgb(
                 int groupR, int groupG, int groupB,
                 int nameR,  int nameG,  int nameB,
-                int verR,   int verG,   int verB) {
+                int verR,   int verG,   int verB,
+                int headerR, int headerG, int headerB,
+                int railR,   int railG,   int railB) {
             return new Palette(
                     "\033[m",
-                    "\033[38;2;233;30;99m",
-                    "\033[38;2;84;110;122m",
+                    rgb(headerR, headerG, headerB),
+                    rgb(railR,   railG,   railB),
                     rgb(groupR, groupG, groupB),
                     rgb(nameR,  nameG,  nameB),
                     rgb(verR,   verG,   verB));

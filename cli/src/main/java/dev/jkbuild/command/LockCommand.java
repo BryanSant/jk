@@ -393,7 +393,13 @@ public final class LockCommand implements CliCommand {
                                 dev.jkbuild.cli.theme.JkDarkTheme.BRIGHT_CYAN.b(),
                                 dev.jkbuild.cli.theme.JkDarkTheme.COORD_VERSION.r(),
                                 dev.jkbuild.cli.theme.JkDarkTheme.COORD_VERSION.g(),
-                                dev.jkbuild.cli.theme.JkDarkTheme.COORD_VERSION.b());
+                                dev.jkbuild.cli.theme.JkDarkTheme.COORD_VERSION.b(),
+                                dev.jkbuild.cli.theme.JkDarkTheme.NORMAL_RED.r(),
+                                dev.jkbuild.cli.theme.JkDarkTheme.NORMAL_RED.g(),
+                                dev.jkbuild.cli.theme.JkDarkTheme.NORMAL_RED.b(),
+                                dev.jkbuild.cli.theme.JkDarkTheme.BRIGHT_BLACK.r(),
+                                dev.jkbuild.cli.theme.JkDarkTheme.BRIGHT_BLACK.g(),
+                                dev.jkbuild.cli.theme.JkDarkTheme.BRIGHT_BLACK.b());
                     LockOrchestrator orchestrator = new LockOrchestrator(repos)
                             .withDiagnosticPalette(diagnosticPalette);
                     // Wrap the caller's observer so it also drives ctx.label/progress
@@ -573,7 +579,13 @@ public final class LockCommand implements CliCommand {
                                 dev.jkbuild.cli.theme.JkDarkTheme.BRIGHT_CYAN.b(),
                                 dev.jkbuild.cli.theme.JkDarkTheme.COORD_VERSION.r(),
                                 dev.jkbuild.cli.theme.JkDarkTheme.COORD_VERSION.g(),
-                                dev.jkbuild.cli.theme.JkDarkTheme.COORD_VERSION.b());
+                                dev.jkbuild.cli.theme.JkDarkTheme.COORD_VERSION.b(),
+                                dev.jkbuild.cli.theme.JkDarkTheme.NORMAL_RED.r(),
+                                dev.jkbuild.cli.theme.JkDarkTheme.NORMAL_RED.g(),
+                                dev.jkbuild.cli.theme.JkDarkTheme.NORMAL_RED.b(),
+                                dev.jkbuild.cli.theme.JkDarkTheme.BRIGHT_BLACK.r(),
+                                dev.jkbuild.cli.theme.JkDarkTheme.BRIGHT_BLACK.g(),
+                                dev.jkbuild.cli.theme.JkDarkTheme.BRIGHT_BLACK.b());
                     LockOrchestrator orchestrator = new LockOrchestrator(repos)
                             .withDiagnosticPalette(diagnosticPalette);
                     ResolveObserver observer = new ResolveObserver() {

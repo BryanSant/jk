@@ -66,7 +66,7 @@ public final class GoalWedge {
     }
 
     /**
-     * Settled failure: {@code ‼ Build ▶ Failed to build <tail>} — "Failed" in red, then "to
+     * Settled failure: {@code ✘ Build ▶ Failed to build <tail>} — "Failed" in red, then "to
      * &lt;goal&gt;" (the goal name lower-cased: build, test, …) in the default color; tail pre-styled
      * by the caller.
      */
@@ -87,7 +87,7 @@ public final class GoalWedge {
     }
 
     /**
-     * Settled cancellation: {@code ‼ Build Canceled by user <tail>}. Reuses the failed-build chrome —
+     * Settled cancellation: {@code ✘ Build Canceled by user <tail>}. Reuses the failed-build chrome —
      * the same red chip (white on red) and cap as {@link #failureLine} — but reads "Canceled" (in
      * red) "by user"; {@code tail} (the {@code "took Xs"} suffix) is pre-styled by the caller.
      */

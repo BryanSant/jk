@@ -2,6 +2,8 @@
 package dev.jkbuild.command;
 
 import dev.jkbuild.cli.GlobalOptions;
+import dev.jkbuild.cli.theme.Theme;
+import dev.jkbuild.cli.tui.Glyphs;
 import dev.jkbuild.jdk.JdkHit;
 import dev.jkbuild.jdk.JdkRegistry;
 import dev.jkbuild.jdk.JdkSelector;
@@ -69,7 +71,10 @@ public final class JdkPinCommand implements CliCommand {
         }
         Files.writeString(projectDir.resolve(".jdk-version"), pin + "\n", StandardCharsets.UTF_8);
         dev.jkbuild.jdk.JdkAccessLedger.atDefaultPath().touch(pin, "pin");
-        System.out.println("Pinned project to " + pin);
+        Theme t = Theme.active();
+        System.out.println(Theme.colorize(Glyphs.CHECK, t.success())
+                + " Pinned project to "
+                + Theme.colorize(pin, t.focused()));
         return 0;
     }
 

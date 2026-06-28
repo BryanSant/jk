@@ -3,6 +3,7 @@ package dev.jkbuild.command;
 
 import dev.jkbuild.compat.BuildTool;
 import dev.jkbuild.compat.InstalledTool;
+import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.discovery.SymlinkProvisioner;
 import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Invocation;
@@ -48,15 +49,18 @@ public final class DoctorCommand implements CliCommand {
         Path root = toolsDir != null ? toolsDir : JkDirs.cache().resolve("tools");
 
         int healthy = 0, pruned = 0, verified = 0;
+        Theme t = Theme.active();
         for (BuildTool tool : BuildTool.values()) {
             for (InstalledTool installed : listIncludingBrokenLinks(root, tool)) {
                 Path home = installed.home();
-                String label = tool.slug() + " " + installed.version();
+                String toolName = Theme.colorize(tool.slug(), t.cyan());
+                String label = toolName + " " + installed.version();
                 if (SymlinkProvisioner.isBrokenLink(home)) {
                     String wasPointingAt = readlinkSafe(home);
                     SymlinkProvisioner.unlink(home);
                     pruned++;
-                    System.out.println("pruned: " + label + " (link target missing: " + wasPointingAt + ")");
+                    System.out.println(Theme.colorize("pruned:  ", t.warning()) + " " + label
+                            + " (link target missing: " + Theme.colorize(wasPointingAt, t.path()) + ")");
                     continue;
                 }
                 if (Files.isSymbolicLink(home) && verifyLinked) {
@@ -64,20 +68,23 @@ public final class DoctorCommand implements CliCommand {
                     Path marker = root.resolve(tool.slug()).resolve(installed.version() + ".fingerprint");
                     Files.writeString(marker, fingerprint);
                     verified++;
-                    System.out.println("verified: " + label + " (sha256-tree=" + fingerprint.substring(0, 12) + "…)");
+                    System.out.println(Theme.colorize("verified:", t.completedStep()) + " " + label
+                            + " (sha256-tree=" + fingerprint.substring(0, 12) + "…)");
                 } else if (Files.isSymbolicLink(home)) {
-                    System.out.println("linked:   " + label + " → " + readlinkSafe(home));
+                    System.out.println("linked:   " + label
+                            + " " + Theme.colorize("→", t.darkGray()) + " "
+                            + Theme.colorize(readlinkSafe(home), t.path()));
                 } else {
-                    System.out.println("ok:       " + label);
+                    System.out.println(Theme.colorize("ok:      ", t.completedStep()) + " " + label);
                 }
                 healthy++;
             }
         }
-        System.out.println("---");
-        System.out.println(healthy
+        System.out.println(Theme.colorize("---", t.darkGray()));
+        System.out.println(Theme.colorize(String.valueOf(healthy), t.focused())
                 + " healthy"
-                + (pruned > 0 ? ", " + pruned + " pruned" : "")
-                + (verified > 0 ? ", " + verified + " fingerprinted" : ""));
+                + (pruned > 0 ? ", " + Theme.colorize(String.valueOf(pruned), t.focused()) + " pruned" : "")
+                + (verified > 0 ? ", " + Theme.colorize(String.valueOf(verified), t.focused()) + " fingerprinted" : ""));
         return 0;
     }
 

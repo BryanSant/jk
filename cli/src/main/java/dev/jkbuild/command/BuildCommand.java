@@ -510,7 +510,7 @@ public final class BuildCommand implements CliCommand {
             exit = ok ? 0 : exitCodeFor(pm.goal());
         } catch (RuntimeException e) {
             synchronized (buf) {
-                buf.add("  ✗ " + (e.getMessage() == null ? e.toString() : e.getMessage()));
+                buf.add("  " + Theme.colorize(Glyphs.CROSS, Theme.active().error()) + " " + (e.getMessage() == null ? e.toString() : e.getMessage()));
             }
             ok = false;
             exit = 1;
@@ -565,7 +565,7 @@ public final class BuildCommand implements CliCommand {
                     false,
                     1,
                     (System.nanoTime() - t0) / 1_000_000,
-                    List.of("  ✗ " + (e.getMessage() == null ? e.toString() : e.getMessage())));
+                    List.of("  " + Theme.colorize(Glyphs.CROSS, Theme.active().error()) + " " + (e.getMessage() == null ? e.toString() : e.getMessage())));
         }
     }
 
@@ -653,8 +653,9 @@ public final class BuildCommand implements CliCommand {
             for (int i = 0; i < sorted.size(); i++) {
                 Path moduleDir = sorted.get(i);
                 System.out.println();
+                String sepGlyph = Theme.colorize("══", Theme.active().darkGray());
                 System.out.println(
-                        "══ " + workspaceRoot.relativize(moduleDir) + " (" + (i + 1) + "/" + sorted.size() + ") ══");
+                        sepGlyph + " " + workspaceRoot.relativize(moduleDir) + " (" + (i + 1) + "/" + sorted.size() + ") " + sepGlyph);
                 int exit = runForDir(moduleDir);
                 if (exit != 0) {
                     System.err.println(

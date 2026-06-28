@@ -129,7 +129,7 @@ Colors for various categories of text content.
 | `bright-text` | `brightWhite()` | `#ECEFF1` | Emphasis without bold (e.g. chip inner text) |
 | `muted-text` | `normalGray()` | `#C5CAE9` | De-emphasized body text adjacent to bright labels |
 | `path` | `path()` | `#969DD4` | File system paths |
-| `shell` | *(inline)* | `#FF9800` | Shell commands and command-lines (e.g. `jk run` output) |
+| `shell` | `shell()` | `#FF9800` | Shell commands and command-lines (e.g. `jk run` output) |
 | `link` | `cyan()` | `#00BCD4` | JDK identifiers, URLs, and similar reference text |
 
 ### 2.6 Wizard Step Colors

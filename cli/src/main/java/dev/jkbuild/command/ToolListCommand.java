@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
@@ -55,12 +56,14 @@ public final class ToolListCommand implements CliCommand {
             return 0;
         }
         envs.sort(Comparator.comparing(p -> p.getFileName().toString()));
+        Theme t = Theme.active();
         for (Path envDir : envs) {
             String bin = envDir.getFileName().toString();
             String coord = readCoord(envDir.resolve("env.json")).orElse("(unknown coord)");
             Path launcher = binDir.resolve(bin);
-            System.out.printf("%-24s %s%n", bin, coord);
-            if (Files.exists(launcher)) System.out.printf("%-24s → %s%n", "", launcher);
+            System.out.printf("%-24s %s%n", Theme.colorize(bin, t.cyan()), coord);
+            if (Files.exists(launcher)) System.out.printf("%-24s %s %s%n",
+                    "", Theme.colorize("→", t.darkGray()), Theme.colorize(launcher.toString(), t.path()));
         }
         return 0;
     }

@@ -80,7 +80,8 @@ public record ConsoleSpec(
     /** Render a warning diagnostic for the console, per its {@code code}. */
     public static String renderWarning(GoalResult.Diagnostic d) {
         if (isCompilerCode(d.code())) return compilerWarning(d.phase(), d.message());
-        return "warn[" + d.phase() + "]: " + d.message();
+        return Theme.colorize(Glyphs.BANG + " Warning", Theme.active().warning())
+                + " [" + d.phase() + "]: " + d.message();
     }
 
     /**
@@ -88,7 +89,7 @@ public record ConsoleSpec(
      * block colorized like an error (relative paths, etc.).
      */
     public static String compilerWarning(String phase, String message) {
-        return Theme.colorize(Glyphs.CROSS + " Warning", Theme.active().warning())
+        return Theme.colorize(Glyphs.BANG + " Warning", Theme.active().warning())
                 + " ["
                 + phase
                 + "]:"

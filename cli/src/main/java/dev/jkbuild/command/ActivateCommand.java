@@ -112,15 +112,20 @@ public final class ActivateCommand implements CliCommand {
             result = wizard.run(terminal);
         }
         if (result.isEmpty() || "no".equals(result.get().get("modify"))) {
+            Theme t = Theme.active();
             System.out.println(
-                    "Skipped — paste this into your " + rcDisplay + " when you're ready:\n  " + activationLine);
+                    Theme.colorize(Glyphs.BANG, t.warning())
+                            + " Skipped — paste this into your "
+                            + rcDisplay
+                            + " when you're ready:\n  "
+                            + Theme.colorize(activationLine, t.shell()));
             return 0;
         }
         appendActivationLine(rcFile, activationLine);
         System.out.println(Theme.colorize(Glyphs.CHECK, Theme.active().completedStep())
                 + " appended jk activation to "
                 + Theme.colorize(rcDisplay, Theme.active().focused()));
-        System.out.println("Open a new shell (or " + sourceHint(shell, rcDisplay) + ") to pick up the change.");
+        System.out.println("Open a new shell (or " + sourceHint(shell, rcDisplay, Theme.active()) + ") to pick up the change.");
         return 0;
     }
 
@@ -136,11 +141,11 @@ public final class ActivateCommand implements CliCommand {
                     rcFile, block, StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.WRITE);
     }
 
-    private static String sourceHint(Shell shell, String rcDisplay) {
+    private static String sourceHint(Shell shell, String rcDisplay, Theme t) {
         return switch (shell.name()) {
-            case "fish" -> "run `source " + rcDisplay + "`";
-            case "pwsh" -> "dot-source " + rcDisplay;
-            default -> "run `source " + rcDisplay + "`";
+            case "fish" -> "run " + Theme.colorize("source " + rcDisplay, t.shell());
+            case "pwsh" -> "dot-source " + Theme.colorize(rcDisplay, t.shell());
+            default -> "run " + Theme.colorize("source " + rcDisplay, t.shell());
         };
     }
 
