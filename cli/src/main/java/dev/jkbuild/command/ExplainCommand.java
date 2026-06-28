@@ -136,12 +136,12 @@ public final class ExplainCommand implements CliCommand {
             etaMillis = 0; // never fail explain over the estimate
         }
 
-        // Header: a dark royal blue (#0F4786) " - Build Plan " chip, capped by a matching ▶
+        // Header: a dark royal blue (#0F4786) " ≡ Build Plan " chip, capped by a matching ▶
         // segment arrow when nerdfont, then the build-time estimate (yellow).
         String header = nerdfont
-                ? Theme.colorize(" - Build Plan ", t.planBadge())
+                ? Theme.colorize(" ≡ Build Plan ", t.planBadge())
                         + Theme.colorize(dev.jkbuild.cli.tui.Glyphs.SEGMENT_END_NERD, t.bright(t.planBadgeColor()))
-                : Theme.colorize(" - Build Plan ", t.planBadge());
+                : Theme.colorize(" ≡ Build Plan ", t.planBadge());
         String estimate = etaMillis == 0
                 ? "Build time " + Theme.colorize("unknown", t.warning())
                 : "Build time estimate " + Theme.colorize("~" + fmtDuration(etaMillis), t.warning());

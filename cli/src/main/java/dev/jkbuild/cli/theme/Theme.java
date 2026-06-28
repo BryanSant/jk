@@ -54,7 +54,7 @@ public interface Theme {
     /** Medium gray — the shared badge/chip background (and its powerline caps). */
     AttributedStyle gray();
 
-    /** Active rail / step bullet — the highlight accent (Jk Dark accent). */
+    /** Active rail / step bullet — bright cyan highlight. */
     AttributedStyle activeStep();
 
     AttributedStyle completedStep();

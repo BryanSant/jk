@@ -101,14 +101,13 @@ public final class TreeCommand implements CliCommand {
         // Uses the filled-circle bullet (●) consistent with the root-node glyph.
         boolean nerdfont = dev.jkbuild.config.GlobalConfig.nerdfont();
         Theme t = Theme.active();
-        String title = " ● Dependencies Tree ";
+        String title = " ≡ Dependencies Tree ";
         String header = nerdfont
                 ? Theme.colorize(title, t.goalChip())
                         + Theme.colorize(dev.jkbuild.cli.tui.Glyphs.SEGMENT_END_NERD, t.bright(t.planBadgeColor()))
                 : Theme.colorize(title, t.goalChip());
         System.out.println();
         System.out.println(header);
-        System.out.println();
         // Composite-aware: walks path deps' own trees too (anchored at `dir`).
         String rendered = DependencyTree.render(project, lock, dir, max, styling(nerdfont), flatten, scopes, stack);
         // Split root coord from tree body so we can insert a " │" separator between them.
@@ -208,17 +207,7 @@ public final class TreeCommand implements CliCommand {
         // Scope section badge: a rounded pill (Nerd Font) or space-padded chip.
         UnaryOperator<String> scopeBadge = s -> dev.jkbuild.cli.tui.Badge.pill(s, nerdfont);
         Theme t = Theme.active();
-        // Badge background color — matches the scope pill caps.
-        dev.jkbuild.cli.theme.Rgb badgeBg = dev.jkbuild.cli.theme.Rgb.hex(0x90A4AE);
-        // Root-line: pill-capped coord with bold black text on gray background (nerdfont),
-        // or plain bold coord (non-nerdfont fallback).
-        org.jline.utils.AttributedStyle rootCoordStyle =
-                t.withBackground(org.jline.utils.AttributedStyle.DEFAULT.bold().foreground(0, 0, 0), badgeBg);
-        UnaryOperator<String> rootLine = nerdfont
-                ? gav -> Theme.colorize(dev.jkbuild.cli.tui.Glyphs.PILL_LEFT_NERD, t.gray())
-                        + Theme.colorize(gav, rootCoordStyle)
-                        + Theme.colorize(dev.jkbuild.cli.tui.Glyphs.PILL_RIGHT_NERD, t.gray())
-                : gav -> " " + boldCoord(gav);
+        // Root-line: ● bullet (dark-gray) + bold coord colors — no pill or background.
         return new DependencyTree.Styling(
                 s -> Theme.colorize(s, t.darkGray()),
                 s -> Theme.colorize(s, Coords.groupStyle()),
@@ -227,8 +216,7 @@ public final class TreeCommand implements CliCommand {
                 // ⎋ back-reference rows: the whole entry in bright-black (= darkGray).
                 s -> Theme.colorize(s, t.darkGray()),
                 scopeBadge,
-                TreeCommand::boldCoord,
-                rootLine);
+                TreeCommand::boldCoord);
     }
 
     /**

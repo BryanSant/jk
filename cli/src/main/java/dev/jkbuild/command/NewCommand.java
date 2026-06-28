@@ -649,25 +649,17 @@ public final class NewCommand implements CliCommand {
     private static void emitProjectExistsError(String name, boolean isModule, boolean isInit, Terminal terminal) {
         var verb = isInit ? "initialize" : "create";
         var noun = isModule ? "module" : "project";
-        var body = Theme.active().normalGray();
+        String chipVerb = isModule ? "New Module" : (isInit ? "Init" : "New Project");
+        String nameStyled = Theme.colorize(name, Theme.active().brightCyan().bold());
+        String message = "Failed to " + verb + " " + noun + " " + nameStyled + ". Project already exists.";
+        boolean nerdfont = dev.jkbuild.config.GlobalConfig.nerdfont();
+        String line = dev.jkbuild.cli.tui.GoalWedge.failureLine(chipVerb, nerdfont, message);
         if (terminal != null) {
             var writer = terminal.writer();
-            writer.println();
-            writer.println(new AttributedStringBuilder()
-                    .append(dev.jkbuild.cli.tui.Glyphs.CROSS, Theme.active().error())
-                    .append(" Failed to " + verb + " " + noun + " ", body)
-                    .append(name, Theme.active().cyan())
-                    .append(". Project already exists.", body)
-                    .toAttributedString()
-                    .toAnsi(terminal));
+            writer.println(line);
             writer.flush();
         } else {
-            System.err.println();
-            System.err.println(Theme.colorize(
-                            dev.jkbuild.cli.tui.Glyphs.CROSS, Theme.active().error())
-                    + Theme.colorize(" Failed to " + verb + " " + noun + " ", body)
-                    + Theme.colorize(name, Theme.active().cyan())
-                    + Theme.colorize(". Project already exists.", body));
+            System.err.println(line);
         }
     }
 
@@ -960,8 +952,7 @@ public final class NewCommand implements CliCommand {
                 .defaultChoice(defaultJdkId);
 
         String wizardSubtitle = module
-                ? "Create a new module for "
-                        + Theme.colorize(parent.displayName(), Theme.active().brightCyan())
+                ? "Create a new module for " + parent.displayName()
                 : isInit ? "Initialize this project" : "Create a new project";
         return Wizard.builder()
                 .verb(module ? "New Module" : isInit ? "Init" : "New Project")
@@ -1113,28 +1104,7 @@ public final class NewCommand implements CliCommand {
                     .toAttributedString()
                     .toAnsi(terminal));
         }
-        var verb = isInit ? "Initialized" : "Created";
-        var noun = module != null ? "module" : "project";
-        writer.println();
-        writer.println(new AttributedStringBuilder()
-                .append(
-                        dev.jkbuild.cli.tui.Glyphs.CHECK + " " + verb + " new " + noun + " ",
-                        Theme.active().success())
-                .append(inputs.name(), Theme.active().cyan())
-                .append(".", Theme.active().success())
-                .toAttributedString()
-                .toAnsi(terminal));
-        writer.println();
-        writer.println(new AttributedStringBuilder()
-                .append("Next:", Theme.active().focused())
-                .toAttributedString()
-                .toAnsi(terminal));
-        for (var line : nextSteps(inputs)) {
-            writer.println(new AttributedStringBuilder()
-                    .append(line, Theme.active().warning())
-                    .toAttributedString()
-                    .toAnsi(terminal));
-        }
+        writer.println(successLine(inputs, module, isInit));
         writer.flush();
     }
 
@@ -1142,19 +1112,19 @@ public final class NewCommand implements CliCommand {
         if (module != null) {
             System.out.println("Registered module '" + module.rel() + "' in workspace " + module.root());
         }
-        var verb = isInit ? "Initialized" : "Created";
-        var noun = module != null ? "module" : "project";
-        System.out.println();
-        System.out.println(dev.jkbuild.cli.tui.Glyphs.CHECK + " " + verb + " new " + noun + " " + inputs.name() + ".");
-        System.out.println();
-        System.out.println("Next:");
-        for (var line : nextSteps(inputs)) {
-            System.out.println(line);
-        }
+        System.out.println(successLine(inputs, module, isInit));
     }
 
-    private static List<String> nextSteps(NewInputs inputs) {
-        return List.of("cd " + inputs.directory().toAbsolutePath(), inputs.isRunnable() ? "jk run" : "jk build");
+    private static String successLine(NewInputs inputs, Module module, boolean isInit) {
+        String chipVerb = module != null ? "New Module" : (isInit ? "Init" : "New Project");
+        String noun = module != null ? "module" : "project";
+        String action = isInit ? "Initialized" : "Created new";
+        String nameStyled = Theme.colorize(inputs.name(),
+                Theme.active().brightCyan().bold());
+        String message = action + " " + noun + " " + nameStyled;
+        boolean nerdfont = dev.jkbuild.config.GlobalConfig.nerdfont();
+        return dev.jkbuild.cli.tui.GoalWedge.chipLine(
+                dev.jkbuild.cli.tui.Glyphs.CHECK, chipVerb, nerdfont, message);
     }
 
     // Suppress unused warning for the import we keep for clarity.

@@ -382,10 +382,19 @@ public final class Wizard {
         Theme t = Theme.active();
         if (!verb.isEmpty()) {
             boolean nf = GlobalConfig.nerdfont();
-            String chipStr = GoalWedge.chip("●", verb, t.goalChip());
-            String capStr = GoalWedge.cap(t.planBadgeColor(), nf);
-            String sep = nf ? " " : "  ";
-            return chipStr + capStr + sep + subtitle;
+            String chipStr = GoalWedge.chip("≡", verb, t.goalChip());
+            if (nf) {
+                // Dark-gray band: BRIGHT_BLACK (#546E7A) bg, black text, matching caps.
+                dev.jkbuild.cli.theme.Rgb dg = dev.jkbuild.cli.theme.Rgb.hex(0x90A4AE); // GRAY — matches jk tree scope badges
+                String cap1 = Theme.colorize(Glyphs.SEGMENT_END_NERD,
+                        t.withBackground(t.bright(t.planBadgeColor()), dg));
+                String bgBlack = "\033[48;2;" + dg.r() + ";" + dg.g() + ";" + dg.b()
+                        + ";38;2;0;0;0m";
+                String cap2 = Theme.colorize(Glyphs.SEGMENT_END_NERD, t.gray()); // GRAY matches band bg
+                // Re-apply bg before the trailing space — subtitle may end with a reset.
+                return chipStr + cap1 + bgBlack + " " + subtitle + bgBlack + " " + Ansi.RESET + cap2;
+            }
+            return chipStr + "  " + subtitle;
         }
         // Legacy indigo-badge header.
         String text = title.isEmpty() ? "Wizard" : title;

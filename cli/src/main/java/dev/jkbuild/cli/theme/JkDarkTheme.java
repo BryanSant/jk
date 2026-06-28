@@ -140,7 +140,7 @@ public final class JkDarkTheme implements Theme {
 
     @Override
     public AttributedStyle activeStep() {
-        return withColor(AttributedStyle.DEFAULT, ACCENT);
+        return withColor(AttributedStyle.DEFAULT, BRIGHT_CYAN);
     }
 
     @Override
@@ -170,7 +170,7 @@ public final class JkDarkTheme implements Theme {
 
     @Override
     public AttributedStyle completedPrompt() {
-        return darkGray();
+        return gray();
     }
 
     @Override
