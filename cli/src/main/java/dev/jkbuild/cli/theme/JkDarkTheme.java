@@ -341,6 +341,11 @@ public final class JkDarkTheme implements Theme {
         return withColor(AttributedStyle.DEFAULT, PATH);
     }
 
+    @Override
+    public AttributedStyle shell() {
+        return withColor(AttributedStyle.DEFAULT, Rgb.hex(0xFF9800)); // Material Orange 500
+    }
+
     // --- syntax-highlight styles -----------------------------------------
 
     @Override

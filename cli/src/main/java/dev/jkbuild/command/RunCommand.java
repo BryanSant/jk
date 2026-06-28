@@ -248,7 +248,7 @@ public final class RunCommand implements CliCommand {
             javaCmd = (hasDeps ? "java -cp … -jar " : "java -jar ") + jarDisplay;
         }
         return Theme.colorize(jdkLeaf, t.cyan()) + ": "
-                + Theme.colorize(javaCmd, t.bright(dev.jkbuild.cli.theme.Rgb.hex(0xFF9800)));
+                + Theme.colorize(javaCmd, t.shell());
     }
 
     /**

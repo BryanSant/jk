@@ -189,6 +189,9 @@ public interface Theme {
     /** Filesystem paths (relative or absolute) shown to the user — periwinkle. */
     AttributedStyle path();
 
+    /** Shell commands and command-lines shown to the user — orange ({@code #FF9800}). */
+    AttributedStyle shell();
+
     // --- syntax-highlight styles (compiler-diagnostic source snippets) ----
     // GitHub dark-theme palette, so highlighted snippets read like github.com.
 
