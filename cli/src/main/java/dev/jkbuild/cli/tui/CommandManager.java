@@ -72,6 +72,12 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
      * [global].nerdfont — gates the powerline pill header. Package-private: tests set it directly.
      */
     boolean nerdfont = GlobalConfig.nerdfont();
+    /**
+     * When set and {@code denominator == 0}, the header shows this text instead of the progress
+     * bar — used by {@code jk lock} to display "Resolving dependencies…" during the PubGrub solve
+     * phase before the total artifact count is known.
+     */
+    private volatile String solveLabel = "";
 
     private final AttributedStyle[] frameColors = Spinner.buildGradient(FRAMES.length);
     private final ProgressBar bar = new ProgressBar();
@@ -238,6 +244,15 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
         synchronized (lock) {
             this.etaEstimateMs = Math.max(0, totalMillis);
         }
+    }
+
+    /**
+     * Set a text label shown in the header instead of the progress bar when the denominator is
+     * still 0 (pre-solve phase). Once {@link #progress} is called with a positive denominator the
+     * bar takes over automatically; pass {@code ""} to clear explicitly.
+     */
+    public void solveLabel(String label) {
+        this.solveLabel = label == null ? "" : label;
     }
 
     /** Set the aggregate progress numerator/denominator for the bar. */
@@ -632,35 +647,41 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
         AttributedStyle dim = Theme.active().darkGray();
         String barStr = bar.render(numerator, denominator);
         StringBuilder h = new StringBuilder();
+        String sl = solveLabel;
+        boolean phase1 = denominator == 0 && !sl.isEmpty();
         if (nerdfont) {
             // The spinner + name share the goal chip: white text on PLAN_BLUE.
-            // The chip is closed by a U+E0B0 cap whose foreground is PLAN_BLUE (so
-            // its solid body continues the chip) and whose background tracks the bar's
-            // first cell color — so the chip tapers into whatever block sits immediately
-            // to its right and re-tints live as the bar fills. Only the spinner glyph
-            // cycles — no color animation in the pill. A leading space (on the pill
-            // background) gives the region its one-column indent while extending the
-            // pill to the left edge.
             AttributedStyle chip = Theme.active().goalChip();
-            AttributedStyle cap = Theme.active()
-                    .withBackground(
-                            Theme.active().bright(Theme.active().planBadgeColor()),
-                            bar.leadColor(numerator, denominator));
             h.append(Theme.colorize(" ", chip))
                     .append(Theme.colorize(FRAMES[frame], chip))
                     .append(Theme.colorize(" ", chip))
                     .append(Theme.colorize(name, chip))
-                    .append(Theme.colorize(" ", chip))
-                    .append(Theme.colorize(Glyphs.SEGMENT_END_NERD, cap))
-                    .append(barStr);
+                    .append(Theme.colorize(" ", chip));
+            if (phase1) {
+                // Phase 1 (spinner label): U+E0B0 cap tapering to terminal bg, white text.
+                AttributedStyle phase1Cap = Theme.active().bright(Theme.active().planBadgeColor());
+                h.append(Theme.colorize(Glyphs.SEGMENT_END_NERD, phase1Cap))
+                        .append(Theme.colorize(sl, Theme.active().brightWhite()));
+            } else {
+                // Phase 2 (fetching): cap tapers into the bar.
+                AttributedStyle cap = Theme.active()
+                        .withBackground(
+                                Theme.active().bright(Theme.active().planBadgeColor()),
+                                bar.leadColor(numerator, denominator));
+                h.append(Theme.colorize(Glyphs.SEGMENT_END_NERD, cap)).append(barStr);
+            }
         } else {
             // Plain leading space to match the region's one-column indent.
             h.append(' ')
                     .append(Theme.colorize(FRAMES[frame], frameColors[frame]))
                     .append(' ')
                     .append(Theme.colorize(name, Theme.active().focused()))
-                    .append(' ')
-                    .append(barStr);
+                    .append(' ');
+            if (phase1) {
+                h.append(Theme.colorize(sl, Theme.active().brightWhite()));
+            } else {
+                h.append(barStr);
+            }
         }
         // After the bar's percent: a bright-black middle dot, then the build clock in
         // yellow. With a useful ETA (learned timings) the clock counts down from the

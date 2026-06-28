@@ -71,6 +71,8 @@ public final class JkDarkTheme implements Theme {
     public static final Rgb BRIGHT_MAGENTA = Rgb.hex(0xE040FB); // Purple A200
     public static final Rgb BRIGHT_CYAN = Rgb.hex(0x18FFFF); // Cyan A200
     public static final Rgb BRIGHT_WHITE = Rgb.hex(0xECEFF1); // Blue Grey 50
+    /** {@code coordVersion()} — midpoint between {@link #BRIGHT_CYAN} and {@link #BRIGHT_WHITE}. */
+    public static final Rgb COORD_VERSION = Rgb.hex(0x82F7F8);
 
     // --- gradients --------------------------------------------------------
     // Named gradients, each independently tunable (all from the Jk Dark scheme):
@@ -228,7 +230,7 @@ public final class JkDarkTheme implements Theme {
 
     @Override
     public AttributedStyle coordVersion() {
-        return withColor(AttributedStyle.DEFAULT, BRIGHT_WHITE);
+        return withColor(AttributedStyle.DEFAULT, COORD_VERSION);
     }
 
     @Override

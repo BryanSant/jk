@@ -240,35 +240,26 @@ public final class LockCommand implements CliCommand {
 
         Path lockFile = dir.resolve("jk.lock");
 
-        // Estimate this module's scope and add it to the global denominator.
-        AtomicInteger moduleTotal = new AtomicInteger(scopeEstimate(effective, lockFile));
-        globalTotal.addAndGet(moduleTotal.get());
-        view.progress(globalLocked.get(), globalTotal.get());
+        // Lock is purely resolution (version constraints) — artifact fetching
+        // happens in jk sync/build, not here. There's no meaningful "X of N"
+        // count to show, so we display only a spinner + label; denominator stays
+        // 0 so no progress bar is ever rendered.
+        AtomicInteger moduleTotal = new AtomicInteger(0);
+        view.solveLabel("Resolving dependencies…");
 
-        // Observer: feeds per-package completions + updates the bar.
         ResolveObserver observer = new ResolveObserver() {
             @Override
             public void onTotal(int total) {
-                // Adjust global denominator by the delta from our estimate.
-                int delta = total - moduleTotal.getAndSet(total);
-                if (delta != 0) globalTotal.addAndGet(delta);
-                view.progress(globalLocked.get(), Math.max(globalTotal.get(), globalLocked.get()));
+                moduleTotal.set(total);
+                // Update the label to show how many packages were resolved.
+                view.solveLabel("Resolved " + total + " package" + (total == 1 ? "" : "s") + "…");
             }
 
             @Override
             public void onPackage(String module, String version) {
-                // Update active-row label with the coord just resolved.
+                // Show the most recently resolved coord in the active row.
                 view.phaseMessage(coord, "lock", Coords.module(module, version));
-                int gn = globalLocked.incrementAndGet();
-                int gt = Math.max(globalTotal.get(), gn);
-                view.progress(gn, gt);
-                // Add to the completion tail (newest-first, capped by MAX_COMPLETIONS).
-                String line = lockCompletionLine(gn, gt, module, version);
-                if (view.animating()) {
-                    view.addCompletion(line);
-                } else {
-                    view.writeAbove("    " + line);
-                }
+                globalLocked.incrementAndGet();
             }
         };
 
@@ -408,7 +399,19 @@ public final class LockCommand implements CliCommand {
                         throw new RuntimeException(e);
                     }
                     RepoGroup repos = prep.repos();
-                    LockOrchestrator orchestrator = new LockOrchestrator(repos);
+                    dev.jkbuild.resolver.pubgrub.Diagnostics.Palette diagnosticPalette =
+                            dev.jkbuild.resolver.pubgrub.Diagnostics.Palette.fromRgb(
+                                dev.jkbuild.cli.theme.JkDarkTheme.NORMAL_CYAN.r(),
+                                dev.jkbuild.cli.theme.JkDarkTheme.NORMAL_CYAN.g(),
+                                dev.jkbuild.cli.theme.JkDarkTheme.NORMAL_CYAN.b(),
+                                dev.jkbuild.cli.theme.JkDarkTheme.BRIGHT_CYAN.r(),
+                                dev.jkbuild.cli.theme.JkDarkTheme.BRIGHT_CYAN.g(),
+                                dev.jkbuild.cli.theme.JkDarkTheme.BRIGHT_CYAN.b(),
+                                dev.jkbuild.cli.theme.JkDarkTheme.COORD_VERSION.r(),
+                                dev.jkbuild.cli.theme.JkDarkTheme.COORD_VERSION.g(),
+                                dev.jkbuild.cli.theme.JkDarkTheme.COORD_VERSION.b());
+                    LockOrchestrator orchestrator = new LockOrchestrator(repos)
+                            .withDiagnosticPalette(diagnosticPalette);
                     // Wrap the caller's observer so it also drives ctx.label/progress
                     // (needed for the bar when running under GoalConsole).
                     ResolveObserver wrappedObserver = new ResolveObserver() {
@@ -576,7 +579,19 @@ public final class LockCommand implements CliCommand {
                         throw new RuntimeException(e);
                     }
                     RepoGroup repos = prep.repos();
-                    LockOrchestrator orchestrator = new LockOrchestrator(repos);
+                    dev.jkbuild.resolver.pubgrub.Diagnostics.Palette diagnosticPalette =
+                            dev.jkbuild.resolver.pubgrub.Diagnostics.Palette.fromRgb(
+                                dev.jkbuild.cli.theme.JkDarkTheme.NORMAL_CYAN.r(),
+                                dev.jkbuild.cli.theme.JkDarkTheme.NORMAL_CYAN.g(),
+                                dev.jkbuild.cli.theme.JkDarkTheme.NORMAL_CYAN.b(),
+                                dev.jkbuild.cli.theme.JkDarkTheme.BRIGHT_CYAN.r(),
+                                dev.jkbuild.cli.theme.JkDarkTheme.BRIGHT_CYAN.g(),
+                                dev.jkbuild.cli.theme.JkDarkTheme.BRIGHT_CYAN.b(),
+                                dev.jkbuild.cli.theme.JkDarkTheme.COORD_VERSION.r(),
+                                dev.jkbuild.cli.theme.JkDarkTheme.COORD_VERSION.g(),
+                                dev.jkbuild.cli.theme.JkDarkTheme.COORD_VERSION.b());
+                    LockOrchestrator orchestrator = new LockOrchestrator(repos)
+                            .withDiagnosticPalette(diagnosticPalette);
                     ResolveObserver observer = new ResolveObserver() {
                         @Override
                         public void onTotal(int total) {

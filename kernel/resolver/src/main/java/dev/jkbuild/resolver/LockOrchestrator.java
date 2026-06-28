@@ -64,6 +64,7 @@ public final class LockOrchestrator {
 
     private final RepoGroup repos;
     private final Resolver resolverOverride;
+    private dev.jkbuild.resolver.pubgrub.Diagnostics.Palette diagnosticPalette;
 
     public LockOrchestrator(MavenRepo repo) {
         this(RepoGroup.of(repo));
@@ -80,7 +81,26 @@ public final class LockOrchestrator {
         this.resolverOverride = Objects.requireNonNull(resolver, "resolver");
     }
 
-    /** Lock with the project's default feature selection. */
+    /**
+     * Inject a {@link dev.jkbuild.resolver.pubgrub.Diagnostics.Palette} built from the CLI theme
+     * so version colors in conflict messages match the live {@code coordVersion()} color. Returns
+     * {@code this} for chaining.
+     */
+    public LockOrchestrator withDiagnosticPalette(dev.jkbuild.resolver.pubgrub.Diagnostics.Palette palette) {
+        this.diagnosticPalette = palette;
+        return this;
+    }
+
+    private PubGrubResolver buildResolver(
+            dev.jkbuild.repo.RepoGroup repos,
+            java.util.Map<String, String> bomConstraints,
+            java.util.Map<String, String> lockedVersionPrefs) {
+        PubGrubResolver r = new PubGrubResolver(repos, bomConstraints, lockedVersionPrefs);
+        if (diagnosticPalette != null) r.palette = diagnosticPalette;
+        return r;
+    }
+
+        /** Lock with the project's default feature selection. */
     public Lockfile lock(JkBuild project, String jkVersion) throws IOException, InterruptedException {
         return lock(project, jkVersion, List.of(), true, ResolveObserver.NOOP);
     }
@@ -246,7 +266,7 @@ public final class LockOrchestrator {
 
         Resolver resolver = resolverOverride != null
                 ? resolverOverride
-                : new PubGrubResolver(repos, bomConstraints, lockedVersionPrefs);
+                : buildResolver(repos, bomConstraints, lockedVersionPrefs);
         Resolution resolution = resolver.resolve(declared);
         observer.onTotal(resolution.modules().size() + fileDeps.size());
 

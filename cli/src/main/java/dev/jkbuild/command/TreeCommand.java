@@ -97,20 +97,29 @@ public final class TreeCommand implements CliCommand {
         int max = depth != null ? depth : Integer.MAX_VALUE;
 
         // Header: a leading blank line, then a left-flush green powerline chip
-        // " - Dependencies Tree " — white on PLAN_BLUE with a PLAN_BLUE cap.
-        // '-' is not a status glyph, so the chip follows the default blue rule.
+        // " ● Dependencies Tree " — white on PLAN_BLUE with a PLAN_BLUE cap.
+        // Uses the filled-circle bullet (●) consistent with the root-node glyph.
         boolean nerdfont = dev.jkbuild.config.GlobalConfig.nerdfont();
         Theme t = Theme.active();
-        String title = " - Dependencies Tree ";
+        String title = " ● Dependencies Tree ";
         String header = nerdfont
                 ? Theme.colorize(title, t.goalChip())
                         + Theme.colorize(dev.jkbuild.cli.tui.Glyphs.SEGMENT_END_NERD, t.bright(t.planBadgeColor()))
                 : Theme.colorize(title, t.goalChip());
         System.out.println();
         System.out.println(header);
+        System.out.println();
         // Composite-aware: walks path deps' own trees too (anchored at `dir`).
         String rendered = DependencyTree.render(project, lock, dir, max, styling(nerdfont), flatten, scopes, stack);
-        System.out.print(indentBody(rendered));
+        // Split root coord from tree body so we can insert a " │" separator between them.
+        int nl = rendered.indexOf('\n');
+        if (nl >= 0) {
+            System.out.println(rendered.substring(0, nl));
+            System.out.println(" " + Theme.colorize("│", t.darkGray()));
+            System.out.print(indentBody(rendered.substring(nl + 1), false));
+        } else {
+            System.out.print(rendered);
+        }
         if (rendered.contains(DependencyTree.MISSING_SUFFIX)) {
             System.out.println();
             System.out.println("Some dependencies are missing from your local cache. Run "
@@ -169,11 +178,20 @@ public final class TreeCommand implements CliCommand {
      * untouched.
      */
     private static String indentBody(String rendered) {
+        return indentBody(rendered, true);
+    }
+
+    /**
+     * Indents tree body lines by one space. When {@code skipFirst} is true (the full rendered
+     * string including root coord is passed), the first line is left untouched. When false (only
+     * the body after the root coord is passed), every non-empty line gets a leading space.
+     */
+    private static String indentBody(String rendered, boolean skipFirst) {
         String[] lines = rendered.split("\n", -1);
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < lines.length; i++) {
             if (i > 0) sb.append('\n');
-            if (i > 0 && !lines[i].isEmpty()) sb.append(' ');
+            if ((!skipFirst || i > 0) && !lines[i].isEmpty()) sb.append(' ');
             sb.append(lines[i]);
         }
         return sb.toString();
@@ -187,18 +205,30 @@ public final class TreeCommand implements CliCommand {
      * is off.
      */
     private static DependencyTree.Styling styling(boolean nerdfont) {
-        // Scope section badge: a black-on-bright-black chip (a rounded pill with a
-        // Nerd Font, a space-padded chip without) — shared with jk explain's index.
+        // Scope section badge: a rounded pill (Nerd Font) or space-padded chip.
         UnaryOperator<String> scopeBadge = s -> dev.jkbuild.cli.tui.Badge.pill(s, nerdfont);
+        Theme t = Theme.active();
+        // Badge background color — matches the scope pill caps.
+        dev.jkbuild.cli.theme.Rgb badgeBg = dev.jkbuild.cli.theme.Rgb.hex(0x90A4AE);
+        // Root-line: pill-capped coord with bold black text on gray background (nerdfont),
+        // or plain bold coord (non-nerdfont fallback).
+        org.jline.utils.AttributedStyle rootCoordStyle =
+                t.withBackground(org.jline.utils.AttributedStyle.DEFAULT.bold().foreground(0, 0, 0), badgeBg);
+        UnaryOperator<String> rootLine = nerdfont
+                ? gav -> Theme.colorize(dev.jkbuild.cli.tui.Glyphs.PILL_LEFT_NERD, t.gray())
+                        + Theme.colorize(gav, rootCoordStyle)
+                        + Theme.colorize(dev.jkbuild.cli.tui.Glyphs.PILL_RIGHT_NERD, t.gray())
+                : gav -> " " + boldCoord(gav);
         return new DependencyTree.Styling(
-                s -> Theme.colorize(s, Theme.active().darkGray()),
+                s -> Theme.colorize(s, t.darkGray()),
                 s -> Theme.colorize(s, Coords.groupStyle()),
                 s -> Theme.colorize(s, Coords.artifactStyle()),
                 s -> Theme.colorize(s, Coords.versionStyle()),
                 // ⎋ back-reference rows: the whole entry in bright-black (= darkGray).
-                s -> Theme.colorize(s, Theme.active().darkGray()),
+                s -> Theme.colorize(s, t.darkGray()),
                 scopeBadge,
-                TreeCommand::boldCoord);
+                TreeCommand::boldCoord,
+                rootLine);
     }
 
     /**

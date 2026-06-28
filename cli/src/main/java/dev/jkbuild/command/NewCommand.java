@@ -328,7 +328,8 @@ public final class NewCommand implements CliCommand {
                             Optional.ofNullable(System.getProperty("user.home"))
                                     .map(Path::of)
                                     .orElse(null));
-                    var wizard = buildWizard(candidates, groupGuess, parent, defaultJdk.isPresent());
+                    var wizard = buildWizard(candidates, groupGuess, parent, defaultJdk.isPresent(),
+                            directory != null && isCurrentDirArg(directory));
                     var wizardResult = wizard.run(terminal, preset);
                     if (wizardResult.isEmpty()) {
                         // Cancelled via Ctrl-C. Wizard.printCancellation
@@ -843,7 +844,11 @@ public final class NewCommand implements CliCommand {
     }
 
     private static Wizard buildWizard(
-            List<NewJdkCandidate> candidates, String groupGuess, ParentInfo parent, boolean hasDefaultJdk) {
+            List<NewJdkCandidate> candidates,
+            String groupGuess,
+            ParentInfo parent,
+            boolean hasDefaultJdk,
+            boolean isInit) {
         boolean module = parent != null;
         // Modules inherit the parent's group, JDK, and language as defaults; a
         // standalone project guesses the group and defaults to the latest LTS.
@@ -957,9 +962,9 @@ public final class NewCommand implements CliCommand {
         String wizardSubtitle = module
                 ? "Create a new module for "
                         + Theme.colorize(parent.displayName(), Theme.active().brightCyan())
-                : "Create a new project";
+                : isInit ? "Initialize this project" : "Create a new project";
         return Wizard.builder()
-                .verb(module ? "New Module" : "New Project")
+                .verb(module ? "New Module" : isInit ? "Init" : "New Project")
                 .subtitle(wizardSubtitle)
                 .step(WizardStep.InputStep.of("name", module ? "Module name:" : "Project name:")
                         .placeholder("untitled")

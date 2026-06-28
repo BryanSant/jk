@@ -98,7 +98,7 @@ class DiagnosticsTest {
             fail("expected UnsatisfiableException");
         } catch (UnsatisfiableException e) {
             String rendered = Diagnostics.render(e.rootCause());
-            assertThat(rendered).contains("therefore,");
+            assertThat(rendered).contains("Therefore,");
             assertThat(rendered).contains("cannot be resolved");
         } catch (Exception e) {
             fail("expected UnsatisfiableException, got: " + e);

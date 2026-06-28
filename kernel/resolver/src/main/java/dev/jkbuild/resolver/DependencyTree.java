@@ -58,7 +58,23 @@ public final class DependencyTree {
             UnaryOperator<String> version,
             UnaryOperator<String> reference,
             UnaryOperator<String> scopeBadge,
-            UnaryOperator<String> boldCoord) {
+            UnaryOperator<String> boldCoord,
+            UnaryOperator<String> rootLine) {
+
+        /**
+         * Back-compat 7-arg form (no {@code rootLine}): the root line is rendered as {@code " ● coord"}.
+         */
+        public Styling(
+                UnaryOperator<String> rail,
+                UnaryOperator<String> group,
+                UnaryOperator<String> artifact,
+                UnaryOperator<String> version,
+                UnaryOperator<String> reference,
+                UnaryOperator<String> scopeBadge,
+                UnaryOperator<String> boldCoord) {
+            this(rail, group, artifact, version, reference, scopeBadge, boldCoord,
+                    gav -> " " + rail.apply("●") + " " + boldCoord.apply(gav));
+        }
 
         /**
          * Back-compat 6-arg form (no {@code boldCoord}): the root project coordinate renders with the
@@ -188,12 +204,9 @@ public final class DependencyTree {
             List<Scope> scopeOrder,
             boolean stack) {
         StringBuilder out = new StringBuilder();
-        // Root node: a bright-black ● bullet, then the project's group:artifact:version
-        // in bold (via boldCoord, so the project stands out as the tree root).
-        out.append(' ')
-                .append(styling.rail().apply("●"))
-                .append(' ')
-                .append(styling.boldCoord()
+        // Root node: styled via rootLine, which defaults to " ● boldCoord" but
+        // callers (e.g. jk tree) can override to a pill-wrapped form.
+        out.append(styling.rootLine()
                         .apply(project.project().group()
                                 + ":"
                                 + project.project().name()

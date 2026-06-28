@@ -117,7 +117,7 @@ public interface Theme {
     /** Coordinate artifact/name segment — bright cyan (Jk Dark bright cyan {@code #18FFFF}). */
     AttributedStyle coordName();
 
-    /** Coordinate version segment — bright white ({@code #ECEFF1}). */
+    /** Coordinate version segment — midpoint between bright-cyan and white ({@code #82F7F8}). */
     AttributedStyle coordVersion();
 
     /**

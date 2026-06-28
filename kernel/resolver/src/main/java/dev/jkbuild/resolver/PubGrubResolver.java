@@ -34,6 +34,8 @@ public final class PubGrubResolver implements Resolver {
 
     private final PackageSource source;
     private final EffectivePomBuilder pomBuilder;
+    /** Optional palette injected by the CLI so diagnostic colors match the live theme. */
+    dev.jkbuild.resolver.pubgrub.Diagnostics.Palette palette; // package-private for LockOrchestrator
 
     public PubGrubResolver(MavenRepo repo) {
         this(RepoGroup.of(repo));
@@ -88,7 +90,11 @@ public final class PubGrubResolver implements Resolver {
         } catch (UnsatisfiableException e) {
             boolean ansi =
                     System.console() != null && !"dumb".equals(System.getenv("TERM")) && System.getenv("CI") == null;
-            throw new UnsatisfiableException(Diagnostics.render(e.rootCause(), rootDepNames, ansi), e.rootCause());
+            // Use the injected palette (from the CLI theme) when available; fall back to the
+            // built-in DEFAULT which hard-codes the same values as JkDarkTheme.
+            dev.jkbuild.resolver.pubgrub.Diagnostics.Palette palette =
+                    this.palette != null ? this.palette : (ansi ? dev.jkbuild.resolver.pubgrub.Diagnostics.Palette.DEFAULT : dev.jkbuild.resolver.pubgrub.Diagnostics.Palette.PLAIN);
+            throw new UnsatisfiableException(Diagnostics.render(e.rootCause(), palette), e.rootCause());
         }
 
         // Drop the synthetic root from the result and build the per-module dep lists.
