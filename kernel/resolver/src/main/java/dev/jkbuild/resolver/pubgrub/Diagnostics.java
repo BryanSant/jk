@@ -4,7 +4,6 @@ package dev.jkbuild.resolver.pubgrub;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -46,17 +45,12 @@ public final class Diagnostics {
         return render(rootCause, Map.of(), false);
     }
 
-    /**
-     * @param rootDepNames maps {@code group:artifact} modules of the user's root deps to the short
-     *     name they used as the {@code [dependencies.<scope>]} table key. When a {@link
-     *     Incompatibility.Cause.NoVersions} cause names a module that's in this map and the artifact
-     *     portion of the module matches the name, the renderer appends a hint pointing at the
-     *     artifact-defaulted-from-key behavior.
-     */
+    /** Retained for call-site compatibility; {@code rootDepNames} is no longer used. */
     public static String render(Incompatibility rootCause, Map<String, String> rootDepNames) {
         return render(rootCause, rootDepNames, false);
     }
 
+    /** Retained for call-site compatibility; {@code rootDepNames} is no longer used. */
     public static String render(Incompatibility rootCause, Map<String, String> rootDepNames, boolean ansi) {
         Map<Incompatibility, Integer> incomingEdges = new HashMap<>();
         countIncomingEdges(rootCause, incomingEdges, new HashSet<>());
@@ -79,59 +73,7 @@ public final class Diagnostics {
         out.append('\n');
         out.append("These constraints are unsatisfiable together.\n");
 
-        Set<String> hintedFor = new LinkedHashSet<>();
-        appendArtifactHints(rootCause, rootDepNames, hintedFor, out, new HashSet<>());
-
         return out.toString();
-    }
-
-    /**
-     * Walks the incompatibility DAG and emits a hint paragraph for each {@code
-     * NoVersions(unknownPackage=true)} cause that corresponds to a root dep whose key matches the
-     * artifact portion of the failed module.
-     */
-    private static void appendArtifactHints(
-            Incompatibility inco,
-            Map<String, String> rootDepNames,
-            Set<String> hintedFor,
-            StringBuilder out,
-            Set<Incompatibility> visited) {
-        if (!visited.add(inco)) return;
-        if (inco.cause() instanceof Incompatibility.Cause.Derived d) {
-            appendArtifactHints(d.a(), rootDepNames, hintedFor, out, visited);
-            appendArtifactHints(d.b(), rootDepNames, hintedFor, out, visited);
-            return;
-        }
-        if (!(inco.cause() instanceof Incompatibility.Cause.NoVersions nv)) return;
-        if (!nv.unknownPackage()) return;
-
-        String pkg = nv.pkg();
-        String name = rootDepNames.get(pkg);
-        if (name == null) return;
-
-        int colon = pkg.indexOf(':');
-        if (colon < 0) return;
-        String group = pkg.substring(0, colon);
-        String artifact = pkg.substring(colon + 1);
-        if (!artifact.equals(name)) return;
-        if (!hintedFor.add(pkg)) return;
-
-        out.append('\n');
-        out.append("Hint: the dep `")
-                .append(name)
-                .append("` resolves to `")
-                .append(pkg)
-                .append("`, which Maven Central does not\n");
-        out.append("recognize. If it is published under a different name, set\n");
-        out.append("`name` explicitly:\n\n");
-        out.append("  ")
-                .append(name)
-                .append(" = { group = \"")
-                .append(group)
-                .append("\", name = \"<correct-name>\", version = \"...\" }\n");
-        out.append("\n");
-        out.append("(jk defaults `name` to the table key when omitted — see\n");
-        out.append("docs/artifact-coord-design.md §\"Footgun: name defaulting\".)\n");
     }
 
     private static void countIncomingEdges(
