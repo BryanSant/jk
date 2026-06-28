@@ -29,8 +29,8 @@ class DiagnosticsTest {
         } catch (UnsatisfiableException e) {
             String rendered = Diagnostics.render(e.rootCause());
             assertThat(rendered).contains("Cannot resolve dependencies");
-            assertThat(rendered).contains("a 1.0 depends on shared 1.0");
-            assertThat(rendered).contains("b 1.0 depends on shared 2.0");
+            assertThat(rendered).contains("A 1.0 depends on shared 1.0");
+            assertThat(rendered).contains("B 1.0 depends on shared 2.0");
             assertThat(rendered).contains("unsatisfiable");
         } catch (Exception e) {
             fail("expected UnsatisfiableException, got: " + e);
@@ -48,7 +48,7 @@ class DiagnosticsTest {
             fail("expected UnsatisfiableException");
         } catch (UnsatisfiableException e) {
             String rendered = Diagnostics.render(e.rootCause());
-            assertThat(rendered).contains("no versions of widget");
+            assertThat(rendered).contains("No versions of widget");
         } catch (Exception e) {
             fail("expected UnsatisfiableException, got: " + e);
         }
@@ -69,8 +69,10 @@ class DiagnosticsTest {
                 new Incompatibility(List.of(root, dep.invert()), new Incompatibility.Cause.Derived(a, b));
 
         String rendered = Diagnostics.render(derived);
-        long bulletCount = rendered.lines().filter(l -> l.startsWith("  - ")).count();
-        assertThat(bulletCount).isEqualTo(1);
+        // The shared dependency fact should appear once as a numbered sentence
+        // and be referenced by "#" on subsequent mentions — not re-emitted verbatim.
+        long dependsOnCount = rendered.lines().filter(l -> l.contains("depends on")).count();
+        assertThat(dependsOnCount).isEqualTo(1);
     }
 
     @Test
@@ -96,8 +98,8 @@ class DiagnosticsTest {
             fail("expected UnsatisfiableException");
         } catch (UnsatisfiableException e) {
             String rendered = Diagnostics.render(e.rootCause());
-            assertThat(rendered).contains("therefore:");
-            assertThat(rendered).contains("cannot all hold");
+            assertThat(rendered).contains("therefore,");
+            assertThat(rendered).contains("cannot be resolved");
         } catch (Exception e) {
             fail("expected UnsatisfiableException, got: " + e);
         }

@@ -30,12 +30,15 @@ import java.util.Set;
  */
 public final class Diagnostics {
 
-    // ANSI 24-bit color codes — colors match JkDarkTheme.
+    // ANSI 24-bit color codes — colors match JkDarkTheme coord-* roles.
     private static final String RESET = "\033[m";
-    private static final String RED = "\033[38;2;233;30;99m"; // NORMAL_RED  — ‼ header
-    private static final String PRIMARY = "\033[38;2;63;81;181m"; // PRIMARY     — group part of group:artifact
-    private static final String CYAN = "\033[38;2;0;188;212m"; // NORMAL_CYAN — artifact part, bare packages
-    private static final String BLUE = "\033[38;2;83;109;254m"; // BRIGHT_BLUE — version constraints
+    private static final String RED    = "\033[38;2;233;30;99m";   // NORMAL_RED   — ‼ header
+    private static final String GROUP  = "\033[38;2;0;188;212m";   // NORMAL_CYAN  — coordGroup (group segment)
+    private static final String NAME   = "\033[38;2;24;255;255m";  // BRIGHT_CYAN  — coordName  (artifact segment)
+    private static final String VER    = "\033[38;2;236;239;241m"; // BRIGHT_WHITE — coordVersion
+
+    /** The synthetic root package injected by PubGrubResolver — not meaningful to users. */
+    private static final String ROOT_PKG = "<root>";
 
     private Diagnostics() {}
 
@@ -166,53 +169,52 @@ public final class Diagnostics {
                 renderInco(d.b(), out, prefix, emitted, numbered, ansi);
                 out.append(prefix)
                         .append(label)
-                        .append("therefore: ")
+                        .append("therefore, ")
                         .append(describeConclusion(inco, ansi))
                         .append('\n');
             }
-            case Incompatibility.Cause.Dependency dep ->
+            case Incompatibility.Cause.Dependency dep -> {
+                String from = isRoot(dep.from()) ? "The root" : cap(describe(dep.from(), ansi));
                 out.append(prefix)
-                        .append("- ")
                         .append(label)
-                        .append(describe(dep.from(), ansi))
+                        .append(from)
                         .append(" depends on ")
                         .append(describe(dep.to(), ansi))
                         .append('\n');
+            }
             case Incompatibility.Cause.NoVersions nv ->
                 out.append(prefix)
-                        .append("- ")
                         .append(label)
-                        .append("no versions of ")
+                        .append("No versions of ")
                         .append(colorPkg(nv.pkg(), ansi))
                         .append(" match ")
-                        .append(colorVersion(nv.requested().toString(), ansi))
+                        .append(colorVersion(stripBraces(nv.requested().toString()), ansi))
                         .append('\n');
             case Incompatibility.Cause.Root r ->
                 out.append(prefix)
-                        .append("- ")
                         .append(label)
-                        .append("the root project ")
-                        .append(colorPkg(r.rootPkg(), ansi))
-                        .append(' ')
-                        .append(colorVersion(r.rootVersion(), ansi))
-                        .append('\n');
+                        .append("The root project\n");
         }
     }
 
     private static String describeConclusion(Incompatibility inco, boolean ansi) {
         List<Term> terms = inco.terms();
         if (terms.isEmpty()) return "this combination is impossible";
+        // All-root conclusion: plain prose instead of exposing the synthetic <root> token.
+        boolean allRoot = terms.stream().allMatch(t -> ROOT_PKG.equals(t.pkg()));
+        if (allRoot) return "the root project's requirements cannot be resolved";
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < terms.size(); i++) {
             if (i > 0) sb.append(" and ");
-            sb.append(describe(terms.get(i), ansi));
+            sb.append(describeForConclusion(terms.get(i), ansi));
         }
-        sb.append(" cannot all hold");
+        sb.append(" cannot be resolved");
         return sb.toString();
     }
 
     /** Compact user-facing version of {@link Term#toString()}. */
     private static String describe(Term term, boolean ansi) {
+        if (isRoot(term)) return "the root";
         String prefix = term.positive() ? "" : "not ";
         VersionSet vs = term.versions();
         if (vs instanceof VersionSet.Range r
@@ -223,22 +225,52 @@ public final class Diagnostics {
                 && r.min().equals(r.max())) {
             return prefix + colorPkg(term.pkg(), ansi) + " " + colorVersion(r.min(), ansi);
         }
-        return prefix + colorPkg(term.pkg(), ansi) + " " + colorVersion(vs.toString(), ansi);
+        return prefix + colorPkg(term.pkg(), ansi) + " " + colorVersion(stripBraces(vs.toString()), ansi);
+    }
+
+    /** Like {@link #describe} but used inside conclusion sentences (already lower-case context). */
+    private static String describeForConclusion(Term term, boolean ansi) {
+        if (isRoot(term)) return "the root";
+        return describe(term, ansi);
+    }
+
+    /** True when the term refers to the synthetic PubGrub root package. */
+    private static boolean isRoot(Term term) {
+        return ROOT_PKG.equals(term.pkg());
+    }
+
+    private static boolean isRoot(Incompatibility.Cause.Dependency dep) {
+        return ROOT_PKG.equals(dep.from().pkg());
     }
 
     /**
-     * Color a package name. {@code group:artifact} coords get group in primary and artifact in cyan;
-     * bare names (like {@code <root>}) get cyan wholesale.
+     * Color a package coordinate. {@code group:artifact} gets group in coordGroup and artifact in
+     * coordName; bare/synthetic names fall back to coordName.
      */
     private static String colorPkg(String pkg, boolean ansi) {
         if (!ansi) return pkg;
         int colon = pkg.indexOf(':');
-        if (colon < 0) return CYAN + pkg + RESET;
-        return PRIMARY + pkg.substring(0, colon) + RESET + ":" + CYAN + pkg.substring(colon + 1) + RESET;
+        if (colon < 0) return NAME + pkg + RESET;
+        return GROUP + pkg.substring(0, colon) + RESET + ":" + NAME + pkg.substring(colon + 1) + RESET;
     }
 
     private static String colorVersion(String version, boolean ansi) {
         if (!ansi) return version;
-        return BLUE + version + RESET;
+        return VER + version + RESET;
+    }
+
+    /** Strip PubGrub's {@code {…}} wrapper from single-version VersionSet strings. */
+    private static String stripBraces(String s) {
+        if (s.length() >= 2 && s.charAt(0) == '{' && s.charAt(s.length() - 1) == '}') {
+            return s.substring(1, s.length() - 1);
+        }
+        return s;
+    }
+
+    /** Capitalize the first character of a string (leaves ANSI-prefixed strings alone). */
+    private static String cap(String s) {
+        if (s.isEmpty()) return s;
+        // If the string starts with an ANSI escape, capitalize the visible first char after the reset.
+        return Character.toUpperCase(s.charAt(0)) + s.substring(1);
     }
 }
