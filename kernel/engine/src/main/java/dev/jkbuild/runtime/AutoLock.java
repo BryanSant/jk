@@ -110,10 +110,13 @@ public final class AutoLock {
             LockfileWriter.write(updated, lockFile);
             dev.jkbuild.task.AccessLedger.atDefaultPath().touchLock(updated);
             return updated;
+        } catch (dev.jkbuild.resolver.pubgrub.UnsatisfiableException e) {
+            // Hard failure: dependencies are genuinely unsatisfiable — re-throw so
+            // the build fails instead of silently continuing with a stale lock.
+            throw e;
         } catch (Exception e) {
-            // Conservative re-lock failed (e.g. new dep introduced an
-            // unsatisfiable constraint). Warn but don't block the build —
-            // the caller should surface the message and use the existing lock.
+            // Soft failure (network, I/O, etc.): warn and fall back to the existing
+            // lock so a transient connectivity issue doesn't block the build.
             System.err.println("jk: auto-lock warning — could not update jk.lock: " + e.getMessage());
             System.err.println("    Run `jk lock` to resolve manually.");
             return null;
