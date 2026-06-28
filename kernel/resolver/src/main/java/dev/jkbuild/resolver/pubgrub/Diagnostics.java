@@ -54,7 +54,7 @@ public final class Diagnostics {
                 "\033[38;2;84;110;122m",   // BRIGHT_BLACK — │ rail
                 "\033[38;2;0;188;212m",    // NORMAL_CYAN  — coordGroup
                 "\033[38;2;24;255;255m",   // BRIGHT_CYAN  — coordName
-                "\033[38;2;130;247;248m"); // COORD_VERSION — coordVersion (#82F7F8)
+                "\033[38;2;193;251;252m"); // COORD_VERSION — coordVersion (#C1FBFC)
 
         /** Plain palette — no colors. */
         public static final Palette PLAIN = new Palette("", "", "", "", "", "");
