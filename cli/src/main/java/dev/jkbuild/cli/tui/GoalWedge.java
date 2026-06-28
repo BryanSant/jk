@@ -42,9 +42,16 @@ public final class GoalWedge {
      * the chip (closed by the powerline cap); {@code message} is caller-styled and follows the cap.
      * For commands whose result reads as its own sentence (e.g. {@code jk clean}'s "Removed N files")
      * rather than the "{goal} successful" phrasing of {@link #successLine}.
+     *
+     * <p>No-ANSI: ASCII-only prefixes — {@code "+"} for {@link Glyphs#CHECK}, {@code "!"} for {@link
+     * Glyphs#CROSS}, {@code "*"} for anything else — with a {@code ": "} separator and no color.
      */
     public static String chipLine(String glyph, String verb, boolean nerdfont, String message) {
         Theme t = Theme.active();
+        if (!t.isAnsi()) {
+            String prefix = Glyphs.CHECK.equals(glyph) ? "+" : Glyphs.CROSS.equals(glyph) ? "!" : "*";
+            return prefix + " " + verb + ": " + message;
+        }
         boolean isCheck = Glyphs.CHECK.equals(glyph);
         if (nerdfont) {
             var chipStyle = isCheck ? t.goalSuccessChip() : t.goalChip();
@@ -69,9 +76,14 @@ public final class GoalWedge {
      * Settled failure: {@code ✘ Build ▶ Failed to build <tail>} — "Failed" in red, then "to
      * &lt;goal&gt;" (the goal name lower-cased: build, test, …) in the default color; tail pre-styled
      * by the caller.
+     *
+     * <p>No-ANSI: {@code "! <verb> Failed: <tail>"} — ASCII only, no color.
      */
     public static String failureLine(String name, boolean nerdfont, String tail) {
         Theme t = Theme.active();
+        if (!t.isAnsi()) {
+            return "! " + name + " Failed: " + tail;
+        }
         String verb =
                 Theme.colorize("Failed", t.error()) + (name.isEmpty() ? "" : " to " + name.toLowerCase(Locale.ROOT));
         if (nerdfont) {
@@ -90,9 +102,14 @@ public final class GoalWedge {
      * Settled cancellation: {@code ✘ Build Canceled by user <tail>}. Reuses the failed-build chrome —
      * the same red chip (white on red) and cap as {@link #failureLine} — but reads "Canceled" (in
      * red) "by user"; {@code tail} (the {@code "took Xs"} suffix) is pre-styled by the caller.
+     *
+     * <p>No-ANSI: {@code "· <verb> Canceled"} — ASCII only, no color.
      */
     public static String canceledLine(String name, boolean nerdfont, String tail) {
         Theme t = Theme.active();
+        if (!t.isAnsi()) {
+            return "· " + name + " Canceled";
+        }
         String verb = Theme.colorize("Canceled", t.error()) + " by user";
         if (nerdfont) {
             return chip(Glyphs.CROSS, name, t.goalFailureChip())

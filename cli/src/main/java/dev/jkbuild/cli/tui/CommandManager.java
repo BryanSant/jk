@@ -363,6 +363,28 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
         settle(Theme.colorize(Glyphs.CROSS, Theme.active().error()) + " " + message, above);
     }
 
+    /**
+     * Clear the live region without printing any result line — used when the goal's outcome is
+     * communicated externally (e.g. via a post-goal chipLine printed by the caller). Same cleanup
+     * as {@link #settle} but outputs nothing.
+     */
+    public void dismiss() {
+        restoreStreams();
+        stopAnimator();
+        synchronized (lock) {
+            if (done) return;
+            done = true;
+            LiveRegion.clearActive(this);
+            if (animate) {
+                if (goalMode) wipeRegion();
+                else freezeSpinnerLine();
+                out.print(Ansi.TASKBAR_CLEAR);
+                out.print(Ansi.SHOW_CURSOR);
+                out.flush();
+            }
+        }
+    }
+
     /** The goal/verb name shown in the header ("Building", "Locking", …). */
     private String goalName() {
         String n = goalMode ? name : label;

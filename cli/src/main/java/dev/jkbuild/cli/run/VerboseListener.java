@@ -59,7 +59,7 @@ public final class VerboseListener implements GoalListener {
         String glyph =
                 switch (status) {
                     case SUCCESS -> Theme.colorize(Glyphs.CHECK, Theme.active().completedStep());
-                    case FAIL -> Theme.colorize("𝘅", Theme.active().error());
+                    case FAIL -> Theme.colorize(Glyphs.CROSS, Theme.active().error());
                     case CANCELLED -> Theme.colorize("·", Theme.active().normalGray());
                     default -> "·";
                 };
@@ -92,7 +92,7 @@ public final class VerboseListener implements GoalListener {
     public void goalFinish(GoalResult result) {
         String summary = result.success()
                 ? Theme.colorize(Glyphs.CHECK + " done", Theme.active().completedStep())
-                : Theme.colorize("𝘅 failed", Theme.active().error());
+                : Theme.colorize(Glyphs.CROSS + " failed", Theme.active().error());
         out.println(summary + " (" + ConsoleSpec.fmtDuration(result.duration()) + ")");
     }
 }

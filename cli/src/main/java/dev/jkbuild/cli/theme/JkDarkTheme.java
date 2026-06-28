@@ -112,6 +112,11 @@ public final class JkDarkTheme implements Theme {
     }
 
     @Override
+    public boolean isAnsi() {
+        return Theme.colorEnabled();
+    }
+
+    @Override
     public AttributedStyle dim() {
         return AttributedStyle.DEFAULT.faint();
     }

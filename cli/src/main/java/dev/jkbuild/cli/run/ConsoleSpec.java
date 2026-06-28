@@ -103,6 +103,17 @@ public record ConsoleSpec(
     }
 
     /**
+     * Formats a {@code [k of N]} counter with darkGray brackets and a zero-padded numerator.
+     * Used in build completion lines and similar indexed output.
+     *
+     * <p>Example: {@code countBracket(1, 16, theme)} → {@code "[01 of 16]"} with dark-gray brackets.
+     */
+    public static String countBracket(int n, int total, Theme t) {
+        String num = String.format("%0" + Integer.toString(total).length() + "d", n);
+        return Theme.colorize("[", t.darkGray()) + num + " of " + total + Theme.colorize("]", t.darkGray());
+    }
+
+    /**
      * Human-friendly duration: {@code 712ms}, {@code 3.1s}, {@code 2m 4s}, {@code 1h 3m 2s}, {@code
      * 1d 12h 13m 5s}.
      */

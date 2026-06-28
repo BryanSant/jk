@@ -5,6 +5,7 @@ import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.cli.theme.Coords;
+import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.config.WorkspaceLoader;
 import dev.jkbuild.http.Http;
@@ -425,14 +426,16 @@ public final class SyncCommand implements CliCommand {
                 var report = new dev.jkbuild.resolver.CacheSync(cas, http)
                         .sync(lock, dev.jkbuild.resolver.CacheSync.ProgressObserver.NOOP, refresh);
                 if (!global.outputIsJson() && (report.fetched() > 0 || report.upToDate() > 0)) {
-                    System.out.println(dir.relativize(moduleDir)
-                            + ": "
-                            + report.fetched()
-                            + " fetched, "
-                            + report.upToDate()
-                            + " up-to-date, "
-                            + report.skipped()
-                            + " skipped");
+                    Theme th = Theme.active();
+                    System.out.println(
+                            Theme.colorize(dir.relativize(moduleDir).toString(), th.cyan())
+                            + Theme.colorize(": ", th.settled())
+                            + Theme.colorize(String.valueOf(report.fetched()), th.focused())
+                            + Theme.colorize(" fetched, ", th.settled())
+                            + Theme.colorize(String.valueOf(report.upToDate()), th.focused())
+                            + Theme.colorize(" up-to-date, ", th.settled())
+                            + Theme.colorize(String.valueOf(report.skipped()), th.focused())
+                            + Theme.colorize(" skipped", th.settled()));
                 }
             } catch (Exception e) {
                 System.err.println("jk sync: " + dir.relativize(moduleDir) + ": sync failed — " + e.getMessage());
@@ -446,16 +449,23 @@ public final class SyncCommand implements CliCommand {
      */
     private void printSuccessSummary(Goal goal, Path lockFile) {
         if (global.outputIsJson()) return;
+        Theme t = Theme.active();
         goal.get(WORKSPACE_MODULES)
-                .ifPresent(n -> System.out.println("Workspace: " + n + " module" + (n == 1 ? "" : "s")));
+                .ifPresent(n -> System.out.println(
+                        Theme.colorize("Workspace:", t.settled())
+                        + " "
+                        + Theme.colorize(String.valueOf(n), t.focused())
+                        + " module"
+                        + (n == 1 ? "" : "s")));
         boolean created = goal.get(LOCKFILE_CREATED).orElse(false);
         goal.get(LOCKFILE).ifPresent(lock -> {
             if (created) {
                 int n = lock.artifacts().size();
-                System.out.println("Created "
+                System.out.println(Theme.colorize("Created", t.settled())
+                        + " "
                         + dev.jkbuild.cli.PathDisplay.styledRaw(lockFile)
                         + " ("
-                        + n
+                        + Theme.colorize(String.valueOf(n), t.focused())
                         + " package"
                         + (n == 1 ? "" : "s")
                         + ")");
@@ -464,16 +474,22 @@ public final class SyncCommand implements CliCommand {
         goal.get(JDK_OUTCOME).ifPresent(SyncCommand::printJdkSummary);
         goal.get(CAS_REPORT)
                 .ifPresent(r -> System.out.println(
-                        r.fetched() + " fetched, " + r.upToDate() + " up-to-date, " + r.skipped() + " skipped"));
+                        Theme.colorize(String.valueOf(r.fetched()), t.focused())
+                        + Theme.colorize(" fetched, ", t.settled())
+                        + Theme.colorize(String.valueOf(r.upToDate()), t.focused())
+                        + Theme.colorize(" up-to-date, ", t.settled())
+                        + Theme.colorize(String.valueOf(r.skipped()), t.focused())
+                        + Theme.colorize(" skipped", t.settled())));
         goal.get(WORKER_REPORT).ifPresent(r -> {
             if (r.fetched() > 0 || r.missing() > 0) {
-                System.out.println("Workers: "
-                        + r.present()
-                        + " present, "
-                        + r.fetched()
-                        + " fetched, "
-                        + r.missing()
-                        + " missing");
+                System.out.println(Theme.colorize("Workers:", t.settled())
+                        + " "
+                        + Theme.colorize(String.valueOf(r.present()), t.focused())
+                        + Theme.colorize(" present, ", t.settled())
+                        + Theme.colorize(String.valueOf(r.fetched()), t.focused())
+                        + Theme.colorize(" fetched, ", t.settled())
+                        + Theme.colorize(String.valueOf(r.missing()), t.focused())
+                        + Theme.colorize(" missing", t.settled()));
             }
         });
     }

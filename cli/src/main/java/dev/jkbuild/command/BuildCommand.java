@@ -595,15 +595,10 @@ public final class BuildCommand implements CliCommand {
     private static String completionLine(boolean ok, int index, int total, String coord, long millis) {
         var th = Theme.active();
         String mark = Theme.colorize(ok ? Glyphs.CHECK : Glyphs.CROSS, ok ? th.success() : th.error());
-        String num = String.format("%0" + Integer.toString(total).length() + "d", index);
         StringBuilder sb = new StringBuilder();
         sb.append(mark)
                 .append(' ')
-                .append(Theme.colorize("[", th.darkGray()))
-                .append(num)
-                .append(" of ")
-                .append(total)
-                .append(Theme.colorize("]", th.darkGray()))
+                .append(ConsoleSpec.countBracket(index, total, th))
                 .append(' ');
         if (ok) {
             sb.append(Theme.colorize(coord, th.plainWhite().crossedOut()))

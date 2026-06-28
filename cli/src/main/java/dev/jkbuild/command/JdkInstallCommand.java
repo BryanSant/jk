@@ -34,7 +34,6 @@ import java.net.URI;
 import java.nio.file.Path;
 import java.util.Optional;
 import org.jline.terminal.Terminal;
-import org.jline.utils.AttributedStyle;
 
 /**
  * {@code jk jdk install [<spec>]} — pull a JDK from the JetBrains JDK feed and unpack it into the
@@ -303,10 +302,10 @@ public final class JdkInstallCommand implements CliCommand {
                     System.out.println();
                     System.out.println(Theme.colorize("➜", Theme.active().brightGreen())
                             + " "
-                            + Theme.colorize(installed.identifier(), AttributedStyle.DEFAULT.bold())
-                            + " is now the "
+                            + Theme.colorize(installed.identifier(), Theme.active().focused())
+                            + Theme.colorize(" is now the ", Theme.active().normalGray())
                             + Theme.colorize("default", Theme.active().focused())
-                            + " JDK");
+                            + Theme.colorize(" JDK", Theme.active().normalGray()));
                     Optional<JdkShell> shell = JdkShell.detect();
                     if (shell.isPresent()) {
                         System.out.println(

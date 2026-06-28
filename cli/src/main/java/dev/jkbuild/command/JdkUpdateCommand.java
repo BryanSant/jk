@@ -212,9 +212,11 @@ public final class JdkUpdateCommand implements CliCommand {
                 }
                 System.out.println(Theme.colorize(Glyphs.CHECK, Theme.active().completedStep())
                         + " Updated "
-                        + Theme.colorize(oldId, Theme.active().cyan())
-                        + " → "
-                        + Theme.colorize(newJdk.identifier(), Theme.active().cyan()));
+                        + Theme.colorize(oldId, Theme.active().warning())
+                        + " "
+                        + Theme.colorize("→", Theme.active().darkGray())
+                        + " "
+                        + Theme.colorize(newJdk.identifier(), Theme.active().focused()));
                 updated++;
             } catch (IOException | InterruptedException e) {
                 if (e instanceof InterruptedException) Thread.currentThread().interrupt();
@@ -310,8 +312,10 @@ public final class JdkUpdateCommand implements CliCommand {
             System.out.println("   "
                     + Theme.colorize(
                             JdkRegistry.identifierFor(u.old.home()),
-                            Theme.active().cyan())
-                    + " → "
+                            Theme.active().warning())
+                    + " "
+                    + Theme.colorize("→", Theme.active().darkGray())
+                    + " "
                     + Theme.colorize(
                             u.target.installFolderName(), Theme.active().focused()));
         }

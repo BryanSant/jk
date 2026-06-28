@@ -17,6 +17,11 @@ import java.util.List;
  * list. On completion the live region is replaced by a {@code ✓}/{@code ✗} result line built from
  * the {@link ConsoleSpec} mappers.
  *
+ * <p>When constructed with a {@code null} {@link ConsoleSpec} the listener uses {@code verb} as the
+ * display name and calls {@link CommandManager#dismiss()} on completion (the caller owns the result
+ * line). This is used by {@link GoalConsole#run(dev.jkbuild.run.Goal, GoalConsole.Mode,
+ * java.nio.file.Path)} to drive the CommandManager spinner for simple goals.
+ *
  * <p>All phases of this goal are attributed to a single {@code module} (the project's {@code
  * group:artifact}). Workspace aggregation across modules feeds one shared {@link CommandManager}
  * from several goals; that path is built on the same component.
@@ -24,7 +29,9 @@ import java.util.List;
 public final class CommandManagerListener implements GoalListener {
 
     private final PrintStream out;
+    /** May be {@code null} — use {@link #verb} as the display name and dismiss on completion. */
     private final ConsoleSpec spec;
+    private final String verb;
     private final String module;
     private final List<Phase> phases;
     private final boolean animate;
@@ -36,6 +43,21 @@ public final class CommandManagerListener implements GoalListener {
             PrintStream out, ConsoleSpec spec, String module, List<Phase> phases, boolean animate) {
         this.out = out;
         this.spec = spec;
+        this.verb = spec != null ? spec.verb() : module;
+        this.module = module;
+        this.phases = phases;
+        this.animate = animate;
+    }
+
+    /**
+     * No-spec constructor: uses {@code verb} as the spinner display name and calls {@link
+     * CommandManager#dismiss()} on completion so the caller can print its own result line.
+     */
+    public CommandManagerListener(
+            PrintStream out, String verb, String module, List<Phase> phases, boolean animate) {
+        this.out = out;
+        this.spec = null;
+        this.verb = verb;
         this.module = module;
         this.phases = phases;
         this.animate = animate;
@@ -43,7 +65,7 @@ public final class CommandManagerListener implements GoalListener {
 
     @Override
     public void goalStart(GoalView view) {
-        cm = CommandManager.goal(out, spec.verb(), animate);
+        cm = CommandManager.goal(out, verb, animate);
         cm.target(module);
         for (Phase p : phases) {
             cm.addPhaseLabeled(module, p.name(), display(p));
@@ -88,7 +110,12 @@ public final class CommandManagerListener implements GoalListener {
         // Restore the real streams before settling so the result line isn't
         // itself routed back above the (closing) region.
         if (capture != null) capture.close();
-        if (cm == null) cm = CommandManager.goal(out, spec.verb(), animate);
+        if (cm == null) cm = CommandManager.goal(out, verb, animate);
+        // No-spec path: the caller owns the result line — just clean up the live region.
+        if (spec == null) {
+            cm.dismiss();
+            return;
+        }
         // Exec commands hand off to a subprocess — the build duration is meaningless there.
         String suffix = spec.exec() ? "" : " " + ConsoleSpec.took(result.duration());
         // All diagnostics print ABOVE the result line (which stays last) — warnings

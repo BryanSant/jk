@@ -232,14 +232,14 @@ public final class CacheCommand implements CliCommand {
             return Theme.colorize(sb.toString(), Theme.active().darkGray());
         }
 
-        /** Full-width centered title in the accent color. */
+        /** Full-width centered title — white on plan-blue per §15 table title spec. */
         private static String titleRow(String title, int inner) {
             int pad = Math.max(0, inner - title.length());
             int left = pad / 2, right = pad - left;
             String bar = Theme.colorize("│", Theme.active().darkGray());
             return bar
                     + " ".repeat(left)
-                    + Theme.colorize(title, Theme.active().activeStep())
+                    + Theme.colorize(title, Theme.active().planBadge())
                     + " ".repeat(right)
                     + bar;
         }

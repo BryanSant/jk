@@ -2,6 +2,7 @@
 package dev.jkbuild.command;
 
 import dev.jkbuild.cli.GlobalOptions;
+import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.config.ForgeAuthConfig;
 import dev.jkbuild.forge.AuthException;
 import dev.jkbuild.forge.DeviceCode;
@@ -136,9 +137,12 @@ public final class AuthLoginCommand implements CliCommand {
                         && !dc.verificationUriComplete().isBlank())
                 ? dc.verificationUriComplete()
                 : dc.verificationUri();
-        System.out.println("\n  First copy your one-time code: " + dc.userCode());
-        System.out.println("  Then open:                     " + dc.verificationUri());
-        System.out.println("\n  Waiting for authorization…");
+        Theme t = Theme.active();
+        System.out.println("\n  First copy your one-time code: "
+                + Theme.colorize(dc.userCode(), t.focused().bold()));
+        System.out.println("  Then open:                     "
+                + Theme.colorize(dc.verificationUri(), t.cyan()));
+        System.out.println("\n  " + Theme.colorize("Waiting for authorization…", t.normalGray().italic()));
         openBrowser(url);
     }
 

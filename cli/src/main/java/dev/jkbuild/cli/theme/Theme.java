@@ -295,6 +295,16 @@ public interface Theme {
         Holder.active = theme;
     }
 
+    /**
+     * True when ANSI escape sequences (color, cursor movement, Unicode glyphs) may be emitted.
+     * False when output is piped or {@code --no-ansi} / No-ANSI mode is active. Implementations
+     * default to {@link #colorEnabled()} — subclasses may override when they track TTY state
+     * separately from color choice.
+     */
+    default boolean isAnsi() {
+        return colorEnabled();
+    }
+
     /** True when foreground color should be emitted, given the resolved {@code --color} choice. */
     static boolean colorEnabled() {
         var choice = ActiveConfig.get().colorOr(JkConfig.ColorChoice.AUTO);

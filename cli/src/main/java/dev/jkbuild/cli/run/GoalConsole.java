@@ -11,7 +11,7 @@ import java.util.List;
 
 /**
  * Single entry point CLI commands use to run a {@link Goal} against the right set of console
- * listeners — picks {@link ProgressBarListener} (default TTY), {@link VerboseListener} ({@code
+ * listeners — picks {@link CommandManagerListener} (default TTY), {@link VerboseListener} ({@code
  * --verbose}), {@link NdjsonListener} ({@code --output json}), or {@link SilentListener} (non-TTY,
  * {@code --quiet}, or interactive goal); always layers an {@link EventLogListener} on top so the
  * run lands in {@code <cacheRoot>/runs/}.
@@ -183,7 +183,7 @@ public final class GoalConsole {
             case VERBOSE -> new VerboseListener(System.out, System.err);
             case AUTO ->
                 isInteractiveTerminal()
-                        ? new ProgressBarListener(System.out, System.err, goal.phases())
+                        ? new CommandManagerListener(System.out, goal.name(), goal.name(), goal.phases(), true)
                         : new SilentListener(System.out, System.err);
         };
     }

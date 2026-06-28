@@ -678,3 +678,189 @@ When adding new output:
 4. Dependency coordinates must always use §10 coloring when color is enabled.
 5. Plugin/worker output must be routed above the controlled output region (§13).
 6. Update this document when any of the above decisions change.
+
+---
+
+## 20. JDK Download Progress
+
+The animated download bar shown during `jk jdk install` and `jk ensure`.
+
+**Format:** GoalWedge-style chip prefix + standalone ProgressBar + dim italic label
+- Nerd Font: `[src]/temurin-25  ████████░░  38%  downloading…`
+- Non-Nerd Font: same (bar uses `█`/`░`)
+- No-Color: plain text `[src]/temurin-25 [====    ] 38% downloading…`
+- No-ANSI: single line per threshold: `[38%] temurin-25 downloading…`
+
+**Theme roles:** `coordGroup()` for source brackets, `coordName()` for identifier, `darkGray()` for separator and bar track, `warning()` for percentage text, `dim()` for label.
+
+---
+
+## 21. Bare Confirmation Line
+
+A single `✓`/`✘` + verb + noun line printed outside a GoalWedge chip — used when a command completes a sub-task (e.g. `jk jdk pin`).
+
+**Format:** `✓ Pinned project to <identifier>`
+- Nerd Font/Non-Nerd Font: `✓ Pinned project to temurin-25` (CHECK in `success()`, identifier in `focused()`)
+- No-Color: `✓ Pinned project to temurin-25` (glyphs retained, no color)
+- No-ANSI: `+ Pinned project to temurin-25`
+
+**Theme roles:** `success()` for CHECK, `focused()` for the identifier.
+
+---
+
+## 22. Post-Command Advisory
+
+A hint line printed after a command's main output — e.g. the `➜` settled-answer prefix outside a wizard, or an inline shell command hint.
+
+**Format:** `➜ Run <command> to activate`
+- Nerd Font/Non-Nerd Font: `➜` in `brightGreen()`, body in `normalGray()`, inline shell cmd in `shell()`
+- No-Color: `➜ Run <command> to activate` (no color)
+- No-ANSI: `> Run <command> to activate`
+
+**Theme roles:** `brightGreen()` for arrow, `normalGray()` for body, `shell()` for inline shell text.
+
+---
+
+## 23. Confirm Prompt
+
+The destructive action prompt: icon + warning message + `[Y/n]` default.
+
+**Format:** `‼ This permanently deletes the ENTIRE jk cache. Continue? [Y/n]`
+- Nerd Font/Non-Nerd Font: `‼` in `warning()`, body in `errorLabel()`, `[Y/n]` in `focused()`
+- No-Color: plain text prompt, no color
+- No-ANSI: same as No-Color
+
+**Theme roles:** `warning()` for BANG, `errorLabel()` for the warning body, `focused()` for the prompt default.
+
+---
+
+## 24. Migration Arrow
+
+Used in `jk jdk update` when an identifier changes: `{old} → {new}`.
+
+**Format:** `temurin-24.0.2 → temurin-25.0.1`
+- old identifier in `warning()` or plain, `→` in `darkGray()`, new identifier in `focused()` or `success()`
+- No-ANSI: `temurin-24.0.2 -> temurin-25.0.1`
+
+**Theme roles:** `darkGray()` for arrow, `focused()` or `success()` for new value.
+
+---
+
+## 25. JDK Status Column
+
+Used in `jk jdk list` to show each JDK's status relative to the active project.
+
+| Status | Glyph | Color |
+|---|---|---|
+| default | `[default]` | `brightYellow()` |
+| active (in-use) | `[active]` | `activeStep()` / `#18FFFF` |
+| native | `[native]` | `cyan()` |
+| installed | `[installed]` | `success()` |
+| available | `[available]` | `darkGray()` |
+
+No-ANSI: plain `[status]` labels, no color.
+
+---
+
+## 26. Embedded Utilization Bar
+
+A `ProgressBar` rendered inside a table row (e.g. `jk cache info` storage usage).
+
+**Format:** `████████░░  81%  (4.2 GB / 5.0 GB)`
+- Bar in `planBadge()` bg, track in `darkGray()`, percentage in `warning()`, sizes in `darkGray()`
+- No-ANSI: `[========  ] 81% (4.2 GB / 5.0 GB)`
+
+**Theme roles:** `planBadge()` for bar fill, `darkGray()` for track and sizes, `warning()` for percentage.
+
+---
+
+## 27. Post-Chip Summary
+
+Unstyled (or lightly styled) summary lines printed below a settled GoalWedge chip.
+
+**Format (example):** `  Updated 3 of 5 dependencies` or `  Synced 12 artifacts to target/`
+
+**Rules:**
+- Leading 2-space indent
+- Counts in `focused()`, path in `path()`, surrounding text in `settled()` (default body)
+- No-ANSI: plain text, no indent required
+
+---
+
+## 28. Verbose Module Separator
+
+The `══ module (k/N) ══` horizontal rule printed in verbose/multi-module build output.
+
+**Format:** `══ acme:api (1/3) ══`
+- `══` glyphs in `darkGray()`, module coord in `commandName()` or `coordName()`, `(k/N)` in `darkGray()`
+- No-ANSI: `=== acme:api (1/3) ===`
+
+**Theme roles:** `darkGray()` for border glyphs and count, `coordName()` for module identifier.
+
+---
+
+## 29. Destructive Confirmation Block
+
+A multi-line block for irreversible operations: warning header + explanation + Y/n prompt.
+
+**Format:**
+```
+‼ This permanently deletes the ENTIRE jk cache.
+  All downloaded artifacts will need to be re-fetched.
+Continue? [Y/n]
+```
+- `‼` in `warning()`, body in `errorLabel()`, explanation in `settled()`, prompt in `focused()`
+- No-ANSI: plain text
+
+---
+
+## 30. Device Flow Prompt
+
+Used by `jk auth login` OAuth device flow.
+
+**Format:**
+```
+Open: https://github.com/login/device
+Code: ABCD-1234
+Waiting for authorization…
+```
+- URL in `cyan()`, code in `focused()` + bold, "Waiting…" in `normalGray()` + dim
+- No-ANSI: plain text
+
+**Theme roles:** `cyan()` for URL, `focused()` for code, `normalGray()` for waiting line.
+
+---
+
+## 31. [k of N] Count Bracket
+
+Used in `jk build` completion lines and similar counters.
+
+**Format:** `[01 of 16]`
+- `[` and `]` in `darkGray()`, `01 of 16` in default foreground, numerator zero-padded to denominator width
+- No-ANSI: `[01 of 16]` plain
+
+**Theme roles:** `darkGray()` for brackets.
+
+Use `ConsoleSpec.countBracket(n, total, theme)` — see §3.6.
+
+---
+
+## 32. crossedOut Completion
+
+A finished workspace unit's coordinate rendered with strikethrough to indicate it's done.
+
+**Format:** ~~`acme:api`~~ (crossedOut + plain/dim color)
+- `plainWhite().crossedOut()` style — the coord is visually de-emphasized once finished
+- No-ANSI: `[done] acme:api`
+
+**Theme roles:** `plainWhite().crossedOut()` in Nerd Font/Non-Nerd Font modes.
+
+---
+
+## 33. errorLabel() Role
+
+Bold error-text: same hue as `error()` (#E91E63), with bold added. Used for the body text of destructive or severe messages (e.g. the CacheCommand purge body).
+
+**Theme method:** `errorLabel()` — bold variant of `error()`
+
+**Usage:** Destructive confirmation body text, critical advisory messages. Distinct from `error()` (inline markers) — `errorLabel()` is for longer label-style strings that need emphasis.
