@@ -740,7 +740,7 @@ public final class Wizard {
                     sb.append(
                             isFocused ? Rail.RADIO_ON : Rail.RADIO_OFF,
                             isFocused
-                                    ? Theme.active().activeStep()
+                                    ? Theme.active().completedStep()
                                     : Theme.active().darkGray());
                     sb.append("  ");
                     sb.append(
@@ -762,7 +762,7 @@ public final class Wizard {
                             .append(
                                     isFocused ? Rail.RADIO_ON : Rail.RADIO_OFF,
                                     isFocused
-                                            ? Theme.active().activeStep()
+                                            ? Theme.active().completedStep()
                                             : Theme.active().darkGray())
                             .append("  ")
                             .append(
@@ -779,7 +779,7 @@ public final class Wizard {
                             .append(
                                     isFocused ? Rail.RADIO_ON : Rail.RADIO_OFF,
                                     isFocused
-                                            ? Theme.active().activeStep()
+                                            ? Theme.active().completedStep()
                                             : Theme.active().darkGray())
                             .append("  ");
                     appendCustomField(sb, isFocused, rs.customPlaceholder());
