@@ -196,7 +196,7 @@ public final class JkRunner implements Plugin {
                     continue;
                 }
                 String className = line.substring(4).trim();
-                var classRequest = discoveryRequest(
+                var classRequest = new SimpleDiscoveryRequest(
                         List.of(DiscoverySelectors.selectClass(className)),
                         List.of());
                 for (var engine : engines) {
@@ -222,133 +222,36 @@ public final class JkRunner implements Plugin {
         if (args.filter != null && !args.filter.isEmpty()) {
             filters.add(ClassNameFilter.includeClassNamePatterns(args.filter));
         }
-        return discoveryRequest(List.copyOf(selectors), List.copyOf(filters));
-    }
-
-    private static org.junit.platform.engine.EngineDiscoveryRequest discoveryRequest(
-            List<org.junit.platform.engine.DiscoverySelector> selectors,
-            List<org.junit.platform.engine.DiscoveryFilter<?>> filters) {
-        return (org.junit.platform.engine.EngineDiscoveryRequest)
-                java.lang.reflect.Proxy.newProxyInstance(
-                        JkRunner.class.getClassLoader(),
-                        new Class<?>[] {org.junit.platform.engine.EngineDiscoveryRequest.class},
-                        (proxy, method, args) -> switch (method.getName()) {
-                            case "getSelectorsByType" -> {
-                                @SuppressWarnings("unchecked")
-                                var type = (Class<org.junit.platform.engine.DiscoverySelector>) args[0];
-                                yield selectors.stream()
-                                        .filter(type::isInstance)
-                                        .map(type::cast)
-                                        .toList();
-                            }
-                            case "getFiltersByType" -> {
-                                @SuppressWarnings("unchecked")
-                                var type = (Class<org.junit.platform.engine.DiscoveryFilter<?>>) args[0];
-                                yield filters.stream()
-                                        .filter(type::isInstance)
-                                        .map(type::cast)
-                                        .toList();
-                            }
-                            case "getConfigurationParameters" -> EmptyConfigParams.INSTANCE;
-                            // JUnit 6+ added getOutputDirectoryCreator() to EngineDiscoveryRequest.
-                            // Provide a no-op via a Proxy of the return type so any version works.
-                            case "getOutputDirectoryCreator" -> noOpOutputDirectoryCreator();
-                            default -> {
-                                // Invoke a default method if present; return null for anything else.
-                                if (method.isDefault()) {
-                                    yield java.lang.invoke.MethodHandles
-                                            .privateLookupIn(
-                                                    method.getDeclaringClass(),
-                                                    java.lang.invoke.MethodHandles.lookup())
-                                            .unreflectSpecial(method, method.getDeclaringClass())
-                                            .bindTo(proxy)
-                                            .invokeWithArguments(args);
-                                }
-                                yield null;
-                            }
-                        });
+        return new SimpleDiscoveryRequest(List.copyOf(selectors), List.copyOf(filters));
     }
 
     /**
-     * Returns a no-op proxy of {@code OutputDirectoryCreator} (added in JUnit Platform 6.x) when
-     * that type is on the classpath, or {@code null} on JUnit 5.x where the type doesn't exist.
+     * Creates an {@link org.junit.platform.engine.ExecutionRequest} using the JUnit 6.x 6-arg
+     * factory. Falls back to the deprecated 3-arg constructor on JUnit 5.x (where
+     * {@link org.junit.platform.engine.support.store.NamespacedHierarchicalStore} and
+     * {@link org.junit.platform.engine.CancellationToken} don't exist).
      *
-     * <p>JUnit 6.1.1 declares: {@code Path getRootDirectory()} and
-     * {@code Path createOutputDirectory(TestDescriptor) throws IOException}. We return the system
-     * temp dir as the root so any code that reads it doesn't get a NPE, and null for individual
-     * test output directories (tests that write output find no output dir, which is safe).
-     */
-    private static Object noOpOutputDirectoryCreator() {
-        try {
-            Class<?> creatorType = Class.forName("org.junit.platform.engine.OutputDirectoryCreator");
-            java.nio.file.Path tmpRoot =
-                    java.nio.file.Path.of(System.getProperty("java.io.tmpdir", "/tmp"));
-            return java.lang.reflect.Proxy.newProxyInstance(
-                    creatorType.getClassLoader(),
-                    new Class<?>[] {creatorType},
-                    (proxy, method, args) -> switch (method.getName()) {
-                        case "getRootDirectory" -> tmpRoot;
-                        case "createOutputDirectory" -> null; // no per-test output dir
-                        default -> {
-                            if (method.getReturnType() == java.util.Optional.class)
-                                yield java.util.Optional.empty();
-                            if (method.isDefault())
-                                yield java.lang.invoke.MethodHandles
-                                        .privateLookupIn(
-                                                method.getDeclaringClass(),
-                                                java.lang.invoke.MethodHandles.lookup())
-                                        .unreflectSpecial(method, method.getDeclaringClass())
-                                        .bindTo(proxy)
-                                        .invokeWithArguments(args);
-                            yield null;
-                        }
-                    });
-        } catch (ClassNotFoundException e) {
-            return null; // JUnit 5.x — OutputDirectoryCreator doesn't exist yet
-        }
-    }
-
-    /**
-     * Creates an {@link org.junit.platform.engine.ExecutionRequest} compatible with whatever JUnit
-     * Platform version is on the test classpath.
-     *
-     * <ul>
-     *   <li>JUnit 5.x: uses the public 3-arg constructor.
-     *   <li>JUnit 6.x: uses the 6-arg {@code create()} factory, which also requires a
-     *       {@code NamespacedHierarchicalStore} (for extension state) and a
-     *       {@code CancellationToken}. Both are created reflectively so we compile cleanly against
-     *       the 1.8-baseline and still work at runtime on 6.x.
-     * </ul>
+     * <p>The {@code NoClassDefFoundError} catch is the clean 5.x/6.x seam: the JVM resolves
+     * types lazily inside method bodies, so the try block only fails when those classes are
+     * genuinely absent at runtime.
      */
     @SuppressWarnings("deprecation")
     private static org.junit.platform.engine.ExecutionRequest makeExecutionRequest(
             org.junit.platform.engine.TestDescriptor descriptor,
             org.junit.platform.engine.EngineExecutionListener listener) {
         try {
-            String ep = "org.junit.platform.engine";
-            Class<?> cancelClass = Class.forName(ep + ".CancellationToken");
-            Class<?> storeClass  = Class.forName(ep + ".support.store.NamespacedHierarchicalStore");
-            Class<?> outDirClass = Class.forName(ep + ".OutputDirectoryCreator");
-
-            // CancellationToken.disabled() — a token that never cancels.
-            Object cancellation = cancelClass.getMethod("disabled").invoke(null);
-            // Jupiter requires requestLevelStore.getParent() to be present —
-            // create a launcher-level root store first, then a child for this request.
-            Object parentStore = storeClass.getConstructor(storeClass).newInstance((Object) null);
-            Object store = storeClass.getMethod("newChild").invoke(parentStore);
-            Object outDir = noOpOutputDirectoryCreator();
-
-            var factory = org.junit.platform.engine.ExecutionRequest.class.getMethod(
-                    "create",
-                    org.junit.platform.engine.TestDescriptor.class,
-                    org.junit.platform.engine.EngineExecutionListener.class,
-                    org.junit.platform.engine.ConfigurationParameters.class,
-                    outDirClass, storeClass, cancelClass);
-            return (org.junit.platform.engine.ExecutionRequest) factory.invoke(
-                    null, descriptor, listener, EmptyConfigParams.INSTANCE,
-                    outDir, store, cancellation);
-        } catch (Exception ignored) {
-            // JUnit 5.x: 3-arg public constructor is fine, no store required.
+            // Jupiter requires requestLevelStore.getParent() to be present.
+            // Create a launcher-level root store then a child for this request.
+            var parentStore =
+                    new org.junit.platform.engine.support.store.NamespacedHierarchicalStore<
+                            org.junit.platform.engine.support.store.Namespace>(null);
+            var store = parentStore.newChild();
+            return org.junit.platform.engine.ExecutionRequest.create(
+                    descriptor, listener, EmptyConfigParams.INSTANCE,
+                    NoOpOutputDirectoryCreator.INSTANCE, store,
+                    org.junit.platform.engine.CancellationToken.disabled());
+        } catch (NoClassDefFoundError e) {
+            // JUnit 5.x: NamespacedHierarchicalStore / CancellationToken absent.
             return new org.junit.platform.engine.ExecutionRequest(
                     descriptor, listener, EmptyConfigParams.INSTANCE);
         }
@@ -391,6 +294,64 @@ public final class JkRunner implements Plugin {
     }
 
     // --- inner helpers -------------------------------------------------------
+
+    /** Minimal {@link org.junit.platform.engine.EngineDiscoveryRequest} backed by fixed lists. */
+    private static final class SimpleDiscoveryRequest
+            implements org.junit.platform.engine.EngineDiscoveryRequest {
+        private final List<org.junit.platform.engine.DiscoverySelector> selectors;
+        private final List<org.junit.platform.engine.DiscoveryFilter<?>> filters;
+
+        SimpleDiscoveryRequest(
+                List<org.junit.platform.engine.DiscoverySelector> selectors,
+                List<org.junit.platform.engine.DiscoveryFilter<?>> filters) {
+            this.selectors = selectors;
+            this.filters = filters;
+        }
+
+        @Override
+        @SuppressWarnings("unchecked")
+        public <T extends org.junit.platform.engine.DiscoverySelector> List<T> getSelectorsByType(
+                Class<T> type) {
+            return selectors.stream().filter(type::isInstance).map(type::cast).toList();
+        }
+
+        @Override
+        @SuppressWarnings("unchecked")
+        public <T extends org.junit.platform.engine.DiscoveryFilter<?>> List<T> getFiltersByType(
+                Class<T> type) {
+            return filters.stream().filter(type::isInstance).map(type::cast).toList();
+        }
+
+        @Override
+        public org.junit.platform.engine.ConfigurationParameters getConfigurationParameters() {
+            return EmptyConfigParams.INSTANCE;
+        }
+
+        /** JUnit 6.x: provide a no-op creator so Jupiter doesn't fall through to the default throw. */
+        @Override
+        public org.junit.platform.engine.OutputDirectoryCreator getOutputDirectoryCreator() {
+            return NoOpOutputDirectoryCreator.INSTANCE;
+        }
+    }
+
+    /** No-op {@link org.junit.platform.engine.OutputDirectoryCreator} — added in JUnit 6.x. */
+    private static final class NoOpOutputDirectoryCreator
+            implements org.junit.platform.engine.OutputDirectoryCreator {
+        static final NoOpOutputDirectoryCreator INSTANCE = new NoOpOutputDirectoryCreator();
+        private static final java.nio.file.Path TMP =
+                java.nio.file.Path.of(System.getProperty("java.io.tmpdir", "/tmp"));
+
+        @Override
+        public java.nio.file.Path getRootDirectory() {
+            return TMP;
+        }
+
+        @Override
+        public java.nio.file.Path createOutputDirectory(
+                org.junit.platform.engine.TestDescriptor descriptor) {
+            return null; // no per-test output directory
+        }
+    }
 
     /** ConfigurationParameters implementation that returns empty/false for all keys. */
     private static final class EmptyConfigParams
