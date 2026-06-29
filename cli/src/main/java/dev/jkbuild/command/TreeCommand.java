@@ -101,28 +101,37 @@ public final class TreeCommand implements CliCommand {
         // Uses the filled-circle bullet (●) consistent with the root-node glyph.
         boolean nerdfont = dev.jkbuild.config.GlobalConfig.nerdfont();
         Theme t = Theme.active();
-        String title = " ≡ Dependencies Tree ";
-        String header = nerdfont
-                ? Theme.colorize(title, t.goalChip())
-                        + Theme.colorize(dev.jkbuild.cli.tui.Glyphs.SEGMENT_END_NERD, t.bright(t.planBadgeColor()))
-                : Theme.colorize(title, t.goalChip());
-        System.out.println();
-        System.out.println(header);
+        boolean ansi = t.isAnsi();
+
+        if (ansi) {
+            String title = " ≡ Dependencies Tree ";
+            String header = nerdfont
+                    ? Theme.colorize(title, t.goalChip())
+                            + Theme.colorize(dev.jkbuild.cli.tui.Glyphs.SEGMENT_END_NERD, t.bright(t.planBadgeColor()))
+                    : Theme.colorize(title, t.goalChip());
+            System.out.println();
+            System.out.println(header);
+        } else {
+            System.out.println(" - Dependencies Tree:");
+        }
+
         // Composite-aware: walks path deps' own trees too (anchored at `dir`).
-        String rendered = DependencyTree.render(project, lock, dir, max, styling(nerdfont), flatten, scopes, stack);
-        // Split root coord from tree body so we can insert a " │" separator between them.
+        String rendered = DependencyTree.render(project, lock, dir, max, styling(nerdfont, ansi), flatten, scopes, stack);
+        // Split root coord from tree body so we can insert a separator between them.
         int nl = rendered.indexOf('\n');
         if (nl >= 0) {
             System.out.println(rendered.substring(0, nl));
-            System.out.println(" " + Theme.colorize("│", t.darkGray()));
+            System.out.println(ansi ? " " + Theme.colorize("│", t.darkGray()) : " |");
             System.out.print(indentBody(rendered.substring(nl + 1), false));
         } else {
             System.out.print(rendered);
         }
         if (rendered.contains(DependencyTree.MISSING_SUFFIX)) {
             System.out.println();
-            System.out.println("Some dependencies are missing from your local cache. Run "
-                    + Theme.colorize("jk lock", Theme.active().warning()));
+            System.out.println(ansi
+                    ? "Some dependencies are missing from your local cache. Run "
+                            + Theme.colorize("jk lock", t.warning())
+                    : "Some dependencies are missing from your local cache. Run `jk lock`");
         }
         return 0;
     }
@@ -203,7 +212,32 @@ public final class TreeCommand implements CliCommand {
      * {@code --color} / {@code NO_COLOR} / dumb terminals, so escapes are dropped cleanly when color
      * is off.
      */
-    private static DependencyTree.Styling styling(boolean nerdfont) {
+    private static DependencyTree.Styling styling(boolean nerdfont, boolean ansi) {
+        if (!ansi) {
+            // No-ANSI: replace all Unicode connectors with ASCII equivalents,
+            // use [scope] bracket badges, * root bullet, plain uncolored coords.
+            UnaryOperator<String> asciiRail = s -> switch (s) {
+                case "├─"  -> "+-";
+                case "╰─"  -> "`-";
+                case "├─ " -> "+- ";
+                case "╰─ " -> "`- ";
+                case "│  " -> "|  ";
+                case "   " -> "   ";
+                case "●"   -> "*";
+                default    -> s;
+            };
+            UnaryOperator<String> plain = UnaryOperator.identity();
+            // Back-reference rows: connector + coord + " ⎋" all arrive as one string.
+            // Replace Unicode connectors and drop the ⎋ marker (no color = no dim cue).
+            UnaryOperator<String> asciiReference = s -> s
+                    .replace("╰─ ", "`- ")
+                    .replace("├─ ", "+- ")
+                    .replace(" ⎋", "");
+            UnaryOperator<String> asciiBadge = s -> "[" + s + "]";
+            UnaryOperator<String> asciiRoot = gav -> " * " + gav;
+            return new DependencyTree.Styling(
+                    asciiRail, plain, plain, plain, asciiReference, asciiBadge, plain, asciiRoot);
+        }
         // Scope section badge: a rounded pill (Nerd Font) or space-padded chip.
         UnaryOperator<String> scopeBadge = s -> dev.jkbuild.cli.tui.Badge.pill(s, nerdfont);
         Theme t = Theme.active();
