@@ -187,6 +187,14 @@ public final class Jk {
                 // Legacy aliases — still accepted, fold into force.
                 case "--rerun", "--refresh" -> force = java.util.Optional.of(true);
                 case "--no-progress" -> noProgress = java.util.Optional.of(true);
+                // --no-ansi: no ANSI escape codes, no Unicode glyphs, no animations.
+                // Equivalent to --color never + --no-progress (color=never → isAnsi()=false
+                // → GoalWedge ASCII output, nerdfont()=false; no-progress → QUIET mode →
+                // animate=false, no cursor-movement redraws).
+                case "--no-ansi" -> {
+                    color = java.util.Optional.of(JkConfig.ColorChoice.NEVER);
+                    noProgress = java.util.Optional.of(true);
+                }
                 case "--color" -> {
                     if (i + 1 < args.length) color = JkConfig.ColorChoice.parse(args[++i]);
                 }

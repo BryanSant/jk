@@ -147,6 +147,7 @@ public final class GlobalOptions {
                 Opt.flag("Disable network access for this run", "--offline"),
                 Opt.flag("Bypass jk's caching and redo this operation", "--force"),
                 Opt.flag("Disable all progress bars and spinners", "--no-progress"),
+                Opt.flag("Disable all ANSI/color/Unicode; ASCII-only output", "--no-ansi"),
                 Opt.value("<FORMAT>", "Output format: text (default) or json", "--output"),
                 Opt.value("<FILE>", "Use this jk.toml for configuration", "--config-file"),
                 Opt.flag("Skip jk.toml discovery; use defaults", "--no-config"),
