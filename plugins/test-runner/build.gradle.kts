@@ -17,7 +17,7 @@ val bundledCodec by configurations.creating {
 }
 
 dependencies {
-    implementation(libs.junit.platform.launcher)
+    implementation(libs.junit.platform.engine)
     compileOnly(project(":plugin-api"))
     bundledCodec(project(":plugin-api"))
     testImplementation(project(":plugin-api"))

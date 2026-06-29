@@ -75,7 +75,8 @@ picocli                = { module = "info.picocli:picocli",                     
 jline-terminal-ffm     = { module = "org.jline:jline-terminal-ffm",                 version.ref = "jline" }
 
 # testing (consumed by jk.java-conventions; applied to every module)
-junit-jupiter          = { module = "org.junit.jupiter:junit-jupiter",              version.ref = "junit" }
+junit-jupiter           = { module = "org.junit.jupiter:junit-jupiter",              version.ref = "junit" }
+junit-platform-engine   = { module = "org.junit.platform:junit-platform-engine",    version.ref = "junit" }
 junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher",  version.ref = "junit" }
 assertj-core           = { module = "org.assertj:assertj-core",                     version.ref = "assertj" }
 

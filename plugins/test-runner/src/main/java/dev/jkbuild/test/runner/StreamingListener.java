@@ -7,14 +7,14 @@ import java.io.StringWriter;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
+import org.junit.platform.engine.EngineExecutionListener;
+import org.junit.platform.engine.TestDescriptor;
 import org.junit.platform.engine.TestExecutionResult;
 import org.junit.platform.engine.reporting.ReportEntry;
-import org.junit.platform.launcher.TestExecutionListener;
-import org.junit.platform.launcher.TestIdentifier;
-import org.junit.platform.launcher.TestPlan;
 
 /**
- * {@link TestExecutionListener} that translates JUnit Platform callbacks into protocol events on a
+ * {@link EngineExecutionListener} that translates JUnit Platform callbacks into protocol events on a
  * {@link EventWriter}. Stateful enough to track per-test timing (JUnit's listener API gives us
  * "started" / "finished" but no built-in duration).
  *
@@ -22,12 +22,12 @@ import org.junit.platform.launcher.TestPlan;
  * safely cross classpaths intact, and the parent jk process doesn't need a live exception, just its
  * rendered form.
  */
-final class StreamingListener implements TestExecutionListener {
+final class StreamingListener implements EngineExecutionListener {
 
     private final EventWriter out;
     private final int workerId;
     private final ConcurrentHashMap<String, Long> startNanos = new ConcurrentHashMap<>();
-    private long planStartNanos;
+    private final AtomicBoolean failed = new AtomicBoolean(false);
 
     StreamingListener(EventWriter out, int workerId) {
         this.out = out;
@@ -35,75 +35,76 @@ final class StreamingListener implements TestExecutionListener {
     }
 
     @Override
-    public void testPlanExecutionStarted(TestPlan testPlan) {
-        // PLAN_STARTED is emitted by JkRunner once per worker session, not
-        // here — in pull mode this method fires per-class, so emitting here
-        // would produce N plan_started events per worker.
-    }
-
-    @Override
-    public void dynamicTestRegistered(TestIdentifier id) {
+    public void dynamicTestRegistered(TestDescriptor descriptor) {
         var payload = new LinkedHashMap<String, Object>();
-        payload.put("id", id.getUniqueId());
-        payload.put("display", id.getDisplayName());
-        payload.put("parent", id.getParentId().orElse(null));
-        payload.put("type", id.getType().name());
+        payload.put("id", descriptor.getUniqueId().toString());
+        payload.put("display", descriptor.getDisplayName());
+        payload.put("parent", descriptor.getParent().map(p -> p.getUniqueId().toString()).orElse(null));
+        payload.put("type", descriptor.getType().name());
         emit(EventType.DYNAMIC_REGISTERED, payload);
     }
 
     @Override
-    public void executionSkipped(TestIdentifier id, String reason) {
+    public void executionSkipped(TestDescriptor descriptor, String reason) {
         var payload = new LinkedHashMap<String, Object>();
-        payload.put("id", id.getUniqueId());
-        payload.put("display", id.getDisplayName());
-        payload.put("type", id.getType().name());
+        payload.put("id", descriptor.getUniqueId().toString());
+        payload.put("display", descriptor.getDisplayName());
+        payload.put("type", descriptor.getType().name());
         payload.put("reason", reason == null ? "" : reason);
         emit(EventType.SKIPPED, payload);
     }
 
     @Override
-    public void executionStarted(TestIdentifier id) {
-        startNanos.put(id.getUniqueId(), System.nanoTime());
+    public void executionStarted(TestDescriptor descriptor) {
+        String uid = descriptor.getUniqueId().toString();
+        startNanos.put(uid, System.nanoTime());
         var payload = new LinkedHashMap<String, Object>();
-        payload.put("id", id.getUniqueId());
-        payload.put("display", id.getDisplayName());
-        payload.put("parent", id.getParentId().orElse(null));
-        payload.put("type", id.getType().name());
-        id.getSource().ifPresent(src -> payload.put("source", src.toString()));
+        payload.put("id", uid);
+        payload.put("display", descriptor.getDisplayName());
+        payload.put("parent", descriptor.getParent().map(p -> p.getUniqueId().toString()).orElse(null));
+        payload.put("type", descriptor.getType().name());
+        descriptor.getSource().ifPresent(src -> payload.put("source", src.toString()));
         emit(EventType.STARTED, payload);
     }
 
     @Override
-    public void executionFinished(TestIdentifier id, TestExecutionResult result) {
-        long started = startNanos.getOrDefault(id.getUniqueId(), System.nanoTime());
+    public void executionFinished(TestDescriptor descriptor, TestExecutionResult result) {
+        String uid = descriptor.getUniqueId().toString();
+        long started = startNanos.getOrDefault(uid, System.nanoTime());
         long durationMs = Math.max(0, (System.nanoTime() - started) / 1_000_000);
 
+        if (result.getStatus() == TestExecutionResult.Status.FAILED) {
+            failed.set(true);
+        }
+
         var payload = new LinkedHashMap<String, Object>();
-        payload.put("id", id.getUniqueId());
+        payload.put("id", uid);
         payload.put("status", result.getStatus().name());
-        payload.put("type", id.getType().name()); // parent counts FINISHED[type=TEST] for totals
-        payload.put("display", id.getDisplayName());
+        payload.put("type", descriptor.getType().name()); // parent counts FINISHED[type=TEST] for totals
+        payload.put("display", descriptor.getDisplayName());
         payload.put("duration_ms", durationMs);
         result.getThrowable().ifPresent(t -> payload.put("throwable", flatten(t)));
         emit(EventType.FINISHED, payload);
     }
 
     @Override
-    public void reportingEntryPublished(TestIdentifier id, ReportEntry entry) {
+    public void reportingEntryPublished(TestDescriptor descriptor, ReportEntry entry) {
         var payload = new LinkedHashMap<String, Object>();
-        payload.put("id", id.getUniqueId());
+        payload.put("id", descriptor.getUniqueId().toString());
         payload.put("entries", new LinkedHashMap<>(entry.getKeyValuePairs()));
         emit(EventType.REPORT, payload);
     }
 
-    @Override
-    public void testPlanExecutionFinished(TestPlan testPlan) {
-        // Counters are derived from this listener's view of the just-finished
-        // plan: walking the plan + the TestExecutionResult callbacks would be
-        // redundant when ResultAggregator on the parent already counts
-        // FINISHED events directly. Emit a marker event with the per-plan
-        // duration so the parent can show "engine X took Yms" if it wants.
-        long durationMs = Math.max(0, (System.nanoTime() - planStartNanos) / 1_000_000);
+    /** Returns true if any test finished with FAILED status during this session. */
+    boolean hasFailures() {
+        return failed.get();
+    }
+
+    /**
+     * Emit the PLAN_FINISHED event. Called by JkRunner after all engines complete execution,
+     * replacing the old {@code testPlanExecutionFinished(TestPlan)} callback.
+     */
+    void emitPlanFinished(long durationMs) {
         var payload = new LinkedHashMap<String, Object>();
         payload.put("duration_ms", durationMs);
         emit(EventType.PLAN_FINISHED, payload);

@@ -13,5 +13,4 @@ main     = "dev.jkbuild.test.runner.JkRunner"
 "Implementation-Version" = "0.1.0"
 
 [dependencies.main]
-junit-platform-launcher = { group = "org.junit.platform", version = "=6.1.0" }
-junit-jupiter-api = "latest"
+junit-platform-engine = { group = "org.junit.platform", version = ">=1.8.0" }
