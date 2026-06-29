@@ -113,10 +113,14 @@ public final class JkDarkTheme implements Theme {
 
     @Override
     public boolean isAnsi() {
-        // --no-ansi explicitly disables all ANSI output (color + text attributes).
-        // --color never (without --no-ansi) only strips color but preserves text attributes.
+        // No-ANSI mode: explicitly set, dumb terminal, or CI=true/1.
+        // NOT gated on colorEnabled() — NO_COLOR / --color never only disables color;
+        // it does not disable Unicode glyphs, animations, or other ANSI sequences.
         if (dev.jkbuild.config.ActiveConfig.get().noAnsiOr(false)) return false;
-        return Theme.colorEnabled();
+        if ("dumb".equals(System.getenv("TERM"))) return false;
+        String ci = System.getenv("CI");
+        if ("true".equalsIgnoreCase(ci) || "1".equals(ci)) return false;
+        return true;
     }
 
     @Override
