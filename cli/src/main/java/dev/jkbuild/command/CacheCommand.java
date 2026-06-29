@@ -180,8 +180,11 @@ public final class CacheCommand implements CliCommand {
             }
             Stats sha = statsOf(root.resolve("sha256"));
             Stats actions = statsOf(root.resolve("actions"));
-            long totalFiles = sha.files + actions.files;
-            long totalBytes = sha.bytes + actions.bytes;
+            Stats repos = statsOf(root.resolve("repos"));
+            Stats runs = statsOf(root.resolve("runs"));
+            Stats stamps = statsOf(root.resolve("format-stamps"));
+            long totalFiles = sha.files + actions.files + repos.files + runs.files + stamps.files;
+            long totalBytes = sha.bytes + actions.bytes + repos.bytes + runs.bytes + stamps.bytes;
 
             // Utilization denominator: the configured LRU ceiling ([cache]
             // max-size-gb in ~/.jk/config.toml), or the documented 20 GiB default
@@ -189,17 +192,40 @@ public final class CacheCommand implements CliCommand {
             var cfg = dev.jkbuild.config.JkCacheConfig.resolve();
             long maxBytes = (long) cfg.maxSizeGb().orElse(20) * 1024L * 1024L * 1024L;
 
-            for (String line : renderInfoTable(sha, actions, totalFiles, totalBytes, maxBytes)) {
+            // Last-pruned timestamp from the scheduler stamp file.
+            String lastPruned = lastPrunedLabel(root);
+
+            for (String line : renderInfoTable(sha, actions, repos, runs, stamps,
+                    totalFiles, totalBytes, maxBytes, lastPruned)) {
                 System.out.println(line);
             }
             return 0;
         }
 
+        private static String lastPrunedLabel(Path root) {
+            Path stamp = root.resolve(dev.jkbuild.task.CachePruneScheduler.LAST_PRUNED_FILE);
+            if (!Files.isRegularFile(stamp)) return "never";
+            try {
+                long millis = Long.parseLong(Files.readString(stamp, StandardCharsets.UTF_8).trim());
+                long ageMs = System.currentTimeMillis() - millis;
+                long days = ageMs / (24L * 60 * 60 * 1000);
+                if (days == 0) return "today";
+                if (days == 1) return "1 day ago";
+                return days + " days ago";
+            } catch (Exception e) {
+                return "unknown";
+            }
+        }
+
         private static List<String> renderInfoTable(
-                Stats sha, Stats actions, long totalFiles, long totalBytes, long maxBytes) {
+                Stats sha, Stats actions, Stats repos, Stats runs, Stats stamps,
+                long totalFiles, long totalBytes, long maxBytes, String lastPruned) {
             String[][] rows = {
-                {"CAS Blobs", fmtCount(sha.files), fmtSize(sha.bytes)},
-                {"Action Cache", fmtCount(actions.files), fmtSize(actions.bytes)},
+                {"CAS Blobs",     fmtCount(sha.files),     fmtSize(sha.bytes)},
+                {"Action Cache",  fmtCount(actions.files), fmtSize(actions.bytes)},
+                {"Worker JARs",   fmtCount(repos.files),   fmtSize(repos.bytes)},
+                {"Run Logs",      fmtCount(runs.files),    fmtSize(runs.bytes)},
+                {"Format Stamps", fmtCount(stamps.files),  fmtSize(stamps.bytes)},
             };
             String[] total = {"Total", fmtCount(totalFiles), fmtSize(totalBytes)};
 
@@ -221,6 +247,9 @@ public final class CacheCommand implements CliCommand {
             out.add(divider("├", "┴", "┤", w)); // ┴ closes the columns; utilization spans full width
             out.add(utilizationRow(totalBytes, maxBytes, inner));
             out.add(border("╰", "╯", inner));
+            Theme t = Theme.active();
+            out.add("  Last pruned: " + Theme.colorize(lastPruned, "never".equals(lastPruned)
+                    ? t.warning() : t.normalGray()));
             return out;
         }
 
