@@ -91,7 +91,8 @@ public final class JkConfigLoader {
                 TomlValues.optBoolean(config, "quiet"),
                 TomlValues.optBoolean(config, "verbose"),
                 TomlValues.optString(config, "directory").map(Paths::get),
-                TomlValues.optBoolean(config, "force"));
+                TomlValues.optBoolean(config, "force"),
+                Optional.empty()); // no-ansi is CLI-only, not config-file settable
     }
 
     /** Build a config layer from environment variables. */
@@ -120,6 +121,7 @@ public final class JkConfigLoader {
                 EnvValues.bool(env, ENV_QUIET),
                 EnvValues.bool(env, ENV_VERBOSE),
                 Optional.empty(), // directory isn't env-var-driven
-                force);
+                force,
+                Optional.empty()); // no-ansi is CLI-only
     }
 }

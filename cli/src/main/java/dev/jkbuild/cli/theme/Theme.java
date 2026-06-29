@@ -307,6 +307,8 @@ public interface Theme {
 
     /** True when foreground color should be emitted, given the resolved {@code --color} choice. */
     static boolean colorEnabled() {
+        // --no-ansi disables everything including color.
+        if (ActiveConfig.get().noAnsiOr(false)) return false;
         var choice = ActiveConfig.get().colorOr(JkConfig.ColorChoice.AUTO);
         return switch (choice) {
             case ALWAYS -> true;
@@ -337,6 +339,9 @@ public interface Theme {
      * every consumer — it just makes one canonical byte order across the module.
      */
     static String colorize(String text, AttributedStyle style) {
+        // --no-ansi: strip everything including bold/italic — return plain text.
+        // (--color never alone preserves text attributes; --no-ansi strips all.)
+        if (ActiveConfig.get().noAnsiOr(false)) return text;
         String sgr = style.toAnsi();
         // A style with no attributes renders as a blank SGR body (JLine emits a
         // single space, not ""), which would otherwise produce a stray `\033[ m`.

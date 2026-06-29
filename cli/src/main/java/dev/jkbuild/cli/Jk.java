@@ -174,6 +174,7 @@ public final class Jk {
         java.util.Optional<Boolean> refresh = java.util.Optional.empty(); // legacy
         java.util.Optional<Boolean> force = java.util.Optional.empty();
         java.util.Optional<Boolean> noProgress = java.util.Optional.empty();
+        java.util.Optional<Boolean> noAnsi = java.util.Optional.empty();
         java.util.Optional<Boolean> quiet = java.util.Optional.empty();
         java.util.Optional<Boolean> verbose = java.util.Optional.empty();
         java.util.Optional<java.nio.file.Path> directory = java.util.Optional.empty();
@@ -187,12 +188,12 @@ public final class Jk {
                 // Legacy aliases — still accepted, fold into force.
                 case "--rerun", "--refresh" -> force = java.util.Optional.of(true);
                 case "--no-progress" -> noProgress = java.util.Optional.of(true);
-                // --no-ansi: no ANSI escape codes, no Unicode glyphs, no animations.
-                // Equivalent to --color never + --no-progress (color=never → isAnsi()=false
-                // → GoalWedge ASCII output, nerdfont()=false; no-progress → QUIET mode →
-                // animate=false, no cursor-movement redraws).
+                // --no-ansi: strip ALL ANSI (color + bold/italic) and disable animations.
+                // Sets noAnsi=true (→ isAnsi()=false → colorize() returns plain text) and
+                // noProgress=true (→ QUIET mode, no cursor-movement redraws).
+                // Distinct from --color never which strips color but preserves text attributes.
                 case "--no-ansi" -> {
-                    color = java.util.Optional.of(JkConfig.ColorChoice.NEVER);
+                    noAnsi = java.util.Optional.of(true);
                     noProgress = java.util.Optional.of(true);
                 }
                 case "--color" -> {
@@ -210,7 +211,7 @@ public final class Jk {
                 }
             }
         }
-        JkConfig cli = new JkConfig(color, offline, rerun, refresh, noProgress, quiet, verbose, directory, force);
+        JkConfig cli = new JkConfig(color, offline, rerun, refresh, noProgress, quiet, verbose, directory, force, noAnsi);
         ActiveConfig.install(ActiveConfig.get().mergedWith(cli));
     }
 

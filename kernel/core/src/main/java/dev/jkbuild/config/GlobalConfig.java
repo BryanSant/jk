@@ -77,6 +77,7 @@ public final class GlobalConfig {
      * the CLI layer, duplicated here so {@code kernel/core} can apply it without a circular dep.
      */
     static boolean colorActivelyEnabled() {
+        if (ActiveConfig.get().noAnsiOr(false)) return false;
         var choice = ActiveConfig.get().colorOr(JkConfig.ColorChoice.AUTO);
         return switch (choice) {
             case ALWAYS -> true;

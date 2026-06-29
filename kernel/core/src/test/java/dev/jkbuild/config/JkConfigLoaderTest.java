@@ -32,7 +32,8 @@ class JkConfigLoaderTest {
                 Optional.empty(),
                 Optional.empty(),
                 Optional.empty(),
-                Optional.empty()); // force
+                Optional.empty(), // force
+                Optional.empty()); // noAnsi
         JkConfig over = new JkConfig(
                 Optional.of(JkConfig.ColorChoice.ALWAYS),
                 Optional.empty(),
@@ -42,7 +43,8 @@ class JkConfigLoaderTest {
                 Optional.empty(),
                 Optional.empty(),
                 Optional.empty(),
-                Optional.empty()); // force
+                Optional.empty(), // force
+                Optional.empty()); // noAnsi
         JkConfig merged = base.mergedWith(over);
         assertThat(merged.color()).hasValue(JkConfig.ColorChoice.ALWAYS); // over wins
         assertThat(merged.offline()).hasValue(true); // base passes through

@@ -42,7 +42,13 @@ public record JkConfig(
          * Supersedes both {@code rerun} and {@code refresh}: any code that checks either of those
          * will also see {@code true} when {@code force} is set.
          */
-        Optional<Boolean> force) {
+        Optional<Boolean> force,
+        /**
+         * {@code --no-ansi} — disable all ANSI escape sequences including color, bold, italic,
+         * and cursor movement. Output is ASCII-only. Distinct from {@code --color never} which
+         * strips color but preserves text attributes (bold/italic).
+         */
+        Optional<Boolean> noAnsi) {
 
     public enum ColorChoice {
         AUTO,
@@ -70,11 +76,13 @@ public record JkConfig(
         Objects.requireNonNull(verbose, "verbose");
         Objects.requireNonNull(directory, "directory");
         Objects.requireNonNull(force, "force");
+        Objects.requireNonNull(noAnsi, "noAnsi");
     }
 
     /** Empty config — every setting unset. Used as the seed before layers merge. */
     public static JkConfig empty() {
         return new JkConfig(
+                Optional.empty(),
                 Optional.empty(),
                 Optional.empty(),
                 Optional.empty(),
@@ -100,7 +108,8 @@ public record JkConfig(
                 over.quiet.or(() -> this.quiet),
                 over.verbose.or(() -> this.verbose),
                 over.directory.or(() -> this.directory),
-                over.force.or(() -> this.force));
+                over.force.or(() -> this.force),
+                over.noAnsi.or(() -> this.noAnsi));
     }
 
     /** Convenience: color with a fallback when empty. */
@@ -131,6 +140,11 @@ public record JkConfig(
     /** True when {@code --force} / {@code JK_FORCE} was set for this invocation. */
     public boolean forceOr(boolean fallback) {
         return force.orElse(fallback);
+    }
+
+    /** True when {@code --no-ansi} was set — all ANSI sequences suppressed, ASCII only. */
+    public boolean noAnsiOr(boolean fallback) {
+        return noAnsi.orElse(fallback);
     }
 
     public boolean noProgressOr(boolean fallback) {

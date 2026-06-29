@@ -386,19 +386,27 @@ public final class JdkListCommand implements CliCommand {
     // supplied, which mangles this table.
 
     private static String border(String left, String mid, String right, int inner) {
+        if (!Theme.active().isAnsi()) return "+" + "-".repeat(inner) + "+";
         return Theme.colorize(left + mid.repeat(inner) + right, Theme.active().darkGray());
     }
 
     private static String divider(String left, String junction, String right, int[] widths) {
-        var sb = new StringBuilder(left);
+        boolean ansi = Theme.active().isAnsi();
+        var sb = new StringBuilder(ansi ? left : "+");
         for (int i = 0; i < widths.length; i++) {
-            sb.append("─".repeat(widths[i] + 2));
-            sb.append(i == widths.length - 1 ? right : junction);
+            sb.append((ansi ? "─" : "-").repeat(widths[i] + 2));
+            sb.append(i == widths.length - 1 ? (ansi ? right : "+") : (ansi ? junction : "+"));
         }
-        return Theme.colorize(sb.toString(), Theme.active().darkGray());
+        return ansi ? Theme.colorize(sb.toString(), Theme.active().darkGray()) : sb.toString();
     }
 
     private static String titleLine(String title, int inner) {
+        if (!Theme.active().isAnsi()) {
+            // No-ANSI: plain | centered title | — no color, no pills
+            int total = Math.max(0, inner - title.length());
+            int left = total / 2, right = total - left;
+            return "|" + " ".repeat(left) + title + " ".repeat(right) + "|";
+        }
         // Full-width banner: the centered title runs white on the build-goal blue
         // wedge (Theme.goalChip), so the whole span between the box rails — padding
         // included — carries the blue background. The rails stay dark gray.
@@ -433,7 +441,7 @@ public final class JdkListCommand implements CliCommand {
     }
 
     private static String headerRow(int[] widths) {
-        var bar = Theme.colorize("│", Theme.active().darkGray());
+        String bar = Theme.active().isAnsi() ? Theme.colorize("│", Theme.active().darkGray()) : "|";
         var sb = new StringBuilder(bar);
         for (int i = 0; i < HEADERS.length; i++) {
             sb.append(" ");
@@ -462,19 +470,20 @@ public final class JdkListCommand implements CliCommand {
         // the single padding space immediately inside each rail, so the background band
         // tapers into the terminal background with rounded edges — same as GoalWedge.cap().
         boolean nerdfont = dev.jkbuild.config.GlobalConfig.nerdfont();
-        String outerBar = Theme.colorize("│", Theme.active().darkGray());
-        String innerBar = band == null
-                ? outerBar
-                : Theme.colorize("│", banded(Theme.active().darkGray(), band));
+        boolean ansi = Theme.active().isAnsi();
+        String outerBar = ansi ? Theme.colorize("│", Theme.active().darkGray()) : "|";
+        String innerBar = ansi
+                ? (band == null ? outerBar : Theme.colorize("│", banded(Theme.active().darkGray(), band)))
+                : "|";
         String sp = bandSpaces(1, band);
         // leftPad / rightPad: normally a single (possibly banded) space; with nerdfont+band
         // becomes the pill cap (foreground = band color, no background — it IS the cap).
-        String leftPad = (nerdfont && band != null)
+        String leftPad = (ansi && nerdfont && band != null)
                 ? Theme.colorize(
                         dev.jkbuild.cli.tui.Glyphs.PILL_LEFT_NERD,
                         Theme.active().bright(band))
                 : sp;
-        String rightPad = (nerdfont && band != null)
+        String rightPad = (ansi && nerdfont && band != null)
                 ? Theme.colorize(
                         dev.jkbuild.cli.tui.Glyphs.PILL_RIGHT_NERD,
                         Theme.active().bright(band))
