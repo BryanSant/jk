@@ -161,6 +161,10 @@ public final class EffortWeights {
             boolean forceRebuild) {
         boolean rerun = ActiveConfig.get().rerunOr(false) || forceRebuild;
         boolean refresh = ActiveConfig.get().refreshOr(false);
+        // If jk.toml is newer than jk.lock AND the lock no longer satisfies all declared
+        // deps, treat the module as dirty so parse-lock runs and updates the lock.
+        boolean lockStale = !rerun && AutoLock.needsRelocking(in.dir(), in.lockFile());
+        if (lockStale) rerun = true;
 
         int sync = predictSync(in, cas, refresh);
         // Learned per-unit rates (cold ⇒ empty ⇒ static Phase-1 weights). Keyed by

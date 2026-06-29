@@ -136,6 +136,11 @@ final class BuildPlanForecast {
             phases.add(new Phase("compile-main", Status.RUN, "not locked yet (run `jk build`)", null));
             return new Module(u, phases, 0, 0, false, false);
         }
+        // Two-tier lock check: mtime first (cheap), deep dep validation only when stale.
+        if (dev.jkbuild.runtime.AutoLock.needsRelocking(dir, lockFile)) {
+            phases.add(new Phase("compile-main", Status.RUN, "jk.toml changed — lock update needed", null));
+            return new Module(u, phases, 0, 0, false, false);
+        }
         int sourceCount = 0, testCount = 0;
         boolean producesJar = false, producesImage = false;
         try {
