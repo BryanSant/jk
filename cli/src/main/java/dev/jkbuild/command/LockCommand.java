@@ -234,32 +234,23 @@ public final class LockCommand implements CliCommand {
             AtomicInteger globalTotal,
             List<String> errorLines)
             throws Exception {
-        // Register and activate this module's row.
-        view.addPhaseLabeled(coord, "lock", coord);
-        view.phaseRunning(coord, "lock");
-
         Path lockFile = dir.resolve("jk.lock");
 
-        // Lock is purely resolution (version constraints) — artifact fetching
-        // happens in jk sync/build, not here. There's no meaningful "X of N"
-        // count to show, so we display only a spinner + label; denominator stays
-        // 0 so no progress bar is ever rendered.
+        // Lock is purely resolution — no meaningful X-of-N count, so we show
+        // only a static spinner label with an incrementing package counter.
         AtomicInteger moduleTotal = new AtomicInteger(0);
-        view.solveLabel("Resolving dependencies…");
+        view.solveLabel("Locking versions…");
 
         ResolveObserver observer = new ResolveObserver() {
             @Override
             public void onTotal(int total) {
                 moduleTotal.set(total);
-                // Update the label to show how many packages were resolved.
-                view.solveLabel("Resolved " + total + " package" + (total == 1 ? "" : "s") + "…");
             }
 
             @Override
             public void onPackage(String module, String version) {
-                // Show the most recently resolved coord in the active row.
-                view.phaseMessage(coord, "lock", Coords.module(module, version));
-                globalLocked.incrementAndGet();
+                int n = globalLocked.incrementAndGet();
+                view.solveLabel("Locking versions… " + n);
             }
         };
 
@@ -268,12 +259,10 @@ public final class LockCommand implements CliCommand {
         GoalResult result = goal.run();
 
         if (result.success()) {
-            view.phaseDone(coord, "lock", true);
             return 0;
         }
 
-        // Failure: collect diagnostics, mark row failed.
-        view.phaseDone(coord, "lock", false);
+        // Failure: collect diagnostics.
         for (GoalResult.Diagnostic d : result.errors()) {
             errorLines.add(ConsoleSpec.renderError(d));
         }
