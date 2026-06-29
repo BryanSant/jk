@@ -252,40 +252,45 @@ public final class BuildCommand implements CliCommand {
             return runGraphPlain(units, graph.edges());
         }
 
-        // Live path (AUTO / QUIET): start the TUI *before* any I/O so the spinner
-        // is visible while BuildGraph.resolve() and forecastDirty() run.
+        // Live path (AUTO / QUIET): resolve the graph and run the cache forecast
+        // *before* creating the CommandManager so a fully-cached build never
+        // flashes the animated spinner. The TUI is created only when there is
+        // confirmed work to do; for a cached build we print the chip line directly.
         boolean animate = mode == GoalConsole.Mode.AUTO && GoalConsole.isInteractiveTerminal();
-        CommandManager view = CommandManager.goal(System.out, "Build", animate);
+        boolean nerdfont = dev.jkbuild.config.GlobalConfig.nerdfont();
 
         BuildGraph.Result graph;
         try {
             graph = BuildGraph.resolve(entryDir, entryBuild, cache.resolve("git"));
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            view.finishGoalFailure("interrupted resolving the build graph");
+            System.err.println(ConsoleSpec.errorLine("build", "interrupted resolving the build graph"));
             return 2;
         }
         if (graph.hasErrors()) {
-            for (String err : graph.errors()) view.writeAbove(ConsoleSpec.errorLine("composite", err));
-            view.finishGoalFailure("dependency resolution failed");
+            for (String err : graph.errors()) System.err.println(ConsoleSpec.errorLine("composite", err));
+            System.err.println(dev.jkbuild.cli.tui.GoalWedge.failureLine("Build", nerdfont, "dependency resolution failed"));
             return 2;
         }
         List<BuildGraph.BuildUnit> units = graph.topoOrder();
         if (units.isEmpty()) {
-            view.finishGoalSuccess("workspace declares no modules");
+            System.out.println(dev.jkbuild.cli.tui.GoalWedge.chipLine(
+                    dev.jkbuild.cli.tui.Glyphs.CHECK, "Build", nerdfont, "workspace declares no modules"));
             return 0;
         }
-        // Size worker concurrency + heaps to the graph's peak parallelism before
-        // any unit forks (caps the JVM slot pool the scheduler draws from).
         applyMemoryPlan(Math.min(maxReadyWidth(units, graph.edges()), JkThreads.CPU_THREADS));
-        // forecastDirty also runs under the spinner — stat/CAS-only scan, typically <200ms.
         long buildStart = System.nanoTime();
         Set<Path> dirtyDirs = forecastDirty(graph, cache);
         if (dirtyDirs.isEmpty()) {
-            // Nothing to rebuild — settle with the chip line immediately; no progress bar flash.
-            view.finishGoalSuccess(upToDateTail("all modules", buildStart));
+            // Fully cached — print chip line directly with no spinner ever created.
+            System.out.println(dev.jkbuild.cli.tui.GoalWedge.chipLine(
+                    dev.jkbuild.cli.tui.Glyphs.CHECK, "Build", nerdfont,
+                    upToDateTail("all modules", buildStart)));
             return 0;
         }
+        // Work confirmed — create the CommandManager now so the spinner starts
+        // the instant we know there is something to build.
+        CommandManager view = CommandManager.goal(System.out, "Build", animate);
         return runGraphLive(view, units, graph.edges(), dirtyDirs, cache, buildStart, entryDir);
     }
 
