@@ -680,9 +680,10 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
                     .append(Theme.colorize(name, chip))
                     .append(Theme.colorize(" ", chip));
             if (phase1) {
-                // Phase 1 (spinner label): U+E0B0 cap tapering to terminal bg, white text.
+                // Phase 1 (spinner label): U+E0B0 cap tapering to terminal bg, then space + white text.
                 AttributedStyle phase1Cap = Theme.active().bright(Theme.active().planBadgeColor());
                 h.append(Theme.colorize(Glyphs.SEGMENT_END_NERD, phase1Cap))
+                        .append(' ')
                         .append(Theme.colorize(sl, Theme.active().brightWhite()));
             } else {
                 // Phase 2 (fetching): cap tapers into the bar.
