@@ -53,12 +53,10 @@ public final class GoalWedge {
             return prefix + " " + verb + ": " + message;
         }
         boolean isCheck = Glyphs.CHECK.equals(glyph);
-        if (nerdfont) {
-            var chipStyle = isCheck ? t.goalSuccessChip() : t.goalChip();
-            var capColor = isCheck ? t.goalChipColor() : t.planBadgeColor();
-            return chip(glyph, verb, chipStyle) + cap(capColor, true) + " " + message;
-        }
-        return Theme.colorize(glyph + " " + verb, t.focused()) + " " + message;
+        var chipStyle = isCheck ? t.goalSuccessChip() : t.goalChip();
+        var capColor  = isCheck ? t.goalChipColor()  : t.planBadgeColor();
+        // Background is always applied; the powerline cap glyph is the only nerd-font difference.
+        return chip(glyph, verb, chipStyle) + cap(capColor, nerdfont) + " " + message;
     }
 
     /** {@code group:name} with the group cyan and the name bright-cyan — for failure tails. */
@@ -86,16 +84,12 @@ public final class GoalWedge {
         }
         String verb =
                 Theme.colorize("Failed", t.error()) + (name.isEmpty() ? "" : " to " + name.toLowerCase(Locale.ROOT));
-        if (nerdfont) {
-            return chip(Glyphs.CROSS, name, t.goalFailureChip())
-                    + cap(t.goalFailColor(), true)
-                    + " "
-                    + verb
-                    + " "
-                    + tail;
-        }
-        String head = Theme.colorize(Glyphs.CROSS + (name.isEmpty() ? "" : " " + name), t.error());
-        return head + " " + verb + " " + tail;
+        return chip(Glyphs.CROSS, name, t.goalFailureChip())
+                + cap(t.goalFailColor(), nerdfont)
+                + " "
+                + verb
+                + " "
+                + tail;
     }
 
     /**
@@ -111,15 +105,11 @@ public final class GoalWedge {
             return "· " + name + " Canceled";
         }
         String verb = Theme.colorize("Canceled", t.error()) + " by user";
-        if (nerdfont) {
-            return chip(Glyphs.CROSS, name, t.goalFailureChip())
-                    + cap(t.goalFailColor(), true)
-                    + " "
-                    + verb
-                    + " "
-                    + tail;
-        }
-        String head = Theme.colorize(Glyphs.CROSS + (name.isEmpty() ? "" : " " + name), t.error());
-        return head + " " + verb + " " + tail;
+        return chip(Glyphs.CROSS, name, t.goalFailureChip())
+                + cap(t.goalFailColor(), nerdfont)
+                + " "
+                + verb
+                + " "
+                + tail;
     }
 }

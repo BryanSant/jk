@@ -694,14 +694,12 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
                 h.append(Theme.colorize(Glyphs.SEGMENT_END_NERD, cap)).append(barStr);
             }
         } else {
-            // Plain leading space to match the region's one-column indent.
-            h.append(' ')
-                    .append(Theme.colorize(FRAMES[frame], frameColors[frame]))
-                    .append(' ')
-                    .append(Theme.colorize(name, Theme.active().focused()))
-                    .append(' ');
+            // Same chip background as the nerd-font path; the only difference is no
+            // powerline cap glyph (PUA). Spinner frame and name share the chip style.
+            AttributedStyle chip = Theme.active().goalChip();
+            h.append(Theme.colorize(" " + FRAMES[frame] + " " + name + " ", chip));
             if (phase1) {
-                h.append(Theme.colorize(sl, Theme.active().brightWhite()));
+                h.append(' ').append(Theme.colorize(sl, Theme.active().brightWhite()));
             } else {
                 h.append(barStr);
             }
