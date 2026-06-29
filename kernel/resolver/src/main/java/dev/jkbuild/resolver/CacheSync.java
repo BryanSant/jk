@@ -48,6 +48,19 @@ public final class CacheSync {
         this.localRepo = new dev.jkbuild.repo.JkMavenLocalRepo(cas.root());
     }
 
+    /**
+     * Counts the artifacts in {@code lock} that will be processed by {@link #sync} — i.e.,
+     * those with a non-null checksum (POM-only, path, and git deps are skipped). Used to
+     * pre-compute the bar denominator before the sync starts.
+     */
+    public static int countArtifacts(Lockfile lock) {
+        int count = 0;
+        for (Lockfile.Artifact pkg : lock.artifacts()) {
+            if (pkg.checksum() != null) count++;
+        }
+        return count;
+    }
+
     public Report sync(Lockfile lock) throws IOException, InterruptedException {
         return sync(lock, ProgressObserver.NOOP, false);
     }

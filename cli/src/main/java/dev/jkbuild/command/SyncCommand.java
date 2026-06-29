@@ -3,9 +3,9 @@ package dev.jkbuild.command;
 
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cli.GlobalOptions;
+import dev.jkbuild.cli.run.ConsoleSpec;
 import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.cli.theme.Coords;
-import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.config.WorkspaceLoader;
 import dev.jkbuild.http.Http;
@@ -29,6 +29,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * {@code jk sync} — bring the local toolchain + dependency cache in line with the project's {@code
@@ -44,6 +46,7 @@ import java.util.Map;
  *   <li>{@code sync-cas} (IO, parallel) — fetch any locked artifacts the CAS doesn't already hold.
  *       Per-package progress events come from {@link CacheSync.ProgressObserver}.
  *   <li>{@code write-sync-manifest} (SYNC) — stamp {@code actions/synced/<projectFingerprint>}.
+ *   <li>{@code sync-modules} (IO) — for workspace roots, cascade-sync each module's lockfile.
  * </ol>
  */
 public final class SyncCommand implements CliCommand {
@@ -105,6 +108,35 @@ public final class SyncCommand implements CliCommand {
         Path lockFile = dir.resolve("jk.lock");
         Path cache = cacheDir != null ? cacheDir : JkDirs.cache();
         Files.createDirectories(cache);
+
+        // Pre-scan: count artifacts across root + all workspace module lockfiles so
+        // sync-cas has an accurate denominator from the first bar frame. Falls back
+        // to 0 (dynamic scope) when jk.lock doesn't exist yet.
+        int preScannedTotal = 0;
+        if (Files.isRegularFile(lockFile)) {
+            try {
+                Lockfile rootLock = LockfileReader.read(lockFile);
+                preScannedTotal += CacheSync.countArtifacts(rootLock);
+                // Workspace modules: add their artifact counts too.
+                JkBuild rootBuild = parseBuildIfPresent(dir);
+                if (rootBuild != null && rootBuild.isWorkspaceRoot()) {
+                    try {
+                        Map<Path, JkBuild> mods = WorkspaceLoader.loadModules(dir, rootBuild);
+                        for (Path modDir : mods.keySet()) {
+                            Path modLock = modDir.resolve("jk.lock");
+                            if (Files.isRegularFile(modLock)) {
+                                preScannedTotal += CacheSync.countArtifacts(LockfileReader.read(modLock));
+                            }
+                        }
+                    } catch (Exception ignored) { /* best-effort */ }
+                }
+            } catch (Exception ignored) { /* lock unreadable — fall through to dynamic scope */ }
+        }
+        final int preScanDenominator = preScannedTotal;
+
+        AtomicReference<CacheSync.Report> casReportRef = new AtomicReference<>();
+        AtomicInteger totalFetched = new AtomicInteger(0);
+        AtomicInteger totalUpToDate = new AtomicInteger(0);
 
         Phase parseLock = Phase.builder("parse-lock")
                 .scope(1)
@@ -174,28 +206,26 @@ public final class SyncCommand implements CliCommand {
         Phase syncCas = Phase.builder("sync-cas")
                 .kind(PhaseKind.IO)
                 .requires("parse-lock")
-                .scope(0) // grown once parse-lock fills lockfile
+                .scope(preScanDenominator) // pre-scanned; 0 → updateScope() fallback
                 .execute(ctx -> {
                     Lockfile lock = ctx.require(LOCKFILE);
-                    int packages = lock.artifacts().size();
-                    if (packages > 0) ctx.updateScope(packages);
+                    int packages = CacheSync.countArtifacts(lock);
+                    if (preScanDenominator == 0 && packages > 0) ctx.updateScope(packages);
                     ctx.label("fetch deps");
 
                     Cas cas = new Cas(cache);
                     Http http = new Http();
-                    // Per-package progress: each callback adds 1 to the
-                    // numerator on whatever thread completed the fetch.
-                    // The TUI bar advances as individual deps land; the
-                    // event log records them ordered by completion.
                     var observer = new CacheSync.ProgressObserver() {
                         @Override
                         public void fetched(Lockfile.Artifact pkg) {
                             ctx.label("fetched " + Coords.module(pkg.name(), pkg.version()));
+                            totalFetched.incrementAndGet();
                             ctx.progress(1);
                         }
 
                         @Override
                         public void upToDate(Lockfile.Artifact pkg) {
+                            totalUpToDate.incrementAndGet();
                             ctx.progress(1);
                         }
 
@@ -212,6 +242,7 @@ public final class SyncCommand implements CliCommand {
                     };
                     boolean refresh = dev.jkbuild.config.ActiveConfig.get().refreshOr(false);
                     var report = new CacheSync(cas, http).sync(lock, observer, refresh);
+                    casReportRef.set(report);
                     ctx.put(CAS_REPORT, report);
                     if (report.hasErrors()) {
                         throw new RuntimeException("dep fetch had errors");
@@ -355,6 +386,74 @@ public final class SyncCommand implements CliCommand {
                 })
                 .build();
 
+        Phase syncModules = Phase.builder("sync-modules")
+                .kind(PhaseKind.IO)
+                .requires("write-sync-manifest")
+                .scope(0) // grown as modules are discovered
+                .execute(ctx -> {
+                    JkBuild root;
+                    try {
+                        root = JkBuildParser.parse(dir.resolve("jk.toml"));
+                    } catch (Exception ignored) {
+                        return;
+                    }
+                    if (!root.isWorkspaceRoot()) return;
+
+                    Map<Path, JkBuild> modules;
+                    try {
+                        modules = WorkspaceLoader.loadModules(dir, root);
+                    } catch (Exception e) {
+                        ctx.warn("modules", "skipping module sync — " + e.getMessage());
+                        return;
+                    }
+                    if (modules.isEmpty()) return;
+
+                    Cas cas = new Cas(cache);
+                    Http http = new Http();
+                    boolean refresh = dev.jkbuild.config.ActiveConfig.get().refreshOr(false);
+
+                    for (Map.Entry<Path, JkBuild> entry : modules.entrySet()) {
+                        Path moduleDir = entry.getKey();
+                        Path moduleLock = moduleDir.resolve("jk.lock");
+                        if (!Files.isRegularFile(moduleLock)) continue;
+                        try {
+                            Lockfile lock = LockfileReader.read(moduleLock);
+                            int modArtifacts = CacheSync.countArtifacts(lock);
+                            if (preScanDenominator == 0 && modArtifacts > 0) ctx.updateScope(modArtifacts);
+                            String modLabel = dir.relativize(moduleDir).toString();
+                            var observer = new CacheSync.ProgressObserver() {
+                                @Override
+                                public void fetched(Lockfile.Artifact pkg) {
+                                    ctx.label(modLabel + ": fetched " + Coords.module(pkg.name(), pkg.version()));
+                                    totalFetched.incrementAndGet();
+                                    ctx.progress(1);
+                                }
+
+                                @Override
+                                public void upToDate(Lockfile.Artifact pkg) {
+                                    totalUpToDate.incrementAndGet();
+                                    ctx.progress(1);
+                                }
+
+                                @Override
+                                public void skipped(Lockfile.Artifact pkg) {
+                                    ctx.progress(1);
+                                }
+
+                                @Override
+                                public void failed(Lockfile.Artifact pkg, String error) {
+                                    ctx.warn("dep", modLabel + ": " + Coords.module(pkg.name(), pkg.version()) + " — " + error);
+                                    ctx.progress(1);
+                                }
+                            };
+                            new CacheSync(cas, http).sync(lock, observer, refresh);
+                        } catch (Exception e) {
+                            ctx.warn("modules", dir.relativize(moduleDir) + ": " + e.getMessage());
+                        }
+                    }
+                })
+                .build();
+
         Goal goal = Goal.builder("sync")
                 .addPhase(parseLock)
                 .addPhase(ensureJdk)
@@ -363,156 +462,36 @@ public final class SyncCommand implements CliCommand {
                 .addPhase(syncPlugins)
                 .addPhase(syncWorkers)
                 .addPhase(writeManifest)
+                .addPhase(syncModules)
                 .build();
 
-        GoalResult result = GoalConsole.run(goal, GoalConsole.modeFor(global), cache);
+        String targetLabel = dir.getFileName() != null ? dir.getFileName().toString() : dir.toString();
+        ConsoleSpec spec = new ConsoleSpec(
+                "Sync",
+                r -> {
+                    int fetched = totalFetched.get();
+                    int upToDate = totalUpToDate.get();
+                    String tail = fetched == 0 && upToDate == 0
+                            ? "already up to date"
+                            : fetched + " fetched, " + upToDate + " up-to-date";
+                    return tail;
+                },
+                r -> "Failed to sync dependencies.",
+                true);
+
+        GoalResult result = GoalConsole.runGoal(
+                goal, GoalConsole.modeFor(global), cache, spec, targetLabel);
 
         if (result.success()) {
-            printSuccessSummary(goal, lockFile);
-            // Opportunistic cache prune — no-op when auto-prune is off. Cache
-            // settings are user-global only; resolve() reads ~/.jk/config.toml
-            // (a project jk.toml's [cache] is intentionally ignored).
+            // Opportunistic cache prune — no-op when auto-prune is off.
             var cacheConfig = dev.jkbuild.config.JkCacheConfig.resolve();
             dev.jkbuild.task.CachePruneScheduler.resolveJkExe()
                     .ifPresent(exe -> dev.jkbuild.task.CachePruneScheduler.maybeRun(cacheConfig, cache, exe));
-            // Cascade: sync each module's lock file for workspace roots.
-            cascadeSyncModules(dir, cache);
             return 0;
         }
         // The progress-bar listener (or SilentListener on a pipe) has
         // already surfaced the failure — no command-side summary.
         return 1;
-    }
-
-    /**
-     * For workspace roots: download any artifacts locked by each module's own {@code jk.lock} that
-     * aren't already in the CAS. Skips modules whose lock file hasn't been created yet (run {@code jk
-     * lock} first).
-     */
-    private void cascadeSyncModules(Path dir, Path cache) {
-        JkBuild root;
-        try {
-            root = JkBuildParser.parse(dir.resolve("jk.toml"));
-        } catch (Exception ignored) {
-            return;
-        }
-        if (!root.isWorkspaceRoot()) return;
-
-        Map<Path, JkBuild> modules;
-        try {
-            modules = WorkspaceLoader.loadModules(dir, root);
-        } catch (Exception e) {
-            if (!global.outputIsJson()) {
-                System.out.println("jk sync: skipping module sync — " + e.getMessage());
-            }
-            return;
-        }
-
-        Cas cas = new Cas(cache);
-        Http http = new Http();
-        boolean refresh = dev.jkbuild.config.ActiveConfig.get().refreshOr(false);
-        for (Map.Entry<Path, JkBuild> entry : modules.entrySet()) {
-            Path moduleDir = entry.getKey();
-            Path moduleLock = moduleDir.resolve("jk.lock");
-            if (!Files.exists(moduleLock)) {
-                if (!global.outputIsJson()) {
-                    System.out.println(
-                            "jk sync: " + dir.relativize(moduleDir) + "/jk.lock not found — run `jk lock` first");
-                }
-                continue;
-            }
-            try {
-                Lockfile lock = LockfileReader.read(moduleLock);
-                var report = new dev.jkbuild.resolver.CacheSync(cas, http)
-                        .sync(lock, dev.jkbuild.resolver.CacheSync.ProgressObserver.NOOP, refresh);
-                if (!global.outputIsJson() && (report.fetched() > 0 || report.upToDate() > 0)) {
-                    Theme th = Theme.active();
-                    System.out.println(
-                            Theme.colorize(dir.relativize(moduleDir).toString(), th.path())
-                            + ": "
-                            + Theme.colorize(String.valueOf(report.fetched()), th.focused())
-                            + " "
-                            + Theme.colorize("fetched", th.success())
-                            + ", "
-                            + Theme.colorize(String.valueOf(report.upToDate()), th.focused())
-                            + " "
-                            + Theme.colorize("up-to-date", th.normalGray())
-                            + ", "
-                            + Theme.colorize(String.valueOf(report.skipped()), th.focused())
-                            + " "
-                            + Theme.colorize("skipped", th.normalGray()));
-                }
-            } catch (Exception e) {
-                System.err.println("jk sync: " + dir.relativize(moduleDir) + ": sync failed — " + e.getMessage());
-            }
-        }
-    }
-
-    /**
-     * On success, surface the backward-compat one-liners every prior version of {@code jk sync}
-     * printed. Tests + dotfiles + scripts grep for these.
-     */
-    private void printSuccessSummary(Goal goal, Path lockFile) {
-        if (global.outputIsJson()) return;
-        Theme t = Theme.active();
-        goal.get(WORKSPACE_MODULES)
-                .ifPresent(n -> System.out.println(
-                        Theme.colorize("Workspace:", t.settled())
-                        + " "
-                        + Theme.colorize(String.valueOf(n), t.focused())
-                        + " module"
-                        + (n == 1 ? "" : "s")));
-        boolean created = goal.get(LOCKFILE_CREATED).orElse(false);
-        goal.get(LOCKFILE).ifPresent(lock -> {
-            if (created) {
-                int n = lock.artifacts().size();
-                System.out.println(Theme.colorize("Created", t.settled())
-                        + " "
-                        + dev.jkbuild.cli.PathDisplay.styledRaw(lockFile)
-                        + " ("
-                        + Theme.colorize(String.valueOf(n), t.focused())
-                        + " package"
-                        + (n == 1 ? "" : "s")
-                        + ")");
-            }
-        });
-        goal.get(JDK_OUTCOME).ifPresent(SyncCommand::printJdkSummary);
-        goal.get(CAS_REPORT)
-                .ifPresent(r -> System.out.println(
-                        Theme.colorize(String.valueOf(r.fetched()), t.focused())
-                        + Theme.colorize(" fetched, ", t.settled())
-                        + Theme.colorize(String.valueOf(r.upToDate()), t.focused())
-                        + Theme.colorize(" up-to-date, ", t.settled())
-                        + Theme.colorize(String.valueOf(r.skipped()), t.focused())
-                        + Theme.colorize(" skipped", t.settled())));
-        goal.get(WORKER_REPORT).ifPresent(r -> {
-            if (r.fetched() > 0 || r.missing() > 0) {
-                System.out.println(Theme.colorize("Workers:", t.settled())
-                        + " "
-                        + Theme.colorize(String.valueOf(r.present()), t.focused())
-                        + Theme.colorize(" present, ", t.settled())
-                        + Theme.colorize(String.valueOf(r.fetched()), t.focused())
-                        + Theme.colorize(" fetched, ", t.settled())
-                        + Theme.colorize(String.valueOf(r.missing()), t.focused())
-                        + Theme.colorize(" missing", t.settled()));
-            }
-        });
-    }
-
-    private static void printJdkSummary(JdkEnsure.Outcome outcome) {
-        if (outcome.jdk().isEmpty()) {
-            System.out.println("JDK: (no pin in jk.lock or jk.toml; falling back to JAVA_HOME)");
-            return;
-        }
-        var jdk = outcome.jdk().get();
-        switch (outcome.source()) {
-            case ALREADY_PINNED, LOCKFILE_INSTALL ->
-                System.out.println("JDK: " + jdk.identifier() + " (already installed)");
-            case INSTALLED ->
-                System.out.println("JDK: installed "
-                        + jdk.identifier()
-                        + (outcome.specUsed() != null ? " (from spec " + outcome.specUsed() + ")" : ""));
-        }
     }
 
     private static JkBuild parseBuildIfPresent(Path dir) {
