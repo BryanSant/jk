@@ -417,10 +417,12 @@ public final class NewCommand implements CliCommand {
                     }
                     if ("exists".equals(d.code())) {
                         NewInputs partial = goal.get(INPUTS).orElse(null);
-                        String name = partial != null ? partial.name() : "project";
+                        String coord = partial != null
+                                ? partial.group() + ":" + partial.name()
+                                : "project";
                         boolean isInit = directory != null && isCurrentDirArg(directory);
                         Terminal term = goal.get(TERMINAL).orElse(null);
-                        emitProjectExistsError(name, parent != null, isInit, term);
+                        emitProjectExistsError(coord, parent != null, isInit, term);
                         return 2;
                     }
                 }
@@ -463,7 +465,8 @@ public final class NewCommand implements CliCommand {
         }
         if (Files.exists(inputs.directory().resolve("jk.toml"))) {
             emitProjectExistsError(
-                    inputs.name(), parent != null, directory != null && isCurrentDirArg(directory), null);
+                    inputs.group() + ":" + inputs.name(),
+                    parent != null, directory != null && isCurrentDirArg(directory), null);
             return 2;
         }
         Path cache = JkDirs.cache();
@@ -647,20 +650,36 @@ public final class NewCommand implements CliCommand {
         return raw.equals(".") || raw.equals("./") || raw.equals(".\\");
     }
 
-    private static void emitProjectExistsError(String name, boolean isModule, boolean isInit, Terminal terminal) {
-        var verb = isInit ? "initialize" : "create";
-        var noun = isModule ? "module" : "project";
-        String chipVerb = isModule ? "New Module" : (isInit ? "Init" : "New Project");
-        String nameStyled = Theme.colorize(name, Theme.active().brightCyan().bold());
-        String message = "Failed to " + verb + " " + noun + " " + nameStyled + ". Project already exists.";
+    private static void emitProjectExistsError(String coord, boolean isModule, boolean isInit, Terminal terminal) {
+        Theme t = Theme.active();
         boolean nerdfont = dev.jkbuild.config.GlobalConfig.nerdfont();
-        String line = dev.jkbuild.cli.tui.GoalWedge.failureLine(chipVerb, nerdfont, message);
+        String noun = isModule ? "module" : "project";
+
+        // Style the coord: group:name in coordGroup/coordName; bare name in coordName.
+        int colon = coord.indexOf(':');
+        String coordStyled = colon > 0
+                ? Theme.colorize(coord.substring(0, colon), t.coordGroup())
+                        + ":"
+                        + Theme.colorize(coord.substring(colon + 1), t.coordName())
+                : Theme.colorize(coord, t.coordName());
+
+        // Line 1: ‼ The group:name project already exists in this directory.
+        String warnLine = Theme.colorize(Glyphs.BANG, t.warning())
+                + " The " + coordStyled + " " + noun + " already exists in this directory.";
+
+        // Line 2: ✘ New Project  Failed to initialize/create the project.
+        String chipVerb = isModule ? "New Module" : "New Project";
+        String failTail = "Failed to " + (isInit ? "initialize" : "create") + " the " + noun + ".";
+        String chipLine = dev.jkbuild.cli.tui.GoalWedge.failureLine(chipVerb, nerdfont, failTail);
+
         if (terminal != null) {
             var writer = terminal.writer();
-            writer.println(line);
+            writer.println(warnLine);
+            writer.println(chipLine);
             writer.flush();
         } else {
-            System.err.println(line);
+            System.err.println(warnLine);
+            System.err.println(chipLine);
         }
     }
 
