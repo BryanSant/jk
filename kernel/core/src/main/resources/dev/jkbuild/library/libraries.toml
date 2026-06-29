@@ -6,7 +6,7 @@
 # project's jk.toml references a known short name, jk fills in the
 # coordinate automatically — the user only supplies a version:
 #
-#     [dependencies.main]
+#     [dependencies]
 #     jackson-databind = "2.18.2"           # parser resolves via this table
 #
 # Unknown short names fall back to the structured form

@@ -14,7 +14,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
- * Workspace-internal classpath resolution, focused on {@code [dependencies.export]} acting like a
+ * Workspace-internal classpath resolution, focused on {@code [export-dependencies]} acting like a
  * main dependency that also rides transitively to consumers.
  */
 class WorkspaceClasspathTest {
@@ -24,7 +24,7 @@ class WorkspaceClasspathTest {
         scaffold(root);
         JkBuild app = JkBuildParser.parse(root.resolve("app/jk.toml"));
         var result = WorkspaceClasspath.resolve(root.resolve("app"), app, Set.of(Scope.EXPORT, Scope.MAIN));
-        // `app` declares `lib` in [dependencies.export]; it must be on app's own classpath.
+        // `app` declares `lib` in [export-dependencies]; it must be on app's own classpath.
         assertThat(jarNames(result)).anyMatch(n -> n.startsWith("lib-"));
     }
 
@@ -54,11 +54,11 @@ class WorkspaceClasspathTest {
                 """);
         module(root, "lib", "");
         module(root, "app", """
-                [dependencies.export]
+                [export-dependencies]
                 lib = { workspace = true }
                 """);
         module(root, "top", """
-                [dependencies.main]
+                [dependencies]
                 app = { workspace = true }
                 """);
     }

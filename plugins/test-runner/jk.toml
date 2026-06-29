@@ -12,5 +12,5 @@ main     = "dev.jkbuild.test.runner.JkRunner"
 "Implementation-Title" = "jk-test-runner"
 "Implementation-Version" = "0.1.0"
 
-[dependencies.main]
+[dependencies]
 junit-platform-engine = { group = "org.junit.platform", version = ">=6.0.0" }

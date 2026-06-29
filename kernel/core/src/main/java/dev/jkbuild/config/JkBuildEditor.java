@@ -14,32 +14,27 @@ import org.tomlj.TomlParseResult;
  * preserving user formatting and comments — the way {@code cargo add} / {@code uv add} treat their
  * config files.
  *
- * <p>Works against the v0.7 name-as-key sub-table format:
+ * <p>Works against the v0.7 name-as-key top-level section format:
  *
  * <pre>{@code
- * [dependencies.main]
+ * [dependencies]
  * spring-web = { group = "org.springframework.boot", name = "spring-boot-starter-web", version = "3.4.0" }
  *
- * [dependencies.test]
+ * [test-dependencies]
  * junit-jupiter.workspace = true
  * }</pre>
  *
- * <p>Default-scope shorthand: when a file's {@code [dependencies]} table contains only inline-table
- * children (i.e. no sub-scopes), it is treated as {@code [dependencies.main]}; we add main deps
- * directly under that header. Adding a {@code test} dep to such a file creates a separate {@code
- * [dependencies.test]} sub-table.
+ * <p>Each scope is a top-level section: {@code [dependencies]} for MAIN, {@code
+ * [test-dependencies]} for TEST, {@code [provided-dependencies]} for PROVIDED, {@code
+ * [processor-dependencies]} for PROCESSOR, {@code [export-dependencies]} for EXPORT.
  *
  * <p>After every edit we run the result through {@link Toml#parse(String)} for validation; if the
  * document no longer parses, the edit is rejected.
  */
 public final class JkBuildEditor {
 
-    /** Header line for the bare {@code [dependencies]} table (flat-shorthand). */
+    /** Header line for the {@code [dependencies]} table (MAIN scope). */
     private static final Pattern DEPS_FLAT_HEADER = Pattern.compile("^\\s*\\[dependencies]\\s*$");
-
-    /** Header line for {@code [dependencies.<scope>]}. Captures scope name in group 1. */
-    private static final Pattern DEPS_SCOPE_HEADER =
-            Pattern.compile("^\\s*\\[dependencies\\.([a-zA-Z][a-zA-Z0-9_-]*)]\\s*$");
 
     /** Any TOML table header. */
     private static final Pattern ANY_HEADER = Pattern.compile("^\\s*\\[[^]]+]\\s*$");
@@ -66,20 +61,16 @@ public final class JkBuildEditor {
     private JkBuildEditor() {}
 
     /**
-     * Add a dependency entry to {@code [dependencies.<scope>]}.
+     * Add a dependency entry to the scope section (e.g. {@code [dependencies]} for MAIN,
+     * {@code [test-dependencies]} for TEST).
      *
      * <p>Decisions:
      *
      * <ul>
      *   <li>If {@code artifact.equals(name)}, the {@code artifact} field is omitted (it defaults to
      *       the key per the design doc).
-     *   <li>If the file has no {@code [dependencies]} table at all, we append a fresh {@code
-     *       [dependencies.<scope>]} header at the end.
-     *   <li>If the file has a flat {@code [dependencies]} table holding only inline-table deps (the
-     *       shorthand for {@code main}), we treat it as {@code [dependencies.main]}: adding a main
-     *       dep extends it in place; adding a non-main dep appends a separate sub-table.
-     *   <li>If a {@code [dependencies.<scope>]} sub-table already exists, we append the new entry
-     *       just before the next table header.
+     *   <li>If the file has no section for the requested scope, we append a fresh one at the end.
+     *   <li>If a section already exists, we append the new entry just before the next table header.
      * </ul>
      *
      * @param versionLiteral the value placed inside {@code version = "..."}. Pass {@code "=1.2.3"}
@@ -99,23 +90,16 @@ public final class JkBuildEditor {
 
         List<String> lines = splitPreservingTerminator(content);
         if (findDepKey(lines, scope, name) >= 0) {
-            throw new IllegalStateException("dependencies." + scope.canonical() + " already contains \"" + name + "\"");
+            throw new IllegalStateException(sectionOf(scope) + " already contains \"" + name + "\"");
         }
 
         String entryLine = renderEntry(name, group, artifact, versionLiteral);
 
-        // If we're adding a non-main dep while a flat [dependencies] shorthand
-        // is in use, promote the flat header to [dependencies.main] first —
-        // otherwise the resulting file mixes shapes and the parser rejects it.
-        if (scope != Scope.MAIN) {
-            promoteFlatShorthandIfPresent(lines);
-        }
-
         int header = findScopeHeader(lines, scope);
         if (header < 0) {
-            // No sub-table for this scope. Append one at the end of the file.
+            // No section for this scope. Append one at the end of the file.
             ensureTrailingBlankLine(lines);
-            lines.add("[dependencies." + scope.canonical() + "]");
+            lines.add("[" + sectionOf(scope) + "]");
             lines.add(entryLine);
             return validated(join(lines));
         }
@@ -158,7 +142,7 @@ public final class JkBuildEditor {
         List<String> lines = splitPreservingTerminator(content);
         if (findDepKey(lines, scope, library) >= 0) {
             throw new IllegalStateException(
-                    "dependencies." + scope.canonical() + " already contains \"" + library + "\"");
+                    sectionOf(scope) + " already contains \"" + library + "\"");
         }
 
         StringBuilder sb = new StringBuilder(library)
@@ -173,14 +157,10 @@ public final class JkBuildEditor {
         sb.append(", version = \"").append(escape(version)).append("\" }");
         String entryLine = sb.toString();
 
-        if (scope != Scope.MAIN) {
-            promoteFlatShorthandIfPresent(lines);
-        }
-
         int header = findScopeHeader(lines, scope);
         if (header < 0) {
             ensureTrailingBlankLine(lines);
-            lines.add("[dependencies." + scope.canonical() + "]");
+            lines.add("[" + sectionOf(scope) + "]");
             lines.add(entryLine);
             return validated(join(lines));
         }
@@ -203,11 +183,11 @@ public final class JkBuildEditor {
         List<String> lines = splitPreservingTerminator(content);
         int hit = findDepKey(lines, scope, name);
         if (hit < 0) {
-            // Determine whether the scope sub-table existed for a better error.
+            // Determine whether the scope section existed for a better error.
             if (findScopeHeader(lines, scope) < 0) {
-                throw new IllegalStateException("dependencies." + scope.canonical() + " not found in jk.toml");
+                throw new IllegalStateException(sectionOf(scope) + " not found in jk.toml");
             }
-            throw new IllegalStateException("\"" + name + "\" not found in dependencies." + scope.canonical());
+            throw new IllegalStateException("\"" + name + "\" not found in " + sectionOf(scope));
         }
         lines.remove(hit);
         return validated(join(lines));
@@ -353,76 +333,39 @@ public final class JkBuildEditor {
     // --- internals ---------------------------------------------------------
 
     /**
-     * Locate the line that opens {@code [dependencies.<scope>]}. Honors default-scope shorthand: a
-     * bare {@code [dependencies]} table whose direct children are all dep entries (not sub-scopes)
-     * counts as {@code [dependencies.main]}.
+     * Map a {@link Scope} to its top-level TOML section name. MAIN → {@code dependencies}; others →
+     * {@code <canonical>-dependencies} (e.g. {@code test-dependencies}).
+     */
+    private static String sectionOf(Scope scope) {
+        return switch (scope) {
+            case MAIN      -> "dependencies";
+            case TEST      -> "test-dependencies";
+            case PROVIDED  -> "provided-dependencies";
+            case PROCESSOR -> "processor-dependencies";
+            case EXPORT    -> "export-dependencies";
+            default        -> scope.canonical() + "-dependencies";
+        };
+    }
+
+    /**
+     * Locate the line that opens the section for {@code scope}. MAIN scope uses the {@code
+     * [dependencies]} header; non-MAIN scopes use {@code [<canonical>-dependencies]}.
      */
     private static int findScopeHeader(List<String> lines, Scope scope) {
-        int flat = -1;
+        String sectionName = sectionOf(scope);
+        Pattern target;
+        if (scope == Scope.MAIN) {
+            target = DEPS_FLAT_HEADER;
+        } else {
+            // Build a pattern that matches exactly this scope's section header.
+            target = Pattern.compile("^\\s*\\[" + Pattern.quote(sectionName) + "]\\s*$");
+        }
         for (int i = 0; i < lines.size(); i++) {
-            String line = lines.get(i);
-            Matcher sub = DEPS_SCOPE_HEADER.matcher(line);
-            if (sub.matches() && sub.group(1).equals(scope.canonical())) {
+            if (target.matcher(lines.get(i)).matches()) {
                 return i;
             }
-            if (DEPS_FLAT_HEADER.matcher(line).matches()) {
-                flat = i;
-            }
-        }
-        if (flat >= 0 && scope == Scope.MAIN && isFlatShorthand(lines, flat)) {
-            return flat;
         }
         return -1;
-    }
-
-    /**
-     * A bare {@code [dependencies]} table is the shorthand for {@code [dependencies.main]} iff every
-     * direct child line under it is a dep entry (i.e. no sub-table line like {@code
-     * [dependencies.test]} comes between this header and the next top-level header).
-     *
-     * <p>In practice all we need to check is that the bare header isn't immediately followed by
-     * sub-scope headers — those would mean the flat header is a parse error per the design doc. The
-     * parser rejects mixed shape, but the editor must still be forgiving: if any sub-scope appears
-     * anywhere after {@code [dependencies]}, that sub-scope is the canonical container; we don't
-     * treat the bare table as main.
-     */
-    private static boolean isFlatShorthand(List<String> lines, int flatHeaderLine) {
-        // If any [dependencies.<scope>] header exists in the file, the bare
-        // [dependencies] block is something else (e.g., an empty placeholder
-        // or user-introduced mistake) and we don't claim it as main.
-        for (int i = 0; i < lines.size(); i++) {
-            if (i == flatHeaderLine) continue;
-            if (DEPS_SCOPE_HEADER.matcher(lines.get(i)).matches()) return false;
-        }
-        // Scan children: every non-blank, non-comment line up to the next
-        // header must be a dep entry (key = ...). Mixed shape produces a
-        // parse error downstream anyway; here we just want a sane heuristic.
-        for (int i = flatHeaderLine + 1; i < lines.size(); i++) {
-            String line = lines.get(i);
-            if (ANY_HEADER.matcher(line).matches()) break;
-            String trimmed = line.trim();
-            if (trimmed.isEmpty() || trimmed.startsWith("#")) continue;
-            if (!DEP_ENTRY.matcher(line).matches()) return false;
-        }
-        return true;
-    }
-
-    /**
-     * If a flat {@code [dependencies]} shorthand block is present, rewrite its header to {@code
-     * [dependencies.main]} so a sibling sub-scope can be added without producing a "mixed flat and
-     * sub-scope" parse error. No-op when no flat shorthand exists.
-     */
-    private static void promoteFlatShorthandIfPresent(List<String> lines) {
-        for (int i = 0; i < lines.size(); i++) {
-            if (DEPS_FLAT_HEADER.matcher(lines.get(i)).matches() && isFlatShorthand(lines, i)) {
-                // Preserve the original indentation, in case the user wrote it
-                // with leading whitespace (uncommon but legal).
-                String original = lines.get(i);
-                String leadingWs = original.substring(0, original.indexOf('['));
-                lines.set(i, leadingWs + "[dependencies.main]");
-                return;
-            }
-        }
     }
 
     /** Find the line index of the dep entry named {@code name} in {@code scope}, or {@code -1}. */

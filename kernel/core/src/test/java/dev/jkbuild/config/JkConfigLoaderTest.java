@@ -31,7 +31,8 @@ class JkConfigLoaderTest {
                 Optional.empty(), // noProgress
                 Optional.empty(),
                 Optional.empty(),
-                Optional.empty());
+                Optional.empty(),
+                Optional.empty()); // force
         JkConfig over = new JkConfig(
                 Optional.of(JkConfig.ColorChoice.ALWAYS),
                 Optional.empty(),
@@ -40,7 +41,8 @@ class JkConfigLoaderTest {
                 Optional.of(true), // noProgress — over sets it
                 Optional.empty(),
                 Optional.empty(),
-                Optional.empty());
+                Optional.empty(),
+                Optional.empty()); // force
         JkConfig merged = base.mergedWith(over);
         assertThat(merged.color()).hasValue(JkConfig.ColorChoice.ALWAYS); // over wins
         assertThat(merged.offline()).hasValue(true); // base passes through

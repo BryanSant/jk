@@ -6,7 +6,7 @@ jdk      = 25
 java     = 25
 main     = "dev.jkbuild.cli.Jk"
 
-[dependencies.main]
+[dependencies]
 jk-core         = { group = "dev.jkbuild", name = "jk-core",         version = "0.6.0-SNAPSHOT" }
 jk-io           = { group = "dev.jkbuild", name = "jk-io",           version = "0.6.0-SNAPSHOT" }
 jk-resolver     = { group = "dev.jkbuild", name = "jk-resolver",     version = "0.6.0-SNAPSHOT" }
@@ -14,7 +14,7 @@ jk-toolchain    = { group = "dev.jkbuild", name = "jk-toolchain",    version = "
 jk-engine       = { group = "dev.jkbuild", name = "jk-engine",       version = "0.6.0-SNAPSHOT" }
 jline-terminal-ffm = { group = "org.jline", name = "jline-terminal-ffm", version = "4.1.2" }
 
-[dependencies.test]
+[test-dependencies]
 bouncycastle-bcpg       = { group = "org.bouncycastle",   name = "bcpg-jdk18on",            version = "1.84" }
 assertj-core            = { group = "org.assertj",        name = "assertj-core",            version = "3.27.7" }
 junit-jupiter           = { group = "org.junit.jupiter",  name = "junit-jupiter",           version = "6.1.0" }

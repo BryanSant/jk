@@ -6,7 +6,7 @@ description = "jk domain model: Goal/Phase/GoalListener, Dependency/Coordinate, 
 jdk      = 25
 java     = 25
 
-[dependencies.test]
+[test-dependencies]
 assertj-core            = { group = "org.assertj",        name = "assertj-core",            version = "3.27.7" }
 junit-jupiter           = { group = "org.junit.jupiter",  name = "junit-jupiter",           version = "6.1.0" }
 junit-platform-launcher = { group = "org.junit.platform", name = "junit-platform-launcher", version = "6.1.0" }

@@ -48,10 +48,10 @@ import org.tomlj.TomlTable;
  *   <li>{@code [project]} — required; {@code group}, {@code name}, {@code version} required;
  *       optional {@code jdk}, {@code main}, {@code java}/{@code kotlin}, {@code shadow}, {@code
  *       native}, {@code description}.
- *   <li>{@code [dependencies.<scope>]} — library-as-key sub-tables; each entry is {@code <lib> = {
- *       group, name?, version | path | git | workspace }}. {@code [dependencies]} with only
- *       inline-table children is shorthand for {@code [dependencies.main]}; mixing flat and
- *       sub-scope is a parse error.
+ *   <li>{@code [dependencies]} — MAIN scope; library-as-key flat table, each entry is {@code <lib>
+ *       = { group, name?, version | path | git | workspace }}. Additional scopes use top-level
+ *       section names: {@code [test-dependencies]}, {@code [provided-dependencies]}, {@code
+ *       [processor-dependencies]}, {@code [export-dependencies]}.
  *   <li>{@code [workspace]} — optional; {@code modules = [...]} plus an optional {@code
  *       [workspace.dependencies]} table of shared external deps inherited by modules via {@code
  *       <name>.workspace = true}.
@@ -390,64 +390,47 @@ public final class JkBuildParser {
     // Dependencies
     // ---------------------------------------------------------------------
 
-    private static JkBuild.Dependencies parseDependencies(TomlTable root, Workspace workspace, LibraryCatalog catalog) {
-        TomlTable deps = root.getTable("dependencies");
-        if (deps == null) return JkBuild.Dependencies.empty();
+    private static JkBuild.Dependencies parseDependencies(
+            TomlTable root, Workspace workspace, LibraryCatalog catalog) {
         EnumMap<Scope, List<Dependency>> byScope = new EnumMap<>(Scope.class);
 
-        // Classify the children of [dependencies]:
-        //   - inline tables (TomlTable that came from a `name = { ... }` line)
-        //     → flat-form dep entries belonging to the default scope (main)
-        //   - sub-tables (TomlTable named after a scope) → per-scope groups
-        // tomlj does not distinguish inline vs sub-table at the TomlTable
-        // level, so we detect by key: a scope name (one of the six) maps to
-        // a sub-table; everything else is a flat dep entry.
-        List<String> flatDepKeys = new ArrayList<>();
-        List<String> subScopeKeys = new ArrayList<>();
-        for (String key : deps.keySet()) {
-            if (isScopeName(key)) {
-                subScopeKeys.add(key);
-            } else {
-                flatDepKeys.add(key);
-            }
-        }
-        if (!flatDepKeys.isEmpty() && !subScopeKeys.isEmpty()) {
-            throw new JkBuildParseException("mixed flat and sub-scope dep tables are ambiguous in [dependencies]; "
-                    + "move flat entries under [dependencies.main] or remove the sub-scope tables");
-        }
-
-        if (!flatDepKeys.isEmpty()) {
-            // Default-scope shorthand: [dependencies] with only inline-table
-            // children is treated as [dependencies.main].
-            List<Dependency> parsed = parseScopeTable(deps, flatDepKeys, Scope.MAIN, workspace, catalog);
+        // [dependencies] → MAIN scope (all entries are flat deps, no sub-tables)
+        TomlTable mainDeps = root.getTable("dependencies");
+        if (mainDeps != null) {
+            List<Dependency> parsed = parseScopeTable(
+                    mainDeps, new ArrayList<>(mainDeps.keySet()), Scope.MAIN, workspace, catalog);
             if (!parsed.isEmpty()) byScope.put(Scope.MAIN, parsed);
         }
 
-        for (String scopeKey : subScopeKeys) {
-            Scope scope = scopeOf(scopeKey);
-            TomlTable scopeTable = deps.getTable(scopeKey);
-            if (scopeTable == null) {
-                throw new JkBuildParseException("dependencies." + scopeKey + " must be a table of name → dep entries");
-            }
-            List<Dependency> parsed =
-                    parseScopeTable(scopeTable, new ArrayList<>(scopeTable.keySet()), scope, workspace, catalog);
-            if (!parsed.isEmpty()) byScope.put(scope, parsed);
-        }
+        // Top-level scope tables: [test-dependencies], [provided-dependencies], etc.
+        addScopeDeps(byScope, root, "test-dependencies",      Scope.TEST,      workspace, catalog);
+        addScopeDeps(byScope, root, "provided-dependencies",  Scope.PROVIDED,  workspace, catalog);
+        addScopeDeps(byScope, root, "processor-dependencies", Scope.PROCESSOR, workspace, catalog);
+        addScopeDeps(byScope, root, "export-dependencies",    Scope.EXPORT,    workspace, catalog);
+
         return new JkBuild.Dependencies(byScope);
     }
 
-    private static boolean isScopeName(String key) {
-        for (Scope s : Scope.values()) {
-            if (s.canonical().equals(key)) return true;
-        }
-        return false;
+    private static void addScopeDeps(
+            EnumMap<Scope, List<Dependency>> byScope,
+            TomlTable root, String tableKey, Scope scope,
+            Workspace workspace, LibraryCatalog catalog) {
+        TomlTable table = root.getTable(tableKey);
+        if (table == null) return;
+        List<Dependency> parsed = parseScopeTable(
+                table, new ArrayList<>(table.keySet()), scope, workspace, catalog);
+        if (!parsed.isEmpty()) byScope.put(scope, parsed);
     }
 
-    private static Scope scopeOf(String canonical) {
-        for (Scope s : Scope.values()) {
-            if (s.canonical().equals(canonical)) return s;
-        }
-        throw new JkBuildParseException("unknown dependency scope: " + canonical);
+    private static String sectionOf(Scope scope) {
+        return switch (scope) {
+            case MAIN      -> "dependencies";
+            case TEST      -> "test-dependencies";
+            case PROVIDED  -> "provided-dependencies";
+            case PROCESSOR -> "processor-dependencies";
+            case EXPORT    -> "export-dependencies";
+            default        -> scope.canonical() + "-dependencies";
+        };
     }
 
     private static List<Dependency> parseScopeTable(
@@ -463,8 +446,7 @@ public final class JkBuildParser {
                 continue;
             }
             if (!(value instanceof TomlTable entry)) {
-                throw new JkBuildParseException("dependencies."
-                        + scope.canonical()
+                throw new JkBuildParseException(sectionOf(scope)
                         + "."
                         + name
                         + " must be an inline table (e.g. { group = \"...\", version = \"...\" })"
@@ -480,7 +462,7 @@ public final class JkBuildParser {
      * library catalog.
      */
     private static Dependency parseShorthandEntry(String name, String versionRaw, Scope scope, LibraryCatalog catalog) {
-        String displayPath = "dependencies." + scope.canonical() + "." + name;
+        String displayPath = sectionOf(scope) + "." + name;
         if (versionRaw.isBlank()) {
             throw new JkBuildParseException(displayPath + " has an empty version string");
         }
@@ -522,7 +504,7 @@ public final class JkBuildParser {
 
     private static Dependency parseDepEntryForm(
             String name, TomlTable entry, Scope scope, Workspace workspace, LibraryCatalog catalog) {
-        String displayPath = "dependencies." + scope.canonical() + "." + name;
+        String displayPath = sectionOf(scope) + "." + name;
         boolean hasWorkspace = entry.contains("workspace");
         boolean hasVersion = entry.contains("version");
         boolean hasPath = entry.contains("path");

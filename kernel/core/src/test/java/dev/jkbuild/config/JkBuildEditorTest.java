@@ -31,7 +31,7 @@ class JkBuildEditorTest {
         String result = JkBuildEditor.addDependency(
                 BASE, Scope.MAIN, "jackson-databind", "com.fasterxml.jackson.core", "jackson-databind", "=2.18.2");
 
-        assertThat(result).contains("[dependencies.main]");
+        assertThat(result).contains("[dependencies]");
         assertThat(result)
                 .contains("jackson-databind = { group = \"com.fasterxml.jackson.core\", version = \"=2.18.2\" }");
 
@@ -98,7 +98,7 @@ class JkBuildEditorTest {
     void add_to_existing_scope_appends_under_header() {
         String start = BASE + """
 
-                [dependencies.main]
+                [dependencies]
                 picocli = { group = "info.picocli", version = "4.7.7" }
                 """;
 
@@ -106,9 +106,9 @@ class JkBuildEditorTest {
 
         assertThat(result).contains("picocli = { group = \"info.picocli\", version = \"4.7.7\" }");
         assertThat(result).contains("tomlj = \"1.1.1\"");
-        // Both entries appear under [dependencies.main]; no second header.
-        int firstHeader = result.indexOf("[dependencies.main]");
-        int lastHeader = result.lastIndexOf("[dependencies.main]");
+        // Both entries appear under [dependencies]; no second header.
+        int firstHeader = result.indexOf("[dependencies]");
+        int lastHeader = result.lastIndexOf("[dependencies]");
         assertThat(firstHeader).isEqualTo(lastHeader);
     }
 
@@ -116,17 +116,17 @@ class JkBuildEditorTest {
     void add_test_scope_alongside_main_creates_separate_sub_table() {
         String start = BASE + """
 
-                [dependencies.main]
+                [dependencies]
                 picocli = { group = "info.picocli", version = "4.7.7" }
                 """;
 
         String result = JkBuildEditor.addDependency(
                 start, Scope.TEST, "junit-jupiter", "org.junit.jupiter", "junit-jupiter", "6.1.0");
 
-        assertThat(result).contains("[dependencies.main]");
-        assertThat(result).contains("[dependencies.test]");
+        assertThat(result).contains("[dependencies]");
+        assertThat(result).contains("[test-dependencies]");
         // The new sub-table comes after main, and the entry is under it.
-        int testHeader = result.indexOf("[dependencies.test]");
+        int testHeader = result.indexOf("[test-dependencies]");
         int junitLine = result.indexOf("junit-jupiter =");
         assertThat(junitLine).isGreaterThan(testHeader);
 
@@ -145,8 +145,8 @@ class JkBuildEditorTest {
 
         String result = JkBuildEditor.addDependency(start, Scope.MAIN, "tomlj", "org.tomlj", "tomlj", "1.1.1");
 
-        // Should extend the flat table, not create [dependencies.main].
-        assertThat(result).doesNotContain("[dependencies.main]");
+        // Should extend the flat table, not create a second [dependencies] header.
+        assertThat(result.indexOf("[dependencies]")).isEqualTo(result.lastIndexOf("[dependencies]"));
         assertThat(result).contains("tomlj = \"1.1.1\"");
 
         JkBuild parsed = JkBuildParser.parse(result);
@@ -164,7 +164,7 @@ class JkBuildEditorTest {
         String result = JkBuildEditor.addDependency(
                 start, Scope.TEST, "junit-jupiter", "org.junit.jupiter", "junit-jupiter", "6.1.0");
 
-        assertThat(result).contains("[dependencies.test]");
+        assertThat(result).contains("[test-dependencies]");
         JkBuild parsed = JkBuildParser.parse(result);
         assertThat(parsed.dependencies().of(Scope.MAIN)).hasSize(1);
         assertThat(parsed.dependencies().of(Scope.TEST)).hasSize(1);
@@ -174,7 +174,7 @@ class JkBuildEditorTest {
     void add_rejects_duplicate_name_in_same_scope() {
         String start = BASE + """
 
-                [dependencies.main]
+                [dependencies]
                 picocli = { group = "info.picocli", version = "4.7.7" }
                 """;
 
@@ -188,7 +188,7 @@ class JkBuildEditorTest {
     void add_allows_same_name_in_different_scope() {
         String start = BASE + """
 
-                [dependencies.provided]
+                [provided-dependencies]
                 lombok = { group = "org.projectlombok", version = "1.18.34" }
                 """;
 
@@ -197,15 +197,15 @@ class JkBuildEditorTest {
         String result =
                 JkBuildEditor.addDependency(start, Scope.PROCESSOR, "lombok", "org.projectlombok", "lombok", "1.18.34");
 
-        assertThat(result).contains("[dependencies.provided]");
-        assertThat(result).contains("[dependencies.processor]");
+        assertThat(result).contains("[provided-dependencies]");
+        assertThat(result).contains("[processor-dependencies]");
     }
 
     @Test
     void remove_drops_the_named_entry() {
         String start = BASE + """
 
-                [dependencies.main]
+                [dependencies]
                 picocli = { group = "info.picocli", version = "4.7.7" }
                 tomlj   = { group = "org.tomlj",    version = "1.1.1" }
                 """;
@@ -224,14 +224,14 @@ class JkBuildEditorTest {
     void remove_last_entry_leaves_sub_table_in_place() {
         String start = BASE + """
 
-                [dependencies.main]
+                [dependencies]
                 picocli = { group = "info.picocli", version = "4.7.7" }
                 """;
 
         String result = JkBuildEditor.removeDependency(start, Scope.MAIN, "picocli");
 
         // We don't try to remove the now-empty sub-table; minimal blast radius.
-        assertThat(result).contains("[dependencies.main]");
+        assertThat(result).contains("[dependencies]");
         assertThat(result).doesNotContain("picocli");
 
         // An empty sub-table is still valid TOML.
@@ -243,7 +243,7 @@ class JkBuildEditorTest {
     void remove_drops_workspace_shorthand_entry() {
         String start = BASE + """
 
-                [dependencies.test]
+                [test-dependencies]
                 junit-jupiter.workspace = true
                 assertj-core.workspace  = true
                 """;
@@ -258,14 +258,14 @@ class JkBuildEditorTest {
     void remove_when_scope_missing_throws_clear_error() {
         assertThatThrownBy(() -> JkBuildEditor.removeDependency(BASE, Scope.TEST, "anything"))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("dependencies.test not found");
+                .hasMessageContaining("test-dependencies not found");
     }
 
     @Test
     void remove_when_name_missing_throws_clear_error() {
         String start = BASE + """
 
-                [dependencies.main]
+                [dependencies]
                 picocli = { group = "info.picocli", version = "4.7.7" }
                 """;
 
@@ -285,7 +285,7 @@ class JkBuildEditorTest {
                 java     = 21
 
                 # User comment above deps.
-                [dependencies.main]
+                [dependencies]
                 # Inline comment about picocli.
                 picocli = { group = "info.picocli", version = "4.7.7" }
 

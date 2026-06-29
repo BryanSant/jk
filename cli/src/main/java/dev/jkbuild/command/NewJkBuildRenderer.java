@@ -18,7 +18,7 @@ import java.util.Map;
  * jdk      = "25"
  * java     = 25
  *
- * [dependencies.test]
+ * [test-dependencies]
  * junit-jupiter = { group = "org.junit.jupiter", version = "6.1.0" }
  * }</pre>
  *
@@ -82,7 +82,8 @@ public final class NewJkBuildRenderer {
     private static void renderScope(StringBuilder sb, String scope, List<NewScaffolder.CuratedEntry> entries) {
         if (entries.isEmpty()) return;
         sb.append('\n');
-        sb.append("[dependencies.").append(scope).append("]\n");
+        String sectionHeader = scope.equals("main") ? "dependencies" : scope + "-dependencies";
+        sb.append("[").append(sectionHeader).append("]\n");
         for (var e : entries) {
             sb.append(formatEntry(e)).append('\n');
         }

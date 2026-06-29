@@ -6,12 +6,12 @@ description = "jk toolchain: JDK manager, tool installer, Gradle/Maven importers
 jdk      = 25
 java     = 25
 
-[dependencies.main]
+[dependencies]
 jk-core     = { group = "dev.jkbuild", name = "jk-core",     version = "0.6.0-SNAPSHOT" }
 jk-io       = { group = "dev.jkbuild", name = "jk-io",       version = "0.6.0-SNAPSHOT" }
 jk-resolver = { group = "dev.jkbuild", name = "jk-resolver", version = "0.6.0-SNAPSHOT" }
 
-[dependencies.test]
+[test-dependencies]
 assertj-core            = { group = "org.assertj",        name = "assertj-core",            version = "3.27.7" }
 junit-jupiter           = { group = "org.junit.jupiter",  name = "junit-jupiter",           version = "6.1.0" }
 junit-platform-launcher = { group = "org.junit.platform", name = "junit-platform-launcher", version = "6.1.0" }

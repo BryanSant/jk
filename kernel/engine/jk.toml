@@ -6,7 +6,7 @@ description = "jk build engine: BuildPipeline, plugin dispatch, action cache, co
 jdk         = 25
 java        = 25
 
-[dependencies.main]
+[dependencies]
 jk-core       = { group = "dev.jkbuild", name = "jk-core",       version = "0.6.0-SNAPSHOT" }
 jk-io         = { group = "dev.jkbuild", name = "jk-io",         version = "0.6.0-SNAPSHOT" }
 jk-plugin-api = { group = "dev.jkbuild", name = "jk-plugin-api", version = "0.6.0-SNAPSHOT" }
@@ -16,7 +16,7 @@ asm           = { group = "org.ow2.asm", name = "asm",            version = "9.1
 asm-tree      = { group = "org.ow2.asm", name = "asm-tree",       version = "9.10.1" }
 asm-commons   = { group = "org.ow2.asm", name = "asm-commons",    version = "9.10.1" }
 
-[dependencies.test]
+[test-dependencies]
 jgit                    = { group = "org.eclipse.jgit",   name = "org.eclipse.jgit",       version = "7.6.0.202603022253-r" }
 assertj-core            = { group = "org.assertj",        name = "assertj-core",            version = "3.27.7" }
 junit-jupiter           = { group = "org.junit.jupiter",  name = "junit-jupiter",           version = "6.1.0" }
