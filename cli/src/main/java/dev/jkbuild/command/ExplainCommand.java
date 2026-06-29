@@ -80,6 +80,7 @@ public final class ExplainCommand implements CliCommand {
         }
 
         Theme t = Theme.active();
+        boolean ansi = t.isAnsi();
         boolean nerdfont = dev.jkbuild.config.GlobalConfig.nerdfont();
         // On a TTY, wrap the cached-module list to the terminal width; piped output gets
         // the full list on one line (MAX_VALUE → never wraps).
@@ -138,20 +139,23 @@ public final class ExplainCommand implements CliCommand {
 
         // Header: a dark royal blue (#0F4786) " ≡ Build Plan " chip, capped by a matching ▶
         // segment arrow when nerdfont, then the build-time estimate (yellow).
-        String header = nerdfont
-                ? Theme.colorize(" ≡ Build Plan ", t.planBadge())
-                        + Theme.colorize(dev.jkbuild.cli.tui.Glyphs.SEGMENT_END_NERD, t.bright(t.planBadgeColor()))
-                : Theme.colorize(" ≡ Build Plan ", t.planBadge());
+        String header = !ansi ? " - Build Plan "
+                : (nerdfont
+                        ? Theme.colorize(" ≡ Build Plan ", t.planBadge())
+                                + Theme.colorize(dev.jkbuild.cli.tui.Glyphs.SEGMENT_END_NERD, t.bright(t.planBadgeColor()))
+                        : Theme.colorize(" ≡ Build Plan ", t.planBadge()));
         String estimate = etaMillis == 0
                 ? "Build time " + Theme.colorize("unknown", t.warning())
                 : "Build time estimate " + Theme.colorize("~" + fmtDuration(etaMillis), t.warning());
         System.out.println();
         System.out.println(header + " " + estimate);
         // Root node: ● bullet, then the entry project's group:artifact in bold.
+        String rootBullet = ansi ? Theme.colorize("●", t.darkGray()) : "*";
+        String coord = entry.project().group() + ":" + entry.project().name();
         System.out.println(" "
-                + Theme.colorize("●", t.darkGray())
+                + rootBullet
                 + " "
-                + boldCoord(entry.project().group() + ":" + entry.project().name(), t));
+                + (ansi ? boldCoord(coord, t) : coord));
 
         // Workspace-wide stats directly under the root bullet.
         int totalModules = modules.size();
@@ -163,7 +167,7 @@ public final class ExplainCommand implements CliCommand {
                 modules.stream().filter(BuildPlanForecast.Module::producesJar).count();
         int totalImages = (int)
                 modules.stream().filter(BuildPlanForecast.Module::producesImage).count();
-        String rootPfx = " " + Theme.colorize("│", t.darkGray()) + " · ";
+        String rootPfx = ansi ? " " + Theme.colorize("│", t.darkGray()) + " · " : " | - ";
         if (totalModules > 1) System.out.println(rootPfx + "Modules: " + String.format("%,d", totalModules));
         System.out.println(rootPfx + "Sources: " + fmtCount(totalSources, "file", "files"));
         System.out.println(rootPfx + "Tests: " + fmtCount(totalTests, "test", "tests"));
@@ -183,14 +187,20 @@ public final class ExplainCommand implements CliCommand {
 
         if (!cachedIdx.isEmpty()) {
             boolean lastSection = dirtyIdx.isEmpty();
+            String sectionConnector = lastSection ? "╰─" : "├─";
+            String sectionBadge = ansi
+                    ? dev.jkbuild.cli.tui.Badge.pill("Fully Cached", nerdfont)
+                    : " [Fully Cached]";
             System.out.println(" "
-                    + Theme.colorize(lastSection ? "╰─" : "├─", t.darkGray())
-                    + dev.jkbuild.cli.tui.Badge.pill("Fully Cached", nerdfont));
-            String childPrefix = " " + Theme.colorize(lastSection ? "   " : "│  ", t.darkGray());
+                    + (ansi ? Theme.colorize(sectionConnector, t.darkGray()) : (lastSection ? "`-" : "+-"))
+                    + sectionBadge);
+            String childPrefix = ansi
+                    ? " " + Theme.colorize(lastSection ? "   " : "│  ", t.darkGray())
+                    : " " + (lastSection ? "   " : "|  ");
             if (verbose) {
                 for (int j = 0; j < cachedIdx.size(); j++) {
                     int i = cachedIdx.get(j);
-                    renderModuleRow(modules.get(i), i + 1, j == cachedIdx.size() - 1, childPrefix, nerdfont, true, t);
+                    renderModuleRow(modules.get(i), i + 1, j == cachedIdx.size() - 1, childPrefix, nerdfont, true, t, ansi);
                 }
             } else {
                 List<String> names = new ArrayList<>();
@@ -199,17 +209,22 @@ public final class ExplainCommand implements CliCommand {
                 // Wrap the full list across lines (no truncation): the first line hangs off
                 // a "╰─ " connector; continuations align under the first name.
                 List<String> lines = wrapNames(names, Math.max(20, width - 7));
-                String cont = childPrefix + "   "; // align past "╰─ "
+                String cont = childPrefix + "   "; // align past "╰─ " / "`- "
+                String firstConnector = ansi ? Theme.colorize("╰─ ", t.darkGray()) : "`- ";
                 for (int li = 0; li < lines.size(); li++) {
-                    System.out.println((li == 0 ? childPrefix + Theme.colorize("╰─ ", t.darkGray()) : cont)
+                    System.out.println((li == 0 ? childPrefix + firstConnector : cont)
                             + renderCachedNames(lines.get(li), t));
                 }
             }
         }
         if (!dirtyIdx.isEmpty()) {
-            System.out.println(
-                    " " + Theme.colorize("╰─", t.darkGray()) + dev.jkbuild.cli.tui.Badge.pill("Rebuild", nerdfont));
-            String secPfx = "    " + Theme.colorize("│", t.darkGray()) + " · ";
+            String rebuildBadge = ansi
+                    ? dev.jkbuild.cli.tui.Badge.pill("Rebuild", nerdfont)
+                    : " [Rebuild]";
+            System.out.println(" "
+                    + (ansi ? Theme.colorize("╰─", t.darkGray()) : "`-")
+                    + rebuildBadge);
+            String secPfx = ansi ? "    " + Theme.colorize("│", t.darkGray()) + " · " : "    | - ";
             int dirtyModules = dirtyIdx.size();
             int dirtySources = modules.stream()
                     .filter(BuildPlanForecast.Module::dirty)
@@ -240,7 +255,7 @@ public final class ExplainCommand implements CliCommand {
                         + pct(dirtyImages, totalImages));
             for (int j = 0; j < dirtyIdx.size(); j++) {
                 int i = dirtyIdx.get(j);
-                renderModuleRow(modules.get(i), i + 1, j == dirtyIdx.size() - 1, "    ", nerdfont, verbose, t);
+                renderModuleRow(modules.get(i), i + 1, j == dirtyIdx.size() - 1, "    ", nerdfont, verbose, t, ansi);
             }
         }
         return 0;
@@ -270,15 +285,24 @@ public final class ExplainCommand implements CliCommand {
             String prefix,
             boolean nerdfont,
             boolean verbose,
-            Theme t) {
+            Theme t,
+            boolean ansi) {
+        String moduleConnector = ansi
+                ? Theme.colorize((last ? "╰" : "├") + "─", t.darkGray())
+                : (last ? "`-" : "+-");
+        String moduleBadge = ansi
+                ? dev.jkbuild.cli.tui.Badge.pill(String.format("%02d", idx), nerdfont)
+                : " [" + String.format("%02d", idx) + "]";
         System.out.println(prefix
-                + Theme.colorize((last ? "╰" : "├") + "─", t.darkGray())
-                + dev.jkbuild.cli.tui.Badge.pill(String.format("%02d", idx), nerdfont)
+                + moduleConnector
+                + moduleBadge
                 + ' '
-                + coloredCoord(m.unit().coord(), t));
+                + (ansi ? coloredCoord(m.unit().coord(), t) : m.unit().coord()));
 
         if (m.dirty() || verbose) {
-            String spine = prefix + (last ? "   " : Theme.colorize("│", t.darkGray()) + "  ");
+            String spine = ansi
+                    ? prefix + (last ? "   " : Theme.colorize("│", t.darkGray()) + "  ")
+                    : prefix + (last ? "   " : "|  ");
             List<BuildPlanForecast.Phase> ph = m.phases();
             // Pad each □ phase's verb to the widest in this module so the · column lines up.
             int verbCol = 0;
@@ -287,11 +311,17 @@ public final class ExplainCommand implements CliCommand {
             }
             for (int k = 0; k < ph.size(); k++) {
                 boolean lp = k == ph.size() - 1;
+                String phaseConnector = ansi
+                        ? Theme.colorize(lp ? "╰─ " : "├─ ", t.darkGray())
+                        : (lp ? "`- " : "+- ");
+                String phaseName = ansi
+                        ? Theme.colorize(padRight(ph.get(k).name(), PHASE_COL), t.brightWhite())
+                        : padRight(ph.get(k).name(), PHASE_COL);
                 System.out.println(spine
-                        + Theme.colorize(lp ? "╰─ " : "├─ ", t.darkGray())
-                        + Theme.colorize(padRight(ph.get(k).name(), PHASE_COL), t.brightWhite())
+                        + phaseConnector
+                        + phaseName
                         + "  "
-                        + renderStatus(ph.get(k), verbCol, t));
+                        + renderStatus(ph.get(k), verbCol, t, ansi));
             }
         }
     }
@@ -339,9 +369,16 @@ public final class ExplainCommand implements CliCommand {
      * A phase's status: {@code ✓ cached <key> · detail} (green) when cached, otherwise {@code □
      * <verb> · <detail>} with the verb in yellow (padded to {@code verbCol} so the {@code ·} lines up
      * across the module's phases), the {@code ·} bright-black, and the trailing detail in italic.
+     * When {@code !ansi}: {@code (cached)} / {@code [run]} ASCII equivalents, no color.
      */
-    private static String renderStatus(BuildPlanForecast.Phase p, int verbCol, Theme t) {
+    private static String renderStatus(BuildPlanForecast.Phase p, int verbCol, Theme t, boolean ansi) {
         if (p.cached()) {
+            if (!ansi) {
+                StringBuilder s = new StringBuilder("(cached)");
+                if (p.key() != null) s.append(' ').append(p.key());
+                if (p.text() != null && !p.text().isEmpty()) s.append(' ').append(p.text());
+                return s.toString();
+            }
             StringBuilder s = new StringBuilder(Theme.colorize("✓ cached", t.success()));
             if (p.key() != null) s.append(' ').append(Theme.colorize(p.key(), t.path()));
             if (p.text() != null && !p.text().isEmpty())
@@ -352,6 +389,11 @@ public final class ExplainCommand implements CliCommand {
         int sep = text.indexOf(" · ");
         String verb = sep < 0 ? text : text.substring(0, sep);
         String detail = sep < 0 ? null : text.substring(sep + 3);
+        if (!ansi) {
+            StringBuilder s = new StringBuilder("[run] ").append(padRight(verb, verbCol));
+            if (detail != null) s.append(" - ").append(detail);
+            return s.toString();
+        }
         StringBuilder s = new StringBuilder(Theme.colorize("□ ", t.brightWhite()))
                 .append(Theme.colorize(padRight(verb, verbCol), t.warning()));
         if (detail != null) {

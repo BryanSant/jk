@@ -280,9 +280,12 @@ public final class IdeaCommand implements CliCommand {
                 + (files == 1 ? "" : "s")
                 + " in "
                 + Theme.colorize(".idea", t.path()));
+        boolean ansi = t.isAnsi();
         for (int i = 0; i < items.size(); i++) {
-            String connector = i == items.size() - 1 ? "╰─ " : "├─ ";
-            System.out.println(" " + Theme.colorize(connector, t.darkGray()) + items.get(i));
+            String connector = i == items.size() - 1
+                    ? (ansi ? "╰─ " : "`- ")
+                    : (ansi ? "├─ " : "+- ");
+            System.out.println(" " + (ansi ? Theme.colorize(connector, t.darkGray()) : connector) + items.get(i));
         }
 
         System.out.println();
