@@ -112,6 +112,7 @@ public final class TreeCommand implements CliCommand {
             System.out.println();
             System.out.println(header);
         } else {
+            System.out.println();
             System.out.println(" - Dependencies Tree:");
         }
 
