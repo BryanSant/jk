@@ -359,12 +359,29 @@ public final class CacheCommand implements CliCommand {
                         + String.join(
                                 ", ", versions.stream().map(Coords::version).toList()));
             }
-            if (shown < total)
+            if (shown < total) {
+                Theme st = Theme.active();
                 System.out.println(
-                        "… and " + (total - shown) + " more (pass --limit " + total + " or refine the search)");
-            System.out.printf(
-                    "%s coordinate%s, %s version%s cached%n",
-                    fmtCount(shown), shown == 1 ? "" : "s", fmtCount(versionCount), versionCount == 1 ? "" : "s");
+                        Theme.colorize("…", st.darkGray())
+                        + " "
+                        + Theme.colorize("and ", st.normalGray())
+                        + Theme.colorize(String.valueOf(total - shown), st.focused())
+                        + " "
+                        + Theme.colorize("more", st.normalGray())
+                        + " "
+                        + Theme.colorize("(pass --limit " + total + " or refine the search)", st.dim()));
+            }
+            {
+                Theme st = Theme.active();
+                System.out.println(
+                        Theme.colorize(fmtCount(shown), st.focused())
+                        + " "
+                        + Theme.colorize("coordinate" + (shown == 1 ? "" : "s"), st.settled())
+                        + ", "
+                        + Theme.colorize(fmtCount(versionCount), st.focused())
+                        + " "
+                        + Theme.colorize("version" + (versionCount == 1 ? "" : "s") + " cached", st.settled()));
+            }
             return 0;
         }
 
@@ -519,45 +536,67 @@ public final class CacheCommand implements CliCommand {
                         }
                     }
                 }
+                Theme pt = Theme.active();
                 String verb = dryRun ? "Would prune" : "Pruned";
-                System.out.printf(
-                        "%s: records expired %s (%s), temps %s (%s), run-logs %s (%s)",
-                        verb,
-                        fmtCount(recordsExpired),
-                        fmtBytes(recordsBytes),
-                        fmtCount(tempsCleared),
-                        fmtBytes(tempsBytes),
-                        fmtCount(runLogReport.deleted()),
-                        fmtBytes(runLogReport.freedBytes()));
-                if (formatStampReport.deleted() > 0)
-                    System.out.printf(
-                            ", format-stamps %s (%s)",
-                            fmtCount(formatStampReport.deleted()), fmtBytes(formatStampReport.freedBytes()));
-                if (m2LocalSidecarReport.deleted() > 0)
-                    System.out.printf(
-                            ", m2local-index %s (%s)",
-                            fmtCount(m2LocalSidecarReport.deleted()), fmtBytes(m2LocalSidecarReport.freedBytes()));
-                if (cacheDir == null)
-                    System.out.printf(", tmp %s (%s)", fmtCount(tmpReport.deleted()), fmtBytes(tmpReport.freedBytes()));
-                if (timingsReport.evictedByAge() + timingsReport.evictedBySize() > 0)
-                    System.out.printf(
-                            ", timings %s (age %s, size %s)",
-                            fmtCount(timingsReport.evictedByAge() + timingsReport.evictedBySize()),
-                            fmtCount(timingsReport.evictedByAge()),
-                            fmtCount(timingsReport.evictedBySize()));
-                if (doSweep)
-                    System.out.printf(
-                            ", swept %s (%s); kept %s",
-                            fmtCount(sweptCount), fmtBytes(sweptBytes), fmtCount(sweptKept));
-                if (budgetBytes > 0)
-                    System.out.printf(
-                            "; evicted %s (%s) to fit %s",
-                            fmtCount(evictedCount), fmtBytes(evictedBytes), fmtBytes(budgetBytes));
-                System.out.println();
+                StringBuilder pruneOut = new StringBuilder();
+                pruneOut.append(verb).append(": records expired ");
+                pruneOut.append(styledCount(recordsExpired, pt));
+                pruneOut.append(" ").append(Theme.colorize("(" + fmtBytes(recordsBytes) + ")", pt.darkGray()));
+                pruneOut.append(", temps ");
+                pruneOut.append(styledCount(tempsCleared, pt));
+                pruneOut.append(" ").append(Theme.colorize("(" + fmtBytes(tempsBytes) + ")", pt.darkGray()));
+                pruneOut.append(", run-logs ");
+                pruneOut.append(styledCount(runLogReport.deleted(), pt));
+                pruneOut.append(" ").append(Theme.colorize("(" + fmtBytes(runLogReport.freedBytes()) + ")", pt.darkGray()));
+                if (formatStampReport.deleted() > 0) {
+                    pruneOut.append(", format-stamps ");
+                    pruneOut.append(styledCount(formatStampReport.deleted(), pt));
+                    pruneOut.append(" ").append(Theme.colorize("(" + fmtBytes(formatStampReport.freedBytes()) + ")", pt.darkGray()));
+                }
+                if (m2LocalSidecarReport.deleted() > 0) {
+                    pruneOut.append(", m2local-index ");
+                    pruneOut.append(styledCount(m2LocalSidecarReport.deleted(), pt));
+                    pruneOut.append(" ").append(Theme.colorize("(" + fmtBytes(m2LocalSidecarReport.freedBytes()) + ")", pt.darkGray()));
+                }
+                if (cacheDir == null) {
+                    pruneOut.append(", tmp ");
+                    pruneOut.append(styledCount(tmpReport.deleted(), pt));
+                    pruneOut.append(" ").append(Theme.colorize("(" + fmtBytes(tmpReport.freedBytes()) + ")", pt.darkGray()));
+                }
+                if (timingsReport.evictedByAge() + timingsReport.evictedBySize() > 0) {
+                    long timingsTotal = timingsReport.evictedByAge() + timingsReport.evictedBySize();
+                    pruneOut.append(", timings ");
+                    pruneOut.append(styledCount(timingsTotal, pt));
+                    pruneOut.append(" (age ");
+                    pruneOut.append(styledCount(timingsReport.evictedByAge(), pt));
+                    pruneOut.append(", size ");
+                    pruneOut.append(styledCount(timingsReport.evictedBySize(), pt));
+                    pruneOut.append(")");
+                }
+                if (doSweep) {
+                    pruneOut.append(", swept ");
+                    pruneOut.append(styledCount(sweptCount, pt));
+                    pruneOut.append(" ").append(Theme.colorize("(" + fmtBytes(sweptBytes) + ")", pt.darkGray()));
+                    pruneOut.append("; kept ");
+                    pruneOut.append(styledCount(sweptKept, pt));
+                }
+                if (budgetBytes > 0) {
+                    pruneOut.append("; evicted ");
+                    pruneOut.append(styledCount(evictedCount, pt));
+                    pruneOut.append(" ").append(Theme.colorize("(" + fmtBytes(evictedBytes) + ")", pt.darkGray()));
+                    pruneOut.append(" to fit ");
+                    pruneOut.append(Theme.colorize(fmtBytes(budgetBytes), pt.focused()));
+                }
+                System.out.println(pruneOut);
                 if (evictedReachable > 0)
-                    System.err.println("Warning: evicted "
-                            + evictedReachable
-                            + " reachable objects to fit the budget — consider raising --max-size.");
+                    System.err.println(
+                            Theme.colorize(Glyphs.BANG, pt.warning())
+                            + " "
+                            + Theme.colorize(
+                                    "evicted "
+                                    + evictedReachable
+                                    + " reachable objects to fit the budget — consider raising --max-size.",
+                                    pt.settled()));
                 return 0;
             } finally {
                 if (background && !dryRun) {
@@ -584,6 +623,11 @@ public final class CacheCommand implements CliCommand {
                     }
                 }
             }
+        }
+
+        /** Style a count: {@code focused()} bold-white for non-zero, {@code normalGray()} for zero. */
+        private static String styledCount(long n, Theme t) {
+            return Theme.colorize(fmtCount(n), n > 0 ? t.focused() : t.normalGray());
         }
 
         private static List<Path> olderThan(Path dir, long cutoffMillis) throws IOException {

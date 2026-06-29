@@ -428,14 +428,19 @@ public final class SyncCommand implements CliCommand {
                 if (!global.outputIsJson() && (report.fetched() > 0 || report.upToDate() > 0)) {
                     Theme th = Theme.active();
                     System.out.println(
-                            Theme.colorize(dir.relativize(moduleDir).toString(), th.cyan())
-                            + Theme.colorize(": ", th.settled())
+                            Theme.colorize(dir.relativize(moduleDir).toString(), th.path())
+                            + ": "
                             + Theme.colorize(String.valueOf(report.fetched()), th.focused())
-                            + Theme.colorize(" fetched, ", th.settled())
+                            + " "
+                            + Theme.colorize("fetched", th.success())
+                            + ", "
                             + Theme.colorize(String.valueOf(report.upToDate()), th.focused())
-                            + Theme.colorize(" up-to-date, ", th.settled())
+                            + " "
+                            + Theme.colorize("up-to-date", th.normalGray())
+                            + ", "
                             + Theme.colorize(String.valueOf(report.skipped()), th.focused())
-                            + Theme.colorize(" skipped", th.settled()));
+                            + " "
+                            + Theme.colorize("skipped", th.normalGray()));
                 }
             } catch (Exception e) {
                 System.err.println("jk sync: " + dir.relativize(moduleDir) + ": sync failed — " + e.getMessage());

@@ -155,7 +155,7 @@ public final class JdkDownloadBar implements AutoCloseable, LiveRegion {
     private String buildLine() {
         Theme t = Theme.active();
         String dim = Theme.colorize("·", t.darkGray());
-        String label = Theme.colorize("Downloading " + displayName, t.darkGray());
+        String label = Theme.colorize("Downloading " + displayName, t.normalGray());
 
         if (nerdfont) {
             var chip = t.goalChip();

@@ -117,7 +117,7 @@ public final class AutoLock {
         } catch (Exception e) {
             // Soft failure (network, I/O, etc.): warn and fall back to the existing
             // lock so a transient connectivity issue doesn't block the build.
-            System.err.println("jk: auto-lock warning — could not update jk.lock: " + e.getMessage());
+            System.err.println("‼ jk: auto-lock warning — could not update jk.lock: " + e.getMessage());
             System.err.println("    Run `jk lock` to resolve manually.");
             return null;
         }
