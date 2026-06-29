@@ -321,12 +321,16 @@ public final class CacheCommand implements CliCommand {
 
         /** Full-width "Utilization <bar> NN%" row. */
         private static String utilizationRow(long used, long max, int inner) {
+            Theme t = Theme.active();
             int pct = (int) Math.round(dev.jkbuild.cli.tui.ProgressBar.fraction(used, max) * 100);
             String prefix = " Utilization  ";
             String suffix = "  " + pct + "% ";
             int barWidth = Math.max(0, inner - prefix.length() - suffix.length());
-            String bar = new dev.jkbuild.cli.tui.ProgressBar().renderBar(used, max, barWidth);
-            String rail = Theme.colorize("│", Theme.active().darkGray());
+            String bar = dev.jkbuild.cli.tui.ProgressBar.renderBar(
+                    used, max, barWidth,
+                    t.bright(t.planBadgeColor()), // filled ▰ — plan-badge blue
+                    t.darkGray());                 // empty  ▱ — bright-black
+            String rail = Theme.colorize("│", t.darkGray());
             return rail + prefix + bar + suffix + rail;
         }
 

@@ -161,6 +161,24 @@ public final class ProgressBar {
         return sb.toString();
     }
 
+    /**
+     * Flat two-color variant of {@link #renderBar}: filled cells use {@code fillStyle}, empty cells
+     * use {@code emptyStyle}. For contexts where a gradient isn't appropriate (e.g. utilization rows
+     * that want a solid fill color and a distinct track color).
+     */
+    public static String renderBar(
+            long numerator, long denominator, int segments,
+            AttributedStyle fillStyle, AttributedStyle emptyStyle) {
+        if (segments <= 0) return "";
+        int fill = (int) Math.round(fraction(numerator, denominator) * segments);
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < segments; i++) {
+            char c = i < fill ? FILLED_CHAR : EMPTY_CHAR;
+            sb.append(Theme.colorize(String.valueOf(c), i < fill ? fillStyle : emptyStyle));
+        }
+        return sb.toString();
+    }
+
     private static AttributedStyle[] buildGradient(int n, Gradient gradient) {
         AttributedStyle[] a = new AttributedStyle[n];
         for (int i = 0; i < n; i++) {
