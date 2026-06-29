@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.cli.GlobalOptions;
+import dev.jkbuild.cli.run.ConsoleSpec;
+import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.cli.theme.Coords;
 import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.cli.tui.Glyphs;
@@ -11,6 +14,9 @@ import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.model.command.Param;
 import dev.jkbuild.repo.JkMavenLocalRepo;
 import dev.jkbuild.resolver.Versions;
+import dev.jkbuild.run.Goal;
+import dev.jkbuild.run.GoalResult;
+import dev.jkbuild.run.Phase;
 import dev.jkbuild.util.JkDirs;
 import java.io.IOException;
 import java.io.PrintStream;
@@ -437,6 +443,7 @@ public final class CacheCommand implements CliCommand {
             boolean sweep = in.isSet("sweep");
             String maxSize = in.value("max-size").orElse(null);
             boolean background = in.isSet("background");
+            GlobalOptions global = GlobalOptions.from(in);
 
             Path root = resolveCacheRoot(cacheDir);
             if (!Files.isDirectory(root)) {
@@ -465,135 +472,134 @@ public final class CacheCommand implements CliCommand {
                 System.setErr(logStream);
             }
             try {
-                long cutoffMillis = System.currentTimeMillis() - (long) olderThanDays * 24L * 60L * 60L * 1000L;
-                int recordsExpired = 0;
-                long recordsBytes = 0;
-                int tempsCleared = 0;
-                long tempsBytes = 0;
-                Path shaDir = root.resolve("sha256");
-                if (Files.isDirectory(shaDir)) {
-                    for (Path file : tempFiles(shaDir)) {
-                        long sz = Files.size(file);
-                        if (!dryRun) Files.deleteIfExists(file);
-                        tempsCleared++;
-                        tempsBytes += sz;
-                    }
-                }
-                Path actionsDir = root.resolve("actions");
-                if (Files.isDirectory(actionsDir)) {
-                    Path keysDir = actionsDir.resolve("keys");
-                    if (Files.isDirectory(keysDir)) {
-                        for (Path file : olderThan(keysDir, cutoffMillis)) {
-                            long sz = Files.size(file);
-                            if (!dryRun) Files.deleteIfExists(file);
-                            recordsExpired++;
-                            recordsBytes += sz;
-                        }
-                    }
-                }
-                var runLogReport = dev.jkbuild.task.RunLogGc.sweep(root, dev.jkbuild.task.RunLogGc.DEFAULT_TTL, dryRun);
-                var formatStampReport =
-                        dev.jkbuild.task.FormatStampGc.sweep(root, dev.jkbuild.task.FormatStampGc.DEFAULT_TTL, dryRun);
-                var timingsReport = dev.jkbuild.runtime.PhaseTimings.prune(
-                        root,
-                        dev.jkbuild.runtime.PhaseTimings.Limits.resolve(
-                                dev.jkbuild.util.JkDirs.userConfigFile(), System::getenv),
-                        System.currentTimeMillis(),
-                        dryRun);
-                var tmpReport = cacheDir == null
-                        ? dev.jkbuild.task.TmpGc.sweep(
-                                dev.jkbuild.util.JkDirs.tmp(), dev.jkbuild.task.TmpGc.DEFAULT_TTL, dryRun)
-                        : new dev.jkbuild.task.TmpGc.Report(0, 0L);
-                boolean doSweep = sweep || maxSize != null;
-                long budgetBytes = maxSize != null ? dev.jkbuild.task.LruEvictor.parseSize(maxSize) : -1L;
-                int sweptCount = 0;
-                long sweptBytes = 0;
-                int sweptKept = 0;
-                int evictedCount = 0;
-                long evictedBytes = 0;
-                int evictedReachable = 0;
-                long finalSize = -1L;
-                if (doSweep) {
-                    dev.jkbuild.cache.Cas cas = new dev.jkbuild.cache.Cas(root);
-                    Path toolsDir = root.resolve("tools");
-                    var liveRefs = dev.jkbuild.task.CacheRoots.collect(cas, actionsDir, toolsDir);
-                    var sweepReport = dev.jkbuild.task.CasSweep.sweep(cas, liveRefs, dryRun);
-                    sweptCount = sweepReport.deleted();
-                    sweptBytes = sweepReport.freedBytes();
-                    sweptKept = sweepReport.kept();
-                    if (budgetBytes > 0) {
-                        var ledger = dev.jkbuild.task.AccessLedger.atDefaultPath();
-                        var evictReport =
-                                dev.jkbuild.task.LruEvictor.evictDownTo(cas, budgetBytes, liveRefs, ledger, dryRun);
-                        evictedCount = evictReport.deleted();
-                        evictedBytes = evictReport.freedBytes();
-                        evictedReachable = evictReport.reachableEvicted();
-                        finalSize = evictReport.finalSize();
-                        if (!dryRun) {
-                            try {
-                                ledger.compactIfLarge();
-                            } catch (IOException ignored) {
+                // Mutable result holder closed over by the phase lambda and onSuccess.
+                // [0] = totalFiles removed, [1] = totalBytes freed, [2] = evictedReachable count
+                long[] result = {0L, 0L, 0L};
+
+                Phase prunePhase = Phase.builder("prune")
+                        .scope(1)
+                        .execute(ctx -> {
+                            ctx.label("Pruning cache…");
+                            long cutoffMillis =
+                                    System.currentTimeMillis() - (long) olderThanDays * 24L * 60L * 60L * 1000L;
+                            long totalFiles = 0;
+                            long totalBytes = 0;
+
+                            Path shaDir = root.resolve("sha256");
+                            if (Files.isDirectory(shaDir)) {
+                                for (Path file : tempFiles(shaDir)) {
+                                    long sz = Files.size(file);
+                                    if (!dryRun) Files.deleteIfExists(file);
+                                    totalFiles++;
+                                    totalBytes += sz;
+                                }
                             }
-                        }
-                    }
-                }
-                Theme pt = Theme.active();
-                String verb = dryRun ? "Would prune" : "Pruned";
-                StringBuilder pruneOut = new StringBuilder();
-                pruneOut.append(verb).append(": action records ");
-                pruneOut.append(styledCount(recordsExpired, pt));
-                pruneOut.append(" ").append(Theme.colorize("(" + fmtBytes(recordsBytes) + ")", pt.darkGray()));
-                pruneOut.append(", temps ");
-                pruneOut.append(styledCount(tempsCleared, pt));
-                pruneOut.append(" ").append(Theme.colorize("(" + fmtBytes(tempsBytes) + ")", pt.darkGray()));
-                pruneOut.append(", run-logs ");
-                pruneOut.append(styledCount(runLogReport.deleted(), pt));
-                pruneOut.append(" ").append(Theme.colorize("(" + fmtBytes(runLogReport.freedBytes()) + ")", pt.darkGray()));
-                if (formatStampReport.deleted() > 0) {
-                    pruneOut.append(", format-stamps ");
-                    pruneOut.append(styledCount(formatStampReport.deleted(), pt));
-                    pruneOut.append(" ").append(Theme.colorize("(" + fmtBytes(formatStampReport.freedBytes()) + ")", pt.darkGray()));
-                }
-                if (cacheDir == null) {
-                    pruneOut.append(", tmp ");
-                    pruneOut.append(styledCount(tmpReport.deleted(), pt));
-                    pruneOut.append(" ").append(Theme.colorize("(" + fmtBytes(tmpReport.freedBytes()) + ")", pt.darkGray()));
-                }
-                if (timingsReport.evictedByAge() + timingsReport.evictedBySize() > 0) {
-                    long timingsTotal = timingsReport.evictedByAge() + timingsReport.evictedBySize();
-                    pruneOut.append(", timings ");
-                    pruneOut.append(styledCount(timingsTotal, pt));
-                    pruneOut.append(" (age ");
-                    pruneOut.append(styledCount(timingsReport.evictedByAge(), pt));
-                    pruneOut.append(", size ");
-                    pruneOut.append(styledCount(timingsReport.evictedBySize(), pt));
-                    pruneOut.append(")");
-                }
-                if (doSweep) {
-                    pruneOut.append(", swept ");
-                    pruneOut.append(styledCount(sweptCount, pt));
-                    pruneOut.append(" ").append(Theme.colorize("(" + fmtBytes(sweptBytes) + ")", pt.darkGray()));
-                    pruneOut.append("; kept ");
-                    pruneOut.append(styledCount(sweptKept, pt));
-                }
-                if (budgetBytes > 0) {
-                    pruneOut.append("; evicted ");
-                    pruneOut.append(styledCount(evictedCount, pt));
-                    pruneOut.append(" ").append(Theme.colorize("(" + fmtBytes(evictedBytes) + ")", pt.darkGray()));
-                    pruneOut.append(" to fit ");
-                    pruneOut.append(Theme.colorize(fmtBytes(budgetBytes), pt.focused()));
-                }
-                System.out.println(pruneOut);
-                if (evictedReachable > 0)
+                            Path actionsDir = root.resolve("actions");
+                            if (Files.isDirectory(actionsDir)) {
+                                Path keysDir = actionsDir.resolve("keys");
+                                if (Files.isDirectory(keysDir)) {
+                                    for (Path file : olderThan(keysDir, cutoffMillis)) {
+                                        long sz = Files.size(file);
+                                        if (!dryRun) Files.deleteIfExists(file);
+                                        totalFiles++;
+                                        totalBytes += sz;
+                                    }
+                                }
+                            }
+                            var runLogReport =
+                                    dev.jkbuild.task.RunLogGc.sweep(root, dev.jkbuild.task.RunLogGc.DEFAULT_TTL, dryRun);
+                            totalFiles += runLogReport.deleted();
+                            totalBytes += runLogReport.freedBytes();
+
+                            var formatStampReport = dev.jkbuild.task.FormatStampGc.sweep(
+                                    root, dev.jkbuild.task.FormatStampGc.DEFAULT_TTL, dryRun);
+                            totalFiles += formatStampReport.deleted();
+                            totalBytes += formatStampReport.freedBytes();
+
+                            var timingsReport = dev.jkbuild.runtime.PhaseTimings.prune(
+                                    root,
+                                    dev.jkbuild.runtime.PhaseTimings.Limits.resolve(
+                                            dev.jkbuild.util.JkDirs.userConfigFile(), System::getenv),
+                                    System.currentTimeMillis(),
+                                    dryRun);
+                            totalFiles += timingsReport.evictedByAge() + timingsReport.evictedBySize();
+
+                            if (cacheDir == null) {
+                                var tmpReport = dev.jkbuild.task.TmpGc.sweep(
+                                        dev.jkbuild.util.JkDirs.tmp(), dev.jkbuild.task.TmpGc.DEFAULT_TTL, dryRun);
+                                totalFiles += tmpReport.deleted();
+                                totalBytes += tmpReport.freedBytes();
+                            }
+
+                            boolean doSweep = sweep || maxSize != null;
+                            long budgetBytes = maxSize != null ? dev.jkbuild.task.LruEvictor.parseSize(maxSize) : -1L;
+                            if (doSweep) {
+                                dev.jkbuild.cache.Cas cas = new dev.jkbuild.cache.Cas(root);
+                                Path toolsDir = root.resolve("tools");
+                                Path actionsDir2 = root.resolve("actions");
+                                var liveRefs = dev.jkbuild.task.CacheRoots.collect(cas, actionsDir2, toolsDir);
+                                var sweepReport = dev.jkbuild.task.CasSweep.sweep(cas, liveRefs, dryRun);
+                                totalFiles += sweepReport.deleted();
+                                totalBytes += sweepReport.freedBytes();
+                                if (budgetBytes > 0) {
+                                    var ledger = dev.jkbuild.task.AccessLedger.atDefaultPath();
+                                    var evictReport = dev.jkbuild.task.LruEvictor.evictDownTo(
+                                            cas, budgetBytes, liveRefs, ledger, dryRun);
+                                    totalFiles += evictReport.deleted();
+                                    totalBytes += evictReport.freedBytes();
+                                    result[2] = evictReport.reachableEvicted();
+                                    if (!dryRun) {
+                                        try {
+                                            ledger.compactIfLarge();
+                                        } catch (IOException ignored) {
+                                        }
+                                    }
+                                }
+                            }
+
+                            result[0] = totalFiles;
+                            result[1] = totalBytes;
+                            ctx.progress(1);
+                        })
+                        .build();
+
+                Goal goal = Goal.builder("cache-prune").addPhase(prunePhase).build();
+
+                ConsoleSpec spec = new ConsoleSpec(
+                        "Cache",
+                        r -> {
+                            long files = result[0];
+                            long bytes = result[1];
+                            if (dryRun) {
+                                if (files == 0) return "Dry run: nothing to clean up.";
+                                return "Dry run: would remove "
+                                        + files + " " + (files == 1 ? "file" : "files")
+                                        + ", " + fmtBytes(bytes) + " reclaimable.";
+                            }
+                            if (files == 0) return "Finished pruning cache. Nothing to clean up.";
+                            return "Finished pruning cache. "
+                                    + files + " " + (files == 1 ? "file" : "files")
+                                    + " removed, " + fmtBytes(bytes) + " reclaimed.";
+                        },
+                        r -> "Failed to prune cache.",
+                        true);
+
+                GoalResult goalResult = GoalConsole.runGoal(
+                        goal, GoalConsole.modeFor(global), root, spec, "Cache");
+
+                if (result[2] > 0) {
+                    Theme pt = Theme.active();
                     System.err.println(
                             Theme.colorize(Glyphs.BANG, pt.warning())
                             + " "
                             + Theme.colorize(
                                     "evicted "
-                                    + evictedReachable
+                                    + result[2]
                                     + " reachable objects to fit the budget — consider raising --max-size.",
                                     pt.settled()));
-                return 0;
+                }
+
+                return goalResult.success() ? 0 : 1;
             } finally {
                 if (background && !dryRun) {
                     try {
@@ -619,11 +625,6 @@ public final class CacheCommand implements CliCommand {
                     }
                 }
             }
-        }
-
-        /** Style a count: {@code focused()} bold-white for non-zero, {@code normalGray()} for zero. */
-        private static String styledCount(long n, Theme t) {
-            return Theme.colorize(fmtCount(n), n > 0 ? t.focused() : t.normalGray());
         }
 
         private static List<Path> olderThan(Path dir, long cutoffMillis) throws IOException {
