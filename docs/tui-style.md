@@ -891,3 +891,68 @@ A trailing parenthesized qualifier appended to a result line — e.g. `(non-LTS 
 - No-ANSI: same plain text
 
 **Role name:** dim-annotation → `darkGray()`
+
+---
+
+## 36. Cache Prune Structured Summary
+
+The single-line summary printed after `jk cache prune` completes.
+
+**Format:** `Pruned: records expired N (size), temps N (size), run-logs N (size)`
+
+- Non-zero counts: `focused()` bold-white
+- Zero counts: `normalGray()` to de-emphasize
+- Sizes in parentheses e.g. `(45.6 MiB)`: `darkGray()` (dim-annotation role)
+- Label `Pruned:` and separators: `settled()` body-text
+- Companion eviction warning on stderr: `‼` in `warning()` + message in `settled()`
+- No-ANSI / No-Color: plain text (already compliant)
+
+---
+
+## 37. Sync Cascade Lines
+
+Per-module result lines printed during `jk sync` cascade processing in a workspace.
+
+**Format:** `kernel/core: 5 fetched, 10 up-to-date, 0 skipped`
+
+- Module path before the colon: `path()` (`#969DD4`)
+- Count numbers: `focused()` bold-white
+- Verb `fetched`: `success()` green
+- Verbs `up-to-date` and `skipped`: `normalGray()` muted-text
+- Separators (`: `, `, `): plain terminal foreground
+- No-ANSI: plain text (already compliant)
+
+---
+
+## 38. AutoLock Stderr Warning
+
+The fallback warning emitted to stderr when the engine auto-lock fails outside a goal listener.
+
+**Format:**
+```
+‼ jk: auto-lock warning — could not update jk.lock: <message>
+    Run `jk lock` to resolve manually.
+```
+
+- `‼` literal prefix (no color — engine layer cannot import CLI theme)
+- When inside a goal listener, route via `warn()` callback instead so the warning appears inline with the TUI
+- No-Color / No-ANSI: keep plain text on stderr (already appropriate for engine-layer output)
+
+**Design note:** Engine modules must not import from the CLI module. Color is therefore not applied here; only the icon is added. The goal listener path is preferred when available.
+
+---
+
+## 39. Cache Search Continuation and Summary Lines
+
+Lines printed after `jk cache search` result rows when results are truncated, and the overall count summary.
+
+**Format (continuation):** `… and 5 more (pass --limit 20 or refine the search)`
+- `…` ellipsis: `darkGray()` (separator role)
+- "and N more": N in `focused()`, surrounding text in `normalGray()`
+- Parenthesized hint: `dim()` faint attribute
+
+**Format (summary):** `3 coordinates, 8 versions cached`
+- Numbers: `focused()` bold-white
+- Nouns: `settled()` body-text
+
+No-ANSI / No-Color: plain text (already compliant).
