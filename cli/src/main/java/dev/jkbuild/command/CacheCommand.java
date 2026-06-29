@@ -267,16 +267,20 @@ public final class CacheCommand implements CliCommand {
             return Theme.colorize(sb.toString(), Theme.active().darkGray());
         }
 
-        /** Full-width centered title — white on plan-blue per §15 table title spec. */
+        /**
+         * Full-width title band — white text on plan-blue background, capped with ◖/◗
+         * (U+25D6 / U+25D7) in plan-blue foreground so the row reads as a rounded pill.
+         * The caps replace the │ rail chars on this row only.
+         */
         private static String titleRow(String title, int inner) {
+            Theme t = Theme.active();
+            String leftCap  = Theme.colorize("◖", t.bright(t.planBadgeColor()));
+            String rightCap = Theme.colorize("◗", t.bright(t.planBadgeColor()));
             int pad = Math.max(0, inner - title.length());
             int left = pad / 2, right = pad - left;
-            String bar = Theme.colorize("│", Theme.active().darkGray());
-            return bar
-                    + " ".repeat(left)
-                    + Theme.colorize(title, Theme.active().planBadge())
-                    + " ".repeat(right)
-                    + bar;
+            String band = Theme.colorize(
+                    " ".repeat(left) + title + " ".repeat(right), t.planBadge());
+            return leftCap + band + rightCap;
         }
 
         /** Column headers, left-justified, in white. */
