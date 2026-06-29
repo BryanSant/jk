@@ -298,6 +298,12 @@ public final class BuildCommand implements CliCommand {
      * <em>forward</em> as cached phases collapse, never backward.
      */
     private static Set<Path> forecastDirty(BuildGraph.Result graph, Path cache) {
+        Set<Path> all = new java.util.HashSet<>();
+        for (BuildGraph.BuildUnit u : graph.topoOrder()) all.add(u.dir());
+        // --force bypasses all caching inside the goal phases, so treat every module
+        // as dirty — the forecast (which reads action-cache snapshots) would falsely
+        // report "all cached" and short-circuit the build before any phase runs.
+        if (dev.jkbuild.config.ActiveConfig.get().rerunOr(false)) return all;
         try {
             dev.jkbuild.cache.Cas cas = new dev.jkbuild.cache.Cas(cache);
             dev.jkbuild.task.ActionCache ac = new dev.jkbuild.task.ActionCache(cas, cache.resolve("actions"));
@@ -307,8 +313,6 @@ public final class BuildCommand implements CliCommand {
             }
             return dirty;
         } catch (RuntimeException e) {
-            Set<Path> all = new java.util.HashSet<>();
-            for (BuildGraph.BuildUnit u : graph.topoOrder()) all.add(u.dir());
             return all;
         }
     }
