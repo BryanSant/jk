@@ -234,10 +234,15 @@ public final class LockCommand implements CliCommand {
             AtomicInteger globalTotal,
             List<String> errorLines)
             throws Exception {
+        // Register one phase row for this module. The active message shows the
+        // module name + the dependency currently being resolved.
+        view.addPhaseLabeled(coord, "lock", coord);
+        view.phaseRunning(coord, "lock");
+
         Path lockFile = dir.resolve("jk.lock");
 
-        // Lock is purely resolution — no meaningful X-of-N count, so we show
-        // only a static spinner label with an incrementing package counter.
+        // Lock is purely resolution — total is unknown upfront, so we show a
+        // static top-line label and record each resolved dep as a completion line.
         AtomicInteger moduleTotal = new AtomicInteger(0);
         view.solveLabel("Locking versions…");
 
@@ -248,9 +253,25 @@ public final class LockCommand implements CliCommand {
             }
 
             @Override
-            public void onPackage(String module, String version) {
+            public void onPackage(String pkg, String version) {
+                // Show active dep in the phase row.
+                view.phaseMessage(coord, "lock",
+                        Theme.colorize(coord, Theme.active().normalGray())
+                                + " › "
+                                + Coords.module(pkg, version));
+                // Record as a completion line with an absolute count bracket.
                 int n = globalLocked.incrementAndGet();
-                view.solveLabel("Locking versions… " + n);
+                Theme t = Theme.active();
+                String line = Theme.colorize(dev.jkbuild.cli.tui.Glyphs.CHECK, t.success())
+                        + " "
+                        + dev.jkbuild.cli.run.ConsoleSpec.countBracket(n, t)
+                        + " "
+                        + Coords.module(pkg, version);
+                if (view.animating()) {
+                    view.addCompletion(line);
+                } else {
+                    System.out.println(line);
+                }
             }
         };
 
@@ -259,10 +280,12 @@ public final class LockCommand implements CliCommand {
         GoalResult result = goal.run();
 
         if (result.success()) {
+            view.phaseDone(coord, "lock", true);
             return 0;
         }
 
-        // Failure: collect diagnostics.
+        // Failure: collect diagnostics, mark row failed.
+        view.phaseDone(coord, "lock", false);
         for (GoalResult.Diagnostic d : result.errors()) {
             errorLines.add(ConsoleSpec.renderError(d));
         }

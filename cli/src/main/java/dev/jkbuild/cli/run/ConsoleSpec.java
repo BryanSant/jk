@@ -114,6 +114,16 @@ public record ConsoleSpec(
     }
 
     /**
+     * Formats an absolute {@code [N]} counter with darkGray brackets — no denominator. Used when
+     * the total is not known ahead of time (e.g. {@code jk lock} dependency resolution).
+     *
+     * <p>Example: {@code countBracket(42, theme)} → {@code "[42]"} with dark-gray brackets.
+     */
+    public static String countBracket(int n, Theme t) {
+        return Theme.colorize("[", t.darkGray()) + n + Theme.colorize("]", t.darkGray());
+    }
+
+    /**
      * Human-friendly duration: {@code 712ms}, {@code 3.1s}, {@code 2m 4s}, {@code 1h 3m 2s}, {@code
      * 1d 12h 13m 5s}.
      */
