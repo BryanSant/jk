@@ -8,7 +8,6 @@ import dev.jkbuild.compile.JavacDriver;
 import dev.jkbuild.compile.WorkerJavac;
 import dev.jkbuild.compile.incremental.ClassAbi;
 import dev.jkbuild.compile.incremental.ClassDependencies;
-import dev.jkbuild.compile.incremental.JavaClasspathAbi;
 import dev.jkbuild.util.Hashing;
 import java.io.BufferedReader;
 import java.io.File;
@@ -244,15 +243,6 @@ public final class JavaIncrementalCompile {
         return true;
     }
 
-    private static boolean classpathPathsUnchanged(CompileRequest request, Map<String, String> in) {
-        Set<String> nowCp = new TreeSet<>();
-        for (Path cp : request.classpath())
-            nowCp.add("cp:" + cp.toAbsolutePath().normalize());
-        Set<String> priorCp = new TreeSet<>();
-        for (String k : in.keySet()) if (k.startsWith("cp:")) priorCp.add(k);
-        return nowCp.equals(priorCp);
-    }
-
     private static boolean processorPathUnchanged(CompileRequest request, Map<String, String> in) {
         Set<String> now = new TreeSet<>();
         for (Path pp : request.processorPath())
@@ -284,9 +274,6 @@ public final class JavaIncrementalCompile {
         Analysis a = analyze(out, request.sources(), co.generated(), Set.of());
         Map<String, List<String>> units = unitsOf(a, out);
         store(taskId, key, request, out, cas, actionCache, units);
-        saveUnion(
-                stateDir,
-                JavaClasspathAbi.union(request.classpath(), cas, cas.root().resolve("cp-abi-snapshots")));
         // Remodule whether this project source-generates (so the next build routes
         // through the worker) and whether those processors are isolating.
         boolean sgap = flags.sourceGenAps() || a.hasGenerated() || a.orphans();
@@ -353,36 +340,13 @@ public final class JavaIncrementalCompile {
             units.remove(e.getKey());
         }
 
-        // Seed: the directly edited sources, plus the sources that reference any
-        // dependency class whose ABI changed since last build (classpath diff).
+        // Seed: the directly edited sources.
         Set<Path> seed = new HashSet<>(changedSources(request, prior.inputs()));
         if (removedConstantHolder) {
             seed.addAll(request.sources());
         } else if (!removedClasses.isEmpty()) {
             seed.addAll(referencers(removedClasses, facts, units, request.sources()));
         }
-        Path cpCacheDir = cas.root().resolve("cp-abi-snapshots");
-        Map<String, JavaClasspathAbi.DepFacts> priorUnion = loadUnion(stateDir);
-        boolean haveBaseline = priorUnion != null;
-        // CAS jars are content-stable, so when the classpath paths are unchanged
-        // and carry no directory entries, no dependency class can have changed.
-        boolean cpStable = haveBaseline
-                && classpathPathsUnchanged(request, prior.inputs())
-                && noDirectoryEntries(request.classpath());
-        Map<String, JavaClasspathAbi.DepFacts> currentUnion;
-        if (cpStable) {
-            currentUnion = priorUnion;
-        } else {
-            currentUnion = JavaClasspathAbi.union(request.classpath(), cas, cpCacheDir);
-            if (!haveBaseline) {
-                seed.addAll(request.sources()); // no baseline to diff against → conservative, once
-            } else {
-                DepDiff dd = diffDeps(priorUnion, currentUnion);
-                if (dd.conservative) seed.addAll(request.sources());
-                else seed.addAll(referencers(dd.changed, facts, units, request.sources()));
-            }
-        }
-
         Set<Path> compiled = new HashSet<>();
         Deque<Path> frontier = new ArrayDeque<>(seed);
         List<CompileResult.Diagnostic> diagnostics = new ArrayList<>();
@@ -469,7 +433,6 @@ public final class JavaIncrementalCompile {
 
         store(taskId, key, request, out, cas, actionCache, units);
         saveState(stateDir, facts);
-        saveUnion(stateDir, currentUnion);
         // Reaching here means we never tripped the aggregating bail, so isolating holds.
         saveApFlags(stateDir, new ApFlags(flags.sourceGenAps() || !provenance.isEmpty(), flags.isolating()));
         return new Result(true, "compiled", key, diagnostics);
@@ -634,52 +597,6 @@ public final class JavaIncrementalCompile {
             }
         }
         actionCache.storeWithOutputs(taskId, key, ActionKey.snapshotInputs(request), outputs, units);
-    }
-
-    private record DepDiff(Set<String> changed, boolean conservative) {}
-
-    /** Dependency classes whose ABI changed (or vanished) since the prior build. */
-    private static DepDiff diffDeps(
-            Map<String, JavaClasspathAbi.DepFacts> prior, Map<String, JavaClasspathAbi.DepFacts> current) {
-        Set<String> changed = new TreeSet<>();
-        boolean conservative = false;
-        for (Map.Entry<String, JavaClasspathAbi.DepFacts> e : prior.entrySet()) {
-            JavaClasspathAbi.DepFacts before = e.getValue();
-            JavaClasspathAbi.DepFacts after = current.get(e.getKey());
-            if (after == null || !after.abi().equals(before.abi())) {
-                changed.add(e.getKey());
-                // A changed dep that inlines constants leaves no bytecode edge → conservative.
-                if (before.constants() || (after != null && after.constants())) conservative = true;
-            }
-        }
-        return new DepDiff(changed, conservative);
-    }
-
-    private static boolean noDirectoryEntries(List<Path> classpath) {
-        for (Path p : classpath) if (Files.isDirectory(p)) return false;
-        return true;
-    }
-
-    /** The prior classpath ABI union, or {@code null} when no baseline has been recorded yet. */
-    private static Map<String, JavaClasspathAbi.DepFacts> loadUnion(Path stateDir) throws IOException {
-        Path f = unionFile(stateDir);
-        if (!Files.isRegularFile(f)) return null;
-        try {
-            return JavaClasspathAbi.readDepFacts(Files.readAllBytes(f));
-        } catch (RuntimeException corrupt) {
-            return null;
-        }
-    }
-
-    private static void saveUnion(Path stateDir, Map<String, JavaClasspathAbi.DepFacts> union) throws IOException {
-        Files.createDirectories(stateDir);
-        Files.write(
-                unionFile(stateDir),
-                JavaClasspathAbi.writeDepFacts(new TreeMap<>(union)).getBytes(StandardCharsets.UTF_8));
-    }
-
-    private static Path unionFile(Path stateDir) {
-        return stateDir.resolve("java-cp-abi.txt");
     }
 
     private static Path stateFile(Path stateDir) {

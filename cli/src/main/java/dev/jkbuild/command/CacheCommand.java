@@ -481,18 +481,19 @@ public final class CacheCommand implements CliCommand {
                 }
                 Path actionsDir = root.resolve("actions");
                 if (Files.isDirectory(actionsDir)) {
-                    for (Path file : olderThan(actionsDir, cutoffMillis)) {
-                        long sz = Files.size(file);
-                        if (!dryRun) Files.deleteIfExists(file);
-                        recordsExpired++;
-                        recordsBytes += sz;
+                    Path keysDir = actionsDir.resolve("keys");
+                    if (Files.isDirectory(keysDir)) {
+                        for (Path file : olderThan(keysDir, cutoffMillis)) {
+                            long sz = Files.size(file);
+                            if (!dryRun) Files.deleteIfExists(file);
+                            recordsExpired++;
+                            recordsBytes += sz;
+                        }
                     }
                 }
                 var runLogReport = dev.jkbuild.task.RunLogGc.sweep(root, dev.jkbuild.task.RunLogGc.DEFAULT_TTL, dryRun);
                 var formatStampReport =
                         dev.jkbuild.task.FormatStampGc.sweep(root, dev.jkbuild.task.FormatStampGc.DEFAULT_TTL, dryRun);
-                var m2LocalSidecarReport = dev.jkbuild.task.M2LocalSidecarGc.sweep(
-                        root, dev.jkbuild.task.M2LocalSidecarGc.DEFAULT_TTL, dryRun);
                 var timingsReport = dev.jkbuild.runtime.PhaseTimings.prune(
                         root,
                         dev.jkbuild.runtime.PhaseTimings.Limits.resolve(
@@ -539,7 +540,7 @@ public final class CacheCommand implements CliCommand {
                 Theme pt = Theme.active();
                 String verb = dryRun ? "Would prune" : "Pruned";
                 StringBuilder pruneOut = new StringBuilder();
-                pruneOut.append(verb).append(": records expired ");
+                pruneOut.append(verb).append(": action records ");
                 pruneOut.append(styledCount(recordsExpired, pt));
                 pruneOut.append(" ").append(Theme.colorize("(" + fmtBytes(recordsBytes) + ")", pt.darkGray()));
                 pruneOut.append(", temps ");
@@ -552,11 +553,6 @@ public final class CacheCommand implements CliCommand {
                     pruneOut.append(", format-stamps ");
                     pruneOut.append(styledCount(formatStampReport.deleted(), pt));
                     pruneOut.append(" ").append(Theme.colorize("(" + fmtBytes(formatStampReport.freedBytes()) + ")", pt.darkGray()));
-                }
-                if (m2LocalSidecarReport.deleted() > 0) {
-                    pruneOut.append(", m2local-index ");
-                    pruneOut.append(styledCount(m2LocalSidecarReport.deleted(), pt));
-                    pruneOut.append(" ").append(Theme.colorize("(" + fmtBytes(m2LocalSidecarReport.freedBytes()) + ")", pt.darkGray()));
                 }
                 if (cacheDir == null) {
                     pruneOut.append(", tmp ");
