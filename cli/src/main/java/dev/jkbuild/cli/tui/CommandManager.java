@@ -739,20 +739,20 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
     }
 
     /**
-     * A running phase row: {@code <group>:<artifact> › <Phase>[ › <message>]} — no status glyph,
-     * module coordinate colored (cyan group, bright-cyan artifact). No trailing ellipsis.
+     * A running phase row: {@code <module> › <phase>[ › <message>]} — no status glyph, module
+     * coordinate colored (cyan group, bright-cyan artifact). When {@code phase} is empty the phase
+     * segment is omitted, giving {@code <module> › <message>} (two segments instead of three).
      */
     private static String renderActiveRow(Row r, String sep) {
         StringBuilder sb = new StringBuilder();
-        sb.append(coloredModule(r.module))
-                .append(' ')
-                .append(sep)
-                .append(' ')
-                .append(Theme.colorize(r.phase, Theme.active().settled()));
+        sb.append(coloredModule(r.module));
+        boolean hasPhase = r.phase != null && !r.phase.isEmpty();
+        if (hasPhase) {
+            sb.append(' ').append(sep).append(' ')
+                    .append(Theme.colorize(r.phase, Theme.active().settled()));
+        }
         if (r.message != null && !r.message.isEmpty()) {
-            sb.append(' ')
-                    .append(sep)
-                    .append(' ')
+            sb.append(' ').append(sep).append(' ')
                     .append(Theme.colorize(r.message, Theme.active().settled()));
         }
         return sb.toString();

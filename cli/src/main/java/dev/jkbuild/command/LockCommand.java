@@ -234,9 +234,9 @@ public final class LockCommand implements CliCommand {
             AtomicInteger globalTotal,
             List<String> errorLines)
             throws Exception {
-        // Register one phase row for this module. The active message shows the
-        // module name + the dependency currently being resolved.
-        view.addPhaseLabeled(coord, "lock", coord);
+        // Register one phase row for this module. The display label is empty so
+        // renderActiveRow produces "module › dep" (two segments, not three).
+        view.addPhaseLabeled(coord, "lock", "");
         view.phaseRunning(coord, "lock");
 
         Path lockFile = dir.resolve("jk.lock");
@@ -254,11 +254,8 @@ public final class LockCommand implements CliCommand {
 
             @Override
             public void onPackage(String pkg, String version) {
-                // Show active dep in the phase row.
-                view.phaseMessage(coord, "lock",
-                        Theme.colorize(coord, Theme.active().normalGray())
-                                + " › "
-                                + Coords.module(pkg, version));
+                // Show active dep in the phase row (module › dep via renderActiveRow).
+                view.phaseMessage(coord, "lock", Coords.module(pkg, version));
                 // Record as a completion line with an absolute count bracket.
                 int n = globalLocked.incrementAndGet();
                 Theme t = Theme.active();
