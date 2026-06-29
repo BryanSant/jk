@@ -52,6 +52,22 @@ class GlobalConfigTest {
         assertThat(GlobalConfig.nerdfont(noFile, "maybe")).isTrue();
     }
 
+    @Test
+    void color_disabled_degrades_nerdfont_to_false(@TempDir Path dir) throws IOException {
+        // colorEnabled=false (--color never / NO_COLOR) must disable Nerd Font:
+        // PUA glyphs without color produce misaligned or blank-box output.
+        Path cfgNerdTrue  = write(dir, "[global]\nnerdfont = true\n");
+        Path cfgNerdFalse = write(dir, "[global]\nnerdfont = false\n");
+        assertThat(GlobalConfig.nerdfont(cfgNerdTrue,  null, false)).isFalse();
+        assertThat(GlobalConfig.nerdfont(cfgNerdFalse, null, false)).isFalse();
+    }
+
+    @Test
+    void color_enabled_respects_configured_nerdfont(@TempDir Path dir) throws IOException {
+        assertThat(GlobalConfig.nerdfont(write(dir, "[global]\nnerdfont = true\n"),  null, true)).isTrue();
+        assertThat(GlobalConfig.nerdfont(write(dir, "[global]\nnerdfont = false\n"), null, true)).isFalse();
+    }
+
     private static Path write(Path dir, String content) throws IOException {
         Path f = Files.createTempFile(dir, "config", ".toml");
         Files.writeString(f, content);

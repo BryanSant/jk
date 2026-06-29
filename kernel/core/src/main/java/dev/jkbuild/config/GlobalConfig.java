@@ -69,16 +69,38 @@ public final class GlobalConfig {
      * {@code 0/false/no/off}); see {@link EnvValues}.
      */
     public static boolean nerdfont() {
-        return nerdfont(JkDirs.userConfigFile(), System.getenv("JK_NERDFONT"));
+        return nerdfont(JkDirs.userConfigFile(), System.getenv("JK_NERDFONT"), colorActivelyEnabled());
+    }
+
+    /**
+     * True when color output is currently enabled — same logic as {@code Theme.colorEnabled()} in
+     * the CLI layer, duplicated here so {@code kernel/core} can apply it without a circular dep.
+     */
+    static boolean colorActivelyEnabled() {
+        var choice = ActiveConfig.get().colorOr(JkConfig.ColorChoice.AUTO);
+        return switch (choice) {
+            case ALWAYS -> true;
+            case NEVER  -> false;
+            case AUTO   -> {
+                String nc = System.getenv("NO_COLOR");
+                yield nc == null || nc.isEmpty();
+            }
+        };
     }
 
     /** As {@link #nerdfont()} but against an explicit config file — for tests. */
     static boolean nerdfont(Path configFile) {
-        return nerdfont(configFile, System.getenv("JK_NERDFONT"));
+        return nerdfont(configFile, System.getenv("JK_NERDFONT"), colorActivelyEnabled());
     }
 
-    /** As {@link #nerdfont(Path)} but with an explicit env value — for tests. */
+    /** As {@link #nerdfont(Path)} but with an explicit env value — bypasses color check for tests. */
     static boolean nerdfont(Path configFile, String envValue) {
+        return EnvValues.parseBool(envValue).orElseGet(() -> booleanFromGlobal(configFile, "nerdfont", true));
+    }
+
+    /** Full testable overload: config file + env value + explicit color-enabled flag. */
+    static boolean nerdfont(Path configFile, String envValue, boolean colorEnabled) {
+        if (!colorEnabled) return false;
         return EnvValues.parseBool(envValue).orElseGet(() -> booleanFromGlobal(configFile, "nerdfont", true));
     }
 
