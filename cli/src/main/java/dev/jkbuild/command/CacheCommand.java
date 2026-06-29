@@ -268,19 +268,23 @@ public final class CacheCommand implements CliCommand {
         }
 
         /**
-         * Full-width title band — white text on plan-blue background, capped with ◖/◗
-         * (U+25D6 / U+25D7) in plan-blue foreground so the row reads as a rounded pill.
-         * The caps replace the │ rail chars on this row only.
+         * Full-width title band — white text on plan-blue background, with Nerd Font
+         * rounded pill caps (U+E0B6 / U+E0B4) in plan-blue foreground between the │ rails.
+         * The │ rails are retained; the caps sit inside them, consuming one column each.
          */
         private static String titleRow(String title, int inner) {
             Theme t = Theme.active();
-            String leftCap  = Theme.colorize("◖", t.bright(t.planBadgeColor()));
-            String rightCap = Theme.colorize("◗", t.bright(t.planBadgeColor()));
-            int pad = Math.max(0, inner - title.length());
+            boolean nerdfont = dev.jkbuild.config.GlobalConfig.nerdfont();
+            String rail = Theme.colorize("│", t.darkGray());
+            String leftCap  = nerdfont ? Theme.colorize(dev.jkbuild.cli.tui.Glyphs.PILL_LEFT_NERD,  t.bright(t.planBadgeColor())) : "";
+            String rightCap = nerdfont ? Theme.colorize(dev.jkbuild.cli.tui.Glyphs.PILL_RIGHT_NERD, t.bright(t.planBadgeColor())) : "";
+            // Band fills inner minus the two cap columns (or full inner when no Nerd Font).
+            int bandWidth = inner - (nerdfont ? 2 : 0);
+            int pad = Math.max(0, bandWidth - title.length());
             int left = pad / 2, right = pad - left;
             String band = Theme.colorize(
                     " ".repeat(left) + title + " ".repeat(right), t.planBadge());
-            return leftCap + band + rightCap;
+            return rail + leftCap + band + rightCap + rail;
         }
 
         /** Column headers, left-justified, in white. */
