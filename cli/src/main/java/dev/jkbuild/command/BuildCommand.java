@@ -649,8 +649,10 @@ public final class BuildCommand implements CliCommand {
                 Path moduleDir = sorted.get(i);
                 System.out.println();
                 String sepGlyph = Theme.colorize("══", Theme.active().darkGray());
+                String moduleName = workspaceRoot.relativize(moduleDir).toString();
+                String moduleCount = "(" + (i + 1) + "/" + sorted.size() + ")";
                 System.out.println(
-                        sepGlyph + " " + workspaceRoot.relativize(moduleDir) + " (" + (i + 1) + "/" + sorted.size() + ") " + sepGlyph);
+                        sepGlyph + " " + Theme.colorize(moduleName, Theme.active().settled()) + " " + Theme.colorize(moduleCount, Theme.active().normalGray()) + " " + sepGlyph);
                 int exit = runForDir(moduleDir);
                 if (exit != 0) {
                     System.err.println(

@@ -431,7 +431,7 @@ public final class JdkInstallCommand implements CliCommand {
      * </pre>
      */
     private static String doneLine(String label, Path home, String verb) {
-        return Theme.colorize(Glyphs.CHECK, Theme.active().completedStep())
+        return Theme.colorize(Glyphs.CHECK, Theme.active().success())
                 + " "
                 + Theme.colorize(label, Theme.active().focused())
                 + " "

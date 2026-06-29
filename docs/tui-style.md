@@ -78,6 +78,7 @@ Colors that communicate the outcome or current state of an operation.
 | `chip-success-cap` | `goalChipColor()` | `#357B38` | Powerline cap fg after a success chip |
 | `chip-error-cap` | `goalFailColor()` | `#E91E63` | Powerline cap fg after an error chip |
 | `error-text` | `error()` | `#E91E63` | Inline error text foreground (no bg) |
+| `error-label` | `errorLabel()` | `#E91E63` + bold | Bold error-text — destructive confirmation body, critical advisory labels |
 | `success-text` | `success()` | `#4CAF50` + bold | Inline success text foreground (no bg) |
 | `warning-text` | `warning()` | `#FFC107` | Warning text foreground — also the countdown/counter color |
 | `jdk-status-default` | `brightYellow()` | `#FFD54F` | JDK "default" status label |
@@ -864,3 +865,29 @@ Bold error-text: same hue as `error()` (#E91E63), with bold added. Used for the 
 **Theme method:** `errorLabel()` — bold variant of `error()`
 
 **Usage:** Destructive confirmation body text, critical advisory messages. Distinct from `error()` (inline markers) — `errorLabel()` is for longer label-style strings that need emphasis.
+
+---
+
+## 34. Soft Informational Notice
+
+A parenthesized inline advisory printed as a standalone line when there is nothing actionable to do — e.g. `(no remaining JDKs — global default cleared)`.
+
+**Format:** `(message)` — parentheses retained, text in `muted-text`
+- Nerd Font / Non-Nerd Font: `(message)` in `normalGray()` (`#C5CAE9`), no icon
+- No-Color: plain text, parentheses retained
+- No-ANSI: same plain text
+
+**Role name:** soft-notice → `normalGray()`
+
+---
+
+## 35. Dim Annotation
+
+A trailing parenthesized qualifier appended to a result line — e.g. `(non-LTS fallback)`, `(graalvm-ce-25.0.1)`.
+
+**Format:** `(qualifier)` — parentheses retained, text in `darkGray()`, immediately after the main text
+- Nerd Font / Non-Nerd Font: `(qualifier)` in `darkGray()` (`#546E7A`)
+- No-Color: plain text, parentheses retained
+- No-ANSI: same plain text
+
+**Role name:** dim-annotation → `darkGray()`
