@@ -667,10 +667,15 @@ public final class NewCommand implements CliCommand {
         String warnLine = Theme.colorize(Glyphs.BANG, t.warning())
                 + " The " + coordStyled + " " + noun + " already exists in this directory.";
 
-        // Line 2: ✘ New Project  Failed to initialize/create the project.
+        // Line 2: ✘ New Project  Failed to create project large. Project already exists.
+        // Use chipLine (not failureLine) — failureLine auto-prepends "Failed to {verb}"
+        // which would double up if the tail also starts with "Failed to".
         String chipVerb = isModule ? "New Module" : "New Project";
-        String failTail = "Failed to " + (isInit ? "initialize" : "create") + " the " + noun + ".";
-        String chipLine = dev.jkbuild.cli.tui.GoalWedge.failureLine(chipVerb, nerdfont, failTail);
+        String bareName = colon > 0 ? coord.substring(colon + 1) : coord;
+        String failTail = "Failed to " + (isInit ? "initialize" : "create") + " " + noun
+                + " " + bareName + ". Project already exists.";
+        String chipLine = dev.jkbuild.cli.tui.GoalWedge.chipLine(
+                Glyphs.CROSS, chipVerb, nerdfont, failTail);
 
         if (terminal != null) {
             var writer = terminal.writer();
