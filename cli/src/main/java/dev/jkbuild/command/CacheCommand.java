@@ -716,24 +716,48 @@ public final class CacheCommand implements CliCommand {
             Path cacheDir = in.value("cache-dir").map(Path::of).orElse(null);
             boolean dryRun = in.isSet("dry-run");
             boolean assumeYes = in.isSet("yes");
+            GlobalOptions global = GlobalOptions.from(in);
+            boolean nerdfont = dev.jkbuild.config.GlobalConfig.nerdfont();
             Path root = resolveCacheRoot(cacheDir);
             if (!Files.isDirectory(root)) {
-                System.out.println(root + " does not exist; nothing to purge.");
+                System.out.println(
+                        dev.jkbuild.cli.tui.GoalWedge.chipLine(
+                                dev.jkbuild.cli.tui.Glyphs.CHECK, "Cache", nerdfont,
+                                "Nothing to purge — cache directory does not exist."));
                 return 0;
             }
             Stats stats = statsOf(root);
             if (dryRun) {
-                System.out.printf(
-                        "Would remove %s files (%s) from %s%n", fmtCount(stats.files), fmtBytes(stats.bytes), root);
+                System.out.println(
+                        dev.jkbuild.cli.tui.GoalWedge.chipLine(
+                                dev.jkbuild.cli.tui.Glyphs.CHECK, "Cache", nerdfont,
+                                "Dry run: would remove " + fmtCount(stats.files)
+                                        + " files, " + fmtBytes(stats.bytes) + "."));
                 return 0;
             }
             if (!assumeYes && !confirmPurge(root, stats)) {
-                System.out.println("Aborted; nothing removed.");
+                System.out.println(
+                        dev.jkbuild.cli.tui.GoalWedge.chipLine(
+                                dev.jkbuild.cli.tui.Glyphs.CROSS, "Cache", nerdfont,
+                                "Purge aborted."));
                 return 1;
             }
-            deleteContents(root);
-            System.out.printf("Removed %s files (%s) from %s%n", fmtCount(stats.files), fmtBytes(stats.bytes), root);
-            return 0;
+            long[] result = {stats.files, stats.bytes};
+            Phase purgePhase = Phase.builder("purge")
+                    .execute(ctx -> {
+                        ctx.label("Purging cache…");
+                        deleteContents(root);
+                    })
+                    .build();
+            Goal goal = Goal.builder("cache-purge").addPhase(purgePhase).build();
+            ConsoleSpec spec = new ConsoleSpec(
+                    "Cache",
+                    r -> "Purged " + fmtCount(result[0]) + " files, " + fmtBytes(result[1]) + " freed.",
+                    r -> "Failed to purge cache.",
+                    true);
+            GoalResult goalResult = GoalConsole.runGoal(
+                    goal, GoalConsole.modeFor(global), root, spec, "Cache");
+            return goalResult.success() ? 0 : 1;
         }
 
         /** Stern, default-to-no confirmation before wiping the whole cache. */
