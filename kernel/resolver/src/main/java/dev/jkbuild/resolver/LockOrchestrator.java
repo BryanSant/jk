@@ -43,24 +43,27 @@ public final class LockOrchestrator {
             List.of(Scope.EXPORT, Scope.MAIN, Scope.RUNTIME, Scope.PROVIDED, Scope.TEST, Scope.PROCESSOR);
 
     /**
-     * The JUnit Platform deps jk adds to every project's TEST scope so that {@code jk test} (which
-     * forks {@code jk-test-runner} over the JUnit Platform) works out of the box — the user never
-     * mentions these in {@code jk.toml}.
-     *
-     * <p>Declared as {@code latest}, not a pinned version: {@code jk lock} records today's latest
-     * <em>stable</em> release into {@code jk.lock} (reproducible), and {@code jk update} advances it
-     * — so "jk defaults to the latest stable JUnit" stays evergreen. Unbounded {@code latest} is safe
-     * because the runner jar bundles no JUnit; it drives whatever launcher + engines resolve here
-     * through the stable JUnit Platform Launcher API, so a newer JUnit is always fine.
-     *
-     * <p>Injected on every lock (see {@link #lock}). For a project that declared no test deps this
-     * <em>is</em> the default test framework; when the user did declare their own, {@code
-     * putIfAbsent} keeps their chosen {@code junit-jupiter} version and just ensures the launcher is
-     * present.
+     * jk test infrastructure: always injected into the TEST classpath via {@code putIfAbsent} so
+     * {@code jk test} (which forks {@code jk-test-runner} over the JUnit Platform Launcher API)
+     * works regardless of which test framework the user chose.
      */
-    private static final List<Dependency> DEFAULT_TEST_DEPS = List.of(
-            new Dependency("org.junit.jupiter:junit-jupiter", VersionSelector.parse("latest")),
-            new Dependency("org.junit.platform:junit-platform-launcher", VersionSelector.parse("latest")));
+    private static final Dependency JUNIT_LAUNCHER =
+            new Dependency("org.junit.platform:junit-platform-launcher", VersionSelector.parse("latest"));
+
+    /**
+     * Passive JUnit 5 default: injected only when the user declared no {@code [test-dependencies]}
+     * section, so that a bare project gets a working test framework out of the box. Once the user
+     * owns the section — even if they don't list JUnit — jk leaves the framework choice to them.
+     *
+     * <p>Declared as {@code latest}: {@code jk lock} pins today's latest stable release (reproducible
+     * builds), and {@code jk update} advances it — "jk defaults to the latest stable JUnit" stays
+     * evergreen without manual bumps.
+     */
+    private static final Dependency JUNIT_JUPITER =
+            new Dependency("org.junit.jupiter:junit-jupiter", VersionSelector.parse("latest"));
+
+    /** Both default test deps together — used only for the no-test-section fast path. */
+    private static final List<Dependency> DEFAULT_TEST_DEPS = List.of(JUNIT_JUPITER, JUNIT_LAUNCHER);
 
     private final RepoGroup repos;
     private final Resolver resolverOverride;
@@ -200,13 +203,14 @@ public final class LockOrchestrator {
             }
             deduped.putIfAbsent(opt.module(), opt);
         }
-        // jk drives `jk test` over the JUnit Platform, so it always seeds the
-        // test classpath with the launcher + a default engine. When the user
-        // declared no test deps this is the default test framework (latest
-        // stable JUnit Jupiter); when they did, putIfAbsent ensures the launcher
-        // is present without overriding the versions they chose.
-        for (Dependency dflt : DEFAULT_TEST_DEPS) {
-            deduped.putIfAbsent(dflt.module(), dflt);
+        // junit-platform-launcher is jk test infrastructure — always inject it;
+        // putIfAbsent lets a user-declared launcher version win.
+        deduped.putIfAbsent(JUNIT_LAUNCHER.module(), JUNIT_LAUNCHER);
+        // junit-jupiter is the passive default: only inject it when the user
+        // declared no [test-dependencies] section. Once they own that section
+        // (even without a junit entry) the framework choice is theirs.
+        if (project.dependencies().of(Scope.TEST).isEmpty()) {
+            deduped.putIfAbsent(JUNIT_JUPITER.module(), JUNIT_JUPITER);
         }
         // Partition: sha256-pinned file deps are already resolved — they carry
         // their own blob identity and never need PubGrub or a network fetch.
@@ -281,9 +285,12 @@ public final class LockOrchestrator {
                 rootModules.add(d.module());
             }
             if (scope == Scope.TEST) {
-                // The default JUnit deps seed the TEST scope so their transitive
-                // closure lands on the test-runtime classpath.
-                for (Dependency d : DEFAULT_TEST_DEPS) rootModules.add(d.module());
+                // Launcher is always in deduped — seed its transitive closure into TEST scope.
+                rootModules.add(JUNIT_LAUNCHER.module());
+                // Jupiter is only in deduped when passively injected (no explicit test section).
+                if (project.dependencies().of(Scope.TEST).isEmpty()) {
+                    rootModules.add(JUNIT_JUPITER.module());
+                }
             }
             if (rootModules.isEmpty()) continue;
             for (String module : reachableFrom(rootModules, resolution)) {
