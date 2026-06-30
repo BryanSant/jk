@@ -116,6 +116,14 @@ public final class Wizard {
         return title;
     }
 
+    public String verb() {
+        return verb;
+    }
+
+    public String subtitle() {
+        return subtitle;
+    }
+
     public void cancel() {
         this.cancelled = true;
     }
@@ -296,10 +304,9 @@ public final class Wizard {
             }
         }
 
-        // Print the closing line then one CRLF to create a blank-line gap
-        // between the wizard and whatever the caller emits next (progress bar,
-        // confirmation prompt, etc.). The `finally` block writes a second \r\n
-        // that lands the cursor on the fresh line where the caller starts.
+        // Print the Done closer then a blank line so callers' result lines
+        // have breathing room below the wizard rail. The `finally` block
+        // writes a second \r\n that lands the cursor on the fresh line.
         writer.print(INDENT + Rail.closer("Done", Theme.active().success()).toAnsi(terminal));
         writer.print("\r\n");
         writer.flush();

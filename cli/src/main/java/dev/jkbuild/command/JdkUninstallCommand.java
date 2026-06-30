@@ -254,7 +254,7 @@ public final class JdkUninstallCommand implements CliCommand {
                 // skips shutdown hooks — JLine's cleanup hook blocks on its
                 // stdin reader thread that macOS won't let us interrupt; the
                 // wizard's finally already restored terminal attributes.
-                Wizard.printCancellation(terminal, "𝘅 JDK uninstall canceled");
+                Wizard.printCancellation(terminal, "JDK uninstall canceled");
                 Runtime.getRuntime().halt(130); // 128 + SIGINT
                 throw new AssertionError("unreachable");
             }
@@ -364,9 +364,7 @@ public final class JdkUninstallCommand implements CliCommand {
                     + "!");
             throw e;
         }
-        System.out.println(Theme.colorize(Glyphs.CHECK, Theme.active().completedStep())
-                + " Removed "
-                + JdkRender.coord(hit.source(), identifier));
+        System.out.println(JdkRender.removed(hit.source(), identifier, dev.jkbuild.config.GlobalConfig.nerdfont()));
     }
 
     /**
@@ -380,10 +378,8 @@ public final class JdkUninstallCommand implements CliCommand {
         String warn = Theme.colorize(Glyphs.BANG, Theme.active().warning());
         String question;
         if (victims.size() == 1) {
-            question = "\n" + warn + " Are you sure you want to delete " + target(victims.getFirst()) + "?";
+            question = warn + " Are you sure you want to delete " + target(victims.getFirst()) + "?";
         } else {
-            // The wizard already left a blank line after its "╰── Done" closer,
-            // so this header needs no leading newline of its own.
             System.out.println(warn + " Are you sure you want to delete the following " + victims.size() + " JDKs?");
             String dash = Theme.colorize("-", Theme.active().warning());
             for (JdkHit h : victims) {
@@ -409,11 +405,12 @@ public final class JdkUninstallCommand implements CliCommand {
         return proceed;
     }
 
-    /** The {@code source/identifier} a deletion targets, in cyan. */
+    /** {@code {source}/identifier}: source in italic path color, identifier in plain path color. */
     private static String target(JdkHit h) {
-        return Theme.colorize(
-                h.source() + "/" + JdkRegistry.identifierFor(h.home()),
-                Theme.active().cyan());
+        Theme t = Theme.active();
+        String identifier = JdkRegistry.identifierFor(h.home());
+        return Theme.colorize("{" + h.source() + "}", t.path().italic())
+                + Theme.colorize("/" + identifier, t.path());
     }
 
     /**

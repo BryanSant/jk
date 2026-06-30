@@ -64,6 +64,23 @@ public final class JdkRender {
         return GoalWedge.chipLine(Glyphs.CHECK, "JDK", nerdfont, msg);
     }
 
+    /**
+     * GoalWedge chip line for a successful uninstall:
+     *
+     * <pre>
+     *   ✓ JDK ▶ Removed {source}/identifier
+     * </pre>
+     *
+     * {@code {source}} is rendered in italic path color; {@code /identifier} in plain path color.
+     */
+    public static String removed(String source, String identifier, boolean nerdfont) {
+        Theme t = Theme.active();
+        String coord = Theme.colorize("{" + source + "}", t.path().italic())
+                + Theme.colorize("/" + identifier, t.path());
+        String msg = Theme.colorize("Removed ", t.normalGray()) + coord;
+        return GoalWedge.chipLine(Glyphs.CHECK, "JDK", nerdfont, msg);
+    }
+
     // ── internal helpers ────────────────────────────────────────────────────
 
     /** Leading digit sequence of a JDK version string (e.g. "25" from "25.0.3"). */

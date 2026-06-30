@@ -340,7 +340,7 @@ public final class NewCommand implements CliCommand {
                         // on the NonBlockingReader.
                         Wizard.printCancellation(
                                 terminal,
-                                parent != null ? "𝘅 Module creation canceled" : "𝘅 Project creation canceled");
+                                parent != null ? "Module creation canceled" : "Project creation canceled");
                         Runtime.getRuntime().halt(130);
                     }
                     ctx.put(ANSWERS, wizardResult.get());

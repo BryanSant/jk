@@ -2,6 +2,7 @@
 package dev.jkbuild.command;
 
 import dev.jkbuild.cli.tui.Answers;
+import dev.jkbuild.cli.tui.Choice;
 import dev.jkbuild.cli.tui.Wizard;
 import dev.jkbuild.cli.tui.WizardStep;
 import dev.jkbuild.jdk.JdkCatalog;
@@ -109,11 +110,20 @@ final class JdkInstallWizard {
                 .orElse(majors.getFirst());
         versionStep.defaultChoice(String.valueOf(defaultMajor));
 
-        WizardStep.RadioStep.Builder vendorStep = WizardStep.RadioStep.vertical("vendor", "Select a JDK Vendor");
-        for (VendorOption v : vendors) {
-            vendorStep.choice(v.id(), v.label(), answers -> hintForAnswers(v, answers));
-        }
-        vendorStep.defaultChoice(vendorDefault);
+        WizardStep.RadioStep.Builder vendorStep = WizardStep.RadioStep.vertical("vendor", "Select a JDK Vendor")
+                .choicesFn(answers -> {
+                    int major = 0;
+                    String versionStr = answers.get("version");
+                    if (versionStr != null && !versionStr.isBlank()) {
+                        try { major = Integer.parseInt(versionStr); } catch (NumberFormatException ignored) {}
+                    }
+                    final int selectedMajor = major;
+                    return vendors.stream()
+                            .filter(v -> selectedMajor == 0 || v.installFolderByMajor().containsKey(selectedMajor))
+                            .map(v -> new Choice(v.id(), v.label(), a -> hintForAnswers(v, a)))
+                            .toList();
+                })
+                .defaultChoice(vendorDefault);
 
         WizardStep.RadioStep makeDefaultStep = WizardStep.RadioStep.horizontal("default", "Make this the default JDK?")
                 .choice("yes", "Yes")
@@ -122,7 +132,8 @@ final class JdkInstallWizard {
                 .build();
 
         return Wizard.builder()
-                .title("Jk - Install a Java Development Kit")
+                .verb("Install JDK")
+                .subtitle("Install a Java Development Kit")
                 .step(versionStep.build())
                 .step(vendorStep.build())
                 .step(makeDefaultStep)

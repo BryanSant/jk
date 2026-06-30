@@ -35,6 +35,7 @@ public final class JdkDownloadBar implements AutoCloseable, LiveRegion {
     private long denominator;
     private boolean drawn;
     private boolean closed;
+    private boolean installing;
     private Thread animator;
 
     private JdkDownloadBar(PrintStream out, String displayName, boolean nerdfont, boolean silent) {
@@ -71,6 +72,25 @@ public final class JdkDownloadBar implements AutoCloseable, LiveRegion {
         if (total > 0) {
             out.print(Ansi.taskbarProgress((int) Math.min(100, bytesDownloaded * 100L / total)));
         }
+    }
+
+    /**
+     * Start an "Installing…" chip spinner using the same chip-with-frame pattern as the download bar
+     * — the spinner frame cycles inside the {@code ✸ JDK ▶} chip. Call {@link #close()} on the
+     * returned handle when installation completes.
+     */
+    public static JdkDownloadBar showInstalling(PrintStream out, String displayName) {
+        boolean silent = dev.jkbuild.config.ActiveConfig.get().noProgressOr(false);
+        boolean nerdfont = dev.jkbuild.config.GlobalConfig.nerdfont();
+        JdkDownloadBar db = new JdkDownloadBar(out, displayName, nerdfont, silent);
+        db.installing = true;
+        LiveRegion.setActive(db);
+        if (!silent) {
+            out.print(Ansi.HIDE_CURSOR);
+            out.flush();
+            db.startAnimator();
+        }
+        return db;
     }
 
     /**
@@ -154,11 +174,18 @@ public final class JdkDownloadBar implements AutoCloseable, LiveRegion {
 
     private String buildLine() {
         Theme t = Theme.active();
-        String dim = Theme.colorize("·", t.darkGray());
-        String label = Theme.colorize("Downloading " + displayName, t.normalGray());
+        String verb = installing ? "Installing " : "Downloading ";
+        String label = Theme.colorize(verb + displayName, t.normalGray());
 
         if (nerdfont) {
             var chip = t.goalChip();
+            String chipStr = Theme.colorize(" ", chip)
+                    + Theme.colorize(FRAMES[frame], chip)
+                    + Theme.colorize(" JDK ", chip)
+                    + Theme.colorize(Glyphs.SEGMENT_END_NERD, t.bright(t.planBadgeColor()));
+            if (installing) {
+                return chipStr + " " + label;
+            }
             Rgb lead = bar.leadColor(numerator, denominator);
             var cap = t.withBackground(t.bright(t.planBadgeColor()), lead);
             return Theme.colorize(" ", chip)
@@ -169,15 +196,18 @@ public final class JdkDownloadBar implements AutoCloseable, LiveRegion {
                     + Theme.colorize(Glyphs.SEGMENT_END_NERD, cap)
                     + bar.render(numerator, denominator)
                     + " "
-                    + dim
+                    + Theme.colorize("·", t.darkGray())
                     + " "
                     + label;
         } else {
+            if (installing) {
+                return Theme.colorize(FRAMES[frame], frameColors[frame]) + " JDK  " + label;
+            }
             return Theme.colorize(FRAMES[frame], frameColors[frame])
                     + " JDK "
                     + bar.render(numerator, denominator)
                     + " "
-                    + dim
+                    + Theme.colorize("·", t.darkGray())
                     + " "
                     + label;
         }

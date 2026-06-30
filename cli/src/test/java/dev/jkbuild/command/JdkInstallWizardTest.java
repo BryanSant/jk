@@ -106,16 +106,18 @@ class JdkInstallWizardTest {
         Wizard w = JdkInstallWizard.buildWizard(List.of(25, 21, 17), List.of(temurin, graalvm), "Eclipse|Temurin");
         WizardStep.RadioStep vendor = (WizardStep.RadioStep) w.steps().get(1);
 
-        // User picks "17" → hints update to the 17 line.
-        assertThat(vendor.choices().get(0).hintFor(Answers.of(Map.of("version", "17"))))
+        // User picks "17" → filtered choices include both (both have 17), hints update to the 17 line.
+        var choices17 = vendor.choicesFor(Answers.of(Map.of("version", "17")));
+        assertThat(choices17.get(0).hintFor(Answers.of(Map.of("version", "17"))))
                 .isEqualTo("temurin-17.0.10");
-        assertThat(vendor.choices().get(1).hintFor(Answers.of(Map.of("version", "17"))))
+        assertThat(choices17.get(1).hintFor(Answers.of(Map.of("version", "17"))))
                 .isEqualTo("graalvm-jdk-17.0.12");
 
-        // User picks "25" → hints update to the 25 line.
-        assertThat(vendor.choices().get(0).hintFor(Answers.of(Map.of("version", "25"))))
+        // User picks "25" → filtered choices include both (both have 25), hints update to the 25 line.
+        var choices25 = vendor.choicesFor(Answers.of(Map.of("version", "25")));
+        assertThat(choices25.get(0).hintFor(Answers.of(Map.of("version", "25"))))
                 .isEqualTo("temurin-25.0.1");
-        assertThat(vendor.choices().get(1).hintFor(Answers.of(Map.of("version", "25"))))
+        assertThat(choices25.get(1).hintFor(Answers.of(Map.of("version", "25"))))
                 .isEqualTo("graalvm-jdk-25");
     }
 
@@ -186,8 +188,11 @@ class JdkInstallWizardTest {
         WizardStep.RadioStep vendor = (WizardStep.RadioStep) steps.get(1);
         assertThat(vendor.key()).isEqualTo("vendor");
         assertThat(vendor.orientation()).isEqualTo(Orientation.VERTICAL);
-        assertThat(vendor.choices()).extracting("id").containsExactly("Eclipse|Temurin", "Oracle|OpenJDK");
-        assertThat(vendor.choices()).extracting("label").containsExactly("Eclipse Temurin", "Oracle OpenJDK");
+        // Vendor list is dynamic — must supply a version answer to trigger the choicesFn filter.
+        // Both test vendors only have version 25, so asking for 25 returns both.
+        var vendorChoices = vendor.choicesFor(Answers.of(Map.of("version", "25")));
+        assertThat(vendorChoices).extracting("id").containsExactly("Eclipse|Temurin", "Oracle|OpenJDK");
+        assertThat(vendorChoices).extracting("label").containsExactly("Eclipse Temurin", "Oracle OpenJDK");
         assertThat(vendor.defaultChoice()).isEqualTo("Eclipse|Temurin");
 
         WizardStep.RadioStep makeDefault = (WizardStep.RadioStep) steps.get(2);
@@ -196,7 +201,8 @@ class JdkInstallWizardTest {
         assertThat(makeDefault.choices()).extracting("id").containsExactly("yes", "no");
         assertThat(makeDefault.defaultChoice()).isEqualTo("no");
 
-        assertThat(w.title()).isEqualTo("Jk - Install a Java Development Kit");
+        assertThat(w.verb()).isEqualTo("Install JDK");
+        assertThat(w.subtitle()).isEqualTo("Install a Java Development Kit");
     }
 
     private static JdkInstallWizard.VendorOption vendorOption(

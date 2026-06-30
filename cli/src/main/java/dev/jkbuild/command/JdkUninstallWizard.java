@@ -36,8 +36,6 @@ import org.jline.utils.AttributedStringBuilder;
  */
 final class JdkUninstallWizard {
 
-    private static final String TITLE = "Uninstall Java Development Kits";
-
     static final String VICTIMS_KEY = "victims";
 
     private JdkUninstallWizard() {}
@@ -62,7 +60,11 @@ final class JdkUninstallWizard {
             victims.choice(Choice.rich(id, fallback, hint, focused -> richLabel(hit, identifier, focused)));
         }
 
-        Wizard wizard = Wizard.builder().title(TITLE).step(victims.build()).build();
+        Wizard wizard = Wizard.builder()
+                .verb("Uninstall JDK")
+                .subtitle("Remove installed Java Development Kits")
+                .step(victims.build())
+                .build();
 
         Optional<Answers> outcome = wizard.run(terminal);
         if (outcome.isEmpty()) return Optional.empty();

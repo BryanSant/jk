@@ -265,11 +265,10 @@ public final class JdkInstallCommand implements CliCommand {
                     }
                     JdkCatalog.Entry entry = ctx.require(ENTRY);
                     String label = entry.vendor() + " " + entry.product() + " " + entry.majorVersion();
-                    String installing =
-                            "Installing " + Theme.colorize(label, Theme.active().focused()) + "...";
                     ctx.label("extract " + label);
                     InstalledJdk installed;
-                    try (Spinner sp = Spinner.show(System.out, installing)) {
+                    try (dev.jkbuild.cli.tui.JdkDownloadBar sp =
+                            dev.jkbuild.cli.tui.JdkDownloadBar.showInstalling(System.out, label)) {
                         installed = installer.extractInstalled(entry, ctx.require(ARCHIVE));
                         ctx.put(INSTALLED, installed);
                         // Journal the install event for the JDK-usage stats —
@@ -427,36 +426,17 @@ public final class JdkInstallCommand implements CliCommand {
      * Render the post-install summary line:
      *
      * <pre>
-     *   ✓ &lt;label&gt; &lt;verb&gt; &lt;~/path&gt;
+     *   ✓ JDK ▶ Installed {label} {verb} {~/path}
      * </pre>
      */
     private static String doneLine(String label, Path home, String verb) {
-        return Theme.colorize(Glyphs.CHECK, Theme.active().success())
-                + " "
-                + Theme.colorize(label, Theme.active().focused())
-                + " "
-                + emphasizeInstalled(verb)
-                + " "
-                + Theme.colorize(tildeCollapse(home), Theme.active().path());
-    }
-
-    /** Render {@code verb} in normal-gray with the word "installed" promoted to bold-white. */
-    private static String emphasizeInstalled(String verb) {
-        String key = "installed";
-        int idx = verb.indexOf(key);
-        if (idx < 0) {
-            return Theme.colorize(verb, Theme.active().normalGray());
-        }
-        var sb = new StringBuilder();
-        if (idx > 0) {
-            sb.append(Theme.colorize(verb.substring(0, idx), Theme.active().normalGray()));
-        }
-        sb.append(Theme.colorize(key, Theme.active().focused()));
-        int end = idx + key.length();
-        if (end < verb.length()) {
-            sb.append(Theme.colorize(verb.substring(end), Theme.active().normalGray()));
-        }
-        return sb.toString();
+        Theme t = Theme.active();
+        boolean nerdfont = dev.jkbuild.config.GlobalConfig.nerdfont();
+        String msg = Theme.colorize("Installed ", t.normalGray())
+                + Theme.colorize(label, t.focused())
+                + Theme.colorize(" " + verb + " ", t.normalGray())
+                + Theme.colorize(tildeCollapse(home), t.path());
+        return dev.jkbuild.cli.tui.GoalWedge.chipLine(Glyphs.CHECK, "JDK", nerdfont, msg);
     }
 
     /** Render an absolute path with {@code $HOME} collapsed to {@code ~}. */
@@ -486,7 +466,7 @@ public final class JdkInstallCommand implements CliCommand {
             // hooks, which is what we want here — JLine's cleanup hook blocks
             // on its stdin reader thread that macOS won't let us interrupt.
             // The wizard's finally already restored terminal attributes.
-            Wizard.printCancellation(terminal, "𝘅 JDK installation canceled");
+            Wizard.printCancellation(terminal, "JDK installation canceled");
             Runtime.getRuntime().halt(130); // 128 + SIGINT
             throw new AssertionError("unreachable");
         }
