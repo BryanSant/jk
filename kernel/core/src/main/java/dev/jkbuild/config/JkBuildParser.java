@@ -447,17 +447,52 @@ public final class JkBuildParser {
     }
 
     /**
-     * Resolve a {@code name = "version-spec"} shorthand by looking the short name up in the bundled
-     * library catalog.
+     * Resolve a {@code name = "value"} string shorthand. Three forms are recognised:
+     *
+     * <ul>
+     *   <li>Local path — value starts with {@code .} or {@code /}: a path dependency whose
+     *       coordinate is always discovered from the {@code jk.toml} inside the directory.
+     *   <li>Git URL — value starts with {@code git://} or {@code https://}: a git dependency with
+     *       URL-embedded ref/subdir parsing. When no ref is embedded, {@code branch = "main"} is
+     *       implied.
+     *   <li>Version spec — anything else: looked up in the bundled catalog by {@code name} and
+     *       treated as a floating version selector (the Cargo-style {@code name = "1.2.3"} form).
+     * </ul>
      */
-    private static Dependency parseShorthandEntry(String name, String versionRaw, Scope scope, LibraryCatalog catalog) {
+    private static Dependency parseShorthandEntry(String name, String value, Scope scope, LibraryCatalog catalog) {
         String displayPath = scope.tomlSection() + "." + name;
-        if (versionRaw.isBlank()) {
-            throw new JkBuildParseException(displayPath + " has an empty version string");
+        if (value.isBlank()) {
+            throw new JkBuildParseException(displayPath + " has an empty value string");
         }
+
+        // Local path shorthand: starts with '.' (relative) or '/' (absolute).
+        if (value.startsWith(".") || value.startsWith("/")) {
+            return Dependency.path(name, "path:" + name, value);
+        }
+
+        // Git URL shorthand: starts with "git://" or "https://".
+        if (value.startsWith("git://") || value.startsWith("https://")) {
+            EmbeddedUrlParts parts = splitEmbeddedUrl(value);
+            GitRefSpec ref;
+            boolean shallow;
+            if (parts.refSpec() != null) {
+                ref = parseUrlEmbeddedRefSpec(parts.refSpec());
+                shallow = false;
+            } else {
+                // No ref embedded → default to branch "main", full clone.
+                ref = new GitRefSpec.Branch("main");
+                shallow = false;
+            }
+            String canonical = GitUrl.canonicalize(parts.baseUrl());
+            GitSource source = new GitSource(
+                    canonical, parts.baseUrl(), ref, parts.subdir(), true, false, shallow, null);
+            return Dependency.git(name, "git:" + name, source);
+        }
+
+        // Version spec: catalog lookup by name.
         LibraryCatalog.Module mod = catalog.lookup(name)
                 .orElseThrow(() -> new JkBuildParseException(unknownLibraryMessage(displayPath, name, catalog)));
-        VersionSelector selector = VersionSelector.parseFloating(versionRaw);
+        VersionSelector selector = VersionSelector.parseFloating(value);
         return Dependency.of(name, mod.moduleKey(), selector);
     }
 
@@ -496,8 +531,10 @@ public final class JkBuildParser {
         String displayPath = scope.tomlSection() + "." + name;
         boolean hasWorkspace = entry.contains("workspace");
         boolean hasVersion = entry.contains("version");
-        boolean hasPath = entry.contains("path");
         boolean hasGit = entry.contains("git");
+        // `path` is a source type only when standalone: for git deps it's a sub-directory
+        // modifier (the same as the `!subdir` URL suffix) and must not count toward sourceCount.
+        boolean hasPath = entry.contains("path") && !hasGit;
         boolean hasSha256 = entry.contains("sha256");
 
         int sourceCount = (hasVersion ? 1 : 0)
@@ -505,17 +542,13 @@ public final class JkBuildParser {
                 + (hasGit ? 1 : 0)
                 + (hasWorkspace ? 1 : 0)
                 + (hasSha256 ? 1 : 0);
-        // Two legal multi-source pairings:
-        //   git + version: version overrides the ref-derived version (git-source-deps.md).
-        //   sha256 + version: version is required alongside sha256 to record the coordinate.
-        // Every other multi-source combination is ambiguous.
-        boolean gitWithVersionOverride = hasGit && hasVersion && !hasPath && !hasWorkspace && !hasSha256;
+        // The only legal multi-source pairing: sha256 + version (version records the coordinate).
         boolean sha256WithVersion = hasSha256 && hasVersion && !hasPath && !hasGit && !hasWorkspace;
         if (sourceCount == 0) {
             throw new JkBuildParseException(
                     displayPath + " must set exactly one of `version`, `path`, `git`, `sha256`, or `workspace = true`");
         }
-        if (sourceCount > 1 && !gitWithVersionOverride && !sha256WithVersion) {
+        if (sourceCount > 1 && !sha256WithVersion) {
             throw new JkBuildParseException(displayPath
                     + " sets more than one of `version` / `path` / `git` / `sha256` / `workspace`; "
                     + "pick exactly one");
@@ -569,44 +602,35 @@ public final class JkBuildParser {
         }
 
         if (hasPath) {
-            if (groupExplicit == null || groupExplicit.isBlank()) {
-                throw new JkBuildParseException(displayPath
-                        + " with `path = ...` must set a `group` explicitly "
-                        + "(catalog shorthand applies only to version-based deps)");
+            // path deps are always pure discovery: the coordinate (group, name) and
+            // version come from the jk.toml inside the local directory. Specifying
+            // `group`, `name`, or `version` in the dep entry is an error.
+            for (String forbidden : new String[]{"group", "name", "version"}) {
+                if (entry.contains(forbidden)) {
+                    throw new JkBuildParseException(displayPath
+                            + " with `path` must not set `" + forbidden + "` — the coordinate"
+                            + " and version are always read from the jk.toml inside the path");
+                }
             }
             String path = entry.getString("path");
             if (path == null || path.isBlank()) {
                 throw new JkBuildParseException(displayPath + ".path must not be blank");
             }
-            return Dependency.path(name, group + ":" + artifact, path);
+            return Dependency.path(name, "path:" + name, path);
         }
 
         if (hasGit) {
-            // Discovery is the default: with no `group`, the coordinate is read
-            // from the cloned repo's [project] at materialization. An explicit
-            // `group` overrides the coordinate (artifact defaults to the dep
-            // name, as for version deps); `version` overrides the derived
-            // version (docs/git-source-deps.md §"Discovery with override").
-            GitSource base = parseGitSource(entry, displayPath);
-            String versionOverride = entry.getString("version");
-            if (hasVersion && (versionOverride == null || versionOverride.isBlank())) {
-                throw new JkBuildParseException(displayPath + ".version must not be blank");
+            // git deps are always pure discovery: the coordinate (group, name) and
+            // version come from the cloned repo's jk.toml. Specifying `group`,
+            // `name`, or `version` in the dep entry is an error.
+            for (String forbidden : new String[]{"group", "name", "version"}) {
+                if (entry.contains(forbidden)) {
+                    throw new JkBuildParseException(displayPath
+                            + " with `git` must not set `" + forbidden + "` — the coordinate"
+                            + " and version are always read from the cloned repo's jk.toml");
+                }
             }
-            if (groupExplicit != null && !groupExplicit.isBlank()) {
-                // Coordinate fully overridden — pin the module now.
-                GitSource source = base.withOverrides(groupExplicit, artifact, versionOverride);
-                return Dependency.git(name, groupExplicit + ":" + artifact, source);
-            }
-            if (artifactExplicit != null) {
-                throw new JkBuildParseException(displayPath
-                        + " sets `name` without `group`; set `group` too to override the "
-                        + "discovered coordinate, or omit both to discover it from the repo");
-            }
-            // Pure discovery (modulo an optional version override): a synthetic
-            // module placeholder that GitSourceResolution rewrites to the
-            // discovered coordinate, mirroring the workspace-dep placeholder.
-            GitSource source = base.withOverrides(null, null, versionOverride);
-            return Dependency.git(name, "git:" + name, source);
+            return Dependency.git(name, "git:" + name, parseGitSource(entry, displayPath));
         }
 
         // version-only.
@@ -660,22 +684,28 @@ public final class JkBuildParser {
         if (urlRaw == null) {
             throw new JkBuildParseException(displayPath + " requires a `git` URL");
         }
-        String canonical = GitUrl.canonicalize(urlRaw);
+
+        EmbeddedUrlParts parts = splitEmbeddedUrl(urlRaw);
+
         String tag = obj.getString("tag");
         String branch = obj.getString("branch");
         String rev = obj.getString("rev");
-        int set = (tag != null ? 1 : 0) + (branch != null ? 1 : 0) + (rev != null ? 1 : 0);
-        if (set == 0) {
-            throw new JkBuildParseException(displayPath + " must set one of `tag`, `branch`, or `rev`");
+        boolean hasExplicitRef = tag != null || branch != null || rev != null;
+
+        if (parts.refSpec() != null && hasExplicitRef) {
+            throw new JkBuildParseException(displayPath
+                    + " sets both a URL-embedded ref (`@` or `#` suffix) and an explicit ref"
+                    + " key (`tag`, `branch`, or `rev`); use one or the other");
         }
-        if (set > 1) {
-            throw new JkBuildParseException(displayPath + " must set exactly one of `tag`, `branch`, or `rev`");
+
+        String explicitPath = obj.getString("path");
+        if (parts.subdir() != null && explicitPath != null) {
+            throw new JkBuildParseException(displayPath
+                    + " sets both a URL-embedded sub-directory (`!` suffix) and an explicit"
+                    + " `path` key; use one or the other");
         }
-        GitRefSpec ref;
-        if (tag != null) ref = new GitRefSpec.Tag(tag);
-        else if (branch != null) ref = new GitRefSpec.Branch(branch);
-        else ref = new GitRefSpec.Rev(rev);
-        String path = obj.getString("path");
+        String path = parts.subdir() != null ? parts.subdir() : explicitPath;
+
         boolean submodules = obj.getBoolean("submodules", () -> true);
         boolean verifySigned = obj.getBoolean("verify-signed", () -> false);
         String fetch = obj.getString("fetch");
@@ -686,7 +716,148 @@ public final class JkBuildParser {
                     + fetch
                     + ")");
         }
-        return new GitSource(canonical, urlRaw, ref, path, submodules, verifySigned).withFetch(fetch);
+
+        GitRefSpec ref;
+        boolean shallow;
+
+        if (parts.refSpec() != null) {
+            // URL-embedded refs are always full (deep) clones regardless of ref type.
+            ref = parseUrlEmbeddedRefSpec(parts.refSpec());
+            shallow = false;
+        } else {
+            int set = (tag != null ? 1 : 0) + (branch != null ? 1 : 0) + (rev != null ? 1 : 0);
+            if (set == 0) {
+                throw new JkBuildParseException(
+                        displayPath + " must set `tag`, `branch`, or `rev` (or embed the ref in the URL)");
+            }
+            if (set > 1) {
+                throw new JkBuildParseException(
+                        displayPath + " must set exactly one of `tag`, `branch`, or `rev`");
+            }
+            if (tag != null) {
+                ref = new GitRefSpec.Tag(tag);
+                shallow = true; // explicit tag = → shallow clone
+            } else if (branch != null) {
+                ref = new GitRefSpec.Branch(branch);
+                shallow = false;
+            } else {
+                ref = new GitRefSpec.Rev(rev);
+                shallow = false;
+            }
+        }
+
+        String canonical = GitUrl.canonicalize(parts.baseUrl());
+        return new GitSource(canonical, parts.baseUrl(), ref, path, submodules, verifySigned, shallow, fetch);
+    }
+
+    /**
+     * The result of splitting URL-embedded ref and sub-directory out of a raw git URL. At most one
+     * of {@link #refSpec} and {@link #subdir} may be non-null when this is produced from a plain
+     * URL, but the parser also handles both.
+     *
+     * @param baseUrl the git repository URL with no embedded suffix
+     * @param subdir  sub-directory inside the repo, from the {@code !path} suffix, or {@code null}
+     * @param refSpec raw ref string prefixed by {@code "@"} or {@code "#"}, or {@code null}
+     */
+    record EmbeddedUrlParts(String baseUrl, String subdir, String refSpec) {}
+
+    /**
+     * Parse embedded ref ({@code @name} / {@code #sha}) and sub-directory ({@code !subdir}) out of
+     * a raw git URL. Either or both may be absent. The two suffixes may appear in either order:
+     *
+     * <ul>
+     *   <li>{@code url@ref!subdir} — ref before subdir
+     *   <li>{@code url!subdir@ref} — subdir before ref
+     *   <li>{@code url#sha!subdir} / {@code url!subdir#sha} — sha with subdir
+     * </ul>
+     *
+     * <p>The {@code @} ref delimiter is searched only after the last {@code /} or {@code :} in the
+     * URL, so the {@code git@host} userinfo form is not confused for an embedded ref. The {@code #}
+     * and {@code !} delimiters are searched from the start of the string (they are not valid in
+     * standard git URL paths without encoding).
+     */
+    static EmbeddedUrlParts splitEmbeddedUrl(String urlRaw) {
+        // @ must follow the authority so we don't mistake "git@github.com" for an embedded branch.
+        // Anchor at the first '/' after the scheme+host ("://host/"), or after ':' for SCP form.
+        int schemeEnd = urlRaw.indexOf("://");
+        int pathStart;
+        if (schemeEnd >= 0) {
+            int hostSlash = urlRaw.indexOf('/', schemeEnd + 3);
+            pathStart = hostSlash >= 0 ? hostSlash : urlRaw.length();
+        } else {
+            int colon = urlRaw.indexOf(':');
+            pathStart = colon >= 0 ? colon : 0;
+        }
+        int atPos = urlRaw.indexOf('@', pathStart);
+        int hashPos = urlRaw.indexOf('#');
+        int bangPos = urlRaw.indexOf('!');
+
+        // Ignore an @ that appears after a # (it would be inside the SHA string).
+        if (hashPos >= 0 && atPos > hashPos) atPos = -1;
+
+        boolean hasRef = atPos >= 0 || hashPos >= 0;
+        boolean hasBang = bangPos >= 0;
+
+        if (!hasRef && !hasBang) return new EmbeddedUrlParts(urlRaw, null, null);
+
+        // Determine which delimiter comes first.
+        int firstAt = atPos >= 0 ? atPos : Integer.MAX_VALUE;
+        int firstHash = hashPos >= 0 ? hashPos : Integer.MAX_VALUE;
+        int firstBang = bangPos >= 0 ? bangPos : Integer.MAX_VALUE;
+        int first = Math.min(firstAt, Math.min(firstHash, firstBang));
+
+        if (hasBang && bangPos == first) {
+            // Pattern: baseUrl!subdir[@ref|#sha]
+            String base = urlRaw.substring(0, bangPos);
+            String rest = urlRaw.substring(bangPos + 1);
+            int atInRest = rest.indexOf('@');
+            int hashInRest = rest.indexOf('#');
+            if (atInRest >= 0 && (hashInRest < 0 || atInRest < hashInRest)) {
+                return new EmbeddedUrlParts(base, rest.substring(0, atInRest), "@" + rest.substring(atInRest + 1));
+            } else if (hashInRest >= 0) {
+                return new EmbeddedUrlParts(base, rest.substring(0, hashInRest), "#" + rest.substring(hashInRest + 1));
+            } else {
+                return new EmbeddedUrlParts(base, rest, null); // subdir only, no ref (will error at validation)
+            }
+        } else {
+            // Pattern: baseUrl[@ref|#sha][!subdir]
+            int refPos = firstAt < firstHash ? atPos : hashPos;
+            char refChar = urlRaw.charAt(refPos);
+            String base = urlRaw.substring(0, refPos);
+            String refAndRest = urlRaw.substring(refPos + 1);
+            int bangInRest = refAndRest.indexOf('!');
+            if (bangInRest >= 0) {
+                return new EmbeddedUrlParts(
+                        base,
+                        refAndRest.substring(bangInRest + 1),
+                        (refChar == '#' ? "#" : "@") + refAndRest.substring(0, bangInRest));
+            } else {
+                return new EmbeddedUrlParts(base, null, (refChar == '#' ? "#" : "@") + refAndRest);
+            }
+        }
+    }
+
+    /**
+     * Parse the raw ref string extracted from a URL suffix ({@code "@name"} or {@code "#sha"}).
+     * A hex-only string (any length) → {@link GitRefSpec.Rev}; a version-like name (starts with a
+     * digit, or {@code v}/{@code r} followed by a digit) → {@link GitRefSpec.Tag}; anything else →
+     * {@link GitRefSpec.Branch}. All are {@code shallow = false} — URL-embedded refs always do a
+     * full clone even when they resolve to a tag.
+     */
+    private static GitRefSpec parseUrlEmbeddedRefSpec(String prefixedRef) {
+        // "#sha" is always a Rev; "@name" is classified by heuristic.
+        if (prefixedRef.startsWith("#")) {
+            return new GitRefSpec.Rev(prefixedRef.substring(1));
+        }
+        String name = prefixedRef.substring(1); // strip leading "@"
+        if (name.isEmpty()) return new GitRefSpec.Branch(name);
+        if (name.chars().allMatch(c -> (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'))) {
+            return new GitRefSpec.Rev(name); // "@hexsha" form
+        }
+        char first = name.charAt(0);
+        boolean versionLike = Character.isDigit(first)
+                || ((first == 'v' || first == 'r') && name.length() > 1 && Character.isDigit(name.charAt(1)));
+        return versionLike ? new GitRefSpec.Tag(name) : new GitRefSpec.Branch(name);
     }
 
     /**

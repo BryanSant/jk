@@ -107,6 +107,9 @@ public final class GitFetcherWorker {
                     .setBare(true)
                     .setURI(source.canonicalUrl())
                     .setDirectory(bareDir.toFile());
+            // Explicit tag entries request a shallow clone (depth 1) to save bandwidth.
+            // URL-embedded refs and all other ref types use a full clone.
+            if (source.shallow()) clone.setDepth(1);
             if (credentials != null) clone.setCredentialsProvider(credentials);
             clone.call().close();
         } catch (GitAPIException e) {

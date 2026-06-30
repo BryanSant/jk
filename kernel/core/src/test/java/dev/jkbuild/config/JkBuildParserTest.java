@@ -388,12 +388,12 @@ class JkBuildParserTest {
     void path_source_is_pinned() {
         JkBuild parsed = JkBuildParser.parse(PROJECT + """
                 [dependencies]
-                shared-utils = { group = "com.acme", name = "shared-utils", path = "../shared-utils" }
+                shared-utils = { path = "../shared-utils" }
                 """);
         var dep = parsed.dependencies().of(Scope.MAIN).getFirst();
         assertThat(dep.isPath()).isTrue();
         assertThat(dep.pathSource()).isEqualTo("../shared-utils");
-        assertThat(dep.module()).isEqualTo("com.acme:shared-utils");
+        assertThat(dep.module()).isEqualTo("path:shared-utils");
         assertThat(dep.pinned()).isTrue();
     }
 
@@ -401,13 +401,13 @@ class JkBuildParserTest {
     void git_source_inline_on_dep_table() {
         JkBuild parsed = JkBuildParser.parse(PROJECT + """
                 [dependencies]
-                codec = { group = "com.acme", git = "https://github.com/acme/codec", tag = "v0.9.1" }
+                codec = { git = "https://github.com/acme/codec", tag = "v0.9.1" }
                 """);
         var dep = parsed.dependencies().of(Scope.MAIN).getFirst();
         assertThat(dep.isGit()).isTrue();
         assertThat(dep.gitSource().originalUrl()).isEqualTo("https://github.com/acme/codec");
         assertThat(dep.gitSource().ref()).isInstanceOf(GitRefSpec.Tag.class);
-        assertThat(dep.module()).isEqualTo("com.acme:codec");
+        assertThat(dep.module()).isEqualTo("git:codec");
         assertThat(dep.pinned()).isTrue();
     }
 
@@ -415,14 +415,14 @@ class JkBuildParserTest {
     void git_source_must_set_exactly_one_ref() {
         assertThatThrownBy(() -> JkBuildParser.parse(PROJECT + """
                 [dependencies]
-                codec = { group = "com.acme", git = "https://github.com/acme/codec", tag = "v1", branch = "main" }
+                codec = { git = "https://github.com/acme/codec", tag = "v1", branch = "main" }
                 """))
                 .isInstanceOf(JkBuildParseException.class)
                 .hasMessageContaining("exactly one of");
     }
 
     @Test
-    void git_source_without_group_discovers_the_coordinate() {
+    void git_source_discovers_coordinate_from_repo() {
         JkBuild parsed = JkBuildParser.parse(PROJECT + """
                 [dependencies]
                 mylib = { git = "https://github.com/acme/widgets", tag = "v1.4.0" }
@@ -430,34 +430,46 @@ class JkBuildParserTest {
         var dep = parsed.dependencies().of(Scope.MAIN).getFirst();
         assertThat(dep.isGit()).isTrue();
         // Discovery: a placeholder module the resolver rewrites once the repo's
-        // [project] coordinate is known; no override carried.
+        // [project] coordinate is known.
         assertThat(dep.module()).isEqualTo("git:mylib");
-        assertThat(dep.gitSource().hasOverrides()).isFalse();
-        assertThat(dep.gitSource().overrideGroup()).isNull();
+        assertThat(dep.gitSource().ref()).isEqualTo(new GitRefSpec.Tag("v1.4.0"));
     }
 
     @Test
-    void git_source_honors_coordinate_and_version_overrides() {
-        JkBuild parsed = JkBuildParser.parse(PROJECT + """
+    void git_source_rejects_group_field() {
+        assertThatThrownBy(() -> JkBuildParser.parse(PROJECT + """
                 [dependencies]
-                fork = { git = "https://github.com/me/widgets-fork", branch = "main", \
-                         group = "com.acme", name = "widgets", version = "1.4.0-acme" }
-                """);
-        var dep = parsed.dependencies().of(Scope.MAIN).getFirst();
-        assertThat(dep.isGit()).isTrue();
-        assertThat(dep.module()).isEqualTo("com.acme:widgets");
-        var src = dep.gitSource();
-        assertThat(src.overrideGroup()).isEqualTo("com.acme");
-        assertThat(src.overrideArtifact()).isEqualTo("widgets");
-        assertThat(src.overrideVersion()).isEqualTo("1.4.0-acme");
+                fork = { git = "https://github.com/me/widgets", branch = "main", group = "com.acme" }
+                """))
+                .isInstanceOf(JkBuildParseException.class)
+                .hasMessageContaining("`group`");
+    }
+
+    @Test
+    void git_source_rejects_name_field() {
+        assertThatThrownBy(() -> JkBuildParser.parse(PROJECT + """
+                [dependencies]
+                fork = { git = "https://github.com/me/widgets", branch = "main", name = "widgets" }
+                """))
+                .isInstanceOf(JkBuildParseException.class)
+                .hasMessageContaining("`name`");
+    }
+
+    @Test
+    void git_source_rejects_version_field() {
+        assertThatThrownBy(() -> JkBuildParser.parse(PROJECT + """
+                [dependencies]
+                fork = { git = "https://github.com/me/widgets", tag = "v1.0", version = "1.0.0" }
+                """))
+                .isInstanceOf(JkBuildParseException.class)
+                .hasMessageContaining("`version`");
     }
 
     @Test
     void git_source_parses_fetch_freshness_policy() {
         JkBuild parsed = JkBuildParser.parse(PROJECT + """
                 [dependencies]
-                fork = { group = "com.acme", name = "widgets", \
-                         git = "https://github.com/me/widgets", branch = "main", fetch = "48h" }
+                fork = { git = "https://github.com/me/widgets", branch = "main", fetch = "48h" }
                 """);
         assertThat(parsed.dependencies().of(Scope.MAIN).getFirst().gitSource().fetch())
                 .isEqualTo("48h");
@@ -467,31 +479,124 @@ class JkBuildParserTest {
     void git_source_rejects_invalid_fetch_policy() {
         assertThatThrownBy(() -> JkBuildParser.parse(PROJECT + """
                 [dependencies]
-                fork = { group = "com.acme", name = "widgets", \
-                         git = "https://github.com/me/widgets", branch = "main", fetch = "soon" }
+                fork = { git = "https://github.com/me/widgets", branch = "main", fetch = "soon" }
                 """)).hasMessageContaining("fetch");
     }
 
     @Test
-    void git_source_group_override_defaults_artifact_to_dep_name() {
-        JkBuild parsed = JkBuildParser.parse(PROJECT + """
+    void git_source_requires_tag_branch_rev_or_embedded_ref() {
+        assertThatThrownBy(() -> JkBuildParser.parse(PROJECT + """
                 [dependencies]
-                codec = { group = "com.acme", git = "https://github.com/acme/codec", tag = "v0.9.1" }
-                """);
-        var src = parsed.dependencies().of(Scope.MAIN).getFirst().gitSource();
-        assertThat(src.overrideGroup()).isEqualTo("com.acme");
-        assertThat(src.overrideArtifact()).isEqualTo("codec"); // defaults to the dep name
-        assertThat(src.overrideVersion()).isNull(); // version still derived from the tag
+                bad = { git = "https://github.com/acme/widgets" }
+                """))
+                .isInstanceOf(JkBuildParseException.class)
+                .hasMessageContaining("must set `tag`, `branch`, or `rev`");
     }
 
     @Test
-    void git_source_artifact_without_group_is_rejected() {
+    void git_source_url_embedded_branch_via_at() {
+        JkBuild parsed = JkBuildParser.parse(PROJECT + """
+                [dependencies]
+                mylib = { git = "https://github.com/jin-tonic/jin@main" }
+                """);
+        var src = parsed.dependencies().of(Scope.MAIN).getFirst().gitSource();
+        assertThat(src.originalUrl()).isEqualTo("https://github.com/jin-tonic/jin");
+        assertThat(src.ref()).isEqualTo(new GitRefSpec.Branch("main"));
+        assertThat(src.shallow()).isFalse();
+    }
+
+    @Test
+    void git_source_url_embedded_tag_via_at_is_deep_clone() {
+        JkBuild parsed = JkBuildParser.parse(PROJECT + """
+                [dependencies]
+                requests = { git = "https://github.com/psf/requests.git@v1.2.3" }
+                """);
+        var src = parsed.dependencies().of(Scope.MAIN).getFirst().gitSource();
+        assertThat(src.ref()).isEqualTo(new GitRefSpec.Tag("v1.2.3"));
+        assertThat(src.shallow()).isFalse(); // URL-embedded → always deep
+    }
+
+    @Test
+    void git_source_explicit_tag_is_shallow_clone() {
+        JkBuild parsed = JkBuildParser.parse(PROJECT + """
+                [dependencies]
+                mylib = { git = "https://github.com/acme/widgets", tag = "v1.4.0" }
+                """);
+        var src = parsed.dependencies().of(Scope.MAIN).getFirst().gitSource();
+        assertThat(src.ref()).isEqualTo(new GitRefSpec.Tag("v1.4.0"));
+        assertThat(src.shallow()).isTrue(); // explicit tag = → shallow
+    }
+
+    @Test
+    void git_source_url_embedded_rev_via_hash() {
+        JkBuild parsed = JkBuildParser.parse(PROJECT + """
+                [dependencies]
+                mylib = { git = "https://github.com/user/repo#8f3a1b2c4d5e6f" }
+                """);
+        var src = parsed.dependencies().of(Scope.MAIN).getFirst().gitSource();
+        assertThat(src.ref()).isEqualTo(new GitRefSpec.Rev("8f3a1b2c4d5e6f"));
+        assertThat(src.shallow()).isFalse();
+    }
+
+    @Test
+    void git_source_url_embedded_ref_and_explicit_ref_conflict() {
         assertThatThrownBy(() -> JkBuildParser.parse(PROJECT + """
                 [dependencies]
-                bad = { git = "https://github.com/acme/widgets", tag = "v1", name = "widgets" }
+                bad = { git = "https://github.com/acme/widgets@main", branch = "main" }
                 """))
                 .isInstanceOf(JkBuildParseException.class)
-                .hasMessageContaining("`name` without `group`");
+                .hasMessageContaining("URL-embedded ref");
+    }
+
+    @Test
+    void git_source_subdir_via_bang_before_ref() {
+        // url!subdir@ref form
+        JkBuild parsed = JkBuildParser.parse(PROJECT + """
+                [dependencies]
+                auth = { git = "https://github.com/user/repo!components/auth@v1.2.3" }
+                """);
+        var src = parsed.dependencies().of(Scope.MAIN).getFirst().gitSource();
+        assertThat(src.originalUrl()).isEqualTo("https://github.com/user/repo");
+        assertThat(src.path()).isEqualTo("components/auth");
+        assertThat(src.ref()).isEqualTo(new GitRefSpec.Tag("v1.2.3"));
+        assertThat(src.shallow()).isFalse();
+    }
+
+    @Test
+    void git_source_subdir_via_bang_after_ref() {
+        // url@ref!subdir form
+        JkBuild parsed = JkBuildParser.parse(PROJECT + """
+                [dependencies]
+                auth = { git = "git://github.com/user/repo@v1.2.3!components/auth" }
+                """);
+        var src = parsed.dependencies().of(Scope.MAIN).getFirst().gitSource();
+        assertThat(src.originalUrl()).isEqualTo("git://github.com/user/repo");
+        assertThat(src.path()).isEqualTo("components/auth");
+        assertThat(src.ref()).isEqualTo(new GitRefSpec.Tag("v1.2.3"));
+        assertThat(src.shallow()).isFalse();
+    }
+
+    @Test
+    void git_source_subdir_via_bang_with_sha() {
+        // url#sha!subdir form
+        JkBuild parsed = JkBuildParser.parse(PROJECT + """
+                [dependencies]
+                auth = { git = "https://github.com/user/repo#8f3a1b2c4d5e6f!components/auth" }
+                """);
+        var src = parsed.dependencies().of(Scope.MAIN).getFirst().gitSource();
+        assertThat(src.path()).isEqualTo("components/auth");
+        assertThat(src.ref()).isEqualTo(new GitRefSpec.Rev("8f3a1b2c4d5e6f"));
+        assertThat(src.shallow()).isFalse();
+    }
+
+    @Test
+    void git_source_url_subdir_and_explicit_path_conflict() {
+        assertThatThrownBy(() -> JkBuildParser.parse(PROJECT + """
+                [dependencies]
+                auth = { git = "https://github.com/user/repo!components/auth", branch = "main", path = "components/auth" }
+                """))
+                .isInstanceOf(JkBuildParseException.class)
+                .hasMessageContaining("sub-directory");
     }
 
     @Test
@@ -775,6 +880,100 @@ class JkBuildParserTest {
             "picocli", new LibraryCatalog.Module("info.picocli", "picocli")));
 
     @Test
+    void shorthand_relative_path_creates_path_dep() {
+        JkBuild parsed = JkBuildParser.parse(PROJECT + """
+                [dependencies]
+                my-lib = "./some/local/path"
+                """);
+        var dep = parsed.dependencies().of(Scope.MAIN).getFirst();
+        assertThat(dep.isPath()).isTrue();
+        assertThat(dep.pathSource()).isEqualTo("./some/local/path");
+        assertThat(dep.module()).isEqualTo("path:my-lib");
+    }
+
+    @Test
+    void shorthand_parent_relative_path_creates_path_dep() {
+        JkBuild parsed = JkBuildParser.parse(PROJECT + """
+                [dependencies]
+                shared = "../shared-utils"
+                """);
+        var dep = parsed.dependencies().of(Scope.MAIN).getFirst();
+        assertThat(dep.isPath()).isTrue();
+        assertThat(dep.pathSource()).isEqualTo("../shared-utils");
+    }
+
+    @Test
+    void shorthand_absolute_path_creates_path_dep() {
+        JkBuild parsed = JkBuildParser.parse(PROJECT + """
+                [dependencies]
+                shared = "/opt/libs/shared"
+                """);
+        var dep = parsed.dependencies().of(Scope.MAIN).getFirst();
+        assertThat(dep.isPath()).isTrue();
+        assertThat(dep.pathSource()).isEqualTo("/opt/libs/shared");
+    }
+
+    @Test
+    void shorthand_https_url_defaults_to_main_branch() {
+        JkBuild parsed = JkBuildParser.parse(PROJECT + """
+                [dependencies]
+                requests = "https://github.com/psf/requests"
+                """);
+        var dep = parsed.dependencies().of(Scope.MAIN).getFirst();
+        assertThat(dep.isGit()).isTrue();
+        assertThat(dep.gitSource().ref()).isEqualTo(new GitRefSpec.Branch("main"));
+        assertThat(dep.gitSource().shallow()).isFalse();
+        assertThat(dep.module()).isEqualTo("git:requests");
+    }
+
+    @Test
+    void shorthand_git_url_with_embedded_branch() {
+        JkBuild parsed = JkBuildParser.parse(PROJECT + """
+                [dependencies]
+                jin = "git://github.com/jin-tonic/jin@mybranch"
+                """);
+        var dep = parsed.dependencies().of(Scope.MAIN).getFirst();
+        assertThat(dep.isGit()).isTrue();
+        assertThat(dep.gitSource().ref()).isEqualTo(new GitRefSpec.Branch("mybranch"));
+        assertThat(dep.gitSource().shallow()).isFalse();
+    }
+
+    @Test
+    void shorthand_git_url_with_embedded_tag() {
+        JkBuild parsed = JkBuildParser.parse(PROJECT + """
+                [dependencies]
+                requests = "https://github.com/psf/requests.git@v1.2.3"
+                """);
+        var dep = parsed.dependencies().of(Scope.MAIN).getFirst();
+        assertThat(dep.isGit()).isTrue();
+        assertThat(dep.gitSource().ref()).isEqualTo(new GitRefSpec.Tag("v1.2.3"));
+        assertThat(dep.gitSource().shallow()).isFalse(); // URL-embedded → always deep
+    }
+
+    @Test
+    void shorthand_git_url_with_embedded_sha() {
+        JkBuild parsed = JkBuildParser.parse(PROJECT + """
+                [dependencies]
+                repo = "git://github.com/user/repo#8f3a1b2c4d5e6f"
+                """);
+        var dep = parsed.dependencies().of(Scope.MAIN).getFirst();
+        assertThat(dep.isGit()).isTrue();
+        assertThat(dep.gitSource().ref()).isEqualTo(new GitRefSpec.Rev("8f3a1b2c4d5e6f"));
+    }
+
+    @Test
+    void shorthand_git_url_with_subdir() {
+        JkBuild parsed = JkBuildParser.parse(PROJECT + """
+                [dependencies]
+                auth = "https://github.com/user/repo!components/auth@main"
+                """);
+        var dep = parsed.dependencies().of(Scope.MAIN).getFirst();
+        assertThat(dep.isGit()).isTrue();
+        assertThat(dep.gitSource().path()).isEqualTo("components/auth");
+        assertThat(dep.gitSource().ref()).isEqualTo(new GitRefSpec.Branch("main"));
+    }
+
+    @Test
     void shorthand_string_value_resolves_through_catalog() {
         // The cargo-add experience: `name = "1.0.0"` looks up the coord in
         // the bundled catalog and treats the version as caret-floating.
@@ -852,15 +1051,33 @@ class JkBuildParserTest {
     }
 
     @Test
-    void path_source_still_requires_explicit_group_even_for_catalog_name() {
-        // Catalog shorthand is name → version; path/git sources are
-        // out-of-catalog by construction. Force the user to be explicit.
+    void path_source_rejects_group_field() {
         assertThatThrownBy(() -> JkBuildParser.parse(PROJECT + """
                 [dependencies]
-                picocli = { path = "../picocli" }
-                """, TEST_CATALOG))
+                picocli = { path = "../picocli", group = "info.picocli" }
+                """))
                 .isInstanceOf(JkBuildParseException.class)
-                .hasMessageContaining("must set a `group` explicitly");
+                .hasMessageContaining("`group`");
+    }
+
+    @Test
+    void path_source_rejects_name_field() {
+        assertThatThrownBy(() -> JkBuildParser.parse(PROJECT + """
+                [dependencies]
+                shared = { path = "../shared", name = "shared-utils" }
+                """))
+                .isInstanceOf(JkBuildParseException.class)
+                .hasMessageContaining("`name`");
+    }
+
+    @Test
+    void path_source_rejects_version_field() {
+        assertThatThrownBy(() -> JkBuildParser.parse(PROJECT + """
+                [dependencies]
+                shared = { path = "../shared", version = "1.0.0" }
+                """))
+                .isInstanceOf(JkBuildParseException.class)
+                .hasMessageContaining("`version`");
     }
 
     @Test
@@ -979,5 +1196,71 @@ class JkBuildParserTest {
                 .isFalse();
         assertThat(JkBuildParser.parse(PROJECT + "m2install = true\n").project().m2install())
                 .isTrue();
+    }
+
+    // ── splitEmbeddedUrl unit tests ──────────────────────────────────────────
+
+    @Test
+    void split_url_no_embedded() {
+        var p = JkBuildParser.splitEmbeddedUrl("https://github.com/user/repo");
+        assertThat(p.baseUrl()).isEqualTo("https://github.com/user/repo");
+        assertThat(p.subdir()).isNull();
+        assertThat(p.refSpec()).isNull();
+    }
+
+    @Test
+    void split_url_at_ref_only() {
+        var p = JkBuildParser.splitEmbeddedUrl("https://github.com/user/repo@main");
+        assertThat(p.baseUrl()).isEqualTo("https://github.com/user/repo");
+        assertThat(p.subdir()).isNull();
+        assertThat(p.refSpec()).isEqualTo("@main");
+    }
+
+    @Test
+    void split_url_hash_ref_only() {
+        var p = JkBuildParser.splitEmbeddedUrl("https://github.com/user/repo#8f3a1b");
+        assertThat(p.baseUrl()).isEqualTo("https://github.com/user/repo");
+        assertThat(p.subdir()).isNull();
+        assertThat(p.refSpec()).isEqualTo("#8f3a1b");
+    }
+
+    @Test
+    void split_url_ref_then_subdir() {
+        var p = JkBuildParser.splitEmbeddedUrl("git://github.com/user/repo@v1.2.3!components/auth");
+        assertThat(p.baseUrl()).isEqualTo("git://github.com/user/repo");
+        assertThat(p.subdir()).isEqualTo("components/auth");
+        assertThat(p.refSpec()).isEqualTo("@v1.2.3");
+    }
+
+    @Test
+    void split_url_subdir_then_ref() {
+        var p = JkBuildParser.splitEmbeddedUrl("https://github.com/user/repo!components/auth@v1.2.3");
+        assertThat(p.baseUrl()).isEqualTo("https://github.com/user/repo");
+        assertThat(p.subdir()).isEqualTo("components/auth");
+        assertThat(p.refSpec()).isEqualTo("@v1.2.3");
+    }
+
+    @Test
+    void split_url_hash_then_subdir() {
+        var p = JkBuildParser.splitEmbeddedUrl("https://github.com/user/repo#8f3a1b!components/auth");
+        assertThat(p.baseUrl()).isEqualTo("https://github.com/user/repo");
+        assertThat(p.subdir()).isEqualTo("components/auth");
+        assertThat(p.refSpec()).isEqualTo("#8f3a1b");
+    }
+
+    @Test
+    void split_url_subdir_then_hash() {
+        var p = JkBuildParser.splitEmbeddedUrl("https://github.com/user/repo!components/auth#8f3a1b");
+        assertThat(p.baseUrl()).isEqualTo("https://github.com/user/repo");
+        assertThat(p.subdir()).isEqualTo("components/auth");
+        assertThat(p.refSpec()).isEqualTo("#8f3a1b");
+    }
+
+    @Test
+    void split_url_git_at_host_not_confused_for_ref() {
+        // "git@github.com" is userinfo, not an embedded ref
+        var p = JkBuildParser.splitEmbeddedUrl("git@github.com:user/repo");
+        assertThat(p.baseUrl()).isEqualTo("git@github.com:user/repo");
+        assertThat(p.refSpec()).isNull();
     }
 }

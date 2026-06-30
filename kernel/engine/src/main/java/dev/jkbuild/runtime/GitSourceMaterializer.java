@@ -90,10 +90,7 @@ public final class GitSourceMaterializer {
         GitFetcher fetcher = new GitFetcher(gitRoot, credentials);
         GitFetcher.Fetched fetched = fetcher.fetch(source);
         String sha = fetched.sha();
-        // An explicit `version` override relabels the artifact without touching
-        // the ref → commit selection, so we can skip ref-derived versioning.
-        String version =
-                source.overrideVersion() != null ? source.overrideVersion() : deriveVersion(fetcher, source, sha);
+        String version = deriveVersion(fetcher, source, sha);
 
         Path projectDir = source.path() != null && !source.path().isBlank()
                 ? fetched.checkoutPath().resolve(source.path())
@@ -107,14 +104,9 @@ public final class GitSourceMaterializer {
                     + " (only jk.toml builds are supported)");
         }
         JkBuild project = JkBuildParser.parse(Files.readString(buildFile));
-        // Discovery with override: explicit group/artifact replace the
-        // coordinate read from the repo's [project] (docs/git-source-deps.md).
-        String group = source.overrideGroup() != null
-                ? source.overrideGroup()
-                : project.project().group();
-        String artifact = source.overrideArtifact() != null
-                ? source.overrideArtifact()
-                : project.project().name();
+        // Coordinate is always read from the cloned repo's [project] — no overrides.
+        String group = project.project().group();
+        String artifact = project.project().name();
 
         // Per-commit local Maven repo; reused on a cache hit (immutable tag/rev).
         Path repo = artifactsRoot
@@ -147,16 +139,15 @@ public final class GitSourceMaterializer {
     }
 
     private static String deriveVersion(GitFetcher fetcher, GitSource source, String sha) throws IOException {
-        GitRefSpec ref = source.ref();
-        if (ref instanceof GitRefSpec.Tag t) {
-            return GitVersion.fromTag(t.name());
-        }
-        if (ref instanceof GitRefSpec.Branch b) {
-            return GitVersion.forBranch(b.name());
-        }
-        // Explicit commit → tag-anchored timestamp pseudo-version.
-        GitFetcher.RefInfo info = fetcher.resolveRef(source);
-        return GitVersion.pseudo(info.nearestTag(), info.commitTime(), shortSha(sha));
+        return switch (source.ref()) {
+            case GitRefSpec.Tag t -> GitVersion.fromTag(t.name());
+            case GitRefSpec.Branch b -> GitVersion.forBranch(b.name());
+            case GitRefSpec.Rev ignored -> {
+                // Explicit commit: tag-anchored timestamp pseudo-version.
+                GitFetcher.RefInfo info = fetcher.resolveRef(source);
+                yield GitVersion.pseudo(info.nearestTag(), info.commitTime(), shortSha(sha));
+            }
+        };
     }
 
     private static String shortSha(String sha) {

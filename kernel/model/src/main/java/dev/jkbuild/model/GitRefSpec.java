@@ -7,13 +7,18 @@ import java.util.Objects;
  * What ref of a git repository to resolve (PRD §11.1). One of:
  *
  * <ul>
- *   <li>{@link Tag} — an annotated or lightweight tag (e.g. {@code v1.2.3}).
- *   <li>{@link Branch} — a moving branch ref (e.g. {@code main}).
- *   <li>{@link Rev} — an explicit 40-char SHA, the canonical pin.
+ *   <li>{@link Tag} — an annotated or lightweight tag (e.g. {@code v1.2.3}). Immutable; when
+ *       declared via an explicit {@code tag = "..."} table field, jk does a shallow clone (depth 1)
+ *       to minimise bandwidth. URL-embedded tag refs ({@code url@v1.2.3}) always do a full clone.
+ *   <li>{@link Branch} — a moving branch ref (e.g. {@code main}). Mutable; built from source as a
+ *       composite dependency and never locked.
+ *   <li>{@link Rev} — an explicit 40-char (or abbreviated) commit SHA. Always immutable and pinned
+ *       in {@code jk.lock}. Always does a full clone.
  * </ul>
  *
- * <p>Tags and branches are mutable; only a {@link Rev} is fully reproducible. The resolver always
- * pins to a SHA in the lockfile regardless of the spec (PRD §11.2).
+ * <p>Whether the clone is shallow is governed by {@link GitSource#shallow()}, not purely by this
+ * ref type — a URL-embedded tag ({@code url@v1.2.3}) carries {@link Tag} here but has
+ * {@code shallow = false}.
  */
 public sealed interface GitRefSpec {
 
@@ -26,10 +31,10 @@ public sealed interface GitRefSpec {
     }
 
     /**
-     * Whether the spec names an effectively-immutable ref ({@link Tag} or {@link Rev}). Immutable git
-     * deps are materialized and pinned in {@code jk.lock} (a tag's stability is enforced by the
-     * tag-rewrite canary). A {@link Branch} is a moving target: it is built-from-source on demand and
-     * injected onto the classpath like a {@code path} dependency, never locked.
+     * Whether the spec names an effectively-immutable ref ({@link Tag} or {@link Rev}). Immutable
+     * git deps are materialized and pinned in {@code jk.lock}. A {@link Branch} is a moving target:
+     * it is built from source on demand and injected onto the classpath like a {@code path}
+     * dependency, never locked.
      */
     default boolean isImmutable() {
         return true;
@@ -65,9 +70,6 @@ public sealed interface GitRefSpec {
     record Rev(String sha) implements GitRefSpec {
         public Rev {
             Objects.requireNonNull(sha, "sha");
-            if (sha.length() != 40 || !sha.chars().allMatch(c -> (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) {
-                throw new IllegalArgumentException("rev must be a 40-char lowercase hex SHA (got: " + sha + ")");
-            }
         }
 
         @Override

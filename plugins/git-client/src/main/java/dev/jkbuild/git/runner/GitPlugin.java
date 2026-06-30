@@ -51,7 +51,7 @@ public final class GitPlugin implements Plugin {
         String command = null, url = null, refType = null, ref = null;
         String credUser = null, credPass = null, expectedSha = null;
         Path gitRoot = null;
-        boolean noCache = false;
+        boolean noCache = false, shallow = false;
 
         try {
             for (String line : Files.readAllLines(specFile, StandardCharsets.UTF_8)) {
@@ -66,6 +66,7 @@ public final class GitPlugin implements Plugin {
                     case "REF_TYPE" -> refType = val;
                     case "REF" -> ref = val;
                     case "NO_CACHE" -> noCache = "true".equalsIgnoreCase(val);
+                    case "SHALLOW" -> shallow = "true".equalsIgnoreCase(val);
                     case "GIT_ROOT" -> gitRoot = Path.of(val);
                     case "CRED_USER" -> credUser = val;
                     case "CRED_PASS" -> credPass = val;
@@ -84,7 +85,7 @@ public final class GitPlugin implements Plugin {
         }
 
         GitFetcherWorker worker = new GitFetcherWorker(gitRoot, credUser, credPass);
-        GitSource source = buildSource(url, refType, ref);
+        GitSource source = buildSource(url, refType, ref, shallow);
 
         return switch (command) {
             case "fetch" -> doFetch(out, worker, source, noCache);
@@ -155,13 +156,13 @@ public final class GitPlugin implements Plugin {
         }
     }
 
-    private static GitSource buildSource(String url, String refType, String ref) {
-        GitRefSpec refSpec =
-                switch (refType != null ? refType : "Rev") {
-                    case "Tag" -> new GitRefSpec.Tag(ref);
-                    case "Branch" -> new GitRefSpec.Branch(ref);
-                    default -> new GitRefSpec.Rev(ref);
-                };
-        return new GitSource(url, url, refSpec, null, true, false);
+    private static GitSource buildSource(String url, String refType, String ref, boolean shallow) {
+        GitRefSpec refSpec = switch (refType != null ? refType : "") {
+            case "Tag" -> new GitRefSpec.Tag(ref);
+            case "Branch" -> new GitRefSpec.Branch(ref);
+            case "Rev" -> new GitRefSpec.Rev(ref);
+            default -> throw new IllegalArgumentException("unknown REF_TYPE: " + refType);
+        };
+        return new GitSource(url, url, refSpec, null, true, false, shallow, null);
     }
 }

@@ -135,6 +135,7 @@ public final class GitFetcher {
         lines.add("REF_TYPE " + refTypeName(source.ref()));
         lines.add("REF " + refValue(source.ref()));
         lines.add("NO_CACHE " + noCache);
+        lines.add("SHALLOW " + source.shallow());
         lines.add("GIT_ROOT " + gitRoot.toAbsolutePath());
         if (cred != null) {
             lines.add("CRED_USER " + cred[0]);

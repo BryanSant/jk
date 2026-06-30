@@ -220,10 +220,7 @@ public final class GitSourceResolution {
                 "|",
                 source.canonicalUrl(),
                 source.ref().token(),
-                source.path() == null ? "" : source.path(),
-                source.overrideGroup() == null ? "" : source.overrideGroup(),
-                source.overrideArtifact() == null ? "" : source.overrideArtifact(),
-                source.overrideVersion() == null ? "" : source.overrideVersion());
+                source.path() == null ? "" : source.path());
     }
 
     private static String provenanceKey(String coordinate, String version) {
