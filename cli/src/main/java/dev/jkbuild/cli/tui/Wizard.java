@@ -54,14 +54,12 @@ public final class Wizard {
     /** Poll interval for keys; lets the loop observe async cancellation flag. */
     private static final long KEY_POLL_MS = 75L;
 
-    private final String title;
     private final String verb;
     private final String subtitle;
     private final List<WizardStep> steps;
     private volatile boolean cancelled;
 
-    Wizard(String title, String verb, String subtitle, List<WizardStep> steps) {
-        this.title = title;
+    Wizard(String verb, String subtitle, List<WizardStep> steps) {
         this.verb = verb;
         this.subtitle = subtitle;
         this.steps = steps;
@@ -110,10 +108,6 @@ public final class Wizard {
 
     public List<WizardStep> steps() {
         return steps;
-    }
-
-    public String title() {
-        return title;
     }
 
     public String verb() {
@@ -379,39 +373,25 @@ public final class Wizard {
     /**
      * Build the wizard header.
      *
-     * <p>When {@code verb} + {@code subtitle} are set (the modern path), renders as a goal chip
-     * matching the build TUI: {@code " · New Project "} on the plan-blue chip, closed by a powerline cap
-     * (Nerd Font) or a double space (plain), followed by the pre-styled subtitle.
-     *
-     * <p>Legacy (title-only): the original indigo-badge style with a {@code ╭──} rail opener.
+     * <p>Renders as a goal chip matching the build TUI: {@code " · New Project "} on the
+     * plan-blue chip, closed by a powerline cap (Nerd Font) or a double space (plain), followed
+     * by the pre-styled subtitle.
      */
     private String headerLine(Terminal terminal) {
         Theme t = Theme.active();
-        if (!verb.isEmpty()) {
-            boolean nf = GlobalConfig.nerdfont();
-            String chipStr = GoalWedge.chip("≡", verb, t.goalChip());
-            if (nf) {
-                // Dark-gray band: BRIGHT_BLACK (#546E7A) bg, black text, matching caps.
-                dev.jkbuild.cli.theme.Rgb dg = dev.jkbuild.cli.theme.Rgb.hex(0x90A4AE); // GRAY — matches jk tree scope badges
-                String cap1 = Theme.colorize(Glyphs.SEGMENT_END_NERD,
-                        t.withBackground(t.bright(t.planBadgeColor()), dg));
-                String bgBlack = "\033[48;2;" + dg.r() + ";" + dg.g() + ";" + dg.b()
-                        + ";38;2;0;0;0m";
-                String cap2 = Theme.colorize(Glyphs.SEGMENT_END_NERD, t.gray()); // GRAY matches band bg
-                // Re-apply bg before the trailing space — subtitle may end with a reset.
-                return chipStr + cap1 + bgBlack + " " + subtitle + bgBlack + " " + Ansi.RESET + cap2;
-            }
-            return chipStr + "  " + subtitle;
+        boolean nf = GlobalConfig.nerdfont();
+        String chipStr = GoalWedge.chip("≡", verb, t.goalChip());
+        if (nf) {
+            // Dark-gray band: BRIGHT_BLACK (#546E7A) bg, black text, matching caps.
+            dev.jkbuild.cli.theme.Rgb dg = dev.jkbuild.cli.theme.Rgb.hex(0x90A4AE); // GRAY — matches jk tree scope badges
+            String cap1 = Theme.colorize(Glyphs.SEGMENT_END_NERD,
+                    t.withBackground(t.bright(t.planBadgeColor()), dg));
+            String bgBlack = "\033[48;2;" + dg.r() + ";" + dg.g() + ";" + dg.b()
+                    + ";38;2;0;0;0m";
+            // Re-apply bg before the trailing space — subtitle may end with a reset.
+            return chipStr + cap1 + bgBlack + " " + subtitle + bgBlack + " " + Ansi.RESET;
         }
-        // Legacy indigo-badge header.
-        String text = title.isEmpty() ? "Wizard" : title;
-        return new AttributedStringBuilder()
-                .append("╭──", t.railStyle(Rail.StepState.INACTIVE, Rail.RailGlyph.OPEN))
-                .append("", t.bright(t.indigoBadgeColor()))
-                .append(" " + text + " ", t.indigoBadge())
-                .append("", t.bright(t.indigoBadgeColor()))
-                .toAttributedString()
-                .toAnsi(terminal);
+        return chipStr + "  " + subtitle;
     }
 
     private static List<AttributedString> summarize(WizardStep step, Map<String, Object> answers) {

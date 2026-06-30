@@ -12,7 +12,6 @@ import dev.jkbuild.jdk.JdkVendor;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import org.jline.terminal.Terminal;
 import org.jline.utils.AttributedString;
@@ -21,7 +20,7 @@ import org.jline.utils.AttributedStringBuilder;
 /**
  * TUI for {@code jk jdk uninstall} when no argument is supplied.
  *
- * <p>One vertical checkbox step over every installed JDK. Each row renders as:
+ * <p>One vertical radio step over every installed JDK. Each row renders as:
  *
  * <pre>
  *   {source}/{identifier} - {Vendor} {Product}
@@ -31,8 +30,8 @@ import org.jline.utils.AttributedStringBuilder;
  * metadata in dark gray. The currently-installed default JDK gets a {@code (default)} hint so the
  * user sees what they're about to remove.
  *
- * <p>Returns the {@link JdkHit}s the user checked. The caller does the confirmation prompt +
- * per-item deletion + default reconciliation — keeping the wizard's responsibility narrow.
+ * <p>Returns the {@link JdkHit} the user selected. The caller does the confirmation prompt +
+ * deletion + default reconciliation — keeping the wizard's responsibility narrow.
  */
 final class JdkUninstallWizard {
 
@@ -40,41 +39,33 @@ final class JdkUninstallWizard {
 
     private JdkUninstallWizard() {}
 
-    /**
-     * Show the wizard. Empty result means the user cancelled (Esc); a result with an empty list means
-     * they committed without checking anything.
-     */
-    static Optional<List<JdkHit>> run(List<JdkHit> installed, Optional<String> currentDefault, Terminal terminal) {
+    /** Show the wizard. Empty result means the user cancelled (Esc). */
+    static Optional<JdkHit> run(List<JdkHit> installed, Optional<String> currentDefault, Terminal terminal) {
         Map<String, JdkHit> byId = new LinkedHashMap<>();
         for (JdkHit hit : installed) {
             byId.put(choiceIdFor(hit), hit);
         }
 
-        WizardStep.MultiSelectStep.Builder victims =
-                WizardStep.MultiSelectStep.vertical(VICTIMS_KEY, "Select the JDKs to uninstall");
+        List<Choice> choices = new java.util.ArrayList<>();
         for (JdkHit hit : installed) {
             String id = choiceIdFor(hit);
             String identifier = JdkRegistry.identifierFor(hit.home());
             String fallback = richLabel(hit, identifier, false).toString();
             String hint = currentDefault.isPresent() && currentDefault.get().equals(identifier) ? "(default)" : "";
-            victims.choice(Choice.rich(id, fallback, hint, focused -> richLabel(hit, identifier, focused)));
+            choices.add(Choice.rich(id, fallback, hint, focused -> richLabel(hit, identifier, focused)));
         }
 
         Wizard wizard = Wizard.builder()
                 .verb("Uninstall JDK")
-                .subtitle("Remove installed Java Development Kits")
-                .step(victims.build())
+                .subtitle("Remove an installed Java Development Kit")
+                .step(WizardStep.RadioStep.vertical(VICTIMS_KEY, "Select a JDK to uninstall")
+                        .choicesFn(_ -> choices)
+                        .build())
                 .build();
 
         Optional<Answers> outcome = wizard.run(terminal);
         if (outcome.isEmpty()) return Optional.empty();
-        Answers a = outcome.get();
-
-        List<JdkHit> picked = a.getList(VICTIMS_KEY).stream()
-                .map(byId::get)
-                .filter(Objects::nonNull)
-                .toList();
-        return Optional.of(picked);
+        return Optional.ofNullable(byId.get(outcome.get().get(VICTIMS_KEY)));
     }
 
     /**

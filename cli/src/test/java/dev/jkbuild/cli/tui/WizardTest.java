@@ -55,7 +55,7 @@ class WizardTest {
     void input_step_records_typed_string() throws Exception {
         var h = newHarness();
         var wizard = Wizard.builder()
-                .title("Test")
+                .verb("Test")
                 .step(WizardStep.InputStep.of("name", "Project name").build())
                 .build();
 
@@ -76,7 +76,7 @@ class WizardTest {
     void radio_step_records_default_on_enter() throws Exception {
         var h = newHarness();
         var wizard = Wizard.builder()
-                .title("Test")
+                .verb("Test")
                 .step(WizardStep.RadioStep.horizontal("lang", "Language")
                         .choice("java", "Java")
                         .choice("kotlin", "Kotlin")
@@ -101,7 +101,7 @@ class WizardTest {
     void radio_step_navigates_right_then_enter() throws Exception {
         var h = newHarness();
         var wizard = Wizard.builder()
-                .title("Test")
+                .verb("Test")
                 .step(WizardStep.RadioStep.horizontal("lang", "Language")
                         .choice("java", "Java")
                         .choice("kotlin", "Kotlin")
@@ -128,7 +128,7 @@ class WizardTest {
     void multi_select_toggles_with_space() throws Exception {
         var h = newHarness();
         var wizard = Wizard.builder()
-                .title("Test")
+                .verb("Test")
                 .step(WizardStep.MultiSelectStep.vertical("deps", "Dependencies")
                         .choice("lombok", "Lombok")
                         .choice("guava", "Guava")
@@ -162,7 +162,7 @@ class WizardTest {
     void multi_select_toggle_all_with_a() throws Exception {
         var h = newHarness();
         var wizard = Wizard.builder()
-                .title("Test")
+                .verb("Test")
                 .step(WizardStep.MultiSelectStep.vertical("deps", "Dependencies")
                         .choice("lombok", "Lombok")
                         .choice("guava", "Guava")
@@ -188,7 +188,7 @@ class WizardTest {
     void output_step_advances_on_enter() throws Exception {
         var h = newHarness();
         var wizard = Wizard.builder()
-                .title("Test")
+                .verb("Test")
                 .step(WizardStep.InputStep.of("name", "Name").build())
                 .step(WizardStep.OutputStep.of("preview", a -> java.util.List.of("Hello " + a.get("name")))
                         .build())
@@ -214,7 +214,7 @@ class WizardTest {
         var h = newHarness();
         var savedBefore = h.terminal().getAttributes();
         var wizard = Wizard.builder()
-                .title("Test")
+                .verb("Test")
                 .step(WizardStep.InputStep.of("name", "Name").build())
                 .build();
 
@@ -238,7 +238,7 @@ class WizardTest {
     void conditional_step_is_skipped_when_predicate_false() throws Exception {
         var h = newHarness();
         var wizard = Wizard.builder()
-                .title("Test")
+                .verb("Test")
                 .step(WizardStep.RadioStep.horizontal("mode", "Mode")
                         .choice("lib", "Library")
                         .choice("bin", "Binary")
@@ -268,7 +268,7 @@ class WizardTest {
     void backspace_deletes_char() throws Exception {
         var h = newHarness();
         var wizard = Wizard.builder()
-                .title("Test")
+                .verb("Test")
                 .step(WizardStep.InputStep.of("name", "Name").build())
                 .build();
 
@@ -289,7 +289,7 @@ class WizardTest {
     void right_arrow_realizes_placeholder_into_input() throws Exception {
         var h = newHarness();
         var wizard = Wizard.builder()
-                .title("Test")
+                .verb("Test")
                 .step(WizardStep.InputStep.of("name", "Name")
                         .placeholder("widget")
                         .build())
@@ -315,7 +315,7 @@ class WizardTest {
     void right_arrow_realized_text_can_be_edited_further() throws Exception {
         var h = newHarness();
         var wizard = Wizard.builder()
-                .title("Test")
+                .verb("Test")
                 .step(WizardStep.InputStep.of("name", "Name")
                         .placeholder("widget")
                         .build())
@@ -341,7 +341,7 @@ class WizardTest {
     void input_step_seeds_buffer_from_initial_value_fn() throws Exception {
         var h = newHarness();
         var wizard = Wizard.builder()
-                .title("Test")
+                .verb("Test")
                 .step(WizardStep.InputStep.of("name", "Name").build())
                 .step(WizardStep.InputStep.of("artifact", "Artifact")
                         // pre-populate with the project name from the prior step
@@ -371,7 +371,7 @@ class WizardTest {
     void tab_realizes_placeholder_into_input() throws Exception {
         var h = newHarness();
         var wizard = Wizard.builder()
-                .title("Test")
+                .verb("Test")
                 .step(WizardStep.InputStep.of("name", "Name")
                         .placeholder("widget")
                         .build())
@@ -397,7 +397,7 @@ class WizardTest {
     void radio_vertical_custom_option_records_typed_text() throws Exception {
         var h = newHarness();
         var wizard = Wizard.builder()
-                .title("Test")
+                .verb("Test")
                 .step(WizardStep.RadioStep.vertical("fruit", "Pick a fruit")
                         .choice("apple", "Apple")
                         .choice("banana", "Banana")
@@ -430,7 +430,7 @@ class WizardTest {
     void radio_vertical_custom_option_present_still_selects_a_choice_id() throws Exception {
         var h = newHarness();
         var wizard = Wizard.builder()
-                .title("Test")
+                .verb("Test")
                 .step(WizardStep.RadioStep.vertical("fruit", "Pick a fruit")
                         .choice("apple", "Apple")
                         .choice("banana", "Banana")
@@ -459,7 +459,7 @@ class WizardTest {
     void radio_vertical_custom_option_rejects_empty_then_accepts_text() throws Exception {
         var h = newHarness();
         var wizard = Wizard.builder()
-                .title("Test")
+                .verb("Test")
                 .step(WizardStep.RadioStep.vertical("fruit", "Pick a fruit")
                         .choice("apple", "Apple")
                         .customOption("Enter your own fruit")
@@ -492,7 +492,7 @@ class WizardTest {
     void multi_select_custom_option_appends_typed_text() throws Exception {
         var h = newHarness();
         var wizard = Wizard.builder()
-                .title("Test")
+                .verb("Test")
                 .step(WizardStep.MultiSelectStep.vertical("fruit", "Pick fruits")
                         .choice("apple", "Apple")
                         .choice("banana", "Banana")
@@ -529,7 +529,7 @@ class WizardTest {
         // value, which here is also empty, so input is just "").
         var h = newHarness();
         var wizard = Wizard.builder()
-                .title("Test")
+                .verb("Test")
                 .step(WizardStep.InputStep.of("name", "Name").build())
                 .build();
 

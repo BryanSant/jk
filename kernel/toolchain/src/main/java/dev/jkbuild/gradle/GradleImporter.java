@@ -302,7 +302,7 @@ public final class GradleImporter {
                     report.error("dependencies entry not understood: `"
                             + line
                             + "` — jk import is best-effort and only handles string-form deps."
-                            + " Re-state the dep in jk.toml as `dependencies.main { \"g:a\" = \"=v\" }`.");
+                            + " Re-state the dep in jk.toml under [dependencies] as `\"g:a\" = { version = \"=v\" }`.");
                 }
                 continue;
             }

@@ -4,8 +4,10 @@ package dev.jkbuild.command;
 import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.cli.tui.Answers;
 import dev.jkbuild.cli.tui.Glyphs;
+import dev.jkbuild.cli.tui.GoalWedge;
 import dev.jkbuild.cli.tui.Wizard;
 import dev.jkbuild.cli.tui.WizardStep;
+import dev.jkbuild.config.GlobalConfig;
 import dev.jkbuild.model.command.Arity;
 import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Invocation;
@@ -81,19 +83,22 @@ public final class ActivateCommand implements CliCommand {
         String rcDisplay = shell.rcFileDisplay();
         String jkExe = resolveJkExe();
         String activationLine = shell.activationLine(jkExe);
+        boolean nerdfont = GlobalConfig.nerdfont();
 
         if (Files.exists(rcFile)) {
             String existing = Files.readString(rcFile, StandardCharsets.UTF_8);
             if (existing.contains(activationLine)) {
-                System.out.println(Theme.colorize(Glyphs.CHECK, Theme.active().completedStep())
-                        + " jk activation is already wired up in "
-                        + Theme.colorize(rcDisplay, Theme.active().focused()));
+                Theme t = Theme.active();
+                System.out.println(GoalWedge.chipLine(Glyphs.CHECK, "Activate", nerdfont,
+                        "Shell integration is already configured in "
+                                + Theme.colorize(rcDisplay, t.path())));
                 return 0;
             }
         }
 
         Wizard wizard = Wizard.builder()
-                .title("Jk - Activate Shell Integration")
+                .verb("Activate")
+                .subtitle("Shell integration")
                 .step(WizardStep.RadioStep.horizontal("modify", "Allow Jk to modify your " + rcDisplay + " file?")
                         .choice("yes", "Yes")
                         .choice("no", "No")
@@ -113,19 +118,16 @@ public final class ActivateCommand implements CliCommand {
         }
         if (result.isEmpty() || "no".equals(result.get().get("modify"))) {
             Theme t = Theme.active();
-            System.out.println(
-                    Theme.colorize(Glyphs.BANG, t.warning())
-                            + " Skipped — paste this into your "
-                            + rcDisplay
-                            + " when you're ready:\n  "
-                            + Theme.colorize(activationLine, t.shell()));
+            System.out.println(GoalWedge.chipLine(Glyphs.BANG, "Activate", nerdfont,
+                    "Skipped — add this to " + Theme.colorize(rcDisplay, t.path()) + " manually:"));
+            System.out.println("  " + Theme.colorize(activationLine, t.shell()));
             return 0;
         }
         appendActivationLine(rcFile, activationLine);
-        System.out.println(Theme.colorize(Glyphs.CHECK, Theme.active().completedStep())
-                + " appended jk activation to "
-                + Theme.colorize(rcDisplay, Theme.active().focused()));
-        System.out.println("Open a new shell (or " + sourceHint(shell, rcDisplay, Theme.active()) + ") to pick up the change.");
+        Theme t = Theme.active();
+        System.out.println(GoalWedge.chipLine(Glyphs.CHECK, "Activate", nerdfont,
+                "Shell integration configured in " + Theme.colorize(rcDisplay, t.path())));
+        System.out.println("Open a new shell (or " + sourceHint(shell, rcDisplay, t) + ") to pick up the change.");
         return 0;
     }
 

@@ -426,14 +426,13 @@ public final class JdkInstallCommand implements CliCommand {
      * Render the post-install summary line:
      *
      * <pre>
-     *   ✓ JDK ▶ Installed {label} {verb} {~/path}
+     *   ✓ JDK ▶ {label} {verb} {~/path}
      * </pre>
      */
     private static String doneLine(String label, Path home, String verb) {
         Theme t = Theme.active();
         boolean nerdfont = dev.jkbuild.config.GlobalConfig.nerdfont();
-        String msg = Theme.colorize("Installed ", t.normalGray())
-                + Theme.colorize(label, t.focused())
+        String msg = Theme.colorize(label, t.focused())
                 + Theme.colorize(" " + verb + " ", t.normalGray())
                 + Theme.colorize(tildeCollapse(home), t.path());
         return dev.jkbuild.cli.tui.GoalWedge.chipLine(Glyphs.CHECK, "JDK", nerdfont, msg);

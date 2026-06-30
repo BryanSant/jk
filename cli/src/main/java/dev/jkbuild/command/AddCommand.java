@@ -262,8 +262,9 @@ public final class AddCommand implements CliCommand {
                 + Coords.shortName(name)
                 + " ("
                 + Coords.gav(group, artifact, version)
-                + ") to dependencies."
-                + scope.canonical());
+                + ") to ["
+                + scope.tomlSection()
+                + "]");
 
         // 2. Register membership in the enclosing workspace root (cwd itself
         //    when cwd is the root).

@@ -403,34 +403,23 @@ public final class JkBuildParser {
         }
 
         // Top-level scope tables: [test-dependencies], [provided-dependencies], etc.
-        addScopeDeps(byScope, root, "test-dependencies",      Scope.TEST,      workspace, catalog);
-        addScopeDeps(byScope, root, "provided-dependencies",  Scope.PROVIDED,  workspace, catalog);
-        addScopeDeps(byScope, root, "processor-dependencies", Scope.PROCESSOR, workspace, catalog);
-        addScopeDeps(byScope, root, "export-dependencies",    Scope.EXPORT,    workspace, catalog);
+        addScopeDeps(byScope, root, Scope.TEST,      workspace, catalog);
+        addScopeDeps(byScope, root, Scope.PROVIDED,  workspace, catalog);
+        addScopeDeps(byScope, root, Scope.PROCESSOR, workspace, catalog);
+        addScopeDeps(byScope, root, Scope.EXPORT,    workspace, catalog);
 
         return new JkBuild.Dependencies(byScope);
     }
 
     private static void addScopeDeps(
             EnumMap<Scope, List<Dependency>> byScope,
-            TomlTable root, String tableKey, Scope scope,
+            TomlTable root, Scope scope,
             Workspace workspace, LibraryCatalog catalog) {
-        TomlTable table = root.getTable(tableKey);
+        TomlTable table = root.getTable(scope.tomlSection());
         if (table == null) return;
         List<Dependency> parsed = parseScopeTable(
                 table, new ArrayList<>(table.keySet()), scope, workspace, catalog);
         if (!parsed.isEmpty()) byScope.put(scope, parsed);
-    }
-
-    private static String sectionOf(Scope scope) {
-        return switch (scope) {
-            case MAIN      -> "dependencies";
-            case TEST      -> "test-dependencies";
-            case PROVIDED  -> "provided-dependencies";
-            case PROCESSOR -> "processor-dependencies";
-            case EXPORT    -> "export-dependencies";
-            default        -> scope.canonical() + "-dependencies";
-        };
     }
 
     private static List<Dependency> parseScopeTable(
@@ -446,7 +435,7 @@ public final class JkBuildParser {
                 continue;
             }
             if (!(value instanceof TomlTable entry)) {
-                throw new JkBuildParseException(sectionOf(scope)
+                throw new JkBuildParseException(scope.tomlSection()
                         + "."
                         + name
                         + " must be an inline table (e.g. { group = \"...\", version = \"...\" })"
@@ -462,7 +451,7 @@ public final class JkBuildParser {
      * library catalog.
      */
     private static Dependency parseShorthandEntry(String name, String versionRaw, Scope scope, LibraryCatalog catalog) {
-        String displayPath = sectionOf(scope) + "." + name;
+        String displayPath = scope.tomlSection() + "." + name;
         if (versionRaw.isBlank()) {
             throw new JkBuildParseException(displayPath + " has an empty version string");
         }
@@ -504,7 +493,7 @@ public final class JkBuildParser {
 
     private static Dependency parseDepEntryForm(
             String name, TomlTable entry, Scope scope, Workspace workspace, LibraryCatalog catalog) {
-        String displayPath = sectionOf(scope) + "." + name;
+        String displayPath = scope.tomlSection() + "." + name;
         boolean hasWorkspace = entry.contains("workspace");
         boolean hasVersion = entry.contains("version");
         boolean hasPath = entry.contains("path");

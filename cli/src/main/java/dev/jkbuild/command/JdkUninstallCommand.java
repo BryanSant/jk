@@ -36,7 +36,7 @@ import org.jline.terminal.Terminal;
 
 /**
  * {@code jk jdk uninstall <source>/<spec>} — source-qualified single-target removal. Without
- * arguments (and on a TTY) opens an interactive checkbox wizard listing every install across every
+ * arguments (and on a TTY) opens an interactive radio wizard listing every install across every
  * probe with the same {@code <source>/<spec>} contract applied per-row.
  *
  * <p>Both paths funnel through the same per-victim logic: {@link #uninstallOne}. The interactive
@@ -213,7 +213,7 @@ public final class JdkUninstallCommand implements CliCommand {
 
         // The confirmation prompt names the resolved <source>/<spec>, so a bare
         // spec that matched somewhere unexpected can still be cancelled here.
-        if (!confirmDeletion(List.of(hit), null)) {
+        if (!confirmDeletion(hit, null)) {
             System.out.println("Aborted.");
             return 0;
         }
@@ -247,7 +247,7 @@ public final class JdkUninstallCommand implements CliCommand {
         // Wizard.run's finally force-restores ECHO+ICANON on, so a plain
         // System.in readLine inside this block works as expected.
         try (terminal) {
-            Optional<List<JdkHit>> outcome = JdkUninstallWizard.run(installed, currentDefault, terminal);
+            Optional<JdkHit> outcome = JdkUninstallWizard.run(installed, currentDefault, terminal);
             if (outcome.isEmpty()) {
                 // Ctrl-C cancellation. Render the red closer on the active rail,
                 // identical to `jk jdk install`. Runtime.halt() (not close())
@@ -258,16 +258,12 @@ public final class JdkUninstallCommand implements CliCommand {
                 Runtime.getRuntime().halt(130); // 128 + SIGINT
                 throw new AssertionError("unreachable");
             }
-            List<JdkHit> victims = outcome.get();
-            if (victims.isEmpty()) {
-                System.out.println("Nothing selected — no JDKs removed.");
-                return 0;
-            }
-            if (!confirmDeletion(victims, terminal)) {
+            JdkHit victim = outcome.get();
+            if (!confirmDeletion(victim, terminal)) {
                 System.out.println("Aborted.");
                 return 0;
             }
-            return runDeleteGoal(victims, registry, defaults);
+            return runDeleteGoal(List.of(victim), registry, defaults);
         }
     }
 
@@ -368,37 +364,24 @@ public final class JdkUninstallCommand implements CliCommand {
     }
 
     /**
-     * Single bulk confirmation. {@code --yes} short-circuits. Returns {@code true} on Enter / {@code
-     * y} / {@code yes}; anything else aborts. Caller is responsible for keeping the JLine terminal
-     * open across this call (see {@link #runWizard}) — once the terminal closes, the underlying
-     * {@code System.in} FD goes with it.
+     * Confirmation prompt for a single-target deletion. {@code --yes} short-circuits. Returns {@code
+     * true} on Enter / {@code y} / {@code yes}; anything else aborts. Caller is responsible for
+     * keeping the JLine terminal open across this call (see {@link #runWizard}) — once the terminal
+     * closes, the underlying {@code System.in} FD goes with it.
      */
-    private boolean confirmDeletion(List<JdkHit> victims, Terminal terminal) {
+    private boolean confirmDeletion(JdkHit victim, Terminal terminal) {
         if (assumeYes) return true;
         String warn = Theme.colorize(Glyphs.BANG, Theme.active().warning());
-        String question;
-        if (victims.size() == 1) {
-            question = warn + " Are you sure you want to delete " + target(victims.getFirst()) + "?";
-        } else {
-            System.out.println(warn + " Are you sure you want to delete the following " + victims.size() + " JDKs?");
-            String dash = Theme.colorize("-", Theme.active().warning());
-            for (JdkHit h : victims) {
-                System.out.println(dash + "  " + target(h));
-            }
-            System.out.println(); // blank line before the Proceed prompt
-            question = warn + " Proceed?";
-        }
-        // Reuse the wizard's already-open terminal when present (the bulk path);
-        // the single-spec path has none, so the widget opens its own (and falls
-        // back to a cooked read on a non-TTY).
+        String question = warn + " Are you sure you want to delete " + target(victim) + "?";
+        // Reuse the wizard's already-open terminal when present; the single-spec
+        // path has none, so the widget opens its own (and falls back to a cooked
+        // read on a non-TTY).
         Confirm confirm = Confirm.of(question, true);
         boolean proceed = terminal != null ? confirm.ask(terminal) : confirm.ask();
-        // For a single-target confirmation on a real terminal, erase the
-        // question so the ✓/✗ result line (printed by uninstallOne) lands in
-        // its place. Confirm left the cursor one row below the prompt, so step
-        // back up, return to column 0, and clear to end of line. Multi-victim
-        // prompts span several rows, so leave those intact.
-        if (proceed && victims.size() == 1 && isInteractiveTerminal()) {
+        // Erase the question so the ✓/✗ result line (printed by uninstallOne)
+        // lands in its place. Confirm left the cursor one row below the prompt,
+        // so step back up, return to column 0, and clear to end of line.
+        if (proceed && isInteractiveTerminal()) {
             System.out.print(Ansi.cursorUp(1) + "\r" + Ansi.ERASE_LINE_TO_END);
             System.out.flush();
         }

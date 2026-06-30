@@ -90,7 +90,7 @@ public final class JkBuildEditor {
 
         List<String> lines = splitPreservingTerminator(content);
         if (findDepKey(lines, scope, name) >= 0) {
-            throw new IllegalStateException(sectionOf(scope) + " already contains \"" + name + "\"");
+            throw new IllegalStateException(scope.tomlSection() + " already contains \"" + name + "\"");
         }
 
         String entryLine = renderEntry(name, group, artifact, versionLiteral);
@@ -99,7 +99,7 @@ public final class JkBuildEditor {
         if (header < 0) {
             // No section for this scope. Append one at the end of the file.
             ensureTrailingBlankLine(lines);
-            lines.add("[" + sectionOf(scope) + "]");
+            lines.add("[" + scope.tomlSection() + "]");
             lines.add(entryLine);
             return validated(join(lines));
         }
@@ -115,7 +115,8 @@ public final class JkBuildEditor {
     }
 
     /**
-     * Add a file-backed (CAS sha256) dependency entry to {@code [dependencies.<scope>]}. The rendered
+     * Add a file-backed (CAS sha256) dependency entry to the scope's dependency section (e.g.
+     * {@code [dependencies]} for MAIN, {@code [test-dependencies]} for TEST). The rendered
      * form is:
      *
      * <pre>{@code
@@ -142,7 +143,7 @@ public final class JkBuildEditor {
         List<String> lines = splitPreservingTerminator(content);
         if (findDepKey(lines, scope, library) >= 0) {
             throw new IllegalStateException(
-                    sectionOf(scope) + " already contains \"" + library + "\"");
+                    scope.tomlSection() + " already contains \"" + library + "\"");
         }
 
         StringBuilder sb = new StringBuilder(library)
@@ -160,7 +161,7 @@ public final class JkBuildEditor {
         int header = findScopeHeader(lines, scope);
         if (header < 0) {
             ensureTrailingBlankLine(lines);
-            lines.add("[" + sectionOf(scope) + "]");
+            lines.add("[" + scope.tomlSection() + "]");
             lines.add(entryLine);
             return validated(join(lines));
         }
@@ -173,7 +174,8 @@ public final class JkBuildEditor {
     }
 
     /**
-     * Remove a dependency by short {@code name} from {@code [dependencies.<scope>]}. Leaves the
+     * Remove a dependency by short {@code name} from its scope section (e.g. {@code [dependencies]}
+     * for MAIN, {@code [test-dependencies]} for TEST). Leaves the
      * (possibly now-empty) sub-table in place — minimal blast radius on surrounding formatting.
      *
      * @throws IllegalStateException if the scope or name isn't present.
@@ -185,9 +187,9 @@ public final class JkBuildEditor {
         if (hit < 0) {
             // Determine whether the scope section existed for a better error.
             if (findScopeHeader(lines, scope) < 0) {
-                throw new IllegalStateException(sectionOf(scope) + " not found in jk.toml");
+                throw new IllegalStateException(scope.tomlSection() + " not found in jk.toml");
             }
-            throw new IllegalStateException("\"" + name + "\" not found in " + sectionOf(scope));
+            throw new IllegalStateException("\"" + name + "\" not found in " + scope.tomlSection());
         }
         lines.remove(hit);
         return validated(join(lines));
@@ -336,23 +338,12 @@ public final class JkBuildEditor {
      * Map a {@link Scope} to its top-level TOML section name. MAIN → {@code dependencies}; others →
      * {@code <canonical>-dependencies} (e.g. {@code test-dependencies}).
      */
-    private static String sectionOf(Scope scope) {
-        return switch (scope) {
-            case MAIN      -> "dependencies";
-            case TEST      -> "test-dependencies";
-            case PROVIDED  -> "provided-dependencies";
-            case PROCESSOR -> "processor-dependencies";
-            case EXPORT    -> "export-dependencies";
-            default        -> scope.canonical() + "-dependencies";
-        };
-    }
-
     /**
      * Locate the line that opens the section for {@code scope}. MAIN scope uses the {@code
      * [dependencies]} header; non-MAIN scopes use {@code [<canonical>-dependencies]}.
      */
     private static int findScopeHeader(List<String> lines, Scope scope) {
-        String sectionName = sectionOf(scope);
+        String sectionName = scope.tomlSection();
         Pattern target;
         if (scope == Scope.MAIN) {
             target = DEPS_FLAT_HEADER;
