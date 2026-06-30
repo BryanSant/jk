@@ -115,12 +115,11 @@ public final class Diagnostics {
         StringBuilder out = new StringBuilder();
         boolean ansi = !palette.reset().isEmpty();
         String bang = ansi ? palette.header() + "‼" + palette.reset() : "‼";
-        out.append(bang).append(" Cannot resolve dependencies.\n\n");
+        out.append(bang).append(" Cannot resolve dependencies:\n");
         Set<Incompatibility> emitted = new HashSet<>();
-        String rail = ansi ? palette.rail() + " │" + palette.reset() + " " : " │ ";
+        String rail = ansi ? palette.rail() + "  │" + palette.reset() + " " : "  │ ";
         renderInco(rootCause, out, rail, emitted, numbered, palette);
         out.append('\n');
-        out.append("These constraints are unsatisfiable together.\n");
 
         return out.toString();
     }

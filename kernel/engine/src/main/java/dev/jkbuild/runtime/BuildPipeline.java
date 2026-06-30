@@ -345,7 +345,7 @@ public final class BuildPipeline {
                             throw new RuntimeException("dependency resolution failed");
                         }
                         if (result.status() != 0) {
-                            ctx.error("lock", result.error() != null ? result.error() : "dependency resolution failed");
+                            ctx.error("verbatim", result.error() != null ? result.error() : "dependency resolution failed");
                             throw new RuntimeException("lock failed");
                         }
                         ctx.put(LOCKFILE, result.lockfile());
