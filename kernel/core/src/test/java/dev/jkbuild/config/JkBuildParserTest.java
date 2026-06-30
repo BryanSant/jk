@@ -974,6 +974,91 @@ class JkBuildParserTest {
     }
 
     @Test
+    void shorthand_ambiguous_string_becomes_deferred_path_dep() {
+        // A string that isn't a version spec, keyword, or explicit path prefix is
+        // stored as a path dep to be stat-checked at lock time.
+        JkBuild parsed = JkBuildParser.parse(PROJECT + """
+                [dependencies]
+                my-dep = "some-dir"
+                """);
+        var dep = parsed.dependencies().of(Scope.MAIN).getFirst();
+        assertThat(dep.isPath()).isTrue();
+        assertThat(dep.pathSource()).isEqualTo("some-dir");
+        assertThat(dep.module()).isEqualTo("path:my-dep");
+    }
+
+    @Test
+    void shorthand_path_with_slash_becomes_deferred_path_dep() {
+        JkBuild parsed = JkBuildParser.parse(PROJECT + """
+                [dependencies]
+                auth = "components/auth"
+                """);
+        var dep = parsed.dependencies().of(Scope.MAIN).getFirst();
+        assertThat(dep.isPath()).isTrue();
+        assertThat(dep.pathSource()).isEqualTo("components/auth");
+    }
+
+    @Test
+    void shorthand_reserved_keyword_latest_is_always_catalog() {
+        // "latest" is reserved — never statted, always a version lookup.
+        assertThatThrownBy(() -> JkBuildParser.parse(PROJECT + """
+                [dependencies]
+                unknown-lib = "latest"
+                """, TEST_CATALOG))
+                .isInstanceOf(JkBuildParseException.class)
+                .hasMessageContaining("unknown short name");
+    }
+
+    @Test
+    void shorthand_reserved_keyword_stable_is_always_catalog() {
+        assertThatThrownBy(() -> JkBuildParser.parse(PROJECT + """
+                [dependencies]
+                unknown-lib = "stable"
+                """, TEST_CATALOG))
+                .isInstanceOf(JkBuildParseException.class)
+                .hasMessageContaining("unknown short name");
+    }
+
+    @Test
+    void shorthand_version_starting_with_digit_is_catalog() {
+        // "1.2.3" starts with a digit → treated as version spec, not a path.
+        assertThatThrownBy(() -> JkBuildParser.parse(PROJECT + """
+                [dependencies]
+                unknown-lib = "1.2.3"
+                """, TEST_CATALOG))
+                .isInstanceOf(JkBuildParseException.class)
+                .hasMessageContaining("unknown short name");
+    }
+
+    @Test
+    void shorthand_caret_version_is_catalog() {
+        JkBuild parsed = JkBuildParser.parse(PROJECT + """
+                [dependencies]
+                jackson-databind = "^2.18.0"
+                """, TEST_CATALOG);
+        var dep = parsed.dependencies().of(Scope.MAIN).getFirst();
+        assertThat(dep.isGit()).isFalse();
+        assertThat(dep.isPath()).isFalse();
+        assertThat(dep.version()).isInstanceOf(VersionSelector.Caret.class);
+    }
+
+    @Test
+    void isVersionSpecOrKeyword_covers_all_reserved_words() {
+        assertThat(JkBuildParser.isVersionSpecOrKeyword("latest")).isTrue();
+        assertThat(JkBuildParser.isVersionSpecOrKeyword("stable")).isTrue();
+        assertThat(JkBuildParser.isVersionSpecOrKeyword("lts")).isTrue();
+        assertThat(JkBuildParser.isVersionSpecOrKeyword("preview")).isTrue();
+        assertThat(JkBuildParser.isVersionSpecOrKeyword("^2.0.0")).isTrue();
+        assertThat(JkBuildParser.isVersionSpecOrKeyword("~1.0")).isTrue();
+        assertThat(JkBuildParser.isVersionSpecOrKeyword("=1.2.3")).isTrue();
+        assertThat(JkBuildParser.isVersionSpecOrKeyword(">=1.0")).isTrue();
+        assertThat(JkBuildParser.isVersionSpecOrKeyword("1.2.3")).isTrue();
+        assertThat(JkBuildParser.isVersionSpecOrKeyword("some-dir")).isFalse();
+        assertThat(JkBuildParser.isVersionSpecOrKeyword("components/auth")).isFalse();
+        assertThat(JkBuildParser.isVersionSpecOrKeyword("my-library")).isFalse();
+    }
+
+    @Test
     void shorthand_string_value_resolves_through_catalog() {
         // The cargo-add experience: `name = "1.0.0"` looks up the coord in
         // the bundled catalog and treats the version as caret-floating.

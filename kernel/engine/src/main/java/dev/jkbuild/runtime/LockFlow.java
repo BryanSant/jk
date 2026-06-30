@@ -7,7 +7,9 @@ import dev.jkbuild.config.WorkspaceLoader;
 import dev.jkbuild.config.WorkspaceLocator;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.lock.LockfileWriter;
+import dev.jkbuild.model.Dependency;
 import dev.jkbuild.model.JkBuild;
+import dev.jkbuild.model.Scope;
 import dev.jkbuild.model.WorkspaceMerge;
 import dev.jkbuild.repo.RepoGroup;
 import dev.jkbuild.resolver.LockOrchestrator;
@@ -15,6 +17,8 @@ import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.List;
 
 /**
@@ -82,6 +86,16 @@ public final class LockFlow {
             return new Result(2, e.getMessage(), null, null, 0);
         }
 
+        // Stat-check deferred path deps: string shorthands that weren't prefixed with
+        // '.', '/', 'git://', or 'https://' are stored as path deps whose source may be
+        // a bare relative path like "some-dir". Confirm each resolves to a directory now
+        // so the user gets a clear error rather than a silent build failure later.
+        try {
+            effective = statDeferredPaths(effective, dir);
+        } catch (IllegalArgumentException e) {
+            return new Result(2, e.getMessage(), null, null, 0);
+        }
+
         Cas cas = new Cas(cache);
         RepoGroup baseRepos = RepoGroupBuilder.buildFor(effective, repoUrl, cas);
 
@@ -110,5 +124,73 @@ public final class LockFlow {
         LockfileWriter.write(lock, lockFile);
         dev.jkbuild.task.AccessLedger.atDefaultPath().touchLock(lock);
         return new Result(0, null, lock, effective, moduleCount);
+    }
+
+    /**
+     * Validates "deferred" path dependencies produced by the string-shorthand parser from values
+     * that were neither an explicit path prefix ({@code .}, {@code /}) nor a git URL nor a
+     * version spec. Their {@code pathSource} is a bare relative string like {@code "some-dir"};
+     * we stat {@code projectDir.resolve(pathSource)} now and error loudly if it is not a
+     * directory.
+     *
+     * <p>Returns {@code project} unchanged when there are no deferred deps (the common case).
+     */
+    private static JkBuild statDeferredPaths(JkBuild project, Path projectDir) {
+        boolean anyDeferred = false;
+        for (Scope scope : Scope.values()) {
+            for (Dependency dep : project.dependencies().of(scope)) {
+                if (isDeferred(dep)) {
+                    anyDeferred = true;
+                    break;
+                }
+            }
+            if (anyDeferred) break;
+        }
+        if (!anyDeferred) return project;
+
+        EnumMap<Scope, List<Dependency>> byScope = new EnumMap<>(Scope.class);
+        for (Scope scope : Scope.values()) {
+            List<Dependency> deps = project.dependencies().of(scope);
+            if (deps.isEmpty()) continue;
+            List<Dependency> out = new ArrayList<>(deps.size());
+            for (Dependency dep : deps) {
+                if (isDeferred(dep)) {
+                    Path candidate = projectDir.resolve(dep.pathSource());
+                    if (!Files.isDirectory(candidate)) {
+                        throw new IllegalArgumentException("dep '"
+                                + dep.library()
+                                + "' = \""
+                                + dep.pathSource()
+                                + "\" is not an existing directory"
+                                + " (prefix with './' for an explicit relative path)");
+                    }
+                }
+                out.add(dep);
+            }
+            byScope.put(scope, out);
+        }
+        return new JkBuild(
+                project.project(),
+                new JkBuild.Dependencies(byScope),
+                project.repositories(),
+                project.profiles(),
+                project.features(),
+                project.workspace(),
+                project.manifest(),
+                project.plugins(),
+                project.nativeConfig(),
+                project.build(),
+                project.format());
+    }
+
+    /**
+     * A dep is "deferred" when it is a path dep whose {@code pathSource} was not an explicit
+     * path prefix ({@code .} or {@code /}) — i.e., it came from an ambiguous string shorthand
+     * and needs a filesystem stat to confirm it names a directory.
+     */
+    private static boolean isDeferred(Dependency dep) {
+        if (!dep.isPath()) return false;
+        String src = dep.pathSource();
+        return !src.startsWith(".") && !src.startsWith("/");
     }
 }

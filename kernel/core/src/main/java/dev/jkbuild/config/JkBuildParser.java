@@ -489,11 +489,45 @@ public final class JkBuildParser {
             return Dependency.git(name, "git:" + name, source);
         }
 
-        // Version spec: catalog lookup by name.
-        LibraryCatalog.Module mod = catalog.lookup(name)
-                .orElseThrow(() -> new JkBuildParseException(unknownLibraryMessage(displayPath, name, catalog)));
-        VersionSelector selector = VersionSelector.parseFloating(value);
-        return Dependency.of(name, mod.moduleKey(), selector);
+        // Version spec or reserved keyword → catalog lookup.
+        // A reserved keyword (latest/stable/lts/…) or a string that starts with a
+        // version-spec character (digit, ^, ~, =, >, <) is always a catalog dep.
+        if (isVersionSpecOrKeyword(value)) {
+            LibraryCatalog.Module mod = catalog.lookup(name)
+                    .orElseThrow(() -> new JkBuildParseException(unknownLibraryMessage(displayPath, name, catalog)));
+            VersionSelector selector = VersionSelector.parseFloating(value);
+            return Dependency.of(name, mod.moduleKey(), selector);
+        }
+
+        // Ambiguous string: not a recognised version spec and not an explicit path or URL.
+        // Treat as a local directory path to be stat-checked at lock time — if the path
+        // resolves to an existing directory it becomes a path dep, otherwise it is an error.
+        return Dependency.path(name, "path:" + name, value);
+    }
+
+    /**
+     * Returns {@code true} when {@code value} should always be treated as a version spec or
+     * reserved keyword — never as a filesystem path — regardless of what the filesystem contains.
+     *
+     * <ul>
+     *   <li>Reserved keywords: {@code latest}, {@code stable}, {@code lts}, {@code preview},
+     *       {@code nightly}.
+     *   <li>Version spec operators: leading {@code ^} (caret), {@code ~} (tilde), {@code =}
+     *       (exact), {@code >}, {@code <}.
+     *   <li>Bare version numbers: leading digit (e.g. {@code 1.2.3}, {@code 2.0}).
+     * </ul>
+     */
+    static boolean isVersionSpecOrKeyword(String value) {
+        if (value.isEmpty()) return false;
+        return switch (value) {
+            case "latest", "stable", "lts", "preview", "nightly" -> true;
+            default -> {
+                char first = value.charAt(0);
+                yield Character.isDigit(first)
+                        || first == '^' || first == '~' || first == '='
+                        || first == '>' || first == '<';
+            }
+        };
     }
 
     /**
