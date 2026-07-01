@@ -213,15 +213,13 @@ public final class LockOrchestrator {
             deduped.putIfAbsent(JUNIT_JUPITER.module(), JUNIT_JUPITER);
         }
         // Partition: sha256-pinned file deps are already resolved — they carry
-        // their own blob identity and never need PubGrub or a network fetch.
-        // Composite source deps (`path = …` and branch git deps) are built from
-        // source and injected onto the classpath at build time (the composite build path,
-        // jk's includeBuild analog); they are NOT coordinates the resolver can
-        // resolve and are never written to the lock, so drop them here.
+        // their own blob identity and never need PubGrub or a network fetch. By
+        // this point every git dep has already been rewritten to a plain
+        // coordinate pin by GitSourceResolution.prepare, so nothing reaching here
+        // is still git- or path-sourced.
         List<Dependency> fileDeps = new ArrayList<>();
         List<Dependency> declared = new ArrayList<>();
         for (Dependency d : deduped.values()) {
-            if (isComposite(d)) continue;
             if (d.isFile()) fileDeps.add(d);
             else declared.add(d);
         }
@@ -379,16 +377,6 @@ public final class LockOrchestrator {
             case VersionSelector.Range ignored -> null;
             case VersionSelector.Latest ignored -> null;
         };
-    }
-
-    /**
-     * A composite source dependency — built from source and injected onto the classpath at build time
-     * rather than resolved as a Maven coordinate: a {@code path = …} dep, or a <em>branch</em> git
-     * dep (a moving target). Immutable (tag/rev) git deps are materialized to a pin upstream ({@code
-     * GitSourceResolution}) and arrive here as ordinary coordinates.
-     */
-    private static boolean isComposite(Dependency d) {
-        return d.isPath() || (d.isGit() && !d.gitSource().ref().isImmutable());
     }
 
     /**

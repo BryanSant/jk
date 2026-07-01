@@ -96,7 +96,7 @@ public final class AutoLock {
         }
         for (Scope scope : Scope.values()) {
             for (Dependency dep : build.dependencies().of(scope)) {
-                if (dep.gitSource() != null || dep.pathSource() != null) continue; // non-Maven
+                if (dep.gitSource() != null) continue; // raw git declaration, not a group:artifact key yet
                 String module = dep.module(); // "group:artifact"
                 String locked = lockedVersions.get(module);
                 if (locked == null) return false; // dep not in lock

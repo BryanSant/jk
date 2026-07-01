@@ -9,8 +9,12 @@ git-sourced libraries anywhere.
 > `jk.toml`; `group`/`name`/`version` on the dep table are rejected, not
 > honored as overrides), materialize into a per-commit `file://` repo,
 > rewrite to an exact coordinate pin, resolve through the normal solver, and
-> stamp git provenance into `jk.lock`. `jk lock` detects force-moved tags;
-> `jk update` accepts them.
+> stamp git provenance into `jk.lock` — every ref type (tag, rev, **and**
+> branch) alike, not just immutable ones. `jk lock` detects force-moved
+> tags; `jk update --git [<name>]` re-resolves one git dependency by name,
+> or every git dependency, leaving every other dependency's locked version
+> untouched. There is no local freshness-window cache standing in for the
+> lock: an ordinary build never re-fetches an already-locked git dep.
 > The "Later" list below (transitive git deps, non-`jk` source builds, build
 > sandboxing, signed-tag-by-default) remains future work.
 
@@ -112,9 +116,9 @@ coordinate, that's a conflict surfaced like any other.
 
 ### Discovery is not overridable
 
-`group`, `name`, and `version` are rejected outright alongside `git` (same
-rule for `path`) — `JkBuildParser` throws rather than let a stale override
-silently diverge from what the cloned repo actually declares:
+`group`, `name`, and `version` are rejected outright alongside `git` —
+`JkBuildParser` throws rather than let a stale override silently diverge
+from what the cloned repo actually declares:
 
 ```toml
 fork = { git = "gh:me/widgets-fork", branch = "main" }
@@ -123,7 +127,9 @@ fork = { git = "gh:me/widgets-fork", branch = "main" }
 There is no relabeling knob: a fork that wants a different coordinate or
 version changes its own `[project]` in the forked repo, not the consumer's
 dep table. An earlier design allowed `group`/`name`/`version` as overrides on
-the git/path table; that was dropped in favor of discovery-only.
+the git table; that was dropped in favor of discovery-only. (An earlier
+design also allowed a local-path dependency source; that's gone too — a
+local sibling is always a `[workspace] modules` entry, never a dependency.)
 
 ## Resolution pipeline — "materialization" before the solve
 
@@ -210,8 +216,8 @@ build at resolve time.
   (the earlier Go-style `1.2.4-0.<ts>` guess sorted wrong under Maven's
   comparator).
 - **Coordinate / version:** always discovered from the cloned repo's
-  `[project]` — `group`/`name`/`version` keys on the git (or path) table are
-  rejected, not honored as overrides.
+  `[project]` — `group`/`name`/`version` keys on the git table are rejected,
+  not honored as overrides.
 - **Build sandboxing:** deferred for v1 — rely on SHA-pinning + `verify-signed`;
   document that a git dep runs that repo's build at resolve time.
 - **`-SNAPSHOT` re-resolve cadence:** only on `jk update` / `jk lock`. In

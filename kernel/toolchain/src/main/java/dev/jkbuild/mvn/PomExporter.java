@@ -189,7 +189,7 @@ public final class PomExporter {
         sb.append("    </dependency>\n");
     }
 
-    /** Git / path / content-addressed deps have no Maven equivalent — warn and skip. */
+    /** Git / content-addressed deps have no Maven equivalent — warn and skip. */
     private static boolean warnIfUnmappable(Dependency d, ImportReport.Builder report) {
         if (d.isGit()) {
             report.warning("dependency `"
@@ -198,19 +198,6 @@ public final class PomExporter {
                     + " equivalent — dropped. Build & install that project to your local repo"
                     + " (`mvn install`, or `jk install`) so it resolves by coordinate, then add it"
                     + " as a normal <dependency>.");
-            return true;
-        }
-        if (d.isPath()) {
-            report.warning("dependency `"
-                    + d.module()
-                    + "` is a local path dep; Maven has no direct"
-                    + " equivalent — dropped. Install the local project to your Maven repo first"
-                    + " (`cd "
-                    + d.pathSource()
-                    + " && mvn install`, or `jk install`), then declare"
-                    + " `"
-                    + d.module()
-                    + "` as a normal <dependency>; or fold it in as a Maven <module>.");
             return true;
         }
         if (d.isFile()) {

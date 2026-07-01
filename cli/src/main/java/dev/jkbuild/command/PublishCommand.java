@@ -10,6 +10,7 @@ import dev.jkbuild.credential.RepoCredential;
 import dev.jkbuild.jdk.HostPlatform;
 import dev.jkbuild.layout.BuildLayout;
 import dev.jkbuild.model.Dependency;
+import dev.jkbuild.model.GitRefSpec;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.RepositorySpec;
 import dev.jkbuild.model.command.CliCommand;
@@ -140,20 +141,19 @@ public final class PublishCommand implements CliCommand {
                                         + "per PRD §21.4).");
                         throw new RuntimeException("snapshot refused");
                     }
-                    // A composite source dep (`path =`, or a branch git dep) is built locally and has
-                    // no published coordinate — publishing one would emit a broken <dependency> with
-                    // no resolvable version. Refuse until it's pinned to a real coordinate.
-                    Dependency composite = firstCompositeDep(project);
-                    if (composite != null) {
+                    // A branch-tracked git dep is locked in jk.lock, but its pin moves on the next
+                    // `jk update --git`/`jk fetch` — not a stable reference for external consumers
+                    // of the published artifact. Refuse until it's pinned to a tag/rev instead.
+                    Dependency branchGit = firstBranchGitDep(project);
+                    if (branchGit != null) {
                         ctx.error(
-                                "composite-dep",
+                                "branch-git-dep",
                                 "refusing to publish: dependency `"
-                                        + composite.module()
-                                        + "` is a local source dependency ("
-                                        + (composite.isPath() ? "path" : "branch git")
-                                        + ") with no published coordinate. Pin it to a released version"
-                                        + " (`version = \"…\"`) — or an immutable git tag/rev — before publishing.");
-                        throw new RuntimeException("composite dependency refused");
+                                        + branchGit.module()
+                                        + "` tracks a git branch, which is not a stable reference for"
+                                        + " published consumers. Pin it to an immutable git tag/rev"
+                                        + " (or a released `version = \"…\"`) before publishing.");
+                        throw new RuntimeException("branch git dependency refused");
                     }
                     BuildLayout layout = BuildLayout.of(projectDir, project);
                     Path jar = jarPath != null ? jarPath : layout.mainJar();
@@ -320,15 +320,14 @@ public final class PublishCommand implements CliCommand {
     }
 
     /**
-     * The first composite source dependency (a {@code path =} dep, or a <em>branch</em> git dep)
-     * declared in any scope, or {@code null} if none. These are built from local source and carry no
-     * published coordinate, so they cannot appear in a published POM. Immutable (tag/rev) git deps
-     * are materialized to a real coordinate and are fine.
+     * The first branch-tracked git dependency declared in any scope, or {@code null} if none. Its
+     * lockfile pin moves whenever the branch tip is re-resolved, so it cannot appear in a published
+     * POM. A tag/rev git dep is materialized to a real, stable coordinate and is fine.
      */
-    private static Dependency firstCompositeDep(JkBuild project) {
+    private static Dependency firstBranchGitDep(JkBuild project) {
         for (List<Dependency> deps : project.dependencies().byScope().values()) {
             for (Dependency d : deps) {
-                if (d.isPath() || (d.isGit() && !d.gitSource().ref().isImmutable())) {
+                if (d.isGit() && d.gitSource().ref() instanceof GitRefSpec.Branch) {
                     return d;
                 }
             }

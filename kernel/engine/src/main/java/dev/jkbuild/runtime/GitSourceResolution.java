@@ -93,11 +93,7 @@ public final class GitSourceResolution {
         Map<String, Lockfile.Artifact.GitInfo> gitInfo = new LinkedHashMap<>();
         for (List<Dependency> list : byScope.values()) {
             for (Dependency d : list) {
-                // Only immutable (tag/rev) git deps are materialized + lock-pinned.
-                // Branch git deps are moving targets: they pass through to be built
-                // on demand and injected at classpath time (the composite build path),
-                // never locked — so skip them here.
-                if (!d.isGit() || !d.gitSource().ref().isImmutable()) continue;
+                if (!d.isGit()) continue;
                 String key = sourceKey(d.gitSource());
                 if (bySource.containsKey(key)) continue;
                 // Tag-rewrite canary: an immutable ref must still point where the
@@ -116,9 +112,7 @@ public final class GitSourceResolution {
         byScope.forEach((scope, list) -> {
             List<Dependency> out = new ArrayList<>(list.size());
             for (Dependency d : list) {
-                // Non-git and branch-git deps pass through unchanged: branch git
-                // deps stay as-is for the composite build path, not rewritten to a pin.
-                if (!d.isGit() || !d.gitSource().ref().isImmutable()) {
+                if (!d.isGit()) {
                     out.add(d);
                     continue;
                 }

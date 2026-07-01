@@ -73,7 +73,7 @@ public final class ExplainCommand implements CliCommand {
         Cas cas = new Cas(cache);
         ActionCache actionCache = new ActionCache(cas, cache.resolve("actions"));
 
-        BuildGraph.Result graph = BuildGraph.resolve(startDir, entry, cache.resolve("git"));
+        BuildGraph.Result graph = BuildGraph.resolve(startDir, entry);
         if (graph.hasErrors()) {
             for (String err : graph.errors()) System.err.println(ConsoleSpec.errorLine("composite", err));
             return 2;

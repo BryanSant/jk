@@ -150,7 +150,6 @@ public final class JkBuildRenderer {
      *       true}
      *   <li>Git-sourced: {@code <lib> = { group = "...", name?, git = "...", tag|branch|rev = "..."
      *       }}
-     *   <li>Path-sourced: {@code <lib> = { group = "...", name?, path = "..." }}
      *   <li>Versioned: {@code <lib> = { group = "...", name?, version = "..." }}
      * </ul>
      */
@@ -173,9 +172,6 @@ public final class JkBuildRenderer {
             if (s.path() != null) sb.append(", path = ").append(quote(s.path()));
             if (!s.submodules()) sb.append(", submodules = false");
             if (s.verifySignature()) sb.append(", verify-signed = true");
-        } else if (d.isPath()) {
-            // Same pure-discovery rule as git: no `group`/`name` alongside `path`.
-            sb.append("path = ").append(quote(d.pathSource()));
         } else {
             sb.append("group = ").append(quote(d.group()));
             if (!d.name().equals(d.library())) {

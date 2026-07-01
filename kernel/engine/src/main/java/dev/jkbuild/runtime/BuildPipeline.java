@@ -384,22 +384,6 @@ public final class BuildPipeline {
                     // exact classpath `jk explain` re-derives, so the action keys match.
                     List<Path> mainCp = mainCompileClasspath(lock, resolver, mainSiblings);
 
-                    // Composite source deps (`path` + branch-git): build from source
-                    // and inject onto the main compile classpath (jk's includeBuild).
-                    List<String> mainComposite = addCompositeDeps(
-                            in.dir(),
-                            project,
-                            cas,
-                            in.cache(),
-                            Set.of(Scope.EXPORT, Scope.MAIN),
-                            ClasspathResolver.COMPILE_MAIN,
-                            mainCp);
-                    if (!mainComposite.isEmpty()) {
-                        for (String e : mainComposite) ctx.error("composite", e);
-                        throw new RuntimeException("composite dependency build failed");
-                    }
-                    warnCompositeVersionConflicts(ctx, in.dir(), project, in.cache());
-
                     Profile profile = CompileSupport.resolveProfile(project.profiles(), in.profileName());
                     // Default lint (deprecation/unchecked) unless [build] lint = false;
                     // the profile's own javac args win (appended after). Shared by the
@@ -436,27 +420,6 @@ public final class BuildPipeline {
                         } catch (Exception ignored) {
                             /* best-effort */
                         }
-                    }
-                    // Composite deps on the test classpaths too (compile + runtime scopes).
-                    List<String> testComposite = addCompositeDeps(
-                            in.dir(),
-                            project,
-                            cas,
-                            in.cache(),
-                            Set.of(Scope.EXPORT, Scope.MAIN, Scope.TEST),
-                            ClasspathResolver.COMPILE_TEST,
-                            compileTestCp);
-                    addCompositeDeps(
-                            in.dir(),
-                            project,
-                            cas,
-                            in.cache(),
-                            Set.of(Scope.EXPORT, Scope.MAIN, Scope.TEST),
-                            ClasspathResolver.RUNTIME,
-                            testRuntimeCp);
-                    if (!testComposite.isEmpty()) {
-                        for (String e : testComposite) ctx.error("composite", e);
-                        throw new RuntimeException("composite dependency build failed");
                     }
                     ctx.put(COMPILE_TEST_CP, compileTestCp);
                     ctx.put(TEST_RUNTIME_CP, testRuntimeCp);
@@ -1318,15 +1281,6 @@ public final class BuildPipeline {
                                 /* best-effort */
                             }
                         }
-                        // Composite (path + branch-git) deps must be bundled into the fat jar too.
-                        addCompositeDeps(
-                                layout.moduleRoot(),
-                                project,
-                                new Cas(cache),
-                                cache,
-                                Set.of(Scope.EXPORT, Scope.MAIN),
-                                ClasspathResolver.RUNTIME,
-                                depJars);
                     }
                     // Packaging cache: the fat jar is a pure function of the main
                     // classes, the bundled dependency jars' content, the main-class,
@@ -1513,15 +1467,6 @@ public final class BuildPipeline {
                             } catch (Exception ignored) {
                             }
                         }
-                        // Composite (path + branch-git) deps: native-image must see their classes.
-                        addCompositeDeps(
-                                dir,
-                                project,
-                                new Cas(cache),
-                                cache,
-                                Set.of(Scope.EXPORT, Scope.MAIN),
-                                ClasspathResolver.RUNTIME,
-                                classpath);
                     } catch (Exception ignored) {
                     }
 
@@ -1600,48 +1545,11 @@ public final class BuildPipeline {
     }
 
     /**
-     * Warn (best-effort) when the consumer and a composite ({@code path}/branch-git) dependency
-     * disagree on a shared external coordinate's version — both jars are on the classpath, deduped by
-     * path not coordinate, since each project resolves its own lock independently (no cross-boundary
-     * unification). jk surfaces what Gradle/Maven sidestep.
-     */
-    private static void warnCompositeVersionConflicts(PhaseContext ctx, Path dir, JkBuild project, Path cache) {
-        boolean any = false;
-        for (Scope s : Scope.values()) {
-            for (dev.jkbuild.model.Dependency d : project.dependencies().of(s)) {
-                if (BuildGraph.isComposite(d)) {
-                    any = true;
-                    break;
-                }
-            }
-            if (any) break;
-        }
-        if (!any) return;
-        try {
-            for (CompositeLocator.VersionConflict c : CompositeLocator.conflicts(dir, project, cache.resolve("git"))) {
-                String detail = c.versionBySource().entrySet().stream()
-                        .map(e -> e.getKey() + " → " + e.getValue())
-                        .collect(java.util.stream.Collectors.joining(", "));
-                ctx.warn(
-                        "composite-version",
-                        "version conflict on `"
-                                + c.coord()
-                                + "` across composite dependencies ("
-                                + detail
-                                + "); both versions are on the classpath");
-            }
-        } catch (Exception ignored) {
-            // Diagnostic only — never fail a build over conflict detection.
-        }
-    }
-
-    /**
      * The main-compile classpath contributed by the lockfile and workspace siblings: {@code
      * COMPILE_MAIN} lockfile deps + each depended sibling's built jar + those siblings' own {@code
      * COMPILE_MAIN} lockfile deps (so e.g. tomlj declared in jk-core is visible when compiling
      * jk-io). Shared by the {@code compile-main} phase and {@code jk explain} so their javac action
-     * keys agree. Does NOT include composite (path / branch-git) deps — the build appends those after
-     * building them.
+     * keys agree.
      */
     public static List<Path> mainCompileClasspath(
             Lockfile lock, ClasspathResolver resolver, WorkspaceClasspath.Result siblings) throws IOException {
@@ -1663,28 +1571,6 @@ public final class BuildPipeline {
             }
         }
         return cp;
-    }
-
-    private static List<String> addCompositeDeps(
-            Path consumerDir,
-            JkBuild project,
-            Cas cas,
-            Path cache,
-            Set<Scope> depScopes,
-            Set<Scope> externalCpScopes,
-            List<Path> cp) {
-        try {
-            CompositeLocator.Located r = CompositeLocator.locate(
-                    consumerDir, project, depScopes, externalCpScopes, cas, cache.resolve("git"));
-            for (Path j : r.jars()) if (!cp.contains(j)) cp.add(j);
-            for (Path j : r.externalDepJars()) if (!cp.contains(j)) cp.add(j);
-            return r.missing();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            return List.of("interrupted locating composite dependencies");
-        } catch (IOException | RuntimeException e) {
-            return List.of("composite dependency lookup failed: " + e.getMessage());
-        }
     }
 
     /**

@@ -385,16 +385,26 @@ class JkBuildParserTest {
     }
 
     @Test
-    void path_source_is_pinned() {
-        JkBuild parsed = JkBuildParser.parse(PROJECT + """
+    void inline_path_dependency_is_rejected() {
+        assertThatThrownBy(() -> JkBuildParser.parse(PROJECT + """
                 [dependencies]
                 shared-utils = { path = "../shared-utils" }
-                """);
-        var dep = parsed.dependencies().of(Scope.MAIN).getFirst();
-        assertThat(dep.isPath()).isTrue();
-        assertThat(dep.pathSource()).isEqualTo("../shared-utils");
-        assertThat(dep.module()).isEqualTo("path:shared-utils");
-        assertThat(dep.pinned()).isTrue();
+                """))
+                .isInstanceOf(JkBuildParseException.class)
+                .hasMessageContaining("[workspace] modules");
+    }
+
+    @Test
+    void inline_path_dependency_is_rejected_even_with_other_fields() {
+        // The `path` check fires before the general "pick exactly one source"
+        // validation, so the error names `path` specifically rather than a
+        // generic multi-source complaint.
+        assertThatThrownBy(() -> JkBuildParser.parse(PROJECT + """
+                [dependencies]
+                picocli = { path = "../picocli", group = "info.picocli" }
+                """))
+                .isInstanceOf(JkBuildParseException.class)
+                .hasMessageContaining("[workspace] modules");
     }
 
     @Test
@@ -466,21 +476,15 @@ class JkBuildParserTest {
     }
 
     @Test
-    void git_source_parses_fetch_freshness_policy() {
-        JkBuild parsed = JkBuildParser.parse(PROJECT + """
-                [dependencies]
-                fork = { git = "https://github.com/me/widgets", branch = "main", fetch = "48h" }
-                """);
-        assertThat(parsed.dependencies().of(Scope.MAIN).getFirst().gitSource().fetch())
-                .isEqualTo("48h");
-    }
-
-    @Test
-    void git_source_rejects_invalid_fetch_policy() {
+    void git_source_rejects_fetch_field() {
+        // `fetch` (the branch-tip freshness window) is gone — every git dep is pinned
+        // in jk.lock and only moves on an explicit `jk update --git` / `jk fetch`.
         assertThatThrownBy(() -> JkBuildParser.parse(PROJECT + """
                 [dependencies]
-                fork = { git = "https://github.com/me/widgets", branch = "main", fetch = "soon" }
-                """)).hasMessageContaining("fetch");
+                fork = { git = "https://github.com/me/widgets", branch = "main", fetch = "48h" }
+                """))
+                .isInstanceOf(JkBuildParseException.class)
+                .hasMessageContaining("fetch");
     }
 
     @Test
@@ -603,7 +607,7 @@ class JkBuildParserTest {
     void multiple_sources_on_dep_is_rejected() {
         assertThatThrownBy(() -> JkBuildParser.parse(PROJECT + """
                 [dependencies]
-                bad = { group = "com.example", version = "1.0", path = "../bad" }
+                bad = { git = "https://github.com/acme/bad", branch = "main", version = "1.0" }
                 """))
                 .isInstanceOf(JkBuildParseException.class)
                 .hasMessageContaining("more than one");
@@ -671,6 +675,19 @@ class JkBuildParserTest {
                 """);
         var pico = parsed.workspace().dependencies().get("picocli");
         assertThat(pico.artifact()).isEqualTo("picocli");
+    }
+
+    @Test
+    void workspace_dependencies_rejects_path_source() {
+        assertThatThrownBy(() -> JkBuildParser.parse(PROJECT + """
+                [workspace]
+                modules = ["a"]
+
+                [workspace.dependencies]
+                shared-lib = { group = "com.acme", path = "../shared" }
+                """))
+                .isInstanceOf(JkBuildParseException.class)
+                .hasMessageContaining("[workspace] modules");
     }
 
     @Test
@@ -880,37 +897,33 @@ class JkBuildParserTest {
             "picocli", new LibraryCatalog.Module("info.picocli", "picocli")));
 
     @Test
-    void shorthand_relative_path_creates_path_dep() {
-        JkBuild parsed = JkBuildParser.parse(PROJECT + """
+    void shorthand_relative_path_is_rejected() {
+        assertThatThrownBy(() -> JkBuildParser.parse(PROJECT + """
                 [dependencies]
                 my-lib = "./some/local/path"
-                """);
-        var dep = parsed.dependencies().of(Scope.MAIN).getFirst();
-        assertThat(dep.isPath()).isTrue();
-        assertThat(dep.pathSource()).isEqualTo("./some/local/path");
-        assertThat(dep.module()).isEqualTo("path:my-lib");
+                """))
+                .isInstanceOf(JkBuildParseException.class)
+                .hasMessageContaining("[workspace] modules");
     }
 
     @Test
-    void shorthand_parent_relative_path_creates_path_dep() {
-        JkBuild parsed = JkBuildParser.parse(PROJECT + """
+    void shorthand_parent_relative_path_is_rejected() {
+        assertThatThrownBy(() -> JkBuildParser.parse(PROJECT + """
                 [dependencies]
                 shared = "../shared-utils"
-                """);
-        var dep = parsed.dependencies().of(Scope.MAIN).getFirst();
-        assertThat(dep.isPath()).isTrue();
-        assertThat(dep.pathSource()).isEqualTo("../shared-utils");
+                """))
+                .isInstanceOf(JkBuildParseException.class)
+                .hasMessageContaining("[workspace] modules");
     }
 
     @Test
-    void shorthand_absolute_path_creates_path_dep() {
-        JkBuild parsed = JkBuildParser.parse(PROJECT + """
+    void shorthand_absolute_path_is_rejected() {
+        assertThatThrownBy(() -> JkBuildParser.parse(PROJECT + """
                 [dependencies]
                 shared = "/opt/libs/shared"
-                """);
-        var dep = parsed.dependencies().of(Scope.MAIN).getFirst();
-        assertThat(dep.isPath()).isTrue();
-        assertThat(dep.pathSource()).isEqualTo("/opt/libs/shared");
+                """))
+                .isInstanceOf(JkBuildParseException.class)
+                .hasMessageContaining("[workspace] modules");
     }
 
     @Test
@@ -974,28 +987,25 @@ class JkBuildParserTest {
     }
 
     @Test
-    void shorthand_ambiguous_string_becomes_deferred_path_dep() {
-        // A string that isn't a version spec, keyword, or explicit path prefix is
-        // stored as a path dep to be stat-checked at lock time.
-        JkBuild parsed = JkBuildParser.parse(PROJECT + """
+    void shorthand_ambiguous_string_is_unknown_library() {
+        // A string that isn't a version spec, keyword, git URL, or explicit path
+        // prefix is never guessed at as a path dep — it's an unknown short name.
+        assertThatThrownBy(() -> JkBuildParser.parse(PROJECT + """
                 [dependencies]
                 my-dep = "some-dir"
-                """);
-        var dep = parsed.dependencies().of(Scope.MAIN).getFirst();
-        assertThat(dep.isPath()).isTrue();
-        assertThat(dep.pathSource()).isEqualTo("some-dir");
-        assertThat(dep.module()).isEqualTo("path:my-dep");
+                """))
+                .isInstanceOf(JkBuildParseException.class)
+                .hasMessageContaining("unknown short name");
     }
 
     @Test
-    void shorthand_path_with_slash_becomes_deferred_path_dep() {
-        JkBuild parsed = JkBuildParser.parse(PROJECT + """
+    void shorthand_string_with_slash_is_unknown_library() {
+        assertThatThrownBy(() -> JkBuildParser.parse(PROJECT + """
                 [dependencies]
                 auth = "components/auth"
-                """);
-        var dep = parsed.dependencies().of(Scope.MAIN).getFirst();
-        assertThat(dep.isPath()).isTrue();
-        assertThat(dep.pathSource()).isEqualTo("components/auth");
+                """))
+                .isInstanceOf(JkBuildParseException.class)
+                .hasMessageContaining("unknown short name");
     }
 
     @Test
@@ -1038,7 +1048,6 @@ class JkBuildParserTest {
                 """, TEST_CATALOG);
         var dep = parsed.dependencies().of(Scope.MAIN).getFirst();
         assertThat(dep.isGit()).isFalse();
-        assertThat(dep.isPath()).isFalse();
         assertThat(dep.version()).isInstanceOf(VersionSelector.Caret.class);
     }
 
@@ -1133,36 +1142,6 @@ class JkBuildParserTest {
                 """, TEST_CATALOG))
                 .isInstanceOf(JkBuildParseException.class)
                 .hasMessageContaining("must set a `group`");
-    }
-
-    @Test
-    void path_source_rejects_group_field() {
-        assertThatThrownBy(() -> JkBuildParser.parse(PROJECT + """
-                [dependencies]
-                picocli = { path = "../picocli", group = "info.picocli" }
-                """))
-                .isInstanceOf(JkBuildParseException.class)
-                .hasMessageContaining("`group`");
-    }
-
-    @Test
-    void path_source_rejects_name_field() {
-        assertThatThrownBy(() -> JkBuildParser.parse(PROJECT + """
-                [dependencies]
-                shared = { path = "../shared", name = "shared-utils" }
-                """))
-                .isInstanceOf(JkBuildParseException.class)
-                .hasMessageContaining("`name`");
-    }
-
-    @Test
-    void path_source_rejects_version_field() {
-        assertThatThrownBy(() -> JkBuildParser.parse(PROJECT + """
-                [dependencies]
-                shared = { path = "../shared", version = "1.0.0" }
-                """))
-                .isInstanceOf(JkBuildParseException.class)
-                .hasMessageContaining("`version`");
     }
 
     @Test

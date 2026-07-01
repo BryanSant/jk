@@ -161,8 +161,6 @@ public final class BuildCommand implements CliCommand {
             // Workspace discovery failed — fall through to single-project build.
         }
         applyMemoryPlan(1); // single project: one module, tests fork `workers` JVMs
-        int dep = buildCompositeDeps(startDir, peek);
-        if (dep != 0) return dep;
         return runForDir(startDir);
     }
 
@@ -231,14 +229,7 @@ public final class BuildCommand implements CliCommand {
         if (!live) {
             // --output json / --verbose: buffered, non-animated path.  Resolve the
             // graph normally (no TUI to show during it) then run plain.
-            BuildGraph.Result graph;
-            try {
-                graph = BuildGraph.resolve(entryDir, entryBuild, cache.resolve("git"));
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                System.err.println("jk build: interrupted resolving the build graph");
-                return 2;
-            }
+            BuildGraph.Result graph = BuildGraph.resolve(entryDir, entryBuild);
             if (graph.hasErrors()) {
                 for (String err : graph.errors()) System.err.println(ConsoleSpec.errorLine("composite", err));
                 return 2;
@@ -259,14 +250,7 @@ public final class BuildCommand implements CliCommand {
         boolean animate = mode == GoalConsole.Mode.AUTO && GoalConsole.isInteractiveTerminal();
         boolean nerdfont = dev.jkbuild.config.GlobalConfig.nerdfont();
 
-        BuildGraph.Result graph;
-        try {
-            graph = BuildGraph.resolve(entryDir, entryBuild, cache.resolve("git"));
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            System.err.println(ConsoleSpec.errorLine("build", "interrupted resolving the build graph"));
-            return 2;
-        }
+        BuildGraph.Result graph = BuildGraph.resolve(entryDir, entryBuild);
         if (graph.hasErrors()) {
             for (String err : graph.errors()) System.err.println(ConsoleSpec.errorLine("composite", err));
             System.err.println(dev.jkbuild.cli.tui.GoalWedge.failureLine("Build", nerdfont, "dependency resolution failed"));
@@ -388,8 +372,7 @@ public final class BuildCommand implements CliCommand {
         Map<Path, PreparedModule> prepared = new LinkedHashMap<>();
         long totalWeight = 0;
         for (BuildGraph.BuildUnit u : units) {
-            PreparedModule pm =
-                    prepareModule(u.dir(), u.isDependency() || buildOpts.skipTests, dirtyDirs.contains(u.dir()));
+            PreparedModule pm = prepareModule(u.dir(), buildOpts.skipTests, dirtyDirs.contains(u.dir()));
             if (pm == null) {
                 view.finishGoalFailure(noTomlTail(u.dir().toString(), start));
                 return 2;
@@ -551,9 +534,9 @@ public final class BuildCommand implements CliCommand {
         }
     }
 
-    /** Build one graph unit (dependency units compile-only) with output buffered. */
+    /** Build one graph unit with output buffered. */
     private UnitOutcome buildUnit(BuildGraph.BuildUnit unit) {
-        PreparedModule pm = prepareModule(unit.dir(), unit.isDependency() || buildOpts.skipTests);
+        PreparedModule pm = prepareModule(unit.dir(), buildOpts.skipTests);
         if (pm == null) {
             return new UnitOutcome(
                     unit.coord(),
@@ -642,10 +625,6 @@ public final class BuildCommand implements CliCommand {
             return 0;
         }
         applyMemoryPlan(1); // --no-parallel: modules build serially (peak = 1 module)
-        // Build any composite (path / branch-git) dependency units the workspace
-        // (or its modules) declare, before the modules that consume them.
-        int dep = buildCompositeDeps(workspaceRoot, root);
-        if (dep != 0) return dep;
         List<Path> sorted = topoSortModules(modulesByDir);
         GoalConsole.Mode mode = GoalConsole.modeFor(global);
         // Pre-compute workspace link map once (covers all modes) — needs the full sorted list.
@@ -824,18 +803,6 @@ public final class BuildCommand implements CliCommand {
             }
         }
         return sorted;
-    }
-
-    /**
-     * Build the entry's transitive composite ({@code path} / branch-git) dependency units from source
-     * — compile-only, in dependency order — via the SAME real pipeline as any project ({@code
-     * prepareModule} → {@code coreBuilder}). jk's {@code includeBuild} analog. The consumer/modules
-     * then locate these jars on their classpath ({@code CompositeLocator}). No-op when none are
-     * declared. Returns 0 on success, else an exit code (errors already printed).
-     */
-    private int buildCompositeDeps(Path entryDir, JkBuild entry) throws Exception {
-        Path cache = cacheDir != null ? cacheDir : JkDirs.cache();
-        return CompositeBuild.buildDependencies(entryDir, entry, cache, jdksDir, profileName, global);
     }
 
     private int runForDir(Path dir) throws Exception {

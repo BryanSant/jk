@@ -447,17 +447,18 @@ public final class JkBuildParser {
     }
 
     /**
-     * Resolve a {@code name = "value"} string shorthand. Three forms are recognised:
+     * Resolve a {@code name = "value"} string shorthand. Two forms are recognised:
      *
      * <ul>
-     *   <li>Local path — value starts with {@code .} or {@code /}: a path dependency whose
-     *       coordinate is always discovered from the {@code jk.toml} inside the directory.
      *   <li>Git URL — value starts with {@code git://} or {@code https://}: a git dependency with
      *       URL-embedded ref/subdir parsing. When no ref is embedded, {@code branch = "main"} is
      *       implied.
      *   <li>Version spec — anything else: looked up in the bundled catalog by {@code name} and
      *       treated as a floating version selector (the Cargo-style {@code name = "1.2.3"} form).
      * </ul>
+     *
+     * <p>There is no local-path shorthand: a local sibling project is declared as a {@code
+     * [workspace] modules} entry, never as a {@code [dependencies]} value.
      */
     private static Dependency parseShorthandEntry(String name, String value, Scope scope, LibraryCatalog catalog) {
         String displayPath = scope.tomlSection() + "." + name;
@@ -465,9 +466,12 @@ public final class JkBuildParser {
             throw new JkBuildParseException(displayPath + " has an empty value string");
         }
 
-        // Local path shorthand: starts with '.' (relative) or '/' (absolute).
         if (value.startsWith(".") || value.startsWith("/")) {
-            return Dependency.path(name, "path:" + name, value);
+            throw new JkBuildParseException(displayPath + " = \"" + value + "\" looks like a local path, but jk"
+                    + " has no inline path dependency. Add `" + value + "` to the root jk.toml's `[workspace]"
+                    + " modules = [...]` instead, then declare `" + name + " = { group = \"...\", version ="
+                    + " \"...\" }` here pointing at that sibling's coordinate — jk resolves workspace siblings"
+                    + " automatically.");
         }
 
         // Git URL shorthand: starts with "git://" or "https://".
@@ -484,8 +488,7 @@ public final class JkBuildParser {
                 shallow = false;
             }
             String canonical = GitUrl.canonicalize(parts.baseUrl());
-            GitSource source = new GitSource(
-                    canonical, parts.baseUrl(), ref, parts.subdir(), true, false, shallow, null);
+            GitSource source = new GitSource(canonical, parts.baseUrl(), ref, parts.subdir(), true, false, shallow);
             return Dependency.git(name, "git:" + name, source);
         }
 
@@ -499,10 +502,9 @@ public final class JkBuildParser {
             return Dependency.of(name, mod.moduleKey(), selector);
         }
 
-        // Ambiguous string: not a recognised version spec and not an explicit path or URL.
-        // Treat as a local directory path to be stat-checked at lock time — if the path
-        // resolves to an existing directory it becomes a path dep, otherwise it is an error.
-        return Dependency.path(name, "path:" + name, value);
+        // Ambiguous string: not a recognised version spec, not a git URL. There is no
+        // deferred-path fallback anymore — this is always an unknown-library error.
+        throw new JkBuildParseException(unknownLibraryMessage(displayPath, name, catalog));
     }
 
     /**
@@ -566,25 +568,32 @@ public final class JkBuildParser {
         boolean hasWorkspace = entry.contains("workspace");
         boolean hasVersion = entry.contains("version");
         boolean hasGit = entry.contains("git");
-        // `path` is a source type only when standalone: for git deps it's a sub-directory
-        // modifier (the same as the `!subdir` URL suffix) and must not count toward sourceCount.
-        boolean hasPath = entry.contains("path") && !hasGit;
         boolean hasSha256 = entry.contains("sha256");
 
+        // `path` (standalone, not the git sub-directory modifier) is no longer a source
+        // type — reject it up front with a dedicated message rather than letting it fall
+        // into the generic "no source set" branch below, where the offending key would be
+        // invisible.
+        if (entry.contains("path") && !hasGit) {
+            throw new JkBuildParseException(displayPath + " uses `path = \"...\"` — inline path dependencies are"
+                    + " no longer supported. Add the target directory to the root jk.toml's `[workspace]"
+                    + " modules = [...]`, then declare `" + name + " = { group = \"...\", version = \"...\" }`"
+                    + " here matching that module's coordinate — jk resolves workspace siblings automatically.");
+        }
+
         int sourceCount = (hasVersion ? 1 : 0)
-                + (hasPath ? 1 : 0)
                 + (hasGit ? 1 : 0)
                 + (hasWorkspace ? 1 : 0)
                 + (hasSha256 ? 1 : 0);
         // The only legal multi-source pairing: sha256 + version (version records the coordinate).
-        boolean sha256WithVersion = hasSha256 && hasVersion && !hasPath && !hasGit && !hasWorkspace;
+        boolean sha256WithVersion = hasSha256 && hasVersion && !hasGit && !hasWorkspace;
         if (sourceCount == 0) {
             throw new JkBuildParseException(
-                    displayPath + " must set exactly one of `version`, `path`, `git`, `sha256`, or `workspace = true`");
+                    displayPath + " must set exactly one of `version`, `git`, `sha256`, or `workspace = true`");
         }
         if (sourceCount > 1 && !sha256WithVersion) {
             throw new JkBuildParseException(displayPath
-                    + " sets more than one of `version` / `path` / `git` / `sha256` / `workspace`; "
+                    + " sets more than one of `version` / `git` / `sha256` / `workspace`; "
                     + "pick exactly one");
         }
 
@@ -603,8 +612,8 @@ public final class JkBuildParser {
 
         // For non-workspace deps, group/name may come from the table or
         // fall back to the bundled catalog (which keys off the short name).
-        // path/git sources still REQUIRE explicit `group` — they're inherently
-        // user-controlled overrides where defaulting silently would be
+        // A git source still REQUIRES explicit `group` — it's inherently a
+        // user-controlled override where defaulting silently would be
         // surprising.
         String groupExplicit = entry.getString("group");
         String artifactExplicit = entry.getString("name");
@@ -633,24 +642,6 @@ public final class JkBuildParser {
                 throw new JkBuildParseException(displayPath + " with `sha256 = ...` must also set `version`");
             }
             return Dependency.file(name, group + ":" + artifact, versionRaw, sha256);
-        }
-
-        if (hasPath) {
-            // path deps are always pure discovery: the coordinate (group, name) and
-            // version come from the jk.toml inside the local directory. Specifying
-            // `group`, `name`, or `version` in the dep entry is an error.
-            for (String forbidden : new String[]{"group", "name", "version"}) {
-                if (entry.contains(forbidden)) {
-                    throw new JkBuildParseException(displayPath
-                            + " with `path` must not set `" + forbidden + "` — the coordinate"
-                            + " and version are always read from the jk.toml inside the path");
-                }
-            }
-            String path = entry.getString("path");
-            if (path == null || path.isBlank()) {
-                throw new JkBuildParseException(displayPath + ".path must not be blank");
-            }
-            return Dependency.path(name, "path:" + name, path);
         }
 
         if (hasGit) {
@@ -698,17 +689,13 @@ public final class JkBuildParser {
         // encode the unresolved state via a synthetic module of the form
         // "workspace:<name>" and a Latest selector; the resolver never
         // sees this because WorkspaceMerge rewrites it first.
-        return new Dependency(
-                name, "workspace:" + name, new VersionSelector.Latest("workspace"), null, null, null, false);
+        return new Dependency(name, "workspace:" + name, new VersionSelector.Latest("workspace"), null, null, false);
     }
 
     private static Dependency materialize(String name, WorkspaceDependency wd) {
         String module = wd.module();
         if (wd.gitSource() != null) {
             return Dependency.git(name, module, wd.gitSource());
-        }
-        if (wd.pathSource() != null) {
-            return Dependency.path(name, module, wd.pathSource());
         }
         return Dependency.of(name, module, wd.version());
     }
@@ -742,13 +729,10 @@ public final class JkBuildParser {
 
         boolean submodules = obj.getBoolean("submodules", () -> true);
         boolean verifySigned = obj.getBoolean("verify-signed", () -> false);
-        String fetch = obj.getString("fetch");
-        if (fetch != null && !isValidFetchPolicy(fetch)) {
-            throw new JkBuildParseException(displayPath
-                    + ".fetch must be \"always\", \"0\", "
-                    + "or a duration like \"30m\", \"12h\", \"3d\" (got: "
-                    + fetch
-                    + ")");
+        if (obj.contains("fetch")) {
+            throw new JkBuildParseException(displayPath + ".fetch is no longer supported — every git dependency is"
+                    + " resolved once and pinned in jk.lock; a branch ref's tip only moves on an explicit `jk"
+                    + " update --git` or `jk fetch`. Remove the `fetch` key.");
         }
 
         GitRefSpec ref;
@@ -781,7 +765,7 @@ public final class JkBuildParser {
         }
 
         String canonical = GitUrl.canonicalize(parts.baseUrl());
-        return new GitSource(canonical, parts.baseUrl(), ref, path, submodules, verifySigned, shallow, fetch);
+        return new GitSource(canonical, parts.baseUrl(), ref, path, submodules, verifySigned, shallow);
     }
 
     /**
@@ -892,14 +876,6 @@ public final class JkBuildParser {
         boolean versionLike = Character.isDigit(first)
                 || ((first == 'v' || first == 'r') && name.length() > 1 && Character.isDigit(name.charAt(1)));
         return versionLike ? new GitRefSpec.Tag(name) : new GitRefSpec.Branch(name);
-    }
-
-    /**
-     * A git branch-tip freshness policy: {@code "always"}/{@code "0"}, or a duration {@code
-     * <n>[smhd]}.
-     */
-    private static boolean isValidFetchPolicy(String policy) {
-        return "always".equals(policy) || "0".equals(policy) || policy.matches("\\d+[smhd]");
     }
 
     // ---------------------------------------------------------------------
@@ -1081,33 +1057,31 @@ public final class JkBuildParser {
             throw new JkBuildParseException(displayPath + ".name must not be blank");
         }
         boolean hasVersion = entry.contains("version");
-        boolean hasPath = entry.contains("path");
         boolean hasGit = entry.contains("git");
-        int sourceCount = (hasVersion ? 1 : 0) + (hasPath ? 1 : 0) + (hasGit ? 1 : 0);
+        if (entry.contains("path")) {
+            throw new JkBuildParseException(displayPath + " uses `path = \"...\"` — this is no longer supported."
+                    + " Move `" + name + "` into the root jk.toml's `[workspace] modules = [...]` list directly"
+                    + " instead (it becomes an ordinary workspace sibling); remove this"
+                    + " [workspace.dependencies." + name + "] entry.");
+        }
+        int sourceCount = (hasVersion ? 1 : 0) + (hasGit ? 1 : 0);
         if (sourceCount == 0) {
-            throw new JkBuildParseException(displayPath + " must set exactly one of `version`, `path`, or `git`");
+            throw new JkBuildParseException(displayPath + " must set exactly one of `version` or `git`");
         }
         if (sourceCount > 1) {
             throw new JkBuildParseException(
-                    displayPath + " sets more than one of `version` / `path` / `git`; pick exactly one");
-        }
-        if (hasPath) {
-            String path = entry.getString("path");
-            if (path == null || path.isBlank()) {
-                throw new JkBuildParseException(displayPath + ".path must not be blank");
-            }
-            return new WorkspaceDependency(group, artifact, null, null, path);
+                    displayPath + " sets more than one of `version` / `git`; pick exactly one");
         }
         if (hasGit) {
             GitSource source = parseGitSource(entry, displayPath);
-            return new WorkspaceDependency(group, artifact, null, source, null);
+            return new WorkspaceDependency(group, artifact, null, source);
         }
         String versionRaw = entry.getString("version");
         if (versionRaw == null || versionRaw.isBlank()) {
             throw new JkBuildParseException(displayPath + ".version must not be blank");
         }
         VersionSelector selector = VersionSelector.parseFloating(versionRaw);
-        return new WorkspaceDependency(group, artifact, selector, null, null);
+        return new WorkspaceDependency(group, artifact, selector, null);
     }
 
     // -----------------------------------------------------------------------

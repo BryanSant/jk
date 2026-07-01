@@ -183,30 +183,25 @@ class JkBuildRendererTest {
     }
 
     @Test
-    void git_and_path_sources_render_without_group_or_name_and_round_trip() {
-        // JkBuildParser rejects `group`/`name` alongside `git`/`path` — the coordinate is pure
-        // discovery from the target's own jk.toml — so the renderer must never emit them there.
+    void git_source_renders_without_group_or_name_and_round_trips() {
+        // JkBuildParser rejects `group`/`name` alongside `git` — the coordinate is pure
+        // discovery from the cloned repo's own jk.toml — so the renderer must never emit them there.
         Map<Scope, List<Dependency>> byScope = new EnumMap<>(Scope.class);
         dev.jkbuild.model.GitSource git = dev.jkbuild.model.GitSource.of(
                 "github.com/acme/widgets",
                 "https://github.com/acme/widgets",
                 new dev.jkbuild.model.GitRefSpec.Tag("v1.0.0"));
-        byScope.put(
-                Scope.MAIN,
-                List.of(
-                        Dependency.git("widgets", "git:widgets", git),
-                        Dependency.path("shared", "path:shared", "../shared")));
+        byScope.put(Scope.MAIN, List.of(Dependency.git("widgets", "git:widgets", git)));
 
         JkBuild model = new JkBuild(
                 new JkBuild.Project("com.example", "widget", "1.0.0", 21), new JkBuild.Dependencies(byScope));
         String out = JkBuildRenderer.render(model);
 
         assertThat(out).contains("widgets = { git = \"https://github.com/acme/widgets\", tag = \"v1.0.0\" }");
-        assertThat(out).contains("shared = { path = \"../shared\" }");
         assertThat(out).doesNotContain("group =");
 
         JkBuild reparsed = JkBuildParser.parse(out);
-        assertThat(reparsed.dependencies().of(Scope.MAIN)).hasSize(2);
+        assertThat(reparsed.dependencies().of(Scope.MAIN)).hasSize(1);
     }
 
     @Test

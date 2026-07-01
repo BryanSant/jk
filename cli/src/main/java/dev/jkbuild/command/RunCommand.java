@@ -27,7 +27,6 @@ import dev.jkbuild.run.Goal;
 import dev.jkbuild.run.GoalResult;
 import dev.jkbuild.runtime.BuildPipeline;
 import dev.jkbuild.runtime.CompileToolchain;
-import dev.jkbuild.runtime.CompositeLocator;
 import dev.jkbuild.util.JkDirs;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -116,11 +115,6 @@ public final class RunCommand implements CliCommand {
         }
         BuildLayout layout = BuildLayout.of(projectDir, project);
         Path cache = cacheDir();
-
-        // Build composite (path / branch-git) dependency units first, so the
-        // project's own build can locate their jars on its classpath.
-        int dep = CompositeBuild.buildDependencies(projectDir, project, cache, jdksDir, null, global);
-        if (dep != 0) return dep;
 
         // Build through the one pipeline, producing whatever jk.toml declares
         // (jar always; shadow/native when configured). Cache-aware, so a clean
@@ -294,22 +288,6 @@ public final class RunCommand implements CliCommand {
         }
         WorkspaceClasspath.Result siblings = WorkspaceClasspath.resolve(projectDir, project, ClasspathResolver.RUNTIME);
         classpath.addAll(siblings.jars());
-
-        // Composite (path + branch-git) source deps: locate their jars + runtime
-        // external deps (already built upfront by CompositeBuild) for the run classpath.
-        try {
-            CompositeLocator.Located composite = CompositeLocator.locate(
-                    projectDir,
-                    project,
-                    ClasspathResolver.RUNTIME,
-                    ClasspathResolver.RUNTIME,
-                    cas,
-                    cacheDir().resolve("git"));
-            for (Path j : composite.jars()) if (!classpath.contains(j)) classpath.add(j);
-            for (Path j : composite.externalDepJars()) if (!classpath.contains(j)) classpath.add(j);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
         return classpath;
     }
 

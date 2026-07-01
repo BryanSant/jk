@@ -171,6 +171,18 @@ class FreshnessStampTest {
                 .isFalse();
     }
 
+    @Test
+    void different_release_invalidates_stamp(@TempDir Path tempDir) throws IOException {
+        Path classes = tempDir.resolve("classes");
+        Files.createDirectories(classes);
+        Path src = writeFile(tempDir.resolve("A.java"), "class A {}");
+        FreshnessStamp.write(
+                classes, FreshnessStamp.JAVA_STAMP, "compile-main", "key123", List.of(src), List.of(), RELEASE);
+
+        assertThat(FreshnessStamp.isFresh(classes, FreshnessStamp.JAVA_STAMP, List.of(src), List.of(), 17))
+                .isFalse();
+    }
+
     private static Path writeFile(Path file, String body) throws IOException {
         Files.writeString(file, body);
         return file;

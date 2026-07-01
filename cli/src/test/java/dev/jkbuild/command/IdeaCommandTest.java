@@ -18,8 +18,19 @@ import org.junit.jupiter.api.io.TempDir;
 class IdeaCommandTest {
 
     @Test
-    void composite_path_dep_becomes_an_idea_module(@TempDir Path tmp) throws IOException {
-        // A standalone library project, depended on by `app` via a path dep.
+    void workspace_sibling_becomes_an_idea_module(@TempDir Path tmp) throws IOException {
+        // A local sibling is always a workspace module now, never a path dependency.
+        Files.writeString(tmp.resolve("jk.toml"), """
+                [project]
+                group = "com.example"
+                name  = "root"
+                version = "1.0.0"
+                jdk = 25
+
+                [workspace]
+                modules = ["lib", "app"]
+                """);
+
         Path lib = tmp.resolve("lib");
         Files.createDirectories(lib.resolve("src/main/java/lib"));
         Files.writeString(lib.resolve("jk.toml"), """
@@ -41,7 +52,7 @@ class IdeaCommandTest {
                 jdk = 25
 
                 [dependencies]
-                libcore = { path = "../lib" }
+                libcore.workspace = true
                 """);
         Files.writeString(app.resolve("src/main/java/app/Main.java"), "package app; public class Main {}");
 
@@ -50,12 +61,12 @@ class IdeaCommandTest {
         Path ideConfig = tmp.resolve("ideconfig");
         Files.createDirectories(ideConfig.resolve("JetBrains/IntelliJIdea2025.1/options"));
 
-        assertThat(runIdea(app, jdks, ideConfig, tmp.resolve("cache"))).isEqualTo(0);
+        assertThat(runIdea(tmp, jdks, ideConfig, tmp.resolve("cache"))).isEqualTo(0);
 
-        // The composite target is registered as a module (out-of-tree .iml path)...
-        String modules = Files.readString(app.resolve(".idea/modules.xml"));
+        // Both siblings are registered as modules...
+        String modules = Files.readString(tmp.resolve(".idea/modules.xml"));
         assertThat(modules).contains("app.iml");
-        assertThat(modules).contains("../lib/libcore.iml");
+        assertThat(modules).contains("lib/libcore.iml");
         // ...its own .iml was generated...
         assertThat(lib.resolve("libcore.iml")).exists();
         // ...and app depends on it as a module, not a phantom library.

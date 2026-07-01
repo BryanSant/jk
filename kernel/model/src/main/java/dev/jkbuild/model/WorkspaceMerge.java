@@ -169,9 +169,6 @@ public final class WorkspaceMerge {
             if (ws.gitSource() != null) {
                 return Dependency.git(name, ws.module(), ws.gitSource());
             }
-            if (ws.pathSource() != null) {
-                return Dependency.path(name, ws.module(), ws.pathSource());
-            }
             return Dependency.of(name, ws.module(), ws.version());
         }
         throw new IllegalStateException("no workspace dependency or sibling named `" + name + "`");

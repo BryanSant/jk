@@ -31,11 +31,11 @@ public record Workspace(List<String> modules, Map<String, WorkspaceDependency> d
 
     /**
      * A single entry in {@code [workspace.dependencies]}. Holds the same shape as an inline dep table
-     * — group/artifact/version, or a path or git source override. Resolution happens when a child
-     * writes {@code <name>.workspace = true}.
+     * — group/artifact/version, or a git source override. A local sibling project is never declared
+     * here: it's a {@code [workspace] modules} entry instead. Resolution happens when a child writes
+     * {@code <name>.workspace = true}.
      */
-    public record WorkspaceDependency(
-            String group, String artifact, VersionSelector version, GitSource gitSource, String pathSource) {
+    public record WorkspaceDependency(String group, String artifact, VersionSelector version, GitSource gitSource) {
 
         public WorkspaceDependency {
             Objects.requireNonNull(group, "group");
@@ -46,10 +46,9 @@ public record Workspace(List<String> modules, Map<String, WorkspaceDependency> d
             if (artifact.isBlank()) {
                 throw new IllegalArgumentException("workspace dependency artifact must not be blank");
             }
-            int sourceCount = (version != null ? 1 : 0) + (gitSource != null ? 1 : 0) + (pathSource != null ? 1 : 0);
+            int sourceCount = (version != null ? 1 : 0) + (gitSource != null ? 1 : 0);
             if (sourceCount != 1) {
-                throw new IllegalArgumentException(
-                        "workspace dependency must set exactly one of `version`, `git`, or `path`");
+                throw new IllegalArgumentException("workspace dependency must set exactly one of `version` or `git`");
             }
         }
 

@@ -111,9 +111,9 @@ class GitSourceResolutionTest {
     }
 
     @Test
-    void branch_git_dep_is_left_for_composite_not_materialized(@TempDir Path tmp) throws Exception {
-        // A branch is a moving target: prepare must leave it untouched (built on
-        // demand by the composite build path, never materialized or lock-pinned).
+    void branch_git_dep_is_materialized_and_pinned(@TempDir Path tmp) throws Exception {
+        // A branch's tip moves, but once resolved it's materialized and pinned like any
+        // other git ref — there is no separate "composite, never locked" path anymore.
         Path repoDir = tmp.resolve("lib");
         Files.createDirectories(repoDir);
         Files.writeString(repoDir.resolve("jk.toml"), """
@@ -147,13 +147,16 @@ class GitSourceResolutionTest {
         GitSourceResolution.Prepared prep = GitSourceResolution.prepare(
                 consumer(branchLib), baseRepos, cas, Path.of(System.getProperty("java.home")), "test");
 
-        // The branch dep passes through unchanged — still a git dep, not a pin.
+        // The branch dep is rewritten to an exact coordinate pin, same as tag/rev.
         List<Dependency> mainDeps = prep.project().dependencies().of(Scope.MAIN);
         assertThat(mainDeps).hasSize(1);
-        assertThat(mainDeps.get(0).isGit()).isTrue();
-        // No file:// repo prepended and no provenance stamped.
-        assertThat(prep.repos().repos()).hasSize(baseRepos.repos().size());
-        assertThat(prep.gitInfoByKey()).isEmpty();
+        assertThat(mainDeps.get(0).isGit()).isFalse();
+        assertThat(mainDeps.get(0).module()).isEqualTo("com.acme:widgets");
+        // A file:// repo is prepended and provenance is stamped, with a "branch=" ref token.
+        assertThat(prep.repos().repos()).hasSize(baseRepos.repos().size() + 1);
+        assertThat(prep.gitInfoByKey()).hasSize(1);
+        var gitInfo = prep.gitInfoByKey().values().iterator().next();
+        assertThat(gitInfo.ref()).isEqualTo("branch=" + branch);
     }
 
     @Test

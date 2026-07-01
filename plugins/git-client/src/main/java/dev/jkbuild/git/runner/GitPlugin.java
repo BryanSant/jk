@@ -163,6 +163,6 @@ public final class GitPlugin implements Plugin {
             case "Rev" -> new GitRefSpec.Rev(ref);
             default -> throw new IllegalArgumentException("unknown REF_TYPE: " + refType);
         };
-        return new GitSource(url, url, refSpec, null, true, false, shallow, null);
+        return new GitSource(url, url, refSpec, null, true, false, shallow);
     }
 }

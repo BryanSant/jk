@@ -11,11 +11,11 @@ import dev.jkbuild.cli.tui.Glyphs;
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.config.WorkspaceLoader;
 import dev.jkbuild.config.WorkspaceLocator;
-import dev.jkbuild.git.GitFetcher;
 import dev.jkbuild.lock.Lockfile;
+import dev.jkbuild.lock.LockfileReader;
 import dev.jkbuild.lock.LockfileWriter;
 import dev.jkbuild.model.Dependency;
-import dev.jkbuild.model.GitRefSpec;
+import dev.jkbuild.model.GitSource;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.WorkspaceMerge;
 import dev.jkbuild.model.command.CliCommand;
@@ -49,6 +49,12 @@ import java.util.Map;
  *
  * <p>{@code --precise &lt;coord&gt;@&lt;ver&gt;} per PRD §6 is accepted but a no-op until selective
  * resolution lands.
+ *
+ * <p>{@code --git [&lt;name&gt;]} re-resolves git dependencies only (one by name, or every git dep
+ * when no name is given) — every ref type, tag/rev/branch alike, is pinned in {@code jk.lock} and
+ * only moves forward here or via {@code jk fetch}. Every other dependency's locked version is left
+ * exactly as it was: the full solver runs (reusing the normal resolve pipeline), then the result is
+ * spliced against the previous lock so only the targeted git artifact(s) actually change.
  */
 public final class UpdateCommand implements CliCommand {
 
@@ -76,7 +82,13 @@ public final class UpdateCommand implements CliCommand {
                 Opt.value("<a,b,...>", "Activate listed features beyond defaults.", "--features")
                         .splitOn(","),
                 Opt.flag("Don't activate the project's defaults.", "--no-default-features"),
-                Opt.flag("Re-fetch branch git dep tips now.", "--git"),
+                Opt.value(
+                                "[<name>]",
+                                "Re-resolve one git dependency by its declared name, or every git"
+                                        + " dependency when no name is given — leaving every other"
+                                        + " dependency's locked version untouched.",
+                                "--git")
+                        .withFallback("*"),
                 Opt.value("<url>", "Override declared repos with a single URL.", "--repo-url")
                         .hide(),
                 Opt.value(
@@ -119,10 +131,11 @@ public final class UpdateCommand implements CliCommand {
             return 2;
         }
 
-        // `jk update --git`: force branch git deps to re-resolve their tip on the
-        // next build (clears the freshness stamp), instead of a dependency re-lock.
-        if (in.isSet("git")) {
-            return refreshGitBranches(dir, root, cache);
+        // `jk update --git [<name>]`: re-resolve git dependencies only, leaving every
+        // other dependency's locked version untouched.
+        if (in.has("git")) {
+            String target = in.value("git").orElse("*");
+            return updateGitOnly(dir, root, cache, "*".equals(target) ? null : target);
         }
 
         // When updating a workspace module directly, filter sibling-internal deps.
@@ -251,41 +264,125 @@ public final class UpdateCommand implements CliCommand {
     }
 
     /**
-     * {@code jk update --git}: clear the branch-tip freshness stamp for every branch git dependency
-     * (project + workspace modules), so the next build re-resolves the remote tip regardless of the
-     * freshness window.
+     * {@code jk update --git [<name>]}: re-resolve git dependencies only, in the root project and
+     * (for a workspace root) each declared module — one dependency by its declared name, or every
+     * git dependency when {@code targetLibrary} is {@code null}. Every scope with no matching git
+     * dependency is left untouched entirely (its {@code jk.lock} isn't even read).
      */
-    private int refreshGitBranches(Path dir, JkBuild root, Path cache) throws Exception {
-        List<JkBuild> builds = new java.util.ArrayList<>();
-        builds.add(root);
-        if (root.isWorkspaceRoot())
-            builds.addAll(WorkspaceLoader.loadModules(dir, root).values());
-
-        GitFetcher fetcher = new GitFetcher(cache.resolve("git"));
-        java.util.Set<String> seen = new java.util.LinkedHashSet<>();
-        int n = 0;
-        for (JkBuild b : builds) {
-            for (List<Dependency> deps : b.dependencies().byScope().values()) {
-                for (Dependency d : deps) {
-                    if (d.isGit()
-                            && d.gitSource().ref() instanceof GitRefSpec.Branch
-                            && seen.add(d.module() + "@" + d.gitSource().canonicalUrl())) {
-                        fetcher.invalidateBranchTip(d.gitSource());
-                        n++;
-                    }
-                }
+    private int updateGitOnly(Path dir, JkBuild root, Path cache, String targetLibrary) throws Exception {
+        JkBuild effectiveRoot = applyWorkspaceContextIfModule(dir, root);
+        var scopes = new java.util.LinkedHashMap<Path, JkBuild>();
+        scopes.put(dir, effectiveRoot);
+        if (effectiveRoot.isWorkspaceRoot()) {
+            Map<Path, JkBuild> modules;
+            try {
+                modules = WorkspaceLoader.loadModules(dir, effectiveRoot);
+            } catch (RuntimeException e) {
+                System.err.println("jk update: " + e.getMessage());
+                return 2;
             }
+            for (Map.Entry<Path, JkBuild> entry : modules.entrySet()) {
+                scopes.put(entry.getKey(), WorkspaceMerge.applyToModule(effectiveRoot, entry.getValue(), modules.values()));
+            }
+        }
+
+        int totalRefreshed = 0;
+        for (Map.Entry<Path, JkBuild> scope : scopes.entrySet()) {
+            List<Dependency> gitDeps = declaredGitDeps(scope.getValue());
+            List<Dependency> targeted = targetLibrary == null
+                    ? gitDeps
+                    : gitDeps.stream().filter(d -> d.library().equals(targetLibrary)).toList();
+            if (targeted.isEmpty()) continue;
+
+            int refreshed;
+            try {
+                refreshed = updateGitOnlyForScope(scope.getKey(), scope.getValue(), cache, targeted);
+            } catch (Exception e) {
+                System.err.println("jk update: " + e.getMessage());
+                return 6;
+            }
+            totalRefreshed += refreshed;
+        }
+
+        if (targetLibrary != null && totalRefreshed == 0) {
+            System.err.println("jk update: no git dependency named `" + targetLibrary + "` found.");
+            return 2;
         }
         if (!global.outputIsJson()) {
             System.out.println(
-                    n == 0
-                            ? "No branch git dependencies to refresh."
-                            : "Marked "
-                                    + n
-                                    + " branch git dependenc"
-                                    + (n == 1 ? "y" : "ies")
-                                    + " for re-fetch on the next build.");
+                    totalRefreshed == 0
+                            ? "No git dependencies to refresh."
+                            : "Refreshed "
+                                    + totalRefreshed
+                                    + " git dependenc"
+                                    + (totalRefreshed == 1 ? "y" : "ies")
+                                    + ".");
         }
         return 0;
+    }
+
+    /**
+     * Re-resolve {@code effective}'s full dependency set (the normal pipeline — every git dep
+     * accepts upstream movement, no tag-rewrite check), then splice the result against the existing
+     * lock so only {@code targeted}'s git artifact(s) actually change; every other artifact keeps
+     * its previously-locked value. Returns how many of {@code targeted} were actually refreshed.
+     */
+    private int updateGitOnlyForScope(Path dir, JkBuild effective, Path cache, List<Dependency> targeted)
+            throws Exception {
+        Path lockFile = dir.resolve("jk.lock");
+        Lockfile oldLock = Files.exists(lockFile) ? LockfileReader.read(lockFile) : null;
+
+        Cas cas = new Cas(cache);
+        RepoGroup baseRepos = RepoGroupBuilder.buildFor(effective, repoUrl, cas);
+        GitSourceResolution.Prepared prep = GitSourceResolution.prepare(
+                effective, baseRepos, cas, CompileToolchain.resolveJavaHome(dir), Jk.VERSION);
+        Lockfile newLock =
+                new LockOrchestrator(prep.repos()).lock(prep.project(), Jk.VERSION, features, !noDefaultFeatures);
+        newLock = GitSourceResolution.stamp(newLock, prep.gitInfoByKey());
+
+        java.util.Set<String> targetKeys = new java.util.LinkedHashSet<>();
+        for (Dependency d : targeted) targetKeys.add(gitKey(d.gitSource()));
+
+        Map<String, Lockfile.Artifact> oldByName = new java.util.LinkedHashMap<>();
+        if (oldLock != null) for (Lockfile.Artifact a : oldLock.artifacts()) oldByName.put(a.name(), a);
+
+        List<Lockfile.Artifact> spliced = new java.util.ArrayList<>();
+        int refreshed = 0;
+        for (Lockfile.Artifact a : newLock.artifacts()) {
+            boolean isTargeted = a.git() != null && targetKeys.contains(a.git().url() + "|" + a.git().ref());
+            if (isTargeted) {
+                spliced.add(a);
+                refreshed++;
+                continue;
+            }
+            Lockfile.Artifact old = oldByName.get(a.name());
+            spliced.add(old != null ? old : a);
+        }
+        Lockfile finalLock = new Lockfile(
+                newLock.version(),
+                newLock.generatedBy(),
+                newLock.resolutionAlgorithm(),
+                newLock.jdk(),
+                newLock.kotlin(),
+                spliced,
+                oldLock != null ? oldLock.plugins() : newLock.plugins());
+        LockfileWriter.write(finalLock, lockFile);
+        return refreshed;
+    }
+
+    private static String gitKey(GitSource s) {
+        return s.canonicalUrl() + "|" + s.ref().token();
+    }
+
+    /** Every git-sourced dependency directly declared across all scopes, deduped by library name. */
+    private static List<Dependency> declaredGitDeps(JkBuild project) {
+        List<Dependency> out = new java.util.ArrayList<>();
+        java.util.Set<String> seen = new java.util.LinkedHashSet<>();
+        for (List<Dependency> deps : project.dependencies().byScope().values()) {
+            for (Dependency d : deps) {
+                if (d.isGit() && seen.add(d.library())) out.add(d);
+            }
+        }
+        return out;
     }
 }

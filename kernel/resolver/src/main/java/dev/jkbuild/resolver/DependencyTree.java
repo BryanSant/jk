@@ -5,7 +5,6 @@ import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.lock.LockfileReader;
 import dev.jkbuild.model.Dependency;
-import dev.jkbuild.model.GitRefSpec;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.Scope;
 import java.nio.file.Files;
@@ -510,7 +509,7 @@ public final class DependencyTree {
             StringBuilder out) {
 
         Map<String, Lockfile.Artifact> byModule = lock == null ? Map.of() : indexByModule(lock);
-        Map<String, Dependency> composite = compositeDeps(project);
+        Map<String, Dependency> composite = Map.of();
         List<String> mods = scopes.stream()
                 .flatMap(s -> project.dependencies().of(s).stream())
                 .map(Dependency::module)
@@ -533,19 +532,6 @@ public final class DependencyTree {
                     seenDirs,
                     out);
         }
-    }
-
-    /** Path + branch-git deps of a project, keyed by module, for {@link #renderDep} dispatch. */
-    private static Map<String, Dependency> compositeDeps(JkBuild project) {
-        Map<String, Dependency> composite = new HashMap<>();
-        for (Scope s : Scope.values()) {
-            for (Dependency d : project.dependencies().of(s)) {
-                if (d.isPath() || (d.isGit() && d.gitSource().ref() instanceof GitRefSpec.Branch)) {
-                    composite.putIfAbsent(d.module(), d);
-                }
-            }
-        }
-        return composite;
     }
 
     /**
@@ -587,7 +573,7 @@ public final class DependencyTree {
             StringBuilder out) {
 
         Map<String, Lockfile.Artifact> byModule = lock == null ? Map.of() : indexByModule(lock);
-        Map<String, Dependency> composite = compositeDeps(project);
+        Map<String, Dependency> composite = Map.of();
         List<Scope> sections = new ArrayList<>();
         for (Scope s : sectionOrder(scopeOrder)) {
             if (!project.dependencies().of(s).isEmpty()) sections.add(s);
@@ -637,7 +623,7 @@ public final class DependencyTree {
             Set<String> visited = new HashSet<>();
             for (LoadedModule m : modules) {
                 Map<String, Lockfile.Artifact> byModule = m.lock() == null ? Map.of() : indexByModule(m.lock());
-                Map<String, Dependency> composite = compositeDeps(m.build());
+                Map<String, Dependency> composite = Map.of();
                 for (Scope s : sections) {
                     for (String dep : directModules(m.build(), s)) {
                         collectFlat(dep, composite, byModule, byName, visited, collected);
@@ -654,7 +640,7 @@ public final class DependencyTree {
             for (LoadedModule m : modules) {
                 if (m.build().dependencies().of(s).isEmpty()) continue;
                 Map<String, Lockfile.Artifact> byModule = m.lock() == null ? Map.of() : indexByModule(m.lock());
-                Map<String, Dependency> composite = compositeDeps(m.build());
+                Map<String, Dependency> composite = Map.of();
                 for (String dep : directModules(m.build(), s)) {
                     collectFlat(dep, composite, byModule, byName, visited, collected);
                 }
@@ -705,16 +691,6 @@ public final class DependencyTree {
             putFlat(out, new FlatDep(byName.getOrDefault(name, module), null, " [workspace]"));
             return;
         }
-        Dependency comp = composite.get(module);
-        if (comp != null && comp.isPath()) {
-            putFlat(out, new FlatDep(module, null, " [path]"));
-            return;
-        }
-        if (comp != null && comp.isGit()) {
-            String ref = ((GitRefSpec.Branch) comp.gitSource().ref()).name();
-            putFlat(out, new FlatDep(module, null, " [git: " + ref + "]"));
-            return;
-        }
         if (!visited.add(module)) return;
         Lockfile.Artifact pkg = byModule.get(module);
         if (pkg == null) {
@@ -755,7 +731,8 @@ public final class DependencyTree {
     }
 
     /**
-     * Render one direct dependency, dispatching on its kind (maven / workspace / path / branch-git).
+     * Render one direct dependency, dispatching on its kind (maven coordinate, or a {@code
+     * workspace = true} sibling reference).
      */
     private static void renderDep(
             String module,
@@ -786,21 +763,7 @@ public final class DependencyTree {
                     .append('\n');
             return;
         }
-        Dependency comp = composite.get(module);
-        if (comp == null) {
-            renderNode(byModule, module, depth, maxDepth, isLast, prefix, styling, seenModules, out);
-        } else if (comp.isPath()) {
-            renderPathNode(
-                    comp, module, dir, depth, maxDepth, isLast, prefix, styling, modules, seenModules, seenDirs, out);
-        } else {
-            // branch git dep — annotate (no recursion; needs a clone).
-            String ref = ((GitRefSpec.Branch) comp.gitSource().ref()).name();
-            out.append(prefix)
-                    .append(styling.rail().apply(isLast ? "╰─ " : "├─ "))
-                    .append(coordLabel(module, styling))
-                    .append(styling.rail().apply(" [git: " + ref + "]"))
-                    .append('\n');
-        }
+        renderNode(byModule, module, depth, maxDepth, isLast, prefix, styling, seenModules, out);
     }
 
     /**
@@ -811,71 +774,7 @@ public final class DependencyTree {
         return s.name().toLowerCase(java.util.Locale.ROOT);
     }
 
-    /** A path dep node, recursing into the target's own tree (its jk.toml + jk.lock). */
-    private static void renderPathNode(
-            Dependency dep,
-            String module,
-            Path consumerDir,
-            int depth,
-            int maxDepth,
-            boolean isLast,
-            String prefix,
-            Styling styling,
-            Map<String, String> modules,
-            Set<String> seenModules,
-            Set<String> seenDirs,
-            StringBuilder out) {
-
-        String connector = isLast ? "╰─ " : "├─ ";
-        Path targetDir = consumerDir == null
-                ? null
-                : consumerDir.resolve(dep.pathSource()).normalize();
-        boolean cycle = targetDir != null && !seenDirs.add(targetDir.toString());
-        Path lockPath = targetDir == null ? null : targetDir.resolve("jk.lock");
-        boolean built = lockPath != null && Files.isRegularFile(lockPath);
-        String tag = !built ? " [path, not built]" : " [path]";
-
-        if (cycle) {
-            // Back-reference to a path dir already expanded — dim the whole row.
-            out.append(prefix)
-                    .append(styling.reference().apply(connector + module + tag + " ⎋"))
-                    .append('\n');
-            return;
-        }
-
-        out.append(prefix)
-                .append(styling.rail().apply(connector))
-                .append(coordLabel(module, styling))
-                .append(styling.rail().apply(tag))
-                .append('\n');
-
-        if (targetDir == null || !built || depth >= maxDepth) return;
-        JkBuild target;
-        Lockfile targetLock;
-        try {
-            target = JkBuildParser.parse(targetDir.resolve("jk.toml"));
-            targetLock = LockfileReader.read(lockPath);
-        } catch (Exception e) {
-            return; // unreadable target — stop descending
-        }
-        String childPrefix = prefix + styling.rail().apply(isLast ? "   " : "│  ");
-        renderScopeSections(
-                target,
-                targetLock,
-                targetDir,
-                depth + 1,
-                maxDepth,
-                childPrefix,
-                styling,
-                modules,
-                null,
-                false,
-                seenModules,
-                seenDirs,
-                out);
-    }
-
-    /** {@code group:artifact} styled (no version — composite deps carry none here). */
+    /** {@code group:artifact} styled (no version — a workspace sibling reference carries none here). */
     private static String coordLabel(String module, Styling styling) {
         int colon = module.indexOf(':');
         String groupId = colon > 0 ? module.substring(0, colon) : module;

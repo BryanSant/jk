@@ -136,11 +136,12 @@ jk-core.workspace = true
 # Workspace external dep (looks up in [workspace.dependencies])
 jackson-databind.workspace = true
 
-# Path source — pure discovery, no group/name/version here: the coordinate
-# and version are always read from ../shared-utils's own jk.toml.
-shared-utils = { path = "../shared-utils" }
+# A local, hand-edited sibling is never declared here — add it to the root
+# jk.toml's `[workspace] modules = [...]` instead, then reference it the
+# same way as any other workspace sibling: `shared-utils.workspace = true`.
 
-# Git source — same pure-discovery rule: no group/name/version.
+# Git source — pure discovery: no group/name/version, the coordinate and
+# version are always read from the cloned repo's own jk.toml.
 codec = { git = "https://github.com/acme/codec", tag = "v0.9.1" }
 ```
 
@@ -148,11 +149,10 @@ codec = { git = "https://github.com/acme/codec", tag = "v0.9.1" }
 
 | Field        | Required when                     | Notes |
 |--------------|-----------------------------------|-------|
-| `group`      | version-based dep, not workspace-resolved | Maven groupId. Forbidden on a `path`/`git`/`workspace` dep — those read the coordinate from elsewhere. |
-| `name`       | library handle differs from it, and version-based | Defaults to the key (`spring-web` → `spring-web`). Same `path`/`git`/`workspace` restriction as `group`. |
-| `version`    | no `path`, `git`, or `workspace`  | Version selector. See grammar below. Forbidden alongside `path`/`git`. |
-| `path`       | local-path source                 | Mutually exclusive with `version`, `git`, `group`, and `name`. |
-| `git`        | git source                        | Mutually exclusive with `version`, `path`, `group`, and `name`. |
+| `group`      | version-based dep, not workspace-resolved | Maven groupId. Forbidden on a `git`/`workspace` dep — those read the coordinate from elsewhere. |
+| `name`       | library handle differs from it, and version-based | Defaults to the key (`spring-web` → `spring-web`). Same `git`/`workspace` restriction as `group`. |
+| `version`    | no `git` or `workspace`           | Version selector. See grammar below. Forbidden alongside `git`. |
+| `git`        | git source                        | Mutually exclusive with `version`, `group`, and `name`. There is no local-path source — a hand-edited sibling is always a `[workspace] modules` entry. |
 | `tag` / `branch` / `rev` | git source              | Exactly one required when `git` is set. |
 | `workspace`  | inheriting from workspace         | `true` only. Mutually exclusive with everything else. |
 | `optional`   | feature-gated dep                 | bool, default false. Withheld from the default resolution; pulled in only when a `[features]` entry names this dep (see [features]). Orthogonal to the source form. |
@@ -244,13 +244,14 @@ are withheld from the default resolution and enter the graph only when an
 activated feature names them. Referencing a dep that isn't declared
 `optional` (or doesn't exist) is a config error. Because the listed name
 resolves to a normal dep entry, feature deps support every dep form
-(`version` / `git` / `path` / `workspace` / catalog short-name / `sha256`).
+(`version` / `git` / `workspace` / catalog short-name / `sha256`).
 The active set is the `default` list plus any `--features=A,B`.
 
 ### `[sources]` — **removed**
 
-Replaced by the inline `path` / `git` fields on the dep table. No
-separate top-level table.
+Replaced by the inline `git` field on the dep table (a local sibling is a
+`[workspace] modules` entry, not a dependency source at all). No separate
+top-level table.
 
 ## Worked examples
 
@@ -337,26 +338,29 @@ main-class = "dev.jkbuild.cli.Jk"
    dep's short name; the value must be an inline table.
 2. **Resolution mode.** Pick exactly one of:
    - `workspace = true` → look up in workspace.
-   - `path = "..."` → local-path source; pure discovery — `group`, `name`,
-     and `version` are forbidden here.
-   - `git = "..."` + one of `tag`/`branch`/`rev` → git source; same
-     pure-discovery rule as `path`.
+   - `git = "..."` + one of `tag`/`branch`/`rev` → git source; pure
+     discovery — `group`, `name`, and `version` are forbidden here.
    - `version = "..."` → Maven coord; `group` is required, `artifact`
      defaults to the key.
+   - A stray `path = "..."` key (outside a git table's subdirectory
+     modifier) is a hard parse error naming the fix: add the directory to
+     the root jk.toml's `[workspace] modules = [...]` instead.
 3. **No sub-table ambiguity.** `[dependencies]` maps directly to `main` —
    there is no flat-vs-sub-scope detection and no "mixed flat and sub-scope
    dep tables" error to raise; the section name alone determines the scope.
-4. **Mutual exclusivity.** A dep table with both `version` and `path`
+4. **Mutual exclusivity.** A dep table with both `version` and `git`
    (or any other two source modes) is a parse error, as is `group`/`name`/
-   `version` alongside `path` or `git`.
+   `version` alongside `git`.
 5. **Coordinate construction.**
    - `workspace = true`: resolve via the workspace lookup chain.
-   - `path` / `git`: resolved later, from the target project's own
-     `jk.toml` — not constructed from this table at all.
+   - `git`: resolved later, from the target project's own `jk.toml` — not
+     constructed from this table at all.
    - Else: `Coordinate(group, artifact ?? key, version-or-source)`.
 6. **Pinned flag (lockfile semantics).** Derive from the version
-   selector: `=X.Y.Z` → pinned; everything else floats. `path` and `git`
-   deps are pinned to their source.
+   selector: `=X.Y.Z` → pinned; everything else floats. A `git` dep
+   (tag, rev, or branch alike) is pinned to its source — every ref type
+   is materialized and locked in `jk.lock`, moved only by an explicit
+   `jk update --git`.
 
 ## Migration impact (internal)
 
@@ -479,7 +483,7 @@ junit-jupiter = { version = "6.1.0" }
 Resolution rules:
 
 - **Explicit `group` always wins.** Writing `picocli = { group = "io.fork", version = "..." }` overrides the catalog — useful for forks and ambiguous artifacts.
-- **`path` / `git` sources still require explicit `group`.** The catalog only resolves version-based deps; path/git overrides are deliberate enough that defaulting silently would be surprising.
+- **The catalog only resolves version-based deps.** A `git` source is pure discovery — `group`/`name`/`version` are rejected outright, not looked up.
 - **Unknown names get a parse error pointing at this section.**
 - **Tooling emits the shorthand when it can.** `jk add picocli --ver 4.7.7` writes `picocli = "4.7.7"` to the manifest; `jk add picocli --group io.fork --ver 4.7.7` writes the structured form.
 

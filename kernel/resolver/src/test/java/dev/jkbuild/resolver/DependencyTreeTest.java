@@ -97,9 +97,30 @@ class DependencyTreeTest {
     }
 
     @Test
-    void composite_deps_are_annotated_not_missing(@org.junit.jupiter.api.io.TempDir Path tmp) {
+    void branch_git_dep_renders_as_a_locked_coordinate(@org.junit.jupiter.api.io.TempDir Path tmp) {
+        // A branch-ref git dep is materialized and pinned in jk.lock like any other
+        // git dep — it renders exactly like a locked Maven coordinate, no special tag.
         var deps = new ArrayList<Dependency>();
-        deps.add(Dependency.path("lib", "com.foo:lib", "../lib")); // ../lib absent → not built
+        deps.add(Dependency.git(
+                "com.foo:forked",
+                dev.jkbuild.model.GitSource.of(
+                        "https://x/forked", "https://x/forked", new dev.jkbuild.model.GitRefSpec.Branch("main"))));
+        JkBuild project = new JkBuild(
+                new JkBuild.Project("com.example", "widget", "0.1.0", 0),
+                new JkBuild.Dependencies(Map.of(Scope.MAIN, deps)));
+        Lockfile lock = lockOf(pkg("com.foo:forked", "main-SNAPSHOT", List.of()));
+
+        String rendered =
+                DependencyTree.render(project, lock, tmp, Integer.MAX_VALUE, DependencyTree.Styling.plain());
+
+        assertThat(rendered).contains("com.foo:forked:main-SNAPSHOT");
+        assertThat(rendered).doesNotContain("[git:");
+        assertThat(rendered).doesNotContain("(missing)");
+    }
+
+    @Test
+    void branch_git_dep_missing_from_lock_is_marked_missing(@org.junit.jupiter.api.io.TempDir Path tmp) {
+        var deps = new ArrayList<Dependency>();
         deps.add(Dependency.git(
                 "com.foo:forked",
                 dev.jkbuild.model.GitSource.of(
@@ -111,9 +132,7 @@ class DependencyTreeTest {
         String rendered =
                 DependencyTree.render(project, lockOf(), tmp, Integer.MAX_VALUE, DependencyTree.Styling.plain());
 
-        assertThat(rendered).contains("com.foo:lib [path, not built]");
-        assertThat(rendered).contains("com.foo:forked [git: main]");
-        assertThat(rendered).doesNotContain("(missing)"); // composite deps aren't "missing"
+        assertThat(rendered).contains("com.foo:forked (missing)");
     }
 
     @Test

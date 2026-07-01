@@ -2,6 +2,7 @@
 package dev.jkbuild.publish;
 
 import dev.jkbuild.model.Dependency;
+import dev.jkbuild.model.GitRefSpec;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.Scope;
 import dev.jkbuild.model.VersionSelector;
@@ -175,10 +176,11 @@ public final class PublishablePom {
         for (Scope s : order) {
             String mavenScope = mavenScope(s);
             for (Dependency d : jkBuild.dependencies().of(s)) {
-                // Composite source deps (path / branch git) have no published coordinate.
-                // `jk publish` rejects them up front; skip here as a safety net so a stray
-                // caller never emits a broken <version>=path</version>.
-                if (d.isPath() || (d.isGit() && !d.gitSource().ref().isImmutable())) {
+                // A branch-tracked git dep, even though it's locked in jk.lock, is still not a
+                // stable reference for external consumers of the published artifact. `jk
+                // publish` rejects it up front; skip here as a safety net so a stray caller
+                // never emits a broken <version>=branch=...</version>.
+                if (d.isGit() && d.gitSource().ref() instanceof GitRefSpec.Branch) {
                     continue;
                 }
                 sb.append("    <dependency>\n");

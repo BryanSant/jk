@@ -1,15 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.runtime;
 
-import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.config.WorkspaceLoader;
-import dev.jkbuild.git.GitFetcher;
 import dev.jkbuild.model.Dependency;
-import dev.jkbuild.model.GitSource;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.Scope;
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -21,19 +17,19 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Resolves the full <em>composite build graph</em> for an entry project: the workspace root + its
- * modules + every transitive {@code path =} and <em>branch</em> git dependency, as one
+ * Resolves the build graph for an entry project: the workspace root + its modules, as one
  * topologically-sorted list of build units. The single source of truth that both the build driver
  * and {@code jk explain} consume, so they agree on exactly what builds and in what order.
  *
  * <p>Every unit is a real {@code jk.toml} project built by the normal pipeline ({@code
- * BuildPipeline.coreBuilder}); dependency units (PATH / BRANCH_GIT) are compile-only. Immutable
- * (tag/rev) git deps are NOT units here — they stay on the lock-pinned {@link GitSourceResolution}
- * path. Edges point from a unit to the units that must build before it (prereqs), unifying
- * workspace module order ({@code [build].order-after} + sibling deps) with composite edges.
+ * BuildPipeline.coreBuilder}). There is no separate "dependency unit" concept: a local sibling is
+ * always a workspace module, and a git dependency (any ref type) is always a lock-pinned
+ * coordinate resolved by {@link GitSourceResolution} — neither needs its own build unit here.
+ * Edges point from a unit to the units that must build before it (prereqs): sibling deps plus
+ * {@code [build].order-after}.
  *
- * <p>Cycles (e.g. git1→git2→git1, path loops, or module cycles) and chains deeper than {@link
- * #MAX_DEPTH} are reported as errors before any build runs.
+ * <p>Cycles and chains deeper than {@link #MAX_DEPTH} are reported as errors before any build
+ * runs.
  */
 public final class BuildGraph {
 
@@ -42,21 +38,11 @@ public final class BuildGraph {
 
     public enum Origin {
         ROOT,
-        MODULE,
-        PATH,
-        BRANCH_GIT
+        MODULE
     }
 
-    /**
-     * One project to build. {@code dir} is canonical (real path) — the identity key. {@code
-     * gitSource} is non-null only for {@link Origin#BRANCH_GIT}.
-     */
-    public record BuildUnit(Path dir, JkBuild manifest, String coord, Origin origin, GitSource gitSource) {
-        /** Dependency units are compile-only; root/modules run their own tests. */
-        public boolean isDependency() {
-            return origin == Origin.PATH || origin == Origin.BRANCH_GIT;
-        }
-    }
+    /** One project to build. {@code dir} is canonical (real path) — the identity key. */
+    public record BuildUnit(Path dir, JkBuild manifest, String coord, Origin origin) {}
 
     /**
      * @param topoOrder dependency-first build order ({@code errors} empty ⇒ valid)
@@ -71,76 +57,28 @@ public final class BuildGraph {
 
     private BuildGraph() {}
 
-    /**
-     * Resolve the graph rooted at {@code entryDir}/{@code entry}. {@code gitRoot} is the git checkout
-     * cache ({@code $JK_CACHE/git}) used to clone branch git targets during discovery (the clone
-     * reveals a target's edges).
-     */
-    public static Result resolve(Path entryDir, JkBuild entry, Path gitRoot) throws IOException, InterruptedException {
-        Builder b = new Builder(gitRoot);
-        try {
-            if (entry.isWorkspaceRoot()) {
-                b.addWorkspace(entryDir, entry, Origin.MODULE);
-            } else {
-                b.addUnit(b.canonical(entryDir), entry, Origin.ROOT, null);
-                b.discoverComposites(entryDir, entry, 1);
-            }
-        } catch (GitFetcher.TagRewriteException e) {
-            throw e; // never happens for branches, but keep the checked type honest
+    /** Resolve the graph rooted at {@code entryDir}/{@code entry}. */
+    public static Result resolve(Path entryDir, JkBuild entry) throws IOException {
+        Builder b = new Builder();
+        if (entry.isWorkspaceRoot()) {
+            b.addWorkspace(entryDir, entry, Origin.MODULE);
+        } else {
+            b.addUnit(b.canonical(entryDir), entry, Origin.ROOT);
         }
         List<BuildUnit> order = b.errors.isEmpty() ? b.topoSort() : List.of();
         return new Result(order, b.edges, b.errors);
     }
 
-    /**
-     * The composite (path / branch-git) deps of {@code project} across MAIN+RUNTIME+TEST, deduped by
-     * module.
-     */
-    static List<Dependency> compositeDeps(JkBuild project) {
-        List<Dependency> out = new ArrayList<>();
-        Set<String> seen = new LinkedHashSet<>();
-        for (Scope scope : List.of(Scope.MAIN, Scope.RUNTIME, Scope.PROVIDED, Scope.TEST, Scope.EXPORT)) {
-            for (Dependency d : project.dependencies().of(scope)) {
-                if (isComposite(d) && seen.add(d.module())) out.add(d);
-            }
-        }
-        return out;
-    }
-
-    static boolean isComposite(Dependency d) {
-        return d.isPath() || (d.isGit() && !d.gitSource().ref().isImmutable());
-    }
-
-    /**
-     * Resolve a composite dependency's project directory: a {@code path} dep's normalized dir, or a
-     * branch git dep's checkout dir (cloned via {@link GitFetcher}, cached). Shared with {@code
-     * CompositeLocator} and {@code jk idea}.
-     */
-    public static Path targetDir(Path fromDir, Dependency dep, Path gitRoot) throws IOException, InterruptedException {
-        if (dep.isPath()) {
-            return fromDir.resolve(dep.pathSource()).normalize();
-        }
-        GitSource src = dep.gitSource();
-        Path checkout = new GitFetcher(gitRoot).fetch(src).checkoutPath();
-        return (src.path() != null && !src.path().isBlank()) ? checkout.resolve(src.path()) : checkout;
-    }
-
     // ---------------------------------------------------------------------
 
     private static final class Builder {
-        final Path gitRoot;
         final Map<Path, BuildUnit> units = new LinkedHashMap<>(); // canonical dir → unit
         final Map<Path, Set<Path>> edges = new LinkedHashMap<>(); // dir → prereq dirs
         final List<String> errors = new ArrayList<>();
-        final LinkedHashSet<Path> onStack = new LinkedHashSet<>(); // cycle detection
 
-        Builder(Path gitRoot) {
-            this.gitRoot = gitRoot;
-        }
-
-        void addUnit(Path canonicalDir, JkBuild m, Origin origin, GitSource git) {
+        void addUnit(Path canonicalDir, JkBuild m, Origin origin) {
             String coord = m.project().group() + ":" + m.project().name();
-            units.putIfAbsent(canonicalDir, new BuildUnit(canonicalDir, m, coord, origin, git));
+            units.putIfAbsent(canonicalDir, new BuildUnit(canonicalDir, m, coord, origin));
             edges.putIfAbsent(canonicalDir, new LinkedHashSet<>());
         }
 
@@ -149,17 +87,15 @@ public final class BuildGraph {
                 edges.computeIfAbsent(from, k -> new LinkedHashSet<>()).add(prereq);
         }
 
-        /**
-         * Add every module of a workspace as a unit, wire module-order edges, then descend composites.
-         */
-        void addWorkspace(Path wsRoot, JkBuild root, Origin moduleOrigin) throws IOException, InterruptedException {
+        /** Add every module of a workspace as a unit, then wire module-order edges. */
+        void addWorkspace(Path wsRoot, JkBuild root, Origin moduleOrigin) throws IOException {
             Map<Path, JkBuild> modules = WorkspaceLoader.loadModules(wsRoot, root);
             // Index by coord + bare name for sibling/order-after edge resolution.
             Map<String, Path> dirByCoord = new LinkedHashMap<>();
             Map<String, Path> dirByName = new LinkedHashMap<>();
             for (var e : modules.entrySet()) {
                 Path c = canonical(e.getKey());
-                addUnit(c, e.getValue(), moduleOrigin, null);
+                addUnit(c, e.getValue(), moduleOrigin);
                 dirByCoord.put(
                         e.getValue().project().group() + ":"
                                 + e.getValue().project().name(),
@@ -168,9 +104,7 @@ public final class BuildGraph {
             }
             for (var e : modules.entrySet()) {
                 Path moduleDir = canonical(e.getKey());
-                JkBuild m = e.getValue();
-                addModuleEdges(moduleDir, m, dirByCoord, dirByName);
-                discoverComposites(e.getKey(), m, 1);
+                addModuleEdges(moduleDir, e.getValue(), dirByCoord, dirByName);
             }
         }
 
@@ -197,58 +131,6 @@ public final class BuildGraph {
             }
         }
 
-        /** Discover the composite (path / branch-git) deps of a unit; recurse depth-first. */
-        void discoverComposites(Path fromDir, JkBuild from, int depth) throws IOException, InterruptedException {
-            if (depth > MAX_DEPTH) {
-                errors.add("composite dependency chain exceeds "
-                        + MAX_DEPTH
-                        + " levels (likely a cycle through symlinks)");
-                return;
-            }
-            Path fromCanon = canonical(fromDir);
-            for (Dependency dep : compositeDeps(from)) {
-                Path targetDir = targetDirOf(fromDir, dep);
-                if (targetDir == null) continue; // error recorded
-                Path key = canonical(targetDir);
-                addEdge(fromCanon, key);
-                if (units.containsKey(key)) continue; // memoized
-                if (onStack.contains(key)) {
-                    errors.add("composite dependency cycle through " + targetDir);
-                    continue;
-                }
-                Path toml = targetDir.resolve("jk.toml");
-                if (!Files.isRegularFile(toml)) {
-                    errors.add("composite dependency `" + dep.module() + "` has no jk.toml at " + targetDir);
-                    continue;
-                }
-                JkBuild target;
-                try {
-                    target = JkBuildParser.parse(Files.readString(toml));
-                } catch (RuntimeException e) {
-                    errors.add("composite dependency `"
-                            + dep.module()
-                            + "` failed to parse "
-                            + toml
-                            + ": "
-                            + e.getMessage());
-                    continue;
-                }
-                // The coordinate is pure discovery now — path/branch-git deps can't declare an
-                // expected `group`/`name` for jk to cross-check (JkBuildParser rejects it), so
-                // whatever the target project declares is authoritative; there's nothing to compare.
-                Origin origin = dep.isPath() ? Origin.PATH : Origin.BRANCH_GIT;
-                addUnit(key, target, origin, dep.isGit() ? dep.gitSource() : null);
-                onStack.add(key);
-                discoverComposites(targetDir, target, depth + 1);
-                onStack.remove(key);
-            }
-        }
-
-        /** Resolve a composite dep's project dir (path dir, or a branch git checkout). */
-        private Path targetDirOf(Path fromDir, Dependency dep) throws IOException, InterruptedException {
-            return targetDir(fromDir, dep, gitRoot);
-        }
-
         /** Kahn topo-sort (prereqs first); a leftover set means a cycle → error. */
         List<BuildUnit> topoSort() {
             Map<Path, Integer> remaining = new LinkedHashMap<>();
@@ -268,9 +150,7 @@ public final class BuildGraph {
                 }
             }
             if (sorted.size() != units.size()) {
-                errors.add("composite/workspace build graph has a cycle among "
-                        + (units.size() - sorted.size())
-                        + " unit(s)");
+                errors.add("workspace build graph has a cycle among " + (units.size() - sorted.size()) + " unit(s)");
                 return List.of();
             }
             return sorted;

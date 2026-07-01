@@ -4,6 +4,8 @@ package dev.jkbuild.publish;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import dev.jkbuild.model.Dependency;
+import dev.jkbuild.model.GitRefSpec;
+import dev.jkbuild.model.GitSource;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.Scope;
 import dev.jkbuild.model.VersionSelector;
@@ -31,9 +33,13 @@ class PublishablePomTest {
     }
 
     @Test
-    void composite_path_dependency_is_skipped_for_publish() {
+    void branch_git_dependency_is_skipped_for_publish() {
+        // Even though a branch-tracked git dep is locked in jk.lock, it's still not a stable
+        // reference for external consumers of the published artifact.
+        GitSource source =
+                GitSource.of("https://github.com/acme/lib", "https://github.com/acme/lib", new GitRefSpec.Branch("main"));
         Map<Scope, List<Dependency>> byScope = new EnumMap<>(Scope.class);
-        byScope.put(Scope.MAIN, List.of(Dependency.path("lib", "com.example:lib", "../lib")));
+        byScope.put(Scope.MAIN, List.of(Dependency.git("lib", "com.example:lib", source)));
         String xml = PublishablePom.render(
                         new JkBuild(
                                 new JkBuild.Project("com.example", "widget", "1.0.0", 21),
@@ -41,8 +47,8 @@ class PublishablePomTest {
                         null)
                 .xml();
 
-        // No broken <version>=path</version>, no phantom dependency.
-        assertThat(xml).doesNotContain("path");
+        // No broken <version>=git</version>, no phantom dependency.
+        assertThat(xml).doesNotContain("=git");
         assertThat(xml).doesNotContain("<artifactId>lib</artifactId>");
     }
 

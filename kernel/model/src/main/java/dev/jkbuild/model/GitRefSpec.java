@@ -6,14 +6,21 @@ import java.util.Objects;
 /**
  * What ref of a git repository to resolve (PRD §11.1). One of:
  *
+ * <p>Every ref type is materialized once and pinned in {@code jk.lock} as an ordinary locked
+ * artifact. The only behavioral difference between them is what {@code jk update --git}/{@code jk
+ * fetch} do when explicitly re-resolving: a {@link Tag} or {@link Rev} is expected to stay put (and
+ * re-resolving to a different SHA is a tag-rewrite event); a {@link Branch} is expected to move to
+ * its current tip. An ordinary build never re-resolves any of them — it just reads the existing
+ * lockfile pin.
+ *
  * <ul>
- *   <li>{@link Tag} — an annotated or lightweight tag (e.g. {@code v1.2.3}). Immutable; when
- *       declared via an explicit {@code tag = "..."} table field, jk does a shallow clone (depth 1)
- *       to minimise bandwidth. URL-embedded tag refs ({@code url@v1.2.3}) always do a full clone.
- *   <li>{@link Branch} — a moving branch ref (e.g. {@code main}). Mutable; built from source as a
- *       composite dependency and never locked.
- *   <li>{@link Rev} — an explicit 40-char (or abbreviated) commit SHA. Always immutable and pinned
- *       in {@code jk.lock}. Always does a full clone.
+ *   <li>{@link Tag} — an annotated or lightweight tag (e.g. {@code v1.2.3}). When declared via an
+ *       explicit {@code tag = "..."} table field, jk does a shallow clone (depth 1) to minimise
+ *       bandwidth. URL-embedded tag refs ({@code url@v1.2.3}) always do a full clone.
+ *   <li>{@link Branch} — a moving branch ref (e.g. {@code main}). Its tip is resolved once and
+ *       pinned like any other ref; {@code jk update --git}/{@code jk fetch} re-resolve it to the
+ *       current tip on demand.
+ *   <li>{@link Rev} — an explicit 40-char (or abbreviated) commit SHA. Always does a full clone.
  * </ul>
  *
  * <p>Whether the clone is shallow is governed by {@link GitSource#shallow()}, not purely by this
@@ -28,16 +35,6 @@ public sealed interface GitRefSpec {
     /** Whether the spec is intrinsically reproducible (a full SHA). */
     default boolean isPin() {
         return false;
-    }
-
-    /**
-     * Whether the spec names an effectively-immutable ref ({@link Tag} or {@link Rev}). Immutable
-     * git deps are materialized and pinned in {@code jk.lock}. A {@link Branch} is a moving target:
-     * it is built from source on demand and injected onto the classpath like a {@code path}
-     * dependency, never locked.
-     */
-    default boolean isImmutable() {
-        return true;
     }
 
     record Tag(String name) implements GitRefSpec {
@@ -59,11 +56,6 @@ public sealed interface GitRefSpec {
         @Override
         public String token() {
             return "branch=" + name;
-        }
-
-        @Override
-        public boolean isImmutable() {
-            return false;
         }
     }
 

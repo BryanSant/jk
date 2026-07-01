@@ -68,24 +68,6 @@ public final class GradleExporter {
         for (Map.Entry<String, JkBuild> e : modulesByRelPath.entrySet()) {
             buildFiles.put(
                     e.getKey(), renderBuild(e.getValue(), layoutOf(layoutByRelPath, e.getKey()), locked, report));
-            // includeBuild lives in the root settings.gradle.kts and is root-relative;
-            // a module's own path dep can't be expressed there automatically.
-            for (java.util.List<Dependency> list :
-                    e.getValue().dependencies().byScope().values()) {
-                for (Dependency d : list) {
-                    if (d.isPath()) {
-                        report.warning("module `"
-                                + e.getKey()
-                                + "` has a path dep `"
-                                + d.module()
-                                + "`; add `includeBuild(\""
-                                + e.getKey()
-                                + "/"
-                                + d.pathSource()
-                                + "\")` to settings.gradle.kts manually.");
-                    }
-                }
-            }
         }
         return new Result(settings, buildFiles, report.build());
     }
@@ -104,22 +86,6 @@ public final class GradleExporter {
                 .append("\"\n");
         sb.append("}\n\n");
         sb.append("rootProject.name = \"").append(kEsc(root.project().name())).append("\"\n");
-
-        // Composite (`path = …`) deps → Gradle composite builds. Gradle substitutes
-        // the matching coordinate (declared without a version in build.gradle.kts)
-        // with the included build's output — jk's includeBuild analog.
-        java.util.LinkedHashSet<String> includeBuilds = new java.util.LinkedHashSet<>();
-        for (java.util.List<Dependency> list : root.dependencies().byScope().values()) {
-            for (Dependency d : list) {
-                if (d.isPath()) includeBuilds.add(d.pathSource());
-            }
-        }
-        if (!includeBuilds.isEmpty()) {
-            sb.append('\n');
-            for (String path : includeBuilds) {
-                sb.append("includeBuild(\"").append(kEsc(path)).append("\")\n");
-            }
-        }
 
         if (!moduleRelPaths.isEmpty()) {
             sb.append('\n');
@@ -205,17 +171,6 @@ public final class GradleExporter {
         }
         for (Pair pr : order) {
             for (Dependency d : jk.dependencies().of(pr.scope())) {
-                if (d.isPath()) {
-                    // Composite build: depend by coordinate (no version); the
-                    // `includeBuild(...)` in settings.gradle.kts substitutes the
-                    // local source build for this module. jk's includeBuild analog.
-                    sb.append("    ")
-                            .append(pr.config())
-                            .append("(\"")
-                            .append(kEsc(d.module()))
-                            .append("\")\n");
-                    continue;
-                }
                 if (warnIfUnmappable(d, report)) continue;
                 sb.append("    ")
                         .append(pr.config())

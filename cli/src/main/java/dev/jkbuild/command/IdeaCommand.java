@@ -23,7 +23,6 @@ import dev.jkbuild.layout.BuildLayout;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.lock.LockfileReader;
 import dev.jkbuild.model.Coordinate;
-import dev.jkbuild.model.Dependency;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.Scope;
 import dev.jkbuild.model.command.CliCommand;
@@ -32,7 +31,6 @@ import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.repo.MavenLayout;
 import dev.jkbuild.repo.RepoArtifactStore;
 import dev.jkbuild.resolver.CacheSync;
-import dev.jkbuild.runtime.BuildGraph;
 import dev.jkbuild.util.JkDirs;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -143,13 +141,12 @@ public final class IdeaCommand implements CliCommand {
         Map<Path, JkBuild> modules =
                 rootBuild.isWorkspaceRoot() ? WorkspaceLoader.loadModules(wsRoot, rootBuild) : Map.of();
 
-        // Unified module set: workspace modules (or the single root) PLUS composite
-        // (path / branch-git) dependency targets — each becomes an IDEA module so the
-        // IDE resolves cross-project sources, not just compiled jars.
+        // Unified module set: workspace modules, or the single root project. A git
+        // dependency (any ref type) is a locked Maven coordinate, not an IDEA module —
+        // it's already covered by the library resolution below.
         Map<Path, JkBuild> allModules = new LinkedHashMap<>();
         if (modules.isEmpty()) allModules.put(wsRoot, rootBuild);
         else allModules.putAll(modules);
-        allModules.putAll(resolveCompositeModules(wsRoot, rootBuild, cache));
 
         // Collect all library definitions across every module
         // (name → LibDef). LinkedHashMap preserves stable ordering.
@@ -243,7 +240,6 @@ public final class IdeaCommand implements CliCommand {
             Path moduleDir = me.getKey();
             JkBuild module = me.getValue();
             List<ModuleRef> modRefs = new ArrayList<>(siblingModuleRefs(moduleDir, module, modules));
-            modRefs.addAll(compositeModuleRefs(moduleDir, module, cache));
             List<LibRef> libRefs = libRefs(moduleDir, module, modules, cas, allLibs);
             write(
                     moduleDir.resolve(moduleName(module) + ".iml"),
@@ -472,61 +468,6 @@ public final class IdeaCommand implements CliCommand {
         if (plus <= 0 || plus >= source.length() - 1) return null;
         String repoName = source.substring(0, plus);
         return (repoName.isEmpty() || repoName.equals("local") || repoName.startsWith("git:")) ? null : repoName;
-    }
-
-    // =========================================================================
-    // Composite (path / branch-git) dependency modules
-    // =========================================================================
-
-    /**
-     * Every composite ({@code path} / branch-git) dependency target across the whole graph, as an
-     * IDEA module ({@code dir → manifest}). Best-effort: on a resolution error the IDE is still
-     * generated for the workspace, just without composite modules.
-     */
-    private Map<Path, JkBuild> resolveCompositeModules(Path wsRoot, JkBuild rootBuild, Path cache) {
-        Map<Path, JkBuild> out = new LinkedHashMap<>();
-        try {
-            BuildGraph.Result g = BuildGraph.resolve(wsRoot, rootBuild, cache.resolve("git"));
-            if (g.hasErrors()) {
-                for (String e : g.errors()) System.err.println("jk idea: " + e);
-                return out;
-            }
-            for (BuildGraph.BuildUnit u : g.topoOrder()) {
-                if (u.isDependency()) out.put(u.dir(), u.manifest());
-            }
-        } catch (Exception e) {
-            System.err.println("jk idea: composite dependencies skipped (" + e.getMessage() + ")");
-        }
-        return out;
-    }
-
-    /**
-     * Module references for a project's direct composite deps — each resolves to the target's IDEA
-     * module (by name), so the consumer module depends on the composite target's sources (jk's
-     * includeBuild, in the IDE).
-     */
-    private static List<ModuleRef> compositeModuleRefs(Path dir, JkBuild project, Path cache) {
-        List<ModuleRef> refs = new ArrayList<>();
-        Set<String> seen = new LinkedHashSet<>();
-        for (Scope scope : Scope.values()) {
-            for (Dependency d : project.dependencies().of(scope)) {
-                boolean composite =
-                        d.isPath() || (d.isGit() && !d.gitSource().ref().isImmutable());
-                if (!composite) continue;
-                try {
-                    Path toml =
-                            BuildGraph.targetDir(dir, d, cache.resolve("git")).resolve("jk.toml");
-                    if (!Files.isRegularFile(toml)) continue;
-                    String name = moduleName(JkBuildParser.parse(toml));
-                    if (seen.add(name)) {
-                        refs.add(new ModuleRef(name, scope == Scope.TEST ? "TEST" : "COMPILE"));
-                    }
-                } catch (Exception ignored) {
-                    // Unresolved composite (e.g. offline branch dep) — skip the ref.
-                }
-            }
-        }
-        return refs;
     }
 
     // =========================================================================
