@@ -41,24 +41,23 @@ public final class TreeCommand implements CliCommand {
 
     @Override
     public List<Opt> options() {
+        // --flat / --scope are accepted as unique prefixes of --flatten / --scopes (no explicit alias).
         return List.of(
                 Opt.value("<depth>", "Maximum tree depth. Default: unlimited.", "--depth"),
                 Opt.flag("Flatten each scope to a sorted, deduped list.", "--flatten"),
-                Opt.flag("", "--flat").hide(),
                 Opt.flag("Blend all scopes into one tree, one badge row.", "--stack"),
-                Opt.value("<scopes>", "Scopes to show, in order; meta: exec/run/all.", "--scopes"),
-                Opt.value("<scopes>", "", "--scope").hide());
+                Opt.value("<scopes>", "Scopes to show, in order; meta: exec/run/all.", "--scopes"));
     }
 
     @Override
     public int run(Invocation in) throws IOException {
         Integer depth = in.value("depth").map(Integer::parseInt).orElse(null);
-        boolean flatten = in.isSet("flatten") || in.isSet("flat");
+        boolean flatten = in.isSet("flatten");
         boolean stack = in.isSet("stack");
 
-        // --scopes / --scope: an explicit, ordered subset of scopes to display.
+        // --scopes: an explicit, ordered subset of scopes to display.
         List<Scope> scopes = null;
-        var scopesArg = in.value("scopes").or(() -> in.value("scope"));
+        var scopesArg = in.value("scopes");
         if (scopesArg.isPresent()) {
             List<String> tokens = Arrays.stream(scopesArg.get().split(","))
                     .map(String::trim)

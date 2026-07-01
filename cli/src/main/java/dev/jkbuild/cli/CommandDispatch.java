@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.cli;
 
+import dev.jkbuild.cli.args.Abbreviations;
 import dev.jkbuild.cli.args.ArgParser;
 import dev.jkbuild.cli.args.ParseException;
 import dev.jkbuild.cli.theme.Theme;
@@ -54,10 +55,8 @@ import dev.jkbuild.model.command.Param;
 import dev.jkbuild.worker.WorkerJarNotFoundException;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 /**
  * Routes verbs that have been ported off picocli through jk's own {@link ArgParser} + {@link
@@ -140,9 +139,15 @@ public final class CommandDispatch {
         List<String> all = List.of(args);
         int verbAt = verbIndex(all);
         if (verbAt < 0) return null;
-        CliCommand cmd = BY_NAME.get(all.get(verbAt));
-        if (cmd == null) return null;
-        return dispatch(cmd, "jk " + all.get(verbAt), all.subList(verbAt + 1, all.size()), ansiEnabled());
+        String verb = all.get(verbAt);
+        Abbreviations.Result<CliCommand> r = Abbreviations.resolve(verb, BY_NAME);
+        if (r.kind() == Abbreviations.Kind.AMBIGUOUS) {
+            printAmbiguousVerb(verb, r.candidates(), ansiEnabled());
+            return 2;
+        }
+        CliCommand cmd = r.value();
+        if (cmd == null) return null; // unknown verb: let the caller show top-level help
+        return dispatch(cmd, "jk " + cmd.name(), all.subList(verbAt + 1, all.size()), ansiEnabled());
     }
 
     /** Dispatch {@code cmd} against {@code rest} (its arguments), descending into subcommands. */
@@ -153,20 +158,25 @@ public final class CommandDispatch {
                 // No subcommand: print the group's command list. `--help` is a
                 // request (exit 0); bare `jk <group>` is a usage error (64).
                 System.out.print(renderHelp(cmd, qualified, ansi));
-                return helpRequested(rest) ? 0 : 64;
+                return helpRequested(cmd, rest) ? 0 : 64;
             }
             String subName = rest.get(subAt);
-            CliCommand sub = findSub(cmd, subName);
+            Abbreviations.Result<CliCommand> r = resolveSub(cmd, subName);
+            if (r.kind() == Abbreviations.Kind.AMBIGUOUS) {
+                printAmbiguousSubcommand(cmd, qualified, subName, r.candidates(), ansi);
+                return 2;
+            }
+            CliCommand sub = r.value();
             if (sub == null) {
                 printUnknownSubcommand(cmd, qualified, subName, ansi);
                 return 2;
             }
-            return dispatch(sub, qualified + " " + subName, rest.subList(subAt + 1, rest.size()), ansi);
+            return dispatch(sub, qualified + " " + sub.name(), rest.subList(subAt + 1, rest.size()), ansi);
         }
 
         // --help wins over parse validation (e.g. a missing required argument),
         // matching picocli — so `jk <cmd> --help` always shows help.
-        if (helpRequested(rest)) {
+        if (helpRequested(cmd, rest)) {
             System.out.print(renderHelp(cmd, qualified, ansi));
             return 0;
         }
@@ -193,11 +203,14 @@ public final class CommandDispatch {
         }
     }
 
-    private static CliCommand findSub(CliCommand parent, String name) {
+    /** Resolve a sub-verb (exact or unique prefix) against a parent's subcommands and their aliases. */
+    private static Abbreviations.Result<CliCommand> resolveSub(CliCommand parent, String name) {
+        Map<String, CliCommand> byName = new LinkedHashMap<>();
         for (CliCommand sub : parent.subcommands()) {
-            if (sub.name().equals(name) || sub.aliases().contains(name)) return sub;
+            byName.put(sub.name(), sub);
+            for (String alias : sub.aliases()) byName.put(alias, sub);
         }
-        return null;
+        return Abbreviations.resolve(name, byName);
     }
 
     /** A parse model = the command's own options plus the shared global options. */
@@ -266,6 +279,29 @@ public final class CommandDispatch {
         System.err.println(helpHint(ansi));
     }
 
+    private static void printAmbiguousVerb(String verb, List<String> candidates, boolean ansi) {
+        System.err.println(HelpRenderer.paint("error:", Theme.active().errorLabel(), ansi)
+                + " '"
+                + HelpRenderer.paint(verb, Theme.active().highlight(), ansi)
+                + "' is ambiguous: "
+                + String.join(", ", candidates));
+        System.err.println();
+        System.err.println(helpHint(ansi));
+    }
+
+    private static void printAmbiguousSubcommand(
+            CliCommand parent, String qualified, String sub, List<String> candidates, boolean ansi) {
+        System.err.println(HelpRenderer.paint("error:", Theme.active().errorLabel(), ansi)
+                + " subcommand '"
+                + HelpRenderer.paint(sub, Theme.active().highlight(), ansi)
+                + "' is ambiguous: "
+                + String.join(", ", candidates));
+        System.err.println();
+        System.err.println(usageLine(parent, qualified, ansi));
+        System.err.println();
+        System.err.println(helpHint(ansi));
+    }
+
     private static void printUnknownSubcommand(CliCommand parent, String qualified, String sub, boolean ansi) {
         System.err.println(HelpRenderer.paint("error:", Theme.active().errorLabel(), ansi)
                 + " unrecognized subcommand '"
@@ -309,9 +345,11 @@ public final class CommandDispatch {
      * jk}, or {@code jk --help}).
      */
     static int verbIndex(List<String> args) {
-        Set<String> valueGlobals = new LinkedHashSet<>();
+        Map<String, Opt> valueGlobals = new LinkedHashMap<>();
         for (Opt o : GlobalOptions.globalOpts()) {
-            if (o.takesValue()) valueGlobals.addAll(o.names());
+            if (o.takesValue()) {
+                for (String n : o.names()) valueGlobals.put(n, o);
+            }
         }
         int i = 0;
         while (i < args.size()) {
@@ -319,13 +357,35 @@ public final class CommandDispatch {
             if (a.equals("--")) return i + 1 < args.size() ? i + 1 : -1;
             if (!a.startsWith("-") || a.equals("-")) return i; // first positional = verb
             String name = a.contains("=") ? a.substring(0, a.indexOf('=')) : a;
-            i += (valueGlobals.contains(name) && !a.contains("=")) ? 2 : 1;
+            // A value-taking global before the verb (exact or unique prefix, e.g. --dir for
+            // --directory) consumes the next token, so skip both to reach the verb.
+            boolean consumesNext = !a.contains("=") && Abbreviations.resolve(name, valueGlobals).resolved();
+            i += consumesNext ? 2 : 1;
         }
         return -1;
     }
 
-    private static boolean helpRequested(List<String> args) {
-        return args.contains("-h") || args.contains("--help");
+    /**
+     * True when the argument list requests help — {@code -h}/{@code --help} exactly, or a unique
+     * {@code --} prefix of {@code --help} that isn't ambiguous with any of this command's other
+     * options (e.g. {@code --hel}). An ambiguous prefix is left for the parser to reject.
+     */
+    private static boolean helpRequested(CliCommand cmd, List<String> args) {
+        Map<String, Opt> byName = new LinkedHashMap<>();
+        for (Opt o : withGlobals(cmd).options()) {
+            for (String n : o.names()) byName.put(n, o);
+        }
+        Opt help = byName.get("--help");
+        for (String tok : args) {
+            if (tok.equals("--")) break;
+            if (tok.equals("-h") || tok.equals("--help")) return true;
+            if (help != null && tok.startsWith("--")) {
+                String name = tok.contains("=") ? tok.substring(0, tok.indexOf('=')) : tok;
+                Abbreviations.Result<Opt> r = Abbreviations.resolve(name, byName);
+                if (r.resolved() && r.value() == help) return true;
+            }
+        }
+        return false;
     }
 
     static boolean ansiEnabled() {

@@ -153,4 +153,49 @@ class ArgParserTest {
         assertThat(in.value("profile")).contains("ci");
         assertThat(in.positionals()).containsExactly("build", "test");
     }
+
+    @Test
+    void longOption_uniquePrefixResolves() throws Exception {
+        Command c = cmd(List.of(Opt.flag("flatten", "--flatten"), Opt.flag("stack", "--stack")), List.of());
+        assertThat(parse(c, "--flat").isSet("flatten")).isTrue();
+        assertThat(parse(c, "--fl").isSet("flatten")).isTrue(); // still unique (stack starts with --st)
+    }
+
+    @Test
+    void longValueOption_uniquePrefixTakesValue() throws Exception {
+        Command c = cmd(List.of(Opt.value("<scopes>", "scopes", "--scopes")), List.of());
+        assertThat(parse(c, "--scope", "test,runtime").value("scopes")).contains("test,runtime");
+        assertThat(parse(c, "--sc=all").value("scopes")).contains("all");
+    }
+
+    @Test
+    void longOption_exactWinsOverPrefix() throws Exception {
+        // --flat is an exact name AND a prefix of --flatten; exact must win.
+        Command c = cmd(List.of(Opt.flag("flat", "--flat"), Opt.flag("flatten", "--flatten")), List.of());
+        assertThat(parse(c, "--flat").isSet("flat")).isTrue();
+        assertThat(parse(c, "--flat").isSet("flatten")).isFalse();
+    }
+
+    @Test
+    void ambiguousPrefix_throws() {
+        Command c = cmd(List.of(Opt.flag("stack", "--stack"), Opt.value("<s>", "scopes", "--scopes")), List.of());
+        ParseException ex = catchThrowableOfType(() -> parse(c, "--s"), ParseException.class);
+        assertThat(ex.kind()).isEqualTo(ParseException.Kind.AMBIGUOUS_OPTION);
+        assertThat(ex.getMessage()).contains("--scopes").contains("--stack");
+    }
+
+    @Test
+    void negatableFlag_uniquePrefix() throws Exception {
+        Command c = cmd(List.of(Opt.flag("executable", "--executable").negate()), List.of());
+        assertThat(parse(c, "--no-exec").flag("executable")).contains(false);
+    }
+
+    @Test
+    void passthrough_forwardsAbbreviationsInsteadOfMatching() throws Exception {
+        // A passthrough command must NOT prefix-match; --flat is forwarded, not resolved to --flatten.
+        Command c = cmd(List.of(Opt.flag("flatten", "--flatten")), List.of(Param.of("args", Arity.ZERO_OR_MORE, "a")));
+        Invocation in = ArgParser.parse(c, List.of("--flat", "x"), true);
+        assertThat(in.isSet("flatten")).isFalse();
+        assertThat(in.positionals()).containsExactly("--flat", "x");
+    }
 }

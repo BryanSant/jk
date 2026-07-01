@@ -92,13 +92,30 @@ public final class ArgParser {
             inline = tok.substring(eq + 1);
         }
 
-        Opt opt = byName.get(name);
+        // Passthrough commands (jk mvn / gradle) match only their own options exactly and forward
+        // everything else — abbreviation would risk eating a flag meant for the child process.
+        Opt opt;
+        if (passthroughUnknown) {
+            opt = byName.get(name);
+        } else {
+            Abbreviations.Result<Opt> r = Abbreviations.resolve(name, byName);
+            if (r.kind() == Abbreviations.Kind.AMBIGUOUS) throw ambiguous(tok, name, r.candidates());
+            opt = r.value();
+        }
         if (opt != null) {
             return consume(out, opt, args, i, inline);
         }
-        // Negatable: --no-foo turns off a negatable flag --foo.
+        // Negatable: --no-foo turns off a negatable flag --foo (exact, or a unique prefix of it).
         if (name.startsWith("--no-")) {
-            Opt neg = byName.get("--" + name.substring("--no-".length()));
+            String base = "--" + name.substring("--no-".length());
+            Opt neg;
+            if (passthroughUnknown) {
+                neg = byName.get(base);
+            } else {
+                Abbreviations.Result<Opt> r = Abbreviations.resolve(base, byName);
+                if (r.kind() == Abbreviations.Kind.AMBIGUOUS) throw ambiguous(tok, name, r.candidates());
+                neg = r.value();
+            }
             if (neg != null && neg.negatable() && !neg.takesValue()) {
                 out.flag(neg.canonicalName(), false);
                 return i;
@@ -179,6 +196,13 @@ public final class ArgParser {
             out.putValue(opt.canonicalName(), value);
         }
         return consumed;
+    }
+
+    private static ParseException ambiguous(String tok, String name, List<String> candidates) {
+        return new ParseException(
+                ParseException.Kind.AMBIGUOUS_OPTION,
+                tok,
+                "option " + name + " is ambiguous: " + String.join(", ", candidates));
     }
 
     private static boolean looksLikeOption(String tok) {

@@ -12,6 +12,7 @@ public final class ParseException extends Exception {
 
     public enum Kind {
         UNKNOWN_OPTION,
+        AMBIGUOUS_OPTION,
         MISSING_VALUE,
         MISSING_REQUIRED,
         TOO_MANY_ARGS,
