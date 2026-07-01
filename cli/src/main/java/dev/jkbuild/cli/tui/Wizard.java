@@ -45,11 +45,11 @@ public final class Wizard {
     /** Display width of the rail prefix "│  " in columns. */
     private static final int RAIL_PREFIX_WIDTH = 3;
 
-    /** One-space indent applied to every line below the header, matching the build TUI style. */
-    private static final String INDENT = " ";
+    /** No indent — the rail runs flush against the left edge of the terminal. */
+    private static final String INDENT = "";
 
     /** Column count of {@link #INDENT}. */
-    private static final int INDENT_COLS = 1;
+    private static final int INDENT_COLS = 0;
 
     /** Poll interval for keys; lets the loop observe async cancellation flag. */
     private static final long KEY_POLL_MS = 75L;
@@ -245,14 +245,20 @@ public final class Wizard {
         var answers = new LinkedHashMap<String, Object>(preset.asMap());
 
         writer.println();
-        writer.println(headerLine(terminal));
+        String hdr = headerLine(terminal);
+        writer.println(hdr);
+        // Box opener: ╭ followed by dashes to match the header's visual width.
+        int hdrWidth = visibleLength(hdr);
+        writer.println(Theme.colorize("╭" + "─".repeat(Math.max(0, hdrWidth - 1)), Theme.active().darkGray()));
         writer.flush();
 
+        boolean firstStep = true;
         for (var step : steps) {
             // Pre-seeded answers skip the interactive prompt but still render
             // as settled so the user can see what was inferred up front.
             if (answers.containsKey(step.key()) && preset.has(step.key())) {
-                writer.println(INDENT + Rail.midBlank(Rail.StepState.COMPLETED).toAnsi(terminal));
+                if (!firstStep) writer.println(Theme.colorize("├──────", Theme.active().darkGray()));
+                firstStep = false;
                 renderSettledRegion(terminal, step, answers);
                 writer.flush();
                 continue;
@@ -260,7 +266,8 @@ public final class Wizard {
             if (!step.shouldRun().test(Answers.of(answers))) {
                 continue;
             }
-            writer.println(INDENT + Rail.midBlank(Rail.StepState.COMPLETED).toAnsi(terminal));
+            if (!firstStep) writer.println(Theme.colorize("├──────", Theme.active().darkGray()));
+            firstStep = false;
 
             var state = new ActiveState(step, answers);
             var regionLines = renderActiveRegion(terminal, step, state);
@@ -301,7 +308,7 @@ public final class Wizard {
         // Print the Done closer then a blank line so callers' result lines
         // have breathing room below the wizard rail. The `finally` block
         // writes a second \r\n that lands the cursor on the fresh line.
-        writer.print(INDENT + Rail.closer("Done", Theme.active().success()).toAnsi(terminal));
+        writer.print(Theme.colorize("╰──────", Theme.active().darkGray()));
         writer.print("\r\n");
         writer.flush();
         return Answers.of(Map.copyOf(answers));
@@ -316,9 +323,7 @@ public final class Wizard {
         }
         // └ hook one line below the interactive content; gets erased on commit
         // and re-emitted (with the next step's content above it) on each step.
-        // Cyan matches the active rail above it.
-        writer.println(
-                INDENT + Rail.closer("", Theme.active().darkGray(), Rail.StepState.ACTIVE).toAnsi(terminal));
+        writer.println(Theme.colorize("╰──────", Theme.active().railStyle(Rail.StepState.ACTIVE, Rail.RailGlyph.CLOSE)));
         return 1 + interactive.size() + 1;
     }
 
@@ -371,27 +376,36 @@ public final class Wizard {
     }
 
     /**
-     * Build the wizard header.
+     * Build the wizard header as a three-line rounded box:
      *
-     * <p>Renders as a goal chip matching the build TUI: {@code " · New Project "} on the
-     * plan-blue chip, closed by a powerline cap (Nerd Font) or a double space (plain), followed
-     * by the pre-styled subtitle.
+     * <pre>
+     *   ╭──────────────────────────────────────────╮
+     *   │ ≡ Verb ▶ [gray-band] Subtitle [/band]   │
+     *   ├──────────────────────────────────────────╯
+     * </pre>
+     *
+     * <p>The middle line is exactly the original chip+subtitle content (Nerd Font cap, gray
+     * background band, etc.) — unchanged. The box borders are in {@code darkGray} and
+     * auto-size to the content's visible (print-column) width.
+     */
+    /**
+     * Header line: GoalWedge chip followed by the subtitle in bold-white. The {@code ╭──} opener
+     * is printed separately in {@link #loop} to match this line's visual width.
      */
     private String headerLine(Terminal terminal) {
         Theme t = Theme.active();
-        boolean nf = GlobalConfig.nerdfont();
         String chipStr = GoalWedge.chip("≡", verb, t.goalChip());
-        if (nf) {
-            // Dark-gray band: BRIGHT_BLACK (#546E7A) bg, black text, matching caps.
-            dev.jkbuild.cli.theme.Rgb dg = dev.jkbuild.cli.theme.Rgb.hex(0x90A4AE); // GRAY — matches jk tree scope badges
-            String cap1 = Theme.colorize(Glyphs.SEGMENT_END_NERD,
-                    t.withBackground(t.bright(t.planBadgeColor()), dg));
-            String bgBlack = "\033[48;2;" + dg.r() + ";" + dg.g() + ";" + dg.b()
-                    + ";38;2;0;0;0m";
-            // Re-apply bg before the trailing space — subtitle may end with a reset.
-            return chipStr + cap1 + bgBlack + " " + subtitle + bgBlack + " " + Ansi.RESET;
+        if (GlobalConfig.nerdfont()) {
+            // Solid right-pointer tapers the chip; subtitle is bold-white with no background.
+            String cap = Theme.colorize(Glyphs.SEGMENT_END_NERD, t.bright(t.planBadgeColor()));
+            return chipStr + cap + " " + Theme.colorize(subtitle, t.focused());
         }
-        return chipStr + "  " + subtitle;
+        return chipStr + "  " + Theme.colorize(subtitle, t.focused());
+    }
+
+    /** Returns the visible (print-column) length of {@code s} by stripping CSI escape sequences. */
+    private static int visibleLength(String s) {
+        return s.replaceAll("\033\\[[^m]*m", "").length();
     }
 
     private static List<AttributedString> summarize(WizardStep step, Map<String, Object> answers) {
