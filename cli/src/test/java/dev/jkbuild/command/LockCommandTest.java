@@ -176,7 +176,7 @@ class LockCommandTest {
                 name     = "app"
                 version = "0.1.0"
 
-                [dependencies.main]
+                [dependencies]
                 libb = { group = "com.acme", name = "libb", version = "0.1.0" }
                 root = { group = "com.foo",  name = "root", version = "1.0" }
                 """);
@@ -242,7 +242,7 @@ class LockCommandTest {
                 name     = "app"
                 version = "0.1.0"
 
-                [dependencies.main]
+                [dependencies]
                 libb = { group = "com.acme", name = "libb", version = "0.1.0" }
                 root = { group = "com.foo",  name = "root", version = "1.0" }
                 """);
@@ -481,7 +481,7 @@ class LockCommandTest {
                 name     = "app"
                 version = "0.1.0"
 
-                [dependencies.main]
+                [dependencies]
                 root = { group = "com.foo", name = "root", version = "1.0" }
                 """);
     }

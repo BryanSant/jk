@@ -31,9 +31,9 @@ class BuildGraphTest {
                 java    = 21
                 """.formatted(name));
         if (pathDeps.length > 0) {
-            sb.append("\n[dependencies.main]\n");
+            sb.append("\n[dependencies]\n");
             for (String d : pathDeps) {
-                sb.append("%s = { group = \"com.example\", name = \"%s\", path = \"../%s\" }\n".formatted(d, d, d));
+                sb.append("%s = { path = \"../%s\" }\n".formatted(d, d));
             }
         }
         Files.writeString(dir.resolve("jk.toml"), sb.toString());
@@ -93,28 +93,6 @@ class BuildGraphTest {
     }
 
     @Test
-    void coordinate_mismatch_is_reported(@TempDir Path tmp) throws Exception {
-        project(tmp.resolve("real"), "real");
-        // app declares the dep under the wrong name but points at ../real.
-        Files.createDirectories(tmp.resolve("app"));
-        Files.writeString(tmp.resolve("app/jk.toml"), """
-                [project]
-                group = "com.example"
-                name  = "app"
-                version = "1.0.0"
-                jdk = 21
-                java = 21
-
-                [dependencies.main]
-                wrong = { group = "com.example", name = "wrong", path = "../real" }
-                """);
-
-        BuildGraph.Result r = resolve(tmp.resolve("app"), tmp);
-
-        assertThat(r.errors()).anyMatch(e -> e.contains("coordinate"));
-    }
-
-    @Test
     void missing_target_jk_toml_is_reported(@TempDir Path tmp) throws Exception {
         project(tmp.resolve("a"), "a", "ghost"); // ../ghost has no jk.toml
 
@@ -148,7 +126,7 @@ class BuildGraphTest {
                 jdk = 21
                 java = 21
 
-                [dependencies.main]
+                [dependencies]
                 core = { group = "com.example", name = "core", version = "1.0.0" }
                 """);
 

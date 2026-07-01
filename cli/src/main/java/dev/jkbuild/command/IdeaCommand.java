@@ -29,8 +29,8 @@ import dev.jkbuild.model.Scope;
 import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
-import dev.jkbuild.repo.JkMavenLocalRepo;
 import dev.jkbuild.repo.MavenLayout;
+import dev.jkbuild.repo.RepoArtifactStore;
 import dev.jkbuild.resolver.CacheSync;
 import dev.jkbuild.runtime.BuildGraph;
 import dev.jkbuild.util.JkDirs;
@@ -412,7 +412,6 @@ public final class IdeaCommand implements CliCommand {
 
         // Build a set of workspace-sibling coordinates so we can skip them.
         Set<String> siblingCoords = siblingCoordinates(module, modules);
-        JkMavenLocalRepo repo = new JkMavenLocalRepo(cas.root());
 
         for (Lockfile.Artifact pkg : lock.artifacts()) {
             if (pkg.checksum() == null) continue; // path/git dep
@@ -424,38 +423,55 @@ public final class IdeaCommand implements CliCommand {
             Coordinate coord =
                     Coordinate.of(pkg.name().substring(0, colon), pkg.name().substring(colon + 1), pkg.version());
 
-            // Use the repo (Maven-layout with proper .jar extension) rather than
-            // the CAS (extension-less hash paths). IntelliJ requires .jar extension.
+            // Use a Maven-layout path with a proper .jar extension rather than the CAS
+            // (extension-less hash paths) — IntelliJ requires .jar.
             String artifactRelPath = MavenLayout.artifactPath(coord);
-            Optional<Path> jarOpt = repo.locate(artifactRelPath);
-            if (jarOpt.isEmpty()) {
-                // CAS has the blob but jk sync pre-dated the repo mirror — materialize now.
-                String hex = hexOf(pkg.checksum());
-                if (hex != null && cas.contains(hex)) {
-                    repo.materialize(artifactRelPath, cas.pathFor(hex));
-                    jarOpt = repo.locate(artifactRelPath);
-                }
-            }
-            if (jarOpt.isEmpty()) continue; // not yet synced / non-Maven dep
+            Path jar = locateOrMaterialize(cas, pkg.source(), artifactRelPath, hexOf(pkg.checksum()));
+            if (jar == null) continue; // not yet synced / non-Maven dep
 
             Path sourcesPath = null;
             if (pkg.sourcesChecksum() != null) {
                 Coordinate srcCoord =
                         new Coordinate(coord.group(), coord.artifact(), coord.version(), "sources", "jar");
                 String srcRelPath = MavenLayout.artifactPath(srcCoord);
-                sourcesPath = repo.locate(srcRelPath).orElse(null);
-                if (sourcesPath == null) {
-                    String srcHex = hexOf(pkg.sourcesChecksum());
-                    if (srcHex != null && cas.contains(srcHex)) {
-                        repo.materialize(srcRelPath, cas.pathFor(srcHex));
-                        sourcesPath = repo.locate(srcRelPath).orElse(null);
-                    }
-                }
+                sourcesPath = locateOrMaterialize(cas, pkg.source(), srcRelPath, hexOf(pkg.sourcesChecksum()));
             }
 
             String libName = pkg.name() + ":" + pkg.version();
-            allLibs.put(libName, new LibDef(libName, libFileName(libName), jarOpt.get(), sourcesPath));
+            allLibs.put(libName, new LibDef(libName, libFileName(libName), jar, sourcesPath));
         }
+    }
+
+    /**
+     * Resolve a Maven-layout artifact path with a real {@code .jar} extension for IntelliJ. Tries
+     * the package's own named-repo index first ({@code repos/<name>/}, index-only for anything but
+     * {@code local}, pointing at {@code ~/.m2}); if that repo never indexed it (e.g. it predates the
+     * named-repo store) but the CAS already holds the blob, materialises a full-store copy under
+     * {@code repos/local/} so a real m2-layout file exists on disk to reference.
+     */
+    private static Path locateOrMaterialize(Cas cas, String source, String relativePath, String hex) {
+        String repoName = repoNameOf(source);
+        if (repoName != null) {
+            Optional<Path> found = RepoArtifactStore.forRepoName(cas.root(), repoName).locate(relativePath);
+            if (found.isPresent()) return found.get();
+        }
+        RepoArtifactStore local = RepoArtifactStore.forRepoName(cas.root(), "local");
+        Optional<Path> found = local.locate(relativePath);
+        if (found.isPresent()) return found.get();
+        if (hex != null && cas.contains(hex)) {
+            local.materialize(relativePath, cas.pathFor(hex), hex);
+            found = local.locate(relativePath);
+        }
+        return found.orElse(null);
+    }
+
+    /** The named repo a locked package came from, or {@code null} for git/path/local sources. */
+    private static String repoNameOf(String source) {
+        if (source == null) return null;
+        int plus = source.indexOf('+');
+        if (plus <= 0 || plus >= source.length() - 1) return null;
+        String repoName = source.substring(0, plus);
+        return (repoName.isEmpty() || repoName.equals("local") || repoName.startsWith("git:")) ? null : repoName;
     }
 
     // =========================================================================

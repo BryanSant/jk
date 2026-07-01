@@ -173,7 +173,7 @@ class UpdateCommandTest {
                 name     = "app"
                 version = "0.1.0"
 
-                [dependencies.main]
+                [dependencies]
                 libb = { group = "com.acme", name = "libb", version = "0.1.0" }
                 leaf = { group = "com.foo",  name = "leaf", version = "1.0" }
                 """);

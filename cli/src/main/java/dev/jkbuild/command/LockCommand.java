@@ -14,6 +14,8 @@ import dev.jkbuild.config.GlobalConfig;
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.config.WorkspaceLoader;
 import dev.jkbuild.config.WorkspaceLocator;
+import dev.jkbuild.http.Http;
+import dev.jkbuild.library.LibraryCatalog;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.lock.LockfileReader;
 import dev.jkbuild.lock.LockfileWriter;
@@ -25,6 +27,7 @@ import dev.jkbuild.model.WorkspaceMerge;
 import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
+import dev.jkbuild.repo.LibraryRegistryClient;
 import dev.jkbuild.repo.RepoGroup;
 import dev.jkbuild.resolver.LockOrchestrator;
 import dev.jkbuild.resolver.ResolveObserver;
@@ -43,8 +46,10 @@ import dev.jkbuild.runtime.GitSourceResolution;
 import dev.jkbuild.runtime.RepoGroupBuilder;
 import dev.jkbuild.util.JkDirs;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -96,11 +101,21 @@ public final class LockCommand implements CliCommand {
                                 "<dir>",
                                 "Override the jk cache directory. Default: $JK_CACHE_DIR or ~/.cache/jk.",
                                 "--cache-dir")
+                        .hide(),
+                Opt.value("<url>", "Override the library registry URL (used by tests).", "--library-registry-url")
+                        .hide(),
+                Opt.value(
+                                "<file>",
+                                "Override the downloaded library catalog path (used by tests).",
+                                "--library-cache-file")
                         .hide());
     }
 
     private static final GoalKey<JkBuild> EFFECTIVE = GoalKey.of("effective-build", JkBuild.class);
     private static final GoalKey<Lockfile> LOCKFILE = GoalKey.of("lockfile", Lockfile.class);
+
+    private URI libraryRegistryUrl;
+    private Path libraryCacheFile;
 
     @Override
     public int run(Invocation in) throws Exception {
@@ -109,6 +124,8 @@ public final class LockCommand implements CliCommand {
         this.sources = in.isSet("sources");
         this.repoUrl = in.value("repo-url").map(URI::create).orElse(null);
         this.cacheDir = in.value("cache-dir").map(Path::of).orElse(null);
+        this.libraryRegistryUrl = in.value("library-registry-url").map(URI::create).orElse(null);
+        this.libraryCacheFile = in.value("library-cache-file").map(Path::of).orElse(null);
         this.global = GlobalOptions.from(in);
 
         Path dir = global.workingDir();
@@ -118,6 +135,11 @@ public final class LockCommand implements CliCommand {
         }
         Path cache = cacheDir != null ? cacheDir : JkDirs.cache();
         Files.createDirectories(cache);
+
+        refreshLibraryRegistry(
+                global.offline,
+                libraryRegistryUrl != null ? libraryRegistryUrl : LibraryRegistryClient.DEFAULT_SOURCE,
+                libraryCacheFile != null ? libraryCacheFile : LibraryCatalog.downloadedFile());
 
         JkBuild root;
         try {
@@ -710,6 +732,46 @@ public final class LockCommand implements CliCommand {
     }
 
     // ---- shared helpers ----------------------------------------------------
+
+    /**
+     * Best-effort revalidation of the downloaded library catalog layer ({@link
+     * LibraryCatalog#downloadedFile()}) before {@code jk.toml} is parsed — parsing is what expands
+     * short library names against the catalog, so this needs to land before resolution sees the
+     * effective dependency list.
+     *
+     * <p>Only revalidates a catalog that's already been downloaded; a project that has never run
+     * {@code jk library update} keeps resolving against the bundled floor rather than jk silently
+     * reaching out to GitHub on its behalf. A conditional GET means the common case (nothing changed
+     * upstream) costs one round trip of headers — a 304 — and any failure (offline, unreachable,
+     * malformed payload) is swallowed: the existing cache, or the bundled floor if there's none, is
+     * good enough to proceed with.
+     */
+    private static void refreshLibraryRegistry(boolean offline, URI source, Path cacheFile) {
+        if (offline) return;
+        if (!Files.isRegularFile(cacheFile)) return;
+        Path etagFile = LibraryCatalog.etagFileFor(cacheFile);
+        try {
+            var result = new LibraryRegistryClient(new Http()).fetch(source, etagFile);
+            if (result instanceof LibraryRegistryClient.Result.Updated updated) {
+                LibraryCatalog.parse(new String(updated.body(), StandardCharsets.UTF_8)); // validate before writing
+                writeAtomic(cacheFile, updated.body());
+                if (updated.etag() != null) {
+                    writeAtomic(etagFile, updated.etag().getBytes(StandardCharsets.UTF_8));
+                } else {
+                    Files.deleteIfExists(etagFile);
+                }
+            }
+        } catch (Exception ignored) {
+            // Fail soft: a stale or bundled catalog is still usable, and `jk lock` shouldn't fail
+            // because the library registry is unreachable or handed back something malformed.
+        }
+    }
+
+    private static void writeAtomic(Path target, byte[] data) throws java.io.IOException {
+        Path tmp = target.resolveSibling(target.getFileName() + ".tmp");
+        Files.write(tmp, data);
+        Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+    }
 
     /**
      * When invoked from a workspace module (not the root), discover the enclosing workspace and apply

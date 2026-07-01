@@ -141,7 +141,10 @@ public final class CompositeLocator {
         if (Files.isRegularFile(jar)) {
             jars.add(jar);
         } else {
-            missing.add(dep.module() + " (not built — expected " + jar + ")");
+            // The coordinate is discovery-only (dep.module() is just a "path:"/"git:" placeholder
+            // for a path/branch-git dep) — use what the target project actually declares.
+            String coord = target.project().group() + ":" + target.project().name();
+            missing.add(coord + " (not built — expected " + jar + ")");
         }
 
         // The target's external transitive deps, from its own lock (locate-only).

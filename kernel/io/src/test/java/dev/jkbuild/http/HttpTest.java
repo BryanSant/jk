@@ -110,6 +110,7 @@ class HttpTest {
                 Optional.empty(), Optional.of(true),
                 Optional.empty(), Optional.empty(),
                 Optional.empty(), Optional.empty(),
+                Optional.empty(), Optional.empty(),
                 Optional.empty(), Optional.empty())));
         try {
             assertThatThrownBy(() -> http().get(base.resolve("/anything")))

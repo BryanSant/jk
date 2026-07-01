@@ -166,7 +166,7 @@ class DependencyTreeTest {
                 name = "b"
                 version = "9.9.9"
 
-                [dependencies.main]
+                [dependencies]
                 a = { workspace = true }
                 """);
         Files.writeString(b.resolve("jk.lock"), EMPTY_LOCK);

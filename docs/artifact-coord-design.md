@@ -51,7 +51,7 @@ caret-floating per the locked v1 default, `"=1.2.3"` is exact.
 main = ["org.springframework.boot:spring-boot-starter-web:3.4.0"]
 
 # After — name-as-key, scope is a sub-table mapping name → dep
-[dependencies.main]
+[dependencies]
 spring-web = { group = "org.springframework.boot", name = "spring-boot-starter-web", version = "3.4.0" }
 ```
 
@@ -114,13 +114,19 @@ pinned to the sibling's `[project].version`. A bare name (`jk add jackson`)
 is a catalog library / Maven coord, never a path. All edits preserve the
 array's formatting and comments.
 
-### `[dependencies.<scope>]` — name-as-key sub-tables
+### `[dependencies]` and friends — name-as-key top-level tables
 
 Six scopes, identical to v0.6: `main`, `provided`, `runtime`, `test`,
-`processor`, `platform`.
+`processor`, `platform`. Each scope is its own top-level section — no
+`[dependencies.<scope>]` sub-table nesting. `main` elides the scope name
+(Cargo/npm convention: the common case gets the short form); every other
+scope prefixes it: `[test-dependencies]`, `[provided-dependencies]`,
+`[processor-dependencies]`, `[export-dependencies]`, `[runtime-dependencies]`.
+`[dependencies]` is unambiguous on its own — there's no sub-table detection
+and no "mixed flat/sub-scope" error to worry about.
 
 ```toml
-[dependencies.main]
+[dependencies]
 # Fully structured
 picocli = { group = "info.picocli", name = "picocli", version = "4.7.7" }
 
@@ -130,22 +136,23 @@ jk-core.workspace = true
 # Workspace external dep (looks up in [workspace.dependencies])
 jackson-databind.workspace = true
 
-# Path source override (replaces v0.6 [sources] table)
-shared-utils = { group = "com.acme", name = "shared-utils", path = "../shared-utils" }
+# Path source — pure discovery, no group/name/version here: the coordinate
+# and version are always read from ../shared-utils's own jk.toml.
+shared-utils = { path = "../shared-utils" }
 
-# Git source override (replaces v0.6 [sources] table)
-codec = { group = "com.acme", name = "codec", git = "https://github.com/acme/codec", tag = "v0.9.1" }
+# Git source — same pure-discovery rule: no group/name/version.
+codec = { git = "https://github.com/acme/codec", tag = "v0.9.1" }
 ```
 
 #### Field reference for a dep table
 
 | Field        | Required when                     | Notes |
 |--------------|-----------------------------------|-------|
-| `group`      | not a workspace-resolved dep      | Maven groupId. |
-| `name`       | library handle differs from it    | Defaults to the key (`spring-web` → `spring-web`). |
-| `version`    | no `path`, `git`, or `workspace`  | Version selector. See grammar below. |
-| `path`       | local-path source                 | Mutually exclusive with `version` and `git`. |
-| `git`        | git source                        | Mutually exclusive with `version` and `path`. |
+| `group`      | version-based dep, not workspace-resolved | Maven groupId. Forbidden on a `path`/`git`/`workspace` dep — those read the coordinate from elsewhere. |
+| `name`       | library handle differs from it, and version-based | Defaults to the key (`spring-web` → `spring-web`). Same `path`/`git`/`workspace` restriction as `group`. |
+| `version`    | no `path`, `git`, or `workspace`  | Version selector. See grammar below. Forbidden alongside `path`/`git`. |
+| `path`       | local-path source                 | Mutually exclusive with `version`, `git`, `group`, and `name`. |
+| `git`        | git source                        | Mutually exclusive with `version`, `path`, `group`, and `name`. |
 | `tag` / `branch` / `rev` | git source              | Exactly one required when `git` is set. |
 | `workspace`  | inheriting from workspace         | `true` only. Mutually exclusive with everything else. |
 | `optional`   | feature-gated dep                 | bool, default false. Withheld from the default resolution; pulled in only when a `[features]` entry names this dep (see [features]). Orthogonal to the source form. |
@@ -174,7 +181,7 @@ within its grammar.
 When all deps fall in `main`, the scope sub-table is optional:
 
 ```toml
-# Equivalent to [dependencies.main]
+# Equivalent to [dependencies]
 [dependencies]
 spring-web = { group = "...", name = "...", version = "3.4.0" }
 ```
@@ -182,10 +189,10 @@ spring-web = { group = "...", name = "...", version = "3.4.0" }
 When mixed scopes appear, prefer the explicit sub-table form:
 
 ```toml
-[dependencies.main]
+[dependencies]
 spring-web = { group = "...", name = "...", version = "3.4.0" }
 
-[dependencies.test]
+[test-dependencies]
 junit-jupiter.workspace = true
 ```
 
@@ -220,7 +227,7 @@ of **dep names** (or other feature names), not coord strings:
 default = ["postgres", "jackson"]
 
 [features.postgres]
-deps = ["hikari", "postgres-jdbc"]   # names from [dependencies.*]
+deps = ["hikari", "postgres-jdbc"]   # names from any dependency scope table
 
 [features.mysql]
 deps = ["hikari", "mysql-connector"]
@@ -231,7 +238,8 @@ deps     = []
 ```
 
 Activating a feature pulls the listed deps into the build. Each listed dep
-must be declared in `[dependencies.*]` with `optional = true` — optional deps
+must be declared in a dependency scope table (`[dependencies]`,
+`[test-dependencies]`, etc.) with `optional = true` — optional deps
 are withheld from the default resolution and enter the graph only when an
 activated feature names them. Referencing a dep that isn't declared
 `optional` (or doesn't exist) is a config error. Because the listed name
@@ -277,12 +285,12 @@ version  = "0.7.0-SNAPSHOT"
 jdk      = 25
 java     = 25
 
-[dependencies.main]
+[dependencies]
 typesafe-config  = { group = "com.typesafe",        name = "config",           version = "1.4.8" }
 tomlj            = { group = "org.tomlj",           name = "tomlj",            version = "1.1.1" }
 jackson-databind = { group = "tools.jackson.core",  name = "jackson-databind", version = "3.1.3" }
 
-[dependencies.test]
+[test-dependencies]
 junit-jupiter.workspace           = true
 junit-platform-launcher.workspace = true
 assertj-core.workspace            = true
@@ -299,7 +307,7 @@ jdk      = 25
 java     = 25
 main     = "dev.jkbuild.cli.Jk"
 
-[dependencies.main]
+[dependencies]
 # Workspace siblings — short-name resolves to the matching module.
 jk-compat.workspace       = true
 jk-core.workspace         = true
@@ -312,7 +320,7 @@ jk-toolchain.workspace    = true
 # External
 picocli = { group = "info.picocli", name = "picocli", version = "4.7.7" }
 
-[dependencies.test]
+[test-dependencies]
 assertj-core.workspace            = true
 junit-jupiter.workspace           = true
 junit-platform-launcher.workspace = true
@@ -323,24 +331,28 @@ main-class = "dev.jkbuild.cli.Jk"
 
 ## Parser semantics
 
-1. **Dep table walk.** For each scope `s` in `[dependencies.s]`, iterate
-   the table's keys. The key is the dep's short name; the value must be
-   an inline table.
+1. **Dep table walk.** For each scope's top-level section (`[dependencies]`
+   for `main`, `[<scope>-dependencies]` for everything else), iterate the
+   table's keys directly — no sub-table nesting to detect. The key is the
+   dep's short name; the value must be an inline table.
 2. **Resolution mode.** Pick exactly one of:
    - `workspace = true` → look up in workspace.
-   - `path = "..."` → local-path source.
-   - `git = "..."` + one of `tag`/`branch`/`rev` → git source.
+   - `path = "..."` → local-path source; pure discovery — `group`, `name`,
+     and `version` are forbidden here.
+   - `git = "..."` + one of `tag`/`branch`/`rev` → git source; same
+     pure-discovery rule as `path`.
    - `version = "..."` → Maven coord; `group` is required, `artifact`
      defaults to the key.
-3. **Default-scope shorthand.** `[dependencies]` (no sub-key) is treated
-   as `[dependencies.main]` IF every direct child is an inline table
-   (i.e., a dep). If any direct child is itself a table (sub-scope),
-   throw a parse error: "mixed flat and sub-scope dep tables are
-   ambiguous".
+3. **No sub-table ambiguity.** `[dependencies]` maps directly to `main` —
+   there is no flat-vs-sub-scope detection and no "mixed flat and sub-scope
+   dep tables" error to raise; the section name alone determines the scope.
 4. **Mutual exclusivity.** A dep table with both `version` and `path`
-   (or any other two source modes) is a parse error.
+   (or any other two source modes) is a parse error, as is `group`/`name`/
+   `version` alongside `path` or `git`.
 5. **Coordinate construction.**
    - `workspace = true`: resolve via the workspace lookup chain.
+   - `path` / `git`: resolved later, from the target project's own
+     `jk.toml` — not constructed from this table at all.
    - Else: `Coordinate(group, artifact ?? key, version-or-source)`.
 6. **Pinned flag (lockfile semantics).** Derive from the version
    selector: `=X.Y.Z` → pinned; everything else floats. `path` and `git`
@@ -441,8 +453,8 @@ defined in multiple places, and the topmost layer wins.
 | Layer | Source | Updated by |
 |--|--|--|
 | **project** | `[libraries]` table in the project's `jk.toml` | Hand-edited |
-| **local** | `~/.jk/libs.local.toml` | Hand-edited |
-| **global** | `~/.jk/libs.global.toml` | `jk library update` |
+| **local** | `~/.jk/libraries.local.toml` | Hand-edited |
+| **global** | `~/.jk/libraries.global.toml` | `jk library update`, revalidated by `jk lock` |
 | **bundled** | classpath resource at `dev/jkbuild/library/libraries.toml` | Shipped with the binary |
 
 Only the bundled layer is guaranteed to exist. The local file lights up
@@ -455,7 +467,7 @@ manifest they're declared in.
 When a dep's short name matches a curated entry, the user can drop the coord:
 
 ```toml
-[dependencies.main]
+[dependencies]
 # String shorthand — cargo-style one-liner.
 picocli = "4.7.7"
 jackson-databind = "2.18.2"
@@ -477,7 +489,8 @@ The bundled index is intentionally version-free — it's a name-to-coord index, 
 
 ### `jk library` subcommands
 
-- **`jk library update`** pulls `https://raw.githubusercontent.com/jkbuild/jk-library-registry/refs/heads/main/libraries.toml` and replaces `~/.jk/libs.global.toml`. The previous file is preserved at `libs.global.toml.prev`. A malformed or HTTP-failed response never replaces a good cache.
+- **`jk library update`** pulls `https://raw.githubusercontent.com/jkbuild/jk-library-registry/refs/heads/main/libraries.toml` and replaces `~/.jk/libraries.global.toml`. The previous file is preserved at `libraries.global.toml.prev`. A malformed or HTTP-failed response never replaces a good cache. The upstream `ETag` is cached in a hidden `.libraries.global.toml.etag` sidecar so the request can be conditional.
+- **`jk lock`** revalidates an already-downloaded global layer before resolving: a conditional GET (`If-None-Match` from the `.etag` sidecar) either confirms it's current (304) or replaces it, mirroring `jk library update`. It never triggers the *first* download — a project that has never run `jk library update` keeps resolving against the bundled floor — and any failure (offline, unreachable, malformed payload) is swallowed so it never breaks the lock.
 - **`jk library list`** prints every library with its source layer. `--layer <name>` filters (e.g. `--layer project`).
 - **`jk library search <term>...`** substring-matches against name, group, and artifact across every layer. Multiple terms are AND-ed (each must appear in at least one of the three fields). Case-insensitive. `--limit N` caps the result count for noisy queries.
 
@@ -498,7 +511,7 @@ libraries or internal artifacts that aren't in the curated set:
 picocli = "io.fork:picocli"        # local fork wins over bundled
 internal-widget = "com.acme:internal-widget"
 
-[dependencies.main]
+[dependencies]
 picocli = "4.7.7"
 internal-widget = "0.1.0"
 ```
@@ -516,7 +529,7 @@ the parser does not enforce or honor them yet.
   `readme`, `keywords`. Adds option value but no immediate feature
   unlock.
 - **`[platforms]` BOM imports** as first-class. v0.6 already supports
-  `[dependencies.platform]` for BOMs; we keep that.
+  `[platform-dependencies]` for BOMs; we keep that.
 - **`[features.conflicts]`** declaring mutually-exclusive features.
 - **`target.cfg(...)` profile-conditional deps.** Maven `<profile>` is
   the JVM mental model; we'll likely keep `[profiles.<name>]` rather

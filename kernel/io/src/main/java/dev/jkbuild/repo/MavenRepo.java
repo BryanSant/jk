@@ -37,23 +37,14 @@ public final class MavenRepo {
     private final URI baseUrl;
     private final RepoTransport transport;
     private final Cas cas;
-
-    @SuppressWarnings("deprecation")
-    private final JkMavenLocalRepo localRepo; // legacy m2 mirror; kept for backward compat GC
-
     private final RepoArtifactStore repoStore; // index-only: .sha256 sidecars, JARs in ~/.m2
     private final RepoCredential credential;
 
     /** TTL + conditional-GET cache for maven-metadata.xml; null for non-HTTP transports. */
     private final MavenMetadataCache metadataCache;
 
-    /** Without a local repo — offline resolve is unavailable through this repo. */
     public MavenRepo(String name, URI baseUrl, Http http, Cas cas) {
-        this(name, baseUrl, http, cas, JkMavenLocalRepo.NONE);
-    }
-
-    public MavenRepo(String name, URI baseUrl, Http http, Cas cas, JkMavenLocalRepo localRepo) {
-        this(name, baseUrl, http, cas, localRepo, RepoCredential.ANONYMOUS);
+        this(name, baseUrl, http, cas, RepoCredential.ANONYMOUS);
     }
 
     /**
@@ -61,14 +52,12 @@ public final class MavenRepo {
      * RepoTransports} (which rejects non-http(s)), and authenticates with {@code credential}
      * (anonymous repos pass {@link RepoCredential#ANONYMOUS}).
      */
-    public MavenRepo(
-            String name, URI baseUrl, Http http, Cas cas, JkMavenLocalRepo localRepo, RepoCredential credential) {
+    public MavenRepo(String name, URI baseUrl, Http http, Cas cas, RepoCredential credential) {
         this(
                 name,
                 baseUrl,
                 RepoTransports.forUrl(baseUrl, Objects.requireNonNull(http, "http")),
                 cas,
-                localRepo,
                 credential,
                 http);
     }
@@ -78,14 +67,8 @@ public final class MavenRepo {
      * (s3://, file://, …) selected by the caller. These don't get the HTTP metadata cache (it has no
      * status/headers to revalidate against).
      */
-    public MavenRepo(
-            String name,
-            URI baseUrl,
-            RepoTransport transport,
-            Cas cas,
-            JkMavenLocalRepo localRepo,
-            RepoCredential credential) {
-        this(name, baseUrl, transport, cas, localRepo, credential, null);
+    public MavenRepo(String name, URI baseUrl, RepoTransport transport, Cas cas, RepoCredential credential) {
+        this(name, baseUrl, transport, cas, credential, null);
     }
 
     /**
@@ -93,18 +76,11 @@ public final class MavenRepo {
      * (enabling the metadata cache), or {@code null} for a non-HTTP transport.
      */
     private MavenRepo(
-            String name,
-            URI baseUrl,
-            RepoTransport transport,
-            Cas cas,
-            JkMavenLocalRepo localRepo,
-            RepoCredential credential,
-            Http httpOrNull) {
+            String name, URI baseUrl, RepoTransport transport, Cas cas, RepoCredential credential, Http httpOrNull) {
         this.name = Objects.requireNonNull(name, "name");
         this.baseUrl = normalize(Objects.requireNonNull(baseUrl, "baseUrl"));
         this.transport = Objects.requireNonNull(transport, "transport");
         this.cas = Objects.requireNonNull(cas, "cas");
-        this.localRepo = Objects.requireNonNull(localRepo, "localRepo");
         // Index-only store for non-local repos: sidecars in repos/<name>/, JARs in ~/.m2.
         this.repoStore = RepoArtifactStore.forRepoName(cas.root(), name);
         this.credential = Objects.requireNonNull(credential, "credential");
@@ -152,9 +128,7 @@ public final class MavenRepo {
      */
     public List<String> availableVersions(Coordinate coord) throws IOException, InterruptedException {
         if (ActiveConfig.get().offlineOr(false)) {
-            // Prefer the new per-named-repo store; fall back to the legacy mirror.
-            List<String> versions = repoStore.versions(coord.group(), coord.artifact());
-            return versions.isEmpty() ? localRepo.versions(coord.group(), coord.artifact()) : versions;
+            return repoStore.versions(coord.group(), coord.artifact());
         }
         try {
             byte[] xml = metadataCache != null
@@ -194,22 +168,17 @@ public final class MavenRepo {
                 // Best-effort: the CAS blob is already written; a ~/.m2 failure is non-fatal.
             }
             repoStore.recordIndex(relativePath, stored.sha256());
-            // Legacy mirror: maintain the hard-link at repo/ so old lockfiles that reference
-            // CAS paths continue to work until re-locked.
-            localRepo.materialize(relativePath, stored.path());
         }
         return new Fetched(uri, stored.path(), stored.sha256(), stored.size());
     }
 
     /**
-     * Serve a fetch from the local repo. The mirrored file <em>is</em> the artifact (a hard link to
-     * the CAS blob), so a present entry is served directly; a coordinate that was never mirrored is
-     * treated as not-found and the resolver falls through cleanly.
+     * Serve a fetch from the named repo's index. Index-only repos resolve to the artifact in
+     * {@code ~/.m2/repository}; a coordinate that was never indexed here is treated as not-found and
+     * the resolver falls through cleanly.
      */
     private Fetched fetchOffline(Coordinate coord, String relativePath) throws IOException {
-        // Prefer the new named repo store (repos/<name>/…); fall back to the legacy mirror.
         Optional<Path> found = repoStore.locate(relativePath);
-        if (found.isEmpty()) found = localRepo.locate(relativePath);
         if (found.isEmpty()) {
             throw new ArtifactNotFoundException(
                     "offline: " + coord + " (" + relativePath + ") not in local index for " + name);

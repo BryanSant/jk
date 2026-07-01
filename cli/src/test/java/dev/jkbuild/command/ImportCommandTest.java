@@ -37,7 +37,7 @@ class ImportCommandTest {
 
         String jkBuild = Files.readString(tempDir.resolve("jk.toml"));
         assertThat(jkBuild).contains("name     = \"widget\"");
-        assertThat(jkBuild).contains("[dependencies.main]");
+        assertThat(jkBuild).contains("[dependencies]");
         assertThat(jkBuild)
                 .contains("jackson-databind = { group = \"com.fasterxml.jackson.core\", version = \"=2.18.2\" }");
 
@@ -110,7 +110,7 @@ class ImportCommandTest {
         String jkBuild = Files.readString(tempDir.resolve("jk.toml"));
         assertThat(jkBuild).contains("group    = \"com.example\"");
         assertThat(jkBuild).contains("jdk      = \"21\"");
-        assertThat(jkBuild).contains("[dependencies.main]");
+        assertThat(jkBuild).contains("[dependencies]");
         assertThat(jkBuild)
                 .contains("jackson-databind = { group = \"com.fasterxml.jackson.core\", version = \"=2.18.2\" }");
 

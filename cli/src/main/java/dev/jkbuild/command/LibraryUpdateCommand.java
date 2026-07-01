@@ -9,9 +9,9 @@ import dev.jkbuild.library.LibraryCatalog;
 import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
+import dev.jkbuild.repo.LibraryRegistryClient;
 import java.io.IOException;
 import java.net.URI;
-import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -23,8 +23,7 @@ import org.jline.utils.AttributedStyle;
 /** {@code jk library update} — pull the latest library catalog. */
 public final class LibraryUpdateCommand implements CliCommand {
 
-    static final URI DEFAULT_SOURCE =
-            URI.create("https://raw.githubusercontent.com/jkbuild/jk-library-registry/refs/heads/main/libraries.toml");
+    static final URI DEFAULT_SOURCE = LibraryRegistryClient.DEFAULT_SOURCE;
 
     @Override
     public String name() {
@@ -55,21 +54,23 @@ public final class LibraryUpdateCommand implements CliCommand {
 
         long startNanos = System.nanoTime();
         Path cacheFile = cacheFileOverride != null ? cacheFileOverride : LibraryCatalog.downloadedFile();
+        Path etagFile = LibraryCatalog.etagFileFor(cacheFile);
         Path previousBackup = cacheFile.resolveSibling(cacheFile.getFileName() + ".prev");
         Map<String, LibraryCatalog.Module> before = currentEntries(cacheFile);
 
-        HttpResponse<byte[]> response;
+        LibraryRegistryClient.Result result;
         try {
-            response = new Http().get(source);
+            result = new LibraryRegistryClient(new Http()).fetch(source, etagFile);
         } catch (IOException e) {
             System.err.println("jk library update: failed to reach " + source + "\n  " + e.getMessage());
             return 1;
         }
-        if (response.statusCode() != 200) {
-            System.err.println("jk library update: HTTP " + response.statusCode() + " from " + source);
-            return 1;
+        if (result instanceof LibraryRegistryClient.Result.Unchanged) {
+            printSummary(before.size(), Diff.compute(before, before), Duration.ofNanos(System.nanoTime() - startNanos));
+            return 0;
         }
-        String body = new String(response.body(), StandardCharsets.UTF_8);
+        LibraryRegistryClient.Result.Updated updated = (LibraryRegistryClient.Result.Updated) result;
+        String body = new String(updated.body(), StandardCharsets.UTF_8);
 
         Map<String, LibraryCatalog.Module> after;
         try {
@@ -83,6 +84,11 @@ public final class LibraryUpdateCommand implements CliCommand {
         Files.createDirectories(cacheFile.getParent());
         if (Files.exists(cacheFile)) Files.copy(cacheFile, previousBackup, StandardCopyOption.REPLACE_EXISTING);
         Files.writeString(cacheFile, body, StandardCharsets.UTF_8);
+        if (updated.etag() != null) {
+            Files.writeString(etagFile, updated.etag(), StandardCharsets.UTF_8);
+        } else {
+            Files.deleteIfExists(etagFile);
+        }
 
         Diff diff = Diff.compute(before, after);
         printSummary(after.size(), diff, Duration.ofNanos(System.nanoTime() - startNanos));

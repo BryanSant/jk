@@ -8,10 +8,15 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.stream.Stream;
 
 /**
@@ -169,6 +174,108 @@ public final class RepoArtifactStore {
         } catch (IOException e) {
             return List.of();
         }
+    }
+
+    /** A cached module and the versions held locally for it. */
+    public record Module(String group, String artifact, List<String> versions) {
+        public String moduleKey() {
+            return group + ":" + artifact;
+        }
+    }
+
+    /**
+     * Every {@code group:artifact} tracked by this store, with the versions held for each. Powers
+     * offline cache search ({@code jk cache search}, {@code jk library search --offline}). Empty
+     * for {@link #NONE} or a cold store. Versions are in directory-listing order — callers wanting
+     * newest-first should sort.
+     */
+    public List<Module> modules() {
+        if (root == null || !Files.isDirectory(root)) return List.of();
+        // Group tracked files by their version directory (the file's parent).
+        Map<Path, Boolean> versionDirs = new TreeMap<>();
+        try (Stream<Path> walk = Files.walk(root)) {
+            walk.filter(Files::isRegularFile)
+                    .filter(p -> (m2Root != null) == p.getFileName().toString().endsWith(".sha256"))
+                    .forEach(p -> versionDirs.put(p.getParent(), Boolean.TRUE));
+        } catch (IOException e) {
+            return List.of();
+        }
+        Map<String, List<String>> versionsByModule = new TreeMap<>();
+        Map<String, String[]> ga = new HashMap<>();
+        for (Path versionDir : versionDirs.keySet()) {
+            Path rel = root.relativize(versionDir);
+            int n = rel.getNameCount();
+            if (n < 3) continue; // need at least one group segment + artifact + version
+            String version = rel.getName(n - 1).toString();
+            String artifact = rel.getName(n - 2).toString();
+            StringBuilder group = new StringBuilder();
+            for (int i = 0; i < n - 2; i++) {
+                if (i > 0) group.append('.');
+                group.append(rel.getName(i));
+            }
+            String key = group + ":" + artifact;
+            ga.putIfAbsent(key, new String[] {group.toString(), artifact});
+            versionsByModule.computeIfAbsent(key, k -> new ArrayList<>()).add(version);
+        }
+        List<Module> out = new ArrayList<>();
+        for (var e : versionsByModule.entrySet()) {
+            String[] parts = ga.get(e.getKey());
+            out.add(new Module(parts[0], parts[1], List.copyOf(e.getValue())));
+        }
+        return out;
+    }
+
+    /**
+     * Names of every per-repo store under {@code <cacheRoot>/repos/} — the repos jk has fetched
+     * through so far. Empty for a cold cache.
+     */
+    public static List<String> repoNames(Path cacheRoot) {
+        Path reposDir = cacheRoot.resolve("repos");
+        if (!Files.isDirectory(reposDir)) return List.of();
+        try (Stream<Path> entries = Files.list(reposDir)) {
+            return entries.filter(Files::isDirectory)
+                    .map(p -> p.getFileName().toString())
+                    .sorted()
+                    .toList();
+        } catch (IOException e) {
+            return List.of();
+        }
+    }
+
+    /**
+     * Every {@code group:artifact} cached under any named repo in {@code cacheRoot}, merged by
+     * module key — the repo-agnostic view {@code jk cache search} and {@code jk library search
+     * --offline} want, since neither is scoped to one particular declared repository.
+     */
+    public static List<Module> allModules(Path cacheRoot) {
+        Map<String, String[]> ga = new LinkedHashMap<>();
+        Map<String, Set<String>> versionsByModule = new LinkedHashMap<>();
+        for (String repoName : repoNames(cacheRoot)) {
+            for (Module m : forRepoName(cacheRoot, repoName).modules()) {
+                ga.putIfAbsent(m.moduleKey(), new String[] {m.group(), m.artifact()});
+                versionsByModule
+                        .computeIfAbsent(m.moduleKey(), k -> new LinkedHashSet<>())
+                        .addAll(m.versions());
+            }
+        }
+        List<Module> out = new ArrayList<>();
+        for (var e : versionsByModule.entrySet()) {
+            String[] parts = ga.get(e.getKey());
+            out.add(new Module(parts[0], parts[1], List.copyOf(e.getValue())));
+        }
+        return out;
+    }
+
+    /**
+     * Versions of {@code group:artifact} cached under any named repo in {@code cacheRoot}, merged
+     * and deduplicated — the repo-agnostic counterpart to {@link #versions(String, String)}.
+     */
+    public static List<String> allVersions(Path cacheRoot, String group, String artifact) {
+        Set<String> out = new LinkedHashSet<>();
+        for (String repoName : repoNames(cacheRoot)) {
+            out.addAll(forRepoName(cacheRoot, repoName).versions(group, artifact));
+        }
+        return List.copyOf(out);
     }
 
     /** All relative m2 paths stored (non-sidecar files for full store). Empty for NONE. */

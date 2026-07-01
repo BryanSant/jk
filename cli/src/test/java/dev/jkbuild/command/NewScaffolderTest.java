@@ -134,12 +134,12 @@ class NewScaffolderTest {
         NewScaffolder.write(inputs);
 
         var build = Files.readString(tempDir.resolve("jk.toml"));
-        assertThat(build).contains("[dependencies.main]");
+        assertThat(build).contains("[dependencies]");
         // Catalog-known short names collapse to the `name = "latest"` one-liner.
         assertThat(build).contains("commons-io = \"latest\"");
         assertThat(build).contains("guava = \"latest\"");
-        assertThat(build).doesNotContain("[dependencies.processor]");
-        assertThat(build).doesNotContain("[dependencies.provided]");
+        assertThat(build).doesNotContain("[processor-dependencies]");
+        assertThat(build).doesNotContain("[provided-dependencies]");
     }
 
     @Test
@@ -158,9 +158,9 @@ class NewScaffolderTest {
         NewScaffolder.write(inputs);
 
         var build = Files.readString(tempDir.resolve("jk.toml"));
-        assertThat(build).doesNotContain("[dependencies.main]");
-        assertThat(build).contains("[dependencies.processor]");
-        assertThat(build).contains("[dependencies.provided]");
+        assertThat(build).doesNotContain("[dependencies]");
+        assertThat(build).contains("[processor-dependencies]");
+        assertThat(build).contains("[provided-dependencies]");
         assertThat(build).contains("lombok = \"latest\"");
     }
 
@@ -180,7 +180,7 @@ class NewScaffolderTest {
         NewScaffolder.write(inputs);
 
         var build = Files.readString(tempDir.resolve("jk.toml"));
-        assertThat(build).contains("[dependencies.main]");
+        assertThat(build).contains("[dependencies]");
         assertThat(build).contains("jspecify = \"latest\"");
     }
 
@@ -200,7 +200,7 @@ class NewScaffolderTest {
         NewScaffolder.write(inputs);
 
         var build = Files.readString(tempDir.resolve("jk.toml"));
-        assertThat(build).contains("[dependencies.test]");
+        assertThat(build).contains("[test-dependencies]");
         assertThat(build).contains("kotest-runner-junit6 = \"latest\"");
     }
 

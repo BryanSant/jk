@@ -24,11 +24,14 @@ import java.util.TreeMap;
  *       main/shadow/native emitted only when set.
  *   <li>{@code [workspace]} block when this is a workspace root.
  *   <li>{@code [repositories]} block with per-name URL strings.
- *   <li>{@code [dependencies.<scope>]} sub-tables; each entry is {@code <lib> = { group = "...",
- *       name = "...", version = "..." }}. The {@code name} field is omitted when it equals the
- *       {@code <lib>} key. Workspace placeholders ({@code module} starts with {@code workspace:})
- *       collapse to {@code <lib>.workspace = true}. Git sources emit the inline-table form with
- *       {@code git}/{@code tag|branch|rev} fields. Path sources emit {@code path = "..."}.
+ *   <li>Top-level per-scope sections ({@code [dependencies]} for MAIN, {@code [test-dependencies]},
+ *       …, per {@link Scope#tomlSection()}); each entry is {@code <lib> = { group = "...", name =
+ *       "...", version = "..." }}. The {@code name} field is omitted when it equals the {@code
+ *       <lib>} key. Workspace placeholders ({@code module} starts with {@code workspace:}) collapse
+ *       to {@code <lib>.workspace = true}. Git sources emit the inline-table form with {@code
+ *       git}/{@code tag|branch|rev} fields — no {@code group}/{@code name}, which {@code
+ *       JkBuildParser} rejects alongside a source override. Path sources emit {@code path = "..."}
+ *       the same way.
  * </ul>
  *
  * <p>Within a scope, deps are alphabetised by the short library key for determinism; declared order
@@ -132,7 +135,7 @@ public final class JkBuildRenderer {
             for (Dependency d : deps) sorted.put(d.library(), d);
 
             sb.append('\n');
-            sb.append("[dependencies.").append(scope.canonical()).append("]\n");
+            sb.append('[').append(scope.tomlSection()).append("]\n");
             for (Dependency d : sorted.values()) {
                 sb.append(renderEntry(d)).append('\n');
             }
@@ -156,13 +159,12 @@ public final class JkBuildRenderer {
             return safeKey(d.library()) + ".workspace = true";
         }
         StringBuilder sb = new StringBuilder();
-        sb.append(safeKey(d.library())).append(" = { group = ").append(quote(d.group()));
-        if (!d.name().equals(d.library())) {
-            sb.append(", name = ").append(quote(d.name()));
-        }
+        sb.append(safeKey(d.library())).append(" = { ");
         if (d.isGit()) {
+            // Pure discovery: JkBuildParser rejects `group`/`name` alongside `git` — the
+            // coordinate and version always come from the cloned repo's own jk.toml.
             GitSource s = d.gitSource();
-            sb.append(", git = ").append(quote(s.originalUrl()));
+            sb.append("git = ").append(quote(s.originalUrl()));
             switch (s.ref()) {
                 case GitRefSpec.Tag t -> sb.append(", tag = ").append(quote(t.name()));
                 case GitRefSpec.Branch b -> sb.append(", branch = ").append(quote(b.name()));
@@ -172,8 +174,13 @@ public final class JkBuildRenderer {
             if (!s.submodules()) sb.append(", submodules = false");
             if (s.verifySignature()) sb.append(", verify-signed = true");
         } else if (d.isPath()) {
-            sb.append(", path = ").append(quote(d.pathSource()));
+            // Same pure-discovery rule as git: no `group`/`name` alongside `path`.
+            sb.append("path = ").append(quote(d.pathSource()));
         } else {
+            sb.append("group = ").append(quote(d.group()));
+            if (!d.name().equals(d.library())) {
+                sb.append(", name = ").append(quote(d.name()));
+            }
             sb.append(", version = ").append(quote(versionLiteral(d.version())));
         }
         sb.append(" }");

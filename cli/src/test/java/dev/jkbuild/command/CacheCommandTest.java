@@ -164,14 +164,18 @@ class CacheCommandTest {
 
     // --- helpers -----------------------------------------------------------
 
-    /** Materialise a jar for {@code group:artifact:version} into the m2 local repo. */
+    /** Materialise a jar for {@code group:artifact:version} into the "central" named-repo store. */
     private static void seedRepo(Path cache, String group, String artifact, String version) {
         try {
+            byte[] bytes = (group + ":" + artifact + ":" + version).getBytes(StandardCharsets.UTF_8);
             dev.jkbuild.cache.Cas cas = new dev.jkbuild.cache.Cas(cache);
-            Path blob = cas.put((group + ":" + artifact + ":" + version).getBytes(StandardCharsets.UTF_8));
+            Path blob = cas.put(bytes);
             var coord = dev.jkbuild.model.Coordinate.of(group, artifact, version);
-            new dev.jkbuild.repo.JkMavenLocalRepo(cache)
-                    .materialize(dev.jkbuild.repo.MavenLayout.artifactPath(coord), blob);
+            dev.jkbuild.repo.RepoArtifactStore.forRepoName(cache, "central")
+                    .materialize(
+                            dev.jkbuild.repo.MavenLayout.artifactPath(coord),
+                            blob,
+                            dev.jkbuild.util.Hashing.sha256Hex(bytes));
         } catch (Exception e) {
             throw new RuntimeException(e);
         }

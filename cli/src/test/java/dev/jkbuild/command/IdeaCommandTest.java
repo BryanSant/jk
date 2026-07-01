@@ -40,8 +40,8 @@ class IdeaCommandTest {
                 version = "1.0.0"
                 jdk = 25
 
-                [dependencies.main]
-                libcore = { group = "com.example", name = "libcore", path = "../lib" }
+                [dependencies]
+                libcore = { path = "../lib" }
                 """);
         Files.writeString(app.resolve("src/main/java/app/Main.java"), "package app; public class Main {}");
 
@@ -203,7 +203,7 @@ class IdeaCommandTest {
                 version = "0.1.0"
                 jdk = 25
 
-                [dependencies.main]
+                [dependencies]
                 a = { workspace = true }
                 """);
 

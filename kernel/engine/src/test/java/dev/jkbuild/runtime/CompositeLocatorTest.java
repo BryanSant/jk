@@ -33,9 +33,9 @@ class CompositeLocatorTest {
                 java    = 21
                 """.formatted(name));
         if (pathDeps.length > 0) {
-            sb.append("\n[dependencies.main]\n");
+            sb.append("\n[dependencies]\n");
             for (String d : pathDeps) {
-                sb.append("%s = { group = \"com.example\", name = \"%s\", path = \"../%s\" }\n".formatted(d, d, d));
+                sb.append("%s = { path = \"../%s\" }\n".formatted(d, d));
             }
         }
         Files.writeString(dir.resolve("jk.toml"), sb.toString());

@@ -23,7 +23,7 @@ class PomExporterTest {
                 version = "1.2.3"
                 java = 21
 
-                [dependencies.main]
+                [dependencies]
                 guava = { group = "com.google.guava", name = "guava", version = "33.0.0-jre" }
                 """);
 
@@ -45,7 +45,7 @@ class PomExporterTest {
                 version = "1.0.0"
                 java = 21
 
-                [dependencies.main]
+                [dependencies]
                 guava = { group = "com.google.guava", name = "guava", version = "^33.0.0-jre" }
                 """);
 
@@ -105,7 +105,7 @@ class PomExporterTest {
                 version = "1.0.0"
                 java = 21
 
-                [dependencies.processor]
+                [processor-dependencies]
                 mapstruct-ap = { group = "org.mapstruct", name = "mapstruct-processor", version = "1.6.3" }
                 """);
 
@@ -144,8 +144,8 @@ class PomExporterTest {
                 version = "1.0.0"
                 java = 21
 
-                [dependencies.main]
-                acme = { group = "com.acme", name = "acme", git = "https://example.com/acme.git", tag = "v1.0" }
+                [dependencies]
+                acme = { git = "https://example.com/acme.git", tag = "v1.0" }
                 """);
 
         PomExporter.Result r = PomExporter.export(b);

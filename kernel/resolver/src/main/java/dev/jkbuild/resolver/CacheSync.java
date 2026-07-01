@@ -31,7 +31,6 @@ public final class CacheSync {
 
     private final Cas cas;
     private final Http http;
-    private final dev.jkbuild.repo.JkMavenLocalRepo localRepo;
     private final dev.jkbuild.repo.RepoCredentialResolver creds;
 
     public CacheSync(Cas cas, Http http) {
@@ -43,9 +42,6 @@ public final class CacheSync {
         this.cas = Objects.requireNonNull(cas, "cas");
         this.http = Objects.requireNonNull(http, "http");
         this.creds = Objects.requireNonNull(creds, "creds");
-        // Mirror artifacts into the m2 local repo as `jk sync` downloads them,
-        // so an offline resolve later has them addressable by coordinate.
-        this.localRepo = new dev.jkbuild.repo.JkMavenLocalRepo(cas.root());
     }
 
     /**
@@ -285,7 +281,7 @@ public final class CacheSync {
         String name = source.substring(0, plus);
         URI url = URI.create(source.substring(plus + 1));
         var cred = creds.resolve(name, url, java.util.Optional.empty());
-        MavenRepo repo = new MavenRepo(name, url, http, cas, localRepo, cred);
+        MavenRepo repo = new MavenRepo(name, url, http, cas, cred);
         cache.put(source, repo);
         return repo;
     }

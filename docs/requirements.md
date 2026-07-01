@@ -220,7 +220,7 @@ Conventions:
 
 - All top-level tables are optional. A `jk.toml` with only `[project]` (`group`, `name`, `version`) is a valid project.
 - A JSON Schema is published alongside the binary; IntelliJ/VS Code/Helix can autocomplete and validate.
-- Dependencies use **name-as-key** sub-tables per scope: `[dependencies.<scope>]` maps a short local name to an inline coord table (`{ group, artifact, version }`). The short name is the user-controlled identifier; the coordinate is a resolution detail. Source overrides (`path`, `git` + `tag`/`branch`/`rev`) are inline fields on the same table — there is **no separate `[sources]` table**. Shared external deps live in `[workspace.dependencies]`; children inherit by writing `name.workspace = true`. Workspace siblings are resolved through the same `name.workspace = true` mechanism (matched against modules' `[project].name`). A `[dependencies]` block whose direct children are all inline dep tables is shorthand for `[dependencies.main]`. See [docs/artifact-coord-design.md](./artifact-coord-design.md) for the full grammar.
+- Dependencies use **name-as-key** tables, one top-level section per scope: `[dependencies]` (main), `[test-dependencies]`, `[provided-dependencies]`, `[processor-dependencies]`, `[export-dependencies]`, `[runtime-dependencies]` — Cargo/npm convention, eliding `main` for the common case. Each maps a short local name to an inline coord table (`{ group, artifact, version }`). The short name is the user-controlled identifier; the coordinate is a resolution detail. `path` and `git` (+ `tag`/`branch`/`rev`) are alternate sources on the same table — there is **no separate `[sources]` table** — but they're pure discovery: a `path`/`git` entry must not also set `group`/`name`/`version`, since the coordinate and version are always read from the target project's own `jk.toml`. Shared external deps live in `[workspace.dependencies]`; children inherit by writing `name.workspace = true`. Workspace siblings are resolved through the same `name.workspace = true` mechanism (matched against modules' `[project].name`). See [docs/artifact-coord-design.md](./artifact-coord-design.md) for the full grammar.
 
 ### 5.2 `jk.lock`
 
@@ -315,12 +315,12 @@ Gradle convention: `groupId:artifactId:version` (e.g., `com.fasterxml.jackson.co
 
 | Scope | `jk.toml` section | Compile classpath | Runtime classpath | Test classpath | Published `<scope>` |
 |---|---|---|---|---|---|
-| Main | `dependencies.main` | yes | yes | yes | `compile` |
-| Provided | `dependencies.provided` | yes | no | yes | `provided` |
-| Runtime | `dependencies.runtime` | no | yes | yes | `runtime` |
-| Test | `dependencies.test` | no | no | yes (compile+runtime) | `test` |
-| Processor | `dependencies.processor` | no (only `-processorpath`) | no | no | (omitted from POM) |
-| Platform (BOM) | `dependencies.platform` | (constraints only) | (constraints only) | (constraints only) | `<dependencyManagement>` import |
+| Main | `dependencies` | yes | yes | yes | `compile` |
+| Provided | `provided-dependencies` | yes | no | yes | `provided` |
+| Runtime | `runtime-dependencies` | no | yes | yes | `runtime` |
+| Test | `test-dependencies` | no | no | yes (compile+runtime) | `test` |
+| Processor | `processor-dependencies` | no (only `-processorpath`) | no | no | (omitted from POM) |
+| Platform (BOM) | `platform-dependencies` | (constraints only) | (constraints only) | (constraints only) | `<dependencyManagement>` import |
 
 `system` scope is rejected on import with a Tier-3 diagnostic. Use git deps or a local repo.
 
@@ -356,7 +356,7 @@ Conflicts are resolved by:
 By default, a coordinate is resolved by walking declared repositories in declared order; the first hit wins. **A package can be pinned to a specific repository** with `from = "internal"`:
 
 ```toml
-[dependencies.main]
+[dependencies]
 internal-lib = { group = "com.acme", name = "internal-lib", version = "1.0", from = "internal" }
 ```
 
@@ -365,7 +365,7 @@ When pinned, jk will *refuse* to fetch the package from any other repo even at a
 ### 7.6 Platform / BOM imports
 
 ```toml
-[dependencies.platform]
+[platform-dependencies]
 spring-boot-dependencies = { group = "org.springframework.boot", name = "spring-boot-dependencies", version = "3.4.0" }
 ```
 
@@ -374,7 +374,7 @@ Imported `<dependencyManagement>` constraints apply to all other scopes in the p
 ### 7.7 Target-conditional dependencies
 
 ```toml
-[dependencies.main]
+[dependencies]
 netty-epoll = { group = "io.netty", name = "netty-transport-native-epoll", version = "4.1.115",
                 classifier = "linux-x86_64", target = "os(linux)" }
 netty-kqueue = { group = "io.netty", name = "netty-transport-native-kqueue", version = "4.1.115",
@@ -387,10 +387,10 @@ Supported target predicates in v1: `os(linux|darwin|windows)`, `arch(x86_64|aarc
 
 Named, additive dependency sets. Solve real JVM problems (driver/parser/logger selection) without conditional source compilation.
 
-Features reference **short dep names** from `[dependencies.*]`, not coord strings. A dep a feature pulls in is declared `optional = true`. This is **enforced**: an optional dep is *withheld* from the default resolution and enters the graph only when an activated feature names it. Because a feature dep is just an ordinary `[dependencies.*]` entry, it keeps the full dependency grammar — `git` / `path` / `workspace` / catalog short-names / version selectors / `sha256`. Naming a dep that isn't declared `optional = true` (or doesn't exist) is a config error. The active set is the `default` list plus anything passed via `--features=A,B` (resolved at `jk lock` / `jk update`).
+Features reference **short dep names** from any dependency scope table (`[dependencies]`, `[test-dependencies]`, etc.), not coord strings. A dep a feature pulls in is declared `optional = true`. This is **enforced**: an optional dep is *withheld* from the default resolution and enters the graph only when an activated feature names it. Because a feature dep is just an ordinary dependency-table entry, it keeps the full dependency grammar — `git` / `path` / `workspace` / catalog short-names / version selectors / `sha256`. Naming a dep that isn't declared `optional = true` (or doesn't exist) is a config error. The active set is the `default` list plus anything passed via `--features=A,B` (resolved at `jk lock` / `jk update`).
 
 ```toml
-[dependencies.main]
+[dependencies]
 postgres-jdbc    = { group = "org.postgresql",             name = "postgresql",        version = "42.7.4", optional = true }
 mysql-connector  = { group = "com.mysql",                  name = "mysql-connector-j", version = "9.0.0",  optional = true }
 jackson-databind = { group = "com.fasterxml.jackson.core", name = "jackson-databind",  version = "2.18.2", optional = true }
@@ -422,7 +422,7 @@ features = ["postgres", "jackson", "metrics"]
 Consumer side — request specific features *of a dependency* by adding fields to the dep table (**planned; not yet implemented** — cross-package feature propagation is post-v1; today `features` are local to the current project):
 
 ```toml
-[dependencies.main]
+[dependencies]
 widget = { group = "com.example", name = "widget", version = "0.3.1",
            features = ["mysql", "gson"], default-features = false }
 ```
@@ -612,23 +612,21 @@ The headline new feature. Inspired by Cargo, with JVM-shaped extensions.
 
 ### 11.1 Declaration
 
-A git dep is a regular `[dependencies.<scope>]` entry whose source mode is `git` instead of `version`. The `tag`/`branch`/`rev` selector is an inline field on the same dep table — there is no separate `[sources]` table.
+A git dep is a regular dependency-table entry (`[dependencies]`, `[test-dependencies]`, etc.) whose source mode is `git` instead of `version`. The `tag`/`branch`/`rev` selector is an inline field on the same dep table — there is no separate `[sources]` table.
 
 ```toml
-[dependencies.main]
-# Long form
-bar = { group = "com.foo", name = "bar",
-        git = "https://github.com/foo/bar", tag = "v1.2.3",
+[dependencies]
+# Long form — no group/name: the coordinate and version are always read
+# from the cloned repo's own jk.toml.
+bar = { git = "https://github.com/foo/bar", tag = "v1.2.3",
         path = "modules/bar", submodules = true }
 # Host shorthands (gh, gl, bb, sr — for github, gitlab, bitbucket, sourcehut)
-baz = { group = "com.foo", name = "baz",
-        git = "gh:foo/baz", tag = "v0.5.0" }
+baz = { git = "gh:foo/baz", tag = "v0.5.0" }
 # SSH form
-qux = { group = "com.foo", name = "qux",
-        git = "git@github.com:foo/qux.git", branch = "main" }
+qux = { git = "git@github.com:foo/qux.git", branch = "main" }
 ```
 
-The ref selector is exactly one of `tag`, `branch`, or `rev`. `submodules` defaults to `true`; set `false` to opt out per dep. `path` (when the coord lives in a sub-directory of the cloned repo) and `verify-signed` are also inline fields on the dep table.
+The ref selector is exactly one of `tag`, `branch`, or `rev`. `submodules` defaults to `true`; set `false` to opt out per dep. `path` here is the coord's sub-directory inside the cloned repo (distinct from a standalone `path =` local-path source), and `verify-signed` is also an inline field on the dep table. `group`/`name`/`version` are forbidden alongside `git` — jk rejects the entry rather than let a stale override silently diverge from the cloned repo's real coordinate.
 
 ### 11.2 Pinning model
 
@@ -808,7 +806,7 @@ group    = "com.example"
 name     = "api"
 version  = "$workspace"
 
-[dependencies.main]
+[dependencies]
 # Shared external dep — inherited from [workspace.dependencies] above.
 jackson-databind.workspace = true
 # Workspace sibling — short name matches the sibling module's [project].name.
@@ -987,7 +985,7 @@ JUnit Platform (JUnit 5). Auto-detected; no configuration. Other frameworks (Tes
 ```toml
 [test-sets.integration]
 path = "src/integrationTest"
-deps = ["testcontainers"]    # short names referencing entries in [dependencies.test]
+deps = ["testcontainers"]    # short names referencing entries in [test-dependencies]
 
 [test-sets.smoke]
 path = "src/smoke"

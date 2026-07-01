@@ -30,9 +30,9 @@ import org.tomlj.TomlTable;
  * <ol>
  *   <li><b>Project</b> — the {@code [libraries]} table in the project's {@code jk.toml}. Passed in
  *       by the parser.
- *   <li><b>Local</b> — {@code ~/.jk/libs.local.toml} (per-user overrides, hand-edited).
- *   <li><b>Global</b> — {@code ~/.jk/libs.global.toml}, refreshed by {@code jk library update} from
- *       {@code github.com/jkbuild/jk-library-registry}.
+ *   <li><b>Local</b> — {@code ~/.jk/libraries.local.toml} (per-user overrides, hand-edited).
+ *   <li><b>Global</b> — {@code ~/.jk/libraries.global.toml}, refreshed by {@code jk library update}
+ *       and revalidated by {@code jk lock} from {@code github.com/jkbuild/jk-library-registry}.
  *   <li><b>Bundled</b> — classpath resource shipped with the jk binary ({@code
  *       dev/jkbuild/library/libraries.toml}). Acts as the floor so lookups still work offline
  *       before any update has run.
@@ -53,16 +53,31 @@ public final class LibraryCatalog {
         this.layers = List.copyOf(Objects.requireNonNull(layers, "layers"));
     }
 
-    /** Per-user manual override layer: {@code ~/.jk/libs.local.toml}. */
+    /** Per-user manual override layer: {@code ~/.jk/libraries.local.toml}. */
     public static Path userFile() {
-        return JkDirs.home().resolve("libs.local.toml");
+        return JkDirs.home().resolve("libraries.local.toml");
     }
 
     /**
-     * The downloaded layer, refreshed by {@code jk library update}: {@code ~/.jk/libs.global.toml}.
+     * The downloaded layer, refreshed by {@code jk library update} and revalidated by {@code jk
+     * lock}: {@code ~/.jk/libraries.global.toml}.
      */
     public static Path downloadedFile() {
-        return JkDirs.home().resolve("libs.global.toml");
+        return JkDirs.home().resolve("libraries.global.toml");
+    }
+
+    /**
+     * Hidden sidecar next to {@code cacheFile} storing the validating {@code ETag} used for
+     * conditional-GET revalidation. Kept alongside the cache file it validates so overriding one (as
+     * tests do for {@link #downloadedFile()}) naturally relocates the other.
+     */
+    public static Path etagFileFor(Path cacheFile) {
+        return cacheFile.resolveSibling("." + cacheFile.getFileName() + ".etag");
+    }
+
+    /** The validating {@code ETag} sidecar for {@link #downloadedFile()}. */
+    public static Path etagFile() {
+        return etagFileFor(downloadedFile());
     }
 
     /**

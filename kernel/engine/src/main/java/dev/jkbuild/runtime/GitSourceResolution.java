@@ -10,7 +10,6 @@ import dev.jkbuild.model.GitSource;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.Scope;
 import dev.jkbuild.model.VersionSelector;
-import dev.jkbuild.repo.JkMavenLocalRepo;
 import dev.jkbuild.repo.MavenRepo;
 import dev.jkbuild.repo.RepoGroup;
 import java.io.IOException;
@@ -106,12 +105,8 @@ public final class GitSourceResolution {
                 verifyImmutableRef(materializer, d.gitSource(), lockedShas);
                 GitSourceMaterializer.Materialized m = materializer.materialize(d.gitSource());
                 bySource.put(key, m);
-                extraRepos.add(new MavenRepo(
-                        "git:" + m.coordinate() + ":" + m.version(),
-                        m.repoUrl(),
-                        new Http(),
-                        cas,
-                        JkMavenLocalRepo.NONE));
+                extraRepos.add(
+                        new MavenRepo("git:" + m.coordinate() + ":" + m.version(), m.repoUrl(), new Http(), cas));
                 gitInfo.put(provenanceKey(m.coordinate(), m.version()), m.gitInfo());
             }
         }

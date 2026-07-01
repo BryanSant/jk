@@ -12,7 +12,7 @@ import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.model.command.Param;
-import dev.jkbuild.repo.JkMavenLocalRepo;
+import dev.jkbuild.repo.RepoArtifactStore;
 import dev.jkbuild.resolver.Versions;
 import dev.jkbuild.run.Goal;
 import dev.jkbuild.run.GoalResult;
@@ -373,15 +373,15 @@ public final class CacheCommand implements CliCommand {
             List<String> terms = in.positionals();
             Integer limit = in.value("limit").map(Integer::parseInt).orElse(null);
             Path cacheDir = in.value("cache-dir").map(Path::of).orElse(null);
-            JkMavenLocalRepo localRepo = new JkMavenLocalRepo(resolveCacheRoot(cacheDir));
+            Path cacheRoot = resolveCacheRoot(cacheDir);
             List<String> lowerTerms =
                     terms.stream().map(t -> t.toLowerCase(Locale.ROOT)).toList();
-            List<JkMavenLocalRepo.Module> hits = localRepo.modules().stream()
+            List<RepoArtifactStore.Module> hits = RepoArtifactStore.allModules(cacheRoot).stream()
                     .filter(m -> allMatch(
                             lowerTerms,
                             m.group().toLowerCase(Locale.ROOT),
                             m.artifact().toLowerCase(Locale.ROOT)))
-                    .sorted(Comparator.comparing(JkMavenLocalRepo.Module::moduleKey))
+                    .sorted(Comparator.comparing(RepoArtifactStore.Module::moduleKey))
                     .toList();
             if (hits.isEmpty()) {
                 System.out.println("No cached coordinates match: " + String.join(" ", terms));
@@ -394,7 +394,7 @@ public final class CacheCommand implements CliCommand {
                 keyWidth = Math.max(keyWidth, hits.get(i).moduleKey().length());
             long versionCount = 0;
             for (int i = 0; i < shown; i++) {
-                JkMavenLocalRepo.Module m = hits.get(i);
+                RepoArtifactStore.Module m = hits.get(i);
                 List<String> versions = new ArrayList<>(m.versions());
                 versions.sort((a, b) -> Versions.compare(b, a));
                 versionCount += versions.size();

@@ -115,12 +115,12 @@ name    = "widgets"
 version = "1.4.0"
 jdk     = 25
 
-[dependencies.main]
+[dependencies]
 jackson = "2.18.2"                       # caret by default: ^2.18.2
 guava   = ">=33,<34"
 mylib   = { git = "https://github.com/acme/mylib", tag = "v1.4.0" }
 
-[dependencies.test]
+[test-dependencies]
 junit   = "5.11.0"
 ```
 
@@ -201,7 +201,7 @@ artifact, and hands the resolver an exact coordinate pin — so transitive deps
 resolve like any other dependency.
 
 ```toml
-[dependencies.main]
+[dependencies]
 mylib  = { git = "https://github.com/acme/widgets", tag = "v1.4.0" }
 edge   = { git = "https://gitlab.com/acme/edge",     branch = "main" }
 pinned = { git = "https://github.com/acme/widgets",  rev = "3f2a9c1…" }

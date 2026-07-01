@@ -5,7 +5,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.model.Coordinate;
-import dev.jkbuild.repo.JkMavenLocalRepo;
 import dev.jkbuild.repo.MavenLayout;
 import dev.jkbuild.util.Hashing;
 import java.io.IOException;
@@ -19,10 +18,16 @@ class CacheGcTest {
 
     private static final long DAY = 24L * 60 * 60 * 1000;
 
+    /**
+     * Seed both the CAS and the legacy {@code <cache>/repo/} mirror {@link CacheGc} sweeps —
+     * nothing writes that mirror anymore, so tests populate it directly.
+     */
     private static Path seed(Path cache, String body, Coordinate coord) throws IOException {
         Cas cas = new Cas(cache);
         Path blob = cas.put(body.getBytes(StandardCharsets.UTF_8));
-        new JkMavenLocalRepo(cache).materialize(MavenLayout.artifactPath(coord), blob);
+        Path mirrored = cache.resolve("repo").resolve(MavenLayout.artifactPath(coord));
+        Files.createDirectories(mirrored.getParent());
+        Files.write(mirrored, body.getBytes(StandardCharsets.UTF_8));
         return blob;
     }
 

@@ -50,6 +50,8 @@ class MavenRepoTest {
                 Optional.empty(),
                 Optional.empty(),
                 Optional.empty(),
+                Optional.empty(),
+                Optional.empty(),
                 Optional.empty()));
     }
 
@@ -106,37 +108,33 @@ class MavenRepoTest {
     }
 
     @Test
-    void online_fetch_mirrors_into_local_repo(@TempDir Path tempDir) throws Exception {
+    void online_fetch_mirrors_into_named_repo_store(@TempDir Path tempDir) throws Exception {
         byte[] pom = "<project/>".getBytes(StandardCharsets.UTF_8);
         serve("/com/example/widget/1.0/widget-1.0.pom", 200, pom);
-        JkMavenLocalRepo localRepo = new JkMavenLocalRepo(tempDir);
-        MavenRepo repo = new MavenRepo("test", base, new Http(), new Cas(tempDir), localRepo);
+        MavenRepo repo = new MavenRepo("test", base, new Http(), new Cas(tempDir));
 
         Coordinate coord = Coordinate.of("com.example", "widget", "1.0");
         repo.fetchPom(coord);
 
-        Path mirrored = tempDir.resolve("repo/com/example/widget/1.0/widget-1.0.pom");
-        assertThat(mirrored).exists();
-        assertThat(Files.readAllBytes(mirrored)).isEqualTo(pom);
         // metadata is deliberately not mirrored
-        assertThat(localRepo.versions("com.example", "widget")).containsExactly("1.0");
+        assertThat(RepoArtifactStore.forRepoName(tempDir, "test").versions("com.example", "widget"))
+                .containsExactly("1.0");
     }
 
     @Test
-    void offline_fetch_is_served_from_local_repo(@TempDir Path tempDir) throws Exception {
+    void offline_fetch_is_served_from_the_named_repo_store(@TempDir Path tempDir) throws Exception {
         byte[] pom = "<project/>".getBytes(StandardCharsets.UTF_8);
         serve("/com/example/widget/1.0/widget-1.0.pom", 200, pom);
-        JkMavenLocalRepo localRepo = new JkMavenLocalRepo(tempDir);
         Cas cas = new Cas(tempDir);
         Coordinate coord = Coordinate.of("com.example", "widget", "1.0");
 
-        // Warm the cache + local repo online.
-        new MavenRepo("test", base, new Http(), cas, localRepo).fetchPom(coord);
+        // Warm the cache + named-repo store online.
+        new MavenRepo("test", base, new Http(), cas).fetchPom(coord);
 
         // Now offline: stop the server so any network attempt would fail loudly.
         server.stop(0);
         goOffline();
-        MavenRepo offline = new MavenRepo("test", base, new Http(), cas, localRepo);
+        MavenRepo offline = new MavenRepo("test", base, new Http(), cas);
         MavenRepo.Fetched fetched = offline.fetchPom(coord);
 
         assertThat(fetched.sha256()).isEqualTo(Hashing.sha256Hex(pom));
@@ -144,23 +142,21 @@ class MavenRepoTest {
     }
 
     @Test
-    void offline_fetch_of_unmirrored_coord_is_not_found(@TempDir Path tempDir) {
+    void offline_fetch_of_unindexed_coord_is_not_found(@TempDir Path tempDir) {
         goOffline();
-        MavenRepo repo = new MavenRepo("test", base, new Http(), new Cas(tempDir), new JkMavenLocalRepo(tempDir));
+        MavenRepo repo = new MavenRepo("test", base, new Http(), new Cas(tempDir));
         assertThatThrownBy(() -> repo.fetchPom(Coordinate.of("com.example", "absent", "1.0")))
                 .isInstanceOf(MavenRepo.ArtifactNotFoundException.class);
     }
 
     @Test
-    void offline_available_versions_come_from_local_repo(@TempDir Path tempDir) throws Exception {
-        Cas cas = new Cas(tempDir);
-        JkMavenLocalRepo localRepo = new JkMavenLocalRepo(tempDir);
-        Path blob = cas.put("jar-bytes".getBytes(StandardCharsets.UTF_8));
-        localRepo.materialize(MavenLayout.artifactPath(Coordinate.of("com.example", "widget", "1.0")), blob);
-        localRepo.materialize(MavenLayout.artifactPath(Coordinate.of("com.example", "widget", "2.0")), blob);
+    void offline_available_versions_come_from_the_named_repo_store(@TempDir Path tempDir) throws Exception {
+        RepoArtifactStore store = RepoArtifactStore.forRepoName(tempDir, "test");
+        store.recordIndex(MavenLayout.artifactPath(Coordinate.of("com.example", "widget", "1.0")), "sha-1");
+        store.recordIndex(MavenLayout.artifactPath(Coordinate.of("com.example", "widget", "2.0")), "sha-2");
         goOffline();
 
-        MavenRepo repo = new MavenRepo("test", base, new Http(), cas, localRepo);
+        MavenRepo repo = new MavenRepo("test", base, new Http(), new Cas(tempDir));
         assertThat(repo.availableVersions(Coordinate.of("com.example", "widget", "0")))
                 .containsExactlyInAnyOrder("1.0", "2.0");
     }

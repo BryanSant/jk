@@ -161,7 +161,7 @@ class BuildCommandTest {
         // app depends on both independent libs → builds after them.
         module(tempDir.resolve("app"), "app", "app", "Main", """
 
-                [dependencies.main]
+                [dependencies]
                 liba = { group = "com.example", name = "liba", version = "1.0.0" }
                 libb = { group = "com.example", name = "libb", version = "1.0.0" }
                 """);

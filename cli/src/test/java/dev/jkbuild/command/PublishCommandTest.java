@@ -242,8 +242,8 @@ class PublishCommandTest {
                 version  = "1.0.0"
                 jdk      = 21
 
-                [dependencies.main]
-                lib = { group = "com.example", name = "lib", path = "../lib" }
+                [dependencies]
+                lib = { path = "../lib" }
                 """);
         writeJar(tempDir.resolve("target/widget-1.0.0.jar"));
 

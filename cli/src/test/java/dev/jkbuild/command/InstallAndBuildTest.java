@@ -60,7 +60,7 @@ class InstallAndBuildTest {
                 version = "0.1.0"
                 java = 21
 
-                [dependencies.main]
+                [dependencies]
                 greeter = { sha256 = "%s", group = "lib", version = "1.0.0" }
                 """.formatted(sha256));
         Path src = projectDir.resolve("src/main/java/app/App.java");
@@ -107,7 +107,7 @@ class InstallAndBuildTest {
                 version = "0.1.0"
                 java = 21
 
-                [dependencies.main]
+                [dependencies]
                 mylib = { sha256 = "%s", group = "lib", version = "1.0.0" }
                 """.formatted(sha256));
         Path src = projectDir.resolve("src/main/java/app/Main.java");
@@ -160,7 +160,7 @@ class InstallAndBuildTest {
                 version = "0.1.0"
                 java = 21
 
-                [dependencies.main]
+                [dependencies]
                 util = { sha256 = "%s", group = "lib", version = "1.0.0" }
                 """.formatted(sha256));
         Path src = projectDir.resolve("src/main/java/app/Main.java");

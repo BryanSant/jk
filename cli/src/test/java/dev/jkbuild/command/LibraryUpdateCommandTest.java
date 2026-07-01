@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.sun.net.httpserver.HttpServer;
 import dev.jkbuild.cli.Jk;
+import dev.jkbuild.library.LibraryCatalog;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
@@ -24,14 +25,21 @@ class LibraryUpdateCommandTest {
     private URI base;
     private final AtomicReference<String> body = new AtomicReference<>();
     private final AtomicInteger status = new AtomicInteger(200);
+    private final AtomicReference<String> etag = new AtomicReference<>();
+    private volatile String lastIfNoneMatch;
 
     @BeforeEach
     void start() throws IOException {
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.createContext("/libraries.toml", exchange -> {
             int code = status.get();
+            lastIfNoneMatch = exchange.getRequestHeaders().getFirst("If-None-Match");
             byte[] payload = body.get() == null ? new byte[0] : body.get().getBytes(StandardCharsets.UTF_8);
-            if (code == 200) {
+            String currentEtag = etag.get();
+            if (code == 200 && currentEtag != null && currentEtag.equals(lastIfNoneMatch)) {
+                exchange.sendResponseHeaders(304, -1);
+            } else if (code == 200) {
+                if (currentEtag != null) exchange.getResponseHeaders().set("ETag", currentEtag);
                 exchange.sendResponseHeaders(200, payload.length);
                 exchange.getResponseBody().write(payload);
             } else {
@@ -120,6 +128,33 @@ class LibraryUpdateCommandTest {
 
         assertThat(exit).isOne();
         assertThat(Files.readString(cache)).contains("keep = \"com.acme:keep\"");
+    }
+
+    @Test
+    void update_stores_the_etag_sidecar_after_a_200(@TempDir Path tempDir) throws Exception {
+        etag.set("\"v1\"");
+        body.set("[libraries]\nfoo = \"com.acme:foo\"\n");
+
+        Path cache = tempDir.resolve("libraries.toml");
+        int exit = run(cache);
+
+        assertThat(exit).isZero();
+        assertThat(Files.readString(LibraryCatalog.etagFileFor(cache))).isEqualTo("\"v1\"");
+    }
+
+    @Test
+    void update_sends_the_stored_etag_and_reports_no_changes_on_304(@TempDir Path tempDir) throws Exception {
+        etag.set("\"v1\"");
+        String original = "[libraries]\nfoo = \"com.acme:foo\"\n";
+        Path cache = tempDir.resolve("libraries.toml");
+        Files.writeString(cache, original);
+        Files.writeString(LibraryCatalog.etagFileFor(cache), "\"v1\"");
+
+        int exit = run(cache);
+
+        assertThat(exit).isZero();
+        assertThat(lastIfNoneMatch).isEqualTo("\"v1\"");
+        assertThat(Files.readString(cache)).isEqualTo(original); // 304 → untouched
     }
 
     private int run(Path cacheFile) {

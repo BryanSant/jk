@@ -4,10 +4,13 @@
 from a git repo on demand and resolves the result; it does not publish
 git-sourced libraries anywhere.
 
-> **Implemented:** `jk.toml`-based git deps now parse (discovery + override),
-> materialize into a per-commit `file://` repo, rewrite to an exact coordinate
-> pin, resolve through the normal solver, and stamp git provenance into
-> `jk.lock`. `jk lock` detects force-moved tags; `jk update` accepts them.
+> **Implemented:** `jk.toml`-based git deps now parse (pure discovery — the
+> coordinate and version are always read from the cloned repo's own
+> `jk.toml`; `group`/`name`/`version` on the dep table are rejected, not
+> honored as overrides), materialize into a per-commit `file://` repo,
+> rewrite to an exact coordinate pin, resolve through the normal solver, and
+> stamp git provenance into `jk.lock`. `jk lock` detects force-moved tags;
+> `jk update` accepts them.
 > The "Later" list below (transitive git deps, non-`jk` source builds, build
 > sandboxing, signed-tag-by-default) remains future work.
 
@@ -21,8 +24,8 @@ builds only** for now (no Maven/Gradle/sbt source builds).
 ## What already exists (and the gaps)
 
 The declaration grammar and most plumbing are already in the tree:
-- **Declaration:** `[dependencies.<scope>]` entries already accept
-  `{ git = "...", tag|branch|rev = "...", path = "...", submodules, verify-signed }`
+- **Declaration:** dependency-table entries (`[dependencies]`, `[test-dependencies]`,
+  etc.) already accept `{ git = "...", tag|branch|rev = "...", path = "...", submodules, verify-signed }`
   → `GitSource` + `GitRefSpec` (`Tag`/`Branch`/`Rev`), parsed by
   `JkBuildParser.parseGitSource`. Git deps carry a synthetic `version = "=git"`.
 - **Clone:** `GitFetcher` does bare clone + per-ref checkout under
@@ -94,7 +97,7 @@ dependency's **real coordinate read from the cloned repo's `[project]`**
 (`group:artifact`). The consumer writes only a name + git ref:
 
 ```toml
-[dependencies.main]
+[dependencies]
 # coordinate (group:artifact) is discovered from the repo's jk.toml [project]
 mylib    = { git = "gh:acme/widgets", tag = "v1.4.0" }
 edge     = { git = "https://gitlab.com/acme/edge", branch = "main" }
@@ -107,27 +110,20 @@ same `group:artifact` lines up with the git-built one (one node in the graph),
 and conflict resolution works normally. If two git sources resolve to the same
 coordinate, that's a conflict surfaced like any other.
 
-### Discovery with override
-Discovery is the default; any of the normal inline-coord keys on the same git
-table **override** it (and are validated against the build, where feasible):
+### Discovery is not overridable
+
+`group`, `name`, and `version` are rejected outright alongside `git` (same
+rule for `path`) — `JkBuildParser` throws rather than let a stale override
+silently diverge from what the cloned repo actually declares:
 
 ```toml
-fork = { git = "gh:me/widgets-fork", branch = "main",
-         group = "com.acme", name = "widgets",   # override discovered coordinate
-         version = "1.4.0-acme" }                     # override derived version
+fork = { git = "gh:me/widgets-fork", branch = "main" }
 ```
 
-- **`group` / `name`** override the coordinate discovered from `[project]`.
-- **`version` is honored** as an explicit override of the *derived* version.
-  The ref (`tag`/`branch`/`rev`) still selects **which commit to build**;
-  `version` only relabels the published/resolved artifact — handy for forks, or
-  when a tag won't coerce to a clean version. **Precedence:** explicit
-  `version` field → derived-from-ref. Likewise explicit `group`/`name` →
-  discovered coordinate.
-
-This requires populating `Dependency`'s `module`/version from these keys for
-git deps (today git deps carry a synthetic `version = "=git"`); the
-materialization step uses the override when present, else discovers/derives.
+There is no relabeling knob: a fork that wants a different coordinate or
+version changes its own `[project]` in the forked repo, not the consumer's
+dep table. An earlier design allowed `group`/`name`/`version` as overrides on
+the git/path table; that was dropped in favor of discovery-only.
 
 ## Resolution pipeline — "materialization" before the solve
 
@@ -143,9 +139,8 @@ PubGrub solver never needs to know about git:
 4. **Clone + build (on miss).** Check out at the SHA (`GitFetcher` keeps a full
    bare clone, so the tag history the pseudo-version needs is already present),
    locate `jk.toml` (root or `path` subdir), run the `jk build` pipeline to
-   produce the jar, and render its POM with `PublishablePom` — stamped with the
-   **derived (or overridden) version** and the project's own resolved
-   dependencies.
+   produce the jar, and render its POM with `PublishablePom` — stamped with
+   the **derived version** and the project's own resolved dependencies.
 5. **Local publish.** Write the jar + POM into a per-build Maven-layout
    directory, e.g. `$JK_CACHE_DIR/git-artifacts/<urlhash>/<sha>/m2/`, and record
    the blobs in the CAS + `Journal` (so offline resolve works).
@@ -214,9 +209,9 @@ build at resolve time.
   the next release under `resolver/Versions.java`. Implemented in `GitVersion`
   (the earlier Go-style `1.2.4-0.<ts>` guess sorted wrong under Maven's
   comparator).
-- **Coordinate / version:** discover from `[project]` by default; `group` /
-  `name` / `version` keys on the git table override (the ref still selects
-  the commit; `version` only relabels).
+- **Coordinate / version:** always discovered from the cloned repo's
+  `[project]` — `group`/`name`/`version` keys on the git (or path) table are
+  rejected, not honored as overrides.
 - **Build sandboxing:** deferred for v1 — rely on SHA-pinning + `verify-signed`;
   document that a git dep runs that repo's build at resolve time.
 - **`-SNAPSHOT` re-resolve cadence:** only on `jk update` / `jk lock`. In

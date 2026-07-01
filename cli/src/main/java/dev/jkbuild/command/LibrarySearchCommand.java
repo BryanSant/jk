@@ -10,7 +10,7 @@ import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.model.command.Param;
-import dev.jkbuild.repo.JkMavenLocalRepo;
+import dev.jkbuild.repo.RepoArtifactStore;
 import dev.jkbuild.resolver.Versions;
 import dev.jkbuild.util.JkDirs;
 import java.nio.file.Path;
@@ -64,7 +64,7 @@ public final class LibrarySearchCommand implements CliCommand {
         GlobalOptions global = GlobalOptions.from(in);
 
         LibraryCatalog catalog = LibraryCatalog.layered(System.err::println);
-        JkMavenLocalRepo localRepo = new JkMavenLocalRepo(cacheDir != null ? cacheDir : JkDirs.cache());
+        Path cacheRoot = cacheDir != null ? cacheDir : JkDirs.cache();
         List<String> lowerTerms =
                 terms.stream().map(t -> t.toLowerCase(Locale.ROOT)).toList();
 
@@ -77,7 +77,7 @@ public final class LibrarySearchCommand implements CliCommand {
                     src.module().group().toLowerCase(Locale.ROOT),
                     src.module().artifact().toLowerCase(Locale.ROOT))) continue;
             List<String> cached = new ArrayList<>(
-                    localRepo.versions(src.module().group(), src.module().artifact()));
+                    RepoArtifactStore.allVersions(cacheRoot, src.module().group(), src.module().artifact()));
             cached.sort((a, b) -> Versions.compare(b, a));
             if (global.offline && cached.isEmpty()) continue;
             hits.add(new Hit(name, src, cached));

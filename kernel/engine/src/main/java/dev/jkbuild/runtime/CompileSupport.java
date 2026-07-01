@@ -94,14 +94,6 @@ public final class CompileSupport {
         };
     }
 
-    /**
-     * @deprecated Use {@link #isSimpleLayout(JkBuild.Project, Path)} instead.
-     */
-    @Deprecated
-    public static boolean isCompact(JkBuild.Project project, Path projectDir) {
-        return isSimpleLayout(project, projectDir);
-    }
-
     private static boolean anySourceUnder(Path root, String... extensions) {
         if (!Files.isDirectory(root)) return false;
         try (Stream<Path> stream = Files.walk(root)) {

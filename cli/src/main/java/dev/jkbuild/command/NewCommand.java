@@ -117,7 +117,7 @@ public final class NewCommand implements CliCommand {
     private static final GoalKey<NewInputs> INPUTS = GoalKey.of("inputs", NewInputs.class);
 
     /** Set during scaffold when the new project was registered as a workspace module. */
-    private record Module(Path root, String rel) {}
+    private record Module(Path root, String rel, String projectName) {}
 
     private volatile Module registered;
 
@@ -533,7 +533,7 @@ public final class NewCommand implements CliCommand {
             // Registers the module, promoting a plain project into a workspace
             // root (creating the [workspace] table) when this is its first module.
             Files.writeString(rootToml, JkBuildEditor.registerWorkspaceModule(Files.readString(rootToml), rel));
-            registered = new Module(root, rel);
+            registered = new Module(root, rel, parent.displayName());
         }
     }
 
@@ -1121,33 +1121,28 @@ public final class NewCommand implements CliCommand {
 
     private static void emitSuccessOnTerminal(NewInputs inputs, Terminal terminal, Module module, boolean isInit) {
         var writer = terminal.writer();
-        if (module != null) {
-            writer.println(new AttributedStringBuilder()
-                    .append("Registered module ", Theme.active().dim())
-                    .append("'" + module.rel() + "'", Theme.active().success())
-                    .append(" in workspace " + module.root(), Theme.active().dim())
-                    .toAttributedString()
-                    .toAnsi(terminal));
-        }
         writer.println(successLine(inputs, module, isInit));
         writer.flush();
     }
 
     private static void emitSuccessPlain(NewInputs inputs, Module module, boolean isInit) {
-        if (module != null) {
-            System.out.println("Registered module '" + module.rel() + "' in workspace " + module.root());
-        }
         System.out.println(successLine(inputs, module, isInit));
     }
 
     private static String successLine(NewInputs inputs, Module module, boolean isInit) {
-        String chipVerb = module != null ? "New Module" : (isInit ? "Init" : "New Project");
-        String noun = module != null ? "module" : "project";
-        String action = isInit ? "Initialized" : "Created new";
-        String nameStyled = Theme.colorize(inputs.name(),
-                Theme.active().brightCyan().bold());
-        String message = action + " " + noun + " " + nameStyled;
         boolean nerdfont = dev.jkbuild.config.GlobalConfig.nerdfont();
+        org.jline.utils.AttributedStyle accent = Theme.active().brightCyan().bold();
+        if (module != null) {
+            String message = "New module "
+                    + Theme.colorize(inputs.name(), accent)
+                    + Theme.colorize(" added to project ", Theme.active().normalGray())
+                    + Theme.colorize(module.projectName(), accent);
+            return dev.jkbuild.cli.tui.GoalWedge.chipLine(
+                    dev.jkbuild.cli.tui.Glyphs.CHECK, "New Module", nerdfont, message);
+        }
+        String chipVerb = isInit ? "Init" : "New Project";
+        String action = isInit ? "Initialized" : "Created new";
+        String message = action + " project " + Theme.colorize(inputs.name(), accent);
         return dev.jkbuild.cli.tui.GoalWedge.chipLine(
                 dev.jkbuild.cli.tui.Glyphs.CHECK, chipVerb, nerdfont, message);
     }

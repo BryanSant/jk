@@ -61,7 +61,7 @@ public final class BuildGraph {
     /**
      * @param topoOrder dependency-first build order ({@code errors} empty ⇒ valid)
      * @param edges unit dir → dirs that must build before it
-     * @param errors cycle / depth-cap / coordinate-mismatch / missing-jk.toml
+     * @param errors cycle / depth-cap / missing-jk.toml
      */
     public record Result(List<BuildUnit> topoOrder, Map<Path, Set<Path>> edges, List<String> errors) {
         public boolean hasErrors() {
@@ -233,18 +233,9 @@ public final class BuildGraph {
                             + e.getMessage());
                     continue;
                 }
-                String coord = target.project().group() + ":" + target.project().name();
-                if (!coord.equals(dep.module())) {
-                    errors.add("composite dependency `"
-                            + dep.module()
-                            + "` points at a project whose "
-                            + "coordinate is `"
-                            + coord
-                            + "` ("
-                            + targetDir
-                            + "); they must match");
-                    continue;
-                }
+                // The coordinate is pure discovery now — path/branch-git deps can't declare an
+                // expected `group`/`name` for jk to cross-check (JkBuildParser rejects it), so
+                // whatever the target project declares is authoritative; there's nothing to compare.
                 Origin origin = dep.isPath() ? Origin.PATH : Origin.BRANCH_GIT;
                 addUnit(key, target, origin, dep.isGit() ? dep.gitSource() : null);
                 onStack.add(key);

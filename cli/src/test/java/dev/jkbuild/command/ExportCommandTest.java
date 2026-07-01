@@ -28,7 +28,7 @@ class ExportCommandTest {
                 java = 21
                 main = "com.example.Main"
 
-                [dependencies.main]
+                [dependencies]
                 guava = { group = "com.google.guava", name = "guava", version = "=33.0.0-jre" }
                 """);
     }

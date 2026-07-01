@@ -20,7 +20,6 @@ import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.model.command.Param;
-import dev.jkbuild.repo.JkMavenLocalRepo;
 import dev.jkbuild.repo.MavenLayout;
 import dev.jkbuild.tool.JarManifest;
 import dev.jkbuild.util.Hashing;
@@ -350,16 +349,14 @@ public final class AddCommand implements CliCommand {
         }
         if (library == null) library = artifact;
 
-        // Store in the CAS and mirror into the m2 local repo (mirrors
-        // InstallCommand.cacheInstallArtifact).
+        // Store in the CAS. File deps are resolved straight from the CAS by their sha256 at both
+        // lock and build time (see ClasspathResolver), so no Maven-layout mirroring is needed.
         Path cache = JkDirs.cache();
         Files.createDirectories(cache);
         byte[] bytes = Files.readAllBytes(filePath);
         String sha256 = Hashing.sha256Hex(bytes);
         Cas cas = new Cas(cache);
         cas.putByLink(filePath, sha256);
-        Coordinate coord = Coordinate.of(group, artifact, version);
-        new JkMavenLocalRepo(cache).materialize(MavenLayout.artifactPath(coord), cas.pathFor(sha256));
 
         // Edit jk.toml.
         String original = Files.readString(tomlFile);

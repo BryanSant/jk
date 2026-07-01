@@ -6,8 +6,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cli.Jk;
 import dev.jkbuild.model.Coordinate;
-import dev.jkbuild.repo.JkMavenLocalRepo;
 import dev.jkbuild.repo.MavenLayout;
+import dev.jkbuild.repo.RepoArtifactStore;
+import dev.jkbuild.util.Hashing;
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
@@ -37,7 +38,7 @@ class LibrarySearchCommandTest {
     @Test
     void search_matches_substring_of_name_in_bundled_catalog(@TempDir Path tempHome) {
         // Isolate JkDirs.home() to an empty dir so only the bundled layer loads —
-        // otherwise a developer's downloaded ~/.jk/libs.global.toml shadows the
+        // otherwise a developer's downloaded ~/.jk/libraries.global.toml shadows the
         // curated rows as [global] and the [bundled] assertion fails. (Under Gradle
         // the java-conventions plugin already points JK_HOME at a throwaway dir; this
         // makes the test self-contained under any runner, including jk build itself.)
@@ -97,8 +98,10 @@ class LibrarySearchCommandTest {
         Path cache = tempDir.resolve("cache");
         // Cache one of the two "junit" curated coords.
         Coordinate coord = Coordinate.of("org.junit.jupiter", "junit-jupiter", "6.1.0");
-        Path blob = new Cas(cache).put("junit-jar".getBytes(StandardCharsets.UTF_8));
-        new JkMavenLocalRepo(cache).materialize(MavenLayout.artifactPath(coord), blob);
+        byte[] bytes = "junit-jar".getBytes(StandardCharsets.UTF_8);
+        Path blob = new Cas(cache).put(bytes);
+        RepoArtifactStore.forRepoName(cache, "central")
+                .materialize(MavenLayout.artifactPath(coord), blob, Hashing.sha256Hex(bytes));
 
         int exit = Jk.execute("library", "search", "junit", "--offline", "--cache-dir", cache.toString());
         assertThat(exit).isZero();
