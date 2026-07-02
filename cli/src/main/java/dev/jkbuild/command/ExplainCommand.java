@@ -138,12 +138,21 @@ public final class ExplainCommand implements CliCommand {
                     : dev.jkbuild.worker.HeapPlan.requestedJvms(
                             graph.maxReadyWidth(), workers, parallelTests, Runtime.getRuntime()
                                     .availableProcessors());
-            // Cold (no learned timings): anchor the weight→ms conversion to this host, probing once
-            // if needed — the sanctioned exception to explain being a pure dry run. Warm: learned
-            // rates already encode the machine, so the constant round-trips and we don't re-scale.
-            long msPerWeight = dev.jkbuild.runtime.PhaseTimings.load(cache).isEmpty()
-                    ? Math.round(dev.jkbuild.runtime.Calibration.ensure(jdksDir).msPerWeight())
-                    : dev.jkbuild.runtime.EffortWeights.MS_PER_WEIGHT;
+            // Cold (no learned timings for THESE modules): anchor the weight→ms conversion to this
+            // host, probing once if needed — the sanctioned exception to explain being a pure dry run.
+            // Warm: learned rates already encode the machine, so the constant round-trips and we don't
+            // re-scale. Gate on hasTimingsFor(theseModules), NOT the coarse global isEmpty(): a
+            // brand-new module in an otherwise-warm cache has no learned entries and falls back to the
+            // static reference-frame weights, so pricing it at the MS_PER_WEIGHT reference constant
+            // (instead of this host's measured calibration) over-predicts by reference/host — ~4× on a
+            // fast machine. This mirrors jk build's own seed logic (BuildCommand ~L461) so the ETA and
+            // the build countdown agree.
+            List<String> moduleDirs = modules.stream()
+                    .map(m -> m.unit().dir().toString())
+                    .toList();
+            long msPerWeight = dev.jkbuild.runtime.PhaseTimings.load(cache).hasTimingsFor(moduleDirs)
+                    ? dev.jkbuild.runtime.EffortWeights.MS_PER_WEIGHT
+                    : Math.round(dev.jkbuild.runtime.Calibration.ensure(jdksDir).msPerWeight());
             etaMillis = dev.jkbuild.runtime.EffortWeights.scheduleMillis(
                     costs, concurrency, serial, parallelTests, msPerWeight);
         } catch (RuntimeException e) {
