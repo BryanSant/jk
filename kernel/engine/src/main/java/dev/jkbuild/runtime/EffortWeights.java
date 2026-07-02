@@ -336,6 +336,21 @@ public final class EffortWeights {
     public record ModuleCost(Path dir, Set<Path> prereqs, int weight, int testWeight) {}
 
     /**
+     * The {@link ModuleCost} of a prepared module goal: its total estimated bar weight, plus the
+     * serialized {@code run-tests} slice pulled out on its own (the schedule estimate treats that
+     * phase as a cross-module serial bound). Shared by {@code jk build} and {@code jk explain} so
+     * their wall-clock estimates are computed from the goal identically.
+     */
+    public static ModuleCost costOf(Path dir, Set<Path> prereqs, dev.jkbuild.run.Goal goal) {
+        int weight = goal.estimatedTotalWeight();
+        int testWeight = goal.phases().stream()
+                .filter(p -> p.name().equals("run-tests"))
+                .mapToInt(dev.jkbuild.run.Phase::estimateWeight)
+                .sum();
+        return new ModuleCost(dir, prereqs, weight, testWeight);
+    }
+
+    /**
      * Estimate a build's wall-clock (ms) from per-module weights, honoring how {@code jk build}
      * actually schedules. Serial ({@code --no-parallel}) sums every module's weight. The parallel
      * graph build overlaps independent modules, so the estimate is the largest of three lower bounds
@@ -347,17 +362,29 @@ public final class EffortWeights {
      * compile/package work that overlaps the long serial test tail.
      */
     public static long scheduleMillis(List<ModuleCost> mods, int concurrency, boolean serial, boolean parallelTests) {
+        return scheduleMillis(mods, concurrency, serial, parallelTests, MS_PER_WEIGHT);
+    }
+
+    /**
+     * As {@link #scheduleMillis(List, int, boolean, boolean)} but with an explicit weight→ms
+     * conversion. Pass {@link #MS_PER_WEIGHT} on a warm machine (learned rates already encode this
+     * host, so the constant round-trips exactly); pass a {@link Calibration}-measured or live
+     * re-projected rate on a cold machine, where the constant is a blind guess. Applying a measured
+     * rate only when the learned ledger is cold keeps it from stacking on top of learned rates.
+     */
+    public static long scheduleMillis(
+            List<ModuleCost> mods, int concurrency, boolean serial, boolean parallelTests, long msPerWeight) {
         long serialSum = 0;
         long testSum = 0;
         for (ModuleCost m : mods) {
             serialSum += m.weight();
             testSum += m.testWeight();
         }
-        if (serial || concurrency <= 1) return serialSum * MS_PER_WEIGHT;
+        if (serial || concurrency <= 1) return serialSum * msPerWeight;
         long critical = criticalPath(mods);
         long throughput = (serialSum + concurrency - 1) / concurrency;
         long testFloor = parallelTests ? 0 : testSum;
-        return Math.max(critical, Math.max(throughput, testFloor)) * MS_PER_WEIGHT;
+        return Math.max(critical, Math.max(throughput, testFloor)) * msPerWeight;
     }
 
     /**

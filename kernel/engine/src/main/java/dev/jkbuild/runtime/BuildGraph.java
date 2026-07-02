@@ -53,9 +53,41 @@ public final class BuildGraph {
         public boolean hasErrors() {
             return !errors.isEmpty();
         }
+
+        /** {@link BuildGraph#maxReadyWidth(List, Map)} over this graph's own order and edges. */
+        public int maxReadyWidth() {
+            return BuildGraph.maxReadyWidth(topoOrder, edges);
+        }
     }
 
     private BuildGraph() {}
+
+    /**
+     * The widest wave of independent modules — the most that could build concurrently once
+     * dependencies are honored. Simulates the same ready-set draining the build scheduler does (a
+     * module is ready when all its in-graph prereqs are done), returning the largest wave. Drives
+     * the concurrency the build and its ETA calibrate to, so {@code jk build} and {@code jk
+     * explain} agree.
+     */
+    public static int maxReadyWidth(List<BuildUnit> units, Map<Path, Set<Path>> edges) {
+        Set<Path> unitDirs = new java.util.HashSet<>();
+        for (BuildUnit u : units) unitDirs.add(u.dir());
+        Set<Path> done = new java.util.HashSet<>();
+        List<BuildUnit> remaining = new ArrayList<>(units);
+        int max = 1;
+        while (!remaining.isEmpty()) {
+            List<BuildUnit> ready = remaining.stream()
+                    .filter(u -> edges.getOrDefault(u.dir(), Set.of()).stream()
+                            .filter(unitDirs::contains)
+                            .allMatch(done::contains))
+                    .toList();
+            if (ready.isEmpty()) break; // defensive: a cycle would otherwise spin
+            max = Math.max(max, ready.size());
+            for (BuildUnit u : ready) done.add(u.dir());
+            remaining.removeAll(ready);
+        }
+        return max;
+    }
 
     /** Resolve the graph rooted at {@code entryDir}/{@code entry}. */
     public static Result resolve(Path entryDir, JkBuild entry) throws IOException {

@@ -23,6 +23,17 @@ class EffortWeightsTest {
     }
 
     @Test
+    void scheduleMillis_explicit_msPerWeight_scales_the_estimate() {
+        var mods = List.of(
+                new EffortWeights.ModuleCost(Path.of("/a"), Set.of(), 10, 4),
+                new EffortWeights.ModuleCost(Path.of("/b"), Set.of(), 20, 8));
+        // A calibrated 50 ms/unit gives 30 × 50; the 4-arg overload delegates with MS_PER_WEIGHT.
+        assertThat(EffortWeights.scheduleMillis(mods, 4, true, false, 50)).isEqualTo(30L * 50);
+        assertThat(EffortWeights.scheduleMillis(mods, 4, true, false, MS))
+                .isEqualTo(EffortWeights.scheduleMillis(mods, 4, true, false));
+    }
+
+    @Test
     void scheduleMillis_parallel_overlaps_independent_modules() {
         // Three independent compile-only modules → bounded by throughput, not the sum.
         var mods = List.of(

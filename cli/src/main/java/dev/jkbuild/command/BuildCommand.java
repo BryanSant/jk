@@ -246,25 +246,16 @@ public final class BuildCommand implements CliCommand {
         }
     }
 
-    /** Peak number of units that become ready simultaneously across the topo schedule. */
-    private static int maxReadyWidth(List<BuildGraph.BuildUnit> units, Map<Path, Set<Path>> edges) {
-        Set<Path> unitDirs = new java.util.HashSet<>();
-        for (BuildGraph.BuildUnit u : units) unitDirs.add(u.dir());
-        Set<Path> done = new java.util.HashSet<>();
-        List<BuildGraph.BuildUnit> remaining = new ArrayList<>(units);
-        int max = 1;
-        while (!remaining.isEmpty()) {
-            List<BuildGraph.BuildUnit> ready = remaining.stream()
-                    .filter(u -> edges.getOrDefault(u.dir(), Set.of()).stream()
-                            .filter(unitDirs::contains)
-                            .allMatch(done::contains))
-                    .toList();
-            if (ready.isEmpty()) break; // defensive: a cycle would otherwise spin
-            max = Math.max(max, ready.size());
-            for (BuildGraph.BuildUnit u : ready) done.add(u.dir());
-            remaining.removeAll(ready);
+    /** Median of the observed per-module {@code ms/weight} rates, or {@code null} when none yet. */
+    private static Double medianRate(List<Double> rates) {
+        List<Double> sorted;
+        synchronized (rates) {
+            if (rates.isEmpty()) return null;
+            sorted = new ArrayList<>(rates);
         }
-        return max;
+        sorted.sort(Double::compareTo);
+        int n = sorted.size();
+        return n % 2 == 1 ? sorted.get(n / 2) : (sorted.get(n / 2 - 1) + sorted.get(n / 2)) / 2.0;
     }
 
     private static final Object OUT_LOCK = new Object();
@@ -300,7 +291,7 @@ public final class BuildCommand implements CliCommand {
                 System.out.println("(workspace declares no modules)");
                 return 0;
             }
-            applyMemoryPlan(Math.min(maxReadyWidth(units, graph.edges()), JkThreads.CPU_THREADS));
+            applyMemoryPlan(Math.min(BuildGraph.maxReadyWidth(units, graph.edges()), JkThreads.CPU_THREADS));
             return runGraphPlain(units, graph.edges());
         }
 
@@ -323,7 +314,7 @@ public final class BuildCommand implements CliCommand {
                     dev.jkbuild.cli.tui.Glyphs.CHECK, "Build", nerdfont, "workspace declares no modules"));
             return 0;
         }
-        applyMemoryPlan(Math.min(maxReadyWidth(units, graph.edges()), JkThreads.CPU_THREADS));
+        applyMemoryPlan(Math.min(BuildGraph.maxReadyWidth(units, graph.edges()), JkThreads.CPU_THREADS));
         long buildStart = System.nanoTime();
         Set<Path> dirtyDirs = forecastDirty(graph, cache);
         if (dirtyDirs.isEmpty()) {
@@ -450,32 +441,40 @@ public final class BuildCommand implements CliCommand {
         // sum over-counts. (--no-parallel runs runWorkspaceBuild, not this path, so here
         // is always parallel.) The bar still calibrates to the summed tick total above;
         // only the wall-clock countdown is parallel-aware.
-        List<dev.jkbuild.runtime.EffortWeights.ModuleCost> costs = new ArrayList<>();
+        Map<Path, dev.jkbuild.runtime.EffortWeights.ModuleCost> costByDir = new LinkedHashMap<>();
         for (var e : prepared.entrySet()) {
-            int tw = e.getValue().goal().phases().stream()
-                    .filter(p -> p.name().equals("run-tests"))
-                    .mapToInt(dev.jkbuild.run.Phase::estimateWeight)
-                    .sum();
-            costs.add(new dev.jkbuild.runtime.EffortWeights.ModuleCost(
+            costByDir.put(
                     e.getKey(),
-                    edges.getOrDefault(e.getKey(), Set.of()),
-                    (int) e.getValue().barWeight(),
-                    tw));
+                    dev.jkbuild.runtime.EffortWeights.costOf(
+                            e.getKey(), edges.getOrDefault(e.getKey(), Set.of()), e.getValue().goal()));
         }
+        List<dev.jkbuild.runtime.EffortWeights.ModuleCost> costs = new ArrayList<>(costByDir.values());
         int etaWorkers = workers != null && workers > 0 ? workers : 1;
         int concurrency = dev.jkbuild.worker.HeapPlan.requestedJvms(
-                maxReadyWidth(units, edges),
+                BuildGraph.maxReadyWidth(units, edges),
                 etaWorkers,
                 parallelTests,
                 Runtime.getRuntime().availableProcessors());
-        // Countdown only when this project has useful learned timings; otherwise leave the
-        // estimate at 0 so the clock counts elapsed time up from 0s.
+        // Seed the countdown's weight→ms conversion: learned rates when warm (the constant
+        // round-trips this host), else a one-time host calibration (probe-if-absent). Only 0 —
+        // count up — when the machine is both unlearned and uncalibratable (no JDK yet).
         boolean usefulTimings = dev.jkbuild.runtime.PhaseTimings.load(cache)
                 .hasTimingsFor(prepared.keySet().stream().map(Path::toString).toList());
+        long seedMpw = -1;
+        if (usefulTimings) {
+            seedMpw = dev.jkbuild.runtime.EffortWeights.MS_PER_WEIGHT;
+        } else {
+            dev.jkbuild.runtime.Calibration cal = dev.jkbuild.runtime.Calibration.ensure(jdksDir);
+            if (cal.present()) seedMpw = Math.round(cal.msPerWeight());
+        }
         view.setEtaEstimate(
-                usefulTimings
-                        ? dev.jkbuild.runtime.EffortWeights.scheduleMillis(costs, concurrency, false, parallelTests)
+                seedMpw > 0
+                        ? dev.jkbuild.runtime.EffortWeights.scheduleMillis(costs, concurrency, false, parallelTests, seedMpw)
                         : 0);
+        // Live re-projection: as modules finish we measure real per-module throughput (ms ÷ weight)
+        // and re-estimate the remaining ETA from it, so external contention self-corrects. Median
+        // over completed modules keeps parallelism out of the rate; the schedule model re-applies it.
+        List<Double> observedRates = java.util.Collections.synchronizedList(new ArrayList<>());
 
         // Pre-compute workspace hard-link destinations for application modules so collision
         // detection sees the full module set before any build starts.
@@ -506,6 +505,11 @@ public final class BuildCommand implements CliCommand {
                 UnitOutcome o = futures.get(i).join();
                 if (o.success()) {
                     linkModuleArtifacts(readyDirs.get(i), wsLinks);
+                    PreparedModule donePm = prepared.get(readyDirs.get(i));
+                    long w = donePm != null ? donePm.barWeight() : 0;
+                    // Skip fully-cached modules — their near-zero time isn't representative of work.
+                    if (donePm != null && !donePm.fullyCached() && w > 0 && o.millis() > 0)
+                        observedRates.add(o.millis() / (double) w);
                 } else if (failure == null) {
                     failure = o;
                 }
@@ -525,12 +529,27 @@ public final class BuildCommand implements CliCommand {
             }
             for (BuildGraph.BuildUnit u : ready) done.add(u.dir());
             remaining.removeAll(ready);
+            // Re-project the remaining ETA from measured throughput. The view's countdown is
+            // (total − elapsed), so the new total is elapsed-so-far + the reprojected remainder.
+            Double liveMpw = medianRate(observedRates);
+            if (liveMpw != null && !remaining.isEmpty()) {
+                List<dev.jkbuild.runtime.EffortWeights.ModuleCost> rem = new ArrayList<>();
+                for (var ce : costByDir.entrySet()) if (!done.contains(ce.getKey())) rem.add(ce.getValue());
+                long elapsed = (System.nanoTime() - start) / 1_000_000;
+                long remMs = dev.jkbuild.runtime.EffortWeights.scheduleMillis(
+                        rem, concurrency, false, parallelTests, Math.round(liveMpw));
+                view.setEtaEstimate(elapsed + remMs);
+            }
         }
         // Whole graph succeeded: fold this run's real phase durations into the
         // learned ledger (EWMA) so the next build's bar is time-accurate. Failed
         // builds don't record — their phase times are abnormal.
         dev.jkbuild.runtime.PhaseTimings.record(
                 cache, timingSamples, dev.jkbuild.runtime.PhaseTimings.DEFAULT_ALPHA, System.currentTimeMillis());
+        // Fold this run's measured throughput into the host calibration (EWMA), so the cold
+        // anchor tracks the machine without a fresh probe next time.
+        Double runMpw = medianRate(observedRates);
+        if (runMpw != null) dev.jkbuild.runtime.Calibration.refine(runMpw, System.currentTimeMillis());
         view.finishGoalSuccess(
                 dirtyDirs.isEmpty() ? upToDateTail("all modules", start) : modulesTail(total, start),
                 snapshot(deferredOutput));
@@ -746,23 +765,39 @@ public final class BuildCommand implements CliCommand {
                 prepared.put(moduleDir, pm);
             }
             agg.calibrate(total);
-            // Countdown only with useful learned timings; otherwise count up from 0s.
+            // Countdown weight→ms conversion: learned rates when warm, else a one-time host
+            // calibration (probe-if-absent); 0 (count up) only when neither is available.
             Path etaCache = cacheDir != null ? cacheDir : JkDirs.cache();
             boolean usefulTimings = dev.jkbuild.runtime.PhaseTimings.load(etaCache)
                     .hasTimingsFor(
                             prepared.keySet().stream().map(Path::toString).toList());
-            view.setEtaEstimate(usefulTimings ? (long) total * dev.jkbuild.runtime.EffortWeights.MS_PER_WEIGHT : 0);
+            long seedMpw;
+            if (usefulTimings) {
+                seedMpw = dev.jkbuild.runtime.EffortWeights.MS_PER_WEIGHT;
+            } else {
+                dev.jkbuild.runtime.Calibration cal = dev.jkbuild.runtime.Calibration.ensure(jdksDir);
+                seedMpw = cal.present() ? Math.round(cal.msPerWeight()) : -1;
+            }
+            view.setEtaEstimate(seedMpw > 0 ? total * seedMpw : 0);
 
+            // Serial re-projection: measure each module's real ms/weight as it finishes and
+            // re-estimate the remaining (whole-sum, serial) ETA from the median — contention
+            // self-corrects. --no-parallel doesn't attach a PhaseTimings recorder, but feeding
+            // the calibration anchor still lets these runs improve the cold estimate.
+            List<Double> observedRates = new ArrayList<>();
+            long remainingWeight = total;
             for (Path moduleDir : sorted) {
                 String module = workspaceRoot.relativize(moduleDir).toString();
                 PreparedModule pm = prepared.get(moduleDir);
                 int exit;
+                long t0 = System.nanoTime();
                 try {
                     exit = runPrepared(pm, agg, buildStart);
                 } catch (Exception e) {
                     view.finishFailure(buildFailedAt(module, buildStart));
                     throw e;
                 }
+                long moduleMs = (System.nanoTime() - t0) / 1_000_000;
                 if (exit != 0) {
                     // Error diagnostics print above the result line (which stays last),
                     // mirroring the success route.
@@ -779,7 +814,19 @@ public final class BuildCommand implements CliCommand {
                 }
                 linkModuleArtifacts(moduleDir, wsLinks);
                 built++;
+                // Re-project from measured throughput: new total = elapsed + remaining×median.
+                remainingWeight -= pm.barWeight();
+                if (!pm.fullyCached() && pm.barWeight() > 0 && moduleMs > 0)
+                    observedRates.add(moduleMs / (double) pm.barWeight());
+                Double liveMpw = medianRate(observedRates);
+                if (liveMpw != null && remainingWeight > 0) {
+                    long elapsed = (System.nanoTime() - buildStart) / 1_000_000;
+                    view.setEtaEstimate(elapsed + Math.round(remainingWeight * liveMpw));
+                }
             }
+            // Fold measured throughput into the host calibration so cold estimates improve.
+            Double runMpw = medianRate(observedRates);
+            if (runMpw != null) dev.jkbuild.runtime.Calibration.refine(runMpw, System.currentTimeMillis());
         }
         view.finishGoalSuccess(modulesTail(sorted.size(), buildStart));
         return 0;
@@ -917,23 +964,11 @@ public final class BuildCommand implements CliCommand {
         Path cache = cacheDir != null ? cacheDir : JkDirs.cache();
         Path buildFile = dir.resolve("jk.toml");
         if (!Files.exists(buildFile)) return null;
-        Path lockFile = dir.resolve("jk.lock");
-        int workerCount = workers != null && workers > 0 ? workers : 1;
-        // Lexical pre-discovery so the run-tests phase's scope is known before
-        // any phase runs — see TestCommand.estimateTestCount.
-        int estimatedTestCount = skipTests ? 0 : TestCommand.estimateTestCount(dir.resolve("src/test/java"));
-        BuildPipeline.Inputs inputs = new BuildPipeline.Inputs(
-                dir,
-                cache,
-                buildFile,
-                lockFile,
-                dir,
-                workerCount,
-                estimatedTestCount,
-                profileName,
-                jdksDir,
-                skipTests,
-                global.verbose);
+        // One shared Inputs factory with jk explain (see BuildPlanForecast.inputsFor) so the two
+        // can't drift in what they feed the effort-weight prediction — it also does the lexical
+        // run-tests pre-discovery so the phase's scope is known before any phase runs.
+        BuildPipeline.Inputs inputs = BuildPlanForecast.inputsFor(
+                dir, cache, workers != null ? workers : 1, jdksDir, profileName, skipTests, global.verbose);
         // Quick pre-check: is every work phase already cached? Uses only stat/CAS
         // lookups — the same operations the parse-build phase would run lazily.
         // Doubles as a gate for the single-module TUI bypass in runPrepared().
@@ -993,6 +1028,17 @@ public final class BuildCommand implements CliCommand {
         }
 
         if (result.success()) {
+            // Single-module (standalone) build: fold this run's measured throughput into the host
+            // calibration so the cold estimate self-heals — the common case never hits the workspace
+            // loops that do this. Skip fully-cached runs (near-zero time, not representative of work);
+            // workspace paths (agg != null) refine themselves.
+            if (agg == null && !pm.fullyCached() && pm.barWeight() > 0) {
+                long moduleMs = (System.nanoTime() - startNanos) / 1_000_000;
+                if (moduleMs > 0) {
+                    dev.jkbuild.runtime.Calibration.refine(
+                            moduleMs / (double) pm.barWeight(), System.currentTimeMillis());
+                }
+            }
             // Cache settings are user-global only; resolve() reads ~/.jk/config.toml
             // (a project jk.toml's [cache] is intentionally ignored).
             var cacheConfig = dev.jkbuild.config.JkCacheConfig.resolve();

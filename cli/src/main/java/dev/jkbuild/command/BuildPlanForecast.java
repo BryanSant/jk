@@ -126,6 +126,26 @@ final class BuildPlanForecast {
         return out;
     }
 
+    /**
+     * The {@link BuildPipeline.Inputs} a real {@code jk build} constructs for one module — the
+     * single factory both {@code jk build} ({@code BuildCommand.prepareModule}) and {@code jk
+     * explain}'s ETA use, so the two can't drift in what they feed the effort-weight prediction.
+     * The {@code jdksDir} default of {@code null} is load-bearing: it routes {@link
+     * dev.jkbuild.runtime.EffortWeights#jdkWeight} through the full JDK probe chain (PATH /
+     * JAVA_HOME / GraalVM / SDKMAN / …) instead of the empty {@code ~/.jk/jdks}, so an
+     * already-installed JDK predicts a zero-cost {@code ensure-jdk} rather than a phantom download.
+     */
+    static BuildPipeline.Inputs inputsFor(
+            Path dir, Path cache, int workers, Path jdksDir, String profile, boolean skipTests, boolean verbose) {
+        Path buildFile = dir.resolve("jk.toml");
+        Path lockFile = dir.resolve("jk.lock");
+        int workerCount = workers > 0 ? workers : 1;
+        int estimatedTestCount = skipTests ? 0 : TestCommand.estimateTestCount(dir.resolve("src/test/java"));
+        return new BuildPipeline.Inputs(
+                dir, cache, buildFile, lockFile, dir, workerCount, estimatedTestCount, profile, jdksDir, skipTests,
+                verbose);
+    }
+
     private static Module forecastModule(
             BuildGraph.BuildUnit u, boolean depDirty, Cas cas, ActionCache actionCache, Path cache) {
         JkBuild project = u.manifest();

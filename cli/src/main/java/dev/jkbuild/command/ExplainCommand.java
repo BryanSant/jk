@@ -48,6 +48,12 @@ public final class ExplainCommand implements CliCommand {
                 Opt.flag("Estimate the ETA for a serial build (one module at a time).", "--no-parallel"),
                 Opt.flag("", "--parallel").hide(),
                 Opt.flag("Estimate the ETA with tests running concurrently across modules.", "--parallel-tests"),
+                // The plan-affecting options `jk build` accepts — forecasting `jk build <flags>`
+                // means feeding the same inputs to the shared estimate (and, with --run, to build).
+                Opt.value("<name>", "Forecast with a build profile applied. Default: auto (ci on CI).", "--profile"),
+                Opt.value("<N>", "Forecast with N test-runner JVMs forked in parallel. Default 1.", "-w", "--workers"),
+                Opt.flag("Forecast a build that skips compiling and running tests.", "--skip-tests"),
+                Opt.value("<dir>", "Override the JDK install root.", "--jdks-dir").hide(),
                 Opt.value(
                                 "<dir>",
                                 "Override the jk cache directory. Default: $JK_CACHE_DIR or ~/.cache/jk.",
@@ -104,35 +110,42 @@ public final class ExplainCommand implements CliCommand {
         // re-checking stamps/CAS across the workspace is a real couple of seconds.
         boolean serial = in.isSet("no-parallel") && !in.isSet("parallel") && !in.isSet("parallel-tests");
         boolean parallelTests = in.isSet("parallel-tests");
+        // The plan-affecting options `jk build` reads, forecast with the same defaults build uses
+        // (jdksDir=null → full JDK probe chain, workers=1, skipTests=false) so a bare `jk explain`
+        // predicts exactly what a bare `jk build` would do.
+        int workers = in.value("workers").map(Integer::parseInt).orElse(1);
+        boolean skipTests = in.isSet("skip-tests");
+        String profile = in.value("profile").orElse(null);
+        Path jdksDir = in.value("jdks-dir").map(Path::of).orElse(null);
         long etaMillis = 0;
         try {
             List<dev.jkbuild.runtime.EffortWeights.ModuleCost> costs = new ArrayList<>();
             for (BuildPlanForecast.Module m : modules) {
                 Path mdir = m.unit().dir();
-                var inputs = new dev.jkbuild.runtime.BuildPipeline.Inputs(
-                        mdir,
-                        cache,
-                        mdir.resolve("jk.toml"),
-                        mdir.resolve("jk.lock"),
-                        mdir,
-                        1,
-                        TestCommand.estimateTestCount(mdir.resolve("src/test/java")),
-                        null,
-                        JkDirs.jdks(),
-                        false,
-                        false);
-                var goal = dev.jkbuild.runtime.BuildPipeline.coreBuilder(inputs, m.dirty())
-                        .build();
-                int weight = goal.estimatedTotalWeight();
-                int testWeight = goal.phases().stream()
-                        .filter(p -> p.name().equals("run-tests"))
-                        .mapToInt(dev.jkbuild.run.Phase::estimateWeight)
-                        .sum();
-                costs.add(new dev.jkbuild.runtime.EffortWeights.ModuleCost(
-                        mdir, graph.edges().getOrDefault(mdir, Set.of()), weight, testWeight));
+                // Assemble each module's goal exactly as `jk build` does: the shared Inputs factory,
+                // core phases + declared tails (native-image / OCI / shadow). Same goal in, same
+                // cost out — so the ETA can't diverge from what build calibrates to.
+                var inputs =
+                        BuildPlanForecast.inputsFor(mdir, cache, workers, jdksDir, profile, skipTests, global.verbose);
+                var builder = dev.jkbuild.runtime.BuildPipeline.coreBuilder(inputs, m.dirty());
+                dev.jkbuild.runtime.BuildPipeline.appendDeclaredTails(builder, inputs);
+                var goal = builder.build();
+                costs.add(dev.jkbuild.runtime.EffortWeights.costOf(
+                        mdir, graph.edges().getOrDefault(mdir, Set.of()), goal));
             }
-            int concurrency = Math.max(1, Math.min(Runtime.getRuntime().availableProcessors(), modules.size()));
-            etaMillis = dev.jkbuild.runtime.EffortWeights.scheduleMillis(costs, concurrency, serial, parallelTests);
+            int concurrency = serial
+                    ? 1
+                    : dev.jkbuild.worker.HeapPlan.requestedJvms(
+                            graph.maxReadyWidth(), workers, parallelTests, Runtime.getRuntime()
+                                    .availableProcessors());
+            // Cold (no learned timings): anchor the weight→ms conversion to this host, probing once
+            // if needed — the sanctioned exception to explain being a pure dry run. Warm: learned
+            // rates already encode the machine, so the constant round-trips and we don't re-scale.
+            long msPerWeight = dev.jkbuild.runtime.PhaseTimings.load(cache).isEmpty()
+                    ? Math.round(dev.jkbuild.runtime.Calibration.ensure(jdksDir).msPerWeight())
+                    : dev.jkbuild.runtime.EffortWeights.MS_PER_WEIGHT;
+            etaMillis = dev.jkbuild.runtime.EffortWeights.scheduleMillis(
+                    costs, concurrency, serial, parallelTests, msPerWeight);
         } catch (RuntimeException e) {
             etaMillis = 0; // never fail explain over the estimate
         }
