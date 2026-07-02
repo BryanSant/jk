@@ -42,8 +42,8 @@ public final class Rail {
     /** Horizontal bars drawn after the corner glyph on the top/bottom of the frame. */
     private static final String CORNER_DASHES = "──";
 
-    public static final String CHECKBOX_OFF = "◻";
-    public static final String CHECKBOX_ON = "◼";
+    public static final String CHECKBOX_OFF = "□";
+    public static final String CHECKBOX_ON = "■";
     public static final String RADIO_ON = "●";
     public static final String RADIO_OFF = "○";
 

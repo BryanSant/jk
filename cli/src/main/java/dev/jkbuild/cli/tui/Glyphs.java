@@ -19,8 +19,9 @@ public final class Glyphs {
     /** Warning marker — U+203C double exclamation. Paint with {@code Theme.warning()}. */
     public static final String BANG = "‼";
 
-    /** Pending / active phase-row marker — white medium square. */
-    public static final String PENDING = "◻";
+    /** Pending / active phase-row marker — white square (Neutral East Asian Width; avoids the
+     * Ambiguous-width medium square, which some terminal/font combos render double-wide). */
+    public static final String PENDING = "□";
 
     /** Run/exec marker — right-pointing triangle. Paint with {@code Theme.brightGreen()}. */
     public static final String PLAY = "▶";
