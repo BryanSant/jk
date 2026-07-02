@@ -18,7 +18,7 @@ import org.junit.jupiter.api.io.TempDir;
 /** {@code jk explain} renders the unified composite build plan (BuildGraph). */
 class ExplainCommandTest {
 
-    private static void project(Path dir, String name, String... pathDeps) throws IOException {
+    private static void project(Path dir, String name, String... deps) throws IOException {
         Files.createDirectories(dir);
         StringBuilder sb = new StringBuilder("""
                 [project]
@@ -28,13 +28,33 @@ class ExplainCommandTest {
                 jdk     = 21
                 java    = 21
                 """.formatted(name));
-        if (pathDeps.length > 0) {
+        if (deps.length > 0) {
+            // Sibling modules are declared by coordinate (inline path deps were removed); the
+            // workspace root resolves them to the local module builds.
             sb.append("\n[dependencies]\n");
-            for (String d : pathDeps) {
-                sb.append("%s = { group = \"com.example\", name = \"%s\", path = \"../%s\" }\n".formatted(d, d, d));
+            for (String d : deps) {
+                sb.append("%s = { group = \"com.example\", name = \"%s\", version = \"1.0.0\" }\n".formatted(d, d));
             }
         }
         Files.writeString(dir.resolve("jk.toml"), sb.toString());
+    }
+
+    /** A workspace-root jk.toml listing the given modules. */
+    private static void workspace(Path dir, String... modules) throws IOException {
+        Files.createDirectories(dir);
+        String mods = String.join(", ", Arrays.stream(modules).map(m -> '"' + m + '"').toList());
+        Files.writeString(
+                dir.resolve("jk.toml"),
+                """
+                [project]
+                group   = "com.example"
+                name    = "root"
+                version = "1.0.0"
+
+                [workspace]
+                modules = [%s]
+                """
+                        .formatted(mods));
     }
 
     private static String runExplainCapturingStdout(Path dir) {
@@ -89,18 +109,18 @@ class ExplainCommandTest {
 
     @Test
     void renders_units_in_dependency_order(@TempDir Path tmp) throws Exception {
+        // A two-module workspace: app depends on sibling module lib by coordinate.
+        workspace(tmp, "lib", "app");
         project(tmp.resolve("lib"), "lib");
         project(tmp.resolve("app"), "app", "lib");
 
         // Assertions target single-color-span tokens, so they hold whether or not ANSI
         // color is active (each coordinate segment is one colorize call).
-        String out = runExplainCapturingStdout(tmp.resolve("app"));
+        String out = runExplainCapturingStdout(tmp);
 
         assertThat(out).contains("Modules: 2");
         assertThat(out).contains("com.example").contains("app").contains("lib");
-        // Both modules rebuild (fresh), listed dependency-first: lib (the path dep) before
-        // app (the root). app also appears once on the ● root line, so compare app's row
-        // via lastIndexOf.
+        // Both modules rebuild (fresh), listed dependency-first: lib before app.
         assertThat(out.indexOf("lib")).isLessThan(out.lastIndexOf("app"));
     }
 }

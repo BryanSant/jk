@@ -31,7 +31,7 @@ class DiagnosticsTest {
             assertThat(rendered).contains("Cannot resolve dependencies");
             assertThat(rendered).contains("A 1.0 depends on shared 1.0");
             assertThat(rendered).contains("B 1.0 depends on shared 2.0");
-            assertThat(rendered).contains("unsatisfiable");
+            assertThat(rendered).contains("cannot be resolved");
         } catch (Exception e) {
             fail("expected UnsatisfiableException, got: " + e);
         }

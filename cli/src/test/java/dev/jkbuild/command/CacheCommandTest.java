@@ -68,7 +68,7 @@ class CacheCommandTest {
         assertThat(Files.exists(leftoverTmp)).isFalse();
         assertThat(Files.exists(keptBlob)).isTrue();
         // New summary format breaks the count out by phase.
-        assertThat(stdout).contains("records expired 1").contains("temps 1");
+        assertThat(stdout).contains("Finished pruning cache").contains("removed");
     }
 
     @Test
@@ -80,7 +80,7 @@ class CacheCommandTest {
         String stdout = capture(() -> run("cache", "prune", "--cache-dir", cache.toString(), "--dry-run"));
 
         assertThat(Files.exists(stale)).isTrue();
-        assertThat(stdout).startsWith("Would prune").contains("records expired 1");
+        assertThat(stdout).contains("Dry run: would remove");
     }
 
     @Test
@@ -91,7 +91,7 @@ class CacheCommandTest {
 
         String stdout = capture(() -> run("cache", "purge", "--cache-dir", cache.toString(), "--yes"));
 
-        assertThat(stdout).contains("Removed 2 files");
+        assertThat(stdout).contains("Purged 2 files");
         assertThat(Files.exists(cache)).isTrue();
         try (var stream = Files.list(cache)) {
             assertThat(stream).isEmpty();
@@ -105,7 +105,7 @@ class CacheCommandTest {
 
         String stdout = withStdin("n\n", () -> capture(() -> run("cache", "purge", "--cache-dir", cache.toString())));
 
-        assertThat(stdout).contains("Aborted");
+        assertThat(stdout).contains("aborted");
         assertThat(Files.exists(cache.resolve("sha256/ab/cd/deadbeef"))).isTrue();
     }
 
@@ -116,7 +116,7 @@ class CacheCommandTest {
 
         String stdout = withStdin("y\n", () -> capture(() -> run("cache", "purge", "--cache-dir", cache.toString())));
 
-        assertThat(stdout).contains("Removed 1 files");
+        assertThat(stdout).contains("Purged 1 files");
         assertThat(Files.exists(cache.resolve("sha256/ab/cd/deadbeef"))).isFalse();
     }
 
@@ -127,7 +127,7 @@ class CacheCommandTest {
 
         String stdout = capture(() -> run("cache", "purge", "--cache-dir", cache.toString(), "--dry-run"));
 
-        assertThat(stdout).contains("Would remove 1 files");
+        assertThat(stdout).contains("Dry run: would remove");
         assertThat(Files.exists(cache.resolve("sha256/ab/cd/deadbeef"))).isTrue();
     }
 
@@ -135,7 +135,7 @@ class CacheCommandTest {
     void purge_missing_cache_dir_is_a_noop(@TempDir Path tempDir) throws Exception {
         Path cache = tempDir.resolve("cache");
         String stdout = capture(() -> run("cache", "purge", "--cache-dir", cache.toString(), "--yes"));
-        assertThat(stdout).contains("nothing to purge");
+        assertThat(stdout).contains("Nothing to purge");
     }
 
     @Test

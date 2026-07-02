@@ -85,8 +85,8 @@ class CommandManagerTest {
         cm.finishFailure("Failed to sync remote artifacts");
 
         String raw = buf.toString(StandardCharsets.UTF_8);
-        assertThat(stripAnsi(raw)).contains("‼ Failed to sync remote artifacts");
-        assertThat(raw).contains(Theme.colorize("‼", Theme.active().error()));
+        assertThat(stripAnsi(raw)).contains("✘ Failed to sync remote artifacts");
+        assertThat(raw).contains(Theme.colorize("✘", Theme.active().error()));
     }
 
     @Test
@@ -196,7 +196,7 @@ class CommandManagerTest {
                 .doesNotContain("[")
                 .doesNotContain("acme:api");
         assertThat(raw.get(0))
-                .contains(Theme.colorize("Building", Theme.active().focused()));
+                .contains(Theme.colorize(" · Building ", Theme.active().planBadge()));
         // Bar with percent, inlined into the header line — the N-of-M count is gone.
         assertThat(all).contains("45%");
         assertThat(all).doesNotContain("[45 of 100]");

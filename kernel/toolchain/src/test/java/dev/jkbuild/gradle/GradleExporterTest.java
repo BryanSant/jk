@@ -132,34 +132,8 @@ class GradleExporterTest {
         assertThat(r.buildFiles()).containsKey("mod-a");
     }
 
-    @Test
-    void path_dependency_becomes_includeBuild_plus_coordinate() {
-        JkBuild b = parse("""
-                [project]
-                group = "com.example"
-                name  = "app"
-                version = "1.0.0"
-                java = 21
-
-                [dependencies]
-                shared = { path = "../shared" }
-                """);
-
-        GradleExporter.Result r = GradleExporter.export(b, Map.of());
-
-        // settings.gradle.kts wires the composite build...
-        assertThat(r.settings()).contains("includeBuild(\"../shared\")");
-        // ...and build.gradle.kts depends by coordinate (no version → Gradle substitutes).
-        //
-        // KNOWN GAP: since path deps became pure discovery (coordinate + version read from the
-        // referenced directory's jk.toml, not the dep entry — JkBuildParser now rejects an
-        // explicit `group`/`name` alongside `path`), a bare JkBuildParser.parse() has no real
-        // coordinate to render here and GradleExporter falls back to the "path:<name>" placeholder
-        // module string. Gradle's composite-build substitution only fires for a genuine matching
-        // group:name, so this placeholder does NOT actually resolve today — rendering the correct
-        // coordinate would require GradleExporter to read the referenced directory's jk.toml.
-        assertThat(r.buildFiles().get("")).contains("implementation(\"path:shared\")");
-    }
+    // Note: inline `path = "..."` dependencies were removed from the manifest schema (path targets
+    // are now declared as workspace modules), so there is no path→includeBuild export case to test.
 
     @Test
     void git_dependency_is_dropped_with_warning() {

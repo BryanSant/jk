@@ -229,10 +229,14 @@ public final class JavaIncrementalCompile {
         ActionCache.ActionRecord p = prior.get();
         if (p.units().isEmpty()) return false; // pre-incremental record
         Map<String, String> in = p.inputs();
-        // release/options change → full (they affect every class). A *classpath*
-        // change is fine: the incremental loop diffs dependency ABIs (§ phase 3).
+        // release/options change → full (they affect every class).
         if (!String.valueOf(request.release()).equals(in.getOrDefault("release", null))) return false;
         if (!String.join(",", request.extraOptions()).equals(in.getOrDefault("options", ""))) return false;
+        // A classpath change (a dependency bump: its CAS path/content changed) has no
+        // fine-grained ABI-diff mechanism, so a source referencing the dependency could go
+        // stale → recompile the whole module. (CAS paths encode content, so an unchanged
+        // classpath hashes identically here; only a real change forces the full rebuild.)
+        if (!classpathUnchanged(request, in)) return false;
         // A processor-path change has no ABI-diff mechanism (a new processor can
         // regenerate anything) → full. (CAS paths encode content, so a processor
         // version bump shows up as a different path here.)
@@ -249,6 +253,15 @@ public final class JavaIncrementalCompile {
             now.add("pp:" + pp.toAbsolutePath().normalize());
         Set<String> prior = new TreeSet<>();
         for (String k : in.keySet()) if (k.startsWith("pp:")) prior.add(k);
+        return now.equals(prior);
+    }
+
+    private static boolean classpathUnchanged(CompileRequest request, Map<String, String> in) {
+        Set<String> now = new TreeSet<>();
+        for (Path cp : request.classpath())
+            now.add("cp:" + cp.toAbsolutePath().normalize());
+        Set<String> prior = new TreeSet<>();
+        for (String k : in.keySet()) if (k.startsWith("cp:")) prior.add(k);
         return now.equals(prior);
     }
 
