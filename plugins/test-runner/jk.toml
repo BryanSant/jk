@@ -7,10 +7,13 @@ description = "jk-test-runner: child-JVM entry point that drives JUnit Platform 
 jdk      = 25
 java     = 25
 main     = "dev.jkbuild.test.runner.JkRunner"
+shadow   = true   # runnable fat jar: bundles plugin-api (PluginWorkerMain) so the forked
+                  # worker launches standalone (`-cp <jar> PluginWorkerMain`), like the other workers.
 
 [manifest]
 "Implementation-Title" = "jk-test-runner"
 "Implementation-Version" = "0.1.0"
 
 [dependencies]
+jk-plugin-api         = { group = "dev.jkbuild", name = "jk-plugin-api", version = "0.6.0-SNAPSHOT" }
 junit-platform-engine = { group = "org.junit.platform", version = ">=6.0.0" }
