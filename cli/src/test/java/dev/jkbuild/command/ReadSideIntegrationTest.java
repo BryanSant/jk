@@ -140,8 +140,8 @@ class ReadSideIntegrationTest {
                 base.toString()));
 
         assertThat(lockFile).exists();
-        // The lock path is path-colored; strip ANSI before matching the plain path.
-        assertThat(out.replaceAll("\\u001B\\[[;0-9]*m", "")).contains("Created " + lockFile);
+        // sync auto-locks when jk.lock is missing, then reports its summary.
+        assertThat(out.replaceAll("\\u001B\\[[;0-9]*m", "")).contains("Sync");
         // The package we added should show up in the freshly written lock.
         assertThat(Files.readString(lockFile)).contains("com.foo:leaf");
     }

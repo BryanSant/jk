@@ -81,6 +81,7 @@ class InstallCommandTest {
 
         Path bin = tempDir.resolve("bin");
         Path cache = tempDir.resolve("cache");
+        Path m2 = tempDir.resolve("m2");
         int exit = Jk.execute(
                 "install",
                 "-C",
@@ -92,12 +93,17 @@ class InstallCommandTest {
                 "--bin-dir",
                 bin.toString(),
                 "--libexec-dir",
-                tempDir.resolve("libexec").toString());
+                tempDir.resolve("libexec").toString(),
+                "--m2-dir",
+                m2.toString());
         // A library is not a usage error any more — it cache-installs.
         assertThat(exit).isEqualTo(0);
         assertThat(bin.resolve("lib-only")).doesNotExist(); // no launcher
-        // The m2 local repo mirrors the local install so other projects can resolve it.
-        assertThat(cache.resolve("repo/com/example/lib-only/0.1.0/lib-only-0.1.0.jar"))
+        // ~/.m2 is primary now: the JAR lands in the local Maven repo so other projects
+        // resolve it, with an index sidecar in the cache's repos/local/ pointing at it.
+        assertThat(m2.resolve("repository/com/example/lib-only/0.1.0/lib-only-0.1.0.jar"))
+                .exists();
+        assertThat(cache.resolve("repos/local/com/example/lib-only/0.1.0/lib-only-0.1.0.jar.sha256"))
                 .exists();
     }
 

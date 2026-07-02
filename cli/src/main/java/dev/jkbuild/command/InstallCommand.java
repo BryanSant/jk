@@ -529,8 +529,8 @@ public final class InstallCommand implements CliCommand {
         byte[] pomBytes = pomXml.getBytes(java.nio.charset.StandardCharsets.UTF_8);
 
         if (p.m2install()) {
-            // ~/.m2 is primary.
-            Path m2Root = dev.jkbuild.repo.M2Dirs.localRepository();
+            // ~/.m2 is primary. Honor --m2-dir so installs are redirectable (tests, sandboxes).
+            Path m2Root = m2Dir().resolve("repository");
 
             // JAR → ~/.m2 with .sha1, .md5, _remote.repositories
             Path m2Jar = m2Root.resolve(jarRelPath);

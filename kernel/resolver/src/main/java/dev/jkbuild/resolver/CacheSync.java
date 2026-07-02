@@ -102,6 +102,15 @@ public final class CacheSync {
                 observer.upToDate(pkg);
                 continue;
             }
+            // A "local" source (jk install <file>, jk's own worker JARs) is never fetched from a
+            // remote repo — it lives in the repos/local full store. Materialize it into the CAS so
+            // the compile classpath can resolve it by hash, then treat it as satisfied.
+            if ("local".equals(pkg.source())) {
+                if (materializeLocal(pkg, hex)) upToDate++;
+                else skipped++;
+                observer.upToDate(pkg);
+                continue;
+            }
             pending.add(new PendingFetch(pkg, hex, repoFor(pkg.source(), repoCache)));
         }
 
@@ -269,6 +278,26 @@ public final class CacheSync {
         // the sidecar in repos/<name>/ AND the actual artifact in ~/.m2.
         dev.jkbuild.repo.RepoArtifactStore store = dev.jkbuild.repo.RepoArtifactStore.forRepoName(cas.root(), repoName);
         return store.contains(m2Path);
+    }
+
+    /**
+     * Ensure a {@code local}-source artifact (installed into the repos/local full store) is present
+     * in the CAS under its locked hash, so the compile classpath can resolve it by hash. Returns
+     * false when the artifact isn't in the local store (nothing to materialize).
+     */
+    private boolean materializeLocal(Lockfile.Artifact pkg, String hex) {
+        if (cas.contains(hex)) return true;
+        dev.jkbuild.repo.RepoArtifactStore local =
+                dev.jkbuild.repo.RepoArtifactStore.forRepoName(cas.root(), "local");
+        java.util.Optional<java.nio.file.Path> jar =
+                local.locate(dev.jkbuild.repo.MavenLayout.artifactPath(toCoord(pkg)));
+        if (jar.isEmpty()) return false;
+        try {
+            cas.putByLink(jar.get(), hex);
+            return true;
+        } catch (java.io.IOException e) {
+            return false;
+        }
     }
 
     private MavenRepo repoFor(String source, Map<String, MavenRepo> cache) {
