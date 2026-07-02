@@ -50,8 +50,17 @@ class PublishCommandTest {
 
     @Test
     void publishes_jar_pom_sources_and_checksums(@TempDir Path tempDir) throws Exception {
-        writeJkBuild(tempDir);
-        writeJar(tempDir.resolve("target/widget-1.0.0.jar"));
+        // sources = true → PUBLISH mode: the sources jar is assembled at publish time
+        // (sourcesMode defaults to DISABLED, so it must be opted into here).
+        Files.writeString(tempDir.resolve("jk.toml"), """
+                [project]
+                group    = "com.example"
+                name     = "widget"
+                version  = "1.0.0"
+                jdk      = 21
+                sources  = true
+                """);
+        writeJar(tempDir.resolve("target/lib/widget-1.0.0.jar"));
         writeSource(
                 tempDir.resolve("src/main/java/com/example/Widget.java"),
                 "package com.example; public class Widget {}");
@@ -83,7 +92,7 @@ class PublishCommandTest {
                 version  = "1.0.0-SNAPSHOT"
                 jdk      = 21
                 """);
-        writeJar(tempDir.resolve("target/widget-1.0.0-SNAPSHOT.jar"));
+        writeJar(tempDir.resolve("target/lib/widget-1.0.0-SNAPSHOT.jar"));
 
         int exit = run("publish", "-C", tempDir.toString(), "--repo-url", base.toString());
         assertThat(exit).isEqualTo(65); // EX_DATAERR
@@ -99,7 +108,7 @@ class PublishCommandTest {
                 version  = "1.0.0-SNAPSHOT"
                 jdk      = 21
                 """);
-        writeJar(tempDir.resolve("target/widget-1.0.0-SNAPSHOT.jar"));
+        writeJar(tempDir.resolve("target/lib/widget-1.0.0-SNAPSHOT.jar"));
 
         int exit = run(
                 "publish", "-C", tempDir.toString(), "--repo-url", base.toString(), "--allow-snapshot");
@@ -109,7 +118,7 @@ class PublishCommandTest {
     @Test
     void sources_disabled_by_default_no_sources_jar(@TempDir Path tempDir) throws Exception {
         writeJkBuild(tempDir);
-        writeJar(tempDir.resolve("target/widget-1.0.0.jar"));
+        writeJar(tempDir.resolve("target/lib/widget-1.0.0.jar"));
 
         int exit = run("publish", "-C", tempDir.toString(), "--repo-url", base.toString());
         assertThat(exit).isEqualTo(0);
@@ -129,7 +138,7 @@ class PublishCommandTest {
         var key = GpgTestFixture.generate(tempDir, "pass");
 
         writeJkBuild(tempDir);
-        writeJar(tempDir.resolve("target/widget-1.0.0.jar"));
+        writeJar(tempDir.resolve("target/lib/widget-1.0.0.jar"));
 
         int exit = run(
                 "publish",
@@ -153,7 +162,7 @@ class PublishCommandTest {
     @Test
     void sign_without_key_file_errors(@TempDir Path tempDir) throws Exception {
         writeJkBuild(tempDir);
-        writeJar(tempDir.resolve("target/widget-1.0.0.jar"));
+        writeJar(tempDir.resolve("target/lib/widget-1.0.0.jar"));
         int exit = run("publish", "-C", tempDir.toString(), "--repo-url", base.toString(), "--sign");
         // CommandLine propagates the runtime error as a non-zero exit.
         assertThat(exit).isNotZero();
@@ -162,7 +171,7 @@ class PublishCommandTest {
     @Test
     void dry_run_makes_no_http_requests(@TempDir Path tempDir) throws Exception {
         writeJkBuild(tempDir);
-        writeJar(tempDir.resolve("target/widget-1.0.0.jar"));
+        writeJar(tempDir.resolve("target/lib/widget-1.0.0.jar"));
 
         int exit = run("publish", "-C", tempDir.toString(), "--repo-url", base.toString(), "--dry-run");
         assertThat(exit).isEqualTo(0);
@@ -172,7 +181,7 @@ class PublishCommandTest {
     @Test
     void slsa_emits_intoto_provenance_for_the_main_jar(@TempDir Path tempDir) throws Exception {
         writeJkBuild(tempDir);
-        writeJar(tempDir.resolve("target/widget-1.0.0.jar"));
+        writeJar(tempDir.resolve("target/lib/widget-1.0.0.jar"));
 
         int exit = run("publish", "-C", tempDir.toString(), "--repo-url", base.toString(), "--slsa");
         assertThat(exit).isEqualTo(0);
@@ -188,7 +197,7 @@ class PublishCommandTest {
     @Test
     void sbom_emits_cyclonedx_and_spdx_sidecars(@TempDir Path tempDir) throws Exception {
         writeJkBuild(tempDir);
-        writeJar(tempDir.resolve("target/widget-1.0.0.jar"));
+        writeJar(tempDir.resolve("target/lib/widget-1.0.0.jar"));
 
         int exit = run("publish", "-C", tempDir.toString(), "--repo-url", base.toString(), "--sbom");
         assertThat(exit).isEqualTo(0);
@@ -214,7 +223,7 @@ class PublishCommandTest {
         // would otherwise need network + OIDC. Same goes for --sign without a
         // key file — dry-run is the path users hit while exploring the verb.
         writeJkBuild(tempDir);
-        writeJar(tempDir.resolve("target/widget-1.0.0.jar"));
+        writeJar(tempDir.resolve("target/lib/widget-1.0.0.jar"));
 
         int exit = run("publish", "-C", tempDir.toString(), "--repo-url", base.toString(), "--sigstore", "--dry-run");
         assertThat(exit).isEqualTo(0);
@@ -245,7 +254,7 @@ class PublishCommandTest {
                 [dependencies]
                 lib = { path = "../lib" }
                 """);
-        writeJar(tempDir.resolve("target/widget-1.0.0.jar"));
+        writeJar(tempDir.resolve("target/lib/widget-1.0.0.jar"));
 
         int exit = run("publish", "-C", tempDir.toString(), "--repo-url", base.toString());
 

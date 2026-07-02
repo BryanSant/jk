@@ -35,7 +35,7 @@ class ImageCommandTest {
                 tempDir.resolve("cache").toString());
 
         assertThat(exit).isEqualTo(64);
-        assertThat(tempDir.resolve("target/widget-0.1.0.jar")).exists();
+        assertThat(tempDir.resolve("target/lib/widget-0.1.0.jar")).exists();
         assertThat(tempDir.resolve("jk.lock")).exists();
     }
 

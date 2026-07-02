@@ -27,7 +27,7 @@ class DoctorCommandTest {
         Files.createSymbolicLink(link, tempDir.resolve("nonexistent"));
 
         String stdout = capture(() -> Jk.execute("doctor", "--tools-dir", tempDir.toString()));
-        assertThat(stdout).contains("pruned: maven 3.9.9");
+        assertThat(stdout).containsPattern("pruned:\\s+maven 3.9.9");
         assertThat(stdout).contains("1 pruned");
         assertThat(Files.exists(link, LinkOption.NOFOLLOW_LINKS)).isFalse();
     }
@@ -40,7 +40,7 @@ class DoctorCommandTest {
         Files.writeString(home.resolve("bin/gradle"), "#!/bin/sh\n");
 
         String stdout = capture(() -> Jk.execute("doctor", "--tools-dir", tempDir.toString()));
-        assertThat(stdout).contains("ok:       gradle 9.5.1");
+        assertThat(stdout).containsPattern("ok:\\s+gradle 9.5.1");
     }
 
     private static String capture(Runnable body) {
@@ -52,6 +52,7 @@ class DoctorCommandTest {
         } finally {
             System.setOut(original);
         }
-        return buf.toString(StandardCharsets.UTF_8);
+        // Strip ANSI so assertions match the text regardless of color/alignment styling.
+        return buf.toString(StandardCharsets.UTF_8).replaceAll("\\x1b\\[[0-9;]*m", "");
     }
 }
