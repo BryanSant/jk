@@ -203,8 +203,7 @@ public final class JkRunner implements Plugin {
                     var uid = org.junit.platform.engine.UniqueId.root("[engine]", engine.getId());
                     var descriptor = engine.discover(classRequest, uid);
                     if (descriptor.getChildren().isEmpty()) continue; // engine has nothing for this class
-                    var execRequest = org.junit.platform.engine.ExecutionRequest.create(
-                            descriptor, streaming, EmptyConfigParams.INSTANCE);
+                    var execRequest = makeExecutionRequest(descriptor, streaming);
                     engine.execute(execRequest);
                 }
                 streaming.emitReady();

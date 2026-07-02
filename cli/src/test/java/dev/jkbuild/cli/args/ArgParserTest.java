@@ -117,14 +117,14 @@ class ArgParserTest {
     void positionals_arityValidation() {
         Command oneRequired = cmd(List.of(), List.of(Param.of("coord", Arity.ONE, "the coord")));
         assertThatThrownBy(() -> parse(oneRequired)).isInstanceOf(ParseException.class);
-        ParseException tooMany = catchThrowableOfType(() -> parse(oneRequired, "a", "b"), ParseException.class);
+        ParseException tooMany = catchThrowableOfType(ParseException.class, () -> parse(oneRequired, "a", "b"));
         assertThat(tooMany.kind()).isEqualTo(ParseException.Kind.TOO_MANY_ARGS);
     }
 
     @Test
     void unknownOption_throws() {
         Command c = cmd(List.of(Opt.flag("quiet", "--quiet")), List.of());
-        ParseException ex = catchThrowableOfType(() -> parse(c, "--bogus"), ParseException.class);
+        ParseException ex = catchThrowableOfType(ParseException.class, () -> parse(c, "--bogus"));
         assertThat(ex.kind()).isEqualTo(ParseException.Kind.UNKNOWN_OPTION);
         assertThat(ex.token()).isEqualTo("--bogus");
     }
@@ -132,14 +132,14 @@ class ArgParserTest {
     @Test
     void missingValue_throws() {
         Command c = cmd(List.of(Opt.value("<name>", "profile", "--profile")), List.of());
-        ParseException ex = catchThrowableOfType(() -> parse(c, "--profile"), ParseException.class);
+        ParseException ex = catchThrowableOfType(ParseException.class, () -> parse(c, "--profile"));
         assertThat(ex.kind()).isEqualTo(ParseException.Kind.MISSING_VALUE);
     }
 
     @Test
     void requiredOption_throwsWhenAbsent() {
         Command c = cmd(List.of(Opt.value("<url>", "repo", "--repo-url").require()), List.of());
-        ParseException ex = catchThrowableOfType(() -> parse(c), ParseException.class);
+        ParseException ex = catchThrowableOfType(ParseException.class, () -> parse(c));
         assertThat(ex.kind()).isEqualTo(ParseException.Kind.MISSING_REQUIRED);
     }
 
@@ -179,7 +179,7 @@ class ArgParserTest {
     @Test
     void ambiguousPrefix_throws() {
         Command c = cmd(List.of(Opt.flag("stack", "--stack"), Opt.value("<s>", "scopes", "--scopes")), List.of());
-        ParseException ex = catchThrowableOfType(() -> parse(c, "--s"), ParseException.class);
+        ParseException ex = catchThrowableOfType(ParseException.class, () -> parse(c, "--s"));
         assertThat(ex.kind()).isEqualTo(ParseException.Kind.AMBIGUOUS_OPTION);
         assertThat(ex.getMessage()).contains("--scopes").contains("--stack");
     }
