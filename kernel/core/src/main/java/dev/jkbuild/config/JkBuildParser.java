@@ -115,8 +115,8 @@ public final class JkBuildParser {
                     "failed to parse jk.toml: " + result.errors().getFirst().getMessage());
         }
         JkBuild.Project project = parseProject(result);
-        Workspace workspace = parseWorkspace(result);
         LibraryCatalog effective = catalog.withProjectOverrides(parseProjectLibraries(result));
+        Workspace workspace = parseWorkspace(result, effective);
         JkBuild.Dependencies deps = parseDependencies(result, workspace, effective);
         List<RepositorySpec> repos = parseRepositories(result);
         Profiles profiles = parseProfiles(result);
@@ -1016,7 +1016,7 @@ public final class JkBuildParser {
         return new Features(byName, defaults);
     }
 
-    private static Workspace parseWorkspace(TomlTable root) {
+    private static Workspace parseWorkspace(TomlTable root, LibraryCatalog catalog) {
         TomlTable workspace = root.getTable("workspace");
         if (workspace == null) return null;
         // `modules` is the documented key; `members` is an undocumented synonym kept
@@ -1027,35 +1027,55 @@ public final class JkBuildParser {
                 ? modules
                 : java.util.stream.Stream.concat(modules.stream(), members.stream())
                         .toList();
-        Map<String, WorkspaceDependency> wsDeps = parseWorkspaceDependencies(workspace);
+        Map<String, WorkspaceDependency> wsDeps = parseWorkspaceDependencies(workspace, catalog);
         return new Workspace(all, wsDeps);
     }
 
-    private static Map<String, WorkspaceDependency> parseWorkspaceDependencies(TomlTable workspace) {
+    private static Map<String, WorkspaceDependency> parseWorkspaceDependencies(
+            TomlTable workspace, LibraryCatalog catalog) {
         TomlTable wsDeps = workspace.getTable("dependencies");
         if (wsDeps == null) return Map.of();
         Map<String, WorkspaceDependency> out = new LinkedHashMap<>();
         for (String name : wsDeps.keySet()) {
             Object value = wsDeps.get(List.of(name));
-            if (!(value instanceof TomlTable entry)) {
-                throw new JkBuildParseException("workspace.dependencies." + name + " must be an inline table");
+            String displayPath = "workspace.dependencies." + name;
+            if (value instanceof String shorthand) {
+                out.put(name, parseWorkspaceShorthand(name, shorthand, displayPath, catalog));
+            } else if (value instanceof TomlTable entry) {
+                out.put(name, parseWorkspaceDepEntry(name, entry, catalog));
+            } else {
+                throw new JkBuildParseException(displayPath + " must be a version-string shorthand"
+                        + " (e.g. \"1.2.3\") or an inline table");
             }
-            out.put(name, parseWorkspaceDepEntry(name, entry));
         }
         return out;
     }
 
-    private static WorkspaceDependency parseWorkspaceDepEntry(String name, TomlTable entry) {
+    /**
+     * String shorthand for a workspace dependency: {@code name = "1.2.3"} (or {@code "^1.0"}, {@code
+     * "latest"}, …). The short {@code name} is resolved to a {@code group:artifact} through the
+     * bundled catalog, matching the {@code [dependencies]} shorthand. Local-path and git-URL string
+     * forms are not accepted here — a shared workspace dep must be a Maven coordinate (use the inline
+     * {@code git = "..."} table form for git, or a {@code [workspace] modules} entry for a sibling).
+     */
+    private static WorkspaceDependency parseWorkspaceShorthand(
+            String name, String value, String displayPath, LibraryCatalog catalog) {
+        if (value.isBlank()) {
+            throw new JkBuildParseException(displayPath + " has an empty value string");
+        }
+        if (value.startsWith(".") || value.startsWith("/")
+                || value.startsWith("git://") || value.startsWith("https://")) {
+            throw new JkBuildParseException(displayPath + " string shorthand must be a version spec"
+                    + " (e.g. \"1.2.3\"); for a git source use the inline `{ git = \"...\" }` form,"
+                    + " for a local sibling add it to `[workspace] modules`");
+        }
+        LibraryCatalog.Module mod = catalog.lookup(name)
+                .orElseThrow(() -> new JkBuildParseException(unknownLibraryMessage(displayPath, name, catalog)));
+        return new WorkspaceDependency(mod.group(), mod.artifact(), VersionSelector.parseFloating(value), null);
+    }
+
+    private static WorkspaceDependency parseWorkspaceDepEntry(String name, TomlTable entry, LibraryCatalog catalog) {
         String displayPath = "workspace.dependencies." + name;
-        String group = entry.getString("group");
-        if (group == null || group.isBlank()) {
-            throw new JkBuildParseException(displayPath + " must set a `group`");
-        }
-        String artifact = entry.getString("name");
-        if (artifact == null) artifact = name;
-        if (artifact.isBlank()) {
-            throw new JkBuildParseException(displayPath + ".name must not be blank");
-        }
         boolean hasVersion = entry.contains("version");
         boolean hasGit = entry.contains("git");
         if (entry.contains("path")) {
@@ -1073,15 +1093,41 @@ public final class JkBuildParser {
                     displayPath + " sets more than one of `version` / `git`; pick exactly one");
         }
         if (hasGit) {
+            // Git workspace deps still carry an explicit coordinate: the shared coordinate is what
+            // sibling modules pin against, and it must be known at parse time.
+            String gitGroup = entry.getString("group");
+            if (gitGroup == null || gitGroup.isBlank()) {
+                throw new JkBuildParseException(displayPath + " with `git` must set a `group`");
+            }
+            String gitArtifact = entry.getString("name");
+            if (gitArtifact == null) gitArtifact = name;
+            if (gitArtifact.isBlank()) {
+                throw new JkBuildParseException(displayPath + ".name must not be blank");
+            }
             GitSource source = parseGitSource(entry, displayPath);
-            return new WorkspaceDependency(group, artifact, null, source);
+            return new WorkspaceDependency(gitGroup, gitArtifact, null, source);
+        }
+        // Version dep: group/name may be explicit or resolved from the catalog by the short name,
+        // exactly like a [dependencies] entry.
+        String groupExplicit = entry.getString("group");
+        String artifactExplicit = entry.getString("name");
+        LibraryCatalog.Module catalogHit = (groupExplicit == null) ? catalog.lookup(name).orElse(null) : null;
+        String group = groupExplicit != null ? groupExplicit : (catalogHit != null ? catalogHit.group() : null);
+        String artifact = artifactExplicit != null
+                ? artifactExplicit
+                : (catalogHit != null ? catalogHit.artifact() : name);
+        if (group == null || group.isBlank()) {
+            throw new JkBuildParseException(
+                    displayPath + " must set a `group` (or use a catalog-known short name)");
+        }
+        if (artifact.isBlank()) {
+            throw new JkBuildParseException(displayPath + ".name must not be blank");
         }
         String versionRaw = entry.getString("version");
         if (versionRaw == null || versionRaw.isBlank()) {
             throw new JkBuildParseException(displayPath + ".version must not be blank");
         }
-        VersionSelector selector = VersionSelector.parseFloating(versionRaw);
-        return new WorkspaceDependency(group, artifact, selector, null);
+        return new WorkspaceDependency(group, artifact, VersionSelector.parseFloating(versionRaw), null);
     }
 
     // -----------------------------------------------------------------------

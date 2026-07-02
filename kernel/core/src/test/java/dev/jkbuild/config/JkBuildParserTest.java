@@ -678,6 +678,59 @@ class JkBuildParserTest {
     }
 
     @Test
+    void workspace_dependencies_string_shorthand_resolves_through_catalog() {
+        JkBuild parsed = JkBuildParser.parse(PROJECT + """
+                [workspace]
+                modules = ["a"]
+
+                [workspace.dependencies]
+                jackson-databind = "2.18.2"
+                """, TEST_CATALOG);
+        var jd = parsed.workspace().dependencies().get("jackson-databind");
+        assertThat(jd.module()).isEqualTo("tools.jackson.core:jackson-databind");
+        assertThat(jd.version()).isInstanceOf(VersionSelector.Caret.class);
+    }
+
+    @Test
+    void workspace_dependencies_table_without_group_resolves_through_catalog() {
+        JkBuild parsed = JkBuildParser.parse(PROJECT + """
+                [workspace]
+                modules = ["a"]
+
+                [workspace.dependencies]
+                picocli = { version = "4.7.7" }
+                """, TEST_CATALOG);
+        var pico = parsed.workspace().dependencies().get("picocli");
+        assertThat(pico.module()).isEqualTo("info.picocli:picocli");
+    }
+
+    @Test
+    void workspace_dependencies_unknown_shorthand_is_rejected() {
+        assertThatThrownBy(() -> JkBuildParser.parse(PROJECT + """
+                [workspace]
+                modules = ["a"]
+
+                [workspace.dependencies]
+                some-unknown-thing = "1.0.0"
+                """, TEST_CATALOG))
+                .isInstanceOf(JkBuildParseException.class)
+                .hasMessageContaining("unknown short name");
+    }
+
+    @Test
+    void workspace_dependencies_string_shorthand_rejects_git_url() {
+        assertThatThrownBy(() -> JkBuildParser.parse(PROJECT + """
+                [workspace]
+                modules = ["a"]
+
+                [workspace.dependencies]
+                shared = "https://github.com/acme/shared"
+                """))
+                .isInstanceOf(JkBuildParseException.class)
+                .hasMessageContaining("version spec");
+    }
+
+    @Test
     void workspace_dependencies_rejects_path_source() {
         assertThatThrownBy(() -> JkBuildParser.parse(PROJECT + """
                 [workspace]

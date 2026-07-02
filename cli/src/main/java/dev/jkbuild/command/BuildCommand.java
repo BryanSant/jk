@@ -23,8 +23,11 @@ import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.run.Goal;
 import dev.jkbuild.run.GoalKey;
 import dev.jkbuild.run.GoalResult;
+import dev.jkbuild.runtime.AutoLock;
 import dev.jkbuild.runtime.BuildGraph;
 import dev.jkbuild.runtime.BuildPipeline;
+import dev.jkbuild.runtime.LockFlow;
+import dev.jkbuild.resolver.pubgrub.UnsatisfiableException;
 import dev.jkbuild.test.JUnitLauncher;
 import dev.jkbuild.util.JkDirs;
 import dev.jkbuild.util.JkThreads;
@@ -166,7 +169,65 @@ public final class BuildCommand implements CliCommand {
 
     /** Default: parallel graph build; {@code --no-parallel}: the serial rich aggregate view. */
     private int buildWorkspace(Path root, JkBuild rootBuild) throws Exception {
+        // Whole-workspace staleness guard: the per-module cache forecast can report "all up to
+        // date" against per-module locks even when the merged workspace lock is stale or a
+        // root-declared dependency is unresolvable — silently masking a broken workspace. Before any
+        // build decision, re-lock the whole workspace when stale so an unsatisfiable dep fails the
+        // build here instead of lying "up to date".
+        int lockGuard = ensureWorkspaceLockFresh(root, rootBuild);
+        if (lockGuard != 0) return lockGuard;
         return noParallel ? runWorkspaceBuild(root, rootBuild) : runGraphParallel(root, rootBuild);
+    }
+
+    /**
+     * If the merged workspace lock ({@code root/jk.lock}) is missing or older than the root manifest
+     * or any member manifest, re-lock the whole workspace (a merged resolve, the same {@link
+     * LockFlow} path {@code jk lock} uses). Returns 0 when the lock is fresh or was refreshed
+     * successfully; a non-zero exit code (surfacing the resolver diagnostic) when the merged
+     * dependencies are unsatisfiable — so {@code jk build} fails rather than reporting a false
+     * success. Transient failures (I/O, network) fall through to the normal per-unit path.
+     */
+    private int ensureWorkspaceLockFresh(Path root, JkBuild rootBuild) {
+        Path rootLock = root.resolve("jk.lock");
+        if (!workspaceLockStale(root, rootBuild, rootLock)) return 0;
+        Path cache = cacheDir != null ? cacheDir : JkDirs.cache();
+        boolean nerdfont = GlobalConfig.nerdfont();
+        try {
+            LockFlow.Result r = LockFlow.run(root, cache, List.of(), true, null);
+            if (r.status() != 0) {
+                if (r.error() != null && !global.outputIsJson()) System.err.println(r.error());
+                if (!global.outputIsJson())
+                    System.err.println(GoalWedge.failureLine("Build", nerdfont, "dependency resolution failed"));
+                return r.status();
+            }
+            return 0;
+        } catch (UnsatisfiableException e) {
+            if (!global.outputIsJson()) {
+                System.err.println(e.getMessage());
+                System.err.println(GoalWedge.failureLine("Build", nerdfont, "dependency resolution failed"));
+            }
+            return 6;
+        } catch (Exception e) {
+            // Soft failure (I/O, network): don't block the build on the guard — the per-unit
+            // path will surface any genuine problem when it resolves classpaths.
+            return 0;
+        }
+    }
+
+    /**
+     * True when {@code rootLock} is absent or older than the root manifest or any declared member
+     * manifest — i.e. the merged workspace lock no longer reflects the manifests it was derived from.
+     */
+    private static boolean workspaceLockStale(Path root, JkBuild rootBuild, Path rootLock) {
+        if (!Files.exists(rootLock)) return true;
+        if (AutoLock.isStale(root, rootLock)) return true; // root jk.toml newer than the lock
+        if (rootBuild.workspace() != null) {
+            for (String module : rootBuild.workspace().modules()) {
+                Path moduleDir = root.resolve(module).normalize();
+                if (AutoLock.isStale(moduleDir, rootLock)) return true; // a member manifest is newer
+            }
+        }
+        return false;
     }
 
     /**

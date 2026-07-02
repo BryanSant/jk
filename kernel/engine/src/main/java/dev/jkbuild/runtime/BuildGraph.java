@@ -93,6 +93,17 @@ public final class BuildGraph {
             // Index by coord + bare name for sibling/order-after edge resolution.
             Map<String, Path> dirByCoord = new LinkedHashMap<>();
             Map<String, Path> dirByName = new LinkedHashMap<>();
+            // A workspace root that carries its own sources is itself a build unit — it
+            // compiles and locks like any module (its coordinate is already in the
+            // collision set). A pure coordinator root (no src/) is not built; its merged
+            // deps are still validated up front by the whole-workspace lock check.
+            Path rootDir = canonical(wsRoot);
+            boolean rootBuildable = CompileSupport.hasSources(rootDir);
+            if (rootBuildable) {
+                addUnit(rootDir, root, Origin.ROOT);
+                dirByCoord.put(root.project().group() + ":" + root.project().name(), rootDir);
+                dirByName.put(root.project().name(), rootDir);
+            }
             for (var e : modules.entrySet()) {
                 Path c = canonical(e.getKey());
                 addUnit(c, e.getValue(), moduleOrigin);
@@ -105,6 +116,10 @@ public final class BuildGraph {
             for (var e : modules.entrySet()) {
                 Path moduleDir = canonical(e.getKey());
                 addModuleEdges(moduleDir, e.getValue(), dirByCoord, dirByName);
+            }
+            // The root may depend on its own siblings — wire those edges too.
+            if (rootBuildable) {
+                addModuleEdges(rootDir, root, dirByCoord, dirByName);
             }
         }
 

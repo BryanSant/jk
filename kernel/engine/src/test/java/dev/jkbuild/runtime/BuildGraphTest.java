@@ -91,6 +91,70 @@ class BuildGraphTest {
     }
 
     @Test
+    void coordinator_workspace_root_without_sources_is_not_a_unit(@TempDir Path tmp) throws Exception {
+        Files.writeString(tmp.resolve("jk.toml"), """
+                [project]
+                group = "com.example"
+                name  = "root"
+                version = "1.0.0"
+                jdk = 21
+                java = 21
+
+                [workspace]
+                modules = ["core"]
+                """);
+        Files.createDirectories(tmp.resolve("core/src"));
+        Files.writeString(tmp.resolve("core/src/Main.java"), "class Main {}");
+        Files.writeString(tmp.resolve("core/jk.toml"), """
+                [project]
+                group = "com.example"
+                name  = "core"
+                version = "1.0.0"
+                jdk = 21
+                java = 21
+                """);
+
+        BuildGraph.Result r = resolve(tmp);
+
+        assertThat(r.errors()).isEmpty();
+        // Root has no src/ → coordinator only; only the module is a unit.
+        assertThat(coords(r)).containsExactly("com.example:core");
+    }
+
+    @Test
+    void self_buildable_workspace_root_is_also_a_unit(@TempDir Path tmp) throws Exception {
+        Files.writeString(tmp.resolve("jk.toml"), """
+                [project]
+                group = "com.example"
+                name  = "root"
+                version = "1.0.0"
+                jdk = 21
+                java = 21
+
+                [workspace]
+                modules = ["core"]
+                """);
+        // Root carries its own sources → it is itself a build unit.
+        Files.createDirectories(tmp.resolve("src"));
+        Files.writeString(tmp.resolve("src/Main.java"), "class Main {}");
+        Files.createDirectories(tmp.resolve("core/src"));
+        Files.writeString(tmp.resolve("core/src/Core.java"), "class Core {}");
+        Files.writeString(tmp.resolve("core/jk.toml"), """
+                [project]
+                group = "com.example"
+                name  = "core"
+                version = "1.0.0"
+                jdk = 21
+                java = 21
+                """);
+
+        BuildGraph.Result r = resolve(tmp);
+
+        assertThat(r.errors()).isEmpty();
+        assertThat(coords(r)).containsExactlyInAnyOrder("com.example:root", "com.example:core");
+    }
+
+    @Test
     void module_dependency_cycle_is_reported(@TempDir Path tmp) throws Exception {
         Files.writeString(tmp.resolve("jk.toml"), """
                 [project]
