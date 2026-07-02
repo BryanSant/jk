@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.jdk;
 
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
 
@@ -62,6 +64,50 @@ public final class SupportedJdk {
         for (int m : available) {
             if (isFirstClass(m, latest)) out.add(m);
         }
+        return out;
+    }
+
+    /**
+     * A GraalVM / native-image-capable catalog entry. Identified by {@code suggested_sdk_name}
+     * starting with {@code graalvm} ({@code graalvm-jdk-<major>} = Oracle GraalVM,
+     * {@code graalvm-ce-<major>} = GraalVM Community) — the robust signal, since the feed's
+     * {@code (vendor, product)} strings for CE don't match {@link JdkVendor}'s constants.
+     */
+    public static boolean isNativeImageCapable(JdkCatalog.Entry e) {
+        return e.suggestedSdkName() != null && e.suggestedSdkName().startsWith("graalvm");
+    }
+
+    /**
+     * The language-level majors {@code jk new} should offer for one track, newest-first, derived
+     * from the live catalog so a newly-published major appears automatically. {@code nativeOnly}
+     * restricts to {@linkplain #isNativeImageCapable native-image-capable} (GraalVM) distributions,
+     * so a native project can't be pinned to a Java release no GraalVM ships yet.
+     *
+     * <p>Mirrors the wizard's established shape: every {@linkplain JdkLts#isLtsMajor LTS} at or above
+     * {@link #MIN_MAJOR} that the catalog actually publishes, in descending order, then the newest
+     * non-LTS major appended last (e.g. 26 while 25 is the current LTS). Returns an empty list when
+     * the catalog is empty/unavailable so the caller can fall back to offline constants.
+     */
+    public static List<Integer> offerableMajors(JdkCatalog catalog, boolean nativeOnly, String os, String arch) {
+        if (catalog == null) return List.of();
+        TreeSet<Integer> avail = new TreeSet<>();
+        for (JdkCatalog.Entry e : catalog.entries()) {
+            if (e.os().equalsIgnoreCase(os)
+                    && e.arch().equalsIgnoreCase(arch)
+                    && !e.preview()
+                    && e.majorVersion() >= MIN_MAJOR
+                    && (!nativeOnly || isNativeImageCapable(e))) {
+                avail.add(e.majorVersion());
+            }
+        }
+        if (avail.isEmpty()) return List.of();
+        int max = avail.last();
+        int maxLts = JdkLts.latestLtsIn(avail).orElse(MIN_MAJOR);
+        List<Integer> out = new ArrayList<>();
+        for (int v = maxLts; v >= MIN_MAJOR; v--) {
+            if (JdkLts.isLtsMajor(v) && avail.contains(v)) out.add(v);
+        }
+        if (max > maxLts) out.add(max); // the newest non-LTS release, offered last
         return out;
     }
 }

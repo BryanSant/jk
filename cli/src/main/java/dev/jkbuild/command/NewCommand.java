@@ -112,6 +112,8 @@ public final class NewCommand implements CliCommand {
     private static final GoalKey<List> CANDIDATES = GoalKey.of("candidates", List.class);
 
     private static final GoalKey<Terminal> TERMINAL = GoalKey.of("terminal", Terminal.class);
+    private static final GoalKey<dev.jkbuild.jdk.JdkCatalog> CATALOG =
+            GoalKey.of("catalog", dev.jkbuild.jdk.JdkCatalog.class);
     private static final GoalKey<Answers> ANSWERS = GoalKey.of("answers", Answers.class);
     private static final GoalKey<NewJdkCandidate> PICKED = GoalKey.of("picked", NewJdkCandidate.class);
     private static final GoalKey<NewInputs> INPUTS = GoalKey.of("inputs", NewInputs.class);
@@ -308,6 +310,7 @@ public final class NewCommand implements CliCommand {
                         throw new RuntimeException("no jdks");
                     }
                     ctx.put(CANDIDATES, candidates);
+                    catalog.ifPresent(c -> ctx.put(CATALOG, c)); // drives the two-track language list
                     ctx.progress(1);
                 })
                 .build();
@@ -329,8 +332,8 @@ public final class NewCommand implements CliCommand {
                             Optional.ofNullable(System.getProperty("user.home"))
                                     .map(Path::of)
                                     .orElse(null));
-                    var wizard = buildWizard(candidates, groupGuess, parent, defaultJdk.isPresent(),
-                            directory != null && isCurrentDirArg(directory));
+                    var wizard = buildWizard(candidates, ctx.get(CATALOG).orElse(null), groupGuess, parent,
+                            defaultJdk.isPresent(), directory != null && isCurrentDirArg(directory));
                     var wizardResult = wizard.run(terminal, preset);
                     if (wizardResult.isEmpty()) {
                         // Cancelled via Ctrl-C. Wizard.printCancellation
@@ -573,6 +576,17 @@ public final class NewCommand implements CliCommand {
         // release) even when it diverges from the JDK toolchain; standalone
         // projects target their JDK.
         int resolvedJavaRelease = parent != null ? parent.javaRelease() : resolvedJdkMajor;
+        // A native binary needs a GraalVM (native-image) JDK; reject a Java release no GraalVM
+        // ships yet (e.g. 26 today). Same two-track rule the wizard enforces, checked here for the
+        // non-interactive flag path. Consult the catalog only when --native is set.
+        if (nativeImage && resolvedJavaRelease > 0) {
+            int maxNative = maxNativeMajor(fetchCatalogQuiet().orElse(null));
+            if (resolvedJavaRelease > maxNative) {
+                throw new IllegalArgumentException("--native requires a GraalVM (native-image) JDK; the newest "
+                        + "native-image-capable Java is " + maxNative + ", but Java " + resolvedJavaRelease
+                        + " was requested");
+            }
+        }
         var resolvedLang = (lang != null && !lang.isBlank())
                 ? parseLanguage(lang)
                 : (parent != null && parent.kotlin()) ? NewInputs.Language.KOTLIN : NewInputs.Language.JAVA;
@@ -862,6 +876,7 @@ public final class NewCommand implements CliCommand {
 
     private static Wizard buildWizard(
             List<NewJdkCandidate> candidates,
+            dev.jkbuild.jdk.JdkCatalog catalog,
             String groupGuess,
             ParentInfo parent,
             boolean hasDefaultJdk,
@@ -929,16 +944,25 @@ public final class NewCommand implements CliCommand {
         // release newer than the toolchain). Modules inherit the parent's
         // release, and when a global default JDK is set we adopt its major, so
         // both skip this question. Kotlin projects skip it too.
-        // LTS versions from the latest down to 17, then the latest stable if it's
-        // a non-LTS cutting-edge release (e.g. 26 while 25 is the current LTS).
-        var jvb = WizardStep.RadioStep.horizontal("javaVersion", "Java Language Version:");
-        for (int v = LATEST_LTS_MAJOR; v >= dev.jkbuild.jdk.SupportedJdk.MIN_MAJOR; v--) {
-            if (dev.jkbuild.jdk.JdkLts.isLtsMajor(v)) jvb = jvb.choice(String.valueOf(v), String.valueOf(v));
-        }
-        int latestStable = dev.jkbuild.jdk.JdkLts.OFFLINE_LATEST_STABLE;
-        if (latestStable > LATEST_LTS_MAJOR)
-            jvb = jvb.choice(String.valueOf(latestStable), String.valueOf(latestStable));
-        var javaVersion = jvb.defaultChoice(String.valueOf(LATEST_LTS_MAJOR))
+        //
+        // Two tracks, both derived from the live jdks.json catalog (so a newly
+        // published major appears automatically): a standard track over all
+        // distributions, and a native track restricted to native-image-capable
+        // (GraalVM) JDKs — you can't build a native binary against a Java release
+        // no GraalVM ships yet (e.g. 26 today). `targets` (the native choice) is
+        // asked before this step, so the choicesFn can read it per render. When
+        // the catalog is unavailable (offline) we fall back to constants.
+        String os = dev.jkbuild.jdk.HostPlatform.currentOs();
+        String arch = dev.jkbuild.jdk.HostPlatform.currentArch();
+        List<Integer> standardMajors = orElseList(
+                dev.jkbuild.jdk.SupportedJdk.offerableMajors(catalog, false, os, arch), offlineMajors(false));
+        List<Integer> nativeMajors = orElseList(
+                dev.jkbuild.jdk.SupportedJdk.offerableMajors(catalog, true, os, arch), offlineMajors(true));
+        var javaVersion = WizardStep.RadioStep.horizontal("javaVersion", "Java Language Version:")
+                .choicesFn(a -> (a.getList("targets").contains("native") ? nativeMajors : standardMajors).stream()
+                        .map(m -> new dev.jkbuild.cli.tui.Choice(String.valueOf(m), String.valueOf(m)))
+                        .toList())
+                .defaultChoice(String.valueOf(LATEST_LTS_MAJOR))
                 .when(a -> "java".equals(a.get("lang")) && !module && !hasDefaultJdk)
                 .build();
 
@@ -1017,6 +1041,39 @@ public final class NewCommand implements CliCommand {
      * newer than itself. A module inherits the parent's {@code java} target; a standalone Java
      * project uses the chosen Java Language Version; Kotlin (no Java target) imposes no floor.
      */
+    /** {@code primary} unless it's empty, in which case {@code fallback} (the offline default). */
+    private static List<Integer> orElseList(List<Integer> primary, List<Integer> fallback) {
+        return primary.isEmpty() ? fallback : primary;
+    }
+
+    /**
+     * Offline language-major list for one wizard track, from the compiled-in constants — used only
+     * when the catalog can't be fetched. LTS majors down to {@link dev.jkbuild.jdk.SupportedJdk#MIN_MAJOR},
+     * then (standard track only) the latest non-LTS stable. The native track caps at the latest LTS,
+     * since GraalVM tracks LTS releases and we can't know a newer native-capable major offline.
+     */
+    private static List<Integer> offlineMajors(boolean nativeTrack) {
+        List<Integer> out = new java.util.ArrayList<>();
+        for (int v = dev.jkbuild.jdk.JdkLts.OFFLINE_LATEST_LTS; v >= dev.jkbuild.jdk.SupportedJdk.MIN_MAJOR; v--) {
+            if (dev.jkbuild.jdk.JdkLts.isLtsMajor(v)) out.add(v);
+        }
+        int latestStable = dev.jkbuild.jdk.JdkLts.OFFLINE_LATEST_STABLE;
+        if (!nativeTrack && latestStable > dev.jkbuild.jdk.JdkLts.OFFLINE_LATEST_LTS) out.add(latestStable);
+        return out;
+    }
+
+    /** The newest native-image-capable (GraalVM) Java major, from the catalog or the offline cap. */
+    private static int maxNativeMajor(dev.jkbuild.jdk.JdkCatalog catalog) {
+        List<Integer> majors = orElseList(
+                dev.jkbuild.jdk.SupportedJdk.offerableMajors(
+                        catalog,
+                        true,
+                        dev.jkbuild.jdk.HostPlatform.currentOs(),
+                        dev.jkbuild.jdk.HostPlatform.currentArch()),
+                offlineMajors(true));
+        return majors.stream().mapToInt(Integer::intValue).max().orElse(dev.jkbuild.jdk.JdkLts.OFFLINE_LATEST_LTS);
+    }
+
     static int jdkFloor(Answers answers, ParentInfo parent) {
         if (parent != null) return parent.javaRelease();
         if ("kotlin".equalsIgnoreCase(answers.get("lang"))) return 0;
