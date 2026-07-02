@@ -20,17 +20,34 @@ assertj-core            = { group = "org.assertj",        name = "assertj-core",
 junit-jupiter           = { group = "org.junit.jupiter",  name = "junit-jupiter",           version = "6.1.0" }
 junit-platform-launcher = { group = "org.junit.platform", name = "junit-platform-launcher", version = "6.1.0" }
 
-# Self-host: cli tests run real `jk` commands that fork jk's own worker JVMs.
+# Self-host: cli tests run real `jk` commands that fork nested `jk` builds spawning worker JVMs.
 # Under self-host the jk-built test classpath carries neither a -D override nor the
-# Gradle-generated /META-INF/jk-<worker>-sha256.txt resource, so the worker can't be
-# located (and KotlinCompilationTest additionally isolates via --cache-dir, redirecting
-# the CAS lookup). Inject the RUNNING jk's workers as absolute -Djk.<worker>.worker.jar
-# overrides (located from the real ~/.jk CAS), which WorkerJar.locate checks first:
+# Gradle-generated /META-INF/jk-<worker>-sha256.txt resource, so a nested build can't locate its
+# workers (and KotlinCompilationTest additionally isolates via --cache-dir, redirecting the CAS
+# lookup). Inject the RUNNING jk's workers as absolute -Djk.<worker>.worker.jar overrides (located
+# from the real ~/.jk CAS), which WorkerJar.locate checks first. This mirrors the worker set
+# cli/build.gradle.kts hands the Gradle test JVM, plus java-compiler (Gradle finds that via its
+# classpath sha256 resource; the self-host test classpath has none). Every cli test that builds,
+# tests, publishes, images, imports, or resolves git deps in a nested `jk` needs its worker here:
+#   - test-runner:     any nested build that runs tests (BuildCommandTest, InstallAndBuildTest, …)
+#   - java-compiler:   any nested Java build
 #   - kotlin-compiler: KotlinCompilationTest (jk build on Kotlin sources)
-#   - publisher:       PublishCommandTest    (jk publish — sign/sigstore/slsa/sbom)
-#   - compat-bridge:   ImportCommandTest      (jk import — pom/gradle → jk.toml)
+#   - auditor:         AuditCommandTest
+#   - publisher:       PublishCommandTest (jk publish — sign/sigstore/slsa/sbom)
+#   - image-builder:   ImageCommandTest
+#   - compat-bridge:   ImportCommandTest (jk import — pom/gradle → jk.toml)
+#   - git-client:      git-dependency resolution
 [build]
-test-worker-jars = ["kotlin-compiler", "publisher", "compat-bridge"]
+test-worker-jars = [
+    "test-runner",
+    "java-compiler",
+    "kotlin-compiler",
+    "auditor",
+    "publisher",
+    "image-builder",
+    "compat-bridge",
+    "git-client",
+]
 
 [image]
 main-class = "dev.jkbuild.cli.Jk"
