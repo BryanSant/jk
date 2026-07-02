@@ -110,16 +110,47 @@ class EffortWeightsTest {
         PhaseTimings.record(cache, List.of(new PhaseTimings.Sample("/m/seen", "run-tests", 0.7)), 0.4, 1L);
         PhaseTimings t = PhaseTimings.load(cache);
 
-        // (2) A never-built module borrows the cross-module rate, not the hot static.
+        // (2) A never-built module borrows the cross-module rate, not the hot static. The learned
+        // reconstruction adds the small learnable TEST_STARTUP_FLOOR, NOT the larger cold TEST_STARTUP
+        // guess — that decoupling is what lets a fast suite learn a rate below the old 15-unit floor.
         int crossModule = EffortWeights.learned(t, "/m/never", "run-tests", 100, staticWeight);
-        assertThat(crossModule).isEqualTo((int) Math.round(EffortWeights.TEST_STARTUP + 0.7 * 100)); // 85
+        assertThat(crossModule).isEqualTo((int) Math.round(EffortWeights.TEST_STARTUP_FLOOR + 0.7 * 100)); // 72
         assertThat(crossModule).isLessThan(staticWeight);
 
         // (1) A module with its own history uses that, ignoring the cross-module rate.
         PhaseTimings.clearMemo();
         PhaseTimings.record(cache, List.of(new PhaseTimings.Sample("/m/seen", "run-tests", 2.0)), 0.4, 2L);
         int own = EffortWeights.learned(PhaseTimings.load(cache), "/m/seen", "run-tests", 100, staticWeight);
-        // EWMA: 0.4*2 + 0.6*0.7 = 1.22 → round(15 + 122) = 137
-        assertThat(own).isEqualTo((int) Math.round(EffortWeights.TEST_STARTUP + 1.22 * 100));
+        // EWMA: 0.4*2 + 0.6*0.7 = 1.22 → round(2 + 122) = 124
+        assertThat(own).isEqualTo((int) Math.round(EffortWeights.TEST_STARTUP_FLOOR + 1.22 * 100));
+    }
+
+    @Test
+    void run_tests_is_learnable_below_the_old_startup_floor() {
+        // A fast suite (450 ms ≈ 3 units for 1 test) now teaches a real rate: residual against the
+        // small learnable floor (2) is positive. Under the old floor (TEST_STARTUP = 15 ≈ 2.25 s) the
+        // residual was negative, so EVERY fast suite was dropped and run-tests never learned.
+        assertThat(EffortWeights.observedPerUnit("run-tests", 450, 1)).isEqualTo(1.0); // (3 − 2) / 1
+        assertThat(EffortWeights.TEST_STARTUP_FLOOR).isLessThan(EffortWeights.TEST_STARTUP);
+        double underOldFloor = 450 / (double) MS - EffortWeights.TEST_STARTUP; // would have been dropped
+        assertThat(underOldFloor).isNegative();
+        // A genuinely trivial run at/under the floor still drops (no ~0 rate taught).
+        assertThat(EffortWeights.observedPerUnit("run-tests", 300, 1)).isEqualTo(-1);
+    }
+
+    @Test
+    void scheduleMillis_prices_each_module_by_its_own_rate() {
+        var mods = List.of(
+                new EffortWeights.ModuleCost(Path.of("/warm"), Set.of(), 10, 0),
+                new EffortWeights.ModuleCost(Path.of("/cold"), Set.of(), 10, 0));
+        // Warm module converts at MS_PER_WEIGHT (its learned rates round-trip); cold at a slower
+        // reference constant would be wrong — price the cold one at this host's (faster) calibration.
+        java.util.function.ToDoubleFunction<Path> rate =
+                d -> d.equals(Path.of("/warm")) ? EffortWeights.MS_PER_WEIGHT : 50.0;
+        assertThat(EffortWeights.scheduleMillis(mods, 1, true, false, rate))
+                .isEqualTo(10L * EffortWeights.MS_PER_WEIGHT + 10L * 50);
+        // A uniform per-module rate reduces to the scalar overload.
+        assertThat(EffortWeights.scheduleMillis(mods, 1, true, false, d -> 50.0))
+                .isEqualTo(EffortWeights.scheduleMillis(mods, 1, true, false, 50));
     }
 }

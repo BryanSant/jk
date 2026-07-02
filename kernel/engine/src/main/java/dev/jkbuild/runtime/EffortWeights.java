@@ -42,8 +42,18 @@ public final class EffortWeights {
 
     static final int SKIP = 0; // a phase that does no work this run — off the bar entirely
     static final int RESTORE = 3; // compile output hard-linked back from the CAS (set live by the phase)
-    static final int TEST_STARTUP = 15; // fork the test JVM + framework init (paid even by a tiny suite)
+    static final int TEST_STARTUP = 15; // COLD static guess for test JVM fork + framework init (see runTestsWeight)
     static final int TEST_METHOD = 8; // per @Test (and ParameterizedTest/&c.)
+    // The *learnable* fixed floor for run-tests, decoupled from the larger cold TEST_STARTUP guess.
+    // TEST_STARTUP (15 ≈ 2.25s at 150) was tuned to a slow reference machine and is used as floor()
+    // in both the learned reconstruction and observedPerUnit's residual — so on a fast host, where a
+    // whole small suite forks + runs in well under 2.25s, EVERY run-tests sample landed under the
+    // floor and was dropped (residual ≤ 0), so run-tests could NEVER be learned and stayed pinned to
+    // the 15-unit static guess forever (~10× hot, as the run-tests phase reweight comment notes).
+    // Keep 15 as the COLD reservation (runTestsWeight), but let the learnable floor be small so real
+    // durations are captured and the learned rate can settle below the old floor. Measured test-JVM
+    // startup on a fast host ≈ 200 ms ≈ 1.4 units; 2 is a safe minimum reservation just above it.
+    static final int TEST_STARTUP_FLOOR = 2; // learnable fixed component of a run-tests phase
     static final int COMPILE_FLOOR = 2; // javac/kotlinc fixed startup (the learned per-source rate adds to it)
     static final int ARTIFACT_FETCH = 8; // per dependency artifact downloaded
 
@@ -93,10 +103,15 @@ public final class EffortWeights {
         return TEST_STARTUP + Math.max(0, methods) * TEST_METHOD;
     }
 
-    /** Fixed per-phase startup floor (weight units) that the learned per-unit rate adds onto. */
+    /**
+     * Fixed per-phase startup floor (weight units) that the learned per-unit rate adds onto, and that
+     * {@link #observedPerUnit} subtracts before learning. Deliberately SMALL for run-tests (the
+     * learnable {@link #TEST_STARTUP_FLOOR}, not the larger cold {@link #TEST_STARTUP} guess): a big
+     * floor here made every fast suite land under it and be dropped, so run-tests never learned.
+     */
     static int floor(String phase) {
         return switch (phase) {
-            case "run-tests" -> TEST_STARTUP;
+            case "run-tests" -> TEST_STARTUP_FLOOR;
             case "compile-java", "compile-kotlin", "compile-test" -> COMPILE_FLOOR;
             default -> 0;
         };
@@ -385,6 +400,40 @@ public final class EffortWeights {
         long throughput = (serialSum + concurrency - 1) / concurrency;
         long testFloor = parallelTests ? 0 : testSum;
         return Math.max(critical, Math.max(throughput, testFloor)) * msPerWeight;
+    }
+
+    /**
+     * As {@link #scheduleMillis(List, int, boolean, boolean, long)} but with a <em>per-module</em>
+     * weight→ms rate. A single workspace-wide rate mis-priced the common mixed case — a brand-new
+     * module beside already-built ones: the whole estimate had to pick one rail, so either the new
+     * module was priced at {@link #MS_PER_WEIGHT} (the reference machine, ~4× hot on a fast host,
+     * because its static reference-frame weights don't encode this host) or the built modules were
+     * priced at the calibration rate (wrong for them — their learned rates already round-trip at 150).
+     * Pricing each module by its own learned-ness fixes both at once: a warm module (learned rates for
+     * its dir) converts at 150; a cold module converts at this host's measured calibration.
+     *
+     * <p>Implemented by pre-scaling each module's weights into ms-space with its own rate, then
+     * running the identical schedule model at 1 ms/unit — so the critical-path / throughput /
+     * serial-test bounds compose across modules that were priced differently.
+     */
+    public static long scheduleMillis(
+            List<ModuleCost> mods,
+            int concurrency,
+            boolean serial,
+            boolean parallelTests,
+            java.util.function.ToDoubleFunction<Path> msPerWeightForModule) {
+        List<ModuleCost> inMs = new ArrayList<>(mods.size());
+        for (ModuleCost m : mods) {
+            double r = msPerWeightForModule.applyAsDouble(m.dir());
+            inMs.add(new ModuleCost(m.dir(), m.prereqs(), scaleToMs(m.weight(), r), scaleToMs(m.testWeight(), r)));
+        }
+        return scheduleMillis(inMs, concurrency, serial, parallelTests, 1L);
+    }
+
+    /** Weight × rate, rounded and clamped to a positive int (ms-space) so the schedule math can't overflow. */
+    private static int scaleToMs(int weight, double rate) {
+        long ms = Math.round(weight * Math.max(0.0, rate));
+        return (int) Math.max(0, Math.min(Integer.MAX_VALUE, ms));
     }
 
     /**

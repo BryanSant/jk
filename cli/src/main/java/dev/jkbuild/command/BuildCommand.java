@@ -455,22 +455,28 @@ public final class BuildCommand implements CliCommand {
                 etaWorkers,
                 parallelTests,
                 Runtime.getRuntime().availableProcessors());
-        // Seed the countdown's weight→ms conversion: learned rates when warm (the constant
-        // round-trips this host), else a one-time host calibration (probe-if-absent). Only 0 —
-        // count up — when the machine is both unlearned and uncalibratable (no JDK yet).
-        boolean usefulTimings = dev.jkbuild.runtime.PhaseTimings.load(cache)
-                .hasTimingsFor(prepared.keySet().stream().map(Path::toString).toList());
-        long seedMpw = -1;
-        if (usefulTimings) {
-            seedMpw = dev.jkbuild.runtime.EffortWeights.MS_PER_WEIGHT;
+        // Seed the countdown's weight→ms conversion, PER MODULE (matches jk explain): a module with
+        // its own learned timings converts at MS_PER_WEIGHT (its rates round-trip this host); a cold
+        // module — static reference-frame weights — converts at this host's measured calibration, not
+        // the reference constant (~4× hot on a fast machine). Only count up (eta 0) when a cold module
+        // exists AND the host is uncalibratable (no JDK yet) — then no rate is trustworthy.
+        dev.jkbuild.runtime.PhaseTimings timings = dev.jkbuild.runtime.PhaseTimings.load(cache);
+        java.util.function.Predicate<Path> warm =
+                dir -> timings.hasTimingsFor(java.util.List.of(dir.toString()));
+        boolean anyCold = prepared.keySet().stream().anyMatch(dir -> !warm.test(dir));
+        dev.jkbuild.runtime.Calibration cal =
+                anyCold ? dev.jkbuild.runtime.Calibration.ensure(jdksDir) : null;
+        if (anyCold && (cal == null || !cal.present())) {
+            view.setEtaEstimate(0); // cold + no calibration → count up rather than fake a countdown
         } else {
-            dev.jkbuild.runtime.Calibration cal = dev.jkbuild.runtime.Calibration.ensure(jdksDir);
-            if (cal.present()) seedMpw = Math.round(cal.msPerWeight());
+            double coldRate = cal != null ? cal.msPerWeight() : dev.jkbuild.runtime.EffortWeights.MS_PER_WEIGHT;
+            view.setEtaEstimate(dev.jkbuild.runtime.EffortWeights.scheduleMillis(
+                    costs,
+                    concurrency,
+                    false,
+                    parallelTests,
+                    dir -> warm.test(dir) ? dev.jkbuild.runtime.EffortWeights.MS_PER_WEIGHT : coldRate));
         }
-        view.setEtaEstimate(
-                seedMpw > 0
-                        ? dev.jkbuild.runtime.EffortWeights.scheduleMillis(costs, concurrency, false, parallelTests, seedMpw)
-                        : 0);
         // Live re-projection: as modules finish we measure real per-module throughput (ms ÷ weight)
         // and re-estimate the remaining ETA from it, so external contention self-corrects. Median
         // over completed modules keeps parallelism out of the rate; the schedule model re-applies it.
