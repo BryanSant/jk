@@ -137,13 +137,31 @@ final class BuildPlanForecast {
      */
     static BuildPipeline.Inputs inputsFor(
             Path dir, Path cache, int workers, Path jdksDir, String profile, boolean skipTests, boolean verbose) {
+        return inputsFor(dir, cache, workers, jdksDir, profile, skipTests, verbose, Set.of());
+    }
+
+    /**
+     * As {@link #inputsFor(Path, Path, int, Path, String, boolean, boolean)} but carrying the sibling
+     * module dirs of the build graph, so the effort-weight prediction can borrow a project-tier learned
+     * rate for a not-yet-built module (see {@link dev.jkbuild.runtime.EffortWeights#learned}).
+     */
+    static BuildPipeline.Inputs inputsFor(
+            Path dir,
+            Path cache,
+            int workers,
+            Path jdksDir,
+            String profile,
+            boolean skipTests,
+            boolean verbose,
+            Set<Path> projectModules) {
         Path buildFile = dir.resolve("jk.toml");
         Path lockFile = dir.resolve("jk.lock");
         int workerCount = workers > 0 ? workers : 1;
         int estimatedTestCount = skipTests ? 0 : TestCommand.estimateTestCount(dir.resolve("src/test/java"));
         return new BuildPipeline.Inputs(
-                dir, cache, buildFile, lockFile, dir, workerCount, estimatedTestCount, profile, jdksDir, skipTests,
-                verbose);
+                        dir, cache, buildFile, lockFile, dir, workerCount, estimatedTestCount, profile, jdksDir,
+                        skipTests, verbose)
+                .withProjectModules(projectModules);
     }
 
     private static Module forecastModule(

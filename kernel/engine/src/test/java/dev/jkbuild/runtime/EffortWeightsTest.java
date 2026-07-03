@@ -126,6 +126,37 @@ class EffortWeightsTest {
     }
 
     @Test
+    void learned_prefers_project_median_over_host_median(@TempDir Path cache) {
+        PhaseTimings.clearMemo();
+        int staticWeight = EffortWeights.runTestsWeight(10);
+        // Host has slow run-tests rates from modules OUTSIDE this project, and one fast sibling IN it.
+        PhaseTimings.record(
+                cache,
+                List.of(
+                        new PhaseTimings.Sample("/other/x", "run-tests", 5.0),
+                        new PhaseTimings.Sample("/other/y", "run-tests", 5.0),
+                        new PhaseTimings.Sample("/proj/sib", "run-tests", 1.0)),
+                0.4,
+                1L);
+        PhaseTimings t = PhaseTimings.load(cache);
+        var projectDirs = List.of("/proj/sib", "/proj/new");
+
+        // A never-built module in the project borrows the project (sibling) rate, not the host median.
+        int project = EffortWeights.learned(t, "/proj/new", "run-tests", 10, staticWeight, projectDirs);
+        int host = EffortWeights.learned(t, "/proj/new", "run-tests", 10, staticWeight); // no project ctx
+        assertThat(project).isEqualTo((int) Math.round(EffortWeights.TEST_STARTUP_FLOOR + 1.0 * 10)); // 12
+        assertThat(host).isEqualTo((int) Math.round(EffortWeights.TEST_STARTUP_FLOOR + 5.0 * 10)); // 52
+        assertThat(project).isLessThan(host);
+
+        // The module's OWN history still wins over the project tier.
+        PhaseTimings.clearMemo();
+        PhaseTimings.record(cache, List.of(new PhaseTimings.Sample("/proj/new", "run-tests", 3.0)), 0.4, 2L);
+        int own = EffortWeights.learned(
+                PhaseTimings.load(cache), "/proj/new", "run-tests", 10, staticWeight, projectDirs);
+        assertThat(own).isEqualTo((int) Math.round(EffortWeights.TEST_STARTUP_FLOOR + 3.0 * 10)); // 32
+    }
+
+    @Test
     void run_tests_is_learnable_below_the_old_startup_floor() {
         // A fast suite (450 ms ≈ 3 units for 1 test) now teaches a real rate: residual against the
         // small learnable floor (2) is positive. Under the old floor (TEST_STARTUP = 15 ≈ 2.25 s) the

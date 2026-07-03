@@ -117,24 +117,48 @@ public final class EffortWeights {
         };
     }
 
+    /** Back-compat overload with no project context — a two-tier fallback (module → host-median). */
+    static int learned(PhaseTimings timings, String dir, String phase, int count, int staticWeight) {
+        return learned(timings, dir, phase, count, staticWeight, java.util.List.of());
+    }
+
     /**
      * The learned weight for a running phase: {@code floor + rate × count}, where the per-unit {@code
-     * rate} is, in order of preference, (1) this exact (module, phase) if seen before, (2) the median
-     * rate this machine has measured for the phase across <em>any</em> module, so a never-built
-     * module borrows a realistic rate instead of the static constant, or (3) the static Phase-1
-     * estimate ({@code staticWeight}) when nothing for the phase has ever been recorded — so a fully
-     * cold ledger still reproduces Phase 1 exactly, and warm runs rescale by the current {@code
-     * count}.
+     * rate} is, in order of preference (nearest locality first):
+     *
+     * <ol>
+     *   <li><b>this exact (module, phase)</b> if seen before — the module's own measured history;
+     *   <li><b>the project/workspace median</b> for the phase across {@code projectDirs} (the other
+     *       modules of this build) — a closer prior than the whole host for a not-yet-built module,
+     *       since siblings share frameworks/fixtures/setup cost;
+     *   <li><b>the host median</b> for the phase across <em>any</em> module this machine has built;
+     *   <li><b>the static Phase-1 estimate</b> ({@code staticWeight}) when nothing for the phase has
+     *       ever been recorded — so a fully cold ledger reproduces Phase 1 exactly.
+     * </ol>
+     *
+     * <p>{@code projectDirs} empty (the back-compat overload) collapses tiers 2+3 to just the host
+     * median, the prior behavior. Warm runs rescale whichever rate wins by the current {@code count}.
      */
-    static int learned(PhaseTimings timings, String dir, String phase, int count, int staticWeight) {
-        var perUnit = timings.perUnit(dir, phase);
+    static int learned(
+            PhaseTimings timings,
+            String dir,
+            String phase,
+            int count,
+            int staticWeight,
+            java.util.Collection<String> projectDirs) {
         double rate;
-        if (perUnit.isPresent()) {
-            rate = perUnit.getAsDouble();
+        var own = timings.perUnit(dir, phase);
+        if (own.isPresent()) {
+            rate = own.getAsDouble();
         } else {
-            var crossModule = timings.medianPerUnit(phase);
-            if (crossModule.isEmpty()) return staticWeight; // never seen this phase → Phase-1 static
-            rate = crossModule.getAsDouble();
+            var project = timings.medianPerUnit(phase, projectDirs);
+            if (project.isPresent()) {
+                rate = project.getAsDouble();
+            } else {
+                var host = timings.medianPerUnit(phase);
+                if (host.isEmpty()) return staticWeight; // never seen this phase anywhere → Phase-1 static
+                rate = host.getAsDouble();
+            }
         }
         return Math.max(1, (int) Math.round(floor(phase) + rate * Math.max(0, count)));
     }
@@ -186,6 +210,9 @@ public final class EffortWeights {
         // module dir, the same key the recorder writes at build end.
         PhaseTimings timings = PhaseTimings.load(in.cache());
         String mod = in.dir().toString();
+        // Sibling modules of this build, for the project-tier learned fallback (empty ⇒ host-median).
+        List<String> projectDirs =
+                in.projectModules().stream().map(Path::toString).toList();
         int compileJava = SKIP, compileKotlin = SKIP, compileTest = SKIP, runTests = SKIP, pkg = SKIP;
         try {
             JkBuild project = JkBuildParser.parse(in.buildFile());
@@ -196,16 +223,18 @@ public final class EffortWeights {
                 List<Path> src = CompileSupport.collectJavaSources(
                         compact ? in.dir().resolve("src") : in.dir().resolve("src/main/java"));
                 javaRun = rerun || !FreshnessStamp.looksFresh(layout.classesDir(), FreshnessStamp.JAVA_STAMP, src);
-                compileJava =
-                        javaRun ? learned(timings, mod, "compile-java", src.size(), compileWeight(src.size())) : SKIP;
+                compileJava = javaRun
+                        ? learned(timings, mod, "compile-java", src.size(), compileWeight(src.size()), projectDirs)
+                        : SKIP;
             }
             boolean ktRun = false;
             if (useKotlin) {
                 List<Path> src = CompileSupport.collectKotlinSources(in.dir(), compact);
                 ktRun = rerun
                         || !FreshnessStamp.looksFresh(layout.kotlinClassesDir(), FreshnessStamp.KOTLIN_STAMP, src);
-                compileKotlin =
-                        ktRun ? learned(timings, mod, "compile-kotlin", src.size(), compileWeight(src.size())) : SKIP;
+                compileKotlin = ktRun
+                        ? learned(timings, mod, "compile-kotlin", src.size(), compileWeight(src.size()), projectDirs)
+                        : SKIP;
             }
             boolean compileRun = javaRun || ktRun;
 
@@ -226,10 +255,14 @@ public final class EffortWeights {
             // of pure fiction for a ~1.2s compile). The static cold fallback stays a
             // file-count guess. (compile-java is consistent: its .scope is the source
             // count, the same count predict multiplies, so it stays per-source.)
-            compileTest = testWillRun ? learned(timings, mod, "compile-test", 1, compileWeight(testSrc.size())) : SKIP;
+            compileTest = testWillRun
+                    ? learned(timings, mod, "compile-test", 1, compileWeight(testSrc.size()), projectDirs)
+                    : SKIP;
 
             int methods = in.estimatedTestCount();
-            runTests = testWillRun ? learned(timings, mod, "run-tests", methods, runTestsWeight(methods)) : SKIP;
+            runTests = testWillRun
+                    ? learned(timings, mod, "run-tests", methods, runTestsWeight(methods), projectDirs)
+                    : SKIP;
 
             boolean jarFresh = !rerun && !compileRun && Files.isRegularFile(layout.mainJar());
             pkg = jarFresh ? SKIP : PACKAGE_JAR;

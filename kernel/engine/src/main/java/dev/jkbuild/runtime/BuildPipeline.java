@@ -126,9 +126,15 @@ public final class BuildPipeline {
             boolean skipTests,
             boolean verbose,
             boolean testOnly,
-            boolean compileOnly) {
+            boolean compileOnly,
+            // Dirs of the other modules in this build graph / workspace. Used ONLY to compute a
+            // project-tier learned rate (EffortWeights.learned): a not-yet-built module borrows the
+            // median rate of its sibling modules — same frameworks/fixtures, a closer prior than the
+            // whole-host median — before falling back to that host median. Empty (the default) leaves
+            // the fallback chain as module → host-median → static, exactly as before.
+            Set<Path> projectModules) {
 
-        /** Back-compat: a full build (not test-only, not compile-only). */
+        /** Back-compat: a full build (not test-only, not compile-only), no project context. */
         public Inputs(
                 Path dir,
                 Path cache,
@@ -154,10 +160,11 @@ public final class BuildPipeline {
                     skipTests,
                     verbose,
                     false,
-                    false);
+                    false,
+                    Set.of());
         }
 
-        /** A test-only or full build (not compile-only). */
+        /** A test-only or full build (not compile-only), no project context. */
         public Inputs(
                 Path dir,
                 Path cache,
@@ -184,7 +191,59 @@ public final class BuildPipeline {
                     skipTests,
                     verbose,
                     testOnly,
-                    false);
+                    false,
+                    Set.of());
+        }
+
+        /** Former canonical arity (testOnly + compileOnly), no project context. */
+        public Inputs(
+                Path dir,
+                Path cache,
+                Path buildFile,
+                Path lockFile,
+                Path lockDir,
+                int workerCount,
+                int estimatedTestCount,
+                String profileName,
+                Path jdksDir,
+                boolean skipTests,
+                boolean verbose,
+                boolean testOnly,
+                boolean compileOnly) {
+            this(
+                    dir,
+                    cache,
+                    buildFile,
+                    lockFile,
+                    lockDir,
+                    workerCount,
+                    estimatedTestCount,
+                    profileName,
+                    jdksDir,
+                    skipTests,
+                    verbose,
+                    testOnly,
+                    compileOnly,
+                    Set.of());
+        }
+
+        /** Copy carrying the project/workspace module set — set by the estimate paths (explain/build). */
+        public Inputs withProjectModules(Set<Path> modules) {
+            return new Inputs(
+                    dir,
+                    cache,
+                    buildFile,
+                    lockFile,
+                    lockDir,
+                    workerCount,
+                    estimatedTestCount,
+                    profileName,
+                    jdksDir,
+                    skipTests,
+                    verbose,
+                    testOnly,
+                    compileOnly,
+                    modules == null ? Set.of() : modules);
         }
     }
 
@@ -979,7 +1038,8 @@ public final class BuildPipeline {
                             in.dir().toString(),
                             "run-tests",
                             in.estimatedTestCount(),
-                            EffortWeights.runTestsWeight(in.estimatedTestCount())));
+                            EffortWeights.runTestsWeight(in.estimatedTestCount()),
+                            in.projectModules().stream().map(Path::toString).toList()));
                     List<Path> runtimeCp = new ArrayList<>();
                     runtimeCp.add(ctx.require(MAIN_CLASSES));
                     runtimeCp.addAll(testRtCp);

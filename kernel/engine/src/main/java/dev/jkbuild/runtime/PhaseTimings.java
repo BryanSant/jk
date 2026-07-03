@@ -120,6 +120,27 @@ public final class PhaseTimings {
         return OptionalDouble.of(n % 2 == 1 ? rates[n / 2] : (rates[n / 2 - 1] + rates[n / 2]) / 2.0);
     }
 
+    /**
+     * The median learned per-unit rate for {@code phase} across just {@code dirs} — the modules of one
+     * project/workspace. A tighter prior than the whole-host {@link #medianPerUnit(String)} for a
+     * not-yet-built module, since sibling modules share frameworks, fixtures, and setup cost. Empty
+     * when {@code dirs} is null/empty or none of them has recorded this phase (caller falls to the
+     * host median). Median (not mean) so one pathological sibling can't skew it.
+     */
+    public OptionalDouble medianPerUnit(String phase, java.util.Collection<String> dirs) {
+        if (dirs == null || dirs.isEmpty()) return OptionalDouble.empty();
+        double[] rates = dirs.stream()
+                .distinct()
+                .map(d -> entries.get(key(d, phase)))
+                .filter(java.util.Objects::nonNull)
+                .mapToDouble(Entry::perUnit)
+                .sorted()
+                .toArray();
+        if (rates.length == 0) return OptionalDouble.empty();
+        int n = rates.length;
+        return OptionalDouble.of(n % 2 == 1 ? rates[n / 2] : (rates[n / 2 - 1] + rates[n / 2]) / 2.0);
+    }
+
     /** A measured per-unit rate for one phase of one module, to fold into the ledger. */
     public record Sample(String dir, String phase, double observedPerUnit) {}
 

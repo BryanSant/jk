@@ -97,6 +97,10 @@ public final class BuildCommand implements CliCommand {
     GlobalOptions global;
     boolean noParallel;
     boolean parallelTests;
+    // Dirs of all modules in the build graph, set once the graph is known so prepareModule can pass
+    // them to the effort-weight prediction for the project-tier learned fallback. Empty for the
+    // single-module paths (a lone module's "project" is itself → the fallback is just host-median).
+    private Set<Path> workspaceModuleDirs = Set.of();
 
     // ---- GoalKeys -------------------------------------------------------
     //
@@ -412,6 +416,9 @@ public final class BuildCommand implements CliCommand {
             throws Exception {
         Set<Path> unitDirs = new java.util.HashSet<>();
         for (BuildGraph.BuildUnit u : units) unitDirs.add(u.dir());
+        // Expose the whole-graph module set so prepareModule feeds it to the effort-weight
+        // prediction (project-tier learned fallback for a not-yet-built module).
+        this.workspaceModuleDirs = unitDirs;
         AggregateContext agg = new AggregateContext(view);
         int total = units.size();
 
@@ -974,7 +981,8 @@ public final class BuildCommand implements CliCommand {
         // can't drift in what they feed the effort-weight prediction — it also does the lexical
         // run-tests pre-discovery so the phase's scope is known before any phase runs.
         BuildPipeline.Inputs inputs = BuildPlanForecast.inputsFor(
-                dir, cache, workers != null ? workers : 1, jdksDir, profileName, skipTests, global.verbose);
+                dir, cache, workers != null ? workers : 1, jdksDir, profileName, skipTests, global.verbose,
+                workspaceModuleDirs);
         // Quick pre-check: is every work phase already cached? Uses only stat/CAS
         // lookups — the same operations the parse-build phase would run lazily.
         // Doubles as a gate for the single-module TUI bypass in runPrepared().

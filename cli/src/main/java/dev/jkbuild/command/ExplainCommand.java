@@ -120,13 +120,17 @@ public final class ExplainCommand implements CliCommand {
         long etaMillis = 0;
         try {
             List<dev.jkbuild.runtime.EffortWeights.ModuleCost> costs = new ArrayList<>();
+            // All modules of this build graph — the project/workspace set each module's prediction
+            // borrows a learned rate from when it has no history of its own (EffortWeights.learned).
+            Set<Path> projectModules =
+                    modules.stream().map(m -> m.unit().dir()).collect(java.util.stream.Collectors.toSet());
             for (BuildPlanForecast.Module m : modules) {
                 Path mdir = m.unit().dir();
                 // Assemble each module's goal exactly as `jk build` does: the shared Inputs factory,
                 // core phases + declared tails (native-image / OCI / shadow). Same goal in, same
                 // cost out — so the ETA can't diverge from what build calibrates to.
-                var inputs =
-                        BuildPlanForecast.inputsFor(mdir, cache, workers, jdksDir, profile, skipTests, global.verbose);
+                var inputs = BuildPlanForecast.inputsFor(
+                        mdir, cache, workers, jdksDir, profile, skipTests, global.verbose, projectModules);
                 var builder = dev.jkbuild.runtime.BuildPipeline.coreBuilder(inputs, m.dirty());
                 dev.jkbuild.runtime.BuildPipeline.appendDeclaredTails(builder, inputs);
                 var goal = builder.build();
