@@ -198,8 +198,8 @@ public final class EffortWeights {
             boolean useJava,
             boolean useKotlin,
             boolean forceRebuild) {
-        boolean rerun = ActiveConfig.get().rerunOr(false) || forceRebuild;
-        boolean refresh = ActiveConfig.get().refreshOr(false);
+        boolean rerun = in.session().config().rerunOr(false) || forceRebuild;
+        boolean refresh = in.session().config().refreshOr(false);
         // If jk.toml is newer than jk.lock AND the lock no longer satisfies all declared
         // deps, treat the module as dirty so parse-lock runs and updates the lock.
         boolean lockStale = !rerun && AutoLock.needsRelocking(in.dir(), in.lockFile());

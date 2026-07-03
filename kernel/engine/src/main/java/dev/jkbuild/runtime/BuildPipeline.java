@@ -132,7 +132,11 @@ public final class BuildPipeline {
             // median rate of its sibling modules — same frameworks/fixtures, a closer prior than the
             // whole-host median — before falling back to that host median. Empty (the default) leaves
             // the fallback chain as module → host-median → static, exactly as before.
-            Set<Path> projectModules) {
+            Set<Path> projectModules,
+            // The request-scoped session (config incl. --force/--refresh, working dir, cache/JDK
+            // roots). Threaded so the engine reads request state explicitly instead of the ambient
+            // global. Delegating ctors default it from SessionContext.current() at construction.
+            dev.jkbuild.config.Session session) {
 
         /** Back-compat: a full build (not test-only, not compile-only), no project context. */
         public Inputs(
@@ -161,7 +165,8 @@ public final class BuildPipeline {
                     verbose,
                     false,
                     false,
-                    Set.of());
+                    Set.of(),
+                    dev.jkbuild.config.SessionContext.current());
         }
 
         /** A test-only or full build (not compile-only), no project context. */
@@ -192,7 +197,8 @@ public final class BuildPipeline {
                     verbose,
                     testOnly,
                     false,
-                    Set.of());
+                    Set.of(),
+                    dev.jkbuild.config.SessionContext.current());
         }
 
         /** Former canonical arity (testOnly + compileOnly), no project context. */
@@ -224,7 +230,8 @@ public final class BuildPipeline {
                     verbose,
                     testOnly,
                     compileOnly,
-                    Set.of());
+                    Set.of(),
+                    dev.jkbuild.config.SessionContext.current());
         }
 
         /** Copy carrying the project/workspace module set — set by the estimate paths (explain/build). */
@@ -243,7 +250,8 @@ public final class BuildPipeline {
                     verbose,
                     testOnly,
                     compileOnly,
-                    modules == null ? Set.of() : modules);
+                    modules == null ? Set.of() : modules,
+                    session);
         }
     }
 
@@ -546,7 +554,7 @@ public final class BuildPipeline {
                             ctx.progress(1);
                         }
                     };
-                    boolean refresh = dev.jkbuild.config.ActiveConfig.get().refreshOr(false);
+                    boolean refresh = in.session().config().refreshOr(false);
                     var report = new CacheSync(cas, new Http()).sync(lock, observer, refresh);
                     if (report.hasErrors()) throw new RuntimeException("dep sync had errors");
                 })
@@ -623,7 +631,7 @@ public final class BuildPipeline {
                     }
                     @SuppressWarnings("unchecked")
                     List<Path> processorCp = (List<Path>) ctx.require(PROCESSOR_CP);
-                    boolean rerun = dev.jkbuild.config.ActiveConfig.get().rerunOr(false);
+                    boolean rerun = in.session().config().rerunOr(false);
                     // Fold the processor path into the freshness inputs so a processor
                     // bump busts the stamp (it isn't on the compile classpath).
                     List<Path> stampInputs = classpath;
@@ -777,7 +785,7 @@ public final class BuildPipeline {
                     // rewrites, and copy-resources churns it).
                     List<Path> freshInputs = new ArrayList<>(ktSources);
                     if (mixedWithJava) freshInputs.addAll(javaSources(ctx));
-                    boolean rerun = dev.jkbuild.config.ActiveConfig.get().rerunOr(false);
+                    boolean rerun = in.session().config().rerunOr(false);
                     if (!rerun
                             && dev.jkbuild.task.FreshnessStamp.isFresh(
                                     classes,
@@ -1007,7 +1015,7 @@ public final class BuildPipeline {
                     // freshness checks above (which all guard on !rerun). Without
                     // this guard the action record would skip the runner even when
                     // the user explicitly asked to bypass build caches.
-                    boolean rerun = dev.jkbuild.config.ActiveConfig.get().rerunOr(false);
+                    boolean rerun = in.session().config().rerunOr(false);
                     // The "tests passed for this input" marker lives in the CAS (keyed by
                     // the content key), NOT in target/ — so it survives `jk clean`: a later
                     // build that restores byte-identical classes recomputes the same key and
@@ -1684,7 +1692,7 @@ public final class BuildPipeline {
                 .snapshotDir(in.cache().resolve("kotlin-cp-snapshots"))
                 .extraArgs(ktArgs)
                 .build();
-        boolean rerun = dev.jkbuild.config.ActiveConfig.get().rerunOr(false);
+        boolean rerun = in.session().config().rerunOr(false);
         // Reweight from the real request: a CAS hit is a cheap restore (3), else a
         // full kotlinc. Same forKotlinc key KotlinCompile.run looks up.
         if (!rerun) {
