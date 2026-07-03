@@ -6,17 +6,27 @@ package dev.jkbuild.model;
  * — rejected on import.
  */
 public enum Scope {
-    EXPORT,
-    MAIN,
-    PROVIDED,
-    RUNTIME,
-    TEST,
-    PROCESSOR,
-    PLATFORM;
+    EXPORT("export", "export-dependencies"),
+    MAIN("main", "dependencies"),
+    PROVIDED("provided", "provided-dependencies"),
+    RUNTIME("runtime", "runtime-dependencies"),
+    TEST("test", "test-dependencies"),
+    PROCESSOR("processor", "processor-dependencies"),
+    PLATFORM("platform", "platform-dependencies");
+
+    // Precomputed once at class-load rather than reallocated on every call: canonical() and
+    // tomlSection() are hot (dependency loops, ~21 + ~call sites) and effectively constant.
+    private final String canonical;
+    private final String tomlSection;
+
+    Scope(String canonical, String tomlSection) {
+        this.canonical = canonical;
+        this.tomlSection = tomlSection;
+    }
 
     /** Lowercase canonical name of this scope (e.g. {@code "main"}, {@code "test"}). */
     public String canonical() {
-        return name().toLowerCase();
+        return canonical;
     }
 
     /**
@@ -25,13 +35,6 @@ public enum Scope {
      * {@code "<canonical>-dependencies"} (e.g. {@code "test-dependencies"}).
      */
     public String tomlSection() {
-        return switch (this) {
-            case MAIN      -> "dependencies";
-            case TEST      -> "test-dependencies";
-            case PROVIDED  -> "provided-dependencies";
-            case PROCESSOR -> "processor-dependencies";
-            case EXPORT    -> "export-dependencies";
-            default        -> canonical() + "-dependencies";
-        };
+        return tomlSection;
     }
 }

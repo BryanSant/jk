@@ -10,8 +10,10 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import org.tomlj.TomlParseResult;
 import org.tomlj.TomlTable;
 
 /**
@@ -111,9 +113,34 @@ public final class GlobalConfig {
 
     /** Read a boolean from the {@code [global]} table, falling back leniently. */
     private static boolean booleanFromGlobal(Path file, String key, boolean fallback) {
-        return TomlValues.parse(file)
+        return parseConfig(file)
                 .flatMap(toml -> TomlValues.optBoolean(toml.getTable("global"), key))
                 .orElse(fallback);
+    }
+
+    // ~/.jk/config.toml is process-stable but was re-parsed on every nerdfont()/repositories() call
+    // (nerdfont alone fires 20+ times per invocation, several within one command). Memoize the parse
+    // per (path, size, mtime) — mirrors JkBuildParser/LockfileReader — so the file is read at most
+    // once per (unchanged) invocation.
+    private static final ConcurrentHashMap<String, Optional<TomlParseResult>> CONFIG_CACHE = new ConcurrentHashMap<>();
+
+    private static Optional<TomlParseResult> parseConfig(Path file) {
+        if (file == null) return Optional.empty();
+        String key;
+        try {
+            if (!java.nio.file.Files.exists(file)) return Optional.empty();
+            var attrs = java.nio.file.Files.readAttributes(file, java.nio.file.attribute.BasicFileAttributes.class);
+            key = file.toAbsolutePath() + "|" + attrs.size() + "|"
+                    + attrs.lastModifiedTime().toMillis();
+        } catch (java.io.IOException e) {
+            return TomlValues.parse(file); // uncached fallback on stat failure
+        }
+        return CONFIG_CACHE.computeIfAbsent(key, k -> TomlValues.parse(file));
+    }
+
+    /** Clear the memoized config parse. For tests that rewrite {@code ~/.jk/config.toml} in one JVM. */
+    static void clearCache() {
+        CONFIG_CACHE.clear();
     }
 
     // -------------------------------------------------------------------------
@@ -131,7 +158,7 @@ public final class GlobalConfig {
 
     /** As {@link #repositories()} but against an explicit config file — for tests. */
     static List<RepositorySpec> repositories(Path configFile) {
-        return TomlValues.parse(configFile)
+        return parseConfig(configFile)
                 .map(toml -> parseRepositories(toml.getTable("repositories")))
                 .orElse(List.of());
     }

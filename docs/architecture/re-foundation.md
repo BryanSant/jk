@@ -72,6 +72,44 @@ Rules:
   `Exit` code vocabulary; delete unreachable parent `run()` bodies. Update self-host `jk.toml` and the
   jk.jk mirror.
 
+## Status log
+
+Branch: `refoundation`. Every commit below is green (`./gradlew :cli:test`).
+
+**Done**
+- Blueprint (this doc).
+- **M1a** — `Session` + `SessionContext` (core); `ActiveConfig` reduced to a shim over them.
+- **M1b** — `Session` threaded through `BuildPipeline.Inputs` (delegating ctors default it from
+  `SessionContext.current()`, zero call-site churn); hot build-path reads (`BuildPipeline` phase
+  bodies, `EffortWeights.predict`) now read `in.session().config()`.
+- **M5 (partial, safe wins)** — `Scope.canonical()`/`tomlSection()` precomputed into enum fields;
+  `GlobalConfig` memoizes `~/.jk/config.toml` parses per `(path,size,mtime)` (was re-parsed 20+×/run).
+
+**Deferred (documented — cascade-heavy, multi-session; NOT started)**
+These require pervasive threading or large structural moves and were intentionally not attempted
+half-way (would risk a red branch). Rationale noted so the next pass can pick them up cleanly:
+- **M1c** — Remaining kernel globals are the "host-JVM channel" statics: `JvmOptions.processSettings`/
+  `heapPlan`, `WorkerSlots.slots`, `BuildPipeline.TEST_GATE`/`parallelTests`, the `jk.jdk`/`jk.graal`
+  system properties, and `Quietable`'s `System.setOut`. De-globalizing them means threading `Session`
+  (JVM tuning + jdk/graal selection + output sink + a per-session test gate/worker-slot pool) through
+  the worker-fork layer (`WorkerProcess`, `JvmOptions`, `PluginLoader`) and every worker-launch site,
+  plus the leaf provisioning/packaging reads still on the `ActiveConfig` shim (`restore/storePackaged`,
+  `artifactFresh`, `TestSupport`, `CompileToolchain`, `KotlinBtaResolver`). `ActiveConfig` is deleted
+  only once these are threaded. **Assumption:** until then, those leaf reads observe the ambient
+  `SessionContext.current()` — correct for the single-session CLI; the multi-session server needs the
+  threading above.
+- **M2** — Hoist `BuildCommand`'s ~1,000-line workspace driver + the `Jdk*Command` DAGs into a
+  `BuildService` facade in `engine`; unify the explain/build planner.
+- **M3** — Extract `coreBuilder`'s inline phase-body lambdas into `BuildStep` classes; remove/realize
+  dead `PluginContext.contribute`.
+- **M4** — `WorkerClient<Req,Res>` + standardized worker envelope across the 9 plugins; `CompilerWorker`
+  bridge; `IdeSdkRegistrar` SPI + move `Intellij*` out of `kernel/toolchain`; de-dup `compat` package.
+- **M5 (remainder)** — `Coordinate`/`Module` as single currency + `coordinate()` accessors killing the
+  ~43 `indexOf(':')` splits; sealed dependency source-kind; builders retiring telescoping ctors;
+  `RepoArtifactResolver` facade; `Hashing` consolidation; one `${ENV}`+repo-TOML parser.
+- **M6** — Extract/bless `jk-api`; CLI facades (`ProjectContext`, `CliOutput`, `WorkspaceCommand`,
+  `Exit`); delete unreachable parent `run()` bodies; update self-host `jk.toml` + jk.jk mirror.
+
 ## Invariants to hold at every commit
 - `./gradlew :cli:test` (and the full suite) green.
 - No new `System.out`/`System.err`/`System.setOut` in kernel modules; user text routes through
