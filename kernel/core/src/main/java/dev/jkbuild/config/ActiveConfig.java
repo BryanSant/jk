@@ -2,32 +2,31 @@
 package dev.jkbuild.config;
 
 /**
- * Process-wide accessor for the resolved {@link JkConfig}. Populated once at CLI entry by {@code
- * Jk.execute} before any subcommand runs, then read freely by anything that needs to know the
- * user's color / offline / progress / etc. preference.
+ * Process-wide accessor for the resolved {@link JkConfig}.
  *
- * <p>Anything calling {@link #get} before {@link #install} returns {@link JkConfig#empty()}, which
- * means "every consumer falls back to its own default" — safe for tests that bypass the CLI entry
- * point.
+ * <p><b>Transitional shim.</b> The config now lives on the request-scoped {@link Session} held by
+ * {@link SessionContext}; this class is a thin façade over {@code SessionContext.current().config()}
+ * so the ~30 legacy {@code ActiveConfig.get()} call sites keep working while they migrate to reading
+ * {@link Session} directly. New code should take a {@link Session} (threaded through the engine)
+ * rather than call this. Removed once every consumer is migrated.
  */
 public final class ActiveConfig {
 
-    private static volatile JkConfig active = JkConfig.empty();
-
     private ActiveConfig() {}
 
-    /** Install the resolved config. Subsequent {@link #get} calls return this. */
+    /** Install the resolved config onto the current {@link Session}. */
     public static void install(JkConfig config) {
-        active = (config == null) ? JkConfig.empty() : config;
+        JkConfig cfg = (config == null) ? JkConfig.empty() : config;
+        SessionContext.install(SessionContext.current().withConfig(cfg));
     }
 
     /** Read the currently-installed config (never null). */
     public static JkConfig get() {
-        return active;
+        return SessionContext.current().config();
     }
 
     /** Reset to the empty default. Primarily for tests that share a JVM. */
     public static void reset() {
-        active = JkConfig.empty();
+        SessionContext.reset();
     }
 }
