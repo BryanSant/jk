@@ -9,28 +9,24 @@ import java.util.EnumSet;
 import java.util.List;
 
 /**
- * {@code jk idea} — generate IntelliJ IDEA project files ({@code .idea/} + {@code *.iml}).
+ * {@code jk vscode} — generate VS Code project files ({@code .vscode/} + Eclipse metadata for the
+ * redhat.java language server).
  *
- * <p>A hidden alias of {@code jk ide --idea}, kept for backward compatibility. All generation logic
- * lives in {@link IdeCommand} + {@link dev.jkbuild.command.ide.IntellijIdeGenerator}.
+ * <p>An alias of {@code jk ide --vscode}. All generation logic lives in {@link IdeCommand} +
+ * {@link dev.jkbuild.command.ide.VscodeIdeGenerator}.
  */
-public final class IdeaCommand implements CliCommand {
+public final class VscodeCommand implements CliCommand {
 
-    private final IdeCommand delegate = new IdeCommand(EnumSet.of(IdeTarget.IDEA));
+    private final IdeCommand delegate = new IdeCommand(EnumSet.of(IdeTarget.VSCODE));
 
     @Override
     public String name() {
-        return "idea";
-    }
-
-    @Override
-    public boolean hidden() {
-        return true;
+        return "vscode";
     }
 
     @Override
     public String description() {
-        return "Generate IntelliJ IDEA project files (alias of `jk ide --idea`)";
+        return "Generate VS Code project files (alias of `jk ide --vscode`)";
     }
 
     @Override

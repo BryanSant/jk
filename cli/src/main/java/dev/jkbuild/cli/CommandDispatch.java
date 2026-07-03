@@ -22,6 +22,7 @@ import dev.jkbuild.command.ExportCommand;
 import dev.jkbuild.command.FormatCommand;
 import dev.jkbuild.command.GradleCommand;
 import dev.jkbuild.command.HookEnvCommand;
+import dev.jkbuild.command.IdeCommand;
 import dev.jkbuild.command.IdeaCommand;
 import dev.jkbuild.command.ImageCommand;
 import dev.jkbuild.command.ImportCommand;
@@ -44,6 +45,7 @@ import dev.jkbuild.command.ToolCommand;
 import dev.jkbuild.command.TreeCommand;
 import dev.jkbuild.command.UpdateCommand;
 import dev.jkbuild.command.VerifyBuildCommand;
+import dev.jkbuild.command.VscodeCommand;
 import dev.jkbuild.command.WhyCommand;
 import dev.jkbuild.config.ActiveConfig;
 import dev.jkbuild.config.JkConfig;
@@ -96,7 +98,9 @@ public final class CommandDispatch {
             new ToolCommand(),
             new LibraryCommand(),
             new RepoCommand(),
+            new IdeCommand(),
             new IdeaCommand(),
+            new VscodeCommand(),
             new ExportCommand(),
             new ImportCommand(),
             new PublishCommand(),

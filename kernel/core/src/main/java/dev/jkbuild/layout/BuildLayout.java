@@ -143,6 +143,21 @@ public final class BuildLayout {
     }
 
     /**
+     * {@code target/jdt/classes/main/} — main class output for an external IDE language server
+     * (Eclipse JDT-LS, used by VS Code's redhat.java). Kept separate from {@link #classesDir()} so an
+     * IDE's continuous autobuild never collides with jk's incremental compiler, which deletes and
+     * re-hashes every {@code .class} under its own output dir.
+     */
+    public Path jdtClassesDir() {
+        return buildDir().resolve("jdt").resolve("classes").resolve("main");
+    }
+
+    /** {@code target/jdt/classes/test/} — test class output for an external IDE language server. */
+    public Path jdtTestClassesDir() {
+        return buildDir().resolve("jdt").resolve("classes").resolve("test");
+    }
+
+    /**
      * {@code target/kotlin/main/} — kotlinc incremental workspace for main sources.
      *
      * <p>The Kotlin BTA incremental compiler owns this directory and prunes any {@code .class} file

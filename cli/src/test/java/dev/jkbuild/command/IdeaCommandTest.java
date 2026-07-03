@@ -126,6 +126,9 @@ class IdeaCommandTest {
         // #1 — misc.xml references the stable, jk-managed SDK name (not "25").
         String misc = Files.readString(ws.resolve(".idea/misc.xml"));
         assertThat(misc).contains("project-jdk-name=\"jk-temurin-25\"").contains("languageLevel=\"JDK_25\"");
+        // Project compiler output goes to jk's build dir (target/), never "out" or "build".
+        assertThat(misc).contains("<output url=\"file://$PROJECT_DIR$/target\" />");
+        assertThat(misc).doesNotContain("$PROJECT_DIR$/out").doesNotContain("$PROJECT_DIR$/build");
 
         // #1 — the SDK is actually defined in the IDE's jdk.table.xml.
         Path table = ideConfig.resolve("JetBrains/IntelliJIdea2025.1/options/jdk.table.xml");
