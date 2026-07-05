@@ -296,7 +296,7 @@ public final class EffortWeights {
                     jdksDir != null ? new dev.jkbuild.jdk.JdkRegistry(jdksDir) : new dev.jkbuild.jdk.JdkRegistry();
             var req = new dev.jkbuild.jdk.JdkResolution.Request(
                     dir,
-                    System.getProperty("jk.jdk"),
+                    dev.jkbuild.config.SessionContext.current().jdkSpec(),
                     System.getenv("JK_JDK"),
                     lock != null ? lock.jdk() : null,
                     project.project() != null ? project.project().jdk() : null,

@@ -75,7 +75,8 @@ public final class GraalResolver {
         JdkRegistry registry = jdksDir != null ? new JdkRegistry(jdksDir) : new JdkRegistry();
 
         // 1. Explicit spec: --graal switch (jk.graal) > project.graal > JK_GRAAL env.
-        String effective = firstNonBlank(System.getProperty("jk.graal"), graalSpec, System.getenv("JK_GRAAL"));
+        String effective = firstNonBlank(
+                dev.jkbuild.config.SessionContext.current().graalSpec(), graalSpec, System.getenv("JK_GRAAL"));
         if (effective != null && !effective.isBlank()) {
             Optional<InstalledJdk> hit = registry.findBySpec(effective);
             if (hit.isPresent() && NativeImageDriver.resolve(hit.get().home()).isPresent()) {

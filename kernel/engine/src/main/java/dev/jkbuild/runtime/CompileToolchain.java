@@ -48,7 +48,7 @@ public final class CompileToolchain {
             JkBuild build = readBuildSoft(projectDir);
             JdkResolution.Request req = new JdkResolution.Request(
                     projectDir,
-                    System.getProperty("jk.jdk"),
+                    dev.jkbuild.config.SessionContext.current().jdkSpec(),
                     System.getenv("JK_JDK"),
                     lock != null ? lock.jdk() : null,
                     (build != null && build.project() != null) ? build.project().jdk() : null,

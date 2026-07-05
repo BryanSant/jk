@@ -233,7 +233,13 @@ public final class Calibration {
         try {
             JdkRegistry registry = jdksDir != null ? new JdkRegistry(jdksDir) : new JdkRegistry();
             var req = new JdkResolution.Request(
-                    null, System.getProperty("jk.jdk"), System.getenv("JK_JDK"), null, null, 0, System::getenv);
+                    null,
+                    dev.jkbuild.config.SessionContext.current().jdkSpec(),
+                    System.getenv("JK_JDK"),
+                    null,
+                    null,
+                    0,
+                    System::getenv);
             var r = JdkResolution.resolve(req, registry, GlobalDefaultJdk.current(), JdkLts.OFFLINE_LATEST_LTS);
             return r.jdk().map(dev.jkbuild.jdk.InstalledJdk::home);
         } catch (Exception e) {

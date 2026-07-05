@@ -111,16 +111,11 @@ public final class GlobalOptions {
         g.jvmArgs = in.values("jvm-arg");
         g.jdk = in.value("jdk").orElse(null);
         g.graal = in.value("graal").orElse(null);
-        // No host JVM carries these across the worker/process boundary, so stash
-        // them process-wide (same channel as JVM tuning above). The shared
-        // JdkResolution / GraalResolver read them as the top resolution tier.
-        // (M1c remainder: fold these onto the Session alongside the JVM tuning.)
-        applyProp("jk.jdk", g.jdk);
-        applyProp("jk.graal", g.graal);
-        // Resolve JVM tuning (flag > env > jk.toml > default) once for the whole
-        // invocation and carry it on the request-scoped Session, so every worker
-        // fork the build spawns reads it from the request (see JvmOptions.tuning()).
+        // Carry the top-tier JDK/GraalVM selection and the resolved JVM tuning on the request-scoped
+        // Session, so the toolchain resolvers (JdkResolution / GraalResolver) and every worker fork
+        // read them from the request instead of process-global system properties / static channels.
         dev.jkbuild.config.SessionContext.install(dev.jkbuild.config.SessionContext.current()
+                .withToolchainSpecs(g.jdk, g.graal)
                 .withJvm(dev.jkbuild.worker.JvmOptions.resolve(g.jvmCli(), g.workingDir())));
         return g;
     }
@@ -130,15 +125,6 @@ public final class GlobalOptions {
      * into every command's option set so global flags are accepted everywhere and shown in the
      * "Global options" help section.
      */
-    /** Stash a CLI spec process-wide (set when present, cleared when absent). */
-    private static void applyProp(String key, String value) {
-        if (value != null && !value.isBlank()) {
-            System.setProperty(key, value.trim());
-        } else {
-            System.clearProperty(key);
-        }
-    }
-
     public static List<Opt> globalOpts() {
         return List.of(
                 Opt.flag("Suppress informational output", "-q", "--quiet"),
