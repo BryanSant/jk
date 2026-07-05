@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
-package dev.jkbuild.config;
+package dev.jkbuild.cli;
 
+import dev.jkbuild.config.JkConfig;
 import java.io.OutputStream;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;

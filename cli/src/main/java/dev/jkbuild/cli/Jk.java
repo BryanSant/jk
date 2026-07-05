@@ -53,7 +53,7 @@ public final class Jk {
         applyCliOverrides(args);
         // -q/--quiet must take effect before any println happens. Apply it now
         // based on the resolved config (which already knows about env/file/CLI layers).
-        dev.jkbuild.config.Quietable.applyIfQuiet(dev.jkbuild.config.SessionContext.current().config());
+        Quietable.applyIfQuiet(dev.jkbuild.config.SessionContext.current().config());
         String[] rewritten = rewriteAlias(args);
         // Every verb is now on the CliCommand model; CommandDispatch handles all
         // dispatch. The fallback below handles bare `jk` + --help + --version.
@@ -162,7 +162,7 @@ public final class Jk {
     /**
      * Argv-scan pass that folds explicit CLI flags into {@link dev.jkbuild.config.SessionContext}. This is intentionally a
      * small scan rather than reusing picocli's parser: the highest-precedence layer needs to be
-     * available <em>before</em> picocli runs (e.g. so {@link dev.jkbuild.config.Quietable} can mute
+     * available <em>before</em> picocli runs (e.g. so {@link Quietable} can mute
      * stdout before the first subcommand println). Only flags that affect global behavior are read
      * here; everything else flows through picocli.
      */
