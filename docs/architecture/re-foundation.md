@@ -85,26 +85,26 @@ Branch: `refoundation`. Every commit below is green (`./gradlew :cli:test`).
 - **M5 (partial, safe wins)** — `Scope.canonical()`/`tomlSection()` precomputed into enum fields;
   `GlobalConfig` memoizes `~/.jk/config.toml` parses per `(path,size,mtime)` (was re-parsed 20+×/run).
 
-**M1c (in progress) — kernel globals onto `Session`**
-The mutable global *channels that carry request data* have been moved onto `Session` (each a green commit):
-- `JvmOptions.processSettings`/`setProcessSettings` → `Session.jvm` (`WorkerTuning`, moved to core);
-  `workerFlags` reads it via `JvmOptions.tuning()`.
-- `jk.jdk`/`jk.graal` `System.setProperty` → `Session.jdkSpec`/`graalSpec`; toolchain readers
-  (`CompileToolchain`, `JdkEnsure`, `Calibration`, `EffortWeights`, `GraalResolver`) read the session.
-- `BuildPipeline.parallelTests`/`setParallelTests` → `Session.parallelTests`; the run-tests gate reads
-  `in.session().parallelTests()`.
+**M1c — kernel globals onto `Session` (essentially done)**
+The mutable global *channels that carry request data* now live on `Session` (each a green commit):
+- `JvmOptions.processSettings`/`setProcessSettings` → `Session.jvm` (`WorkerTuning`, moved to core).
+- `jk.jdk`/`jk.graal` `System.setProperty` → `Session.jdkSpec`/`graalSpec`; toolchain readers read it.
+- `BuildPipeline.parallelTests`/`setParallelTests` → `Session.parallelTests`.
+- **`ActiveConfig` deleted** — it had been a shim over `SessionContext.current().config()` since M1a;
+  all ~40 refs migrated. `SessionContext` is now the single process-wide request holder (adding a
+  `ScopedValue` binding would enable concurrent in-JVM builds with no caller changes).
+- **`Quietable` relocated** kernel/core → cli: the kernel no longer calls `System.setOut`. Suppressing
+  the CLI's own stdout for `--quiet` is a client concern (the engine routes output through
+  `PhaseContext`/`GoalListener`, never `System.out`).
 
-**M1c remainder (deferred — shared primitives / output sink / cascade; documented)**
+**M1c remainder (deferred — shared primitives; documented)**
 - `WorkerSlots.slots` and `BuildPipeline.TEST_GATE` — shared *concurrency primitives* (not request
-  data). Correct as per-invocation for the single-process CLI; making them per-session pools needs a
-  per-build engine context and is server-hardening, not a data-leak fix.
-- `Quietable`'s `System.setOut` — needs a session-scoped output sink threaded to print sites; folds
-  into the `CliOutput`/`GoalListener` output work (M2/M6).
-- Leaf provisioning/packaging reads still on the `ActiveConfig` shim (`restore/storePackaged`,
-  `artifactFresh`, `TestSupport`, `CompileToolchain`/`KotlinBtaResolver` `refresh`). `ActiveConfig`
-  is now a thin shim over `SessionContext.current().config()`; it is deleted once these leaf reads are
-  threaded. **Assumption:** until then they observe the ambient `SessionContext.current()` — correct
-  for the single-session CLI; the multi-session server needs explicit threading.
+  data). Correct as per-invocation for the single-process CLI; per-session pools are server-hardening
+  (a per-build engine context or a `ScopedValue`), not a data-leak fix.
+- Leaf `refresh`/`rerun` reads (`restore/storePackaged`, `artifactFresh`, `TestSupport`,
+  `CompileToolchain`/`KotlinBtaResolver`) now read the single `SessionContext.current().config()` —
+  the request session, one holder. Explicit param-threading would only matter once `SessionContext`
+  is made `ScopedValue`-scoped for concurrent in-JVM builds.
 
 **M2 (in progress) — BuildService facade + hoist orchestration**
 - `BuildService` (engine) created as the client-facing build front door (pure policy, no stream
