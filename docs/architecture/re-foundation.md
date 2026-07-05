@@ -126,14 +126,19 @@ The mutable global *channels that carry request data* now live on `Session` (eac
   `runGraphPlain`+`buildUnit`+`report`. A headless front-end (Action, web backend) drives a full
   build with one call. Verified end-to-end on a real 2-module workspace (dep order, warm-cache,
   artifact linking, fail-fast exit=1, `--output json`).
-- **M2 remainder (Phase 2 — dedup, not a separation gap):** route the *interactive* live view
-  (`runGraphLive`) through `buildWorkspace` too, so there's one workspace-build entry point. This
-  needs `GoalConsole` refactored to expose "build the per-module aggregate `GoalListener`" separately
-  from "run the goal" (so `onModuleStart` can return it), plus per-level ETA re-projection recomputed
-  in `onModuleFinish` from remaining plan weights. The client/server separation is already complete
-  (the engine owns all orchestration; the live view is a renderer) — this is coherence, and carries
-  live-UX regression risk, so it wants its own focused pass with interactive verification. Also still
-  open: the `Jdk*Command` install DAGs.
+- **Phase 2 (done):** the interactive live view (`runGraphLive`) now also routes through
+  `buildWorkspace` — one workspace-build entry point for both headless and live. `buildWorkspace`
+  owns the ETA model + emits `onEtaEstimate`, and records the learned `PhaseTimings`/`Calibration`;
+  the CLI live view is a pure renderer (`onPlan`→calibrate bar, `onModuleStart`→existing
+  `AggregateModuleListener`, `onModuleFinish`→`[k/N]` + deferred output). No `GoalConsole` refactor
+  was needed — `AggregateModuleListener` is directly constructible. Removed `buildUnitLive`,
+  `UnitOutcome`, the inline pre-scan/ETA. Verified on a real 3-module dep chain (topo order,
+  warm-cache shortcut, incremental cascade, artifact linking, fail-fast exit 1). Only TTY *animation*
+  is un-observable in non-TTY; the view receives the identical call sequence as before.
+- **M2 remainder:** the `--no-parallel` serial path (`runWorkspaceBuild`) still has its own
+  prepare/run/ETA loop — a distinct rich serial UX — and could route through `buildWorkspace` (with
+  `concurrency=1`) in a later pass; and the `Jdk*Command` install DAGs. Neither is a separation gap
+  (both are CLI renderers over engine primitives), just remaining single-entry-point consolidation.
 
 **Deferred (documented — cascade-heavy, multi-session; NOT started)**
 - **M3** — Extract `coreBuilder`'s inline phase-body lambdas into `BuildStep` classes; remove/realize
