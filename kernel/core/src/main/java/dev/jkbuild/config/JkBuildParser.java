@@ -899,8 +899,8 @@ public final class JkBuildParser {
                     throw new JkBuildParseException("repositories." + name + " requires a string `url` field");
                 }
                 url = u;
-                credential = parseRepoCredential(name, t);
-                objectStore = parseObjectStore(name, t);
+                credential = RepositoryToml.credential(t, strictInterp(name));
+                objectStore = RepositoryToml.objectStore(t, strictInterp(name));
             } else {
                 throw new JkBuildParseException(
                         "repositories." + name + " must be a URL string or an inline table with `url`");
@@ -920,63 +920,20 @@ public final class JkBuildParser {
      * {@code session-token}. All support {@code ${ENV}} interpolation (so keys aren't committed
      * literally); any unset field falls back to the AWS environment / default chain.
      */
-    private static Optional<ObjectStoreConfig> parseObjectStore(String name, TomlTable t) {
-        String region = interpolateEnv(name, t.getString("region"));
-        String endpoint = interpolateEnv(name, t.getString("endpoint"));
-        String accessKey = interpolateEnv(name, t.getString("access-key"));
-        String secretKey = interpolateEnv(name, t.getString("secret-key"));
-        String sessionToken = interpolateEnv(name, t.getString("session-token"));
-        ObjectStoreConfig cfg = new ObjectStoreConfig(
-                blankToNull(region),
-                blankToNull(endpoint),
-                blankToNull(accessKey),
-                blankToNull(secretKey),
-                blankToNull(sessionToken));
-        return cfg.isEmpty() ? Optional.empty() : Optional.of(cfg);
-    }
-
-    private static String blankToNull(String s) {
-        return (s == null || s.isBlank()) ? null : s;
-    }
-
     /**
-     * Optional inline credential on a {@code [repositories.<name>]} table: {@code token = "..."}
-     * (bearer) or {@code username}/{@code password} (basic). Values support {@code ${ENV}}
-     * interpolation so secrets need not be committed literally; an unset referenced variable is an
-     * error so a typo fails loudly rather than silently authenticating anonymously.
+     * Project-layer {@code ${ENV}} interpolation for {@code [repositories.<name>]}: strict — an unset
+     * variable is a parse error so a typo fails loudly rather than silently authenticating
+     * anonymously. Field parsing lives in {@link RepositoryToml}.
      */
-    private static Optional<RepoCredential> parseRepoCredential(String name, TomlTable t) {
-        String token = interpolateEnv(name, t.getString("token"));
-        String username = interpolateEnv(name, t.getString("username"));
-        String password = interpolateEnv(name, t.getString("password"));
-        if (token != null && !token.isBlank()) {
-            return Optional.of(new RepoCredential.Bearer(token));
-        }
-        if (username != null && !username.isBlank()) {
-            return Optional.of(new RepoCredential.Basic(username, password == null ? "" : password));
-        }
-        return Optional.empty();
-    }
-
-    private static final java.util.regex.Pattern ENV_REF =
-            java.util.regex.Pattern.compile("\\$\\{([A-Za-z_][A-Za-z0-9_]*)}");
-
-    /** Expand {@code ${VAR}} against the environment; missing var → parse error. */
-    private static String interpolateEnv(String repoName, String raw) {
-        if (raw == null) return null;
-        java.util.regex.Matcher m = ENV_REF.matcher(raw);
-        StringBuilder out = new StringBuilder();
-        while (m.find()) {
-            String var = m.group(1);
+    private static java.util.function.UnaryOperator<String> strictInterp(String repoName) {
+        return raw -> RepositoryToml.interpolate(raw, var -> {
             String val = System.getenv(var);
             if (val == null) {
                 throw new JkBuildParseException(
                         "repositories." + repoName + " references unset environment variable ${" + var + "}");
             }
-            m.appendReplacement(out, java.util.regex.Matcher.quoteReplacement(val));
-        }
-        m.appendTail(out);
-        return out.toString();
+            return val;
+        });
     }
 
     private static Profiles parseProfiles(TomlTable root) {

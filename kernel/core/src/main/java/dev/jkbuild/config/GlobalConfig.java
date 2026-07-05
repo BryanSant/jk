@@ -11,8 +11,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import org.tomlj.TomlParseResult;
 import org.tomlj.TomlTable;
 
@@ -178,8 +176,8 @@ public final class GlobalConfig {
                     String u = t.getString("url");
                     if (u == null) continue; // malformed — skip leniently
                     url = u;
-                    credential = parseRepoCredential(t);
-                    objectStore = parseObjectStore(t);
+                    credential = RepositoryToml.credential(t, LENIENT_INTERP);
+                    objectStore = RepositoryToml.objectStore(t, LENIENT_INTERP);
                 } else {
                     continue; // unexpected type — skip leniently
                 }
@@ -191,45 +189,14 @@ public final class GlobalConfig {
         return result;
     }
 
-    private static Optional<RepoCredential> parseRepoCredential(TomlTable t) {
-        String token = interpolateEnv(t.getString("token"));
-        String username = interpolateEnv(t.getString("username"));
-        String password = interpolateEnv(t.getString("password"));
-        if (token != null && !token.isBlank()) {
-            return Optional.of(new RepoCredential.Bearer(token));
-        }
-        if (username != null && !username.isBlank()) {
-            return Optional.of(new RepoCredential.Basic(username, password == null ? "" : password));
-        }
-        return Optional.empty();
-    }
-
-    private static Optional<ObjectStoreConfig> parseObjectStore(TomlTable t) {
-        ObjectStoreConfig cfg = new ObjectStoreConfig(
-                blankToNull(interpolateEnv(t.getString("region"))),
-                blankToNull(interpolateEnv(t.getString("endpoint"))),
-                blankToNull(interpolateEnv(t.getString("access-key"))),
-                blankToNull(interpolateEnv(t.getString("secret-key"))),
-                blankToNull(interpolateEnv(t.getString("session-token"))));
-        return cfg.isEmpty() ? Optional.empty() : Optional.of(cfg);
-    }
-
-    private static final Pattern ENV_REF = Pattern.compile("\\$\\{([A-Za-z_][A-Za-z0-9_]*)}");
-
-    /** Expand {@code ${VAR}} against the environment; missing var → returns the original text (lenient). */
-    private static String interpolateEnv(String raw) {
-        if (raw == null) return null;
-        Matcher m = ENV_REF.matcher(raw);
-        StringBuilder out = new StringBuilder();
-        while (m.find()) {
-            String val = System.getenv(m.group(1));
-            m.appendReplacement(out, Matcher.quoteReplacement(val != null ? val : m.group(0)));
-        }
-        m.appendTail(out);
-        return out.toString();
-    }
-
-    private static String blankToNull(String s) {
-        return (s == null || s.isBlank()) ? null : s;
-    }
+    /**
+     * Global-layer {@code ${ENV}} interpolation: lenient — an unset variable is left as the literal
+     * {@code ${VAR}} text (global config must never fail a build). Field parsing lives in {@link
+     * RepositoryToml}.
+     */
+    private static final java.util.function.UnaryOperator<String> LENIENT_INTERP = raw -> RepositoryToml.interpolate(
+            raw, var -> {
+                String v = System.getenv(var);
+                return v != null ? v : "${" + var + "}";
+            });
 }
