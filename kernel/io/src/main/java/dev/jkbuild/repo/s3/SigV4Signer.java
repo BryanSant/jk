@@ -3,7 +3,6 @@ package dev.jkbuild.repo.s3;
 
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 import java.util.Locale;
 import java.util.Map;
 import java.util.StringJoiner;
@@ -85,7 +84,7 @@ public final class SigV4Signer {
                 + sha256Hex(canonicalRequest.getBytes(StandardCharsets.UTF_8));
 
         byte[] signingKey = signingKey(secretKey, dateStamp, region, service);
-        String signature = hex(hmac(signingKey, stringToSign.getBytes(StandardCharsets.UTF_8)));
+        String signature = dev.jkbuild.util.Hashing.hex(hmac(signingKey, stringToSign.getBytes(StandardCharsets.UTF_8)));
 
         return ALGORITHM
                 + " Credential="
@@ -133,11 +132,7 @@ public final class SigV4Signer {
     }
 
     public static String sha256Hex(byte[] data) {
-        try {
-            return hex(MessageDigest.getInstance("SHA-256").digest(data));
-        } catch (Exception e) {
-            throw new IllegalStateException("SHA-256 unavailable", e);
-        }
+        return dev.jkbuild.util.Hashing.sha256Hex(data);
     }
 
     private static byte[] signingKey(String secretKey, String dateStamp, String region, String service) {
@@ -158,11 +153,6 @@ public final class SigV4Signer {
         }
     }
 
-    private static String hex(byte[] bytes) {
-        StringBuilder sb = new StringBuilder(bytes.length * 2);
-        for (byte b : bytes) sb.append(Character.forDigit((b >> 4) & 0xf, 16)).append(Character.forDigit(b & 0xf, 16));
-        return sb.toString();
-    }
 
     /** RFC 3986 unreserved set is left as-is; everything else percent-encoded (uppercase hex). */
     static String rfc3986(String s) {

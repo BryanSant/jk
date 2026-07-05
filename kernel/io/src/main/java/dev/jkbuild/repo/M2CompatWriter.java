@@ -9,8 +9,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.util.HexFormat;
 
 /**
  * Writes Maven-compatible artifact files to {@code ~/.m2/repository} (or the path returned by
@@ -192,14 +190,10 @@ public final class M2CompatWriter {
     }
 
     private static MessageDigest newDigest(String algorithm) {
-        try {
-            return MessageDigest.getInstance(algorithm);
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException(algorithm + " not available", e);
-        }
+        return dev.jkbuild.util.Hashing.newDigest(algorithm);
     }
 
     private static String hex(byte[] digest) {
-        return HexFormat.of().formatHex(digest);
+        return dev.jkbuild.util.Hashing.hex(digest);
     }
 }

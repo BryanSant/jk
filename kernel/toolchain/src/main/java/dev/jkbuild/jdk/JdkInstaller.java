@@ -15,11 +15,9 @@ import java.net.http.HttpResponse;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HexFormat;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
@@ -332,12 +330,7 @@ public final class JdkInstaller {
             }
             throw new IOException("JDK download " + uri + " returned " + response.statusCode());
         }
-        MessageDigest sha;
-        try {
-            sha = MessageDigest.getInstance("SHA-256");
-        } catch (NoSuchAlgorithmException e) {
-            throw new AssertionError("SHA-256 is required on every JVM", e);
-        }
+        MessageDigest sha = dev.jkbuild.util.Hashing.newSha256();
         long total = 0;
         try (InputStream body = response.body();
                 OutputStream sink = Files.newOutputStream(archive)) {
@@ -351,7 +344,7 @@ public final class JdkInstaller {
             }
         }
         if (expectedSha256 != null && !expectedSha256.isEmpty()) {
-            String actual = HexFormat.of().formatHex(sha.digest());
+            String actual = dev.jkbuild.util.Hashing.hex(sha.digest());
             if (!actual.equalsIgnoreCase(expectedSha256)) {
                 throw new IOException(
                         "sha256 mismatch for " + displayName + " — expected " + expectedSha256 + ", got " + actual);

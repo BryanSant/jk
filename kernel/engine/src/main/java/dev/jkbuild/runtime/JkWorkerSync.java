@@ -8,8 +8,6 @@ import dev.jkbuild.worker.WorkerJar;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.security.MessageDigest;
-import java.util.HexFormat;
 
 /**
  * Ensures jk's own child-JVM worker jars ({@code jk-test-runner}, {@code jk-kotlin-compiler}, …)
@@ -72,8 +70,7 @@ public final class JkWorkerSync {
 
             try {
                 byte[] jarBytes = Files.readAllBytes(m2Jar);
-                byte[] digest = MessageDigest.getInstance("SHA-256").digest(jarBytes);
-                String hex = HexFormat.of().formatHex(digest);
+                String hex = dev.jkbuild.util.Hashing.sha256Hex(jarBytes);
                 // Put into CAS first (hard-link source for materialize), then materialize into repos/local/
                 Path casBlob = cas.put(jarBytes);
                 localStore.materialize(relPath, casBlob, hex);

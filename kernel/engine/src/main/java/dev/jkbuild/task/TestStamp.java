@@ -7,10 +7,8 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HexFormat;
 import java.util.List;
 
 /**
@@ -63,7 +61,7 @@ public final class TestStamp {
     public static String computeKey(
             List<Path> testSources, Path mainClasses, Path lockFile, List<Path> runtimeCp, List<String> extraInputs) {
         try {
-            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            MessageDigest md = Hashing.newSha256();
             feed(md, FORMAT_VERSION);
 
             // Test sources: path + content hash, sorted for stability.
@@ -96,8 +94,8 @@ public final class TestStamp {
                 for (String e : extras) feed(md, "x:" + e);
             }
 
-            return HexFormat.of().formatHex(md.digest());
-        } catch (IOException | NoSuchAlgorithmException e) {
+            return Hashing.hex(md.digest());
+        } catch (IOException e) {
             return null; // fail open — retest
         }
     }

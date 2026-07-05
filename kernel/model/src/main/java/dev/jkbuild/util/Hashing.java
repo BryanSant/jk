@@ -40,14 +40,33 @@ public final class Hashing {
 
     /** A fresh SHA-256 {@link MessageDigest} for incremental hashing. */
     public static MessageDigest newSha256() {
-        try {
-            return MessageDigest.getInstance("SHA-256");
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 not available on this JVM", e);
-        }
+        return newDigest("SHA-256");
     }
 
     public static byte[] sha256(byte[] data) {
         return newSha256().digest(data);
+    }
+
+    /**
+     * A fresh {@link MessageDigest} for {@code algorithm} (e.g. {@code "SHA-256"}, {@code "SHA-1"},
+     * {@code "MD5"}) — the multi-algorithm case (Maven checksums, streaming multi-digest). The named
+     * algorithms are mandated on every JVM, so absence is a JVM defect, not a recoverable error.
+     */
+    public static MessageDigest newDigest(String algorithm) {
+        try {
+            return MessageDigest.getInstance(algorithm);
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException(algorithm + " not available on this JVM", e);
+        }
+    }
+
+    /** Lowercase hex of raw digest bytes — the one spelling of {@code HexFormat.of().formatHex(..)}. */
+    public static String hex(byte[] bytes) {
+        return HexFormat.of().formatHex(bytes);
+    }
+
+    /** Hex digest of {@code data} under {@code algorithm} (one-shot). */
+    public static String hashHex(String algorithm, byte[] data) {
+        return hex(newDigest(algorithm).digest(data));
     }
 }
