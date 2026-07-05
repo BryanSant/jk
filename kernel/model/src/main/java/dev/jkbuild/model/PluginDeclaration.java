@@ -28,7 +28,7 @@ import java.util.Objects;
  * }</pre>
  *
  * <p>Any key other than {@code group}, {@code name}, and {@code version} is collected into {@link
- * #config} and delivered to the plugin via {@link dev.jkbuild.plugin.PluginContext#config()}.
+ * #config} and delivered to the plugin as its {@code [plugins.<alias>]} config.
  * Values are plain JDK types: {@link String}, {@link Long} (integers), {@link Double} (floats),
  * {@link Boolean}, {@link java.util.List} (arrays), and nested {@link java.util.Map}&lt;String,
  * Object&gt; (sub-tables).
