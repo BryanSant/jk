@@ -118,12 +118,22 @@ The mutable global *channels that carry request data* now live on `Session` (eac
   `LevelSink`; per-unit build + all presentation stay in the CLI callbacks. Verified end-to-end on a
   real 2-module workspace (dep ordering, live view, warm-cache no-op, `--no-parallel`, artifact
   linking, fail-fast exit=1).
-- **M2 remainder:** the deeper goal-execution event split is optional — the `UnitTask`/`LevelSink`
-  callback boundary already keeps orchestration in the engine and presentation in the CLI; a
-  `BuildService.buildWorkspace(request, GoalListener)` that also runs the per-module goal and emits
-  phase events would let a non-CLI front-end render without a callback, but isn't required for the
-  separation. Still open: the `Jdk*Command` install DAGs, the deferred M1c leaf `refresh` reads, and
-  the `Quietable` output sink (all land on the eventual `buildWorkspace` event API).
+- **`BuildService.buildWorkspace(request, WorkspaceBuildListener)`** landed — the front-end-callable
+  entry point that owns the whole workspace build (resolve graph → memory plan → assemble goals →
+  schedule → run each goal → link artifacts → fail-fast), emitting `onPlan`/`onModuleStart`(→ a
+  `GoalListener`)/`onModuleFinish` events and writing nothing to stdout. The CLI's non-animated path
+  (`--verbose`/`--output json`) is now a pure renderer over it (`runWorkspaceHeadless`), replacing
+  `runGraphPlain`+`buildUnit`+`report`. A headless front-end (Action, web backend) drives a full
+  build with one call. Verified end-to-end on a real 2-module workspace (dep order, warm-cache,
+  artifact linking, fail-fast exit=1, `--output json`).
+- **M2 remainder (Phase 2 — dedup, not a separation gap):** route the *interactive* live view
+  (`runGraphLive`) through `buildWorkspace` too, so there's one workspace-build entry point. This
+  needs `GoalConsole` refactored to expose "build the per-module aggregate `GoalListener`" separately
+  from "run the goal" (so `onModuleStart` can return it), plus per-level ETA re-projection recomputed
+  in `onModuleFinish` from remaining plan weights. The client/server separation is already complete
+  (the engine owns all orchestration; the live view is a renderer) — this is coherence, and carries
+  live-UX regression risk, so it wants its own focused pass with interactive verification. Also still
+  open: the `Jdk*Command` install DAGs.
 
 **Deferred (documented — cascade-heavy, multi-session; NOT started)**
 - **M3** — Extract `coreBuilder`'s inline phase-body lambdas into `BuildStep` classes; remove/realize
