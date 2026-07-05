@@ -82,7 +82,7 @@ Branch: `refoundation`. Every commit below is green (`./gradlew :cli:test`).
 - **M1b** — `Session` threaded through `BuildPipeline.Inputs` (delegating ctors default it from
   `SessionContext.current()`, zero call-site churn); hot build-path reads (`BuildPipeline` phase
   bodies, `EffortWeights.predict`) now read `in.session().config()`.
-- **M5 (in progress)** —
+- **M5 — Model as single currency (DONE)** —
   - `Scope.canonical()`/`tomlSection()` precomputed into enum fields; `GlobalConfig` memoizes
     `~/.jk/config.toml` per `(path,size,mtime)`.
   - **M5a** `Hashing` consolidation: added `newDigest`/`hex`/`hashHex`; routed the hand-rolled
@@ -92,11 +92,24 @@ Branch: `refoundation`. Every commit below is green (`./gradlew :cli:test`).
     `moduleArtifact()`/`coordinate()` + `checksumHex()`/`sourcesChecksumHex()`; migrated the manual
     `name` splits + `sha256:` strips in `CacheSync`, `ClasspathResolver`, `LockOrchestrator`,
     `InstallCommand`, `IdeSupport` (dropped its duplicate `hexOf`).
-  - **M5 remaining:** sealed dependency source-kind (replace `Dependency.module`'s `git:`/`workspace:`
-    magic prefixes — also retires the last split cluster); `RepoArtifactResolver` facade (one owner of
-    `"<name>+<url>"` source parsing, dedup `CacheSync`/`IdeSupport`/`ClasspathResolver`); one
-    `${ENV}`+repo-TOML parser; builders retiring the telescoping ctors on `JkBuild`/`Project`/
-    `Lockfile`/`Artifact`/`Dependency`.
+  - **M5d** `RepoArtifactResolver` facade: one owner of `"<name>+<url>"` source parsing +
+    `locateOrMaterialize`, deduping `CacheSync`/`IdeSupport`/`ClasspathResolver`.
+  - **M5e** one `RepositoryToml` parser for the `[repositories.<name>]` table — `${ENV}` interpolation,
+    bearer/basic creds, object-store — shared by `GlobalConfig` (lenient: unset var kept literal) and
+    `JkBuildParser` (strict: unset var throws), differing only in the injected missing-var policy.
+  - **M5c** explicit source-kind predicates on `Dependency`: the `git:`/`workspace:` magic prefixes
+    (spelled as literals in ~8 discriminators + constructed in 3) are centralized as
+    `WORKSPACE_PREFIX`/`GIT_PREFIX` behind `isWorkspace()`/`isWorkspaceRef`/`workspaceName`/
+    `workspaceRef` + the `gitByName()`/`workspace()` factories. Git's `group()` no longer lies. The
+    `workspace:` placeholder still travels as a bare module string (it must, until `WorkspaceMerge`
+    rewrites it) but its shape is known in exactly one place. A full sealed `Source` type was rejected:
+    it cannot hold at the `Lockfile.Artifact.deps()` String boundaries, so it would leak back to strings.
+  - **M5f** retired the telescoping constructor ladders: `JkBuild.builder`/`Project.builder` are the
+    readable path; deleted `JkBuild`'s 4–10-arg rungs and `Project`'s 10/12-arg rungs (kept the two/one
+    genuinely-clear positional shortcuts). Migrated all callers preserving exact semantics.
+    - *Observed latent smell (not fixed — out of scope):* `WorkspaceMerge`'s merged `JkBuild` drops the
+      module's `[build]` (orderAfter/testWorkerJars/lint) and `[format]` blocks (the old 9-arg rung set
+      them null). Preserved faithfully; worth a deliberate follow-up if merged modules should keep them.
 
 **M1c — kernel globals onto `Session` (essentially done)**
 The mutable global *channels that carry request data* now live on `Session` (each a green commit):
@@ -158,9 +171,6 @@ The mutable global *channels that carry request data* now live on `Session` (eac
   dead `PluginContext.contribute`.
 - **M4** — `WorkerClient<Req,Res>` + standardized worker envelope across the 9 plugins; `CompilerWorker`
   bridge; `IdeSdkRegistrar` SPI + move `Intellij*` out of `kernel/toolchain`; de-dup `compat` package.
-- **M5 (remainder)** — `Coordinate`/`Module` as single currency + `coordinate()` accessors killing the
-  ~43 `indexOf(':')` splits; sealed dependency source-kind; builders retiring telescoping ctors;
-  `RepoArtifactResolver` facade; `Hashing` consolidation; one `${ENV}`+repo-TOML parser.
 - **M6** — Extract/bless `jk-api`; CLI facades (`ProjectContext`, `CliOutput`, `WorkspaceCommand`,
   `Exit`); delete unreachable parent `run()` bodies; update self-host `jk.toml` + jk.jk mirror.
 
