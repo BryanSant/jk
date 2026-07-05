@@ -28,9 +28,6 @@ import java.util.Set;
  */
 public final class WorkspaceMerge {
 
-    /** Synthetic module prefix the parser uses for unresolved workspace deps. */
-    private static final String UNRESOLVED_PREFIX = "workspace:";
-
     private WorkspaceMerge() {}
 
     /**
@@ -153,7 +150,7 @@ public final class WorkspaceMerge {
      */
     private static Dependency resolve(
             Dependency d, Map<String, JkBuild> siblingByArtifact, Map<String, Workspace.WorkspaceDependency> wsDeps) {
-        if (!d.module().startsWith(UNRESOLVED_PREFIX)) return d;
+        if (!d.isWorkspace()) return d;
         String name = d.library();
         // Sibling lookup first. Modules typically name siblings as
         // jk-core, jk-cli, etc. — the dep handle is expected to match the

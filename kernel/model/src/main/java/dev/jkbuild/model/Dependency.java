@@ -19,6 +19,26 @@ import java.util.Objects;
  * <p>For git deps the version field carries the synthetic marker {@code "git"} so the record's
  * non-null invariant holds; consumers gate on {@link #isGit()} rather than reading the marker.
  *
+ * <h2>Source discriminators (no magic-string sniffing)</h2>
+ *
+ * <p>A dependency's <em>source kind</em> is authoritative through named predicates, never through
+ * callers pattern-matching the {@code module} string:
+ *
+ * <ul>
+ *   <li>{@link #isGit()} — a git-sourced dep ({@code gitSource != null}).
+ *   <li>{@link #isFile()} — a CAS file-sourced dep ({@code sha256 != null}).
+ *   <li>{@link #isWorkspace()} — an unresolved workspace-sibling placeholder.
+ *   <li>otherwise — a Maven coordinate.
+ * </ul>
+ *
+ * <p>Two source kinds cannot carry a real {@code group:artifact} at parse time, so they encode a
+ * synthetic {@code module} to satisfy the coordinate invariant: git deps use {@link #GIT_PREFIX}
+ * (write-only — nothing reads it back; discriminate via {@link #isGit()}), and unresolved workspace
+ * siblings use {@link #WORKSPACE_PREFIX} + the sibling name (read back via {@link #isWorkspaceRef}
+ * / {@link #workspaceName} because the placeholder legitimately travels as a bare module string
+ * through classpath/tree/graph consumers before {@code WorkspaceMerge} rewrites it). Both sentinels
+ * are defined here <em>once</em>; consumers never spell the literal.
+ *
  * <p>The {@code pinned} flag is <b>derived</b> from the resolution mode:
  *
  * <ul>
@@ -35,6 +55,21 @@ public record Dependency(
         String sha256,
         boolean pinned,
         boolean optional) {
+
+    /**
+     * Synthetic {@code module} prefix for an unresolved workspace-sibling placeholder ({@code
+     * workspace:<name>}). This one legitimately travels as a bare module string through classpath,
+     * dependency-tree, and build-graph consumers until {@code WorkspaceMerge} rewrites it to the
+     * sibling's real coord — so it is read back via {@link #isWorkspaceRef}/{@link #workspaceName}.
+     */
+    public static final String WORKSPACE_PREFIX = "workspace:";
+
+    /**
+     * Synthetic {@code module} prefix for a bare-name git dep whose real coordinate isn't known at
+     * parse time ({@code git:<name>}). Write-only: nothing reads it back — git deps discriminate via
+     * {@link #isGit()}. It exists only to satisfy the {@code group:artifact} invariant.
+     */
+    public static final String GIT_PREFIX = "git:";
 
     public Dependency {
         Objects.requireNonNull(library, "library");
@@ -94,6 +129,23 @@ public record Dependency(
         return new Dependency(library, module, VersionSelector.parse("=git"), source, null, false);
     }
 
+    /**
+     * Bare-name git dep whose real coordinate isn't known at parse time — the {@code module} is the
+     * synthetic {@link #GIT_PREFIX}{@code <name>} placeholder. Callers must not spell the prefix.
+     */
+    public static Dependency gitByName(String name, GitSource source) {
+        return git(name, GIT_PREFIX + name, source);
+    }
+
+    /**
+     * Unresolved workspace-sibling placeholder — the {@code module} is {@link #WORKSPACE_PREFIX}{@code
+     * <name>} and the version a synthetic {@code Latest("workspace")} marker. {@code WorkspaceMerge}
+     * rewrites this to the sibling's real coord (or errors) before the resolver ever sees it.
+     */
+    public static Dependency workspace(String name) {
+        return new Dependency(name, workspaceRef(name), new VersionSelector.Latest("workspace"), null, null, false);
+    }
+
     /** CAS file-sourced; pinned to an exact version. */
     public static Dependency file(String library, String module, String version, String sha256) {
         Objects.requireNonNull(sha256, "sha256");
@@ -106,6 +158,31 @@ public record Dependency(
 
     public boolean isFile() {
         return sha256 != null;
+    }
+
+    /** True when this is an unresolved {@code workspace:<name>} sibling placeholder. */
+    public boolean isWorkspace() {
+        return isWorkspaceRef(module);
+    }
+
+    /** The sibling name of a workspace placeholder, or {@code null} if this isn't one. */
+    public String workspaceName() {
+        return workspaceName(module);
+    }
+
+    /** Whether a bare module string is a {@code workspace:<name>} placeholder. */
+    public static boolean isWorkspaceRef(String module) {
+        return module != null && module.startsWith(WORKSPACE_PREFIX);
+    }
+
+    /** The sibling name inside a {@code workspace:<name>} module string, or {@code null}. */
+    public static String workspaceName(String module) {
+        return isWorkspaceRef(module) ? module.substring(WORKSPACE_PREFIX.length()) : null;
+    }
+
+    /** Build the synthetic {@code workspace:<name>} module string for a sibling. */
+    public static String workspaceRef(String name) {
+        return WORKSPACE_PREFIX + name;
     }
 
     public String group() {

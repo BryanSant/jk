@@ -704,9 +704,9 @@ public final class BuildCommand implements CliCommand {
                 for (Dependency d : e.getValue().dependencies().of(scope)) {
                     String module = d.module();
                     Path depDir = dirByCoord.get(module);
-                    // workspace: deps use "workspace:<name>" — resolve by bare name
-                    if (depDir == null && module.startsWith("workspace:")) {
-                        depDir = dirByName.get(module.substring("workspace:".length()));
+                    // workspace placeholders resolve by their bare sibling name
+                    if (depDir == null && d.isWorkspace()) {
+                        depDir = dirByName.get(d.workspaceName());
                     }
                     if (depDir != null && !depDir.equals(e.getKey())) {
                         prereqs.add(depDir);

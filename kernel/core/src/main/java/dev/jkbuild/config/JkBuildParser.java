@@ -489,7 +489,7 @@ public final class JkBuildParser {
             }
             String canonical = GitUrl.canonicalize(parts.baseUrl());
             GitSource source = new GitSource(canonical, parts.baseUrl(), ref, parts.subdir(), true, false, shallow);
-            return Dependency.git(name, "git:" + name, source);
+            return Dependency.gitByName(name, source);
         }
 
         // Version spec or reserved keyword → catalog lookup.
@@ -655,7 +655,7 @@ public final class JkBuildParser {
                             + " and version are always read from the cloned repo's jk.toml");
                 }
             }
-            return Dependency.git(name, "git:" + name, parseGitSource(entry, displayPath));
+            return Dependency.gitByName(name, parseGitSource(entry, displayPath));
         }
 
         // version-only.
@@ -674,8 +674,8 @@ public final class JkBuildParser {
         // The workspace lookup chain: modules are resolved upstream at
         // merge time (we don't have them here at single-file parse time),
         // so first check [workspace.dependencies], then fall back to
-        // emitting a placeholder coord that WorkspaceMerge can re-resolve
-        // against the sibling list.
+        // emitting a placeholder coord (Dependency.workspace) that
+        // WorkspaceMerge can re-resolve against the sibling list.
         if (workspace != null) {
             WorkspaceDependency wd = workspace.dependencies().get(name);
             if (wd != null) {
@@ -685,11 +685,11 @@ public final class JkBuildParser {
         // No [workspace.dependencies] match. The parser cannot resolve the
         // sibling here — that requires the full module list, which only
         // WorkspaceMerge / WorkspaceLoader has. Emit a placeholder dep
-        // tagged with the short name; WorkspaceMerge resolves it. We
-        // encode the unresolved state via a synthetic module of the form
-        // "workspace:<name>" and a Latest selector; the resolver never
-        // sees this because WorkspaceMerge rewrites it first.
-        return new Dependency(name, "workspace:" + name, new VersionSelector.Latest("workspace"), null, null, false);
+        // tagged with the short name; WorkspaceMerge resolves it. The
+        // unresolved state is encoded as a synthetic workspace:<name>
+        // module with a Latest selector; the resolver never sees this
+        // because WorkspaceMerge rewrites it first.
+        return Dependency.workspace(name);
     }
 
     private static Dependency materialize(String name, WorkspaceDependency wd) {

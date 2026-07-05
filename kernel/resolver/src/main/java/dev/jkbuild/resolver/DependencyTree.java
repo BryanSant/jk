@@ -686,8 +686,8 @@ public final class DependencyTree {
             Set<String> visited,
             Map<String, FlatDep> out) {
 
-        if (module.startsWith("workspace:")) {
-            String name = module.substring("workspace:".length());
+        if (Dependency.isWorkspaceRef(module)) {
+            String name = Dependency.workspaceName(module);
             putFlat(out, new FlatDep(byName.getOrDefault(name, module), null, " [workspace]"));
             return;
         }
@@ -749,12 +749,12 @@ public final class DependencyTree {
             Set<String> seenDirs,
             StringBuilder out) {
 
-        if (module.startsWith("workspace:")) {
+        if (Dependency.isWorkspaceRef(module)) {
             // Workspace sibling (a `<name>.workspace = true` dep) — already shown
             // at the top level, and its external deps aren't in this module's lock.
             // Resolve the synthetic "workspace:<name>" back to a real coord and
             // reference it (no recursion).
-            String name = module.substring("workspace:".length());
+            String name = Dependency.workspaceName(module);
             String coord = modules.getOrDefault(name, module);
             out.append(prefix)
                     .append(styling.rail().apply(isLast ? "╰─ " : "├─ "))

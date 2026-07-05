@@ -149,8 +149,8 @@ public final class WorkspaceClasspath {
 
     /** Resolve a {@code workspace:<name>} dep reference to its full {@code group:name} coord. */
     private static String resolveWorkspaceRef(String module, Map<String, String> coordByName) {
-        if (!module.startsWith("workspace:")) return module;
-        String name = module.substring("workspace:".length());
+        if (!Dependency.isWorkspaceRef(module)) return module;
+        String name = Dependency.workspaceName(module);
         String coord = coordByName.get(name);
         return coord != null ? coord : module;
     }

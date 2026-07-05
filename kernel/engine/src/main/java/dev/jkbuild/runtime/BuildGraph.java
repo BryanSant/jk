@@ -165,8 +165,8 @@ public final class BuildGraph {
                 for (Dependency d : m.dependencies().of(scope)) {
                     String module = d.module();
                     Path depDir = dirByCoord.get(module);
-                    if (depDir == null && module.startsWith("workspace:")) {
-                        depDir = dirByName.get(module.substring("workspace:".length()));
+                    if (depDir == null && d.isWorkspace()) {
+                        depDir = dirByName.get(d.workspaceName());
                     }
                     if (depDir != null) addEdge(moduleDir, depDir);
                 }
