@@ -90,9 +90,7 @@ public final class CacheSync {
                 observer.skipped(pkg);
                 continue;
             }
-            String hex = pkg.checksum().startsWith("sha256:")
-                    ? pkg.checksum().substring("sha256:".length())
-                    : pkg.checksum();
+            String hex = pkg.checksumHex();
 
             // Check the named-repo store first (repos/<name>/<m2-path>.sha256) — a stat call
             // that works cross-project without any CAS knowledge.  Fall back to the CAS for
@@ -163,9 +161,7 @@ public final class CacheSync {
         List<PendingFetch> pending = new ArrayList<>();
         for (Lockfile.Artifact pkg : lock.artifacts()) {
             if (pkg.sourcesChecksum() == null) continue;
-            String hex = pkg.sourcesChecksum().startsWith("sha256:")
-                    ? pkg.sourcesChecksum().substring("sha256:".length())
-                    : pkg.sourcesChecksum();
+            String hex = pkg.sourcesChecksumHex();
             if (cas.contains(hex)) {
                 observer.upToDate(pkg);
                 continue;
@@ -203,9 +199,8 @@ public final class CacheSync {
     }
 
     private static FetchResult fetchSources(PendingFetch p, HostRateLimiter limiter) {
-        int colon = p.pkg.name().indexOf(':');
         Coordinate sourcesCoord = new dev.jkbuild.model.Coordinate(
-                p.pkg.name().substring(0, colon), p.pkg.name().substring(colon + 1), p.pkg.version(), "sources", "jar");
+                p.pkg.moduleGroup(), p.pkg.moduleArtifact(), p.pkg.version(), "sources", "jar");
         try {
             URI host = p.repo.baseUrl();
             MavenRepo.Fetched f = limiter.run(host, () -> p.repo.fetchArtifact(sourcesCoord));
@@ -316,8 +311,7 @@ public final class CacheSync {
     }
 
     private static Coordinate toCoord(Lockfile.Artifact pkg) {
-        int colon = pkg.name().indexOf(':');
-        return Coordinate.of(pkg.name().substring(0, colon), pkg.name().substring(colon + 1), pkg.version());
+        return pkg.coordinate();
     }
 
     /** A package whose CAS entry is missing and needs to be fetched. */

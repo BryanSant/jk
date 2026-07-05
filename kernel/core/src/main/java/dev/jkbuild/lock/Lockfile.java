@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.lock;
 
+import dev.jkbuild.model.Coordinate;
 import dev.jkbuild.model.Scope;
 import java.util.ArrayList;
 import java.util.EnumSet;
@@ -180,6 +181,38 @@ public record Lockfile(
         public boolean inAnyScope(Set<Scope> include) {
             for (Scope s : scopes) if (include.contains(s)) return true;
             return false;
+        }
+
+        /** The {@code group} segment of {@link #name} ({@code group:artifact}). */
+        public String moduleGroup() {
+            int c = name.indexOf(':');
+            return c < 0 ? name : name.substring(0, c);
+        }
+
+        /** The {@code artifact} segment of {@link #name}. */
+        public String moduleArtifact() {
+            int c = name.indexOf(':');
+            return c < 0 ? "" : name.substring(c + 1);
+        }
+
+        /** This artifact as a jar {@link Coordinate} at its {@link #version} — the single currency. */
+        public Coordinate coordinate() {
+            return Coordinate.of(moduleGroup(), moduleArtifact(), version);
+        }
+
+        /** Raw hex SHA-256 of the jar (strips a {@code "sha256:"} prefix), or {@code null}. */
+        public String checksumHex() {
+            return stripSha256(checksum);
+        }
+
+        /** Raw hex SHA-256 of the {@code -sources.jar} (strips the prefix), or {@code null}. */
+        public String sourcesChecksumHex() {
+            return stripSha256(sourcesChecksum);
+        }
+
+        private static String stripSha256(String c) {
+            if (c == null) return null;
+            return c.startsWith("sha256:") ? c.substring(7) : c;
         }
 
         /**

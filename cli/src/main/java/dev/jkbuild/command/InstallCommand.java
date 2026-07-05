@@ -646,7 +646,7 @@ public final class InstallCommand implements CliCommand {
                         : pkg.checksum();
                 Path blob = cas.pathFor(hex);
                 if (!Files.exists(blob)) continue;
-                String artifactId = pkg.name().substring(pkg.name().indexOf(':') + 1);
+                String artifactId = pkg.moduleArtifact();
                 Path dest = libexecDir.resolve(artifactId + "-" + pkg.version() + ".jar");
                 Linking.linkOrCopy(blob, dest);
                 classpath.add(dest);

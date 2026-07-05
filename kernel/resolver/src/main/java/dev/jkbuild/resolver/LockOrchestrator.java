@@ -393,13 +393,12 @@ public final class LockOrchestrator {
                 updated.add(pkg);
                 continue;
             }
-            int colon = pkg.name().indexOf(':');
-            if (colon < 0) {
+            if (pkg.name().indexOf(':') < 0) {
                 updated.add(pkg);
                 continue;
             }
-            Coordinate sourcesCoord = new Coordinate(
-                    pkg.name().substring(0, colon), pkg.name().substring(colon + 1), pkg.version(), "sources", "jar");
+            Coordinate sourcesCoord =
+                    new Coordinate(pkg.moduleGroup(), pkg.moduleArtifact(), pkg.version(), "sources", "jar");
             try {
                 RepoGroup.RepoFetched hit = repos.tryFetchArtifact(sourcesCoord).orElse(null);
                 if (hit != null) {

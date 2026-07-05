@@ -75,10 +75,8 @@ public final class ClasspathResolver {
         String repoName = source.substring(0, plus);
         // Skip special / non-Maven sources.
         if (repoName.isEmpty() || repoName.equals("local") || repoName.startsWith("git:")) return null;
-        int colon = pkg.name().indexOf(':');
-        if (colon < 0) return null;
-        dev.jkbuild.model.Coordinate coord = dev.jkbuild.model.Coordinate.of(
-                pkg.name().substring(0, colon), pkg.name().substring(colon + 1), pkg.version());
+        if (pkg.name().indexOf(':') < 0) return null;
+        dev.jkbuild.model.Coordinate coord = pkg.coordinate();
         String m2Path = dev.jkbuild.repo.MavenLayout.artifactPath(coord);
         // forRepoName() returns an index-only store for non-local repos so locate() gives the
         // ~/.m2 artifact path (human-readable) rather than a sha256/AB/CD/… CAS path.

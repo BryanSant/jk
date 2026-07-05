@@ -287,15 +287,13 @@ public final class IdeSupport {
             if (siblingCoords.contains(pkg.name())) continue; // workspace sibling → module dep
             if (allLibs.containsKey(pkg.name() + ":" + pkg.version())) continue;
 
-            int colon = pkg.name().indexOf(':');
-            if (colon < 0) continue;
-            Coordinate coord =
-                    Coordinate.of(pkg.name().substring(0, colon), pkg.name().substring(colon + 1), pkg.version());
+            if (pkg.name().indexOf(':') < 0) continue;
+            Coordinate coord = pkg.coordinate();
 
             // Use a Maven-layout path with a proper .jar extension rather than the CAS
             // (extension-less hash paths) — IDEs require .jar.
             String artifactRelPath = MavenLayout.artifactPath(coord);
-            Path jar = locateOrMaterialize(cas, pkg.source(), artifactRelPath, hexOf(pkg.checksum()));
+            Path jar = locateOrMaterialize(cas, pkg.source(), artifactRelPath, pkg.checksumHex());
             if (jar == null) continue; // not yet synced / non-Maven dep
 
             Path sourcesPath = null;
@@ -303,7 +301,7 @@ public final class IdeSupport {
                 Coordinate srcCoord =
                         new Coordinate(coord.group(), coord.artifact(), coord.version(), "sources", "jar");
                 String srcRelPath = MavenLayout.artifactPath(srcCoord);
-                sourcesPath = locateOrMaterialize(cas, pkg.source(), srcRelPath, hexOf(pkg.sourcesChecksum()));
+                sourcesPath = locateOrMaterialize(cas, pkg.source(), srcRelPath, pkg.sourcesChecksumHex());
             }
 
             String libName = pkg.name() + ":" + pkg.version();
@@ -456,11 +454,5 @@ public final class IdeSupport {
     /** Sanitize a string to a valid filename component. */
     public static String sanitize(String s) {
         return s.replaceAll("[^A-Za-z0-9._-]", "_");
-    }
-
-    /** Extract the raw hex SHA from a {@code "sha256:<hex>"} checksum string. */
-    static String hexOf(String checksum) {
-        if (checksum == null) return null;
-        return checksum.startsWith("sha256:") ? checksum.substring(7) : checksum;
     }
 }
