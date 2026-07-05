@@ -106,9 +106,19 @@ The mutable global *channels that carry request data* have been moved onto `Sess
   threaded. **Assumption:** until then they observe the ambient `SessionContext.current()` — correct
   for the single-session CLI; the multi-session server needs explicit threading.
 
+**M2 (in progress) — BuildService facade + hoist orchestration**
+- `BuildService` (engine) created as the client-facing build front door (pure policy, no stream
+  writes — mirrors `LockFlow`). Hoisted from `BuildCommand`: `ensureWorkspaceLockFresh` +
+  `workspaceLockStale` (pre-build re-lock guard) and `computeWorkspaceLinks` + `linkModuleArtifacts`
+  (post-build artifact placement under `<wsRoot>/target/`). CLI renders results only.
+- **M2 remainder (the large piece):** hoist the parallel workspace scheduler (`runGraphLive`/
+  `buildUnitLive` + ETA re-projection) — needs the **event-emitting-scheduler / CLI-renderer split**
+  (`BuildService.buildWorkspace(request, listener)` drives the DAG and emits module start/progress/
+  finish events; a CLI listener renders the live view). Then unify the explain/build ETA planner
+  (move `BuildPlanForecast` to engine — the documented drift hazard), plus the `Jdk*Command` DAGs.
+  The deferred M1c leaf `refresh` reads and the `Quietable` output sink land cleanly here too.
+
 **Deferred (documented — cascade-heavy, multi-session; NOT started)**
-- **M2** — Hoist `BuildCommand`'s ~1,000-line workspace driver + the `Jdk*Command` DAGs into a
-  `BuildService` facade in `engine`; unify the explain/build planner.
 - **M3** — Extract `coreBuilder`'s inline phase-body lambdas into `BuildStep` classes; remove/realize
   dead `PluginContext.contribute`.
 - **M4** — `WorkerClient<Req,Res>` + standardized worker envelope across the 9 plugins; `CompilerWorker`
