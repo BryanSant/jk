@@ -178,9 +178,32 @@ The mutable global *channels that carry request data* now live on `Session` (eac
     (`shadowPhase`/`sourcesPhase`/`nativeImagePhase`). Bodies relocated verbatim (verified
     byte-identical); `coreBuilder` is now a readable assembly.
 
-**Deferred (documented — cascade-heavy, multi-session; NOT started)**
-- **M4** — `WorkerClient<Req,Res>` + standardized worker envelope across the 9 plugins; `CompilerWorker`
-  bridge; `IdeSdkRegistrar` SPI + move `Intellij*` out of `kernel/toolchain`; de-dup `compat` package.
+- **M4 — worker SPI (PARTIALLY DONE)** —
+  - **Done — `compat` de-dup:** `compat-bridge` carried 7 (near-)duplicate `dev.jkbuild.compat`
+    classes (`BuildTool`/`InstalledTool`/`PassthroughEnv`/`ToolDistribution`/`ToolInstaller`/
+    `ToolProvisioning`/`ToolRegistry`) already provided by `:toolchain` (a dependency). Deleted the
+    worker's copies; the two cosmetically-divergent ones were functionally identical.
+  - **Done — IDE registrar out of the kernel:** `IntellijSdkRegistrar` (IDE SDK-table XML writing,
+    zero toolchain-internal users) moved from `kernel/toolchain/jdk` to `cli/command/ide` beside its
+    sibling `IntellijIdeGenerator`; reads IntelliJ's config dirs via toolchain's now-public
+    `IntellijJdkTable.defaultVendorRoots`. `IntellijJdkDir`/`IntellijJdkTable` stay — they are genuine
+    JDK-registry/discovery classes used by `JdkRegistry` + the probe chain. A dedicated
+    `IdeSdkRegistrar` *interface* was judged premature: only IntelliJ registers SDKs today (VS Code
+    uses `settings.json` runtimes, a structurally different path) — introduce it if a second registrar
+    lands.
+  - **Deferred (needs its own session + native rebuild verification) — typed `WorkerClient<Req,Res>`
+    envelope + `CompilerWorker` bridge.** The *transport* (`WorkerProcess`: fork + protocol-line split
+    + two-way `converse`), *command assembly* (`JvmOptions.javaCommand`, `PluginLoader.command`), and
+    *jar location* (`WorkerJar`) are already shared. What remains is the *typed messaging* layer: each
+    of the 9 plugin workers emits its own ad-hoc NDJSON vocabulary (`##JKGIT:`, compile diagnostics,
+    `ready`/`RUN`/`DONE`, …) that its host caller hand-parses. Target design: a canonical result
+    envelope (`{kind: event|result|error|exit, prefix, payload}`) over the existing `ProtocolWriter`,
+    and a generic host `WorkerClient<Req,Res>` that serializes a typed request and folds envelope lines
+    into typed `Res` + a stream of events — collapsing the bespoke parse loops in `GitFetcher`,
+    `WorkerJavac`/`KotlincDriver` (the `CompilerWorker` bridge unifies these two behind one typed
+    compile client), and the ServiceLoader plugins. This rewrites the host↔worker wire format for all
+    9 workers, so it must land with a `./gradlew nativeCompile` + installed-binary smoke test, not a
+    unit-test-only pass — hence deferred rather than rushed.
 - **M6** — Extract/bless `jk-api`; CLI facades (`ProjectContext`, `CliOutput`, `WorkspaceCommand`,
   `Exit`); delete unreachable parent `run()` bodies; update self-host `jk.toml` + jk.jk mirror.
 
