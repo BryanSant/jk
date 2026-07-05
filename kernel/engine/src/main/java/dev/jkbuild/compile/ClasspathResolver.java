@@ -68,13 +68,9 @@ public final class ClasspathResolver {
      * repo (git, path, local), or the source field is missing — callers fall back to the CAS path.
      */
     private Path resolveFromRepos(Lockfile.Artifact pkg) {
-        String source = pkg.source();
-        if (source == null) return null;
-        int plus = source.indexOf('+');
-        if (plus <= 0 || plus >= source.length() - 1) return null;
-        String repoName = source.substring(0, plus);
-        // Skip special / non-Maven sources.
-        if (repoName.isEmpty() || repoName.equals("local") || repoName.startsWith("git:")) return null;
+        String repoName = dev.jkbuild.repo.RepoArtifactResolver.repoName(pkg.source());
+        // Only a named remote repo has a sidecar index pointing at ~/.m2; skip local/git/missing.
+        if (!dev.jkbuild.repo.RepoArtifactResolver.isNamedRemote(repoName)) return null;
         if (pkg.name().indexOf(':') < 0) return null;
         dev.jkbuild.model.Coordinate coord = pkg.coordinate();
         String m2Path = dev.jkbuild.repo.MavenLayout.artifactPath(coord);

@@ -262,11 +262,8 @@ public final class CacheSync {
      * Returns false for non-Maven sources (git, path, local) or malformed source strings.
      */
     private boolean repoStoreContains(Lockfile.Artifact pkg) {
-        String source = pkg.source();
-        if (source == null) return false;
-        int plus = source.indexOf('+');
-        if (plus <= 0 || plus >= source.length() - 1) return false;
-        String repoName = source.substring(0, plus);
+        String repoName = dev.jkbuild.repo.RepoArtifactResolver.repoName(pkg.source());
+        if (repoName == null) return false;
         Coordinate coord = toCoord(pkg);
         String m2Path = dev.jkbuild.repo.MavenLayout.artifactPath(coord);
         // forRepoName() creates an index-only store for non-local repos — contains() checks both

@@ -23,7 +23,6 @@ import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.Scope;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.repo.MavenLayout;
-import dev.jkbuild.repo.RepoArtifactStore;
 import dev.jkbuild.resolver.CacheSync;
 import dev.jkbuild.util.JkDirs;
 import java.io.IOException;
@@ -293,7 +292,7 @@ public final class IdeSupport {
             // Use a Maven-layout path with a proper .jar extension rather than the CAS
             // (extension-less hash paths) — IDEs require .jar.
             String artifactRelPath = MavenLayout.artifactPath(coord);
-            Path jar = locateOrMaterialize(cas, pkg.source(), artifactRelPath, pkg.checksumHex());
+            Path jar = dev.jkbuild.repo.RepoArtifactResolver.locateOrMaterialize(cas, pkg.source(), artifactRelPath, pkg.checksumHex());
             if (jar == null) continue; // not yet synced / non-Maven dep
 
             Path sourcesPath = null;
@@ -301,42 +300,12 @@ public final class IdeSupport {
                 Coordinate srcCoord =
                         new Coordinate(coord.group(), coord.artifact(), coord.version(), "sources", "jar");
                 String srcRelPath = MavenLayout.artifactPath(srcCoord);
-                sourcesPath = locateOrMaterialize(cas, pkg.source(), srcRelPath, pkg.sourcesChecksumHex());
+                sourcesPath = dev.jkbuild.repo.RepoArtifactResolver.locateOrMaterialize(cas, pkg.source(), srcRelPath, pkg.sourcesChecksumHex());
             }
 
             String libName = pkg.name() + ":" + pkg.version();
             allLibs.put(libName, new LibDef(libName, libFileName(libName), jar, sourcesPath));
         }
-    }
-
-    /**
-     * Resolve a Maven-layout artifact path with a real {@code .jar} extension. Tries the package's
-     * own named-repo index first; if that repo never indexed it but the CAS already holds the blob,
-     * materialises a full-store copy under {@code repos/local/} so a real m2-layout file exists.
-     */
-    static Path locateOrMaterialize(Cas cas, String source, String relativePath, String hex) {
-        String repoName = repoNameOf(source);
-        if (repoName != null) {
-            Optional<Path> found = RepoArtifactStore.forRepoName(cas.root(), repoName).locate(relativePath);
-            if (found.isPresent()) return found.get();
-        }
-        RepoArtifactStore local = RepoArtifactStore.forRepoName(cas.root(), "local");
-        Optional<Path> found = local.locate(relativePath);
-        if (found.isPresent()) return found.get();
-        if (hex != null && cas.contains(hex)) {
-            local.materialize(relativePath, cas.pathFor(hex), hex);
-            found = local.locate(relativePath);
-        }
-        return found.orElse(null);
-    }
-
-    /** The named repo a locked package came from, or {@code null} for git/path/local sources. */
-    static String repoNameOf(String source) {
-        if (source == null) return null;
-        int plus = source.indexOf('+');
-        if (plus <= 0 || plus >= source.length() - 1) return null;
-        String repoName = source.substring(0, plus);
-        return (repoName.isEmpty() || repoName.equals("local") || repoName.startsWith("git:")) ? null : repoName;
     }
 
     // =========================================================================
