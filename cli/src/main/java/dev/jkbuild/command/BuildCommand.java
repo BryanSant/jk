@@ -129,7 +129,8 @@ public final class BuildCommand implements CliCommand {
         // Opt-in: run modules' tests concurrently. Default serializes them
         // (shared ports/locks/fixtures) — see BuildPipeline's test gate.
         this.parallelTests = in.isSet("parallel-tests");
-        BuildPipeline.setParallelTests(parallelTests);
+        dev.jkbuild.config.SessionContext.install(
+                dev.jkbuild.config.SessionContext.current().withParallelTests(parallelTests));
         Path startDir = global.workingDir();
         Path buildFile = startDir.resolve("jk.toml");
         if (!Files.exists(buildFile)) {

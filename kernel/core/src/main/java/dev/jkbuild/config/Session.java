@@ -16,9 +16,9 @@ import java.util.Objects;
  * request state off the {@code Session} threaded through {@code BuildPipeline.Inputs}/{@code
  * PhaseContext}.
  *
- * <p>Grows through the re-foundation (M1→): later milestones fold JVM tuning, JDK/GraalVM selection,
- * the output sink, and the cancellation token onto this record. Use the {@code with*} copy-methods so
- * adding a field never ripples to every construction site.
+ * <p>Grows through the re-foundation (M1→): later milestones fold the output sink and the
+ * cancellation token onto this record. Use the {@code with*} copy-methods so adding a field never
+ * ripples to every construction site.
  *
  * @param config the merged user/project settings (color, offline, force, quiet, working-dir hint, …)
  * @param workingDir absolute working directory for this invocation
@@ -27,6 +27,8 @@ import java.util.Objects;
  * @param jvm resolved worker-JVM tuning (max-ram / gc / extra args) for the forks this build spawns
  * @param jdkSpec top-tier JDK selection ({@code --jdk}), or {@code null} — the highest resolution tier
  * @param graalSpec top-tier GraalVM selection ({@code --graal}), or {@code null}
+ * @param parallelTests {@code --parallel-tests}: run modules' test phases concurrently (default false,
+ *     which serializes them through the engine's test gate — shared ports/locks/fixtures)
  */
 public record Session(
         JkConfig config,
@@ -35,7 +37,8 @@ public record Session(
         Path jdksDir,
         WorkerTuning jvm,
         String jdkSpec,
-        String graalSpec) {
+        String graalSpec,
+        boolean parallelTests) {
 
     public Session {
         Objects.requireNonNull(config, "config");
@@ -53,33 +56,47 @@ public record Session(
                 null,
                 WorkerTuning.NONE,
                 null,
-                null);
+                null,
+                false);
     }
 
     public Session withConfig(JkConfig newConfig) {
-        return new Session(newConfig, workingDir, cacheDir, jdksDir, jvm, jdkSpec, graalSpec);
+        return new Session(newConfig, workingDir, cacheDir, jdksDir, jvm, jdkSpec, graalSpec, parallelTests);
     }
 
     public Session withWorkingDir(Path dir) {
-        return new Session(config, dir.toAbsolutePath().normalize(), cacheDir, jdksDir, jvm, jdkSpec, graalSpec);
+        return new Session(
+                config, dir.toAbsolutePath().normalize(), cacheDir, jdksDir, jvm, jdkSpec, graalSpec, parallelTests);
     }
 
     public Session withCacheDir(Path dir) {
-        return new Session(config, workingDir, dir, jdksDir, jvm, jdkSpec, graalSpec);
+        return new Session(config, workingDir, dir, jdksDir, jvm, jdkSpec, graalSpec, parallelTests);
     }
 
     public Session withJdksDir(Path dir) {
-        return new Session(config, workingDir, cacheDir, dir, jvm, jdkSpec, graalSpec);
+        return new Session(config, workingDir, cacheDir, dir, jvm, jdkSpec, graalSpec, parallelTests);
     }
 
     public Session withJvm(WorkerTuning tuning) {
         return new Session(
-                config, workingDir, cacheDir, jdksDir, tuning == null ? WorkerTuning.NONE : tuning, jdkSpec, graalSpec);
+                config,
+                workingDir,
+                cacheDir,
+                jdksDir,
+                tuning == null ? WorkerTuning.NONE : tuning,
+                jdkSpec,
+                graalSpec,
+                parallelTests);
     }
 
     /** The top-tier JDK / GraalVM selection ({@code --jdk} / {@code --graal}); blanks normalize to null. */
     public Session withToolchainSpecs(String jdk, String graal) {
-        return new Session(config, workingDir, cacheDir, jdksDir, jvm, blankToNull(jdk), blankToNull(graal));
+        return new Session(
+                config, workingDir, cacheDir, jdksDir, jvm, blankToNull(jdk), blankToNull(graal), parallelTests);
+    }
+
+    public Session withParallelTests(boolean enabled) {
+        return new Session(config, workingDir, cacheDir, jdksDir, jvm, jdkSpec, graalSpec, enabled);
     }
 
     private static String blankToNull(String s) {

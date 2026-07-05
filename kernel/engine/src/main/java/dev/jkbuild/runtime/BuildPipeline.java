@@ -100,17 +100,13 @@ public final class BuildPipeline {
     /**
      * Process-wide gate that serializes the {@code run-tests} phase across concurrently-built units
      * (parallel workspace module builds). Tests commonly contend on shared resources — ports, lock
-     * files, fixtures — so they run one at a time by default; {@link #setParallelTests} lifts the
-     * gate for users who opt into true parallel test execution ({@code --parallel-tests}).
+     * files, fixtures — so they run one at a time by default; the request's {@link
+     * dev.jkbuild.config.Session#parallelTests()} ({@code --parallel-tests}) lifts the gate.
+     *
+     * <p>The gate itself remains a per-invocation shared primitive (one process, one build at a
+     * time in the CLI); a per-session gate is part of the M1c server-hardening remainder.
      */
     private static final java.util.concurrent.Semaphore TEST_GATE = new java.util.concurrent.Semaphore(1);
-
-    private static volatile boolean parallelTests = false;
-
-    /** Allow concurrent {@code run-tests} phases (opt-in; default serialized). */
-    public static void setParallelTests(boolean enabled) {
-        parallelTests = enabled;
-    }
 
     /** Everything a build needs that isn't carried through the goal's state. */
     public record Inputs(
@@ -1062,7 +1058,7 @@ public final class BuildPipeline {
                     JUnitLauncher.Result result;
                     // Serialize test execution across concurrently-built units unless the
                     // user opted into parallel tests — shared ports/locks/fixtures.
-                    boolean gated = !parallelTests;
+                    boolean gated = !in.session().parallelTests();
                     if (gated) TEST_GATE.acquireUninterruptibly();
                     try {
                         result = new JUnitLauncher()
