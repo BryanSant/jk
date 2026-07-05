@@ -370,7 +370,126 @@ public final class BuildPipeline {
         final Path javaMainSrcDir = compact ? in.dir().resolve("src") : in.dir().resolve("src/main/java");
 
         // ---- parse-build ------------------------------------------------
-        Phase parseBuild = Phase.builder("parse-build")
+        StepContext cx = new StepContext(
+                in, cas, actionCache, plan, javaMainSrcRef, kotlinMainSrcRef,
+                javaMainSrcDir, compact, mixed, kotlinModule, mixedWithJava, mainCompile);
+
+        Phase parseBuild = parseBuildPhase(cx);
+
+        // ---- sync-deps --------------------------------------------------
+        Phase syncDeps = syncDepsPhase(cx);
+
+        // ---- ensure-jdk -------------------------------------------------
+        Phase ensureJdk = ensureJdkPhase(cx);
+
+        // ---- compile-java -----------------------------------------------
+        Phase compileJava = compileJavaPhase(cx);
+
+        // ---- compile-kotlin ---------------------------------------------
+        Phase compileKotlin = compileKotlinPhase(cx);
+
+        // ---- copy-resources ---------------------------------------------
+        Phase copyResources = copyResourcesPhase(cx);
+
+        // ---- compile-test -----------------------------------------------
+        Phase compileTest = compileTestPhase(cx);
+
+        // ---- run-tests --------------------------------------------------
+        Phase runTests = runTestsPhase(cx);
+
+        // ---- package-jar ------------------------------------------------
+        Phase packageJar = packageJarPhase(cx);
+
+        // ---- write-stamp ------------------------------------------------
+        Phase writeStamp = writeStampPhase(cx);
+
+        // ---- write-stamp-kotlin -----------------------------------------
+        // Kotlin's freshness companion (cf. write-stamp for Java). Mirrors the
+        // input set compile-kotlin checked: Kotlin sources, plus Java sources in
+        // a mixed module. No action-cache key exists yet — the direct kotlinc
+        // path leaves it empty until incremental Kotlin lands.
+        Phase writeStampKotlin = writeStampKotlinPhase(cx);
+
+        // ---- assemble-classes (mixed modules only) ----------------------
+        // Merge the per-language output dirs into the shared classes dir that
+        // packaging, tests, and the run/native tails all read.
+        Phase assembleClasses = assembleClassesPhase(cx);
+
+        Goal.Builder b =
+                Goal.builder("build").addPhase(parseBuild).addPhase(syncDeps).addPhase(ensureJdk);
+        // Workspace root with no sources: validate jk.toml + sync deps, nothing more.
+        if (workspaceNoSources) return b;
+        if (useJava) {
+            b.addPhase(compileJava);
+        }
+        if (useKotlin) {
+            b.addPhase(compileKotlin);
+        }
+        if (mixed) {
+            b.addPhase(assembleClasses);
+        }
+        // `jk compile` stops here: lock → sync → compile (+ freshness stamps),
+        // no resources/test/package. Everything later depends on these phases.
+        if (in.compileOnly()) {
+            if (useJava) {
+                b.addPhase(writeStamp);
+            }
+            if (useKotlin) {
+                b.addPhase(writeStampKotlin);
+            }
+            return b;
+        }
+        b.addPhase(copyResources);
+        if (in.testOnly() || !in.skipTests()) {
+            b.addPhase(compileTest).addPhase(runTests);
+        }
+        // `jk test` stops at run-tests — it never packages a jar.
+        if (!in.testOnly()) {
+            b.addPhase(packageJar);
+        }
+        // write-stamp is the Java-compile freshness companion; only when Java ran.
+        if (useJava) {
+            b.addPhase(writeStamp);
+        }
+        // write-stamp-kotlin is the Kotlin-compile freshness companion.
+        if (useKotlin) {
+            b.addPhase(writeStampKotlin);
+        }
+        return b;
+    }
+
+    /**
+     * The build-scoped services, estimation state, and layout flags shared by every core phase —
+     * the explicit replacement for the effectively-final locals the phase lambdas used to capture.
+     */
+    private record StepContext(
+            Inputs in,
+            Cas cas,
+            ActionCache actionCache,
+            java.util.function.Supplier<EffortWeights.Plan> plan,
+            java.util.concurrent.atomic.AtomicReference<List<Path>> javaMainSrcRef,
+            java.util.concurrent.atomic.AtomicReference<List<Path>> kotlinMainSrcRef,
+            Path javaMainSrcDir,
+            boolean compact,
+            boolean mixed,
+            boolean kotlinModule,
+            boolean mixedWithJava,
+            String mainCompile) {}
+
+    private static Phase parseBuildPhase(StepContext cx) {
+        Inputs in = cx.in();
+        Cas cas = cx.cas();
+        ActionCache actionCache = cx.actionCache();
+        java.util.function.Supplier<EffortWeights.Plan> plan = cx.plan();
+        java.util.concurrent.atomic.AtomicReference<List<Path>> javaMainSrcRef = cx.javaMainSrcRef();
+        java.util.concurrent.atomic.AtomicReference<List<Path>> kotlinMainSrcRef = cx.kotlinMainSrcRef();
+        Path javaMainSrcDir = cx.javaMainSrcDir();
+        boolean compact = cx.compact();
+        boolean mixed = cx.mixed();
+        boolean kotlinModule = cx.kotlinModule();
+        boolean mixedWithJava = cx.mixedWithJava();
+        String mainCompile = cx.mainCompile();
+        return Phase.builder("parse-build")
                 .label("Parsing")
                 .weight(() -> plan.get().fullyCached() ? W_CACHED_TOUCH : W_PARSE)
                 .scope(() -> {
@@ -509,9 +628,22 @@ public final class BuildPipeline {
                     ctx.progress(1);
                 })
                 .build();
+    }
 
-        // ---- sync-deps --------------------------------------------------
-        Phase syncDeps = Phase.builder("sync-deps")
+    private static Phase syncDepsPhase(StepContext cx) {
+        Inputs in = cx.in();
+        Cas cas = cx.cas();
+        ActionCache actionCache = cx.actionCache();
+        java.util.function.Supplier<EffortWeights.Plan> plan = cx.plan();
+        java.util.concurrent.atomic.AtomicReference<List<Path>> javaMainSrcRef = cx.javaMainSrcRef();
+        java.util.concurrent.atomic.AtomicReference<List<Path>> kotlinMainSrcRef = cx.kotlinMainSrcRef();
+        Path javaMainSrcDir = cx.javaMainSrcDir();
+        boolean compact = cx.compact();
+        boolean mixed = cx.mixed();
+        boolean kotlinModule = cx.kotlinModule();
+        boolean mixedWithJava = cx.mixedWithJava();
+        String mainCompile = cx.mainCompile();
+        return Phase.builder("sync-deps")
                 .label("Syncing")
                 .kind(PhaseKind.IO)
                 .requires("parse-build")
@@ -555,9 +687,22 @@ public final class BuildPipeline {
                     if (report.hasErrors()) throw new RuntimeException("dep sync had errors");
                 })
                 .build();
+    }
 
-        // ---- ensure-jdk -------------------------------------------------
-        Phase ensureJdk = Phase.builder("ensure-jdk")
+    private static Phase ensureJdkPhase(StepContext cx) {
+        Inputs in = cx.in();
+        Cas cas = cx.cas();
+        ActionCache actionCache = cx.actionCache();
+        java.util.function.Supplier<EffortWeights.Plan> plan = cx.plan();
+        java.util.concurrent.atomic.AtomicReference<List<Path>> javaMainSrcRef = cx.javaMainSrcRef();
+        java.util.concurrent.atomic.AtomicReference<List<Path>> kotlinMainSrcRef = cx.kotlinMainSrcRef();
+        Path javaMainSrcDir = cx.javaMainSrcDir();
+        boolean compact = cx.compact();
+        boolean mixed = cx.mixed();
+        boolean kotlinModule = cx.kotlinModule();
+        boolean mixedWithJava = cx.mixedWithJava();
+        String mainCompile = cx.mainCompile();
+        return Phase.builder("ensure-jdk")
                 .label("JDK")
                 .kind(PhaseKind.IO)
                 .requires("parse-build")
@@ -576,9 +721,22 @@ public final class BuildPipeline {
                     ctx.progress(1);
                 })
                 .build();
+    }
 
-        // ---- compile-java -----------------------------------------------
-        Phase compileJava = Phase.builder("compile-java")
+    private static Phase compileJavaPhase(StepContext cx) {
+        Inputs in = cx.in();
+        Cas cas = cx.cas();
+        ActionCache actionCache = cx.actionCache();
+        java.util.function.Supplier<EffortWeights.Plan> plan = cx.plan();
+        java.util.concurrent.atomic.AtomicReference<List<Path>> javaMainSrcRef = cx.javaMainSrcRef();
+        java.util.concurrent.atomic.AtomicReference<List<Path>> kotlinMainSrcRef = cx.kotlinMainSrcRef();
+        Path javaMainSrcDir = cx.javaMainSrcDir();
+        boolean compact = cx.compact();
+        boolean mixed = cx.mixed();
+        boolean kotlinModule = cx.kotlinModule();
+        boolean mixedWithJava = cx.mixedWithJava();
+        String mainCompile = cx.mainCompile();
+        return Phase.builder("compile-java")
                 .label("Compiling")
                 .kind(PhaseKind.CPU)
                 .requires(
@@ -734,9 +892,22 @@ public final class BuildPipeline {
                     ctx.progress(sources.size());
                 })
                 .build();
+    }
 
-        // ---- compile-kotlin ---------------------------------------------
-        Phase compileKotlin = Phase.builder("compile-kotlin")
+    private static Phase compileKotlinPhase(StepContext cx) {
+        Inputs in = cx.in();
+        Cas cas = cx.cas();
+        ActionCache actionCache = cx.actionCache();
+        java.util.function.Supplier<EffortWeights.Plan> plan = cx.plan();
+        java.util.concurrent.atomic.AtomicReference<List<Path>> javaMainSrcRef = cx.javaMainSrcRef();
+        java.util.concurrent.atomic.AtomicReference<List<Path>> kotlinMainSrcRef = cx.kotlinMainSrcRef();
+        Path javaMainSrcDir = cx.javaMainSrcDir();
+        boolean compact = cx.compact();
+        boolean mixed = cx.mixed();
+        boolean kotlinModule = cx.kotlinModule();
+        boolean mixedWithJava = cx.mixedWithJava();
+        String mainCompile = cx.mainCompile();
+        return Phase.builder("compile-kotlin")
                 .label("Kotlin")
                 .kind(PhaseKind.CPU)
                 // Kotlin compiles first (reads Java declarations from source), so it
@@ -835,9 +1006,22 @@ public final class BuildPipeline {
                     ctx.progress(ktSources.size());
                 })
                 .build();
+    }
 
-        // ---- copy-resources ---------------------------------------------
-        Phase copyResources = Phase.builder("copy-resources")
+    private static Phase copyResourcesPhase(StepContext cx) {
+        Inputs in = cx.in();
+        Cas cas = cx.cas();
+        ActionCache actionCache = cx.actionCache();
+        java.util.function.Supplier<EffortWeights.Plan> plan = cx.plan();
+        java.util.concurrent.atomic.AtomicReference<List<Path>> javaMainSrcRef = cx.javaMainSrcRef();
+        java.util.concurrent.atomic.AtomicReference<List<Path>> kotlinMainSrcRef = cx.kotlinMainSrcRef();
+        Path javaMainSrcDir = cx.javaMainSrcDir();
+        boolean compact = cx.compact();
+        boolean mixed = cx.mixed();
+        boolean kotlinModule = cx.kotlinModule();
+        boolean mixedWithJava = cx.mixedWithJava();
+        String mainCompile = cx.mainCompile();
+        return Phase.builder("copy-resources")
                 .label("Resources")
                 .kind(PhaseKind.CPU)
                 .requires(mainCompile)
@@ -855,9 +1039,22 @@ public final class BuildPipeline {
                     ctx.progress(1);
                 })
                 .build();
+    }
 
-        // ---- compile-test -----------------------------------------------
-        Phase compileTest = Phase.builder("compile-test")
+    private static Phase compileTestPhase(StepContext cx) {
+        Inputs in = cx.in();
+        Cas cas = cx.cas();
+        ActionCache actionCache = cx.actionCache();
+        java.util.function.Supplier<EffortWeights.Plan> plan = cx.plan();
+        java.util.concurrent.atomic.AtomicReference<List<Path>> javaMainSrcRef = cx.javaMainSrcRef();
+        java.util.concurrent.atomic.AtomicReference<List<Path>> kotlinMainSrcRef = cx.kotlinMainSrcRef();
+        Path javaMainSrcDir = cx.javaMainSrcDir();
+        boolean compact = cx.compact();
+        boolean mixed = cx.mixed();
+        boolean kotlinModule = cx.kotlinModule();
+        boolean mixedWithJava = cx.mixedWithJava();
+        String mainCompile = cx.mainCompile();
+        return Phase.builder("compile-test")
                 .label("Test Compile")
                 .kind(PhaseKind.CPU)
                 .requires(mainCompile, "sync-deps")
@@ -976,9 +1173,22 @@ public final class BuildPipeline {
                     ctx.progress(1);
                 })
                 .build();
+    }
 
-        // ---- run-tests --------------------------------------------------
-        Phase runTests = Phase.builder("run-tests")
+    private static Phase runTestsPhase(StepContext cx) {
+        Inputs in = cx.in();
+        Cas cas = cx.cas();
+        ActionCache actionCache = cx.actionCache();
+        java.util.function.Supplier<EffortWeights.Plan> plan = cx.plan();
+        java.util.concurrent.atomic.AtomicReference<List<Path>> javaMainSrcRef = cx.javaMainSrcRef();
+        java.util.concurrent.atomic.AtomicReference<List<Path>> kotlinMainSrcRef = cx.kotlinMainSrcRef();
+        Path javaMainSrcDir = cx.javaMainSrcDir();
+        boolean compact = cx.compact();
+        boolean mixed = cx.mixed();
+        boolean kotlinModule = cx.kotlinModule();
+        boolean mixedWithJava = cx.mixedWithJava();
+        String mainCompile = cx.mainCompile();
+        return Phase.builder("run-tests")
                 .label("Testing")
                 .kind(PhaseKind.IO)
                 .requires("compile-test", "copy-resources")
@@ -1102,9 +1312,22 @@ public final class BuildPipeline {
                     }
                 })
                 .build();
+    }
 
-        // ---- package-jar ------------------------------------------------
-        Phase packageJar = Phase.builder("package-jar")
+    private static Phase packageJarPhase(StepContext cx) {
+        Inputs in = cx.in();
+        Cas cas = cx.cas();
+        ActionCache actionCache = cx.actionCache();
+        java.util.function.Supplier<EffortWeights.Plan> plan = cx.plan();
+        java.util.concurrent.atomic.AtomicReference<List<Path>> javaMainSrcRef = cx.javaMainSrcRef();
+        java.util.concurrent.atomic.AtomicReference<List<Path>> kotlinMainSrcRef = cx.kotlinMainSrcRef();
+        Path javaMainSrcDir = cx.javaMainSrcDir();
+        boolean compact = cx.compact();
+        boolean mixed = cx.mixed();
+        boolean kotlinModule = cx.kotlinModule();
+        boolean mixedWithJava = cx.mixedWithJava();
+        String mainCompile = cx.mainCompile();
+        return Phase.builder("package-jar")
                 .label("Packaging")
                 .kind(PhaseKind.CPU)
                 .requires(
@@ -1142,9 +1365,22 @@ public final class BuildPipeline {
                     ctx.progress(1);
                 })
                 .build();
+    }
 
-        // ---- write-stamp ------------------------------------------------
-        Phase writeStamp = Phase.builder("write-stamp")
+    private static Phase writeStampPhase(StepContext cx) {
+        Inputs in = cx.in();
+        Cas cas = cx.cas();
+        ActionCache actionCache = cx.actionCache();
+        java.util.function.Supplier<EffortWeights.Plan> plan = cx.plan();
+        java.util.concurrent.atomic.AtomicReference<List<Path>> javaMainSrcRef = cx.javaMainSrcRef();
+        java.util.concurrent.atomic.AtomicReference<List<Path>> kotlinMainSrcRef = cx.kotlinMainSrcRef();
+        Path javaMainSrcDir = cx.javaMainSrcDir();
+        boolean compact = cx.compact();
+        boolean mixed = cx.mixed();
+        boolean kotlinModule = cx.kotlinModule();
+        boolean mixedWithJava = cx.mixedWithJava();
+        String mainCompile = cx.mainCompile();
+        return Phase.builder("write-stamp")
                 .requires("compile-java")
                 .weight(() -> plan.get().fullyCached() ? 0 : W_STAMP)
                 .scope(1)
@@ -1178,13 +1414,22 @@ public final class BuildPipeline {
                     ctx.progress(1);
                 })
                 .build();
+    }
 
-        // ---- write-stamp-kotlin -----------------------------------------
-        // Kotlin's freshness companion (cf. write-stamp for Java). Mirrors the
-        // input set compile-kotlin checked: Kotlin sources, plus Java sources in
-        // a mixed module. No action-cache key exists yet — the direct kotlinc
-        // path leaves it empty until incremental Kotlin lands.
-        Phase writeStampKotlin = Phase.builder("write-stamp-kotlin")
+    private static Phase writeStampKotlinPhase(StepContext cx) {
+        Inputs in = cx.in();
+        Cas cas = cx.cas();
+        ActionCache actionCache = cx.actionCache();
+        java.util.function.Supplier<EffortWeights.Plan> plan = cx.plan();
+        java.util.concurrent.atomic.AtomicReference<List<Path>> javaMainSrcRef = cx.javaMainSrcRef();
+        java.util.concurrent.atomic.AtomicReference<List<Path>> kotlinMainSrcRef = cx.kotlinMainSrcRef();
+        Path javaMainSrcDir = cx.javaMainSrcDir();
+        boolean compact = cx.compact();
+        boolean mixed = cx.mixed();
+        boolean kotlinModule = cx.kotlinModule();
+        boolean mixedWithJava = cx.mixedWithJava();
+        String mainCompile = cx.mainCompile();
+        return Phase.builder("write-stamp-kotlin")
                 .requires("compile-kotlin")
                 .weight(() -> plan.get().fullyCached() ? 0 : W_STAMP)
                 .scope(1)
@@ -1212,11 +1457,22 @@ public final class BuildPipeline {
                     ctx.progress(1);
                 })
                 .build();
+    }
 
-        // ---- assemble-classes (mixed modules only) ----------------------
-        // Merge the per-language output dirs into the shared classes dir that
-        // packaging, tests, and the run/native tails all read.
-        Phase assembleClasses = Phase.builder("assemble-classes")
+    private static Phase assembleClassesPhase(StepContext cx) {
+        Inputs in = cx.in();
+        Cas cas = cx.cas();
+        ActionCache actionCache = cx.actionCache();
+        java.util.function.Supplier<EffortWeights.Plan> plan = cx.plan();
+        java.util.concurrent.atomic.AtomicReference<List<Path>> javaMainSrcRef = cx.javaMainSrcRef();
+        java.util.concurrent.atomic.AtomicReference<List<Path>> kotlinMainSrcRef = cx.kotlinMainSrcRef();
+        Path javaMainSrcDir = cx.javaMainSrcDir();
+        boolean compact = cx.compact();
+        boolean mixed = cx.mixed();
+        boolean kotlinModule = cx.kotlinModule();
+        boolean mixedWithJava = cx.mixedWithJava();
+        String mainCompile = cx.mainCompile();
+        return Phase.builder("assemble-classes")
                 .label("Assembling")
                 .kind(PhaseKind.CPU)
                 .requires("compile-java", "compile-kotlin")
@@ -1240,48 +1496,6 @@ public final class BuildPipeline {
                     ctx.progress(1);
                 })
                 .build();
-
-        Goal.Builder b =
-                Goal.builder("build").addPhase(parseBuild).addPhase(syncDeps).addPhase(ensureJdk);
-        // Workspace root with no sources: validate jk.toml + sync deps, nothing more.
-        if (workspaceNoSources) return b;
-        if (useJava) {
-            b.addPhase(compileJava);
-        }
-        if (useKotlin) {
-            b.addPhase(compileKotlin);
-        }
-        if (mixed) {
-            b.addPhase(assembleClasses);
-        }
-        // `jk compile` stops here: lock → sync → compile (+ freshness stamps),
-        // no resources/test/package. Everything later depends on these phases.
-        if (in.compileOnly()) {
-            if (useJava) {
-                b.addPhase(writeStamp);
-            }
-            if (useKotlin) {
-                b.addPhase(writeStampKotlin);
-            }
-            return b;
-        }
-        b.addPhase(copyResources);
-        if (in.testOnly() || !in.skipTests()) {
-            b.addPhase(compileTest).addPhase(runTests);
-        }
-        // `jk test` stops at run-tests — it never packages a jar.
-        if (!in.testOnly()) {
-            b.addPhase(packageJar);
-        }
-        // write-stamp is the Java-compile freshness companion; only when Java ran.
-        if (useJava) {
-            b.addPhase(writeStamp);
-        }
-        // write-stamp-kotlin is the Kotlin-compile freshness companion.
-        if (useKotlin) {
-            b.addPhase(writeStampKotlin);
-        }
-        return b;
     }
 
     /**
