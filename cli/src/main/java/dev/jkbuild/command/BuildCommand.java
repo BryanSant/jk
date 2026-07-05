@@ -314,33 +314,21 @@ public final class BuildCommand implements CliCommand {
 
     /** Buffered, append-only scheduler: each unit flushes a block + a [k/N] line on completion. */
     private int runGraphPlain(List<BuildGraph.BuildUnit> units, Map<Path, Set<Path>> edges) {
-        Set<Path> unitDirs = new java.util.HashSet<>();
-        for (BuildGraph.BuildUnit u : units) unitDirs.add(u.dir());
-        Set<Path> done = java.util.concurrent.ConcurrentHashMap.newKeySet();
-        List<BuildGraph.BuildUnit> remaining = new ArrayList<>(units);
         int total = units.size();
-        int completed = 0;
+        int[] completed = {0};
         long start = System.nanoTime();
-        while (!remaining.isEmpty()) {
-            List<BuildGraph.BuildUnit> ready = remaining.stream()
-                    .filter(u -> edges.getOrDefault(u.dir(), Set.of()).stream()
-                            .filter(unitDirs::contains)
-                            .allMatch(done::contains))
-                    .toList();
-            List<java.util.concurrent.CompletableFuture<UnitOutcome>> futures = new ArrayList<>();
-            for (BuildGraph.BuildUnit u : ready) {
-                futures.add(java.util.concurrent.CompletableFuture.supplyAsync(() -> buildUnit(u), JkThreads.io()));
-            }
-            for (java.util.concurrent.CompletableFuture<UnitOutcome> f : futures) {
-                UnitOutcome o = f.join();
-                report(o, ++completed, total);
-                if (!o.success()) {
-                    System.err.println("jk build: " + o.coord() + " failed (exit " + o.exitCode() + ")");
-                    return o.exitCode();
-                }
-            }
-            for (BuildGraph.BuildUnit u : ready) done.add(u.dir());
-            remaining.removeAll(ready);
+        // Engine owns the DAG dispatch; this sink reports each finished module and fails fast.
+        UnitOutcome failure = dev.jkbuild.runtime.WorkspaceScheduler.run(
+                units, BuildGraph.BuildUnit::dir, edges, this::buildUnit, (ready, results, remaining) -> {
+                    for (UnitOutcome o : results) {
+                        report(o, ++completed[0], total);
+                        if (!o.success()) return o;
+                    }
+                    return null;
+                });
+        if (failure != null) {
+            System.err.println("jk build: " + failure.coord() + " failed (exit " + failure.exitCode() + ")");
+            return failure.exitCode();
         }
         System.out.println(GoalWedge.chipLine(
                 dev.jkbuild.cli.tui.Glyphs.CHECK, "Build", GlobalConfig.nerdfont(), modulesTail(total, start)));
@@ -443,66 +431,60 @@ public final class BuildCommand implements CliCommand {
         // detection sees the full module set before any build starts.
         Map<Path, Path> wsLinks = dev.jkbuild.runtime.BuildService.computeWorkspaceLinks(prepared.keySet(), workspaceRoot);
 
-        Set<Path> done = java.util.concurrent.ConcurrentHashMap.newKeySet();
-        List<BuildGraph.BuildUnit> remaining = new ArrayList<>(units);
         java.util.concurrent.atomic.AtomicInteger completed = new java.util.concurrent.atomic.AtomicInteger();
         // Units' process output is buffered here and flushed below the live region
         // once the build settles, so concurrent logs never interleave with the view.
         List<String> deferredOutput = java.util.Collections.synchronizedList(new ArrayList<>());
-        while (!remaining.isEmpty()) {
-            List<BuildGraph.BuildUnit> ready = remaining.stream()
-                    .filter(u -> edges.getOrDefault(u.dir(), Set.of()).stream()
-                            .filter(unitDirs::contains)
-                            .allMatch(done::contains))
-                    .toList();
-            List<java.util.concurrent.CompletableFuture<UnitOutcome>> futures = new ArrayList<>();
-            List<Path> readyDirs = new ArrayList<>();
-            for (BuildGraph.BuildUnit u : ready) {
-                PreparedModule pm = prepared.get(u.dir());
-                readyDirs.add(u.dir());
-                futures.add(java.util.concurrent.CompletableFuture.supplyAsync(
-                        () -> buildUnitLive(u, pm, agg, view, completed, total, deferredOutput), JkThreads.io()));
+        // Engine owns the DAG dispatch (WorkspaceScheduler); this sink links each finished module's
+        // artifacts, folds its measured throughput into the live ETA, and fails fast.
+        UnitOutcome failure = dev.jkbuild.runtime.WorkspaceScheduler.run(
+                units,
+                BuildGraph.BuildUnit::dir,
+                edges,
+                u -> buildUnitLive(u, prepared.get(u.dir()), agg, view, completed, total, deferredOutput),
+                (ready, results, remaining) -> {
+                    UnitOutcome fail = null;
+                    for (int i = 0; i < results.size(); i++) {
+                        UnitOutcome o = results.get(i);
+                        if (o.success()) {
+                            Path dir = ready.get(i).dir();
+                            dev.jkbuild.runtime.BuildService.linkModuleArtifacts(dir, wsLinks);
+                            PreparedModule donePm = prepared.get(dir);
+                            long w = donePm != null ? donePm.barWeight() : 0;
+                            // Skip fully-cached modules — their near-zero time isn't representative.
+                            if (donePm != null && !donePm.fullyCached() && w > 0 && o.millis() > 0)
+                                observedRates.add(o.millis() / (double) w);
+                        } else if (fail == null) {
+                            fail = o;
+                        }
+                    }
+                    if (fail != null) return fail;
+                    // Re-project remaining ETA from measured throughput: elapsed + reprojected remainder.
+                    Double liveMpw = medianRate(observedRates);
+                    if (liveMpw != null && !remaining.isEmpty()) {
+                        Set<Path> remainingDirs = new java.util.HashSet<>();
+                        for (BuildGraph.BuildUnit u : remaining) remainingDirs.add(u.dir());
+                        List<dev.jkbuild.runtime.EffortWeights.ModuleCost> rem = new ArrayList<>();
+                        for (var ce : costByDir.entrySet())
+                            if (remainingDirs.contains(ce.getKey())) rem.add(ce.getValue());
+                        long elapsed = (System.nanoTime() - start) / 1_000_000;
+                        long remMs = dev.jkbuild.runtime.EffortWeights.scheduleMillis(
+                                rem, concurrency, false, parallelTests, Math.round(liveMpw));
+                        view.setEtaEstimate(elapsed + remMs);
+                    }
+                    return null;
+                });
+        if (failure != null) {
+            // Everything the build emitted prints ABOVE the result line, exactly like the success
+            // route: buffered sub-process output first, then the error diagnostics just above the
+            // "‼ Build failed" line — which stays last so the user sees the outcome without scrolling.
+            List<String> above = snapshot(deferredOutput);
+            for (GoalResult.Diagnostic d : agg.lastErrors()) {
+                if ("test-failure".equals(d.code())) continue; // already printed by run-tests
+                above.add(ConsoleSpec.renderError(d));
             }
-            UnitOutcome failure = null;
-            for (int i = 0; i < futures.size(); i++) {
-                UnitOutcome o = futures.get(i).join();
-                if (o.success()) {
-                    dev.jkbuild.runtime.BuildService.linkModuleArtifacts(readyDirs.get(i), wsLinks);
-                    PreparedModule donePm = prepared.get(readyDirs.get(i));
-                    long w = donePm != null ? donePm.barWeight() : 0;
-                    // Skip fully-cached modules — their near-zero time isn't representative of work.
-                    if (donePm != null && !donePm.fullyCached() && w > 0 && o.millis() > 0)
-                        observedRates.add(o.millis() / (double) w);
-                } else if (failure == null) {
-                    failure = o;
-                }
-            }
-            if (failure != null) {
-                // Everything the build emitted prints ABOVE the result line, exactly
-                // like the success route: buffered sub-process output first, then the
-                // error diagnostics just above the "‼ Build failed" line — which stays
-                // last so the user sees the outcome without scrolling.
-                List<String> above = snapshot(deferredOutput);
-                for (GoalResult.Diagnostic d : agg.lastErrors()) {
-                    if ("test-failure".equals(d.code())) continue; // already printed by run-tests
-                    above.add(ConsoleSpec.renderError(d));
-                }
-                view.finishGoalFailure(failureTail(failure.coord(), start), above);
-                return failure.exitCode();
-            }
-            for (BuildGraph.BuildUnit u : ready) done.add(u.dir());
-            remaining.removeAll(ready);
-            // Re-project the remaining ETA from measured throughput. The view's countdown is
-            // (total − elapsed), so the new total is elapsed-so-far + the reprojected remainder.
-            Double liveMpw = medianRate(observedRates);
-            if (liveMpw != null && !remaining.isEmpty()) {
-                List<dev.jkbuild.runtime.EffortWeights.ModuleCost> rem = new ArrayList<>();
-                for (var ce : costByDir.entrySet()) if (!done.contains(ce.getKey())) rem.add(ce.getValue());
-                long elapsed = (System.nanoTime() - start) / 1_000_000;
-                long remMs = dev.jkbuild.runtime.EffortWeights.scheduleMillis(
-                        rem, concurrency, false, parallelTests, Math.round(liveMpw));
-                view.setEtaEstimate(elapsed + remMs);
-            }
+            view.finishGoalFailure(failureTail(failure.coord(), start), above);
+            return failure.exitCode();
         }
         // Whole graph succeeded: fold this run's real phase durations into the
         // learned ledger (EWMA) so the next build's bar is time-accurate. Failed
