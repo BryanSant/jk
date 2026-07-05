@@ -204,8 +204,29 @@ The mutable global *channels that carry request data* now live on `Session` (eac
     compile client), and the ServiceLoader plugins. This rewrites the host↔worker wire format for all
     9 workers, so it must land with a `./gradlew nativeCompile` + installed-binary smoke test, not a
     unit-test-only pass — hence deferred rather than rushed.
-- **M6** — Extract/bless `jk-api`; CLI facades (`ProjectContext`, `CliOutput`, `WorkspaceCommand`,
-  `Exit`); delete unreachable parent `run()` bodies; update self-host `jk.toml` + jk.jk mirror.
+- **M6 — API module + CLI facades (PARTIALLY DONE)** —
+  - **Done — unreachable parent `run()` removed:** the 7 group verbs (`jk export/repo/jdk/library/
+    auth/tool/cache`) each carried a required-but-dead `run()` (the dispatcher renders a group's
+    subcommand list and never calls it). New `GroupCommand` base (in the command model) supplies a
+    `final run() = USAGE_ERROR` once; the groups extend it and drop the dead bodies. Leaf commands
+    still implement `CliCommand.run` directly, so a missing leaf `run` stays a compile error.
+  - **Deferred (needs its own session + full-suite/native verification):**
+    - **`jk-api` module.** The internal server/client split already holds — the front-end contract
+      lives in coherent packages (`dev.jkbuild.model` + `model.command`, `dev.jkbuild.run`,
+      `dev.jkbuild.runtime.BuildService`/`WorkspaceBuildListener`) and a front-end compiles against
+      `:model`+`:engine` today. Blessing a *physical* `jk-api` artifact (a thin, publishable jar third
+      parties depend on without pulling the engine impl) means: new Gradle module re-exporting/holding
+      the contract types (`BuildService` facade + request/result records + listeners + `GoalKey`/`Goal`
+      view interfaces + model), then rewiring ~15 modules' `build.gradle` + imports. Cross-cutting
+      build-graph reshuffle → dedicated session with `nativeCompile` verification. Packaging refinement,
+      not an architecture change.
+    - **CLI facades (`CliOutput`, `Exit`, `ProjectContext`, `WorkspaceCommand` template).** Consolidate
+      the ~40 commands' direct `System.out`/`System.err` prints + literal exit codes (`0`/`1`/`2`/`64`)
+      behind a `CliOutput` sink + an `Exit` constants holder (seeded by `GroupCommand.USAGE_ERROR`),
+      and hoist the repeated "resolve project dir → parse jk.toml → build Inputs" preamble into a
+      `ProjectContext`/`WorkspaceCommand` template. Broad mechanical sweep; best done as one focused
+      pass so the facade lands uniformly.
+  - **Self-host `jk.toml` + jk.jk mirror** refresh follows once the module set is final.
 
 ## Long-term target: the workspace-build path (records the end state we're converging on)
 
