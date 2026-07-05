@@ -5,7 +5,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.sun.net.httpserver.HttpServer;
 import dev.jkbuild.cli.Jk;
-import dev.jkbuild.config.ActiveConfig;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.lock.LockfileReader;
 import java.io.IOException;
@@ -48,7 +47,7 @@ class UpdateCommandTest {
     @AfterEach
     void stop() {
         server.stop(0);
-        ActiveConfig.reset();
+        dev.jkbuild.config.SessionContext.reset();
         LockfileReader.clearCache();
     }
 

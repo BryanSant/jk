@@ -1774,7 +1774,7 @@ public final class BuildPipeline {
      * caller then skips the (re)packaging work. Honors {@code --force}.
      */
     private static boolean restorePackaged(Path cacheRoot, String key, Path baseDir) throws IOException {
-        if (dev.jkbuild.config.ActiveConfig.get().rerunOr(false)) return false;
+        if (dev.jkbuild.config.SessionContext.current().config().rerunOr(false)) return false;
         ActionCache ac = new ActionCache(new Cas(cacheRoot), cacheRoot.resolve("actions"));
         var hit = ac.lookup(key);
         return hit.isPresent() && ac.restoreArtifacts(hit.get(), baseDir);
@@ -1784,7 +1784,7 @@ public final class BuildPipeline {
     private static void storePackaged(
             Path cacheRoot, String taskId, String key, List<String> tokens, Path baseDir, List<Path> artifacts)
             throws IOException {
-        if (dev.jkbuild.config.ActiveConfig.get().rerunOr(false)) return;
+        if (dev.jkbuild.config.SessionContext.current().config().rerunOr(false)) return;
         new ActionCache(new Cas(cacheRoot), cacheRoot.resolve("actions"))
                 .storeArtifacts(taskId, key, Map.of("inputs", String.join(";", tokens)), baseDir, artifacts);
     }

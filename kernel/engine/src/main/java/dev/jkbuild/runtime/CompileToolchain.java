@@ -162,7 +162,7 @@ public final class CompileToolchain {
             dist = new ToolDistribution(BuildTool.KOTLIN, versionOverride, uri, "zip");
         }
         try {
-            boolean refresh = dev.jkbuild.config.ActiveConfig.get().refreshOr(false);
+            boolean refresh = dev.jkbuild.config.SessionContext.current().config().refreshOr(false);
             ToolProvisioning.Result result =
                     ToolProvisioning.provision(dist, registry, new Http(), /* noDiscover= */ false, refresh);
             switch (result.source()) {

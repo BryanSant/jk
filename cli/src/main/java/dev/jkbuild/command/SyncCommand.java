@@ -240,7 +240,7 @@ public final class SyncCommand implements CliCommand {
                             ctx.progress(1);
                         }
                     };
-                    boolean refresh = dev.jkbuild.config.ActiveConfig.get().refreshOr(false);
+                    boolean refresh = dev.jkbuild.config.SessionContext.current().config().refreshOr(false);
                     var report = new CacheSync(cas, http).sync(lock, observer, refresh);
                     casReportRef.set(report);
                     ctx.put(CAS_REPORT, report);
@@ -410,7 +410,7 @@ public final class SyncCommand implements CliCommand {
 
                     Cas cas = new Cas(cache);
                     Http http = new Http();
-                    boolean refresh = dev.jkbuild.config.ActiveConfig.get().refreshOr(false);
+                    boolean refresh = dev.jkbuild.config.SessionContext.current().config().refreshOr(false);
 
                     for (Map.Entry<Path, JkBuild> entry : modules.entrySet()) {
                         Path moduleDir = entry.getKey();

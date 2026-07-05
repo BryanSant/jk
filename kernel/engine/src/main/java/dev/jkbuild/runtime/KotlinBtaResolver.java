@@ -2,7 +2,6 @@
 package dev.jkbuild.runtime;
 
 import dev.jkbuild.cache.Cas;
-import dev.jkbuild.config.ActiveConfig;
 import dev.jkbuild.model.Coordinate;
 import dev.jkbuild.model.Dependency;
 import dev.jkbuild.model.VersionSelector;
@@ -53,7 +52,7 @@ public final class KotlinBtaResolver {
             throws IOException, InterruptedException {
         requireSupportedVersion(kotlinVersion);
         Path cacheFile = cacheFile(cas, kotlinVersion);
-        boolean refresh = ActiveConfig.get().refreshOr(false);
+        boolean refresh = dev.jkbuild.config.SessionContext.current().config().refreshOr(false);
         if (!refresh) {
             List<Path> cached = readCachedClosure(cacheFile, cas);
             if (cached != null) return cached;

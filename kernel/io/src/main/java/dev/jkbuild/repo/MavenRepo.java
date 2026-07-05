@@ -2,7 +2,6 @@
 package dev.jkbuild.repo;
 
 import dev.jkbuild.cache.Cas;
-import dev.jkbuild.config.ActiveConfig;
 import dev.jkbuild.credential.RepoCredential;
 import dev.jkbuild.http.Http;
 import dev.jkbuild.model.Coordinate;
@@ -127,7 +126,7 @@ public final class MavenRepo {
      * can union across repos.
      */
     public List<String> availableVersions(Coordinate coord) throws IOException, InterruptedException {
-        if (ActiveConfig.get().offlineOr(false)) {
+        if (dev.jkbuild.config.SessionContext.current().config().offlineOr(false)) {
             return repoStore.versions(coord.group(), coord.artifact());
         }
         try {
@@ -142,7 +141,7 @@ public final class MavenRepo {
 
     private Fetched fetch(Coordinate coord, String relativePath, boolean mirror)
             throws IOException, InterruptedException {
-        if (ActiveConfig.get().offlineOr(false)) {
+        if (dev.jkbuild.config.SessionContext.current().config().offlineOr(false)) {
             return fetchOffline(coord, relativePath);
         }
         URI uri = baseUrl.resolve(relativePath);

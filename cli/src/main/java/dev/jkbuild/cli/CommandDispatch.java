@@ -47,7 +47,6 @@ import dev.jkbuild.command.UpdateCommand;
 import dev.jkbuild.command.VerifyBuildCommand;
 import dev.jkbuild.command.VscodeCommand;
 import dev.jkbuild.command.WhyCommand;
-import dev.jkbuild.config.ActiveConfig;
 import dev.jkbuild.config.JkConfig;
 import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Command;
@@ -393,7 +392,7 @@ public final class CommandDispatch {
     }
 
     static boolean ansiEnabled() {
-        JkConfig.ColorChoice choice = ActiveConfig.get().colorOr(JkConfig.ColorChoice.AUTO);
+        JkConfig.ColorChoice choice = dev.jkbuild.config.SessionContext.current().config().colorOr(JkConfig.ColorChoice.AUTO);
         return switch (choice) {
             case ALWAYS -> true;
             case NEVER -> false;

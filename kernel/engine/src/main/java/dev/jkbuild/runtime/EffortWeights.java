@@ -2,7 +2,6 @@
 package dev.jkbuild.runtime;
 
 import dev.jkbuild.cache.Cas;
-import dev.jkbuild.config.ActiveConfig;
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.layout.BuildLayout;
 import dev.jkbuild.lock.Lockfile;
@@ -339,7 +338,7 @@ public final class EffortWeights {
      */
     private static boolean artifactFresh(Path dir, java.util.function.Function<BuildLayout, Path> artifact) {
         try {
-            if (ActiveConfig.get().rerunOr(false)) return false;
+            if (dev.jkbuild.config.SessionContext.current().config().rerunOr(false)) return false;
             JkBuild project = JkBuildParser.parse(dir.resolve("jk.toml"));
             BuildLayout layout = BuildLayout.of(dir, project);
             Path art = artifact.apply(layout);

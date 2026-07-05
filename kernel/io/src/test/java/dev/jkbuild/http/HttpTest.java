@@ -105,8 +105,8 @@ class HttpTest {
 
     @Test
     void offline_short_circuits_with_offline_exception() {
-        var prev = dev.jkbuild.config.ActiveConfig.get();
-        dev.jkbuild.config.ActiveConfig.install(prev.mergedWith(new dev.jkbuild.config.JkConfig(
+        var prev = dev.jkbuild.config.SessionContext.current().config();
+        dev.jkbuild.config.SessionContext.installConfig(prev.mergedWith(new dev.jkbuild.config.JkConfig(
                 Optional.empty(), Optional.of(true),
                 Optional.empty(), Optional.empty(),
                 Optional.empty(), Optional.empty(),
@@ -117,7 +117,7 @@ class HttpTest {
                     .isInstanceOf(OfflineException.class)
                     .hasMessageContaining("offline:");
         } finally {
-            dev.jkbuild.config.ActiveConfig.install(prev);
+            dev.jkbuild.config.SessionContext.installConfig(prev);
         }
     }
 

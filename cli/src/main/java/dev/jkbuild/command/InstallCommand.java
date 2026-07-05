@@ -324,7 +324,7 @@ public final class InstallCommand implements CliCommand {
                 .scope(1)
                 .execute(ctx -> {
                     ctx.label("git fetch " + expanded + " @ " + refStr);
-                    boolean refresh = dev.jkbuild.config.ActiveConfig.get().refreshOr(false);
+                    boolean refresh = dev.jkbuild.config.SessionContext.current().config().refreshOr(false);
                     GitFetcher fetcher = new GitFetcher(cacheDir.resolve("git"));
                     GitFetcher.Fetched fetched;
                     try {

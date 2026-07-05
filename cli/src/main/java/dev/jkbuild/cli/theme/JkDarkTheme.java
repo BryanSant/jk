@@ -116,7 +116,7 @@ public final class JkDarkTheme implements Theme {
         // No-ANSI mode: explicitly set, dumb terminal, or CI=true/1.
         // NOT gated on colorEnabled() — NO_COLOR / --color never only disables color;
         // it does not disable Unicode glyphs, animations, or other ANSI sequences.
-        if (dev.jkbuild.config.ActiveConfig.get().noAnsiOr(false)) return false;
+        if (dev.jkbuild.config.SessionContext.current().config().noAnsiOr(false)) return false;
         if ("dumb".equals(System.getenv("TERM"))) return false;
         String ci = System.getenv("CI");
         if ("true".equalsIgnoreCase(ci) || "1".equals(ci)) return false;

@@ -145,7 +145,7 @@ public final class JdkInstallCommand implements CliCommand {
                 .scope(1)
                 .execute(ctx -> {
                     ctx.label("fetch JetBrains JDK feed");
-                    boolean refresh = dev.jkbuild.config.ActiveConfig.get().refreshOr(false);
+                    boolean refresh = dev.jkbuild.config.SessionContext.current().config().refreshOr(false);
                     JdkCatalogClient client = (feedUrl != null
                                     ? new JdkCatalogClient(
                                             new Http(),
@@ -226,7 +226,7 @@ public final class JdkInstallCommand implements CliCommand {
                 .scope(1)
                 .execute(ctx -> {
                     JdkCatalog.Entry entry = ctx.require(ENTRY);
-                    boolean refresh = dev.jkbuild.config.ActiveConfig.get().refreshOr(false);
+                    boolean refresh = dev.jkbuild.config.SessionContext.current().config().refreshOr(false);
                     InstalledJdk already = refresh ? null : installer.alreadyInstalled(entry);
                     if (already != null) {
                         String label = entry.vendor() + " " + entry.product() + " " + entry.majorVersion();

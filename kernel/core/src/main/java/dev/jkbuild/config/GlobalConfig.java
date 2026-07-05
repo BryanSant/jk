@@ -80,11 +80,11 @@ public final class GlobalConfig {
      */
     static boolean colorActivelyEnabled() {
         // No-ANSI triggers: --no-ansi flag, TERM=dumb, CI=true/1.
-        if (ActiveConfig.get().noAnsiOr(false)) return false;
+        if (dev.jkbuild.config.SessionContext.current().config().noAnsiOr(false)) return false;
         if ("dumb".equals(System.getenv("TERM"))) return false;
         String ci = System.getenv("CI");
         if ("true".equalsIgnoreCase(ci) || "1".equals(ci)) return false;
-        var choice = ActiveConfig.get().colorOr(JkConfig.ColorChoice.AUTO);
+        var choice = dev.jkbuild.config.SessionContext.current().config().colorOr(JkConfig.ColorChoice.AUTO);
         return switch (choice) {
             case ALWAYS -> true;
             case NEVER  -> false;

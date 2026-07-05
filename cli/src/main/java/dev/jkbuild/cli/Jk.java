@@ -3,7 +3,6 @@ package dev.jkbuild.cli;
 
 import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.command.*;
-import dev.jkbuild.config.ActiveConfig;
 import dev.jkbuild.config.JkConfig;
 import dev.jkbuild.config.JkConfigLoader;
 import java.util.List;
@@ -54,7 +53,7 @@ public final class Jk {
         applyCliOverrides(args);
         // -q/--quiet must take effect before any println happens. Apply it now
         // based on the resolved config (which already knows about env/file/CLI layers).
-        dev.jkbuild.config.Quietable.applyIfQuiet(ActiveConfig.get());
+        dev.jkbuild.config.Quietable.applyIfQuiet(dev.jkbuild.config.SessionContext.current().config());
         String[] rewritten = rewriteAlias(args);
         // Every verb is now on the CliCommand model; CommandDispatch handles all
         // dispatch. The fallback below handles bare `jk` + --help + --version.
@@ -161,7 +160,7 @@ public final class Jk {
     }
 
     /**
-     * Argv-scan pass that folds explicit CLI flags into {@link ActiveConfig}. This is intentionally a
+     * Argv-scan pass that folds explicit CLI flags into {@link dev.jkbuild.config.SessionContext}. This is intentionally a
      * small scan rather than reusing picocli's parser: the highest-precedence layer needs to be
      * available <em>before</em> picocli runs (e.g. so {@link dev.jkbuild.config.Quietable} can mute
      * stdout before the first subcommand println). Only flags that affect global behavior are read
@@ -212,14 +211,14 @@ public final class Jk {
             }
         }
         JkConfig cli = new JkConfig(color, offline, rerun, refresh, noProgress, quiet, verbose, directory, force, noAnsi);
-        ActiveConfig.install(ActiveConfig.get().mergedWith(cli));
+        dev.jkbuild.config.SessionContext.installConfig(dev.jkbuild.config.SessionContext.current().config().mergedWith(cli));
     }
 
     /**
      * Read {@code --config-file} / {@code --no-config} out of raw argv with a cheap linear scan, then
-     * ask {@link JkConfigLoader} to build the merged {@link JkConfig} and stash it in {@link
-     * ActiveConfig}. This runs before picocli parsing so the rest of the CLI sees an already-resolved
-     * config.
+     * ask {@link JkConfigLoader} to build the merged {@link JkConfig} and install it on the {@link
+     * dev.jkbuild.config.SessionContext}. This runs before picocli parsing so the rest of the CLI
+     * sees an already-resolved config.
      *
      * <p>CLI flag values (the highest layer) are folded in lazily as each command's {@link
      * GlobalOptions} mixin reads them after parsing.
@@ -239,11 +238,11 @@ public final class Jk {
         }
         try {
             JkConfig resolved = JkConfigLoader.load(java.nio.file.Path.of("").toAbsolutePath(), noConfig, explicit);
-            ActiveConfig.install(resolved);
+            dev.jkbuild.config.SessionContext.installConfig(resolved);
         } catch (java.io.IOException e) {
             // Best-effort — a broken user/project config shouldn't kill the CLI.
             System.err.println("jk: warning: could not load config (" + e.getMessage() + "); using defaults.");
-            ActiveConfig.install(JkConfig.empty());
+            dev.jkbuild.config.SessionContext.installConfig(JkConfig.empty());
         }
     }
 

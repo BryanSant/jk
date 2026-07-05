@@ -90,7 +90,7 @@ public final class SpinnerProgressBar implements AutoCloseable, LiveRegion {
      * no-ops.
      */
     public static SpinnerProgressBar show(PrintStream out) {
-        boolean silent = dev.jkbuild.config.ActiveConfig.get().noProgressOr(false);
+        boolean silent = dev.jkbuild.config.SessionContext.current().config().noProgressOr(false);
         SpinnerProgressBar pb = new SpinnerProgressBar(out, silent);
         LiveRegion.setActive(pb);
         if (!silent) {

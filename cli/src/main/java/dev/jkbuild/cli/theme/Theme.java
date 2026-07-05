@@ -3,7 +3,6 @@ package dev.jkbuild.cli.theme;
 
 import dev.jkbuild.cli.Ansi;
 import dev.jkbuild.cli.tui.Rail;
-import dev.jkbuild.config.ActiveConfig;
 import dev.jkbuild.config.JkConfig;
 import org.jline.utils.AttributedString;
 import org.jline.utils.AttributedStyle;
@@ -19,8 +18,8 @@ import org.jline.utils.AttributedStyle;
  * #colorEnabled()} and {@link #colorize(String, AttributedStyle)} — remain static on this
  * interface.
  *
- * <p>Color emission is decided by the user's resolved {@code --color} choice in {@link
- * ActiveConfig} (see {@link JkConfig.ColorChoice}):
+ * <p>Color emission is decided by the user's resolved {@code --color} choice in the {@link
+ * dev.jkbuild.config.SessionContext} (see {@link JkConfig.ColorChoice}):
  *
  * <ul>
  *   <li>{@code ALWAYS} — emit color unconditionally.
@@ -308,11 +307,11 @@ public interface Theme {
     /** True when foreground color should be emitted, given the resolved {@code --color} choice. */
     static boolean colorEnabled() {
         // No-ANSI triggers (--no-ansi, TERM=dumb, CI=true/1) imply no color.
-        if (ActiveConfig.get().noAnsiOr(false)) return false;
+        if (dev.jkbuild.config.SessionContext.current().config().noAnsiOr(false)) return false;
         if ("dumb".equals(System.getenv("TERM"))) return false;
         String ci = System.getenv("CI");
         if ("true".equalsIgnoreCase(ci) || "1".equals(ci)) return false;
-        var choice = ActiveConfig.get().colorOr(JkConfig.ColorChoice.AUTO);
+        var choice = dev.jkbuild.config.SessionContext.current().config().colorOr(JkConfig.ColorChoice.AUTO);
         return switch (choice) {
             case ALWAYS -> true;
             case NEVER -> false;

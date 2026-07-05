@@ -65,7 +65,7 @@ public final class Spinner implements AutoCloseable {
         this.out = out;
         this.message = message == null ? "" : message;
         this.frameColors = buildGradient(FRAMES.length);
-        this.silent = dev.jkbuild.config.ActiveConfig.get().noProgressOr(false);
+        this.silent = dev.jkbuild.config.SessionContext.current().config().noProgressOr(false);
     }
 
     private void start() {

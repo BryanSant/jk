@@ -52,7 +52,7 @@ public final class JdkDownloadBar implements AutoCloseable, LiveRegion {
      * --no-progress} is set, returns a silent no-op instance.
      */
     public static JdkDownloadBar show(PrintStream out, String displayName) {
-        boolean silent = dev.jkbuild.config.ActiveConfig.get().noProgressOr(false);
+        boolean silent = dev.jkbuild.config.SessionContext.current().config().noProgressOr(false);
         boolean nerdfont = dev.jkbuild.config.GlobalConfig.nerdfont();
         JdkDownloadBar db = new JdkDownloadBar(out, displayName, nerdfont, silent);
         LiveRegion.setActive(db);
@@ -80,7 +80,7 @@ public final class JdkDownloadBar implements AutoCloseable, LiveRegion {
      * returned handle when installation completes.
      */
     public static JdkDownloadBar showInstalling(PrintStream out, String displayName) {
-        boolean silent = dev.jkbuild.config.ActiveConfig.get().noProgressOr(false);
+        boolean silent = dev.jkbuild.config.SessionContext.current().config().noProgressOr(false);
         boolean nerdfont = dev.jkbuild.config.GlobalConfig.nerdfont();
         JdkDownloadBar db = new JdkDownloadBar(out, displayName, nerdfont, silent);
         db.installing = true;

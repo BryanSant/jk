@@ -6,7 +6,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.sun.net.httpserver.HttpServer;
 import dev.jkbuild.cache.Cas;
-import dev.jkbuild.config.ActiveConfig;
 import dev.jkbuild.config.JkConfig;
 import dev.jkbuild.http.Http;
 import dev.jkbuild.model.Coordinate;
@@ -38,11 +37,11 @@ class MavenRepoTest {
     @AfterEach
     void stop() {
         server.stop(0);
-        ActiveConfig.reset();
+        dev.jkbuild.config.SessionContext.reset();
     }
 
     private static void goOffline() {
-        ActiveConfig.install(new JkConfig(
+        dev.jkbuild.config.SessionContext.installConfig(new JkConfig(
                 Optional.empty(),
                 Optional.of(true),
                 Optional.empty(),

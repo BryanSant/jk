@@ -291,7 +291,7 @@ public final class JdkEnsureCommand implements CliCommand {
     }
 
     private JdkCatalog fetchCatalog() throws IOException, InterruptedException {
-        boolean refresh = dev.jkbuild.config.ActiveConfig.get().refreshOr(false);
+        boolean refresh = dev.jkbuild.config.SessionContext.current().config().refreshOr(false);
         JdkCatalogClient client = (feedUrl != null
                         ? new JdkCatalogClient(
                                 new Http(),

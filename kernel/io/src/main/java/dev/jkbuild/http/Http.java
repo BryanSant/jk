@@ -327,7 +327,7 @@ public final class Http {
      * calling Http entirely in offline mode or catch this and substitute a cache lookup.
      */
     private static void checkOffline(URI uri) throws OfflineException {
-        if (dev.jkbuild.config.ActiveConfig.get().offlineOr(false)) {
+        if (dev.jkbuild.config.SessionContext.current().config().offlineOr(false)) {
             throw new OfflineException(uri);
         }
     }

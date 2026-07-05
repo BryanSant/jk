@@ -4,7 +4,6 @@ package dev.jkbuild.runtime;
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.compile.CompileRequest;
 import dev.jkbuild.compile.CompileResult;
-import dev.jkbuild.config.ActiveConfig;
 import dev.jkbuild.run.PhaseContext;
 import dev.jkbuild.task.ActionCache;
 import dev.jkbuild.task.ActionKey;
@@ -186,7 +185,7 @@ public final class TestSupport {
                 .processorPath(processorPath)
                 .build();
         ActionCache actionCache = new ActionCache(cas, cacheRoot.resolve("actions"));
-        boolean useCache = !ActiveConfig.get().rerunOr(false);
+        boolean useCache = !dev.jkbuild.config.SessionContext.current().config().rerunOr(false);
         java.nio.file.Path stateDir =
                 cacheRoot.resolve("actions").resolve("incremental-java").resolve(cacheTaskId);
 

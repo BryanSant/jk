@@ -51,14 +51,14 @@ public final class GlobalOptions {
 
     /**
      * Resolve the working directory: explicit {@code --directory} if set (either on this mixin or via
-     * {@link dev.jkbuild.config.ActiveConfig}, which captures {@code -C} placed before the
+     * {@link dev.jkbuild.config.SessionContext}, which captures {@code -C} placed before the
      * subcommand), otherwise the current working directory. Always returns an absolute normalised
      * path so callers can pass it into IO without worrying about whether {@code -C} was supplied.
      */
     public Path workingDir() {
         Path raw = directory;
         if (raw == null) {
-            raw = dev.jkbuild.config.ActiveConfig.get().directory().orElse(Path.of(""));
+            raw = dev.jkbuild.config.SessionContext.current().config().directory().orElse(Path.of(""));
         }
         return raw.toAbsolutePath().normalize();
     }

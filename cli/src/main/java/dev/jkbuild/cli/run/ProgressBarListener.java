@@ -81,7 +81,7 @@ public final class ProgressBarListener implements GoalListener {
         Map<String, String> labels = new HashMap<>();
         for (Phase p : phases) labels.put(p.name(), p.label());
         this.phaseLabels = Map.copyOf(labels);
-        this.silent = dev.jkbuild.config.ActiveConfig.get().noProgressOr(false);
+        this.silent = dev.jkbuild.config.SessionContext.current().config().noProgressOr(false);
         // spinner = primary→accent; bar = green→bright-green; fail = dark→bright red.
         this.spinColors = buildGradient(SPIN_FRAMES.length, Theme.active().spinnerGradient());
         this.barColors = buildGradient(BAR_SEGS, Theme.active().progressGradient());

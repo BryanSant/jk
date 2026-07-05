@@ -5,7 +5,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.sun.net.httpserver.HttpServer;
 import dev.jkbuild.cli.Jk;
-import dev.jkbuild.config.ActiveConfig;
 import dev.jkbuild.library.LibraryCatalog;
 import dev.jkbuild.lock.LockfileReader;
 import java.io.IOException;
@@ -84,7 +83,7 @@ class LockCommandLibraryRegistryTest {
     void stop() {
         mavenServer.stop(0);
         registryServer.stop(0);
-        ActiveConfig.reset();
+        dev.jkbuild.config.SessionContext.reset();
         LockfileReader.clearCache();
     }
 
