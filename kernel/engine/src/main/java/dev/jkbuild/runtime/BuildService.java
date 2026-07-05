@@ -1,19 +1,24 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.runtime;
 
+import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cache.Linking;
 import dev.jkbuild.config.JkBuildParser;
+import dev.jkbuild.config.SessionContext;
 import dev.jkbuild.layout.BuildLayout;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.resolver.pubgrub.UnsatisfiableException;
+import dev.jkbuild.task.ActionCache;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * The engine-side entry point a front-end (the "client") calls to drive a build — the facade the
@@ -129,6 +134,28 @@ public final class BuildService {
             }
         }
         return links;
+    }
+
+    /**
+     * The set of module dirs the forecast predicts will do real work this build — used to reserve
+     * their progress-bar slice up front. {@code --force} marks every module dirty; on any forecast
+     * error, pessimistically returns all modules (so nothing is under-reserved).
+     */
+    public static Set<Path> forecastDirtyDirs(BuildGraph.Result graph, Path cache) {
+        Set<Path> all = new HashSet<>();
+        for (BuildGraph.BuildUnit u : graph.topoOrder()) all.add(u.dir());
+        if (SessionContext.current().config().rerunOr(false)) return all;
+        try {
+            Cas cas = new Cas(cache);
+            ActionCache ac = new ActionCache(cas, cache.resolve("actions"));
+            Set<Path> dirty = new HashSet<>();
+            for (BuildPlanForecast.Module m : BuildPlanForecast.of(graph, cas, ac, cache)) {
+                if (m.dirty()) dirty.add(m.unit().dir());
+            }
+            return dirty;
+        } catch (RuntimeException e) {
+            return all;
+        }
     }
 
     /** Apply the subset of {@code workspaceLinks} whose sources live under {@code moduleDir} (best-effort). */

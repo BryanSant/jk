@@ -289,7 +289,7 @@ public final class BuildCommand implements CliCommand {
         }
         applyMemoryPlan(Math.min(BuildGraph.maxReadyWidth(units, graph.edges()), JkThreads.CPU_THREADS));
         long buildStart = System.nanoTime();
-        Set<Path> dirtyDirs = forecastDirty(graph, cache);
+        Set<Path> dirtyDirs = dev.jkbuild.runtime.BuildService.forecastDirtyDirs(graph, cache);
         if (dirtyDirs.isEmpty()) {
             // Fully cached — print chip line directly with no spinner ever created.
             System.out.println(dev.jkbuild.cli.tui.GoalWedge.chipLine(
@@ -311,25 +311,6 @@ public final class BuildCommand implements CliCommand {
      * any failure, treat every module as dirty — over-reserving only ever makes the bar jump
      * <em>forward</em> as cached phases collapse, never backward.
      */
-    private static Set<Path> forecastDirty(BuildGraph.Result graph, Path cache) {
-        Set<Path> all = new java.util.HashSet<>();
-        for (BuildGraph.BuildUnit u : graph.topoOrder()) all.add(u.dir());
-        // --force bypasses all caching inside the goal phases, so treat every module
-        // as dirty — the forecast (which reads action-cache snapshots) would falsely
-        // report "all cached" and short-circuit the build before any phase runs.
-        if (dev.jkbuild.config.ActiveConfig.get().rerunOr(false)) return all;
-        try {
-            dev.jkbuild.cache.Cas cas = new dev.jkbuild.cache.Cas(cache);
-            dev.jkbuild.task.ActionCache ac = new dev.jkbuild.task.ActionCache(cas, cache.resolve("actions"));
-            Set<Path> dirty = new java.util.HashSet<>();
-            for (BuildPlanForecast.Module m : BuildPlanForecast.of(graph, cas, ac, cache)) {
-                if (m.dirty()) dirty.add(m.unit().dir());
-            }
-            return dirty;
-        } catch (RuntimeException e) {
-            return all;
-        }
-    }
 
     /** Buffered, append-only scheduler: each unit flushes a block + a [k/N] line on completion. */
     private int runGraphPlain(List<BuildGraph.BuildUnit> units, Map<Path, Set<Path>> edges) {
@@ -936,7 +917,7 @@ public final class BuildCommand implements CliCommand {
      * As {@link #prepareModule(Path, boolean)} but with a {@code forceRebuild} hint (this module will
      * rebuild because an upstream sibling changed) so its compile/test slice is reserved in the
      * calibrated total up front — keeping the aggregate bar honest from the start. Set from {@link
-     * #forecastDirty}.
+     * dev.jkbuild.runtime.BuildService#forecastDirtyDirs}.
      */
     private PreparedModule prepareModule(Path dir, boolean skipTests, boolean forceRebuild) {
         try {
