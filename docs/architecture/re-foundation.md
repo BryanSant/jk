@@ -82,8 +82,21 @@ Branch: `refoundation`. Every commit below is green (`./gradlew :cli:test`).
 - **M1b** — `Session` threaded through `BuildPipeline.Inputs` (delegating ctors default it from
   `SessionContext.current()`, zero call-site churn); hot build-path reads (`BuildPipeline` phase
   bodies, `EffortWeights.predict`) now read `in.session().config()`.
-- **M5 (partial, safe wins)** — `Scope.canonical()`/`tomlSection()` precomputed into enum fields;
-  `GlobalConfig` memoizes `~/.jk/config.toml` parses per `(path,size,mtime)` (was re-parsed 20+×/run).
+- **M5 (in progress)** —
+  - `Scope.canonical()`/`tomlSection()` precomputed into enum fields; `GlobalConfig` memoizes
+    `~/.jk/config.toml` per `(path,size,mtime)`.
+  - **M5a** `Hashing` consolidation: added `newDigest`/`hex`/`hashHex`; routed the hand-rolled
+    `MessageDigest`/hex copies (`JkWorkerSync`, `SigV4Signer`, publisher `Checksums`, `M2CompatWriter`,
+    `JdkInstaller`, `TestStamp`) through it. Shaded worker plugins left isolated.
+  - **M5b** single currency for locked artifacts: `Lockfile.Artifact` gained `moduleGroup()`/
+    `moduleArtifact()`/`coordinate()` + `checksumHex()`/`sourcesChecksumHex()`; migrated the manual
+    `name` splits + `sha256:` strips in `CacheSync`, `ClasspathResolver`, `LockOrchestrator`,
+    `InstallCommand`, `IdeSupport` (dropped its duplicate `hexOf`).
+  - **M5 remaining:** sealed dependency source-kind (replace `Dependency.module`'s `git:`/`workspace:`
+    magic prefixes — also retires the last split cluster); `RepoArtifactResolver` facade (one owner of
+    `"<name>+<url>"` source parsing, dedup `CacheSync`/`IdeSupport`/`ClasspathResolver`); one
+    `${ENV}`+repo-TOML parser; builders retiring the telescoping ctors on `JkBuild`/`Project`/
+    `Lockfile`/`Artifact`/`Dependency`.
 
 **M1c — kernel globals onto `Session` (essentially done)**
 The mutable global *channels that carry request data* now live on `Session` (each a green commit):
