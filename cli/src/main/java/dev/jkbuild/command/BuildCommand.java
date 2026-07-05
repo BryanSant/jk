@@ -234,7 +234,6 @@ public final class BuildCommand implements CliCommand {
     private static final Object OUT_LOCK = new Object();
 
     /** One unit's build outcome, with its buffered output (flushed together on completion). */
-    private record UnitOutcome(String coord, boolean success, int exitCode, long millis, List<String> output) {}
 
     /**
      * Build the whole composite + workspace graph in parallel (Option B): one {@link BuildGraph},
@@ -277,7 +276,6 @@ public final class BuildCommand implements CliCommand {
                     dev.jkbuild.cli.tui.Glyphs.CHECK, "Build", nerdfont, "workspace declares no modules"));
             return 0;
         }
-        applyMemoryPlan(Math.min(BuildGraph.maxReadyWidth(units, graph.edges()), JkThreads.CPU_THREADS));
         long buildStart = System.nanoTime();
         Set<Path> dirtyDirs = dev.jkbuild.runtime.BuildService.forecastDirtyDirs(graph, cache);
         if (dirtyDirs.isEmpty()) {
@@ -287,22 +285,13 @@ public final class BuildCommand implements CliCommand {
                     upToDateTail("all modules", buildStart)));
             return 0;
         }
-        // Work confirmed — create the CommandManager now so the spinner starts
-        // the instant we know there is something to build.
+        // Work confirmed — create the CommandManager now so the spinner starts the instant we know
+        // there's something to build. The engine (BuildService.buildWorkspace, invoked by
+        // runGraphLive) sizes the memory plan and drives the build; we pass the forecast as a hint.
         CommandManager view = CommandManager.goal(System.out, "Build", animate);
-        return runGraphLive(view, units, graph.edges(), dirtyDirs, cache, buildStart, entryDir);
+        return runGraphLive(view, entryDir, entryBuild, cache, buildStart, dirtyDirs);
     }
 
-    /**
-     * Modules that will actually rebuild this run, in dependency order — the same cascade-aware,
-     * content-hash forecast {@code jk explain} shows ({@link BuildPlanForecast}). The live pre-scan
-     * reserves these modules' real compile/test slice up front (via {@code forceRebuild}), so the
-     * bar's total is correct from the start instead of growing mid-build (which slid it backward). On
-     * any failure, treat every module as dirty — over-reserving only ever makes the bar jump
-     * <em>forward</em> as cached phases collapse, never backward.
-     */
-
-    /** Buffered, append-only scheduler: each unit flushes a block + a [k/N] line on completion. */
     /**
      * Non-animated workspace build: the engine ({@link dev.jkbuild.runtime.BuildService#buildWorkspace})
      * owns the whole loop; this listener renders each module's buffered output block + a ✓/✗ {@code
@@ -318,7 +307,8 @@ public final class BuildCommand implements CliCommand {
                 workers != null ? workers : 1,
                 profileName,
                 buildOpts.skipTests,
-                global.verbose);
+                global.verbose,
+                null); // headless: let the engine forecast dirty modules
         Map<Path, List<String>> buffers = new java.util.concurrent.ConcurrentHashMap<>();
         int[] total = {0};
         java.util.concurrent.atomic.AtomicInteger done = new java.util.concurrent.atomic.AtomicInteger();
@@ -396,211 +386,100 @@ public final class BuildCommand implements CliCommand {
      * animates; the same blocks + lines print append-only.
      */
     private int runGraphLive(
-            CommandManager view,
-            List<BuildGraph.BuildUnit> units,
-            Map<Path, Set<Path>> edges,
-            Set<Path> dirtyDirs,
-            Path cache,
-            long start,
-            Path workspaceRoot)
-            throws Exception {
-        Set<Path> unitDirs = new java.util.HashSet<>();
-        for (BuildGraph.BuildUnit u : units) unitDirs.add(u.dir());
-        // Expose the whole-graph module set so prepareModule feeds it to the effort-weight
-        // prediction (project-tier learned fallback for a not-yet-built module).
-        this.workspaceModuleDirs = unitDirs;
+            CommandManager view, Path entryDir, JkBuild entryBuild, Path cache, long start, Set<Path> dirtyDirs) {
         AggregateContext agg = new AggregateContext(view);
-        int total = units.size();
-
-        // Pre-scan: prepare every unit's goal and sum its estimated weight so the
-        // bar calibrates to the whole-graph total and advances 0→100% across it.
-        // Each module also gets a timing recorder feeding one shared sink, folded
-        // into the learned ledger once the build succeeds.
-        List<dev.jkbuild.runtime.PhaseTimings.Sample> timingSamples =
-                java.util.Collections.synchronizedList(new ArrayList<>());
-        Map<Path, PreparedModule> prepared = new LinkedHashMap<>();
-        long totalWeight = 0;
-        for (BuildGraph.BuildUnit u : units) {
-            PreparedModule pm = prepareModule(u.dir(), buildOpts.skipTests, dirtyDirs.contains(u.dir()));
-            if (pm == null) {
-                view.finishGoalFailure(noTomlTail(u.dir().toString(), start));
-                return 2;
-            }
-            pm.goal()
-                    .addListener(new dev.jkbuild.runtime.PhaseTimingsRecorder(
-                            pm.dir().toString(), timingSamples));
-            prepared.put(u.dir(), pm);
-            totalWeight += pm.barWeight();
-        }
-        agg.calibrate(totalWeight);
-        // Seed the countdown with a schedule-aware estimate (the same model jk explain
-        // uses): the parallel graph build overlaps independent modules, so the serial
-        // sum over-counts. (--no-parallel runs runWorkspaceBuild, not this path, so here
-        // is always parallel.) The bar still calibrates to the summed tick total above;
-        // only the wall-clock countdown is parallel-aware.
-        Map<Path, dev.jkbuild.runtime.EffortWeights.ModuleCost> costByDir = new LinkedHashMap<>();
-        for (var e : prepared.entrySet()) {
-            costByDir.put(
-                    e.getKey(),
-                    dev.jkbuild.runtime.EffortWeights.costOf(
-                            e.getKey(), edges.getOrDefault(e.getKey(), Set.of()), e.getValue().goal()));
-        }
-        List<dev.jkbuild.runtime.EffortWeights.ModuleCost> costs = new ArrayList<>(costByDir.values());
-        int etaWorkers = workers != null && workers > 0 ? workers : 1;
-        int concurrency = dev.jkbuild.worker.HeapPlan.requestedJvms(
-                BuildGraph.maxReadyWidth(units, edges),
-                etaWorkers,
-                parallelTests,
-                Runtime.getRuntime().availableProcessors());
-        // Seed the countdown's weight→ms conversion, PER MODULE (matches jk explain): a module with
-        // its own learned timings converts at MS_PER_WEIGHT (its rates round-trip this host); a cold
-        // module — static reference-frame weights — converts at this host's measured calibration, not
-        // the reference constant (~4× hot on a fast machine). Only count up (eta 0) when a cold module
-        // exists AND the host is uncalibratable (no JDK yet) — then no rate is trustworthy.
-        dev.jkbuild.runtime.PhaseTimings timings = dev.jkbuild.runtime.PhaseTimings.load(cache);
-        java.util.function.Predicate<Path> warm =
-                dir -> timings.hasTimingsFor(java.util.List.of(dir.toString()));
-        boolean anyCold = prepared.keySet().stream().anyMatch(dir -> !warm.test(dir));
-        dev.jkbuild.runtime.Calibration cal =
-                anyCold ? dev.jkbuild.runtime.Calibration.ensure(jdksDir) : null;
-        if (anyCold && (cal == null || !cal.present())) {
-            view.setEtaEstimate(0); // cold + no calibration → count up rather than fake a countdown
-        } else {
-            double coldRate = cal != null ? cal.msPerWeight() : dev.jkbuild.runtime.EffortWeights.MS_PER_WEIGHT;
-            view.setEtaEstimate(dev.jkbuild.runtime.EffortWeights.scheduleMillis(
-                    costs,
-                    concurrency,
-                    false,
-                    parallelTests,
-                    dir -> warm.test(dir) ? dev.jkbuild.runtime.EffortWeights.MS_PER_WEIGHT : coldRate));
-        }
-        // Live re-projection: as modules finish we measure real per-module throughput (ms ÷ weight)
-        // and re-estimate the remaining ETA from it, so external contention self-corrects. Median
-        // over completed modules keeps parallelism out of the rate; the schedule model re-applies it.
-        List<Double> observedRates = java.util.Collections.synchronizedList(new ArrayList<>());
-
-        // Pre-compute workspace hard-link destinations for application modules so collision
-        // detection sees the full module set before any build starts.
-        Map<Path, Path> wsLinks = dev.jkbuild.runtime.BuildService.computeWorkspaceLinks(prepared.keySet(), workspaceRoot);
-
-        java.util.concurrent.atomic.AtomicInteger completed = new java.util.concurrent.atomic.AtomicInteger();
-        // Units' process output is buffered here and flushed below the live region
-        // once the build settles, so concurrent logs never interleave with the view.
+        Map<Path, List<String>> buffers = new java.util.concurrent.ConcurrentHashMap<>();
         List<String> deferredOutput = java.util.Collections.synchronizedList(new ArrayList<>());
-        // Engine owns the DAG dispatch (WorkspaceScheduler); this sink links each finished module's
-        // artifacts, folds its measured throughput into the live ETA, and fails fast.
-        UnitOutcome failure = dev.jkbuild.runtime.WorkspaceScheduler.run(
-                units,
-                BuildGraph.BuildUnit::dir,
-                edges,
-                u -> buildUnitLive(u, prepared.get(u.dir()), agg, view, completed, total, deferredOutput),
-                (ready, results, remaining) -> {
-                    UnitOutcome fail = null;
-                    for (int i = 0; i < results.size(); i++) {
-                        UnitOutcome o = results.get(i);
-                        if (o.success()) {
-                            Path dir = ready.get(i).dir();
-                            dev.jkbuild.runtime.BuildService.linkModuleArtifacts(dir, wsLinks);
-                            PreparedModule donePm = prepared.get(dir);
-                            long w = donePm != null ? donePm.barWeight() : 0;
-                            // Skip fully-cached modules — their near-zero time isn't representative.
-                            if (donePm != null && !donePm.fullyCached() && w > 0 && o.millis() > 0)
-                                observedRates.add(o.millis() / (double) w);
-                        } else if (fail == null) {
-                            fail = o;
+        java.util.concurrent.atomic.AtomicInteger completed = new java.util.concurrent.atomic.AtomicInteger();
+        int[] total = {0};
+        var request = new dev.jkbuild.runtime.BuildService.WorkspaceRequest(
+                entryDir,
+                entryBuild,
+                cache,
+                jdksDir,
+                workers != null ? workers : 1,
+                profileName,
+                buildOpts.skipTests,
+                global.verbose,
+                dirtyDirs); // reuse the forecast the fully-cached shortcut already computed
+        dev.jkbuild.runtime.BuildService.WorkspaceResult result =
+                dev.jkbuild.runtime.BuildService.buildWorkspace(request, new dev.jkbuild.runtime.WorkspaceBuildListener() {
+                    @Override
+                    public void onPlan(List<dev.jkbuild.runtime.BuildService.ModulePlan> plan) {
+                        total[0] = plan.size();
+                        long tw = 0;
+                        for (var p : plan) tw += p.weight();
+                        agg.calibrate(tw); // bar calibrated to the whole-graph tick total
+                    }
+
+                    @Override
+                    public void onEtaEstimate(long millis) {
+                        view.setEtaEstimate(millis); // engine computes the schedule-aware estimate; we render it
+                    }
+
+                    @Override
+                    public dev.jkbuild.run.GoalListener onModuleStart(dev.jkbuild.runtime.BuildService.ModulePlan m) {
+                        var log = dev.jkbuild.cli.run.EventLogListener.open(m.cache(), m.goal().name());
+                        if (log != null) m.goal().addListener(log);
+                        List<String> buf = java.util.Collections.synchronizedList(new ArrayList<>());
+                        buffers.put(m.dir(), buf);
+                        // The module's goal feeds the shared aggregate bar; its output buffers for
+                        // ordered flush (parallel modules' logs never interleave).
+                        var lis = new dev.jkbuild.cli.run.AggregateModuleListener(
+                                agg, m.coord(), m.goal().phases(), m.weight());
+                        lis.bufferOutputInto(buf);
+                        return lis;
+                    }
+
+                    @Override
+                    public void onModuleFinish(dev.jkbuild.runtime.BuildService.ModuleOutcome o) {
+                        List<String> buf = buffers.getOrDefault(o.dir(), List.of());
+                        String completion =
+                                completionLine(o.success(), completed.incrementAndGet(), total[0], o.coord(), o.millis());
+                        if (view.animating()) {
+                            view.addCompletion(completion);
+                            synchronized (buf) {
+                                if (!buf.isEmpty()) deferredOutput.addAll(buf);
+                            }
+                        } else {
+                            StringBuilder block = new StringBuilder();
+                            synchronized (buf) {
+                                for (String l : buf) block.append(l).append('\n');
+                            }
+                            block.append(completion);
+                            view.writeAbove(block.toString());
                         }
                     }
-                    if (fail != null) return fail;
-                    // Re-project remaining ETA from measured throughput: elapsed + reprojected remainder.
-                    Double liveMpw = medianRate(observedRates);
-                    if (liveMpw != null && !remaining.isEmpty()) {
-                        Set<Path> remainingDirs = new java.util.HashSet<>();
-                        for (BuildGraph.BuildUnit u : remaining) remainingDirs.add(u.dir());
-                        List<dev.jkbuild.runtime.EffortWeights.ModuleCost> rem = new ArrayList<>();
-                        for (var ce : costByDir.entrySet())
-                            if (remainingDirs.contains(ce.getKey())) rem.add(ce.getValue());
-                        long elapsed = (System.nanoTime() - start) / 1_000_000;
-                        long remMs = dev.jkbuild.runtime.EffortWeights.scheduleMillis(
-                                rem, concurrency, false, parallelTests, Math.round(liveMpw));
-                        view.setEtaEstimate(elapsed + remMs);
-                    }
-                    return null;
                 });
-        if (failure != null) {
-            // Everything the build emitted prints ABOVE the result line, exactly like the success
-            // route: buffered sub-process output first, then the error diagnostics just above the
-            // "‼ Build failed" line — which stays last so the user sees the outcome without scrolling.
+        if (!result.errors().isEmpty()) {
+            List<String> above = new ArrayList<>();
+            for (String err : result.errors()) above.add(ConsoleSpec.errorLine("composite", err));
+            view.finishGoalFailure(
+                    dev.jkbuild.cli.tui.GoalWedge.failureLine(
+                            "Build", GlobalConfig.nerdfont(), "dependency resolution failed"),
+                    above);
+            return 2;
+        }
+        if (!result.success()) {
+            // Buffered sub-process output first, then the error diagnostics just above the
+            // "‼ Build failed" line — which stays last so the outcome is visible without scrolling.
             List<String> above = snapshot(deferredOutput);
             for (GoalResult.Diagnostic d : agg.lastErrors()) {
                 if ("test-failure".equals(d.code())) continue; // already printed by run-tests
                 above.add(ConsoleSpec.renderError(d));
             }
-            view.finishGoalFailure(failureTail(failure.coord(), start), above);
-            return failure.exitCode();
+            String failedCoord = result.modules().stream()
+                    .filter(m -> !m.success())
+                    .map(dev.jkbuild.runtime.BuildService.ModuleOutcome::coord)
+                    .findFirst()
+                    .orElse("build");
+            view.finishGoalFailure(failureTail(failedCoord, start), above);
+            return result.exitCode();
         }
-        // Whole graph succeeded: fold this run's real phase durations into the
-        // learned ledger (EWMA) so the next build's bar is time-accurate. Failed
-        // builds don't record — their phase times are abnormal.
-        dev.jkbuild.runtime.PhaseTimings.record(
-                cache, timingSamples, dev.jkbuild.runtime.PhaseTimings.DEFAULT_ALPHA, System.currentTimeMillis());
-        // Fold this run's measured throughput into the host calibration (EWMA), so the cold
-        // anchor tracks the machine without a fresh probe next time.
-        Double runMpw = medianRate(observedRates);
-        if (runMpw != null) dev.jkbuild.runtime.Calibration.refine(runMpw, System.currentTimeMillis());
         view.finishGoalSuccess(
-                dirtyDirs.isEmpty() ? upToDateTail("all modules", start) : modulesTail(total, start),
+                dirtyDirs.isEmpty() ? upToDateTail("all modules", start) : modulesTail(total[0], start),
                 snapshot(deferredOutput));
         return 0;
-    }
-
-    /**
-     * Build one unit feeding the shared live {@code view}; buffer its output. On completion: when
-     * animating, the colored ✓/✗ {@code [k/N]} line joins the region's completed tail and the unit's
-     * process output is appended to {@code deferredOutput} (flushed below the region once the build
-     * settles, so concurrent logs never interleave with the live view); otherwise (pipes / {@code
-     * --quiet}) the buffered block + line print append-only, atomically.
-     */
-    private UnitOutcome buildUnitLive(
-            BuildGraph.BuildUnit unit,
-            PreparedModule pm,
-            AggregateContext agg,
-            CommandManager view,
-            java.util.concurrent.atomic.AtomicInteger completed,
-            int total,
-            List<String> deferredOutput) {
-        List<String> buf = java.util.Collections.synchronizedList(new ArrayList<>());
-        long t0 = System.nanoTime();
-        boolean ok;
-        int exit;
-        try {
-            GoalResult result =
-                    GoalConsole.runGoalIntoBuffered(pm.goal(), pm.cache(), unit.coord(), agg, pm.barWeight(), buf);
-            ok = result.success();
-            exit = ok ? 0 : exitCodeFor(pm.goal());
-        } catch (RuntimeException e) {
-            synchronized (buf) {
-                buf.add("  " + Theme.colorize(Glyphs.CROSS, Theme.active().error()) + " " + (e.getMessage() == null ? e.toString() : e.getMessage()));
-            }
-            ok = false;
-            exit = 1;
-        }
-        long ms = (System.nanoTime() - t0) / 1_000_000;
-        int k = completed.incrementAndGet();
-        String completion = completionLine(ok, k, total, unit.coord(), ms);
-        if (view.animating()) {
-            view.addCompletion(completion);
-            synchronized (buf) {
-                if (!buf.isEmpty()) deferredOutput.addAll(buf);
-            }
-        } else {
-            StringBuilder block = new StringBuilder();
-            synchronized (buf) {
-                for (String l : buf) block.append(l).append('\n');
-            }
-            block.append(completion);
-            view.writeAbove(block.toString());
-        }
-        return new UnitOutcome(unit.coord(), ok, exit, ms, List.of());
     }
 
     /** Print buffered unit output below the (settled) live region, in completion order. */

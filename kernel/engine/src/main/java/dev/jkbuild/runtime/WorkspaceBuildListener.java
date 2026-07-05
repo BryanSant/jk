@@ -33,6 +33,14 @@ public interface WorkspaceBuildListener {
     /** A module finished (success or failure). */
     default void onModuleFinish(BuildService.ModuleOutcome outcome) {}
 
+    /**
+     * A wall-clock estimate (ms) for the whole build, computed by the engine's schedule-aware model —
+     * emitted once up front (from learned/calibrated rates) and re-projected as modules finish and
+     * real throughput is measured. A front-end renders it as a countdown; {@code 0} means "no
+     * trustworthy estimate — count up instead".
+     */
+    default void onEtaEstimate(long millis) {}
+
     /** The whole workspace build finished. */
     default void onWorkspaceFinish(BuildService.WorkspaceResult result) {}
 }

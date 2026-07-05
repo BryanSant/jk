@@ -146,6 +146,29 @@ The mutable global *channels that carry request data* now live on `Session` (eac
 - **M6** — Extract/bless `jk-api`; CLI facades (`ProjectContext`, `CliOutput`, `WorkspaceCommand`,
   `Exit`); delete unreachable parent `run()` bodies; update self-host `jk.toml` + jk.jk mirror.
 
+## Long-term target: the workspace-build path (records the end state we're converging on)
+
+One engine entry point, `BuildService.buildWorkspace(WorkspaceRequest, WorkspaceBuildListener)`, owns
+*everything* about running a workspace build — because all of it is engine knowledge, reusable by any
+front-end:
+- **Orchestration:** resolve graph → memory plan → assemble goals → schedule (dep order, concurrent
+  levels) → run each goal → link artifacts → fail-fast.
+- **Estimation model:** the ETA (schedule-aware `EffortWeights.scheduleMillis` + `Calibration` cold
+  anchor + per-module warm/cold rate) is computed in the engine and **emitted as `onEtaEstimate`
+  events** — the front-end only renders the number. Re-projected from measured throughput per level.
+- **Learning:** the per-module `PhaseTimings` ledger (EWMA) and host `Calibration` are recorded by the
+  engine after a successful build — so every front-end's future estimates improve, not just the CLI's.
+
+Front-ends are **pure renderers over `WorkspaceBuildListener`**: `onPlan` (per-module weights →
+calibrate a bar), `onModuleStart` (→ return that module's `GoalListener`; the CLI returns its existing
+`AggregateModuleListener`), `onModuleFinish`, `onEtaEstimate`, `onWorkspaceFinish`. The CLI live TUI,
+the headless `--verbose`/`--output json` path, a GitHub Action, an IDE, and a web backend all consume
+the same events. `WorkspaceRequest.dirtyHint` lets a caller that already forecasted (the CLI's
+fully-cached "all up to date" shortcut) avoid a redundant forecast; a headless caller passes null.
+
+Only genuinely client-local concerns stay in the CLI: TTY animation (`CommandManager`), deferred-output
+ordering, glyph/theme choice, and the fully-cached-shortcut *rendering* decision.
+
 ## Invariants to hold at every commit
 - `./gradlew :cli:test` (and the full suite) green.
 - No new `System.out`/`System.err`/`System.setOut` in kernel modules; user text routes through

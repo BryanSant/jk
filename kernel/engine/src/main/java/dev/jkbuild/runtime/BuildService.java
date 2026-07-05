@@ -180,7 +180,10 @@ public final class BuildService {
             int workers,
             String profile,
             boolean skipTests,
-            boolean verbose) {}
+            boolean verbose,
+            // Pre-computed dirty module dirs, or null to forecast internally. Lets a caller that
+            // already forecasted (the CLI's fully-cached "all up to date" shortcut) skip a redundant pass.
+            Set<Path> dirtyHint) {}
 
     /** A module's assembled goal + the estimates a caller needs to render/calibrate. */
     public record ModulePlan(BuildGraph.BuildUnit unit, Goal goal, int weight, boolean fullyCached, Path cache) {
@@ -241,8 +244,10 @@ public final class BuildService {
 
         Set<Path> moduleDirs = new LinkedHashSet<>();
         for (BuildGraph.BuildUnit u : units) moduleDirs.add(u.dir());
-        Set<Path> dirty = forecastDirtyDirs(graph, req.cache());
+        Set<Path> dirty = req.dirtyHint() != null ? req.dirtyHint() : forecastDirtyDirs(graph, req.cache());
 
+        // Each module's phase durations feed one shared sink, folded into the learned ledger on success.
+        List<PhaseTimings.Sample> timingSamples = Collections.synchronizedList(new ArrayList<>());
         Map<Path, ModulePlan> plans = new LinkedHashMap<>();
         for (BuildGraph.BuildUnit u : units) {
             ModulePlan p = prepareModule(u, req, moduleDirs, dirty.contains(u.dir()));
@@ -253,12 +258,26 @@ public final class BuildService {
                 listener.onWorkspaceFinish(r);
                 return r;
             }
+            p.goal().addListener(new PhaseTimingsRecorder(u.dir().toString(), timingSamples));
             plans.put(u.dir(), p);
         }
         listener.onPlan(List.copyOf(plans.values()));
 
+        // ETA model (schedule-aware, per-module warm/cold rate) — engine knowledge, emitted as events.
+        Map<Path, EffortWeights.ModuleCost> costByDir = new LinkedHashMap<>();
+        for (var e : plans.entrySet()) {
+            costByDir.put(
+                    e.getKey(),
+                    EffortWeights.costOf(e.getKey(), graph.edges().getOrDefault(e.getKey(), Set.of()), e.getValue().goal()));
+        }
+        int concurrency = HeapPlan.requestedJvms(width, req.workers() > 0 ? req.workers() : 1, parallelTests, cap);
+        listener.onEtaEstimate(seedEta(
+                new ArrayList<>(costByDir.values()), plans.keySet(), concurrency, parallelTests, req.cache(), req.jdksDir()));
+
         Map<Path, Path> wsLinks = computeWorkspaceLinks(plans.keySet(), req.entryDir());
         List<ModuleOutcome> outcomes = Collections.synchronizedList(new ArrayList<>());
+        List<Double> observedRates = Collections.synchronizedList(new ArrayList<>());
+        long start = System.nanoTime();
         ModuleOutcome failure = WorkspaceScheduler.run(
                 units,
                 BuildGraph.BuildUnit::dir,
@@ -268,15 +287,74 @@ public final class BuildService {
                     for (int i = 0; i < results.size(); i++) {
                         ModuleOutcome o = results.get(i);
                         outcomes.add(o);
-                        if (o.success()) linkModuleArtifacts(ready.get(i).dir(), wsLinks);
-                        else return o; // fail-fast
+                        if (!o.success()) return o; // fail-fast
+                        linkModuleArtifacts(ready.get(i).dir(), wsLinks);
+                        ModulePlan p = plans.get(ready.get(i).dir());
+                        // Skip fully-cached modules — their near-zero time isn't representative of work.
+                        if (p != null && !p.fullyCached() && p.weight() > 0 && o.millis() > 0)
+                            observedRates.add(o.millis() / (double) p.weight());
+                    }
+                    // Re-project remaining ETA from measured throughput: elapsed + reprojected remainder.
+                    Double liveMpw = medianRate(observedRates);
+                    if (liveMpw != null && !remaining.isEmpty()) {
+                        Set<Path> remDirs = new HashSet<>();
+                        for (BuildGraph.BuildUnit u : remaining) remDirs.add(u.dir());
+                        List<EffortWeights.ModuleCost> rem = new ArrayList<>();
+                        for (var ce : costByDir.entrySet()) if (remDirs.contains(ce.getKey())) rem.add(ce.getValue());
+                        long elapsed = (System.nanoTime() - start) / 1_000_000;
+                        listener.onEtaEstimate(elapsed
+                                + EffortWeights.scheduleMillis(rem, concurrency, false, parallelTests, Math.round(liveMpw)));
                     }
                     return null;
                 });
         boolean ok = failure == null;
+        if (ok) {
+            // Fold this run's phase durations + measured throughput into the learned ledger + host
+            // calibration (EWMA) so the next build's estimate is time-accurate. Failed builds don't
+            // record — their phase times are abnormal.
+            PhaseTimings.record(
+                    req.cache(), timingSamples, PhaseTimings.DEFAULT_ALPHA, System.currentTimeMillis());
+            Double runMpw = medianRate(observedRates);
+            if (runMpw != null) Calibration.refine(runMpw, System.currentTimeMillis());
+        }
         WorkspaceResult result = new WorkspaceResult(ok, ok ? 0 : failure.exitCode(), List.copyOf(outcomes), List.of());
         listener.onWorkspaceFinish(result);
         return result;
+    }
+
+    /**
+     * Initial schedule-aware ETA (ms): each module converts weight→ms at its own rate — a warm module
+     * (its dir has learned timings) at the reference {@link EffortWeights#MS_PER_WEIGHT}; a cold module
+     * at this host's measured {@link Calibration}. Returns {@code 0} ("count up") only when a cold
+     * module exists and the host is uncalibratable (no JDK yet) — then no rate is trustworthy.
+     */
+    private static long seedEta(
+            List<EffortWeights.ModuleCost> costs,
+            Set<Path> dirs,
+            int concurrency,
+            boolean parallelTests,
+            Path cache,
+            Path jdksDir) {
+        PhaseTimings timings = PhaseTimings.load(cache);
+        java.util.function.Predicate<Path> warm = dir -> timings.hasTimingsFor(List.of(dir.toString()));
+        boolean anyCold = dirs.stream().anyMatch(dir -> !warm.test(dir));
+        Calibration cal = anyCold ? Calibration.ensure(jdksDir) : null;
+        if (anyCold && (cal == null || !cal.present())) return 0;
+        double coldRate = cal != null ? cal.msPerWeight() : EffortWeights.MS_PER_WEIGHT;
+        return EffortWeights.scheduleMillis(
+                costs, concurrency, false, parallelTests, dir -> warm.test(dir) ? EffortWeights.MS_PER_WEIGHT : coldRate);
+    }
+
+    /** Median of observed per-module ms/weight rates, or null when none recorded yet. */
+    private static Double medianRate(List<Double> rates) {
+        List<Double> sorted;
+        synchronized (rates) {
+            if (rates.isEmpty()) return null;
+            sorted = new ArrayList<>(rates);
+        }
+        sorted.sort(Double::compareTo);
+        int n = sorted.size();
+        return n % 2 == 1 ? sorted.get(n / 2) : (sorted.get(n / 2 - 1) + sorted.get(n / 2)) / 2.0;
     }
 
     /** Assemble one module's goal + estimates (the headless counterpart of the CLI's prepareModule). */
