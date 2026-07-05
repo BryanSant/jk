@@ -252,20 +252,10 @@ public final class BuildCommand implements CliCommand {
         boolean live = mode == GoalConsole.Mode.AUTO || mode == GoalConsole.Mode.QUIET;
 
         if (!live) {
-            // --output json / --verbose: buffered, non-animated path.  Resolve the
-            // graph normally (no TUI to show during it) then run plain.
-            BuildGraph.Result graph = BuildGraph.resolve(entryDir, entryBuild);
-            if (graph.hasErrors()) {
-                for (String err : graph.errors()) System.err.println(ConsoleSpec.errorLine("composite", err));
-                return 2;
-            }
-            List<BuildGraph.BuildUnit> units = graph.topoOrder();
-            if (units.isEmpty()) {
-                System.out.println("(workspace declares no modules)");
-                return 0;
-            }
-            applyMemoryPlan(Math.min(BuildGraph.maxReadyWidth(units, graph.edges()), JkThreads.CPU_THREADS));
-            return runGraphPlain(units, graph.edges());
+            // --output json / --verbose: buffered, non-animated path. The engine drives the whole
+            // workspace build (BuildService.buildWorkspace — resolve graph, memory plan, schedule,
+            // run each module's goal); this listener renders the append-only block + [k/N] line.
+            return runWorkspaceHeadless(entryDir, entryBuild, cache);
         }
 
         // Live path (AUTO / QUIET): resolve the graph and run the cache forecast
@@ -313,25 +303,87 @@ public final class BuildCommand implements CliCommand {
      */
 
     /** Buffered, append-only scheduler: each unit flushes a block + a [k/N] line on completion. */
-    private int runGraphPlain(List<BuildGraph.BuildUnit> units, Map<Path, Set<Path>> edges) {
-        int total = units.size();
-        int[] completed = {0};
+    /**
+     * Non-animated workspace build: the engine ({@link dev.jkbuild.runtime.BuildService#buildWorkspace})
+     * owns the whole loop; this listener renders each module's buffered output block + a ✓/✗ {@code
+     * [k/N]} line, then the summary chip — the same append-only output the CLI produced before, now a
+     * pure renderer over the engine's events.
+     */
+    private int runWorkspaceHeadless(Path entryDir, JkBuild entryBuild, Path cache) {
+        var request = new dev.jkbuild.runtime.BuildService.WorkspaceRequest(
+                entryDir,
+                entryBuild,
+                cache,
+                jdksDir,
+                workers != null ? workers : 1,
+                profileName,
+                buildOpts.skipTests,
+                global.verbose);
+        Map<Path, List<String>> buffers = new java.util.concurrent.ConcurrentHashMap<>();
+        int[] total = {0};
+        java.util.concurrent.atomic.AtomicInteger done = new java.util.concurrent.atomic.AtomicInteger();
         long start = System.nanoTime();
-        // Engine owns the DAG dispatch; this sink reports each finished module and fails fast.
-        UnitOutcome failure = dev.jkbuild.runtime.WorkspaceScheduler.run(
-                units, BuildGraph.BuildUnit::dir, edges, this::buildUnit, (ready, results, remaining) -> {
-                    for (UnitOutcome o : results) {
-                        report(o, ++completed[0], total);
-                        if (!o.success()) return o;
+        dev.jkbuild.runtime.BuildService.WorkspaceResult result =
+                dev.jkbuild.runtime.BuildService.buildWorkspace(request, new dev.jkbuild.runtime.WorkspaceBuildListener() {
+                    @Override
+                    public void onPlan(List<dev.jkbuild.runtime.BuildService.ModulePlan> plan) {
+                        total[0] = plan.size();
                     }
-                    return null;
+
+                    @Override
+                    public dev.jkbuild.run.GoalListener onModuleStart(dev.jkbuild.runtime.BuildService.ModulePlan m) {
+                        // Durable run log, same as the old buffered path.
+                        var log = dev.jkbuild.cli.run.EventLogListener.open(
+                                m.cache(), m.goal().name());
+                        if (log != null) m.goal().addListener(log);
+                        List<String> buf = java.util.Collections.synchronizedList(new ArrayList<>());
+                        buffers.put(m.dir(), buf);
+                        return new dev.jkbuild.run.GoalListener() {
+                            @Override
+                            public synchronized void output(String phase, String line) {
+                                buf.add(line);
+                            }
+
+                            @Override
+                            public synchronized void warn(String phase, String code, String message) {
+                                buf.add("  " + Glyphs.BANG + " " + phase + ": " + message);
+                            }
+
+                            @Override
+                            public synchronized void error(String phase, String code, String message) {
+                                buf.add("  " + Glyphs.CROSS + " " + phase + ": " + message);
+                            }
+                        };
+                    }
+
+                    @Override
+                    public void onModuleFinish(dev.jkbuild.runtime.BuildService.ModuleOutcome o) {
+                        if (global.outputIsJson()) return;
+                        List<String> buf = buffers.getOrDefault(o.dir(), List.of());
+                        synchronized (OUT_LOCK) {
+                            for (String line : buf) System.out.println(line);
+                            System.out.println(
+                                    completionLine(o.success(), done.incrementAndGet(), total[0], o.coord(), o.millis()));
+                        }
+                    }
                 });
-        if (failure != null) {
-            System.err.println("jk build: " + failure.coord() + " failed (exit " + failure.exitCode() + ")");
-            return failure.exitCode();
+        if (!result.errors().isEmpty()) {
+            for (String err : result.errors()) System.err.println(ConsoleSpec.errorLine("composite", err));
+            return 2;
+        }
+        if (total[0] == 0) {
+            System.out.println("(workspace declares no modules)");
+            return 0;
+        }
+        if (!result.success()) {
+            result.modules().stream()
+                    .filter(m -> !m.success())
+                    .findFirst()
+                    .ifPresent(f -> System.err.println("jk build: " + f.coord() + " failed (exit " + f.exitCode() + ")"));
+            return result.exitCode();
         }
         System.out.println(GoalWedge.chipLine(
-                dev.jkbuild.cli.tui.Glyphs.CHECK, "Build", GlobalConfig.nerdfont(), modulesTail(total, start)));
+                dev.jkbuild.cli.tui.Glyphs.CHECK, "Build", GlobalConfig.nerdfont(), modulesTail(total[0], start)));
         return 0;
     }
 
@@ -560,45 +612,10 @@ public final class BuildCommand implements CliCommand {
     }
 
     /** Build one graph unit with output buffered. */
-    private UnitOutcome buildUnit(BuildGraph.BuildUnit unit) {
-        PreparedModule pm = prepareModule(unit.dir(), buildOpts.skipTests);
-        if (pm == null) {
-            return new UnitOutcome(
-                    unit.coord(),
-                    false,
-                    2,
-                    0,
-                    List.of("no jk.toml in " + dev.jkbuild.cli.PathDisplay.styledRaw(unit.dir())));
-        }
-        long t0 = System.nanoTime();
-        try {
-            GoalConsole.Buffered b = GoalConsole.runGoalBuffered(pm.goal(), pm.cache());
-            long ms = (System.nanoTime() - t0) / 1_000_000;
-            int exit = b.result().success() ? 0 : exitCodeFor(pm.goal());
-            return new UnitOutcome(unit.coord(), b.result().success(), exit, ms, b.output());
-        } catch (RuntimeException e) {
-            return new UnitOutcome(
-                    unit.coord(),
-                    false,
-                    1,
-                    (System.nanoTime() - t0) / 1_000_000,
-                    List.of("  " + Theme.colorize(Glyphs.CROSS, Theme.active().error()) + " " + (e.getMessage() == null ? e.toString() : e.getMessage())));
-        }
-    }
-
     /** Test failures exit 4; everything else exits 1 (mirrors {@link #runPrepared}). */
     private static int exitCodeFor(Goal goal) {
         var testResult = goal.get(TEST_RESULT).orElse(null);
         return testResult != null && !testResult.allPassed() ? 4 : 1;
-    }
-
-    /** Flush a finished unit's buffered output, then a one-line [k/N] result. Serialized. */
-    private void report(UnitOutcome o, int k, int total) {
-        if (global.outputIsJson()) return;
-        synchronized (OUT_LOCK) {
-            for (String line : o.output()) System.out.println(line);
-            System.out.println(completionLine(o.success(), k, total, o.coord(), o.millis()));
-        }
     }
 
     /**
