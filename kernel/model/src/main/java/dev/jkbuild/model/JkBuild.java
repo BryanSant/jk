@@ -163,6 +163,61 @@ public record JkBuild(
         return new JkBuild(project, Dependencies.empty(), List.of(), Profiles.empty(), Features.empty(), null);
     }
 
+    /**
+     * A fluent builder for {@code JkBuild} — the readable replacement for the telescoping
+     * constructors. Only {@code project} is required; every other field defaults to the same value
+     * the canonical constructor normalizes to (empty collections / {@code EMPTY} blocks / no
+     * workspace). Chain the setters you need and call {@link Builder#build()}.
+     */
+    public static Builder builder(Project project) {
+        return new Builder(project);
+    }
+
+    /** Mutable accumulator for {@link JkBuild}; see {@link #builder}. */
+    public static final class Builder {
+        private final Project project;
+        private Dependencies dependencies = Dependencies.empty();
+        private List<RepositorySpec> repositories = List.of();
+        private Profiles profiles = Profiles.empty();
+        private Features features = Features.empty();
+        private Workspace workspace;
+        private Map<String, String> manifest = Map.of();
+        private List<PluginDeclaration> plugins = List.of();
+        private NativeConfig nativeConfig;
+        private Build build;
+        private FormatConfig format;
+
+        private Builder(Project project) {
+            this.project = project;
+        }
+
+        public Builder dependencies(Dependencies dependencies) { this.dependencies = dependencies; return this; }
+
+        public Builder repositories(List<RepositorySpec> repositories) { this.repositories = repositories; return this; }
+
+        public Builder profiles(Profiles profiles) { this.profiles = profiles; return this; }
+
+        public Builder features(Features features) { this.features = features; return this; }
+
+        public Builder workspace(Workspace workspace) { this.workspace = workspace; return this; }
+
+        public Builder manifest(Map<String, String> manifest) { this.manifest = manifest; return this; }
+
+        public Builder plugins(List<PluginDeclaration> plugins) { this.plugins = plugins; return this; }
+
+        public Builder nativeConfig(NativeConfig nativeConfig) { this.nativeConfig = nativeConfig; return this; }
+
+        public Builder build(Build build) { this.build = build; return this; }
+
+        public Builder format(FormatConfig format) { this.format = format; return this; }
+
+        public JkBuild build() {
+            return new JkBuild(
+                    project, dependencies, repositories, profiles, features, workspace,
+                    manifest, plugins, nativeConfig, build, format);
+        }
+    }
+
     /** Return a copy with the given custom jar-manifest attributes. */
     public JkBuild withManifest(Map<String, String> manifest) {
         return new JkBuild(
@@ -432,6 +487,77 @@ public record JkBuild(
         /** A bare-major int as a jdk spec string ({@code 25} → {@code "25"}); 0/negative → unset. */
         private static String majorSpec(int major) {
             return major > 0 ? Integer.toString(major) : null;
+        }
+
+        /**
+         * A fluent builder for {@code Project} — the readable replacement for the telescoping
+         * constructors. Only {@code group}/{@code name}/{@code version} are required; every other
+         * field defaults to the same value the canonical constructor normalizes to (unset/DISABLED/
+         * AUTO). Chain the setters you need and call {@link Builder#build()}.
+         */
+        public static Builder builder(String group, String name, String version) {
+            return new Builder(group, name, version);
+        }
+
+        /** Mutable accumulator for {@link Project}; see {@link #builder}. */
+        public static final class Builder {
+            private final String group;
+            private final String name;
+            private final String version;
+            private String jdk;
+            private String graal;
+            private int java;
+            private VersionSelector kotlin;
+            private String main;
+            private boolean shadow;
+            private NativeMode nativeMode = NativeMode.DISABLED;
+            private SourcesMode sourcesMode = SourcesMode.DISABLED;
+            private String description;
+            private boolean application;
+            private boolean m2install;
+            private Layout layout = Layout.AUTO;
+
+            private Builder(String group, String name, String version) {
+                this.group = group;
+                this.name = name;
+                this.version = version;
+            }
+
+            /** Toolchain JDK spec, e.g. {@code "temurin-25"} or {@code "25"}. */
+            public Builder jdk(String jdk) { this.jdk = jdk; return this; }
+
+            /** Toolchain JDK from a bare major ({@code 25} → {@code "25"}; 0/negative → unset). */
+            public Builder jdkMajor(int major) { this.jdk = majorSpec(major); return this; }
+
+            /** GraalVM spec for native builds. */
+            public Builder graal(String graal) { this.graal = graal; return this; }
+
+            /** {@code --release} target for javac (0 → falls back to the jdk major). */
+            public Builder java(int java) { this.java = java; return this; }
+
+            public Builder kotlin(VersionSelector kotlin) { this.kotlin = kotlin; return this; }
+
+            public Builder main(String main) { this.main = main; return this; }
+
+            public Builder shadow(boolean shadow) { this.shadow = shadow; return this; }
+
+            public Builder nativeMode(NativeMode nativeMode) { this.nativeMode = nativeMode; return this; }
+
+            public Builder sourcesMode(SourcesMode sourcesMode) { this.sourcesMode = sourcesMode; return this; }
+
+            public Builder description(String description) { this.description = description; return this; }
+
+            public Builder application(boolean application) { this.application = application; return this; }
+
+            public Builder m2install(boolean m2install) { this.m2install = m2install; return this; }
+
+            public Builder layout(Layout layout) { this.layout = layout; return this; }
+
+            public Project build() {
+                return new Project(
+                        group, name, version, jdk, graal, java, kotlin, main, shadow,
+                        nativeMode, sourcesMode, description, application, m2install, layout);
+            }
         }
 
         /** Backward-compat: true when native mode is not DISABLED. */
