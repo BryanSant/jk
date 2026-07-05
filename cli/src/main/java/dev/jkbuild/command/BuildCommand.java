@@ -23,11 +23,9 @@ import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.run.Goal;
 import dev.jkbuild.run.GoalKey;
 import dev.jkbuild.run.GoalResult;
-import dev.jkbuild.runtime.AutoLock;
 import dev.jkbuild.runtime.BuildGraph;
 import dev.jkbuild.runtime.BuildPipeline;
 import dev.jkbuild.runtime.LockFlow;
-import dev.jkbuild.resolver.pubgrub.UnsatisfiableException;
 import dev.jkbuild.test.JUnitLauncher;
 import dev.jkbuild.util.JkDirs;
 import dev.jkbuild.util.JkThreads;
@@ -193,46 +191,15 @@ public final class BuildCommand implements CliCommand {
      * success. Transient failures (I/O, network) fall through to the normal per-unit path.
      */
     private int ensureWorkspaceLockFresh(Path root, JkBuild rootBuild) {
-        Path rootLock = root.resolve("jk.lock");
-        if (!workspaceLockStale(root, rootBuild, rootLock)) return 0;
+        // Policy lives in the engine (BuildService); the CLI only renders the failure.
         Path cache = cacheDir != null ? cacheDir : JkDirs.cache();
-        boolean nerdfont = GlobalConfig.nerdfont();
-        try {
-            LockFlow.Result r = LockFlow.run(root, cache, List.of(), true, null);
-            if (r.status() != 0) {
-                if (r.error() != null && !global.outputIsJson()) System.err.println(r.error());
-                if (!global.outputIsJson())
-                    System.err.println(GoalWedge.failureLine("Build", nerdfont, "dependency resolution failed"));
-                return r.status();
-            }
-            return 0;
-        } catch (UnsatisfiableException e) {
-            if (!global.outputIsJson()) {
-                System.err.println(e.getMessage());
-                System.err.println(GoalWedge.failureLine("Build", nerdfont, "dependency resolution failed"));
-            }
-            return 6;
-        } catch (Exception e) {
-            // Soft failure (I/O, network): don't block the build on the guard — the per-unit
-            // path will surface any genuine problem when it resolves classpaths.
-            return 0;
+        dev.jkbuild.runtime.BuildService.LockGuard g =
+                dev.jkbuild.runtime.BuildService.ensureWorkspaceLockFresh(root, rootBuild, cache);
+        if (g.status() != 0 && !global.outputIsJson()) {
+            if (g.error() != null) System.err.println(g.error());
+            System.err.println(GoalWedge.failureLine("Build", GlobalConfig.nerdfont(), "dependency resolution failed"));
         }
-    }
-
-    /**
-     * True when {@code rootLock} is absent or older than the root manifest or any declared member
-     * manifest — i.e. the merged workspace lock no longer reflects the manifests it was derived from.
-     */
-    private static boolean workspaceLockStale(Path root, JkBuild rootBuild, Path rootLock) {
-        if (!Files.exists(rootLock)) return true;
-        if (AutoLock.isStale(root, rootLock)) return true; // root jk.toml newer than the lock
-        if (rootBuild.workspace() != null) {
-            for (String module : rootBuild.workspace().modules()) {
-                Path moduleDir = root.resolve(module).normalize();
-                if (AutoLock.isStale(moduleDir, rootLock)) return true; // a member manifest is newer
-            }
-        }
-        return false;
+        return g.status();
     }
 
     /**
