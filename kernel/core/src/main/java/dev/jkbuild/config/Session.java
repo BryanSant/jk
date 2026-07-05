@@ -24,34 +24,41 @@ import java.util.Objects;
  * @param workingDir absolute working directory for this invocation
  * @param cacheDir jk cache root for this invocation
  * @param jdksDir JDK install root, or {@code null} to use the default ({@link JkDirs#jdks()})
+ * @param jvm resolved worker-JVM tuning (max-ram / gc / extra args) for the forks this build spawns
  */
-public record Session(JkConfig config, Path workingDir, Path cacheDir, Path jdksDir) {
+public record Session(JkConfig config, Path workingDir, Path cacheDir, Path jdksDir, WorkerTuning jvm) {
 
     public Session {
         Objects.requireNonNull(config, "config");
         Objects.requireNonNull(workingDir, "workingDir");
         Objects.requireNonNull(cacheDir, "cacheDir");
+        Objects.requireNonNull(jvm, "jvm");
     }
 
-    /** A default session: empty config, current working directory, default cache/JDK roots. */
+    /** A default session: empty config, current working directory, default cache/JDK roots, no tuning. */
     public static Session defaults() {
-        return new Session(JkConfig.empty(), Path.of("").toAbsolutePath().normalize(), JkDirs.cache(), null);
+        return new Session(
+                JkConfig.empty(), Path.of("").toAbsolutePath().normalize(), JkDirs.cache(), null, WorkerTuning.NONE);
     }
 
     public Session withConfig(JkConfig newConfig) {
-        return new Session(newConfig, workingDir, cacheDir, jdksDir);
+        return new Session(newConfig, workingDir, cacheDir, jdksDir, jvm);
     }
 
     public Session withWorkingDir(Path dir) {
-        return new Session(config, dir.toAbsolutePath().normalize(), cacheDir, jdksDir);
+        return new Session(config, dir.toAbsolutePath().normalize(), cacheDir, jdksDir, jvm);
     }
 
     public Session withCacheDir(Path dir) {
-        return new Session(config, workingDir, dir, jdksDir);
+        return new Session(config, workingDir, dir, jdksDir, jvm);
     }
 
     public Session withJdksDir(Path dir) {
-        return new Session(config, workingDir, cacheDir, dir);
+        return new Session(config, workingDir, cacheDir, dir, jvm);
+    }
+
+    public Session withJvm(WorkerTuning tuning) {
+        return new Session(config, workingDir, cacheDir, jdksDir, tuning == null ? WorkerTuning.NONE : tuning);
     }
 
     /** JDK install root, resolving the default when unset. */

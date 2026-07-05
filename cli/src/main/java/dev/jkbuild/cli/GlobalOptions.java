@@ -73,12 +73,12 @@ public final class GlobalOptions {
     public List<String> jvmArgs = List.of();
 
     /**
-     * The CLI-supplied JVM tuning as the highest-precedence {@link
-     * dev.jkbuild.worker.JvmOptions.Settings} layer. {@code gc} / {@code string-dedup} are left unset
-     * here — those come from env / {@code jk.toml}; the CLI exposes only the two most common knobs.
+     * The CLI-supplied JVM tuning as the highest-precedence {@link dev.jkbuild.config.WorkerTuning}
+     * layer. {@code gc} / {@code string-dedup} are left unset here — those come from env / {@code
+     * jk.toml}; the CLI exposes only the two most common knobs.
      */
-    public dev.jkbuild.worker.JvmOptions.Settings jvmCli() {
-        return new dev.jkbuild.worker.JvmOptions.Settings(maxRamPercent, null, null, jvmArgs);
+    public dev.jkbuild.config.WorkerTuning jvmCli() {
+        return new dev.jkbuild.config.WorkerTuning(maxRamPercent, null, null, jvmArgs);
     }
 
     /**
@@ -114,14 +114,14 @@ public final class GlobalOptions {
         // No host JVM carries these across the worker/process boundary, so stash
         // them process-wide (same channel as JVM tuning above). The shared
         // JdkResolution / GraalResolver read them as the top resolution tier.
+        // (M1c remainder: fold these onto the Session alongside the JVM tuning.)
         applyProp("jk.jdk", g.jdk);
         applyProp("jk.graal", g.graal);
         // Resolve JVM tuning (flag > env > jk.toml > default) once for the whole
-        // invocation and stash it process-wide, so every worker fork the build
-        // spawns picks it up — not just the JK_* env layer. (With no host JVM to
-        // carry it across a process boundary, this static is the channel.)
-        dev.jkbuild.worker.JvmOptions.setProcessSettings(
-                dev.jkbuild.worker.JvmOptions.resolve(g.jvmCli(), g.workingDir()));
+        // invocation and carry it on the request-scoped Session, so every worker
+        // fork the build spawns reads it from the request (see JvmOptions.tuning()).
+        dev.jkbuild.config.SessionContext.install(dev.jkbuild.config.SessionContext.current()
+                .withJvm(dev.jkbuild.worker.JvmOptions.resolve(g.jvmCli(), g.workingDir())));
         return g;
     }
 

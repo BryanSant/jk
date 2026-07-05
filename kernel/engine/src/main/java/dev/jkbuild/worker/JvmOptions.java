@@ -2,7 +2,9 @@
 package dev.jkbuild.worker;
 
 import dev.jkbuild.config.EnvValues;
+import dev.jkbuild.config.SessionContext;
 import dev.jkbuild.config.TomlValues;
+import dev.jkbuild.config.WorkerTuning;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -18,11 +20,15 @@ import org.tomlj.TomlTable;
  * compile/test/etc. Because {@code jk build --workers N} forks {@code N} test JVMs at once, a flat
  * "use 70% of RAM" would overcommit. The default here is a conservative {@link
  * #DEFAULT_MAX_RAM_PERCENT}; for a set of {@code N} concurrently-launched JVMs the cap is divided
- * by {@code N} (see {@link #flags(Settings, int)}), so the live workers fit.
+ * by {@code N} (see {@link #flags(WorkerTuning, int)}), so the live workers fit.
  *
  * <p>Settings resolve highest-precedence-first: <b>CLI flag</b> ({@code --max-ram-percent} / {@code
  * --jvm-arg}) &gt; <b>env</b> ({@code JK_MAX_RAM_PERCENT}, {@code JK_JVM_GC}, {@code
  * JK_JVM_STRING_DEDUP}, {@code JK_JVM_ARGS}) &gt; <b>{@code [jvm]} in jk.toml</b> &gt; default.
+ *
+ * <p>The resolved {@link WorkerTuning} is carried on the request-scoped {@link
+ * dev.jkbuild.config.Session} (installed by the CLI composition root) and read here via {@link
+ * #tuning()} — so worker forks pick up the request's tuning instead of a process-global channel.
  */
 public final class JvmOptions {
 
@@ -40,26 +46,13 @@ public final class JvmOptions {
     public static final String ENV_ARGS = "JK_JVM_ARGS";
 
     /**
-     * Resolved (or partially-resolved) tuning. {@code null} scalars mean "fall back to the next layer
-     * / the built-in default". {@code extraArgs} are raw flags appended verbatim.
-     */
-    public record Settings(Double maxRamPercent, String gc, Boolean stringDedup, List<String> extraArgs) {
-        public Settings {
-            extraArgs = extraArgs == null ? List.of() : List.copyOf(extraArgs);
-        }
-
-        /** The empty layer — every field unset. */
-        public static final Settings NONE = new Settings(null, null, null, List.of());
-    }
-
-    /**
      * Overlay {@code high} onto {@code low}: high's non-null scalars win; args concatenate (low
      * first).
      */
-    private static Settings overlay(Settings high, Settings low) {
+    private static WorkerTuning overlay(WorkerTuning high, WorkerTuning low) {
         List<String> args = new ArrayList<>(low.extraArgs());
         args.addAll(high.extraArgs());
-        return new Settings(
+        return new WorkerTuning(
                 high.maxRamPercent() != null ? high.maxRamPercent() : low.maxRamPercent(),
                 high.gc() != null ? high.gc() : low.gc(),
                 high.stringDedup() != null ? high.stringDedup() : low.stringDedup(),
@@ -69,16 +62,16 @@ public final class JvmOptions {
     /**
      * Resolve precedence: {@code cli} &gt; env &gt; {@code projectDir/jk.toml [jvm]} &gt; default.
      */
-    public static Settings resolve(Settings cli, Path projectDir) {
-        Settings eff = cli == null ? Settings.NONE : cli;
+    public static WorkerTuning resolve(WorkerTuning cli, Path projectDir) {
+        WorkerTuning eff = cli == null ? WorkerTuning.NONE : cli;
         eff = overlay(eff, fromEnv());
         if (projectDir != null) eff = overlay(eff, fromToml(projectDir.resolve("jk.toml")));
         return eff;
     }
 
     /** The {@code JK_*} environment layer. Coercion via the shared {@link EnvValues}. */
-    public static Settings fromEnv() {
-        return new Settings(
+    public static WorkerTuning fromEnv() {
+        return new WorkerTuning(
                 EnvValues.doubleValue(System::getenv, ENV_MAX_RAM).orElse(null),
                 EnvValues.string(System::getenv, ENV_GC).orElse(null),
                 EnvValues.bool(System::getenv, ENV_STRING_DEDUP).orElse(null),
@@ -86,17 +79,17 @@ public final class JvmOptions {
     }
 
     /**
-     * The {@code [jvm]} table of a {@code jk.toml}, or {@link Settings#NONE}. Never throws — a
+     * The {@code [jvm]} table of a {@code jk.toml}, or {@link WorkerTuning#NONE}. Never throws — a
      * missing/malformed file or table degrades to {@code NONE}. Coercion via the shared {@link
      * TomlValues} ({@code max-ram-percent} accepts a TOML integer or float; {@code args} keeps only
      * string elements).
      */
-    public static Settings fromToml(Path jkToml) {
+    public static WorkerTuning fromToml(Path jkToml) {
         Optional<TomlParseResult> parsed = TomlValues.parse(jkToml);
-        if (parsed.isEmpty()) return Settings.NONE;
+        if (parsed.isEmpty()) return WorkerTuning.NONE;
         TomlTable jvm = parsed.get().getTable("jvm");
-        if (jvm == null) return Settings.NONE;
-        return new Settings(
+        if (jvm == null) return WorkerTuning.NONE;
+        return new WorkerTuning(
                 TomlValues.optDouble(jvm, "max-ram-percent").orElse(null),
                 TomlValues.optString(jvm, "gc").orElse(null),
                 TomlValues.optBoolean(jvm, "string-dedup").orElse(null),
@@ -108,8 +101,8 @@ public final class JvmOptions {
      * simultaneously-launched JVMs (pass {@code 1} for a lone worker; the test-runner passes its
      * worker count).
      */
-    public static List<String> flags(Settings settings, int concurrency) {
-        Settings s = settings == null ? Settings.NONE : settings;
+    public static List<String> flags(WorkerTuning settings, int concurrency) {
+        WorkerTuning s = settings == null ? WorkerTuning.NONE : settings;
         double base = s.maxRamPercent() != null ? s.maxRamPercent() : DEFAULT_MAX_RAM_PERCENT;
         double perJvm = base / Math.max(1, concurrency);
         String gc = (s.gc() != null ? s.gc() : DEFAULT_GC).toLowerCase(Locale.ROOT);
@@ -134,28 +127,20 @@ public final class JvmOptions {
     }
 
     /**
-     * Process-wide resolved tuning for this jk invocation. The CLI resolves it once (flag &gt; env
-     * &gt; jk.toml &gt; default) via {@link #setProcessSettings} and every worker fork reads it
-     * through {@link #workerFlags}. Since jk runs the pipeline and forks workers all in one process,
-     * a process-global is the propagation channel that the now-removed host JVM used to provide.
+     * The request-scoped worker tuning, read from the current {@link dev.jkbuild.config.Session}. When
+     * the session carries none (e.g. a direct engine/test call that bypassed the CLI composition
+     * root), fall back to the {@code JK_*} env layer — mirroring the old {@code processSettings()}
+     * default.
      */
-    private static volatile Settings processSettings;
-
-    /** Stash the fully-resolved tuning so every subsequent worker fork picks it up. */
-    public static void setProcessSettings(Settings settings) {
-        processSettings = settings;
-    }
-
-    /** The resolved process tuning, or the env layer when unset (e.g. direct test calls). */
-    public static Settings processSettings() {
-        Settings s = processSettings;
-        return s != null ? s : fromEnv();
+    private static WorkerTuning tuning() {
+        WorkerTuning t = SessionContext.current().jvm();
+        return (t == null || t == WorkerTuning.NONE) ? fromEnv() : t;
     }
 
     /**
      * Worker-fork JVM flags for {@code concurrency} simultaneously-launched JVMs, built from the
-     * resolved {@linkplain #processSettings() process tuning} — so a {@code --max-ram-percent} flag
-     * or a {@code [jvm]} table reaches the worker.
+     * request's {@linkplain #tuning() tuning} — so a {@code --max-ram-percent} flag or a {@code [jvm]}
+     * table reaches the worker.
      *
      * <p>When a {@linkplain #processHeapPlan() heap plan} is in effect (the default — no explicit
      * heap tuning), absolute {@code -Xms}/{@code -Xmx}/ {@code -XX:SoftMaxHeapSize} from the plan
@@ -163,24 +148,30 @@ public final class JvmOptions {
      * at once, so {@code concurrency} is ignored in that case.
      */
     public static List<String> workerFlags(int concurrency) {
+        WorkerTuning s = tuning();
         HeapPlan.Plan plan = processHeapPlan();
-        if (plan != null && autoHeapEnabled()) return absoluteFlags(plan, processSettings());
-        return flags(processSettings(), concurrency);
+        if (plan != null && autoHeapEnabled(s)) return absoluteFlags(plan, s);
+        return flags(s, concurrency);
     }
 
     /**
      * Resolved heap budget for this invocation, or {@code null} when unset / explicitly overridden.
+     *
+     * <p>Unlike JVM tuning (now request-scoped on {@link dev.jkbuild.config.Session}), the heap plan
+     * and its paired {@link WorkerSlots} permit count remain per-invocation resource-management state
+     * configured once by the CLI ({@link #planAndApply}). Making them per-session pools is a later
+     * server-hardening step (see docs/architecture/re-foundation.md, M1c remainder).
      */
     private static volatile HeapPlan.Plan heapPlan;
 
     /**
-     * Probe memory, compute the heap budget for {@code requestedJvms} desired forks, and apply it
-     * process-wide: stash it for {@link #workerFlags} and size {@link WorkerSlots} so no more than
-     * the plan's parallelism run at once. A no-op (returns {@code null}, opens the worker gate) when
-     * the user supplied explicit heap tuning — their settings then drive sizing as before.
+     * Probe memory, compute the heap budget for {@code requestedJvms} desired forks, and apply it:
+     * stash it for {@link #workerFlags} and size {@link WorkerSlots} so no more than the plan's
+     * parallelism run at once. A no-op (returns {@code null}, opens the worker gate) when the request
+     * supplied explicit heap tuning — those settings then drive sizing as before.
      */
     public static HeapPlan.Plan planAndApply(int requestedJvms) {
-        if (!autoHeapEnabled()) {
+        if (!autoHeapEnabled(tuning())) {
             WorkerSlots.configure(0); // unbounded: honour the user's relative/explicit sizing
             heapPlan = null;
             return null;
@@ -197,12 +188,16 @@ public final class JvmOptions {
     }
 
     /**
-     * True when jk should auto-size worker heaps: the user pinned neither a {@code --max-ram-percent}
-     * / {@code [jvm] max-ram-percent} nor an explicit heap flag ({@code -Xmx}/{@code -Xms}/{@code
-     * -XX:MaxHeapSize}/ {@code -XX:MaxRAMPercentage}) via {@code --jvm-arg} / {@code [jvm] args}.
+     * True when jk should auto-size worker heaps: the request pinned neither a {@code
+     * --max-ram-percent} / {@code [jvm] max-ram-percent} nor an explicit heap flag ({@code
+     * -Xmx}/{@code -Xms}/{@code -XX:MaxHeapSize}/ {@code -XX:MaxRAMPercentage}) via {@code --jvm-arg}
+     * / {@code [jvm] args}.
      */
     public static boolean autoHeapEnabled() {
-        Settings s = processSettings();
+        return autoHeapEnabled(tuning());
+    }
+
+    private static boolean autoHeapEnabled(WorkerTuning s) {
         if (s.maxRamPercent() != null) return false;
         for (String a : s.extraArgs()) {
             if (a.startsWith("-Xmx")
@@ -223,7 +218,7 @@ public final class JvmOptions {
      * with {@code ZUncommit} so idle heap is returned to the OS). {@code SoftMaxHeapSize} is only
      * emitted for collectors that honour it (ZGC / G1).
      */
-    static List<String> absoluteFlags(HeapPlan.Plan plan, Settings s) {
+    static List<String> absoluteFlags(HeapPlan.Plan plan, WorkerTuning s) {
         String gc = (s.gc() != null ? s.gc() : DEFAULT_GC).toLowerCase(Locale.ROOT);
         boolean dedup = s.stringDedup() == null || s.stringDedup();
         boolean softMaxAware = gc.equals("zgc") || gc.equals("g1");
