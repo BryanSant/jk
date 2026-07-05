@@ -86,16 +86,16 @@ public final class WorkspaceMerge {
             }
         }
 
-        return new JkBuild(
-                module.project(),
-                new JkBuild.Dependencies(resolvedByScope),
-                module.repositories(),
-                module.profiles(),
-                module.features(),
-                module.workspace(),
-                module.manifest(),
-                module.plugins(),
-                module.nativeConfig());
+        return JkBuild.builder(module.project())
+                .dependencies(new JkBuild.Dependencies(resolvedByScope))
+                .repositories(module.repositories())
+                .profiles(module.profiles())
+                .features(module.features())
+                .workspace(module.workspace())
+                .manifest(module.manifest())
+                .plugins(module.plugins())
+                .nativeConfig(module.nativeConfig())
+                .build();
     }
 
     public static JkBuild merge(JkBuild root, Collection<JkBuild> modules) {
@@ -132,16 +132,16 @@ public final class WorkspaceMerge {
                 mergedByScope.put(scope, new ArrayList<>(dedup.values()));
             }
         }
-        return new JkBuild(
-                root.project(),
-                new JkBuild.Dependencies(mergedByScope),
-                root.repositories(),
-                root.profiles(),
-                root.features(),
-                root.workspace(),
-                root.manifest(),
-                root.plugins(),
-                root.nativeConfig());
+        return JkBuild.builder(root.project())
+                .dependencies(new JkBuild.Dependencies(mergedByScope))
+                .repositories(root.repositories())
+                .profiles(root.profiles())
+                .features(root.features())
+                .workspace(root.workspace())
+                .manifest(root.manifest())
+                .plugins(root.plugins())
+                .nativeConfig(root.nativeConfig())
+                .build();
     }
 
     /**

@@ -64,13 +64,9 @@ class WorkspaceMergeTest {
     void workspace_dep_resolves_against_workspace_dependencies_when_no_sibling() {
         Workspace.WorkspaceDependency wsDep = new Workspace.WorkspaceDependency(
                 "org.junit.jupiter", "junit-jupiter", VersionSelector.parse("6.1.0"), null);
-        JkBuild root = new JkBuild(
-                new JkBuild.Project("dev.jkbuild", "jk", "0.1.0", 0),
-                JkBuild.Dependencies.empty(),
-                List.of(),
-                Profiles.empty(),
-                Features.empty(),
-                new Workspace(List.of("core"), Map.of("junit-jupiter", wsDep)));
+        JkBuild root = JkBuild.builder(new JkBuild.Project("dev.jkbuild", "jk", "0.1.0", 0))
+                .workspace(new Workspace(List.of("core"), Map.of("junit-jupiter", wsDep)))
+                .build();
 
         JkBuild core = newProject("jk-core", Map.of(Scope.TEST, List.of(workspacePlaceholder("junit-jupiter"))));
 
@@ -101,13 +97,9 @@ class WorkspaceMergeTest {
     }
 
     private static JkBuild workspaceRoot(String artifact, List<String> modules) {
-        return new JkBuild(
-                new JkBuild.Project("dev.jkbuild", artifact, "0.1.0", 0),
-                JkBuild.Dependencies.empty(),
-                List.of(),
-                Profiles.empty(),
-                Features.empty(),
-                new Workspace(modules));
+        return JkBuild.builder(new JkBuild.Project("dev.jkbuild", artifact, "0.1.0", 0))
+                .workspace(new Workspace(modules))
+                .build();
     }
 
     private static Dependency dep(String name, String module, String version) {

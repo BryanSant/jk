@@ -39,17 +39,14 @@ class JkBuildRendererTest {
     @Test
     void renders_main_shadow_and_native_when_set() {
         JkBuild model = new JkBuild(
-                new JkBuild.Project(
-                        "com.example",
-                        "widget",
-                        "1.0.0",
-                        21,
-                        0,
-                        VersionSelector.parseFloating("=2.3.21"),
-                        "com.example.App",
-                        true,
-                        JkBuild.NativeMode.SUPPORTED,
-                        null),
+                JkBuild.Project.builder("com.example", "widget", "1.0.0")
+                        .jdkMajor(21)
+                        .kotlin(VersionSelector.parseFloating("=2.3.21"))
+                        .main("com.example.App")
+                        .shadow(true)
+                        .nativeMode(JkBuild.NativeMode.SUPPORTED)
+                        .application(true)
+                        .build(),
                 JkBuild.Dependencies.empty());
         String out = JkBuildRenderer.render(model);
         assertThat(out).contains("kotlin   = \"=2.3.21\"");
@@ -61,17 +58,11 @@ class JkBuildRendererTest {
     @Test
     void renders_description_when_set() {
         JkBuild model = new JkBuild(
-                new JkBuild.Project(
-                        "com.example",
-                        "widget",
-                        "1.0.0",
-                        21,
-                        21,
-                        null,
-                        null,
-                        false,
-                        JkBuild.NativeMode.DISABLED,
-                        "A tiny widget library."),
+                JkBuild.Project.builder("com.example", "widget", "1.0.0")
+                        .jdkMajor(21)
+                        .java(21)
+                        .description("A tiny widget library.")
+                        .build(),
                 JkBuild.Dependencies.empty());
         String out = JkBuildRenderer.render(model);
         assertThat(out).contains("description = \"A tiny widget library.\"");
@@ -83,19 +74,13 @@ class JkBuildRendererTest {
     @Test
     void application_false_with_main_round_trips() {
         // main is set (would imply application=true) but explicitly false.
-        JkBuild model = JkBuild.of(new JkBuild.Project(
-                "com.example",
-                "widget",
-                "1.0.0",
-                21,
-                21,
-                null,
-                "com.example.Main",
-                false,
-                JkBuild.NativeMode.DISABLED,
-                null,
-                /*application*/ false, /*m2install*/
-                true));
+        JkBuild model = JkBuild.of(JkBuild.Project.builder("com.example", "widget", "1.0.0")
+                .jdkMajor(21)
+                .java(21)
+                .main("com.example.Main")
+                .application(false)
+                .m2install(true)
+                .build());
         String out = JkBuildRenderer.render(model);
         assertThat(out).contains("application = false");
         assertThat(out).contains("m2install = true");
@@ -108,17 +93,12 @@ class JkBuildRendererTest {
     @Test
     void derived_application_is_not_emitted() {
         // main set → application derives true → no explicit key emitted.
-        JkBuild withMain = JkBuild.of(new JkBuild.Project(
-                "com.example",
-                "app",
-                "1.0.0",
-                21,
-                21,
-                null,
-                "com.example.Main",
-                false,
-                JkBuild.NativeMode.DISABLED,
-                null));
+        JkBuild withMain = JkBuild.of(JkBuild.Project.builder("com.example", "app", "1.0.0")
+                .jdkMajor(21)
+                .java(21)
+                .main("com.example.Main")
+                .application(true)
+                .build());
         assertThat(JkBuildRenderer.render(withMain)).doesNotContain("application =");
         // library (no main) → application derives false → no explicit key.
         JkBuild lib = JkBuild.of(new JkBuild.Project("com.example", "lib", "1.0.0", 21));
@@ -218,13 +198,9 @@ class JkBuildRendererTest {
 
     @Test
     void renders_workspace_block() {
-        JkBuild model = new JkBuild(
-                new JkBuild.Project("com.example", "widget-parent", "1.0.0", 21),
-                JkBuild.Dependencies.empty(),
-                List.of(),
-                Profiles.empty(),
-                Features.empty(),
-                new Workspace(List.of("core", "app")));
+        JkBuild model = JkBuild.builder(new JkBuild.Project("com.example", "widget-parent", "1.0.0", 21))
+                .workspace(new Workspace(List.of("core", "app")))
+                .build();
         String out = JkBuildRenderer.render(model);
         assertThat(out).contains("[workspace]");
         assertThat(out).contains("modules = [\"core\", \"app\"]");

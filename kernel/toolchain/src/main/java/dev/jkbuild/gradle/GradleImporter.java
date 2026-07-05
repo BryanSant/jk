@@ -157,17 +157,14 @@ public final class GradleImporter {
         // A Kotlin project sets `kotlin` (a version) and leaves `java` at 0 —
         // the two are mutually exclusive. javaRelease() falls back to jdk.
         int java = kotlin != null ? 0 : jdk;
-        JkBuild.Project project = new JkBuild.Project(
-                group,
-                defaultArtifact,
-                version,
-                jdk,
-                java,
-                kotlin,
-                mainClass,
-                false,
-                JkBuild.NativeMode.DISABLED,
-                description);
+        JkBuild.Project project = JkBuild.Project.builder(group, defaultArtifact, version)
+                .jdkMajor(jdk)
+                .java(java)
+                .kotlin(kotlin)
+                .main(mainClass)
+                .description(description)
+                .application(mainClass != null)
+                .build();
         JkBuild jkBuild = new JkBuild(project, new JkBuild.Dependencies(deps), repos);
         if (!manifest.isEmpty()) jkBuild = jkBuild.withManifest(manifest);
         return new Result(jkBuild, report.build());

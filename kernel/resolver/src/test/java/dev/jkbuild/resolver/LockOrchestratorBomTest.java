@@ -12,8 +12,6 @@ import dev.jkbuild.model.Dependency;
 import dev.jkbuild.model.Feature;
 import dev.jkbuild.model.Features;
 import dev.jkbuild.model.JkBuild;
-import dev.jkbuild.model.Profiles;
-import dev.jkbuild.model.RepositorySpec;
 import dev.jkbuild.model.Scope;
 import dev.jkbuild.model.VersionSelector;
 import dev.jkbuild.repo.MavenRepo;
@@ -267,12 +265,10 @@ class LockOrchestratorBomTest {
     }
 
     private static JkBuild jkBuildWithFeatures(JkBuild.Dependencies deps, Features features) {
-        return new JkBuild(
-                new JkBuild.Project("com.example", "test", "0.1.0", 25),
-                deps,
-                List.<RepositorySpec>of(),
-                Profiles.empty(),
-                features);
+        return JkBuild.builder(new JkBuild.Project("com.example", "test", "0.1.0", 25))
+                .dependencies(deps)
+                .features(features)
+                .build();
     }
 
     private static List<String> modules(Lockfile lock) {

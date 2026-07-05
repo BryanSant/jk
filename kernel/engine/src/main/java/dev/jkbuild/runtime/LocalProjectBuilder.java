@@ -176,14 +176,14 @@ public final class LocalProjectBuilder {
                 p.application(),
                 p.m2install(),
                 p.layout());
-        return new JkBuild(
-                overridden,
-                project.dependencies(),
-                project.repositories(),
-                project.profiles(),
-                project.features(),
-                project.workspace(),
-                project.manifest());
+        return JkBuild.builder(overridden)
+                .dependencies(project.dependencies())
+                .repositories(project.repositories())
+                .profiles(project.profiles())
+                .features(project.features())
+                .workspace(project.workspace())
+                .manifest(project.manifest())
+                .build();
     }
 
     /** Copy a source tree into {@code dest}; no-op if absent. */

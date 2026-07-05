@@ -4,9 +4,7 @@ package dev.jkbuild.mvn;
 import dev.jkbuild.compat.ImportReport;
 import dev.jkbuild.kotlin.KotlinResolver;
 import dev.jkbuild.model.Dependency;
-import dev.jkbuild.model.Features;
 import dev.jkbuild.model.JkBuild;
-import dev.jkbuild.model.Profiles;
 import dev.jkbuild.model.RepositorySpec;
 import dev.jkbuild.model.Scope;
 import dev.jkbuild.model.VersionSelector;
@@ -140,8 +138,7 @@ public final class PomImporter {
 
         Workspace workspace = new Workspace(modules);
         // The workspace root is a coordination point — no deps of its own.
-        JkBuild rootJkBuild = new JkBuild(
-                rootProject, JkBuild.Dependencies.empty(), List.of(), Profiles.empty(), Features.empty(), workspace);
+        JkBuild rootJkBuild = JkBuild.builder(rootProject).workspace(workspace).build();
 
         Map<String, JkBuild> moduleBuilds = new LinkedHashMap<>();
         Path projectDir = rootPom.toAbsolutePath().getParent();
@@ -214,17 +211,14 @@ public final class PomImporter {
         String mainClass = mainClassFromPom(doc);
         // A Kotlin project sets `kotlin` and leaves `java` at 0 (mutually exclusive).
         int java = kotlin != null ? 0 : jdk;
-        return new JkBuild.Project(
-                group,
-                pom.artifactId(),
-                version,
-                jdk,
-                java,
-                kotlin,
-                mainClass,
-                false,
-                JkBuild.NativeMode.DISABLED,
-                description);
+        return JkBuild.Project.builder(group, pom.artifactId(), version)
+                .jdkMajor(jdk)
+                .java(java)
+                .kotlin(kotlin)
+                .main(mainClass)
+                .description(description)
+                .application(mainClass != null)
+                .build();
     }
 
     /**

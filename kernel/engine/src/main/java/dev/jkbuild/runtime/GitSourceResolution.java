@@ -122,14 +122,14 @@ public final class GitSourceResolution {
             rewritten.put(scope, out);
         });
 
-        JkBuild project = new JkBuild(
-                effective.project(),
-                new JkBuild.Dependencies(rewritten),
-                effective.repositories(),
-                effective.profiles(),
-                effective.features(),
-                effective.workspace(),
-                effective.manifest());
+        JkBuild project = JkBuild.builder(effective.project())
+                .dependencies(new JkBuild.Dependencies(rewritten))
+                .repositories(effective.repositories())
+                .profiles(effective.profiles())
+                .features(effective.features())
+                .workspace(effective.workspace())
+                .manifest(effective.manifest())
+                .build();
 
         // Git artifact repos first: the pinned coordinate is built locally, so
         // the file:// repo answers before any remote is consulted.
