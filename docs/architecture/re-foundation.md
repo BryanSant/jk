@@ -166,9 +166,19 @@ The mutable global *channels that carry request data* now live on `Session` (eac
   `concurrency=1`) in a later pass; and the `Jdk*Command` install DAGs. Neither is a separation gap
   (both are CLI renderers over engine primitives), just remaining single-entry-point consolidation.
 
+- **M3 — Step SPI + dead-code removal (DONE)** —
+  - Deleted the dead `PluginContext` SPI (`project()`/`workDir()`/`contribute(Phase)`/`config()`): it
+    described an in-process `Plugin#register` model that never existed — `Plugin` has only
+    `manifest()`/`run()`, every plugin runs as a forked worker, and nothing called `contribute()`.
+    The real composable-step SPI is `Phase`/`Phase.Body` + typed `GoalKey` context; a separate
+    `BuildStep` type would be redundant indirection over `Phase.Body`.
+  - Decomposed `coreBuilder`'s ~1000-line monolith: its 12 inline phase bodies (which captured a
+    dozen effectively-final locals by closure) are now `private static Phase <name>Phase(StepContext
+    cx)` methods over an explicit `StepContext` record — matching the pre-existing tail-phase pattern
+    (`shadowPhase`/`sourcesPhase`/`nativeImagePhase`). Bodies relocated verbatim (verified
+    byte-identical); `coreBuilder` is now a readable assembly.
+
 **Deferred (documented — cascade-heavy, multi-session; NOT started)**
-- **M3** — Extract `coreBuilder`'s inline phase-body lambdas into `BuildStep` classes; remove/realize
-  dead `PluginContext.contribute`.
 - **M4** — `WorkerClient<Req,Res>` + standardized worker envelope across the 9 plugins; `CompilerWorker`
   bridge; `IdeSdkRegistrar` SPI + move `Intellij*` out of `kernel/toolchain`; de-dup `compat` package.
 - **M6** — Extract/bless `jk-api`; CLI facades (`ProjectContext`, `CliOutput`, `WorkspaceCommand`,
