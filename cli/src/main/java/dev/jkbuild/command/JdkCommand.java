@@ -2,11 +2,11 @@
 package dev.jkbuild.command;
 
 import dev.jkbuild.model.command.CliCommand;
-import dev.jkbuild.model.command.Invocation;
+import dev.jkbuild.model.command.GroupCommand;
 import java.util.List;
 
 /** {@code jk jdk} parent — Manage JDK versions and installations */
-public final class JdkCommand implements CliCommand {
+public final class JdkCommand extends GroupCommand {
 
     @Override
     public String name() {
@@ -36,10 +36,5 @@ public final class JdkCommand implements CliCommand {
                 new JdkHomeCommand(),
                 new JdkUninstallCommand(),
                 new JdkUpdateShellCommand());
-    }
-
-    @Override
-    public int run(Invocation in) {
-        return 64;
     }
 }

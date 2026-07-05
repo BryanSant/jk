@@ -8,7 +8,7 @@ import dev.jkbuild.forge.ForgeRemote;
 import dev.jkbuild.forge.GitForgeDetector;
 import dev.jkbuild.forge.TokenStore;
 import dev.jkbuild.model.command.CliCommand;
-import dev.jkbuild.model.command.Invocation;
+import dev.jkbuild.model.command.GroupCommand;
 import java.nio.file.Path;
 import java.util.List;
 
@@ -16,7 +16,7 @@ import java.util.List;
  * {@code jk auth} parent verb — authenticate jk against a git forge so it can call that forge's
  * API.
  */
-public final class AuthCommand implements CliCommand {
+public final class AuthCommand extends GroupCommand {
 
     @Override
     public String name() {
@@ -32,11 +32,6 @@ public final class AuthCommand implements CliCommand {
     public List<CliCommand> subcommands() {
         return List.of(
                 new AuthLoginCommand(), new AuthLogoutCommand(), new AuthStatusCommand(), new AuthTokenCommand());
-    }
-
-    @Override
-    public int run(Invocation in) {
-        return 64;
     }
 
     /** Resolve a provider id to a {@link ForgeKind}, throwing on unknown. */

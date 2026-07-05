@@ -2,7 +2,7 @@
 package dev.jkbuild.command;
 
 import dev.jkbuild.model.command.CliCommand;
-import dev.jkbuild.model.command.Invocation;
+import dev.jkbuild.model.command.GroupCommand;
 import java.util.List;
 
 /**
@@ -11,7 +11,7 @@ import java.util.List;
  * {@code ~/.jk/repo-credentials/} for use when resolving from / publishing to private Nexus,
  * Artifactory, WebDAV, and other authenticated Maven repositories. See docs/artifact-repos.md.
  */
-public final class RepoCommand implements CliCommand {
+public final class RepoCommand extends GroupCommand {
 
     @Override
     public String name() {
@@ -26,11 +26,5 @@ public final class RepoCommand implements CliCommand {
     @Override
     public List<CliCommand> subcommands() {
         return List.of(new RepoLoginCommand(), new RepoLogoutCommand());
-    }
-
-    /** Unreachable: the dispatcher prints the command list for a bare parent. */
-    @Override
-    public int run(Invocation in) {
-        return 64;
     }
 }

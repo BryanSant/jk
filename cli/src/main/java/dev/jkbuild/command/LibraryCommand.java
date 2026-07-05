@@ -2,11 +2,11 @@
 package dev.jkbuild.command;
 
 import dev.jkbuild.model.command.CliCommand;
-import dev.jkbuild.model.command.Invocation;
+import dev.jkbuild.model.command.GroupCommand;
 import java.util.List;
 
 /** {@code jk library} parent verb — manage the short-name library catalog. */
-public final class LibraryCommand implements CliCommand {
+public final class LibraryCommand extends GroupCommand {
 
     @Override
     public String name() {
@@ -26,10 +26,5 @@ public final class LibraryCommand implements CliCommand {
     @Override
     public List<CliCommand> subcommands() {
         return List.of(new LibraryUpdateCommand(), new LibraryListCommand(), new LibrarySearchCommand());
-    }
-
-    @Override
-    public int run(Invocation in) {
-        return 64;
     }
 }

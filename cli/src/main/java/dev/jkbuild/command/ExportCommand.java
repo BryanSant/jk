@@ -2,7 +2,7 @@
 package dev.jkbuild.command;
 
 import dev.jkbuild.model.command.CliCommand;
-import dev.jkbuild.model.command.Invocation;
+import dev.jkbuild.model.command.GroupCommand;
 import java.util.List;
 
 /**
@@ -18,7 +18,7 @@ import java.util.List;
  * <p>Replaces the former {@code jk export <file>} form — export now selects a target
  * <em>system</em>, not a filename.
  */
-public final class ExportCommand implements CliCommand {
+public final class ExportCommand extends GroupCommand {
 
     @Override
     public String name() {
@@ -33,11 +33,5 @@ public final class ExportCommand implements CliCommand {
     @Override
     public List<CliCommand> subcommands() {
         return List.of(new ExportGradleCommand(), new ExportMavenCommand(), new ExportIdeaCommand());
-    }
-
-    @Override
-    public int run(Invocation in) {
-        System.err.println("usage: jk export <gradle|maven|idea>");
-        return 64;
     }
 }

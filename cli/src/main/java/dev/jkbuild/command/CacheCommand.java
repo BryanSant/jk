@@ -9,6 +9,7 @@ import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.cli.tui.Glyphs;
 import dev.jkbuild.model.command.Arity;
 import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.GroupCommand;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.model.command.Param;
@@ -32,7 +33,7 @@ import java.util.List;
 import java.util.Locale;
 
 /** {@code jk cache} — manage the on-disk cache at {@code $JK_CACHE_DIR}. */
-public final class CacheCommand implements CliCommand {
+public final class CacheCommand extends GroupCommand {
 
     @Override
     public String name() {
@@ -52,11 +53,6 @@ public final class CacheCommand implements CliCommand {
                 new CacheSearchCommand(),
                 new CachePruneCommand(),
                 new CachePurgeCommand());
-    }
-
-    @Override
-    public int run(Invocation in) {
-        return 64;
     }
 
     // --- shared helpers (accessed by Cache*Command classes) ---------------------------
