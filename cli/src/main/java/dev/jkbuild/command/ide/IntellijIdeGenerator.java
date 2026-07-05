@@ -5,7 +5,6 @@ import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.cli.tui.Glyphs;
 import dev.jkbuild.cli.tui.GoalWedge;
 import dev.jkbuild.config.GlobalConfig;
-import dev.jkbuild.jdk.IntellijSdkRegistrar;
 import dev.jkbuild.layout.BuildLayout;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.Scope;

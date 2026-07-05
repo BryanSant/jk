@@ -9,7 +9,6 @@ import dev.jkbuild.config.WorkspaceLoader;
 import dev.jkbuild.config.WorkspaceLocator;
 import dev.jkbuild.http.Http;
 import dev.jkbuild.jdk.IntellijJdkDir;
-import dev.jkbuild.jdk.IntellijSdkRegistrar;
 import dev.jkbuild.jdk.JdkHit;
 import dev.jkbuild.jdk.JdkRegistry;
 import dev.jkbuild.jdk.JdkSelector;

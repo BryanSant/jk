@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command.ide;
 
-import dev.jkbuild.jdk.IntellijSdkRegistrar;
 import dev.jkbuild.model.JkBuild;
 import java.nio.file.Path;
 import java.util.List;

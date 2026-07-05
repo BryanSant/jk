@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
-package dev.jkbuild.jdk;
+package dev.jkbuild.command.ide;
 
+import dev.jkbuild.jdk.IntellijJdkTable;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;

@@ -80,7 +80,7 @@ public final class IntellijJdkTable {
      * products and Android Studio (under {@code Google}) live beside each other under the platform's
      * per-user config base.
      */
-    static List<Path> defaultVendorRoots(Function<String, String> env, String osName, String userHome) {
+    public static List<Path> defaultVendorRoots(Function<String, String> env, String osName, String userHome) {
         String lower = osName.toLowerCase(Locale.ROOT);
         Path home = Path.of(userHome);
         Path base;
