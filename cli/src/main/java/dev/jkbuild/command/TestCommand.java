@@ -20,8 +20,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
-import java.util.regex.Pattern;
-import java.util.stream.Stream;
 
 /**
  * {@code jk test} — compile main + test sources and run JUnit Platform tests.
@@ -158,33 +156,13 @@ public final class TestCommand implements CliCommand {
      * a comment over-counts). Both biases are safe — the numerator is gated on the static plan, so
      * over-estimation just means the bar reaches ~98% and phase-end auto-fill closes the rest.
      */
-    private static final Pattern TEST_ANNOTATION_REGEX =
-            Pattern.compile("@(?:Test|ParameterizedTest|TestFactory|TestTemplate|RepeatedTest)\\b");
-
     /** Bridge test-runner NDJSON events onto the goal's progress bar (delegates to TestSupport). */
     static TestProgressListener bridgeListener(PhaseContext ctx, int workerCount, boolean verbose) {
         return dev.jkbuild.runtime.TestSupport.bridgeListener(ctx, workerCount, verbose);
     }
 
+    /** Delegates to the engine ({@link dev.jkbuild.runtime.TestSupport#estimateTestCount}). */
     static int estimateTestCount(Path testSrcDir) {
-        if (!Files.isDirectory(testSrcDir)) return 0;
-        int count = 0;
-        try (Stream<Path> walk = Files.walk(testSrcDir)) {
-            for (Path file : (Iterable<Path>) walk.filter(Files::isRegularFile).filter(p -> {
-                String n = p.getFileName().toString();
-                return n.endsWith(".java") || n.endsWith(".kt");
-            })::iterator) {
-                try {
-                    String content = Files.readString(file);
-                    count += (int)
-                            TEST_ANNOTATION_REGEX.matcher(content).results().count();
-                } catch (IOException ignored) {
-                    // best-effort: skip unreadable files, keep counting
-                }
-            }
-        } catch (IOException ignored) {
-            // best-effort: zero estimate falls back to a flat (empty) bar
-        }
-        return count;
+        return dev.jkbuild.runtime.TestSupport.estimateTestCount(testSrcDir);
     }
 }

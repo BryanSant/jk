@@ -16,6 +16,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 /**
  * Test-phase building blocks shared by the build pipeline and the {@code test} verb. Coupled only
@@ -25,6 +27,35 @@ import java.util.List;
 public final class TestSupport {
 
     private TestSupport() {}
+
+    private static final Pattern TEST_ANNOTATION_REGEX =
+            Pattern.compile("@(?:Test|ParameterizedTest|TestFactory|TestTemplate|RepeatedTest)\\b");
+
+    /**
+     * Best-effort count of JUnit test methods under {@code testSrcDir} — scans {@code .java}/{@code
+     * .kt} sources for {@code @Test}-family annotations. Feeds the build's {@code estimatedTestCount}
+     * (progress-bar weighting); a zero estimate falls back to a flat bar. Never throws.
+     */
+    public static int estimateTestCount(Path testSrcDir) {
+        if (!Files.isDirectory(testSrcDir)) return 0;
+        int count = 0;
+        try (Stream<Path> walk = Files.walk(testSrcDir)) {
+            for (Path file : (Iterable<Path>) walk.filter(Files::isRegularFile).filter(p -> {
+                        String n = p.getFileName().toString();
+                        return n.endsWith(".java") || n.endsWith(".kt");
+                    })::iterator) {
+                try {
+                    String content = Files.readString(file);
+                    count += (int) TEST_ANNOTATION_REGEX.matcher(content).results().count();
+                } catch (IOException ignored) {
+                    // best-effort: skip unreadable files, keep counting
+                }
+            }
+        } catch (IOException ignored) {
+            // best-effort: zero estimate falls back to a flat (empty) bar
+        }
+        return count;
+    }
 
     /**
      * Render a failed test run as console lines — each failing test's name followed by its full stack

@@ -11,6 +11,7 @@ import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.runtime.BuildGraph;
+import dev.jkbuild.runtime.BuildPlanForecast;
 import dev.jkbuild.task.ActionCache;
 import dev.jkbuild.util.JkDirs;
 import java.nio.file.Files;

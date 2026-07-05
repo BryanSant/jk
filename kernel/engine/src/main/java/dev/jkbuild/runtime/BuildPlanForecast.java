@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-package dev.jkbuild.command;
+package dev.jkbuild.runtime;
 
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.compile.ClasspathResolver;
@@ -12,9 +12,6 @@ import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.lock.LockfileReader;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.Scope;
-import dev.jkbuild.runtime.BuildGraph;
-import dev.jkbuild.runtime.BuildPipeline;
-import dev.jkbuild.runtime.CompileSupport;
 import dev.jkbuild.task.ActionCache;
 import dev.jkbuild.task.ActionKey;
 import dev.jkbuild.task.ClasspathFingerprint;
@@ -53,12 +50,12 @@ import java.util.Set;
  * misses the cache and is reported as "will run" (pessimistic) — it can never produce a false
  * "cached".
  */
-final class BuildPlanForecast {
+public final class BuildPlanForecast {
 
     private BuildPlanForecast() {}
 
     /** Per-phase verdict. CACHED = restored from cache; the rest do real work. */
-    enum Status {
+    public enum Status {
         CACHED,
         FULL,
         PARTIAL,
@@ -69,27 +66,27 @@ final class BuildPlanForecast {
      * One phase of a module's build. {@code text} is the right-hand detail after the status glyph;
      * {@code key} is the 8-char action key when known (cached).
      */
-    record Phase(String name, Status status, String text, String key) {
-        boolean cached() {
+    public record Phase(String name, Status status, String text, String key) {
+        public boolean cached() {
             return status == Status.CACHED;
         }
     }
 
     /** A module's forecast: its build unit and the ordered phases that apply to it. */
-    record Module(
+    public record Module(
             BuildGraph.BuildUnit unit,
             List<Phase> phases,
             int sourceCount,
             int testCount,
             boolean producesJar,
             boolean producesImage) {
-        boolean dirty() {
+        public boolean dirty() {
             return phases.stream().anyMatch(p -> !p.cached());
         }
     }
 
     /** Forecast every module in {@code graph}, in topological (dependency) order. */
-    static List<Module> of(BuildGraph.Result graph, Cas cas, ActionCache actionCache, Path cache) {
+    public static List<Module> of(BuildGraph.Result graph, Cas cas, ActionCache actionCache, Path cache) {
         List<Module> out = new ArrayList<>();
         // Dirs whose *main output* will change this build — seeds downstream and
         // cross-module dirtiness. Filled as we walk in dependency order.
@@ -135,7 +132,7 @@ final class BuildPlanForecast {
      * JAVA_HOME / GraalVM / SDKMAN / …) instead of the empty {@code ~/.jk/jdks}, so an
      * already-installed JDK predicts a zero-cost {@code ensure-jdk} rather than a phantom download.
      */
-    static BuildPipeline.Inputs inputsFor(
+    public static BuildPipeline.Inputs inputsFor(
             Path dir, Path cache, int workers, Path jdksDir, String profile, boolean skipTests, boolean verbose) {
         return inputsFor(dir, cache, workers, jdksDir, profile, skipTests, verbose, Set.of());
     }
@@ -145,7 +142,7 @@ final class BuildPlanForecast {
      * module dirs of the build graph, so the effort-weight prediction can borrow a project-tier learned
      * rate for a not-yet-built module (see {@link dev.jkbuild.runtime.EffortWeights#learned}).
      */
-    static BuildPipeline.Inputs inputsFor(
+    public static BuildPipeline.Inputs inputsFor(
             Path dir,
             Path cache,
             int workers,
@@ -157,7 +154,7 @@ final class BuildPlanForecast {
         Path buildFile = dir.resolve("jk.toml");
         Path lockFile = dir.resolve("jk.lock");
         int workerCount = workers > 0 ? workers : 1;
-        int estimatedTestCount = skipTests ? 0 : TestCommand.estimateTestCount(dir.resolve("src/test/java"));
+        int estimatedTestCount = skipTests ? 0 : TestSupport.estimateTestCount(dir.resolve("src/test/java"));
         return new BuildPipeline.Inputs(
                         dir, cache, buildFile, lockFile, dir, workerCount, estimatedTestCount, profile, jdksDir,
                         skipTests, verbose)
@@ -282,7 +279,7 @@ final class BuildPlanForecast {
                 }
 
                 // ---- run-tests ----
-                int estimated = TestCommand.estimateTestCount(javaTestDir);
+                int estimated = TestSupport.estimateTestCount(javaTestDir);
                 testCount = estimated;
                 String tests = estimated > 0 ? "~" + count(estimated, "test") : "tests";
                 if (compileDirty || testDirty) {

@@ -25,6 +25,7 @@ import dev.jkbuild.run.GoalKey;
 import dev.jkbuild.run.GoalResult;
 import dev.jkbuild.runtime.BuildGraph;
 import dev.jkbuild.runtime.BuildPipeline;
+import dev.jkbuild.runtime.BuildPlanForecast;
 import dev.jkbuild.runtime.LockFlow;
 import dev.jkbuild.test.JUnitLauncher;
 import dev.jkbuild.util.JkDirs;
