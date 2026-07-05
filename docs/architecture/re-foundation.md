@@ -111,12 +111,19 @@ The mutable global *channels that carry request data* have been moved onto `Sess
   writes — mirrors `LockFlow`). Hoisted from `BuildCommand`: `ensureWorkspaceLockFresh` +
   `workspaceLockStale` (pre-build re-lock guard) and `computeWorkspaceLinks` + `linkModuleArtifacts`
   (post-build artifact placement under `<wsRoot>/target/`). CLI renders results only.
-- **M2 remainder (the large piece):** hoist the parallel workspace scheduler (`runGraphLive`/
-  `buildUnitLive` + ETA re-projection) — needs the **event-emitting-scheduler / CLI-renderer split**
-  (`BuildService.buildWorkspace(request, listener)` drives the DAG and emits module start/progress/
-  finish events; a CLI listener renders the live view). Then unify the explain/build ETA planner
-  (move `BuildPlanForecast` to engine — the documented drift hazard), plus the `Jdk*Command` DAGs.
-  The deferred M1c leaf `refresh` reads and the `Quietable` output sink land cleanly here too.
+- `BuildPlanForecast` (the single explain/build planner) + `estimateTestCount` moved to the engine;
+  `forecastDirtyDirs` hoisted into `BuildService`. The explain/build drift hazard is closed.
+- **`WorkspaceScheduler`** (engine) now owns the parallel DAG dispatch (ready-set / topo-level,
+  `JkThreads.io()`, fail-fast). Both `runGraphPlain` and `runGraphLive` drive it via a `UnitTask` +
+  `LevelSink`; per-unit build + all presentation stay in the CLI callbacks. Verified end-to-end on a
+  real 2-module workspace (dep ordering, live view, warm-cache no-op, `--no-parallel`, artifact
+  linking, fail-fast exit=1).
+- **M2 remainder:** the deeper goal-execution event split is optional — the `UnitTask`/`LevelSink`
+  callback boundary already keeps orchestration in the engine and presentation in the CLI; a
+  `BuildService.buildWorkspace(request, GoalListener)` that also runs the per-module goal and emits
+  phase events would let a non-CLI front-end render without a callback, but isn't required for the
+  separation. Still open: the `Jdk*Command` install DAGs, the deferred M1c leaf `refresh` reads, and
+  the `Quietable` output sink (all land on the eventual `buildWorkspace` event API).
 
 **Deferred (documented — cascade-heavy, multi-session; NOT started)**
 - **M3** — Extract `coreBuilder`'s inline phase-body lambdas into `BuildStep` classes; remove/realize
