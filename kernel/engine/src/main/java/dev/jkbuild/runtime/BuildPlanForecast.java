@@ -72,14 +72,72 @@ public final class BuildPlanForecast {
         }
     }
 
-    /** A module's forecast: its build unit and the ordered phases that apply to it. */
-    public record Module(
-            BuildGraph.BuildUnit unit,
-            List<Phase> phases,
-            int sourceCount,
-            int testCount,
-            boolean producesJar,
-            boolean producesImage) {
+    /**
+     * A module's forecast: its build unit and the ordered phases that apply to it. Front-ends read
+     * only {@link #coord()}, {@link #dir()}, {@link #phases()}, {@link #sourceCount()}, {@link
+     * #testCount()}, {@link #producesJar()}, {@link #producesImage()}, and {@link #dirty()}. The
+     * engine-internal {@link BuildGraph.BuildUnit} is reachable only through the package-private
+     * {@link #unit()} accessor — a {@code final class} (not a {@code record}) so that accessor can
+     * drop below {@code public}, keeping {@code BuildGraph.BuildUnit} invisible to the CLI.
+     */
+    public static final class Module {
+        private final BuildGraph.BuildUnit unit;
+        private final List<Phase> phases;
+        private final int sourceCount;
+        private final int testCount;
+        private final boolean producesJar;
+        private final boolean producesImage;
+
+        public Module(
+                BuildGraph.BuildUnit unit,
+                List<Phase> phases,
+                int sourceCount,
+                int testCount,
+                boolean producesJar,
+                boolean producesImage) {
+            this.unit = unit;
+            this.phases = phases;
+            this.sourceCount = sourceCount;
+            this.testCount = testCount;
+            this.producesJar = producesJar;
+            this.producesImage = producesImage;
+        }
+
+        /** Engine-internal build unit — package-private so front-ends can't reach {@link BuildGraph.BuildUnit}. */
+        BuildGraph.BuildUnit unit() {
+            return unit;
+        }
+
+        /** The module's {@code group:artifact} coordinate. */
+        public String coord() {
+            return unit.coord();
+        }
+
+        /** The module's directory. */
+        public Path dir() {
+            return unit.dir();
+        }
+
+        public List<Phase> phases() {
+            return phases;
+        }
+
+        public int sourceCount() {
+            return sourceCount;
+        }
+
+        public int testCount() {
+            return testCount;
+        }
+
+        public boolean producesJar() {
+            return producesJar;
+        }
+
+        public boolean producesImage() {
+            return producesImage;
+        }
+
         public boolean dirty() {
             return phases.stream().anyMatch(p -> !p.cached());
         }

@@ -159,7 +159,7 @@ public final class BuildService {
             ActionCache ac = new ActionCache(cas, cache.resolve("actions"));
             Set<Path> dirty = new HashSet<>();
             for (BuildPlanForecast.Module m : BuildPlanForecast.of(graph, cas, ac, cache)) {
-                if (m.dirty()) dirty.add(m.unit().dir());
+                if (m.dirty()) dirty.add(m.dir());
             }
             return dirty;
         } catch (RuntimeException e) {
@@ -188,16 +188,56 @@ public final class BuildService {
     /**
      * A module's assembled goal + the estimates a caller needs to render/calibrate. The front-end
      * contract is {@link #coord()}, {@link #dir()}, {@link #goal()}, {@link #weight()}, {@link
-     * #fullyCached()}, and {@link #cache()}; {@link #unit()} is the engine-internal {@link
-     * BuildGraph.BuildUnit} used to run the module and is not part of the front-end-facing API.
+     * #fullyCached()}, and {@link #cache()}. The engine-internal {@link BuildGraph.BuildUnit} used to
+     * run the module is exposed only through the package-private {@link #unit()} accessor, so the
+     * boundary is compiler-enforced: engine consumers in {@code dev.jkbuild.runtime} can reach it,
+     * front-ends in other packages (the CLI) cannot.
+     *
+     * <p>A {@code final class} rather than a {@code record} precisely so {@code unit()} can drop below
+     * {@code public} — a record's canonical accessors are always {@code public}.
      */
-    public record ModulePlan(BuildGraph.BuildUnit unit, Goal goal, int weight, boolean fullyCached, Path cache) {
+    public static final class ModulePlan {
+        private final BuildGraph.BuildUnit unit;
+        private final Goal goal;
+        private final int weight;
+        private final boolean fullyCached;
+        private final Path cache;
+
+        public ModulePlan(BuildGraph.BuildUnit unit, Goal goal, int weight, boolean fullyCached, Path cache) {
+            this.unit = unit;
+            this.goal = goal;
+            this.weight = weight;
+            this.fullyCached = fullyCached;
+            this.cache = cache;
+        }
+
+        /** Engine-internal build unit — package-private so front-ends can't reach {@link BuildGraph.BuildUnit}. */
+        BuildGraph.BuildUnit unit() {
+            return unit;
+        }
+
         public String coord() {
             return unit.coord();
         }
 
         public Path dir() {
             return unit.dir();
+        }
+
+        public Goal goal() {
+            return goal;
+        }
+
+        public int weight() {
+            return weight;
+        }
+
+        public boolean fullyCached() {
+            return fullyCached;
+        }
+
+        public Path cache() {
+            return cache;
         }
     }
 

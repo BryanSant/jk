@@ -124,9 +124,9 @@ public final class ExplainCommand implements CliCommand {
             // All modules of this build graph — the project/workspace set each module's prediction
             // borrows a learned rate from when it has no history of its own (EffortWeights.learned).
             Set<Path> projectModules =
-                    modules.stream().map(m -> m.unit().dir()).collect(java.util.stream.Collectors.toSet());
+                    modules.stream().map(BuildPlanForecast.Module::dir).collect(java.util.stream.Collectors.toSet());
             for (BuildPlanForecast.Module m : modules) {
-                Path mdir = m.unit().dir();
+                Path mdir = m.dir();
                 // Assemble each module's goal exactly as `jk build` does: the shared Inputs factory,
                 // core phases + declared tails (native-image / OCI / shadow). Same goal in, same
                 // cost out — so the ETA can't diverge from what build calibrates to.
@@ -236,7 +236,7 @@ public final class ExplainCommand implements CliCommand {
             } else {
                 List<String> names = new ArrayList<>();
                 for (int i : cachedIdx)
-                    names.add(":" + shortName(modules.get(i).unit().coord()));
+                    names.add(":" + shortName(modules.get(i).coord()));
                 // Wrap the full list across lines (no truncation): the first line hangs off
                 // a "╰─ " connector; continuations align under the first name.
                 List<String> lines = wrapNames(names, Math.max(20, width - 7));
@@ -328,7 +328,7 @@ public final class ExplainCommand implements CliCommand {
                 + moduleConnector
                 + moduleBadge
                 + ' '
-                + (ansi ? coloredCoord(m.unit().coord(), t) : m.unit().coord()));
+                + (ansi ? coloredCoord(m.coord(), t) : m.coord()));
 
         if (m.dirty() || verbose) {
             String spine = ansi
