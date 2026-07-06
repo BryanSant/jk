@@ -90,8 +90,14 @@ for the build preflight. `ExplainCommand` and `BuildCommand` migrated and **no l
 `dev.jkbuild.runtime.BuildGraph` or `BuildGraph.BuildUnit`** — closing the M6-logged leak. The only
 remaining `BuildGraph` reference in the CLI is `NativeCommand`'s front-end-safe
 `BuildGraph.orderModules(Map)` (the M4 map API, not graph internals).
-_Deferred (logged, scope decision):_ `installJdk` and single-module `build` facades are **not** added.
-Rationale below; not a silent gap.
+_Update (2026-07-06):_ **`installJdk` facade landed** — `JdkService` (engine) owns catalog fetch →
+spec/keyword resolve → download → extract, emitting progress via `JdkInstallListener`; a headless
+front-end installs a JDK with one `install(spec, …)` call. The CLI keeps only presentation (wizard,
+download-bar, set-default prompt). Verified end-to-end: `jk jdk install 21` downloaded + extracted
+Temurin 21, and a re-run hit the already-installed short-circuit. (The interactivity was never
+intrinsic — `jk jdk install <spec>`/`--lts` were always non-interactive; the wizard just collects a
+spec the same pipeline installs.) Single-module `build` facade (`BuildService.buildModule`) remains
+the one un-hoisted L8 item — offered, not yet requested.
 
 `BuildService`'s actual public surface is `buildWorkspace(...)` + a lock-freshness guard
 (`ensureWorkspaceLockFresh`/`workspaceLockStale`) + link/forecast helpers. There is **no `explain()`,
