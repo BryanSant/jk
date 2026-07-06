@@ -53,6 +53,23 @@ import java.util.stream.Stream;
  */
 public final class BuildPipeline {
 
+    static {
+        // Bridge the per-session cooperative cancel token into the engine's EXISTING per-goal
+        // cancellation poll (PhaseContext.cancelled()) without an upward :model → :core edge:
+        // :model exposes the SessionCancel seam and the engine (which sees :core) binds a probe
+        // reading the current session's token. Runs once when this class loads — before any of
+        // its phase factories produce phases that poll cancelled(). The session is resolved
+        // lazily at poll time, so a later install()/where() binding is picked up.
+        //
+        // CAVEAT: ScopedValue bindings do NOT propagate to tasks on the shared JkThreads.io()
+        // pool (only to structured forks), so a *scoped* (multi-tenant) session's cancel is seen
+        // by phases polling on the binding thread but not by async worker-pool tasks, which read
+        // the process-static session. For the single-process CLI (static session) this is fully
+        // effective; full async propagation is a documented follow-up.
+        dev.jkbuild.run.SessionCancel.bind(
+                () -> dev.jkbuild.config.SessionContext.current().cancelled());
+    }
+
     private BuildPipeline() {}
 
     // ---- shared cross-phase keys ---------------------------------------
@@ -1796,7 +1813,8 @@ public final class BuildPipeline {
                     int exit = dev.jkbuild.tool.NativeImageDriver.run(
                             new dev.jkbuild.tool.NativeImageDriver.Request(
                                     javaHome, classpath, mainClass, out, allArgs, shared),
-                            listener);
+                            listener,
+                            ctx::output);
                     if (exit != 0) {
                         ctx.error("native", "native-image exited " + exit);
                         throw new RuntimeException("native-image failed (exit " + exit + ")");

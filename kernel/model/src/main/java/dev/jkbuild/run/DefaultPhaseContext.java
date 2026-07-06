@@ -196,7 +196,11 @@ final class DefaultPhaseContext implements PhaseContext {
 
     @Override
     public boolean cancelled() {
-        return goal.cancelledRef().get();
+        // Per-goal cancel (a sibling failure, or Ctrl-C torn down by the scheduler) OR a
+        // session-level cancel signaled through the SessionCancel seam (a front-end's
+        // CancelToken). The seam avoids an upward :model → :core dependency; until the engine
+        // binds a probe it reads false, so the per-goal behavior is unchanged.
+        return goal.cancelledRef().get() || SessionCancel.cancelled();
     }
 
     @Override

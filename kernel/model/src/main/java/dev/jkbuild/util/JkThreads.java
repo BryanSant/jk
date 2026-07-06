@@ -18,8 +18,8 @@ import java.util.concurrent.atomic.AtomicInteger;
  *       probe-chain enumeration — anything that mostly blocks on syscalls or the network.
  * </ul>
  *
- * <p>{@link dev.jkbuild.cli.tui.GlobalCancel} ultimately calls {@link Runtime#halt} for Ctrl-C,
- * which kills all threads in either pool immediately. No graceful cancellation hook is required.
+ * <p>The CLI's Ctrl-C handler ultimately calls {@link Runtime#halt}, which kills all threads in
+ * either pool immediately. No graceful cancellation hook is required.
  */
 public final class JkThreads {
 

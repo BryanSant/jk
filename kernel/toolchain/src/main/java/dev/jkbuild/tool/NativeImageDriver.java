@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -19,10 +20,11 @@ import java.util.regex.Pattern;
  * Thin driver over GraalVM's {@code native-image} binary (PRD §6 {@code jk native} verb). Verifies
  * the JDK ships {@code bin/native-image}, assembles the classpath argument, and execs.
  *
- * <p>Subprocess stdout and stderr are forwarded line-by-line through {@code System.out} and {@code
- * System.err} respectively. When the jk TUI is active those streams have been replaced by {@code
- * CommandManager}'s {@code LineSink}, so all native-image output appears above the progress bar
- * rather than interleaved with it.
+ * <p>Subprocess stdout and stderr are forwarded line-by-line to a caller-provided sink (see {@link
+ * #run(Request, ProgressListener, Consumer)}). The caller routes that sink to the view layer — the
+ * engine passes {@code PhaseContext::output} so native-image's output appears above the progress bar
+ * rather than interleaved with it. This driver writes nothing to {@code System.out}/{@code
+ * System.err} and relies on no stream swap.
  *
  * <p>This driver only resolves and execs {@code native-image}; it does not install GraalVM.
  * Selecting/auto-installing the GraalVM that owns {@code native-image} (via {@code project.graal},
@@ -81,34 +83,40 @@ public final class NativeImageDriver {
 
     private NativeImageDriver() {}
 
-    /** Exec native-image with no progress listener; return its exit code. */
+    /** Exec native-image with no progress listener and a discarded output sink; return its exit code. */
     public static int run(Request request) throws IOException, InterruptedException {
-        return run(request, null);
+        return run(request, null, null);
     }
 
     /**
      * Exec native-image; return its exit code.
      *
-     * <p>stdout is forwarded line-by-line through {@code System.out} (so the TUI's {@code
-     * CommandManager.captureOutput()} displays it above the progress bar) and parsed for {@code
-     * [N/M]} step headers. Each header fires {@link ProgressListener#onStep} on the stdout-reader
-     * thread.
+     * <p>The subprocess's stdout and stderr are forwarded line-by-line to {@code out} (both streams
+     * share the sink, preserving the interleaved order the user would see on a console). stdout is
+     * additionally parsed for {@code [N/M]} step headers; each header fires {@link
+     * ProgressListener#onStep} on the stdout-reader thread. The engine passes {@code
+     * PhaseContext::output} so lines reach the view layer above the progress bar — this driver never
+     * touches {@code System.out}/{@code System.err}.
      *
-     * <p>{@code listener} may be {@code null} — output still flows to {@code System.out} but no
-     * callbacks are invoked.
+     * <p>{@code listener} may be {@code null} — output still flows to {@code out} but no callbacks are
+     * invoked. {@code out} may be {@code null} — output is then discarded (no console writes). The
+     * sink is invoked from the reader daemon threads, so callers must tolerate that.
      */
-    public static int run(Request request, ProgressListener listener) throws IOException, InterruptedException {
+    public static int run(Request request, ProgressListener listener, Consumer<String> out)
+            throws IOException, InterruptedException {
         Path binary = resolve(request.javaHome()).orElseThrow(() -> notFoundError(request.javaHome()));
         List<String> command = buildCommand(binary, request);
 
         Files.createDirectories(request.outputPath().toAbsolutePath().getParent());
 
-        // Do NOT use inheritIO() — it writes directly to fd 1/2, bypassing
-        // System.out/System.err which CommandManager.captureOutput() replaces
-        // with a LineSink to render output above the TUI progress bar.
+        // Do NOT use inheritIO() — it writes directly to fd 1/2, escaping the view
+        // layer entirely. Instead each stream is drained line-by-line into the
+        // caller's sink (the engine's PhaseContext::output), which renders output
+        // above the TUI progress bar. No System.out/err, no reliance on a stream swap.
+        Consumer<String> sink = (out == null) ? line -> {} : out;
         Process process = new ProcessBuilder(command).start();
-        Thread fwdOut = forwardStdout(process.getInputStream(), listener);
-        Thread fwdErr = forwardStream(process.getErrorStream(), System.err);
+        Thread fwdOut = forwardStdout(process.getInputStream(), listener, sink);
+        Thread fwdErr = forwardStream(process.getErrorStream(), sink);
         int exit = process.waitFor();
         fwdOut.join();
         fwdErr.join();
@@ -140,17 +148,16 @@ public final class NativeImageDriver {
     }
 
     /**
-     * Forward stdout to {@code System.out} line-by-line, parsing {@code [N/M]} step headers and
-     * firing the listener when found. stderr uses the simpler {@link #forwardStream} (no parsing
-     * needed).
+     * Forward stdout to {@code sink} line-by-line, parsing {@code [N/M]} step headers and firing the
+     * listener when found. stderr uses the simpler {@link #forwardStream} (no parsing needed).
      */
-    private static Thread forwardStdout(java.io.InputStream in, ProgressListener listener) {
+    private static Thread forwardStdout(java.io.InputStream in, ProgressListener listener, Consumer<String> sink) {
         Thread t = new Thread(
                 () -> {
                     try (BufferedReader br = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8))) {
                         String line;
                         while ((line = br.readLine()) != null) {
-                            System.out.println(line);
+                            sink.accept(line);
                             if (listener != null) {
                                 Matcher m = STEP_PATTERN.matcher(line);
                                 if (m.matches()) {
@@ -170,13 +177,13 @@ public final class NativeImageDriver {
         return t;
     }
 
-    private static Thread forwardStream(java.io.InputStream in, java.io.PrintStream dest) {
+    private static Thread forwardStream(java.io.InputStream in, Consumer<String> sink) {
         Thread t = new Thread(
                 () -> {
                     try (BufferedReader br = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8))) {
                         String line;
                         while ((line = br.readLine()) != null) {
-                            dest.println(line);
+                            sink.accept(line);
                         }
                     } catch (IOException ignored) {
                     }

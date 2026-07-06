@@ -43,6 +43,11 @@ public final class GlobalCancel {
             }
             err.print(Ansi.RESET); // explicit SGR reset beyond the inline reset
             err.flush();
+            // Belt-and-suspenders: signal the current session's cooperative cancel token before
+            // the process-level halt. The CLI's guarantee is still the halt below; this lets a
+            // cooperative consumer sharing the process (e.g. an embedder that does NOT halt)
+            // observe the cancel through PhaseContext.cancelled() via the SessionCancel seam.
+            dev.jkbuild.config.SessionContext.current().cancel().cancel();
             Runtime.getRuntime().halt(2);
         });
     }
