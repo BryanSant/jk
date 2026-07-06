@@ -15,7 +15,7 @@ import dev.jkbuild.plugin.protocol.Ndjson;
 import dev.jkbuild.runtime.CompileToolchain;
 import dev.jkbuild.util.JkDirs;
 import dev.jkbuild.worker.WorkerJar;
-import dev.jkbuild.worker.WorkerProcess;
+import dev.jkbuild.worker.WorkerClient;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -120,22 +120,19 @@ public final class MvnCommand implements CliCommand {
                     List.of("-jar", workerJar.toString(), spec.toAbsolutePath().toString()));
             String[] bin = {null};
             StringBuilder diag = new StringBuilder();
-            int exit = WorkerProcess.run(
-                    cmd,
-                    "##JKCMP:",
-                    json -> {
-                        if ("result".equals(Ndjson.str(json, "t"))) {
-                            bin[0] = Ndjson.str(json, "bin");
-                            String err = Ndjson.str(json, "error");
-                            if (err != null) System.err.println("jk " + (isGradle ? "gradle" : "mvn") + ": " + err);
-                            String src = Ndjson.str(json, "source");
-                            String ver = Ndjson.str(json, "version");
-                            if ("LINKED".equals(src) || "DOWNLOADED".equals(src)) {
-                                System.err.println((isGradle ? "Gradle " : "Maven ") + ver + " " + src.toLowerCase());
-                            }
+            int exit = new WorkerClient("##JKCMP:")
+                    .on("result", json -> {
+                        bin[0] = Ndjson.str(json, "bin");
+                        String err = Ndjson.str(json, "error");
+                        if (err != null) System.err.println("jk " + (isGradle ? "gradle" : "mvn") + ": " + err);
+                        String src = Ndjson.str(json, "source");
+                        String ver = Ndjson.str(json, "version");
+                        if ("LINKED".equals(src) || "DOWNLOADED".equals(src)) {
+                            System.err.println((isGradle ? "Gradle " : "Maven ") + ver + " " + src.toLowerCase());
                         }
-                    },
-                    ln -> diag.append(ln).append('\n'));
+                    })
+                    .passthrough(ln -> diag.append(ln).append('\n'))
+                    .run(cmd);
             if (exit != 0) {
                 if (diag.length() > 0) System.err.println(diag.toString().trim());
                 return null;

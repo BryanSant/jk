@@ -74,38 +74,28 @@ public final class WorkerJavac {
             // worker JVM classpath), so its own jar is the whole classpath.
             boolean win = HostPlatform.isWindows();
             Path javaExe = req.javaHome().resolve("bin").resolve(win ? "java.exe" : "java");
-            int exit = dev.jkbuild.worker.PluginLoader.run(
+            List<String> command = dev.jkbuild.worker.PluginLoader.command(
                     javaExe,
                     req.workerJar().toString(),
                     dev.jkbuild.worker.JvmOptions.workerFlags(1),
-                    PREFIX,
-                    List.of("@" + spec.toAbsolutePath()),
-                    json -> {
-                        String t = Ndjson.str(json, "t");
-                        if (t == null) return;
-                        switch (t) {
-                            case "diag" ->
-                                diagnostics.add(new CompileResult.Diagnostic(
-                                        CompileResult.Severity.fromName(Ndjson.str(json, "sev")),
-                                        null,
-                                        0,
-                                        0,
-                                        Ndjson.str(json, "msg")));
-                            case "prov" -> {
-                                String genStr = Ndjson.str(json, "gen");
-                                if (genStr == null) return;
-                                Path gen = Path.of(genStr);
-                                Set<Path> origins = new TreeSet<>();
-                                for (String s : Ndjson.strArray(json, "src")) origins.add(Path.of(s));
-                                generated.put(gen, origins);
-                            }
-                            case "result" -> status[0] = Ndjson.str(json, "status");
-                            default -> {
-                                /* ignore */
-                            }
-                        }
-                    },
-                    null);
+                    List.of("@" + spec.toAbsolutePath()));
+            int exit = new dev.jkbuild.worker.WorkerClient(PREFIX)
+                    .on("diag", json -> diagnostics.add(new CompileResult.Diagnostic(
+                            CompileResult.Severity.fromName(Ndjson.str(json, "sev")),
+                            null,
+                            0,
+                            0,
+                            Ndjson.str(json, "msg"))))
+                    .on("prov", json -> {
+                        String genStr = Ndjson.str(json, "gen");
+                        if (genStr == null) return;
+                        Path gen = Path.of(genStr);
+                        Set<Path> origins = new TreeSet<>();
+                        for (String s : Ndjson.strArray(json, "src")) origins.add(Path.of(s));
+                        generated.put(gen, origins);
+                    })
+                    .on("result", json -> status[0] = Ndjson.str(json, "status"))
+                    .run(command);
             boolean success = exit == 0 && "OK".equals(status[0]);
             return new Result(success, diagnostics, generated);
         } finally {

@@ -19,7 +19,7 @@ import dev.jkbuild.run.PhaseKind;
 import dev.jkbuild.runtime.CompileToolchain;
 import dev.jkbuild.util.JkDirs;
 import dev.jkbuild.worker.WorkerJar;
-import dev.jkbuild.worker.WorkerProcess;
+import dev.jkbuild.worker.WorkerClient;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -167,11 +167,8 @@ public final class AuditCommand implements CliCommand {
                     List.of("-jar", workerJar.toString(), spec.toAbsolutePath().toString()));
 
             List<AuditReport.Finding> findings = new ArrayList<>();
-            int exit = WorkerProcess.run(
-                    cmd,
-                    "##JKAU:",
-                    json -> {
-                        if (!"finding".equals(Ndjson.str(json, "t"))) return;
+            int exit = new WorkerClient("##JKAU:")
+                    .on("finding", json -> {
                         String module = Ndjson.str(json, "module");
                         String version = Ndjson.str(json, "version");
                         String vulnId = Ndjson.str(json, "vuln_id");
@@ -185,8 +182,8 @@ public final class AuditCommand implements CliCommand {
                                     summary != null ? summary : "",
                                     AuditReport.Severity.parse(severity)));
                         }
-                    },
-                    null);
+                    })
+                    .run(cmd);
             if (exit != 0) {
                 throw new RuntimeException("audit worker exited with code " + exit);
             }

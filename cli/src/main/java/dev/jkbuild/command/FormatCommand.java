@@ -23,7 +23,7 @@ import dev.jkbuild.tool.ToolResolver;
 import dev.jkbuild.util.JkDirs;
 import dev.jkbuild.worker.JvmOptions;
 import dev.jkbuild.worker.WorkerJar;
-import dev.jkbuild.worker.WorkerProcess;
+import dev.jkbuild.worker.WorkerClient;
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -239,35 +239,29 @@ public final class FormatCommand implements CliCommand {
             throws IOException, InterruptedException {
         List<String> cmd = withSpec(baseCmd, spec);
         int[] counts = {0, 0, 0}; // changed, clean, errors
-        int exit = WorkerProcess.run(
-                cmd,
-                "##JKFMT:",
-                json -> {
-                    String t = Ndjson.str(json, "t");
-                    if ("file".equals(t)) {
-                        String status = Ndjson.str(json, "status");
-                        String path = Ndjson.str(json, "path");
-                        if ("changed".equals(status)) {
-                            counts[0]++;
-                            if (!global.outputIsJson()) {
-                                String mark = Theme.colorize(
-                                        Glyphs.CHECK, Theme.active().success());
-                                String rel = Theme.colorize(
-                                        PathDisplay.of(Path.of(path), projectDir),
-                                        Theme.active().path());
-                                System.out.println(mark + " " + (check ? "Would format: " : "Formatted: ") + rel);
-                            }
-                        } else if ("error".equals(status)) {
-                            counts[2]++;
-                            System.err.println("  error  " + path + ": " + Ndjson.str(json, "msg"));
-                        } else {
-                            counts[1]++;
+        int exit = new WorkerClient("##JKFMT:")
+                .on("file", json -> {
+                    String status = Ndjson.str(json, "status");
+                    String path = Ndjson.str(json, "path");
+                    if ("changed".equals(status)) {
+                        counts[0]++;
+                        if (!global.outputIsJson()) {
+                            String mark = Theme.colorize(Glyphs.CHECK, Theme.active().success());
+                            String rel = Theme.colorize(
+                                    PathDisplay.of(Path.of(path), projectDir), Theme.active().path());
+                            System.out.println(mark + " " + (check ? "Would format: " : "Formatted: ") + rel);
                         }
+                    } else if ("error".equals(status)) {
+                        counts[2]++;
+                        System.err.println("  error  " + path + ": " + Ndjson.str(json, "msg"));
+                    } else {
+                        counts[1]++;
                     }
-                },
-                line -> {
+                })
+                .passthrough(line -> {
                     if (global.verbose) System.err.println("  [formatter] " + line);
-                });
+                })
+                .run(cmd);
 
         if (!global.outputIsJson()) {
             String mark = Theme.colorize(Glyphs.CHECK, Theme.active().success());
@@ -300,12 +294,8 @@ public final class FormatCommand implements CliCommand {
         {
             int[] scanned = {0};
             int[] counts = {0, 0, 0}; // changed, clean, errors
-            int exit = WorkerProcess.run(
-                    cmd,
-                    "##JKFMT:",
-                    json -> {
-                        String t = Ndjson.str(json, "t");
-                        if (!"file".equals(t)) return;
+            int exit = new WorkerClient("##JKFMT:")
+                    .on("file", json -> {
                         String status = Ndjson.str(json, "status");
                         String path = Ndjson.str(json, "path");
                         // Advance bar on every file so the scan is visually smooth.
@@ -315,19 +305,19 @@ public final class FormatCommand implements CliCommand {
                             cm.addCompletion(completionLine(path, projectDir));
                         } else if ("error".equals(status)) {
                             counts[2]++;
-                            cm.writeAbove(
-                                    Theme.colorize("  error", Theme.active().error())
-                                            + "  "
-                                            + path
-                                            + ": "
-                                            + Ndjson.str(json, "msg"));
+                            cm.writeAbove(Theme.colorize("  error", Theme.active().error())
+                                    + "  "
+                                    + path
+                                    + ": "
+                                    + Ndjson.str(json, "msg"));
                         } else {
                             counts[1]++;
                         }
-                    },
-                    line -> {
+                    })
+                    .passthrough(line -> {
                         if (global.verbose) cm.writeAbove("  [formatter] " + line);
-                    });
+                    })
+                    .run(cmd);
 
             cm.phaseDone("", "fmt", counts[2] == 0);
 

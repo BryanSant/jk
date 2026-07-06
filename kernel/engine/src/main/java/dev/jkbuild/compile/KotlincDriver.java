@@ -2,7 +2,7 @@
 package dev.jkbuild.compile;
 
 import dev.jkbuild.plugin.protocol.Ndjson;
-import dev.jkbuild.worker.WorkerProcess;
+import dev.jkbuild.worker.WorkerClient;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
@@ -58,18 +58,10 @@ public final class KotlincDriver {
             List<String> diagnostics = new ArrayList<>();
             String[] status = {null};
             // Non-protocol lines (JDK/compiler chatter) are dropped, as before.
-            int exit = WorkerProcess.run(
-                    cmd,
-                    PROTOCOL_PREFIX,
-                    json -> {
-                        String t = Ndjson.str(json, "t");
-                        if ("diag".equals(t)) {
-                            diagnostics.add(Ndjson.str(json, "sev") + ": " + Ndjson.str(json, "msg"));
-                        } else if ("result".equals(t)) {
-                            status[0] = Ndjson.str(json, "status");
-                        }
-                    },
-                    null);
+            int exit = new WorkerClient(PROTOCOL_PREFIX)
+                    .on("diag", json -> diagnostics.add(Ndjson.str(json, "sev") + ": " + Ndjson.str(json, "msg")))
+                    .on("result", json -> status[0] = Ndjson.str(json, "status"))
+                    .run(cmd);
             boolean success = exit == 0 && "COMPILATION_SUCCESS".equals(status[0]);
             return new KotlincResult(success, String.join("\n", diagnostics));
         } finally {

@@ -26,7 +26,7 @@ import dev.jkbuild.run.PhaseKind;
 import dev.jkbuild.runtime.CompileToolchain;
 import dev.jkbuild.util.JkDirs;
 import dev.jkbuild.worker.WorkerJar;
-import dev.jkbuild.worker.WorkerProcess;
+import dev.jkbuild.worker.WorkerClient;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -232,16 +232,13 @@ public final class PublishCommand implements CliCommand {
             int[] files = {0};
             String[] error = {null};
             StringBuilder workerDiag = new StringBuilder();
-            int exit = WorkerProcess.run(
-                    cmd,
-                    "##JKPU:",
-                    json -> {
-                        if ("result".equals(Ndjson.str(json, "t"))) {
-                            files[0] = Ndjson.intValue(json, "files", 0);
-                            error[0] = Ndjson.str(json, "error");
-                        }
-                    },
-                    line -> workerDiag.append(line).append('\n'));
+            int exit = new WorkerClient("##JKPU:")
+                    .on("result", json -> {
+                        files[0] = Ndjson.intValue(json, "files", 0);
+                        error[0] = Ndjson.str(json, "error");
+                    })
+                    .passthrough(line -> workerDiag.append(line).append('\n'))
+                    .run(cmd);
             if (exit != 0) {
                 String diag = workerDiag.length() > 0 ? workerDiag.toString().trim() : null;
                 throw new RuntimeException("publish worker failed"

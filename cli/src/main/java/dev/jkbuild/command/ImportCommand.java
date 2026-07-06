@@ -14,7 +14,7 @@ import dev.jkbuild.plugin.protocol.Ndjson;
 import dev.jkbuild.runtime.CompileToolchain;
 import dev.jkbuild.util.JkDirs;
 import dev.jkbuild.worker.WorkerJar;
-import dev.jkbuild.worker.WorkerProcess;
+import dev.jkbuild.worker.WorkerClient;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -121,23 +121,19 @@ public final class ImportCommand implements CliCommand {
                     1,
                     List.of("-jar", workerJar.toString(), spec.toAbsolutePath().toString()));
             StringBuilder diag = new StringBuilder();
-            int exit = WorkerProcess.run(
-                    cmd,
-                    "##JKCMP:",
-                    json -> {
-                        String t = Ndjson.str(json, "t");
-                        if ("wrote".equals(t)) System.out.println("Wrote " + Ndjson.str(json, "path"));
-                        else if ("note".equals(t)) System.out.println(Ndjson.str(json, "msg"));
-                        else if ("result".equals(t)) {
-                            String err = Ndjson.str(json, "error");
-                            if (err != null) System.err.println("jk import: " + err);
-                            int warnings = Ndjson.intValue(json, "warnings", 0);
-                            if (warnings != 0) {
-                                System.out.println("Import notes: " + warnings + " issue(s)");
-                            }
+            int exit = new WorkerClient("##JKCMP:")
+                    .on("wrote", json -> System.out.println("Wrote " + Ndjson.str(json, "path")))
+                    .on("note", json -> System.out.println(Ndjson.str(json, "msg")))
+                    .on("result", json -> {
+                        String err = Ndjson.str(json, "error");
+                        if (err != null) System.err.println("jk import: " + err);
+                        int warnings = Ndjson.intValue(json, "warnings", 0);
+                        if (warnings != 0) {
+                            System.out.println("Import notes: " + warnings + " issue(s)");
                         }
-                    },
-                    ln -> diag.append(ln).append('\n'));
+                    })
+                    .passthrough(ln -> diag.append(ln).append('\n'))
+                    .run(cmd);
             if (exit != 0 && diag.length() > 0) {
                 System.err.println("jk import: " + diag.toString().trim());
             }

@@ -30,7 +30,7 @@ import dev.jkbuild.runtime.BuildPipeline;
 import dev.jkbuild.runtime.CompileToolchain;
 import dev.jkbuild.util.JkDirs;
 import dev.jkbuild.worker.WorkerJar;
-import dev.jkbuild.worker.WorkerProcess;
+import dev.jkbuild.worker.WorkerClient;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -357,17 +357,14 @@ public final class ImageCommand implements CliCommand {
             String[] ref = {null};
             String[] workerError = {null};
             StringBuilder diag = new StringBuilder();
-            int exit = WorkerProcess.run(
-                    cmd,
-                    "##JKIM:",
-                    json -> {
-                        if ("result".equals(Ndjson.str(json, "t"))) {
-                            ref[0] = Ndjson.str(json, "ref");
-                            String err = Ndjson.str(json, "error");
-                            if (err != null) workerError[0] = err;
-                        }
-                    },
-                    ln -> diag.append(ln).append('\n'));
+            int exit = new WorkerClient("##JKIM:")
+                    .on("result", json -> {
+                        ref[0] = Ndjson.str(json, "ref");
+                        String err = Ndjson.str(json, "error");
+                        if (err != null) workerError[0] = err;
+                    })
+                    .passthrough(ln -> diag.append(ln).append('\n'))
+                    .run(cmd);
             if (workerError[0] != null) throw new RuntimeException("image worker: " + workerError[0]);
             if (exit != 0) {
                 String d = diag.length() > 0 ? diag.toString().trim() : null;

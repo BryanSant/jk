@@ -66,7 +66,12 @@ public final class PluginLoader {
         return WorkerProcess.converse(command(javaExe, classpath, jvmFlags, args), prefix, onProtocol, onPassthrough);
     }
 
-    private static List<String> command(Path javaExe, String classpath, List<String> jvmFlags, List<String> args) {
+    /**
+     * Build the worker launch command {@code <java> <jvmFlags> -cp <classpath>
+     * dev.jkbuild.plugin.worker.PluginWorkerMain <args>} without running it — for callers that drive
+     * the stream themselves via {@link WorkerClient}.
+     */
+    public static List<String> command(Path javaExe, String classpath, List<String> jvmFlags, List<String> args) {
         var cmd = new ArrayList<String>();
         cmd.add(javaExe.toString());
         cmd.addAll(jvmFlags);

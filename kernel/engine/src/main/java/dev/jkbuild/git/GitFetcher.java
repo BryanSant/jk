@@ -5,8 +5,8 @@ import dev.jkbuild.forge.ForgeGitCredentials;
 import dev.jkbuild.model.GitRefSpec;
 import dev.jkbuild.model.GitSource;
 import dev.jkbuild.plugin.protocol.Ndjson;
+import dev.jkbuild.worker.WorkerClient;
 import dev.jkbuild.worker.WorkerJar;
-import dev.jkbuild.worker.WorkerProcess;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -135,11 +135,8 @@ public final class GitFetcher {
             StringBuilder diag = new StringBuilder();
             int exit;
             try {
-                exit = WorkerProcess.run(
-                        cmd,
-                        "##JKGIT:",
-                        json -> {
-                            if (!"result".equals(Ndjson.str(json, "t"))) return;
+                exit = new WorkerClient("##JKGIT:")
+                        .on("result", json -> {
                             result.ok = Ndjson.bool(json, "ok", true);
                             result.sha = Ndjson.str(json, "sha");
                             result.checkout = Ndjson.str(json, "checkout");
@@ -148,8 +145,9 @@ public final class GitFetcher {
                             result.actual = Ndjson.str(json, "actual");
                             result.commitTime = Ndjson.longValue(json, "commit_time", 0);
                             result.nearestTag = Ndjson.str(json, "nearest_tag");
-                        },
-                        line -> diag.append(line).append('\n'));
+                        })
+                        .passthrough(line -> diag.append(line).append('\n'))
+                        .run(cmd);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 throw new IOException("git operation interrupted", e);
