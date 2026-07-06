@@ -2,6 +2,7 @@
 package dev.jkbuild.deny;
 
 import dev.jkbuild.lock.Lockfile;
+import dev.jkbuild.lock.RepoSource;
 import dev.jkbuild.model.DenyPolicy;
 import java.util.ArrayList;
 import java.util.List;
@@ -26,10 +27,9 @@ public final class PolicyChecker {
     public List<Violation> check(Lockfile lock) {
         List<Violation> out = new ArrayList<>();
         for (Lockfile.Artifact pkg : lock.artifacts()) {
-            // Source format: `<name>+<url>`; we test the host portion.
-            String source = pkg.source();
-            int plus = source.indexOf('+');
-            String url = plus > 0 ? source.substring(plus + 1) : source;
+            // Source format: `<name>+<url>`; we test the host portion. RepoSource.url() applies the
+            // lenient split (url after the first '+', else the whole string) this check has always used.
+            String url = RepoSource.parse(pkg.source()).url();
             String host = hostOf(url);
             for (String denied : policy.deniedSources()) {
                 if (hostMatches(host, denied)) {

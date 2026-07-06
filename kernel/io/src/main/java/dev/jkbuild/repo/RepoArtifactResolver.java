@@ -2,6 +2,7 @@
 package dev.jkbuild.repo;
 
 import dev.jkbuild.cache.Cas;
+import dev.jkbuild.lock.RepoSource;
 import java.nio.file.Path;
 import java.util.Optional;
 
@@ -24,13 +25,11 @@ public final class RepoArtifactResolver {
 
     /**
      * The {@code <name>} before the {@code '+'} in a lockfile source ({@code "central+https://…"}),
-     * or {@code null} when the source is absent/malformed.
+     * or {@code null} when the source is absent/malformed. Delegates to the shared {@link RepoSource}
+     * parser (in {@code :core}), which owns the {@code <name>+<url>} split.
      */
     public static String repoName(String source) {
-        if (source == null) return null;
-        int plus = source.indexOf('+');
-        if (plus <= 0 || plus >= source.length() - 1) return null;
-        return source.substring(0, plus);
+        return RepoSource.parse(source).name();
     }
 
     /**
