@@ -145,9 +145,9 @@ public final class CompatRunner implements Plugin {
             for (Map.Entry<String, JkBuild> e : modules.entrySet()) {
                 Path moduleJkBuild = effectiveBaseDir.resolve(e.getKey()).resolve("jk.toml");
                 if (Files.exists(moduleJkBuild) && !force) {
-                    out.emit("{\"t\":\"result\",\"ok\":false,\"error\":\"would overwrite "
-                            + moduleJkBuild
-                            + " — pass --force\"}");
+                    out.emit("{\"t\":\"result\",\"ok\":false,\"error\":"
+                            + Ndjson.quote("would overwrite " + moduleJkBuild + " — pass --force")
+                            + "}");
                     return 73;
                 }
                 Files.writeString(moduleJkBuild, JkBuildRenderer.render(e.getValue()), StandardCharsets.UTF_8);

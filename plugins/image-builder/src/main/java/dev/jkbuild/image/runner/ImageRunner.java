@@ -140,12 +140,12 @@ public final class ImageRunner implements Plugin {
             } else if ("daemon".equals(mode)) {
                 String ref = config.targetReference(artifact, version);
                 String exe = dockerExecutable != null ? dockerExecutable : "docker";
-                out.emit("{\"t\":\"progress\",\"msg\":\"loading " + ref + " into " + exe + "\"}");
+                out.emit("{\"t\":\"progress\",\"msg\":" + Ndjson.quote("loading " + ref + " into " + exe) + "}");
                 ImageBuilder.loadToLocalDaemon(plan, dockerExePath);
                 out.emit("{\"t\":\"result\",\"ok\":true,\"ref\":" + Ndjson.quote(ref) + ",\"daemon\":true}");
             } else {
                 String ref = config.targetReference(artifact, version);
-                out.emit("{\"t\":\"progress\",\"msg\":\"pushing " + ref + "\"}");
+                out.emit("{\"t\":\"progress\",\"msg\":" + Ndjson.quote("pushing " + ref) + "}");
                 ImageBuilder.pushToRegistry(plan);
                 out.emit("{\"t\":\"result\",\"ok\":true,\"ref\":" + Ndjson.quote(ref) + "}");
             }
