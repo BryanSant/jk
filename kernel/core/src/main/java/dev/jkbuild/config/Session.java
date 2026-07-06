@@ -4,6 +4,7 @@ package dev.jkbuild.config;
 import dev.jkbuild.util.JkDirs;
 import java.nio.file.Path;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * The request-scoped context for one jk invocation — the value the engine (the "server") needs to do
@@ -29,6 +30,11 @@ import java.util.Objects;
  * @param graalSpec top-tier GraalVM selection ({@code --graal}), or {@code null}
  * @param parallelTests {@code --parallel-tests}: run modules' test phases concurrently (default false,
  *     which serializes them through the engine's test gate — shared ports/locks/fixtures)
+ * @param cancel per-session cooperative cancellation token (never {@code null}); a front-end holds it
+ *     and calls {@link CancelToken#cancel()} to signal, while the engine polls {@link #cancelled()}.
+ *     A {@code null} passed to the canonical constructor normalizes to {@link CancelToken#NONE} (an
+ *     inert, never-cancelled token); {@link #defaults()} instead carries a fresh {@link
+ *     CancelToken#live() live} token so the default front-end path is cancellable out of the box.
  */
 public record Session(
         JkConfig config,
@@ -38,16 +44,66 @@ public record Session(
         WorkerTuning jvm,
         String jdkSpec,
         String graalSpec,
-        boolean parallelTests) {
+        boolean parallelTests,
+        CancelToken cancel) {
 
     public Session {
         Objects.requireNonNull(config, "config");
         Objects.requireNonNull(workingDir, "workingDir");
         Objects.requireNonNull(cacheDir, "cacheDir");
         Objects.requireNonNull(jvm, "jvm");
+        cancel = (cancel == null) ? CancelToken.NONE : cancel;
     }
 
-    /** A default session: empty config, current working directory, default cache/JDK roots, no tuning. */
+    /**
+     * Per-session cooperative cancellation signal. The front-end that owns a {@link Session} keeps a
+     * reference to its token and calls {@link #cancel()} to request a stop; engine phases poll {@link
+     * #cancelled()} at safe points and unwind. Implementations are thread-safe: the signalling thread
+     * (a UI/front-end) and the polling threads (engine workers) differ by design.
+     */
+    public interface CancelToken {
+
+        /** Whether cancellation has been requested. */
+        boolean cancelled();
+
+        /** Request cancellation. Idempotent; safe to call from any thread. */
+        void cancel();
+
+        /** A shared, inert token: {@link #cancelled()} is always {@code false} and {@link #cancel()} is a no-op. */
+        CancelToken NONE = new CancelToken() {
+            @Override
+            public boolean cancelled() {
+                return false;
+            }
+
+            @Override
+            public void cancel() {
+                // no-op: NONE is never cancellable
+            }
+        };
+
+        /** A fresh, live token backed by an {@link AtomicBoolean} — thread-safe and one-shot. */
+        static CancelToken live() {
+            return new CancelToken() {
+                private final AtomicBoolean flag = new AtomicBoolean(false);
+
+                @Override
+                public boolean cancelled() {
+                    return flag.get();
+                }
+
+                @Override
+                public void cancel() {
+                    flag.set(true);
+                }
+            };
+        }
+    }
+
+    /**
+     * A default session: empty config, current working directory, default cache/JDK roots, no tuning,
+     * and a fresh {@link CancelToken#live() live} cancellation token so a front-end can cancel it.
+     */
     public static Session defaults() {
         return new Session(
                 JkConfig.empty(),
@@ -57,24 +113,26 @@ public record Session(
                 WorkerTuning.NONE,
                 null,
                 null,
-                false);
+                false,
+                CancelToken.live());
     }
 
     public Session withConfig(JkConfig newConfig) {
-        return new Session(newConfig, workingDir, cacheDir, jdksDir, jvm, jdkSpec, graalSpec, parallelTests);
+        return new Session(newConfig, workingDir, cacheDir, jdksDir, jvm, jdkSpec, graalSpec, parallelTests, cancel);
     }
 
     public Session withWorkingDir(Path dir) {
         return new Session(
-                config, dir.toAbsolutePath().normalize(), cacheDir, jdksDir, jvm, jdkSpec, graalSpec, parallelTests);
+                config, dir.toAbsolutePath().normalize(), cacheDir, jdksDir, jvm, jdkSpec, graalSpec, parallelTests,
+                cancel);
     }
 
     public Session withCacheDir(Path dir) {
-        return new Session(config, workingDir, dir, jdksDir, jvm, jdkSpec, graalSpec, parallelTests);
+        return new Session(config, workingDir, dir, jdksDir, jvm, jdkSpec, graalSpec, parallelTests, cancel);
     }
 
     public Session withJdksDir(Path dir) {
-        return new Session(config, workingDir, cacheDir, dir, jvm, jdkSpec, graalSpec, parallelTests);
+        return new Session(config, workingDir, cacheDir, dir, jvm, jdkSpec, graalSpec, parallelTests, cancel);
     }
 
     public Session withJvm(WorkerTuning tuning) {
@@ -86,17 +144,24 @@ public record Session(
                 tuning == null ? WorkerTuning.NONE : tuning,
                 jdkSpec,
                 graalSpec,
-                parallelTests);
+                parallelTests,
+                cancel);
     }
 
     /** The top-tier JDK / GraalVM selection ({@code --jdk} / {@code --graal}); blanks normalize to null. */
     public Session withToolchainSpecs(String jdk, String graal) {
         return new Session(
-                config, workingDir, cacheDir, jdksDir, jvm, blankToNull(jdk), blankToNull(graal), parallelTests);
+                config, workingDir, cacheDir, jdksDir, jvm, blankToNull(jdk), blankToNull(graal), parallelTests,
+                cancel);
     }
 
     public Session withParallelTests(boolean enabled) {
-        return new Session(config, workingDir, cacheDir, jdksDir, jvm, jdkSpec, graalSpec, enabled);
+        return new Session(config, workingDir, cacheDir, jdksDir, jvm, jdkSpec, graalSpec, enabled, cancel);
+    }
+
+    /** A copy carrying the given cancellation token ({@code null} → {@link CancelToken#NONE}). */
+    public Session withCancel(CancelToken token) {
+        return new Session(config, workingDir, cacheDir, jdksDir, jvm, jdkSpec, graalSpec, parallelTests, token);
     }
 
     private static String blankToNull(String s) {
@@ -124,5 +189,10 @@ public record Session(
 
     public boolean verbose() {
         return config.verboseOr(false);
+    }
+
+    /** Whether this session's {@link #cancel() cancellation token} has been signalled. */
+    public boolean cancelled() {
+        return cancel.cancelled();
     }
 }
