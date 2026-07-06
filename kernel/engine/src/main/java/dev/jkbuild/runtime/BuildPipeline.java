@@ -61,11 +61,11 @@ public final class BuildPipeline {
         // its phase factories produce phases that poll cancelled(). The session is resolved
         // lazily at poll time, so a later install()/where() binding is picked up.
         //
-        // CAVEAT: ScopedValue bindings do NOT propagate to tasks on the shared JkThreads.io()
-        // pool (only to structured forks), so a *scoped* (multi-tenant) session's cancel is seen
-        // by phases polling on the binding thread but not by async worker-pool tasks, which read
-        // the process-static session. For the single-process CLI (static session) this is fully
-        // effective; full async propagation is a documented follow-up.
+        // Session context (and thus this cancel token) also reaches tasks on the shared
+        // JkThreads.io()/cpu() pools: those pools wrap every task via ContextPropagator, which
+        // SessionContext binds to capture the submitting thread's session and rebind it on the
+        // worker. So a scoped (multi-tenant) session's cancel is observed by async worker-pool
+        // tasks too, not just phases polling on the binding thread.
         dev.jkbuild.run.SessionCancel.bind(
                 () -> dev.jkbuild.config.SessionContext.current().cancelled());
     }

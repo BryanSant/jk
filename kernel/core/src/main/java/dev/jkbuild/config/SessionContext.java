@@ -45,6 +45,33 @@ public final class SessionContext {
     /** Process-wide fallback for the single-build CLI path. */
     private static volatile Session current = Session.defaults();
 
+    static {
+        // Install the Session-capturing propagator into :model's ContextPropagator seam so a
+        // where()-bound session propagates to tasks run on the shared JkThreads.io()/cpu() pools
+        // (a ScopedValue binding otherwise does NOT reach a pre-existing shared executor). wrap* is
+        // called on the SUBMITTING thread — capturing current() there — and rebinds it on the worker.
+        // Because the rebound session carries its per-request cancel token, SessionCancel.cancelled()
+        // (which reads current().cancelled()) now also reaches async worker-pool tasks. This class
+        // loads early (everything reads current()), so the binding is in place before any pool
+        // submission. Under a single static session (the CLI) this just rebinds the same session —
+        // behavior unchanged.
+        dev.jkbuild.util.ContextPropagator.bind(
+                new dev.jkbuild.util.ContextPropagator.Propagator() {
+                    @Override
+                    public Runnable wrapRunnable(Runnable r) {
+                        Session s = current();
+                        return () -> runWhere(s, r);
+                    }
+
+                    @Override
+                    public <T> java.util.concurrent.Callable<T> wrapCallable(
+                            java.util.concurrent.Callable<T> c) {
+                        Session s = current();
+                        return () -> where(s, c);
+                    }
+                });
+    }
+
     private SessionContext() {}
 
     /** Install the resolved session onto the process-static fallback for this invocation. */
