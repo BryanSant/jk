@@ -83,7 +83,15 @@ and headless paths, but three parallel implementations remain.
 
 ### M4 — `topoSortModules` duplicated in the CLI
 
-**Severity: medium (correctness drift).** **Status: OPEN.**
+**Severity: medium (correctness drift).** **Status: FIXED** (commit `one workspace topo-sort … M4`).
+`BuildGraph` now owns the single implementation: private `modulePrereqs()` + `kahnSort()` are shared
+by the graph resolver (`Builder.topoSort`) and a new public `BuildGraph.orderModules(Map)`. The serial
+path (`BuildCommand`) and `NativeCommand` route through it; the CLI copy and the cross-command static
+reach are deleted. Cycle fallback preserved.
+_Bonus finding (resolved):_ tie-break among independent modules is now deterministic declaration order
+(was `HashMap` hash order — a latent non-determinism); and the stale `[build.embed-sha]` reference in
+the old javadoc/one test described a **non-existent feature** (no `embed-sha` parsing exists) — the
+test only passed by hash luck and was corrected to exercise the real `test-worker-jars` edge.
 
 `BuildCommand.topoSortModules` (`cli/.../command/BuildCommand.java:693`) is a complete second
 workspace-DAG topo-sort — including `workspace:` name resolution and `[build].order-after` edges —
@@ -149,7 +157,16 @@ through the session output sink (depends on L7's output-sink landing).
 
 ### M6 — the engine/internal boundary is convention-only
 
-**Severity: medium (encapsulation).** **Status: OPEN.**
+**Severity: medium (encapsulation).** **Status: FIXED** (commit `compiler-enforce … M6`).
+`BuildService.ModulePlan` and `BuildPlanForecast.Module` are now `final class`es (not records) so their
+`unit()` accessor drops to package-private — reachable by engine consumers in `dev.jkbuild.runtime`,
+invisible to the CLI. `ExplainCommand` migrated to the new public `coord()`/`dir()`; the CLI no longer
+calls `.unit()` anywhere.
+_Compromise (logged → folded into L8):_ the CLI still names `BuildGraph`/`BuildGraph.BuildUnit`
+*directly* via `graph.topoOrder()` (`BuildCommand.java:275`) and `BuildGraph.resolve(...)`
+(`ExplainCommand.java:83`, `BuildCommand`). That is a different leak vector (the raw graph API, not the
+`ModulePlan`/`Module` accessors this item enforced) and closing it needs a `BuildService` plan/explain
+facade — tracked under **L8**.
 
 `ModulePlan` is a record, so `unit()` (returning engine-internal `BuildGraph.BuildUnit`) is a **public
 accessor** — the doc says "not part of the front-end API" but nothing enforces it. The spirit is already
@@ -272,9 +289,14 @@ in the final review. `(open)` = still a compromise; `(resolved)` = revisited and
 - **[Q3] (open)** `CacheSync` scans `+` twice — needs a `RepoArtifactResolver.repoUrl`/parsed-source in io.
 - **[Q3] (open)** `PolicyChecker` (core) still hand-splits `+` — deferred by layering; needs a shared
   repo-source parser in `core`/`model`.
+- **[M6] (open → L8)** the CLI still names `BuildGraph`/`BuildUnit` directly via `graph.topoOrder()`
+  (`BuildCommand:275`) and `BuildGraph.resolve` (`ExplainCommand:83`). Needs a `BuildService`
+  plan/explain facade — folded into L8.
 
 ---
 
 ## Change log
 
 - 2026-07-06 — document created from the audit; all items OPEN.
+- 2026-07-06 — Quick phase (Q1 FIXED, Q2/Q3 mostly fixed) + Medium M4/M6 FIXED landed green
+  (`:cli:test` + `:engine:test`). Compromises logged. M5, L7, L8 remaining.
