@@ -181,6 +181,9 @@ public final class BuildService {
             String profile,
             boolean skipTests,
             boolean verbose,
+            // Max modules to build concurrently. 0 = auto (schedule every ready level's units at once,
+            // memory permitting — the parallel default); 1 = strictly serial; N = a rolling window of N.
+            int maxModuleConcurrency,
             // Pre-computed dirty module dirs, or null to forecast internally. Lets a caller that
             // already forecasted (the CLI's fully-cached "all up to date" shortcut) skip a redundant pass.
             Set<Path> dirtyHint) {}
@@ -285,6 +288,9 @@ public final class BuildService {
         int cap = Runtime.getRuntime().availableProcessors();
         boolean parallelTests = SessionContext.current().parallelTests();
         int width = BuildGraph.maxReadyWidth(units, graph.edges());
+        // A module-concurrency cap (e.g. --no-parallel → 1) bounds the peak module count for both the
+        // memory plan and the ETA below, so serial builds size heaps and estimate time as serial.
+        if (req.maxModuleConcurrency() > 0) width = Math.min(width, req.maxModuleConcurrency());
         JvmOptions.planAndApply(HeapPlan.requestedJvms(width, req.workers() > 0 ? req.workers() : 1, parallelTests, cap));
 
         Set<Path> moduleDirs = new LinkedHashSet<>();
@@ -315,7 +321,10 @@ public final class BuildService {
                     e.getKey(),
                     EffortWeights.costOf(e.getKey(), graph.edges().getOrDefault(e.getKey(), Set.of()), e.getValue().goal()));
         }
-        int concurrency = HeapPlan.requestedJvms(width, req.workers() > 0 ? req.workers() : 1, parallelTests, cap);
+        int requestedJvms = HeapPlan.requestedJvms(width, req.workers() > 0 ? req.workers() : 1, parallelTests, cap);
+        // Clamp the ETA's module concurrency to the cap so a serial build (cap 1) estimates serially.
+        final int concurrency =
+                req.maxModuleConcurrency() > 0 ? Math.min(requestedJvms, req.maxModuleConcurrency()) : requestedJvms;
         listener.onEtaEstimate(seedEta(
                 new ArrayList<>(costByDir.values()), plans.keySet(), concurrency, parallelTests, req.cache(), req.jdksDir()));
 
@@ -351,7 +360,8 @@ public final class BuildService {
                                 + EffortWeights.scheduleMillis(rem, concurrency, false, parallelTests, Math.round(liveMpw)));
                     }
                     return null;
-                });
+                },
+                req.maxModuleConcurrency());
         boolean ok = failure == null;
         if (ok) {
             // Fold this run's phase durations + measured throughput into the learned ledger + host

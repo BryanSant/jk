@@ -12,7 +12,6 @@ import dev.jkbuild.cli.tui.Glyphs;
 import dev.jkbuild.cli.tui.GoalWedge;
 import dev.jkbuild.config.GlobalConfig;
 import dev.jkbuild.config.JkBuildParser;
-import dev.jkbuild.config.WorkspaceLoader;
 import dev.jkbuild.config.WorkspaceLocator;
 import dev.jkbuild.layout.BuildLayout;
 import dev.jkbuild.model.JkBuild;
@@ -33,7 +32,6 @@ import dev.jkbuild.util.JkThreads;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -135,7 +133,7 @@ public final class BuildCommand implements CliCommand {
             return Exit.CONFIG;
         }
         // Peek at the manifest before committing to a per-dir build. A
-        // workspace root dispatches to runWorkspaceBuild. A workspace module
+        // workspace root dispatches to buildWorkspace. A workspace module
         // also redirects — jk build from any module builds the whole workspace
         // in topological order, same as running from the root.
         JkBuild peek;
@@ -178,7 +176,9 @@ public final class BuildCommand implements CliCommand {
         // build here instead of lying "up to date".
         int lockGuard = ensureWorkspaceLockFresh(root, rootBuild);
         if (lockGuard != 0) return lockGuard;
-        return noParallel ? runWorkspaceBuild(root, rootBuild) : runGraphParallel(root, rootBuild);
+        // Both modes drive the one engine planner (BuildService.buildWorkspace); --no-parallel just
+        // caps module concurrency to 1 (strict serial) via the request the view layer builds below.
+        return runGraphParallel(root, rootBuild);
     }
 
     /**
@@ -215,18 +215,6 @@ public final class BuildCommand implements CliCommand {
         if (plan != null && plan.warning() != null && !global.outputIsJson()) {
             CliOutput.err("jk build: " + plan.warning());
         }
-    }
-
-    /** Median of the observed per-module {@code ms/weight} rates, or {@code null} when none yet. */
-    private static Double medianRate(List<Double> rates) {
-        List<Double> sorted;
-        synchronized (rates) {
-            if (rates.isEmpty()) return null;
-            sorted = new ArrayList<>(rates);
-        }
-        sorted.sort(Double::compareTo);
-        int n = sorted.size();
-        return n % 2 == 1 ? sorted.get(n / 2) : (sorted.get(n / 2 - 1) + sorted.get(n / 2)) / 2.0;
     }
 
     private static final Object OUT_LOCK = new Object();
@@ -306,6 +294,7 @@ public final class BuildCommand implements CliCommand {
                 profileName,
                 buildOpts.skipTests,
                 global.verbose,
+                noParallel ? 1 : 0, // --no-parallel → strict serial; else auto/unbounded
                 null); // headless: let the engine forecast dirty modules
         Map<Path, List<String>> buffers = new java.util.concurrent.ConcurrentHashMap<>();
         int[] total = {0};
@@ -399,6 +388,7 @@ public final class BuildCommand implements CliCommand {
                 profileName,
                 buildOpts.skipTests,
                 global.verbose,
+                noParallel ? 1 : 0, // --no-parallel → strict serial; else auto/unbounded
                 dirtyDirs); // reuse the forecast the fully-cached shortcut already computed
         dev.jkbuild.runtime.BuildService.WorkspaceResult result =
                 dev.jkbuild.runtime.BuildService.buildWorkspace(request, new dev.jkbuild.runtime.WorkspaceBuildListener() {
@@ -519,156 +509,6 @@ public final class BuildCommand implements CliCommand {
             sb.append(CommandManager.coloredModule(coord)).append(' ').append(Theme.colorize("— failed", th.error()));
         }
         return sb.toString();
-    }
-
-    /**
-     * Build every module of the workspace whose root is {@code workspaceRoot}. Modules compile in
-     * topological order computed from each module's inter-sibling deps (a sibling listed as a regular
-     * Maven coord whose group+artifact match another module's {@code [project]}). Each module's jar
-     * lands at {@code <workspaceRoot>/target/} per the {@link BuildLayout} contract.
-     *
-     * <p>If the root manifest also declares its own {@code [project]} with source files, that build
-     * is skipped — the workspace root is coordinator-only here. (We may revisit this once virtual
-     * workspaces land; for now the assumption matches every multi-module JVM project we've seen.)
-     */
-    private int runWorkspaceBuild(Path workspaceRoot, JkBuild root) throws Exception {
-        Map<Path, JkBuild> modulesByDir;
-        try {
-            modulesByDir = WorkspaceLoader.loadModules(workspaceRoot, root);
-        } catch (RuntimeException e) {
-            CliOutput.err("jk build: " + e.getMessage());
-            return Exit.CONFIG;
-        }
-        if (modulesByDir.isEmpty()) {
-            CliOutput.out("(workspace declares no modules)");
-            return 0;
-        }
-        applyMemoryPlan(1); // --no-parallel: modules build serially (peak = 1 module)
-        List<Path> sorted = BuildGraph.orderModules(modulesByDir);
-        GoalConsole.Mode mode = GoalConsole.modeFor(global);
-        // Pre-compute workspace link map once (covers all modes) — needs the full sorted list.
-        Map<Path, Path> wsLinks = dev.jkbuild.runtime.BuildService.computeWorkspaceLinks(sorted, workspaceRoot);
-
-        // --output json / --verbose keep per-module rendering (NDJSON streams,
-        // verbose wants the full per-phase log). Banners separate the modules.
-        if (mode != GoalConsole.Mode.AUTO && mode != GoalConsole.Mode.QUIET) {
-            for (int i = 0; i < sorted.size(); i++) {
-                Path moduleDir = sorted.get(i);
-                CliOutput.out();
-                String sepGlyph = Theme.colorize("══", Theme.active().darkGray());
-                String moduleName = workspaceRoot.relativize(moduleDir).toString();
-                String moduleCount = "(" + (i + 1) + "/" + sorted.size() + ")";
-                CliOutput.out(
-                        sepGlyph + " " + Theme.colorize(moduleName, Theme.active().settled()) + " " + Theme.colorize(moduleCount, Theme.active().normalGray()) + " " + sepGlyph);
-                int exit = runForDir(moduleDir);
-                if (exit != 0) {
-                    CliOutput.err(
-                            "jk build: " + workspaceRoot.relativize(moduleDir) + " failed (exit " + exit + ")");
-                    return exit;
-                }
-                dev.jkbuild.runtime.BuildService.linkModuleArtifacts(moduleDir, wsLinks);
-            }
-            return 0;
-        }
-
-        // AUTO / QUIET: every module feeds ONE aggregate view (spinner header +
-        // single bar + merged phase list). Settle it once after the last module.
-        boolean animate = mode == GoalConsole.Mode.AUTO && GoalConsole.isInteractiveTerminal();
-        CommandManager view = CommandManager.goal(CliOutput.stdout(), "Build", animate);
-        AggregateContext agg = new AggregateContext(view);
-        int built = 0;
-        long buildStart = System.nanoTime();
-        // Route every module's phase/process output above the one shared region.
-        try (var cap = view.captureOutput()) {
-            // Breadth-first pre-scan — build every module's goal and sum its
-            // estimated ticks so the bar calibrates to the whole-workspace total
-            // and advances 0→100% without resetting per module. These are the very
-            // goals we then run in-process, one module at a time.
-            Map<Path, PreparedModule> prepared = new LinkedHashMap<>();
-            long total = 0;
-            for (Path moduleDir : sorted) {
-                PreparedModule pm;
-                try {
-                    pm = prepareModule(moduleDir);
-                } catch (Exception e) {
-                    view.finishFailure(
-                            Theme.colorize("Build failed", Theme.active().error()) + " " + elapsedSince(buildStart));
-                    throw e;
-                }
-                if (pm == null) {
-                    view.finishFailure(
-                            "No jk.toml in " + workspaceRoot.relativize(moduleDir) + " " + elapsedSince(buildStart));
-                    return Exit.CONFIG;
-                }
-                total += pm.barWeight();
-                prepared.put(moduleDir, pm);
-            }
-            agg.calibrate(total);
-            // Countdown weight→ms conversion: learned rates when warm, else a one-time host
-            // calibration (probe-if-absent); 0 (count up) only when neither is available.
-            Path etaCache = cacheDir != null ? cacheDir : JkDirs.cache();
-            boolean usefulTimings = dev.jkbuild.runtime.PhaseTimings.load(etaCache)
-                    .hasTimingsFor(
-                            prepared.keySet().stream().map(Path::toString).toList());
-            long seedMpw;
-            if (usefulTimings) {
-                seedMpw = dev.jkbuild.runtime.EffortWeights.MS_PER_WEIGHT;
-            } else {
-                dev.jkbuild.runtime.Calibration cal = dev.jkbuild.runtime.Calibration.ensure(jdksDir);
-                seedMpw = cal.present() ? Math.round(cal.msPerWeight()) : -1;
-            }
-            view.setEtaEstimate(seedMpw > 0 ? total * seedMpw : 0);
-
-            // Serial re-projection: measure each module's real ms/weight as it finishes and
-            // re-estimate the remaining (whole-sum, serial) ETA from the median — contention
-            // self-corrects. --no-parallel doesn't attach a PhaseTimings recorder, but feeding
-            // the calibration anchor still lets these runs improve the cold estimate.
-            List<Double> observedRates = new ArrayList<>();
-            long remainingWeight = total;
-            for (Path moduleDir : sorted) {
-                String module = workspaceRoot.relativize(moduleDir).toString();
-                PreparedModule pm = prepared.get(moduleDir);
-                int exit;
-                long t0 = System.nanoTime();
-                try {
-                    exit = runPrepared(pm, agg, buildStart);
-                } catch (Exception e) {
-                    view.finishFailure(buildFailedAt(module, buildStart));
-                    throw e;
-                }
-                long moduleMs = (System.nanoTime() - t0) / 1_000_000;
-                if (exit != 0) {
-                    // Error diagnostics print above the result line (which stays last),
-                    // mirroring the success route.
-                    List<String> above = new ArrayList<>();
-                    for (GoalResult.Diagnostic d : agg.lastErrors()) {
-                        // Per-test failures (code "test-failure") were already printed
-                        // in full by the run-tests phase; keep them for --output json
-                        // but don't echo them again here.
-                        if ("test-failure".equals(d.code())) continue;
-                        above.add(ConsoleSpec.renderError(d));
-                    }
-                    view.finishFailure(buildFailedAt(module, buildStart), above);
-                    return exit;
-                }
-                dev.jkbuild.runtime.BuildService.linkModuleArtifacts(moduleDir, wsLinks);
-                built++;
-                // Re-project from measured throughput: new total = elapsed + remaining×median.
-                remainingWeight -= pm.barWeight();
-                if (!pm.fullyCached() && pm.barWeight() > 0 && moduleMs > 0)
-                    observedRates.add(moduleMs / (double) pm.barWeight());
-                Double liveMpw = medianRate(observedRates);
-                if (liveMpw != null && remainingWeight > 0) {
-                    long elapsed = (System.nanoTime() - buildStart) / 1_000_000;
-                    view.setEtaEstimate(elapsed + Math.round(remainingWeight * liveMpw));
-                }
-            }
-            // Fold measured throughput into the host calibration so cold estimates improve.
-            Double runMpw = medianRate(observedRates);
-            if (runMpw != null) dev.jkbuild.runtime.Calibration.refine(runMpw, System.currentTimeMillis());
-        }
-        view.finishGoalSuccess(modulesTail(sorted.size(), buildStart));
-        return 0;
     }
 
     private int runForDir(Path dir) throws Exception {
@@ -838,11 +678,6 @@ public final class BuildCommand implements CliCommand {
         return dev.jkbuild.cli.run.ConsoleSpec.took(java.time.Duration.ofMillis(ms));
     }
 
-    /**
-     * Workspace build-failure result line: red "Build failed", the failing module in cyan, dim
-     * duration — e.g. {@code ‼ Build failed: Failure at kernel/core in 8.7s} (the {@code ‼} + red is
-     * added by {@code finishFailure}).
-     */
     /** The green {@code Build successful} lead that opens every build success message. */
     private static String buildOk() {
         return Theme.colorize("Build successful", Theme.active().success());
@@ -938,11 +773,4 @@ public final class BuildCommand implements CliCommand {
                 + Theme.colorize(elapsedSince(start), Theme.active().darkGray());
     }
 
-    private static String buildFailedAt(String module, long buildStart) {
-        return Theme.colorize("Build failed", Theme.active().error())
-                + ": Failure at "
-                + Theme.colorize(module, Theme.active().cyan())
-                + " "
-                + elapsedSince(buildStart);
-    }
 }
