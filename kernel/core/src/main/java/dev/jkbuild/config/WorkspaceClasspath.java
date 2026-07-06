@@ -38,46 +38,54 @@ public final class WorkspaceClasspath {
      *     {@code MAIN}+{@code TEST} for tests)
      */
     public static Result resolve(Path projectDir, JkBuild project, Set<Scope> scopes) throws IOException {
-        // Case 1: project IS the workspace root — add all module jars implicitly.
-        // Modules' compiled outputs are always applicable to the root's classpath;
-        // no explicit dependency declaration is needed.
+        // Locate the workspace root — this project is either the root itself or a member.
+        Path root;
+        JkBuild rootManifest;
         if (project.isWorkspaceRoot()) {
-            return resolveForRoot(projectDir, project);
+            root = projectDir;
+            rootManifest = project;
+        } else {
+            var rootOpt = WorkspaceLocator.findRoot(projectDir);
+            if (rootOpt.isEmpty()) {
+                return new Result(List.of(), List.of());
+            }
+            root = rootOpt.get();
+            rootManifest = JkBuildParser.parse(root.resolve("jk.toml"));
+            if (!rootManifest.isWorkspaceRoot()) {
+                return new Result(List.of(), List.of());
+            }
         }
 
-        // Case 2: project is a workspace module — add declared sibling deps.
-        var rootOpt = WorkspaceLocator.findRoot(projectDir);
-        if (rootOpt.isEmpty()) {
-            return new Result(List.of(), List.of());
-        }
-        Path root = rootOpt.get();
-        JkBuild rootManifest = JkBuildParser.parse(root.resolve("jk.toml"));
-        if (!rootManifest.isWorkspaceRoot()) {
-            return new Result(List.of(), List.of());
-        }
-
-        // Build bidirectional index: module-coord and bare-name → sibling dir + jar
+        // Every build unit in the workspace — the members AND the buildable root — is a
+        // resolvable sibling. Inter-unit dependencies are explicit (`x = { workspace = true }`)
+        // and may point in any acyclic direction: member→member, member→root, or root→member
+        // (Cargo/uv style; no implicit "root depends on all members"). The unit doing the
+        // resolving is excluded from its own sibling set.
+        Path self = projectDir.toAbsolutePath().normalize();
         Map<String, Path> siblingDirByModule = new HashMap<>();
         Map<String, Path> siblingJarByModule = new HashMap<>();
-        Map<String, Path> siblingJarByName = new HashMap<>();
+        Map<String, JkBuild> siblingManifestByCoord = new HashMap<>();
         Map<String, String> siblingCoordByName = new HashMap<>(); // name → full coord
+        List<Path> unitDirs = new ArrayList<>();
         for (String moduleName : rootManifest.workspace().modules()) {
-            Path siblingDir = root.resolve(moduleName);
-            Path siblingManifest = siblingDir.resolve("jk.toml");
-            if (!Files.exists(siblingManifest)) continue;
-            JkBuild sibling;
+            unitDirs.add(root.resolve(moduleName));
+        }
+        unitDirs.add(root); // the root is a unit too
+        for (Path unitDir : unitDirs) {
+            if (unitDir.toAbsolutePath().normalize().equals(self)) continue; // exclude self
+            Path manifest = unitDir.resolve("jk.toml");
+            if (!Files.exists(manifest)) continue;
+            JkBuild unit;
             try {
-                sibling = JkBuildParser.parse(siblingManifest);
+                unit = unitDir.equals(root) ? rootManifest : JkBuildParser.parse(manifest);
             } catch (RuntimeException ignored) {
                 continue;
             }
-            String moduleCoord =
-                    sibling.project().group() + ":" + sibling.project().name();
-            Path jar = BuildLayout.of(siblingDir, sibling).mainJar();
-            siblingDirByModule.put(moduleCoord, siblingDir);
-            siblingJarByModule.put(moduleCoord, jar);
-            siblingJarByName.put(sibling.project().name(), jar);
-            siblingCoordByName.put(sibling.project().name(), moduleCoord);
+            String coord = unit.project().group() + ":" + unit.project().name();
+            siblingDirByModule.put(coord, unitDir);
+            siblingJarByModule.put(coord, BuildLayout.of(unitDir, unit).mainJar());
+            siblingManifestByCoord.put(coord, unit);
+            siblingCoordByName.put(unit.project().name(), coord);
         }
 
         // Collect the full transitive workspace closure via BFS.  Direct deps
@@ -96,16 +104,8 @@ public final class WorkspaceClasspath {
         }
         while (!queue.isEmpty()) {
             String coord = queue.poll();
-            Path sibDir = siblingDirByModule.get(coord);
-            if (sibDir == null) continue;
-            Path sibToml = sibDir.resolve("jk.toml");
-            if (!Files.exists(sibToml)) continue;
-            JkBuild sibBuild;
-            try {
-                sibBuild = JkBuildParser.parse(sibToml);
-            } catch (RuntimeException ignored) {
-                continue;
-            }
+            JkBuild sibBuild = siblingManifestByCoord.get(coord);
+            if (sibBuild == null) continue;
             // MAIN and EXPORT propagate transitively: a sibling's exported deps
             // (api semantics) ride along to anything that depends on it, and MAIN
             // deps stay visible down the workspace chain (io→core→model).
@@ -153,35 +153,6 @@ public final class WorkspaceClasspath {
         String name = Dependency.workspaceName(module);
         String coord = coordByName.get(name);
         return coord != null ? coord : module;
-    }
-
-    /**
-     * When the workspace root itself has source code, all module jars are automatically on its
-     * classpath — no explicit dep declaration needed.
-     */
-    private static Result resolveForRoot(Path root, JkBuild rootManifest) throws IOException {
-        List<Path> jars = new ArrayList<>();
-        List<Path> closureJars = new ArrayList<>();
-        List<String> missing = new ArrayList<>();
-        for (String moduleName : rootManifest.workspace().modules()) {
-            Path siblingDir = root.resolve(moduleName);
-            Path siblingManifest = siblingDir.resolve("jk.toml");
-            if (!Files.exists(siblingManifest)) continue;
-            JkBuild sibling;
-            try {
-                sibling = JkBuildParser.parse(siblingManifest);
-            } catch (RuntimeException ignored) {
-                continue;
-            }
-            Path jar = BuildLayout.of(siblingDir, sibling).mainJar();
-            closureJars.add(jar);
-            if (Files.exists(jar)) {
-                jars.add(jar);
-            } else {
-                missing.add(sibling.project().group() + ":" + sibling.project().name() + " (expected at " + jar + ")");
-            }
-        }
-        return new Result(jars, missing, List.of(), closureJars);
     }
 
     public record Result(

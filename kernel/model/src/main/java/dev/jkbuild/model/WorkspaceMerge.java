@@ -51,6 +51,10 @@ public final class WorkspaceMerge {
             siblingByArtifact.put(m.project().name(), m);
             internal.add(m.project().group() + ":" + m.project().name());
         }
+        // The workspace root is itself a unit members may depend on (Cargo/uv style:
+        // a member can `<root> = { workspace = true }`), so it joins the sibling set.
+        siblingByArtifact.put(root.project().name(), root);
+        internal.add(root.project().group() + ":" + root.project().name());
         Map<String, Workspace.WorkspaceDependency> wsDeps =
                 root.workspace() != null ? root.workspace().dependencies() : Map.of();
 
@@ -109,6 +113,9 @@ public final class WorkspaceMerge {
             siblingByArtifact.put(module.project().name(), module);
             internal.add(coord);
         }
+        // The root is itself a workspace unit members may depend on.
+        siblingByArtifact.put(root.project().name(), root);
+        internal.add(root.project().group() + ":" + root.project().name());
 
         Map<String, Workspace.WorkspaceDependency> wsDeps =
                 root.workspace() != null ? root.workspace().dependencies() : Map.of();
