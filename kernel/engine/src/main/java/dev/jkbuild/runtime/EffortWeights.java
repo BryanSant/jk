@@ -198,13 +198,12 @@ public final class EffortWeights {
             boolean useKotlin,
             boolean forceRebuild) {
         boolean rerun = in.session().config().rerunOr(false) || forceRebuild;
-        boolean refresh = in.session().config().refreshOr(false);
         // If jk.toml is newer than jk.lock AND the lock no longer satisfies all declared
         // deps, treat the module as dirty so parse-lock runs and updates the lock.
         boolean lockStale = !rerun && AutoLock.needsRelocking(in.dir(), in.lockFile());
         if (lockStale) rerun = true;
 
-        int sync = predictSync(in, cas, refresh);
+        int sync = predictSync(in, cas);
         // Learned per-unit rates (cold ⇒ empty ⇒ static Phase-1 weights). Keyed by
         // module dir, the same key the recorder writes at build end.
         PhaseTimings timings = PhaseTimings.load(in.cache());
@@ -353,7 +352,7 @@ public final class EffortWeights {
     }
 
     /** Fetch weight: 8 per artifact not already in the CAS (all of them under {@code  --force}). */
-    private static int predictSync(BuildPipeline.Inputs in, Cas cas, boolean refresh) {
+    private static int predictSync(BuildPipeline.Inputs in, Cas cas) {
         try {
             if (!Files.exists(in.lockFile())) return ARTIFACT_FETCH; // first run resolves+fetches
             Lockfile lock = LockfileReader.read(in.lockFile());
@@ -361,10 +360,11 @@ public final class EffortWeights {
             for (Lockfile.Artifact a : lock.artifacts()) {
                 String checksum = a.checksum();
                 if (checksum == null) continue; // pom-only / path / git — nothing to fetch
-                if (refresh) {
-                    fetches++;
-                    continue;
-                }
+                // Only artifacts missing from the CAS cost anything to sync. --force/--refresh does
+                // NOT re-download blobs already present: the CAS is content-addressed (a stored
+                // sha256 is byte-identical), so a forced build resolves entirely from local disk —
+                // it even succeeds offline. Reserving a per-artifact download here for cached deps
+                // was the bug that made `jk explain --force` predict tens of seconds of phantom fetch.
                 String hex = checksum.startsWith("sha256:") ? checksum.substring("sha256:".length()) : checksum;
                 if (!cas.contains(hex)) fetches++;
             }

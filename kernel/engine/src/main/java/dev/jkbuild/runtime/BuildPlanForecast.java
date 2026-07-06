@@ -88,6 +88,11 @@ public final class BuildPlanForecast {
     /** Forecast every module in {@code graph}, in topological (dependency) order. */
     public static List<Module> of(BuildGraph.Result graph, Cas cas, ActionCache actionCache, Path cache) {
         List<Module> out = new ArrayList<>();
+        // --force/--rerun bypasses jk's build caches, so every phase runs — the forecast must say
+        // so too (otherwise the plan tree renders "Fully Cached" while the ETA, which honors force,
+        // predicts a full rebuild — a self-contradiction).
+        boolean force = dev.jkbuild.config.SessionContext.current().config().forceOr(false)
+                || dev.jkbuild.config.SessionContext.current().config().rerunOr(false);
         // Dirs whose *main output* will change this build — seeds downstream and
         // cross-module dirtiness. Filled as we walk in dependency order.
         Set<Path> dirty = new java.util.HashSet<>();
@@ -99,7 +104,7 @@ public final class BuildPlanForecast {
                     break;
                 }
             }
-            Module m = forecastModule(u, depDirty, cas, actionCache, cache);
+            Module m = forecastModule(u, depDirty, force, cas, actionCache, cache);
             // A module's consumed output changes — and so seeds downstream dirtiness —
             // when its compile does real work (classes change) OR its jar will be
             // (re)packaged, or a dependency already changed. Package matters on its own:
@@ -162,7 +167,7 @@ public final class BuildPlanForecast {
     }
 
     private static Module forecastModule(
-            BuildGraph.BuildUnit u, boolean depDirty, Cas cas, ActionCache actionCache, Path cache) {
+            BuildGraph.BuildUnit u, boolean depDirty, boolean force, Cas cas, ActionCache actionCache, Path cache) {
         JkBuild project = u.manifest();
         Path dir = u.dir();
         List<Phase> phases = new ArrayList<>();
@@ -187,7 +192,7 @@ public final class BuildPlanForecast {
             List<String> javacArgs = JavacLint.effectiveArgs(project.build().lint(), List.of());
             List<Path> processorCp = resolver.classpathFor(lock, Set.of(Scope.PROCESSOR));
 
-            boolean compileDirty = depDirty;
+            boolean compileDirty = depDirty || force;
 
             // ---- compile-main (Java) ----
             Path mainSrcDir = compact ? dir.resolve("src") : dir.resolve("src/main/java");
@@ -209,7 +214,7 @@ public final class BuildPlanForecast {
                 Path stateDir =
                         cache.resolve("actions").resolve("incremental-java").resolve(taskId);
                 var pred = JavaIncrementalCompile.predict(taskId, req, JkVersion.VERSION, actionCache, stateDir);
-                phases.add(compilePhase("compile-main", pred, depDirty));
+                phases.add(compilePhase("compile-main", pred, depDirty || force));
                 if (!phases.get(phases.size() - 1).cached()) compileDirty = true;
             }
 
@@ -217,6 +222,7 @@ public final class BuildPlanForecast {
             List<Path> ktSrc = CompileSupport.collectKotlinSources(dir, compact);
             if (!ktSrc.isEmpty()) {
                 boolean fresh = !depDirty
+                        && !force
                         && FreshnessStamp.looksFresh(layout.kotlinClassesDir(), FreshnessStamp.KOTLIN_STAMP, ktSrc);
                 phases.add(
                         fresh
