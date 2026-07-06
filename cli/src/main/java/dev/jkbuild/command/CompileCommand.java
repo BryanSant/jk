@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.cli.ProjectContext;
 import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.run.ConsoleSpec;
@@ -15,7 +16,6 @@ import dev.jkbuild.run.GoalResult;
 import dev.jkbuild.runtime.BuildPipeline;
 import dev.jkbuild.util.JkDirs;
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
@@ -54,12 +54,10 @@ public final class CompileCommand implements CliCommand {
         Path cacheDir = in.value("cache-dir").map(Path::of).orElse(null);
         GlobalOptions global = GlobalOptions.from(in);
         Path dir = global.workingDir();
-        Path buildFile = dir.resolve("jk.toml");
-        if (!Files.exists(buildFile)) {
-            CliOutput.err("jk compile: no jk.toml in " + dev.jkbuild.cli.PathDisplay.styledRaw(dir));
-            return Exit.CONFIG;
-        }
-        Path lockFile = dir.resolve("jk.lock");
+        var proj = ProjectContext.require(dir, "compile").orElse(null);
+        if (proj == null) return Exit.CONFIG;
+        Path buildFile = proj.buildFile();
+        Path lockFile = proj.lockFile();
         Path cache = cacheDir != null ? cacheDir : JkDirs.cache();
 
         // compileOnly → lock → sync → compile. The pipeline resolves jk.lock on

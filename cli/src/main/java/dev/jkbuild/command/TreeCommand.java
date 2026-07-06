@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.cli.ProjectContext;
 import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.theme.Coords;
@@ -17,7 +18,6 @@ import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.resolver.DependencyTree;
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -81,13 +81,11 @@ public final class TreeCommand implements CliCommand {
             scopes = new ArrayList<>(ordered);
         }
         Path dir = new GlobalOptions().workingDir();
-        Path buildFile = dir.resolve("jk.toml");
-        Path lockFile = dir.resolve("jk.lock");
-        if (!Files.exists(buildFile)) {
-            CliOutput.err("jk tree: no jk.toml in " + dev.jkbuild.cli.PathDisplay.styledRaw(dir));
-            return Exit.CONFIG;
-        }
-        if (!Files.exists(lockFile)) {
+        var proj = ProjectContext.require(dir, "tree").orElse(null);
+        if (proj == null) return Exit.CONFIG;
+        Path buildFile = proj.buildFile();
+        Path lockFile = proj.lockFile();
+        if (!proj.isLocked()) {
             CliOutput.err(
                     "jk tree: no jk.lock in " + dev.jkbuild.cli.PathDisplay.styledRaw(dir) + " (run `jk lock` first)");
             return Exit.CONFIG;

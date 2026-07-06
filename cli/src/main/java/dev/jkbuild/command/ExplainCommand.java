@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.cli.ProjectContext;
 import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cli.GlobalOptions;
@@ -16,7 +17,6 @@ import dev.jkbuild.runtime.BuildGraph;
 import dev.jkbuild.runtime.BuildPlanForecast;
 import dev.jkbuild.task.ActionCache;
 import dev.jkbuild.util.JkDirs;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -72,11 +72,9 @@ public final class ExplainCommand implements CliCommand {
         GlobalOptions global = GlobalOptions.from(in);
         Path cacheDir = in.value("cache-dir").map(Path::of).orElse(null);
         Path startDir = global.workingDir();
-        Path buildFile = startDir.resolve("jk.toml");
-        if (!Files.exists(buildFile)) {
-            CliOutput.err("jk explain: no jk.toml in " + dev.jkbuild.cli.PathDisplay.styledRaw(startDir));
-            return Exit.CONFIG;
-        }
+        var proj = ProjectContext.require(startDir, "explain").orElse(null);
+        if (proj == null) return Exit.CONFIG;
+        Path buildFile = proj.buildFile();
         JkBuild entry = JkBuildParser.parse(buildFile);
         Path cache = cacheDir != null ? cacheDir : JkDirs.cache();
         Cas cas = new Cas(cache);

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.cli.ProjectContext;
 import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cli.GlobalOptions;
@@ -131,10 +132,7 @@ public final class LockCommand implements CliCommand {
         this.global = GlobalOptions.from(in);
 
         Path dir = global.workingDir();
-        if (!Files.exists(dir.resolve("jk.toml"))) {
-            CliOutput.err("jk lock: no jk.toml in " + dev.jkbuild.cli.PathDisplay.styledRaw(dir));
-            return Exit.CONFIG;
-        }
+        if (ProjectContext.require(dir, "lock").isEmpty()) return Exit.CONFIG;
         Path cache = cacheDir != null ? cacheDir : JkDirs.cache();
         Files.createDirectories(cache);
 

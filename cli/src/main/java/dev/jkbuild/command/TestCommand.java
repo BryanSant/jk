@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.cli.ProjectContext;
 import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.run.ConsoleSpec;
@@ -19,7 +20,6 @@ import dev.jkbuild.test.JUnitLauncher;
 import dev.jkbuild.test.TestProgressListener;
 import dev.jkbuild.util.JkDirs;
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
@@ -79,12 +79,10 @@ public final class TestCommand implements CliCommand {
         this.jdksDir = in.value("jdks-dir").map(Path::of).orElse(null);
         this.global = GlobalOptions.from(in);
         Path dir = global.workingDir();
-        Path buildFile = dir.resolve("jk.toml");
-        Path lockFile = dir.resolve("jk.lock");
-        if (!Files.exists(buildFile)) {
-            CliOutput.err("jk test: no jk.toml in " + dev.jkbuild.cli.PathDisplay.styledRaw(dir));
-            return Exit.CONFIG;
-        }
+        var proj = ProjectContext.require(dir, "test").orElse(null);
+        if (proj == null) return Exit.CONFIG;
+        Path buildFile = proj.buildFile();
+        Path lockFile = proj.lockFile();
         // No jk.lock guard: the pipeline's parse-build phase resolves the lock on
         // first run and re-locks when jk.toml changed — same as `jk build`/`run`.
 
