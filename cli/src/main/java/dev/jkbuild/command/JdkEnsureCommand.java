@@ -15,6 +15,7 @@ import dev.jkbuild.jdk.JdkKeywords;
 import dev.jkbuild.jdk.JdkRegistry;
 import dev.jkbuild.jdk.JdkSelector;
 import dev.jkbuild.jdk.JdkSpec;
+import dev.jkbuild.model.command.Exit;
 import dev.jkbuild.model.command.Arity;
 import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Invocation;
@@ -96,7 +97,7 @@ public final class JdkEnsureCommand implements CliCommand {
         if (spec == null || spec.isBlank()) {
             System.err.println("jk jdk ensure: a <spec> is required "
                     + "(e.g. `jk jdk ensure 25`, `jk jdk ensure 25.0.3`, `jk jdk ensure lts`).");
-            return 64; // EX_USAGE
+            return Exit.USAGE;
         }
 
         JdkRegistry registry = jdksDir != null ? new JdkRegistry(jdksDir) : new JdkRegistry();

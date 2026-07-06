@@ -10,6 +10,7 @@ import dev.jkbuild.cli.tui.Wizard;
 import dev.jkbuild.cli.tui.WizardStep;
 import dev.jkbuild.config.JkBuildEditor;
 import dev.jkbuild.config.JkBuildParser;
+import dev.jkbuild.model.command.Exit;
 import dev.jkbuild.model.command.Arity;
 import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Invocation;
@@ -244,7 +245,7 @@ public final class NewCommand implements CliCommand {
                     .orElseGet(
                             () -> cwd.getFileName() != null ? cwd.getFileName().toString() : "this directory");
             emitProjectExistsError(existing, parent != null, true, null);
-            return 2; // EX_CONFIG
+            return Exit.CONFIG;
         }
 
         // Are we adding a module to an existing project/workspace, or creating
@@ -460,7 +461,7 @@ public final class NewCommand implements CliCommand {
             inputs = fromFlags(cwd);
         } catch (IllegalArgumentException e) {
             System.err.println("jk new: " + e.getMessage());
-            return 64; // EX_USAGE
+            return Exit.USAGE;
         }
         if (shadow && inputs.main().isEmpty()) {
             System.err.println("jk new: --shadow requires --executable");

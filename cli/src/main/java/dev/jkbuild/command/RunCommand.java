@@ -18,6 +18,7 @@ import dev.jkbuild.layout.BuildLayout;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.lock.LockfileReader;
 import dev.jkbuild.model.JkBuild;
+import dev.jkbuild.model.command.Exit;
 import dev.jkbuild.model.command.Arity;
 import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Invocation;
@@ -98,7 +99,7 @@ public final class RunCommand implements CliCommand {
             System.err.println("jk run: no jk.toml in "
                     + dev.jkbuild.cli.PathDisplay.styledRaw(projectDir)
                     + " — run from a project directory, or use `jk tool run` to run a file or tool.");
-            return 64; // EX_USAGE
+            return Exit.USAGE;
         }
         return runProject(projectDir, positional);
     }

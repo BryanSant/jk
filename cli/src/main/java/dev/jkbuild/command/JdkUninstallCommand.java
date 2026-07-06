@@ -16,6 +16,7 @@ import dev.jkbuild.jdk.JdkHit;
 import dev.jkbuild.jdk.JdkInstaller;
 import dev.jkbuild.jdk.JdkRegistry;
 import dev.jkbuild.jdk.JdkToolUninstaller;
+import dev.jkbuild.model.command.Exit;
 import dev.jkbuild.model.command.Arity;
 import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Invocation;
@@ -138,7 +139,7 @@ public final class JdkUninstallCommand implements CliCommand {
         if (!isInteractiveTerminal()) {
             System.err.println("jk jdk uninstall: stdin is not a TTY — pass a spec "
                     + "(e.g. `jk jdk uninstall temurin-21.0.5`) or run interactively.");
-            return 64; // EX_USAGE
+            return Exit.USAGE;
         }
         return runWizard(registry, defaults);
     }

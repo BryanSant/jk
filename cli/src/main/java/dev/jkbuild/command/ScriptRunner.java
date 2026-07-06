@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.model.command.Exit;
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.run.GoalConsole;
@@ -526,7 +527,7 @@ final class ScriptRunner {
         GoalResult result = GoalConsole.run(goal, GoalConsole.modeFor(global), cacheDir());
         if (!result.success()) {
             for (GoalResult.Diagnostic d : result.errors()) {
-                if ("no-main-class".equals(d.code())) return 65; // EX_DATAERR
+                if ("no-main-class".equals(d.code())) return Exit.DATA_ERR;
             }
             return failureExitCode(result);
         }

@@ -13,6 +13,7 @@ import dev.jkbuild.model.Dependency;
 import dev.jkbuild.model.GitRefSpec;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.RepositorySpec;
+import dev.jkbuild.model.command.Exit;
 import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
@@ -124,7 +125,7 @@ public final class PublishCommand implements CliCommand {
         }
         if (sign && keyFile == null) {
             System.err.println("jk publish: --sign requires --key-file <path>.");
-            return 64; // EX_USAGE
+            return Exit.USAGE;
         }
         Path cache = JkDirs.cache();
 

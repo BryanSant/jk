@@ -11,9 +11,6 @@ package dev.jkbuild.model.command;
  */
 public abstract class GroupCommand implements CliCommand {
 
-    /** Command-line usage error (mirrors {@code sysexits.h} {@code EX_USAGE}). */
-    public static final int USAGE_ERROR = 64;
-
     /**
      * Unreachable in normal dispatch (the dispatcher renders the subcommand list for a group before
      * it would ever call this). Present only to satisfy {@link CliCommand#run}; returns the usage
@@ -21,6 +18,6 @@ public abstract class GroupCommand implements CliCommand {
      */
     @Override
     public final int run(Invocation in) {
-        return USAGE_ERROR;
+        return Exit.USAGE;
     }
 }

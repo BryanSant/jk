@@ -15,6 +15,7 @@ import dev.jkbuild.model.Coordinate;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.RepositorySpec;
 import dev.jkbuild.model.Scope;
+import dev.jkbuild.model.command.Exit;
 import dev.jkbuild.model.command.Arity;
 import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Invocation;
@@ -141,7 +142,7 @@ public final class AddCommand implements CliCommand {
             parsed = ParsedDep.parse(coord, libraryFlag, groupFlag, nameFlag, versionFlag);
         } catch (IllegalArgumentException e) {
             System.err.println("jk add: " + e.getMessage());
-            return 64; // EX_USAGE
+            return Exit.USAGE;
         }
 
         if (ping) {
@@ -151,7 +152,7 @@ public final class AddCommand implements CliCommand {
         Path file = dir.resolve("jk.toml");
         if (!Files.exists(file)) {
             System.err.println("jk add: no jk.toml in current directory");
-            return 2; // EX_CONFIG
+            return Exit.CONFIG;
         }
         Scope scope = resolveScope();
         if (scope == null) return 64;
