@@ -223,13 +223,24 @@ The mutable global *channels that carry request data* now live on `Session` (eac
     `ModulePlan.coord()/dir()/goal()/weight()/fullyCached()/cache()`, never `unit()` — documented `unit()`
     as engine-internal. Creating a redundant `:api` gradle module (Java packages unchanged, `:model`
     already zero-dep + blessed, no publishing configured) would be ceremony, not value — explicitly not done.
-  - **Deferred (one focused pass):**
-    - **CLI facades (`CliOutput`, `Exit`, `ProjectContext`, `WorkspaceCommand` template).** Consolidate
-      the ~40 commands' direct `System.out`/`System.err` prints + literal exit codes (`0`/`1`/`2`/`64`)
-      behind a `CliOutput` sink + an `Exit` constants holder (seeded by `GroupCommand.USAGE_ERROR`),
-      and hoist the repeated "resolve project dir → parse jk.toml → build Inputs" preamble into a
-      `ProjectContext`/`WorkspaceCommand` template. Broad mechanical sweep; best done as one focused
-      pass so the facade lands uniformly.
+  - **Done — `Exit` exit-code vocabulary.** Added `Exit` (in the command model): the single documented
+    source of truth for jk's process exit codes — `SUCCESS`/`FAILURE`/`CONFIG` + the sysexits
+    `USAGE`/`DATA_ERR`/`NO_INPUT`/`SOFTWARE`/`CANT_CREATE`, each mapped to its meaning. `GroupCommand.run`
+    returns `Exit.USAGE`. Adopted at the 9 sites that already annotated their code with a `// EX_*`
+    comment (zero-ambiguity). Broader adoption is intentionally gradual — `0`/`1` stay bare where
+    universally understood.
+  - **Investigated and deliberately NOT done (churn/poor-fit, not value):**
+    - **`CliOutput` sink** — the CLI has ~361 `System.out`/`System.err` calls, but they are already
+      themed through `Theme`/`Ansi` and are legitimate user-facing presentation; routing all of them
+      through a sink is a massive sweep whose main payoff (testability) doesn't justify the churn +
+      output-regression risk on a well-factored surface.
+    - **`ProjectContext`/`WorkspaceCommand` template** — the "resolve dir → require jk.toml → build
+      Inputs" preamble looks repeated but varies materially per command (workspace-root ascent in
+      build/native, multi-module in install, jk.lock-also in tree/why/verify, differing error wording);
+      a one-size template would force an awkward abstraction and risks changing exact error-message
+      text that tests assert. The per-command resolution is clearer left explicit.
+    - **Full 275-site exit-code migration** — `0`/`1` are universal and `2` is jk-idiomatic; naming
+      only the genuinely-cryptic sysexits codes (done above) is the right "name what's unclear" line.
   - **Self-host `jk.toml` + jk.jk mirror** refresh follows once the module set is final.
 
 ## Long-term target: the workspace-build path (records the end state we're converging on)
