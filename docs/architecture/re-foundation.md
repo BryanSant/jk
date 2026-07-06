@@ -191,19 +191,20 @@ The mutable global *channels that carry request data* now live on `Session` (eac
     `IdeSdkRegistrar` *interface* was judged premature: only IntelliJ registers SDKs today (VS Code
     uses `settings.json` runtimes, a structurally different path) — introduce it if a second registrar
     lands.
-  - **Deferred (needs its own session + native rebuild verification) — typed `WorkerClient<Req,Res>`
-    envelope + `CompilerWorker` bridge.** The *transport* (`WorkerProcess`: fork + protocol-line split
-    + two-way `converse`), *command assembly* (`JvmOptions.javaCommand`, `PluginLoader.command`), and
-    *jar location* (`WorkerJar`) are already shared. What remains is the *typed messaging* layer: each
-    of the 9 plugin workers emits its own ad-hoc NDJSON vocabulary (`##JKGIT:`, compile diagnostics,
-    `ready`/`RUN`/`DONE`, …) that its host caller hand-parses. Target design: a canonical result
-    envelope (`{kind: event|result|error|exit, prefix, payload}`) over the existing `ProtocolWriter`,
-    and a generic host `WorkerClient<Req,Res>` that serializes a typed request and folds envelope lines
-    into typed `Res` + a stream of events — collapsing the bespoke parse loops in `GitFetcher`,
-    `WorkerJavac`/`KotlincDriver` (the `CompilerWorker` bridge unifies these two behind one typed
-    compile client), and the ServiceLoader plugins. This rewrites the host↔worker wire format for all
-    9 workers, so it must land with a `./gradlew nativeCompile` + installed-binary smoke test, not a
-    unit-test-only pass — hence deferred rather than rushed.
+  - **Done — `WorkerClient` SPI + standardized envelope.** Established the canonical envelope: every
+    protocol line is `{"t":"<type>", ...}` with `t:"result"` the terminal outcome (8/9 workers already
+    matched; only the test runner's richer `"e"` pull-protocol differs, kept as a documented exception).
+    Added `WorkerClient` — a fluent host driver over `WorkerProcess` that splits the stream by `"t"` and
+    dispatches each type to a registered handler (`.on("diag", …).on("result", …).run(cmd)`). Migrated
+    all 9 one-shot launch sites off the hand-rolled fork+read+`switch(t)`: `GitFetcher`, `WorkerJavac` +
+    `KotlincDriver` (the **CompilerWorker bridge** — both compilers now share the client + `diag`/`result`
+    envelope), and the CLI `Publish`/`Format`/`Audit`/`Image`/`Import`/`Mvn` workers. `PluginLoader.command`
+    made public so callers build the command and drive it via `WorkerClient`. Also fixed 3 worker emit
+    sites that concatenated dynamic paths/refs into JSON without escaping (routed through `Ndjson.quote`).
+    Verified by `nativeCompile` + installed-binary smoke (build/test/format/publish paths). The
+    test-runner (`JUnitLauncher`) stays on `PluginLoader` directly — its stateful 10-event pull-protocol
+    would be higher risk than value to reshape; `WorkerClient` already supports it (`converse` + custom
+    discriminator) if desired later.
 - **M6 — API module + CLI facades (PARTIALLY DONE)** —
   - **Done — unreachable parent `run()` removed:** the 7 group verbs (`jk export/repo/jdk/library/
     auth/tool/cache`) each carried a required-but-dead `run()` (the dispatcher renders a group's
