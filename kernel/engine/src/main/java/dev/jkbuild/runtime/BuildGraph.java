@@ -149,9 +149,15 @@ public final class BuildGraph {
                 Path moduleDir = canonical(e.getKey());
                 addModuleEdges(moduleDir, e.getValue(), dirByCoord, dirByName);
             }
-            // The root may depend on its own siblings — wire those edges too.
+            // A buildable workspace root compiles against ALL module jars:
+            // WorkspaceClasspath.resolveForRoot puts every sibling jar on the root's
+            // classpath regardless of declared deps, so the root must build after every
+            // module. Wire root -> each module (plus its explicit deps / order-after).
             if (rootBuildable) {
                 addModuleEdges(rootDir, root, dirByCoord, dirByName);
+                for (var e : modules.entrySet()) {
+                    addEdge(rootDir, canonical(e.getKey()));
+                }
             }
         }
 
