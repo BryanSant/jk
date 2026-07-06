@@ -39,8 +39,6 @@ import java.util.TreeMap;
  */
 public final class JkBuildRenderer {
 
-    private static final String WORKSPACE_PLACEHOLDER_PREFIX = "workspace:";
-
     private JkBuildRenderer() {}
 
     public static String render(JkBuild jkBuild) {
@@ -154,7 +152,7 @@ public final class JkBuildRenderer {
      * </ul>
      */
     private static String renderEntry(Dependency d) {
-        if (d.module().startsWith(WORKSPACE_PLACEHOLDER_PREFIX)) {
+        if (d.isWorkspace()) {
             return safeKey(d.library()) + ".workspace = true";
         }
         StringBuilder sb = new StringBuilder();

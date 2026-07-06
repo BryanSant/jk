@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.resolver;
 
+import dev.jkbuild.model.Coordinate;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -29,6 +30,11 @@ public record Resolution(Map<String, ResolvedModule> modules) {
         /** Lockfile-style key: {@code group:artifact@version}. */
         public String coord() {
             return module + "@" + version;
+        }
+
+        /** This module's {@code group:artifact} plus its picked version as a {@link Coordinate}. */
+        public Coordinate coordinate() {
+            return Coordinate.ofModule(module, version);
         }
     }
 }

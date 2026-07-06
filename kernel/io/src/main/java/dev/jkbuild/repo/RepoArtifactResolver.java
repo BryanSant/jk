@@ -12,6 +12,14 @@ import java.util.Optional;
  */
 public final class RepoArtifactResolver {
 
+    /**
+     * Repo-source-name prefix for a synthetic git-materialized repo ({@code git:<coord>:<version>}).
+     * This is a <em>repo source name</em> concept — distinct from {@code Dependency.GIT_PREFIX}, which
+     * is a module-coordinate placeholder. Written by the git-source materializer when it registers the
+     * repo, read back here to exclude such repos from the named-remote fast path.
+     */
+    public static final String GIT_SOURCE_PREFIX = "git:";
+
     private RepoArtifactResolver() {}
 
     /**
@@ -34,7 +42,7 @@ public final class RepoArtifactResolver {
         return repoName != null
                 && !repoName.isEmpty()
                 && !repoName.equals("local")
-                && !repoName.startsWith("git:");
+                && !repoName.startsWith(GIT_SOURCE_PREFIX);
     }
 
     /**

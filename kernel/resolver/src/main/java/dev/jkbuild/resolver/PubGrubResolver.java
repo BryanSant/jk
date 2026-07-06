@@ -130,7 +130,6 @@ public final class PubGrubResolver implements Resolver {
     }
 
     private static Coordinate toCoord(String module, String version) {
-        int colon = module.indexOf(':');
-        return Coordinate.of(module.substring(0, colon), module.substring(colon + 1), version);
+        return Coordinate.ofModule(module, version);
     }
 }

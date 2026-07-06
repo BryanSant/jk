@@ -303,9 +303,7 @@ public final class LockOrchestrator {
 
         List<Lockfile.Artifact> packages = new ArrayList<>(resolution.modules().size());
         for (Resolution.ResolvedModule mod : resolution.modules().values()) {
-            int colon = mod.module().indexOf(':');
-            Coordinate coord =
-                    Coordinate.of(mod.module().substring(0, colon), mod.module().substring(colon + 1), mod.version());
+            Coordinate coord = mod.coordinate();
 
             observer.onPackage(mod.module(), mod.version());
 

@@ -11,6 +11,7 @@ import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.Scope;
 import dev.jkbuild.model.VersionSelector;
 import dev.jkbuild.repo.MavenRepo;
+import dev.jkbuild.repo.RepoArtifactResolver;
 import dev.jkbuild.repo.RepoGroup;
 import java.io.IOException;
 import java.nio.file.Path;
@@ -102,7 +103,11 @@ public final class GitSourceResolution {
                 GitSourceMaterializer.Materialized m = materializer.materialize(d.gitSource());
                 bySource.put(key, m);
                 extraRepos.add(
-                        new MavenRepo("git:" + m.coordinate() + ":" + m.version(), m.repoUrl(), new Http(), cas));
+                        new MavenRepo(
+                                RepoArtifactResolver.GIT_SOURCE_PREFIX + m.coordinate() + ":" + m.version(),
+                                m.repoUrl(),
+                                new Http(),
+                                cas));
                 gitInfo.put(provenanceKey(m.coordinate(), m.version()), m.gitInfo());
             }
         }

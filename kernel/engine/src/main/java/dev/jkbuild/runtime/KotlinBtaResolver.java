@@ -64,9 +64,7 @@ public final class KotlinBtaResolver {
         List<Path> jars = new ArrayList<>();
         List<String> shas = new ArrayList<>();
         for (Resolution.ResolvedModule mod : resolution.modules().values()) {
-            String module = mod.module(); // "group:artifact"
-            int colon = module.indexOf(':');
-            Coordinate coord = Coordinate.of(module.substring(0, colon), module.substring(colon + 1), mod.version());
+            Coordinate coord = mod.coordinate();
             // POM-only modules (BOMs/parents) carry no jar — tryFetchArtifact
             // returns empty and we simply omit them from the classpath.
             var hit = repos.tryFetchArtifact(coord);

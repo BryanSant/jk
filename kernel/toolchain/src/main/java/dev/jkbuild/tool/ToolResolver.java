@@ -67,10 +67,7 @@ public final class ToolResolver {
         String primaryKey = primary.group() + ":" + primary.artifact();
         for (Resolution.ResolvedModule m : resolution.modules().values()) {
             if (m.module().equals(primaryKey)) continue;
-            int colon = m.module().indexOf(':');
-            Coordinate coord =
-                    Coordinate.of(m.module().substring(0, colon), m.module().substring(colon + 1), m.version());
-            classpath.add(fetchJar(coord));
+            classpath.add(fetchJar(m.coordinate()));
         }
 
         // 3. Main-Class detection.

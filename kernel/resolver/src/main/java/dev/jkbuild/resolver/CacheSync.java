@@ -7,6 +7,7 @@ import dev.jkbuild.http.Http;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.model.Coordinate;
 import dev.jkbuild.repo.MavenRepo;
+import dev.jkbuild.repo.RepoArtifactResolver;
 import dev.jkbuild.util.JkThreads;
 import java.io.IOException;
 import java.net.URI;
@@ -295,12 +296,11 @@ public final class CacheSync {
     private MavenRepo repoFor(String source, Map<String, MavenRepo> cache) {
         MavenRepo existing = cache.get(source);
         if (existing != null) return existing;
-        int plus = source.indexOf('+');
-        if (plus <= 0 || plus >= source.length() - 1) {
+        String name = RepoArtifactResolver.repoName(source);
+        if (name == null) {
             throw new IllegalArgumentException("lockfile package source must be '<name>+<url>', got: " + source);
         }
-        String name = source.substring(0, plus);
-        URI url = URI.create(source.substring(plus + 1));
+        URI url = URI.create(source.substring(source.indexOf('+') + 1));
         var cred = creds.resolve(name, url, java.util.Optional.empty());
         MavenRepo repo = new MavenRepo(name, url, http, cas, cred);
         cache.put(source, repo);

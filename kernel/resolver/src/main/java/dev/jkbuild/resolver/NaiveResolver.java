@@ -93,8 +93,7 @@ public final class NaiveResolver implements Resolver {
     }
 
     private static Coordinate toCoord(WorkItem item) {
-        int colon = item.module.indexOf(':');
-        return Coordinate.of(item.module.substring(0, colon), item.module.substring(colon + 1), item.version);
+        return Coordinate.ofModule(item.module, item.version);
     }
 
     private record WorkItem(String module, String version) {}

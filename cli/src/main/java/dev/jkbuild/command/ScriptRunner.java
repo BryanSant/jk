@@ -610,9 +610,7 @@ final class ScriptRunner {
         for (String module : ordered) {
             Resolution.ResolvedModule m = resolution.modules().get(module);
             if (m == null) continue;
-            int colon = m.module().indexOf(':');
-            Coordinate coord =
-                    Coordinate.of(m.module().substring(0, colon), m.module().substring(colon + 1), m.version());
+            Coordinate coord = m.coordinate();
             jars.add(repos.tryFetchArtifact(coord)
                     .orElseThrow(() ->
                             new MavenRepo.ArtifactNotFoundException("jar not found in any declared repo: " + coord))

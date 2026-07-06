@@ -23,6 +23,25 @@ public record Coordinate(String group, String artifact, String version, String c
         return new Coordinate(group, artifact, version, null, "jar");
     }
 
+    /**
+     * Build a coordinate from a {@code group:artifact} module string plus a separate version.
+     * Classifier defaults to absent and type to {@code jar}, matching {@link #of(String, String,
+     * String)}. This is the common shape produced by the resolver, where a module identifier and its
+     * picked version are carried separately.
+     *
+     * @param module a {@code group:artifact} identifier (no version)
+     * @param version the resolved version
+     * @throws IllegalArgumentException if {@code module} is not of the form {@code group:artifact}
+     */
+    public static Coordinate ofModule(String module, String version) {
+        Objects.requireNonNull(module, "module");
+        int colon = module.indexOf(':');
+        if (colon < 0) {
+            throw new IllegalArgumentException("module must be group:artifact, got: " + module);
+        }
+        return of(module.substring(0, colon), module.substring(colon + 1), version);
+    }
+
     /** Parse a coordinate spec of the form {@code group:artifact:version[:classifier][@type]}. */
     public static Coordinate parse(String spec) {
         Objects.requireNonNull(spec, "spec");

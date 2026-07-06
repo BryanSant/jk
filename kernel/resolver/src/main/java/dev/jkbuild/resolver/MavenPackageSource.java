@@ -182,7 +182,6 @@ public final class MavenPackageSource implements PackageSource {
     }
 
     private static Coordinate withVersion(String pkg, String version) {
-        int colon = pkg.indexOf(':');
-        return Coordinate.of(pkg.substring(0, colon), pkg.substring(colon + 1), version);
+        return Coordinate.ofModule(pkg, version);
     }
 }
