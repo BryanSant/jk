@@ -241,6 +241,11 @@ The mutable global *channels that carry request data* now live on `Session` (eac
       lock/tree (error text preserved verbatim; tree keeps its distinct `jk.lock` message via
       `isLocked()`). Workspace-root-ascent verbs (build/install/native, which discover the root by
       ascent) keep their own resolution — a one-size template there would be a worse fit than explicit.
+  - **Self-host `jk.toml`**: unaffected — the re-foundation added classes within existing modules and
+    added/renamed no gradle module, so the `[workspace] modules` list is unchanged.
+  - **jk.jk mirror refresh**: gated on merge. The `jk.jk` sibling is a faithful source mirror that
+    syncs *from jk's `main`*; refreshing it from this unmerged `refoundation` branch would push
+    unmerged work into the mirror's main. It syncs after `refoundation` lands on `main`.
 
 ## Long-term target: the workspace-build path (records the end state we're converging on)
 
