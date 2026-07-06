@@ -211,16 +211,19 @@ The mutable global *channels that carry request data* now live on `Session` (eac
     subcommand list and never calls it). New `GroupCommand` base (in the command model) supplies a
     `final run() = USAGE_ERROR` once; the groups extend it and drop the dead bodies. Leaf commands
     still implement `CliCommand.run` directly, so a missing leaf `run` stays a compile error.
-  - **Deferred (needs its own session + full-suite/native verification):**
-    - **`jk-api` module.** The internal server/client split already holds — the front-end contract
-      lives in coherent packages (`dev.jkbuild.model` + `model.command`, `dev.jkbuild.run`,
-      `dev.jkbuild.runtime.BuildService`/`WorkspaceBuildListener`) and a front-end compiles against
-      `:model`+`:engine` today. Blessing a *physical* `jk-api` artifact (a thin, publishable jar third
-      parties depend on without pulling the engine impl) means: new Gradle module re-exporting/holding
-      the contract types (`BuildService` facade + request/result records + listeners + `GoalKey`/`Goal`
-      view interfaces + model), then rewiring ~15 modules' `build.gradle` + imports. Cross-cutting
-      build-graph reshuffle → dedicated session with `nativeCompile` verification. Packaging refinement,
-      not an architecture change.
+  - **Done — `jk-api` blessed (it already exists as `:model`).** Investigation outcome: the physical
+    API module the milestone imagined *already exists* — the codebase evolved so that `:model` is a
+    zero-external-dependency, dependency-graph-leaf module holding the entire contract-type surface
+    (`dev.jkbuild.model` + the `model.command` CliCommand/Invocation SPI + the `dev.jkbuild.run`
+    Goal/Phase/GoalListener/GoalKey scheduler SPI). Blessed it explicitly as "jk-api" in its build
+    description. A build-*driving* front-end depends on `:engine` for the `BuildService` facade — same
+    as the CLI does — which is the north-star (engine=server, any client incl. CLI drives it), not a
+    gap; that facade is engine-coupled by design (`ModulePlan` carries the internal `BuildGraph.BuildUnit`
+    to run modules). Verified the front-end event contract is already impl-free: the CLI consumes only
+    `ModulePlan.coord()/dir()/goal()/weight()/fullyCached()/cache()`, never `unit()` — documented `unit()`
+    as engine-internal. Creating a redundant `:api` gradle module (Java packages unchanged, `:model`
+    already zero-dep + blessed, no publishing configured) would be ceremony, not value — explicitly not done.
+  - **Deferred (one focused pass):**
     - **CLI facades (`CliOutput`, `Exit`, `ProjectContext`, `WorkspaceCommand` template).** Consolidate
       the ~40 commands' direct `System.out`/`System.err` prints + literal exit codes (`0`/`1`/`2`/`64`)
       behind a `CliOutput` sink + an `Exit` constants holder (seeded by `GroupCommand.USAGE_ERROR`),

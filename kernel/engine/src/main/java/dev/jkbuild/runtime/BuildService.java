@@ -185,7 +185,12 @@ public final class BuildService {
             // already forecasted (the CLI's fully-cached "all up to date" shortcut) skip a redundant pass.
             Set<Path> dirtyHint) {}
 
-    /** A module's assembled goal + the estimates a caller needs to render/calibrate. */
+    /**
+     * A module's assembled goal + the estimates a caller needs to render/calibrate. The front-end
+     * contract is {@link #coord()}, {@link #dir()}, {@link #goal()}, {@link #weight()}, {@link
+     * #fullyCached()}, and {@link #cache()}; {@link #unit()} is the engine-internal {@link
+     * BuildGraph.BuildUnit} used to run the module and is not part of the front-end-facing API.
+     */
     public record ModulePlan(BuildGraph.BuildUnit unit, Goal goal, int weight, boolean fullyCached, Path cache) {
         public String coord() {
             return unit.coord();
