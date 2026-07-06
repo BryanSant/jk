@@ -329,9 +329,13 @@ in the final review. `(open)` = still a compromise; `(resolved)` = revisited and
   `warn()` channel — not counted in `GoalResult.warnings()`/ndjson. Intentional to preserve exact text.
 - **[Q2] (open)** ~11 CLI/resolver display-coloring coordinate splits left un-deduped — adopting the
   shared `Coords` helper would change rendered output bytes; `resolver`'s two cannot see cli's `Coords`.
-- **[Q3] (open)** `CacheSync` scans `+` twice — needs a `RepoArtifactResolver.repoUrl`/parsed-source in io.
-- **[Q3] (open)** `PolicyChecker` (core) still hand-splits `+` — deferred by layering; needs a shared
-  repo-source parser in `core`/`model`.
+- **[Q3] (resolved)** `CacheSync` double-`+`-scan and **[Q3] (resolved)** `PolicyChecker`'s
+  layering-blocked hand-split are BOTH closed by a shared `dev.jkbuild.lock.RepoSource` (in `core`,
+  visible to core/io/resolver): one owner of the `<name>+<url>` split with a strict nullable `name()`
+  (mirrors `repoName`) and a lenient `url()` (mirrors PolicyChecker), each preserving its exact
+  boundary contract (they intentionally diverge only on a trailing `+`, documented + unit-tested).
+  `RepoArtifactResolver.repoName` delegates to it; `CacheSync` parses once; `PolicyChecker` uses it
+  directly. The M5d "single owner of `<name>+<url>`" goal is now fully realized.
 - **[M6] (resolved by L8)** the CLI's direct `BuildGraph`/`BuildUnit` use (`BuildCommand:275`,
   `ExplainCommand:83`) is closed — both now go through `BuildService.explain`/`resolveGraph`. Only
   `NativeCommand.orderModules` (front-end-safe map API) names `BuildGraph`.
@@ -351,8 +355,39 @@ in the final review. `(open)` = still a compromise; `(resolved)` = revisited and
 
 ---
 
+## Final review (2026-07-06)
+
+Independent re-audit of the invariants after all items landed (each verified by grep + a clean
+`:cli:test`/`:engine:test`/`:core:test`/`:toolchain:test`/`:model:test` run):
+
+- **No kernel `System.out`/`System.err`/`setOut`** outside comments, EXCEPT
+  `plugin-api/.../worker/PluginWorkerMain.java` — a forked worker process's `main()` reporting fatal
+  bootstrap errors (no jk output infra exists yet in that process). **Accepted exception** (a separate
+  process's last-resort stderr, not the engine writing user text). Q1 (`AutoLock`) and L7c
+  (`NativeImageDriver`) leaks confirmed gone.
+- **CLI names no engine build internals:** zero `BuildGraph.BuildUnit` / `.unit()` references in
+  `cli/src/main`; `topoSortModules` deleted; only `NativeCommand`'s front-end-safe
+  `BuildGraph.orderModules(Map)` remains. (M4 + M6 + L8.)
+- **Kernel → CLI layering:** zero `import dev.jkbuild.cli`/`command` in any kernel/plugin-api main
+  source. Intact.
+- **Coordinate-split cluster** (the 7 `ResolvedModule → Coordinate` sites) eliminated; remaining
+  `indexOf(':')` are the documented display-coloring (`DependencyTree`, `Diagnostics`) and
+  lockfile-guard (`LockOrchestrator`) sites, intentionally left.
+
+Remaining documented follow-ups (not regressions — future work): **L7** `ScopedValue` propagation to
+the `JkThreads.io()` worker pool (`StructuredTaskScope`/per-task rebinding) for fully-isolated
+multi-tenant builds; **L8** first-class `installJdk`/single-module `build` facades (their mechanical
+cores already run on engine primitives); **Q2** an optional output-normalizing pass to dedup the CLI
+coordinate display-coloring. The `SessionCancel` bind-once DI seam and the accepted concurrency
+primitives (`WorkerSlots`/`TEST_GATE`/`HeapPlan.heapPlan`) are not request-data globals.
+
+Verdict: every audited gap is FIXED or a documented, rationalized deferral; all logged compromises are
+resolved or intentional; the build is green.
+
 ## Change log
 
 - 2026-07-06 — document created from the audit; all items OPEN.
+- 2026-07-06 — Quick (Q1/Q2/Q3), Medium (M4/M5/M6), and Large (L7/L8) all landed green; Q3 layering
+  compromise revisited and resolved (`RepoSource`); re-audit + final review complete.
 - 2026-07-06 — Quick phase (Q1 FIXED, Q2/Q3 mostly fixed) + Medium M4/M6 FIXED landed green
   (`:cli:test` + `:engine:test`). Compromises logged. M5, L7, L8 remaining.
