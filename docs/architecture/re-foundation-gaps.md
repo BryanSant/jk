@@ -105,7 +105,19 @@ and route both the serial path and `NativeCommand` through it.
 
 ### M5 — serial `--no-parallel` path re-implements the planner
 
-**Severity: medium (correctness drift).** **Status: OPEN.**
+**Severity: medium (correctness drift).** **Status: FIXED** (commit `serial --no-parallel … M5`).
+`WorkspaceScheduler.run` gained a module-concurrency cap (`<=0` = today's batch-per-level parallel,
+verbatim; `>0` = a rolling window across levels; `1` = strict serial). `WorkspaceRequest.maxModuleConcurrency`
+threads it; `buildWorkspace` clamps the memory-plan width + ETA concurrency to it. `--no-parallel` now
+dispatches through `runGraphParallel` with cap=1, so the engine owns the whole serial↔parallel
+spectrum and the CLI's duplicate `runWorkspaceBuild` (+ its private ETA/median re-projection,
+`buildFailedAt`) is deleted. Verified end-to-end: an 8-module serial build of `jk.jk` in correct
+dependency order (model→…→cli), artifact linking, and both success + fail-fast rendering.
+_Compromises (logged):_ (1) serial builds now record `PhaseTimings` (the old path didn't) — an
+improvement; (2) under an *intermediate* cap (2..N-1) the scheduler's `remaining` excludes in-flight
+units, slightly under-counting the ETA remainder — moot for the only shipped caps (0 and 1); (3) on
+fail-fast under a cap, in-flight peers drain in the background rather than being cancelled — moot for
+cap=1 (no peers), and the cooperative-cancel wiring is L7's job.
 
 `runWorkspaceBuild` (`BuildCommand.java:538`) does not call `buildWorkspace`. It re-implements memory
 planning (`applyMemoryPlan`), ETA/calibration (`PhaseTimings`/`Calibration`/median-rate re-projection
