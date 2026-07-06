@@ -168,6 +168,108 @@ public final class BuildService {
     }
 
     // =========================================================================
+    // Explain / plan (the front-end-callable dry-run planner)
+    // =========================================================================
+
+    /**
+     * A front-end-facing forecast of {@code jk build}: the workspace's modules in dependency order
+     * (each already front-end-safe — see {@link BuildPlanForecast.Module}), the prereq edges and
+     * peak-concurrency width the ETA model needs, and any graph-resolution errors. Deliberately free
+     * of {@link BuildGraph}/{@link BuildGraph.BuildUnit}: edges are exposed as a plain {@code dir →
+     * prereq dirs} map (keyed by the same {@link BuildPlanForecast.Module#dir()} the caller iterates),
+     * so a non-CLI client can render the plan and compute the estimate without engine internals.
+     *
+     * @param modules dependency-first modules; empty when {@link #hasErrors()}
+     * @param edges module dir → the dirs that must build before it
+     * @param maxReadyWidth widest wave of independent modules (drives ETA concurrency)
+     * @param errors graph-resolution errors (cycle / depth-cap / missing jk.toml); non-empty ⇒ no plan
+     */
+    public record ExplainPlan(
+            List<BuildPlanForecast.Module> modules,
+            Map<Path, Set<Path>> edges,
+            int maxReadyWidth,
+            List<String> errors) {
+        public boolean hasErrors() {
+            return !errors.isEmpty();
+        }
+    }
+
+    /**
+     * Forecast the build without running it: resolve the module graph and run the truthful
+     * per-phase {@link BuildPlanForecast} over it, returning an {@link ExplainPlan} the caller
+     * renders. Pure policy — nothing here writes to {@code stdout}/{@code stderr}. Graph-resolution
+     * errors come back in {@link ExplainPlan#errors()} (the caller renders the same failure); an
+     * {@link IOException} probing the workspace still propagates, exactly as the direct resolve did.
+     */
+    public static ExplainPlan explain(Path entryDir, JkBuild entryBuild, Path cache) throws IOException {
+        BuildGraph.Result graph = BuildGraph.resolve(entryDir, entryBuild);
+        if (graph.hasErrors()) {
+            return new ExplainPlan(List.of(), Map.of(), 1, List.copyOf(graph.errors()));
+        }
+        Cas cas = new Cas(cache);
+        ActionCache actionCache = new ActionCache(cas, cache.resolve("actions"));
+        List<BuildPlanForecast.Module> modules = BuildPlanForecast.of(graph, cas, actionCache, cache);
+        return new ExplainPlan(modules, graph.edges(), graph.maxReadyWidth(), List.of());
+    }
+
+    // =========================================================================
+    // Build preflight (resolve + dirty forecast, for the fully-cached shortcut)
+    // =========================================================================
+
+    /**
+     * An opaque, front-end-safe handle to a resolved build graph: enough for a caller to branch on
+     * resolution errors / an empty workspace and then forecast dirty modules, without ever naming
+     * {@link BuildGraph}/{@link BuildGraph.BuildUnit}. The engine-internal {@link BuildGraph.Result}
+     * is reachable only through the package-private {@link #graph()} accessor (feeding {@link
+     * #forecastDirtyDirs(ResolvedGraph, Path)}), so the boundary is compiler-enforced.
+     *
+     * <p>A {@code final class} rather than a {@code record} precisely so {@code graph()} can drop
+     * below {@code public}.
+     */
+    public static final class ResolvedGraph {
+        private final BuildGraph.Result graph;
+
+        private ResolvedGraph(BuildGraph.Result graph) {
+            this.graph = graph;
+        }
+
+        /** Engine-internal graph — package-private so front-ends can't reach {@link BuildGraph.Result}. */
+        BuildGraph.Result graph() {
+            return graph;
+        }
+
+        public boolean hasErrors() {
+            return graph.hasErrors();
+        }
+
+        public List<String> errors() {
+            return List.copyOf(graph.errors());
+        }
+
+        /** True when the graph resolved to zero build units (a workspace that declares no modules). */
+        public boolean isEmpty() {
+            return graph.topoOrder().isEmpty();
+        }
+
+        /** The build units in dependency-first order, as plain directory paths. */
+        public List<Path> moduleDirs() {
+            List<Path> dirs = new ArrayList<>();
+            for (BuildGraph.BuildUnit u : graph.topoOrder()) dirs.add(u.dir());
+            return dirs;
+        }
+    }
+
+    /** Resolve the module graph rooted at {@code entryDir}, wrapped so front-ends never name {@link BuildGraph}. */
+    public static ResolvedGraph resolveGraph(Path entryDir, JkBuild entryBuild) throws IOException {
+        return new ResolvedGraph(BuildGraph.resolve(entryDir, entryBuild));
+    }
+
+    /** {@link #forecastDirtyDirs(BuildGraph.Result, Path)} over a front-end-held {@link ResolvedGraph}. */
+    public static Set<Path> forecastDirtyDirs(ResolvedGraph graph, Path cache) {
+        return forecastDirtyDirs(graph.graph(), cache);
+    }
+
+    // =========================================================================
     // Workspace build (the front-end-callable event-emitting entry point)
     // =========================================================================
 

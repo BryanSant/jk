@@ -3,7 +3,6 @@ package dev.jkbuild.command;
 
 import dev.jkbuild.cli.ProjectContext;
 import dev.jkbuild.cli.CliOutput;
-import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.run.ConsoleSpec;
 import dev.jkbuild.cli.theme.Theme;
@@ -13,9 +12,8 @@ import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Exit;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
-import dev.jkbuild.runtime.BuildGraph;
 import dev.jkbuild.runtime.BuildPlanForecast;
-import dev.jkbuild.task.ActionCache;
+import dev.jkbuild.runtime.BuildService;
 import dev.jkbuild.util.JkDirs;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -23,9 +21,9 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * {@code jk explain} — forecast the build (the same {@link BuildGraph} the build driver uses):
- * every module (workspace root + modules + transitive {@code path} / branch-git deps) in dependency
- * order, its origin and edges, and — via {@link BuildPlanForecast} — what each of its phases
+ * {@code jk explain} — forecast the build (the same plan the build driver uses, via {@link
+ * BuildService#explain}): every module (workspace root + modules + transitive {@code path} /
+ * branch-git deps) in dependency order, and — via {@link BuildPlanForecast} — what each of its phases
  * (compile → test → package) would do when {@code jk build} runs: restore from cache or do real
  * work. Fully-cached modules collapse to a summary line; modules that will rebuild expand to their
  * phase sub-tree ({@code --verbose} expands all). {@code --run} executes the plan ({@code jk
@@ -77,12 +75,12 @@ public final class ExplainCommand implements CliCommand {
         Path buildFile = proj.buildFile();
         JkBuild entry = JkBuildParser.parse(buildFile);
         Path cache = cacheDir != null ? cacheDir : JkDirs.cache();
-        Cas cas = new Cas(cache);
-        ActionCache actionCache = new ActionCache(cas, cache.resolve("actions"));
 
-        BuildGraph.Result graph = BuildGraph.resolve(startDir, entry);
-        if (graph.hasErrors()) {
-            for (String err : graph.errors()) CliOutput.err(ConsoleSpec.errorLine("composite", err));
+        // Forecast the build through the engine facade — resolve the graph and run the truthful
+        // per-phase plan, returning a front-end-safe view (modules + edges + concurrency width).
+        BuildService.ExplainPlan plan = BuildService.explain(startDir, entry, cache);
+        if (plan.hasErrors()) {
+            for (String err : plan.errors()) CliOutput.err(ConsoleSpec.errorLine("composite", err));
             return Exit.CONFIG;
         }
 
@@ -97,7 +95,7 @@ public final class ExplainCommand implements CliCommand {
 
         // Forecast every module's full phase pipeline (compile → test → package),
         // truthfully — see BuildPlanForecast.
-        List<BuildPlanForecast.Module> modules = BuildPlanForecast.of(graph, cas, actionCache, cache);
+        List<BuildPlanForecast.Module> modules = plan.modules();
         boolean all = in.isSet("verbose");
         int total = modules.size();
         long rebuild = modules.stream().filter(BuildPlanForecast.Module::dirty).count();
@@ -136,12 +134,12 @@ public final class ExplainCommand implements CliCommand {
                 dev.jkbuild.runtime.BuildPipeline.appendDeclaredTails(builder, inputs);
                 var goal = builder.build();
                 costs.add(dev.jkbuild.runtime.EffortWeights.costOf(
-                        mdir, graph.edges().getOrDefault(mdir, Set.of()), goal));
+                        mdir, plan.edges().getOrDefault(mdir, Set.of()), goal));
             }
             int concurrency = serial
                     ? 1
                     : dev.jkbuild.worker.HeapPlan.requestedJvms(
-                            graph.maxReadyWidth(), workers, parallelTests, Runtime.getRuntime()
+                            plan.maxReadyWidth(), workers, parallelTests, Runtime.getRuntime()
                                     .availableProcessors());
             // Weight→ms conversion, PER MODULE: a module whose own dir has learned timings converts
             // at MS_PER_WEIGHT (its learned rates were recorded relative to that constant, so it

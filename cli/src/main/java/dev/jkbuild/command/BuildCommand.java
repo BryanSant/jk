@@ -22,7 +22,6 @@ import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.run.Goal;
 import dev.jkbuild.run.GoalKey;
 import dev.jkbuild.run.GoalResult;
-import dev.jkbuild.runtime.BuildGraph;
 import dev.jkbuild.runtime.BuildPipeline;
 import dev.jkbuild.runtime.BuildPlanForecast;
 import dev.jkbuild.runtime.LockFlow;
@@ -222,7 +221,7 @@ public final class BuildCommand implements CliCommand {
     /** One unit's build outcome, with its buffered output (flushed together on completion). */
 
     /**
-     * Build the whole composite + workspace graph in parallel (Option B): one {@link BuildGraph},
+     * Build the whole composite + workspace graph in parallel (Option B): one build graph,
      * scheduled by topological level, independent units built concurrently on {@link JkThreads#io()}
      * (their CPU work shares the bounded cpu pool, so no oversubscription). Each unit runs buffered —
      * its output is captured and flushed as one contiguous block on completion, so parallel logs
@@ -250,14 +249,14 @@ public final class BuildCommand implements CliCommand {
         boolean animate = mode == GoalConsole.Mode.AUTO && GoalConsole.isInteractiveTerminal();
         boolean nerdfont = dev.jkbuild.config.GlobalConfig.nerdfont();
 
-        BuildGraph.Result graph = BuildGraph.resolve(entryDir, entryBuild);
+        dev.jkbuild.runtime.BuildService.ResolvedGraph graph =
+                dev.jkbuild.runtime.BuildService.resolveGraph(entryDir, entryBuild);
         if (graph.hasErrors()) {
             for (String err : graph.errors()) CliOutput.err(ConsoleSpec.errorLine("composite", err));
             CliOutput.err(dev.jkbuild.cli.tui.GoalWedge.failureLine("Build", nerdfont, "dependency resolution failed"));
             return Exit.CONFIG;
         }
-        List<BuildGraph.BuildUnit> units = graph.topoOrder();
-        if (units.isEmpty()) {
+        if (graph.isEmpty()) {
             CliOutput.out(dev.jkbuild.cli.tui.GoalWedge.chipLine(
                     dev.jkbuild.cli.tui.Glyphs.CHECK, "Build", nerdfont, "workspace declares no modules"));
             return 0;
