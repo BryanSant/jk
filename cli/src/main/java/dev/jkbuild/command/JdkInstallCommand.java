@@ -9,22 +9,21 @@ import dev.jkbuild.cli.tui.Confirm;
 import dev.jkbuild.cli.tui.Glyphs;
 import dev.jkbuild.cli.tui.Spinner;
 import dev.jkbuild.cli.tui.Wizard;
-import dev.jkbuild.http.Http;
 import dev.jkbuild.jdk.GlobalDefaultJdk;
 import dev.jkbuild.jdk.HostPlatform;
 import dev.jkbuild.jdk.InstalledJdk;
 import dev.jkbuild.jdk.JdkCatalog;
-import dev.jkbuild.jdk.JdkCatalogClient;
 import dev.jkbuild.jdk.JdkInstaller;
 import dev.jkbuild.jdk.JdkKeywords;
 import dev.jkbuild.jdk.JdkRegistry;
-import dev.jkbuild.jdk.JdkSelector;
 import dev.jkbuild.model.command.Arity;
 import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Exit;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.model.command.Param;
+import dev.jkbuild.runtime.JdkInstallListener;
+import dev.jkbuild.runtime.JdkService;
 import dev.jkbuild.run.Goal;
 import dev.jkbuild.run.GoalKey;
 import dev.jkbuild.run.GoalResult;
@@ -98,8 +97,6 @@ public final class JdkInstallCommand implements CliCommand {
 
     private static final GoalKey<JdkCatalog> CATALOG = GoalKey.of("catalog", JdkCatalog.class);
     private static final GoalKey<JdkCatalog.Entry> ENTRY = GoalKey.of("entry", JdkCatalog.Entry.class);
-    private static final GoalKey<JdkInstaller.DownloadedArchive> ARCHIVE =
-            GoalKey.of("archive", JdkInstaller.DownloadedArchive.class);
     private static final GoalKey<InstalledJdk> INSTALLED = GoalKey.of("installed", InstalledJdk.class);
     private static final GoalKey<Boolean> WANT_DEFAULT = GoalKey.of("want-default", Boolean.class);
 
@@ -131,8 +128,10 @@ public final class JdkInstallCommand implements CliCommand {
         JdkRegistry registry = jdksDir != null ? new JdkRegistry(jdksDir) : new JdkRegistry();
         // Reclaim any partial archive left by a previously canceled download
         // (Ctrl-C halts the JVM mid-download, skipping the inline cleanup).
+        // Kept in the CLI so every path — including the wizard and non-TTY
+        // early-outs below — sweeps once, before any goal runs.
         JdkInstaller.sweepStaleDownloads(registry.jdksRoot());
-        JdkInstaller installer = new JdkInstaller(new Http(), registry);
+        JdkService service = new JdkService();
 
         // Pre-goal sanity: when no spec and no TTY, we can't go further.
         boolean haveSpec = spec != null && !spec.isBlank();
@@ -148,16 +147,8 @@ public final class JdkInstallCommand implements CliCommand {
                 .execute(ctx -> {
                     ctx.label("fetch JetBrains JDK feed");
                     boolean refresh = dev.jkbuild.config.SessionContext.current().config().refreshOr(false);
-                    JdkCatalogClient client = (feedUrl != null
-                                    ? new JdkCatalogClient(
-                                            new Http(),
-                                            feedUrl,
-                                            cacheFile != null ? cacheFile : ephemeralCachePath(),
-                                            java.time.Duration.ZERO)
-                                    : new JdkCatalogClient())
-                            .onWarning(ctx::output);
                     try {
-                        ctx.put(CATALOG, client.fetch(refresh));
+                        ctx.put(CATALOG, service.fetchCatalog(feedUrl, cacheFile, refresh, ctx::output));
                     } catch (Exception e) {
                         ctx.error("catalog", e.getMessage());
                         throw new RuntimeException(e);
@@ -190,11 +181,11 @@ public final class JdkInstallCommand implements CliCommand {
                         ctx.put(WIZARD_RAN, true);
                     } else {
                         ctx.label("select " + effective);
-                        // selectPreferred applies the Temurin bias for
-                        // vendor-unqualified specs (e.g. `26`, `25.0.3`); the
-                        // keyword path already resolved `effective` to
-                        // `temurin-<major>`, so it's a no-op bias there.
-                        Optional<JdkCatalog.Entry> selected = JdkSelector.selectPreferred(catalog, effective, os, arch);
+                        // resolveEntry re-applies the keyword→major translation and
+                        // selectPreferred's Temurin bias for vendor-unqualified specs
+                        // (e.g. `26`, `25.0.3`); passing the original spec keeps the
+                        // resolution identical to the headless path.
+                        Optional<JdkCatalog.Entry> selected = service.resolveEntry(catalog, spec, os, arch);
                         if (selected.isEmpty()) {
                             ctx.error("no-match", "no JDK matches " + effective + " on " + os + "/" + arch);
                             throw new RuntimeException("no match");
@@ -222,73 +213,35 @@ public final class JdkInstallCommand implements CliCommand {
                 })
                 .build();
 
-        Phase download = Phase.builder("download")
+        // download + extract are owned by JdkService.install; the CLI keeps only
+        // the presentation — an InstallView that drives the download bar and the
+        // installing spinner off the facade's listener events, plus the done
+        // lines. Merged into one phase because install() is a single atomic call;
+        // interactive goals render via SilentListener, so phase labels aren't
+        // shown and the bars/done-lines are the only visible output.
+        Phase install = Phase.builder("install")
                 .kind(PhaseKind.IO)
                 .requires("select")
                 .scope(1)
                 .execute(ctx -> {
                     JdkCatalog.Entry entry = ctx.require(ENTRY);
                     boolean refresh = dev.jkbuild.config.SessionContext.current().config().refreshOr(false);
-                    InstalledJdk already = refresh ? null : installer.alreadyInstalled(entry);
-                    if (already != null) {
-                        String label = entry.vendor() + " " + entry.product() + " " + entry.majorVersion();
-                        CliOutput.out(doneLine(label, already.home(), "is already installed at"));
-                        ctx.put(INSTALLED, already);
-                        ctx.label("already installed");
-                        ctx.progress(1);
-                        return;
-                    }
-                    String label = entry.vendor() + " " + entry.product() + " " + entry.majorVersion();
-                    ctx.label("download " + label);
-                    long total = entry.archiveSize();
-                    try (dev.jkbuild.cli.tui.JdkDownloadBar pb =
-                            dev.jkbuild.cli.tui.JdkDownloadBar.show(CliOutput.stdout(), label)) {
-                        JdkInstaller.DownloadedArchive dl = installer.download(entry, bytes -> pb.update(bytes, total));
-                        pb.finish();
-                        ctx.put(ARCHIVE, dl);
+                    ctx.label("install " + JdkService.displayLabel(entry));
+                    // try-with-resources guarantees the download bar / spinner is
+                    // wiped even when the install throws mid-download (matches the
+                    // old per-phase try-with-resources cleanup).
+                    try (InstallView view = new InstallView(entry)) {
+                        ctx.put(INSTALLED, service.install(entry, registry, refresh, view));
                     } catch (Exception e) {
-                        ctx.error("download", e.getMessage());
+                        ctx.error("install", e.getMessage());
                         throw new RuntimeException(e);
                     }
-                    ctx.progress(1);
-                })
-                .build();
-
-        Phase extract = Phase.builder("extract")
-                .kind(PhaseKind.IO)
-                .requires("download")
-                .scope(1)
-                .execute(ctx -> {
-                    if (ctx.get(INSTALLED).isPresent()) {
-                        // Already-installed short-circuit from the download phase.
-                        ctx.label("skip (already installed)");
-                        ctx.progress(1);
-                        return;
-                    }
-                    JdkCatalog.Entry entry = ctx.require(ENTRY);
-                    String label = entry.vendor() + " " + entry.product() + " " + entry.majorVersion();
-                    ctx.label("extract " + label);
-                    InstalledJdk installed;
-                    try (dev.jkbuild.cli.tui.JdkDownloadBar sp =
-                            dev.jkbuild.cli.tui.JdkDownloadBar.showInstalling(CliOutput.stdout(), label)) {
-                        installed = installer.extractInstalled(entry, ctx.require(ARCHIVE));
-                        ctx.put(INSTALLED, installed);
-                        // Journal the install event for the JDK-usage stats —
-                        // feeds future wizards that surface a user's
-                        // preferred vendors / versions.
-                        dev.jkbuild.jdk.JdkAccessLedger.atDefaultPath().touch(installed.identifier(), "install");
-                    } catch (Exception e) {
-                        ctx.error("extract", e.getMessage());
-                        throw new RuntimeException(e);
-                    }
-                    // Print after close() so the done line overwrites the cleared spinner line.
-                    CliOutput.out(doneLine(label, installed.home(), "has been installed to"));
                     ctx.progress(1);
                 })
                 .build();
 
         Phase setDefault = Phase.builder("set-default")
-                .requires("extract")
+                .requires("install")
                 .scope(1)
                 .execute(ctx -> {
                     if (!Boolean.TRUE.equals(ctx.get(WANT_DEFAULT).orElse(false))) {
@@ -323,8 +276,7 @@ public final class JdkInstallCommand implements CliCommand {
                 .interactive(true)
                 .addPhase(fetchCatalog)
                 .addPhase(select)
-                .addPhase(download)
-                .addPhase(extract)
+                .addPhase(install)
                 .addPhase(setDefault)
                 .build();
 
@@ -409,7 +361,9 @@ public final class JdkInstallCommand implements CliCommand {
      */
     private String resolveKeyword(String raw, JdkCatalog catalog, String os, String arch) {
         if (!JdkKeywords.isKeyword(raw)) return null;
-        String resolved = JdkKeywords.resolveToMajorSpec(catalog, raw, os, arch).orElse(null);
+        // Pure keyword→major resolution lives in the engine (shared with the
+        // headless path); the CLI adds only the "could not resolve" message.
+        String resolved = JdkService.resolveKeyword(raw, catalog, os, arch).orElse(null);
         if (resolved == null) {
             // A keyword resolved to nothing: lts/stable with no LTS major, or
             // `native` with no Oracle GraalVM, for this host.
@@ -479,10 +433,58 @@ public final class JdkInstallCommand implements CliCommand {
         return System.console() != null && !"dumb".equals(System.getenv("TERM")) && System.getenv("CI") == null;
     }
 
-    private static Path ephemeralCachePath() throws java.io.IOException {
-        Path tmp = java.nio.file.Files.createTempFile("jk-feed-", ".json.xz");
-        tmp.toFile().deleteOnExit();
-        java.nio.file.Files.delete(tmp); // force a fresh fetch
-        return tmp;
+    /**
+     * CLI presentation for {@link JdkService}'s install pipeline: turns the facade's listener events
+     * into the animated {@link dev.jkbuild.cli.tui.JdkDownloadBar} (download then installing spinner)
+     * and the {@code doneLine} summaries. {@link AutoCloseable} so a mid-install failure still wipes
+     * the active bar (via the phase's try-with-resources), matching the old per-phase cleanup.
+     */
+    private static final class InstallView implements JdkInstallListener, AutoCloseable {
+
+        private final String label;
+        private dev.jkbuild.cli.tui.JdkDownloadBar bar;
+
+        InstallView(JdkCatalog.Entry entry) {
+            this.label = JdkService.displayLabel(entry);
+        }
+
+        @Override
+        public void onAlreadyInstalled(InstalledJdk jdk) {
+            CliOutput.out(doneLine(label, jdk.home(), "is already installed at"));
+        }
+
+        @Override
+        public void onDownloadStart(String displayName, long totalBytes) {
+            bar = dev.jkbuild.cli.tui.JdkDownloadBar.show(CliOutput.stdout(), displayName);
+        }
+
+        @Override
+        public void onDownloadProgress(long readBytes, long totalBytes) {
+            if (bar != null) bar.update(readBytes, totalBytes);
+        }
+
+        @Override
+        public void onExtractStart(String displayName) {
+            if (bar != null) bar.finish();
+            bar = dev.jkbuild.cli.tui.JdkDownloadBar.showInstalling(CliOutput.stdout(), displayName);
+        }
+
+        @Override
+        public void onInstalled(InstalledJdk jdk) {
+            if (bar != null) {
+                bar.finish();
+                bar = null;
+            }
+            // Print after the spinner is wiped so the done line takes its place.
+            CliOutput.out(doneLine(label, jdk.home(), "has been installed to"));
+        }
+
+        @Override
+        public void close() {
+            if (bar != null) {
+                bar.finish();
+                bar = null;
+            }
+        }
     }
 }
