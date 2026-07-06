@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.Jk;
@@ -25,6 +26,7 @@ import dev.jkbuild.model.Scope;
 import dev.jkbuild.model.VersionSelector;
 import dev.jkbuild.model.WorkspaceMerge;
 import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Exit;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.repo.LibraryRegistryClient;
@@ -130,8 +132,8 @@ public final class LockCommand implements CliCommand {
 
         Path dir = global.workingDir();
         if (!Files.exists(dir.resolve("jk.toml"))) {
-            System.err.println("jk lock: no jk.toml in " + dev.jkbuild.cli.PathDisplay.styledRaw(dir));
-            return 2;
+            CliOutput.err("jk lock: no jk.toml in " + dev.jkbuild.cli.PathDisplay.styledRaw(dir));
+            return Exit.CONFIG;
         }
         Path cache = cacheDir != null ? cacheDir : JkDirs.cache();
         Files.createDirectories(cache);
@@ -145,8 +147,8 @@ public final class LockCommand implements CliCommand {
         try {
             root = JkBuildParser.parse(dir.resolve("jk.toml"));
         } catch (RuntimeException e) {
-            System.err.println("jk lock: " + e.getMessage());
-            return 2;
+            CliOutput.err("jk lock: " + e.getMessage());
+            return Exit.CONFIG;
         }
 
         JkBuild effectiveRoot = applyWorkspaceContextIfModule(dir, root);
@@ -163,8 +165,8 @@ public final class LockCommand implements CliCommand {
                 try {
                     modules = WorkspaceLoader.loadModules(dir, effectiveRoot);
                 } catch (RuntimeException e) {
-                    System.err.println("jk lock: " + e.getMessage());
-                    return 2;
+                    CliOutput.err("jk lock: " + e.getMessage());
+                    return Exit.CONFIG;
                 }
                 for (Map.Entry<Path, JkBuild> entry : modules.entrySet()) {
                     Path moduleDir = entry.getKey();
@@ -191,7 +193,7 @@ public final class LockCommand implements CliCommand {
      * calibrated to total packages across all modules, and a completed-package tail.
      */
     private int runLive(Path dir, JkBuild effectiveRoot, Path cache, boolean animate) throws Exception {
-        CommandManager view = CommandManager.goal(System.out, "Lock", animate);
+        CommandManager view = CommandManager.goal(CliOutput.stdout(), "Lock", animate);
         long start = System.nanoTime();
 
         // Shared counters across all modules.
@@ -213,7 +215,7 @@ public final class LockCommand implements CliCommand {
             } catch (RuntimeException e) {
                 errorLines.add(e.getMessage());
                 view.finishGoalFailure(lockFailTail(), errorLines);
-                return 2;
+                return Exit.CONFIG;
             }
             for (Map.Entry<Path, JkBuild> entry : modules.entrySet()) {
                 Path moduleDir = entry.getKey();
@@ -289,7 +291,7 @@ public final class LockCommand implements CliCommand {
                 if (view.animating()) {
                     view.addCompletion(line);
                 } else {
-                    System.out.println(line);
+                    CliOutput.out(line);
                 }
             }
         };
@@ -313,7 +315,7 @@ public final class LockCommand implements CliCommand {
                 .filter(p -> p.status() == PhaseStatus.FAIL)
                 .map(GoalResult.PhaseReport::name)
                 .anyMatch("resolve"::equals);
-        return resolveFailed ? 6 : 2;
+        return resolveFailed ? 6 : Exit.CONFIG;
     }
 
     /** Failure result tail for the Lock chip (GoalWedge prepends "Failed to lock"). */
@@ -726,7 +728,7 @@ public final class LockCommand implements CliCommand {
                     .map(GoalResult.PhaseReport::name)
                     .findFirst()
                     .orElse("?");
-            return failed.equals("resolve") ? 6 : 2;
+            return failed.equals("resolve") ? 6 : Exit.CONFIG;
         }
         return 0;
     }

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.cli.tui.Glyphs;
@@ -8,6 +9,7 @@ import dev.jkbuild.config.JkBuildEditor;
 import dev.jkbuild.model.Scope;
 import dev.jkbuild.model.command.Arity;
 import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Exit;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.model.command.Param;
@@ -67,13 +69,13 @@ public final class RemoveCommand implements CliCommand {
         Path dir = global.workingDir();
         Path file = dir.resolve("jk.toml");
         if (!Files.exists(file)) {
-            System.err.println("jk remove: no jk.toml in current directory");
-            return 2;
+            CliOutput.err("jk remove: no jk.toml in current directory");
+            return Exit.CONFIG;
         }
         int selected = (test ? 1 : 0) + (runtime ? 1 : 0) + (provided ? 1 : 0) + (processor ? 1 : 0);
         if (selected > 1) {
-            System.err.println("jk remove: --test / --runtime / --provided / --processor are mutually exclusive");
-            return 64;
+            CliOutput.err("jk remove: --test / --runtime / --provided / --processor are mutually exclusive");
+            return Exit.USAGE;
         }
         Scope scope = test
                 ? Scope.TEST
@@ -82,8 +84,8 @@ public final class RemoveCommand implements CliCommand {
         try {
             name = shortNameOf(nameArg);
         } catch (IllegalArgumentException e) {
-            System.err.println("jk remove: " + e.getMessage());
-            return 64;
+            CliOutput.err("jk remove: " + e.getMessage());
+            return Exit.USAGE;
         }
 
         String original = Files.readString(file);
@@ -91,11 +93,11 @@ public final class RemoveCommand implements CliCommand {
         try {
             updated = JkBuildEditor.removeDependency(original, scope, name);
         } catch (IllegalStateException | IllegalArgumentException e) {
-            System.err.println("jk remove: " + e.getMessage());
+            CliOutput.err("jk remove: " + e.getMessage());
             return 1;
         }
         Files.writeString(file, updated, StandardCharsets.UTF_8);
-        System.out.println(Theme.colorize(Glyphs.CROSS, Theme.active().darkGray())
+        CliOutput.out(Theme.colorize(Glyphs.CROSS, Theme.active().darkGray())
                 + " Removed "
                 + Theme.colorize(name, Theme.active().activeStep())
                 + " from "

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.compat.PassthroughEnv;
 import dev.jkbuild.jdk.HostPlatform;
@@ -124,17 +125,17 @@ public final class MvnCommand implements CliCommand {
                     .on("result", json -> {
                         bin[0] = Ndjson.str(json, "bin");
                         String err = Ndjson.str(json, "error");
-                        if (err != null) System.err.println("jk " + (isGradle ? "gradle" : "mvn") + ": " + err);
+                        if (err != null) CliOutput.err("jk " + (isGradle ? "gradle" : "mvn") + ": " + err);
                         String src = Ndjson.str(json, "source");
                         String ver = Ndjson.str(json, "version");
                         if ("LINKED".equals(src) || "DOWNLOADED".equals(src)) {
-                            System.err.println((isGradle ? "Gradle " : "Maven ") + ver + " " + src.toLowerCase());
+                            CliOutput.err((isGradle ? "Gradle " : "Maven ") + ver + " " + src.toLowerCase());
                         }
                     })
                     .passthrough(ln -> diag.append(ln).append('\n'))
                     .run(cmd);
             if (exit != 0) {
-                if (diag.length() > 0) System.err.println(diag.toString().trim());
+                if (diag.length() > 0) CliOutput.err(diag.toString().trim());
                 return null;
             }
             return bin[0] != null ? Path.of(bin[0]) : null;

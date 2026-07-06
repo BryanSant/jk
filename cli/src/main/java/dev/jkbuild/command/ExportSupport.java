@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.cli.PathDisplay;
 import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.cli.tui.Glyphs;
@@ -71,14 +72,14 @@ final class ExportSupport {
     static Loaded load(Path startDir, String cmd) throws IOException {
         Path toml = startDir.resolve("jk.toml");
         if (!Files.exists(toml)) {
-            System.err.println(cmd + ": no jk.toml in " + dev.jkbuild.cli.PathDisplay.styledRaw(startDir));
+            CliOutput.err(cmd + ": no jk.toml in " + dev.jkbuild.cli.PathDisplay.styledRaw(startDir));
             return null;
         }
         JkBuild root;
         try {
             root = JkBuildParser.parse(toml);
         } catch (RuntimeException e) {
-            System.err.println(cmd + ": " + e.getMessage());
+            CliOutput.err(cmd + ": " + e.getMessage());
             return null;
         }
         Map<Path, JkBuild> modules = root.isWorkspaceRoot() ? WorkspaceLoader.loadModules(startDir, root) : Map.of();
@@ -112,7 +113,7 @@ final class ExportSupport {
      */
     static boolean canWrite(Path target, boolean force, String cmd) {
         if (Files.exists(target) && !force) {
-            System.err.println(cmd + ": refusing to overwrite " + PathDisplay.styled(target) + " (use --force).");
+            CliOutput.err(cmd + ": refusing to overwrite " + PathDisplay.styled(target) + " (use --force).");
             return false;
         }
         return true;
@@ -123,13 +124,13 @@ final class ExportSupport {
         int n = 0;
         for (ImportReport.Issue issue : report.issues()) {
             String tag = issue.severity() == ImportReport.Severity.ERROR ? "error" : "note";
-            System.err.println(Theme.colorize("  " + tag + ":", Theme.active().darkGray()) + " " + issue.message());
+            CliOutput.err(Theme.colorize("  " + tag + ":", Theme.active().darkGray()) + " " + issue.message());
             n++;
         }
         return n;
     }
 
     static void wrote(Path path) {
-        System.out.println(Theme.colorize(Glyphs.CHECK, Theme.active().success()) + " Wrote " + PathDisplay.styled(path));
+        CliOutput.out(Theme.colorize(Glyphs.CHECK, Theme.active().success()) + " Wrote " + PathDisplay.styled(path));
     }
 }

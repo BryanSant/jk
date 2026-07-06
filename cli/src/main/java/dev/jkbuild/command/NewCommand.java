@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.cli.theme.Theme;
@@ -417,7 +418,7 @@ public final class NewCommand implements CliCommand {
                 for (GoalResult.Diagnostic d : result.errors()) {
                     if ("no-jdks".equals(d.code())) {
                         emitNoJdksError();
-                        return 2;
+                        return Exit.CONFIG;
                     }
                     if ("exists".equals(d.code())) {
                         NewInputs partial = goal.get(INPUTS).orElse(null);
@@ -427,10 +428,10 @@ public final class NewCommand implements CliCommand {
                         boolean isInit = directory != null && isCurrentDirArg(directory);
                         Terminal term = goal.get(TERMINAL).orElse(null);
                         emitProjectExistsError(coord, parent != null, isInit, term);
-                        return 2;
+                        return Exit.CONFIG;
                     }
                 }
-                return 2;
+                return Exit.CONFIG;
             }
 
             NewInputs inputs = goal.get(INPUTS).orElseThrow();
@@ -460,18 +461,18 @@ public final class NewCommand implements CliCommand {
         try {
             inputs = fromFlags(cwd);
         } catch (IllegalArgumentException e) {
-            System.err.println("jk new: " + e.getMessage());
+            CliOutput.err("jk new: " + e.getMessage());
             return Exit.USAGE;
         }
         if (shadow && inputs.main().isEmpty()) {
-            System.err.println("jk new: --shadow requires --executable");
-            return 64;
+            CliOutput.err("jk new: --shadow requires --executable");
+            return Exit.USAGE;
         }
         if (Files.exists(inputs.directory().resolve("jk.toml"))) {
             emitProjectExistsError(
                     inputs.group() + ":" + inputs.name(),
                     parent != null, directory != null && isCurrentDirArg(directory), null);
-            return 2;
+            return Exit.CONFIG;
         }
         Path cache = JkDirs.cache();
 
@@ -698,8 +699,8 @@ public final class NewCommand implements CliCommand {
             writer.println(chipLine);
             writer.flush();
         } else {
-            System.err.println(warnLine);
-            System.err.println(chipLine);
+            CliOutput.err(warnLine);
+            CliOutput.err(chipLine);
         }
     }
 
@@ -708,7 +709,7 @@ public final class NewCommand implements CliCommand {
         var warn = Theme.active().warning();
         var label = Theme.active().activeStep();
         var body = Theme.active().normalGray();
-        System.err.println(Theme.colorize(Glyphs.BANG, warn)
+        CliOutput.err(Theme.colorize(Glyphs.BANG, warn)
                 + " "
                 + Theme.colorize("Jk", label)
                 + Theme.colorize(": No JDKs found on this system. Run ", body)
@@ -834,12 +835,12 @@ public final class NewCommand implements CliCommand {
             // Download (progress bar) then extract (spinner).
             var label = entry.vendor() + " " + entry.product() + " " + entry.majorVersion();
             long total = entry.archiveSize();
-            try (var pb = dev.jkbuild.cli.tui.JdkDownloadBar.show(System.out, label)) {
+            try (var pb = dev.jkbuild.cli.tui.JdkDownloadBar.show(CliOutput.stdout(), label)) {
                 var dl = installer.download(entry, bytes -> pb.update(bytes, total));
                 pb.finish();
-                try (var sp = dev.jkbuild.cli.tui.Spinner.show(System.out, "Installing " + label + "...")) {
+                try (var sp = dev.jkbuild.cli.tui.Spinner.show(CliOutput.stdout(), "Installing " + label + "...")) {
                     var installed = installer.extractInstalled(entry, dl);
-                    System.out.println("✓ Installed " + label + " → " + installed.home());
+                    CliOutput.out("✓ Installed " + label + " → " + installed.home());
                     var opt = new NewJdkOptions.Option(
                             installed.identifier(),
                             installed.identifier() + "  (JDK " + entry.majorVersion() + ")",
@@ -850,7 +851,7 @@ public final class NewCommand implements CliCommand {
                 }
             }
         } catch (Exception e) {
-            System.err.println("jk new: failed to install JDK: " + e.getMessage());
+            CliOutput.err("jk new: failed to install JDK: " + e.getMessage());
             return Optional.empty();
         }
     }
@@ -1184,7 +1185,7 @@ public final class NewCommand implements CliCommand {
     }
 
     private static void emitSuccessPlain(NewInputs inputs, Module module, boolean isInit) {
-        System.out.println(successLine(inputs, module, isInit));
+        CliOutput.out(successLine(inputs, module, isInit));
     }
 
     private static String successLine(NewInputs inputs, Module module, boolean isInit) {

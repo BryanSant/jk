@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cli.Ansi;
 import dev.jkbuild.cli.GlobalOptions;
@@ -96,7 +97,7 @@ public final class RunCommand implements CliCommand {
         Path projectDir = global.workingDir();
         Path manifest = projectDir.resolve("jk.toml");
         if (!Files.exists(manifest)) {
-            System.err.println("jk run: no jk.toml in "
+            CliOutput.err("jk run: no jk.toml in "
                     + dev.jkbuild.cli.PathDisplay.styledRaw(projectDir)
                     + " — run from a project directory, or use `jk tool run` to run a file or tool.");
             return Exit.USAGE;
@@ -111,8 +112,8 @@ public final class RunCommand implements CliCommand {
             String msg = "No " + Theme.colorize("main", Theme.active().cyan())
                     + " class specified in "
                     + Theme.colorize("[project]", Theme.active().cyan());
-            System.out.println(GoalWedge.failureLine("Exec", nerdfont, msg));
-            return 64;
+            CliOutput.out(GoalWedge.failureLine("Exec", nerdfont, msg));
+            return Exit.USAGE;
         }
         BuildLayout layout = BuildLayout.of(projectDir, project);
         Path cache = cacheDir();
@@ -169,10 +170,10 @@ public final class RunCommand implements CliCommand {
             printExecBanner(projectDir, command);
         } else {
             // Chip already settled with exec info; emit the blank separator + color reset.
-            System.err.println();
+            CliOutput.err();
             if (Theme.colorEnabled()) {
-                System.err.print(Ansi.RESET);
-                System.err.flush();
+                CliOutput.errRaw(Ansi.RESET);
+                CliOutput.stderr().flush();
             }
         }
         command.addAll(appArgs);
@@ -252,14 +253,14 @@ public final class RunCommand implements CliCommand {
      */
     private static void printExecBanner(Path projectDir, List<String> command) {
         Theme t = Theme.active();
-        System.err.println(
+        CliOutput.err(
                 Theme.colorize(dev.jkbuild.cli.tui.Glyphs.PLAY, t.brightGreen()) + " " + execTail(projectDir, command));
-        System.err.println();
+        CliOutput.err();
         // Reset any lingering SGR state so the program's own output starts from
         // the terminal's default colors (only when we're emitting color at all).
         if (Theme.colorEnabled()) {
-            System.err.print(Ansi.RESET);
-            System.err.flush();
+            CliOutput.errRaw(Ansi.RESET);
+            CliOutput.stderr().flush();
         }
     }
 

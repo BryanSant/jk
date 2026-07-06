@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.run.GoalConsole;
@@ -15,6 +16,7 @@ import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.lock.LockfileReader;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Exit;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.run.Goal;
@@ -75,9 +77,9 @@ public final class VerifyBuildCommand implements CliCommand {
         Path buildFile = dir.resolve("jk.toml");
         Path lockFile = dir.resolve("jk.lock");
         if (!Files.exists(buildFile) || !Files.exists(lockFile)) {
-            System.err.println(
+            CliOutput.err(
                     "jk verify: jk.toml and jk.lock required in " + dev.jkbuild.cli.PathDisplay.styledRaw(dir));
-            return 2;
+            return Exit.CONFIG;
         }
         Path cache = cacheDir != null ? cacheDir : JkDirs.cache();
 
@@ -144,7 +146,7 @@ public final class VerifyBuildCommand implements CliCommand {
 
         if (!result.success()) {
             for (GoalResult.Diagnostic d : result.errors()) {
-                if ("missing-jar".equals(d.code())) return 66;
+                if ("missing-jar".equals(d.code())) return Exit.NO_INPUT;
             }
             return 1;
         }
@@ -152,14 +154,14 @@ public final class VerifyBuildCommand implements CliCommand {
         String existing = goal.get(EXISTING_HASH).orElseThrow();
         String rebuilt = goal.get(REBUILT_HASH).orElseThrow();
         if (!global.outputIsJson()) {
-            System.out.println("Existing: " + existing);
-            System.out.println("Rebuilt : " + rebuilt);
+            CliOutput.out("Existing: " + existing);
+            CliOutput.out("Rebuilt : " + rebuilt);
         }
         if (existing.equals(rebuilt)) {
-            if (!global.outputIsJson()) System.out.println("Reproducible.");
+            if (!global.outputIsJson()) CliOutput.out("Reproducible.");
             return 0;
         }
-        System.err.println("Not reproducible — see diff above.");
+        CliOutput.err("Not reproducible — see diff above.");
         return 1;
     }
 

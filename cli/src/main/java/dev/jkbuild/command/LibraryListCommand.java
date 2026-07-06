@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.cli.theme.Coords;
 import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.library.LibraryCatalog;
@@ -47,10 +48,10 @@ public final class LibraryListCommand implements CliCommand {
         this.showLayer = in.isSet("show-layer");
         this.groupByLayer = in.isSet("group-by-layer");
 
-        LibraryCatalog catalog = LibraryCatalog.layered(System.err::println);
+        LibraryCatalog catalog = LibraryCatalog.layered(CliOutput.stderr()::println);
         Set<String> names = catalog.names();
         if (names.isEmpty()) {
-            System.out.println("(no libraries registered)");
+            CliOutput.out("(no libraries registered)");
             return 0;
         }
         int nameWidth = names.stream().mapToInt(String::length).max().orElse(0);
@@ -64,9 +65,9 @@ public final class LibraryListCommand implements CliCommand {
             var src = catalog.source(name).orElseThrow();
             if (layerFilter != null && !src.layer().equals(layerFilter)) continue;
             shown++;
-            System.out.println(row(name, src, leaderColumn));
+            CliOutput.out(row(name, src, leaderColumn));
         }
-        if (shown == 0 && layerFilter != null) System.out.println("(no libraries in layer `" + layerFilter + "`)");
+        if (shown == 0 && layerFilter != null) CliOutput.out("(no libraries in layer `" + layerFilter + "`)");
         return 0;
     }
 
@@ -80,15 +81,15 @@ public final class LibraryListCommand implements CliCommand {
                 if (catalog.source(name).orElseThrow().layer().equals(layer)) inLayer.add(name);
             }
             if (inLayer.isEmpty()) continue;
-            if (!firstGroup) System.out.println();
+            if (!firstGroup) CliOutput.out();
             firstGroup = false;
-            System.out.println(Theme.colorize(layer, Theme.active().cyan()));
+            CliOutput.out(Theme.colorize(layer, Theme.active().cyan()));
             for (String name : inLayer) {
                 shown++;
-                System.out.println(row(name, catalog.source(name).orElseThrow(), leaderColumn));
+                CliOutput.out(row(name, catalog.source(name).orElseThrow(), leaderColumn));
             }
         }
-        if (shown == 0 && layerFilter != null) System.out.println("(no libraries in layer `" + layerFilter + "`)");
+        if (shown == 0 && layerFilter != null) CliOutput.out("(no libraries in layer `" + layerFilter + "`)");
         return 0;
     }
 

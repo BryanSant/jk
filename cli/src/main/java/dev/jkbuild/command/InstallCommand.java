@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cache.Linking;
 import dev.jkbuild.cli.GlobalOptions;
@@ -23,6 +24,7 @@ import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.RepositorySpec;
 import dev.jkbuild.model.command.Arity;
 import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Exit;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.model.command.Param;
@@ -179,8 +181,8 @@ public final class InstallCommand implements CliCommand {
         Path projectDir = global.workingDir();
         Path manifest = projectDir.resolve("jk.toml");
         if (!Files.exists(manifest)) {
-            System.err.println("jk install: no jk.toml in " + dev.jkbuild.cli.PathDisplay.styledRaw(projectDir));
-            return 64;
+            CliOutput.err("jk install: no jk.toml in " + dev.jkbuild.cli.PathDisplay.styledRaw(projectDir));
+            return Exit.USAGE;
         }
         return runProjectInstallGoal(projectDir, "install");
     }
@@ -195,8 +197,8 @@ public final class InstallCommand implements CliCommand {
      */
     private int installFromFile(Path filePath) throws IOException {
         if (!Files.exists(filePath)) {
-            System.err.println("jk install: " + PathDisplay.styled(filePath) + ": no such file");
-            return 2;
+            CliOutput.err("jk install: " + PathDisplay.styled(filePath) + ": no such file");
+            return Exit.CONFIG;
         }
 
         boolean isJar = filePath.getFileName().toString().toLowerCase().endsWith(".jar");
@@ -214,7 +216,7 @@ public final class InstallCommand implements CliCommand {
 
         if (group == null || artifact == null || version == null) {
             if (!isJar) {
-                System.err.println("jk install: --group, --name, and --ver are required for non-JAR files");
+                CliOutput.err("jk install: --group, --name, and --ver are required for non-JAR files");
             } else {
                 StringBuilder msg = new StringBuilder("jk install: could not detect");
                 if (group == null) msg.append(" group");
@@ -224,9 +226,9 @@ public final class InstallCommand implements CliCommand {
                 if (group == null) msg.append("; supply --group");
                 if (artifact == null) msg.append("; supply --name");
                 if (version == null) msg.append("; supply --ver");
-                System.err.println(msg.toString());
+                CliOutput.err(msg.toString());
             }
-            return 64;
+            return Exit.USAGE;
         }
 
         Path cache = cacheDir();
@@ -237,7 +239,7 @@ public final class InstallCommand implements CliCommand {
         writeToLocalStore(cache, MavenLayout.artifactPath(coord), filePath);
 
         if (!global.outputIsJson()) {
-            System.out.println("Installed " + dev.jkbuild.cli.theme.Coords.gav(coord) + " to the local cache");
+            CliOutput.out("Installed " + dev.jkbuild.cli.theme.Coords.gav(coord) + " to the local cache");
         }
         return 0;
     }
@@ -253,8 +255,8 @@ public final class InstallCommand implements CliCommand {
         try {
             parsed = Coordinate.parse(coord);
         } catch (IllegalArgumentException e) {
-            System.err.println("jk install: " + e.getMessage());
-            return 64;
+            CliOutput.err("jk install: " + e.getMessage());
+            return Exit.USAGE;
         }
         String bin = binName != null && !binName.isBlank() ? binName : parsed.artifact();
         Path cacheDir = cacheDir();
@@ -351,7 +353,7 @@ public final class InstallCommand implements CliCommand {
         GoalResult fetchResult = GoalConsole.run(fetchGoal, GoalConsole.modeFor(global), cacheDir);
         if (!fetchResult.success()) {
             for (GoalResult.Diagnostic d : fetchResult.errors()) {
-                if ("no-jk-toml".equals(d.code())) return 70;
+                if ("no-jk-toml".equals(d.code())) return Exit.SOFTWARE;
             }
             return failureExit(fetchResult, "jk install", cacheDir);
         }
@@ -359,7 +361,7 @@ public final class InstallCommand implements CliCommand {
         Path checkout = fetchGoal.get(CHECKOUT).orElseThrow();
         String sha = fetchGoal.get(FETCHED_SHA).orElseThrow();
         if (!global.outputIsJson()) {
-            System.out.println(
+            CliOutput.out(
                     "Fetched " + expanded + " @ " + refStr + " (" + sha.substring(0, Math.min(7, sha.length())) + ")");
         }
 
@@ -399,10 +401,10 @@ public final class InstallCommand implements CliCommand {
         JkBuild proj = JkBuildParser.parse(projectDir.resolve("jk.toml"));
         var pj = proj.project();
         if (pj.isApplication() && pj.nativeMode() == JkBuild.NativeMode.DISABLED && pj.main() == null) {
-            System.err.println("jk install: application project at "
+            CliOutput.err("jk install: application project at "
                     + dev.jkbuild.cli.PathDisplay.styledRaw(projectDir)
                     + " has no `main` class set in [project]");
-            return 64;
+            return Exit.USAGE;
         }
         // ALWAYS: native is part of the standard build and install produces a native binary.
         // SUPPORTED: user runs `jk native` explicitly; install deploys the jar.
@@ -720,21 +722,21 @@ public final class InstallCommand implements CliCommand {
 
     private void announceInstall(String coord, Path launcher, Path binDir) {
         if (global.outputIsJson()) return;
-        System.out.println("Installed " + coord + " → " + launcher);
-        System.out.println("Add to PATH if needed:");
-        System.out.println("  export PATH=\"" + binDir + ":$PATH\"");
+        CliOutput.out("Installed " + coord + " → " + launcher);
+        CliOutput.out("Add to PATH if needed:");
+        CliOutput.out("  export PATH=\"" + binDir + ":$PATH\"");
     }
 
     /** Announce a project install: launcher path for an app, cache-only for a library. */
     private void announceProjectInstall(String coord, Path launcher, Path binDir) {
         if (global.outputIsJson()) return;
         if (launcher == null) {
-            System.out.println("Installed " + coord + " to the local cache");
+            CliOutput.out("Installed " + coord + " to the local cache");
             return;
         }
-        System.out.println("Installed " + coord + " → " + launcher);
-        System.out.println("Add to PATH if needed:");
-        System.out.println("  export PATH=\"" + binDir + ":$PATH\"");
+        CliOutput.out("Installed " + coord + " → " + launcher);
+        CliOutput.out("Add to PATH if needed:");
+        CliOutput.out("  export PATH=\"" + binDir + ":$PATH\"");
     }
 
     /**

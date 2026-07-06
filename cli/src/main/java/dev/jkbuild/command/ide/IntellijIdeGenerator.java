@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command.ide;
 
+import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.cli.tui.Glyphs;
 import dev.jkbuild.cli.tui.GoalWedge;
@@ -122,7 +123,7 @@ public final class IntellijIdeGenerator implements IdeGenerator {
         Theme t = Theme.active();
         String check = Theme.colorize(Glyphs.CHECK, t.success());
 
-        System.out.println(GoalWedge.chipLine(
+        CliOutput.out(GoalWedge.chipLine(
                 Glyphs.CHECK,
                 "IDEA",
                 GlobalConfig.nerdfont(),
@@ -144,11 +145,11 @@ public final class IntellijIdeGenerator implements IdeGenerator {
             String connector = i == items.size() - 1
                     ? (ansi ? "╰─ " : "`- ")
                     : (ansi ? "├─ " : "+- ");
-            System.out.println(" " + (ansi ? Theme.colorize(connector, t.darkGray()) : connector) + items.get(i));
+            CliOutput.out(" " + (ansi ? Theme.colorize(connector, t.darkGray()) : connector) + items.get(i));
         }
 
-        System.out.println();
-        System.out.println(" "
+        CliOutput.out();
+        CliOutput.out(" "
                 + Theme.colorize(Glyphs.BANG + " Note", t.warning())
                 + ": You may need to "
                 + Theme.colorize("restart your IDE", AttributedStyle.DEFAULT.italic())

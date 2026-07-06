@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.gradle.GradleExporter;
 import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Exit;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import java.io.IOException;
@@ -41,17 +43,17 @@ public final class ExportGradleCommand implements CliCommand {
         GlobalOptions global = GlobalOptions.from(in);
         boolean force = in.isSet("force");
         ExportSupport.Loaded loaded = ExportSupport.load(global.workingDir(), "jk export gradle");
-        if (loaded == null) return 66;
+        if (loaded == null) return Exit.NO_INPUT;
 
         GradleExporter.Result result = GradleExporter.export(
                 loaded.root(), loaded.modulesByRelPath(), loaded.layoutByRelPath(), loaded.locked());
 
         // Pre-flight overwrite guard across every file we'd write.
         Path settings = loaded.rootDir().resolve("settings.gradle.kts");
-        if (!ExportSupport.canWrite(settings, force, "jk export gradle")) return 73;
+        if (!ExportSupport.canWrite(settings, force, "jk export gradle")) return Exit.CANT_CREATE;
         for (String relDir : result.buildFiles().keySet()) {
             Path build = loaded.rootDir().resolve(relDir).resolve("build.gradle.kts");
-            if (!ExportSupport.canWrite(build, force, "jk export gradle")) return 73;
+            if (!ExportSupport.canWrite(build, force, "jk export gradle")) return Exit.CANT_CREATE;
         }
 
         Files.writeString(settings, result.settings(), StandardCharsets.UTF_8);
@@ -65,7 +67,7 @@ public final class ExportGradleCommand implements CliCommand {
 
         int warnings = ExportSupport.printReport(result.report());
         if (warnings > 0) {
-            System.out.println("  (" + warnings + " fidelity note" + (warnings == 1 ? "" : "s") + ")");
+            CliOutput.out("  (" + warnings + " fidelity note" + (warnings == 1 ? "" : "s") + ")");
         }
         return 0;
     }

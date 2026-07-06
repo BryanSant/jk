@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.model.command.Arity;
 import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Invocation;
@@ -54,7 +55,7 @@ public final class ToolUninstallCommand implements CliCommand {
         boolean envExists = Files.isDirectory(envDir);
         boolean launcherExists = Files.exists(launcher) || Files.exists(winLauncher);
         if (!envExists && !launcherExists) {
-            System.out.println(name + " is not installed.");
+            CliOutput.out(name + " is not installed.");
             return 0;
         }
 
@@ -70,7 +71,7 @@ public final class ToolUninstallCommand implements CliCommand {
         }
         Files.deleteIfExists(launcher);
         Files.deleteIfExists(winLauncher);
-        System.out.println("Removed " + name);
+        CliOutput.out("Removed " + name);
         return 0;
     }
 }

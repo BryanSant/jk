@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.PathDisplay;
@@ -15,6 +16,7 @@ import dev.jkbuild.jdk.HostPlatform;
 import dev.jkbuild.model.Coordinate;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Exit;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.plugin.protocol.Ndjson;
@@ -105,8 +107,8 @@ public final class FormatCommand implements CliCommand {
         Path projectDir = global.workingDir();
         Path buildFile = projectDir.resolve("jk.toml");
         if (!Files.exists(buildFile)) {
-            System.err.println("jk format: no jk.toml in " + PathDisplay.styledRaw(projectDir));
-            return 2;
+            CliOutput.err("jk format: no jk.toml in " + PathDisplay.styledRaw(projectDir));
+            return Exit.CONFIG;
         }
         JkBuild build = JkBuildParser.parse(buildFile);
 
@@ -129,8 +131,8 @@ public final class FormatCommand implements CliCommand {
                     cliOptimize,
                     build.format());
         } catch (IllegalArgumentException e) {
-            System.err.println("jk format: " + e.getMessage());
-            return 64;
+            CliOutput.err("jk format: " + e.getMessage());
+            return Exit.USAGE;
         }
         // Supplying --rewrite-config implicitly enables optimize-imports when neither
         // flag nor env var said otherwise (so the OpenRewrite pipeline actually runs).
@@ -149,7 +151,7 @@ public final class FormatCommand implements CliCommand {
             List<Path> javaFiles = collectSources(projectDir, ".java");
             List<Path> kotlinFiles = collectSources(projectDir, ".kt");
             if (javaFiles.isEmpty() && kotlinFiles.isEmpty()) {
-                if (!global.outputIsJson()) System.out.println("jk format: no Java or Kotlin sources found.");
+                if (!global.outputIsJson()) CliOutput.out("jk format: no Java or Kotlin sources found.");
                 return 0;
             }
             Path cache = JkDirs.cache();
@@ -175,7 +177,7 @@ public final class FormatCommand implements CliCommand {
 
         // Animated path — start the TUI *first*, then do I/O under the spinner.
         String subtitle = optimizeImports ? "Examining source files & optimizing imports" : "Examining source files";
-        try (CommandManager cm = CommandManager.goal(System.out, "Format", true)) {
+        try (CommandManager cm = CommandManager.goal(CliOutput.stdout(), "Format", true)) {
             cm.addPhaseLabeled("", "fmt", subtitle);
             cm.phaseRunning("", "fmt");
 
@@ -249,17 +251,17 @@ public final class FormatCommand implements CliCommand {
                             String mark = Theme.colorize(Glyphs.CHECK, Theme.active().success());
                             String rel = Theme.colorize(
                                     PathDisplay.of(Path.of(path), projectDir), Theme.active().path());
-                            System.out.println(mark + " " + (check ? "Would format: " : "Formatted: ") + rel);
+                            CliOutput.out(mark + " " + (check ? "Would format: " : "Formatted: ") + rel);
                         }
                     } else if ("error".equals(status)) {
                         counts[2]++;
-                        System.err.println("  error  " + path + ": " + Ndjson.str(json, "msg"));
+                        CliOutput.err("  error  " + path + ": " + Ndjson.str(json, "msg"));
                     } else {
                         counts[1]++;
                     }
                 })
                 .passthrough(line -> {
-                    if (global.verbose) System.err.println("  [formatter] " + line);
+                    if (global.verbose) CliOutput.err("  [formatter] " + line);
                 })
                 .run(cmd);
 
@@ -272,7 +274,7 @@ public final class FormatCommand implements CliCommand {
                     : counts[0] + " file" + (counts[0] == 1 ? "" : "s") + ", " + counts[1] + " already clean";
             if (counts[2] > 0) body += ", " + counts[2] + " error" + (counts[2] == 1 ? "" : "s");
             String inTime = ConsoleSpec.took(Duration.ofMillis(System.currentTimeMillis() - startMs));
-            System.out.println(mark + " " + verb + " " + body + " " + inTime);
+            CliOutput.out(mark + " " + verb + " " + body + " " + inTime);
         }
         return exit;
     }

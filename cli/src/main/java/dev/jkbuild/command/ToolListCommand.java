@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Invocation;
@@ -44,7 +45,7 @@ public final class ToolListCommand implements CliCommand {
         Path binDir = binDirOverride != null ? binDirOverride : JkDirs.binDir();
         Path envsRoot = state.resolve("tools").resolve("envs");
         if (!Files.isDirectory(envsRoot)) {
-            System.out.println("No tools installed. Try `jk tool install <coord>`.");
+            CliOutput.out("No tools installed. Try `jk tool install <coord>`.");
             return 0;
         }
         List<Path> envs = new ArrayList<>();
@@ -52,7 +53,7 @@ public final class ToolListCommand implements CliCommand {
             stream.filter(Files::isDirectory).forEach(envs::add);
         }
         if (envs.isEmpty()) {
-            System.out.println("No tools installed. Try `jk tool install <coord>`.");
+            CliOutput.out("No tools installed. Try `jk tool install <coord>`.");
             return 0;
         }
         envs.sort(Comparator.comparing(p -> p.getFileName().toString()));
@@ -61,8 +62,8 @@ public final class ToolListCommand implements CliCommand {
             String bin = envDir.getFileName().toString();
             String coord = readCoord(envDir.resolve("env.json")).orElse("(unknown coord)");
             Path launcher = binDir.resolve(bin);
-            System.out.printf("%-24s %s%n", Theme.colorize(bin, t.cyan()), coord);
-            if (Files.exists(launcher)) System.out.printf("%-24s %s %s%n",
+            CliOutput.stdout().printf("%-24s %s%n", Theme.colorize(bin, t.cyan()), coord);
+            if (Files.exists(launcher)) CliOutput.stdout().printf("%-24s %s %s%n",
                     "", Theme.colorize("→", t.darkGray()), Theme.colorize(launcher.toString(), t.path()));
         }
         return 0;

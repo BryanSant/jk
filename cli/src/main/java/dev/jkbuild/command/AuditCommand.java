@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.audit.AuditReport;
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cli.GlobalOptions;
@@ -8,6 +9,7 @@ import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.jdk.HostPlatform;
 import dev.jkbuild.lock.LockfileReader;
 import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Exit;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.plugin.protocol.Ndjson;
@@ -76,13 +78,13 @@ public final class AuditCommand implements CliCommand {
         Path projectDir = global.workingDir();
         Path lockPath = projectDir.resolve("jk.lock");
         if (!Files.exists(lockPath)) {
-            System.err.println("jk audit: no jk.lock in "
+            CliOutput.err("jk audit: no jk.lock in "
                     + dev.jkbuild.cli.PathDisplay.styledRaw(projectDir)
                     + " (run `jk lock` first).");
-            return 2;
+            return Exit.CONFIG;
         }
         if (global.offline) {
-            System.err.println("jk audit: --offline is set; OSV queries require network access.");
+            CliOutput.err("jk audit: --offline is set; OSV queries require network access.");
             return 1;
         }
         Path cache = JkDirs.cache();
@@ -139,12 +141,12 @@ public final class AuditCommand implements CliCommand {
         AuditReport report = new AuditReport(findings);
 
         if (!global.outputIsJson()) {
-            System.out.println(report.renderMarkdown());
+            CliOutput.out(report.renderMarkdown());
         }
 
         List<AuditReport.Finding> blocking = report.filterAtLeast(threshold);
         if (!blocking.isEmpty()) {
-            System.err.println("jk audit: " + blocking.size() + " finding(s) at or above " + threshold + " — failing.");
+            CliOutput.err("jk audit: " + blocking.size() + " finding(s) at or above " + threshold + " — failing.");
             return 1;
         }
         return 0;

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.cli.tui.Glyphs;
 import dev.jkbuild.cli.tui.GoalWedge;
@@ -13,6 +14,7 @@ import dev.jkbuild.jdk.JdkRegistry;
 import dev.jkbuild.jdk.JdkVendor;
 import dev.jkbuild.model.command.Arity;
 import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Exit;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.model.command.Param;
@@ -64,27 +66,27 @@ public final class JdkDefaultCommand implements CliCommand {
 
         if (lts) {
             if (spec != null && !spec.isBlank()) {
-                System.err.println("jk jdk default: --lts and <spec> are mutually exclusive.");
-                return 64;
+                CliOutput.err("jk jdk default: --lts and <spec> are mutually exclusive.");
+                return Exit.USAGE;
             }
-            return applyLts(registry, defaults, System.out, System.err) ? 0 : 1;
+            return applyLts(registry, defaults, CliOutput.stdout(), CliOutput.stderr()) ? 0 : 1;
         }
         if (spec == null || spec.isBlank()) {
-            System.err.println("jk jdk default: <spec> required (or pass --lts).");
-            return 64;
+            CliOutput.err("jk jdk default: <spec> required (or pass --lts).");
+            return Exit.USAGE;
         }
         Optional<JdkHit> match = dev.jkbuild.jdk.JdkKeywords.isKeyword(spec)
                 ? dev.jkbuild.jdk.JdkKeywords.bestInstalledMatch(spec, registry.listHits())
                 : registry.findHitBySpec(spec);
         if (match.isEmpty()) {
-            System.err.println("jk jdk default: no installed JDK matches `"
+            CliOutput.err("jk jdk default: no installed JDK matches `"
                     + spec
                     + "` (try `jk jdk list` or `jk jdk install "
                     + spec
                     + "`)");
             return 1;
         }
-        applyDefault(match.get(), defaults, System.out);
+        applyDefault(match.get(), defaults, CliOutput.stdout());
         return 0;
     }
 

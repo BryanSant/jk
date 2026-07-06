@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.run.ConsoleSpec;
 import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Exit;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.run.Goal;
@@ -80,8 +82,8 @@ public final class TestCommand implements CliCommand {
         Path buildFile = dir.resolve("jk.toml");
         Path lockFile = dir.resolve("jk.lock");
         if (!Files.exists(buildFile)) {
-            System.err.println("jk test: no jk.toml in " + dev.jkbuild.cli.PathDisplay.styledRaw(dir));
-            return 2;
+            CliOutput.err("jk test: no jk.toml in " + dev.jkbuild.cli.PathDisplay.styledRaw(dir));
+            return Exit.CONFIG;
         }
         // No jk.lock guard: the pipeline's parse-build phase resolves the lock on
         // first run and re-locks when jk.toml changed — same as `jk build`/`run`.
@@ -94,7 +96,7 @@ public final class TestCommand implements CliCommand {
                 dev.jkbuild.worker.JvmOptions.planAndApply(dev.jkbuild.worker.HeapPlan.requestedJvms(
                         1, workerCount, false, Runtime.getRuntime().availableProcessors()));
         if (heapPlan != null && heapPlan.warning() != null && !global.outputIsJson()) {
-            System.err.println("jk test: " + heapPlan.warning());
+            CliOutput.err("jk test: " + heapPlan.warning());
         }
         // Up-front lexical estimate (Java + Kotlin test sources) so the bar's
         // denominator is set once; the static plan gates the numerator and

@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.forge.AuthException;
 import dev.jkbuild.forge.ForgeAuth;
 import dev.jkbuild.forge.ResolvedToken;
 import dev.jkbuild.model.command.Arity;
 import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Exit;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.model.command.Param;
@@ -57,21 +59,21 @@ public final class AuthTokenCommand implements CliCommand {
         try {
             target = AuthCommand.resolveTarget(provider, host, global.workingDir());
         } catch (IllegalArgumentException e) {
-            System.err.println("error: " + e.getMessage());
-            return 2;
+            CliOutput.err("error: " + e.getMessage());
+            return Exit.CONFIG;
         }
         String resolvedHost;
         try {
             resolvedHost = ForgeAuth.resolveHost(target.kind(), target.host());
         } catch (AuthException e) {
-            System.err.println("error: " + e.getMessage());
-            return 2;
+            CliOutput.err("error: " + e.getMessage());
+            return Exit.CONFIG;
         }
 
         Optional<ResolvedToken> token =
                 AuthCommand.authFor(credentialsDir).resolveSilently(target.kind(), resolvedHost);
         if (token.isEmpty()) {
-            System.err.println("error: not logged in to "
+            CliOutput.err("error: not logged in to "
                     + target.kind().displayName()
                     + " ("
                     + resolvedHost
@@ -79,7 +81,7 @@ public final class AuthTokenCommand implements CliCommand {
                     + target.kind().id());
             return 1;
         }
-        System.out.println(token.get().value());
+        CliOutput.out(token.get().value());
         return 0;
     }
 }

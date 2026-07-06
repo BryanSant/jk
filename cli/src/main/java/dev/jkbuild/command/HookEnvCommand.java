@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Exit;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import java.io.IOException;
@@ -46,8 +48,8 @@ public final class HookEnvCommand implements CliCommand {
         String shellName = in.value("shell").orElseThrow();
         var shell = Shell.byName(shellName);
         if (shell.isEmpty()) {
-            System.err.println("jk hook-env: unsupported shell `" + shellName + "`");
-            return 64;
+            CliOutput.err("jk hook-env: unsupported shell `" + shellName + "`");
+            return Exit.USAGE;
         }
         var cwd = new GlobalOptions().workingDir();
         var env = JkEnv.defaults();
@@ -57,7 +59,7 @@ public final class HookEnvCommand implements CliCommand {
         var out = new StringBuilder();
         var snapshot = JkDiff.EnvSnapshot.fromSystem();
         emit(shell.get(), target, prevDiff, snapshot, out);
-        System.out.print(out);
+        CliOutput.outRaw(String.valueOf(out));
         return 0;
     }
 

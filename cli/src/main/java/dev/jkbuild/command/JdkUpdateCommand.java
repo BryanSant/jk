@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.cli.tui.Glyphs;
 import dev.jkbuild.http.Http;
@@ -117,7 +118,7 @@ public final class JdkUpdateCommand implements CliCommand {
         }
         List<JdkHit> managed = registry.managedHits(spec);
         if (managed.isEmpty()) {
-            System.out.println(
+            CliOutput.out(
                     spec == null || spec.isBlank()
                             ? "(no jk-managed JDKs installed)"
                             : "(no jk-managed JDK matches `" + spec + "`)");
@@ -149,7 +150,7 @@ public final class JdkUpdateCommand implements CliCommand {
         }
 
         for (String id : noTarget) {
-            System.out.println(Theme.colorize("•", Theme.active().darkGray())
+            CliOutput.out(Theme.colorize("•", Theme.active().darkGray())
                     + " "
                     + Theme.colorize(id, Theme.active().cyan())
                     + Theme.colorize(
@@ -157,7 +158,7 @@ public final class JdkUpdateCommand implements CliCommand {
         }
 
         if (updates.isEmpty()) {
-            System.out.println(Theme.colorize(Glyphs.CHECK, Theme.active().completedStep())
+            CliOutput.out(Theme.colorize(Glyphs.CHECK, Theme.active().completedStep())
                     + " All "
                     + managed.size()
                     + " jk-managed JDK"
@@ -167,7 +168,7 @@ public final class JdkUpdateCommand implements CliCommand {
         }
 
         if (!assumeYes && !confirm(updates)) {
-            System.out.println("Aborted.");
+            CliOutput.out("Aborted.");
             return 0;
         }
 
@@ -210,7 +211,7 @@ public final class JdkUpdateCommand implements CliCommand {
                 if (currentDefault.isPresent() && currentDefault.get().equals(oldId)) {
                     defaults.set(newJdk);
                 }
-                System.out.println(Theme.colorize(Glyphs.CHECK, Theme.active().completedStep())
+                CliOutput.out(Theme.colorize(Glyphs.CHECK, Theme.active().completedStep())
                         + " Updated "
                         + Theme.colorize(oldId, Theme.active().warning())
                         + " "
@@ -220,7 +221,7 @@ public final class JdkUpdateCommand implements CliCommand {
                 updated++;
             } catch (IOException | InterruptedException e) {
                 if (e instanceof InterruptedException) Thread.currentThread().interrupt();
-                System.out.println(Theme.colorize(Glyphs.CROSS, Theme.active().error())
+                CliOutput.out(Theme.colorize(Glyphs.CROSS, Theme.active().error())
                         + " Failed to update "
                         + Theme.colorize(oldId, Theme.active().warning())
                         + ": "
@@ -232,7 +233,7 @@ public final class JdkUpdateCommand implements CliCommand {
         // Reap anything just enqueued (and any survivors from prior runs).
         new JdkGarbage(registry.jdksRoot()).drain();
 
-        System.out.println(updated + " updated" + (failed > 0 ? ", " + failed + " failed" : ""));
+        CliOutput.out(updated + " updated" + (failed > 0 ? ", " + failed + " failed" : ""));
         return failed == 0;
     }
 
@@ -260,7 +261,7 @@ public final class JdkUpdateCommand implements CliCommand {
         String label = entry.vendor() + " " + entry.product() + " " + entry.majorVersion();
         long total = entry.archiveSize();
         InstalledJdk installed;
-        try (dev.jkbuild.cli.tui.JdkDownloadBar pb = dev.jkbuild.cli.tui.JdkDownloadBar.show(System.out, label)) {
+        try (dev.jkbuild.cli.tui.JdkDownloadBar pb = dev.jkbuild.cli.tui.JdkDownloadBar.show(CliOutput.stdout(), label)) {
             installed = installer.install(entry, bytes -> pb.update(bytes, total));
             pb.finish();
         }
@@ -306,10 +307,10 @@ public final class JdkUpdateCommand implements CliCommand {
     // --- confirmation -------------------------------------------------------
 
     private boolean confirm(List<Update> updates) {
-        System.out.println(
+        CliOutput.out(
                 "\nThe following " + updates.size() + " JDK" + (updates.size() == 1 ? "" : "s") + " will be updated:");
         for (Update u : updates) {
-            System.out.println("   "
+            CliOutput.out("   "
                     + Theme.colorize(
                             JdkRegistry.identifierFor(u.old.home()),
                             Theme.active().warning())
@@ -327,7 +328,7 @@ public final class JdkUpdateCommand implements CliCommand {
 
     private boolean hostSupported() {
         if (HostPlatform.supported()) return true;
-        System.err.println("jk jdk update: host "
+        CliOutput.err("jk jdk update: host "
                 + System.getProperty("os.name")
                 + "/"
                 + System.getProperty("os.arch")
@@ -344,7 +345,7 @@ public final class JdkUpdateCommand implements CliCommand {
                                 cacheFile != null ? cacheFile : ephemeralCachePath(),
                                 Duration.ZERO)
                         : new JdkCatalogClient())
-                .onWarning(System.err::println);
+                .onWarning(CliOutput.stderr()::println);
         return client.fetch(refresh);
     }
 

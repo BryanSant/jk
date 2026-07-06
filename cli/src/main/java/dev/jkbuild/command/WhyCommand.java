@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.theme.Coords;
 import dev.jkbuild.cli.theme.Theme;
@@ -10,6 +11,7 @@ import dev.jkbuild.lock.LockfileReader;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.command.Arity;
 import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Exit;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Param;
 import dev.jkbuild.resolver.Provenance;
@@ -43,8 +45,8 @@ public final class WhyCommand implements CliCommand {
         Path buildFile = dir.resolve("jk.toml");
         Path lockFile = dir.resolve("jk.lock");
         if (!Files.exists(buildFile) || !Files.exists(lockFile)) {
-            System.err.println("jk why: project must have jk.toml and jk.lock (run `jk lock` first)");
-            return 2;
+            CliOutput.err("jk why: project must have jk.toml and jk.lock (run `jk lock` first)");
+            return Exit.CONFIG;
         }
 
         String query = moduleOnly(in.positionals().get(0));
@@ -55,22 +57,22 @@ public final class WhyCommand implements CliCommand {
                 .filter(p -> matchesQuery(p.name(), query))
                 .toList();
         if (matches.isEmpty()) {
-            System.err.println("jk why: " + query + " is not in jk.lock");
+            CliOutput.err("jk why: " + query + " is not in jk.lock");
             return 1;
         }
 
-        System.out.println(Theme.active().gradientHeaderAnsi("Jk - Dependency Lookup"));
+        CliOutput.out(Theme.active().gradientHeaderAnsi("Jk - Dependency Lookup"));
         for (Lockfile.Artifact target : matches) {
-            System.out.println(Coords.module(target.name(), target.version()) + " is pulled in by:");
+            CliOutput.out(Coords.module(target.name(), target.version()) + " is pulled in by:");
             List<Provenance.Path> paths = Provenance.pathsTo(project, lock, target.name());
             if (paths.isEmpty()) {
-                System.out.println("  (unreachable from declared dependencies — likely a stale lockfile entry)");
+                CliOutput.out("  (unreachable from declared dependencies — likely a stale lockfile entry)");
             } else {
                 for (Provenance.Path path : paths) {
-                    System.out.println("  " + renderPath(path));
+                    CliOutput.out("  " + renderPath(path));
                 }
             }
-            if (matches.size() > 1) System.out.println();
+            if (matches.size() > 1) CliOutput.out();
         }
         return 0;
     }

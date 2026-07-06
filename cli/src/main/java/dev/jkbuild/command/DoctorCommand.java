@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.compat.BuildTool;
 import dev.jkbuild.compat.InstalledTool;
 import dev.jkbuild.cli.theme.Theme;
@@ -59,7 +60,7 @@ public final class DoctorCommand implements CliCommand {
                     String wasPointingAt = readlinkSafe(home);
                     SymlinkProvisioner.unlink(home);
                     pruned++;
-                    System.out.println(Theme.colorize("pruned:  ", t.warning()) + " " + label
+                    CliOutput.out(Theme.colorize("pruned:  ", t.warning()) + " " + label
                             + " (link target missing: " + Theme.colorize(wasPointingAt, t.path()) + ")");
                     continue;
                 }
@@ -68,20 +69,20 @@ public final class DoctorCommand implements CliCommand {
                     Path marker = root.resolve(tool.slug()).resolve(installed.version() + ".fingerprint");
                     Files.writeString(marker, fingerprint);
                     verified++;
-                    System.out.println(Theme.colorize("verified:", t.completedStep()) + " " + label
+                    CliOutput.out(Theme.colorize("verified:", t.completedStep()) + " " + label
                             + " (sha256-tree=" + fingerprint.substring(0, 12) + "…)");
                 } else if (Files.isSymbolicLink(home)) {
-                    System.out.println("linked:   " + label
+                    CliOutput.out("linked:   " + label
                             + " " + Theme.colorize("→", t.darkGray()) + " "
                             + Theme.colorize(readlinkSafe(home), t.path()));
                 } else {
-                    System.out.println(Theme.colorize("ok:      ", t.completedStep()) + " " + label);
+                    CliOutput.out(Theme.colorize("ok:      ", t.completedStep()) + " " + label);
                 }
                 healthy++;
             }
         }
-        System.out.println(Theme.colorize("---", t.darkGray()));
-        System.out.println(Theme.colorize(String.valueOf(healthy), t.focused())
+        CliOutput.out(Theme.colorize("---", t.darkGray()));
+        CliOutput.out(Theme.colorize(String.valueOf(healthy), t.focused())
                 + " healthy"
                 + (pruned > 0 ? ", " + Theme.colorize(String.valueOf(pruned), t.focused()) + " pruned" : "")
                 + (verified > 0 ? ", " + Theme.colorize(String.valueOf(verified), t.focused()) + " fingerprinted" : ""));

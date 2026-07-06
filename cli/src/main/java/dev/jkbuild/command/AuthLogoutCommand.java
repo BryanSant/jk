@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.forge.AuthException;
 import dev.jkbuild.forge.ForgeAuth;
 import dev.jkbuild.forge.ForgeKind;
 import dev.jkbuild.model.command.Arity;
 import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Exit;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.model.command.Param;
@@ -53,19 +55,19 @@ public final class AuthLogoutCommand implements CliCommand {
         try {
             kind = AuthCommand.requireKind(provider);
         } catch (IllegalArgumentException e) {
-            System.err.println("error: " + e.getMessage());
-            return 2;
+            CliOutput.err("error: " + e.getMessage());
+            return Exit.CONFIG;
         }
         String resolvedHost;
         try {
             resolvedHost = ForgeAuth.resolveHost(kind, host);
         } catch (AuthException e) {
-            System.err.println("error: " + e.getMessage());
-            return 2;
+            CliOutput.err("error: " + e.getMessage());
+            return Exit.CONFIG;
         }
 
         AuthCommand.authFor(credentialsDir).logout(kind, resolvedHost);
-        if (!global.quiet) System.out.println("Logged out of " + kind.displayName() + " (" + resolvedHost + ").");
+        if (!global.quiet) CliOutput.out("Logged out of " + kind.displayName() + " (" + resolvedHost + ").");
         return 0;
     }
 }

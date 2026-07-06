@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.model.command.Arity;
 import dev.jkbuild.model.command.CliCommand;
@@ -51,7 +52,7 @@ public final class RepoLogoutCommand implements CliCommand {
                 credentialsDir != null ? new RepoCredentialStore(credentialsDir) : new RepoCredentialStore();
         store.clear(id);
         if (!global.quiet) {
-            System.out.println("Removed stored credentials for repository '" + id + "'.");
+            CliOutput.out("Removed stored credentials for repository '" + id + "'.");
         }
         return 0;
     }

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.cli.theme.Theme;
@@ -20,6 +21,7 @@ import dev.jkbuild.jdk.JdkRegistry;
 import dev.jkbuild.jdk.JdkSelector;
 import dev.jkbuild.model.command.Arity;
 import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Exit;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.model.command.Param;
@@ -115,7 +117,7 @@ public final class JdkInstallCommand implements CliCommand {
         this.cacheFile = in.value("cache-file").map(Path::of).orElse(null);
 
         if (!HostPlatform.supported()) {
-            System.err.println("jk jdk install: host "
+            CliOutput.err("jk jdk install: host "
                     + System.getProperty("os.name")
                     + "/"
                     + System.getProperty("os.arch")
@@ -135,9 +137,9 @@ public final class JdkInstallCommand implements CliCommand {
         // Pre-goal sanity: when no spec and no TTY, we can't go further.
         boolean haveSpec = spec != null && !spec.isBlank();
         if (!haveSpec && !isInteractiveTerminal()) {
-            System.err.println("jk jdk install: stdin is not a TTY — pass `lts` / `latest` "
+            CliOutput.err("jk jdk install: stdin is not a TTY — pass `lts` / `latest` "
                     + "or a <spec> (e.g. `jk jdk install temurin-21`) or run interactively.");
-            return 64;
+            return Exit.USAGE;
         }
 
         Phase fetchCatalog = Phase.builder("fetch-catalog")
@@ -202,7 +204,7 @@ public final class JdkInstallCommand implements CliCommand {
                     ctx.put(ENTRY, entry);
                     ctx.put(WANT_DEFAULT, wantDefault);
                     if (global != null && global.verbose) {
-                        System.err.println("jk jdk install: resolved spec='"
+                        CliOutput.err("jk jdk install: resolved spec='"
                                 + effective
                                 + "' to "
                                 + entry.installFolderName()
@@ -230,7 +232,7 @@ public final class JdkInstallCommand implements CliCommand {
                     InstalledJdk already = refresh ? null : installer.alreadyInstalled(entry);
                     if (already != null) {
                         String label = entry.vendor() + " " + entry.product() + " " + entry.majorVersion();
-                        System.out.println(doneLine(label, already.home(), "is already installed at"));
+                        CliOutput.out(doneLine(label, already.home(), "is already installed at"));
                         ctx.put(INSTALLED, already);
                         ctx.label("already installed");
                         ctx.progress(1);
@@ -240,7 +242,7 @@ public final class JdkInstallCommand implements CliCommand {
                     ctx.label("download " + label);
                     long total = entry.archiveSize();
                     try (dev.jkbuild.cli.tui.JdkDownloadBar pb =
-                            dev.jkbuild.cli.tui.JdkDownloadBar.show(System.out, label)) {
+                            dev.jkbuild.cli.tui.JdkDownloadBar.show(CliOutput.stdout(), label)) {
                         JdkInstaller.DownloadedArchive dl = installer.download(entry, bytes -> pb.update(bytes, total));
                         pb.finish();
                         ctx.put(ARCHIVE, dl);
@@ -268,7 +270,7 @@ public final class JdkInstallCommand implements CliCommand {
                     ctx.label("extract " + label);
                     InstalledJdk installed;
                     try (dev.jkbuild.cli.tui.JdkDownloadBar sp =
-                            dev.jkbuild.cli.tui.JdkDownloadBar.showInstalling(System.out, label)) {
+                            dev.jkbuild.cli.tui.JdkDownloadBar.showInstalling(CliOutput.stdout(), label)) {
                         installed = installer.extractInstalled(entry, ctx.require(ARCHIVE));
                         ctx.put(INSTALLED, installed);
                         // Journal the install event for the JDK-usage stats —
@@ -280,7 +282,7 @@ public final class JdkInstallCommand implements CliCommand {
                         throw new RuntimeException(e);
                     }
                     // Print after close() so the done line overwrites the cleared spinner line.
-                    System.out.println(doneLine(label, installed.home(), "has been installed to"));
+                    CliOutput.out(doneLine(label, installed.home(), "has been installed to"));
                     ctx.progress(1);
                 })
                 .build();
@@ -298,8 +300,8 @@ public final class JdkInstallCommand implements CliCommand {
                     ctx.label("set " + installed.identifier() + " as default");
                     GlobalDefaultJdk.current().set(installed);
                     dev.jkbuild.jdk.JdkAccessLedger.atDefaultPath().touch(installed.identifier(), "default-set");
-                    System.out.println();
-                    System.out.println(Theme.colorize("➜", Theme.active().brightGreen())
+                    CliOutput.out();
+                    CliOutput.out(Theme.colorize("➜", Theme.active().brightGreen())
                             + " "
                             + Theme.colorize(installed.identifier(), Theme.active().focused())
                             + Theme.colorize(" is now the ", Theme.active().normalGray())
@@ -307,10 +309,10 @@ public final class JdkInstallCommand implements CliCommand {
                             + Theme.colorize(" JDK", Theme.active().normalGray()));
                     Optional<JdkShell> shell = JdkShell.detect();
                     if (shell.isPresent()) {
-                        System.out.println(
+                        CliOutput.out(
                                 "Add `" + shell.get().hookInstallCommand() + "` to activate JAVA_HOME on new shells.");
                     } else {
-                        System.out.println("Add `jk hook <bash|zsh|fish>` output to your shell rc "
+                        CliOutput.out("Add `jk hook <bash|zsh|fish>` output to your shell rc "
                                 + "to activate JAVA_HOME on new shells.");
                     }
                     ctx.progress(1);
@@ -411,7 +413,7 @@ public final class JdkInstallCommand implements CliCommand {
         if (resolved == null) {
             // A keyword resolved to nothing: lts/stable with no LTS major, or
             // `native` with no Oracle GraalVM, for this host.
-            System.err.println("jk jdk install: could not resolve `"
+            CliOutput.err("jk jdk install: could not resolve `"
                     + raw.trim()
                     + "` against the JetBrains feed for "
                     + os

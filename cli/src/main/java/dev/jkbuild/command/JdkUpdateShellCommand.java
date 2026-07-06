@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Exit;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.util.JkDirs;
@@ -51,10 +53,10 @@ public final class JdkUpdateShellCommand implements CliCommand {
         Path binDir = binDirOverride != null ? binDirOverride : JkDirs.binDir();
         Optional<JdkShell> detected = shellOverride != null ? JdkShell.detect(shellOverride) : JdkShell.detect();
         if (detected.isEmpty()) {
-            System.err.println("jk jdk update-shell: could not detect shell (set --shell, or add `"
+            CliOutput.err("jk jdk update-shell: could not detect shell (set --shell, or add `"
                     + bashLine(binDir)
                     + "` to your rc file manually).");
-            return 64;
+            return Exit.USAGE;
         }
         JdkShell shell = detected.get();
         Path rcFile = shell.rcFile(home);
@@ -62,7 +64,7 @@ public final class JdkUpdateShellCommand implements CliCommand {
         if (Files.exists(rcFile)) {
             String existing = Files.readString(rcFile, StandardCharsets.UTF_8);
             if (existing.contains(MARKER) || existing.contains(addition)) {
-                System.out.println(rcFile + ": already on PATH");
+                CliOutput.out(rcFile + ": already on PATH");
                 return 0;
             }
         } else {
@@ -74,8 +76,8 @@ public final class JdkUpdateShellCommand implements CliCommand {
                 StandardCharsets.UTF_8,
                 StandardOpenOption.CREATE,
                 StandardOpenOption.APPEND);
-        System.out.println("Updated " + rcFile);
-        System.out.println("Restart your shell or run: source " + rcFile);
+        CliOutput.out("Updated " + rcFile);
+        CliOutput.out("Restart your shell or run: source " + rcFile);
         return 0;
     }
 

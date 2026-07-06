@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.cli.tui.Answers;
 import dev.jkbuild.cli.tui.Glyphs;
@@ -10,6 +11,7 @@ import dev.jkbuild.cli.tui.WizardStep;
 import dev.jkbuild.config.GlobalConfig;
 import dev.jkbuild.model.command.Arity;
 import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Exit;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Param;
 import java.io.IOException;
@@ -54,26 +56,26 @@ public final class ActivateCommand implements CliCommand {
     private int printScript(String shellName) {
         var shell = Shell.byName(shellName);
         if (shell.isEmpty()) {
-            System.err.println("jk activate: unsupported shell `" + shellName + "` (supported: bash, zsh, fish, pwsh)");
-            return 64;
+            CliOutput.err("jk activate: unsupported shell `" + shellName + "` (supported: bash, zsh, fish, pwsh)");
+            return Exit.USAGE;
         }
-        System.out.print(shell.get().activateScript(resolveJkExe()));
+        CliOutput.outRaw(shell.get().activateScript(resolveJkExe()));
         return 0;
     }
 
     private int runInstaller() throws IOException {
         var shell = Shell.detect();
         if (shell.isEmpty()) {
-            System.err.println("jk activate: couldn't detect your shell from $SHELL (value: `"
+            CliOutput.err("jk activate: couldn't detect your shell from $SHELL (value: `"
                     + System.getenv("SHELL")
                     + "`). Pass an explicit shell, e.g. `jk activate zsh`.");
-            return 64;
+            return Exit.USAGE;
         }
         if (!isInteractiveTerminal()) {
-            System.err.println("jk activate: stdin is not a TTY — pass a shell (e.g. `jk activate "
+            CliOutput.err("jk activate: stdin is not a TTY — pass a shell (e.g. `jk activate "
                     + shell.get().name()
                     + "`) to print the integration script instead.");
-            return 64;
+            return Exit.USAGE;
         }
         return runWizard(shell.get());
     }
@@ -89,7 +91,7 @@ public final class ActivateCommand implements CliCommand {
             String existing = Files.readString(rcFile, StandardCharsets.UTF_8);
             if (existing.contains(activationLine)) {
                 Theme t = Theme.active();
-                System.out.println(GoalWedge.chipLine(Glyphs.CHECK, "Activate", nerdfont,
+                CliOutput.out(GoalWedge.chipLine(Glyphs.CHECK, "Activate", nerdfont,
                         "Shell integration is already configured in "
                                 + Theme.colorize(rcDisplay, t.path())));
                 return 0;
@@ -118,16 +120,16 @@ public final class ActivateCommand implements CliCommand {
         }
         if (result.isEmpty() || "no".equals(result.get().get("modify"))) {
             Theme t = Theme.active();
-            System.out.println(GoalWedge.chipLine(Glyphs.BANG, "Activate", nerdfont,
+            CliOutput.out(GoalWedge.chipLine(Glyphs.BANG, "Activate", nerdfont,
                     "Skipped — add this to " + Theme.colorize(rcDisplay, t.path()) + " manually:"));
-            System.out.println("  " + Theme.colorize(activationLine, t.shell()));
+            CliOutput.out("  " + Theme.colorize(activationLine, t.shell()));
             return 0;
         }
         appendActivationLine(rcFile, activationLine);
         Theme t = Theme.active();
-        System.out.println(GoalWedge.chipLine(Glyphs.CHECK, "Activate", nerdfont,
+        CliOutput.out(GoalWedge.chipLine(Glyphs.CHECK, "Activate", nerdfont,
                 "Shell integration configured in " + Theme.colorize(rcDisplay, t.path())));
-        System.out.println("Open a new shell (or " + sourceHint(shell, rcDisplay, t) + ") to pick up the change.");
+        CliOutput.out("Open a new shell (or " + sourceHint(shell, rcDisplay, t) + ") to pick up the change.");
         return 0;
     }
 

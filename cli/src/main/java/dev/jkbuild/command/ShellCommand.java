@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.jdk.JdkRegistry;
 import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Exit;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import java.io.IOException;
@@ -44,9 +46,9 @@ public final class ShellCommand implements CliCommand {
         // whose stdin is a control pipe) the spawned shell would sit at its
         // prompt forever and waitFor() would block. Fail fast instead.
         if (System.console() == null) {
-            System.err.println("jk shell: requires an interactive terminal "
+            CliOutput.err("jk shell: requires an interactive terminal "
                     + "(run it directly from your shell, not piped or scripted)");
-            return 2;
+            return Exit.CONFIG;
         }
         Path jdksDir = in.value("jdks-dir").map(Path::of).orElse(null);
         Path dir = new GlobalOptions().workingDir();
@@ -54,10 +56,10 @@ public final class ShellCommand implements CliCommand {
         JdkRegistry registry = jdksDir != null ? new JdkRegistry(jdksDir) : new JdkRegistry();
         var target = new JkEnv(registry, origPath).resolve(dir);
         if (!target.isActive()) {
-            System.err.println("jk shell: no pinned JDK for "
+            CliOutput.err("jk shell: no pinned JDK for "
                     + dev.jkbuild.cli.PathDisplay.styledRaw(dir)
                     + " (run `jk new` to scaffold, or stamp `jdk = \"<id>\"` in jk.lock)");
-            return 2;
+            return Exit.CONFIG;
         }
         String shell = System.getenv().getOrDefault("SHELL", "/bin/sh");
         ProcessBuilder pb = new ProcessBuilder(shell);
@@ -72,7 +74,7 @@ public final class ShellCommand implements CliCommand {
         env.remove("JDK_HOME");
 
         var javaHome = target.vars().get(JkEnv.JAVA_HOME);
-        System.out.println("Entering jk shell with JAVA_HOME=" + javaHome);
+        CliOutput.out("Entering jk shell with JAVA_HOME=" + javaHome);
         Process p = pb.start();
         return p.waitFor();
     }

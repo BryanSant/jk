@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.run.ConsoleSpec;
 import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Exit;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.run.Goal;
@@ -54,8 +56,8 @@ public final class CompileCommand implements CliCommand {
         Path dir = global.workingDir();
         Path buildFile = dir.resolve("jk.toml");
         if (!Files.exists(buildFile)) {
-            System.err.println("jk compile: no jk.toml in " + dev.jkbuild.cli.PathDisplay.styledRaw(dir));
-            return 2;
+            CliOutput.err("jk compile: no jk.toml in " + dev.jkbuild.cli.PathDisplay.styledRaw(dir));
+            return Exit.CONFIG;
         }
         Path lockFile = dir.resolve("jk.lock");
         Path cache = cacheDir != null ? cacheDir : JkDirs.cache();

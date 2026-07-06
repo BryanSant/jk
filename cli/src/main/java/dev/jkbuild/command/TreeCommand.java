@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.theme.Coords;
 import dev.jkbuild.cli.theme.Theme;
@@ -11,6 +12,7 @@ import dev.jkbuild.lock.LockfileReader;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.Scope;
 import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Exit;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.resolver.DependencyTree;
@@ -64,15 +66,15 @@ public final class TreeCommand implements CliCommand {
                     .filter(s -> !s.isEmpty())
                     .toList();
             if (tokens.isEmpty()) {
-                System.err.println("jk tree: --scopes requires at least one scope (valid: " + validScopes() + ")");
-                return 2;
+                CliOutput.err("jk tree: --scopes requires at least one scope (valid: " + validScopes() + ")");
+                return Exit.CONFIG;
             }
             Set<Scope> ordered = new LinkedHashSet<>();
             for (String token : tokens) {
                 List<Scope> expanded = resolveScopeToken(token);
                 if (expanded == null) {
-                    System.err.println("jk tree: invalid scope '" + token + "' (valid: " + validScopes() + ")");
-                    return 2;
+                    CliOutput.err("jk tree: invalid scope '" + token + "' (valid: " + validScopes() + ")");
+                    return Exit.CONFIG;
                 }
                 ordered.addAll(expanded);
             }
@@ -82,13 +84,13 @@ public final class TreeCommand implements CliCommand {
         Path buildFile = dir.resolve("jk.toml");
         Path lockFile = dir.resolve("jk.lock");
         if (!Files.exists(buildFile)) {
-            System.err.println("jk tree: no jk.toml in " + dev.jkbuild.cli.PathDisplay.styledRaw(dir));
-            return 2;
+            CliOutput.err("jk tree: no jk.toml in " + dev.jkbuild.cli.PathDisplay.styledRaw(dir));
+            return Exit.CONFIG;
         }
         if (!Files.exists(lockFile)) {
-            System.err.println(
+            CliOutput.err(
                     "jk tree: no jk.lock in " + dev.jkbuild.cli.PathDisplay.styledRaw(dir) + " (run `jk lock` first)");
-            return 2;
+            return Exit.CONFIG;
         }
 
         JkBuild project = JkBuildParser.parse(buildFile);
@@ -108,11 +110,11 @@ public final class TreeCommand implements CliCommand {
                     ? Theme.colorize(title, t.goalChip())
                             + Theme.colorize(dev.jkbuild.cli.tui.Glyphs.SEGMENT_END_NERD, t.bright(t.planBadgeColor()))
                     : Theme.colorize(title, t.goalChip());
-            System.out.println();
-            System.out.println(header);
+            CliOutput.out();
+            CliOutput.out(header);
         } else {
-            System.out.println();
-            System.out.println(" - Dependencies Tree:");
+            CliOutput.out();
+            CliOutput.out(" - Dependencies Tree:");
         }
 
         // Composite-aware: walks path deps' own trees too (anchored at `dir`).
@@ -120,15 +122,15 @@ public final class TreeCommand implements CliCommand {
         // Split root coord from tree body so we can insert a separator between them.
         int nl = rendered.indexOf('\n');
         if (nl >= 0) {
-            System.out.println(rendered.substring(0, nl));
-            System.out.println(ansi ? " " + Theme.colorize("│", t.darkGray()) : " |");
-            System.out.print(indentBody(rendered.substring(nl + 1), false));
+            CliOutput.out(rendered.substring(0, nl));
+            CliOutput.out(ansi ? " " + Theme.colorize("│", t.darkGray()) : " |");
+            CliOutput.outRaw(indentBody(rendered.substring(nl + 1), false));
         } else {
-            System.out.print(rendered);
+            CliOutput.outRaw(rendered);
         }
         if (rendered.contains(DependencyTree.MISSING_SUFFIX)) {
-            System.out.println();
-            System.out.println(ansi
+            CliOutput.out();
+            CliOutput.out(ansi
                     ? "Some dependencies are missing from your local cache. Run "
                             + Theme.colorize("jk lock", t.warning())
                     : "Some dependencies are missing from your local cache. Run `jk lock`");

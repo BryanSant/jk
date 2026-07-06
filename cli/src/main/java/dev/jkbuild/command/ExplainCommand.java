@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.run.ConsoleSpec;
@@ -8,6 +9,7 @@ import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Exit;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.runtime.BuildGraph;
@@ -72,8 +74,8 @@ public final class ExplainCommand implements CliCommand {
         Path startDir = global.workingDir();
         Path buildFile = startDir.resolve("jk.toml");
         if (!Files.exists(buildFile)) {
-            System.err.println("jk explain: no jk.toml in " + dev.jkbuild.cli.PathDisplay.styledRaw(startDir));
-            return 2;
+            CliOutput.err("jk explain: no jk.toml in " + dev.jkbuild.cli.PathDisplay.styledRaw(startDir));
+            return Exit.CONFIG;
         }
         JkBuild entry = JkBuildParser.parse(buildFile);
         Path cache = cacheDir != null ? cacheDir : JkDirs.cache();
@@ -82,8 +84,8 @@ public final class ExplainCommand implements CliCommand {
 
         BuildGraph.Result graph = BuildGraph.resolve(startDir, entry);
         if (graph.hasErrors()) {
-            for (String err : graph.errors()) System.err.println(ConsoleSpec.errorLine("composite", err));
-            return 2;
+            for (String err : graph.errors()) CliOutput.err(ConsoleSpec.errorLine("composite", err));
+            return Exit.CONFIG;
         }
 
         Theme t = Theme.active();
@@ -178,12 +180,12 @@ public final class ExplainCommand implements CliCommand {
         String estimate = etaMillis == 0
                 ? "Build time " + Theme.colorize("unknown", t.warning())
                 : "Build time estimate " + Theme.colorize("~" + fmtDuration(etaMillis), t.warning());
-        System.out.println();
-        System.out.println(header + " " + estimate);
+        CliOutput.out();
+        CliOutput.out(header + " " + estimate);
         // Root node: ● bullet, then the entry project's group:artifact in bold.
         String rootBullet = ansi ? Theme.colorize("●", t.darkGray()) : "*";
         String coord = entry.project().group() + ":" + entry.project().name();
-        System.out.println(" "
+        CliOutput.out(" "
                 + rootBullet
                 + " "
                 + (ansi ? boldCoord(coord, t) : coord));
@@ -199,11 +201,11 @@ public final class ExplainCommand implements CliCommand {
         int totalImages = (int)
                 modules.stream().filter(BuildPlanForecast.Module::producesImage).count();
         String rootPfx = ansi ? " " + Theme.colorize("│", t.darkGray()) + " · " : " | - ";
-        if (totalModules > 1) System.out.println(rootPfx + "Modules: " + String.format("%,d", totalModules));
-        System.out.println(rootPfx + "Sources: " + fmtCount(totalSources, "file", "files"));
-        System.out.println(rootPfx + "Tests: " + fmtCount(totalTests, "test", "tests"));
-        if (totalJars > 0) System.out.println(rootPfx + "Packages: " + fmtCount(totalJars, "jar", "jars"));
-        if (totalImages > 0) System.out.println(rootPfx + "Containers: " + fmtCount(totalImages, "image", "images"));
+        if (totalModules > 1) CliOutput.out(rootPfx + "Modules: " + String.format("%,d", totalModules));
+        CliOutput.out(rootPfx + "Sources: " + fmtCount(totalSources, "file", "files"));
+        CliOutput.out(rootPfx + "Tests: " + fmtCount(totalTests, "test", "tests"));
+        if (totalJars > 0) CliOutput.out(rootPfx + "Packages: " + fmtCount(totalJars, "jar", "jars"));
+        if (totalImages > 0) CliOutput.out(rootPfx + "Containers: " + fmtCount(totalImages, "image", "images"));
 
         // Partition the topo order by cache status: every fully-cached module (wherever
         // it sits in the order) collapses into the "Fully Cached" section (names only);
@@ -222,7 +224,7 @@ public final class ExplainCommand implements CliCommand {
             String sectionBadge = ansi
                     ? dev.jkbuild.cli.tui.Badge.pill("Fully Cached", nerdfont)
                     : " [Fully Cached]";
-            System.out.println(" "
+            CliOutput.out(" "
                     + (ansi ? Theme.colorize(sectionConnector, t.darkGray()) : (lastSection ? "`-" : "+-"))
                     + sectionBadge);
             String childPrefix = ansi
@@ -243,7 +245,7 @@ public final class ExplainCommand implements CliCommand {
                 String cont = childPrefix + "   "; // align past "╰─ " / "`- "
                 String firstConnector = ansi ? Theme.colorize("╰─ ", t.darkGray()) : "`- ";
                 for (int li = 0; li < lines.size(); li++) {
-                    System.out.println((li == 0 ? childPrefix + firstConnector : cont)
+                    CliOutput.out((li == 0 ? childPrefix + firstConnector : cont)
                             + renderCachedNames(lines.get(li), t));
                 }
             }
@@ -252,7 +254,7 @@ public final class ExplainCommand implements CliCommand {
             String rebuildBadge = ansi
                     ? dev.jkbuild.cli.tui.Badge.pill("Rebuild", nerdfont)
                     : " [Rebuild]";
-            System.out.println(" "
+            CliOutput.out(" "
                     + (ansi ? Theme.colorize("╰─", t.darkGray()) : "`-")
                     + rebuildBadge);
             String secPfx = ansi ? "    " + Theme.colorize("│", t.darkGray()) + " · " : "    | - ";
@@ -270,17 +272,17 @@ public final class ExplainCommand implements CliCommand {
             int dirtyImages = (int)
                     modules.stream().filter(m -> m.dirty() && m.producesImage()).count();
             if (totalModules > 1)
-                System.out.println(
+                CliOutput.out(
                         secPfx + "Modules: " + String.format("%,d", dirtyModules) + pct(dirtyModules, totalModules));
-            System.out.println(
+            CliOutput.out(
                     secPfx + "Sources: " + fmtCount(dirtySources, "file", "files") + pct(dirtySources, totalSources));
-            System.out.println(
+            CliOutput.out(
                     secPfx + "Tests: " + fmtCount(dirtyTests, "test", "tests") + pct(dirtyTests, totalTests));
             if (totalJars > 0)
-                System.out.println(
+                CliOutput.out(
                         secPfx + "Packages: " + fmtCount(dirtyJars, "jar", "jars") + pct(dirtyJars, totalJars));
             if (totalImages > 0)
-                System.out.println(secPfx
+                CliOutput.out(secPfx
                         + "Containers: "
                         + fmtCount(dirtyImages, "image", "images")
                         + pct(dirtyImages, totalImages));
@@ -324,7 +326,7 @@ public final class ExplainCommand implements CliCommand {
         String moduleBadge = ansi
                 ? dev.jkbuild.cli.tui.Badge.pill(String.format("%02d", idx), nerdfont)
                 : " [" + String.format("%02d", idx) + "]";
-        System.out.println(prefix
+        CliOutput.out(prefix
                 + moduleConnector
                 + moduleBadge
                 + ' '
@@ -348,7 +350,7 @@ public final class ExplainCommand implements CliCommand {
                 String phaseName = ansi
                         ? Theme.colorize(padRight(ph.get(k).name(), PHASE_COL), t.brightWhite())
                         : padRight(ph.get(k).name(), PHASE_COL);
-                System.out.println(spine
+                CliOutput.out(spine
                         + phaseConnector
                         + phaseName
                         + "  "

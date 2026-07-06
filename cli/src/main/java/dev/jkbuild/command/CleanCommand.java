@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.run.ConsoleSpec;
 import dev.jkbuild.cli.theme.Theme;
@@ -75,7 +76,7 @@ public final class CleanCommand implements CliCommand {
         long startMs = System.currentTimeMillis();
         long[] stats = {0L, 0L}; // [fileCount, totalBytes]
 
-        try (Spinner spinner = Spinner.show(System.out, "Cleaning...")) {
+        try (Spinner spinner = Spinner.show(CliOutput.stdout(), "Cleaning...")) {
             for (Path projectDir : projectDirs) {
                 if (!keepArtifacts) {
                     deleteRecursively(projectDir.resolve("target"), stats);
@@ -98,13 +99,13 @@ public final class CleanCommand implements CliCommand {
 
         boolean nerdfont = GlobalConfig.nerdfont();
         if (stats[0] == 0) {
-            System.out.println(GoalWedge.chipLine(Glyphs.CHECK, "Clean", nerdfont, "Nothing to remove"));
+            CliOutput.out(GoalWedge.chipLine(Glyphs.CHECK, "Clean", nerdfont, "Nothing to remove"));
         } else {
             String removed = Theme.colorize("Removed", Theme.active().focused());
             String stats_ = String.format(
                     "%,d file%s, %s total", stats[0], stats[0] == 1 ? "" : "s", CacheCommand.fmtBytes(stats[1]));
             String inTime = ConsoleSpec.took(Duration.ofMillis(elapsedMs));
-            System.out.println(
+            CliOutput.out(
                     GoalWedge.chipLine(Glyphs.CHECK, "Clean", nerdfont, removed + " " + stats_ + " " + inTime));
         }
 
@@ -117,12 +118,12 @@ public final class CleanCommand implements CliCommand {
     /** Run the cache GC and print a one-line summary. */
     private static void gcCache() throws IOException {
         CacheGc.Report report;
-        try (Spinner spinner = Spinner.show(System.out, "Collecting cache...")) {
+        try (Spinner spinner = Spinner.show(CliOutput.stdout(), "Collecting cache...")) {
             report = CacheGc.run(JkDirs.cache(), false);
         }
         boolean nerdfont = GlobalConfig.nerdfont();
         if (report.purgedBlobs() == 0) {
-            System.out.println(GoalWedge.chipLine(Glyphs.CHECK, "Cache GC", nerdfont, "nothing idle past 90 days"));
+            CliOutput.out(GoalWedge.chipLine(Glyphs.CHECK, "Cache GC", nerdfont, "nothing idle past 90 days"));
         } else {
             String msg = String.format(
                     "purged %,d blob%s (%s), %,d repo link%s",
@@ -131,7 +132,7 @@ public final class CleanCommand implements CliCommand {
                     CacheCommand.fmtBytes(report.freedBytes()),
                     report.repoLinksRemoved(),
                     report.repoLinksRemoved() == 1 ? "" : "s");
-            System.out.println(GoalWedge.chipLine(Glyphs.CHECK, "Cache GC", nerdfont, msg));
+            CliOutput.out(GoalWedge.chipLine(Glyphs.CHECK, "Cache GC", nerdfont, msg));
         }
     }
 

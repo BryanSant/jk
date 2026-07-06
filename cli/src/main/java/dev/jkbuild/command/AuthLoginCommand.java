@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.config.ForgeAuthConfig;
@@ -12,6 +13,7 @@ import dev.jkbuild.forge.ForgeKind;
 import dev.jkbuild.http.Http;
 import dev.jkbuild.model.command.Arity;
 import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Exit;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.model.command.Param;
@@ -75,8 +77,8 @@ public final class AuthLoginCommand implements CliCommand {
         try {
             target = AuthCommand.resolveTarget(provider, host, global.workingDir());
         } catch (IllegalArgumentException e) {
-            System.err.println("error: " + e.getMessage());
-            return 2;
+            CliOutput.err("error: " + e.getMessage());
+            return Exit.CONFIG;
         }
         ForgeKind kind = target.kind();
         ForgeAuth auth = AuthCommand.authFor(credentialsDir);
@@ -84,22 +86,22 @@ public final class AuthLoginCommand implements CliCommand {
         try {
             resolvedHost = ForgeAuth.resolveHost(kind, target.host());
         } catch (AuthException e) {
-            System.err.println("error: " + e.getMessage());
-            return 2;
+            CliOutput.err("error: " + e.getMessage());
+            return Exit.CONFIG;
         }
 
         try {
             String token = withToken ? readTokenFromStdin() : runDeviceFlow(kind, resolvedHost);
             auth.store(kind, resolvedHost, token);
         } catch (AuthException e) {
-            System.err.println("error: " + e.getMessage());
+            CliOutput.err("error: " + e.getMessage());
             return 1;
         } catch (IOException e) {
-            System.err.println("error: could not read token from stdin: " + e.getMessage());
+            CliOutput.err("error: could not read token from stdin: " + e.getMessage());
             return 1;
         }
 
-        if (!global.quiet) System.out.println("Logged in to " + kind.displayName() + " (" + resolvedHost + ").");
+        if (!global.quiet) CliOutput.out("Logged in to " + kind.displayName() + " (" + resolvedHost + ").");
         return 0;
     }
 
@@ -138,11 +140,11 @@ public final class AuthLoginCommand implements CliCommand {
                 ? dc.verificationUriComplete()
                 : dc.verificationUri();
         Theme t = Theme.active();
-        System.out.println("\n  First copy your one-time code: "
+        CliOutput.out("\n  First copy your one-time code: "
                 + Theme.colorize(dc.userCode(), t.focused().bold()));
-        System.out.println("  Then open:                     "
+        CliOutput.out("  Then open:                     "
                 + Theme.colorize(dc.verificationUri(), t.cyan()));
-        System.out.println("\n  " + Theme.colorize("Waiting for authorization…", t.normalGray().italic()));
+        CliOutput.out("\n  " + Theme.colorize("Waiting for authorization…", t.normalGray().italic()));
         openBrowser(url);
     }
 

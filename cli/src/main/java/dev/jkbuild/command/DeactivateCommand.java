@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Exit;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import java.util.List;
@@ -32,15 +34,15 @@ public final class DeactivateCommand implements CliCommand {
     public int run(Invocation in) {
         String name = in.value("shell").orElseGet(() -> System.getenv("__JK_SHELL"));
         if (name == null || name.isBlank()) {
-            System.err.println("jk deactivate: no active shell (re-run from a `jk activate`'d shell)");
-            return 64;
+            CliOutput.err("jk deactivate: no active shell (re-run from a `jk activate`'d shell)");
+            return Exit.USAGE;
         }
         var shell = Shell.byName(name);
         if (shell.isEmpty()) {
-            System.err.println("jk deactivate: unsupported shell `" + name + "`");
-            return 64;
+            CliOutput.err("jk deactivate: unsupported shell `" + name + "`");
+            return Exit.USAGE;
         }
-        System.out.print(shell.get().deactivateScript());
+        CliOutput.outRaw(shell.get().deactivateScript());
         return 0;
     }
 }

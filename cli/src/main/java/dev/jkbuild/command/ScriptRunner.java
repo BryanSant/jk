@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.model.command.Exit;
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cli.GlobalOptions;
@@ -126,8 +127,8 @@ final class ScriptRunner {
 
     private int runJavaScript(Path script, List<String> args) throws IOException, InterruptedException {
         if (!Files.isRegularFile(script)) {
-            System.err.println("jk tool run: script not found: " + script);
-            return 66;
+            CliOutput.err("jk tool run: script not found: " + script);
+            return Exit.NO_INPUT;
         }
         byte[] bytes = Files.readAllBytes(script);
         String source = new String(bytes, StandardCharsets.UTF_8);
@@ -237,8 +238,8 @@ final class ScriptRunner {
 
     private int runKotlinScript(Path script, List<String> args) throws IOException, InterruptedException {
         if (!Files.isRegularFile(script)) {
-            System.err.println("jk tool run: script not found: " + script);
-            return 66;
+            CliOutput.err("jk tool run: script not found: " + script);
+            return Exit.NO_INPUT;
         }
         byte[] bytes = Files.readAllBytes(script);
         String source = new String(bytes, StandardCharsets.UTF_8);
@@ -392,8 +393,8 @@ final class ScriptRunner {
 
     private int runKtsScript(Path script, List<String> args) throws IOException, InterruptedException {
         if (!Files.isRegularFile(script)) {
-            System.err.println("jk tool run: script not found: " + script);
-            return 66;
+            CliOutput.err("jk tool run: script not found: " + script);
+            return Exit.NO_INPUT;
         }
         Path cacheDir = cacheDir();
         Files.createDirectories(cacheDir);
@@ -422,7 +423,7 @@ final class ScriptRunner {
             // "kotlinc-missing" is an EX_SOFTWARE (70) shape; everything
             // else collapses to the generic resolver error code.
             for (GoalResult.Diagnostic d : result.errors()) {
-                if ("kotlinc-missing".equals(d.code())) return 70;
+                if ("kotlinc-missing".equals(d.code())) return Exit.SOFTWARE;
             }
             return failureExitCode(result);
         }
@@ -443,8 +444,8 @@ final class ScriptRunner {
 
     private int runJar(Path jar, List<String> args) throws IOException, InterruptedException {
         if (!Files.isRegularFile(jar)) {
-            System.err.println("jk tool run: jar not found: " + jar);
-            return 66;
+            CliOutput.err("jk tool run: jar not found: " + jar);
+            return Exit.NO_INPUT;
         }
 
         Phase inspect = Phase.builder("inspect-jar")

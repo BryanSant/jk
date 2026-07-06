@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.credential.RepoCredential;
 import dev.jkbuild.model.command.Arity;
@@ -61,11 +62,11 @@ public final class RepoLoginCommand implements CliCommand {
         try {
             secret = new String(System.in.readAllBytes(), StandardCharsets.UTF_8).strip();
         } catch (IOException e) {
-            System.err.println("error: could not read secret from stdin: " + e.getMessage());
+            CliOutput.err("error: could not read secret from stdin: " + e.getMessage());
             return 1;
         }
         if (secret.isBlank()) {
-            System.err.println("error: no " + (username != null ? "password" : "token") + " supplied on stdin.");
+            CliOutput.err("error: no " + (username != null ? "password" : "token") + " supplied on stdin.");
             return 1;
         }
 
@@ -75,7 +76,7 @@ public final class RepoLoginCommand implements CliCommand {
         store(credentialsDir).write(id, cred);
 
         if (!global.quiet) {
-            System.out.println(
+            CliOutput.out(
                     "Stored " + (username != null ? "basic" : "token") + " credentials for repository '" + id + "'.");
         }
         return 0;

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.command.ide.IdeGenerator;
 import dev.jkbuild.command.ide.IdeModel;
 import dev.jkbuild.command.ide.IdeSupport;
@@ -75,7 +76,7 @@ public final class IdeCommand implements CliCommand {
         try {
             model = IdeSupport.build(in);
         } catch (IdeSupport.IdeException e) {
-            System.err.println("jk ide: " + e.getMessage());
+            CliOutput.err("jk ide: " + e.getMessage());
             return e.code();
         }
 
@@ -84,7 +85,7 @@ public final class IdeCommand implements CliCommand {
             try {
                 gen.generate(model);
             } catch (IdeSupport.IdeException e) {
-                System.err.println("jk ide: " + e.getMessage());
+                CliOutput.err("jk ide: " + e.getMessage());
                 return e.code();
             }
         }

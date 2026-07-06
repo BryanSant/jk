@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.run.AggregateContext;
 import dev.jkbuild.cli.run.ConsoleSpec;
@@ -18,6 +19,7 @@ import dev.jkbuild.model.Dependency;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.Scope;
 import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Exit;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.run.Goal;
@@ -133,8 +135,8 @@ public final class BuildCommand implements CliCommand {
         Path startDir = global.workingDir();
         Path buildFile = startDir.resolve("jk.toml");
         if (!Files.exists(buildFile)) {
-            System.err.println("jk build: no jk.toml in " + dev.jkbuild.cli.PathDisplay.styledRaw(startDir));
-            return 2;
+            CliOutput.err("jk build: no jk.toml in " + dev.jkbuild.cli.PathDisplay.styledRaw(startDir));
+            return Exit.CONFIG;
         }
         // Peek at the manifest before committing to a per-dir build. A
         // workspace root dispatches to runWorkspaceBuild. A workspace module
@@ -144,8 +146,8 @@ public final class BuildCommand implements CliCommand {
         try {
             peek = JkBuildParser.parse(buildFile);
         } catch (RuntimeException e) {
-            System.err.println("jk build: " + e.getMessage());
-            return 2;
+            CliOutput.err("jk build: " + e.getMessage());
+            return Exit.CONFIG;
         }
         if (peek.isWorkspaceRoot()) {
             return buildWorkspace(startDir, peek);
@@ -156,7 +158,7 @@ public final class BuildCommand implements CliCommand {
             if (rootOpt.isPresent()) {
                 Path root = rootOpt.get();
                 if (!global.outputIsJson()) {
-                    System.err.println("jk build: building workspace from "
+                    CliOutput.err("jk build: building workspace from "
                             + root.getFileName()
                             + " (module: "
                             + startDir.getFileName()
@@ -197,8 +199,8 @@ public final class BuildCommand implements CliCommand {
         dev.jkbuild.runtime.BuildService.LockGuard g =
                 dev.jkbuild.runtime.BuildService.ensureWorkspaceLockFresh(root, rootBuild, cache);
         if (g.status() != 0 && !global.outputIsJson()) {
-            if (g.error() != null) System.err.println(g.error());
-            System.err.println(GoalWedge.failureLine("Build", GlobalConfig.nerdfont(), "dependency resolution failed"));
+            if (g.error() != null) CliOutput.err(g.error());
+            CliOutput.err(GoalWedge.failureLine("Build", GlobalConfig.nerdfont(), "dependency resolution failed"));
         }
         return g.status();
     }
@@ -215,7 +217,7 @@ public final class BuildCommand implements CliCommand {
         int requested = dev.jkbuild.worker.HeapPlan.requestedJvms(requestedModules, w, parallelTests, cap);
         dev.jkbuild.worker.HeapPlan.Plan plan = dev.jkbuild.worker.JvmOptions.planAndApply(requested);
         if (plan != null && plan.warning() != null && !global.outputIsJson()) {
-            System.err.println("jk build: " + plan.warning());
+            CliOutput.err("jk build: " + plan.warning());
         }
     }
 
@@ -266,13 +268,13 @@ public final class BuildCommand implements CliCommand {
 
         BuildGraph.Result graph = BuildGraph.resolve(entryDir, entryBuild);
         if (graph.hasErrors()) {
-            for (String err : graph.errors()) System.err.println(ConsoleSpec.errorLine("composite", err));
-            System.err.println(dev.jkbuild.cli.tui.GoalWedge.failureLine("Build", nerdfont, "dependency resolution failed"));
-            return 2;
+            for (String err : graph.errors()) CliOutput.err(ConsoleSpec.errorLine("composite", err));
+            CliOutput.err(dev.jkbuild.cli.tui.GoalWedge.failureLine("Build", nerdfont, "dependency resolution failed"));
+            return Exit.CONFIG;
         }
         List<BuildGraph.BuildUnit> units = graph.topoOrder();
         if (units.isEmpty()) {
-            System.out.println(dev.jkbuild.cli.tui.GoalWedge.chipLine(
+            CliOutput.out(dev.jkbuild.cli.tui.GoalWedge.chipLine(
                     dev.jkbuild.cli.tui.Glyphs.CHECK, "Build", nerdfont, "workspace declares no modules"));
             return 0;
         }
@@ -280,7 +282,7 @@ public final class BuildCommand implements CliCommand {
         Set<Path> dirtyDirs = dev.jkbuild.runtime.BuildService.forecastDirtyDirs(graph, cache);
         if (dirtyDirs.isEmpty()) {
             // Fully cached — print chip line directly with no spinner ever created.
-            System.out.println(dev.jkbuild.cli.tui.GoalWedge.chipLine(
+            CliOutput.out(dev.jkbuild.cli.tui.GoalWedge.chipLine(
                     dev.jkbuild.cli.tui.Glyphs.CHECK, "Build", nerdfont,
                     upToDateTail("all modules", buildStart)));
             return 0;
@@ -288,7 +290,7 @@ public final class BuildCommand implements CliCommand {
         // Work confirmed — create the CommandManager now so the spinner starts the instant we know
         // there's something to build. The engine (BuildService.buildWorkspace, invoked by
         // runGraphLive) sizes the memory plan and drives the build; we pass the forecast as a hint.
-        CommandManager view = CommandManager.goal(System.out, "Build", animate);
+        CommandManager view = CommandManager.goal(CliOutput.stdout(), "Build", animate);
         return runGraphLive(view, entryDir, entryBuild, cache, buildStart, dirtyDirs);
     }
 
@@ -351,28 +353,28 @@ public final class BuildCommand implements CliCommand {
                         if (global.outputIsJson()) return;
                         List<String> buf = buffers.getOrDefault(o.dir(), List.of());
                         synchronized (OUT_LOCK) {
-                            for (String line : buf) System.out.println(line);
-                            System.out.println(
+                            for (String line : buf) CliOutput.out(line);
+                            CliOutput.out(
                                     completionLine(o.success(), done.incrementAndGet(), total[0], o.coord(), o.millis()));
                         }
                     }
                 });
         if (!result.errors().isEmpty()) {
-            for (String err : result.errors()) System.err.println(ConsoleSpec.errorLine("composite", err));
-            return 2;
+            for (String err : result.errors()) CliOutput.err(ConsoleSpec.errorLine("composite", err));
+            return Exit.CONFIG;
         }
         if (total[0] == 0) {
-            System.out.println("(workspace declares no modules)");
+            CliOutput.out("(workspace declares no modules)");
             return 0;
         }
         if (!result.success()) {
             result.modules().stream()
                     .filter(m -> !m.success())
                     .findFirst()
-                    .ifPresent(f -> System.err.println("jk build: " + f.coord() + " failed (exit " + f.exitCode() + ")"));
+                    .ifPresent(f -> CliOutput.err("jk build: " + f.coord() + " failed (exit " + f.exitCode() + ")"));
             return result.exitCode();
         }
-        System.out.println(GoalWedge.chipLine(
+        CliOutput.out(GoalWedge.chipLine(
                 dev.jkbuild.cli.tui.Glyphs.CHECK, "Build", GlobalConfig.nerdfont(), modulesTail(total[0], start)));
         return 0;
     }
@@ -458,7 +460,7 @@ public final class BuildCommand implements CliCommand {
                     dev.jkbuild.cli.tui.GoalWedge.failureLine(
                             "Build", GlobalConfig.nerdfont(), "dependency resolution failed"),
                     above);
-            return 2;
+            return Exit.CONFIG;
         }
         if (!result.success()) {
             // Buffered sub-process output first, then the error diagnostics just above the
@@ -538,11 +540,11 @@ public final class BuildCommand implements CliCommand {
         try {
             modulesByDir = WorkspaceLoader.loadModules(workspaceRoot, root);
         } catch (RuntimeException e) {
-            System.err.println("jk build: " + e.getMessage());
-            return 2;
+            CliOutput.err("jk build: " + e.getMessage());
+            return Exit.CONFIG;
         }
         if (modulesByDir.isEmpty()) {
-            System.out.println("(workspace declares no modules)");
+            CliOutput.out("(workspace declares no modules)");
             return 0;
         }
         applyMemoryPlan(1); // --no-parallel: modules build serially (peak = 1 module)
@@ -556,15 +558,15 @@ public final class BuildCommand implements CliCommand {
         if (mode != GoalConsole.Mode.AUTO && mode != GoalConsole.Mode.QUIET) {
             for (int i = 0; i < sorted.size(); i++) {
                 Path moduleDir = sorted.get(i);
-                System.out.println();
+                CliOutput.out();
                 String sepGlyph = Theme.colorize("══", Theme.active().darkGray());
                 String moduleName = workspaceRoot.relativize(moduleDir).toString();
                 String moduleCount = "(" + (i + 1) + "/" + sorted.size() + ")";
-                System.out.println(
+                CliOutput.out(
                         sepGlyph + " " + Theme.colorize(moduleName, Theme.active().settled()) + " " + Theme.colorize(moduleCount, Theme.active().normalGray()) + " " + sepGlyph);
                 int exit = runForDir(moduleDir);
                 if (exit != 0) {
-                    System.err.println(
+                    CliOutput.err(
                             "jk build: " + workspaceRoot.relativize(moduleDir) + " failed (exit " + exit + ")");
                     return exit;
                 }
@@ -576,7 +578,7 @@ public final class BuildCommand implements CliCommand {
         // AUTO / QUIET: every module feeds ONE aggregate view (spinner header +
         // single bar + merged phase list). Settle it once after the last module.
         boolean animate = mode == GoalConsole.Mode.AUTO && GoalConsole.isInteractiveTerminal();
-        CommandManager view = CommandManager.goal(System.out, "Build", animate);
+        CommandManager view = CommandManager.goal(CliOutput.stdout(), "Build", animate);
         AggregateContext agg = new AggregateContext(view);
         int built = 0;
         long buildStart = System.nanoTime();
@@ -600,7 +602,7 @@ public final class BuildCommand implements CliCommand {
                 if (pm == null) {
                     view.finishFailure(
                             "No jk.toml in " + workspaceRoot.relativize(moduleDir) + " " + elapsedSince(buildStart));
-                    return 2;
+                    return Exit.CONFIG;
                 }
                 total += pm.barWeight();
                 prepared.put(moduleDir, pm);
@@ -766,8 +768,8 @@ public final class BuildCommand implements CliCommand {
         long startNanos = System.nanoTime(); // captured before prepareModule so timing includes the predict
         Path buildFile = dir.resolve("jk.toml");
         if (!Files.exists(buildFile)) {
-            System.err.println("jk build: no jk.toml in " + dev.jkbuild.cli.PathDisplay.styledRaw(dir));
-            return 2;
+            CliOutput.err("jk build: no jk.toml in " + dev.jkbuild.cli.PathDisplay.styledRaw(dir));
+            return Exit.CONFIG;
         }
         return runPrepared(prepareModule(dir), agg, startNanos);
     }
@@ -849,7 +851,7 @@ public final class BuildCommand implements CliCommand {
         // cached. The pre-check in prepareModule() confirmed this with stat/CAS lookups only.
         // Workspace modules (agg != null) always run so the aggregate view stays consistent.
         if (agg == null && pm.fullyCached() && GoalConsole.isInteractiveTerminal() && !global.outputIsJson()) {
-            System.out.println(dev.jkbuild.cli.tui.GoalWedge.chipLine(
+            CliOutput.out(dev.jkbuild.cli.tui.GoalWedge.chipLine(
                     dev.jkbuild.cli.tui.Glyphs.CHECK,
                     "Build",
                     dev.jkbuild.config.GlobalConfig.nerdfont(),

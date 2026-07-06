@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.run.ConsoleSpec;
@@ -18,6 +19,7 @@ import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.lock.LockfileReader;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Exit;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.plugin.protocol.Ndjson;
@@ -105,8 +107,8 @@ public final class ImageCommand implements CliCommand {
         Path projectDir = global.workingDir();
         Path jkBuildPath = projectDir.resolve("jk.toml");
         if (!Files.exists(jkBuildPath)) {
-            System.err.println("jk image: " + jkBuildPath + " not found.");
-            return 66;
+            CliOutput.err("jk image: " + jkBuildPath + " not found.");
+            return Exit.NO_INPUT;
         }
         Path cache = cacheDirOverride != null ? cacheDirOverride : JkDirs.cache();
         Path lockFile = projectDir.resolve("jk.lock");
@@ -255,7 +257,7 @@ public final class ImageCommand implements CliCommand {
 
         if (!result.success()) {
             for (GoalResult.Diagnostic d : result.errors()) {
-                if ("no-main".equals(d.code())) return 64;
+                if ("no-main".equals(d.code())) return Exit.USAGE;
             }
             var testResult = goal.get(BuildPipeline.TEST_RESULT).orElse(null);
             if (testResult != null && !testResult.allPassed()) return 4;

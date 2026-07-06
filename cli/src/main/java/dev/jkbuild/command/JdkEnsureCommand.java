@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.cli.tui.Glyphs;
 import dev.jkbuild.config.GlobalConfig;
@@ -95,7 +96,7 @@ public final class JdkEnsureCommand implements CliCommand {
         this.cacheFile = in.value("cache-file").map(Path::of).orElse(null);
 
         if (spec == null || spec.isBlank()) {
-            System.err.println("jk jdk ensure: a <spec> is required "
+            CliOutput.err("jk jdk ensure: a <spec> is required "
                     + "(e.g. `jk jdk ensure 25`, `jk jdk ensure 25.0.3`, `jk jdk ensure lts`).");
             return Exit.USAGE;
         }
@@ -183,7 +184,7 @@ public final class JdkEnsureCommand implements CliCommand {
         Optional<JdkCatalog.Entry> entry = JdkKeywords.resolveToMajorSpec(catalog, "lts", os, arch)
                 .flatMap(majorSpec -> JdkSelector.select(catalog, JdkSpec.parse(majorSpec), os, arch));
         if (entry.isEmpty()) {
-            System.err.println("jk jdk ensure: no JDK matches "
+            CliOutput.err("jk jdk ensure: no JDK matches "
                     + spec
                     + " and no LTS JDK is available for "
                     + os
@@ -199,7 +200,7 @@ public final class JdkEnsureCommand implements CliCommand {
                 + " in the JetBrains feed — ";
         Optional<JdkHit> hit = registry.findHitAtLeast(e.majorVersion(), e.version(), List.of());
         if (hit.isPresent()) {
-            System.out.println(head
+            CliOutput.out(head
                     + "using the latest LTS "
                     + Theme.colorize(label(e), Theme.active().cyan())
                     + " instead");
@@ -226,11 +227,11 @@ public final class JdkEnsureCommand implements CliCommand {
         InstalledJdk already = installer.alreadyInstalled(entry);
         if (already != null) return already;
 
-        if (preface != null) System.out.println(preface);
+        if (preface != null) CliOutput.out(preface);
         String label = label(entry);
         long total = entry.archiveSize();
         InstalledJdk installed;
-        try (dev.jkbuild.cli.tui.JdkDownloadBar pb = dev.jkbuild.cli.tui.JdkDownloadBar.show(System.out, label)) {
+        try (dev.jkbuild.cli.tui.JdkDownloadBar pb = dev.jkbuild.cli.tui.JdkDownloadBar.show(CliOutput.stdout(), label)) {
             installed = installer.install(entry, bytes -> pb.update(bytes, total));
             pb.finish();
         }
@@ -265,7 +266,7 @@ public final class JdkEnsureCommand implements CliCommand {
     }
 
     private static void report(String displayName, Path home, boolean downloaded) {
-        System.out.println(JdkRender.available(displayName, home, GlobalConfig.nerdfont(), downloaded));
+        CliOutput.out(JdkRender.available(displayName, home, GlobalConfig.nerdfont(), downloaded));
     }
 
     /** {@code true} when {@code version >= floor} per {@link JdkSelector#versionKey} ordering. */
@@ -283,7 +284,7 @@ public final class JdkEnsureCommand implements CliCommand {
 
     private boolean hostSupported() {
         if (HostPlatform.supported()) return true;
-        System.err.println("jk jdk ensure: host "
+        CliOutput.err("jk jdk ensure: host "
                 + System.getProperty("os.name")
                 + "/"
                 + System.getProperty("os.arch")
@@ -300,7 +301,7 @@ public final class JdkEnsureCommand implements CliCommand {
                                 cacheFile != null ? cacheFile : ephemeralCachePath(),
                                 Duration.ZERO)
                         : new JdkCatalogClient())
-                .onWarning(System.err::println);
+                .onWarning(CliOutput.stderr()::println);
         return client.fetch(refresh);
     }
 

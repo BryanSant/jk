@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.cli.run.ConsoleSpec;
 import dev.jkbuild.cli.theme.Coords;
 import dev.jkbuild.cli.theme.Theme;
@@ -62,7 +63,7 @@ public final class LibraryUpdateCommand implements CliCommand {
         try {
             result = new LibraryRegistryClient(new Http()).fetch(source, etagFile);
         } catch (IOException e) {
-            System.err.println("jk library update: failed to reach " + source + "\n  " + e.getMessage());
+            CliOutput.err("jk library update: failed to reach " + source + "\n  " + e.getMessage());
             return 1;
         }
         if (result instanceof LibraryRegistryClient.Result.Unchanged) {
@@ -76,7 +77,7 @@ public final class LibraryUpdateCommand implements CliCommand {
         try {
             after = materialise(body);
         } catch (RuntimeException e) {
-            System.err.println("jk library update: refusing to replace cache — upstream payload did not validate:\n  "
+            CliOutput.err("jk library update: refusing to replace cache — upstream payload did not validate:\n  "
                     + e.getMessage());
             return 1;
         }
@@ -112,14 +113,14 @@ public final class LibraryUpdateCommand implements CliCommand {
     }
 
     private void printSummary(int total, Diff diff, Duration elapsed) {
-        System.out.println(
+        CliOutput.out(
                 Theme.colorize("✓ Library catalog updated", Theme.active().completedStep())
                         + " — "
                         + Theme.colorize(String.valueOf(total), AttributedStyle.DEFAULT.bold())
                         + " entries cached "
                         + ConsoleSpec.took(elapsed));
         if (diff.isEmpty()) {
-            System.out.println("\n  (no changes from previous version)");
+            CliOutput.out("\n  (no changes from previous version)");
             return;
         }
         emitList("Added", diff.added, Theme.active().completedStep());
@@ -129,10 +130,10 @@ public final class LibraryUpdateCommand implements CliCommand {
 
     private static void emitList(String label, List<String> items, AttributedStyle labelStyle) {
         if (items.isEmpty()) return;
-        System.out.println("\n  " + Theme.colorize(label, labelStyle) + ": " + items.size());
+        CliOutput.out("\n  " + Theme.colorize(label, labelStyle) + ": " + items.size());
         int shown = Math.min(items.size(), 10);
-        for (int i = 0; i < shown; i++) System.out.println("    " + items.get(i));
-        if (items.size() > shown) System.out.println("    … and " + (items.size() - shown) + " more");
+        for (int i = 0; i < shown; i++) CliOutput.out("    " + items.get(i));
+        if (items.size() > shown) CliOutput.out("    … and " + (items.size() - shown) + " more");
     }
 
     private record Diff(List<String> added, List<String> removed, List<String> changed) {

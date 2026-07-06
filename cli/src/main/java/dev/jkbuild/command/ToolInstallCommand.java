@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.run.GoalConsole;
@@ -144,9 +145,9 @@ public final class ToolInstallCommand implements CliCommand {
 
         Path launcher = goal.get(LAUNCHER).orElseThrow();
         if (!global.outputIsJson()) {
-            System.out.println("Installed " + Coords.gav(primary) + " → " + launcher);
-            System.out.println("Add to PATH if needed:");
-            System.out.println("  export PATH=\"" + binDir + ":$PATH\"");
+            CliOutput.out("Installed " + Coords.gav(primary) + " → " + launcher);
+            CliOutput.out("Add to PATH if needed:");
+            CliOutput.out("  export PATH=\"" + binDir + ":$PATH\"");
         }
         return 0;
     }

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.cli.tui.Glyphs;
@@ -59,20 +60,20 @@ public final class JdkPinCommand implements CliCommand {
                 ? dev.jkbuild.jdk.JdkKeywords.bestInstalledMatch(spec, registry.listHits())
                 : registry.findHitBySpec(spec);
         if (hit.isEmpty()) {
-            System.err.println("jk jdk pin: no installed JDK matches `" + spec + "` (try `jk jdk list`)");
+            CliOutput.err("jk jdk pin: no installed JDK matches `" + spec + "` (try `jk jdk list`)");
             return 1;
         }
         // .jdk-version pins <vendor>-<major>, never a patch — jk keeps the patch
         // version current via the stable pointer.
         String pin = pinName(hit.get());
         if (pin == null) {
-            System.err.println("jk jdk pin: could not derive a <vendor>-<major> name from `" + spec + "`");
+            CliOutput.err("jk jdk pin: could not derive a <vendor>-<major> name from `" + spec + "`");
             return 1;
         }
         Files.writeString(projectDir.resolve(".jdk-version"), pin + "\n", StandardCharsets.UTF_8);
         dev.jkbuild.jdk.JdkAccessLedger.atDefaultPath().touch(pin, "pin");
         Theme t = Theme.active();
-        System.out.println(Theme.colorize(Glyphs.CHECK, t.success())
+        CliOutput.out(Theme.colorize(Glyphs.CHECK, t.success())
                 + " Pinned project to "
                 + Theme.colorize(pin, t.focused()));
         return 0;

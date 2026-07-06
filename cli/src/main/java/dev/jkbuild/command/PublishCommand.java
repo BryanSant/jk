@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.run.GoalConsole;
@@ -120,11 +121,11 @@ public final class PublishCommand implements CliCommand {
         Path projectDir = global.workingDir();
         Path jkBuildPath = projectDir.resolve("jk.toml");
         if (!Files.exists(jkBuildPath)) {
-            System.err.println("jk publish: " + jkBuildPath + " not found.");
-            return 66;
+            CliOutput.err("jk publish: " + jkBuildPath + " not found.");
+            return Exit.NO_INPUT;
         }
         if (sign && keyFile == null) {
-            System.err.println("jk publish: --sign requires --key-file <path>.");
+            CliOutput.err("jk publish: --sign requires --key-file <path>.");
             return Exit.USAGE;
         }
         Path cache = JkDirs.cache();
@@ -195,8 +196,8 @@ public final class PublishCommand implements CliCommand {
         GoalResult result = GoalConsole.run(goal, GoalConsole.modeFor(global), cache);
         if (!result.success()) {
             for (GoalResult.Diagnostic d : result.errors()) {
-                if ("snapshot".equals(d.code())) return 65;
-                if ("missing-jar".equals(d.code())) return 66;
+                if ("snapshot".equals(d.code())) return Exit.DATA_ERR;
+                if ("missing-jar".equals(d.code())) return Exit.NO_INPUT;
             }
             return 1;
         }
@@ -204,7 +205,7 @@ public final class PublishCommand implements CliCommand {
         if (!global.outputIsJson()) {
             JkBuild project = goal.get(PROJECT).orElseThrow();
             String summary = goal.get(PUB_SUMMARY).orElse("");
-            System.out.println("Published "
+            CliOutput.out("Published "
                     + Coords.gav(
                             project.project().group(),
                             project.project().name(),

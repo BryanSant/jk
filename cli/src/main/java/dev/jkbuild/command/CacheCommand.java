@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.run.ConsoleSpec;
 import dev.jkbuild.cli.run.GoalConsole;
@@ -141,8 +142,8 @@ public final class CacheCommand extends GroupCommand {
 
         @Override
         public int run(Invocation in) {
-            System.out.println(
-                    resolveCacheRoot(in.value("cache-dir").map(Path::of).orElse(null)));
+            CliOutput.out(String.valueOf(
+                    resolveCacheRoot(in.value("cache-dir").map(Path::of).orElse(null))));
             return 0;
         }
     }
@@ -170,7 +171,7 @@ public final class CacheCommand extends GroupCommand {
         public int run(Invocation in) throws IOException {
             Path root = resolveCacheRoot(in.value("cache-dir").map(Path::of).orElse(null));
             if (!Files.isDirectory(root)) {
-                System.out.println(
+                CliOutput.out(
                         "Cache directory: " + dev.jkbuild.cli.PathDisplay.styledRaw(root) + " (not yet created)");
                 return 0;
             }
@@ -193,7 +194,7 @@ public final class CacheCommand extends GroupCommand {
 
             for (String line : renderInfoTable(sha, actions, repos, runs, stamps,
                     totalFiles, totalBytes, maxBytes, lastPruned)) {
-                System.out.println(line);
+                CliOutput.out(line);
             }
             return 0;
         }
@@ -380,7 +381,7 @@ public final class CacheCommand extends GroupCommand {
                     .sorted(Comparator.comparing(RepoArtifactStore.Module::moduleKey))
                     .toList();
             if (hits.isEmpty()) {
-                System.out.println("No cached coordinates match: " + String.join(" ", terms));
+                CliOutput.out("No cached coordinates match: " + String.join(" ", terms));
                 return 1;
             }
             int total = hits.size();
@@ -396,7 +397,7 @@ public final class CacheCommand extends GroupCommand {
                 versionCount += versions.size();
                 String key = m.moduleKey();
                 String gap = " ".repeat(Math.max(0, keyWidth - key.length()));
-                System.out.println(Coords.module(key)
+                CliOutput.out(Coords.module(key)
                         + gap
                         + "  "
                         + String.join(
@@ -404,7 +405,7 @@ public final class CacheCommand extends GroupCommand {
             }
             if (shown < total) {
                 Theme st = Theme.active();
-                System.out.println(
+                CliOutput.out(
                         Theme.colorize("…", st.darkGray())
                         + " "
                         + Theme.colorize("and ", st.normalGray())
@@ -416,7 +417,7 @@ public final class CacheCommand extends GroupCommand {
             }
             {
                 Theme st = Theme.active();
-                System.out.println(
+                CliOutput.out(
                         Theme.colorize(fmtCount(shown), st.focused())
                         + " "
                         + Theme.colorize("coordinate" + (shown == 1 ? "" : "s"), st.settled())
@@ -484,7 +485,7 @@ public final class CacheCommand extends GroupCommand {
 
             Path root = resolveCacheRoot(cacheDir);
             if (!Files.isDirectory(root)) {
-                System.out.println("Nothing to prune — " + root + " does not exist.");
+                CliOutput.out("Nothing to prune — " + root + " does not exist.");
                 return 0;
             }
 
@@ -503,8 +504,8 @@ public final class CacheCommand extends GroupCommand {
                 Path logFile = root.resolve(".prune-log");
                 var logStream = new PrintStream(Files.newOutputStream(
                         logFile, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING));
-                originalOut = System.out;
-                originalErr = System.err;
+                originalOut = CliOutput.stdout();
+                originalErr = CliOutput.stderr();
                 System.setOut(logStream);
                 System.setErr(logStream);
             }
@@ -626,7 +627,7 @@ public final class CacheCommand extends GroupCommand {
 
                 if (result[2] > 0) {
                     Theme pt = Theme.active();
-                    System.err.println(
+                    CliOutput.err(
                             Theme.colorize(Glyphs.BANG, pt.warning())
                             + " "
                             + Theme.colorize(
@@ -716,7 +717,7 @@ public final class CacheCommand extends GroupCommand {
             boolean nerdfont = dev.jkbuild.config.GlobalConfig.nerdfont();
             Path root = resolveCacheRoot(cacheDir);
             if (!Files.isDirectory(root)) {
-                System.out.println(
+                CliOutput.out(
                         dev.jkbuild.cli.tui.GoalWedge.chipLine(
                                 dev.jkbuild.cli.tui.Glyphs.CHECK, "Cache", nerdfont,
                                 "Nothing to purge — cache directory does not exist."));
@@ -724,7 +725,7 @@ public final class CacheCommand extends GroupCommand {
             }
             Stats stats = statsOf(root);
             if (dryRun) {
-                System.out.println(
+                CliOutput.out(
                         dev.jkbuild.cli.tui.GoalWedge.chipLine(
                                 dev.jkbuild.cli.tui.Glyphs.CHECK, "Cache", nerdfont,
                                 "Dry run: would remove " + fmtCount(stats.files)
@@ -732,7 +733,7 @@ public final class CacheCommand extends GroupCommand {
                 return 0;
             }
             if (!assumeYes && !confirmPurge(root, stats)) {
-                System.out.println(
+                CliOutput.out(
                         dev.jkbuild.cli.tui.GoalWedge.chipLine(
                                 dev.jkbuild.cli.tui.Glyphs.CROSS, "Cache", nerdfont,
                                 "Purge aborted."));
@@ -760,14 +761,14 @@ public final class CacheCommand extends GroupCommand {
         private static boolean confirmPurge(Path root, Stats stats) {
             Theme t = Theme.active();
             String bang = Theme.colorize(Glyphs.BANG, t.warning());
-            System.out.println();
-            System.out.println(
+            CliOutput.out();
+            CliOutput.out(
                     bang + " " + Theme.colorize("This permanently deletes the ENTIRE jk cache.", t.errorLabel()));
-            System.out.println("  " + root);
-            System.out.printf(
+            CliOutput.out("  " + root);
+            CliOutput.stdout().printf(
                     "  %s files, %s — every cached dependency, CAS blob, and the m2 repo mirror.%n",
                     fmtCount(stats.files), fmtBytes(stats.bytes));
-            System.out.println("  jk will re-download everything on the next build.");
+            CliOutput.out("  jk will re-download everything on the next build.");
             return dev.jkbuild.cli.tui.Confirm.of(bang + " Purge the whole cache?", false)
                     .ask();
         }

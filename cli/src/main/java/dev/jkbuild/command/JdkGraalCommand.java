@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.jdk.GlobalDefaultJdk;
 import dev.jkbuild.jdk.InstalledJdk;
@@ -61,7 +62,7 @@ public final class JdkGraalCommand implements CliCommand {
         List<JdkHit> graals =
                 registry.listHits().stream().filter(JdkGraalCommand::isGraal).toList();
         if (graals.isEmpty()) {
-            System.err.println("jk jdk graal: no GraalVM JDK installed — install one with "
+            CliOutput.err("jk jdk graal: no GraalVM JDK installed — install one with "
                     + "`jk jdk install native` (or `jk jdk install graalvm-25`).");
             return 1;
         }
@@ -74,7 +75,7 @@ public final class JdkGraalCommand implements CliCommand {
                     ? dev.jkbuild.jdk.JdkKeywords.bestInstalledMatch(spec, graals)
                     : registry.findHitBySpec(spec).filter(JdkGraalCommand::isGraal);
             if (match.isEmpty()) {
-                System.err.println("jk jdk graal: no installed GraalVM matches `" + spec + "` (try `jk jdk list`).");
+                CliOutput.err("jk jdk graal: no installed GraalVM matches `" + spec + "` (try `jk jdk list`).");
                 return 1;
             }
             chosen = match.get();
@@ -82,7 +83,7 @@ public final class JdkGraalCommand implements CliCommand {
 
         String identifier = JdkRegistry.identifierFor(chosen.home());
         defaults.setGraal(new InstalledJdk(identifier, chosen.home()));
-        System.out.println(Theme.colorize("➜", Theme.active().brightGreen())
+        CliOutput.out(Theme.colorize("➜", Theme.active().brightGreen())
                 + " The "
                 + Theme.colorize("native", Theme.active().focused())
                 + " (default GraalVM) JDK is now set to "

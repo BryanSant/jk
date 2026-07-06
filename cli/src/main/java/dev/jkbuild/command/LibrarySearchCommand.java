@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.theme.Coords;
 import dev.jkbuild.cli.theme.Theme;
@@ -63,7 +64,7 @@ public final class LibrarySearchCommand implements CliCommand {
         Path cacheDir = in.value("cache-dir").map(Path::of).orElse(null);
         GlobalOptions global = GlobalOptions.from(in);
 
-        LibraryCatalog catalog = LibraryCatalog.layered(System.err::println);
+        LibraryCatalog catalog = LibraryCatalog.layered(CliOutput.stderr()::println);
         Path cacheRoot = cacheDir != null ? cacheDir : JkDirs.cache();
         List<String> lowerTerms =
                 terms.stream().map(t -> t.toLowerCase(Locale.ROOT)).toList();
@@ -84,7 +85,7 @@ public final class LibrarySearchCommand implements CliCommand {
         }
 
         if (hits.isEmpty()) {
-            System.out.println(
+            CliOutput.out(
                     "No matches" + (global.offline ? " (cached locally)" : "") + " for: " + String.join(" ", terms));
             return 1;
         }
@@ -95,9 +96,9 @@ public final class LibrarySearchCommand implements CliCommand {
         int leaderColumn = nameWidth + 2;
 
         if (groupByLayer) renderGrouped(catalog, visible, leaderColumn);
-        else for (Hit h : visible) System.out.println(row(h, leaderColumn));
+        else for (Hit h : visible) CliOutput.out(row(h, leaderColumn));
         if (shown < total)
-            System.out.println("… and " + (total - shown) + " more (pass --limit " + total + " or refine the search)");
+            CliOutput.out("… and " + (total - shown) + " more (pass --limit " + total + " or refine the search)");
         return 0;
     }
 
@@ -107,10 +108,10 @@ public final class LibrarySearchCommand implements CliCommand {
             List<Hit> inLayer =
                     visible.stream().filter(h -> h.src.layer().equals(layer)).toList();
             if (inLayer.isEmpty()) continue;
-            if (!firstGroup) System.out.println();
+            if (!firstGroup) CliOutput.out();
             firstGroup = false;
-            System.out.println(Theme.colorize(layer, Theme.active().cyan()));
-            for (Hit h : inLayer) System.out.println(row(h, leaderColumn));
+            CliOutput.out(Theme.colorize(layer, Theme.active().cyan()));
+            for (Hit h : inLayer) CliOutput.out(row(h, leaderColumn));
         }
     }
 

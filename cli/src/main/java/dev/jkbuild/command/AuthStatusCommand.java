@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.cli.tui.Glyphs;
 import dev.jkbuild.forge.ForgeAuth;
@@ -59,14 +60,14 @@ public final class AuthStatusCommand implements CliCommand {
         Theme t = Theme.active();
         for (ForgeKind kind : kinds) {
             if (host == null && kind.defaultHost().isEmpty()) {
-                System.out.println(label(kind, t, "(pass --host to check)"));
+                CliOutput.out(label(kind, t, "(pass --host to check)"));
                 continue;
             }
             String resolvedHost = ForgeAuth.resolveHost(kind, host);
             Optional<ResolvedToken> token = auth.resolveSilently(kind, resolvedHost);
             if (token.isPresent()) {
                 anyAuthenticated = true;
-                System.out.println(label(
+                CliOutput.out(label(
                         kind,
                         t,
                         Theme.colorize(resolvedHost, t.settled())
@@ -75,7 +76,7 @@ public final class AuthStatusCommand implements CliCommand {
                                 + " ("
                                 + describe(token.get().source()) + ")"));
             } else {
-                System.out.println(label(
+                CliOutput.out(label(
                         kind,
                         t,
                         Theme.colorize(resolvedHost, t.settled())

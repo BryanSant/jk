@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.run.ConsoleSpec;
 import dev.jkbuild.cli.run.GoalConsole;
@@ -13,6 +14,7 @@ import dev.jkbuild.config.WorkspaceLoader;
 import dev.jkbuild.config.WorkspaceLocator;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Exit;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.run.Goal;
@@ -97,8 +99,8 @@ public final class NativeCommand implements CliCommand {
         Path cache = cacheDirOverride != null ? cacheDirOverride : JkDirs.cache();
 
         if (!Files.exists(buildFile)) {
-            System.err.println("jk native: " + dev.jkbuild.cli.PathDisplay.styledRaw(buildFile) + " not found.");
-            return 66;
+            CliOutput.err("jk native: " + dev.jkbuild.cli.PathDisplay.styledRaw(buildFile) + " not found.");
+            return Exit.NO_INPUT;
         }
 
         JkBuild peek = JkBuildParser.parse(buildFile);
@@ -114,7 +116,7 @@ public final class NativeCommand implements CliCommand {
             Path wsRoot = rootOpt.get();
             JkBuild rootBuild = JkBuildParser.parse(wsRoot.resolve("jk.toml"));
             if (rootBuild.isWorkspaceRoot()) {
-                System.err.println("jk native: building from workspace root "
+                CliOutput.err("jk native: building from workspace root "
                         + wsRoot.getFileName()
                         + " (module: "
                         + startDir.getFileName()
@@ -134,11 +136,11 @@ public final class NativeCommand implements CliCommand {
         try {
             modulesByDir = WorkspaceLoader.loadModules(wsRoot, root);
         } catch (RuntimeException e) {
-            System.err.println("jk native: " + e.getMessage());
-            return 2;
+            CliOutput.err("jk native: " + e.getMessage());
+            return Exit.CONFIG;
         }
         if (modulesByDir.isEmpty()) {
-            System.out.println("(workspace declares no modules)");
+            CliOutput.out("(workspace declares no modules)");
             return 0;
         }
 
@@ -155,7 +157,7 @@ public final class NativeCommand implements CliCommand {
             JkBuild module = modulesByDir.get(moduleDir);
             if (!isNativeEligible(module)) continue;
             Optional<Path> home = graal.resolve(moduleDir, module.project().graal());
-            if (home.isEmpty()) return 2; // GraalResolver already printed why
+            if (home.isEmpty()) return Exit.CONFIG; // GraalResolver already printed why
             graalHomes.put(moduleDir, home.get());
         }
 
@@ -164,13 +166,13 @@ public final class NativeCommand implements CliCommand {
             for (int i = 0; i < sorted.size(); i++) {
                 Path moduleDir = sorted.get(i);
                 JkBuild module = modulesByDir.get(moduleDir);
-                System.out.println();
-                System.out.println(
+                CliOutput.out();
+                CliOutput.out(
                         "══ " + wsRoot.relativize(moduleDir) + " (" + (i + 1) + "/" + sorted.size() + ") ══");
                 int exit = runPreparedNative(
                         prepareNativeModule(moduleDir, module, cache, graalHomes.get(moduleDir)), null);
                 if (exit != 0) {
-                    System.err.println("jk native: " + wsRoot.relativize(moduleDir) + " failed (exit " + exit + ")");
+                    CliOutput.err("jk native: " + wsRoot.relativize(moduleDir) + " failed (exit " + exit + ")");
                     return exit;
                 }
             }
@@ -179,7 +181,7 @@ public final class NativeCommand implements CliCommand {
 
         // AUTO / QUIET: one shared aggregate view.
         boolean animate = mode == GoalConsole.Mode.AUTO && GoalConsole.isInteractiveTerminal();
-        CommandManager view = CommandManager.goal(System.out, "Build", animate);
+        CommandManager view = CommandManager.goal(CliOutput.stdout(), "Build", animate);
         dev.jkbuild.cli.run.AggregateContext agg = new dev.jkbuild.cli.run.AggregateContext(view);
         int built = 0;
 
@@ -213,7 +215,7 @@ public final class NativeCommand implements CliCommand {
                 if (exit != 0) {
                     view.finishGoalFailure(GoalWedge.coord(moduleName) + " " + BuildCommand.elapsedSince(buildStart));
                     for (GoalResult.Diagnostic d : agg.lastErrors()) {
-                        System.err.println(ConsoleSpec.renderError(d));
+                        CliOutput.err(ConsoleSpec.renderError(d));
                     }
                     return exit;
                 }
@@ -311,17 +313,17 @@ public final class NativeCommand implements CliCommand {
         JkBuild build = JkBuildParser.parse(buildFile);
         String graalSpec;
         if (build.project().nativeMode() != JkBuild.NativeMode.ALWAYS) {
-            System.err.println("jk native: "
+            CliOutput.err("jk native: "
                     + projectDir.getFileName()
                     + " is not native-eligible — set `native = true` under [project] to enable.");
-            return 2;
+            return Exit.CONFIG;
         }
         graalSpec = build.project().graal();
 
         // Resolve GraalVM before the goal/progress UI starts (a prompt/install
         // can't run inside the captured-output region).
         Optional<Path> graalHome = graal.resolve(projectDir, graalSpec);
-        if (graalHome.isEmpty()) return 2; // GraalResolver already printed why
+        if (graalHome.isEmpty()) return Exit.CONFIG; // GraalResolver already printed why
 
         String resolvedMain = resolveMain(buildFile);
         Path lockFile = projectDir.resolve("jk.lock");
@@ -356,7 +358,7 @@ public final class NativeCommand implements CliCommand {
 
         if (result.success()) return 0;
         for (GoalResult.Diagnostic d : result.errors()) {
-            if ("native".equals(d.code()) && d.message().contains("main class")) return 64;
+            if ("native".equals(d.code()) && d.message().contains("main class")) return Exit.USAGE;
         }
         var testResult = goal.get(BuildPipeline.TEST_RESULT).orElse(null);
         if (testResult != null && !testResult.allPassed()) return 4;

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.Jk;
@@ -19,6 +20,7 @@ import dev.jkbuild.model.GitSource;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.WorkspaceMerge;
 import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Exit;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.repo.RepoGroup;
@@ -112,11 +114,11 @@ public final class UpdateCommand implements CliCommand {
 
         Path dir = global.workingDir();
         if (!Files.exists(dir.resolve("jk.toml"))) {
-            System.err.println("jk update: no jk.toml in " + dev.jkbuild.cli.PathDisplay.styledRaw(dir));
-            return 2;
+            CliOutput.err("jk update: no jk.toml in " + dev.jkbuild.cli.PathDisplay.styledRaw(dir));
+            return Exit.CONFIG;
         }
         if (precise != null && !precise.isBlank()) {
-            System.err.println("jk update: --precise is recognized but not yet implemented; "
+            CliOutput.err("jk update: --precise is recognized but not yet implemented; "
                     + "performing a full re-resolve instead.");
         }
 
@@ -127,8 +129,8 @@ public final class UpdateCommand implements CliCommand {
         try {
             root = JkBuildParser.parse(dir.resolve("jk.toml"));
         } catch (RuntimeException e) {
-            System.err.println("jk update: " + e.getMessage());
-            return 2;
+            CliOutput.err("jk update: " + e.getMessage());
+            return Exit.CONFIG;
         }
 
         // `jk update --git [<name>]`: re-resolve git dependencies only, leaving every
@@ -151,8 +153,8 @@ public final class UpdateCommand implements CliCommand {
             try {
                 modules = WorkspaceLoader.loadModules(dir, effectiveRoot);
             } catch (RuntimeException e) {
-                System.err.println("jk update: " + e.getMessage());
-                return 2;
+                CliOutput.err("jk update: " + e.getMessage());
+                return Exit.CONFIG;
             }
             for (Map.Entry<Path, JkBuild> entry : modules.entrySet()) {
                 Path moduleDir = entry.getKey();
@@ -243,14 +245,14 @@ public final class UpdateCommand implements CliCommand {
                     .map(GoalResult.PhaseReport::name)
                     .findFirst()
                     .orElse("?");
-            return failed.equals("resolve") ? 6 : 2;
+            return failed.equals("resolve") ? 6 : Exit.CONFIG;
         }
 
         Lockfile lock = goal.get(LOCKFILE).orElseThrow();
         if (!global.outputIsJson()) {
             var th = Theme.active();
             int n = lock.artifacts().size();
-            System.out.println(Theme.colorize(Glyphs.CHECK, th.success())
+            CliOutput.out(Theme.colorize(Glyphs.CHECK, th.success())
                     + " Updated: "
                     + Theme.colorize(PathDisplay.of(lockFile, global.workingDir()), th.path())
                     + " "
@@ -278,8 +280,8 @@ public final class UpdateCommand implements CliCommand {
             try {
                 modules = WorkspaceLoader.loadModules(dir, effectiveRoot);
             } catch (RuntimeException e) {
-                System.err.println("jk update: " + e.getMessage());
-                return 2;
+                CliOutput.err("jk update: " + e.getMessage());
+                return Exit.CONFIG;
             }
             for (Map.Entry<Path, JkBuild> entry : modules.entrySet()) {
                 scopes.put(entry.getKey(), WorkspaceMerge.applyToModule(effectiveRoot, entry.getValue(), modules.values()));
@@ -298,18 +300,18 @@ public final class UpdateCommand implements CliCommand {
             try {
                 refreshed = updateGitOnlyForScope(scope.getKey(), scope.getValue(), cache, targeted);
             } catch (Exception e) {
-                System.err.println("jk update: " + e.getMessage());
+                CliOutput.err("jk update: " + e.getMessage());
                 return 6;
             }
             totalRefreshed += refreshed;
         }
 
         if (targetLibrary != null && totalRefreshed == 0) {
-            System.err.println("jk update: no git dependency named `" + targetLibrary + "` found.");
-            return 2;
+            CliOutput.err("jk update: no git dependency named `" + targetLibrary + "` found.");
+            return Exit.CONFIG;
         }
         if (!global.outputIsJson()) {
-            System.out.println(
+            CliOutput.out(
                     totalRefreshed == 0
                             ? "No git dependencies to refresh."
                             : "Refreshed "

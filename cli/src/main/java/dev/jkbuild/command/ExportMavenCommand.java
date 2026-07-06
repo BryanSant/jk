@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.compat.ImportReport;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Exit;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.mvn.PomExporter;
@@ -48,13 +50,13 @@ public final class ExportMavenCommand implements CliCommand {
         GlobalOptions global = GlobalOptions.from(in);
         boolean force = in.isSet("force");
         ExportSupport.Loaded loaded = ExportSupport.load(global.workingDir(), "jk export maven");
-        if (loaded == null) return 66;
+        if (loaded == null) return Exit.NO_INPUT;
 
         // Pre-flight overwrite guard: root + every module pom.
         Path rootPom = loaded.rootDir().resolve("pom.xml");
-        if (!ExportSupport.canWrite(rootPom, force, "jk export maven")) return 73;
+        if (!ExportSupport.canWrite(rootPom, force, "jk export maven")) return Exit.CANT_CREATE;
         for (Path moduleDir : loaded.modules().keySet()) {
-            if (!ExportSupport.canWrite(moduleDir.resolve("pom.xml"), force, "jk export maven")) return 73;
+            if (!ExportSupport.canWrite(moduleDir.resolve("pom.xml"), force, "jk export maven")) return Exit.CANT_CREATE;
         }
 
         ImportReport.Builder combined = ImportReport.builder();
@@ -79,7 +81,7 @@ public final class ExportMavenCommand implements CliCommand {
 
         int warnings = ExportSupport.printReport(combined.build());
         if (warnings > 0) {
-            System.out.println("  (" + warnings + " fidelity note" + (warnings == 1 ? "" : "s") + ")");
+            CliOutput.out("  (" + warnings + " fidelity note" + (warnings == 1 ? "" : "s") + ")");
         }
         return 0;
     }

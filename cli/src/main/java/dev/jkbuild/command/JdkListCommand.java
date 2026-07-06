@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.cli.theme.Rgb;
 import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.http.Http;
@@ -164,13 +165,13 @@ public final class JdkListCommand implements CliCommand {
         }
         if (rows.isEmpty()) {
             String suffix = all ? ", no remote JDKs found" : "";
-            System.out.println("(no JDKs installed under " + jdksRoot + suffix + ")");
+            CliOutput.out("(no JDKs installed under " + jdksRoot + suffix + ")");
             return 0;
         }
 
         String title = all ? "All Java Development Kits" : "Installed Java Development Kits";
         for (String line : renderTable(rows, title)) {
-            System.out.println(line);
+            CliOutput.out(line);
         }
         return 0;
     }
@@ -615,13 +616,13 @@ public final class JdkListCommand implements CliCommand {
                                     cacheFile != null ? cacheFile : ephemeralCachePath(),
                                     java.time.Duration.ZERO)
                             : new JdkCatalogClient())
-                    .onWarning(System.err::println);
+                    .onWarning(CliOutput.stderr()::println);
             // --all is the "show me everything" view: every vendor/product at
             // every major >= 17, not just jk's curated LTS-or-latest set.
             return client.fetch(refresh, /* firstClassOnly= */ false);
         } catch (IOException | InterruptedException e) {
             if (e instanceof InterruptedException) Thread.currentThread().interrupt();
-            System.err.println(
+            CliOutput.err(
                     "jk jdk list: JetBrains feed unreachable (" + e.getMessage() + "); showing installed JDKs only.");
             return null;
         }

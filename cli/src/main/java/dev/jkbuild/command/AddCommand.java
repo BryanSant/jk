@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cli.Ansi;
 import dev.jkbuild.cli.GlobalOptions;
@@ -129,11 +130,11 @@ public final class AddCommand implements CliCommand {
             Path candidate = dir.resolve(stripped).normalize();
             if (Files.isRegularFile(candidate)) {
                 Scope scope = resolveScope();
-                if (scope == null) return 64;
+                if (scope == null) return Exit.USAGE;
                 return addFile(dir, candidate, scope);
             }
             Scope scope = resolveScope();
-            if (scope == null) return 64;
+            if (scope == null) return Exit.USAGE;
             return addModule(dir, scope);
         }
 
@@ -141,7 +142,7 @@ public final class AddCommand implements CliCommand {
         try {
             parsed = ParsedDep.parse(coord, libraryFlag, groupFlag, nameFlag, versionFlag);
         } catch (IllegalArgumentException e) {
-            System.err.println("jk add: " + e.getMessage());
+            CliOutput.err("jk add: " + e.getMessage());
             return Exit.USAGE;
         }
 
@@ -151,23 +152,23 @@ public final class AddCommand implements CliCommand {
 
         Path file = dir.resolve("jk.toml");
         if (!Files.exists(file)) {
-            System.err.println("jk add: no jk.toml in current directory");
+            CliOutput.err("jk add: no jk.toml in current directory");
             return Exit.CONFIG;
         }
         Scope scope = resolveScope();
-        if (scope == null) return 64;
+        if (scope == null) return Exit.USAGE;
         String original = Files.readString(file);
         String updated;
         try {
             updated = JkBuildEditor.addDependency(
                     original, scope, parsed.library(), parsed.group(), parsed.name(), parsed.versionLiteral());
         } catch (IllegalStateException | IllegalArgumentException e) {
-            System.err.println("jk add: " + e.getMessage());
+            CliOutput.err("jk add: " + e.getMessage());
             return 1;
         }
         Files.writeString(file, updated, StandardCharsets.UTF_8);
         String check = Theme.colorize(Glyphs.CHECK, Theme.active().success());
-        System.out.println(check
+        CliOutput.out(check
                 + " Added "
                 + Coords.shortName(parsed.library())
                 + " ("
@@ -176,8 +177,8 @@ public final class AddCommand implements CliCommand {
                 + Theme.colorize("dependency", Theme.active().cyan())
                 + "."
                 + Theme.colorize(scope.canonical(), Theme.active().cyan()));
-        System.out.println();
-        System.out.println("Run "
+        CliOutput.out();
+        CliOutput.out("Run "
                 + Theme.colorize("jk lock", Theme.active().warning())
                 + " to lock your dependencies to hard versions");
         return 0;
@@ -187,7 +188,7 @@ public final class AddCommand implements CliCommand {
     private Scope resolveScope() {
         int selected = (test ? 1 : 0) + (runtime ? 1 : 0) + (provided ? 1 : 0) + (processor ? 1 : 0);
         if (selected > 1) {
-            System.err.println("jk add: --test / --runtime / --provided / --processor are mutually exclusive");
+            CliOutput.err("jk add: --test / --runtime / --provided / --processor are mutually exclusive");
             return null;
         }
         return test
@@ -218,28 +219,28 @@ public final class AddCommand implements CliCommand {
     private int addModule(Path cwd, Scope scope) throws IOException {
         Path currentToml = cwd.resolve("jk.toml");
         if (!Files.exists(currentToml)) {
-            System.err.println("jk add: no jk.toml in current directory");
-            return 2;
+            CliOutput.err("jk add: no jk.toml in current directory");
+            return Exit.CONFIG;
         }
         // Strip the optional leading ':' marker and normalise Windows-style
         // separators so `:jackson`, `jackson/`, and `..\..\jackson` all resolve.
         String raw = coord.charAt(0) == ':' ? coord.substring(1) : coord;
         raw = raw.replace('\\', '/');
         if (raw.isBlank()) {
-            System.err.println("jk add: empty module path");
-            return 64;
+            CliOutput.err("jk add: empty module path");
+            return Exit.USAGE;
         }
         Path target = cwd.resolve(raw).normalize();
         Path targetToml = target.resolve("jk.toml");
         if (!Files.exists(targetToml)) {
-            System.err.println("jk add: no jk.toml in " + dev.jkbuild.cli.PathDisplay.styledRaw(target));
-            return 2;
+            CliOutput.err("jk add: no jk.toml in " + dev.jkbuild.cli.PathDisplay.styledRaw(target));
+            return Exit.CONFIG;
         }
         JkBuild module;
         try {
             module = JkBuildParser.parse(targetToml);
         } catch (RuntimeException e) {
-            System.err.println("jk add: " + e.getMessage());
+            CliOutput.err("jk add: " + e.getMessage());
             return 1;
         }
         String group = module.project().group();
@@ -254,11 +255,11 @@ public final class AddCommand implements CliCommand {
         try {
             updated = JkBuildEditor.addDependency(original, scope, name, group, artifact, "=" + version);
         } catch (IllegalStateException | IllegalArgumentException e) {
-            System.err.println("jk add: " + e.getMessage());
+            CliOutput.err("jk add: " + e.getMessage());
             return 1;
         }
         Files.writeString(currentToml, updated, StandardCharsets.UTF_8);
-        System.out.println("Added "
+        CliOutput.out("Added "
                 + Coords.shortName(name)
                 + " ("
                 + Coords.gav(group, artifact, version)
@@ -272,7 +273,7 @@ public final class AddCommand implements CliCommand {
         Path rootToml = root.resolve("jk.toml");
         try {
             if (!target.startsWith(root)) {
-                System.err.println("jk add: "
+                CliOutput.err("jk add: "
                         + raw
                         + " is outside the workspace root "
                         + root
@@ -283,14 +284,14 @@ public final class AddCommand implements CliCommand {
                 String newRoot = JkBuildEditor.addWorkspaceModule(rootContent, rel);
                 if (!newRoot.equals(rootContent)) {
                     Files.writeString(rootToml, newRoot, StandardCharsets.UTF_8);
-                    System.out.println("Registered module '"
+                    CliOutput.out("Registered module '"
                             + rel
                             + "' in workspace "
                             + dev.jkbuild.cli.PathDisplay.styledRaw(root));
                 }
             }
         } catch (RuntimeException e) {
-            System.err.println("jk add: could not register workspace module: " + e.getMessage());
+            CliOutput.err("jk add: could not register workspace module: " + e.getMessage());
         }
         return 0;
     }
@@ -308,8 +309,8 @@ public final class AddCommand implements CliCommand {
     private int addFile(Path cwd, Path filePath, Scope scope) throws IOException {
         Path tomlFile = cwd.resolve("jk.toml");
         if (!Files.exists(tomlFile)) {
-            System.err.println("jk add: no jk.toml in current directory");
-            return 2;
+            CliOutput.err("jk add: no jk.toml in current directory");
+            return Exit.CONFIG;
         }
 
         // Auto-detect coordinates from JAR metadata (best-effort).
@@ -334,7 +335,7 @@ public final class AddCommand implements CliCommand {
         // Validate: all three coordinates are required.
         if (group == null || artifact == null || version == null) {
             if (!isJar) {
-                System.err.println("jk add: --group, --name, and --ver are required for non-JAR files");
+                CliOutput.err("jk add: --group, --name, and --ver are required for non-JAR files");
             } else {
                 StringBuilder msg = new StringBuilder("jk add: could not detect");
                 if (group == null) msg.append(" group");
@@ -344,9 +345,9 @@ public final class AddCommand implements CliCommand {
                 if (group == null) msg.append("; supply --group");
                 if (artifact == null) msg.append("; supply --name");
                 if (version == null) msg.append("; supply --ver");
-                System.err.println(msg.toString());
+                CliOutput.err(msg.toString());
             }
-            return 64;
+            return Exit.USAGE;
         }
         if (library == null) library = artifact;
 
@@ -365,14 +366,14 @@ public final class AddCommand implements CliCommand {
         try {
             updated = JkBuildEditor.addFileDependency(original, scope, library, group, artifact, version, sha256);
         } catch (IllegalStateException | IllegalArgumentException e) {
-            System.err.println("jk add: " + e.getMessage());
+            CliOutput.err("jk add: " + e.getMessage());
             return 1;
         }
         Files.writeString(tomlFile, updated, StandardCharsets.UTF_8);
 
         String check = Theme.colorize(Glyphs.CHECK, Theme.active().success());
         String shortSha = sha256.substring(0, Math.min(12, sha256.length()));
-        System.out.println(check
+        CliOutput.out(check
                 + " Added "
                 + Coords.shortName(library)
                 + " ("
@@ -384,8 +385,8 @@ public final class AddCommand implements CliCommand {
                 + Theme.colorize("dependency", Theme.active().cyan())
                 + "."
                 + Theme.colorize(scope.canonical(), Theme.active().cyan()));
-        System.out.println();
-        System.out.println("Run "
+        CliOutput.out();
+        CliOutput.out("Run "
                 + Theme.colorize("jk lock", Theme.active().warning())
                 + " to lock your dependencies to hard versions");
         return 0;
@@ -427,7 +428,7 @@ public final class AddCommand implements CliCommand {
                     throw new IllegalArgumentException("empty version after '@' in: " + coord);
                 }
                 String library = nonBlank(libraryFlag, libraryKey);
-                var catalog = dev.jkbuild.library.LibraryCatalog.layered(System.err::println);
+                var catalog = dev.jkbuild.library.LibraryCatalog.layered(CliOutput.stderr()::println);
                 var catalogHit = catalog.lookup(libraryKey);
                 String group = nonBlank(
                         groupFlag,
@@ -531,13 +532,13 @@ public final class AddCommand implements CliCommand {
 
         if (response.statusCode() == 200) {
             URI artifactUri = repoBase.resolve(MavenLayout.artifactPath(coord));
-            System.out.println(Theme.colorize(Glyphs.CHECK, Theme.active().success()) + " " + coordStr + " is available.");
-            System.out.println(osc8Link(artifactUri.toString()));
+            CliOutput.out(Theme.colorize(Glyphs.CHECK, Theme.active().success()) + " " + coordStr + " is available.");
+            CliOutput.out(osc8Link(artifactUri.toString()));
             return 0;
         }
 
-        System.out.println(Theme.colorize(Glyphs.BANG, Theme.active().warning()) + " " + coordStr + " is unavailable.");
-        System.out.println("Failed to find " + coordStr + " in any configured repo.");
+        CliOutput.out(Theme.colorize(Glyphs.BANG, Theme.active().warning()) + " " + coordStr + " is unavailable.");
+        CliOutput.out("Failed to find " + coordStr + " in any configured repo.");
         return 1;
     }
 

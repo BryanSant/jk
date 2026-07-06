@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.cli.Ansi;
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.run.GoalConsole;
@@ -137,7 +138,7 @@ public final class JdkUninstallCommand implements CliCommand {
             return runSingle(registry, defaults);
         }
         if (!isInteractiveTerminal()) {
-            System.err.println("jk jdk uninstall: stdin is not a TTY — pass a spec "
+            CliOutput.err("jk jdk uninstall: stdin is not a TTY — pass a spec "
                     + "(e.g. `jk jdk uninstall temurin-21.0.5`) or run interactively.");
             return Exit.USAGE;
         }
@@ -154,27 +155,27 @@ public final class JdkUninstallCommand implements CliCommand {
         String source = slash < 0 ? null : argument.substring(0, slash);
         String spec = slash < 0 ? argument : argument.substring(slash + 1);
         if (slash == 0 || slash == argument.length() - 1) {
-            System.err.println("jk jdk uninstall: argument must be `<spec>` or `<source>/<spec>` "
+            CliOutput.err("jk jdk uninstall: argument must be `<spec>` or `<source>/<spec>` "
                     + "(got `"
                     + argument
                     + "`). Examples: temurin-26.0.1, intellij/temurin-26.0.1.");
-            return 64;
+            return Exit.USAGE;
         }
 
         // Validate an explicitly-supplied source up front.
         if (source != null) {
             if (UNINSTALL_FORBIDDEN_SOURCES.contains(source)) {
-                System.err.println(forbiddenSourceMessage(source));
-                return 64;
+                CliOutput.err(forbiddenSourceMessage(source));
+                return Exit.USAGE;
             }
             if (!KNOWN_SOURCES.contains(source)) {
-                System.err.println("jk jdk uninstall: unknown source `"
+                CliOutput.err("jk jdk uninstall: unknown source `"
                         + source
                         + "` "
                         + "(supported: "
                         + String.join(", ", KNOWN_SOURCES.stream().sorted().toList())
                         + ")");
-                return 64;
+                return Exit.USAGE;
             }
         }
         // Keyword specs (lts, stable, latest) → resolve to best installed match.
@@ -186,7 +187,7 @@ public final class JdkUninstallCommand implements CliCommand {
                     : registry.listHits();
             var kw = dev.jkbuild.jdk.JdkKeywords.bestInstalledMatch(spec, hits);
             if (kw.isEmpty()) {
-                System.err.println("jk jdk uninstall: no installed JDK matches `" + spec + "` (try `jk jdk list`).");
+                CliOutput.err("jk jdk uninstall: no installed JDK matches `" + spec + "` (try `jk jdk list`).");
                 return 1;
             }
             spec = JdkRegistry.identifierFor(kw.get().home());
@@ -199,7 +200,7 @@ public final class JdkUninstallCommand implements CliCommand {
             String where = source != null
                     ? "no `" + source + "` install matches `" + spec + "`"
                     : "no install matches `" + spec + "`";
-            System.err.println("jk jdk uninstall: " + where + " (try `jk jdk list`).");
+            CliOutput.err("jk jdk uninstall: " + where + " (try `jk jdk list`).");
             return 1;
         }
 
@@ -208,14 +209,14 @@ public final class JdkUninstallCommand implements CliCommand {
         // an IDE-registered `intellij` one). Refuse it the same way an explicit
         // `<source>/...` would be — naming the source so the reason is clear.
         if (UNINSTALL_FORBIDDEN_SOURCES.contains(hit.source())) {
-            System.err.println(forbiddenSourceMessage(hit.source()));
-            return 64;
+            CliOutput.err(forbiddenSourceMessage(hit.source()));
+            return Exit.USAGE;
         }
 
         // The confirmation prompt names the resolved <source>/<spec>, so a bare
         // spec that matched somewhere unexpected can still be cancelled here.
         if (!confirmDeletion(hit, null)) {
-            System.out.println("Aborted.");
+            CliOutput.out("Aborted.");
             return 0;
         }
         return runDeleteGoal(List.of(hit), registry, defaults);
@@ -230,7 +231,7 @@ public final class JdkUninstallCommand implements CliCommand {
                 .filter(h -> !UNINSTALL_FORBIDDEN_SOURCES.contains(h.source()))
                 .toList();
         if (installed.isEmpty()) {
-            System.err.println("jk jdk uninstall: no removable JDKs installed "
+            CliOutput.err("jk jdk uninstall: no removable JDKs installed "
                     + "(system- and IDE-managed installs aren't removable here).");
             return 0;
         }
@@ -261,7 +262,7 @@ public final class JdkUninstallCommand implements CliCommand {
             }
             JdkHit victim = outcome.get();
             if (!confirmDeletion(victim, terminal)) {
-                System.out.println("Aborted.");
+                CliOutput.out("Aborted.");
                 return 0;
             }
             return runDeleteGoal(List.of(victim), registry, defaults);
@@ -337,7 +338,7 @@ public final class JdkUninstallCommand implements CliCommand {
         // success line (below) styles it as `[source]/identifier` instead.
         String label = hit.source() + "/" + identifier;
         try (var sp = Spinner.show(
-                System.out,
+                CliOutput.stdout(),
                 "Deleting "
                         + Theme.colorize(
                                 JdkInstallCommand.tildeCollapse(installDir),
@@ -355,13 +356,13 @@ public final class JdkUninstallCommand implements CliCommand {
             // The spinner has already cleared its line; print the failure where
             // the confirmation prompt was (confirmDeletion wiped it for us), then
             // rethrow so the goal records the failure and the exit code is 1.
-            System.out.println(Theme.colorize(Glyphs.CROSS, Theme.active().error())
+            CliOutput.out(Theme.colorize(Glyphs.CROSS, Theme.active().error())
                     + " Failed to remove "
                     + Theme.colorize(label, Theme.active().warning())
                     + "!");
             throw e;
         }
-        System.out.println(JdkRender.removed(hit.source(), identifier, dev.jkbuild.config.GlobalConfig.nerdfont()));
+        CliOutput.out(JdkRender.removed(hit.source(), identifier, dev.jkbuild.config.GlobalConfig.nerdfont()));
     }
 
     /**
@@ -383,8 +384,8 @@ public final class JdkUninstallCommand implements CliCommand {
         // lands in its place. Confirm left the cursor one row below the prompt,
         // so step back up, return to column 0, and clear to end of line.
         if (proceed && isInteractiveTerminal()) {
-            System.out.print(Ansi.cursorUp(1) + "\r" + Ansi.ERASE_LINE_TO_END);
-            System.out.flush();
+            CliOutput.outRaw(Ansi.cursorUp(1) + "\r" + Ansi.ERASE_LINE_TO_END);
+            CliOutput.stdout().flush();
         }
         return proceed;
     }
@@ -412,18 +413,18 @@ public final class JdkUninstallCommand implements CliCommand {
 
         // Try latest-LTS auto-pick first; fall back to "clear default" if no
         // LTS remains.
-        boolean repointed = JdkDefaultCommand.applyLts(registry, defaults, System.out, swallow());
+        boolean repointed = JdkDefaultCommand.applyLts(registry, defaults, CliOutput.stdout(), swallow());
         if (!repointed) {
             // No LTS left — at minimum clear the dangling default pointer.
             List<InstalledJdk> survivors = registry.list();
             if (survivors.isEmpty()) {
                 defaults.clear();
-                System.out.println(Theme.colorize(
+                CliOutput.out(Theme.colorize(
                         "(no remaining JDKs — global default cleared)",
                         Theme.active().normalGray()));
             } else {
                 defaults.set(survivors.getFirst());
-                System.out.println(Theme.colorize("➜", Theme.active().brightGreen())
+                CliOutput.out(Theme.colorize("➜", Theme.active().brightGreen())
                         + " The "
                         + Theme.colorize("default", Theme.active().focused())
                         + " JDK is now set to "

@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.jdk.InstalledJdk;
 import dev.jkbuild.jdk.JdkResolver;
 import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Exit;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import java.io.IOException;
@@ -38,12 +40,12 @@ public final class JdkHomeCommand implements CliCommand {
         Path dir = GlobalOptions.from(in).workingDir();
         Optional<InstalledJdk> jdk = JdkResolver.forProject(dir, jdksDir);
         if (jdk.isEmpty()) {
-            System.err.println("jk jdk home: no pinned JDK for "
+            CliOutput.err("jk jdk home: no pinned JDK for "
                     + dev.jkbuild.cli.PathDisplay.styledRaw(dir)
                     + " (write `.jdk-version` via `jk jdk use <spec>`)");
-            return 2;
+            return Exit.CONFIG;
         }
-        System.out.println("export JAVA_HOME=" + shellQuote(jdk.get().home().toString()));
+        CliOutput.out("export JAVA_HOME=" + shellQuote(jdk.get().home().toString()));
         return 0;
     }
 
