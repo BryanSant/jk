@@ -121,7 +121,14 @@ primitives (`Goal`, `JdkInstaller`, `GoalConsole`). Addressed by L8's `installJd
 
 ### Q1 — the engine writes user text to `System.err` directly
 
-**Severity: high (live invariant violation).** **Status: OPEN.**
+**Severity: high (live invariant violation).** **Status: FIXED** (commit `AutoLock … Q1`).
+`maybeReLock` now takes a `Consumer<String> warn` sink (mirroring the existing
+`JdkEnsure.ensure(..., Consumer<String> warn)` pattern); both callers (`BuildPipeline`,
+`SyncCommand`) pass `ctx::output`, so the warning flows through `PhaseContext.output` →
+`GoalListener` and a non-CLI front-end captures it. Exact two-line text preserved.
+_Compromise (logged):_ routed through `output` (verbatim passthrough) rather than the structured
+`ctx.warn(...)` channel, so it is not counted in `GoalResult.warnings()` / the `--ndjson`
+`type:"warn"` stream. Chosen to preserve the exact text; revisit if structured classification is wanted.
 
 `AutoLock.java:252-253` prints `‼ jk: auto-lock warning — could not update jk.lock: …` and a follow-up
 line straight to `System.err`. This directly violates the invariant at `re-foundation.md:275` ("No new
@@ -159,7 +166,18 @@ surface via an interface. Fix `ExplainCommand`'s reach-through.
 
 ### Q2 — ~33 hand-rolled coordinate splits remain
 
-**Severity: medium (the exact smell M5 claimed to delete).** **Status: OPEN.**
+**Severity: medium (the exact smell M5 claimed to delete).** **Status: PARTIALLY FIXED**
+(commit `Coordinate.ofModule … Q2/Q3`). Added `Coordinate.ofModule(module, version)` +
+`Resolution.ResolvedModule.coordinate()`; migrated the **7-site cluster** and `SyncCommand`'s plugin
+parse (**8 splits eliminated**). The remaining ~25 are genuinely *not* the `ResolvedModule→Coordinate`
+shape and were intentionally left: 7 bespoke input parsers (`@version` floating logic, `null`-returning
+branches, `String[]` returns — `AddCommand`, `ScriptHeaderParser`, `LibraryCatalog`,
+`GradleVersionCatalog`, `GradleImporter`, `Sbom`), 3 lockfile-artifact guards (`indexOf(':')<0` on a
+`Lockfile.Artifact`, not a `Coordinate`), and ~11 CLI/resolver *display-coloring* splits.
+_Compromise (logged):_ the display-coloring splits could not adopt the shared `Coords` helper without
+changing rendered output bytes (three divergent bare-name colors; bold variants; two are in the
+`resolver` module which cannot depend on cli's `Coords`). Revisit whether a display helper is worth a
+deliberate output-normalizing pass.
 
 The `coordinate()` accessors were *added*, but "delete the ~43 `indexOf(':')` splits" largely didn't
 happen. ~33 remain. Root cause of the worst cluster: `Resolution.ResolvedModule`
@@ -189,7 +207,17 @@ Provide a small display helper for the CLI coloring split so the pattern lives i
 
 ### Q3 — `workspace:`/`git:` magic-string leaks
 
-**Severity: low-medium.** **Status: OPEN.**
+**Severity: low-medium.** **Status: MOSTLY FIXED** (commit `Coordinate.ofModule … Q2/Q3`).
+`JkBuildRenderer` now uses `Dependency.isWorkspace()`; `RepoArtifactResolver.GIT_SOURCE_PREFIX` is the
+single owner of the `git:` repo-source prefix (write in `GitSourceResolution`, read in
+`RepoArtifactResolver`); `CacheSync` routes `+` parsing through `RepoArtifactResolver.repoName()`.
+_Compromises (logged, to revisit):_
+1. `CacheSync` still scans `+` a second time for the URL half because `io` exposes only `repoName`, not
+   a `repoUrl`. Add `RepoArtifactResolver.repoUrl(String)` (or a parsed-source record) and delegate.
+2. `PolicyChecker` (`core`) still hand-splits `+` — **DEFERRED by layering**: `core` cannot depend on
+   `io` (io depends on core), and it wants the URL half which the io facade doesn't expose. Correct
+   factoring is a shared repo-source parser in a layer both see (`core`/`model`) that `io`'s resolver
+   then delegates to. Revisit in the final pass.
 
 - `JkBuildRenderer.java:42` re-declares its own `private static final String
   WORKSPACE_PLACEHOLDER_PREFIX = "workspace:"` and uses it at `:157`, despite importing
@@ -237,7 +265,13 @@ no new kernel process-global mutable statics.
 Living log. Every compromise made while fixing an item is recorded here with its item ID, and revisited
 in the final review. `(open)` = still a compromise; `(resolved)` = revisited and closed.
 
-- _(none yet — populated as work lands)_
+- **[Q1] (open)** auto-lock warning routes via `PhaseContext.output` (verbatim) not the structured
+  `warn()` channel — not counted in `GoalResult.warnings()`/ndjson. Intentional to preserve exact text.
+- **[Q2] (open)** ~11 CLI/resolver display-coloring coordinate splits left un-deduped — adopting the
+  shared `Coords` helper would change rendered output bytes; `resolver`'s two cannot see cli's `Coords`.
+- **[Q3] (open)** `CacheSync` scans `+` twice — needs a `RepoArtifactResolver.repoUrl`/parsed-source in io.
+- **[Q3] (open)** `PolicyChecker` (core) still hand-splits `+` — deferred by layering; needs a shared
+  repo-source parser in `core`/`model`.
 
 ---
 
