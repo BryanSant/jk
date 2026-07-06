@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Deque;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -101,6 +102,101 @@ public final class BuildGraph {
         return new Result(order, b.edges, b.errors);
     }
 
+    /**
+     * Order workspace modules dependency-first: each module lands after its sibling deps and its
+     * {@code [build].order-after} prerequisites. The single source of truth for workspace module
+     * ordering — the parallel build scheduler resolves the same edges via {@link #resolve}, while
+     * the serial ({@code --no-parallel}) build and {@code jk native} route through here.
+     *
+     * <p>Edges are the same ones {@link Builder#addModuleEdges} wires: sibling deps across every
+     * {@link Scope} (resolved by {@code group:artifact} coord, or by bare sibling name for {@code
+     * workspace:} placeholders) plus {@code [build].order-after} refs (by coord or name). Keys are
+     * the caller's own directory paths, returned verbatim — no canonicalization — so callers get
+     * back exactly the paths they passed.
+     *
+     * <p>On a cycle (which {@link dev.jkbuild.config.WorkspaceLoader} doesn't currently detect) the
+     * unsorted stragglers are appended in declaration order so the build still attempts to make
+     * progress — a cycle never silently drops a module.
+     */
+    public static List<Path> orderModules(Map<Path, JkBuild> modulesByDir) {
+        Map<String, Path> dirByCoord = new LinkedHashMap<>();
+        Map<String, Path> dirByName = new LinkedHashMap<>(); // for workspace: references
+        for (var e : modulesByDir.entrySet()) {
+            dirByCoord.put(coord(e.getValue()), e.getKey());
+            dirByName.put(e.getValue().project().name(), e.getKey());
+        }
+        Map<Path, Set<Path>> edges = new LinkedHashMap<>();
+        for (var e : modulesByDir.entrySet()) {
+            edges.put(e.getKey(), modulePrereqs(e.getKey(), e.getValue(), dirByCoord, dirByName));
+        }
+        List<Path> sorted = new ArrayList<>(kahnSort(modulesByDir.keySet(), edges));
+        if (sorted.size() != modulesByDir.size()) {
+            // Cycle. Fall back to declaration order for the stragglers
+            // so the build still tries to make progress.
+            for (Path p : modulesByDir.keySet()) {
+                if (!sorted.contains(p)) sorted.add(p);
+            }
+        }
+        return sorted;
+    }
+
+    private static String coord(JkBuild m) {
+        return m.project().group() + ":" + m.project().name();
+    }
+
+    /**
+     * Sibling-dep + {@code [build].order-after} prereqs for one module, resolved against the
+     * workspace's coord/name indexes. Self-references are dropped. Shared by the graph {@link
+     * Builder} and the map-based {@link #orderModules} entry so both compute identical edges.
+     */
+    private static Set<Path> modulePrereqs(
+            Path moduleDir, JkBuild m, Map<String, Path> dirByCoord, Map<String, Path> dirByName) {
+        Set<Path> prereqs = new LinkedHashSet<>();
+        for (Scope scope : Scope.values()) {
+            for (Dependency d : m.dependencies().of(scope)) {
+                String module = d.module();
+                Path depDir = dirByCoord.get(module);
+                // workspace placeholders resolve by their bare sibling name
+                if (depDir == null && d.isWorkspace()) {
+                    depDir = dirByName.get(d.workspaceName());
+                }
+                if (depDir != null && !depDir.equals(moduleDir)) prereqs.add(depDir);
+            }
+        }
+        // [build].order-after: build-order-only edges (no classpath/lock). Each entry names a
+        // sibling by project name or group:artifact coord.
+        for (String ref : m.build().allOrderAfter()) {
+            Path depDir = dirByCoord.get(ref);
+            if (depDir == null) depDir = dirByName.get(ref);
+            if (depDir != null && !depDir.equals(moduleDir)) prereqs.add(depDir);
+        }
+        return prereqs;
+    }
+
+    /**
+     * Kahn topo-sort (prereqs first) over an explicit prereq-edge map. Returns the nodes in
+     * dependency-first order; a returned list SHORTER than {@code nodes} means a cycle left some
+     * nodes unplaced — callers apply their own leftover policy. Shared by {@link Builder#topoSort}
+     * and {@link #orderModules}.
+     */
+    private static List<Path> kahnSort(Collection<Path> nodes, Map<Path, Set<Path>> edges) {
+        Map<Path, Integer> remaining = new LinkedHashMap<>();
+        for (Path n : nodes) remaining.put(n, edges.getOrDefault(n, Set.of()).size());
+        Deque<Path> queue = new ArrayDeque<>();
+        for (var e : remaining.entrySet()) if (e.getValue() == 0) queue.add(e.getKey());
+        List<Path> sorted = new ArrayList<>();
+        while (!queue.isEmpty()) {
+            Path next = queue.removeFirst();
+            sorted.add(next);
+            for (var e : edges.entrySet()) {
+                if (e.getValue().contains(next)) {
+                    if (remaining.merge(e.getKey(), -1, Integer::sum) == 0) queue.add(e.getKey());
+                }
+            }
+        }
+        return sorted;
+    }
+
     // ---------------------------------------------------------------------
 
     private static final class Builder {
@@ -160,51 +256,25 @@ public final class BuildGraph {
         }
 
         /**
-         * Sibling-dep + {@code [build].order-after} prereq edges (lifted from
-         * BuildCommand.topoSortModules).
+         * Sibling-dep + {@code [build].order-after} prereq edges. Delegates edge resolution to the
+         * shared {@link BuildGraph#modulePrereqs} so the graph and {@link BuildGraph#orderModules}
+         * stay in lock-step.
          */
         private void addModuleEdges(
                 Path moduleDir, JkBuild m, Map<String, Path> dirByCoord, Map<String, Path> dirByName) {
-            for (Scope scope : Scope.values()) {
-                for (Dependency d : m.dependencies().of(scope)) {
-                    String module = d.module();
-                    Path depDir = dirByCoord.get(module);
-                    if (depDir == null && d.isWorkspace()) {
-                        depDir = dirByName.get(d.workspaceName());
-                    }
-                    if (depDir != null) addEdge(moduleDir, depDir);
-                }
-            }
-            for (String ref : m.build().allOrderAfter()) {
-                Path depDir = dirByCoord.get(ref);
-                if (depDir == null) depDir = dirByName.get(ref);
-                if (depDir != null) addEdge(moduleDir, depDir);
+            for (Path prereq : modulePrereqs(moduleDir, m, dirByCoord, dirByName)) {
+                addEdge(moduleDir, prereq);
             }
         }
 
         /** Kahn topo-sort (prereqs first); a leftover set means a cycle → error. */
         List<BuildUnit> topoSort() {
-            Map<Path, Integer> remaining = new LinkedHashMap<>();
-            for (Path u : units.keySet()) {
-                remaining.put(u, edges.getOrDefault(u, Set.of()).size());
-            }
-            Deque<Path> queue = new ArrayDeque<>();
-            for (var e : remaining.entrySet()) if (e.getValue() == 0) queue.add(e.getKey());
-            List<BuildUnit> sorted = new ArrayList<>();
-            while (!queue.isEmpty()) {
-                Path next = queue.removeFirst();
-                sorted.add(units.get(next));
-                for (var e : edges.entrySet()) {
-                    if (e.getValue().contains(next)) {
-                        if (remaining.merge(e.getKey(), -1, Integer::sum) == 0) queue.add(e.getKey());
-                    }
-                }
-            }
+            List<Path> sorted = kahnSort(units.keySet(), edges);
             if (sorted.size() != units.size()) {
                 errors.add("workspace build graph has a cycle among " + (units.size() - sorted.size()) + " unit(s)");
                 return List.of();
             }
-            return sorted;
+            return sorted.stream().map(units::get).toList();
         }
 
         Path canonical(Path p) {

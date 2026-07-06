@@ -19,6 +19,7 @@ import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.run.Goal;
 import dev.jkbuild.run.GoalResult;
+import dev.jkbuild.runtime.BuildGraph;
 import dev.jkbuild.runtime.BuildPipeline;
 import dev.jkbuild.util.JkDirs;
 import java.io.IOException;
@@ -144,7 +145,7 @@ public final class NativeCommand implements CliCommand {
             return 0;
         }
 
-        List<Path> sorted = BuildCommand.topoSortModules(modulesByDir);
+        List<Path> sorted = BuildGraph.orderModules(modulesByDir);
         GoalConsole.Mode mode = GoalConsole.modeFor(global);
         long buildStart = System.nanoTime();
 

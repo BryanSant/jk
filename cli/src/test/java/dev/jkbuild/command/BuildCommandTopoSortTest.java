@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.model.JkBuild;
+import dev.jkbuild.runtime.BuildGraph;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -12,7 +13,7 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 /**
- * {@link BuildCommand#topoSortModules} ordering, with focus on the {@code [build].order-after}
+ * {@link BuildGraph#orderModules} ordering, with focus on the {@code [build].order-after}
  * build-order-only edges: they must affect order without being dependencies.
  */
 class BuildCommandTopoSortTest {
@@ -35,7 +36,7 @@ class BuildCommandTopoSortTest {
         modules.put(Path.of("b"), module("b", "[build]\norder-after = [\"a\"]"));
         modules.put(Path.of("a"), module("a", ""));
 
-        List<Path> sorted = BuildCommand.topoSortModules(modules);
+        List<Path> sorted = BuildGraph.orderModules(modules);
 
         assertThat(sorted.indexOf(Path.of("a"))).as("a builds before b").isLessThan(sorted.indexOf(Path.of("b")));
         assertThat(sorted).containsExactlyInAnyOrder(Path.of("a"), Path.of("b"));
@@ -47,22 +48,23 @@ class BuildCommandTopoSortTest {
         modules.put(Path.of("b"), module("b", "[build]\norder-after = [\"g:a\"]"));
         modules.put(Path.of("a"), module("a", ""));
 
-        List<Path> sorted = BuildCommand.topoSortModules(modules);
+        List<Path> sorted = BuildGraph.orderModules(modules);
 
         assertThat(sorted.indexOf(Path.of("a"))).isLessThan(sorted.indexOf(Path.of("b")));
     }
 
     @Test
-    void embed_sha_source_is_a_build_order_prerequisite() {
+    void test_worker_jar_source_is_a_build_order_prerequisite() {
         Map<Path, JkBuild> modules = new LinkedHashMap<>();
-        // engine embeds a's jar sha → a must build first, with no explicit order-after.
-        modules.put(Path.of("engine"), module("engine", "[build.embed-sha]\n\"jk-a\" = \"a\""));
+        // engine hands a's worker jar to its test JVM → a must build first, with no
+        // explicit order-after. test-worker-jars feeds allOrderAfter() as a build-order edge.
+        modules.put(Path.of("engine"), module("engine", "[build]\ntest-worker-jars = [\"a\"]"));
         modules.put(Path.of("a"), module("a", ""));
 
-        List<Path> sorted = BuildCommand.topoSortModules(modules);
+        List<Path> sorted = BuildGraph.orderModules(modules);
 
         assertThat(sorted.indexOf(Path.of("a")))
-                .as("a builds before the module that embeds its sha")
+                .as("a builds before the module that consumes its worker jar")
                 .isLessThan(sorted.indexOf(Path.of("engine")));
     }
 
@@ -71,7 +73,7 @@ class BuildCommandTopoSortTest {
         Map<Path, JkBuild> modules = new LinkedHashMap<>();
         modules.put(Path.of("a"), module("a", "[build]\norder-after = [\"nope\"]"));
 
-        List<Path> sorted = BuildCommand.topoSortModules(modules);
+        List<Path> sorted = BuildGraph.orderModules(modules);
 
         assertThat(sorted).containsExactly(Path.of("a"));
     }
@@ -82,7 +84,7 @@ class BuildCommandTopoSortTest {
         modules.put(Path.of("a"), module("a", "[build]\norder-after = [\"b\"]"));
         modules.put(Path.of("b"), module("b", "[build]\norder-after = [\"a\"]"));
 
-        List<Path> sorted = BuildCommand.topoSortModules(modules);
+        List<Path> sorted = BuildGraph.orderModules(modules);
 
         // Cycle → no valid order, but every module still appears (build still tries).
         assertThat(sorted).containsExactlyInAnyOrder(Path.of("a"), Path.of("b"));

@@ -15,9 +15,7 @@ import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.config.WorkspaceLoader;
 import dev.jkbuild.config.WorkspaceLocator;
 import dev.jkbuild.layout.BuildLayout;
-import dev.jkbuild.model.Dependency;
 import dev.jkbuild.model.JkBuild;
-import dev.jkbuild.model.Scope;
 import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Exit;
 import dev.jkbuild.model.command.Invocation;
@@ -35,9 +33,7 @@ import dev.jkbuild.util.JkThreads;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -548,7 +544,7 @@ public final class BuildCommand implements CliCommand {
             return 0;
         }
         applyMemoryPlan(1); // --no-parallel: modules build serially (peak = 1 module)
-        List<Path> sorted = topoSortModules(modulesByDir);
+        List<Path> sorted = BuildGraph.orderModules(modulesByDir);
         GoalConsole.Mode mode = GoalConsole.modeFor(global);
         // Pre-compute workspace link map once (covers all modes) — needs the full sorted list.
         Map<Path, Path> wsLinks = dev.jkbuild.runtime.BuildService.computeWorkspaceLinks(sorted, workspaceRoot);
@@ -673,87 +669,6 @@ public final class BuildCommand implements CliCommand {
         }
         view.finishGoalSuccess(modulesTail(sorted.size(), buildStart));
         return 0;
-    }
-
-    /**
-     * Order workspace modules so each builds after its sibling deps. Kahn's algorithm against the
-     * in-workspace dep graph. Sibling matches are by full Maven coord ({@code group:artifact}) —
-     * modules declare sibling deps explicitly with inline coords, no {@code .workspace = true}
-     * shorthand needed.
-     *
-     * <p>The graph also includes {@code [build].order-after} edges: build-order-only prerequisites
-     * (by project name or {@code group:artifact}) that carry no classpath or lockfile weight — used
-     * when a module must build after a sibling it doesn't actually depend on (e.g. to embed that
-     * sibling's artifact hash).
-     *
-     * <p>Cycles (which the workspace's {@link dev.jkbuild.config.WorkspaceLoader} doesn't currently
-     * detect) result in any unsorted modules being appended in declaration order so the build still
-     * attempts to make progress.
-     */
-    static List<Path> topoSortModules(Map<Path, JkBuild> modulesByDir) {
-        Map<String, Path> dirByCoord = new HashMap<>();
-        Map<String, Path> dirByName = new HashMap<>(); // for workspace: references
-        for (var e : modulesByDir.entrySet()) {
-            String coord = e.getValue().project().group() + ":"
-                    + e.getValue().project().name();
-            dirByCoord.put(coord, e.getKey());
-            dirByName.put(e.getValue().project().name(), e.getKey());
-        }
-        Map<Path, Set<Path>> requires = new LinkedHashMap<>();
-        for (var e : modulesByDir.entrySet()) {
-            Set<Path> prereqs = new LinkedHashSet<>();
-            for (Scope scope : Scope.values()) {
-                for (Dependency d : e.getValue().dependencies().of(scope)) {
-                    String module = d.module();
-                    Path depDir = dirByCoord.get(module);
-                    // workspace placeholders resolve by their bare sibling name
-                    if (depDir == null && d.isWorkspace()) {
-                        depDir = dirByName.get(d.workspaceName());
-                    }
-                    if (depDir != null && !depDir.equals(e.getKey())) {
-                        prereqs.add(depDir);
-                    }
-                }
-            }
-            // [build].order-after (+ [build.embed-sha] sources): build-order-only
-            // edges (no classpath/lock). Each entry names a sibling by project name
-            // or group:artifact coord.
-            for (String ref : e.getValue().build().allOrderAfter()) {
-                Path depDir = dirByCoord.get(ref);
-                if (depDir == null) depDir = dirByName.get(ref);
-                if (depDir != null && !depDir.equals(e.getKey())) {
-                    prereqs.add(depDir);
-                }
-            }
-            requires.put(e.getKey(), prereqs);
-        }
-        Map<Path, Integer> remainingPrereqs = new HashMap<>();
-        for (var e : requires.entrySet()) {
-            remainingPrereqs.put(e.getKey(), e.getValue().size());
-        }
-        java.util.Deque<Path> queue = new java.util.ArrayDeque<>();
-        for (var e : remainingPrereqs.entrySet()) {
-            if (e.getValue() == 0) queue.add(e.getKey());
-        }
-        List<Path> sorted = new ArrayList<>();
-        while (!queue.isEmpty()) {
-            Path next = queue.removeFirst();
-            sorted.add(next);
-            for (var e : requires.entrySet()) {
-                if (e.getValue().contains(next)) {
-                    int rem = remainingPrereqs.merge(e.getKey(), -1, Integer::sum);
-                    if (rem == 0) queue.add(e.getKey());
-                }
-            }
-        }
-        if (sorted.size() != modulesByDir.size()) {
-            // Cycle. Fall back to declaration order for the stragglers
-            // so the build still tries to make progress.
-            for (Path p : modulesByDir.keySet()) {
-                if (!sorted.contains(p)) sorted.add(p);
-            }
-        }
-        return sorted;
     }
 
     private int runForDir(Path dir) throws Exception {
