@@ -171,7 +171,8 @@ public final class SyncCommand implements CliCommand {
                                 dev.jkbuild.util.JkVersion.VERSION,
                                 List.of(),
                                 true,
-                                dev.jkbuild.resolver.ResolveObserver.NOOP);
+                                dev.jkbuild.resolver.ResolveObserver.NOOP,
+                                ctx::output);
                         ctx.put(LOCKFILE, updated != null ? updated : existing);
                         var build = parseBuildIfPresent(dir);
                         if (build != null) ctx.put(BUILD, build);
@@ -322,13 +323,12 @@ public final class SyncCommand implements CliCommand {
                             ctx.progress(1);
                             continue;
                         }
-                        String[] parts = pe.coordinate().split(":", 2);
-                        if (parts.length != 2) {
+                        if (pe.coordinate().indexOf(':') < 0) {
                             ctx.error("plugin", "malformed coordinate: " + pe.coordinate());
                             ctx.progress(1);
                             continue;
                         }
-                        var coord = dev.jkbuild.model.Coordinate.of(parts[0], parts[1], pe.version());
+                        var coord = dev.jkbuild.model.Coordinate.ofModule(pe.coordinate(), pe.version());
                         try {
                             var r = repos.tryFetchArtifact(coord);
                             if (r.isPresent()) {

@@ -543,7 +543,8 @@ public final class BuildPipeline {
                                 dev.jkbuild.util.JkVersion.VERSION,
                                 List.of(),
                                 true,
-                                dev.jkbuild.resolver.ResolveObserver.NOOP);
+                                dev.jkbuild.resolver.ResolveObserver.NOOP,
+                                ctx::output);
                         ctx.put(LOCKFILE, updated != null ? updated : existing);
                     } else {
                         ctx.put(LOCKFILE, LockfileReader.read(in.lockFile()));

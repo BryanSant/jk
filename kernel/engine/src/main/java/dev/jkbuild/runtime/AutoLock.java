@@ -22,6 +22,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 
 /**
  * Auto-lock: when {@code jk.toml} is newer than {@code jk.lock}, transparently re-locks with a
@@ -198,6 +199,9 @@ public final class AutoLock {
      * @param features active feature flags
      * @param withDefaults whether to include the project's default features
      * @param observer resolver progress callbacks
+     * @param warn sink for a soft-failure warning (one line per call); the engine must NOT write to
+     *     {@code System.out}/{@code System.err}, so callers route this to the view layer (e.g. {@code
+     *     ctx::output}). May be {@code null} to discard.
      */
     public static Lockfile maybeReLock(
             Path dir,
@@ -208,7 +212,8 @@ public final class AutoLock {
             String jkVersion,
             Collection<String> features,
             boolean withDefaults,
-            ResolveObserver observer) {
+            ResolveObserver observer,
+            Consumer<String> warn) {
         if (!isStale(dir, lockFile)) return null;
         try {
             JkBuild build = JkBuildParser.parse(dir.resolve("jk.toml"));
@@ -248,9 +253,13 @@ public final class AutoLock {
             throw e;
         } catch (Exception e) {
             // Soft failure (network, I/O, etc.): warn and fall back to the existing
-            // lock so a transient connectivity issue doesn't block the build.
-            System.err.println("‼ jk: auto-lock warning — could not update jk.lock: " + e.getMessage());
-            System.err.println("    Run `jk lock` to resolve manually.");
+            // lock so a transient connectivity issue doesn't block the build. The engine
+            // is a server — route the warning through the caller's sink (the view layer
+            // owns the terminal streams) instead of touching System.err.
+            if (warn != null) {
+                warn.accept("‼ jk: auto-lock warning — could not update jk.lock: " + e.getMessage());
+                warn.accept("    Run `jk lock` to resolve manually.");
+            }
             return null;
         }
     }
