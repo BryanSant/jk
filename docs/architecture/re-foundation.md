@@ -4,6 +4,17 @@ Status: in progress. Goal: a strict **engine-as-server / front-end-as-client** s
 CLI is one interchangeable client among future front-ends (IntelliJ plugin, VS Code extension, web
 app, GitHub Action). Pre-1.0: breaking changes are welcome; no back-compat shims.
 
+> **Post-audit remediation (2026-07-06):** a follow-up audit verified this doc's claims against the
+> code and closed the gaps it found. See [`re-foundation-gaps.md`](./re-foundation-gaps.md) for the
+> per-item findings + remediation log. Summary of what changed after this doc's original milestones:
+> the CLI/engine topo-sort duplicate was unified (`BuildGraph.orderModules`); the serial
+> `--no-parallel` path now routes through `buildWorkspace` (engine owns the whole serial↔parallel
+> spectrum); the `ModulePlan`/`Module`/`ResolvedGraph` engine boundary is now compiler-enforced
+> (package-private accessors) and the CLI no longer names `BuildGraph`; `BuildService.explain` landed;
+> `SessionContext` is now `ScopedValue`-backed with a per-session cancel token; the `AutoLock` and
+> `NativeImageDriver` kernel-console-I/O leaks are routed through `PhaseContext.output`; and the
+> `Coordinate.ofModule` helper retired the coordinate-split cluster M5 had left behind.
+
 ## North-star architecture
 
 ```
@@ -22,8 +33,15 @@ app, GitHub Action). Pre-1.0: breaking changes are welcome; no back-compat shims
 ```
 
 Rules:
-- **The kernel (model→engine) is the server. It has NO process-global mutable state** — everything
-  request-scoped flows through `Session`/`BuildRequest`. Two builds must be able to run in one JVM.
+- **The kernel (model→engine) is the server; request-scoped state flows through `Session`.** Target:
+  no process-global mutable *request* state, so two builds can run in one JVM. **Status (2026-07):**
+  `SessionContext` is now `ScopedValue`-backed (concurrent scopes don't clobber — the structural
+  unlock), with the process-static kept as the single-build CLI fallback. Remaining to be *fully*
+  effective: `ScopedValue` bindings don't propagate to the shared `JkThreads.io()` worker pool, so
+  scoped multi-tenant isolation across the engine's async dispatch needs `StructuredTaskScope` /
+  per-task rebinding (a logged follow-up). The accepted shared *concurrency primitives*
+  (`WorkerSlots`, `TEST_GATE`, `HeapPlan.heapPlan`) and the bind-once `SessionCancel` DI seam are not
+  request data. See `re-foundation-gaps.md` §L7.
 - **Front-ends never reach into engine internals** — only `jk-api` (`BuildService` + DTOs + events).
 - **CLI-local presentation state is allowed** (`Theme.active`, glyph choice, ANSI): it is client-side
   and per-process; a web/IDE client brings its own presentation and never links it.
@@ -51,6 +69,10 @@ Rules:
   (parallel scheduler, `topoSortModules`, `ensureWorkspaceLockFresh`, memory planning, one shared
   ETA/calibration planner used by both build and explain) and the `JdkInstall` goal DAG into engine
   services. `build/explain/lock/installJdk(request, GoalListener) → result`. Typed `BuildResult`.
+  **Landed (2026-07):** `BuildService.buildWorkspace` (build) + `BuildService.explain → ExplainPlan`
+  (dry-run forecast) + the workspace lock-freshness guard. **Deferred:** a first-class
+  `lock`/`installJdk` facade — `jk jdk install` is an interactive Goal DAG whose mechanical core
+  already runs on engine primitives; see `re-foundation-gaps.md` §L8 for the rationale.
 - **M3 — BuildStep SPI.** Promote `coreBuilder`'s inline phase-body lambdas to `BuildStep` classes
   (Strategy + Template-Method); `coreBuilder` becomes an assembler. Delete the dead
   `PluginContext.contribute`/`Plugin#register` or make it the in-process face of `BuildStep`.
@@ -83,6 +105,12 @@ Branch: `refoundation`. Every commit below is green (`./gradlew :cli:test`).
   `SessionContext.current()`, zero call-site churn); hot build-path reads (`BuildPipeline` phase
   bodies, `EffortWeights.predict`) now read `in.session().config()`.
 - **M5 — Model as single currency (DONE)** —
+  - *Post-audit correction (2026-07):* "delete the ~43 `indexOf(':')` splits" was overstated — a
+    7-site `ResolvedModule → Coordinate` cluster (and `SyncCommand`) still hand-split because
+    `Coordinate` lacked an `ofModule(module, version)` helper and `ResolvedModule` lacked
+    `coordinate()`. Both were added and the cluster migrated (see `re-foundation-gaps.md` §Q2). The
+    remaining splits are genuinely different shapes (bespoke `@version` parsers, display-coloring) and
+    are documented, not silently "done".
   - `Scope.canonical()`/`tomlSection()` precomputed into enum fields; `GlobalConfig` memoizes
     `~/.jk/config.toml` per `(path,size,mtime)`.
   - **M5a** `Hashing` consolidation: added `newDigest`/`hex`/`hashHex`; routed the hand-rolled

@@ -35,7 +35,28 @@ process-global mutable state … Two builds must be able to run in one JVM."* Th
 
 ### L7 — De-globalization did not de-globalize (`SessionContext.current()` is still a static slot)
 
-**Severity: high (blocks the core north-star).** **Status: OPEN.**
+**Severity: high (blocks the core north-star).** **Status: SUBSTANTIALLY FIXED** (commits
+`ScopedValue-backed SessionContext … L7` + `L7 consumers`).
+- `SessionContext` is now `ScopedValue`-backed: `current()` returns the thread's `ScopedValue`
+  binding when set (via `where`/`runWhere`), else the process static. Two builds can run concurrently
+  in one JVM, each with its own `Session`, with no clobber — proven by `SessionScopeTest`. The static
+  `install`/`reset` path is unchanged for the single-build CLI.
+- `Session` gained a per-session cooperative `CancelToken` (`defaults()` mints a live one; `null` →
+  inert `NONE`). `GlobalCancel` signals `SessionContext.current().cancel().cancel()` before its
+  `halt(2)`, and the engine honors it by OR-ing `SessionContext.current().cancelled()` into the
+  existing `PhaseContext.cancelled()` poll — so any phase already checking cancellation observes a
+  session-level cancel (no new polling sites). The CLI keeps `halt(2)` as its process guarantee.
+- **Known limitation (logged, follow-up):** a `ScopedValue` binding does NOT propagate to tasks
+  dispatched on the shared `JkThreads.io()` pool (it propagates only to structured forks). So a
+  *scoped* (multi-tenant) session's config/cancel is fully honored on the binding thread but async
+  worker-pool tasks fall back to the process-static session. The single-process CLI (static session)
+  is fully correct. Making concurrent in-JVM builds *fully* isolated across the engine's async
+  dispatch needs `StructuredTaskScope` or per-task rebinding of the binding — a scoped follow-up.
+  The holder now *supports* concurrency (the structural unlock); the async dispatch must propagate it
+  to be *completely* effective.
+- Output sink: **not** added to `Session` — the one kernel-console-I/O consumer (`NativeImageDriver`)
+  was fixed by routing through the in-scope `PhaseContext.output` instead (see the NativeImageDriver
+  item), which is the existing engine output seam; a redundant `Session` sink was unnecessary.
 
 - `SessionContext` holds `private static volatile Session current` (`kernel/core/.../config/SessionContext.java:17`)
   — a single install-once-per-process slot. **51 non-test call sites** read `current()` (26 cli, 19
@@ -60,7 +81,17 @@ non-scoped call paths); land the output sink + cancel token on `Session`; replac
 
 ### L8 — `BuildService` is not yet the single front door
 
-**Severity: medium (limits non-CLI front-ends).** **Status: OPEN.**
+**Severity: medium (limits non-CLI front-ends).** **Status: PARTIALLY FIXED** (commit
+`BuildService.explain facade … L8`). Added `BuildService.explain(entryDir, build, cache) →
+ExplainPlan` — a `BuildGraph`-free forecast (dependency-ordered `BuildPlanForecast.Module`s + a plain
+`dir → prereq dirs` edge map + width + errors) — plus a `ResolvedGraph` opaque handle
+(package-private `graph()`, mirroring `ModulePlan`) and a `resolveGraph`/`forecastDirtyDirs` overload
+for the build preflight. `ExplainCommand` and `BuildCommand` migrated and **no longer name
+`dev.jkbuild.runtime.BuildGraph` or `BuildGraph.BuildUnit`** — closing the M6-logged leak. The only
+remaining `BuildGraph` reference in the CLI is `NativeCommand`'s front-end-safe
+`BuildGraph.orderModules(Map)` (the M4 map API, not graph internals).
+_Deferred (logged, scope decision):_ `installJdk` and single-module `build` facades are **not** added.
+Rationale below; not a silent gap.
 
 `BuildService`'s actual public surface is `buildWorkspace(...)` + a lock-freshness guard
 (`ensureWorkspaceLockFresh`/`workspaceLockStale`) + link/forecast helpers. There is **no `explain()`,
@@ -301,9 +332,22 @@ in the final review. `(open)` = still a compromise; `(resolved)` = revisited and
 - **[Q3] (open)** `CacheSync` scans `+` twice — needs a `RepoArtifactResolver.repoUrl`/parsed-source in io.
 - **[Q3] (open)** `PolicyChecker` (core) still hand-splits `+` — deferred by layering; needs a shared
   repo-source parser in `core`/`model`.
-- **[M6] (open → L8)** the CLI still names `BuildGraph`/`BuildUnit` directly via `graph.topoOrder()`
-  (`BuildCommand:275`) and `BuildGraph.resolve` (`ExplainCommand:83`). Needs a `BuildService`
-  plan/explain facade — folded into L8.
+- **[M6] (resolved by L8)** the CLI's direct `BuildGraph`/`BuildUnit` use (`BuildCommand:275`,
+  `ExplainCommand:83`) is closed — both now go through `BuildService.explain`/`resolveGraph`. Only
+  `NativeCommand.orderModules` (front-end-safe map API) names `BuildGraph`.
+- **[L7] (open, follow-up)** `ScopedValue` bindings don't propagate to `JkThreads.io()` pool tasks —
+  scoped multi-tenant sessions are fully isolated only on the binding thread; async dispatch needs
+  `StructuredTaskScope`/per-task rebinding. CLI (static session) unaffected.
+- **[L8] (open, minor)** `ResolvedGraph` wraps `BuildGraph.Result` (package-private `graph()`) rather
+  than fully flattening it — deliberate, to keep the fully-cached-shortcut behavior + timing window
+  byte-identical. `ResolvedGraph.moduleDirs()` is currently unused (kept as a front-end-safe accessor).
+- **[L8] (deferred, scope decision)** `installJdk` and single-module `build` facades not added:
+  `jk jdk install` is an inherently *interactive* Goal DAG (wizard/prompts, default-adoption) whose
+  mechanical core already runs on engine primitives (`Goal`/`JdkInstaller`/`GoalConsole`) — the same
+  "CLI renderer over engine primitives" pattern the doc accepts for the serial/native paths; and the
+  single-project build path already drives compile/test/package through engine primitives
+  (`BuildPipeline.coreBuilder`). Hoisting either behind a `BuildService` method is additive future
+  work, not a layering violation. Flagged for the owner to prioritize.
 
 ---
 
