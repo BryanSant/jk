@@ -3,6 +3,7 @@ package dev.jkbuild.compile;
 
 import dev.jkbuild.jdk.HostPlatform;
 import dev.jkbuild.util.PathUtil;
+import dev.jkbuild.worker.JvmOptions;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -65,7 +66,14 @@ public final class SubprocessJavacStrategy implements JavaCompileStrategy {
         try {
             Path argfile = writeArgfile(request, outDir);
             try {
-                ProcessBuilder pb = new ProcessBuilder(javac.toString(), "@" + argfile).redirectErrorStream(true);
+                // -J flags reach javac's own JVM launcher and are rejected inside an
+                // @argfile (javac processes the file itself, after the JVM is already
+                // up) — they must be direct command-line arguments.
+                List<String> command = new ArrayList<>();
+                command.add(javac.toString());
+                command.addAll(JvmOptions.launcherFlags(1));
+                command.add("@" + argfile);
+                ProcessBuilder pb = new ProcessBuilder(command).redirectErrorStream(true);
                 Process process = pb.start();
                 List<CompileResult.Diagnostic> diagnostics = parseStream(process);
                 int exit = process.waitFor();

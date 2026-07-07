@@ -18,10 +18,26 @@ class JvmOptionsTest {
         SessionContext.install(SessionContext.current().withJvm(tuning));
     }
 
+    /** {@code -XX:ActiveProcessorCount} scales with this host's core count, divided by concurrency. */
+    private static int cores(int concurrency) {
+        return Math.max(1, Runtime.getRuntime().availableProcessors() / concurrency);
+    }
+
+    /** The hardening flags every worker fork gets, absent a user override, for the given concurrency. */
+    private static List<String> hardening(int concurrency) {
+        return List.of(
+                "-XX:MaxMetaspaceSize=256m",
+                "-XX:ActiveProcessorCount=" + cores(concurrency),
+                "-Xss512k",
+                "-XX:+ExitOnOutOfMemoryError");
+    }
+
     @Test
     void default_flags_are_50_percent_zgc_string_dedup() {
-        assertThat(JvmOptions.flags(WorkerTuning.NONE, 1))
-                .containsExactly("-XX:MaxRAMPercentage=50", "-XX:+UseZGC", "-XX:+UseStringDeduplication");
+        List<String> expected = new java.util.ArrayList<>(
+                List.of("-XX:MaxRAMPercentage=50", "-XX:+UseZGC", "-XX:+UseStringDeduplication"));
+        expected.addAll(hardening(1));
+        assertThat(JvmOptions.flags(WorkerTuning.NONE, 1)).containsExactlyElementsOf(expected);
     }
 
     @Test
@@ -33,15 +49,42 @@ class JvmOptionsTest {
     @Test
     void explicit_settings_win_and_extra_args_append() {
         WorkerTuning s = new WorkerTuning(70.0, "g1", false, List.of("-XX:+AlwaysPreTouch"));
-        assertThat(JvmOptions.flags(s, 1))
-                .containsExactly("-XX:MaxRAMPercentage=70", "-XX:+UseG1GC", "-XX:+AlwaysPreTouch");
+        List<String> expected = new java.util.ArrayList<>(List.of("-XX:MaxRAMPercentage=70", "-XX:+UseG1GC"));
+        expected.addAll(hardening(1));
+        expected.add("-XX:+AlwaysPreTouch");
+        assertThat(JvmOptions.flags(s, 1)).containsExactlyElementsOf(expected);
         // string-dedup=false → no dedup flag; gc=g1 → G1, not ZGC.
     }
 
     @Test
     void gc_none_emits_no_collector_and_no_dedup() {
         WorkerTuning s = new WorkerTuning(null, "none", true, List.of());
-        assertThat(JvmOptions.flags(s, 1)).containsExactly("-XX:MaxRAMPercentage=50");
+        List<String> expected = new java.util.ArrayList<>(List.of("-XX:MaxRAMPercentage=50"));
+        expected.addAll(hardening(1));
+        assertThat(JvmOptions.flags(s, 1)).containsExactlyElementsOf(expected);
+    }
+
+    @Test
+    void hardening_flags_skip_anything_the_caller_already_pinned() {
+        WorkerTuning s = new WorkerTuning(
+                null,
+                "none",
+                null,
+                List.of("-XX:MaxMetaspaceSize=1g", "-XX:ActiveProcessorCount=2", "-Xss2m", "-XX:+CrashOnOutOfMemoryError"));
+        assertThat(JvmOptions.flags(s, 1))
+                .containsExactly(
+                        "-XX:MaxRAMPercentage=50",
+                        "-XX:MaxMetaspaceSize=1g",
+                        "-XX:ActiveProcessorCount=2",
+                        "-Xss2m",
+                        "-XX:+CrashOnOutOfMemoryError");
+    }
+
+    @Test
+    void launcher_flags_prefix_every_worker_flag_with_dash_j() {
+        assertThat(JvmOptions.launcherFlags(1))
+                .allMatch(f -> f.startsWith("-J-"))
+                .hasSameSizeAs(JvmOptions.flags(WorkerTuning.NONE, 1));
     }
 
     @Test
@@ -49,7 +92,9 @@ class JvmOptionsTest {
         try {
             // The CLI carries resolved tuning on the session; worker forks read it back.
             installTuning(new WorkerTuning(80.0, "g1", false, List.of()));
-            assertThat(JvmOptions.workerFlags(1)).containsExactly("-XX:MaxRAMPercentage=80", "-XX:+UseG1GC");
+            List<String> expected = new java.util.ArrayList<>(List.of("-XX:MaxRAMPercentage=80", "-XX:+UseG1GC"));
+            expected.addAll(hardening(1));
+            assertThat(JvmOptions.workerFlags(1)).containsExactlyElementsOf(expected);
             // Concurrency still divides the resolved cap.
             assertThat(JvmOptions.workerFlags(4)).contains("-XX:MaxRAMPercentage=20");
         } finally {
@@ -60,23 +105,25 @@ class JvmOptionsTest {
     @Test
     void absolute_flags_emit_xms_softmax_xmx_and_zgc_uncommit() {
         HeapPlan.Plan plan = new HeapPlan.Plan(4, 64L << 20, 512L << 20, 800L << 20, null);
-        assertThat(JvmOptions.absoluteFlags(plan, WorkerTuning.NONE))
-                .containsExactly(
-                        "-Xms64m",
-                        "-Xmx800m",
-                        "-XX:SoftMaxHeapSize=512m",
-                        "-XX:+UseZGC",
-                        "-XX:+ZUncommit",
-                        "-XX:ZUncommitDelay=30",
-                        "-XX:+UseStringDeduplication");
+        List<String> expected = new java.util.ArrayList<>(List.of(
+                "-Xms64m",
+                "-Xmx800m",
+                "-XX:SoftMaxHeapSize=512m",
+                "-XX:+UseZGC",
+                "-XX:+ZUncommit",
+                "-XX:ZUncommitDelay=10",
+                "-XX:+UseStringDeduplication"));
+        expected.addAll(hardening(4)); // plan.parallelism() == 4
+        assertThat(JvmOptions.absoluteFlags(plan, WorkerTuning.NONE)).containsExactlyElementsOf(expected);
     }
 
     @Test
     void absolute_flags_skip_softmax_for_serial_gc() {
         HeapPlan.Plan plan = new HeapPlan.Plan(1, 64L << 20, 256L << 20, 256L << 20, null);
         WorkerTuning serial = new WorkerTuning(null, "none", false, List.of());
-        assertThat(JvmOptions.absoluteFlags(plan, serial))
-                .containsExactly("-Xms64m", "-Xmx256m"); // no SoftMaxHeapSize, no collector
+        List<String> expected = new java.util.ArrayList<>(List.of("-Xms64m", "-Xmx256m"));
+        expected.addAll(hardening(1)); // plan.parallelism() == 1; no SoftMaxHeapSize, no collector
+        assertThat(JvmOptions.absoluteFlags(plan, serial)).containsExactlyElementsOf(expected);
     }
 
     @Test

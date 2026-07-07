@@ -40,6 +40,16 @@ public final class JvmOptions {
     /** Default collector: low-pause, uncommits idle heap. */
     public static final String DEFAULT_GC = "zgc";
 
+    /**
+     * Metaspace lives outside the heap budget {@link HeapPlan} sizes, so an unbounded default lets
+     * several concurrent worker JVMs overcommit native memory even when their heaps are well behaved.
+     * Capped unless the caller already set one.
+     */
+    public static final long DEFAULT_MAX_METASPACE_MB = 256;
+
+    /** Worker JVMs (compilers, test runners) rarely need deep stacks; smaller reserve, more headroom. */
+    public static final long DEFAULT_STACK_KB = 512;
+
     public static final String ENV_MAX_RAM = "JK_MAX_RAM_PERCENT";
     public static final String ENV_GC = "JK_JVM_GC";
     public static final String ENV_STRING_DEDUP = "JK_JVM_STRING_DEDUP";
@@ -122,6 +132,7 @@ public final class JvmOptions {
         if (dedup && (gc.equals("zgc") || gc.equals("g1"))) {
             out.add("-XX:+UseStringDeduplication");
         }
+        addHardening(out, s, concurrency);
         out.addAll(s.extraArgs());
         return out;
     }
@@ -188,6 +199,18 @@ public final class JvmOptions {
     }
 
     /**
+     * Test-only: undo {@link #planAndApply} — clears the shared heap plan and reopens the {@link
+     * WorkerSlots} gate. Production code never calls this (a real process's plan is meant to live for
+     * the process's whole lifetime); it exists because a test that spins up a real {@code
+     * DaemonServer} (which calls {@code planAndApply} as a side effect of starting) would otherwise
+     * leak that process-wide static into unrelated tests sharing the same test JVM.
+     */
+    public static void resetSharedPlanForTests() {
+        heapPlan = null;
+        WorkerSlots.configure(0);
+    }
+
+    /**
      * True when jk should auto-size worker heaps: the request pinned neither a {@code
      * --max-ram-percent} / {@code [jvm] max-ram-percent} nor an explicit heap flag ({@code
      * -Xmx}/{@code -Xms}/{@code -XX:MaxHeapSize}/ {@code -XX:MaxRAMPercentage}) via {@code --jvm-arg}
@@ -231,7 +254,7 @@ public final class JvmOptions {
             case "zgc" -> {
                 out.add("-XX:+UseZGC");
                 out.add("-XX:+ZUncommit");
-                out.add("-XX:ZUncommitDelay=30");
+                out.add("-XX:ZUncommitDelay=" + ZGC_UNCOMMIT_DELAY_SECONDS);
             }
             case "g1" -> out.add("-XX:+UseG1GC");
             case "none", "default", "" -> {
@@ -240,11 +263,67 @@ public final class JvmOptions {
             default -> {
                 out.add("-XX:+UseZGC");
                 out.add("-XX:+ZUncommit");
-                out.add("-XX:ZUncommitDelay=30");
+                out.add("-XX:ZUncommitDelay=" + ZGC_UNCOMMIT_DELAY_SECONDS);
             }
         }
         if (dedup && (gc.equals("zgc") || gc.equals("g1"))) out.add("-XX:+UseStringDeduplication");
+        addHardening(out, s, plan.parallelism());
         out.addAll(s.extraArgs());
+        return out;
+    }
+
+    /** How long ZGC waits on an idle heap before returning pages to the OS — tuned for aggressive give-back. */
+    static final int ZGC_UNCOMMIT_DELAY_SECONDS = 10;
+
+    /**
+     * Native-memory and fail-fast hardening applied to every worker JVM (relative or absolute heap
+     * mode alike), skipping anything the caller already pinned via {@code --jvm-arg} / {@code [jvm]
+     * args}:
+     *
+     * <ul>
+     *   <li>{@code -XX:MaxMetaspaceSize} — bounds native class-metadata memory, which lives outside
+     *       the heap budget {@link HeapPlan} sizes.
+     *   <li>{@code -XX:ActiveProcessorCount} — scaled by {@code concurrency} so each simultaneously
+     *       forked JVM sizes its own GC/JIT thread pools (and their native memory) for its actual CPU
+     *       share instead of the whole host's core count.
+     *   <li>{@code -Xss} — a smaller thread-stack reserve; worker JVMs rarely need the JVM default.
+     *   <li>{@code -XX:+ExitOnOutOfMemoryError} — die immediately on OOM rather than degrade in place,
+     *       so the parent sees a failed fork instead of a thrashing process still holding a slot.
+     * </ul>
+     */
+    private static void addHardening(List<String> out, WorkerTuning s, int concurrency) {
+        List<String> extra = s.extraArgs();
+        if (!hasArgPrefix(extra, "-XX:MaxMetaspaceSize", "-XX:MetaspaceSize")) {
+            out.add("-XX:MaxMetaspaceSize=" + DEFAULT_MAX_METASPACE_MB + "m");
+        }
+        if (!hasArgPrefix(extra, "-XX:ActiveProcessorCount")) {
+            int cores = Math.max(1, Runtime.getRuntime().availableProcessors() / Math.max(1, concurrency));
+            out.add("-XX:ActiveProcessorCount=" + cores);
+        }
+        if (!hasArgPrefix(extra, "-Xss")) {
+            out.add("-Xss" + DEFAULT_STACK_KB + "k");
+        }
+        if (!hasArgPrefix(extra, "-XX:+ExitOnOutOfMemoryError", "-XX:-ExitOnOutOfMemoryError", "-XX:+CrashOnOutOfMemoryError")) {
+            out.add("-XX:+ExitOnOutOfMemoryError");
+        }
+    }
+
+    private static boolean hasArgPrefix(List<String> args, String... prefixes) {
+        for (String a : args) {
+            for (String p : prefixes) {
+                if (a.startsWith(p)) return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * {@code workerFlags}, but each flag {@code -J}-prefixed for launcher tools that wrap their own
+     * JVM (javac, native-image) rather than being exec'd as {@code java} directly.
+     */
+    public static List<String> launcherFlags(int concurrency) {
+        List<String> out = new ArrayList<>();
+        for (String f : workerFlags(concurrency)) out.add("-J" + f);
         return out;
     }
 
