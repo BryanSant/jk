@@ -79,6 +79,11 @@ tasks.withType<Test>().configureEach {
     // @TempDir cache per test. Persisted under build/ (cleared by `gradle clean`).
     systemProperty("jk.test.cache.dir",
             layout.buildDirectory.dir("test-shared-cache").get().asFile.absolutePath)
+    // The fast unit-test suite has no real `jk` binary to exec as a daemon and doesn't isolate
+    // ~/.jk/state/daemon/ per test — see BuildCommand.daemonDisabledForTests()'s javadoc. The daemon
+    // transport itself is covered by DaemonServer/DaemonClient tests and manual verification against
+    // the real native binary (docs/daemon.md), not this suite.
+    systemProperty("jk.test.noDaemon", "true")
     doFirst {
         systemProperty("jk.kotlin.worker.jar",       kotlinWorkerJar.singleFile.absolutePath)
         systemProperty("jk.test.runner.jar",         testRunnerJar.singleFile.absolutePath)

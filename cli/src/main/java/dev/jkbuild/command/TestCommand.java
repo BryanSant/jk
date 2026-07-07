@@ -71,6 +71,15 @@ public final class TestCommand implements CliCommand {
     private static final GoalKey<JUnitLauncher.Result> TEST_RESULT =
             GoalKey.of("test-result", JUnitLauncher.Result.class);
 
+    /**
+     * Escape hatch for the fast JVM unit-test suite ONLY — see {@link
+     * BuildCommand#daemonDisabledForTests()}'s javadoc for the full rationale. Same system property,
+     * same "never a user-facing flag" contract; a real {@code jk test} invocation always daemon-hosts.
+     */
+    private static boolean daemonDisabledForTests() {
+        return Boolean.getBoolean("jk.test.noDaemon");
+    }
+
     @Override
     public int run(Invocation in) throws IOException, InterruptedException {
         this.profileName = in.value("profile").orElse(null);
@@ -88,62 +97,97 @@ public final class TestCommand implements CliCommand {
 
         Path cache = cacheDir != null ? cacheDir : JkDirs.cache();
         int workerCount = workers != null && workers > 0 ? workers : 1;
-        // Size the test-runner JVMs' heaps (and cap how many fork at once) to the
-        // host's free memory before launching them.
-        dev.jkbuild.worker.HeapPlan.Plan heapPlan =
-                dev.jkbuild.worker.JvmOptions.planAndApply(dev.jkbuild.worker.HeapPlan.requestedJvms(
-                        1, workerCount, false, Runtime.getRuntime().availableProcessors()));
-        if (heapPlan != null && heapPlan.warning() != null && !global.outputIsJson()) {
-            CliOutput.err("jk test: " + heapPlan.warning());
+
+        GoalResult result;
+        JUnitLauncher.Result testResult;
+        if (daemonDisabledForTests()) {
+            // Size the test-runner JVMs' heaps (and cap how many fork at once) to the
+            // host's free memory before launching them.
+            dev.jkbuild.worker.HeapPlan.Plan heapPlan =
+                    dev.jkbuild.worker.JvmOptions.planAndApply(dev.jkbuild.worker.HeapPlan.requestedJvms(
+                            1, workerCount, false, Runtime.getRuntime().availableProcessors()));
+            if (heapPlan != null && heapPlan.warning() != null && !global.outputIsJson()) {
+                CliOutput.err("jk test: " + heapPlan.warning());
+            }
+            // Up-front lexical estimate (Java + Kotlin test sources) so the bar's
+            // denominator is set once; the static plan gates the numerator and
+            // phase-end auto-fill closes any residual gap.
+            int estimatedTestCount = estimateTestCount(dir.resolve("src/test/java"))
+                    + estimateTestCount(dir.resolve("src/test/kotlin"));
+
+            // testOnly → the core pipeline runs through run-tests but never packages.
+            BuildPipeline.Inputs inputs = new BuildPipeline.Inputs(
+                    dir,
+                    cache,
+                    buildFile,
+                    lockFile,
+                    lockFile.getParent(),
+                    workerCount,
+                    estimatedTestCount,
+                    profileName,
+                    jdksDir,
+                    /* skipTests */ false,
+                    global.verbose, /* testOnly */
+                    true);
+            Goal goal = BuildPipeline.coreBuilder(inputs).build();
+
+            // Deferred lookup: goal.get(TEST_RESULT) is empty until the run-tests phase populates it
+            // mid-run, so these lambdas must read it at invocation time (when the console listener's
+            // own goalFinish fires), not eagerly here.
+            ConsoleSpec spec = new ConsoleSpec(
+                    "Test",
+                    r -> testSummary(goal.get(TEST_RESULT).orElse(null), r),
+                    r -> testFailureMessage(goal.get(TEST_RESULT).orElse(null), r));
+            result = GoalConsole.runGoal(
+                    goal, GoalConsole.modeFor(global), cache, spec, BuildCommand.buildTarget(buildFile, dir));
+            testResult = goal.get(TEST_RESULT).orElse(null);
+        } else {
+            // Daemon-hosted (Phase 3): the wire has no real Goal to attach a console listener to
+            // ahead of time, so the listener is chosen once the phase list arrives over the socket —
+            // see DaemonBuildListenerAdapter.runTest. testResultHolder is populated (if the run-tests
+            // phase actually ran) before the terminal goal-finish reaches that listener, exactly
+            // mirroring how goal.get(TEST_RESULT) is already populated by the in-process path above.
+            JUnitLauncher.Result[] testResultHolder = new JUnitLauncher.Result[1];
+            ConsoleSpec spec = new ConsoleSpec(
+                    "Test", r -> testSummary(testResultHolder[0], r), r -> testFailureMessage(testResultHolder[0], r));
+            String module = BuildCommand.buildTarget(buildFile, dir);
+            GoalConsole.Mode mode = GoalConsole.modeFor(global);
+            try {
+                result = dev.jkbuild.cli.daemon.DaemonClient.runTest(
+                        dev.jkbuild.daemon.DaemonPaths.current(),
+                        new dev.jkbuild.cli.daemon.DaemonClient.TestRequest(
+                                dir, cache, jdksDir, workerCount, profileName, global.verbose),
+                        phases -> GoalConsole.chooseConsoleListener(phases, mode, spec, module),
+                        testResultHolder);
+            } catch (IOException e) {
+                CliOutput.err("jk test: " + e.getMessage());
+                return Exit.SOFTWARE;
+            }
+            testResult = testResultHolder[0];
         }
-        // Up-front lexical estimate (Java + Kotlin test sources) so the bar's
-        // denominator is set once; the static plan gates the numerator and
-        // phase-end auto-fill closes any residual gap.
-        int estimatedTestCount =
-                estimateTestCount(dir.resolve("src/test/java")) + estimateTestCount(dir.resolve("src/test/kotlin"));
-
-        // testOnly → the core pipeline runs through run-tests but never packages.
-        BuildPipeline.Inputs inputs = new BuildPipeline.Inputs(
-                dir,
-                cache,
-                buildFile,
-                lockFile,
-                lockFile.getParent(),
-                workerCount,
-                estimatedTestCount,
-                profileName,
-                jdksDir,
-                /* skipTests */ false,
-                global.verbose, /* testOnly */
-                true);
-        Goal goal = BuildPipeline.coreBuilder(inputs).build();
-
-        ConsoleSpec spec = new ConsoleSpec("Test", r -> testSummary(goal, r), r -> testFailureMessage(goal, r));
-        GoalResult result = GoalConsole.runGoal(
-                goal, GoalConsole.modeFor(global), cache, spec, BuildCommand.buildTarget(buildFile, dir));
 
         if (result.success()) return 0;
         // Test failures get exit 4 (PRD §6); compile / launcher errors are exit 1.
-        var testResult = goal.get(TEST_RESULT).orElse(null);
         if (testResult != null && !testResult.allPassed()) return 4;
         return 1;
     }
 
     /**
      * Success result line (sans the leading ✓): {@code Passed N tests in 32s}, or {@code No tests in
-     * <t>} for a project with no test sources.
+     * <t>} for a project with no test sources. Takes the resolved {@link JUnitLauncher.Result}
+     * directly (rather than a {@code Goal} to look it up from) so both the in-process path (which
+     * reads it off {@code goal.get(TEST_RESULT)}) and the daemon-hosted path (which has no real
+     * {@code Goal}, only a wire-populated holder) share this one rendering method.
      */
-    private String testSummary(Goal goal, GoalResult result) {
-        var testResult = goal.get(TEST_RESULT).orElse(null);
+    private static String testSummary(JUnitLauncher.Result testResult, GoalResult result) {
         if (testResult == null || testResult.total() == 0) return "No tests";
         long total = testResult.total();
         String passed = Theme.colorize("Passed", Theme.active().focused());
         return passed + " " + total + " test" + (total == 1 ? "" : "s");
     }
 
-    private static String testFailureMessage(Goal goal, GoalResult result) {
-        var tr = goal.get(TEST_RESULT).orElse(null);
-        return (tr != null && !tr.allPassed()) ? "Tests failed" : "Build failed";
+    private static String testFailureMessage(JUnitLauncher.Result testResult, GoalResult result) {
+        return (testResult != null && !testResult.allPassed()) ? "Tests failed" : "Build failed";
     }
 
     /**

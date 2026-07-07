@@ -34,9 +34,41 @@ public final class Jk {
             Map.entry("verify-build", List.of("verify")), // renamed verb; verify-build kept for back-compat
             Map.entry("check", List.of("compile"))); // renamed verb; check kept for back-compat
 
+    /**
+     * Internal, hidden flag that re-invokes this same binary as the daemon server loop instead of a
+     * normal client command — mirrors how {@code jk cache prune --background} reuses the binary as a
+     * detached one-shot worker. Not registered with picocli; never appears in {@code --help} or shell
+     * completion. See {@code docs/daemon.md}.
+     */
+    private static final String DAEMON_SERVER_FLAG = "--daemon-server";
+
     public static void main(String[] args) {
         dev.jkbuild.cli.tui.GlobalCancel.install();
+        if (args.length > 0 && DAEMON_SERVER_FLAG.equals(args[0])) {
+            System.exit(runDaemonServer());
+            return;
+        }
         System.exit(execute(args));
+    }
+
+    /**
+     * The daemon server's whole life: resolve identity/config from the same env this process
+     * inherited from its spawner, serve until shutdown, then return. All daemon-lifecycle logging
+     * goes to {@code System.err} — the spawner already redirected this process's stdout/stderr to
+     * the daemon's log file, so nothing here writes to a real terminal.
+     */
+    private static int runDaemonServer() {
+        try {
+            dev.jkbuild.daemon.DaemonPaths.Paths paths = dev.jkbuild.daemon.DaemonPaths.current();
+            dev.jkbuild.config.JkDaemonConfig config = dev.jkbuild.config.JkDaemonConfig.resolve();
+            dev.jkbuild.daemon.DaemonServer server =
+                    new dev.jkbuild.daemon.DaemonServer(paths, config, VERSION, System.err::println);
+            server.run();
+            return 0;
+        } catch (java.io.IOException e) {
+            System.err.println("jk daemon: failed to start: " + e.getMessage());
+            return 1;
+        }
     }
 
     /** Run jk with the given argv. The first positional is rewritten if it's a known alias. */

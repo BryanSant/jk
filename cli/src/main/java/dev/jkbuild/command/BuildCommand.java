@@ -216,6 +216,25 @@ public final class BuildCommand implements CliCommand {
         }
     }
 
+    /**
+     * Escape hatch for the fast JVM unit-test suite ONLY: routes a workspace build through {@link
+     * dev.jkbuild.runtime.BuildService#buildWorkspace} in-process instead of the daemon. Set via
+     * {@code -Djk.test.noDaemon=true} by {@code cli/build.gradle.kts}'s {@code test {}} task —
+     * never a user-facing flag, and never read by any production entry point outside this check.
+     *
+     * <p>Why this exists: a Gradle test JVM has no real {@code jk} binary for {@link
+     * dev.jkbuild.cli.daemon.DaemonClient} to exec as a daemon, and the test suite doesn't isolate
+     * {@code ~/.jk/state/daemon/} per test — building that infrastructure (real subprocess spawn,
+     * per-test isolation, cleanup) for a fast unit-test suite is out of scope. The daemon transport
+     * itself is covered separately: {@code DaemonServer}/{@code DaemonClient} unit tests, and manual
+     * verification against the real native binary (see {@code docs/daemon.md}). Every other command
+     * (a real {@code jk build} invocation) always goes through the daemon, per its "no in-process
+     * fallback" design — this bypass is deliberately not reachable any other way.
+     */
+    private static boolean daemonDisabledForTests() {
+        return Boolean.getBoolean("jk.test.noDaemon");
+    }
+
     private static final Object OUT_LOCK = new Object();
 
     /** One unit's build outcome, with its buffered output (flushed together on completion). */
@@ -294,13 +313,15 @@ public final class BuildCommand implements CliCommand {
                 buildOpts.skipTests,
                 global.verbose,
                 noParallel ? 1 : 0, // --no-parallel → strict serial; else auto/unbounded
-                null); // headless: let the engine forecast dirty modules
+                null, // headless: let the engine forecast dirty modules
+                true); // single-process CLI: plan our own worker-JVM memory budget
         Map<Path, List<String>> buffers = new java.util.concurrent.ConcurrentHashMap<>();
         int[] total = {0};
         java.util.concurrent.atomic.AtomicInteger done = new java.util.concurrent.atomic.AtomicInteger();
         long start = System.nanoTime();
-        dev.jkbuild.runtime.BuildService.WorkspaceResult result =
-                dev.jkbuild.runtime.BuildService.buildWorkspace(request, new dev.jkbuild.runtime.WorkspaceBuildListener() {
+        dev.jkbuild.runtime.BuildService.WorkspaceResult result;
+        try {
+            dev.jkbuild.runtime.WorkspaceBuildListener headlessListener = new dev.jkbuild.runtime.WorkspaceBuildListener() {
                     @Override
                     public void onPlan(List<dev.jkbuild.runtime.BuildService.ModulePlan> plan) {
                         total[0] = plan.size();
@@ -342,7 +363,15 @@ public final class BuildCommand implements CliCommand {
                                     completionLine(o.success(), done.incrementAndGet(), total[0], o.coord(), o.millis()));
                         }
                     }
-                });
+            };
+            result = daemonDisabledForTests()
+                    ? dev.jkbuild.runtime.BuildService.buildWorkspace(request, headlessListener)
+                    : dev.jkbuild.cli.daemon.DaemonClient.buildWorkspace(
+                            dev.jkbuild.daemon.DaemonPaths.current(), request, headlessListener);
+        } catch (java.io.IOException e) {
+            CliOutput.err("jk build: " + e.getMessage());
+            return Exit.SOFTWARE;
+        }
         if (!result.errors().isEmpty()) {
             for (String err : result.errors()) CliOutput.err(ConsoleSpec.errorLine("composite", err));
             return Exit.CONFIG;
@@ -388,9 +417,11 @@ public final class BuildCommand implements CliCommand {
                 buildOpts.skipTests,
                 global.verbose,
                 noParallel ? 1 : 0, // --no-parallel → strict serial; else auto/unbounded
-                dirtyDirs); // reuse the forecast the fully-cached shortcut already computed
-        dev.jkbuild.runtime.BuildService.WorkspaceResult result =
-                dev.jkbuild.runtime.BuildService.buildWorkspace(request, new dev.jkbuild.runtime.WorkspaceBuildListener() {
+                dirtyDirs, // reuse the forecast the fully-cached shortcut already computed
+                true); // single-process CLI: plan our own worker-JVM memory budget
+        dev.jkbuild.runtime.BuildService.WorkspaceResult result;
+        try {
+            dev.jkbuild.runtime.WorkspaceBuildListener liveListener = new dev.jkbuild.runtime.WorkspaceBuildListener() {
                     @Override
                     public void onPlan(List<dev.jkbuild.runtime.BuildService.ModulePlan> plan) {
                         total[0] = plan.size();
@@ -437,7 +468,18 @@ public final class BuildCommand implements CliCommand {
                             view.writeAbove(block.toString());
                         }
                     }
-                });
+            };
+            result = daemonDisabledForTests()
+                    ? dev.jkbuild.runtime.BuildService.buildWorkspace(request, liveListener)
+                    : dev.jkbuild.cli.daemon.DaemonClient.buildWorkspace(
+                            dev.jkbuild.daemon.DaemonPaths.current(), request, liveListener);
+        } catch (java.io.IOException e) {
+            view.finishGoalFailure(
+                    dev.jkbuild.cli.tui.GoalWedge.failureLine(
+                            "Build", GlobalConfig.nerdfont(), String.valueOf(e.getMessage())),
+                    List.of());
+            return Exit.SOFTWARE;
+        }
         if (!result.errors().isEmpty()) {
             List<String> above = new ArrayList<>();
             for (String err : result.errors()) above.add(ConsoleSpec.errorLine("composite", err));

@@ -288,7 +288,13 @@ public final class BuildService {
             int maxModuleConcurrency,
             // Pre-computed dirty module dirs, or null to forecast internally. Lets a caller that
             // already forecasted (the CLI's fully-cached "all up to date" shortcut) skip a redundant pass.
-            Set<Path> dirtyHint) {}
+            Set<Path> dirtyHint,
+            // True (the single-CLI-process default): this call sizes and applies its own worker-JVM
+            // memory plan (see the buildWorkspace javadoc). False: the caller already owns memory
+            // planning for the process — e.g. a host serving several concurrent buildWorkspace calls
+            // in one JVM plans once for its own assumed concurrency, and a per-call plan here would
+            // stomp the shared HeapPlan/WorkerSlots state out from under a sibling call in flight.
+            boolean applyMemoryPlan) {}
 
     /**
      * A module's assembled goal + the estimates a caller needs to render/calibrate. The front-end
@@ -360,11 +366,17 @@ public final class BuildService {
             GoalKey.of("test-result", JUnitLauncher.Result.class);
 
     /**
-     * Build a whole workspace: resolve the module graph, size the worker-JVM memory plan, assemble
-     * each module's goal, then schedule them in dependency order (each level concurrent) — running
-     * every module's goal and surfacing artifacts under the workspace {@code target/}. Progress flows
-     * to {@code listener}; the returned {@link WorkspaceResult} is the aggregate outcome. Pure of
+     * Build a whole workspace: resolve the module graph, size the worker-JVM memory plan (unless
+     * {@link WorkspaceRequest#applyMemoryPlan()} is {@code false} — see its javadoc), assemble each
+     * module's goal, then schedule them in dependency order (each level concurrent) — running every
+     * module's goal and surfacing artifacts under the workspace {@code target/}. Progress flows to
+     * {@code listener}; the returned {@link WorkspaceResult} is the aggregate outcome. Pure of
      * presentation — the caller renders from the events.
+     *
+     * <p>This method does not assume it is the only in-flight caller in the process: memory planning
+     * is opt-out precisely so a host running several concurrent builds in one JVM (a resident daemon)
+     * can plan once for its own concurrency instead of letting each call overwrite the shared
+     * {@code HeapPlan}/{@code WorkerSlots} state sized for just itself.
      */
     public static WorkspaceResult buildWorkspace(WorkspaceRequest req, WorkspaceBuildListener listener) {
         BuildGraph.Result graph;
@@ -393,7 +405,9 @@ public final class BuildService {
         // A module-concurrency cap (e.g. --no-parallel → 1) bounds the peak module count for both the
         // memory plan and the ETA below, so serial builds size heaps and estimate time as serial.
         if (req.maxModuleConcurrency() > 0) width = Math.min(width, req.maxModuleConcurrency());
-        JvmOptions.planAndApply(HeapPlan.requestedJvms(width, req.workers() > 0 ? req.workers() : 1, parallelTests, cap));
+        if (req.applyMemoryPlan()) {
+            JvmOptions.planAndApply(HeapPlan.requestedJvms(width, req.workers() > 0 ? req.workers() : 1, parallelTests, cap));
+        }
 
         Set<Path> moduleDirs = new LinkedHashSet<>();
         for (BuildGraph.BuildUnit u : units) moduleDirs.add(u.dir());

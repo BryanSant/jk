@@ -5,6 +5,7 @@ import dev.jkbuild.cli.tui.Glyphs;
 import dev.jkbuild.run.Goal;
 import dev.jkbuild.run.GoalListener;
 import dev.jkbuild.run.GoalResult;
+import dev.jkbuild.run.Phase;
 import dev.jkbuild.util.JkDirs;
 import java.nio.file.Path;
 import java.util.List;
@@ -112,16 +113,23 @@ public final class GoalConsole {
         EventLogListener log = EventLogListener.open(cacheRoot, goal.name());
         if (log != null) goal.addListener(log);
 
-        GoalListener console =
-                switch (mode) {
-                    case JSON -> new NdjsonListener(System.out);
-                    case VERBOSE -> new VerboseListener(System.out, System.err);
-                    case AUTO ->
-                        new CommandManagerListener(System.out, spec, module, goal.phases(), isInteractiveTerminal());
-                    case QUIET -> new CommandManagerListener(System.out, spec, module, goal.phases(), false);
-                };
-        goal.addListener(console);
+        goal.addListener(chooseConsoleListener(goal.phases(), mode, spec, module));
         return goal.run();
+    }
+
+    /**
+     * The listener {@link #runGoal} picks per {@code mode} — split out so a caller that doesn't have
+     * a real {@code Goal} yet (a daemon-hosted test run reconstructing the phase list from wire
+     * events; see {@code DaemonBuildListenerAdapter}) can choose the same listener from just {@code
+     * phases} once it knows them, instead of duplicating this switch.
+     */
+    public static GoalListener chooseConsoleListener(List<Phase> phases, Mode mode, ConsoleSpec spec, String module) {
+        return switch (mode) {
+            case JSON -> new NdjsonListener(System.out);
+            case VERBOSE -> new VerboseListener(System.out, System.err);
+            case AUTO -> new CommandManagerListener(System.out, spec, module, phases, isInteractiveTerminal());
+            case QUIET -> new CommandManagerListener(System.out, spec, module, phases, false);
+        };
     }
 
     /**
