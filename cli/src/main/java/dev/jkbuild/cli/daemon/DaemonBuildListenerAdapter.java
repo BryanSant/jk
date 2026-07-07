@@ -46,14 +46,13 @@ import java.util.Map;
  * the same public builder the engine itself uses — never {@code run()} — purely so {@code .name()}/
  * {@code .phases()} read correctly for the renderers that already only read those two accessors.
  *
- * <p><b>Known Phase 2 gap:</b> {@code BuildCommand}'s {@code onModuleStart} bodies also call {@code
- * m.goal().addListener(EventLogListener.open(...))} to attach jk's durable per-module run log
- * directly onto the live {@code Goal}. That mechanism is in-process only — attaching a listener to
- * this adapter's synthetic (never-{@code run()}) {@code Goal} silently does nothing, since nothing
- * ever drains it. Daemon-hosted builds lose the durable run-log file until the daemon protocol grows
- * a way to carry it (or {@code BuildCommand} opens it some other way when daemon-hosted). This is a
- * real, tracked limitation, not an oversight — it doesn't affect build correctness or console output,
- * only the supplementary "replay this build's log later" diagnostic file.
+ * <p><b>Resolved Phase 2 gap:</b> {@code BuildCommand}'s {@code onModuleStart} bodies used to call
+ * {@code m.goal().addListener(EventLogListener.open(...))} to attach jk's durable per-module run log
+ * directly onto the live {@code Goal} — a no-op against this adapter's synthetic (never-{@code
+ * run()}) {@code Goal}, since nothing ever drains it. Fixed by composing the log listener into the
+ * listener {@code onModuleStart} <em>returns</em> instead ({@code CompositeGoalListener}) — that one
+ * is driven by wire-replayed events in the daemon-hosted case and by {@code Goal.run()} directly in
+ * the in-process case, so it works either way with no protocol changes.
  */
 final class DaemonBuildListenerAdapter {
 
@@ -147,14 +146,141 @@ final class DaemonBuildListenerAdapter {
             writer.write('\n');
             writer.flush();
 
-            return streamTestEvents(reader, listenerFactory, testResultOut);
+            return streamSingleGoalEvents(reader, listenerFactory, testResultOut, null);
         }
     }
 
-    private static GoalResult streamTestEvents(
+    /**
+     * Run a single (non-workspace) project's real build goal against the daemon — the counterpart of
+     * {@code BuildCommand.runForDir}. Same shape as {@link #runTest}, plus {@code buildOutcomeOut}
+     * (populated with {@code BuildPipeline.BUILD_OUTCOME}, if the goal reported one, before the
+     * terminal {@code goal-finish} reaches {@code listenerFactory}'s listener) so the caller's
+     * summary line (e.g. "project up to date" vs "project built") can match the in-process path.
+     */
+    static GoalResult runSingleBuild(
+            DaemonPaths.Paths paths,
+            DaemonClient.SingleBuildRequest req,
+            java.util.function.Function<List<Phase>, GoalListener> listenerFactory,
+            dev.jkbuild.test.JUnitLauncher.Result[] testResultOut,
+            String[] buildOutcomeOut)
+            throws IOException {
+        DaemonClient.ensureRunning(paths, Jk.VERSION);
+
+        try (SocketChannel ch = DaemonClient.connect(paths.socket())) {
+            BufferedWriter writer =
+                    new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
+            BufferedReader reader =
+                    new BufferedReader(new InputStreamReader(Channels.newInputStream(ch), StandardCharsets.UTF_8));
+
+            writer.write(DaemonProtocol.singleBuildRequest(
+                    req.entryDir().toString(),
+                    req.cache().toString(),
+                    req.jdksDir() != null ? req.jdksDir().toString() : null,
+                    req.workers(),
+                    req.profile(),
+                    req.skipTests(),
+                    req.verbose(),
+                    req.offline(),
+                    req.force()));
+            writer.write('\n');
+            writer.flush();
+
+            return streamSingleGoalEvents(reader, listenerFactory, testResultOut, buildOutcomeOut);
+        }
+    }
+
+    /**
+     * Forecast a build against the daemon — the counterpart of {@code ExplainCommand}'s direct {@code
+     * BuildService.explain} call. Synchronous: sends {@link DaemonProtocol#EXPLAIN_REQUEST} and reads
+     * the module/phase/edge burst to completion, reconstructing a real {@link BuildService.ExplainPlan}.
+     * Unlike {@link #buildModulePlan}, no inert-object trickery is needed here — {@link
+     * dev.jkbuild.runtime.BuildPlanForecast.Module}/{@code Phase} are pure public data, just built from
+     * a synthetic (never-executed) {@link BuildGraph.BuildUnit}, exactly as {@link #buildModulePlan}
+     * already does for the same reason ({@code Module.unit()} is package-private and never read here).
+     */
+    static BuildService.ExplainPlan explain(DaemonPaths.Paths paths, Path entryDir, Path cache) throws IOException {
+        DaemonClient.ensureRunning(paths, Jk.VERSION);
+
+        try (SocketChannel ch = DaemonClient.connect(paths.socket())) {
+            BufferedWriter writer =
+                    new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
+            BufferedReader reader =
+                    new BufferedReader(new InputStreamReader(Channels.newInputStream(ch), StandardCharsets.UTF_8));
+
+            writer.write(DaemonProtocol.explainRequest(entryDir.toString(), cache.toString()));
+            writer.write('\n');
+            writer.flush();
+
+            List<dev.jkbuild.runtime.BuildPlanForecast.Module> modules = new ArrayList<>();
+            Map<String, List<dev.jkbuild.runtime.BuildPlanForecast.Phase>> phasesByDir = new LinkedHashMap<>();
+            Map<String, String> coordByDir = new LinkedHashMap<>();
+            Map<String, int[]> countsByDir = new LinkedHashMap<>(); // [sourceCount, testCount]
+            Map<String, boolean[]> flagsByDir = new LinkedHashMap<>(); // [producesJar, producesImage]
+            List<String> order = new ArrayList<>();
+            Map<Path, java.util.Set<Path>> edges = new LinkedHashMap<>();
+            List<String> errors = new ArrayList<>();
+
+            String line;
+            while ((line = reader.readLine()) != null) {
+                String type = DaemonProtocol.typeOf(line);
+                if (type == null) continue;
+                switch (type) {
+                    case DaemonProtocol.EXPLAIN_MODULE -> {
+                        String dir = Ndjson.str(line, "dir");
+                        order.add(dir);
+                        coordByDir.put(dir, Ndjson.str(line, "coord"));
+                        countsByDir.put(dir, new int[] {
+                            Ndjson.intValue(line, "sourceCount", 0), Ndjson.intValue(line, "testCount", 0)
+                        });
+                        flagsByDir.put(dir, new boolean[] {
+                            Ndjson.bool(line, "producesJar", false), Ndjson.bool(line, "producesImage", false)
+                        });
+                        phasesByDir.put(dir, new ArrayList<>());
+                    }
+                    case DaemonProtocol.EXPLAIN_PHASE -> {
+                        String dir = Ndjson.str(line, "dir");
+                        phasesByDir
+                                .get(dir)
+                                .add(new dev.jkbuild.runtime.BuildPlanForecast.Phase(
+                                        Ndjson.str(line, "name"),
+                                        dev.jkbuild.runtime.BuildPlanForecast.Status.valueOf(
+                                                Ndjson.str(line, "status")),
+                                        Ndjson.str(line, "text"),
+                                        Ndjson.str(line, "key")));
+                    }
+                    case DaemonProtocol.EXPLAIN_EDGE -> {
+                        Path dir = Path.of(Ndjson.str(line, "dir"));
+                        Path dependsOn = Path.of(Ndjson.str(line, "dependsOnDir"));
+                        edges.computeIfAbsent(dir, d -> new java.util.LinkedHashSet<>()).add(dependsOn);
+                    }
+                    case DaemonProtocol.EXPLAIN_ERROR -> errors.add(Ndjson.str(line, "message"));
+                    case DaemonProtocol.EXPLAIN_DONE -> {
+                        for (String dir : order) {
+                            int[] counts = countsByDir.get(dir);
+                            boolean[] flags = flagsByDir.get(dir);
+                            BuildGraph.BuildUnit unit =
+                                    new BuildGraph.BuildUnit(Path.of(dir), null, coordByDir.get(dir), BuildGraph.Origin.MODULE);
+                            modules.add(new dev.jkbuild.runtime.BuildPlanForecast.Module(
+                                    unit, phasesByDir.get(dir), counts[0], counts[1], flags[0], flags[1]));
+                        }
+                        return new BuildService.ExplainPlan(
+                                modules, edges, Ndjson.intValue(line, "maxReadyWidth", 1), errors);
+                    }
+                    default -> {
+                        /* forward-compatible no-op */
+                    }
+                }
+            }
+            throw new IOException("jk daemon: the build daemon disconnected unexpectedly before finishing "
+                    + "(it may have crashed); run `jk daemon status` for details");
+        }
+    }
+
+    private static GoalResult streamSingleGoalEvents(
             BufferedReader reader,
             java.util.function.Function<List<Phase>, GoalListener> listenerFactory,
-            dev.jkbuild.test.JUnitLauncher.Result[] testResultOut)
+            dev.jkbuild.test.JUnitLauncher.Result[] testResultOut,
+            String[] buildOutcomeOut)
             throws IOException {
         List<Phase> phases = new ArrayList<>();
         List<GoalResult.Diagnostic> diagnostics = new ArrayList<>();
@@ -205,13 +331,16 @@ final class DaemonBuildListenerAdapter {
                                 Ndjson.longValue(line, "testSkipped", 0),
                                 List.of());
                     }
+                    if (buildOutcomeOut != null) {
+                        buildOutcomeOut[0] = Ndjson.str(line, "buildOutcome");
+                    }
                     GoalResult result = new GoalResult(
                             "test", success, Duration.ZERO, List.of(), List.of(), diagnostics, false, false);
                     listener.goalFinish(result);
                     return result;
                 }
                 case DaemonProtocol.BUILD_ERROR -> throw new IOException(
-                        "jk daemon: test run failed: " + Ndjson.str(line, "message"));
+                        "jk daemon: run failed: " + Ndjson.str(line, "message"));
                 default -> {
                     /* forward-compatible no-op */
                 }

@@ -100,11 +100,20 @@ different `JK_HOME`/`JK_STATE_DIR` values naturally get independent daemons:
 
 ```
 ~/.jk/state/daemon/
-├── <key>.sock   # Unix domain socket the daemon listens on
+├── <key>.sock   # Unix domain socket the daemon listens on (or a loopback port number on Windows)
+├── <key>.token  # Windows only: the shared secret every connection must send first
 ├── <key>.lock   # advisory lock proving single-instance ownership
 ├── <key>.pid    # PID + start time, for `jk daemon status` display only
-└── <key>.log    # the daemon's own stdout/stderr — check here if lazy-start fails
+├── <key>.log    # the daemon's own stdout/stderr — check here if lazy-start fails
+└── <key>.log.1  # the previous daemon's log, kept one generation deep (see below)
 ```
+
+Each fresh daemon start rotates any existing `<key>.log` to `<key>.log.1` before truncating a new
+`<key>.log` — not truncate-in-place. Without this, a daemon that crashed would have its own log
+destroyed the moment the next command lazily respawns a replacement (which happens automatically,
+often before anyone's looked at it) — exactly the file `jk daemon status`/the lazy-start error
+message point you at for post-mortem. One historical generation is enough for that purpose; this
+isn't a general log archive.
 
 The `.lock` file is the actual source of truth for "is a daemon running here": it's held for the
 whole life of the daemon process and released automatically by the OS the instant that process
@@ -120,8 +129,15 @@ same engine is expected to eventually back a web backend, IDE plugin, or MCP ser
 a stable, versioned protocol is deferred until one of those actually needs to talk to a daemon it
 didn't just spawn itself.)
 
-- **Transport**: a Unix domain socket (plain JDK NIO, no third-party dependency). Windows needs its
-  own transport story later (named pipes, or a loopback-TCP fallback) — not designed yet.
+- **Transport**: a Unix domain socket (plain JDK NIO, no third-party dependency) on macOS/Linux — the
+  platform this whole design was built and verified against. On Windows, where JDK NIO's UDS support
+  is newer and less consistently available across JDK/OS version combinations, `DaemonTransport`
+  switches to a loopback TCP port instead, picked by the OS at bind time (`:0`) and recorded (instead
+  of a socket path) in the `.sock` file. Because a TCP port isn't filesystem-permission-gated the way
+  a socket file is, every connection on this path must send a per-daemon shared secret (`.token`,
+  written alongside `.sock`) as its very first line, before anything else is processed — connections
+  that don't are closed without a reply. `DaemonServer`/`DaemonClient`'s request-handling code is
+  otherwise transport-agnostic; it only ever deals with an already-connected `SocketChannel`.
 - **Framing**: newline-delimited JSON, one message per line — the same style `jk`'s existing
   worker-process protocol already uses for compiler/test/git workers, rather than a new
   length-prefixed scheme. Every dynamic string (a path, an error message, a line of build output)
@@ -148,8 +164,12 @@ didn't just spawn itself.)
 
 ## What runs where
 
-**In the daemon:** `jk build` (`BuildService.buildWorkspace`, every module in a workspace) and `jk
-test` (a single project's compile+test goal) — dependency resolution, the build pipeline and
+**In the daemon:** `jk build` (`BuildService.buildWorkspace` for a workspace, plus a dedicated
+single-goal path for a single project with no `[workspace]` table — both fork worker JVMs the same
+way, so both needed to move for the OOM fix to actually close), `jk test` (a single project's
+compile+test goal), and `jk explain` (`BuildService.explain`, a synchronous read with no worker JVM
+forked — hosted mainly for consistency: the daemon is the one process that always has a live,
+correctly-resolved build graph and caches open) — dependency resolution, the build pipeline and
 scheduler, worker-JVM orchestration and the shared memory/heap-slot accounting that this whole
 effort exists to fix, and the on-disk build/action caches.
 
@@ -159,22 +179,10 @@ at), shell completion generation — and, deliberately, all of `jk jdk install` 
 non-interactive core, not just the install wizard). A JDK install can't cause the kind of memory
 contention the daemon exists to prevent, installs are already safe to run concurrently without any
 coordination, and a machine that has never even built anything shouldn't need a daemon just to
-install a JDK.
-
-**Not yet daemon-hosted** (still runs in-process, unaffected by the daemon):
-- `jk explain` — a read-only dry-run forecast. It never forks a worker JVM, so it doesn't contribute
-  to the memory contention the daemon exists to fix; hosting it would also require extending the
-  engine to cover its client-side ETA computation, which today reaches into `BuildPipeline`/
-  `EffortWeights`/`Calibration` directly from the CLI (a known, pre-existing gap, not a new one).
-  Revisit only if `explain`'s own cost becomes a real concern.
-- Single-project `jk build` (a project with no `[workspace]` table) — only *workspace* builds are
-  daemon-hosted so far. A single-project build forks worker JVMs the same way a workspace module
-  does, so this is a real, tracked gap toward the OOM fix, not a deliberate scope boundary the way
-  `explain` is — closing it needs extracting a clean engine-level facade from `BuildCommand`'s
-  single-module path (`runForDir`/`prepareModule`/`runPrepared`), which today is tightly interleaved
-  with CLI-only concerns (the TUI single-module bypass, workspace-relative calibration) in a way
-  `buildWorkspace` and the test goal weren't. Until this lands, running several single-project builds
-  concurrently in different terminals is still exposed to the original OOM bug.
+install a JDK. `jk explain`'s ETA computation also stays client-side — it reaches into
+`BuildPipeline`/`EffortWeights`/`Calibration` directly from the CLI (a known, pre-existing gap, not
+a new one); only the plan itself (`BuildService.explain`'s module/phase/edge forecast) is
+daemon-hosted.
 
 ## Version skew
 
@@ -235,9 +243,24 @@ real native-image binary:
    pass/fail counts on the terminal `goal-finish` event. Verified: passing tests, a failing test
    (correct exit code 4, full failure detail rendered), and two concurrent `jk test` runs sharing one
    daemon.
-5. **Explicitly deferred, not scheduled:**
-   - `jk explain` and single-project `jk build` daemon-hosting — see
-     [What runs where](#what-runs-where) for why these are open gaps rather than finished work.
+5. **Single-project `jk build` (done).** Closed the gap where only *workspace* builds were
+   daemon-hosted: a single project with no `[workspace]` table now runs its real (non-test-only)
+   build goal through the same single-goal wire vocabulary as `jk test`, on the daemon. The build
+   outcome summary line (e.g. "project up to date" vs. "project built") carries over the wire on the
+   terminal `goal-finish` event so the CLI's post-build message matches the in-process path exactly.
+6. **`jk explain` (done).** `BuildService.explain`'s module/phase/edge forecast streams over the wire
+   as a burst of messages (one per module, one per phase, one per dependency edge), reconstructed
+   client-side into a real `BuildService.ExplainPlan` — no in-process fallback for the plan itself,
+   though the ETA estimate built on top of it stays client-side (see
+   [What runs where](#what-runs-where)).
+7. **Windows transport (done).** `DaemonTransport` switches to a loopback TCP port plus a
+   shared-secret token (see [Wire protocol](#wire-protocol)) when `os.name` says Windows, instead of
+   the Unix domain socket every other platform uses — `DaemonServer`/`DaemonClient`'s request
+   handling is unchanged either way, since both only ever see an already-connected `SocketChannel`.
+   Verified by forcing `os.name` in the JVM test suite (no real Windows host available in this
+   environment) — a real Windows machine has not exercised this path. Treat it as implemented but
+   not field-verified until one does.
+8. **Explicitly deferred, not scheduled:**
    - More precise (rather than coarse) memory accounting across concurrent requests — the current
      daemon sizes one shared budget for the host's core count at startup, not a live demand-registry
      that grows/shrinks per in-flight request. Revisit only once real usage shows the coarse sizing

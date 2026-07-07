@@ -150,6 +150,42 @@ public final class DaemonClient {
         return DaemonBuildListenerAdapter.runTest(paths, req, listenerFactory, testResultOut);
     }
 
+    /** Everything a daemon-hosted single-project {@code jk build} needs — mirrors {@code BuildCommand}'s local fields. */
+    public record SingleBuildRequest(
+            Path entryDir,
+            Path cache,
+            Path jdksDir,
+            int workers,
+            String profile,
+            boolean skipTests,
+            boolean verbose,
+            boolean offline,
+            boolean force) {}
+
+    /**
+     * Run a single (non-workspace) project's build against the daemon — the daemon equivalent of
+     * {@code BuildCommand.runForDir}'s {@code agg == null} branch — see {@link
+     * DaemonBuildListenerAdapter#runSingleBuild} for the exact contract.
+     */
+    public static dev.jkbuild.run.GoalResult runSingleBuild(
+            DaemonPaths.Paths paths,
+            SingleBuildRequest req,
+            java.util.function.Function<List<dev.jkbuild.run.Phase>, dev.jkbuild.run.GoalListener> listenerFactory,
+            dev.jkbuild.test.JUnitLauncher.Result[] testResultOut,
+            String[] buildOutcomeOut)
+            throws IOException {
+        return DaemonBuildListenerAdapter.runSingleBuild(paths, req, listenerFactory, testResultOut, buildOutcomeOut);
+    }
+
+    /**
+     * Forecast a build against the daemon ({@code jk explain}) — see {@link
+     * DaemonBuildListenerAdapter#explain} for the exact contract.
+     */
+    public static BuildService.ExplainPlan explain(DaemonPaths.Paths paths, Path entryDir, Path cache)
+            throws IOException {
+        return DaemonBuildListenerAdapter.explain(paths, entryDir, cache);
+    }
+
     static Handshake ensureRunning(DaemonPaths.Paths paths, String clientVersion, Duration startTimeout)
             throws IOException {
         Optional<Handshake> existing = handshake(paths.socket(), clientVersion);
@@ -179,18 +215,39 @@ public final class DaemonClient {
         String jkExe = CachePruneScheduler.resolveJkExe()
                 .orElseThrow(() -> new IOException("could not resolve the running jk binary's path"));
         Files.createDirectories(paths.dir());
+        rotateLog(paths.log());
         List<String> command = new ArrayList<>();
         command.add(jkExe);
         command.add("--daemon-server");
         ProcessBuilder pb = new ProcessBuilder(command);
         // Merge stderr into stdout inside the child (one fd, no interleaving risk from two
-        // independently-opened streams onto the same file), then route that to the log — truncated
-        // on each fresh start, per docs/daemon.md.
+        // independently-opened streams onto the same file), then route that to the log — a fresh
+        // file every start, per docs/daemon.md.
         pb.redirectErrorStream(true);
         pb.redirectOutput(ProcessBuilder.Redirect.to(paths.log().toFile()));
         pb.redirectInput(ProcessBuilder.Redirect.PIPE);
         Process p = pb.start();
         p.getOutputStream().close(); // EOF immediately; the daemon doesn't read stdin
+    }
+
+    /**
+     * Keep exactly one historical log ({@code <key>.log} → {@code <key>.log.1}) before each fresh
+     * daemon start truncates {@code <key>.log}. Without this, a crash followed by the next lazy
+     * respawn (which happens automatically, often before anyone looks) would silently destroy the
+     * crashed daemon's own log — the one file {@link #ensureRunning}'s error message and {@code jk
+     * daemon status} both point at for post-mortem. Best-effort: a failure here (e.g. permissions)
+     * never blocks starting the daemon.
+     */
+    private static void rotateLog(Path log) {
+        if (!Files.exists(log)) return;
+        try {
+            Files.move(
+                    log,
+                    log.resolveSibling(log.getFileName() + ".1"),
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        } catch (IOException ignored) {
+            // Best-effort — the next start still truncates/overwrites `log` either way.
+        }
     }
 
     private static Optional<Handshake> awaitStartup(DaemonPaths.Paths paths, String clientVersion, Duration timeout) {
@@ -211,8 +268,27 @@ public final class DaemonClient {
         }
     }
 
-    /** Package-visible: {@link DaemonBuildListenerAdapter} opens its own long-lived connection. */
+    /**
+     * Package-visible: {@link DaemonBuildListenerAdapter} opens its own long-lived connection. On
+     * the loopback-TCP transport (Windows — see {@link dev.jkbuild.daemon.DaemonTransport}), {@code
+     * socket} holds the port number (not a real socket path) and this also sends the required
+     * {@link DaemonProtocol#AUTH} line before returning, so every caller authenticates transparently
+     * without needing its own knowledge of the transport.
+     */
     static SocketChannel connect(Path socket) throws IOException {
+        if (dev.jkbuild.daemon.DaemonTransport.useLoopbackTcp()) {
+            int port = Integer.parseInt(Files.readString(socket).trim());
+            String token =
+                    Files.readString(dev.jkbuild.daemon.DaemonPaths.tokenFor(socket)).trim();
+            SocketChannel ch = SocketChannel.open(
+                    new java.net.InetSocketAddress(java.net.InetAddress.getLoopbackAddress(), port));
+            BufferedWriter authWriter =
+                    new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
+            authWriter.write(DaemonProtocol.auth(token));
+            authWriter.write('\n');
+            authWriter.flush();
+            return ch;
+        }
         SocketChannel ch = SocketChannel.open(StandardProtocolFamily.UNIX);
         ch.connect(UnixDomainSocketAddress.of(socket));
         return ch;

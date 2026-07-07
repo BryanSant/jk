@@ -329,28 +329,32 @@ public final class BuildCommand implements CliCommand {
 
                     @Override
                     public dev.jkbuild.run.GoalListener onModuleStart(dev.jkbuild.runtime.BuildService.ModulePlan m) {
-                        // Durable run log, same as the old buffered path.
+                        // Durable run log, same as the old buffered path. Composed into the *returned*
+                        // listener (not attached to m.goal() directly) since a daemon-hosted module's
+                        // goal is a client-side reconstruction that's never run() — only the returned
+                        // listener is actually driven by wire-replayed events either way.
                         var log = dev.jkbuild.cli.run.EventLogListener.open(
                                 m.cache(), m.goal().name());
-                        if (log != null) m.goal().addListener(log);
                         List<String> buf = java.util.Collections.synchronizedList(new ArrayList<>());
                         buffers.put(m.dir(), buf);
-                        return new dev.jkbuild.run.GoalListener() {
-                            @Override
-                            public synchronized void output(String phase, String line) {
-                                buf.add(line);
-                            }
+                        return dev.jkbuild.cli.run.CompositeGoalListener.of(
+                                new dev.jkbuild.run.GoalListener() {
+                                    @Override
+                                    public synchronized void output(String phase, String line) {
+                                        buf.add(line);
+                                    }
 
-                            @Override
-                            public synchronized void warn(String phase, String code, String message) {
-                                buf.add("  " + Glyphs.BANG + " " + phase + ": " + message);
-                            }
+                                    @Override
+                                    public synchronized void warn(String phase, String code, String message) {
+                                        buf.add("  " + Glyphs.BANG + " " + phase + ": " + message);
+                                    }
 
-                            @Override
-                            public synchronized void error(String phase, String code, String message) {
-                                buf.add("  " + Glyphs.CROSS + " " + phase + ": " + message);
-                            }
-                        };
+                                    @Override
+                                    public synchronized void error(String phase, String code, String message) {
+                                        buf.add("  " + Glyphs.CROSS + " " + phase + ": " + message);
+                                    }
+                                },
+                                log);
                     }
 
                     @Override
@@ -437,8 +441,9 @@ public final class BuildCommand implements CliCommand {
 
                     @Override
                     public dev.jkbuild.run.GoalListener onModuleStart(dev.jkbuild.runtime.BuildService.ModulePlan m) {
+                        // Composed into the returned listener, not attached to m.goal() directly — see
+                        // the headless path's onModuleStart above for why.
                         var log = dev.jkbuild.cli.run.EventLogListener.open(m.cache(), m.goal().name());
-                        if (log != null) m.goal().addListener(log);
                         List<String> buf = java.util.Collections.synchronizedList(new ArrayList<>());
                         buffers.put(m.dir(), buf);
                         // The module's goal feeds the shared aggregate bar; its output buffers for
@@ -446,7 +451,7 @@ public final class BuildCommand implements CliCommand {
                         var lis = new dev.jkbuild.cli.run.AggregateModuleListener(
                                 agg, m.coord(), m.goal().phases(), m.weight());
                         lis.bufferOutputInto(buf);
-                        return lis;
+                        return dev.jkbuild.cli.run.CompositeGoalListener.of(lis, log);
                     }
 
                     @Override
@@ -474,19 +479,16 @@ public final class BuildCommand implements CliCommand {
                     : dev.jkbuild.cli.daemon.DaemonClient.buildWorkspace(
                             dev.jkbuild.daemon.DaemonPaths.current(), request, liveListener);
         } catch (java.io.IOException e) {
-            view.finishGoalFailure(
-                    dev.jkbuild.cli.tui.GoalWedge.failureLine(
-                            "Build", GlobalConfig.nerdfont(), String.valueOf(e.getMessage())),
-                    List.of());
+            // finishGoalFailure's own `tail` already gets wrapped in GoalWedge.failureLine(goalName(),
+            // nerdfont, tail) internally — pass the plain message, not a pre-rendered failure line
+            // (passing one double-wraps it into a garbled "‼ Build ‼ Build ..." chip).
+            view.finishGoalFailure(String.valueOf(e.getMessage()), List.of());
             return Exit.SOFTWARE;
         }
         if (!result.errors().isEmpty()) {
             List<String> above = new ArrayList<>();
             for (String err : result.errors()) above.add(ConsoleSpec.errorLine("composite", err));
-            view.finishGoalFailure(
-                    dev.jkbuild.cli.tui.GoalWedge.failureLine(
-                            "Build", GlobalConfig.nerdfont(), "dependency resolution failed"),
-                    above);
+            view.finishGoalFailure("dependency resolution failed", above);
             return Exit.CONFIG;
         }
         if (!result.success()) {
@@ -655,39 +657,91 @@ public final class BuildCommand implements CliCommand {
             return 0;
         }
         GoalResult result;
+        JUnitLauncher.Result testResult;
+        // Daemon-hosted (a real single-project jk build always is, outside the test-only bypass):
+        // the daemon runs the goal and, on success, does the calibration-refine + cache-prune
+        // itself (it's the process that actually measured the work) — see the `if (result.success())`
+        // block below, which only repeats that logic for the two in-process branches.
+        boolean daemonHosted = agg == null && !daemonDisabledForTests();
         if (agg != null) {
             // Workspace module: feed the one shared aggregate view, scaling this
             // module's progress into its reserved slice of the calibrated total.
             result = GoalConsole.runGoalInto(goal, pm.cache(), pm.target(), agg, pm.barWeight());
-        } else {
+            testResult = goal.get(TEST_RESULT).orElse(null);
+        } else if (!daemonHosted) {
             // chip = true → settle through the goal chip (" ✓ Build ▶ Build successful …"),
             // matching the workspace path. onSuccess/onFailure return the tail after the verb.
             ConsoleSpec spec =
                     new ConsoleSpec("Build", r -> projectTail(goal), r -> GoalWedge.coord(pm.target()), true);
             result = GoalConsole.runGoal(goal, GoalConsole.modeFor(global), pm.cache(), spec, pm.target());
+            testResult = goal.get(TEST_RESULT).orElse(null);
+        } else {
+            // The wire has no real Goal to read BUILD_OUTCOME/LAYOUT from ahead of time (they arrive
+            // on the terminal goal-finish event), so projectTail's ingredients are supplied two ways:
+            // BUILD_OUTCOME rides the wire (only the daemon, which actually ran the goal, knows it);
+            // LAYOUT is reconstructed independently — it's a pure derivation from dir + the parsed
+            // jk.toml, both of which the client already has, and the artifact file it points at lives
+            // on the same local filesystem the daemon just built into.
+            JUnitLauncher.Result[] testResultHolder = new JUnitLauncher.Result[1];
+            String[] buildOutcomeHolder = new String[1];
+            BuildLayout layout;
+            try {
+                layout = BuildLayout.of(pm.dir(), JkBuildParser.parse(pm.dir().resolve("jk.toml")));
+            } catch (RuntimeException | java.io.IOException e) {
+                layout = null; // best-effort — projectTail degrades to a plain "project built"
+            }
+            BuildLayout finalLayout = layout;
+            ConsoleSpec spec = new ConsoleSpec(
+                    "Build",
+                    r -> projectTail(buildOutcomeHolder[0], finalLayout),
+                    r -> GoalWedge.coord(pm.target()),
+                    true);
+            GoalConsole.Mode mode = GoalConsole.modeFor(global);
+            try {
+                result = dev.jkbuild.cli.daemon.DaemonClient.runSingleBuild(
+                        dev.jkbuild.daemon.DaemonPaths.current(),
+                        new dev.jkbuild.cli.daemon.DaemonClient.SingleBuildRequest(
+                                pm.dir(),
+                                pm.cache(),
+                                jdksDir,
+                                workers != null ? workers : 1,
+                                profileName,
+                                buildOpts.skipTests,
+                                global.verbose,
+                                dev.jkbuild.config.SessionContext.current().offline(),
+                                dev.jkbuild.config.SessionContext.current().force()),
+                        phases -> GoalConsole.chooseConsoleListener(phases, mode, spec, pm.target()),
+                        testResultHolder,
+                        buildOutcomeHolder);
+            } catch (java.io.IOException e) {
+                CliOutput.err("jk build: " + e.getMessage());
+                return Exit.SOFTWARE;
+            }
+            testResult = testResultHolder[0];
         }
 
         if (result.success()) {
-            // Single-module (standalone) build: fold this run's measured throughput into the host
-            // calibration so the cold estimate self-heals — the common case never hits the workspace
-            // loops that do this. Skip fully-cached runs (near-zero time, not representative of work);
-            // workspace paths (agg != null) refine themselves.
-            if (agg == null && !pm.fullyCached() && pm.barWeight() > 0) {
-                long moduleMs = (System.nanoTime() - startNanos) / 1_000_000;
-                if (moduleMs > 0) {
-                    dev.jkbuild.runtime.Calibration.refine(
-                            moduleMs / (double) pm.barWeight(), System.currentTimeMillis());
+            if (!daemonHosted) {
+                // Single-module (standalone) build: fold this run's measured throughput into the host
+                // calibration so the cold estimate self-heals — the common case never hits the
+                // workspace loops that do this. Skip fully-cached runs (near-zero time, not
+                // representative of work); workspace paths (agg != null) refine themselves.
+                if (agg == null && !pm.fullyCached() && pm.barWeight() > 0) {
+                    long moduleMs = (System.nanoTime() - startNanos) / 1_000_000;
+                    if (moduleMs > 0) {
+                        dev.jkbuild.runtime.Calibration.refine(
+                                moduleMs / (double) pm.barWeight(), System.currentTimeMillis());
+                    }
                 }
+                // Cache settings are user-global only; resolve() reads ~/.jk/config.toml
+                // (a project jk.toml's [cache] is intentionally ignored).
+                var cacheConfig = dev.jkbuild.config.JkCacheConfig.resolve();
+                dev.jkbuild.task.CachePruneScheduler.resolveJkExe()
+                        .ifPresent(exe -> dev.jkbuild.task.CachePruneScheduler.maybeRun(cacheConfig, pm.cache(), exe));
             }
-            // Cache settings are user-global only; resolve() reads ~/.jk/config.toml
-            // (a project jk.toml's [cache] is intentionally ignored).
-            var cacheConfig = dev.jkbuild.config.JkCacheConfig.resolve();
-            dev.jkbuild.task.CachePruneScheduler.resolveJkExe()
-                    .ifPresent(exe -> dev.jkbuild.task.CachePruneScheduler.maybeRun(cacheConfig, pm.cache(), exe));
             return 0;
         }
         // Test failures get exit 4; other failures exit 1.
-        var testResult = goal.get(TEST_RESULT).orElse(null);
         if (testResult != null && !testResult.allPassed()) return 4;
         return 1;
     }
@@ -748,10 +802,20 @@ public final class BuildCommand implements CliCommand {
      * duration — the framework appends it.
      */
     static String projectTail(Goal goal) {
-        if ("up-to-date".equals(goal.get(BUILD_OUTCOME).orElse(""))) {
+        return projectTail(goal.get(BUILD_OUTCOME).orElse(""), goal.get(LAYOUT).orElse(null));
+    }
+
+    /**
+     * As {@link #projectTail(Goal)}, but from already-resolved values instead of a live {@code Goal}
+     * — for a daemon-hosted build, where there's no local {@code Goal} to read {@code BUILD_OUTCOME}/
+     * {@code LAYOUT} off of (they arrive over the wire / get reconstructed independently instead; see
+     * {@code DaemonClient.runSingleBuild}).
+     */
+    static String projectTail(String buildOutcome, BuildLayout layout) {
+        if ("up-to-date".equals(buildOutcome)) {
             return buildOk() + ", project up to date";
         }
-        String art = builtArtifact(goal);
+        String art = builtArtifact(layout);
         return buildOk() + (art.isEmpty() ? ", project built" : art);
     }
 
@@ -761,7 +825,11 @@ public final class BuildCommand implements CliCommand {
      * none exists. Shared with {@code jk native}.
      */
     static String builtArtifact(Goal goal) {
-        BuildLayout layout = goal.get(LAYOUT).orElse(null);
+        return builtArtifact(goal.get(LAYOUT).orElse(null));
+    }
+
+    /** As {@link #builtArtifact(Goal)}, from an already-resolved {@link BuildLayout} (or {@code null}). */
+    static String builtArtifact(BuildLayout layout) {
         if (layout == null) return "";
         Path art = firstExisting(layout.nativeBinary(), layout.nativeLibrary(), layout.shadowJar(), layout.mainJar());
         return art == null

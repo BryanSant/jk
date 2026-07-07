@@ -81,6 +81,9 @@ public final class DaemonServer implements AutoCloseable {
     private ExecutorService connectionExecutor;
     private ScheduledExecutorService idleTicker;
 
+    /** Non-null only on the loopback-TCP transport (Windows) — see {@link DaemonTransport}. */
+    private String expectedToken;
+
     public DaemonServer(DaemonPaths.Paths paths, JkDaemonConfig config, String version, Consumer<String> log) {
         this(paths, config, version, log, DEFAULT_TICK_MILLIS, System::currentTimeMillis);
     }
@@ -128,9 +131,22 @@ public final class DaemonServer implements AutoCloseable {
         // use" even though nothing is listening — safe to remove now: winning the lock proves no live
         // daemon owns it.
         Files.deleteIfExists(paths.socket());
+        Files.deleteIfExists(paths.token());
 
-        serverChannel = ServerSocketChannel.open(StandardProtocolFamily.UNIX);
-        serverChannel.bind(UnixDomainSocketAddress.of(paths.socket()));
+        if (DaemonTransport.useLoopbackTcp()) {
+            // Windows: no dependable Unix-domain-socket support — bind an ephemeral loopback TCP
+            // port instead, and gate every connection on a shared secret (see DaemonTransport),
+            // since a TCP port (unlike a socket file) isn't filesystem-permission-gated by default.
+            serverChannel = ServerSocketChannel.open();
+            serverChannel.bind(new java.net.InetSocketAddress(java.net.InetAddress.getLoopbackAddress(), 0));
+            int port = ((java.net.InetSocketAddress) serverChannel.getLocalAddress()).getPort();
+            expectedToken = DaemonTransport.newToken();
+            Files.writeString(paths.token(), expectedToken);
+            Files.writeString(paths.socket(), Integer.toString(port));
+        } else {
+            serverChannel = ServerSocketChannel.open(StandardProtocolFamily.UNIX);
+            serverChannel.bind(UnixDomainSocketAddress.of(paths.socket()));
+        }
         writePidFile();
 
         connectionExecutor = Executors.newThreadPerTaskExecutor(
@@ -170,12 +186,23 @@ public final class DaemonServer implements AutoCloseable {
         }
     }
 
+    /** Loopback-TCP transport only: the connection's first line must be a matching {@link DaemonProtocol#AUTH}. */
+    private boolean authenticate(BufferedReader reader) throws IOException {
+        String line = reader.readLine();
+        return line != null
+                && DaemonProtocol.AUTH.equals(DaemonProtocol.typeOf(line))
+                && expectedToken.equals(Ndjson.str(line, "token"));
+    }
+
     private void handleConnection(SocketChannel ch) {
         try (ch;
                 BufferedReader reader =
                         new BufferedReader(new InputStreamReader(Channels.newInputStream(ch), StandardCharsets.UTF_8));
                 BufferedWriter writer =
                         new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8))) {
+            if (expectedToken != null && !authenticate(reader)) {
+                return; // loopback-TCP transport only: wrong/missing token — close without a reply
+            }
             String line;
             while ((line = reader.readLine()) != null) {
                 String type = DaemonProtocol.typeOf(line);
@@ -206,6 +233,15 @@ public final class DaemonServer implements AutoCloseable {
                         handleTestRequest(line, reader, writer);
                         return;
                     }
+                    case DaemonProtocol.SINGLE_BUILD_REQUEST -> {
+                        // Same shape as TEST_REQUEST but a real (non-testOnly) build goal.
+                        handleSingleBuildRequest(line, reader, writer);
+                        return;
+                    }
+                    case DaemonProtocol.EXPLAIN_REQUEST -> {
+                        // Synchronous read, no worker JVM forked — handled inline, connection continues.
+                        handleExplainRequest(line, writer);
+                    }
                     default -> {
                         /* unknown type — forward-compatible no-op */
                     }
@@ -225,30 +261,48 @@ public final class DaemonServer implements AutoCloseable {
      * build finishes and its terminal message has been sent, or the connection drops.
      */
     private void handleBuildRequest(String requestLine, BufferedReader reader, BufferedWriter writer) {
+        handleAsyncGoalRequest(requestLine, reader, writer, "jk-daemon-build-", this::runBuild);
+    }
+
+    /** A daemon-hosted operation's body: decode the request, run it, stream events to {@code writer}. */
+    @FunctionalInterface
+    private interface GoalRunner {
+        void run(String requestLine, Session.CancelToken cancelToken, BufferedWriter writer);
+    }
+
+    /**
+     * Fork {@code runner} onto its own thread (so this method can keep reading the connection for a
+     * {@link DaemonProtocol#BUILD_CANCEL} or EOF meanwhile) and wait for it to finish. Shared by every
+     * request type that owns the rest of its connection's lifecycle ({@link #handleBuildRequest},
+     * {@link #handleTestRequest}, {@link #handleSingleBuildRequest}) — they differ only in what
+     * {@code runner} actually builds and runs.
+     */
+    private void handleAsyncGoalRequest(
+            String requestLine, BufferedReader reader, BufferedWriter writer, String threadPrefix, GoalRunner runner) {
         Session.CancelToken cancelToken = Session.CancelToken.live();
-        CountDownLatch buildDone = new CountDownLatch(1);
-        Thread buildThread = Thread.ofVirtual().name("jk-daemon-build-", 0).start(() -> {
+        CountDownLatch done = new CountDownLatch(1);
+        Thread.ofVirtual().name(threadPrefix, 0).start(() -> {
             try {
-                runBuild(requestLine, cancelToken, writer);
+                runner.run(requestLine, cancelToken, writer);
             } finally {
-                buildDone.countDown();
+                done.countDown();
             }
         });
         try {
             String line;
-            while (buildDone.getCount() > 0 && (line = reader.readLine()) != null) {
+            while (done.getCount() > 0 && (line = reader.readLine()) != null) {
                 if (DaemonProtocol.BUILD_CANCEL.equals(DaemonProtocol.typeOf(line))) {
                     cancelToken.cancel();
                 }
             }
-            if (buildDone.getCount() > 0) {
+            if (done.getCount() > 0) {
                 cancelToken.cancel(); // EOF: the client disconnected — best-effort cancel
             }
         } catch (IOException ignored) {
             cancelToken.cancel();
         }
         try {
-            buildDone.await();
+            done.await();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
@@ -320,32 +374,60 @@ public final class DaemonServer implements AutoCloseable {
      * onto its own thread and keeps reading the connection for a cancel/EOF meanwhile.
      */
     private void handleTestRequest(String requestLine, BufferedReader reader, BufferedWriter writer) {
-        Session.CancelToken cancelToken = Session.CancelToken.live();
-        CountDownLatch testDone = new CountDownLatch(1);
-        Thread testThread = Thread.ofVirtual().name("jk-daemon-test-", 0).start(() -> {
-            try {
-                runTest(requestLine, cancelToken, writer);
-            } finally {
-                testDone.countDown();
-            }
-        });
+        handleAsyncGoalRequest(requestLine, reader, writer, "jk-daemon-test-", this::runTest);
+    }
+
+    /**
+     * As {@link #handleTestRequest}, but for a single (non-workspace) project's real build goal — the
+     * daemon-hosted counterpart of {@code BuildCommand.runForDir}.
+     */
+    private void handleSingleBuildRequest(String requestLine, BufferedReader reader, BufferedWriter writer) {
+        handleAsyncGoalRequest(requestLine, reader, writer, "jk-daemon-1build-", this::runSingleBuild);
+    }
+
+    /**
+     * Forecast a build via {@link BuildService#explain} and stream the plan as a burst of
+     * module/phase/edge messages — the daemon-hosted counterpart of {@code ExplainCommand}'s call
+     * into the same facade. Synchronous and inline (no worker JVM forked, no cancel/EOF fork needed
+     * unlike {@link #handleBuildRequest}/{@link #handleTestRequest}/{@link #handleSingleBuildRequest}).
+     */
+    private void handleExplainRequest(String requestLine, BufferedWriter writer) {
         try {
-            String line;
-            while (testDone.getCount() > 0 && (line = reader.readLine()) != null) {
-                if (DaemonProtocol.BUILD_CANCEL.equals(DaemonProtocol.typeOf(line))) {
-                    cancelToken.cancel();
+            String entryDirStr = Ndjson.str(requestLine, "entryDir");
+            String cacheStr = Ndjson.str(requestLine, "cache");
+            Path entryDir = Path.of(entryDirStr);
+            Path cache = Path.of(cacheStr);
+            JkBuild entryBuild = JkBuildParser.parse(entryDir.resolve("jk.toml"));
+            BuildService.ExplainPlan plan = BuildService.explain(entryDir, entryBuild, cache);
+            if (plan.hasErrors()) {
+                for (String err : plan.errors()) {
+                    sendQuiet(writer, DaemonProtocol.explainError(err));
+                }
+                sendQuiet(writer, DaemonProtocol.explainDone(1, 0));
+                return;
+            }
+            for (dev.jkbuild.runtime.BuildPlanForecast.Module m : plan.modules()) {
+                String dir = m.dir().toString();
+                sendQuiet(
+                        writer,
+                        DaemonProtocol.explainModule(
+                                dir, m.coord(), m.sourceCount(), m.testCount(), m.producesJar(), m.producesImage()));
+                for (dev.jkbuild.runtime.BuildPlanForecast.Phase p : m.phases()) {
+                    sendQuiet(
+                            writer,
+                            DaemonProtocol.explainPhase(
+                                    dir, p.name(), p.status().name(), p.text(), p.key()));
                 }
             }
-            if (testDone.getCount() > 0) {
-                cancelToken.cancel(); // EOF: the client disconnected — best-effort cancel
+            for (var e : plan.edges().entrySet()) {
+                for (Path dep : e.getValue()) {
+                    sendQuiet(writer, DaemonProtocol.explainEdge(e.getKey().toString(), dep.toString()));
+                }
             }
-        } catch (IOException ignored) {
-            cancelToken.cancel();
-        }
-        try {
-            testDone.await();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
+            sendQuiet(writer, DaemonProtocol.explainDone(plan.maxReadyWidth(), plan.modules().size()));
+        } catch (Exception e) {
+            sendQuiet(writer, DaemonProtocol.explainError(String.valueOf(e.getMessage())));
+            sendQuiet(writer, DaemonProtocol.explainDone(0, 0));
         }
     }
 
@@ -411,6 +493,97 @@ public final class DaemonServer implements AutoCloseable {
         }
     }
 
+    /**
+     * Build and run a single (non-workspace) project's real build goal — the daemon-hosted
+     * counterpart of {@code BuildCommand.runForDir}/{@code prepareModule}/{@code runPrepared}'s
+     * {@code agg == null} branch. Same single-goal wire shape as {@link #runTest}, {@code
+     * testOnly=false}. On success, folds the measured throughput into the host calibration and
+     * kicks the opportunistic cache-prune scheduler — exactly {@code runPrepared}'s post-success
+     * logic, moved here since the daemon (not the CLI) is the process that actually ran the goal.
+     */
+    private void runSingleBuild(String requestLine, Session.CancelToken cancelToken, BufferedWriter writer) {
+        try {
+            String entryDirStr = Ndjson.str(requestLine, "entryDir");
+            String cacheStr = Ndjson.str(requestLine, "cache");
+            String jdksDirStr = Ndjson.str(requestLine, "jdksDir");
+            int workers = Ndjson.intValue(requestLine, "workers", 1);
+            String profile = Ndjson.str(requestLine, "profile");
+            boolean skipTests = Ndjson.bool(requestLine, "skipTests", false);
+            boolean verbose = Ndjson.bool(requestLine, "verbose", false);
+            boolean offline = Ndjson.bool(requestLine, "offline", false);
+            boolean force = Ndjson.bool(requestLine, "force", false);
+
+            Path entryDir = Path.of(entryDirStr);
+            Path cache = Path.of(cacheStr);
+            Path jdksDir = jdksDirStr != null ? Path.of(jdksDirStr) : null;
+            Path buildFile = entryDir.resolve("jk.toml");
+            Path lockFile = entryDir.resolve("jk.lock");
+            int workerCount = Math.max(1, workers);
+
+            int estimatedTestCount = skipTests
+                    ? 0
+                    : dev.jkbuild.runtime.TestSupport.estimateTestCount(entryDir.resolve("src/test/java"))
+                            + dev.jkbuild.runtime.TestSupport.estimateTestCount(entryDir.resolve("src/test/kotlin"));
+
+            dev.jkbuild.runtime.BuildPipeline.Inputs inputs = new dev.jkbuild.runtime.BuildPipeline.Inputs(
+                    entryDir,
+                    cache,
+                    buildFile,
+                    lockFile,
+                    lockFile.getParent(),
+                    workerCount,
+                    estimatedTestCount,
+                    profile,
+                    jdksDir,
+                    skipTests,
+                    verbose, /* testOnly */
+                    false);
+            dev.jkbuild.run.Goal.Builder builder = dev.jkbuild.runtime.BuildPipeline.coreBuilder(inputs, false);
+            dev.jkbuild.runtime.BuildPipeline.appendDeclaredTails(builder, inputs);
+            dev.jkbuild.run.Goal goal = builder.build();
+            long barWeight = goal.estimatedTotalWeight();
+
+            JkConfig config = new JkConfig(
+                    Optional.empty(),
+                    Optional.of(offline),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.of(verbose),
+                    Optional.empty(),
+                    Optional.of(force),
+                    Optional.empty());
+            Session session = Session.defaults()
+                    .withConfig(config)
+                    .withWorkingDir(entryDir)
+                    .withCacheDir(cache)
+                    .withJdksDir(jdksDir)
+                    .withCancel(cancelToken);
+
+            String dir = DaemonProtocol.SINGLE_GOAL_DIR;
+            for (Phase p : goal.phases()) {
+                sendQuiet(writer, DaemonProtocol.planPhase(dir, p.name(), p.label()));
+            }
+            sendQuiet(writer, DaemonProtocol.planDone(1));
+            goal.addListener(wireGoalListener(dir, writer, goal));
+
+            long startNanos = System.nanoTime();
+            dev.jkbuild.run.GoalResult result = SessionContext.where(session, goal::run);
+            if (result.success() && barWeight > 0) {
+                long moduleMs = (System.nanoTime() - startNanos) / 1_000_000;
+                if (moduleMs > 0) {
+                    dev.jkbuild.runtime.Calibration.refine(moduleMs / (double) barWeight, System.currentTimeMillis());
+                }
+                var cacheConfig = dev.jkbuild.config.JkCacheConfig.resolve();
+                dev.jkbuild.task.CachePruneScheduler.resolveJkExe()
+                        .ifPresent(exe -> dev.jkbuild.task.CachePruneScheduler.maybeRun(cacheConfig, cache, exe));
+            }
+        } catch (Exception e) {
+            sendQuiet(writer, DaemonProtocol.buildError(String.valueOf(e.getMessage())));
+        }
+    }
+
     /** Translate every {@link WorkspaceBuildListener} callback into a wire event on {@code writer}. */
     private WorkspaceBuildListener wireListener(BufferedWriter writer) {
         return new WorkspaceBuildListener() {
@@ -451,12 +624,13 @@ public final class DaemonServer implements AutoCloseable {
 
     /**
      * Translate every {@link GoalListener} callback for one goal into a {@code dir}-tagged wire
-     * event. {@code testResultGoal} is non-null only for {@link #runTest} — its {@link
-     * dev.jkbuild.run.GoalResult}'s test counts (populated by the run-tests phase) ride along on the
-     * {@link DaemonProtocol#GOAL_FINISH} message so the client can render "Passed N tests" before it
-     * even sees the terminal message; {@code null} for a plain per-module build goal.
+     * event. {@code realGoal} is non-null only for {@link #runTest}/{@link #runSingleBuild} — its
+     * {@code TEST_RESULT}/{@code BUILD_OUTCOME} keys (populated by the run-tests/parse-build phases)
+     * ride along on the {@link DaemonProtocol#GOAL_FINISH} message so the client can render its
+     * summary line before it even sees the terminal message; {@code null} for a plain per-module
+     * workspace-build goal (where neither applies at the module level).
      */
-    private GoalListener wireGoalListener(String dir, BufferedWriter writer, dev.jkbuild.run.Goal testResultGoal) {
+    private GoalListener wireGoalListener(String dir, BufferedWriter writer, dev.jkbuild.run.Goal realGoal) {
         return new GoalListener() {
             @Override
             public void goalStart(GoalView view) {
@@ -540,22 +714,24 @@ public final class DaemonServer implements AutoCloseable {
                             DaemonProtocol.goalDiagnostic(
                                     dir, d.phase(), d.code(), d.message(), d.test(), d.exceptionClass()));
                 }
-                dev.jkbuild.test.JUnitLauncher.Result testResult = testResultGoal == null
+                dev.jkbuild.test.JUnitLauncher.Result testResult = realGoal == null
                         ? null
-                        : testResultGoal
-                                .get(dev.jkbuild.runtime.BuildPipeline.TEST_RESULT)
-                                .orElse(null);
+                        : realGoal.get(dev.jkbuild.runtime.BuildPipeline.TEST_RESULT).orElse(null);
+                String buildOutcome = realGoal == null
+                        ? null
+                        : realGoal.get(dev.jkbuild.runtime.BuildPipeline.BUILD_OUTCOME).orElse(null);
                 sendQuiet(
                         writer,
-                        testResult == null
+                        testResult == null && buildOutcome == null
                                 ? DaemonProtocol.goalFinish(dir, result.success())
                                 : DaemonProtocol.goalFinish(
                                         dir,
                                         result.success(),
-                                        testResult.total(),
-                                        testResult.succeeded(),
-                                        testResult.failed(),
-                                        testResult.skipped()));
+                                        buildOutcome,
+                                        testResult != null ? testResult.total() : -1,
+                                        testResult != null ? testResult.succeeded() : -1,
+                                        testResult != null ? testResult.failed() : -1,
+                                        testResult != null ? testResult.skipped() : -1));
             }
         };
     }
@@ -640,6 +816,7 @@ public final class DaemonServer implements AutoCloseable {
             Thread.currentThread().interrupt();
         }
         deleteQuietly(paths.socket());
+        deleteQuietly(paths.token());
         deleteQuietly(paths.pid());
         try {
             if (lock != null) lock.release();

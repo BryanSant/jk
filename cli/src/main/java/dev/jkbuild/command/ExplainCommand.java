@@ -62,6 +62,15 @@ public final class ExplainCommand implements CliCommand {
                         .hide());
     }
 
+    /**
+     * Escape hatch for the fast JVM unit-test suite ONLY — see {@link
+     * BuildCommand#daemonDisabledForTests()} for why this exists; every real {@code jk explain}
+     * invocation goes through the daemon.
+     */
+    private static boolean daemonDisabledForTests() {
+        return Boolean.getBoolean("jk.test.noDaemon");
+    }
+
     @Override
     public int run(Invocation in) throws Exception {
         if (in.isSet("run")) {
@@ -78,7 +87,11 @@ public final class ExplainCommand implements CliCommand {
 
         // Forecast the build through the engine facade — resolve the graph and run the truthful
         // per-phase plan, returning a front-end-safe view (modules + edges + concurrency width).
-        BuildService.ExplainPlan plan = BuildService.explain(startDir, entry, cache);
+        // Daemon-hosted like `jk build`/`jk test`, except in the fast unit-test suite (no real jk
+        // binary/daemon available there — see BuildCommand.daemonDisabledForTests()).
+        BuildService.ExplainPlan plan = daemonDisabledForTests()
+                ? BuildService.explain(startDir, entry, cache)
+                : dev.jkbuild.cli.daemon.DaemonClient.explain(dev.jkbuild.daemon.DaemonPaths.current(), startDir, cache);
         if (plan.hasErrors()) {
             for (String err : plan.errors()) CliOutput.err(ConsoleSpec.errorLine("composite", err));
             return Exit.CONFIG;

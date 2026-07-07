@@ -124,6 +124,38 @@ class DaemonClientTest {
         assertThat(DaemonClient.stop(p.socket())).isTrue();
     }
 
+    /**
+     * No real Windows box in this test run, but {@code DaemonTransport.useLoopbackTcp()} only ever
+     * reads {@code os.name} — overriding it exercises {@link DaemonClient#connect}'s TCP+token
+     * branch for real, end-to-end through the same public API every other test above uses.
+     */
+    @Test
+    void ping_handshake_and_status_round_trip_over_the_loopback_tcp_transport() throws Exception {
+        String previousOsName = System.getProperty("os.name");
+        System.setProperty("os.name", "Windows 11");
+        try {
+            DaemonPaths.Paths p = DaemonPaths.resolve(shortTempDir());
+            DaemonServer server = new DaemonServer(p, JkDaemonConfig.DEFAULTS, "7.7.7", null);
+            startInBackground(server);
+            waitUntil(Duration.ofSeconds(5), () -> Files.exists(p.socket()) && Files.exists(p.token()));
+
+            assertThat(DaemonClient.ping(p.socket())).isTrue();
+
+            var hs = DaemonClient.handshake(p.socket(), "7.7.7");
+            assertThat(hs).isPresent();
+            assertThat(hs.get().version()).isEqualTo("7.7.7");
+
+            var status = DaemonClient.status(p.socket());
+            assertThat(status).isPresent();
+            assertThat(status.get().version()).isEqualTo("7.7.7");
+
+            assertThat(DaemonClient.stop(p.socket())).isTrue();
+        } finally {
+            if (previousOsName != null) System.setProperty("os.name", previousOsName);
+            else System.clearProperty("os.name");
+        }
+    }
+
     @Test
     void ensure_running_returns_immediately_when_a_matching_version_daemon_is_already_up() throws Exception {
         DaemonPaths.Paths p = DaemonPaths.resolve(shortTempDir());

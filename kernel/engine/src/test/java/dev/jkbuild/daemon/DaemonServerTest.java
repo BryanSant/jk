@@ -241,6 +241,64 @@ class DaemonServerTest {
         waitUntil(Duration.ofSeconds(5), () -> !serverThread.isAlive());
     }
 
+    /**
+     * There's no real Windows box in this test run, but {@link DaemonTransport#useLoopbackTcp()}
+     * only ever reads {@code os.name} — overriding that system property exercises the exact same
+     * bind/auth/connect code path a real Windows host would take, without needing one.
+     */
+    @Test
+    void loopback_tcp_transport_gates_every_connection_on_the_token() throws Exception {
+        String previousOsName = System.getProperty("os.name");
+        System.setProperty("os.name", "Windows 11");
+        try {
+            DaemonPaths.Paths p = paths(shortTempDir());
+            DaemonServer server = new DaemonServer(p, JkDaemonConfig.DEFAULTS, "1.0", null);
+            Thread serverThread = runInBackground(server);
+            waitUntil(Duration.ofSeconds(5), () -> Files.exists(p.socket()) && Files.exists(p.token()));
+
+            int port = Integer.parseInt(Files.readString(p.socket()).trim());
+            String token = Files.readString(p.token()).trim();
+            assertThat(token).isNotBlank();
+
+            // Wrong token: the server closes the connection without ever replying.
+            try (SocketChannel ch = SocketChannel.open(
+                    new java.net.InetSocketAddress(java.net.InetAddress.getLoopbackAddress(), port))) {
+                BufferedWriter w =
+                        new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
+                BufferedReader r =
+                        new BufferedReader(new InputStreamReader(Channels.newInputStream(ch), StandardCharsets.UTF_8));
+                w.write(DaemonProtocol.auth("not-the-real-token"));
+                w.write('\n');
+                w.write(DaemonProtocol.ping());
+                w.write('\n');
+                w.flush();
+                assertThat(r.readLine()).isNull(); // EOF — never authenticated, never dispatched
+            }
+
+            // Correct token: the connection behaves exactly like the Unix-domain-socket transport.
+            try (SocketChannel ch = SocketChannel.open(
+                    new java.net.InetSocketAddress(java.net.InetAddress.getLoopbackAddress(), port))) {
+                BufferedWriter w =
+                        new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
+                BufferedReader r =
+                        new BufferedReader(new InputStreamReader(Channels.newInputStream(ch), StandardCharsets.UTF_8));
+                w.write(DaemonProtocol.auth(token));
+                w.write('\n');
+                w.write(DaemonProtocol.ping());
+                w.write('\n');
+                w.flush();
+                assertThat(DaemonProtocol.typeOf(r.readLine())).isEqualTo(DaemonProtocol.PONG);
+            }
+
+            server.close();
+            serverThread.join(5_000);
+            assertThat(Files.exists(p.token())).isFalse(); // cleaned up on shutdown, like .sock/.pid/.lock
+        } finally {
+            if (previousOsName != null) System.setProperty("os.name", previousOsName);
+            else System.clearProperty("os.name");
+        }
+    }
+
     @Test
     void a_stale_socket_file_from_a_killed_daemon_does_not_block_a_fresh_start()
             throws Exception {

@@ -31,5 +31,13 @@ class DaemonPathsTest {
         assertThat(p.lock()).isEqualTo(daemonDir.resolve(p.key() + ".lock"));
         assertThat(p.pid()).isEqualTo(daemonDir.resolve(p.key() + ".pid"));
         assertThat(p.log()).isEqualTo(daemonDir.resolve(p.key() + ".log"));
+        assertThat(p.token()).isEqualTo(daemonDir.resolve(p.key() + ".token"));
+    }
+
+    @Test
+    void tokenFor_derives_the_token_sibling_of_a_sock_path_by_naming_convention() {
+        Path state = Path.of("/tmp/jk-home/state");
+        DaemonPaths.Paths p = DaemonPaths.resolve(state);
+        assertThat(DaemonPaths.tokenFor(p.socket())).isEqualTo(p.token());
     }
 }

@@ -31,6 +31,14 @@ public final class DaemonProtocol {
 
     public static final String TYPE_FIELD = "t";
 
+    /**
+     * Client → server, once per connection, and only on the loopback-TCP transport (see {@code
+     * DaemonTransport}): the shared secret from {@code paths.token()}, required as the very first
+     * line before anything else is processed. Never sent/expected on the Unix-domain-socket
+     * transport, where the socket file's own filesystem permissions already gate access.
+     */
+    public static final String AUTH = "auth";
+
     /** Client → server, once per connection: announces the client's jk version. */
     public static final String HELLO = "hello";
 
@@ -127,12 +135,50 @@ public final class DaemonProtocol {
      */
     public static final String TEST_REQUEST = "test-request";
 
-    /** The {@code dir} tag {@link #TEST_REQUEST}'s single goal events carry (there is no module dir). */
+    /**
+     * Client → server: run a single (non-workspace) project's build goal — the daemon-hosted
+     * counterpart of {@code BuildCommand.runForDir}. Same single-goal shape as {@link #TEST_REQUEST}
+     * (one goal, {@link #SINGLE_GOAL_DIR}-tagged events), but {@code testOnly=false} server-side and
+     * {@link #GOAL_FINISH} additionally carries the build outcome (see {@link
+     * dev.jkbuild.runtime.BuildPipeline#BUILD_OUTCOME}) client-side rendering needs.
+     */
+    public static final String SINGLE_BUILD_REQUEST = "single-build-request";
+
+    /** The {@code dir} tag {@link #TEST_REQUEST}/{@link #SINGLE_BUILD_REQUEST}'s single goal events carry. */
     public static final String SINGLE_GOAL_DIR = "";
+
+    /**
+     * Client → server: forecast a build ({@code jk explain}, {@code BuildService.explain}) — a
+     * synchronous, non-listener-driven read: no progress events, just a burst of {@link
+     * #EXPLAIN_MODULE}/{@link #EXPLAIN_PHASE}/{@link #EXPLAIN_EDGE}/{@link #EXPLAIN_ERROR} messages
+     * followed by a terminal {@link #EXPLAIN_DONE}. Doesn't fork any worker JVM, so unlike {@link
+     * #BUILD_REQUEST}/{@link #TEST_REQUEST}/{@link #SINGLE_BUILD_REQUEST} it's handled inline on the
+     * connection thread — no cancel/EOF-watching fork needed.
+     */
+    public static final String EXPLAIN_REQUEST = "explain-request";
+
+    /** Server → client, repeated once per module: {@code BuildPlanForecast.Module}'s identity/sizing. */
+    public static final String EXPLAIN_MODULE = "explain-module";
+
+    /** Server → client, repeated once per (module, phase): a {@code BuildPlanForecast.Module}'s phase list entry. */
+    public static final String EXPLAIN_PHASE = "explain-phase";
+
+    /** Server → client, repeated once per dependency edge. */
+    public static final String EXPLAIN_EDGE = "explain-edge";
+
+    /** Server → client, repeated once per graph-resolution error (mirrors {@code ExplainPlan.errors()}). */
+    public static final String EXPLAIN_ERROR = "explain-error";
+
+    /** Server → client, terminal: the explain burst is complete. */
+    public static final String EXPLAIN_DONE = "explain-done";
 
     /** The {@code "t"} discriminator of a decoded message, or {@code null} if absent/malformed. */
     public static String typeOf(String json) {
         return Ndjson.str(json, TYPE_FIELD);
+    }
+
+    public static String auth(String token) {
+        return "{\"t\":\"" + AUTH + "\",\"token\":" + Ndjson.quote(token) + "}";
     }
 
     public static String hello(String version) {
@@ -256,6 +302,112 @@ public final class DaemonProtocol {
                 + Ndjson.quote(profile)
                 + ",\"verbose\":"
                 + verbose
+                + "}";
+    }
+
+    /** Start a single-project build (see {@link #SINGLE_BUILD_REQUEST}). {@code jdksDir}/{@code profile} may be {@code null}. */
+    public static String singleBuildRequest(
+            String entryDir,
+            String cache,
+            String jdksDir,
+            int workers,
+            String profile,
+            boolean skipTests,
+            boolean verbose,
+            boolean offline,
+            boolean force) {
+        return "{\"t\":\""
+                + SINGLE_BUILD_REQUEST
+                + "\",\"entryDir\":"
+                + Ndjson.quote(entryDir)
+                + ",\"cache\":"
+                + Ndjson.quote(cache)
+                + ",\"jdksDir\":"
+                + Ndjson.quote(jdksDir)
+                + ",\"workers\":"
+                + workers
+                + ",\"profile\":"
+                + Ndjson.quote(profile)
+                + ",\"skipTests\":"
+                + skipTests
+                + ",\"verbose\":"
+                + verbose
+                + ",\"offline\":"
+                + offline
+                + ",\"force\":"
+                + force
+                + "}";
+    }
+
+    /** Forecast a build (see {@link #EXPLAIN_REQUEST}). */
+    public static String explainRequest(String entryDir, String cache) {
+        return "{\"t\":\""
+                + EXPLAIN_REQUEST
+                + "\",\"entryDir\":"
+                + Ndjson.quote(entryDir)
+                + ",\"cache\":"
+                + Ndjson.quote(cache)
+                + "}";
+    }
+
+    // ---- explain events (server → client) --------------------------------------------------------
+
+    public static String explainModule(
+            String dir, String coord, int sourceCount, int testCount, boolean producesJar, boolean producesImage) {
+        return "{\"t\":\""
+                + EXPLAIN_MODULE
+                + "\",\"dir\":"
+                + Ndjson.quote(dir)
+                + ",\"coord\":"
+                + Ndjson.quote(coord)
+                + ",\"sourceCount\":"
+                + sourceCount
+                + ",\"testCount\":"
+                + testCount
+                + ",\"producesJar\":"
+                + producesJar
+                + ",\"producesImage\":"
+                + producesImage
+                + "}";
+    }
+
+    public static String explainPhase(String dir, String name, String status, String text, String key) {
+        return "{\"t\":\""
+                + EXPLAIN_PHASE
+                + "\",\"dir\":"
+                + Ndjson.quote(dir)
+                + ",\"name\":"
+                + Ndjson.quote(name)
+                + ",\"status\":"
+                + Ndjson.quote(status)
+                + ",\"text\":"
+                + Ndjson.quote(text)
+                + ",\"key\":"
+                + Ndjson.quote(key)
+                + "}";
+    }
+
+    public static String explainEdge(String dir, String dependsOnDir) {
+        return "{\"t\":\""
+                + EXPLAIN_EDGE
+                + "\",\"dir\":"
+                + Ndjson.quote(dir)
+                + ",\"dependsOnDir\":"
+                + Ndjson.quote(dependsOnDir)
+                + "}";
+    }
+
+    public static String explainError(String message) {
+        return "{\"t\":\"" + EXPLAIN_ERROR + "\",\"message\":" + Ndjson.quote(message) + "}";
+    }
+
+    public static String explainDone(int maxReadyWidth, int moduleCount) {
+        return "{\"t\":\""
+                + EXPLAIN_DONE
+                + "\",\"maxReadyWidth\":"
+                + maxReadyWidth
+                + ",\"moduleCount\":"
+                + moduleCount
                 + "}";
     }
 
@@ -476,12 +628,27 @@ public final class DaemonProtocol {
      * {@code goalFinish} handler is what renders the "Passed N tests" summary line.
      */
     public static String goalFinish(String dir, boolean success, long total, long succeeded, long failed, long skipped) {
+        return goalFinish(dir, success, null, total, succeeded, failed, skipped);
+    }
+
+    /**
+     * As {@link #goalFinish(String, boolean, long, long, long, long)}, additionally carrying a {@code
+     * jk build} run's outcome (see {@code BuildPipeline.BUILD_OUTCOME}, e.g. {@code "up-to-date"}/
+     * {@code "no-sources"}) — {@code null} when not applicable (a workspace per-module goal, or a
+     * test-only run). Like the test counts, this rides along on {@code goal-finish} because the
+     * client's console listener renders its summary line from within its own {@code goalFinish}
+     * handler, before any later message could arrive.
+     */
+    public static String goalFinish(
+            String dir, boolean success, String buildOutcome, long total, long succeeded, long failed, long skipped) {
         return "{\"t\":\""
                 + GOAL_FINISH
                 + "\",\"dir\":"
                 + Ndjson.quote(dir)
                 + ",\"success\":"
                 + success
+                + ",\"buildOutcome\":"
+                + Ndjson.quote(buildOutcome)
                 + ",\"testTotal\":"
                 + total
                 + ",\"testSucceeded\":"

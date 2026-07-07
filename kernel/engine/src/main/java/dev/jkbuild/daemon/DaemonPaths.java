@@ -20,8 +20,12 @@ public final class DaemonPaths {
     /** How many hex characters of the state-dir hash to use as the identity key. */
     private static final int KEY_LENGTH = 16;
 
-    /** The socket/lock/pid/log paths for one daemon identity, all siblings under {@code daemon/}. */
-    public record Paths(String key, Path dir, Path socket, Path lock, Path pid, Path log) {}
+    /**
+     * The socket/lock/pid/log paths for one daemon identity, all siblings under {@code daemon/}.
+     * {@code token} is only ever written/read on the {@link DaemonTransport#useLoopbackTcp()} path
+     * (Windows) — on the Unix-domain-socket path it's simply never created.
+     */
+    public record Paths(String key, Path dir, Path socket, Path lock, Path pid, Path log, Path token) {}
 
     /** Resolve against the live {@link JkDirs} (honors {@code JK_HOME}/{@code JK_STATE_DIR}). */
     public static Paths current() {
@@ -38,7 +42,20 @@ public final class DaemonPaths {
                 dir.resolve(key + ".sock"),
                 dir.resolve(key + ".lock"),
                 dir.resolve(key + ".pid"),
-                dir.resolve(key + ".log"));
+                dir.resolve(key + ".log"),
+                dir.resolve(key + ".token"));
+    }
+
+    /**
+     * The token-file sibling of a {@code .sock} path, derived by naming convention alone — so the
+     * CLI-side client's {@code connect(Path)} (which only ever receives {@code paths.socket()}, not
+     * the full {@link Paths} record, across its several call sites) can find it without threading the
+     * whole record through every method.
+     */
+    public static Path tokenFor(Path socket) {
+        String name = socket.getFileName().toString();
+        String base = name.endsWith(".sock") ? name.substring(0, name.length() - ".sock".length()) : name;
+        return socket.resolveSibling(base + ".token");
     }
 
     /** A short, stable hash of the resolved absolute state-dir path. */
