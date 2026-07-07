@@ -260,10 +260,35 @@ real native-image binary:
    Verified by forcing `os.name` in the JVM test suite (no real Windows host available in this
    environment) — a real Windows machine has not exercised this path. Treat it as implemented but
    not field-verified until one does.
-8. **Explicitly deferred, not scheduled:**
-   - More precise (rather than coarse) memory accounting across concurrent requests — the current
-     daemon sizes one shared budget for the host's core count at startup, not a live demand-registry
-     that grows/shrinks per in-flight request. Revisit only once real usage shows the coarse sizing
-     under-parallelizes; building the precise version speculatively isn't warranted yet.
-   - A stable versioned protocol, if a second front-end besides this CLI ever needs to talk to a `jk`
-     daemon directly.
+8. **Explicitly deferred, not scheduled — precise concurrent memory accounting (demand registry).**
+   **Status: DEFERRED (logged), not OPEN** — this is a considered decision, not a known bug. The
+   current daemon sizes one shared worker-JVM budget for the host's core count once at startup
+   (`planSharedWorkerMemoryOnce`), not a live registry that grows/shrinks `HeapPlan`/`WorkerSlots` per
+   in-flight request. A demand-registry is real complexity (live recomputation on request churn,
+   re-plumbing `HeapPlan`/`WorkerSlots` from static to reactive) that's only worth paying for if the
+   coarse sizing actually under-parallelizes in practice — no such evidence exists yet, so building it
+   speculatively would be complexity for a hypothetical need.
+
+   Notably, Gradle — at far larger scale — doesn't solve this with a live registry either: a Gradle
+   daemon serves one build at a time (concurrency = more daemon *processes*, each with a static
+   `-Xmx`), and cross-daemon memory pressure is handled reactively (self-terminate under low system
+   memory), not by a proactive shared-budget calculation. That's a data point for leaving this
+   deferred, not a reason to skip the check below.
+
+   **Revisit trigger — re-open this item once any of these is actually measured, not assumed:**
+   - *Concurrency distribution*: sample `activeConnections` (already tracked, surfaced via `jk daemon
+     status`) over real usage. If concurrent in-flight requests are rare, the coarse plan already
+     matches actual demand and there's nothing to optimize.
+   - *Single-build regression*: compare wall-clock time for one isolated build under the daemon's
+     coarse sizing vs. the pre-daemon per-invocation `JvmOptions.planAndApply` (which sized generously
+     for that build alone). A measurable regression in the common single-build case is the real cost
+     of *not* having a demand-registry.
+   - *Queuing-while-idle*: under synthetic concurrent load (2/4/8 simultaneous single-project or
+     workspace builds), check whether anything blocks on `WorkerSlots` while host RAM/CPU sits idle —
+     that's the literal signal of "under-parallelizes."
+
+   If none of these ever shows a real cost, this item should stay deferred indefinitely — it is not a
+   TODO waiting for someone to get to it.
+9. **Explicitly deferred, not scheduled — a stable versioned protocol.** Only needed if a second
+   front-end besides this CLI ever needs to talk to a `jk` daemon directly; see
+   [Wire protocol](#wire-protocol).
