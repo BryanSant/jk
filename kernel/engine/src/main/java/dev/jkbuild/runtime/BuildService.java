@@ -229,6 +229,70 @@ public final class BuildService {
         return new ExplainPlan(modules, graph.edges(), graph.maxReadyWidth(), List.of());
     }
 
+    /**
+     * Predicted wall-clock for building {@code plan}, in millis ({@code 0} = unknown — the estimate
+     * never fails an explain). Assembles each module's goal exactly as {@code jk build} does (the
+     * shared {@link BuildPlanForecast#inputsFor} factory, core phases + declared tails) and feeds a
+     * schedule-aware estimate that mirrors the build: {@code serial} sums everything; otherwise the
+     * parallel graph build overlaps independent modules, so the critical path / throughput /
+     * serial-test bound wins (see {@link EffortWeights#scheduleMillis}). Weight→ms conversion is
+     * per-module: a module with learned timings of its own converts at {@link
+     * EffortWeights#MS_PER_WEIGHT} (its learned rates round-trip this host exactly); a cold module
+     * converts at this host's measured calibration instead — {@link Calibration#ensure}'s one-time
+     * probe is the sanctioned exception to explain being a pure dry run. Engine-hosted since Wave 3
+     * of the slim client ({@code jk explain} carries the plan-affecting build options on its
+     * request and the result rides back as an {@code eta} event); the re-foundation target always
+     * wanted {@code onEtaEstimate} computed engine-side.
+     */
+    public static long estimateEtaMillis(
+            ExplainPlan plan,
+            Path cache,
+            int workers,
+            Path jdksDir,
+            String profile,
+            boolean skipTests,
+            boolean verbose,
+            boolean serial,
+            boolean parallelTests) {
+        try {
+            List<EffortWeights.ModuleCost> costs = new ArrayList<>();
+            // All modules of this build graph — the project/workspace set each module's prediction
+            // borrows a learned rate from when it has no history of its own (EffortWeights.learned).
+            Set<Path> projectModules = new HashSet<>();
+            for (BuildPlanForecast.Module m : plan.modules()) projectModules.add(m.dir());
+            for (BuildPlanForecast.Module m : plan.modules()) {
+                Path mdir = m.dir();
+                BuildPipeline.Inputs inputs = BuildPlanForecast.inputsFor(
+                        mdir, cache, workers, jdksDir, profile, skipTests, verbose, projectModules);
+                Goal.Builder builder = BuildPipeline.coreBuilder(inputs, m.dirty());
+                BuildPipeline.appendDeclaredTails(builder, inputs);
+                Goal goal = builder.build();
+                costs.add(EffortWeights.costOf(mdir, plan.edges().getOrDefault(mdir, Set.of()), goal));
+            }
+            int concurrency = serial
+                    ? 1
+                    : HeapPlan.requestedJvms(
+                            plan.maxReadyWidth(),
+                            workers,
+                            parallelTests,
+                            Runtime.getRuntime().availableProcessors());
+            PhaseTimings timings = PhaseTimings.load(cache);
+            java.util.function.Predicate<Path> warm =
+                    dir -> timings.hasTimingsFor(List.of(dir.toString()));
+            double coldRate = costs.stream().allMatch(c -> warm.test(c.dir()))
+                    ? EffortWeights.MS_PER_WEIGHT
+                    : Calibration.ensure(jdksDir).msPerWeight();
+            return EffortWeights.scheduleMillis(
+                    costs,
+                    concurrency,
+                    serial,
+                    parallelTests,
+                    dir -> warm.test(dir) ? EffortWeights.MS_PER_WEIGHT : coldRate);
+        } catch (RuntimeException e) {
+            return 0; // never fail explain over the estimate
+        }
+    }
+
     // =========================================================================
     // Build preflight (resolve + dirty forecast, for the fully-cached shortcut)
     // =========================================================================

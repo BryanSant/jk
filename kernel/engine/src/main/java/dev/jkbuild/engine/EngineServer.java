@@ -294,6 +294,26 @@ public final class EngineServer implements AutoCloseable {
                         handleAsyncGoalRequest(line, reader, writer, "jk-engine-provision-", this::runProvision);
                         return;
                     }
+                    case EngineProtocol.COMPILE_REQUEST -> {
+                        // Wave 3 (hosted pipeline verbs): jk compile is a single goal — TEST_REQUEST's shape.
+                        handleAsyncGoalRequest(line, reader, writer, "jk-engine-compile-", this::runCompile);
+                        return;
+                    }
+                    case EngineProtocol.NATIVE_REQUEST -> {
+                        // jk native's serial module cascade, speaking BUILD_REQUEST's workspace vocabulary.
+                        handleAsyncGoalRequest(line, reader, writer, "jk-engine-native-", this::runNative);
+                        return;
+                    }
+                    case EngineProtocol.INSTALL_REQUEST -> {
+                        // jk install's build + cache-install halves; make-install stays client-side.
+                        handleAsyncGoalRequest(line, reader, writer, "jk-engine-install-", this::runInstall);
+                        return;
+                    }
+                    case EngineProtocol.GIT_FETCH_REQUEST -> {
+                        // jk install <git-url>'s clone half (the git-client worker forks engine-side).
+                        handleAsyncGoalRequest(line, reader, writer, "jk-engine-gitfetch-", this::runGitFetch);
+                        return;
+                    }
                     case EngineProtocol.EXPLAIN_REQUEST -> {
                         // Synchronous read, no worker JVM forked — handled inline, connection continues.
                         handleExplainRequest(line, writer);
@@ -505,6 +525,21 @@ public final class EngineServer implements AutoCloseable {
                     sendQuiet(writer, EngineProtocol.explainEdge(e.getKey().toString(), dep.toString()));
                 }
             }
+            // The schedule-aware build-time estimate (Wave 3: previously computed client-side
+            // against BuildPipeline/EffortWeights/Calibration — the known docs/engine.md gap).
+            // 0 = unknown; the client renders "Build time unknown" for that.
+            String etaJdksDirStr = Ndjson.str(requestLine, "jdksDir");
+            long etaMillis = BuildService.estimateEtaMillis(
+                    plan,
+                    cache,
+                    Ndjson.intValue(requestLine, "workers", 1),
+                    etaJdksDirStr != null ? Path.of(etaJdksDirStr) : null,
+                    Ndjson.str(requestLine, "profile"),
+                    Ndjson.bool(requestLine, "skipTests", false),
+                    Ndjson.bool(requestLine, "verbose", false),
+                    Ndjson.bool(requestLine, "serial", false),
+                    Ndjson.bool(requestLine, "parallelTests", false));
+            sendQuiet(writer, EngineProtocol.eta(etaMillis));
             sendQuiet(writer, EngineProtocol.explainDone(plan.maxReadyWidth(), plan.modules().size()));
         } catch (Exception e) {
             sendQuiet(writer, EngineProtocol.explainError(String.valueOf(e.getMessage())));
@@ -1058,6 +1093,243 @@ public final class EngineServer implements AutoCloseable {
         } catch (Exception e) {
             sendQuiet(writer, EngineProtocol.buildError(String.valueOf(e.getMessage())));
         }
+    }
+
+    // ---- hosted pipeline verbs (Wave 3 of the slim-client migration) ------------------------------
+
+    /**
+     * Decode a {@link EngineProtocol#COMPILE_REQUEST} and run {@code jk compile}'s single
+     * compile-only goal in-session — {@link EngineProtocol#TEST_REQUEST}'s exact wire shape with a
+     * plain terminal goal-finish (the verb has no structured summary beyond success).
+     */
+    private void runCompile(String requestLine, Session.CancelToken cancelToken, BufferedWriter writer) {
+        try {
+            String profile = Ndjson.str(requestLine, "profile");
+            boolean verbose = Ndjson.bool(requestLine, "verbose", false);
+            Session session = resolveSession(requestLine, cancelToken, false);
+            String dir = EngineProtocol.SINGLE_GOAL_DIR;
+            dev.jkbuild.run.Goal goal = dev.jkbuild.runtime.CompileGoals.compileGoal(
+                    session.workingDir(), session.cacheDir(), profile, verbose);
+            streamSingleGoal(goal, session, writer, result -> EngineProtocol.goalFinish(dir, result.success()));
+        } catch (Exception e) {
+            sendQuiet(writer, EngineProtocol.buildError(String.valueOf(e.getMessage())));
+        }
+    }
+
+    /**
+     * Decode an {@link EngineProtocol#INSTALL_REQUEST} and run {@code jk install}'s build +
+     * cache-install goal in-session (see {@link dev.jkbuild.runtime.InstallGoals}). The terminal
+     * goal-finish carries the test counts for the client's exit-code logic; the launcher-writing
+     * "make install" half runs client-side after this succeeds.
+     */
+    private void runInstall(String requestLine, Session.CancelToken cancelToken, BufferedWriter writer) {
+        try {
+            boolean skipTests = Ndjson.bool(requestLine, "skipTests", false);
+            boolean verbose = Ndjson.bool(requestLine, "verbose", false);
+            String m2DirStr = Ndjson.str(requestLine, "m2Dir");
+            String graalHomeStr = Ndjson.str(requestLine, "graalHome");
+            Session session = resolveSession(requestLine, cancelToken, false);
+            String dir = EngineProtocol.SINGLE_GOAL_DIR;
+            dev.jkbuild.run.Goal goal = dev.jkbuild.runtime.InstallGoals.projectInstallGoal(
+                    session.workingDir(),
+                    session.cacheDir(),
+                    Path.of(m2DirStr),
+                    skipTests,
+                    verbose,
+                    graalHomeStr != null ? Path.of(graalHomeStr) : null);
+            streamSingleGoal(goal, session, writer, result -> {
+                dev.jkbuild.test.JUnitLauncher.Result testResult =
+                        goal.get(dev.jkbuild.runtime.BuildPipeline.TEST_RESULT).orElse(null);
+                return testResult == null
+                        ? EngineProtocol.goalFinish(dir, result.success())
+                        : EngineProtocol.goalFinish(
+                                dir,
+                                result.success(),
+                                testResult.total(),
+                                testResult.succeeded(),
+                                testResult.failed(),
+                                testResult.skipped());
+            });
+        } catch (Exception e) {
+            sendQuiet(writer, EngineProtocol.buildError(String.valueOf(e.getMessage())));
+        }
+    }
+
+    /**
+     * Decode a {@link EngineProtocol#GIT_FETCH_REQUEST} and materialize the checkout in-session
+     * (the git-client worker forks engine-side); the terminal goal-finish carries the checkout
+     * path + sha the client's follow-up {@link EngineProtocol#INSTALL_REQUEST} needs.
+     */
+    private void runGitFetch(String requestLine, Session.CancelToken cancelToken, BufferedWriter writer) {
+        try {
+            Path cache = Path.of(Ndjson.str(requestLine, "cache"));
+            boolean refresh = Ndjson.bool(requestLine, "refresh", false);
+            JkConfig config = new JkConfig(
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.of(refresh),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty());
+            Session session = Session.defaults()
+                    .withConfig(config)
+                    .withCacheDir(cache)
+                    .withCancel(cancelToken);
+            String dir = EngineProtocol.SINGLE_GOAL_DIR;
+            dev.jkbuild.run.Goal goal = dev.jkbuild.runtime.InstallGoals.gitFetchGoal(
+                    Ndjson.str(requestLine, "url"),
+                    Ndjson.str(requestLine, "canonicalUrl"),
+                    Ndjson.str(requestLine, "ref"),
+                    cache,
+                    refresh);
+            streamSingleGoal(goal, session, writer, result -> {
+                Path checkout = goal.get(dev.jkbuild.runtime.InstallGoals.CHECKOUT).orElse(null);
+                String sha = goal.get(dev.jkbuild.runtime.InstallGoals.FETCHED_SHA).orElse(null);
+                return EngineProtocol.goalFinishGitFetch(
+                        dir, result.success(), checkout != null ? checkout.toString() : null, sha);
+            });
+        } catch (Exception e) {
+            sendQuiet(writer, EngineProtocol.buildError(String.valueOf(e.getMessage())));
+        }
+    }
+
+    /**
+     * Decode a {@link EngineProtocol#NATIVE_REQUEST} and run {@code jk native}'s serial module
+     * cascade in-session, speaking {@link EngineProtocol#BUILD_REQUEST}'s workspace event
+     * vocabulary (a single project is a cascade of one): a full plan burst first (so the client
+     * calibrates its aggregate bar to the whole-workspace weight up front), then each module's goal
+     * — the {@code native-image} child process forking engine-side — stopping at the first failure.
+     * Exit codes are computed here ({@link dev.jkbuild.runtime.NativeGoals#failureExitCode}) and
+     * ride {@code module-finish}/{@code workspace-finish}.
+     */
+    private void runNative(String requestLine, Session.CancelToken cancelToken, BufferedWriter writer) {
+        try {
+            String jdksDirStr = Ndjson.str(requestLine, "jdksDir");
+            Path jdksDir = jdksDirStr != null ? Path.of(jdksDirStr) : null;
+            String mainClass = Ndjson.str(requestLine, "mainClass");
+            boolean skipTests = Ndjson.bool(requestLine, "skipTests", false);
+            boolean verbose = Ndjson.bool(requestLine, "verbose", false);
+            java.util.List<String> extraArgs = Ndjson.strArray(requestLine, "extraArgs");
+            java.util.List<String> graalDirs = Ndjson.strArray(requestLine, "graalDirs");
+            java.util.List<String> graalHomes = Ndjson.strArray(requestLine, "graalHomes");
+            java.util.Map<Path, Path> graalByDir = new java.util.HashMap<>();
+            for (int i = 0; i < Math.min(graalDirs.size(), graalHomes.size()); i++) {
+                graalByDir.put(Path.of(graalDirs.get(i)), Path.of(graalHomes.get(i)));
+            }
+            Session session = resolveSession(requestLine, cancelToken, false).withJdksDir(jdksDir);
+            SessionContext.where(session, () -> {
+                nativeCascade(
+                        session.workingDir(),
+                        session.cacheDir(),
+                        jdksDir,
+                        mainClass,
+                        extraArgs,
+                        graalByDir,
+                        skipTests,
+                        verbose,
+                        writer);
+                return null;
+            });
+        } catch (Exception e) {
+            sendQuiet(writer, EngineProtocol.buildError(String.valueOf(e.getMessage())));
+        }
+    }
+
+    /** The module cascade {@link #runNative} streams — see its javadoc for the wire shape. */
+    private void nativeCascade(
+            Path entryDir,
+            Path cache,
+            Path jdksDir,
+            String mainClass,
+            java.util.List<String> extraArgs,
+            java.util.Map<Path, Path> graalByDir,
+            boolean skipTests,
+            boolean verbose,
+            BufferedWriter writer) {
+        JkBuild root;
+        try {
+            root = JkBuildParser.parse(entryDir.resolve("jk.toml"));
+        } catch (RuntimeException | IOException e) {
+            sendQuiet(writer, EngineProtocol.workspaceFinish(
+                    false, dev.jkbuild.model.command.Exit.CONFIG, java.util.List.of(String.valueOf(e.getMessage()))));
+            return;
+        }
+
+        var scopes = new java.util.LinkedHashMap<Path, JkBuild>();
+        if (root.isWorkspaceRoot()) {
+            java.util.Map<Path, JkBuild> modulesByDir;
+            try {
+                modulesByDir = dev.jkbuild.config.WorkspaceLoader.loadModules(entryDir, root);
+            } catch (RuntimeException | IOException e) {
+                sendQuiet(writer, EngineProtocol.workspaceFinish(
+                        false,
+                        dev.jkbuild.model.command.Exit.CONFIG,
+                        java.util.List.of(String.valueOf(e.getMessage()))));
+                return;
+            }
+            for (Path dir : dev.jkbuild.runtime.BuildGraph.orderModules(modulesByDir)) {
+                scopes.put(dir, modulesByDir.get(dir));
+            }
+        } else {
+            scopes.put(entryDir, root);
+        }
+
+        // Assemble every module's goal up front and send the whole plan burst first, so the
+        // client's aggregate bar calibrates to the workspace total before any module runs.
+        var goals = new java.util.LinkedHashMap<Path, dev.jkbuild.run.Goal>();
+        var coords = new java.util.LinkedHashMap<Path, String>();
+        for (var scope : scopes.entrySet()) {
+            Path dir = scope.getKey();
+            dev.jkbuild.run.Goal goal = dev.jkbuild.runtime.NativeGoals.moduleGoal(
+                    dir,
+                    scope.getValue(),
+                    cache,
+                    jdksDir,
+                    graalByDir.get(dir),
+                    mainClass,
+                    extraArgs,
+                    skipTests,
+                    verbose);
+            goals.put(dir, goal);
+            coords.put(dir, dev.jkbuild.runtime.LockGoals.coordLabel(scope.getValue(), dir));
+        }
+        for (var entry : goals.entrySet()) {
+            String dirTag = entry.getKey().toString();
+            dev.jkbuild.run.Goal goal = entry.getValue();
+            sendQuiet(writer, EngineProtocol.planModule(
+                    dirTag,
+                    coords.get(entry.getKey()),
+                    goal.name(),
+                    (int) Math.min(Integer.MAX_VALUE, goal.estimatedTotalWeight()),
+                    false));
+            for (Phase p : goal.phases()) {
+                sendQuiet(writer, EngineProtocol.planPhase(dirTag, p.name(), p.label()));
+            }
+        }
+        sendQuiet(writer, EngineProtocol.planDone(goals.size()));
+
+        for (var entry : goals.entrySet()) {
+            Path dir = entry.getKey();
+            String dirTag = dir.toString();
+            dev.jkbuild.run.Goal goal = entry.getValue();
+            sendQuiet(writer, EngineProtocol.moduleStart(dirTag));
+            goal.addListener(wireGoalListener(dirTag, writer, goal));
+            long startNanos = System.nanoTime();
+            GoalResult result = goal.run();
+            long millis = (System.nanoTime() - startNanos) / 1_000_000;
+            int exitCode = result.success() ? 0 : dev.jkbuild.runtime.NativeGoals.failureExitCode(goal, result);
+            sendQuiet(writer, EngineProtocol.moduleFinish(
+                    dirTag, coords.get(dir), result.success(), exitCode, millis));
+            if (!result.success()) {
+                sendQuiet(writer, EngineProtocol.workspaceFinish(false, exitCode, java.util.List.of()));
+                return;
+            }
+        }
+        sendQuiet(writer, EngineProtocol.workspaceFinish(true, 0, java.util.List.of()));
     }
 
     /**

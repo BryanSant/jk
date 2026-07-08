@@ -84,6 +84,18 @@ public final class RunCommand implements CliCommand {
     dev.jkbuild.cli.BuildOptions buildOpts;
     GlobalOptions global;
 
+    /**
+     * Escape hatch for the fast JVM unit-test suite ONLY — see {@link
+     * BuildCommand#engineDisabledForTests()} for the full rationale. A real {@code jk run} hosts
+     * its build half on the engine (slim-client Wave 3); only the exec of the user's program stays
+     * in this process (it owns the terminal).
+     */
+    private static boolean engineDisabledForTests() {
+        // Also bypass inside a jk-forked test worker (jk.plugin.class=JkRunner) — see BuildCommand.
+        return Boolean.getBoolean("jk.test.noEngine")
+                || "dev.jkbuild.test.runner.JkRunner".equals(System.getProperty("jk.plugin.class"));
+    }
+
     @Override
     public int run(Invocation in) throws IOException, InterruptedException {
         this.positional = in.positionals();
@@ -118,27 +130,6 @@ public final class RunCommand implements CliCommand {
         BuildLayout layout = BuildLayout.of(projectDir, project);
         Path cache = cacheDir();
 
-        // Build through the one pipeline, producing whatever jk.toml declares
-        // (jar always; shadow/native when configured). Cache-aware, so a clean
-        // tree is near-instant.
-        Path lockFile = projectDir.resolve("jk.lock");
-        int estimatedTestCount = TestCommand.estimateTestCount(projectDir.resolve("src/test/java"));
-        BuildPipeline.Inputs inputs = new BuildPipeline.Inputs(
-                projectDir,
-                cache,
-                projectDir.resolve("jk.toml"),
-                lockFile,
-                projectDir,
-                1,
-                estimatedTestCount,
-                null,
-                jdksDir,
-                buildOpts.skipTests,
-                global.verbose);
-        Goal.Builder builder = BuildPipeline.coreBuilder(inputs);
-        BuildPipeline.appendDeclaredTails(builder, inputs);
-        Goal goal = builder.build();
-
         String coord = BuildCommand.buildTarget(projectDir.resolve("jk.toml"), projectDir);
         GoalConsole.Mode mode = GoalConsole.modeFor(global);
         // In chip modes (AUTO/QUIET) the goal settles with the ▶ Exec chip line showing
@@ -156,9 +147,61 @@ public final class RunCommand implements CliCommand {
                 r -> GoalWedge.coord(coord),
                 true,
                 true);
-        GoalResult result = GoalConsole.runGoal(goal, mode, cache, spec, coord);
+
+        GoalResult result;
+        dev.jkbuild.test.JUnitLauncher.Result testResult;
+        if (engineDisabledForTests()) {
+            // Build through the one pipeline, producing whatever jk.toml declares
+            // (jar always; shadow/native when configured). Cache-aware, so a clean
+            // tree is near-instant.
+            Path lockFile = projectDir.resolve("jk.lock");
+            int estimatedTestCount = TestCommand.estimateTestCount(projectDir.resolve("src/test/java"));
+            BuildPipeline.Inputs inputs = new BuildPipeline.Inputs(
+                    projectDir,
+                    cache,
+                    projectDir.resolve("jk.toml"),
+                    lockFile,
+                    projectDir,
+                    1,
+                    estimatedTestCount,
+                    null,
+                    jdksDir,
+                    buildOpts.skipTests,
+                    global.verbose);
+            Goal.Builder builder = BuildPipeline.coreBuilder(inputs);
+            BuildPipeline.appendDeclaredTails(builder, inputs);
+            Goal goal = builder.build();
+            result = GoalConsole.runGoal(goal, mode, cache, spec, coord);
+            testResult = goal.get(BuildPipeline.TEST_RESULT).orElse(null);
+        } else {
+            // Engine-hosted build half (slim-client Wave 3): jk run's build is exactly the
+            // single-project build goal the engine already hosts (SINGLE_BUILD_REQUEST, with
+            // skipTests=true) — only the exec below stays in this process, which owns the TTY.
+            var session = dev.jkbuild.config.SessionContext.current();
+            dev.jkbuild.test.JUnitLauncher.Result[] testResultHolder = new dev.jkbuild.test.JUnitLauncher.Result[1];
+            try {
+                result = dev.jkbuild.cli.engine.EngineClient.runSingleBuild(
+                        dev.jkbuild.engine.EnginePaths.current(),
+                        new dev.jkbuild.cli.engine.EngineClient.SingleBuildRequest(
+                                projectDir,
+                                cache,
+                                jdksDir,
+                                1,
+                                null,
+                                buildOpts.skipTests,
+                                global.verbose,
+                                session.offline(),
+                                session.force()),
+                        phases -> GoalConsole.chooseConsoleListener(phases, mode, spec, coord),
+                        testResultHolder,
+                        new String[1]);
+            } catch (IOException e) {
+                CliOutput.err("jk run: " + e.getMessage());
+                return Exit.SOFTWARE;
+            }
+            testResult = testResultHolder[0];
+        }
         if (!result.success()) {
-            var testResult = goal.get(BuildPipeline.TEST_RESULT).orElse(null);
             if (testResult != null && !testResult.allPassed()) return 4;
             return 1;
         }

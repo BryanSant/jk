@@ -12,14 +12,11 @@ import dev.jkbuild.compile.ClasspathResolver;
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.config.WorkspaceClasspath;
 import dev.jkbuild.config.WorkspaceLocator;
-import dev.jkbuild.git.GitFetcher;
 import dev.jkbuild.http.Http;
 import dev.jkbuild.layout.BuildLayout;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.lock.LockfileReader;
 import dev.jkbuild.model.Coordinate;
-import dev.jkbuild.model.GitRefSpec;
-import dev.jkbuild.model.GitSource;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.RepositorySpec;
 import dev.jkbuild.model.command.Arity;
@@ -38,13 +35,13 @@ import dev.jkbuild.run.Phase;
 import dev.jkbuild.run.PhaseKind;
 import dev.jkbuild.runtime.BuildPipeline;
 import dev.jkbuild.runtime.CompileToolchain;
+import dev.jkbuild.test.JUnitLauncher;
 import dev.jkbuild.tool.AppLauncher;
 import dev.jkbuild.tool.JarManifest;
 import dev.jkbuild.tool.ToolEnv;
 import dev.jkbuild.tool.ToolLauncher;
 import dev.jkbuild.tool.ToolResolver;
 import dev.jkbuild.util.GitUrl;
-import dev.jkbuild.util.Hashing;
 import dev.jkbuild.util.JkDirs;
 import java.io.IOException;
 import java.net.URI;
@@ -136,14 +133,22 @@ public final class InstallCommand implements CliCommand {
     dev.jkbuild.cli.BuildOptions buildOpts;
     GlobalOptions global;
 
-    // Cross-phase keys.
-    private static final GoalKey<JkBuild> PROJECT = GoalKey.of("project", JkBuild.class);
-    private static final GoalKey<BuildLayout> LAYOUT = GoalKey.of("layout", BuildLayout.class);
+    // Cross-phase keys (Maven-coord mode; the project/git modes' keys live in InstallGoals).
     private static final GoalKey<ToolEnv> TOOL_ENV = GoalKey.of("tool-env", ToolEnv.class);
     private static final GoalKey<Coordinate> PRIMARY = GoalKey.of("primary-coord", Coordinate.class);
     private static final GoalKey<Path> LAUNCHER = GoalKey.of("launcher", Path.class);
-    private static final GoalKey<Path> CHECKOUT = GoalKey.of("checkout-dir", Path.class);
-    private static final GoalKey<String> FETCHED_SHA = GoalKey.of("fetched-sha", String.class);
+
+    /**
+     * Escape hatch for the fast JVM unit-test suite ONLY — see {@link
+     * BuildCommand#engineDisabledForTests()} for the full rationale. A real {@code jk install} of a
+     * project (current dir or git checkout) hosts its build + cache-install on the engine
+     * (slim-client Wave 3); the launcher-writing "make install" half always runs here.
+     */
+    private static boolean engineDisabledForTests() {
+        // Also bypass inside a jk-forked test worker (jk.plugin.class=JkRunner) — see BuildCommand.
+        return Boolean.getBoolean("jk.test.noEngine")
+                || "dev.jkbuild.test.runner.JkRunner".equals(System.getProperty("jk.plugin.class"));
+    }
 
     @Override
     public int run(Invocation in) throws IOException, InterruptedException {
@@ -236,7 +241,7 @@ public final class InstallCommand implements CliCommand {
         Coordinate coord = Coordinate.of(group, artifact, version);
         // File-install writes directly to repos/local/ (the JAR is already on disk, no project
         // metadata for a POM, so ~/.m2 write is not appropriate here).
-        writeToLocalStore(cache, MavenLayout.artifactPath(coord), filePath);
+        dev.jkbuild.runtime.InstallGoals.writeToLocalStore(cache, MavenLayout.artifactPath(coord), filePath);
 
         if (!global.outputIsJson()) {
             CliOutput.out("Installed " + dev.jkbuild.cli.theme.Coords.gav(coord) + " to the local cache");
@@ -320,73 +325,50 @@ public final class InstallCommand implements CliCommand {
         String refStr = split.ref() != null ? split.ref() : "main";
         Path cacheDir = cacheDir();
         Files.createDirectories(cacheDir);
+        boolean refresh = dev.jkbuild.config.SessionContext.current().config().refreshOr(false);
+        GoalConsole.Mode mode = GoalConsole.modeFor(global);
 
-        Phase fetch = Phase.builder("fetch-git")
-                .kind(PhaseKind.IO)
-                .scope(1)
-                .execute(ctx -> {
-                    ctx.label("git fetch " + expanded + " @ " + refStr);
-                    boolean refresh = dev.jkbuild.config.SessionContext.current().config().refreshOr(false);
-                    GitFetcher fetcher = new GitFetcher(cacheDir.resolve("git"));
-                    GitFetcher.Fetched fetched;
-                    try {
-                        fetched = fetchTagOrBranch(fetcher, expanded, canonical, refStr, refresh);
-                    } catch (IOException e) {
-                        ctx.error("fetch", e.getMessage());
-                        throw new RuntimeException(e);
-                    }
-                    Path checkout = fetched.checkoutPath();
-                    if (!Files.exists(checkout.resolve("jk.toml"))) {
-                        ctx.error("no-jk-toml", expanded + " has no jk.toml at " + refStr);
-                        throw new RuntimeException("no jk.toml in checkout");
-                    }
-                    ctx.put(CHECKOUT, checkout);
-                    ctx.put(FETCHED_SHA, fetched.sha());
-                    ctx.progress(1);
-                })
-                .build();
-
-        // After fetch, hand off to the same project-install pipeline used by
-        // mode 1, but with the checkout dir instead of the user's CWD.
-        Goal fetchGoal = Goal.builder("install-git-fetch").addPhase(fetch).build();
-
-        GoalResult fetchResult = GoalConsole.run(fetchGoal, GoalConsole.modeFor(global), cacheDir);
-        if (!fetchResult.success()) {
+        GoalResult fetchResult;
+        Path checkout;
+        String sha;
+        if (engineDisabledForTests()) {
+            Goal fetchGoal =
+                    dev.jkbuild.runtime.InstallGoals.gitFetchGoal(expanded, canonical, refStr, cacheDir, refresh);
+            fetchResult = GoalConsole.run(fetchGoal, mode, cacheDir);
+            checkout = fetchGoal.get(dev.jkbuild.runtime.InstallGoals.CHECKOUT).orElse(null);
+            sha = fetchGoal.get(dev.jkbuild.runtime.InstallGoals.FETCHED_SHA).orElse(null);
+        } else {
+            // Engine-hosted clone (slim-client Wave 3): the git-client worker forks engine-side;
+            // the checkout path + sha ride the terminal goal-finish.
+            dev.jkbuild.cli.engine.EngineClient.GitFetchOutcome outcome;
+            try {
+                outcome = dev.jkbuild.cli.engine.EngineClient.runGitFetch(
+                        dev.jkbuild.engine.EnginePaths.current(),
+                        new dev.jkbuild.cli.engine.EngineClient.GitFetchRequest(
+                                expanded, canonical, refStr, cacheDir, refresh),
+                        phases -> GoalConsole.chooseConsoleListener("install-git-fetch", phases, mode));
+            } catch (IOException e) {
+                CliOutput.err("jk install: " + e.getMessage());
+                return Exit.SOFTWARE;
+            }
+            fetchResult = outcome.result();
+            checkout = outcome.checkout();
+            sha = outcome.sha();
+        }
+        if (!fetchResult.success() || checkout == null || sha == null) {
             for (GoalResult.Diagnostic d : fetchResult.errors()) {
                 if ("no-jk-toml".equals(d.code())) return Exit.SOFTWARE;
             }
             return failureExit(fetchResult, "jk install", cacheDir);
         }
-
-        Path checkout = fetchGoal.get(CHECKOUT).orElseThrow();
-        String sha = fetchGoal.get(FETCHED_SHA).orElseThrow();
         if (!global.outputIsJson()) {
             CliOutput.out(
                     "Fetched " + expanded + " @ " + refStr + " (" + sha.substring(0, Math.min(7, sha.length())) + ")");
         }
 
+        // After fetch, hand off to the same project-install pipeline used by
+        // mode 1, but with the checkout dir instead of the user's CWD.
         return runProjectInstallGoal(checkout, "install-git");
-    }
-
-    /** Try the user's ref as a tag first, then a branch. */
-    private static GitFetcher.Fetched fetchTagOrBranch(
-            GitFetcher fetcher, String expanded, String canonical, String refStr, boolean refresh) throws IOException {
-        IOException tagFailure;
-        try {
-            GitSource asTag = new GitSource(canonical, expanded, new GitRefSpec.Tag(refStr), null, true, false);
-            return fetcher.fetch(asTag, refresh);
-        } catch (IOException e) {
-            tagFailure = e;
-        }
-        try {
-            GitSource asBranch = new GitSource(canonical, expanded, new GitRefSpec.Branch(refStr), null, true, false);
-            return fetcher.fetch(asBranch, refresh);
-        } catch (IOException branchFailure) {
-            IOException wrapped = new IOException("ref `" + refStr + "` not found as tag or branch in " + expanded);
-            wrapped.addSuppressed(tagFailure);
-            wrapped.addSuppressed(branchFailure);
-            throw wrapped;
-        }
     }
 
     // --- shared project-install pipeline ---------------------------------
@@ -409,192 +391,73 @@ public final class InstallCommand implements CliCommand {
         // ALWAYS: native is part of the standard build and install produces a native binary.
         // SUPPORTED: user runs `jk native` explicitly; install deploys the jar.
         boolean isNative = pj.isApplication() && pj.nativeMode() == JkBuild.NativeMode.ALWAYS;
-        boolean needShadow = pj.isApplication() && pj.shadow() && !isNative;
 
-        // Build through the one pipeline (jar always; shadow/native per jk.toml),
-        // then install its outputs — no nested jk process.
-        Path lockFile = projectDir.resolve("jk.lock");
-        int estimatedTestCount = TestCommand.estimateTestCount(projectDir.resolve("src/test/java"));
-        BuildPipeline.Inputs inputs = new BuildPipeline.Inputs(
-                projectDir,
-                cacheDir,
-                projectDir.resolve("jk.toml"),
-                lockFile,
-                projectDir,
-                1,
-                estimatedTestCount,
-                null,
-                null,
-                buildOpts.skipTests,
-                global.verbose);
-        Goal.Builder builder = BuildPipeline.coreBuilder(inputs);
-        BuildPipeline.appendDeclaredTails(builder, inputs);
-
-        // `jk build` no longer auto-builds native (that's `jk native`), so an
-        // installed native application builds its binary here. Resolve the
-        // GraalVM up front — before GoalConsole opens — so a prompt/install never
-        // lands inside the progress UI.
+        // `jk build` no longer auto-builds native (that's `jk native`), so an installed native
+        // application builds its binary here. Resolve the GraalVM up front — before any progress
+        // UI opens, and before the request ships (a prompt/install owns this terminal and must
+        // never run inside the engine).
+        Path graalHome = null;
         if (isNative) {
-            java.util.Optional<Path> graalHome =
+            java.util.Optional<Path> resolved =
                     new dev.jkbuild.cli.GraalResolver(null, false).resolve(projectDir, pj.graal());
-            if (graalHome.isEmpty()) return 1; // GraalResolver already printed why
-            builder.addPhase(
-                    BuildPipeline.nativePhase(projectDir, cacheDir, lockFile, null, graalHome.get(), null, List.of()));
+            if (resolved.isEmpty()) return 1; // GraalResolver already printed why
+            graalHome = resolved.get();
         }
 
-        // cache-install reads the freshly-built jar; make-install must wait for
-        // whichever runnable artifact this project produces.
-        List<String> makeRequires = new ArrayList<>(List.of("cache-install"));
-        if (isNative) makeRequires.add("native-image");
-        if (needShadow) makeRequires.add("package-shadow");
-
-        // Always: install the jar + pom into jk's CAS + m2 local repo (the
-        // `mvn install` equivalent), so other local projects can resolve it.
-        Phase cacheInstall = Phase.builder("cache-install")
-                .requires("package-jar")
-                .scope(1)
-                .execute(ctx -> {
-                    JkBuild project = ctx.require(PROJECT);
-                    BuildLayout layout = ctx.require(LAYOUT);
-                    var p = project.project();
-                    Coordinate coord = Coordinate.of(p.group(), p.name(), p.version());
-                    ctx.label("install " + Coords.gav(coord) + " to cache");
-                    try {
-                        cacheInstallArtifact(project, layout, cacheDir);
-                    } catch (IOException e) {
-                        ctx.error("cache-install", e.getMessage());
-                        throw new RuntimeException(e);
-                    }
-                    ctx.put(PRIMARY, coord);
-                    ctx.progress(1);
-                })
-                .build();
-
-        // Only for applications: place a runnable artifact under ~/.jk.
-        Phase makeInstall = Phase.builder("make-install")
-                .requires(makeRequires.toArray(new String[0]))
-                .scope(1)
-                .execute(ctx -> {
-                    JkBuild project = ctx.require(PROJECT);
-                    BuildLayout layout = ctx.require(LAYOUT);
-                    if (!project.project().isApplication()) {
-                        ctx.label("library — cache install only");
-                        ctx.progress(1);
-                        return;
-                    }
-                    ctx.label("make install to " + binDir);
-                    try {
-                        Path launcher = makeInstallApp(projectDir, project, layout, cacheDir, binDir, libexecDir);
-                        ctx.put(LAUNCHER, launcher);
-                    } catch (IOException e) {
-                        ctx.error("make-install", e.getMessage());
-                        throw new RuntimeException(e);
-                    }
-                    ctx.progress(1);
-                })
-                .build();
-
-        Goal goal = builder.addPhase(cacheInstall).addPhase(makeInstall).build();
-
-        GoalResult result = GoalConsole.run(goal, GoalConsole.modeFor(global), cacheDir);
+        // Build + cache-install through the shared InstallGoals goal (jar always; shadow/native
+        // per jk.toml; jar + generated pom into ~/.m2 / repos/local) — engine-hosted for a real
+        // invocation, in-process for the test-only bypass. The make-install half runs below,
+        // client-side either way: it writes the user-home launcher/binary this process owns.
+        GoalConsole.Mode mode = GoalConsole.modeFor(global);
+        GoalResult result;
+        JUnitLauncher.Result testResult;
+        if (engineDisabledForTests()) {
+            Goal goal = dev.jkbuild.runtime.InstallGoals.projectInstallGoal(
+                    projectDir, cacheDir, m2Dir(), buildOpts.skipTests, global.verbose, graalHome);
+            result = GoalConsole.run(goal, mode, cacheDir);
+            testResult = goal.get(BuildPipeline.TEST_RESULT).orElse(null);
+        } else {
+            var session = dev.jkbuild.config.SessionContext.current();
+            JUnitLauncher.Result[] testResultHolder = new JUnitLauncher.Result[1];
+            try {
+                result = dev.jkbuild.cli.engine.EngineClient.runInstall(
+                        dev.jkbuild.engine.EnginePaths.current(),
+                        new dev.jkbuild.cli.engine.EngineClient.InstallRequest(
+                                projectDir,
+                                cacheDir,
+                                m2Dir(),
+                                graalHome,
+                                buildOpts.skipTests,
+                                session.offline(),
+                                session.force(),
+                                global.verbose),
+                        phases -> GoalConsole.chooseConsoleListener(goalName, phases, mode),
+                        testResultHolder);
+            } catch (IOException e) {
+                CliOutput.err("jk install: " + e.getMessage());
+                return Exit.SOFTWARE;
+            }
+            testResult = testResultHolder[0];
+        }
         if (!result.success()) {
-            var testResult = goal.get(BuildPipeline.TEST_RESULT).orElse(null);
             if (testResult != null && !testResult.allPassed()) return 4;
             return failureExit(result, "jk install", cacheDir);
         }
 
-        announceProjectInstall(
-                Coords.gav(goal.get(PRIMARY).orElseThrow()), goal.get(LAUNCHER).orElse(null), binDir);
+        // Only for applications: place a runnable artifact under ~/.jk (the "make install").
+        Coordinate coord = Coordinate.of(pj.group(), pj.name(), pj.version());
+        Path launcher = null;
+        if (pj.isApplication()) {
+            try {
+                launcher = makeInstallApp(projectDir, proj, BuildLayout.of(projectDir, proj), cacheDir, binDir,
+                        libexecDir);
+            } catch (IOException e) {
+                CliOutput.err("jk install: make install failed: " + e.getMessage());
+                return 1;
+            }
+        }
+        announceProjectInstall(Coords.gav(coord), launcher, binDir);
         return 0;
-    }
-
-    /**
-     * Install the built JAR and a generated POM into the artifact store.
-     *
-     * <ul>
-     *   <li><b>m2install = true (default)</b> — {@code ~/.m2/repository} is primary. The JAR and
-     *       POM are written there with full Maven-compatible {@code .sha1}/{@code .md5} sidecars and
-     *       a {@code _remote.repositories} hint. jk records a {@code .sha256} index sidecar in
-     *       {@code repos/local/} so the artifact is discoverable via the local index.</li>
-     *   <li><b>m2install = false</b> — {@code repos/local/} is primary (used for jk's own worker
-     *       modules that must be found by {@link dev.jkbuild.worker.WorkerJar#locate} without going
-     *       through {@code ~/.m2}).</li>
-     * </ul>
-     */
-    private void cacheInstallArtifact(JkBuild project, BuildLayout layout, Path cacheDir) throws IOException {
-        var p = project.project();
-        Coordinate coord = Coordinate.of(p.group(), p.name(), p.version());
-        Path jar = layout.mainJar();
-        String jarRelPath = dev.jkbuild.repo.MavenLayout.artifactPath(coord);
-        String pomRelPath = dev.jkbuild.repo.MavenLayout.pomPath(coord);
-        String pomXml = dev.jkbuild.publish.PublishablePom.render(project, null).xml();
-        byte[] pomBytes = pomXml.getBytes(java.nio.charset.StandardCharsets.UTF_8);
-
-        if (p.m2install()) {
-            // ~/.m2 is primary. Honor --m2-dir so installs are redirectable (tests, sandboxes).
-            Path m2Root = m2Dir().resolve("repository");
-
-            // JAR → ~/.m2 with .sha1, .md5, _remote.repositories
-            Path m2Jar = m2Root.resolve(jarRelPath);
-            dev.jkbuild.repo.M2CompatWriter.MavenHashes jarH =
-                    dev.jkbuild.repo.M2CompatWriter.copyToM2AndHash(jar, m2Jar);
-            dev.jkbuild.repo.M2CompatWriter.writeMavenSidecars(m2Jar, jarH.sha1(), jarH.md5());
-            dev.jkbuild.repo.M2CompatWriter.writeRemoteRepositories(
-                    m2Jar.getParent(), "local", m2Jar.getFileName().toString());
-
-            // POM → ~/.m2 with .sha1, .md5
-            Path m2Pom = m2Root.resolve(pomRelPath);
-            dev.jkbuild.repo.M2CompatWriter.MavenHashes pomH =
-                    dev.jkbuild.repo.M2CompatWriter.writeBytesToM2(pomBytes, m2Pom);
-            dev.jkbuild.repo.M2CompatWriter.writeMavenSidecars(m2Pom, pomH.sha1(), pomH.md5());
-
-            // Index sidecars in repos/local/ (jk's O(1) lookup, pointing to ~/.m2)
-            writeLocalIndexSidecar(cacheDir, jarRelPath, Hashing.sha256Hex(jar));
-            writeLocalIndexSidecar(cacheDir, pomRelPath, Hashing.sha256Hex(pomBytes));
-        } else {
-            // repos/local/ is primary (worker JARs, jk-internal use).
-            writeToLocalStore(cacheDir, jarRelPath, jar);
-            writeContentToLocalStore(cacheDir, pomRelPath, pomBytes);
-        }
-    }
-
-    /** Write a sidecar-only entry in {@code repos/local/} pointing to an artifact in {@code ~/.m2}. */
-    private static void writeLocalIndexSidecar(Path cacheDir, String relativePath, String sha256) {
-        try {
-            Path sidecar = cacheDir.resolve("repos/local/" + relativePath + ".sha256");
-            Files.createDirectories(sidecar.getParent());
-            if (!Files.exists(sidecar)) Files.writeString(sidecar, sha256);
-        } catch (IOException ignored) {
-        }
-    }
-
-    /** Write a file directly into {@code repos/local/} as a full-store entry (actual JAR on disk). */
-    private static void writeToLocalStore(Path cacheDir, String relativePath, Path source) throws IOException {
-        Path target = cacheDir.resolve("repos/local/" + relativePath);
-        Files.createDirectories(target.getParent());
-        Path tmp = target.resolveSibling(target.getFileName() + ".part");
-        Files.copy(source, tmp, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-        Files.move(
-                tmp,
-                target,
-                java.nio.file.StandardCopyOption.ATOMIC_MOVE,
-                java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-        Files.writeString(Path.of(target + ".sha256"), Hashing.sha256Hex(target));
-    }
-
-    /** Write byte content directly into {@code repos/local/} as a full-store entry. */
-    private static void writeContentToLocalStore(Path cacheDir, String relativePath, byte[] content)
-            throws IOException {
-        Path target = cacheDir.resolve("repos/local/" + relativePath);
-        Files.createDirectories(target.getParent());
-        Path tmp = target.resolveSibling(target.getFileName() + ".part");
-        Files.write(tmp, content);
-        Files.move(
-                tmp,
-                target,
-                java.nio.file.StandardCopyOption.ATOMIC_MOVE,
-                java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-        Files.writeString(Path.of(target + ".sha256"), Hashing.sha256Hex(content));
     }
 
     /**

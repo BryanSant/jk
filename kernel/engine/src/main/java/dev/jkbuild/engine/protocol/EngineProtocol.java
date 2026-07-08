@@ -288,6 +288,52 @@ public final class EngineProtocol {
     /** Server → client, terminal for {@link #PROVISION_REQUEST}: the provisioned tool's bin path. */
     public static final String PROVISION_RESULT = "provision-result";
 
+    // ---- hosted pipeline verbs (Wave 3 of the slim-client migration) -----------------------------
+    //
+    // The in-process BuildPipeline stragglers move engine-side: jk compile, jk native, and jk
+    // install's build/clone halves (jk run's build half rides SINGLE_BUILD_REQUEST as-is — only the
+    // exec of the user's program stays client-side, same reasoning as jk mvn/gradle's exec).
+    // Terminal-owning pre-flights stay in the client: jk native / jk install resolve (and, with
+    // consent, install) the GraalVM in the client and send its home on the request; the launcher
+    // write into ~/.jk/bin (jk install's "make install") happens client-side after the hosted goal.
+
+    /**
+     * Client → server: type-check the project ({@code jk compile}) — the shared pipeline in
+     * compile-only mode. Single goal; {@link #TEST_REQUEST}'s exact wire shape with a plain
+     * {@code goal-finish} terminal.
+     */
+    public static final String COMPILE_REQUEST = "compile-request";
+
+    /**
+     * Client → server: build native artifacts ({@code jk native}) — the full pipeline plus the
+     * native-image tail for every native-eligible module, the {@code native-image} child process
+     * forked engine-side like a worker. Speaks {@link #BUILD_REQUEST}'s workspace event vocabulary
+     * verbatim (a single project is a cascade of one): a {@link #PLAN_MODULE}/{@link #PLAN_PHASE}
+     * burst with per-module goal weights, then each module serially — {@link #MODULE_START}, goal
+     * events, a test-count-carrying {@link #GOAL_FINISH}, {@link #MODULE_FINISH} with an
+     * engine-computed exit code ({@code jk native}'s 64/4/1 mapping) — ending in {@link
+     * #WORKSPACE_FINISH}. The GraalVM was resolved client-side (a prompt/install owns the terminal)
+     * and rides the request as parallel {@code graalDirs}/{@code graalHomes} arrays.
+     */
+    public static final String NATIVE_REQUEST = "native-request";
+
+    /**
+     * Client → server: build the current project and install it into the caches ({@code jk
+     * install}'s build + cache-install halves — jar/pom into {@code ~/.m2} and the local repo
+     * index). Single goal ({@link #TEST_REQUEST}'s wire shape); the terminal {@code goal-finish}
+     * carries the test counts the exit-code logic needs. The "make install" half (launcher/binary
+     * into {@code ~/.jk/bin} + {@code libexec}) stays client-side, after this goal succeeds.
+     */
+    public static final String INSTALL_REQUEST = "install-request";
+
+    /**
+     * Client → server: materialize a git checkout ({@code jk install <git-url>}'s fetch half) via
+     * the engine-forked git-client worker. Single goal; the terminal {@code goal-finish} carries
+     * the checkout path + resolved sha (see {@link #goalFinishGitFetch}), which the client then
+     * feeds into a follow-up {@link #INSTALL_REQUEST}.
+     */
+    public static final String GIT_FETCH_REQUEST = "git-fetch-request";
+
     /** The {@code "t"} discriminator of a decoded message, or {@code null} if absent/malformed. */
     public static String typeOf(String json) {
         return Ndjson.str(json, TYPE_FIELD);
@@ -831,14 +877,168 @@ public final class EngineProtocol {
                 + "}";
     }
 
-    /** Forecast a build (see {@link #EXPLAIN_REQUEST}). */
-    public static String explainRequest(String entryDir, String cache) {
+    /**
+     * Type-check the project (see {@link #COMPILE_REQUEST}). {@code profile} may be {@code null};
+     * {@code offline}/{@code force}/{@code verbose} reconstruct the session config engine-side.
+     */
+    public static String compileRequest(
+            String entryDir, String cache, String profile, boolean offline, boolean force, boolean verbose) {
+        return "{\"t\":\""
+                + COMPILE_REQUEST
+                + "\",\"entryDir\":"
+                + Ndjson.quote(entryDir)
+                + ",\"cache\":"
+                + Ndjson.quote(cache)
+                + ",\"profile\":"
+                + Ndjson.quote(profile)
+                + ",\"offline\":"
+                + offline
+                + ",\"force\":"
+                + force
+                + ",\"verbose\":"
+                + verbose
+                + "}";
+    }
+
+    /**
+     * Build native artifacts (see {@link #NATIVE_REQUEST}). {@code mainClass} is the {@code --main}
+     * override (may be {@code null} — the engine resolves {@code [native].main-class}/{@code
+     * [image].main}/{@code [project].main} itself); {@code extraArgs} are forwarded to {@code
+     * native-image}; {@code graalDirs}/{@code graalHomes} are parallel arrays mapping each
+     * native-eligible module dir to the GraalVM home the client resolved for it (the codec reads no
+     * nested objects, so a map travels as two aligned string arrays).
+     */
+    public static String nativeRequest(
+            String entryDir,
+            String cache,
+            String jdksDir,
+            String mainClass,
+            boolean skipTests,
+            boolean offline,
+            boolean force,
+            boolean verbose,
+            List<String> extraArgs,
+            List<String> graalDirs,
+            List<String> graalHomes) {
+        return "{\"t\":\""
+                + NATIVE_REQUEST
+                + "\",\"entryDir\":"
+                + Ndjson.quote(entryDir)
+                + ",\"cache\":"
+                + Ndjson.quote(cache)
+                + ",\"jdksDir\":"
+                + Ndjson.quote(jdksDir)
+                + ",\"mainClass\":"
+                + Ndjson.quote(mainClass)
+                + ",\"skipTests\":"
+                + skipTests
+                + ",\"offline\":"
+                + offline
+                + ",\"force\":"
+                + force
+                + ",\"verbose\":"
+                + verbose
+                + ",\"extraArgs\":"
+                + quoteArray(extraArgs)
+                + ",\"graalDirs\":"
+                + quoteArray(graalDirs)
+                + ",\"graalHomes\":"
+                + quoteArray(graalHomes)
+                + "}";
+    }
+
+    /**
+     * Build + cache-install the project (see {@link #INSTALL_REQUEST}). {@code m2Dir} is the
+     * resolved local Maven repo root ({@code ~/.m2} or {@code --m2-dir}); {@code graalHome} is
+     * non-null only for a native application (resolved client-side).
+     */
+    public static String installRequest(
+            String entryDir,
+            String cache,
+            String m2Dir,
+            String graalHome,
+            boolean skipTests,
+            boolean offline,
+            boolean force,
+            boolean verbose) {
+        return "{\"t\":\""
+                + INSTALL_REQUEST
+                + "\",\"entryDir\":"
+                + Ndjson.quote(entryDir)
+                + ",\"cache\":"
+                + Ndjson.quote(cache)
+                + ",\"m2Dir\":"
+                + Ndjson.quote(m2Dir)
+                + ",\"graalHome\":"
+                + Ndjson.quote(graalHome)
+                + ",\"skipTests\":"
+                + skipTests
+                + ",\"offline\":"
+                + offline
+                + ",\"force\":"
+                + force
+                + ",\"verbose\":"
+                + verbose
+                + "}";
+    }
+
+    /**
+     * Materialize a git checkout (see {@link #GIT_FETCH_REQUEST}). {@code url} is the expanded
+     * fetch URL, {@code canonicalUrl} its canonical identity, {@code ref} the tag-or-branch name;
+     * {@code refresh} forces a re-fetch of an already-materialized ref.
+     */
+    public static String gitFetchRequest(String url, String canonicalUrl, String ref, String cache, boolean refresh) {
+        return "{\"t\":\""
+                + GIT_FETCH_REQUEST
+                + "\",\"url\":"
+                + Ndjson.quote(url)
+                + ",\"canonicalUrl\":"
+                + Ndjson.quote(canonicalUrl)
+                + ",\"ref\":"
+                + Ndjson.quote(ref)
+                + ",\"cache\":"
+                + Ndjson.quote(cache)
+                + ",\"refresh\":"
+                + refresh
+                + "}";
+    }
+
+    /**
+     * Forecast a build (see {@link #EXPLAIN_REQUEST}). Beyond the plan itself, the fields carry the
+     * plan-affecting {@code jk build} options the engine-side ETA estimate needs ({@code jdksDir}/
+     * {@code profile} may be {@code null}); the computed estimate rides back as an {@link #ETA}
+     * event inside the explain burst.
+     */
+    public static String explainRequest(
+            String entryDir,
+            String cache,
+            int workers,
+            boolean skipTests,
+            String profile,
+            String jdksDir,
+            boolean serial,
+            boolean parallelTests,
+            boolean verbose) {
         return "{\"t\":\""
                 + EXPLAIN_REQUEST
                 + "\",\"entryDir\":"
                 + Ndjson.quote(entryDir)
                 + ",\"cache\":"
                 + Ndjson.quote(cache)
+                + ",\"workers\":"
+                + workers
+                + ",\"skipTests\":"
+                + skipTests
+                + ",\"profile\":"
+                + Ndjson.quote(profile)
+                + ",\"jdksDir\":"
+                + Ndjson.quote(jdksDir)
+                + ",\"serial\":"
+                + serial
+                + ",\"parallelTests\":"
+                + parallelTests
+                + ",\"verbose\":"
+                + verbose
                 + "}";
     }
 
@@ -1336,6 +1536,24 @@ public final class EngineProtocol {
                 + total
                 + ",\"formatWorkerExit\":"
                 + workerExit
+                + "}";
+    }
+
+    /**
+     * As {@link #goalFinish(String, boolean)}, additionally carrying a {@link #GIT_FETCH_REQUEST}'s
+     * materialized checkout path and resolved commit sha ({@code null} when the fetch failed).
+     */
+    public static String goalFinishGitFetch(String dir, boolean success, String checkout, String sha) {
+        return "{\"t\":\""
+                + GOAL_FINISH
+                + "\",\"dir\":"
+                + Ndjson.quote(dir)
+                + ",\"success\":"
+                + success
+                + ",\"gitCheckout\":"
+                + Ndjson.quote(checkout)
+                + ",\"gitSha\":"
+                + Ndjson.quote(sha)
                 + "}";
     }
 

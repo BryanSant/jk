@@ -120,6 +120,23 @@ the same discriminated-envelope style, so this is vocabulary plumbing, not redes
 > hosted, a missing worker jar surfaces as the engine's structured error text (same side-load
 > instructions).
 
+> **Status: Wave 3 landed (2026-07-08).** The in-process `BuildPipeline` stragglers are hosted:
+> `compile` (single-goal shape, shared `CompileGoals`), `run`'s build half (rides the existing
+> `single-build-request`; the exec stays client-side), `native` (the whole serial cascade — one
+> `native-request` speaking `build-request`'s workspace vocabulary, `native-image` forked
+> engine-side, exit codes engine-computed via `NativeGoals`; GraalVM resolution/consent pre-flights
+> client-side and rides the request), and `install`'s project/git modes (`InstallGoals`: build +
+> cache-install hosted, plus a `git-fetch-request` for the clone; the `~/.jk/bin`/`libexec`
+> "make install" half stays client-side). `install`'s Maven-coord mode still resolves via
+> `ToolResolver` in-process — deferred to Wave 4 with `tool install/run`, whose stack it is. The
+> §1.1 `explain` ETA residue is closed: `BuildService.estimateEtaMillis` runs engine-side, fed by
+> eta fields on `explain-request`, emitted as an `eta` event. `cache prune/purge` stay in Wave 4:
+> hosting the foreground mutation alone wouldn't be the correctness fix — CAS/ActionCache have no
+> cross-process locks at all (only prunes mutually exclude via `.prune.lock`, and only on the
+> `--background` path), and the engine runs pipelines concurrently, so a hosted prune would still
+> race in-flight builds; the real fix is the Wave-4 engine-internal idle job that quiesces
+> pipelines first.
+
 ## 2. jdeps evidence
 
 `jdeps -verbose:class -cp <model,core,io,resolver,toolchain,engine,plugin-api jars> cli/build/libs/cli.jar`

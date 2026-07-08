@@ -373,6 +373,7 @@ class EngineServerTest {
             String lockModule = null;
             String goalFinish = null;
             String lockFinish = null;
+            String buildError = null;
             boolean sawLeafPackage = false;
             try (Client c = new Client(p.socket())) {
                 c.sendLine(EngineProtocol.lockRequest(
@@ -395,14 +396,22 @@ class EngineServerTest {
                             sawLeafPackage |= "com.foo:leaf".equals(Ndjson.str(line, "name"));
                         case EngineProtocol.GOAL_FINISH -> goalFinish = line;
                         case EngineProtocol.LOCK_FINISH -> lockFinish = line;
+                        // Terminal too (a pre-goal failure): break instead of waiting forever for a
+                        // lock-finish that will never come — otherwise the server (reading this
+                        // connection for a cancel/EOF) and this loop mutually wait, and the test
+                        // hangs to timeout. The real client (EngineResolveAdapter) does the same.
+                        case EngineProtocol.BUILD_ERROR -> buildError = line;
                         default -> {
                             /* plan/progress events — presence asserted via `types` below */
                         }
                     }
-                    if (lockFinish != null) break;
+                    if (lockFinish != null || buildError != null) break;
                 }
             }
 
+            assertThat(buildError)
+                    .as("engine reported a pre-goal error instead of hosting the lock")
+                    .isNull();
             assertThat(lockModule).isNotNull();
             assertThat(Ndjson.str(lockModule, "dir")).isEqualTo(project.toString());
             assertThat(Ndjson.str(lockModule, "coord")).isEqualTo("com.example:app");
@@ -527,6 +536,89 @@ class EngineServerTest {
             osv.stop(0);
             dev.jkbuild.lock.LockfileReader.clearCache();
         }
+    }
+
+    /**
+     * Engine-hosted {@code jk compile} round-trip (Wave 3 of the slim-client migration — the
+     * in-process {@code BuildPipeline} stragglers): a real server over the socket runs the shared
+     * pipeline in compile-only mode against a tiny dependency-free fixture (a fresh empty {@code
+     * jk.lock}, so no network resolve). Asserts the single-goal wire conversation — plan burst →
+     * goal events → terminal {@code goal-finish} — and that the engine actually compiled the class.
+     */
+    @Test
+    void compile_request_compiles_the_project_over_the_socket() throws Exception {
+        Path project = shortTempDir();
+        Files.writeString(project.resolve("jk.toml"), """
+                [project]
+                group   = "com.example"
+                name    = "app"
+                version = "1.0.0"
+                java    = 21
+                """);
+        Path src = project.resolve("src/main/java/example/Hello.java");
+        Files.createDirectories(src.getParent());
+        Files.writeString(src, """
+                package example;
+                public class Hello {
+                    public static void main(String[] args) {
+                        System.out.println("hi");
+                    }
+                }
+                """);
+        // A fresh empty lock (newer than jk.toml) stands in for "already locked" — the pipeline's
+        // parse-build then uses it verbatim instead of resolving over the network.
+        Files.writeString(project.resolve("jk.lock"), """
+                version = 1
+                generated-by = "jk test"
+                resolution-algorithm = "pubgrub-v1"
+                """);
+        Path cache = shortTempDir();
+
+        EnginePaths.Paths p = paths(shortTempDir());
+        EngineServer server = new EngineServer(p, JkEngineConfig.DEFAULTS, "1.0", null);
+        Thread serverThread = runInBackground(server);
+        waitUntil(Duration.ofSeconds(5), () -> Files.exists(p.socket()));
+
+        List<String> types = new ArrayList<>();
+        List<String> diagnostics = new ArrayList<>();
+        String goalFinish = null;
+        String buildError = null;
+        try (Client c = new Client(p.socket())) {
+            c.sendLine(EngineProtocol.compileRequest(
+                    project.toString(), cache.toString(), null, false, false, false));
+            String line;
+            while ((line = c.readLine()) != null) {
+                String type = EngineProtocol.typeOf(line);
+                types.add(type);
+                switch (type) {
+                    case EngineProtocol.GOAL_FINISH -> goalFinish = line;
+                    case EngineProtocol.GOAL_DIAGNOSTIC -> diagnostics.add(line);
+                    // Terminal too — break instead of waiting for a goal-finish that will never
+                    // come (the mutual-wait shape the audit test also guards against).
+                    case EngineProtocol.BUILD_ERROR -> buildError = line;
+                    default -> {
+                        /* plan/progress events — presence asserted via `types` below */
+                    }
+                }
+                if (goalFinish != null || buildError != null) break;
+            }
+        }
+
+        assertThat(buildError)
+                .as("engine reported a pre-goal error instead of hosting the compile")
+                .isNull();
+        assertThat(types).contains(EngineProtocol.PLAN_PHASE, EngineProtocol.PLAN_DONE);
+        assertThat(goalFinish).isNotNull();
+        assertThat(Ndjson.bool(goalFinish, "success", false))
+                .as("hosted compile succeeded; diagnostics: " + diagnostics)
+                .isTrue();
+        // The engine (not the client) ran the compile.
+        assertThat(Files.isRegularFile(project.resolve("target/classes/main/example/Hello.class")))
+                .isTrue();
+
+        server.close();
+        serverThread.join(5_000);
+        dev.jkbuild.lock.LockfileReader.clearCache();
     }
 
     /** Minimal metadata + dependency-free POM + stub jar for one coordinate on the mock repo. */

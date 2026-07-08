@@ -305,4 +305,96 @@ class EngineProtocolTest {
         assertThat(Ndjson.str(result, "error")).isNull();
         assertThat(Ndjson.intValue(result, "exit", -1)).isEqualTo(0);
     }
+
+    @Test
+    void compile_request_round_trips_all_fields() {
+        String json = EngineProtocol.compileRequest("/work", "/cache", "ci", true, false, true);
+        assertThat(EngineProtocol.typeOf(json)).isEqualTo(EngineProtocol.COMPILE_REQUEST);
+        assertThat(Ndjson.str(json, "entryDir")).isEqualTo("/work");
+        assertThat(Ndjson.str(json, "cache")).isEqualTo("/cache");
+        assertThat(Ndjson.str(json, "profile")).isEqualTo("ci");
+        assertThat(Ndjson.bool(json, "offline", false)).isTrue();
+        assertThat(Ndjson.bool(json, "force", true)).isFalse();
+        assertThat(Ndjson.bool(json, "verbose", false)).isTrue();
+
+        String noProfile = EngineProtocol.compileRequest("/w", "/c", null, false, false, false);
+        assertThat(Ndjson.str(noProfile, "profile")).isNull();
+    }
+
+    @Test
+    void native_request_round_trips_the_parallel_graal_arrays() {
+        String json = EngineProtocol.nativeRequest(
+                "/work",
+                "/cache",
+                "/jdks",
+                "com.example.Main",
+                true,
+                false,
+                true,
+                false,
+                java.util.List.of("-O2"),
+                java.util.List.of("/work/app", "/work/tool"),
+                java.util.List.of("/graal/a", "/graal/b"));
+        assertThat(EngineProtocol.typeOf(json)).isEqualTo(EngineProtocol.NATIVE_REQUEST);
+        assertThat(Ndjson.str(json, "entryDir")).isEqualTo("/work");
+        assertThat(Ndjson.str(json, "jdksDir")).isEqualTo("/jdks");
+        assertThat(Ndjson.str(json, "mainClass")).isEqualTo("com.example.Main");
+        assertThat(Ndjson.bool(json, "skipTests", false)).isTrue();
+        assertThat(Ndjson.bool(json, "force", false)).isTrue();
+        assertThat(Ndjson.strArray(json, "extraArgs")).containsExactly("-O2");
+        assertThat(Ndjson.strArray(json, "graalDirs")).containsExactly("/work/app", "/work/tool");
+        assertThat(Ndjson.strArray(json, "graalHomes")).containsExactly("/graal/a", "/graal/b");
+    }
+
+    @Test
+    void install_request_round_trips_all_fields() {
+        String json = EngineProtocol.installRequest("/work", "/cache", "/home/u/.m2", "/graal", true, false, false, true);
+        assertThat(EngineProtocol.typeOf(json)).isEqualTo(EngineProtocol.INSTALL_REQUEST);
+        assertThat(Ndjson.str(json, "entryDir")).isEqualTo("/work");
+        assertThat(Ndjson.str(json, "m2Dir")).isEqualTo("/home/u/.m2");
+        assertThat(Ndjson.str(json, "graalHome")).isEqualTo("/graal");
+        assertThat(Ndjson.bool(json, "skipTests", false)).isTrue();
+        assertThat(Ndjson.bool(json, "verbose", false)).isTrue();
+
+        String jvmOnly = EngineProtocol.installRequest("/w", "/c", "/m2", null, false, false, false, false);
+        assertThat(Ndjson.str(jvmOnly, "graalHome")).isNull();
+    }
+
+    @Test
+    void git_fetch_request_and_finish_variant_round_trip() {
+        String req = EngineProtocol.gitFetchRequest(
+                "https://github.com/o/r.git", "github.com/o/r", "v1.2", "/cache", true);
+        assertThat(EngineProtocol.typeOf(req)).isEqualTo(EngineProtocol.GIT_FETCH_REQUEST);
+        assertThat(Ndjson.str(req, "url")).isEqualTo("https://github.com/o/r.git");
+        assertThat(Ndjson.str(req, "canonicalUrl")).isEqualTo("github.com/o/r");
+        assertThat(Ndjson.str(req, "ref")).isEqualTo("v1.2");
+        assertThat(Ndjson.bool(req, "refresh", false)).isTrue();
+
+        String finish = EngineProtocol.goalFinishGitFetch("", true, "/cache/git/co/abc", "abc123");
+        assertThat(EngineProtocol.typeOf(finish)).isEqualTo(EngineProtocol.GOAL_FINISH);
+        assertThat(Ndjson.bool(finish, "success", false)).isTrue();
+        assertThat(Ndjson.str(finish, "gitCheckout")).isEqualTo("/cache/git/co/abc");
+        assertThat(Ndjson.str(finish, "gitSha")).isEqualTo("abc123");
+
+        String failed = EngineProtocol.goalFinishGitFetch("", false, null, null);
+        assertThat(Ndjson.str(failed, "gitCheckout")).isNull();
+        assertThat(Ndjson.str(failed, "gitSha")).isNull();
+    }
+
+    @Test
+    void explain_request_carries_the_eta_inputs() {
+        String json = EngineProtocol.explainRequest("/work", "/cache", 4, true, "ci", "/jdks", true, true, false);
+        assertThat(EngineProtocol.typeOf(json)).isEqualTo(EngineProtocol.EXPLAIN_REQUEST);
+        assertThat(Ndjson.str(json, "entryDir")).isEqualTo("/work");
+        assertThat(Ndjson.intValue(json, "workers", -1)).isEqualTo(4);
+        assertThat(Ndjson.bool(json, "skipTests", false)).isTrue();
+        assertThat(Ndjson.str(json, "profile")).isEqualTo("ci");
+        assertThat(Ndjson.str(json, "jdksDir")).isEqualTo("/jdks");
+        assertThat(Ndjson.bool(json, "serial", false)).isTrue();
+        assertThat(Ndjson.bool(json, "parallelTests", false)).isTrue();
+
+        String defaults = EngineProtocol.explainRequest("/w", "/c", 1, false, null, null, false, false, false);
+        assertThat(Ndjson.str(defaults, "profile")).isNull();
+        assertThat(Ndjson.str(defaults, "jdksDir")).isNull();
+    }
 }

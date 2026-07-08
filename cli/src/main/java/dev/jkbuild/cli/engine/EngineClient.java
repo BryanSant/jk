@@ -196,12 +196,30 @@ public final class EngineClient {
     }
 
     /**
-     * Forecast a build against the engine ({@code jk explain}) — see {@link
-     * EngineBuildListenerAdapter#explain} for the exact contract.
+     * Everything an engine-hosted {@code jk explain} needs: the entry dir/cache for the plan, plus
+     * the plan-affecting {@code jk build} options the engine-side ETA estimate feeds through the
+     * shared goal assembly (Wave 3 — the estimate used to be computed client-side).
      */
-    public static BuildService.ExplainPlan explain(EnginePaths.Paths paths, Path entryDir, Path cache)
+    public record ExplainRequest(
+            Path entryDir,
+            Path cache,
+            int workers,
+            boolean skipTests,
+            String profile,
+            Path jdksDir,
+            boolean serial,
+            boolean parallelTests,
+            boolean verbose) {}
+
+    /**
+     * Forecast a build against the engine ({@code jk explain}) — see {@link
+     * EngineBuildListenerAdapter#explain} for the exact contract. {@code etaOut} (a single-slot
+     * holder, may be {@code null}) receives the engine-computed build-time estimate in millis
+     * ({@code 0} = unknown).
+     */
+    public static BuildService.ExplainPlan explain(EnginePaths.Paths paths, ExplainRequest req, long[] etaOut)
             throws IOException {
-        return EngineBuildListenerAdapter.explain(paths, entryDir, cache);
+        return EngineBuildListenerAdapter.explain(paths, req, etaOut);
     }
 
     // ---- resolver family (jk lock / update / sync — Wave 1 of the slim client) ----------------
@@ -608,6 +626,122 @@ public final class EngineClient {
                 paths,
                 EngineProtocol.provisionRequest(
                         cache.toString(), projectDir.toString(), toolsRoot.toString(), noDiscover, gradle));
+    }
+
+    // ---- hosted pipeline verbs (Wave 3 of the slim client) --------------------------------------
+
+    /** Everything an engine-hosted {@code jk compile} needs — mirrors {@code CompileCommand}'s local fields. */
+    public record CompileRequest(
+            Path entryDir, Path cache, String profile, boolean offline, boolean force, boolean verbose) {}
+
+    /**
+     * Run {@code jk compile}'s compile-only goal against the engine — {@code jk test}'s
+     * listener-factory shape, plain terminal goal-finish.
+     */
+    public static dev.jkbuild.run.GoalResult runCompile(
+            EnginePaths.Paths paths,
+            CompileRequest req,
+            java.util.function.Function<List<dev.jkbuild.run.Phase>, dev.jkbuild.run.GoalListener> listenerFactory)
+            throws IOException {
+        return EngineWorkerAdapter.stream(
+                        paths,
+                        EngineProtocol.compileRequest(
+                                req.entryDir().toString(),
+                                req.cache().toString(),
+                                req.profile(),
+                                req.offline(),
+                                req.force(),
+                                req.verbose()),
+                        "compile",
+                        listenerFactory,
+                        (type, line) -> {})
+                .result();
+    }
+
+    /**
+     * Everything an engine-hosted {@code jk native} needs. {@code graalByDir} maps each
+     * native-eligible module dir to the GraalVM home the client resolved for it — resolution (and
+     * any consent prompt / install) happens client-side <em>before</em> this request, because it
+     * owns the terminal.
+     */
+    public record NativeRequest(
+            Path entryDir,
+            Path cache,
+            Path jdksDir,
+            String mainClass,
+            boolean skipTests,
+            boolean offline,
+            boolean force,
+            boolean verbose,
+            List<String> extraArgs,
+            java.util.Map<Path, Path> graalByDir) {}
+
+    /**
+     * Run {@code jk native}'s hosted module cascade against the engine, driving {@code listener}
+     * exactly as {@link #buildWorkspace} does (the cascade speaks the workspace event vocabulary; a
+     * single project is a cascade of one). The returned result's {@code exitCode} is authoritative
+     * — computed engine-side with {@code jk native}'s 64/4/1 mapping.
+     */
+    public static BuildService.WorkspaceResult runNative(
+            EnginePaths.Paths paths, NativeRequest req, WorkspaceBuildListener listener) throws IOException {
+        return EngineBuildListenerAdapter.runNative(paths, req, listener);
+    }
+
+    /**
+     * Everything an engine-hosted {@code jk install} (project mode) needs. {@code m2Dir} is the
+     * resolved local Maven repo root; {@code graalHome} is non-null only for a native application
+     * (resolved client-side, same pre-flight as {@link NativeRequest}).
+     */
+    public record InstallRequest(
+            Path entryDir,
+            Path cache,
+            Path m2Dir,
+            Path graalHome,
+            boolean skipTests,
+            boolean offline,
+            boolean force,
+            boolean verbose) {}
+
+    /**
+     * Run {@code jk install}'s build + cache-install goal against the engine — {@link #runTest}'s
+     * exact contract ({@code testResultOut} settles before the terminal goal-finish reaches the
+     * listener). The launcher-writing "make install" half stays in the calling command.
+     */
+    public static dev.jkbuild.run.GoalResult runInstall(
+            EnginePaths.Paths paths,
+            InstallRequest req,
+            java.util.function.Function<List<dev.jkbuild.run.Phase>, dev.jkbuild.run.GoalListener> listenerFactory,
+            dev.jkbuild.test.JUnitLauncher.Result[] testResultOut)
+            throws IOException {
+        return EngineBuildListenerAdapter.runInstall(paths, req, listenerFactory, testResultOut);
+    }
+
+    /** Everything an engine-hosted {@code jk install <git-url>} fetch needs — pre-split/expanded client-side. */
+    public record GitFetchRequest(String url, String canonicalUrl, String ref, Path cache, boolean refresh) {}
+
+    /** A hosted git fetch's outcome: the goal result plus the materialized checkout + sha (null on failure). */
+    public record GitFetchOutcome(dev.jkbuild.run.GoalResult result, Path checkout, String sha) {}
+
+    /**
+     * Materialize a git checkout via the engine ({@code jk install <git-url>}'s clone half; the
+     * git-client worker forks engine-side). The checkout path + resolved sha ride the terminal
+     * goal-finish and feed the follow-up {@link #runInstall}.
+     */
+    public static GitFetchOutcome runGitFetch(
+            EnginePaths.Paths paths,
+            GitFetchRequest req,
+            java.util.function.Function<List<dev.jkbuild.run.Phase>, dev.jkbuild.run.GoalListener> listenerFactory)
+            throws IOException {
+        EngineWorkerAdapter.HostedFinish finish = EngineWorkerAdapter.stream(
+                paths,
+                EngineProtocol.gitFetchRequest(
+                        req.url(), req.canonicalUrl(), req.ref(), req.cache().toString(), req.refresh()),
+                "install-git-fetch",
+                listenerFactory,
+                (type, line) -> {});
+        String checkout = Ndjson.str(finish.finishLine(), "gitCheckout");
+        return new GitFetchOutcome(
+                finish.result(), checkout != null ? Path.of(checkout) : null, Ndjson.str(finish.finishLine(), "gitSha"));
     }
 
     static Handshake ensureRunning(EnginePaths.Paths paths, String clientVersion, Duration startTimeout)

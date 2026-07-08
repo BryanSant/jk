@@ -210,6 +210,24 @@ source detection/overwrite checks before sending. The `jk mvn`/`gradle` *exec* o
 tool deliberately stays in the client with inherited stdio — a foreign build's interactive run
 belongs to your terminal; only its download/link moved.
 
+Also in the engine (slim-client Wave 3 — the in-process `BuildPipeline` stragglers): `jk compile`
+(the shared pipeline in compile-only mode, `jk test`'s single-goal wire shape), `jk run`'s *build*
+half (it rides the existing single-project build request; only the exec of the user's program stays
+client-side — it owns your terminal, same reasoning as `jk mvn`/`gradle`'s exec), `jk native` (the
+full pipeline plus the native-image tail, the `native-image` child process forked engine-side like
+a worker; the cascade speaks `jk build`'s workspace event vocabulary with engine-computed exit
+codes), and `jk install`'s heavy halves — the git clone of a `jk install <git-url>` (the git-client
+worker forks engine-side) and the build + cache-install of the project (jar/pom into `~/.m2` and
+the local repo index). Pre-flight stays client-side, same rule as always: GraalVM resolution — and,
+with consent, its install — happens in the client before the `native`/`install` request is sent
+(the prompt owns the terminal; the engine only ever runs an already-resolved toolchain), and `jk
+install`'s "make install" (launcher/binary into `~/.jk/bin` + `libexec`) runs client-side after the
+hosted goal succeeds. `jk explain`'s build-time estimate also moved engine-side: the request
+carries the plan-affecting build options, `BuildService.estimateEtaMillis` computes the
+schedule-aware ETA next to the plan (closing the long-standing client-side
+`BuildPipeline`/`EffortWeights`/`Calibration` reach the re-foundation flagged), and the result
+rides back as an `eta` event in the explain burst.
+
 **Always in the CLI, never the engine:** anything tied to your terminal or shell — the live TUI,
 color/theme, Ctrl-C handling (a signal has to reach the actual foreground process you're looking
 at), shell completion generation — and, deliberately, all of `jk jdk install` (including its
@@ -219,10 +237,9 @@ coordination, and a machine that has never even built anything shouldn't need an
 install a JDK. The same rule shapes hosted `jk sync`: its `ensure-jdk` phase *can* trigger a JDK
 download, so the sync command pre-flights the ensure/install client-side before sending the
 request, and the engine-side phase only ever resolves an already-installed JDK (reporting a
-structured "not installed" error otherwise — it never downloads silently). `jk explain`'s ETA computation also stays client-side — it reaches into
-`BuildPipeline`/`EffortWeights`/`Calibration` directly from the CLI (a known, pre-existing gap, not
-a new one); only the plan itself (`BuildService.explain`'s module/phase/edge forecast) is
-engine-hosted.
+structured "not installed" error otherwise — it never downloads silently). The same pre-flight rule
+covers GraalVM for `jk native`/`jk install`: the client resolves (prompting/installing with
+consent) before the request, and the engine runs only the resolved toolchain.
 
 ## Version skew
 
@@ -295,9 +312,9 @@ real native-image binary:
    terminal `goal-finish` event so the CLI's post-build message matches the in-process path exactly.
 6. **`jk explain` (done).** `BuildService.explain`'s module/phase/edge forecast streams over the wire
    as a burst of messages (one per module, one per phase, one per dependency edge), reconstructed
-   client-side into a real `BuildService.ExplainPlan` — no in-process fallback for the plan itself,
-   though the ETA estimate built on top of it stays client-side (see
-   [What runs where](#what-runs-where)).
+   client-side into a real `BuildService.ExplainPlan` — no in-process fallback for the plan itself.
+   The ETA estimate built on top of it initially stayed client-side; slim-client Wave 3 moved it
+   engine-side too (see [What runs where](#what-runs-where)).
 7. **Windows transport (done).** `EngineTransport` switches to a loopback TCP port plus a
    shared-secret token (see [Wire protocol](#wire-protocol)) when `os.name` says Windows, instead of
    the Unix domain socket every other platform uses — `EngineServer`/`EngineClient`'s request

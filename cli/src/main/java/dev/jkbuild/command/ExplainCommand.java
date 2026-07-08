@@ -18,7 +18,6 @@ import dev.jkbuild.util.JkDirs;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 
 /**
  * {@code jk explain} — forecast the build (the same plan the build driver uses, via {@link
@@ -89,13 +88,41 @@ public final class ExplainCommand implements CliCommand {
         JkBuild entry = JkBuildParser.parse(buildFile);
         Path cache = cacheDir != null ? cacheDir : JkDirs.cache();
 
+        // The plan-affecting options `jk build` reads, forecast with the same defaults build uses
+        // (jdksDir=null → full JDK probe chain, workers=1, skipTests=false) so a bare `jk explain`
+        // predicts exactly what a bare `jk build` would do. Parsed before the engine round-trip:
+        // they ride the explain request so the ETA is computed engine-side (slim-client Wave 3).
+        boolean serial = in.isSet("no-parallel") && !in.isSet("parallel") && !in.isSet("parallel-tests");
+        boolean parallelTests = in.isSet("parallel-tests");
+        int workers = in.value("workers").map(Integer::parseInt).orElse(1);
+        boolean skipTests = in.isSet("skip-tests");
+        String profile = in.value("profile").orElse(null);
+        Path jdksDir = in.value("jdks-dir").map(Path::of).orElse(null);
+
         // Forecast the build through the engine facade — resolve the graph and run the truthful
         // per-phase plan, returning a front-end-safe view (modules + edges + concurrency width).
         // Engine-hosted like `jk build`/`jk test`, except in the fast unit-test suite (no real jk
-        // binary/engine available there — see BuildCommand.engineDisabledForTests()).
-        BuildService.ExplainPlan plan = engineDisabledForTests()
-                ? BuildService.explain(startDir, entry, cache)
-                : dev.jkbuild.cli.engine.EngineClient.explain(dev.jkbuild.engine.EnginePaths.current(), startDir, cache);
+        // binary/engine available there — see BuildCommand.engineDisabledForTests()). The
+        // schedule-aware build-time estimate is computed engine-side alongside the plan
+        // (BuildService.estimateEtaMillis) and rides back as an `eta` event; 0 = unknown.
+        BuildService.ExplainPlan plan;
+        long etaMillis;
+        if (engineDisabledForTests()) {
+            plan = BuildService.explain(startDir, entry, cache);
+            etaMillis = plan.hasErrors()
+                    ? 0
+                    : BuildService.estimateEtaMillis(
+                            plan, cache, workers, jdksDir, profile, skipTests, global.verbose, serial, parallelTests);
+        } else {
+            long[] etaOut = new long[1];
+            plan = dev.jkbuild.cli.engine.EngineClient.explain(
+                    dev.jkbuild.engine.EnginePaths.current(),
+                    new dev.jkbuild.cli.engine.EngineClient.ExplainRequest(
+                            startDir, cache, workers, skipTests, profile, jdksDir, serial, parallelTests,
+                            global.verbose),
+                    etaOut);
+            etaMillis = etaOut[0];
+        }
         if (plan.hasErrors()) {
             for (String err : plan.errors()) CliOutput.err(ConsoleSpec.errorLine("composite", err));
             return Exit.CONFIG;
@@ -116,72 +143,6 @@ public final class ExplainCommand implements CliCommand {
         boolean all = in.isSet("verbose");
         int total = modules.size();
         long rebuild = modules.stream().filter(BuildPlanForecast.Module::dirty).count();
-
-        // Predicted wall-clock for the build. Each module's predicted weight (≈150 ms
-        // each, cascade reserved via forceRebuild) feeds a schedule-aware estimate that
-        // mirrors `jk build`: serial (--no-parallel) sums everything; otherwise the
-        // parallel graph build overlaps independent modules, so we take the critical
-        // path / throughput / serial-test bound (see EffortWeights.scheduleMillis).
-        // Computed even for an all-cached plan: re-parsing every build file and
-        // re-checking stamps/CAS across the workspace is a real couple of seconds.
-        boolean serial = in.isSet("no-parallel") && !in.isSet("parallel") && !in.isSet("parallel-tests");
-        boolean parallelTests = in.isSet("parallel-tests");
-        // The plan-affecting options `jk build` reads, forecast with the same defaults build uses
-        // (jdksDir=null → full JDK probe chain, workers=1, skipTests=false) so a bare `jk explain`
-        // predicts exactly what a bare `jk build` would do.
-        int workers = in.value("workers").map(Integer::parseInt).orElse(1);
-        boolean skipTests = in.isSet("skip-tests");
-        String profile = in.value("profile").orElse(null);
-        Path jdksDir = in.value("jdks-dir").map(Path::of).orElse(null);
-        long etaMillis = 0;
-        try {
-            List<dev.jkbuild.runtime.EffortWeights.ModuleCost> costs = new ArrayList<>();
-            // All modules of this build graph — the project/workspace set each module's prediction
-            // borrows a learned rate from when it has no history of its own (EffortWeights.learned).
-            Set<Path> projectModules =
-                    modules.stream().map(BuildPlanForecast.Module::dir).collect(java.util.stream.Collectors.toSet());
-            for (BuildPlanForecast.Module m : modules) {
-                Path mdir = m.dir();
-                // Assemble each module's goal exactly as `jk build` does: the shared Inputs factory,
-                // core phases + declared tails (native-image / OCI / shadow). Same goal in, same
-                // cost out — so the ETA can't diverge from what build calibrates to.
-                var inputs = BuildPlanForecast.inputsFor(
-                        mdir, cache, workers, jdksDir, profile, skipTests, global.verbose, projectModules);
-                var builder = dev.jkbuild.runtime.BuildPipeline.coreBuilder(inputs, m.dirty());
-                dev.jkbuild.runtime.BuildPipeline.appendDeclaredTails(builder, inputs);
-                var goal = builder.build();
-                costs.add(dev.jkbuild.runtime.EffortWeights.costOf(
-                        mdir, plan.edges().getOrDefault(mdir, Set.of()), goal));
-            }
-            int concurrency = serial
-                    ? 1
-                    : dev.jkbuild.worker.HeapPlan.requestedJvms(
-                            plan.maxReadyWidth(), workers, parallelTests, Runtime.getRuntime()
-                                    .availableProcessors());
-            // Weight→ms conversion, PER MODULE: a module whose own dir has learned timings converts
-            // at MS_PER_WEIGHT (its learned rates were recorded relative to that constant, so it
-            // round-trips this host exactly); a module with no learned entries of its own falls back
-            // to the static reference-frame weights, so it converts at this host's measured
-            // calibration instead of the MS_PER_WEIGHT reference constant (~4× hot on a fast machine).
-            // Per-module, not one workspace-wide rate: a brand-new module beside already-built ones is
-            // the common mixed case, and a single rail mis-prices one side or the other. The one-time
-            // host probe (Calibration.ensure) runs only when some module is actually cold — the
-            // sanctioned exception to explain being a pure dry run.
-            dev.jkbuild.runtime.PhaseTimings timings = dev.jkbuild.runtime.PhaseTimings.load(cache);
-            java.util.function.Predicate<Path> warm =
-                    dir -> timings.hasTimingsFor(java.util.List.of(dir.toString()));
-            double coldRate = costs.stream().allMatch(c -> warm.test(c.dir()))
-                    ? dev.jkbuild.runtime.EffortWeights.MS_PER_WEIGHT
-                    : dev.jkbuild.runtime.Calibration.ensure(jdksDir).msPerWeight();
-            etaMillis = dev.jkbuild.runtime.EffortWeights.scheduleMillis(
-                    costs,
-                    concurrency,
-                    serial,
-                    parallelTests,
-                    dir -> warm.test(dir) ? dev.jkbuild.runtime.EffortWeights.MS_PER_WEIGHT : coldRate);
-        } catch (RuntimeException e) {
-            etaMillis = 0; // never fail explain over the estimate
-        }
 
         // Header: a dark royal blue (#0F4786) " ≡ Build Plan " chip, capped by a matching ▶
         // segment arrow when nerdfont, then the build-time estimate (yellow).

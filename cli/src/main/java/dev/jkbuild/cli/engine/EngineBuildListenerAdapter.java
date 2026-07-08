@@ -195,15 +195,15 @@ final class EngineBuildListenerAdapter {
     }
 
     /**
-     * Forecast a build against the engine — the counterpart of {@code ExplainCommand}'s direct {@code
-     * BuildService.explain} call. Synchronous: sends {@link EngineProtocol#EXPLAIN_REQUEST} and reads
-     * the module/phase/edge burst to completion, reconstructing a real {@link BuildService.ExplainPlan}.
-     * Unlike {@link #buildModulePlan}, no inert-object trickery is needed here — {@link
-     * dev.jkbuild.runtime.BuildPlanForecast.Module}/{@code Phase} are pure public data, reconstructed
-     * via {@code Module.fromWire}, exactly as {@link #buildModulePlan} does with {@code
-     * ModulePlan.fromWire} ({@code Module.unit()} is package-private and never read here).
+     * Run {@code jk native}'s hosted module cascade against the engine — it speaks {@link
+     * EngineProtocol#BUILD_REQUEST}'s workspace event vocabulary (see {@link
+     * EngineProtocol#NATIVE_REQUEST}), so the stream replays through the exact same {@link
+     * WorkspaceBuildListener} plumbing {@link #buildWorkspace} uses. Module and workspace exit
+     * codes are engine-computed ({@code jk native}'s 64/4/1 mapping).
      */
-    static BuildService.ExplainPlan explain(EnginePaths.Paths paths, Path entryDir, Path cache) throws IOException {
+    static BuildService.WorkspaceResult runNative(
+            EnginePaths.Paths paths, EngineClient.NativeRequest req, WorkspaceBuildListener listener)
+            throws IOException {
         EngineClient.ensureRunning(paths, Jk.VERSION);
 
         try (SocketChannel ch = EngineClient.connect(paths.socket())) {
@@ -212,7 +212,101 @@ final class EngineBuildListenerAdapter {
             BufferedReader reader =
                     new BufferedReader(new InputStreamReader(Channels.newInputStream(ch), StandardCharsets.UTF_8));
 
-            writer.write(EngineProtocol.explainRequest(entryDir.toString(), cache.toString()));
+            List<String> graalDirs = new ArrayList<>();
+            List<String> graalHomes = new ArrayList<>();
+            for (Map.Entry<Path, Path> e : req.graalByDir().entrySet()) {
+                graalDirs.add(e.getKey().toString());
+                graalHomes.add(e.getValue().toString());
+            }
+            writer.write(EngineProtocol.nativeRequest(
+                    req.entryDir().toString(),
+                    req.cache().toString(),
+                    req.jdksDir() != null ? req.jdksDir().toString() : null,
+                    req.mainClass(),
+                    req.skipTests(),
+                    req.offline(),
+                    req.force(),
+                    req.verbose(),
+                    req.extraArgs(),
+                    graalDirs,
+                    graalHomes));
+            writer.write('\n');
+            writer.flush();
+
+            return streamEvents(reader, listener, req.cache());
+        }
+    }
+
+    /**
+     * Run {@code jk install}'s hosted build + cache-install goal against the engine — {@link
+     * #runTest}'s exact shape ({@code testResultOut} settles before the terminal {@code
+     * goal-finish} reaches the listener); the launcher-writing "make install" half runs in the
+     * caller afterwards.
+     */
+    static GoalResult runInstall(
+            EnginePaths.Paths paths,
+            EngineClient.InstallRequest req,
+            java.util.function.Function<List<Phase>, GoalListener> listenerFactory,
+            dev.jkbuild.test.JUnitLauncher.Result[] testResultOut)
+            throws IOException {
+        EngineClient.ensureRunning(paths, Jk.VERSION);
+
+        try (SocketChannel ch = EngineClient.connect(paths.socket())) {
+            BufferedWriter writer =
+                    new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
+            BufferedReader reader =
+                    new BufferedReader(new InputStreamReader(Channels.newInputStream(ch), StandardCharsets.UTF_8));
+
+            writer.write(EngineProtocol.installRequest(
+                    req.entryDir().toString(),
+                    req.cache().toString(),
+                    req.m2Dir().toString(),
+                    req.graalHome() != null ? req.graalHome().toString() : null,
+                    req.skipTests(),
+                    req.offline(),
+                    req.force(),
+                    req.verbose()));
+            writer.write('\n');
+            writer.flush();
+
+            return streamSingleGoalEvents(reader, listenerFactory, testResultOut, null);
+        }
+    }
+
+    /**
+     * Forecast a build against the engine — the counterpart of {@code ExplainCommand}'s direct {@code
+     * BuildService.explain} call. Synchronous: sends {@link EngineProtocol#EXPLAIN_REQUEST} and reads
+     * the module/phase/edge burst to completion, reconstructing a real {@link BuildService.ExplainPlan}.
+     * Unlike {@link #buildModulePlan}, no inert-object trickery is needed here — {@link
+     * dev.jkbuild.runtime.BuildPlanForecast.Module}/{@code Phase} are pure public data, reconstructed
+     * via {@code Module.fromWire}, exactly as {@link #buildModulePlan} does with {@code
+     * ModulePlan.fromWire} ({@code Module.unit()} is package-private and never read here).
+     *
+     * <p>The request carries the plan-affecting build options the engine-side ETA estimate needs
+     * (Wave 3 — see {@code BuildService.estimateEtaMillis}); the estimate rides back as an {@code
+     * eta} event inside the burst and settles {@code etaOut[0]} ({@code 0} = unknown) before the
+     * terminal {@code explain-done}.
+     */
+    static BuildService.ExplainPlan explain(
+            EnginePaths.Paths paths, EngineClient.ExplainRequest req, long[] etaOut) throws IOException {
+        EngineClient.ensureRunning(paths, Jk.VERSION);
+
+        try (SocketChannel ch = EngineClient.connect(paths.socket())) {
+            BufferedWriter writer =
+                    new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
+            BufferedReader reader =
+                    new BufferedReader(new InputStreamReader(Channels.newInputStream(ch), StandardCharsets.UTF_8));
+
+            writer.write(EngineProtocol.explainRequest(
+                    req.entryDir().toString(),
+                    req.cache().toString(),
+                    req.workers(),
+                    req.skipTests(),
+                    req.profile(),
+                    req.jdksDir() != null ? req.jdksDir().toString() : null,
+                    req.serial(),
+                    req.parallelTests(),
+                    req.verbose()));
             writer.write('\n');
             writer.flush();
 
@@ -259,6 +353,9 @@ final class EngineBuildListenerAdapter {
                         edges.computeIfAbsent(dir, d -> new java.util.LinkedHashSet<>()).add(dependsOn);
                     }
                     case EngineProtocol.EXPLAIN_ERROR -> errors.add(Ndjson.str(line, "message"));
+                    case EngineProtocol.ETA -> {
+                        if (etaOut != null) etaOut[0] = Ndjson.longValue(line, "millis", 0);
+                    }
                     case EngineProtocol.EXPLAIN_DONE -> {
                         for (String dir : order) {
                             int[] counts = countsByDir.get(dir);
