@@ -73,6 +73,9 @@ dependencies {
     gitClientWorkerJar(project(":git-client"))
 }
 tasks.withType<Test>().configureEach {
+    // MemoryProbe's host_statistics64 FFM downcall (macOS memory read), exercised whenever a test
+    // drives a real build/check (PosixDetach's setsid(2) is the same story for the engine role).
+    jvmArgs("--enable-native-access=ALL-UNNAMED")
     dependsOn(kotlinWorkerJar, testRunnerJar, auditorWorkerJar, publisherWorkerJar,
               imageBuilderWorkerJar, compatBridgeWorkerJar, gitClientWorkerJar)
     // The TUI/highlighting tests assert ANSI escape sequences, and Theme/GlobalConfig read the

@@ -2,9 +2,16 @@
 package dev.jkbuild.worker;
 
 import java.io.IOException;
+import java.lang.foreign.Arena;
+import java.lang.foreign.FunctionDescriptor;
+import java.lang.foreign.Linker;
+import java.lang.foreign.MemorySegment;
+import java.lang.foreign.ValueLayout;
+import java.lang.invoke.MethodHandle;
 import java.lang.management.ManagementFactory;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Locale;
 
 /**
  * Container-aware host memory, read from the OS rather than a JVM bean so it works the same in the
@@ -13,9 +20,14 @@ import java.nio.file.Path;
  * <p>On Linux it reads {@code /proc/meminfo} and the cgroup memory controller (v2 {@code
  * memory.max}/{@code memory.current}, v1 {@code memory.limit_in_bytes}/{@code
  * memory.usage_in_bytes}), so a build running under a container limit sees the limit — not the
- * host's RAM. Elsewhere (macOS, no {@code /proc}) it falls back to the {@code com.sun.management}
- * OS bean. Every probe is best-effort and never throws; on total failure it reports a conservative
- * {@link #FALLBACK_TOTAL}.
+ * host's RAM. On macOS it calls {@code host_statistics64(2)} directly via FFM (the same Mach call
+ * {@code vm_stat} itself shells out to — see {@link #fromMachHostStatistics64()}): {@code
+ * com.sun.management}'s free-memory figure only counts truly-idle pages, not the inactive/purgeable
+ * pages macOS's VM keeps stocked with reclaimable file cache, so on a machine that's been up a while
+ * it reports a few hundred MiB free out of tens of GiB — starving {@code HeapPlan} into handing
+ * worker JVMs a near-zero heap. Elsewhere (Windows, or if the Mach call fails) it falls back to the
+ * {@code com.sun.management} OS bean. Every probe is best-effort and never throws; on total failure
+ * it reports a conservative {@link #FALLBACK_TOTAL}.
  */
 public final class MemoryProbe {
 
@@ -99,9 +111,10 @@ public final class MemoryProbe {
         }
 
         if (total <= 0 || available <= 0) {
-            Memory bean = fromBean();
-            if (total <= 0) total = bean.totalBytes();
-            if (available <= 0) available = bean.availableBytes();
+            Memory fallback = isMac() ? fromMachHostStatistics64() : null;
+            if (fallback == null) fallback = fromBean();
+            if (total <= 0) total = fallback.totalBytes();
+            if (available <= 0) available = fallback.availableBytes();
         }
         // Clamp so available never exceeds total and neither is non-positive.
         if (total <= 0) total = FALLBACK_TOTAL;
@@ -110,7 +123,89 @@ public final class MemoryProbe {
         return new Memory(total, available);
     }
 
-    /** {@code com.sun.management} OS bean fallback (macOS / no {@code /proc}). */
+    private static boolean isMac() {
+        return System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("mac");
+    }
+
+    /** {@code mach/host_info.h}: the {@code HOST_VM_INFO64} flavor selector for {@code host_statistics64}. */
+    private static final int HOST_VM_INFO64 = 4;
+
+    /** {@code HOST_VM_INFO64_COUNT}: {@code sizeof(vm_statistics64_data_t) / sizeof(integer_t)}. */
+    private static final int HOST_VM_INFO64_COUNT = 38;
+
+    /** {@code KERN_SUCCESS} in {@code mach/kern_return.h}. */
+    private static final int KERN_SUCCESS = 0;
+
+    // Byte offsets into vm_statistics64_data_t (mach/host_info.h) of the fields we read: natural_t
+    // (4-byte) fields packed until a uint64_t field forces 8-byte alignment. Verified against this
+    // struct's known layout and cross-checked against `vm_stat`'s own output (see MemoryProbeTest).
+    private static final long FREE_COUNT_OFFSET = 0;
+    private static final long INACTIVE_COUNT_OFFSET = 8;
+    private static final long PURGEABLE_COUNT_OFFSET = 88;
+    private static final long SPECULATIVE_COUNT_OFFSET = 92;
+
+    private static final FunctionDescriptor MACH_HOST_SELF = FunctionDescriptor.of(ValueLayout.JAVA_INT);
+    private static final FunctionDescriptor HOST_PAGE_SIZE =
+            FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.ADDRESS);
+    private static final FunctionDescriptor HOST_STATISTICS64 = FunctionDescriptor.of(
+            ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS);
+
+    /**
+     * macOS: reclaimable pages (free + inactive + speculative + purgeable) times the page size,
+     * matching how Activity Monitor and other macOS tools report "available" memory — as opposed to
+     * {@code com.sun.management}'s free-memory figure, which counts only truly-idle pages. Reads
+     * {@code vm_statistics64_data_t} straight from the kernel via the same {@code
+     * mach_host_self}/{@code host_statistics64} calls {@code vm_stat} itself makes — no subprocess, no
+     * text parsing. {@code null} on any failure (missing symbol, non-zero {@code kern_return_t}, no
+     * native access), so the caller falls back to {@link #fromBean()}.
+     */
+    private static Memory fromMachHostStatistics64() {
+        try {
+            Linker linker = Linker.nativeLinker();
+            var lookup = linker.defaultLookup();
+            MethodHandle machHostSelf =
+                    linker.downcallHandle(lookup.find("mach_host_self").orElseThrow(), MACH_HOST_SELF);
+            MethodHandle hostPageSize =
+                    linker.downcallHandle(lookup.find("host_page_size").orElseThrow(), HOST_PAGE_SIZE);
+            MethodHandle hostStatistics64 =
+                    linker.downcallHandle(lookup.find("host_statistics64").orElseThrow(), HOST_STATISTICS64);
+
+            try (Arena arena = Arena.ofConfined()) {
+                int hostPort = (int) machHostSelf.invokeExact();
+
+                MemorySegment pageSizeOut = arena.allocate(ValueLayout.JAVA_LONG);
+                if ((int) hostPageSize.invokeExact(hostPort, pageSizeOut) != KERN_SUCCESS) return null;
+                long pageSize = pageSizeOut.get(ValueLayout.JAVA_LONG, 0);
+
+                MemorySegment info = arena.allocate((long) HOST_VM_INFO64_COUNT * Integer.BYTES);
+                MemorySegment countInOut = arena.allocate(ValueLayout.JAVA_INT);
+                countInOut.set(ValueLayout.JAVA_INT, 0, HOST_VM_INFO64_COUNT);
+                if ((int) hostStatistics64.invokeExact(hostPort, HOST_VM_INFO64, info, countInOut) != KERN_SUCCESS) {
+                    return null;
+                }
+
+                long free = pages(info, FREE_COUNT_OFFSET);
+                long inactive = pages(info, INACTIVE_COUNT_OFFSET);
+                long speculative = pages(info, SPECULATIVE_COUNT_OFFSET);
+                long purgeable = pages(info, PURGEABLE_COUNT_OFFSET);
+                long available = (free + inactive + speculative + purgeable) * pageSize;
+
+                long total = ((com.sun.management.OperatingSystemMXBean) ManagementFactory.getOperatingSystemMXBean())
+                        .getTotalMemorySize();
+                return available > 0 ? new Memory(total, available) : null;
+            }
+        } catch (Throwable t) {
+            // Best-effort: symbol missing, native access not granted, bad kern_return_t — fall back.
+            return null;
+        }
+    }
+
+    /** {@code natural_t} (unsigned 32-bit) page count at {@code byteOffset} into a vm_statistics64_data_t. */
+    private static long pages(MemorySegment info, long byteOffset) {
+        return Integer.toUnsignedLong(info.get(ValueLayout.JAVA_INT, byteOffset));
+    }
+
+    /** {@code com.sun.management} OS bean fallback (Windows, or the Mach call unavailable). */
     private static Memory fromBean() {
         try {
             var os = (com.sun.management.OperatingSystemMXBean) ManagementFactory.getOperatingSystemMXBean();

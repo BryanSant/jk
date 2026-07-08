@@ -41,6 +41,8 @@ val javaCompilerWorkerJar by configurations.creating {
 }
 dependencies { javaCompilerWorkerJar(project(":java-compiler")) }
 tasks.withType<Test>().configureEach {
+    // MemoryProbe's host_statistics64 FFM downcall (macOS memory read).
+    jvmArgs("--enable-native-access=ALL-UNNAMED")
     dependsOn(javaCompilerWorkerJar, testRunnerJarCfg)
     doFirst {
         systemProperty("jk.java.worker.jar", javaCompilerWorkerJar.singleFile.absolutePath)
