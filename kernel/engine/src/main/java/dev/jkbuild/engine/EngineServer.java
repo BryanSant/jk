@@ -755,6 +755,8 @@ public final class EngineServer implements AutoCloseable {
             int workers = Ndjson.intValue(requestLine, "workers", 1);
             String profile = Ndjson.str(requestLine, "profile");
             boolean verbose = Ndjson.bool(requestLine, "verbose", false);
+            boolean offline = Ndjson.bool(requestLine, "offline", false);
+            boolean force = Ndjson.bool(requestLine, "force", false);
 
             Path entryDir = Path.of(entryDirStr);
             Path cache = Path.of(cacheStr);
@@ -782,7 +784,23 @@ public final class EngineServer implements AutoCloseable {
             dev.jkbuild.run.Goal goal =
                     dev.jkbuild.runtime.BuildPipeline.coreBuilder(inputs).build();
 
+            // The request's cache-relevant flags ride the session config exactly as
+            // runSingleBuild's do — without this, `jk test --force` was silently
+            // dropped on the hosted path (the run-tests stamp skip guards on rerunOr,
+            // which reads the force flag).
+            JkConfig config = new JkConfig(
+                    Optional.empty(),
+                    Optional.of(offline),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.of(verbose),
+                    Optional.empty(),
+                    Optional.of(force),
+                    Optional.empty());
             Session session = Session.defaults()
+                    .withConfig(config)
                     .withWorkingDir(entryDir)
                     .withCacheDir(cache)
                     .withJdksDir(jdksDir)

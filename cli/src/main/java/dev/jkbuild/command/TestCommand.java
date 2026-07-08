@@ -116,7 +116,17 @@ public final class TestCommand implements CliCommand {
                 result = dev.jkbuild.cli.engine.EngineClient.runTest(
                         dev.jkbuild.engine.EnginePaths.current(),
                         new dev.jkbuild.cli.engine.EngineClient.TestRequest(
-                                dir, cache, jdksDir, workerCount, profileName, global.verbose),
+                                dir,
+                                cache,
+                                jdksDir,
+                                workerCount,
+                                profileName,
+                                global.verbose,
+                                // Global flags are consumed into the session before dispatch —
+                                // the session (not the Invocation) is their authority, exactly as
+                                // BuildCommand's request wiring reads them.
+                                dev.jkbuild.config.SessionContext.current().offline(),
+                                dev.jkbuild.config.SessionContext.current().force()),
                         phases -> GoalConsole.chooseConsoleListener(phases, mode, spec, module),
                         testResultHolder);
             } catch (IOException e) {

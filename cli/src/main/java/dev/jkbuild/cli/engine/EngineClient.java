@@ -159,7 +159,15 @@ public final class EngineClient {
     }
 
     /** Everything an engine-hosted {@code jk test} run needs — mirrors {@code TestCommand}'s own local fields. */
-    public record TestRequest(Path entryDir, Path cache, Path jdksDir, int workers, String profile, boolean verbose) {}
+    public record TestRequest(
+            Path entryDir,
+            Path cache,
+            Path jdksDir,
+            int workers,
+            String profile,
+            boolean verbose,
+            boolean offline,
+            boolean force) {}
 
     /**
      * Run a single project's test goal against the engine (Phase 3) — see {@link

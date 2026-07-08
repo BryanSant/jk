@@ -550,7 +550,14 @@ public final class EngineProtocol {
 
     /** Start a single-project test run (see {@link #TEST_REQUEST}). {@code jdksDir}/{@code profile} may be {@code null}. */
     public static String testRequest(
-            String entryDir, String cache, String jdksDir, int workers, String profile, boolean verbose) {
+            String entryDir,
+            String cache,
+            String jdksDir,
+            int workers,
+            String profile,
+            boolean verbose,
+            boolean offline,
+            boolean force) {
         return "{\"t\":\""
                 + TEST_REQUEST
                 + "\",\"entryDir\":"
@@ -565,6 +572,10 @@ public final class EngineProtocol {
                 + Ndjson.quote(profile)
                 + ",\"verbose\":"
                 + verbose
+                + ",\"offline\":"
+                + offline
+                + ",\"force\":"
+                + force
                 + "}";
     }
 

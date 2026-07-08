@@ -152,7 +152,9 @@ final class EngineBuildListenerAdapter {
                     req.jdksDir() != null ? req.jdksDir().toString() : null,
                     req.workers(),
                     req.profile(),
-                    req.verbose()));
+                    req.verbose(),
+                    req.offline(),
+                    req.force()));
             writer.write('\n');
             writer.flush();
 
@@ -436,6 +438,10 @@ final class EngineBuildListenerAdapter {
         List<Phase> phases = new ArrayList<>();
         List<GoalResult.Diagnostic> diagnostics = new ArrayList<>();
         GoalListener listener = null;
+        // The wire carries no duration; the summary's "took …" is this client-side
+        // wall clock over the whole stream (spawn latency excluded — ensureRunning
+        // already returned before the request was written).
+        long startNanos = System.nanoTime();
 
         String line;
         while ((line = reader.readLine()) != null) {
@@ -486,7 +492,14 @@ final class EngineBuildListenerAdapter {
                         buildOutcomeOut[0] = Ndjson.str(line, "buildOutcome");
                     }
                     GoalResult result = new GoalResult(
-                            "test", success, Duration.ZERO, List.of(), List.of(), diagnostics, false, false);
+                            "test",
+                            success,
+                            Duration.ofNanos(System.nanoTime() - startNanos),
+                            List.of(),
+                            List.of(),
+                            diagnostics,
+                            false,
+                            false);
                     listener.goalFinish(result);
                     return result;
                 }

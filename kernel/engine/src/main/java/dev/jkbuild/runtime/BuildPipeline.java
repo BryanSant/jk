@@ -1261,12 +1261,20 @@ public final class BuildPipeline {
                     // skips the runner, mirroring how the compile cache survives clean.
                     // stampKey is null only when computeKey failed open (unreadable
                     // input) — treat that as "not cached" and run the tests.
-                    if (!rerun
-                            && stampKey != null
-                            && actionCache.lookup(stampKey).isPresent()) {
-                        ctx.reweight(EffortWeights.SKIP);
-                        ctx.label("tests up-to-date");
-                        return; // skip — nothing changed since last green run
+                    if (!rerun && stampKey != null) {
+                        var greenRecord = actionCache.lookup(stampKey);
+                        if (greenRecord.isPresent()) {
+                            ctx.reweight(EffortWeights.SKIP);
+                            ctx.label("tests up-to-date");
+                            // Replay the green run's counts (stored on the marker) so the summary
+                            // line reads "Passed N tests", not "No tests" — without this a
+                            // legitimate skip was indistinguishable from a module with no test
+                            // sources. Markers written before counts were stored replay nothing;
+                            // the next real run upgrades them.
+                            dev.jkbuild.run.TestSummary previous = stampedSummary(greenRecord.get());
+                            if (previous != null) ctx.put(TEST_RESULT, previous);
+                            return; // skip — nothing changed since last green run
+                        }
                     }
                     // Tests are actually running: claim the real test slice, symmetric
                     // to how compile reweights itself up. Without this a phase the
@@ -1338,13 +1346,36 @@ public final class BuildPipeline {
                     // later build skips the runner when inputs are unchanged. It lives in the
                     // CAS (not target/), so it survives `jk clean`: after clean+build the
                     // compile cache restores byte-identical classes, the key recomputes the
-                    // same, and the marker is found. Output-less — the key's presence is the
-                    // result. (Skip if the key failed open — nothing to key the marker on.)
+                    // same, and the marker is found. The green counts ride the record so the
+                    // skip path can replay them in its summary. (Skip if the key failed open —
+                    // nothing to key the marker on.)
                     if (stampKey != null) {
-                        actionCache.storeWithOutputs(testTaskId, stampKey, java.util.Map.of(), java.util.Map.of());
+                        actionCache.storeWithOutputs(
+                                testTaskId,
+                                stampKey,
+                                java.util.Map.of(),
+                                java.util.Map.of(
+                                        "tests.total", String.valueOf(result.total()),
+                                        "tests.succeeded", String.valueOf(result.succeeded()),
+                                        "tests.skipped", String.valueOf(result.skipped())));
                     }
                 })
                 .build();
+    }
+
+    /** The green run's counts replayed off a run-tests marker; {@code null} for markers written
+     * before counts were stored (or with unparseable ones) — the caller then replays nothing. */
+    private static dev.jkbuild.run.TestSummary stampedSummary(dev.jkbuild.task.ActionCache.ActionRecord record) {
+        try {
+            String total = record.outputs().get("tests.total");
+            if (total == null) return null;
+            long succeeded = Long.parseLong(record.outputs().getOrDefault("tests.succeeded", total));
+            long skipped = Long.parseLong(record.outputs().getOrDefault("tests.skipped", "0"));
+            return new dev.jkbuild.run.TestSummary(
+                    Long.parseLong(total), succeeded, 0, skipped, java.util.List.of());
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     private static Phase packageJarPhase(StepContext cx) {
