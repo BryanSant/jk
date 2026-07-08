@@ -5,6 +5,12 @@ on:
     branches: [main]
   pull_request:
 
+env:
+  # The runners set TERM=dumb, which turns jk's ANSI rendering off
+  # (GlobalConfig) and fails the TUI/highlighting tests that assert
+  # escape sequences. Give CI the same terminal the tests assume.
+  TERM: xterm-256color
+
 jobs:
   test:
     name: Gradle test
@@ -35,5 +41,9 @@ jobs:
           cache: gradle
       - name: Build the native dist
         run: ./gradlew dist
+      - name: Side-load worker jars into the jk CAS
+        # jk's own workers (test-runner, compilers, …) aren't on Maven Central
+        # yet; `jk build` forks them from the local CAS.
+        run: ./gradlew installLocal
       - name: jk builds jk
         run: build/dist/jk build
