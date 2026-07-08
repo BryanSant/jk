@@ -38,7 +38,7 @@ class LibrarySearchCommandTest {
     @Test
     void search_matches_substring_of_name_in_bundled_catalog(@TempDir Path tempHome) {
         // Isolate JkDirs.home() to an empty dir so only the bundled layer loads —
-        // otherwise a developer's downloaded ~/.jk/libraries.global.toml shadows the
+        // otherwise a developer's downloaded ~/.jk/cache/libs.global.toml shadows the
         // curated rows as [global] and the [bundled] assertion fails. (Under Gradle
         // the java-conventions plugin already points JK_HOME at a throwaway dir; this
         // makes the test self-contained under any runner, including jk build itself.)

@@ -36,7 +36,7 @@ tasks.withType<Test>().configureEach {
     // JK_HOME, and everything derived from it (the downloaded global library
     // catalog, cache, credentials, …) follows — so without this a machine
     // that has run `jk library update` would feed its real
-    // ~/.jk/libraries.global.toml into tests and shadow the bundled layer
+    // ~/.jk/cache/libs.global.toml into tests and shadow the bundled layer
     // (e.g. LibrarySearchCommandTest). Point JK_HOME at a throwaway per-module
     // dir to keep tests hermetic.
     environment("JK_HOME", layout.buildDirectory.dir("test-jk-home").get().asFile.absolutePath)

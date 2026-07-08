@@ -30,9 +30,10 @@ import org.tomlj.TomlTable;
  * <ol>
  *   <li><b>Project</b> — the {@code [libraries]} table in the project's {@code jk.toml}. Passed in
  *       by the parser.
- *   <li><b>Local</b> — {@code ~/.jk/libraries.local.toml} (per-user overrides, hand-edited).
- *   <li><b>Global</b> — {@code ~/.jk/libraries.global.toml}, refreshed by {@code jk library update}
- *       and revalidated by {@code jk lock} from {@code github.com/jkbuild/jk-library-registry}.
+ *   <li><b>Local</b> — {@code ~/.jk/libs.toml} (per-user overrides, hand-edited).
+ *   <li><b>Global</b> — {@code ~/.jk/cache/libs.global.toml}, refreshed by {@code jk library
+ *       update} and revalidated by {@code jk lock} from {@code
+ *       github.com/jkbuild/jk-library-registry}.
  *   <li><b>Bundled</b> — classpath resource shipped with the jk binary ({@code
  *       dev/jkbuild/library/libraries.toml}). Acts as the floor so lookups still work offline
  *       before any update has run.
@@ -53,17 +54,18 @@ public final class LibraryCatalog {
         this.layers = List.copyOf(Objects.requireNonNull(layers, "layers"));
     }
 
-    /** Per-user manual override layer: {@code ~/.jk/libraries.local.toml}. */
+    /** Per-user manual override layer: {@code ~/.jk/libs.toml}. */
     public static Path userFile() {
-        return JkDirs.home().resolve("libraries.local.toml");
+        return JkDirs.home().resolve("libs.toml");
     }
 
     /**
      * The downloaded layer, refreshed by {@code jk library update} and revalidated by {@code jk
-     * lock}: {@code ~/.jk/libraries.global.toml}.
+     * lock}: {@code ~/.jk/cache/libs.global.toml} — under {@code cache/} because it is exactly
+     * that: a regenerable mirror of the upstream registry.
      */
     public static Path downloadedFile() {
-        return JkDirs.home().resolve("libraries.global.toml");
+        return JkDirs.cache().resolve("libs.global.toml");
     }
 
     /**

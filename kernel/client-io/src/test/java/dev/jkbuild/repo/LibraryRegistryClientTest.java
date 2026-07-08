@@ -68,7 +68,7 @@ class LibraryRegistryClientTest {
 
     @Test
     void first_fetch_with_no_etag_sidecar_returns_updated_with_body_and_etag(@TempDir Path dir) throws Exception {
-        Path etagFile = dir.resolve(".libraries.global.toml.etag");
+        Path etagFile = dir.resolve(".libs.global.toml.etag");
 
         var result = client().fetch(uri, etagFile);
 
@@ -81,7 +81,7 @@ class LibraryRegistryClientTest {
 
     @Test
     void fetch_sends_stored_etag_and_treats_304_as_unchanged(@TempDir Path dir) throws Exception {
-        Path etagFile = dir.resolve(".libraries.global.toml.etag");
+        Path etagFile = dir.resolve(".libs.global.toml.etag");
         Files.writeString(etagFile, ETAG, StandardCharsets.UTF_8);
 
         var result = client().fetch(uri, etagFile);
@@ -93,7 +93,7 @@ class LibraryRegistryClientTest {
 
     @Test
     void stale_etag_still_yields_a_fresh_updated_body(@TempDir Path dir) throws Exception {
-        Path etagFile = dir.resolve(".libraries.global.toml.etag");
+        Path etagFile = dir.resolve(".libs.global.toml.etag");
         Files.writeString(etagFile, "\"stale\"", StandardCharsets.UTF_8);
 
         var result = client().fetch(uri, etagFile);
@@ -104,7 +104,7 @@ class LibraryRegistryClientTest {
     @Test
     void non_200_non_304_status_throws(@TempDir Path dir) {
         forceStatus = 503;
-        Path etagFile = dir.resolve(".libraries.global.toml.etag");
+        Path etagFile = dir.resolve(".libs.global.toml.etag");
 
         assertThatThrownBy(() -> client().fetch(uri, etagFile)).isInstanceOf(IOException.class);
     }

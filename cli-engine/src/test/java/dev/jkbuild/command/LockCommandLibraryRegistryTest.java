@@ -100,7 +100,7 @@ class LockCommandLibraryRegistryTest {
     @Test
     void lock_revalidates_an_existing_catalog_and_stores_the_fresh_body_and_etag(@TempDir Path tempDir)
             throws Exception {
-        Path libraryCache = tempDir.resolve("libraries.global.toml");
+        Path libraryCache = tempDir.resolve("libs.global.toml");
         Files.writeString(libraryCache, "[libraries]\nold = \"com.old:thing\"\n");
 
         run("new", tempDir.toString());
@@ -115,7 +115,7 @@ class LockCommandLibraryRegistryTest {
 
     @Test
     void lock_sends_the_stored_etag_and_leaves_a_304_cache_untouched(@TempDir Path tempDir) throws Exception {
-        Path libraryCache = tempDir.resolve("libraries.global.toml");
+        Path libraryCache = tempDir.resolve("libs.global.toml");
         String original = "[libraries]\nold = \"com.old:thing\"\n";
         Files.writeString(libraryCache, original);
         Files.writeString(LibraryCatalog.etagFileFor(libraryCache), ETAG);
@@ -130,7 +130,7 @@ class LockCommandLibraryRegistryTest {
 
     @Test
     void lock_never_triggers_the_first_download_of_an_uncached_catalog(@TempDir Path tempDir) throws Exception {
-        Path libraryCache = tempDir.resolve("libraries.global.toml"); // deliberately never created
+        Path libraryCache = tempDir.resolve("libs.global.toml"); // deliberately never created
 
         run("new", tempDir.toString());
         int exit = lock(tempDir, libraryCache);
@@ -142,7 +142,7 @@ class LockCommandLibraryRegistryTest {
 
     @Test
     void lock_offline_skips_the_registry_entirely(@TempDir Path tempDir) throws Exception {
-        Path libraryCache = tempDir.resolve("libraries.global.toml");
+        Path libraryCache = tempDir.resolve("libs.global.toml");
         Files.writeString(libraryCache, "[libraries]\nold = \"com.old:thing\"\n");
 
         run("new", tempDir.toString());
@@ -169,7 +169,7 @@ class LockCommandLibraryRegistryTest {
 
     @Test
     void lock_falls_back_when_the_registry_returns_a_malformed_payload(@TempDir Path tempDir) throws Exception {
-        Path libraryCache = tempDir.resolve("libraries.global.toml");
+        Path libraryCache = tempDir.resolve("libs.global.toml");
         String original = "[libraries]\nold = \"com.old:thing\"\n";
         Files.writeString(libraryCache, original);
         registryStatus = 200; // handled below via a body override instead

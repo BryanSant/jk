@@ -463,8 +463,8 @@ defined in multiple places, and the topmost layer wins.
 | Layer | Source | Updated by |
 |--|--|--|
 | **project** | `[libraries]` table in the project's `jk.toml` | Hand-edited |
-| **local** | `~/.jk/libraries.local.toml` | Hand-edited |
-| **global** | `~/.jk/libraries.global.toml` | `jk library update`, revalidated by `jk lock` |
+| **local** | `~/.jk/libs.toml` | Hand-edited |
+| **global** | `~/.jk/cache/libs.global.toml` | `jk library update`, revalidated by `jk lock` |
 | **bundled** | classpath resource at `dev/jkbuild/library/libraries.toml` | Shipped with the binary |
 
 Only the bundled layer is guaranteed to exist. The local file lights up
@@ -499,7 +499,7 @@ The bundled index is intentionally version-free — it's a name-to-coord index, 
 
 ### `jk library` subcommands
 
-- **`jk library update`** pulls `https://raw.githubusercontent.com/jkbuild/jk-library-registry/refs/heads/main/libraries.toml` and replaces `~/.jk/libraries.global.toml`. The previous file is preserved at `libraries.global.toml.prev`. A malformed or HTTP-failed response never replaces a good cache. The upstream `ETag` is cached in a hidden `.libraries.global.toml.etag` sidecar so the request can be conditional.
+- **`jk library update`** pulls `https://raw.githubusercontent.com/jkbuild/jk-library-registry/refs/heads/main/libraries.toml` and replaces `~/.jk/cache/libs.global.toml`. The previous file is preserved at `libs.global.toml.prev`. A malformed or HTTP-failed response never replaces a good cache. The upstream `ETag` is cached in a hidden `.libs.global.toml.etag` sidecar so the request can be conditional.
 - **`jk lock`** revalidates an already-downloaded global layer before resolving: a conditional GET (`If-None-Match` from the `.etag` sidecar) either confirms it's current (304) or replaces it, mirroring `jk library update`. It never triggers the *first* download — a project that has never run `jk library update` keeps resolving against the bundled floor — and any failure (offline, unreachable, malformed payload) is swallowed so it never breaks the lock.
 - **`jk library list`** prints every library with its source layer. `--layer <name>` filters (e.g. `--layer project`).
 - **`jk library search <term>...`** substring-matches against name, group, and artifact across every layer. Multiple terms are AND-ed (each must appear in at least one of the three fields). Case-insensitive. `--limit N` caps the result count for noisy queries.
