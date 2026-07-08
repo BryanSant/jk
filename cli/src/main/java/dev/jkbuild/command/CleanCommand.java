@@ -115,11 +115,45 @@ public final class CleanCommand implements CliCommand {
         return 0;
     }
 
-    /** Run the cache GC and print a one-line summary. */
+    /**
+     * Escape hatch for the fast JVM unit-test suite ONLY — see {@link
+     * BuildCommand#engineDisabledForTests()} for the full rationale. A real {@code jk clean --cache}
+     * hosts the GC on the engine (Wave 4: it mutates the shared CAS the engine's pipelines read, so
+     * it runs as an idle-boundary job, riding {@code jk cache prune}'s wire vocabulary).
+     */
+    private static boolean engineDisabledForTests() {
+        return Boolean.getBoolean("jk.test.noEngine")
+                || "dev.jkbuild.test.runner.JkRunner".equals(System.getProperty("jk.plugin.class"));
+    }
+
+    /** Run the cache GC (engine-hosted for a real invocation) and print a one-line summary. */
     private static void gcCache() throws IOException {
         CacheGc.Report report;
-        try (Spinner spinner = Spinner.show(CliOutput.stdout(), "Collecting cache...")) {
-            report = CacheGc.run(JkDirs.cache(), false);
+        if (engineDisabledForTests()) {
+            try (Spinner spinner = Spinner.show(CliOutput.stdout(), "Collecting cache...")) {
+                report = CacheGc.run(JkDirs.cache(), false);
+            }
+        } else {
+            // Hosted: the spinner stays client-side (the goal has no per-file progress worth a
+            // bar); the counts ride the terminal goal-finish.
+            var summary = new dev.jkbuild.cli.engine.EngineClient.CacheMaintSummary[1];
+            try (Spinner spinner = Spinner.show(CliOutput.stdout(), "Collecting cache...")) {
+                dev.jkbuild.run.GoalResult result = dev.jkbuild.cli.engine.EngineClient.runCacheMaintenance(
+                        dev.jkbuild.engine.EnginePaths.current(),
+                        new dev.jkbuild.cli.engine.EngineClient.CacheMaintRequest(
+                                "gc", JkDirs.cache(), 0, false, false, null, false),
+                        phases -> new dev.jkbuild.run.GoalListener() {},
+                        (external, pipelines) -> {},
+                        summary);
+                if (!result.success() || summary[0] == null) {
+                    CliOutput.err("jk clean: cache GC failed — run `jk engine status` for details");
+                    return;
+                }
+            }
+            report = new CacheGc.Report(
+                    (int) Math.max(0, summary[0].files()),
+                    Math.max(0, summary[0].bytes()),
+                    (int) Math.max(0, summary[0].repoLinks()));
         }
         boolean nerdfont = GlobalConfig.nerdfont();
         if (report.purgedBlobs() == 0) {

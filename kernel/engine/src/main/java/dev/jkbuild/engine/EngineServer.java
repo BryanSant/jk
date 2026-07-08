@@ -73,6 +73,27 @@ public final class EngineServer implements AutoCloseable {
     private final Object lifecycleLock = new Object();
     private final AtomicInteger activeConnections = new AtomicInteger();
     private final AtomicInteger activePipelines = new AtomicInteger();
+
+    /**
+     * Serializes cache mutation against cache consumption (Wave 4): every pipeline holds the read
+     * side for its whole run; a cache maintenance job (prune/purge/gc — see {@link
+     * #runCacheMaintenance} and the idle-boundary drain in {@link #maybeIdleBoundaryGc}) holds the
+     * write side, so a sweep can never delete blobs from under an in-flight pipeline in this engine
+     * — the Wave-3 correctness finding. Fair, so a waiting prune isn't starved by a stream of new
+     * builds (and vice versa). Cross-<em>process</em> safety (two engines with different state dirs
+     * can share one cache dir — {@code JK_CACHE_DIR} is independent of {@code JK_STATE_DIR}) still
+     * rides the on-disk {@code .prune.lock}, which maintenance additionally takes.
+     */
+    private final java.util.concurrent.locks.ReentrantReadWriteLock cacheGate =
+            new java.util.concurrent.locks.ReentrantReadWriteLock(true);
+
+    /**
+     * The cache root a deferred opportunistic prune should run against, or {@code null} when none
+     * is queued. Set by a successful build/sync when the auto-prune cadence is due (the enqueue that
+     * replaced the detached {@code jk cache prune --background} spawn); drained at the idle boundary.
+     */
+    private final java.util.concurrent.atomic.AtomicReference<Path> pendingPruneCache =
+            new java.util.concurrent.atomic.AtomicReference<>();
     private volatile boolean shuttingDown;
     private volatile boolean hadActivity;
     private volatile long lastActivityAtMillis;
@@ -314,6 +335,17 @@ public final class EngineServer implements AutoCloseable {
                         handleAsyncGoalRequest(line, reader, writer, "jk-engine-gitfetch-", this::runGitFetch);
                         return;
                     }
+                    case EngineProtocol.TOOL_RESOLVE_REQUEST -> {
+                        // Wave 4 (hosted long-tail verbs): jk tool install/run's Maven resolve+fetch.
+                        handleAsyncGoalRequest(line, reader, writer, "jk-engine-tool-", this::runToolResolve);
+                        return;
+                    }
+                    case EngineProtocol.CACHE_PRUNE_REQUEST -> {
+                        // Cache maintenance is an idle-boundary job, not a pipeline: it waits for
+                        // activePipelines to drain (and blocks new ones) instead of joining them.
+                        handleAsyncGoalRequest(line, reader, writer, "jk-engine-cache-", this::runCacheMaintenance, false);
+                        return;
+                    }
                     case EngineProtocol.EXPLAIN_REQUEST -> {
                         // Synchronous read, no worker JVM forked — handled inline, connection continues.
                         handleExplainRequest(line, writer);
@@ -355,14 +387,31 @@ public final class EngineServer implements AutoCloseable {
      */
     private void handleAsyncGoalRequest(
             String requestLine, BufferedReader reader, BufferedWriter writer, String threadPrefix, GoalRunner runner) {
+        handleAsyncGoalRequest(requestLine, reader, writer, threadPrefix, runner, true);
+    }
+
+    /**
+     * As above; {@code pipeline=false} for a cache maintenance job, which is deliberately <em>not</em>
+     * a pipeline: it doesn't join {@link #activePipelines} or hold {@link #cacheGate}'s read side —
+     * its runner takes the write side itself (see {@link #runCacheMaintenance}).
+     */
+    private void handleAsyncGoalRequest(
+            String requestLine,
+            BufferedReader reader,
+            BufferedWriter writer,
+            String threadPrefix,
+            GoalRunner runner,
+            boolean pipeline) {
         Session.CancelToken cancelToken = Session.CancelToken.live();
         CountDownLatch done = new CountDownLatch(1);
-        activePipelines.incrementAndGet();
+        if (pipeline) activePipelines.incrementAndGet();
         try {
             Thread.ofVirtual().name(threadPrefix, 0).start(() -> {
+                if (pipeline) cacheGate.readLock().lock();
                 try {
                     runner.run(requestLine, cancelToken, writer);
                 } finally {
+                    if (pipeline) cacheGate.readLock().unlock();
                     done.countDown();
                 }
             });
@@ -385,7 +434,7 @@ public final class EngineServer implements AutoCloseable {
                 Thread.currentThread().interrupt();
             }
         } finally {
-            maybeIdleBoundaryGc();
+            if (pipeline) maybeIdleBoundaryGc();
         }
     }
 
@@ -394,11 +443,82 @@ public final class EngineServer implements AutoCloseable {
      * collection. SerialGC honors {@code System.gc()} with a compacting full GC that shrinks the
      * committed heap back toward {@code -Xms}, so the resident engine's footprint between builds
      * matches its idle target rather than its last build's peak — and the pause lands on an ideal
-     * boundary: no pipeline is running and no client is waiting on anything.
+     * boundary: no pipeline is running and no client is waiting on anything. The same boundary
+     * drains any queued opportunistic prune (Wave 4) — cache mutation happens exactly where nothing
+     * is reading the cache.
      */
     private void maybeIdleBoundaryGc() {
         if (activePipelines.decrementAndGet() == 0) {
             System.gc();
+            drainPendingPrune();
+        }
+    }
+
+    /**
+     * Queue an opportunistic prune of {@code cache} for the next idle boundary if the auto-prune
+     * cadence is due — the engine-internal replacement for the detached {@code jk cache prune
+     * --background} self-spawn (the engine is the process that did the work, and the idle boundary
+     * is the only safe time to mutate the caches it serves).
+     */
+    private void maybeEnqueuePrune(Path cache) {
+        try {
+            var config = dev.jkbuild.config.JkCacheConfig.resolve();
+            if (config.autoPrune() && dev.jkbuild.task.CachePruneScheduler.shouldRun(config, cache)) {
+                pendingPruneCache.compareAndSet(null, cache);
+            }
+        } catch (IOException ignored) {
+            // Best-effort — the opportunistic prune is hygiene, never load-bearing.
+        }
+    }
+
+    /**
+     * Run the queued opportunistic prune, if any, now that no pipeline is in flight. Runs on the
+     * finishing request's connection thread (keeping the engine visibly busy, so idle-exit can't
+     * race it); a pipeline that starts concurrently wins the {@link #cacheGate} race and the prune
+     * stays queued for the next boundary. Mirrors the legacy {@code --background} flags: sweep on,
+     * TTL/budget from {@code [cache]} config, {@code .prune.lock} held, {@code .last-pruned} stamped.
+     */
+    private void drainPendingPrune() {
+        Path cache = pendingPruneCache.getAndSet(null);
+        if (cache == null) return;
+        if (!cacheGate.writeLock().tryLock()) {
+            pendingPruneCache.compareAndSet(null, cache); // a new pipeline raced in — retry next boundary
+            return;
+        }
+        try (FileChannel lockChan = FileChannel.open(
+                cache.resolve(".prune.lock"), StandardOpenOption.CREATE, StandardOpenOption.WRITE)) {
+            FileLock pruneLock = lockChan.tryLock();
+            if (pruneLock == null) return; // another process's prune is running — it'll stamp .last-pruned
+            try {
+                var config = dev.jkbuild.config.JkCacheConfig.resolve();
+                dev.jkbuild.run.Goal goal = dev.jkbuild.runtime.CacheGoals.pruneGoal(
+                        cache,
+                        config.recordTtlDays(),
+                        false,
+                        true,
+                        config.maxSizeGb().map(gb -> gb + "G").orElse(null),
+                        false);
+                dev.jkbuild.run.GoalResult result = goal.run();
+                if (result.success()) {
+                    Files.writeString(
+                            cache.resolve(dev.jkbuild.task.CachePruneScheduler.LAST_PRUNED_FILE),
+                            Long.toString(clockMillis.getAsLong()),
+                            StandardCharsets.UTF_8);
+                    log.accept("jk engine: idle-boundary cache prune removed "
+                            + goal.get(dev.jkbuild.runtime.CacheGoals.FILES).orElse(0L)
+                            + " files ("
+                            + goal.get(dev.jkbuild.runtime.CacheGoals.BYTES).orElse(0L)
+                            + " bytes)");
+                } else {
+                    log.accept("jk engine: idle-boundary cache prune failed");
+                }
+            } finally {
+                pruneLock.release();
+            }
+        } catch (Exception e) {
+            log.accept("jk engine: idle-boundary cache prune failed: " + e.getMessage());
+        } finally {
+            cacheGate.writeLock().unlock();
         }
     }
 
@@ -614,8 +734,9 @@ public final class EngineServer implements AutoCloseable {
      * counterpart of {@code BuildCommand.runForDir}/{@code prepareModule}/{@code runPrepared}'s
      * {@code agg == null} branch. Same single-goal wire shape as {@link #runTest}, {@code
      * testOnly=false}. On success, folds the measured throughput into the host calibration and
-     * kicks the opportunistic cache-prune scheduler — exactly {@code runPrepared}'s post-success
-     * logic, moved here since the engine (not the CLI) is the process that actually ran the goal.
+     * queues the opportunistic cache prune for the next idle boundary (Wave 4: an engine-internal
+     * enqueue, not a detached self-spawn) — exactly {@code runPrepared}'s post-success logic, moved
+     * here since the engine (not the CLI) is the process that actually ran the goal.
      */
     private void runSingleBuild(String requestLine, Session.CancelToken cancelToken, BufferedWriter writer) {
         try {
@@ -691,9 +812,7 @@ public final class EngineServer implements AutoCloseable {
                 if (moduleMs > 0) {
                     dev.jkbuild.runtime.Calibration.refine(moduleMs / (double) barWeight, System.currentTimeMillis());
                 }
-                var cacheConfig = dev.jkbuild.config.JkCacheConfig.resolve();
-                dev.jkbuild.task.CachePruneScheduler.resolveJkExe()
-                        .ifPresent(exe -> dev.jkbuild.task.CachePruneScheduler.maybeRun(cacheConfig, cache, exe));
+                maybeEnqueuePrune(cache);
             }
         } catch (Exception e) {
             sendQuiet(writer, EngineProtocol.buildError(String.valueOf(e.getMessage())));
@@ -776,8 +895,9 @@ public final class EngineServer implements AutoCloseable {
      * — {@link EngineProtocol#TEST_REQUEST}'s exact wire shape, with the fetched/up-to-date counts
      * riding the terminal goal-finish. The goal is built with {@code allowJdkInstall = false}: JDK
      * installs never happen inside the engine (the client pre-flights them — see {@link
-     * dev.jkbuild.runtime.SyncGoals}). On success, kicks the opportunistic cache-prune scheduler —
-     * the post-success step the CLI used to run, moved here since the engine did the work.
+     * dev.jkbuild.runtime.SyncGoals}). On success, queues the opportunistic cache prune for the
+     * next idle boundary — the post-success step the CLI used to run, moved here since the engine
+     * did the work.
      */
     private void runSync(String requestLine, Session.CancelToken cancelToken, BufferedWriter writer) {
         try {
@@ -807,9 +927,7 @@ public final class EngineServer implements AutoCloseable {
                                 EngineProtocol.goalFinishSync(dir, result.success(), fetched.get(), upToDate.get())));
                 GoalResult result = goal.run();
                 if (result.success()) {
-                    var cacheConfig = dev.jkbuild.config.JkCacheConfig.resolve();
-                    dev.jkbuild.task.CachePruneScheduler.resolveJkExe()
-                            .ifPresent(exe -> dev.jkbuild.task.CachePruneScheduler.maybeRun(cacheConfig, cache, exe));
+                    maybeEnqueuePrune(cache);
                 }
                 return null;
             });
@@ -1192,6 +1310,108 @@ public final class EngineServer implements AutoCloseable {
                 return EngineProtocol.goalFinishGitFetch(
                         dir, result.success(), checkout != null ? checkout.toString() : null, sha);
             });
+        } catch (Exception e) {
+            sendQuiet(writer, EngineProtocol.buildError(String.valueOf(e.getMessage())));
+        }
+    }
+
+    // ---- hosted long-tail verbs (Wave 4 of the slim-client migration) -----------------------------
+
+    /**
+     * Decode a {@link EngineProtocol#TOOL_RESOLVE_REQUEST} and run the shared tool-resolution goal
+     * in-session ({@code jk tool install}/{@code jk tool run}/{@code jk install <g:a:v>}'s Maven
+     * resolve + fetch — see {@link dev.jkbuild.runtime.ToolGoals}). The terminal goal-finish carries
+     * the resolved main class + classpath; the launcher write / inheritIO exec stays client-side.
+     */
+    private void runToolResolve(String requestLine, Session.CancelToken cancelToken, BufferedWriter writer) {
+        try {
+            Path cache = Path.of(Ndjson.str(requestLine, "cache"));
+            String coord = Ndjson.str(requestLine, "coord");
+            String bin = Ndjson.str(requestLine, "bin");
+            String mainClass = Ndjson.str(requestLine, "mainClass");
+            java.net.URI repoUrl = repoUrlOf(requestLine);
+            java.nio.file.Files.createDirectories(cache);
+            dev.jkbuild.model.Coordinate primary = dev.jkbuild.model.Coordinate.parse(coord);
+            Session session = Session.defaults().withCacheDir(cache).withCancel(cancelToken);
+            String dir = EngineProtocol.SINGLE_GOAL_DIR;
+            // Plain g:a:v label — coordinate colorization is a client-side concern.
+            dev.jkbuild.run.Goal goal = dev.jkbuild.runtime.ToolGoals.resolveGoal(
+                    primary, bin, mainClass, repoUrl, cache, coord);
+            streamSingleGoal(goal, session, writer, result -> {
+                dev.jkbuild.tool.ToolEnv env =
+                        goal.get(dev.jkbuild.runtime.ToolGoals.TOOL_ENV).orElse(null);
+                return EngineProtocol.goalFinishTool(
+                        dir,
+                        result.success(),
+                        env != null ? env.mainClass() : null,
+                        env != null
+                                ? env.classpath().stream().map(Path::toString).toList()
+                                : java.util.List.of());
+            });
+        } catch (Exception e) {
+            sendQuiet(writer, EngineProtocol.buildError(String.valueOf(e.getMessage())));
+        }
+    }
+
+    /**
+     * Decode a {@link EngineProtocol#CACHE_PRUNE_REQUEST} and run its maintenance op ({@code prune}
+     * / {@code purge} / {@code gc}) as an idle-boundary job: take {@link #cacheGate}'s write side
+     * (emitting {@link EngineProtocol#PRUNE_WAIT} first when pipelines are in flight, so the client
+     * isn't staring at silence) and the cross-process {@code .prune.lock}, then stream the shared
+     * {@link dev.jkbuild.runtime.CacheGoals} goal — {@link EngineProtocol#TEST_REQUEST}'s wire shape
+     * with a {@link EngineProtocol#goalFinishCache} terminal.
+     */
+    private void runCacheMaintenance(String requestLine, Session.CancelToken cancelToken, BufferedWriter writer) {
+        try {
+            String op = String.valueOf(Ndjson.str(requestLine, "op"));
+            Path cache = Path.of(Ndjson.str(requestLine, "cache"));
+            boolean dryRun = Ndjson.bool(requestLine, "dryRun", false);
+
+            if (!cacheGate.writeLock().tryLock()) {
+                sendQuiet(writer, EngineProtocol.pruneWait(activePipelines.get(), false));
+                cacheGate.writeLock().lock();
+            }
+            try {
+                java.nio.file.Files.createDirectories(cache);
+                try (FileChannel lockChan = FileChannel.open(
+                        cache.resolve(".prune.lock"), StandardOpenOption.CREATE, StandardOpenOption.WRITE)) {
+                    FileLock pruneLock = lockChan.tryLock();
+                    if (pruneLock == null) {
+                        // Another process's prune holds the cross-process lock — wait for it too.
+                        sendQuiet(writer, EngineProtocol.pruneWait(0, true));
+                        pruneLock = lockChan.lock();
+                    }
+                    try {
+                        dev.jkbuild.run.Goal goal =
+                                switch (op) {
+                                    case "purge" -> dev.jkbuild.runtime.CacheGoals.purgeGoal(cache);
+                                    case "gc" -> dev.jkbuild.runtime.CacheGoals.gcGoal(cache);
+                                    default -> dev.jkbuild.runtime.CacheGoals.pruneGoal(
+                                            cache,
+                                            Ndjson.intValue(requestLine, "olderThanDays", 30),
+                                            dryRun,
+                                            Ndjson.bool(requestLine, "sweep", false),
+                                            Ndjson.str(requestLine, "maxSize"),
+                                            Ndjson.bool(requestLine, "includeJkTmp", false));
+                                };
+                        Session session = Session.defaults().withCacheDir(cache).withCancel(cancelToken);
+                        String dir = EngineProtocol.SINGLE_GOAL_DIR;
+                        streamSingleGoal(goal, session, writer, result -> EngineProtocol.goalFinishCache(
+                                dir,
+                                result.success(),
+                                goal.get(dev.jkbuild.runtime.CacheGoals.FILES).orElse(-1L),
+                                goal.get(dev.jkbuild.runtime.CacheGoals.BYTES).orElse(-1L),
+                                goal.get(dev.jkbuild.runtime.CacheGoals.REACHABLE_EVICTED)
+                                        .orElse(-1L),
+                                goal.get(dev.jkbuild.runtime.CacheGoals.REPO_LINKS)
+                                        .orElse(-1L)));
+                    } finally {
+                        pruneLock.release();
+                    }
+                }
+            } finally {
+                cacheGate.writeLock().unlock();
+            }
         } catch (Exception e) {
             sendQuiet(writer, EngineProtocol.buildError(String.valueOf(e.getMessage())));
         }

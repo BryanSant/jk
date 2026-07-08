@@ -2,29 +2,22 @@
 package dev.jkbuild.command;
 
 import dev.jkbuild.cli.CliOutput;
-import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.cli.theme.Coords;
-import dev.jkbuild.http.Http;
 import dev.jkbuild.model.Coordinate;
-import dev.jkbuild.model.RepositorySpec;
 import dev.jkbuild.model.command.Arity;
 import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Exit;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.model.command.Param;
-import dev.jkbuild.repo.MavenRepo;
-import dev.jkbuild.repo.RepoGroup;
 import dev.jkbuild.run.Goal;
-import dev.jkbuild.run.GoalKey;
 import dev.jkbuild.run.GoalResult;
-import dev.jkbuild.run.Phase;
-import dev.jkbuild.run.PhaseKind;
 import dev.jkbuild.runtime.CompileToolchain;
+import dev.jkbuild.runtime.ToolGoals;
 import dev.jkbuild.tool.ToolEnv;
 import dev.jkbuild.tool.ToolLauncher;
-import dev.jkbuild.tool.ToolResolver;
 import dev.jkbuild.util.JkDirs;
 import java.io.IOException;
 import java.net.URI;
@@ -37,9 +30,10 @@ import java.util.List;
  * $JK_BIN_DIR} (PRD §20.1). Was {@code jk install} pre-v1.0; {@code install} remains a hidden
  * alias.
  *
- * <p>Two phases: {@code resolve-coord} (IO) → {@code install-launcher}. Not marked interactive —
- * the work is straightforward enough that the standard progress widget works fine, and the goal
- * stays {@code --output json}-friendly.
+ * <p><b>Engine-hosted</b> (Wave 4 of the slim-client migration): the Maven resolve + fetch runs
+ * inside the resident engine ({@link dev.jkbuild.cli.engine.EngineClient#runToolResolve}); the
+ * launcher write into {@code $JK_BIN_DIR} stays client-side, after the hosted goal succeeds. The
+ * test-only in-process path builds the identical goal via {@link ToolGoals}.
  */
 public final class ToolInstallCommand implements CliCommand {
 
@@ -81,8 +75,15 @@ public final class ToolInstallCommand implements CliCommand {
     URI repoUrl;
     GlobalOptions global;
 
-    private static final GoalKey<ToolEnv> TOOL_ENV = GoalKey.of("tool-env", ToolEnv.class);
-    private static final GoalKey<Path> LAUNCHER = GoalKey.of("launcher", Path.class);
+    /**
+     * Escape hatch for the fast JVM unit-test suite ONLY — see {@link
+     * BuildCommand#engineDisabledForTests()} for the full rationale. A real {@code jk tool install}
+     * hosts its resolve+fetch on the engine; the launcher write always runs here.
+     */
+    private static boolean engineDisabledForTests() {
+        return Boolean.getBoolean("jk.test.noEngine")
+                || "dev.jkbuild.test.runner.JkRunner".equals(System.getProperty("jk.plugin.class"));
+    }
 
     @Override
     public int run(Invocation in) throws IOException, InterruptedException {
@@ -102,48 +103,34 @@ public final class ToolInstallCommand implements CliCommand {
         Path binDir = binDirOverride != null ? binDirOverride : JkDirs.binDir();
         Path envsRoot = stateDir.resolve("tools").resolve("envs");
         Files.createDirectories(cacheDir);
+        GoalConsole.Mode mode = GoalConsole.modeFor(global);
 
-        Phase resolve = Phase.builder("resolve-coord")
-                .kind(PhaseKind.IO)
-                .scope(1)
-                .execute(ctx -> {
-                    ctx.label("resolve " + Coords.gav(primary));
-                    Cas cas = new Cas(cacheDir);
-                    Http http = new Http();
-                    URI url = repoUrl != null ? repoUrl : RepositorySpec.MAVEN_CENTRAL.url();
-                    RepoGroup repos = RepoGroup.of(new MavenRepo("central", url, http, cas));
-                    ToolResolver toolResolver = new ToolResolver(repos);
-                    try {
-                        ctx.put(TOOL_ENV, toolResolver.resolve(primary, bin, mainClass));
-                    } catch (RuntimeException | IOException e) {
-                        ctx.error("resolve", e.getMessage());
-                        throw new RuntimeException(e);
-                    }
-                    ctx.progress(1);
-                })
-                .build();
+        ToolEnv env;
+        if (engineDisabledForTests()) {
+            Goal goal = ToolGoals.resolveGoal(primary, bin, mainClass, repoUrl, cacheDir, Coords.gav(primary));
+            GoalResult result = GoalConsole.run(goal, mode, cacheDir);
+            if (!result.success()) return 1;
+            env = goal.get(ToolGoals.TOOL_ENV).orElseThrow();
+        } else {
+            dev.jkbuild.cli.engine.EngineClient.ToolResolveOutcome outcome;
+            try {
+                outcome = dev.jkbuild.cli.engine.EngineClient.runToolResolve(
+                        dev.jkbuild.engine.EnginePaths.current(),
+                        new dev.jkbuild.cli.engine.EngineClient.ToolResolveRequest(
+                                coord, bin, mainClass, repoUrl, cacheDir),
+                        phases -> GoalConsole.chooseConsoleListener("tool-install", phases, mode));
+            } catch (IOException e) {
+                CliOutput.err("jk tool install: " + e.getMessage());
+                return Exit.SOFTWARE;
+            }
+            if (!outcome.result().success() || outcome.mainClass() == null) return 1;
+            env = new ToolEnv(bin, primary, outcome.mainClass(), outcome.classpath());
+        }
 
-        Phase installLauncher = Phase.builder("install-launcher")
-                .requires("resolve-coord")
-                .scope(1)
-                .execute(ctx -> {
-                    ctx.label("write launcher to " + binDir);
-                    Path javaHome = CompileToolchain.runningJavaHome();
-                    Path launcher = ToolLauncher.install(envsRoot, binDir, javaHome, ctx.require(TOOL_ENV));
-                    ctx.put(LAUNCHER, launcher);
-                    ctx.progress(1);
-                })
-                .build();
+        // The "make install" half stays client-side: the launcher into the user-owned bin dir.
+        Path javaHome = CompileToolchain.runningJavaHome();
+        Path launcher = ToolLauncher.install(envsRoot, binDir, javaHome, env);
 
-        Goal goal = Goal.builder("tool-install")
-                .addPhase(resolve)
-                .addPhase(installLauncher)
-                .build();
-
-        GoalResult result = GoalConsole.run(goal, GoalConsole.modeFor(global), cacheDir);
-        if (!result.success()) return 1;
-
-        Path launcher = goal.get(LAUNCHER).orElseThrow();
         if (!global.outputIsJson()) {
             CliOutput.out("Installed " + Coords.gav(primary) + " → " + launcher);
             CliOutput.out("Add to PATH if needed:");

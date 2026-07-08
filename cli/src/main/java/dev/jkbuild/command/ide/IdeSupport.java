@@ -43,10 +43,30 @@ import java.util.Set;
  * dependency edges, and the per-module JDK/SDK handles — all of it independent of which IDE will
  * consume the result. Mirrors the {@code ExportSupport} convention: a final class of static
  * helpers, no instances.
+ *
+ * <p><b>Engine-hosted sync</b> (Wave 4 of the slim-client migration): a real invocation runs one
+ * hosted {@code jk sync} against the workspace root <em>before</em> computing the model — Wave 1's
+ * {@code sync-request} verbatim, workspace cascade included — instead of the old per-module
+ * in-process {@code CacheSync}+{@code Http} fetch. Best-effort, exactly like that in-line sync was:
+ * a failed sync warns and the model simply skips whatever jars are still missing. Everything after
+ * the sync is local: lockfile reads, CAS lookups ({@code RepoArtifactResolver.locateOrMaterialize}
+ * is a link from already-synced CAS blobs into the Maven-layout mirror — no network), and JDK
+ * pointer maintenance (client-resident by design). The test-only in-process path keeps the in-line
+ * fetch so it builds the exact same model with no engine.
  */
 public final class IdeSupport {
 
     private IdeSupport() {}
+
+    /**
+     * Escape hatch for the fast JVM unit-test suite ONLY — see {@code
+     * BuildCommand.engineDisabledForTests()} for the full rationale. A real {@code jk ide}/{@code
+     * idea}/{@code vscode} pre-syncs through the engine; file generation always runs here.
+     */
+    private static boolean engineDisabledForTests() {
+        return Boolean.getBoolean("jk.test.noEngine")
+                || "dev.jkbuild.test.runner.JkRunner".equals(System.getProperty("jk.plugin.class"));
+    }
 
     /** A build failure carrying the process exit code the command should return. */
     public static final class IdeException extends RuntimeException {
@@ -119,10 +139,18 @@ public final class IdeSupport {
         if (modules.isEmpty()) allModules.put(wsRoot, rootBuild);
         else allModules.putAll(modules);
 
+        // Bring the CAS in line with the lockfiles up front. Hosted on the engine for a real
+        // invocation (one sync-request covers the workspace cascade); the test-only in-process
+        // path fetches per module inside collectLibDefs, exactly as before.
+        boolean hosted = !engineDisabledForTests();
+        if (hosted) {
+            hostedBestEffortSync(wsRoot, cache, jdksDir, global);
+        }
+
         // Collect all library definitions across every module.
         Map<String, LibDef> allLibs = new LinkedHashMap<>();
         for (Map.Entry<Path, JkBuild> me : allModules.entrySet()) {
-            collectLibDefs(me.getKey(), me.getValue(), modules, cas, allLibs);
+            collectLibDefs(me.getKey(), me.getValue(), modules, cas, allLibs, !hosted);
         }
 
         // Per-module JDKs: each module maps to a stable jk-<vendor>-<level> SDK backed by a
@@ -163,6 +191,47 @@ public final class IdeSupport {
                 cacheDir,
                 jdksDir,
                 ideConfigDir);
+    }
+
+    /**
+     * One hosted {@code jk sync} against the workspace root, rendered with the standard Sync chip.
+     * Best-effort by design (mirroring the old in-line {@code CacheSync} call): any failure — the
+     * engine unreachable, offline, a pinned-but-uninstalled JDK failing the goal's resolve-only
+     * ensure-jdk phase — warns and returns; the model build below skips whatever is still missing.
+     */
+    private static void hostedBestEffortSync(Path wsRoot, Path cache, Path jdksDir, GlobalOptions global) {
+        dev.jkbuild.cli.run.GoalConsole.Mode mode = dev.jkbuild.cli.run.GoalConsole.modeFor(global);
+        long[] fetched = new long[1];
+        long[] upToDate = new long[1];
+        dev.jkbuild.cli.run.ConsoleSpec spec = new dev.jkbuild.cli.run.ConsoleSpec(
+                "Sync",
+                r -> fetched[0] == 0 && upToDate[0] == 0
+                        ? "already up to date"
+                        : fetched[0] + " fetched, " + upToDate[0] + " up-to-date",
+                r -> "Dependency sync incomplete — missing jars will be skipped.",
+                true);
+        String label = wsRoot.getFileName() != null ? wsRoot.getFileName().toString() : wsRoot.toString();
+        var session = dev.jkbuild.config.SessionContext.current();
+        try {
+            dev.jkbuild.cli.engine.EngineClient.runSync(
+                    dev.jkbuild.engine.EnginePaths.current(),
+                    new dev.jkbuild.cli.engine.EngineClient.SyncRequest(
+                            wsRoot,
+                            cache,
+                            jdksDir,
+                            null,
+                            false,
+                            session.offline(),
+                            session.force(),
+                            false,
+                            global.verbose),
+                    phases -> dev.jkbuild.cli.run.GoalConsole.chooseConsoleListener(phases, mode, spec, label),
+                    fetched,
+                    upToDate);
+        } catch (IOException e) {
+            dev.jkbuild.cli.CliOutput.err(
+                    "jk ide: dependency sync incomplete (" + e.getMessage() + ") — missing jars will be skipped");
+        }
     }
 
     // =========================================================================
@@ -260,9 +329,18 @@ public final class IdeSupport {
     // Library collection
     // =========================================================================
 
-    /** Collect all external (non-workspace) dep library definitions for one module. */
+    /**
+     * Collect all external (non-workspace) dep library definitions for one module. {@code
+     * fetchMissing} is the test-only in-process mode: fetch missing JARs in-line (the pre-Wave-4
+     * behavior); a real invocation already ran the hosted workspace sync and passes {@code false}.
+     */
     static void collectLibDefs(
-            Path moduleDir, JkBuild module, Map<Path, JkBuild> modules, Cas cas, Map<String, LibDef> allLibs)
+            Path moduleDir,
+            JkBuild module,
+            Map<Path, JkBuild> modules,
+            Cas cas,
+            Map<String, LibDef> allLibs,
+            boolean fetchMissing)
             throws IOException {
         Path lockFile = moduleDir.resolve("jk.lock");
         if (!Files.exists(lockFile)) return;
@@ -270,12 +348,14 @@ public final class IdeSupport {
 
         // Fetch any missing JARs so the repo has entries to reference (mirrors `jk sync` — the IDE
         // export should work without a prior sync).
-        try {
-            new CacheSync(cas, new Http()).sync(lock, CacheSync.ProgressObserver.NOOP);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        } catch (Exception ignored) {
-            /* best-effort; missing JARs are skipped below */
+        if (fetchMissing) {
+            try {
+                new CacheSync(cas, new Http()).sync(lock, CacheSync.ProgressObserver.NOOP);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } catch (Exception ignored) {
+                /* best-effort; missing JARs are skipped below */
+            }
         }
 
         Set<String> siblingCoords = siblingCoordinates(module, modules);

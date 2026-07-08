@@ -1,22 +1,23 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
-import dev.jkbuild.cache.Cas;
+import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.cli.GlobalOptions;
-import dev.jkbuild.http.Http;
+import dev.jkbuild.cli.run.GoalConsole;
+import dev.jkbuild.cli.theme.Coords;
 import dev.jkbuild.model.Coordinate;
-import dev.jkbuild.model.RepositorySpec;
 import dev.jkbuild.model.command.Arity;
 import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Exit;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.model.command.Param;
-import dev.jkbuild.repo.MavenRepo;
-import dev.jkbuild.repo.RepoGroup;
+import dev.jkbuild.run.Goal;
+import dev.jkbuild.run.GoalResult;
 import dev.jkbuild.runtime.CompileToolchain;
+import dev.jkbuild.runtime.ToolGoals;
 import dev.jkbuild.tool.ToolEnv;
 import dev.jkbuild.tool.ToolLauncher;
-import dev.jkbuild.tool.ToolResolver;
 import dev.jkbuild.util.JkDirs;
 import java.io.IOException;
 import java.net.URI;
@@ -37,6 +38,12 @@ import java.util.List;
  *   <li>a {@code .java}/{@code .kt}/{@code .kts}/{@code .jar} file — compiled (if needed) and run
  *       via {@link ScriptRunner}.
  * </ul>
+ *
+ * <p><b>Engine-hosted</b> (Wave 4 of the slim-client migration): a coordinate target's Maven
+ * resolve + fetch runs inside the resident engine; the <em>exec</em> of the tool stays client-side
+ * with inherited stdio — the tool's interactive run belongs to the user's terminal, exactly the
+ * {@code jk mvn}/{@code jk run} reasoning. The test-only in-process path builds the identical goal
+ * via {@link ToolGoals}.
  *
  * <p>{@code jk activate} scripts also expose this on the path as a {@code jkx} alias for uvx-style
  * muscle memory.
@@ -84,6 +91,17 @@ public final class ToolRunCommand implements CliCommand {
     List<String> toolArgs = new ArrayList<>();
     GlobalOptions global;
 
+    /**
+     * Escape hatch for the fast JVM unit-test suite ONLY — see {@link
+     * BuildCommand#engineDisabledForTests()} for the full rationale. A real {@code jk tool run} of
+     * a coordinate hosts its resolve+fetch on the engine; the exec always runs here (it inherits
+     * this terminal's stdio).
+     */
+    private static boolean engineDisabledForTests() {
+        return Boolean.getBoolean("jk.test.noEngine")
+                || "dev.jkbuild.test.runner.JkRunner".equals(System.getProperty("jk.plugin.class"));
+    }
+
     @Override
     public int run(Invocation in) throws IOException, InterruptedException {
         List<String> positionals = in.positionals();
@@ -108,13 +126,31 @@ public final class ToolRunCommand implements CliCommand {
         Path cacheDir = cacheDirOverride != null ? cacheDirOverride : JkDirs.cache();
         Files.createDirectories(cacheDir);
 
-        Cas cas = new Cas(cacheDir);
-        Http http = new Http();
-        URI url = repoUrl != null ? repoUrl : RepositorySpec.MAVEN_CENTRAL.url();
-        RepoGroup repos = RepoGroup.of(new MavenRepo("central", url, http, cas));
-        ToolResolver toolResolver = new ToolResolver(repos);
+        ToolEnv env;
+        if (engineDisabledForTests()) {
+            Goal goal = ToolGoals.resolveGoal(
+                    primary, primary.artifact(), mainClass, repoUrl, cacheDir, Coords.gav(primary));
+            GoalResult result = GoalConsole.run(goal, GoalConsole.modeFor(global), cacheDir);
+            if (!result.success()) return 1;
+            env = goal.get(ToolGoals.TOOL_ENV).orElseThrow();
+        } else {
+            dev.jkbuild.cli.engine.EngineClient.ToolResolveOutcome outcome;
+            try {
+                outcome = dev.jkbuild.cli.engine.EngineClient.runToolResolve(
+                        dev.jkbuild.engine.EnginePaths.current(),
+                        new dev.jkbuild.cli.engine.EngineClient.ToolResolveRequest(
+                                target, primary.artifact(), mainClass, repoUrl, cacheDir),
+                        phases -> GoalConsole.chooseConsoleListener(
+                                "tool-run", phases, GoalConsole.modeFor(global)));
+            } catch (IOException e) {
+                CliOutput.err("jk tool run: " + e.getMessage());
+                return Exit.SOFTWARE;
+            }
+            if (!outcome.result().success() || outcome.mainClass() == null) return 1;
+            env = new ToolEnv(primary.artifact(), primary, outcome.mainClass(), outcome.classpath());
+        }
 
-        ToolEnv env = toolResolver.resolve(primary, primary.artifact(), mainClass);
+        // The exec deliberately stays client-side: the tool inherits this terminal's stdio.
         Path javaHome = CompileToolchain.runningJavaHome();
         return ToolLauncher.execEphemeral(javaHome, env, toolArgs);
     }

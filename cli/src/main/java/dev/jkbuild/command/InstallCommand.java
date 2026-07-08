@@ -12,13 +12,11 @@ import dev.jkbuild.compile.ClasspathResolver;
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.config.WorkspaceClasspath;
 import dev.jkbuild.config.WorkspaceLocator;
-import dev.jkbuild.http.Http;
 import dev.jkbuild.layout.BuildLayout;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.lock.LockfileReader;
 import dev.jkbuild.model.Coordinate;
 import dev.jkbuild.model.JkBuild;
-import dev.jkbuild.model.RepositorySpec;
 import dev.jkbuild.model.command.Arity;
 import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Exit;
@@ -26,13 +24,8 @@ import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.model.command.Param;
 import dev.jkbuild.repo.MavenLayout;
-import dev.jkbuild.repo.MavenRepo;
-import dev.jkbuild.repo.RepoGroup;
 import dev.jkbuild.run.Goal;
-import dev.jkbuild.run.GoalKey;
 import dev.jkbuild.run.GoalResult;
-import dev.jkbuild.run.Phase;
-import dev.jkbuild.run.PhaseKind;
 import dev.jkbuild.runtime.BuildPipeline;
 import dev.jkbuild.runtime.CompileToolchain;
 import dev.jkbuild.test.JUnitLauncher;
@@ -40,7 +33,6 @@ import dev.jkbuild.tool.AppLauncher;
 import dev.jkbuild.tool.JarManifest;
 import dev.jkbuild.tool.ToolEnv;
 import dev.jkbuild.tool.ToolLauncher;
-import dev.jkbuild.tool.ToolResolver;
 import dev.jkbuild.util.GitUrl;
 import dev.jkbuild.util.JkDirs;
 import java.io.IOException;
@@ -133,16 +125,12 @@ public final class InstallCommand implements CliCommand {
     dev.jkbuild.cli.BuildOptions buildOpts;
     GlobalOptions global;
 
-    // Cross-phase keys (Maven-coord mode; the project/git modes' keys live in InstallGoals).
-    private static final GoalKey<ToolEnv> TOOL_ENV = GoalKey.of("tool-env", ToolEnv.class);
-    private static final GoalKey<Coordinate> PRIMARY = GoalKey.of("primary-coord", Coordinate.class);
-    private static final GoalKey<Path> LAUNCHER = GoalKey.of("launcher", Path.class);
-
     /**
      * Escape hatch for the fast JVM unit-test suite ONLY — see {@link
      * BuildCommand#engineDisabledForTests()} for the full rationale. A real {@code jk install} of a
      * project (current dir or git checkout) hosts its build + cache-install on the engine
-     * (slim-client Wave 3); the launcher-writing "make install" half always runs here.
+     * (slim-client Wave 3), and a Maven coordinate hosts its resolve+fetch (Wave 4); the
+     * launcher-writing "make install" half always runs here.
      */
     private static boolean engineDisabledForTests() {
         // Also bypass inside a jk-forked test worker (jk.plugin.class=JkRunner) — see BuildCommand.
@@ -255,6 +243,11 @@ public final class InstallCommand implements CliCommand {
 
     // --- mode 3: Maven coord ---------------------------------------------
 
+    /**
+     * The legacy {@code jk tool install} behavior: resolve+fetch the published tool (engine-hosted
+     * — Wave 4, riding the same {@code tool-resolve-request} as {@code jk tool install/run}), then
+     * write the launcher client-side.
+     */
     private int installFromMaven(String coord) throws IOException, InterruptedException {
         Coordinate parsed;
         try {
@@ -268,51 +261,35 @@ public final class InstallCommand implements CliCommand {
         Path envsRoot = stateDir().resolve("tools").resolve("envs");
         Path binDir = binDir();
         Files.createDirectories(cacheDir);
+        GoalConsole.Mode mode = GoalConsole.modeFor(global);
 
-        Phase resolveCoord = Phase.builder("resolve-coord")
-                .kind(PhaseKind.IO)
-                .scope(1)
-                .execute(ctx -> {
-                    ctx.label("fetch " + Coords.gav(parsed));
-                    Cas cas = new Cas(cacheDir);
-                    Http http = new Http();
-                    URI url = repoUrl != null ? repoUrl : RepositorySpec.MAVEN_CENTRAL.url();
-                    RepoGroup repos = RepoGroup.of(new MavenRepo("central", url, http, cas));
-                    ToolResolver toolResolver = new ToolResolver(repos);
-                    try {
-                        ToolEnv env = toolResolver.resolve(parsed, bin, mainClass);
-                        ctx.put(TOOL_ENV, env);
-                        ctx.put(PRIMARY, parsed);
-                    } catch (RuntimeException | IOException e) {
-                        ctx.error("resolve", e.getMessage());
-                        throw new RuntimeException(e);
-                    }
-                    ctx.progress(1);
-                })
-                .build();
+        ToolEnv env;
+        if (engineDisabledForTests()) {
+            Goal goal = dev.jkbuild.runtime.ToolGoals.resolveGoal(
+                    parsed, bin, mainClass, repoUrl, cacheDir, Coords.gav(parsed));
+            GoalResult result = GoalConsole.run(goal, mode, cacheDir);
+            if (!result.success()) return failureExit(result, "jk install", cacheDir);
+            env = goal.get(dev.jkbuild.runtime.ToolGoals.TOOL_ENV).orElseThrow();
+        } else {
+            dev.jkbuild.cli.engine.EngineClient.ToolResolveOutcome outcome;
+            try {
+                outcome = dev.jkbuild.cli.engine.EngineClient.runToolResolve(
+                        dev.jkbuild.engine.EnginePaths.current(),
+                        new dev.jkbuild.cli.engine.EngineClient.ToolResolveRequest(
+                                coord, bin, mainClass, repoUrl, cacheDir),
+                        phases -> GoalConsole.chooseConsoleListener("install-maven", phases, mode));
+            } catch (IOException e) {
+                CliOutput.err("jk install: " + e.getMessage());
+                return Exit.SOFTWARE;
+            }
+            if (!outcome.result().success() || outcome.mainClass() == null) {
+                return failureExit(outcome.result(), "jk install", cacheDir);
+            }
+            env = new ToolEnv(bin, parsed, outcome.mainClass(), outcome.classpath());
+        }
 
-        Phase installLauncher = Phase.builder("install-launcher")
-                .requires("resolve-coord")
-                .scope(1)
-                .execute(ctx -> {
-                    ctx.label("write launcher to " + binDir);
-                    Path javaHome = CompileToolchain.runningJavaHome();
-                    Path launcher = ToolLauncher.install(envsRoot, binDir, javaHome, ctx.require(TOOL_ENV));
-                    ctx.put(LAUNCHER, launcher);
-                    ctx.progress(1);
-                })
-                .build();
-
-        Goal goal = Goal.builder("install-maven")
-                .addPhase(resolveCoord)
-                .addPhase(installLauncher)
-                .build();
-
-        GoalResult result = GoalConsole.run(goal, GoalConsole.modeFor(global), cacheDir);
-        if (!result.success()) return failureExit(result, "jk install", cacheDir);
-
-        announceInstall(
-                Coords.gav(goal.get(PRIMARY).orElseThrow()), goal.get(LAUNCHER).orElseThrow(), binDir);
+        Path launcher = ToolLauncher.install(envsRoot, binDir, CompileToolchain.runningJavaHome(), env);
+        announceInstall(Coords.gav(parsed), launcher, binDir);
         return 0;
     }
 

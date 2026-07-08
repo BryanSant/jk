@@ -25,6 +25,13 @@ import java.util.Set;
  * IdeModel} (workspace, deps, per-module JDKs), then each selected {@link IdeGenerator} turns it into
  * that IDE's files. The hidden {@code jk idea} and the {@code jk vscode} aliases delegate here with a
  * fixed target.
+ *
+ * <p><b>Engine-hosted</b> (Wave 4 of the slim-client migration): the dependency <em>sync</em> half
+ * — the inventory's hidden heavy hitter, previously an in-process {@code CacheSync}+{@code Http}
+ * fetch per module — now rides Wave 1's hosted {@code jk sync} verbatim (best-effort, exactly like
+ * the old in-line sync); the model computation and file <em>generation</em> stay client-side, fed
+ * from the lockfiles and the already-synced cache. The test-only in-process path keeps the in-line
+ * fetch (see {@link IdeSupport#build}).
  */
 public final class IdeCommand implements CliCommand {
 

@@ -744,6 +744,100 @@ public final class EngineClient {
                 finish.result(), checkout != null ? Path.of(checkout) : null, Ndjson.str(finish.finishLine(), "gitSha"));
     }
 
+    // ---- hosted long-tail verbs (Wave 4 of the slim client) -------------------------------------
+
+    /**
+     * Everything an engine-hosted tool resolution needs ({@code jk tool install}/{@code jk tool
+     * run}/{@code jk install <g:a:v>}). {@code mainClass} is the {@code --main} override (may be
+     * {@code null}); {@code repoUrl} overrides Maven Central (may be {@code null}).
+     */
+    public record ToolResolveRequest(String coord, String bin, String mainClass, java.net.URI repoUrl, Path cache) {}
+
+    /**
+     * A hosted tool resolution's outcome: the goal result plus the resolved main class and
+     * classpath (empty on failure) — the ingredients of a client-side {@code ToolEnv}.
+     */
+    public record ToolResolveOutcome(dev.jkbuild.run.GoalResult result, String mainClass, List<Path> classpath) {}
+
+    /**
+     * Resolve a Maven-published CLI tool against the engine (the POM walk + jar fetches run
+     * engine-side; see {@code ToolGoals}). The launcher write / inheritIO exec stays in the calling
+     * command — it owns the user's {@code ~/.jk/bin} and terminal.
+     */
+    public static ToolResolveOutcome runToolResolve(
+            EnginePaths.Paths paths,
+            ToolResolveRequest req,
+            java.util.function.Function<List<dev.jkbuild.run.Phase>, dev.jkbuild.run.GoalListener> listenerFactory)
+            throws IOException {
+        EngineWorkerAdapter.HostedFinish finish = EngineWorkerAdapter.stream(
+                paths,
+                EngineProtocol.toolResolveRequest(
+                        req.coord(),
+                        req.bin(),
+                        req.mainClass(),
+                        req.repoUrl() != null ? req.repoUrl().toString() : null,
+                        req.cache().toString()),
+                "tool-resolve",
+                listenerFactory,
+                (type, line) -> {});
+        return new ToolResolveOutcome(
+                finish.result(),
+                Ndjson.str(finish.finishLine(), "toolMainClass"),
+                Ndjson.strArray(finish.finishLine(), "toolClasspath").stream()
+                        .map(Path::of)
+                        .toList());
+    }
+
+    /**
+     * Everything an engine-hosted cache maintenance op needs ({@code op} = {@code prune}/{@code
+     * purge}/{@code gc} — {@code jk cache prune}/{@code purge}, {@code jk clean --cache}). {@code
+     * maxSize} may be {@code null}; the non-prune ops ignore the prune-only fields.
+     */
+    public record CacheMaintRequest(
+            String op, Path cache, int olderThanDays, boolean dryRun, boolean sweep, String maxSize, boolean includeJkTmp) {}
+
+    /** A hosted cache maintenance op's summary, decoded from the terminal goal-finish ({@code -1} = n/a). */
+    public record CacheMaintSummary(long files, long bytes, long reachableEvicted, long repoLinks) {}
+
+    /**
+     * Run a cache maintenance op against the engine, which executes it as an idle-boundary job: the
+     * mutation waits until no pipeline is in flight (and blocks new ones while it runs), holding the
+     * cross-process {@code .prune.lock} throughout. {@code onWait} fires when the engine reports the
+     * job is queued — {@code pipelines} in-flight builds ({@code external=true}: another process's
+     * prune) — so the command can explain the pause before the progress UI starts. {@code
+     * summaryOut} (a single-slot holder) is populated from the terminal goal-finish <em>before</em>
+     * it reaches {@code listenerFactory}'s listener, whose own {@code goalFinish} handler renders
+     * the summary line from those fields — the {@code runImage} holder pattern.
+     */
+    public static dev.jkbuild.run.GoalResult runCacheMaintenance(
+            EnginePaths.Paths paths,
+            CacheMaintRequest req,
+            java.util.function.Function<List<dev.jkbuild.run.Phase>, dev.jkbuild.run.GoalListener> listenerFactory,
+            java.util.function.ObjIntConsumer<Boolean> onWait,
+            CacheMaintSummary[] summaryOut)
+            throws IOException {
+        return EngineWorkerAdapter.stream(
+                        paths,
+                        EngineProtocol.cachePruneRequest(
+                                req.op(),
+                                req.cache().toString(),
+                                req.olderThanDays(),
+                                req.dryRun(),
+                                req.sweep(),
+                                req.maxSize(),
+                                req.includeJkTmp()),
+                        "cache-" + req.op(),
+                        listenerFactory,
+                        (type, line) -> onWait.accept(
+                                Ndjson.bool(line, "external", false), Ndjson.intValue(line, "pipelines", 0)),
+                        line -> summaryOut[0] = new CacheMaintSummary(
+                                Ndjson.longValue(line, "cacheFiles", -1),
+                                Ndjson.longValue(line, "cacheBytes", -1),
+                                Ndjson.longValue(line, "cacheReachableEvicted", -1),
+                                Ndjson.longValue(line, "cacheRepoLinks", -1)))
+                .result();
+    }
+
     static Handshake ensureRunning(EnginePaths.Paths paths, String clientVersion, Duration startTimeout)
             throws IOException {
         Optional<Handshake> existing = handshake(paths.socket(), clientVersion);

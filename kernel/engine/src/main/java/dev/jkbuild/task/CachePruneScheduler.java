@@ -20,6 +20,12 @@ import java.util.Optional;
  * <p>The actual prune runs as a detached child process via {@code jk cache prune --background}. The
  * flock inside the child ensures only one prune runs at a time across concurrent invocations. The
  * parent doesn't wait — the build/sync command exits immediately after the spawn.
+ *
+ * <p><b>Legacy path (slim-client Wave 4):</b> the resident engine no longer spawns this — a
+ * successful engine-hosted build/sync enqueues an engine-internal prune that runs at the next idle
+ * boundary (no pipelines in flight; see {@code EngineServer}). Only the test-only in-process
+ * command paths still use the detached spawn, since they run with no engine by definition; {@link
+ * #shouldRun} is the shared cadence check both paths consult.
  */
 public final class CachePruneScheduler {
 
@@ -43,7 +49,7 @@ public final class CachePruneScheduler {
     }
 
     /** True if the configured cadence calls for a prune now. */
-    static boolean shouldRun(JkCacheConfig config, Path cacheRoot) throws IOException {
+    public static boolean shouldRun(JkCacheConfig config, Path cacheRoot) throws IOException {
         Path stamp = cacheRoot.resolve(LAST_PRUNED_FILE);
         if (!Files.isRegularFile(stamp)) return true;
         long last;

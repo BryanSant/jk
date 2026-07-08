@@ -137,6 +137,56 @@ the same discriminated-envelope style, so this is vocabulary plumbing, not redes
 > race in-flight builds; the real fix is the Wave-4 engine-internal idle job that quiesces
 > pipelines first.
 
+> **Status: Wave 4 landed (2026-07-08) — Stage 3 COMPLETE.** The long tail:
+>
+> - **`ide`/`idea`/`vscode` (+ `export idea`)** — split exactly as classified, but cheaper than the
+>   feared "serialized `IdeModel` burst": the heavy half (the per-module in-process
+>   `CacheSync`+`Http` fetch inside `IdeSupport.collectLibDefs`) is now one hosted `sync-request`
+>   against the workspace root (Wave 1's vocabulary verbatim, module cascade included, rendered with
+>   the standard Sync chip, best-effort like the old in-line sync). Model computation + file
+>   generation stay client-side: after the sync, `RepoArtifactResolver.locateOrMaterialize` is a
+>   local CAS-blob → Maven-layout link (no network — the same blessed client-side CAS-link surface
+>   as `add --file`'s `putByLink`), and the SDK-pointer work is client-resident JDK flow by design.
+>   No new wire vocabulary at all.
+> - **`tool install`/`tool run` + `install`'s deferred Maven-coord mode** — the `ToolResolver` stack
+>   (POM walk + jar fetches) hosts as one `tool-resolve-request` (single-goal shape); the terminal
+>   `goal-finish` carries the resolved main class + classpath (flat string array). All three verbs
+>   ride the same request through a shared `runtime.ToolGoals` factory (in-process test path
+>   included). The launcher write (`~/.jk/bin` + env.json) and the inheritIO *exec* stay client-side
+>   — Wave 2/3 exec reasoning. `jk tool run <coord>` gains the standard progress UI during resolve
+>   (previously silent); its exec is unchanged.
+> - **`cache prune`/`cache purge`/`clean --cache`** — engine-hosted as **idle-boundary jobs**, the
+>   Wave-3 correctness fix: a fair `ReentrantReadWriteLock` gates the caches (every hosted pipeline
+>   holds the read side for its whole run; maintenance takes the write side), so a sweep can never
+>   delete blobs from under an in-flight pipeline in this engine, and new pipelines queue behind a
+>   running sweep. One `cache-prune-request` (`op` = prune/purge/gc) covers all three; a `prune-wait`
+>   event tells the client why it's pausing ("waiting for N in-flight builds" / another process's
+>   prune). The post-build/post-sync `--background` self-spawn is **deleted from the engine paths**:
+>   a successful hosted build/sync now enqueues an engine-internal prune drained at the next idle
+>   boundary (`maybeIdleBoundaryGc` grew into that drain). `purge`'s confirm/stats/dry-run stay
+>   client-side (terminal + read-only). **Shared-cache finding:** `JK_CACHE_DIR` is independent of
+>   `JK_STATE_DIR` (`JkDirs`), and engines are keyed by state dir — so two engines *can* share one
+>   cache dir; the on-disk `.prune.lock` therefore still matters and every hosted maintenance run
+>   (and the internal idle job) takes it, closing the Wave-3 gap where the foreground path skipped
+>   it entirely. The legacy `--background` detached child remains only as the engine-less path (the
+>   in-process test builds still spawn it).
+> - **`export gradle`/`export maven`** — **RECLASSIFIED CLIENT-ONLY** (the §1.4 ENGINE-HOSTED row
+>   was provisional and wrong): they are pure local transforms — parse `jk.toml`+`jk.lock`, run
+>   `GradleExporter`/`PomExporter` (no `Http`, no CAS, no effective-POM building against remote
+>   metadata), write text files. Nothing to host; the cost is the compat-exporter classes on the
+>   client classpath, which is a Stage-5 module-split concern (§4 move 4), not a hosting one.
+> - **`explain` ETA** — already closed in Wave 3 (listed in the §5 Wave-4 row; no work remained).
+>
+> **What remains intentionally client-side-heavy after Stage 3:** terminal-owning execs (`run`,
+> `tool run`, `mvn`/`gradle` passthrough, the installed tool itself), the complete JDK flow +
+> GraalVM/consent pre-flights, scaffolding (`new`/`init`), config/manifest edits (`add`/`remove`,
+> auth/credential files), offline lockfile readers (`tree`/`why`/`deny`), and the cheap local file
+> emitters (`ide` generation, `export gradle/maven`). One honest residue: `ScriptRunner` (`jk run
+> <file>` / `jk tool run <file>`) still resolves script-header deps in-process — per-script, small,
+> cached after first run; it was folded under `run`'s Wave-3 row but not hosted. It should ride
+> `tool-resolve-request`'s shape if/when it matters; flagged for Stage 5 since it keeps
+> `RepoGroup`/`NaiveResolver` on the client until then.
+
 ## 2. jdeps evidence
 
 `jdeps -verbose:class -cp <model,core,io,resolver,toolchain,engine,plugin-api jars> cli/build/libs/cli.jar`

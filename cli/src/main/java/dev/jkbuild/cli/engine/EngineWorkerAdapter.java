@@ -95,7 +95,10 @@ final class EngineWorkerAdapter {
                             .label(Ndjson.str(line, "label"))
                             .build());
                     case EngineProtocol.PLAN_DONE -> listener = listenerFactory.apply(phases);
-                    case EngineProtocol.AUDIT_FINDING, EngineProtocol.FORMAT_FILE, EngineProtocol.IMPORT_NOTE ->
+                    case EngineProtocol.AUDIT_FINDING,
+                            EngineProtocol.FORMAT_FILE,
+                            EngineProtocol.IMPORT_NOTE,
+                            EngineProtocol.PRUNE_WAIT ->
                         onEvent.accept(type, line);
                     case EngineProtocol.GOAL_FINISH -> {
                         GoalResult result = new GoalResult(

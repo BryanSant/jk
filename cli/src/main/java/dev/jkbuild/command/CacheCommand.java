@@ -18,7 +18,6 @@ import dev.jkbuild.repo.RepoArtifactStore;
 import dev.jkbuild.resolver.Versions;
 import dev.jkbuild.run.Goal;
 import dev.jkbuild.run.GoalResult;
-import dev.jkbuild.run.Phase;
 import dev.jkbuild.util.JkDirs;
 import java.io.IOException;
 import java.io.PrintStream;
@@ -77,21 +76,18 @@ public final class CacheCommand extends GroupCommand {
         return new Stats(files, bytes);
     }
 
-    static void deleteContents(Path root) throws IOException {
-        try (var stream = Files.walk(root)) {
-            stream.sorted(Comparator.reverseOrder())
-                    .filter(p -> !p.equals(root))
-                    .forEach(p -> {
-                        try {
-                            Files.deleteIfExists(p);
-                        } catch (IOException ignored) {
-                        }
-                    });
-        }
-    }
-
     static String fmtCount(long n) {
         return String.format("%,d", n);
+    }
+
+    /** Render a hosted maintenance job's {@code prune-wait} event (see {@code EngineProtocol.PRUNE_WAIT}). */
+    static void printWait(Boolean external, int pipelines) {
+        if (Boolean.TRUE.equals(external)) {
+            CliOutput.out("Waiting for another jk process's cache prune to finish…");
+        } else {
+            CliOutput.out("Waiting for " + pipelines + " in-flight build" + (pipelines == 1 ? "" : "s")
+                    + " to finish…");
+        }
     }
 
     static String fmtBytes(long bytes) {
@@ -444,6 +440,16 @@ public final class CacheCommand extends GroupCommand {
         }
     }
 
+    /**
+     * {@code jk cache prune} — <b>engine-hosted</b> (Wave 4 of the slim-client migration): the
+     * mutation runs inside the resident engine as an idle-boundary job — it waits until no build
+     * pipeline is in flight (the engine emits a {@code prune-wait} event so this command can say
+     * why it's pausing) and holds the cross-process {@code .prune.lock} while it sweeps, so a prune
+     * can never delete blobs from under an in-flight pipeline. The goal itself lives in {@link
+     * dev.jkbuild.runtime.CacheGoals}; the test-only in-process path and the legacy detached
+     * {@code --background} child (spawned only by engine-less in-process builds) build the exact
+     * same goal here.
+     */
     public static final class CachePruneCommand implements CliCommand {
         @Override
         public String name() {
@@ -473,6 +479,11 @@ public final class CacheCommand extends GroupCommand {
                     Opt.flag("Internal: opportunistic prune.", "--background").hide());
         }
 
+        private static boolean engineDisabledForTests() {
+            return Boolean.getBoolean("jk.test.noEngine")
+                    || "dev.jkbuild.test.runner.JkRunner".equals(System.getProperty("jk.plugin.class"));
+        }
+
         @Override
         public int run(Invocation in) throws IOException {
             Path cacheDir = in.value("cache-dir").map(Path::of).orElse(null);
@@ -487,6 +498,10 @@ public final class CacheCommand extends GroupCommand {
             if (!Files.isDirectory(root)) {
                 CliOutput.out("Nothing to prune — " + root + " does not exist.");
                 return 0;
+            }
+
+            if (!background && !engineDisabledForTests()) {
+                return runHosted(root, cacheDir == null, olderThanDays, dryRun, sweep, maxSize, global);
             }
 
             FileChannel lockChan = null;
@@ -510,132 +525,19 @@ public final class CacheCommand extends GroupCommand {
                 System.setErr(logStream);
             }
             try {
-                // Mutable result holder closed over by the phase lambda and onSuccess.
-                // [0] = totalFiles removed, [1] = totalBytes freed, [2] = evictedReachable count
-                long[] result = {0L, 0L, 0L};
+                Goal goal = dev.jkbuild.runtime.CacheGoals.pruneGoal(
+                        root, olderThanDays, dryRun, sweep, maxSize, cacheDir == null);
 
-                Phase prunePhase = Phase.builder("prune")
-                        .scope(1)
-                        .execute(ctx -> {
-                            ctx.label("Pruning cache…");
-                            long cutoffMillis =
-                                    System.currentTimeMillis() - (long) olderThanDays * 24L * 60L * 60L * 1000L;
-                            long totalFiles = 0;
-                            long totalBytes = 0;
-
-                            Path shaDir = root.resolve("sha256");
-                            if (Files.isDirectory(shaDir)) {
-                                for (Path file : tempFiles(shaDir)) {
-                                    long sz = Files.size(file);
-                                    if (!dryRun) Files.deleteIfExists(file);
-                                    totalFiles++;
-                                    totalBytes += sz;
-                                }
-                            }
-                            Path actionsDir = root.resolve("actions");
-                            if (Files.isDirectory(actionsDir)) {
-                                Path keysDir = actionsDir.resolve("keys");
-                                if (Files.isDirectory(keysDir)) {
-                                    for (Path file : olderThan(keysDir, cutoffMillis)) {
-                                        long sz = Files.size(file);
-                                        if (!dryRun) Files.deleteIfExists(file);
-                                        totalFiles++;
-                                        totalBytes += sz;
-                                    }
-                                }
-                            }
-                            var runLogReport =
-                                    dev.jkbuild.task.RunLogGc.sweep(root, dev.jkbuild.task.RunLogGc.DEFAULT_TTL, dryRun);
-                            totalFiles += runLogReport.deleted();
-                            totalBytes += runLogReport.freedBytes();
-
-                            var formatStampReport = dev.jkbuild.task.FormatStampGc.sweep(
-                                    root, dev.jkbuild.task.FormatStampGc.DEFAULT_TTL, dryRun);
-                            totalFiles += formatStampReport.deleted();
-                            totalBytes += formatStampReport.freedBytes();
-
-                            var timingsReport = dev.jkbuild.runtime.PhaseTimings.prune(
-                                    root,
-                                    dev.jkbuild.runtime.PhaseTimings.Limits.resolve(
-                                            dev.jkbuild.util.JkDirs.userConfigFile(), System::getenv),
-                                    System.currentTimeMillis(),
-                                    dryRun);
-                            totalFiles += timingsReport.evictedByAge() + timingsReport.evictedBySize();
-
-                            if (cacheDir == null) {
-                                var tmpReport = dev.jkbuild.task.TmpGc.sweep(
-                                        dev.jkbuild.util.JkDirs.tmp(), dev.jkbuild.task.TmpGc.DEFAULT_TTL, dryRun);
-                                totalFiles += tmpReport.deleted();
-                                totalBytes += tmpReport.freedBytes();
-                            }
-
-                            boolean doSweep = sweep || maxSize != null;
-                            long budgetBytes = maxSize != null ? dev.jkbuild.task.LruEvictor.parseSize(maxSize) : -1L;
-                            if (doSweep) {
-                                dev.jkbuild.cache.Cas cas = new dev.jkbuild.cache.Cas(root);
-                                Path toolsDir = root.resolve("tools");
-                                Path actionsDir2 = root.resolve("actions");
-                                var liveRefs = dev.jkbuild.task.CacheRoots.collect(cas, actionsDir2, toolsDir);
-                                var sweepReport = dev.jkbuild.task.CasSweep.sweep(cas, liveRefs, dryRun);
-                                totalFiles += sweepReport.deleted();
-                                totalBytes += sweepReport.freedBytes();
-                                if (budgetBytes > 0) {
-                                    var ledger = dev.jkbuild.task.AccessLedger.atDefaultPath();
-                                    var evictReport = dev.jkbuild.task.LruEvictor.evictDownTo(
-                                            cas, budgetBytes, liveRefs, ledger, dryRun);
-                                    totalFiles += evictReport.deleted();
-                                    totalBytes += evictReport.freedBytes();
-                                    result[2] = evictReport.reachableEvicted();
-                                    if (!dryRun) {
-                                        try {
-                                            ledger.compactIfLarge();
-                                        } catch (IOException ignored) {
-                                        }
-                                    }
-                                }
-                            }
-
-                            result[0] = totalFiles;
-                            result[1] = totalBytes;
-                            ctx.progress(1);
-                        })
-                        .build();
-
-                Goal goal = Goal.builder("cache-prune").addPhase(prunePhase).build();
-
-                ConsoleSpec spec = new ConsoleSpec(
-                        "Cache",
-                        r -> {
-                            long files = result[0];
-                            long bytes = result[1];
-                            if (dryRun) {
-                                if (files == 0) return "Dry run: nothing to clean up.";
-                                return "Dry run: would remove "
-                                        + files + " " + (files == 1 ? "file" : "files")
-                                        + ", " + fmtBytes(bytes) + " reclaimable.";
-                            }
-                            if (files == 0) return "Finished pruning cache. Nothing to clean up.";
-                            return "Finished pruning cache. "
-                                    + files + " " + (files == 1 ? "file" : "files")
-                                    + " removed, " + fmtBytes(bytes) + " reclaimed.";
-                        },
-                        r -> "Failed to prune cache.",
-                        true);
+                ConsoleSpec spec = pruneSpec(
+                        dryRun,
+                        () -> goal.get(dev.jkbuild.runtime.CacheGoals.FILES).orElse(0L),
+                        () -> goal.get(dev.jkbuild.runtime.CacheGoals.BYTES).orElse(0L));
 
                 GoalResult goalResult = GoalConsole.runGoal(
                         goal, GoalConsole.modeFor(global), root, spec, "Cache");
 
-                if (result[2] > 0) {
-                    Theme pt = Theme.active();
-                    CliOutput.err(
-                            Theme.colorize(Glyphs.BANG, pt.warning())
-                            + " "
-                            + Theme.colorize(
-                                    "evicted "
-                                    + result[2]
-                                    + " reachable objects to fit the budget — consider raising --max-size.",
-                                    pt.settled()));
-                }
+                warnReachableEvicted(
+                        goal.get(dev.jkbuild.runtime.CacheGoals.REACHABLE_EVICTED).orElse(0L));
 
                 return goalResult.success() ? 0 : 1;
             } finally {
@@ -665,26 +567,73 @@ public final class CacheCommand extends GroupCommand {
             }
         }
 
-        private static List<Path> olderThan(Path dir, long cutoffMillis) throws IOException {
-            try (var stream = Files.walk(dir)) {
-                return stream.filter(Files::isRegularFile)
-                        .filter(p -> {
-                            try {
-                                return Files.getLastModifiedTime(p).toMillis() < cutoffMillis;
-                            } catch (IOException e) {
-                                return false;
-                            }
-                        })
-                        .toList();
+        /** The engine-hosted foreground path: send the request, explain any wait, render the stream. */
+        private static int runHosted(
+                Path root,
+                boolean defaultCacheDir,
+                int olderThanDays,
+                boolean dryRun,
+                boolean sweep,
+                String maxSize,
+                GlobalOptions global) {
+            // Settled from the terminal goal-finish before the console listener renders the line.
+            var summary = new dev.jkbuild.cli.engine.EngineClient.CacheMaintSummary[1];
+            ConsoleSpec spec = pruneSpec(
+                    dryRun,
+                    () -> summary[0] != null ? summary[0].files() : 0L,
+                    () -> summary[0] != null ? summary[0].bytes() : 0L);
+            GoalConsole.Mode mode = GoalConsole.modeFor(global);
+            dev.jkbuild.run.GoalResult result;
+            try {
+                result = dev.jkbuild.cli.engine.EngineClient.runCacheMaintenance(
+                        dev.jkbuild.engine.EnginePaths.current(),
+                        new dev.jkbuild.cli.engine.EngineClient.CacheMaintRequest(
+                                "prune", root, olderThanDays, dryRun, sweep, maxSize, defaultCacheDir),
+                        phases -> GoalConsole.chooseConsoleListener(phases, mode, spec, "Cache"),
+                        CacheCommand::printWait,
+                        summary);
+            } catch (IOException e) {
+                CliOutput.err("jk cache prune: " + e.getMessage());
+                return dev.jkbuild.model.command.Exit.SOFTWARE;
             }
+            if (summary[0] != null) warnReachableEvicted(summary[0].reachableEvicted());
+            return result.success() ? 0 : 1;
         }
 
-        private static List<Path> tempFiles(Path dir) throws IOException {
-            try (var stream = Files.walk(dir)) {
-                return stream.filter(Files::isRegularFile)
-                        .filter(p -> p.getFileName().toString().startsWith(".put-"))
-                        .toList();
-            }
+        /** The Cache chip spec; counts are read lazily, at result-line render time. */
+        private static ConsoleSpec pruneSpec(
+                boolean dryRun, java.util.function.LongSupplier files, java.util.function.LongSupplier bytes) {
+            return new ConsoleSpec(
+                    "Cache",
+                    r -> {
+                        long f = Math.max(0, files.getAsLong());
+                        long b = Math.max(0, bytes.getAsLong());
+                        if (dryRun) {
+                            if (f == 0) return "Dry run: nothing to clean up.";
+                            return "Dry run: would remove "
+                                    + f + " " + (f == 1 ? "file" : "files")
+                                    + ", " + fmtBytes(b) + " reclaimable.";
+                        }
+                        if (f == 0) return "Finished pruning cache. Nothing to clean up.";
+                        return "Finished pruning cache. "
+                                + f + " " + (f == 1 ? "file" : "files")
+                                + " removed, " + fmtBytes(b) + " reclaimed.";
+                    },
+                    r -> "Failed to prune cache.",
+                    true);
+        }
+
+        private static void warnReachableEvicted(long evicted) {
+            if (evicted <= 0) return;
+            Theme pt = Theme.active();
+            CliOutput.err(
+                    Theme.colorize(Glyphs.BANG, pt.warning())
+                    + " "
+                    + Theme.colorize(
+                            "evicted "
+                            + evicted
+                            + " reachable objects to fit the budget — consider raising --max-size.",
+                            pt.settled()));
         }
     }
 
@@ -739,22 +688,40 @@ public final class CacheCommand extends GroupCommand {
                                 "Purge aborted."));
                 return 1;
             }
+            // The confirm/dry-run/stats above are terminal- and read-only concerns and stay here;
+            // the delete itself is engine-hosted (Wave 4) so it too runs at an idle boundary,
+            // never under an in-flight pipeline. Summary counts were gathered pre-delete either way.
             long[] result = {stats.files, stats.bytes};
-            Phase purgePhase = Phase.builder("purge")
-                    .execute(ctx -> {
-                        ctx.label("Purging cache…");
-                        deleteContents(root);
-                    })
-                    .build();
-            Goal goal = Goal.builder("cache-purge").addPhase(purgePhase).build();
             ConsoleSpec spec = new ConsoleSpec(
                     "Cache",
                     r -> "Purged " + fmtCount(result[0]) + " files, " + fmtBytes(result[1]) + " freed.",
                     r -> "Failed to purge cache.",
                     true);
-            GoalResult goalResult = GoalConsole.runGoal(
-                    goal, GoalConsole.modeFor(global), root, spec, "Cache");
+            GoalConsole.Mode mode = GoalConsole.modeFor(global);
+            if (engineDisabledForTests()) {
+                Goal goal = dev.jkbuild.runtime.CacheGoals.purgeGoal(root);
+                GoalResult goalResult = GoalConsole.runGoal(goal, mode, root, spec, "Cache");
+                return goalResult.success() ? 0 : 1;
+            }
+            dev.jkbuild.run.GoalResult goalResult;
+            try {
+                goalResult = dev.jkbuild.cli.engine.EngineClient.runCacheMaintenance(
+                        dev.jkbuild.engine.EnginePaths.current(),
+                        new dev.jkbuild.cli.engine.EngineClient.CacheMaintRequest(
+                                "purge", root, 0, false, false, null, false),
+                        phases -> GoalConsole.chooseConsoleListener(phases, mode, spec, "Cache"),
+                        CacheCommand::printWait,
+                        new dev.jkbuild.cli.engine.EngineClient.CacheMaintSummary[1]);
+            } catch (IOException e) {
+                CliOutput.err("jk cache purge: " + e.getMessage());
+                return dev.jkbuild.model.command.Exit.SOFTWARE;
+            }
             return goalResult.success() ? 0 : 1;
+        }
+
+        private static boolean engineDisabledForTests() {
+            return Boolean.getBoolean("jk.test.noEngine")
+                    || "dev.jkbuild.test.runner.JkRunner".equals(System.getProperty("jk.plugin.class"));
         }
 
         /** Stern, default-to-no confirmation before wiping the whole cache. */

@@ -334,6 +334,44 @@ public final class EngineProtocol {
      */
     public static final String GIT_FETCH_REQUEST = "git-fetch-request";
 
+    // ---- hosted long-tail verbs (Wave 4 of the slim-client migration) ----------------------------
+    //
+    // The last in-process resolution path leaves the client: jk tool install / jk tool run (and jk
+    // install's Maven-coord mode) host their ToolResolver run — transitive POM walk + jar fetches —
+    // as a single goal, returning the resolved main class + classpath on the terminal goal-finish;
+    // the launcher write / inheritIO exec stays client-side (Wave 2/3 exec reasoning). jk ide rides
+    // Wave 1's SYNC_REQUEST verbatim (no new vocabulary; file generation stays client-side). jk
+    // cache prune/purge (and jk clean --cache's GC) become engine-hosted idle-boundary jobs: the
+    // engine runs the mutation only when no pipeline is in flight (and blocks new pipelines while it
+    // runs), emitting PRUNE_WAIT first when the client would otherwise stare at silence. jk export
+    // gradle/maven turned out to be pure local transforms and stay client-only (reclassified).
+
+    /**
+     * Client → server: resolve a Maven-published CLI tool ({@code jk tool install} / {@code jk tool
+     * run} / {@code jk install <g:a:v>}). Single goal ({@link #TEST_REQUEST}'s wire shape); the
+     * terminal {@code goal-finish} carries the resolved main class + classpath (see {@link
+     * #goalFinishTool}), which the client feeds into its launcher write or inheritIO exec — both of
+     * which deliberately stay client-side.
+     */
+    public static final String TOOL_RESOLVE_REQUEST = "tool-resolve-request";
+
+    /**
+     * Client → server: run a cache maintenance operation ({@code op} = {@code prune} / {@code purge}
+     * / {@code gc}) as an idle-boundary job: the engine waits until no pipeline is in flight (new
+     * pipelines queue behind it), takes the cross-process {@code .prune.lock}, and only then mutates
+     * the caches — the Wave-3 correctness finding's fix. Single goal ({@link #TEST_REQUEST}'s wire
+     * shape) with a {@link #goalFinishCache} terminal; while the engine is waiting it emits {@link
+     * #PRUNE_WAIT} (before the plan burst) so the client can explain the pause.
+     */
+    public static final String CACHE_PRUNE_REQUEST = "cache-prune-request";
+
+    /**
+     * Server → client, before the plan burst of a {@link #CACHE_PRUNE_REQUEST}: the operation is
+     * queued behind in-flight work — {@code pipelines} in-engine pipelines ({@code 0} with {@code
+     * external=true} means another process's prune holds {@code .prune.lock}).
+     */
+    public static final String PRUNE_WAIT = "prune-wait";
+
     /** The {@code "t"} discriminator of a decoded message, or {@code null} if absent/malformed. */
     public static String typeOf(String json) {
         return Ndjson.str(json, TYPE_FIELD);
@@ -1671,6 +1709,113 @@ public final class EngineProtocol {
 
     public static String buildError(String message) {
         return "{\"t\":\"" + BUILD_ERROR + "\",\"message\":" + Ndjson.quote(message) + "}";
+    }
+
+    // ---- hosted long-tail verbs (Wave 4) ---------------------------------------------------------
+
+    /**
+     * Resolve a Maven-published CLI tool (see {@link #TOOL_RESOLVE_REQUEST}). {@code mainClass} is
+     * the {@code --main} override ({@code null} = read the primary jar's manifest engine-side);
+     * {@code repoUrl} overrides Maven Central ({@code null} = Central).
+     */
+    public static String toolResolveRequest(String coord, String bin, String mainClass, String repoUrl, String cache) {
+        return "{\"t\":\""
+                + TOOL_RESOLVE_REQUEST
+                + "\",\"coord\":"
+                + Ndjson.quote(coord)
+                + ",\"bin\":"
+                + Ndjson.quote(bin)
+                + ",\"mainClass\":"
+                + Ndjson.quote(mainClass)
+                + ",\"repoUrl\":"
+                + Ndjson.quote(repoUrl)
+                + ",\"cache\":"
+                + Ndjson.quote(cache)
+                + "}";
+    }
+
+    /**
+     * As {@link #goalFinish(String, boolean)}, additionally carrying a {@link #TOOL_RESOLVE_REQUEST}
+     * result: the resolved {@code Main-Class} and the transitive classpath in resolution order
+     * (absolute CAS paths — a flat string array, per the codec's no-nested-objects rule). Both
+     * {@code null}/empty when the resolve failed.
+     */
+    public static String goalFinishTool(String dir, boolean success, String mainClass, List<String> classpath) {
+        return "{\"t\":\""
+                + GOAL_FINISH
+                + "\",\"dir\":"
+                + Ndjson.quote(dir)
+                + ",\"success\":"
+                + success
+                + ",\"toolMainClass\":"
+                + Ndjson.quote(mainClass)
+                + ",\"toolClasspath\":"
+                + quoteArray(classpath)
+                + "}";
+    }
+
+    /**
+     * Run a cache maintenance operation (see {@link #CACHE_PRUNE_REQUEST}). {@code op} is {@code
+     * prune}/{@code purge}/{@code gc}; {@code olderThanDays}/{@code sweep}/{@code maxSize} apply to
+     * {@code prune} only ({@code maxSize} may be {@code null}); {@code includeJkTmp} asks the prune
+     * to also sweep {@code ~/.jk/tmp} (only when the default cache dir is in use, mirroring the
+     * in-process command's behavior).
+     */
+    public static String cachePruneRequest(
+            String op, String cache, int olderThanDays, boolean dryRun, boolean sweep, String maxSize, boolean includeJkTmp) {
+        return "{\"t\":\""
+                + CACHE_PRUNE_REQUEST
+                + "\",\"op\":"
+                + Ndjson.quote(op)
+                + ",\"cache\":"
+                + Ndjson.quote(cache)
+                + ",\"olderThanDays\":"
+                + olderThanDays
+                + ",\"dryRun\":"
+                + dryRun
+                + ",\"sweep\":"
+                + sweep
+                + ",\"maxSize\":"
+                + Ndjson.quote(maxSize)
+                + ",\"includeJkTmp\":"
+                + includeJkTmp
+                + "}";
+    }
+
+    /** The maintenance job is waiting for the cache to quiesce (see {@link #PRUNE_WAIT}). */
+    public static String pruneWait(int pipelines, boolean external) {
+        return "{\"t\":\""
+                + PRUNE_WAIT
+                + "\",\"pipelines\":"
+                + pipelines
+                + ",\"external\":"
+                + external
+                + "}";
+    }
+
+    /**
+     * As {@link #goalFinish(String, boolean)}, additionally carrying a {@link #CACHE_PRUNE_REQUEST}
+     * summary: files removed + bytes freed (what would be removed, on a dry run), the LRU evictor's
+     * reachable-eviction count ({@code prune --max-size} only), and the repo-mirror links removed
+     * ({@code gc} only). {@code -1} = not applicable to the op.
+     */
+    public static String goalFinishCache(
+            String dir, boolean success, long files, long bytes, long reachableEvicted, long repoLinks) {
+        return "{\"t\":\""
+                + GOAL_FINISH
+                + "\",\"dir\":"
+                + Ndjson.quote(dir)
+                + ",\"success\":"
+                + success
+                + ",\"cacheFiles\":"
+                + files
+                + ",\"cacheBytes\":"
+                + bytes
+                + ",\"cacheReachableEvicted\":"
+                + reachableEvicted
+                + ",\"cacheRepoLinks\":"
+                + repoLinks
+                + "}";
     }
 
     /** {@code Ndjson} only reads string arrays; it has no writer half, so this is the encode side. */

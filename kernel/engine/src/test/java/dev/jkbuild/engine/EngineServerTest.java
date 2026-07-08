@@ -621,6 +621,147 @@ class EngineServerTest {
         dev.jkbuild.lock.LockfileReader.clearCache();
     }
 
+    /**
+     * Engine-hosted {@code jk tool install}/{@code tool run} resolution round-trip (Wave 4 of the
+     * slim-client migration): a real server over the socket resolves a Maven-published tool against
+     * a mock repo (the {@code --main} override skips manifest reading — the served jar is a stub).
+     * Asserts the single-goal wire conversation ends in a {@code goal-finish} carrying the resolved
+     * main class + classpath, and that the engine actually fetched the jar into the CAS.
+     */
+    @Test
+    void tool_resolve_request_resolves_and_fetches_over_the_socket() throws Exception {
+        String previousM2 = System.getProperty("jk.m2.local");
+        System.setProperty("jk.m2.local", shortTempDir().toString()); // never touch the real ~/.m2
+        com.sun.net.httpserver.HttpServer repo =
+                com.sun.net.httpserver.HttpServer.create(new java.net.InetSocketAddress("127.0.0.1", 0), 0);
+        try {
+            java.util.Map<String, byte[]> served = new java.util.HashMap<>();
+            seedArtifact(served, "com.example", "widget-cli", "1.0.0");
+            repo.createContext("/", exchange -> {
+                byte[] body = served.get(exchange.getRequestURI().getPath());
+                if (body == null) {
+                    exchange.sendResponseHeaders(404, -1);
+                } else {
+                    exchange.sendResponseHeaders(200, body.length);
+                    exchange.getResponseBody().write(body);
+                }
+                exchange.close();
+            });
+            repo.start();
+            String repoUrl = "http://127.0.0.1:" + repo.getAddress().getPort();
+            Path cache = shortTempDir();
+
+            EnginePaths.Paths p = paths(shortTempDir());
+            EngineServer server = new EngineServer(p, JkEngineConfig.DEFAULTS, "1.0", null);
+            Thread serverThread = runInBackground(server);
+            waitUntil(Duration.ofSeconds(5), () -> Files.exists(p.socket()));
+
+            List<String> types = new ArrayList<>();
+            String goalFinish = null;
+            String buildError = null;
+            try (Client c = new Client(p.socket())) {
+                c.sendLine(EngineProtocol.toolResolveRequest(
+                        "com.example:widget-cli:1.0.0", "widget", "com.example.Main", repoUrl, cache.toString()));
+                String line;
+                while ((line = c.readLine()) != null) {
+                    String type = EngineProtocol.typeOf(line);
+                    types.add(type);
+                    switch (type) {
+                        case EngineProtocol.GOAL_FINISH -> goalFinish = line;
+                        case EngineProtocol.BUILD_ERROR -> buildError = line;
+                        default -> {
+                            /* plan/progress events — presence asserted via `types` below */
+                        }
+                    }
+                    if (goalFinish != null || buildError != null) break;
+                }
+            }
+
+            assertThat(buildError)
+                    .as("engine reported a pre-goal error instead of hosting the resolve")
+                    .isNull();
+            assertThat(types).contains(EngineProtocol.PLAN_PHASE, EngineProtocol.PLAN_DONE);
+            assertThat(goalFinish).isNotNull();
+            assertThat(Ndjson.bool(goalFinish, "success", false)).isTrue();
+            assertThat(Ndjson.str(goalFinish, "toolMainClass")).isEqualTo("com.example.Main");
+            List<String> classpath = Ndjson.strArray(goalFinish, "toolClasspath");
+            assertThat(classpath).hasSize(1);
+            // The engine (not the client) fetched the jar — the classpath entry exists on disk.
+            assertThat(Files.isRegularFile(Path.of(classpath.get(0)))).isTrue();
+
+            server.close();
+            serverThread.join(5_000);
+        } finally {
+            repo.stop(0);
+            if (previousM2 != null) System.setProperty("jk.m2.local", previousM2);
+            else System.clearProperty("jk.m2.local");
+        }
+    }
+
+    /**
+     * Engine-hosted {@code jk cache prune} round-trip (Wave 4 — the idle-boundary cache job): a
+     * real server over the socket sweeps a fixture cache holding a stale action key and a leftover
+     * CAS temp file. Asserts the single-goal wire conversation ends in a summary-carrying {@code
+     * goal-finish}, that the stale files are gone, and that the {@code .prune.lock} cross-process
+     * guard was created (the hosted path always takes it — the Wave-3 finding's fix).
+     */
+    @Test
+    void cache_prune_request_sweeps_the_cache_over_the_socket() throws Exception {
+        Path cache = shortTempDir();
+        Path staleKey = cache.resolve("actions/keys/stale");
+        Files.createDirectories(staleKey.getParent());
+        Files.writeString(staleKey, "INPUT deadbeef /x");
+        Files.setLastModifiedTime(
+                staleKey,
+                java.nio.file.attribute.FileTime.fromMillis(
+                        System.currentTimeMillis() - Duration.ofDays(90).toMillis()));
+        Path putTmp = cache.resolve("sha256/.put-1234");
+        Files.createDirectories(putTmp.getParent());
+        Files.writeString(putTmp, "partial");
+
+        EnginePaths.Paths p = paths(shortTempDir());
+        EngineServer server = new EngineServer(p, JkEngineConfig.DEFAULTS, "1.0", null);
+        Thread serverThread = runInBackground(server);
+        waitUntil(Duration.ofSeconds(5), () -> Files.exists(p.socket()));
+
+        List<String> types = new ArrayList<>();
+        String goalFinish = null;
+        String buildError = null;
+        try (Client c = new Client(p.socket())) {
+            c.sendLine(EngineProtocol.cachePruneRequest("prune", cache.toString(), 30, false, false, null, false));
+            String line;
+            while ((line = c.readLine()) != null) {
+                String type = EngineProtocol.typeOf(line);
+                types.add(type);
+                switch (type) {
+                    case EngineProtocol.GOAL_FINISH -> goalFinish = line;
+                    case EngineProtocol.BUILD_ERROR -> buildError = line;
+                    default -> {
+                        /* plan/progress events — presence asserted via `types` below */
+                    }
+                }
+                if (goalFinish != null || buildError != null) break;
+            }
+        }
+
+        assertThat(buildError)
+                .as("engine reported a pre-goal error instead of hosting the prune")
+                .isNull();
+        assertThat(types).contains(EngineProtocol.PLAN_PHASE, EngineProtocol.PLAN_DONE);
+        assertThat(goalFinish).isNotNull();
+        assertThat(Ndjson.bool(goalFinish, "success", false)).isTrue();
+        assertThat(Ndjson.longValue(goalFinish, "cacheFiles", -1)).isEqualTo(2);
+        assertThat(Ndjson.longValue(goalFinish, "cacheBytes", -1)).isPositive();
+        // The engine (not the client) swept the cache.
+        assertThat(Files.exists(staleKey)).isFalse();
+        assertThat(Files.exists(putTmp)).isFalse();
+        // The cross-process guard exists: hosted maintenance always takes .prune.lock.
+        assertThat(Files.exists(cache.resolve(".prune.lock"))).isTrue();
+
+        server.close();
+        serverThread.join(5_000);
+    }
+
     /** Minimal metadata + dependency-free POM + stub jar for one coordinate on the mock repo. */
     private static void seedArtifact(java.util.Map<String, byte[]> served, String group, String artifact, String version) {
         String base = "/" + group.replace('.', '/') + "/" + artifact;

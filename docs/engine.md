@@ -228,6 +228,28 @@ schedule-aware ETA next to the plan (closing the long-standing client-side
 `BuildPipeline`/`EffortWeights`/`Calibration` reach the re-foundation flagged), and the result
 rides back as an `eta` event in the explain burst.
 
+Also in the engine (slim-client Wave 4 — the long tail; Stage 3 of the slim-client migration is
+complete with it): `jk tool install` / `jk tool run` / `jk install <g:a:v>`'s Maven tool
+resolution (the transitive POM walk + jar fetches run engine-side as one `tool-resolve-request`;
+the launcher write into `~/.jk/bin` and the inheritIO *exec* of the tool stay client-side — your
+terminal, same rule as every exec), `jk ide`/`idea`/`vscode`'s dependency sync (it simply rides
+the hosted `jk sync` against the workspace root; the `.idea`/`.iml`/`.vscode` file *generation* is
+cheap, local, and stays client-side), and — the correctness half of the wave — **cache
+maintenance as an idle-boundary job**: `jk cache prune`, `jk cache purge`, and `jk clean --cache`
+send a maintenance request that the engine executes only when no pipeline is in flight. A fair
+read/write gate makes that exact, not best-effort: every hosted pipeline holds the read side for
+its whole run, maintenance takes the write side, so a CAS sweep can never delete blobs from under
+an in-flight build *in this engine*, and new builds queue briefly behind a running sweep. While
+queued, the engine emits a `prune-wait` event so the client can say "waiting for N in-flight
+builds" instead of sitting silent. The old post-build detached `jk cache prune --background`
+self-spawn is gone from the engine paths — a successful hosted build/sync just enqueues an
+engine-internal prune that runs at the next idle boundary. Cross-*process* safety still rides the
+on-disk `.prune.lock` (two engines with different state directories can legitimately share one
+`JK_CACHE_DIR`), which every hosted maintenance run — and the internal idle job — now takes;
+`purge`'s confirmation prompt and dry-run stay client-side. (`jk export gradle`/`maven`, once
+penciled in for hosting, turned out to be pure local `jk.toml`+`jk.lock` → text transforms and
+deliberately stay client-only.)
+
 **Always in the CLI, never the engine:** anything tied to your terminal or shell — the live TUI,
 color/theme, Ctrl-C handling (a signal has to reach the actual foreground process you're looking
 at), shell completion generation — and, deliberately, all of `jk jdk install` (including its

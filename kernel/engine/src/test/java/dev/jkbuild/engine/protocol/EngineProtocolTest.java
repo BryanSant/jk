@@ -397,4 +397,70 @@ class EngineProtocolTest {
         assertThat(Ndjson.str(defaults, "profile")).isNull();
         assertThat(Ndjson.str(defaults, "jdksDir")).isNull();
     }
+
+    @Test
+    void tool_resolve_request_and_finish_variant_round_trip() {
+        String req = EngineProtocol.toolResolveRequest(
+                "com.example:widget-cli:1.0.0", "widget", "com.example.Main", "http://repo", "/cache");
+        assertThat(EngineProtocol.typeOf(req)).isEqualTo(EngineProtocol.TOOL_RESOLVE_REQUEST);
+        assertThat(Ndjson.str(req, "coord")).isEqualTo("com.example:widget-cli:1.0.0");
+        assertThat(Ndjson.str(req, "bin")).isEqualTo("widget");
+        assertThat(Ndjson.str(req, "mainClass")).isEqualTo("com.example.Main");
+        assertThat(Ndjson.str(req, "repoUrl")).isEqualTo("http://repo");
+        assertThat(Ndjson.str(req, "cache")).isEqualTo("/cache");
+
+        String defaults = EngineProtocol.toolResolveRequest("g:a:1", "a", null, null, "/c");
+        assertThat(Ndjson.str(defaults, "mainClass")).isNull();
+        assertThat(Ndjson.str(defaults, "repoUrl")).isNull();
+
+        String finish = EngineProtocol.goalFinishTool(
+                "", true, "com.example.Main", java.util.List.of("/cas/aa/1.jar", "/cas/bb/2.jar"));
+        assertThat(EngineProtocol.typeOf(finish)).isEqualTo(EngineProtocol.GOAL_FINISH);
+        assertThat(Ndjson.bool(finish, "success", false)).isTrue();
+        assertThat(Ndjson.str(finish, "toolMainClass")).isEqualTo("com.example.Main");
+        assertThat(Ndjson.strArray(finish, "toolClasspath")).containsExactly("/cas/aa/1.jar", "/cas/bb/2.jar");
+
+        String failed = EngineProtocol.goalFinishTool("", false, null, java.util.List.of());
+        assertThat(Ndjson.str(failed, "toolMainClass")).isNull();
+        assertThat(Ndjson.strArray(failed, "toolClasspath")).isEmpty();
+    }
+
+    @Test
+    void cache_prune_request_round_trips_all_fields() {
+        String json = EngineProtocol.cachePruneRequest("prune", "/cache", 14, true, true, "20G", true);
+        assertThat(EngineProtocol.typeOf(json)).isEqualTo(EngineProtocol.CACHE_PRUNE_REQUEST);
+        assertThat(Ndjson.str(json, "op")).isEqualTo("prune");
+        assertThat(Ndjson.str(json, "cache")).isEqualTo("/cache");
+        assertThat(Ndjson.intValue(json, "olderThanDays", -1)).isEqualTo(14);
+        assertThat(Ndjson.bool(json, "dryRun", false)).isTrue();
+        assertThat(Ndjson.bool(json, "sweep", false)).isTrue();
+        assertThat(Ndjson.str(json, "maxSize")).isEqualTo("20G");
+        assertThat(Ndjson.bool(json, "includeJkTmp", false)).isTrue();
+
+        String purge = EngineProtocol.cachePruneRequest("purge", "/c", 0, false, false, null, false);
+        assertThat(Ndjson.str(purge, "op")).isEqualTo("purge");
+        assertThat(Ndjson.str(purge, "maxSize")).isNull();
+    }
+
+    @Test
+    void prune_wait_round_trips_pipelines_and_external() {
+        String inEngine = EngineProtocol.pruneWait(3, false);
+        assertThat(EngineProtocol.typeOf(inEngine)).isEqualTo(EngineProtocol.PRUNE_WAIT);
+        assertThat(Ndjson.intValue(inEngine, "pipelines", -1)).isEqualTo(3);
+        assertThat(Ndjson.bool(inEngine, "external", true)).isFalse();
+
+        String external = EngineProtocol.pruneWait(0, true);
+        assertThat(Ndjson.bool(external, "external", false)).isTrue();
+    }
+
+    @Test
+    void cache_finish_variant_round_trips_the_summary() {
+        String json = EngineProtocol.goalFinishCache("", true, 12, 34_567, 2, -1);
+        assertThat(EngineProtocol.typeOf(json)).isEqualTo(EngineProtocol.GOAL_FINISH);
+        assertThat(Ndjson.bool(json, "success", false)).isTrue();
+        assertThat(Ndjson.longValue(json, "cacheFiles", -99)).isEqualTo(12);
+        assertThat(Ndjson.longValue(json, "cacheBytes", -99)).isEqualTo(34_567);
+        assertThat(Ndjson.longValue(json, "cacheReachableEvicted", -99)).isEqualTo(2);
+        assertThat(Ndjson.longValue(json, "cacheRepoLinks", -99)).isEqualTo(-1); // n/a for prune
+    }
 }
