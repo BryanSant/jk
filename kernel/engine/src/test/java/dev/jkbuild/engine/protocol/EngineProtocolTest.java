@@ -55,4 +55,101 @@ class EngineProtocolTest {
     void type_of_malformed_json_is_null() {
         assertThat(EngineProtocol.typeOf("not json")).isNull();
     }
+
+    @Test
+    void build_request_carries_freshen_lock() {
+        String on = EngineProtocol.buildRequest(
+                "/w", "/c", null, 1, null, false, false, 0, false, false, false, false, true);
+        assertThat(Ndjson.bool(on, "freshenLock", false)).isTrue();
+        String off = EngineProtocol.buildRequest(
+                "/w", "/c", null, 1, null, false, false, 0, false, false, false, false, false);
+        assertThat(Ndjson.bool(off, "freshenLock", true)).isFalse();
+    }
+
+    @Test
+    void lock_request_round_trips_all_fields() {
+        String json = EngineProtocol.lockRequest(
+                "/work", "/cache", java.util.List.of("a", "b"), true, true, "http://repo", true, false, true);
+        assertThat(EngineProtocol.typeOf(json)).isEqualTo(EngineProtocol.LOCK_REQUEST);
+        assertThat(Ndjson.str(json, "entryDir")).isEqualTo("/work");
+        assertThat(Ndjson.str(json, "cache")).isEqualTo("/cache");
+        assertThat(Ndjson.strArray(json, "features")).containsExactly("a", "b");
+        assertThat(Ndjson.bool(json, "noDefaultFeatures", false)).isTrue();
+        assertThat(Ndjson.bool(json, "sources", false)).isTrue();
+        assertThat(Ndjson.str(json, "repoUrl")).isEqualTo("http://repo");
+        assertThat(Ndjson.bool(json, "offline", false)).isTrue();
+        assertThat(Ndjson.bool(json, "force", true)).isFalse();
+        assertThat(Ndjson.bool(json, "verbose", false)).isTrue();
+    }
+
+    @Test
+    void lock_request_null_repo_url_decodes_as_absent() {
+        String json = EngineProtocol.lockRequest(
+                "/w", "/c", java.util.List.of(), false, false, null, false, false, false);
+        assertThat(Ndjson.str(json, "repoUrl")).isNull();
+    }
+
+    @Test
+    void update_request_round_trips_the_git_splice_fields() {
+        String json = EngineProtocol.updateRequest(
+                "/work", "/cache", java.util.List.of(), false, null, true, "mylib", false, true, false);
+        assertThat(EngineProtocol.typeOf(json)).isEqualTo(EngineProtocol.UPDATE_REQUEST);
+        assertThat(Ndjson.bool(json, "gitOnly", false)).isTrue();
+        assertThat(Ndjson.str(json, "gitTarget")).isEqualTo("mylib");
+        assertThat(Ndjson.bool(json, "force", false)).isTrue();
+    }
+
+    @Test
+    void sync_request_round_trips_all_fields() {
+        String json = EngineProtocol.syncRequest(
+                "/work", "/cache", "/jdks", "http://repo", true, false, true, true, false);
+        assertThat(EngineProtocol.typeOf(json)).isEqualTo(EngineProtocol.SYNC_REQUEST);
+        assertThat(Ndjson.str(json, "jdksDir")).isEqualTo("/jdks");
+        assertThat(Ndjson.str(json, "repoUrl")).isEqualTo("http://repo");
+        assertThat(Ndjson.bool(json, "sources", false)).isTrue();
+        assertThat(Ndjson.bool(json, "offline", true)).isFalse();
+        assertThat(Ndjson.bool(json, "force", false)).isTrue();
+        assertThat(Ndjson.bool(json, "refresh", false)).isTrue();
+    }
+
+    @Test
+    void lock_module_and_package_events_round_trip() {
+        String module = EngineProtocol.lockModule("/work/api", "com.example:api");
+        assertThat(EngineProtocol.typeOf(module)).isEqualTo(EngineProtocol.LOCK_MODULE);
+        assertThat(Ndjson.str(module, "dir")).isEqualTo("/work/api");
+        assertThat(Ndjson.str(module, "coord")).isEqualTo("com.example:api");
+
+        String pkg = EngineProtocol.lockPackage("/work/api", "com.foo:leaf", "1.0");
+        assertThat(EngineProtocol.typeOf(pkg)).isEqualTo(EngineProtocol.LOCK_PACKAGE);
+        assertThat(Ndjson.str(pkg, "name")).isEqualTo("com.foo:leaf");
+        assertThat(Ndjson.str(pkg, "version")).isEqualTo("1.0");
+    }
+
+    @Test
+    void goal_finish_lock_variant_carries_the_lockfile_counts() {
+        String json = EngineProtocol.goalFinishLock("", true, 13, 2, 1);
+        assertThat(EngineProtocol.typeOf(json)).isEqualTo(EngineProtocol.GOAL_FINISH);
+        assertThat(Ndjson.bool(json, "success", false)).isTrue();
+        assertThat(Ndjson.longValue(json, "lockPackages", -1)).isEqualTo(13);
+        assertThat(Ndjson.longValue(json, "lockSources", -1)).isEqualTo(2);
+        assertThat(Ndjson.longValue(json, "lockPlugins", -1)).isEqualTo(1);
+    }
+
+    @Test
+    void goal_finish_sync_variant_carries_the_summary_counts() {
+        String json = EngineProtocol.goalFinishSync("", true, 7, 42);
+        assertThat(EngineProtocol.typeOf(json)).isEqualTo(EngineProtocol.GOAL_FINISH);
+        assertThat(Ndjson.longValue(json, "syncFetched", -1)).isEqualTo(7);
+        assertThat(Ndjson.longValue(json, "syncUpToDate", -1)).isEqualTo(42);
+    }
+
+    @Test
+    void lock_finish_round_trips_outcome_errors_and_refreshed_count() {
+        String json = EngineProtocol.lockFinish(false, 6, java.util.List.of("boom", "again"), 3);
+        assertThat(EngineProtocol.typeOf(json)).isEqualTo(EngineProtocol.LOCK_FINISH);
+        assertThat(Ndjson.bool(json, "success", true)).isFalse();
+        assertThat(Ndjson.intValue(json, "exitCode", -1)).isEqualTo(6);
+        assertThat(Ndjson.strArray(json, "errors")).containsExactly("boom", "again");
+        assertThat(Ndjson.intValue(json, "refreshed", -1)).isEqualTo(3);
+    }
 }

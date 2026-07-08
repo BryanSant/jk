@@ -1,0 +1,566 @@
+// SPDX-License-Identifier: Apache-2.0
+package dev.jkbuild.runtime;
+
+import dev.jkbuild.cache.Cas;
+import dev.jkbuild.config.JkBuildParser;
+import dev.jkbuild.config.SessionContext;
+import dev.jkbuild.config.WorkspaceLoader;
+import dev.jkbuild.config.WorkspaceLocator;
+import dev.jkbuild.lock.Lockfile;
+import dev.jkbuild.lock.LockfileReader;
+import dev.jkbuild.lock.LockfileWriter;
+import dev.jkbuild.model.Coordinate;
+import dev.jkbuild.model.Dependency;
+import dev.jkbuild.model.GitSource;
+import dev.jkbuild.model.JkBuild;
+import dev.jkbuild.model.Scope;
+import dev.jkbuild.model.VersionSelector;
+import dev.jkbuild.model.WorkspaceMerge;
+import dev.jkbuild.model.command.Exit;
+import dev.jkbuild.repo.RepoGroup;
+import dev.jkbuild.resolver.LockOrchestrator;
+import dev.jkbuild.resolver.ResolveObserver;
+import dev.jkbuild.resolver.VersionSelectors;
+import dev.jkbuild.resolver.Versions;
+import dev.jkbuild.resolver.pubgrub.UnsatisfiableException;
+import dev.jkbuild.resolver.pubgrub.VersionSet;
+import dev.jkbuild.run.Goal;
+import dev.jkbuild.run.GoalKey;
+import dev.jkbuild.run.GoalResult;
+import dev.jkbuild.run.Phase;
+import dev.jkbuild.run.PhaseKind;
+import dev.jkbuild.run.PhaseStatus;
+import dev.jkbuild.util.JkVersion;
+import java.net.URI;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.BiFunction;
+
+/**
+ * The shared "resolve one project → write its {@code jk.lock}" goal used by {@code jk lock} and
+ * {@code jk update} — hoisted out of the CLI so the resident engine can host both verbs (Wave 1 of
+ * {@code docs/architecture/slim-client.md}) while the commands' test-only in-process path builds the
+ * exact same goal. Like {@link LockFlow} (the listener-less variant {@code jk sync}/{@code jk build}
+ * auto-lock through), nothing here writes to stdout/stderr; progress flows through the goal's
+ * listeners and the supplied {@link ResolveObserver}.
+ *
+ * <p><b>Rendering rule</b> (re-foundation): diagnostics and conflict prose produced here are plain
+ * uncolored text — no {@code Diagnostics.Palette} is ever injected into the resolver anymore (the
+ * CLI used to pre-theme conflict messages with its dark-theme palette; hosted diagnostics must cross
+ * the wire unthemed). Any colorization happens client-side in the renderer. The optional {@code
+ * coordLabel} formatter exists for the same reason in reverse: the in-process CLI path passes its
+ * themed coordinate formatter so labels render exactly as before, while the engine passes {@code
+ * null} and streams structured {@code lock-package} events for the client to format itself.
+ */
+public final class LockGoals {
+
+    private LockGoals() {}
+
+    /** Cross-phase key: the effective (workspace-merged) manifest the resolve phase reads. */
+    public static final GoalKey<JkBuild> EFFECTIVE = GoalKey.of("effective-build", JkBuild.class);
+
+    /** Cross-phase key: the lockfile as it accumulates through resolve → lock-plugins → write. */
+    public static final GoalKey<Lockfile> LOCKFILE = GoalKey.of("lockfile", Lockfile.class);
+
+    /**
+     * Build the {@code jk lock} goal for one project directory: {@code parse-build} → {@code
+     * resolve} (offline-aware, git-source materialization, PubGrub solve, kotlin pin) → {@code
+     * lock-plugins} → {@code write-lockfile}. The offline flag is read off the ambient {@link
+     * SessionContext} at phase-run time, so both the CLI (which installs the session from its
+     * global flags) and the engine (which reconstructs it from the wire request) behave alike.
+     *
+     * @param observer per-package resolution events (never {@code null}; use {@link
+     *     ResolveObserver#NOOP})
+     * @param coordLabel formats a {@code module, version} pair for progress labels, or {@code null}
+     *     to emit no per-package labels (the engine-hosted path — the client synthesizes them from
+     *     {@code lock-package} events so coloring stays client-side)
+     */
+    public static Goal lockGoal(
+            Path dir,
+            JkBuild effective,
+            Path cache,
+            URI repoUrl,
+            List<String> features,
+            boolean withDefaultFeatures,
+            boolean sources,
+            ResolveObserver observer,
+            BiFunction<String, String, String> coordLabel) {
+        Path lockFile = dir.resolve("jk.lock");
+        AtomicInteger resolveEstimate = new AtomicInteger(0);
+
+        Phase parseBuild = Phase.builder("parse-build")
+                .scope(1)
+                .execute(ctx -> {
+                    ctx.label("parse jk.toml");
+                    ctx.put(EFFECTIVE, effective);
+                    ctx.progress(1);
+                })
+                .build();
+
+        Phase resolve = Phase.builder("resolve")
+                .label("Resolving")
+                .kind(PhaseKind.IO)
+                .requires("parse-build")
+                .scope(() -> {
+                    int estimate = scopeEstimate(effective, lockFile);
+                    resolveEstimate.set(estimate);
+                    return estimate;
+                })
+                .execute(ctx -> {
+                    ctx.label("Resolving");
+                    JkBuild eff = ctx.require(EFFECTIVE);
+                    Cas cas = new Cas(cache);
+                    if (SessionContext.current().offline() && Files.exists(lockFile)) {
+                        try {
+                            Lockfile existing = LockfileReader.read(lockFile);
+                            requireOfflineSatisfiable(eff, existing, cas);
+                            ctx.progress(existing.artifacts().size());
+                            ctx.put(LOCKFILE, existing);
+                            return;
+                        } catch (Exception e) {
+                            ctx.error("resolve", e.getMessage());
+                            throw new RuntimeException(e);
+                        }
+                    }
+                    RepoGroup baseRepos = RepoGroupBuilder.buildFor(eff, repoUrl, cas);
+                    Map<String, String> lockedShas = Map.of();
+                    if (Files.exists(lockFile)) {
+                        try {
+                            lockedShas = GitSourceResolution.lockedImmutableShas(LockfileReader.read(lockFile));
+                        } catch (Exception ignored) {
+                        }
+                    }
+                    GitSourceResolution.Prepared prep;
+                    try {
+                        prep = GitSourceResolution.prepare(
+                                eff,
+                                baseRepos,
+                                cas,
+                                CompileToolchain.resolveJavaHome(dir),
+                                JkVersion.VERSION,
+                                lockedShas);
+                    } catch (Exception e) {
+                        ctx.error("resolve", e.getMessage());
+                        throw new RuntimeException(e);
+                    }
+                    RepoGroup repos = prep.repos();
+                    // Deliberately no Diagnostics.Palette here — see the class javadoc.
+                    LockOrchestrator orchestrator = new LockOrchestrator(repos);
+                    // Wrap the caller's observer so it also drives ctx.label/progress
+                    // (the bar under a console listener; wire progress events when hosted).
+                    ResolveObserver wrappedObserver = new ResolveObserver() {
+                        @Override
+                        public void onTotal(int total) {
+                            int delta = total - resolveEstimate.getAndSet(total);
+                            if (delta > 0) ctx.updateScope(delta);
+                            observer.onTotal(total);
+                        }
+
+                        @Override
+                        public void onPackage(String module, String version) {
+                            if (coordLabel != null) {
+                                ctx.label("Resolved " + coordLabel.apply(module, version));
+                            }
+                            ctx.progress(1);
+                            observer.onPackage(module, version);
+                        }
+                    };
+                    try {
+                        Lockfile lock = sources
+                                ? orchestrator.lockWithSources(
+                                        prep.project(), JkVersion.VERSION, features, withDefaultFeatures, wrappedObserver)
+                                : orchestrator.lock(
+                                        prep.project(), JkVersion.VERSION, features, withDefaultFeatures, wrappedObserver);
+                        lock = GitSourceResolution.stamp(lock, prep.gitInfoByKey());
+                        String kotlinVersion = resolveKotlinVersion(eff, repos);
+                        if (kotlinVersion != null) {
+                            ctx.label("resolved kotlin " + kotlinVersion);
+                            lock = lock.withKotlin(kotlinVersion);
+                        }
+                        ctx.put(LOCKFILE, lock);
+                    } catch (UnsatisfiableException e) {
+                        ctx.error("verbatim", e.getMessage());
+                        throw new RuntimeException(e);
+                    } catch (Exception e) {
+                        ctx.error("resolve", e.getMessage());
+                        throw new RuntimeException(e);
+                    }
+                })
+                .build();
+
+        Phase lockPlugins = Phase.builder("lock-plugins")
+                .kind(PhaseKind.IO)
+                .requires("resolve")
+                .scope(() -> effective.plugins().isEmpty() ? 0 : effective.plugins().size())
+                .execute(ctx -> {
+                    var decls = effective.plugins();
+                    if (decls.isEmpty()) return;
+                    ctx.label("lock plugins");
+                    Cas cas = new Cas(cache);
+                    RepoGroup repos = RepoGroupBuilder.buildFor(effective, repoUrl, cas);
+                    var entries = new ArrayList<Lockfile.PluginEntry>();
+                    for (var pd : decls) {
+                        ctx.label("lock " + pd.coordinate());
+                        var coord = Coordinate.of(pd.group(), pd.name(), pd.version());
+                        try {
+                            var fetched = repos.tryFetchArtifact(coord)
+                                    .orElseThrow(() -> new RuntimeException(
+                                            pd.coordinateWithVersion() + " not found in any repo"));
+                            entries.add(new Lockfile.PluginEntry(
+                                    pd.coordinate(), pd.version(), "sha256:" + fetched.fetched().sha256()));
+                        } catch (Exception e) {
+                            ctx.error("plugin", pd.coordinate() + " — " + e.getMessage());
+                            throw new RuntimeException(e);
+                        }
+                        ctx.progress(1);
+                    }
+                    ctx.put(LOCKFILE, ctx.require(LOCKFILE).withPlugins(entries));
+                })
+                .build();
+
+        Phase write = Phase.builder("write-lockfile")
+                .requires("lock-plugins")
+                .scope(1)
+                .execute(ctx -> {
+                    ctx.label("write " + lockFile.getFileName());
+                    LockfileWriter.write(ctx.require(LOCKFILE), lockFile);
+                    ctx.progress(1);
+                })
+                .build();
+
+        return Goal.builder("lock")
+                .addPhase(parseBuild)
+                .addPhase(resolve)
+                .addPhase(lockPlugins)
+                .addPhase(write)
+                .build();
+    }
+
+    /**
+     * Build the {@code jk update} goal for one project directory: same pipeline as {@link
+     * #lockGoal}, but always resolving fresh (no offline shortcut, no lockfile-SHA canary — update
+     * is the "accept the new commit" path; see {@code docs/git-source-deps.md}).
+     */
+    public static Goal updateGoal(
+            Path dir, JkBuild effective, Path cache, URI repoUrl, List<String> features, boolean withDefaultFeatures) {
+        Path lockFile = dir.resolve("jk.lock");
+
+        Phase parseBuild = Phase.builder("parse-build")
+                .scope(1)
+                .execute(ctx -> {
+                    ctx.label("parse jk.toml");
+                    ctx.put(EFFECTIVE, effective);
+                    ctx.progress(1);
+                })
+                .build();
+
+        Phase resolve = Phase.builder("resolve")
+                .kind(PhaseKind.IO)
+                .requires("parse-build")
+                .scope(1)
+                .execute(ctx -> {
+                    ctx.label("re-resolve dependencies");
+                    JkBuild eff = ctx.require(EFFECTIVE);
+                    Cas cas = new Cas(cache);
+                    RepoGroup baseRepos = RepoGroupBuilder.buildFor(eff, repoUrl, cas);
+                    try {
+                        // Git-source deps: re-materialize against the current ref tip and accept
+                        // any movement (no tag-rewrite check; see docs/git-source-deps.md).
+                        GitSourceResolution.Prepared prep = GitSourceResolution.prepare(
+                                eff, baseRepos, cas, CompileToolchain.resolveJavaHome(dir), JkVersion.VERSION);
+                        Lockfile lock = new LockOrchestrator(prep.repos())
+                                .lock(prep.project(), JkVersion.VERSION, features, withDefaultFeatures);
+                        lock = GitSourceResolution.stamp(lock, prep.gitInfoByKey());
+                        ctx.put(LOCKFILE, lock);
+                    } catch (Exception e) {
+                        ctx.error("resolve", e.getMessage());
+                        throw new RuntimeException(e);
+                    }
+                    ctx.progress(1);
+                })
+                .build();
+
+        Phase write = Phase.builder("write-lockfile")
+                .requires("resolve")
+                .scope(1)
+                .execute(ctx -> {
+                    ctx.label("write " + lockFile.getFileName());
+                    LockfileWriter.write(ctx.require(LOCKFILE), lockFile);
+                    ctx.progress(1);
+                })
+                .build();
+
+        return Goal.builder("update")
+                .addPhase(parseBuild)
+                .addPhase(resolve)
+                .addPhase(write)
+                .build();
+    }
+
+    // ---- jk update --git ----------------------------------------------------
+
+    /**
+     * Outcome of a {@code jk update --git} pass. {@code exitCode == 0} means success and {@code
+     * refreshed} counts the git artifacts actually re-pinned; non-zero means the caller should
+     * surface {@code error} (a bare, uncolored message — no verb prefix) and exit with that code.
+     */
+    public record GitUpdateOutcome(int exitCode, int refreshed, String error) {}
+
+    /**
+     * {@code jk update --git [<name>]}: re-resolve git dependencies only, in {@code root}'s project
+     * and (for a workspace root) each declared module — one dependency by its declared name, or
+     * every git dependency when {@code targetLibrary} is {@code null}. Every scope with no matching
+     * git dependency is left untouched entirely (its {@code jk.lock} isn't even read).
+     */
+    public static GitUpdateOutcome updateGitOnly(
+            Path dir,
+            JkBuild root,
+            Path cache,
+            URI repoUrl,
+            List<String> features,
+            boolean withDefaultFeatures,
+            String targetLibrary)
+            throws Exception {
+        JkBuild effectiveRoot = applyWorkspaceContextIfModule(dir, root);
+        var scopes = new java.util.LinkedHashMap<Path, JkBuild>();
+        scopes.put(dir, effectiveRoot);
+        if (effectiveRoot.isWorkspaceRoot()) {
+            Map<Path, JkBuild> modules;
+            try {
+                modules = WorkspaceLoader.loadModules(dir, effectiveRoot);
+            } catch (RuntimeException e) {
+                return new GitUpdateOutcome(Exit.CONFIG, 0, e.getMessage());
+            }
+            for (Map.Entry<Path, JkBuild> entry : modules.entrySet()) {
+                scopes.put(entry.getKey(), WorkspaceMerge.applyToModule(effectiveRoot, entry.getValue(), modules.values()));
+            }
+        }
+
+        int totalRefreshed = 0;
+        for (Map.Entry<Path, JkBuild> scope : scopes.entrySet()) {
+            List<Dependency> gitDeps = declaredGitDeps(scope.getValue());
+            List<Dependency> targeted = targetLibrary == null
+                    ? gitDeps
+                    : gitDeps.stream().filter(d -> d.library().equals(targetLibrary)).toList();
+            if (targeted.isEmpty()) continue;
+
+            try {
+                totalRefreshed += updateGitOnlyForScope(
+                        scope.getKey(), scope.getValue(), cache, repoUrl, features, withDefaultFeatures, targeted);
+            } catch (Exception e) {
+                return new GitUpdateOutcome(6, 0, e.getMessage());
+            }
+        }
+
+        if (targetLibrary != null && totalRefreshed == 0) {
+            return new GitUpdateOutcome(
+                    Exit.CONFIG, 0, "no git dependency named `" + targetLibrary + "` found.");
+        }
+        return new GitUpdateOutcome(0, totalRefreshed, null);
+    }
+
+    /**
+     * Re-resolve {@code effective}'s full dependency set (the normal pipeline — every git dep
+     * accepts upstream movement, no tag-rewrite check), then splice the result against the existing
+     * lock so only {@code targeted}'s git artifact(s) actually change; every other artifact keeps
+     * its previously-locked value. Returns how many of {@code targeted} were actually refreshed.
+     */
+    private static int updateGitOnlyForScope(
+            Path dir,
+            JkBuild effective,
+            Path cache,
+            URI repoUrl,
+            List<String> features,
+            boolean withDefaultFeatures,
+            List<Dependency> targeted)
+            throws Exception {
+        Path lockFile = dir.resolve("jk.lock");
+        Lockfile oldLock = Files.exists(lockFile) ? LockfileReader.read(lockFile) : null;
+
+        Cas cas = new Cas(cache);
+        RepoGroup baseRepos = RepoGroupBuilder.buildFor(effective, repoUrl, cas);
+        GitSourceResolution.Prepared prep = GitSourceResolution.prepare(
+                effective, baseRepos, cas, CompileToolchain.resolveJavaHome(dir), JkVersion.VERSION);
+        Lockfile newLock = new LockOrchestrator(prep.repos())
+                .lock(prep.project(), JkVersion.VERSION, features, withDefaultFeatures);
+        newLock = GitSourceResolution.stamp(newLock, prep.gitInfoByKey());
+
+        java.util.Set<String> targetKeys = new java.util.LinkedHashSet<>();
+        for (Dependency d : targeted) targetKeys.add(gitKey(d.gitSource()));
+
+        Map<String, Lockfile.Artifact> oldByName = new java.util.LinkedHashMap<>();
+        if (oldLock != null) for (Lockfile.Artifact a : oldLock.artifacts()) oldByName.put(a.name(), a);
+
+        List<Lockfile.Artifact> spliced = new ArrayList<>();
+        int refreshed = 0;
+        for (Lockfile.Artifact a : newLock.artifacts()) {
+            boolean isTargeted = a.git() != null && targetKeys.contains(a.git().url() + "|" + a.git().ref());
+            if (isTargeted) {
+                spliced.add(a);
+                refreshed++;
+                continue;
+            }
+            Lockfile.Artifact old = oldByName.get(a.name());
+            spliced.add(old != null ? old : a);
+        }
+        Lockfile finalLock = new Lockfile(
+                newLock.version(),
+                newLock.generatedBy(),
+                newLock.resolutionAlgorithm(),
+                newLock.jdk(),
+                newLock.kotlin(),
+                spliced,
+                oldLock != null ? oldLock.plugins() : newLock.plugins());
+        LockfileWriter.write(finalLock, lockFile);
+        return refreshed;
+    }
+
+    private static String gitKey(GitSource s) {
+        return s.canonicalUrl() + "|" + s.ref().token();
+    }
+
+    /** Every git-sourced dependency directly declared across all scopes, deduped by library name. */
+    private static List<Dependency> declaredGitDeps(JkBuild project) {
+        List<Dependency> out = new ArrayList<>();
+        java.util.Set<String> seen = new java.util.LinkedHashSet<>();
+        for (List<Dependency> deps : project.dependencies().byScope().values()) {
+            for (Dependency d : deps) {
+                if (d.isGit() && seen.add(d.library())) out.add(d);
+            }
+        }
+        return out;
+    }
+
+    // ---- shared helpers ------------------------------------------------------
+
+    /**
+     * Map a failed lock/update goal to its exit code: a failed {@code resolve} phase (unsatisfiable
+     * deps, unreachable repos) exits 6; anything else is a config problem ({@link Exit#CONFIG}).
+     */
+    public static int failureExitCode(GoalResult result) {
+        boolean resolveFailed = result.phases().stream()
+                .filter(p -> p.status() == PhaseStatus.FAIL)
+                .map(GoalResult.PhaseReport::name)
+                .anyMatch("resolve"::equals);
+        return resolveFailed ? 6 : Exit.CONFIG;
+    }
+
+    /**
+     * When invoked from a workspace module (not the root), discover the enclosing workspace and apply
+     * module context: resolve {@code workspace:} placeholders and filter out sibling-internal dep
+     * coords so the solver only sees external Maven coordinates. Returns {@code project} unchanged if
+     * it is a workspace root or no enclosing workspace is found.
+     */
+    public static JkBuild applyWorkspaceContextIfModule(Path dir, JkBuild project) {
+        if (project.isWorkspaceRoot()) return project;
+        try {
+            var rootOpt = WorkspaceLocator.findRoot(dir);
+            if (rootOpt.isEmpty()) return project;
+            Path wsRoot = rootOpt.get();
+            JkBuild wsRootBuild = JkBuildParser.parse(wsRoot.resolve("jk.toml"));
+            if (!wsRootBuild.isWorkspaceRoot()) return project;
+            var siblings = WorkspaceLoader.loadModules(wsRoot, wsRootBuild);
+            return WorkspaceMerge.applyToModule(wsRootBuild, project, siblings.values());
+        } catch (Exception ignored) {
+            return project;
+        }
+    }
+
+    /**
+     * Display coordinate for a module: {@code group:artifact} from its {@code [project]}, falling
+     * back to the directory name.
+     */
+    public static String coordLabel(JkBuild build, Path dir) {
+        try {
+            var p = build.project();
+            return p.group() + ":" + p.name();
+        } catch (Exception e) {
+            return dir.getFileName() == null ? dir.toString() : dir.getFileName().toString();
+        }
+    }
+
+    /**
+     * Best-effort scope estimate for a module's resolve phase: the existing lockfile size (re-run)
+     * or declared deps × a transitive expansion factor.
+     */
+    private static int scopeEstimate(JkBuild effective, Path lockFile) {
+        try {
+            int n = LockfileReader.read(lockFile).artifacts().size();
+            if (n > 0) return n;
+        } catch (Exception ignored) {
+        }
+        try {
+            int declared = effective.dependencies().byScope().values().stream()
+                    .mapToInt(List::size)
+                    .sum();
+            return Math.max(5, declared * 8);
+        } catch (Exception ignored) {
+        }
+        return 20;
+    }
+
+    /**
+     * Resolve the project's {@code kotlin} version selector to a concrete Kotlin compiler release.
+     * Returns {@code null} for a Java project or when resolution can't complete.
+     */
+    private static String resolveKotlinVersion(JkBuild effective, RepoGroup repos) {
+        if (!effective.project().isKotlin()) return null;
+        VersionSelector selector = effective.project().kotlin();
+        if (selector instanceof VersionSelector.Exact exact) {
+            return exact.version();
+        }
+        VersionSet set = VersionSelectors.toVersionSet(selector);
+        Coordinate coord = Coordinate.of("org.jetbrains.kotlin", "kotlin-compiler-embeddable", "any");
+        List<String> available;
+        try {
+            available = repos.availableVersions(coord);
+        } catch (java.io.IOException e) {
+            return null;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return null;
+        }
+        return available.stream()
+                .filter(set::contains)
+                .filter(Versions::isStable)
+                .max(Versions::compare)
+                .or(() -> available.stream().filter(set::contains).max(Versions::compare))
+                .orElse(null);
+    }
+
+    /**
+     * Throw if an existing lockfile can't be honored entirely from the local CAS while offline.
+     */
+    private static void requireOfflineSatisfiable(JkBuild effective, Lockfile lock, Cas cas) {
+        java.util.Set<String> locked = new java.util.HashSet<>();
+        for (Lockfile.Artifact pkg : lock.artifacts()) {
+            locked.add(pkg.name());
+        }
+        for (var entry : effective.dependencies().byScope().entrySet()) {
+            if (entry.getKey() == Scope.PLATFORM) continue;
+            for (var dep : entry.getValue()) {
+                if (!locked.contains(dep.module())) {
+                    throw new IllegalStateException("offline: "
+                            + dep.module()
+                            + " is declared in jk.toml but not in jk.lock; run `jk lock` online first");
+                }
+            }
+        }
+        for (Lockfile.Artifact pkg : lock.artifacts()) {
+            String checksum = pkg.checksum();
+            if (checksum == null) continue;
+            String hex = checksum.startsWith("sha256:") ? checksum.substring("sha256:".length()) : checksum;
+            if (!cas.contains(hex)) {
+                throw new IllegalStateException("offline: "
+                        + pkg.name()
+                        + ":"
+                        + pkg.version()
+                        + " is locked but its artifact isn't cached; run `jk sync` online first");
+            }
+        }
+    }
+}

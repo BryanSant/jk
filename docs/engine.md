@@ -188,9 +188,14 @@ single-goal path for a single project with no `[workspace]` table — both fork 
 way, so both needed to move for the OOM fix to actually close), `jk test` (a single project's
 compile+test goal), and `jk explain` (`BuildService.explain`, a synchronous read with no worker JVM
 forked — hosted mainly for consistency: the engine is the one process that always has a live,
-correctly-resolved build graph and caches open) — dependency resolution, the build pipeline and
-scheduler, worker-JVM orchestration and the shared memory/heap-slot accounting that this whole
-effort exists to fix, and the on-disk build/action caches.
+correctly-resolved build graph and caches open), plus the resolver family — `jk lock`, `jk sync`,
+and `jk update` (slim-client Wave 1: the PubGrub solve, CAS fetches, and git-source
+materialization run engine-side; the CLI renders the streamed events and colorizes them
+client-side) — dependency resolution, the build pipeline and scheduler, worker-JVM orchestration
+and the shared memory/heap-slot accounting that this whole effort exists to fix, and the on-disk
+build/action caches. `jk build` also freshens a stale merged workspace lock engine-side before
+building (the request carries `freshenLock`; `jk verify`'s scratch rebuild opts out to keep the
+pinned lock verbatim).
 
 **Always in the CLI, never the engine:** anything tied to your terminal or shell — the live TUI,
 color/theme, Ctrl-C handling (a signal has to reach the actual foreground process you're looking
@@ -198,7 +203,10 @@ at), shell completion generation — and, deliberately, all of `jk jdk install` 
 non-interactive core, not just the install wizard). A JDK install can't cause the kind of memory
 contention the engine exists to prevent, installs are already safe to run concurrently without any
 coordination, and a machine that has never even built anything shouldn't need an engine just to
-install a JDK. `jk explain`'s ETA computation also stays client-side — it reaches into
+install a JDK. The same rule shapes hosted `jk sync`: its `ensure-jdk` phase *can* trigger a JDK
+download, so the sync command pre-flights the ensure/install client-side before sending the
+request, and the engine-side phase only ever resolves an already-installed JDK (reporting a
+structured "not installed" error otherwise — it never downloads silently). `jk explain`'s ETA computation also stays client-side — it reaches into
 `BuildPipeline`/`EffortWeights`/`Calibration` directly from the CLI (a known, pre-existing gap, not
 a new one); only the plan itself (`BuildService.explain`'s module/phase/edge forecast) is
 engine-hosted.

@@ -172,6 +172,48 @@ public final class EngineProtocol {
     /** Server → client, terminal: the explain burst is complete. */
     public static final String EXPLAIN_DONE = "explain-done";
 
+    /**
+     * Client → server: resolve declared dependencies and write {@code jk.lock} ({@code jk lock},
+     * Wave 1 of the slim-client migration). A workspace root cascades: the root plus each declared
+     * module is locked in declaration order, each as its own single goal. Wire shape per module:
+     * one {@link #LOCK_MODULE}, a {@link #PLAN_PHASE} burst + {@link #PLAN_DONE}, then the standard
+     * {@code dir}-tagged {@link dev.jkbuild.run.GoalListener} event vocabulary ending in a {@link
+     * #GOAL_FINISH} that additionally carries the module's lockfile counts. {@link #LOCK_PACKAGE}
+     * events stream per resolved package so the client can render its per-package completion tail
+     * (and colorize coordinates client-side — the engine never themes text). Terminal: {@link
+     * #LOCK_FINISH}.
+     */
+    public static final String LOCK_REQUEST = "lock-request";
+
+    /**
+     * Client → server: re-resolve fresh and overwrite {@code jk.lock} ({@code jk update}). Rides
+     * {@link #LOCK_REQUEST}'s exact event vocabulary (same cascade, same terminal); {@code gitOnly}
+     * selects the {@code --git} splice mode, which streams no goal events at all — just the {@link
+     * #LOCK_FINISH} terminal carrying {@code refreshed}.
+     */
+    public static final String UPDATE_REQUEST = "update-request";
+
+    /**
+     * Client → server: bring the CAS + toolchain in line with {@code jk.lock} ({@code jk sync}).
+     * A single goal, so it reuses {@link #TEST_REQUEST}'s wire shape verbatim: {@link #PLAN_PHASE}
+     * burst ({@link #SINGLE_GOAL_DIR}-tagged) + {@link #PLAN_DONE}, goal events, then a {@link
+     * #GOAL_FINISH} additionally carrying the fetched/up-to-date counts the summary line needs.
+     * The JDK <em>install</em> half of sync's ensure-jdk phase stays client-side (pre-flight): the
+     * engine only ever resolves an already-installed JDK and reports a structured error when none
+     * is — interactive/consent concerns (and {@code jk jdk install}) live in the client per {@code
+     * docs/engine.md}.
+     */
+    public static final String SYNC_REQUEST = "sync-request";
+
+    /** Server → client, repeated: opens one module's event scope in a lock/update cascade. */
+    public static final String LOCK_MODULE = "lock-module";
+
+    /** Server → client, repeated: one package was resolved and recorded ({@code ResolveObserver.onPackage}). */
+    public static final String LOCK_PACKAGE = "lock-package";
+
+    /** Server → client, terminal for {@link #LOCK_REQUEST}/{@link #UPDATE_REQUEST}: cascade outcome. */
+    public static final String LOCK_FINISH = "lock-finish";
+
     /** The {@code "t"} discriminator of a decoded message, or {@code null} if absent/malformed. */
     public static String typeOf(String json) {
         return Ndjson.str(json, TYPE_FIELD);
@@ -267,6 +309,10 @@ public final class EngineProtocol {
      * still serving locked dependencies from the local CAS, whereas {@code force} additionally
      * implies {@code refresh} (re-download every locked artifact). {@code jk verify}'s scratch
      * rebuild needs exactly the former.
+     *
+     * <p>{@code freshenLock} asks the engine to auto-freshen a stale merged workspace lock before
+     * building (the pre-build guard {@code jk build} used to run client-side); {@code jk verify}'s
+     * scratch rebuild sends {@code false} — it must build against the pinned lock verbatim.
      */
     public static String buildRequest(
             String entryDir,
@@ -280,7 +326,8 @@ public final class EngineProtocol {
             boolean parallelTests,
             boolean offline,
             boolean force,
-            boolean rerun) {
+            boolean rerun,
+            boolean freshenLock) {
         return "{\"t\":\""
                 + BUILD_REQUEST
                 + "\",\"entryDir\":"
@@ -307,6 +354,8 @@ public final class EngineProtocol {
                 + force
                 + ",\"rerun\":"
                 + rerun
+                + ",\"freshenLock\":"
+                + freshenLock
                 + "}";
     }
 
@@ -365,6 +414,124 @@ public final class EngineProtocol {
                 + offline
                 + ",\"force\":"
                 + force
+                + "}";
+    }
+
+    /**
+     * Resolve + write {@code jk.lock} (see {@link #LOCK_REQUEST}). {@code repoUrl} may be {@code
+     * null}. {@code offline}/{@code force}/{@code verbose} reconstruct the session config engine-side
+     * (the same fields {@link #buildRequest} carries).
+     */
+    public static String lockRequest(
+            String entryDir,
+            String cache,
+            List<String> features,
+            boolean noDefaultFeatures,
+            boolean sources,
+            String repoUrl,
+            boolean offline,
+            boolean force,
+            boolean verbose) {
+        return "{\"t\":\""
+                + LOCK_REQUEST
+                + "\",\"entryDir\":"
+                + Ndjson.quote(entryDir)
+                + ",\"cache\":"
+                + Ndjson.quote(cache)
+                + ",\"features\":"
+                + quoteArray(features)
+                + ",\"noDefaultFeatures\":"
+                + noDefaultFeatures
+                + ",\"sources\":"
+                + sources
+                + ",\"repoUrl\":"
+                + Ndjson.quote(repoUrl)
+                + ",\"offline\":"
+                + offline
+                + ",\"force\":"
+                + force
+                + ",\"verbose\":"
+                + verbose
+                + "}";
+    }
+
+    /**
+     * Re-resolve fresh and overwrite {@code jk.lock} (see {@link #UPDATE_REQUEST}). {@code gitTarget}
+     * is the {@code --git <name>} argument ({@code null} = every git dep) and is only read when
+     * {@code gitOnly} is set.
+     */
+    public static String updateRequest(
+            String entryDir,
+            String cache,
+            List<String> features,
+            boolean noDefaultFeatures,
+            String repoUrl,
+            boolean gitOnly,
+            String gitTarget,
+            boolean offline,
+            boolean force,
+            boolean verbose) {
+        return "{\"t\":\""
+                + UPDATE_REQUEST
+                + "\",\"entryDir\":"
+                + Ndjson.quote(entryDir)
+                + ",\"cache\":"
+                + Ndjson.quote(cache)
+                + ",\"features\":"
+                + quoteArray(features)
+                + ",\"noDefaultFeatures\":"
+                + noDefaultFeatures
+                + ",\"repoUrl\":"
+                + Ndjson.quote(repoUrl)
+                + ",\"gitOnly\":"
+                + gitOnly
+                + ",\"gitTarget\":"
+                + Ndjson.quote(gitTarget)
+                + ",\"offline\":"
+                + offline
+                + ",\"force\":"
+                + force
+                + ",\"verbose\":"
+                + verbose
+                + "}";
+    }
+
+    /**
+     * Sync the CAS + toolchain with {@code jk.lock} (see {@link #SYNC_REQUEST}). {@code jdksDir}/
+     * {@code repoUrl} may be {@code null}. {@code refresh} rides separately from {@code force} for
+     * the same reason {@code rerun} does on {@link #buildRequest}: it re-downloads locked artifacts
+     * without implying the rest of {@code force}'s cache bypasses.
+     */
+    public static String syncRequest(
+            String entryDir,
+            String cache,
+            String jdksDir,
+            String repoUrl,
+            boolean sources,
+            boolean offline,
+            boolean force,
+            boolean refresh,
+            boolean verbose) {
+        return "{\"t\":\""
+                + SYNC_REQUEST
+                + "\",\"entryDir\":"
+                + Ndjson.quote(entryDir)
+                + ",\"cache\":"
+                + Ndjson.quote(cache)
+                + ",\"jdksDir\":"
+                + Ndjson.quote(jdksDir)
+                + ",\"repoUrl\":"
+                + Ndjson.quote(repoUrl)
+                + ",\"sources\":"
+                + sources
+                + ",\"offline\":"
+                + offline
+                + ",\"force\":"
+                + force
+                + ",\"refresh\":"
+                + refresh
+                + ",\"verbose\":"
+                + verbose
                 + "}";
     }
 
@@ -686,6 +853,85 @@ public final class EngineProtocol {
                 + failed
                 + ",\"testSkipped\":"
                 + skipped
+                + "}";
+    }
+
+    /**
+     * As {@link #goalFinish(String, boolean)}, additionally carrying a {@code jk lock}/{@code jk
+     * update} module's written-lockfile counts (packages / packages-with-sources / plugins) — the
+     * structured ingredients of the client's summary lines, which its console listener renders from
+     * within its own {@code goalFinish} handler.
+     */
+    public static String goalFinishLock(String dir, boolean success, long packages, long sources, long plugins) {
+        return "{\"t\":\""
+                + GOAL_FINISH
+                + "\",\"dir\":"
+                + Ndjson.quote(dir)
+                + ",\"success\":"
+                + success
+                + ",\"lockPackages\":"
+                + packages
+                + ",\"lockSources\":"
+                + sources
+                + ",\"lockPlugins\":"
+                + plugins
+                + "}";
+    }
+
+    /**
+     * As {@link #goalFinish(String, boolean)}, additionally carrying a {@code jk sync} run's
+     * fetched/up-to-date counts for the client's summary line ({@code "N fetched, M up-to-date"}).
+     */
+    public static String goalFinishSync(String dir, boolean success, long fetched, long upToDate) {
+        return "{\"t\":\""
+                + GOAL_FINISH
+                + "\",\"dir\":"
+                + Ndjson.quote(dir)
+                + ",\"success\":"
+                + success
+                + ",\"syncFetched\":"
+                + fetched
+                + ",\"syncUpToDate\":"
+                + upToDate
+                + "}";
+    }
+
+    /** Opens one module's event scope in a {@code jk lock}/{@code jk update} cascade (see {@link #LOCK_MODULE}). */
+    public static String lockModule(String dir, String coord) {
+        return "{\"t\":\"" + LOCK_MODULE + "\",\"dir\":" + Ndjson.quote(dir) + ",\"coord\":" + Ndjson.quote(coord) + "}";
+    }
+
+    /** One resolved package, streamed as it is recorded (see {@link #LOCK_PACKAGE}). */
+    public static String lockPackage(String dir, String name, String version) {
+        return "{\"t\":\""
+                + LOCK_PACKAGE
+                + "\",\"dir\":"
+                + Ndjson.quote(dir)
+                + ",\"name\":"
+                + Ndjson.quote(name)
+                + ",\"version\":"
+                + Ndjson.quote(version)
+                + "}";
+    }
+
+    /**
+     * Terminal for a lock/update request. {@code exitCode} is computed engine-side (the engine saw
+     * the phase statuses: a failed {@code resolve} phase exits 6, other failures exit 2/CONFIG);
+     * {@code errors} carries pre-goal failures (manifest parse, workspace module load) as plain
+     * uncolored text for the client to render. {@code refreshed} is {@code jk update --git}'s
+     * refreshed-dependency count, {@code -1} for every other request.
+     */
+    public static String lockFinish(boolean success, int exitCode, List<String> errors, int refreshed) {
+        return "{\"t\":\""
+                + LOCK_FINISH
+                + "\",\"success\":"
+                + success
+                + ",\"exitCode\":"
+                + exitCode
+                + ",\"errors\":"
+                + quoteArray(errors)
+                + ",\"refreshed\":"
+                + refreshed
                 + "}";
     }
 

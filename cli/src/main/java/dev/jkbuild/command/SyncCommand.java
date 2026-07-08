@@ -1,53 +1,41 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
-import dev.jkbuild.cache.Cas;
+import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.cli.GlobalOptions;
+import dev.jkbuild.cli.engine.EngineClient;
 import dev.jkbuild.cli.run.ConsoleSpec;
 import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.cli.theme.Coords;
-import dev.jkbuild.config.JkBuildParser;
-import dev.jkbuild.config.WorkspaceLoader;
-import dev.jkbuild.http.Http;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.lock.LockfileReader;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Exit;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
-import dev.jkbuild.resolver.CacheSync;
 import dev.jkbuild.run.Goal;
-import dev.jkbuild.run.GoalKey;
 import dev.jkbuild.run.GoalResult;
-import dev.jkbuild.run.Phase;
-import dev.jkbuild.run.PhaseKind;
 import dev.jkbuild.runtime.JdkEnsure;
-import dev.jkbuild.runtime.LockFlow;
+import dev.jkbuild.runtime.SyncGoals;
 import dev.jkbuild.util.JkDirs;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * {@code jk sync} — bring the local toolchain + dependency cache in line with the project's {@code
- * jk.lock}.
+ * jk.lock}. The goal itself (parse-lock → ensure-jdk ∥ sync-cas ∥ … → sync-modules) lives in
+ * {@link SyncGoals}; see its javadoc for the phase breakdown.
  *
- * <p>Organised as a {@link Goal} with four phases:
- *
- * <ol>
- *   <li>{@code parse-lock} (SYNC) — read {@code jk.lock} or delegate to {@link LockFlow} when it's
- *       missing.
- *   <li>{@code ensure-jdk} (IO, parallel) — resolve or install the project's pinned JDK via {@link
- *       JdkEnsure}.
- *   <li>{@code sync-cas} (IO, parallel) — fetch any locked artifacts the CAS doesn't already hold.
- *       Per-package progress events come from {@link CacheSync.ProgressObserver}.
- *   <li>{@code write-sync-manifest} (SYNC) — stamp {@code actions/synced/<projectFingerprint>}.
- *   <li>{@code sync-modules} (IO) — for workspace roots, cascade-sync each module's lockfile.
- * </ol>
+ * <p><b>Engine-hosted</b> (Wave 1 of the slim-client migration): the CAS fetches and any auto-lock
+ * run inside the resident engine ({@link EngineClient#runSync}); this command pre-flights the JDK
+ * ensure (installs stay client-side — the engine only ever <em>resolves</em> an installed JDK, per
+ * {@code docs/engine.md}), sends the request, and renders the streamed events with the same console
+ * listener the in-process path attaches. The test-only in-process path (see {@link
+ * #engineDisabledForTests}) builds the identical goal via {@link SyncGoals}.
  */
 public final class SyncCommand implements CliCommand {
 
@@ -84,16 +72,15 @@ public final class SyncCommand implements CliCommand {
                 Opt.flag("Also download sources JARs when available.", "--sources"));
     }
 
-    /** Cross-phase keys. Lifted out so each phase reads/writes through the same handle. */
-    private static final GoalKey<Lockfile> LOCKFILE = GoalKey.of("lockfile", Lockfile.class);
-
-    private static final GoalKey<JkBuild> BUILD = GoalKey.of("build", JkBuild.class);
-    private static final GoalKey<JdkEnsure.Outcome> JDK_OUTCOME = GoalKey.of("jdk-outcome", JdkEnsure.Outcome.class);
-    private static final GoalKey<CacheSync.Report> CAS_REPORT = GoalKey.of("cas-report", CacheSync.Report.class);
-    private static final GoalKey<dev.jkbuild.runtime.JkWorkerSync.Result> WORKER_REPORT =
-            GoalKey.of("worker-report", dev.jkbuild.runtime.JkWorkerSync.Result.class);
-    private static final GoalKey<Integer> WORKSPACE_MODULES = GoalKey.of("workspace-modules", Integer.class);
-    private static final GoalKey<Boolean> LOCKFILE_CREATED = GoalKey.of("lockfile-created", Boolean.class);
+    /**
+     * Escape hatch for the fast JVM unit-test suite ONLY — see {@link
+     * BuildCommand#engineDisabledForTests()}'s javadoc for the full rationale. Same system property,
+     * same "never a user-facing flag" contract; a real {@code jk sync} invocation always engine-hosts.
+     */
+    private static boolean engineDisabledForTests() {
+        return Boolean.getBoolean("jk.test.noEngine")
+                || "dev.jkbuild.test.runner.JkRunner".equals(System.getProperty("jk.plugin.class"));
+    }
 
     @Override
     public int run(Invocation in) throws Exception {
@@ -105,382 +92,82 @@ public final class SyncCommand implements CliCommand {
         this.global = GlobalOptions.from(in);
 
         Path dir = global.workingDir();
-        Path lockFile = dir.resolve("jk.lock");
         Path cache = cacheDir != null ? cacheDir : JkDirs.cache();
         Files.createDirectories(cache);
 
-        // Pre-scan: count artifacts across root + all workspace module lockfiles so
-        // sync-cas has an accurate denominator from the first bar frame. Falls back
-        // to 0 (dynamic scope) when jk.lock doesn't exist yet.
-        int preScannedTotal = 0;
+        String targetLabel = dir.getFileName() != null ? dir.getFileName().toString() : dir.toString();
+        GoalConsole.Mode mode = GoalConsole.modeFor(global);
+
+        if (engineDisabledForTests()) {
+            return runInProcess(dir, cache, mode, targetLabel);
+        }
+
+        // Pre-flight the JDK ensure client-side: a missing pinned JDK is downloaded HERE, before
+        // the request — never silently inside the engine (docs/engine.md keeps installs, and any
+        // interactive consent, client-side). The engine's own ensure-jdk phase then only resolves
+        // the already-installed JDK (JdkEnsure with allowInstall=false).
+        Path lockFile = dir.resolve("jk.lock");
+        JkBuild build = SyncGoals.parseBuildIfPresent(dir);
+        Lockfile lock = null;
         if (Files.isRegularFile(lockFile)) {
             try {
-                Lockfile rootLock = LockfileReader.read(lockFile);
-                preScannedTotal += CacheSync.countArtifacts(rootLock);
-                // Workspace modules: add their artifact counts too.
-                JkBuild rootBuild = parseBuildIfPresent(dir);
-                if (rootBuild != null && rootBuild.isWorkspaceRoot()) {
-                    try {
-                        Map<Path, JkBuild> mods = WorkspaceLoader.loadModules(dir, rootBuild);
-                        for (Path modDir : mods.keySet()) {
-                            Path modLock = modDir.resolve("jk.lock");
-                            if (Files.isRegularFile(modLock)) {
-                                preScannedTotal += CacheSync.countArtifacts(LockfileReader.read(modLock));
-                            }
-                        }
-                    } catch (Exception ignored) { /* best-effort */ }
-                }
-            } catch (Exception ignored) { /* lock unreadable — fall through to dynamic scope */ }
+                lock = LockfileReader.read(lockFile);
+            } catch (Exception ignored) {
+                // unreadable lock — the engine's parse-lock phase surfaces the real error
+            }
         }
-        final int preScanDenominator = preScannedTotal;
+        try {
+            JdkEnsure.ensure(dir, jdksDir, build, lock, m -> CliOutput.err("jk sync: " + m));
+        } catch (Exception e) {
+            CliOutput.err("jk sync: " + (e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage()));
+            return 1;
+        }
 
-        AtomicReference<CacheSync.Report> casReportRef = new AtomicReference<>();
+        // Summary counts arrive on the terminal goal-finish, before the console listener's own
+        // goalFinish renders the line — so these holders are settled exactly like the in-process
+        // path's counters.
+        long[] fetched = new long[1];
+        long[] upToDate = new long[1];
+        ConsoleSpec spec = syncSpec(() -> fetched[0], () -> upToDate[0]);
+
+        var session = dev.jkbuild.config.SessionContext.current();
+        GoalResult result;
+        try {
+            result = EngineClient.runSync(
+                    dev.jkbuild.engine.EnginePaths.current(),
+                    new EngineClient.SyncRequest(
+                            dir,
+                            cache,
+                            jdksDir,
+                            repoUrl,
+                            sources,
+                            session.offline(),
+                            session.force(),
+                            session.config().refreshOr(false),
+                            global.verbose),
+                    phases -> GoalConsole.chooseConsoleListener(phases, mode, spec, targetLabel),
+                    fetched,
+                    upToDate);
+        } catch (IOException e) {
+            CliOutput.err("jk sync: " + e.getMessage());
+            return Exit.SOFTWARE;
+        }
+        // The engine ran the opportunistic cache prune on success (it did the work); nothing more
+        // to do here. The progress-bar listener has already surfaced any failure.
+        return result.success() ? 0 : 1;
+    }
+
+    // ---- test-only in-process path (identical goal via SyncGoals) ------------
+
+    private int runInProcess(Path dir, Path cache, GoalConsole.Mode mode, String targetLabel) {
         AtomicInteger totalFetched = new AtomicInteger(0);
         AtomicInteger totalUpToDate = new AtomicInteger(0);
 
-        Phase parseLock = Phase.builder("parse-lock")
-                .scope(1)
-                .execute(ctx -> {
-                    ctx.label("parse jk.lock");
-                    if (!Files.exists(lockFile)) {
-                        ctx.label("resolve deps");
-                        var result = LockFlow.run(dir, cache, List.of(), false, repoUrl);
-                        if (result.workspaceModuleCount() > 0) {
-                            ctx.put(WORKSPACE_MODULES, result.workspaceModuleCount());
-                        }
-                        if (result.status() != 0) {
-                            ctx.error(
-                                    "lock",
-                                    result.error() != null
-                                            ? result.error()
-                                            : "lockfile resolution failed (exit " + result.status() + ")");
-                            throw new RuntimeException("lock-flow failed");
-                        }
-                        ctx.put(LOCKFILE, result.lockfile());
-                        if (result.build() != null) ctx.put(BUILD, result.build());
-                        ctx.put(LOCKFILE_CREATED, true);
-                    } else if (dev.jkbuild.runtime.AutoLock.isStale(dir, lockFile)) {
-                        ctx.label("jk.toml changed — updating lock");
-                        Lockfile existing = LockfileReader.read(lockFile);
-                        Lockfile updated = dev.jkbuild.runtime.AutoLock.maybeReLock(
-                                dir,
-                                existing,
-                                lockFile,
-                                cache,
-                                repoUrl,
-                                dev.jkbuild.util.JkVersion.VERSION,
-                                List.of(),
-                                true,
-                                dev.jkbuild.resolver.ResolveObserver.NOOP,
-                                ctx::output);
-                        ctx.put(LOCKFILE, updated != null ? updated : existing);
-                        var build = parseBuildIfPresent(dir);
-                        if (build != null) ctx.put(BUILD, build);
-                    } else {
-                        ctx.put(LOCKFILE, LockfileReader.read(lockFile));
-                        var build = parseBuildIfPresent(dir);
-                        if (build != null) ctx.put(BUILD, build);
-                    }
-                    ctx.progress(1);
-                })
-                .build();
+        Goal goal = SyncGoals.syncGoal(
+                dir, cache, jdksDir, repoUrl, sources, totalFetched, totalUpToDate, Coords::module, true);
 
-        Phase ensureJdk = Phase.builder("ensure-jdk")
-                .kind(PhaseKind.IO)
-                .requires("parse-lock")
-                .scope(1)
-                .execute(ctx -> {
-                    ctx.label("resolve JDK");
-                    Lockfile lock = ctx.require(LOCKFILE);
-                    JkBuild build = ctx.get(BUILD).orElse(null);
-                    try {
-                        var outcome = JdkEnsure.ensure(dir, jdksDir, build, lock, m -> ctx.warn("jdk", m));
-                        ctx.put(JDK_OUTCOME, outcome);
-                    } catch (Exception e) {
-                        ctx.error("jdk", e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage());
-                        throw e;
-                    }
-                    ctx.progress(1);
-                })
-                .build();
-
-        Phase syncCas = Phase.builder("sync-cas")
-                .kind(PhaseKind.IO)
-                .requires("parse-lock")
-                .scope(preScanDenominator) // pre-scanned; 0 → updateScope() fallback
-                .execute(ctx -> {
-                    Lockfile lock = ctx.require(LOCKFILE);
-                    int packages = CacheSync.countArtifacts(lock);
-                    if (preScanDenominator == 0 && packages > 0) ctx.updateScope(packages);
-                    ctx.label("fetch deps");
-
-                    Cas cas = new Cas(cache);
-                    Http http = new Http();
-                    var observer = new CacheSync.ProgressObserver() {
-                        @Override
-                        public void fetched(Lockfile.Artifact pkg) {
-                            ctx.label("fetched " + Coords.module(pkg.name(), pkg.version()));
-                            totalFetched.incrementAndGet();
-                            ctx.progress(1);
-                        }
-
-                        @Override
-                        public void upToDate(Lockfile.Artifact pkg) {
-                            totalUpToDate.incrementAndGet();
-                            ctx.progress(1);
-                        }
-
-                        @Override
-                        public void skipped(Lockfile.Artifact pkg) {
-                            ctx.progress(1);
-                        }
-
-                        @Override
-                        public void failed(Lockfile.Artifact pkg, String error) {
-                            ctx.error("dep", Coords.module(pkg.name(), pkg.version()) + " — " + error);
-                            ctx.progress(1);
-                        }
-                    };
-                    boolean refresh = dev.jkbuild.config.SessionContext.current().config().refreshOr(false);
-                    var report = new CacheSync(cas, http).sync(lock, observer, refresh);
-                    casReportRef.set(report);
-                    ctx.put(CAS_REPORT, report);
-                    if (report.hasErrors()) {
-                        throw new RuntimeException("dep fetch had errors");
-                    }
-                })
-                .build();
-
-        // jk's own worker jars (test-runner, kotlin-compiler) — pulled from the
-        // local Maven repo into the CAS so `jk test` / Kotlin builds find them by
-        // SHA. Best-effort: absent workers warn but don't fail the sync.
-        Phase syncWorkers = Phase.builder("sync-workers")
-                .kind(PhaseKind.IO)
-                .requires("parse-lock")
-                .scope(1)
-                .execute(ctx -> {
-                    ctx.label("sync jk workers");
-                    Cas cas = new Cas(cache);
-                    try {
-                        var report = dev.jkbuild.runtime.JkWorkerSync.ensureInCas(
-                                cas, new dev.jkbuild.runtime.JkWorkerSync.Observer() {
-                                    @Override
-                                    public void fetched(String artifact) {
-                                        ctx.label("fetched " + artifact);
-                                    }
-
-                                    @Override
-                                    public void missing(String artifact, String detail) {
-                                        // Empty code → ProgressBarListener omits [phase/code] brackets.
-                                        ctx.warn("", artifact + " " + detail + ".");
-                                    }
-                                });
-                        ctx.put(WORKER_REPORT, report);
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                        throw new RuntimeException("interrupted syncing jk workers", e);
-                    }
-                    ctx.progress(1);
-                })
-                .build();
-
-        Phase writeManifest = Phase.builder("write-sync-manifest")
-                .requires("sync-cas")
-                .scope(1)
-                .execute(ctx -> {
-                    ctx.label("stamp reachability manifest");
-                    try {
-                        Lockfile lock = ctx.require(LOCKFILE);
-                        dev.jkbuild.task.SyncManifest.write(cache.resolve("actions"), lockFile, lock);
-                    } catch (IOException e) {
-                        ctx.warn("manifest", "could not stamp reachability manifest: " + e.getMessage());
-                    }
-                    ctx.progress(1);
-                })
-                .build();
-
-        // Sync declared third-party plugin jars from Maven to CAS.
-        Phase syncPlugins = Phase.builder("sync-plugins")
-                .kind(PhaseKind.IO)
-                .requires("parse-lock")
-                .scope(0)
-                .execute(ctx -> {
-                    Lockfile lock = ctx.require(LOCKFILE);
-                    var pluginEntries = lock.plugins();
-                    if (pluginEntries.isEmpty()) return;
-                    ctx.updateScope(pluginEntries.size());
-                    ctx.label("sync plugins");
-                    Cas cas = new Cas(cache);
-                    JkBuild build = ctx.get(BUILD).orElse(null);
-                    dev.jkbuild.repo.RepoGroup repos = build != null
-                            ? dev.jkbuild.runtime.RepoGroupBuilder.buildFor(build, repoUrl, cas)
-                            : dev.jkbuild.runtime.RepoGroupBuilder.buildFor(
-                                    dev.jkbuild.config.JkBuildParser.parse(dir.resolve("jk.toml")), repoUrl, cas);
-                    for (var pe : pluginEntries) {
-                        ctx.label("sync " + pe.coordinate());
-                        String hex = pe.sha256Hex();
-                        if (cas.contains(hex)) {
-                            ctx.progress(1);
-                            continue;
-                        }
-                        if (pe.coordinate().indexOf(':') < 0) {
-                            ctx.error("plugin", "malformed coordinate: " + pe.coordinate());
-                            ctx.progress(1);
-                            continue;
-                        }
-                        var coord = dev.jkbuild.model.Coordinate.ofModule(pe.coordinate(), pe.version());
-                        try {
-                            var r = repos.tryFetchArtifact(coord);
-                            if (r.isPresent()) {
-                                ctx.label("fetched " + pe.coordinate() + ":" + pe.version());
-                            } else {
-                                ctx.error("plugin", pe.coordinate() + " not found in any repo");
-                            }
-                        } catch (Exception e) {
-                            ctx.error("plugin", pe.coordinate() + " — " + e.getMessage());
-                        }
-                        ctx.progress(1);
-                    }
-                })
-                .build();
-
-        // Sync sources JARs for packages that have sourcesChecksum pinned in lock.
-        Phase syncSources = Phase.builder("sync-sources")
-                .kind(PhaseKind.IO)
-                .requires("parse-lock")
-                .scope(0)
-                .execute(ctx -> {
-                    if (!sources) return; // opt-in only
-                    Lockfile lock = ctx.require(LOCKFILE);
-                    long withSrc = lock.artifacts().stream()
-                            .filter(p -> p.sourcesChecksum() != null)
-                            .count();
-                    if (withSrc == 0) return;
-                    ctx.updateScope((int) withSrc);
-                    ctx.label("sync sources");
-                    Cas cas = new Cas(cache);
-                    var observer = new dev.jkbuild.resolver.CacheSync.ProgressObserver() {
-                        @Override
-                        public void fetched(Lockfile.Artifact pkg) {
-                            ctx.label("fetched sources " + pkg.name() + ":" + pkg.version());
-                            ctx.progress(1);
-                        }
-
-                        @Override
-                        public void upToDate(Lockfile.Artifact pkg) {
-                            ctx.progress(1);
-                        }
-
-                        @Override
-                        public void failed(Lockfile.Artifact pkg, String error) {
-                            ctx.warn("sources", pkg.name() + ":" + pkg.version() + " — " + error);
-                            ctx.progress(1);
-                        }
-                    };
-                    try {
-                        new dev.jkbuild.resolver.CacheSync(cas, new dev.jkbuild.http.Http())
-                                .syncSources(lock, observer);
-                    } catch (Exception e) {
-                        ctx.warn("sources", "sources sync failed: " + e.getMessage());
-                    }
-                })
-                .build();
-
-        Phase syncModules = Phase.builder("sync-modules")
-                .kind(PhaseKind.IO)
-                .requires("write-sync-manifest")
-                .scope(0) // grown as modules are discovered
-                .execute(ctx -> {
-                    JkBuild root;
-                    try {
-                        root = JkBuildParser.parse(dir.resolve("jk.toml"));
-                    } catch (Exception ignored) {
-                        return;
-                    }
-                    if (!root.isWorkspaceRoot()) return;
-
-                    Map<Path, JkBuild> modules;
-                    try {
-                        modules = WorkspaceLoader.loadModules(dir, root);
-                    } catch (Exception e) {
-                        ctx.warn("modules", "skipping module sync — " + e.getMessage());
-                        return;
-                    }
-                    if (modules.isEmpty()) return;
-
-                    Cas cas = new Cas(cache);
-                    Http http = new Http();
-                    boolean refresh = dev.jkbuild.config.SessionContext.current().config().refreshOr(false);
-
-                    for (Map.Entry<Path, JkBuild> entry : modules.entrySet()) {
-                        Path moduleDir = entry.getKey();
-                        Path moduleLock = moduleDir.resolve("jk.lock");
-                        if (!Files.isRegularFile(moduleLock)) continue;
-                        try {
-                            Lockfile lock = LockfileReader.read(moduleLock);
-                            int modArtifacts = CacheSync.countArtifacts(lock);
-                            if (preScanDenominator == 0 && modArtifacts > 0) ctx.updateScope(modArtifacts);
-                            String modLabel = dir.relativize(moduleDir).toString();
-                            var observer = new CacheSync.ProgressObserver() {
-                                @Override
-                                public void fetched(Lockfile.Artifact pkg) {
-                                    ctx.label(modLabel + ": fetched " + Coords.module(pkg.name(), pkg.version()));
-                                    totalFetched.incrementAndGet();
-                                    ctx.progress(1);
-                                }
-
-                                @Override
-                                public void upToDate(Lockfile.Artifact pkg) {
-                                    totalUpToDate.incrementAndGet();
-                                    ctx.progress(1);
-                                }
-
-                                @Override
-                                public void skipped(Lockfile.Artifact pkg) {
-                                    ctx.progress(1);
-                                }
-
-                                @Override
-                                public void failed(Lockfile.Artifact pkg, String error) {
-                                    ctx.warn("dep", modLabel + ": " + Coords.module(pkg.name(), pkg.version()) + " — " + error);
-                                    ctx.progress(1);
-                                }
-                            };
-                            new CacheSync(cas, http).sync(lock, observer, refresh);
-                        } catch (Exception e) {
-                            ctx.warn("modules", dir.relativize(moduleDir) + ": " + e.getMessage());
-                        }
-                    }
-                })
-                .build();
-
-        Goal goal = Goal.builder("sync")
-                .addPhase(parseLock)
-                .addPhase(ensureJdk)
-                .addPhase(syncCas)
-                .addPhase(syncSources)
-                .addPhase(syncPlugins)
-                .addPhase(syncWorkers)
-                .addPhase(writeManifest)
-                .addPhase(syncModules)
-                .build();
-
-        String targetLabel = dir.getFileName() != null ? dir.getFileName().toString() : dir.toString();
-        ConsoleSpec spec = new ConsoleSpec(
-                "Sync",
-                r -> {
-                    int fetched = totalFetched.get();
-                    int upToDate = totalUpToDate.get();
-                    String tail = fetched == 0 && upToDate == 0
-                            ? "already up to date"
-                            : fetched + " fetched, " + upToDate + " up-to-date";
-                    return tail;
-                },
-                r -> "Failed to sync dependencies.",
-                true);
-
-        GoalResult result = GoalConsole.runGoal(
-                goal, GoalConsole.modeFor(global), cache, spec, targetLabel);
+        ConsoleSpec spec = syncSpec(totalFetched::get, totalUpToDate::get);
+        GoalResult result = GoalConsole.runGoal(goal, mode, cache, spec, targetLabel);
 
         if (result.success()) {
             // Opportunistic cache prune — no-op when auto-prune is off.
@@ -494,13 +181,16 @@ public final class SyncCommand implements CliCommand {
         return 1;
     }
 
-    private static JkBuild parseBuildIfPresent(Path dir) {
-        Path buildFile = dir.resolve("jk.toml");
-        if (!Files.exists(buildFile)) return null;
-        try {
-            return JkBuildParser.parse(buildFile);
-        } catch (Exception e) {
-            return null;
-        }
+    /** The Sync chip spec; counts are read lazily, at result-line render time. */
+    private static ConsoleSpec syncSpec(java.util.function.LongSupplier fetched, java.util.function.LongSupplier upToDate) {
+        return new ConsoleSpec(
+                "Sync",
+                r -> {
+                    long f = fetched.getAsLong();
+                    long u = upToDate.getAsLong();
+                    return f == 0 && u == 0 ? "already up to date" : f + " fetched, " + u + " up-to-date";
+                },
+                r -> "Failed to sync dependencies.",
+                true);
     }
 }

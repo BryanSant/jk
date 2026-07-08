@@ -185,13 +185,23 @@ public final class GoalConsole {
         // the wizard owns the terminal. Same for JSON output (events
         // already go to stdout via NdjsonListener) and explicit quiet.
         if (goal.interactive()) return new SilentListener(System.out, System.err, true);
+        return chooseConsoleListener(goal.name(), goal.phases(), mode);
+    }
+
+    /**
+     * The default (spec-less) listener {@link #run(Goal, Mode, Path)} picks per {@code mode} — split
+     * out so a caller with no real {@code Goal} (an engine-hosted run reconstructing the phase list
+     * from wire events; see {@code EngineResolveAdapter}) can choose the same listener from just the
+     * goal's name and phases, instead of duplicating this switch. Non-interactive goals only.
+     */
+    public static GoalListener chooseConsoleListener(String goalName, List<Phase> phases, Mode mode) {
         return switch (mode) {
             case QUIET -> new SilentListener(System.out, System.err);
             case JSON -> new NdjsonListener(System.out);
             case VERBOSE -> new VerboseListener(System.out, System.err);
             case AUTO ->
                 isInteractiveTerminal()
-                        ? new CommandManagerListener(System.out, goal.name(), goal.name(), goal.phases(), true)
+                        ? new CommandManagerListener(System.out, goalName, goalName, phases, true)
                         : new SilentListener(System.out, System.err);
         };
     }

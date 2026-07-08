@@ -316,7 +316,12 @@ public final class BuildService {
             // planning for the process — e.g. a host serving several concurrent buildWorkspace calls
             // in one JVM plans once for its own assumed concurrency, and a per-call plan here would
             // stomp the shared HeapPlan/WorkerSlots state out from under a sibling call in flight.
-            boolean applyMemoryPlan) {}
+            boolean applyMemoryPlan,
+            // True (jk build): auto-freshen the merged workspace lock before any build decision via
+            // ensureWorkspaceLockFresh — the guard BuildCommand used to run client-side, now applied
+            // here so an engine-hosted build request freshens the lock engine-side. False for callers
+            // that must use the pinned lock verbatim (jk verify's scratch rebuild).
+            boolean freshenLock) {}
 
     /**
      * A module's assembled goal + the estimates a caller needs to render/calibrate. The front-end
@@ -414,6 +419,23 @@ public final class BuildService {
      * {@code HeapPlan}/{@code WorkerSlots} state sized for just itself.
      */
     public static WorkspaceResult buildWorkspace(WorkspaceRequest req, WorkspaceBuildListener listener) {
+        // Whole-workspace staleness guard (moved engine-side from BuildCommand in the slim-client
+        // migration): the per-module cache forecast can report "all up to date" against per-module
+        // locks even when the merged workspace lock is stale or a root-declared dependency is
+        // unresolvable. Re-lock when stale so an unsatisfiable dep fails the build here instead of
+        // lying "up to date". Soft failures (I/O, network) don't block — see ensureWorkspaceLockFresh.
+        if (req.freshenLock()) {
+            LockGuard guard = ensureWorkspaceLockFresh(req.entryDir(), req.entryBuild(), req.cache());
+            if (guard.status() != 0) {
+                WorkspaceResult r = new WorkspaceResult(
+                        false,
+                        guard.status(),
+                        List.of(),
+                        List.of(guard.error() != null ? guard.error() : "dependency resolution failed"));
+                listener.onWorkspaceFinish(r);
+                return r;
+            }
+        }
         BuildGraph.Result graph;
         try {
             graph = BuildGraph.resolve(req.entryDir(), req.entryBuild());

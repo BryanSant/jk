@@ -105,7 +105,10 @@ final class EngineBuildListenerAdapter {
                     session.force(),
                     // rerun rides separately from force: it bypasses the action cache without
                     // implying refresh, so verify's scratch rebuild stays CAS-local (no re-download).
-                    session.config().rerunOr(false)));
+                    session.config().rerunOr(false),
+                    // jk build asks the engine to auto-freshen a stale workspace lock; verify's
+                    // scratch rebuild must use the pinned lock verbatim (see WorkspaceRequest).
+                    req.freshenLock()));
             writer.write('\n');
             writer.flush();
 

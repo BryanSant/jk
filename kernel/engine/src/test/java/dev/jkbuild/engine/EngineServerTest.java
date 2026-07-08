@@ -100,6 +100,18 @@ class EngineServerTest {
             return reader.readLine();
         }
 
+        /** Fire-and-forget send, for request types that reply with an event stream (not one line). */
+        void sendLine(String line) throws IOException {
+            writer.write(line);
+            writer.write('\n');
+            writer.flush();
+        }
+
+        /** Read the next event line off the stream ({@code null} on EOF). */
+        String readLine() throws IOException {
+            return reader.readLine();
+        }
+
         @Override
         public void close() throws IOException {
             channel.close();
@@ -303,6 +315,139 @@ class EngineServerTest {
             if (previousOsName != null) System.setProperty("os.name", previousOsName);
             else System.clearProperty("os.name");
         }
+    }
+
+    /**
+     * Engine-hosted {@code jk lock} round-trip (Wave 1 of the slim-client migration): a real server
+     * over the socket, a tiny fixture project, and a mock Maven repo standing in for every remote
+     * (the request's {@code repoUrl} override). Asserts the full wire conversation — {@code
+     * lock-module} → plan burst → {@code lock-package} stream → count-carrying {@code goal-finish}
+     * → {@code lock-finish} — and that the engine actually wrote {@code jk.lock}.
+     */
+    @Test
+    void lock_request_resolves_and_writes_the_lockfile_over_the_socket() throws Exception {
+        String previousM2 = System.getProperty("jk.m2.local");
+        System.setProperty("jk.m2.local", shortTempDir().toString()); // never touch the real ~/.m2
+        com.sun.net.httpserver.HttpServer repo =
+                com.sun.net.httpserver.HttpServer.create(new java.net.InetSocketAddress("127.0.0.1", 0), 0);
+        try {
+            java.util.Map<String, byte[]> served = new java.util.HashMap<>();
+            // jk injects the latest-stable JUnit Platform into every project's TEST scope, so the
+            // mock repo must offer those coords (dependency-free stubs) alongside the project dep.
+            seedArtifact(served, "org.junit.jupiter", "junit-jupiter", "6.1.0");
+            seedArtifact(served, "org.junit.platform", "junit-platform-launcher", "6.1.0");
+            seedArtifact(served, "com.foo", "leaf", "1.0");
+            repo.createContext("/", exchange -> {
+                byte[] body = served.get(exchange.getRequestURI().getPath());
+                if (body == null) {
+                    exchange.sendResponseHeaders(404, -1);
+                } else {
+                    exchange.sendResponseHeaders(200, body.length);
+                    exchange.getResponseBody().write(body);
+                }
+                exchange.close();
+            });
+            repo.start();
+            String repoUrl = "http://127.0.0.1:" + repo.getAddress().getPort();
+
+            Path project = shortTempDir();
+            Files.writeString(project.resolve("jk.toml"), """
+                    [project]
+                    group   = "com.example"
+                    name    = "app"
+                    version = "1.0.0"
+                    jdk     = 21
+                    java    = 21
+
+                    [dependencies]
+                    leaf = { group = "com.foo", name = "leaf", version = "1.0" }
+                    """);
+            Path cache = shortTempDir();
+
+            EnginePaths.Paths p = paths(shortTempDir());
+            EngineServer server = new EngineServer(p, JkEngineConfig.DEFAULTS, "1.0", null);
+            Thread serverThread = runInBackground(server);
+            waitUntil(Duration.ofSeconds(5), () -> Files.exists(p.socket()));
+
+            List<String> types = new ArrayList<>();
+            String lockModule = null;
+            String goalFinish = null;
+            String lockFinish = null;
+            boolean sawLeafPackage = false;
+            try (Client c = new Client(p.socket())) {
+                c.sendLine(EngineProtocol.lockRequest(
+                        project.toString(),
+                        cache.toString(),
+                        List.of(),
+                        false,
+                        false,
+                        repoUrl,
+                        false,
+                        false,
+                        false));
+                String line;
+                while ((line = c.readLine()) != null) {
+                    String type = EngineProtocol.typeOf(line);
+                    types.add(type);
+                    switch (type) {
+                        case EngineProtocol.LOCK_MODULE -> lockModule = line;
+                        case EngineProtocol.LOCK_PACKAGE ->
+                            sawLeafPackage |= "com.foo:leaf".equals(Ndjson.str(line, "name"));
+                        case EngineProtocol.GOAL_FINISH -> goalFinish = line;
+                        case EngineProtocol.LOCK_FINISH -> lockFinish = line;
+                        default -> {
+                            /* plan/progress events — presence asserted via `types` below */
+                        }
+                    }
+                    if (lockFinish != null) break;
+                }
+            }
+
+            assertThat(lockModule).isNotNull();
+            assertThat(Ndjson.str(lockModule, "dir")).isEqualTo(project.toString());
+            assertThat(Ndjson.str(lockModule, "coord")).isEqualTo("com.example:app");
+            assertThat(types).contains(EngineProtocol.PLAN_PHASE, EngineProtocol.PLAN_DONE);
+            assertThat(sawLeafPackage).as("lock-package event for com.foo:leaf").isTrue();
+
+            assertThat(goalFinish).isNotNull();
+            assertThat(Ndjson.bool(goalFinish, "success", false)).isTrue();
+            assertThat(Ndjson.longValue(goalFinish, "lockPackages", -1)).isEqualTo(3); // leaf + 2 junit defaults
+
+            assertThat(lockFinish).isNotNull();
+            assertThat(Ndjson.bool(lockFinish, "success", false)).isTrue();
+            assertThat(Ndjson.intValue(lockFinish, "exitCode", -1)).isEqualTo(0);
+
+            // The engine (not the client) wrote the lockfile.
+            assertThat(Files.isRegularFile(project.resolve("jk.lock"))).isTrue();
+            var lock = dev.jkbuild.lock.LockfileReader.read(project.resolve("jk.lock"));
+            assertThat(lock.artifacts().stream().map(a -> a.name())).contains("com.foo:leaf");
+
+            server.close();
+            serverThread.join(5_000);
+        } finally {
+            repo.stop(0);
+            if (previousM2 != null) System.setProperty("jk.m2.local", previousM2);
+            else System.clearProperty("jk.m2.local");
+            dev.jkbuild.lock.LockfileReader.clearCache();
+        }
+    }
+
+    /** Minimal metadata + dependency-free POM + stub jar for one coordinate on the mock repo. */
+    private static void seedArtifact(java.util.Map<String, byte[]> served, String group, String artifact, String version) {
+        String base = "/" + group.replace('.', '/') + "/" + artifact;
+        served.put(
+                base + "/maven-metadata.xml",
+                ("<metadata><groupId>" + group + "</groupId><artifactId>" + artifact
+                                + "</artifactId><versioning><versions><version>" + version
+                                + "</version></versions></versioning></metadata>")
+                        .getBytes(StandardCharsets.UTF_8));
+        String dir = base + "/" + version + "/" + artifact + "-" + version;
+        served.put(
+                dir + ".pom",
+                ("<project><groupId>" + group + "</groupId><artifactId>" + artifact + "</artifactId><version>"
+                                + version + "</version></project>")
+                        .getBytes(StandardCharsets.UTF_8));
+        served.put(dir + ".jar", (artifact + "-stub").getBytes(StandardCharsets.UTF_8));
     }
 
     @Test

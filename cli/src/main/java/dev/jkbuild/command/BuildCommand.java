@@ -24,7 +24,6 @@ import dev.jkbuild.run.GoalKey;
 import dev.jkbuild.run.GoalResult;
 import dev.jkbuild.runtime.BuildPipeline;
 import dev.jkbuild.runtime.BuildPlanForecast;
-import dev.jkbuild.runtime.LockFlow;
 import dev.jkbuild.test.JUnitLauncher;
 import dev.jkbuild.util.JkDirs;
 import dev.jkbuild.util.JkThreads;
@@ -168,36 +167,12 @@ public final class BuildCommand implements CliCommand {
 
     /** Default: parallel graph build; {@code --no-parallel}: the serial rich aggregate view. */
     private int buildWorkspace(Path root, JkBuild rootBuild) throws Exception {
-        // Whole-workspace staleness guard: the per-module cache forecast can report "all up to
-        // date" against per-module locks even when the merged workspace lock is stale or a
-        // root-declared dependency is unresolvable — silently masking a broken workspace. Before any
-        // build decision, re-lock the whole workspace when stale so an unsatisfiable dep fails the
-        // build here instead of lying "up to date".
-        int lockGuard = ensureWorkspaceLockFresh(root, rootBuild);
-        if (lockGuard != 0) return lockGuard;
-        // Both modes drive the one engine planner (BuildService.buildWorkspace); --no-parallel just
-        // caps module concurrency to 1 (strict serial) via the request the view layer builds below.
+        // The whole-workspace lock-staleness guard now runs engine-side, inside
+        // BuildService.buildWorkspace (the request carries freshenLock=true) — the CLI only renders
+        // the failure via the standard workspace-errors path. Both modes drive the one engine
+        // planner; --no-parallel just caps module concurrency to 1 (strict serial) via the request
+        // the view layer builds below.
         return runGraphParallel(root, rootBuild);
-    }
-
-    /**
-     * If the merged workspace lock ({@code root/jk.lock}) is missing or older than the root manifest
-     * or any member manifest, re-lock the whole workspace (a merged resolve, the same {@link
-     * LockFlow} path {@code jk lock} uses). Returns 0 when the lock is fresh or was refreshed
-     * successfully; a non-zero exit code (surfacing the resolver diagnostic) when the merged
-     * dependencies are unsatisfiable — so {@code jk build} fails rather than reporting a false
-     * success. Transient failures (I/O, network) fall through to the normal per-unit path.
-     */
-    private int ensureWorkspaceLockFresh(Path root, JkBuild rootBuild) {
-        // Policy lives in the engine (BuildService); the CLI only renders the failure.
-        Path cache = cacheDir != null ? cacheDir : JkDirs.cache();
-        dev.jkbuild.runtime.BuildService.LockGuard g =
-                dev.jkbuild.runtime.BuildService.ensureWorkspaceLockFresh(root, rootBuild, cache);
-        if (g.status() != 0 && !global.outputIsJson()) {
-            if (g.error() != null) CliOutput.err(g.error());
-            CliOutput.err(GoalWedge.failureLine("Build", GlobalConfig.nerdfont(), "dependency resolution failed"));
-        }
-        return g.status();
     }
 
     /**
@@ -294,7 +269,13 @@ public final class BuildCommand implements CliCommand {
             System.err.println("[jk-perf] client-forecast " + (System.nanoTime() - buildStart) / 1_000_000 + "ms dirty="
                     + dirtyDirs.size());
         }
-        if (dirtyDirs.isEmpty()) {
+        // The forecast runs against the per-module locks; when the merged workspace lock is stale
+        // the engine will re-lock (freshenLock on the request) and the forecast may be wrong — so a
+        // stale lock disables the fully-cached shortcut AND the dirty hint (the engine re-forecasts
+        // after freshening). Cheap: stat-only, no resolution.
+        boolean lockStale = dev.jkbuild.runtime.BuildService.workspaceLockStale(
+                entryDir, entryBuild, entryDir.resolve("jk.lock"));
+        if (dirtyDirs.isEmpty() && !lockStale) {
             // Fully cached — print chip line directly with no spinner ever created.
             CliOutput.out(dev.jkbuild.cli.tui.GoalWedge.chipLine(
                     dev.jkbuild.cli.tui.Glyphs.CHECK, "Build", nerdfont,
@@ -305,7 +286,7 @@ public final class BuildCommand implements CliCommand {
         // there's something to build. The engine (BuildService.buildWorkspace, invoked by
         // runGraphLive) sizes the memory plan and drives the build; we pass the forecast as a hint.
         CommandManager view = CommandManager.goal(CliOutput.stdout(), "Build", animate);
-        return runGraphLive(view, entryDir, entryBuild, cache, buildStart, dirtyDirs);
+        return runGraphLive(view, entryDir, entryBuild, cache, buildStart, dirtyDirs, lockStale);
     }
 
     /**
@@ -326,7 +307,8 @@ public final class BuildCommand implements CliCommand {
                 global.verbose,
                 noParallel ? 1 : 0, // --no-parallel → strict serial; else auto/unbounded
                 null, // headless: let the engine forecast dirty modules
-                true); // single-process CLI: plan our own worker-JVM memory budget
+                true, // single-process CLI: plan our own worker-JVM memory budget
+                true); // jk build: auto-freshen a stale workspace lock engine-side
         Map<Path, List<String>> buffers = new java.util.concurrent.ConcurrentHashMap<>();
         int[] total = {0};
         java.util.concurrent.atomic.AtomicInteger done = new java.util.concurrent.atomic.AtomicInteger();
@@ -390,7 +372,9 @@ public final class BuildCommand implements CliCommand {
         }
         if (!result.errors().isEmpty()) {
             for (String err : result.errors()) CliOutput.err(ConsoleSpec.errorLine("composite", err));
-            return Exit.CONFIG;
+            // exitCode carries the engine's verdict: 2 for graph errors, 6 for an unsatisfiable
+            // workspace lock (the freshen guard) — preserved rather than flattened to CONFIG.
+            return result.exitCode();
         }
         if (total[0] == 0) {
             CliOutput.out("(workspace declares no modules)");
@@ -417,7 +401,13 @@ public final class BuildCommand implements CliCommand {
      * animates; the same blocks + lines print append-only.
      */
     private int runGraphLive(
-            CommandManager view, Path entryDir, JkBuild entryBuild, Path cache, long start, Set<Path> dirtyDirs) {
+            CommandManager view,
+            Path entryDir,
+            JkBuild entryBuild,
+            Path cache,
+            long start,
+            Set<Path> dirtyDirs,
+            boolean lockStale) {
         AggregateContext agg = new AggregateContext(view);
         Map<Path, List<String>> buffers = new java.util.concurrent.ConcurrentHashMap<>();
         List<String> deferredOutput = java.util.Collections.synchronizedList(new ArrayList<>());
@@ -433,8 +423,11 @@ public final class BuildCommand implements CliCommand {
                 buildOpts.skipTests,
                 global.verbose,
                 noParallel ? 1 : 0, // --no-parallel → strict serial; else auto/unbounded
-                dirtyDirs, // reuse the forecast the fully-cached shortcut already computed
-                true); // single-process CLI: plan our own worker-JVM memory budget
+                // Reuse the forecast the fully-cached shortcut computed — unless the workspace lock
+                // was stale, in which case the engine re-locks first and must re-forecast itself.
+                lockStale ? null : dirtyDirs,
+                true, // single-process CLI: plan our own worker-JVM memory budget
+                true); // jk build: auto-freshen a stale workspace lock engine-side
         dev.jkbuild.runtime.BuildService.WorkspaceResult result;
         try {
             dev.jkbuild.runtime.WorkspaceBuildListener liveListener = new dev.jkbuild.runtime.WorkspaceBuildListener() {
@@ -501,7 +494,8 @@ public final class BuildCommand implements CliCommand {
             List<String> above = new ArrayList<>();
             for (String err : result.errors()) above.add(ConsoleSpec.errorLine("composite", err));
             view.finishGoalFailure("dependency resolution failed", above);
-            return Exit.CONFIG;
+            // 2 for graph errors, 6 for an unsatisfiable workspace lock (the engine's freshen guard).
+            return result.exitCode();
         }
         if (!result.success()) {
             // Buffered sub-process output first, then the error diagnostics just above the

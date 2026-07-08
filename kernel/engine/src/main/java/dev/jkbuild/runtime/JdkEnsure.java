@@ -65,6 +65,25 @@ public final class JdkEnsure {
             Lockfile lock,
             java.util.function.Consumer<String> warn)
             throws IOException, InterruptedException {
+        return ensure(projectDir, jdksDirOverride, build, lock, warn, true);
+    }
+
+    /**
+     * As {@link #ensure(Path, Path, JkBuild, Lockfile, java.util.function.Consumer)}, but with an
+     * explicit install permission. {@code allowInstall = false} is the resident engine's mode
+     * ({@code jk sync} hosting): a JDK download must never happen silently inside the engine —
+     * installs stay client-side ({@code jk jdk install}, or the sync command's pre-flight ensure),
+     * per {@code docs/engine.md} — so a resolution that would install instead fails with an
+     * actionable message naming the client-side fix.
+     */
+    public static Outcome ensure(
+            Path projectDir,
+            Path jdksDirOverride,
+            JkBuild build,
+            Lockfile lock,
+            java.util.function.Consumer<String> warn,
+            boolean allowInstall)
+            throws IOException, InterruptedException {
         JdkRegistry registry = jdksDirOverride != null ? new JdkRegistry(jdksDirOverride) : new JdkRegistry();
         GlobalDefaultJdk defaults = GlobalDefaultJdk.current();
         int latestLts = JdkLts.OFFLINE_LATEST_LTS;
@@ -87,6 +106,14 @@ public final class JdkEnsure {
         if (!r.wouldInstall()) {
             // Nothing pinned and nothing to install (resolution found no spec).
             return new Outcome(Optional.empty(), Source.ALREADY_PINNED, null);
+        }
+        if (!allowInstall) {
+            // Engine-hosted sync: the client should have pre-flighted this install before sending
+            // the request — reaching here means it didn't (or the lock was created engine-side with
+            // a pin the client couldn't see). Fail structured rather than downloading silently.
+            throw new IOException("JDK " + r.installSpec()
+                    + " is not installed — run `jk jdk install " + r.installSpec()
+                    + "` (or re-run `jk sync`; JDK installs stay client-side)");
         }
 
         // A named pin (or the bootstrap latest-LTS) isn't on disk — install it.

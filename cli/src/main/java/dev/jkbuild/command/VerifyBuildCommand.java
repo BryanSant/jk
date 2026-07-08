@@ -235,7 +235,8 @@ public final class VerifyBuildCommand implements CliCommand {
                 false, // verbose
                 0, // module concurrency: auto
                 null, // dirtyHint: rerun marks everything dirty anyway
-                true); // only read by the in-process test path; the engine plans its own memory
+                true, // only read by the in-process test path; the engine plans its own memory
+                false); // verify must rebuild against the pinned lock verbatim — never freshen it
         Session session = SessionContext.current()
                 .withConfig(SessionContext.current().config().mergedWith(withRerun()))
                 .withWorkingDir(scratch)

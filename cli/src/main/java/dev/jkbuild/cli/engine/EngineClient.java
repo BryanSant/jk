@@ -204,6 +204,114 @@ public final class EngineClient {
         return EngineBuildListenerAdapter.explain(paths, entryDir, cache);
     }
 
+    // ---- resolver family (jk lock / update / sync — Wave 1 of the slim client) ----------------
+
+    /** Everything an engine-hosted {@code jk lock} needs — mirrors {@code LockCommand}'s local fields. */
+    public record LockRequest(
+            Path entryDir,
+            Path cache,
+            List<String> features,
+            boolean noDefaultFeatures,
+            boolean sources,
+            java.net.URI repoUrl,
+            boolean offline,
+            boolean force,
+            boolean verbose) {}
+
+    /** Everything an engine-hosted {@code jk update} needs — mirrors {@code UpdateCommand}'s local fields. */
+    public record UpdateRequest(
+            Path entryDir,
+            Path cache,
+            List<String> features,
+            boolean noDefaultFeatures,
+            java.net.URI repoUrl,
+            boolean offline,
+            boolean force,
+            boolean verbose) {}
+
+    /** Everything an engine-hosted {@code jk sync} needs — mirrors {@code SyncCommand}'s local fields. */
+    public record SyncRequest(
+            Path entryDir,
+            Path cache,
+            Path jdksDir,
+            java.net.URI repoUrl,
+            boolean sources,
+            boolean offline,
+            boolean force,
+            boolean refresh,
+            boolean verbose) {}
+
+    /**
+     * A lock/update cascade's client-side renderer contract — see {@link EngineResolveAdapter} for
+     * the wire mechanics. {@code onModuleStart} is invoked once per module (entry project first,
+     * then workspace modules in declaration order), after its phase list has arrived, and returns
+     * the {@link dev.jkbuild.run.GoalListener} the module's wire events should drive — the same
+     * listener the in-process path would attach to the live goal. {@code onPackage} fires per
+     * resolved package (plain, unthemed — the renderer colorizes); {@code onModuleFinish} fires
+     * after that listener's own {@code goalFinish} has been dispatched.
+     */
+    public interface LockHandler {
+        dev.jkbuild.run.GoalListener onModuleStart(String dir, String coord, List<dev.jkbuild.run.Phase> phases);
+
+        default void onPackage(String dir, String name, String version) {}
+
+        default void onModuleFinish(String dir, dev.jkbuild.run.GoalResult result, LockCounts counts) {}
+    }
+
+    /** A finished lock/update module's written-lockfile counts ({@code -1} when the goal failed before writing). */
+    public record LockCounts(long packages, long sources, long plugins) {}
+
+    /**
+     * A lock/update request's terminal outcome. {@code errors} carries pre-goal failures (manifest
+     * parse, workspace module load) as plain text; {@code refreshed} is {@code jk update --git}'s
+     * refreshed count ({@code -1} otherwise). {@code exitCode} is authoritative — computed
+     * engine-side from the phase statuses (resolve failure exits 6, config problems 2).
+     */
+    public record LockOutcome(boolean success, int exitCode, List<String> errors, int refreshed) {}
+
+    /**
+     * Run {@code jk lock}'s workspace cascade against the engine — see {@link
+     * EngineResolveAdapter#runLock} for the exact contract. {@code handler} is the command's
+     * renderer; the returned outcome's {@code exitCode} is authoritative (computed engine-side).
+     */
+    public static LockOutcome runLock(EnginePaths.Paths paths, LockRequest req, LockHandler handler)
+            throws IOException {
+        return EngineResolveAdapter.runLock(paths, req, handler);
+    }
+
+    /**
+     * Run {@code jk update}'s full re-resolve cascade against the engine (rides {@code jk lock}'s
+     * event vocabulary) — see {@link EngineResolveAdapter#runUpdate}.
+     */
+    public static LockOutcome runUpdate(EnginePaths.Paths paths, UpdateRequest req, LockHandler handler)
+            throws IOException {
+        return EngineResolveAdapter.runUpdate(paths, req, handler);
+    }
+
+    /**
+     * Run {@code jk update --git [<name>]} against the engine ({@code gitTarget == null} refreshes
+     * every git dependency) — see {@link EngineResolveAdapter#runUpdateGitOnly}.
+     */
+    public static LockOutcome runUpdateGitOnly(EnginePaths.Paths paths, UpdateRequest req, String gitTarget)
+            throws IOException {
+        return EngineResolveAdapter.runUpdateGitOnly(paths, req, gitTarget);
+    }
+
+    /**
+     * Run {@code jk sync}'s single goal against the engine — see {@link
+     * EngineResolveAdapter#runSync} for the exact contract (the {@code jk test} listener-factory
+     * shape, plus fetched/up-to-date count holders for the summary line).
+     */
+    public static dev.jkbuild.run.GoalResult runSync(
+            EnginePaths.Paths paths,
+            SyncRequest req,
+            java.util.function.Function<List<dev.jkbuild.run.Phase>, dev.jkbuild.run.GoalListener> listenerFactory,
+            long[] fetchedOut,
+            long[] upToDateOut)
+            throws IOException {
+        return EngineResolveAdapter.runSync(paths, req, listenerFactory, fetchedOut, upToDateOut);
+    }
+
     static Handshake ensureRunning(EnginePaths.Paths paths, String clientVersion, Duration startTimeout)
             throws IOException {
         Optional<Handshake> existing = handshake(paths.socket(), clientVersion);

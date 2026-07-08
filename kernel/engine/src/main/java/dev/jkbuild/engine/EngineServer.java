@@ -252,6 +252,21 @@ public final class EngineServer implements AutoCloseable {
                         handleSingleBuildRequest(line, reader, writer);
                         return;
                     }
+                    case EngineProtocol.LOCK_REQUEST -> {
+                        // Same fork-and-watch shape as BUILD_REQUEST, hosting jk lock's cascade.
+                        handleAsyncGoalRequest(line, reader, writer, "jk-engine-lock-", this::runLock);
+                        return;
+                    }
+                    case EngineProtocol.UPDATE_REQUEST -> {
+                        // jk update rides jk lock's event vocabulary (plus the --git splice mode).
+                        handleAsyncGoalRequest(line, reader, writer, "jk-engine-update-", this::runUpdate);
+                        return;
+                    }
+                    case EngineProtocol.SYNC_REQUEST -> {
+                        // jk sync is a single goal — TEST_REQUEST's wire shape.
+                        handleAsyncGoalRequest(line, reader, writer, "jk-engine-sync-", this::runSync);
+                        return;
+                    }
                     case EngineProtocol.EXPLAIN_REQUEST -> {
                         // Synchronous read, no worker JVM forked — handled inline, connection continues.
                         handleExplainRequest(line, writer);
@@ -357,6 +372,9 @@ public final class EngineServer implements AutoCloseable {
             // Distinct from force: rerun bypasses the action cache / freshness stamps without
             // implying refresh, so locked dependencies still come from the local CAS (jk verify).
             boolean rerun = Ndjson.bool(requestLine, "rerun", false);
+            // jk build sends true (auto-freshen a stale workspace lock engine-side before building);
+            // jk verify's scratch rebuild sends false (pinned lock used verbatim).
+            boolean freshenLock = Ndjson.bool(requestLine, "freshenLock", false);
 
             Path entryDir = Path.of(entryDirStr);
             Path cache = Path.of(cacheStr);
@@ -374,7 +392,8 @@ public final class EngineServer implements AutoCloseable {
                     verbose,
                     maxModuleConcurrency,
                     null, // let the engine forecast dirty modules itself — see docs/engine.md
-                    false); // this engine plans memory once at startup, not per request
+                    false, // this engine plans memory once at startup, not per request
+                    freshenLock);
 
             JkConfig config = new JkConfig(
                     Optional.empty(),
@@ -619,6 +638,258 @@ public final class EngineServer implements AutoCloseable {
         }
     }
 
+    /**
+     * Decode a {@link EngineProtocol#LOCK_REQUEST} and run {@code jk lock}'s cascade in-session:
+     * the entry project, then (for a workspace root) each declared module in declaration order —
+     * each module a {@link EngineProtocol#LOCK_MODULE} + plan-phase burst + the standard goal
+     * events, ending in a {@link EngineProtocol#LOCK_FINISH} terminal. Per-package resolution
+     * streams as {@link EngineProtocol#LOCK_PACKAGE} (plain structured text; the client formats and
+     * colorizes). Forge tokens for git-source materialization resolve exactly as in the CLI — the
+     * same {@code ~/.jk} token store and environment, which this engine process inherits from its
+     * spawner.
+     */
+    private void runLock(String requestLine, Session.CancelToken cancelToken, BufferedWriter writer) {
+        try {
+            java.util.List<String> features = Ndjson.strArray(requestLine, "features");
+            boolean withDefaults = !Ndjson.bool(requestLine, "noDefaultFeatures", false);
+            boolean sources = Ndjson.bool(requestLine, "sources", false);
+            Session session = resolveSession(requestLine, cancelToken, false);
+            java.net.URI repoUrl = repoUrlOf(requestLine);
+            SessionContext.where(session, () -> {
+                lockCascade(session.workingDir(), session.cacheDir(), repoUrl, features, withDefaults, sources, false, writer);
+                return null;
+            });
+        } catch (Exception e) {
+            sendQuiet(writer, EngineProtocol.buildError(String.valueOf(e.getMessage())));
+        }
+    }
+
+    /**
+     * Decode a {@link EngineProtocol#UPDATE_REQUEST}: either the full re-resolve cascade (riding
+     * {@link #runLock}'s exact event vocabulary, with {@code jk update}'s always-fresh goal) or the
+     * {@code --git} splice mode, which runs no goal at all — just the {@link
+     * EngineProtocol#LOCK_FINISH} terminal carrying the refreshed count.
+     */
+    private void runUpdate(String requestLine, Session.CancelToken cancelToken, BufferedWriter writer) {
+        try {
+            java.util.List<String> features = Ndjson.strArray(requestLine, "features");
+            boolean withDefaults = !Ndjson.bool(requestLine, "noDefaultFeatures", false);
+            boolean gitOnly = Ndjson.bool(requestLine, "gitOnly", false);
+            String gitTarget = Ndjson.str(requestLine, "gitTarget");
+            Session session = resolveSession(requestLine, cancelToken, false);
+            java.net.URI repoUrl = repoUrlOf(requestLine);
+            SessionContext.where(session, () -> {
+                Path entryDir = session.workingDir();
+                Path cache = session.cacheDir();
+                if (gitOnly) {
+                    java.nio.file.Files.createDirectories(cache);
+                    JkBuild root;
+                    try {
+                        root = JkBuildParser.parse(entryDir.resolve("jk.toml"));
+                    } catch (RuntimeException e) {
+                        sendQuiet(writer, EngineProtocol.lockFinish(
+                                false, dev.jkbuild.model.command.Exit.CONFIG,
+                                java.util.List.of(String.valueOf(e.getMessage())), -1));
+                        return null;
+                    }
+                    var outcome = dev.jkbuild.runtime.LockGoals.updateGitOnly(
+                            entryDir, root, cache, repoUrl, features, withDefaults, gitTarget);
+                    sendQuiet(writer, EngineProtocol.lockFinish(
+                            outcome.exitCode() == 0,
+                            outcome.exitCode(),
+                            outcome.error() != null ? java.util.List.of(outcome.error()) : java.util.List.of(),
+                            outcome.refreshed()));
+                } else {
+                    lockCascade(entryDir, cache, repoUrl, features, withDefaults, false, true, writer);
+                }
+                return null;
+            });
+        } catch (Exception e) {
+            sendQuiet(writer, EngineProtocol.buildError(String.valueOf(e.getMessage())));
+        }
+    }
+
+    /**
+     * Decode a {@link EngineProtocol#SYNC_REQUEST} and run {@code jk sync}'s single goal in-session
+     * — {@link EngineProtocol#TEST_REQUEST}'s exact wire shape, with the fetched/up-to-date counts
+     * riding the terminal goal-finish. The goal is built with {@code allowJdkInstall = false}: JDK
+     * installs never happen inside the engine (the client pre-flights them — see {@link
+     * dev.jkbuild.runtime.SyncGoals}). On success, kicks the opportunistic cache-prune scheduler —
+     * the post-success step the CLI used to run, moved here since the engine did the work.
+     */
+    private void runSync(String requestLine, Session.CancelToken cancelToken, BufferedWriter writer) {
+        try {
+            boolean sources = Ndjson.bool(requestLine, "sources", false);
+            boolean refresh = Ndjson.bool(requestLine, "refresh", false);
+            String jdksDirStr = Ndjson.str(requestLine, "jdksDir");
+            Path jdksDir = jdksDirStr != null ? Path.of(jdksDirStr) : null;
+            Session session = resolveSession(requestLine, cancelToken, refresh).withJdksDir(jdksDir);
+            java.net.URI repoUrl = repoUrlOf(requestLine);
+            SessionContext.where(session, () -> {
+                Path entryDir = session.workingDir();
+                Path cache = session.cacheDir();
+                java.nio.file.Files.createDirectories(cache);
+                java.util.concurrent.atomic.AtomicInteger fetched = new java.util.concurrent.atomic.AtomicInteger();
+                java.util.concurrent.atomic.AtomicInteger upToDate = new java.util.concurrent.atomic.AtomicInteger();
+                dev.jkbuild.run.Goal goal = dev.jkbuild.runtime.SyncGoals.syncGoal(
+                        entryDir, cache, jdksDir, repoUrl, sources, fetched, upToDate, null, false);
+                String dir = EngineProtocol.SINGLE_GOAL_DIR;
+                for (Phase p : goal.phases()) {
+                    sendQuiet(writer, EngineProtocol.planPhase(dir, p.name(), p.label()));
+                }
+                sendQuiet(writer, EngineProtocol.planDone(1));
+                goal.addListener(wireGoalListener(
+                        dir,
+                        writer,
+                        (java.util.function.Function<GoalResult, String>) result ->
+                                EngineProtocol.goalFinishSync(dir, result.success(), fetched.get(), upToDate.get())));
+                GoalResult result = goal.run();
+                if (result.success()) {
+                    var cacheConfig = dev.jkbuild.config.JkCacheConfig.resolve();
+                    dev.jkbuild.task.CachePruneScheduler.resolveJkExe()
+                            .ifPresent(exe -> dev.jkbuild.task.CachePruneScheduler.maybeRun(cacheConfig, cache, exe));
+                }
+                return null;
+            });
+        } catch (Exception e) {
+            sendQuiet(writer, EngineProtocol.buildError(String.valueOf(e.getMessage())));
+        }
+    }
+
+    /**
+     * The lock/update cascade both {@link #runLock} and {@link #runUpdate} stream: parse the entry
+     * manifest, apply workspace context, then run one {@link dev.jkbuild.runtime.LockGoals} goal per
+     * scope (entry project first, then each workspace module in declaration order), stopping at the
+     * first failure. Exit codes are computed here — the engine saw the phase statuses — and sent on
+     * the {@link EngineProtocol#LOCK_FINISH} terminal; pre-goal failures (manifest parse, module
+     * load) travel as its plain-text {@code errors}.
+     */
+    private void lockCascade(
+            Path entryDir,
+            Path cache,
+            java.net.URI repoUrl,
+            java.util.List<String> features,
+            boolean withDefaults,
+            boolean sources,
+            boolean update,
+            BufferedWriter writer)
+            throws Exception {
+        java.nio.file.Files.createDirectories(cache);
+        JkBuild root;
+        try {
+            root = JkBuildParser.parse(entryDir.resolve("jk.toml"));
+        } catch (RuntimeException e) {
+            sendQuiet(writer, EngineProtocol.lockFinish(
+                    false, dev.jkbuild.model.command.Exit.CONFIG,
+                    java.util.List.of(String.valueOf(e.getMessage())), -1));
+            return;
+        }
+        JkBuild effectiveRoot = dev.jkbuild.runtime.LockGoals.applyWorkspaceContextIfModule(entryDir, root);
+
+        var scopes = new java.util.LinkedHashMap<Path, JkBuild>();
+        var coords = new java.util.LinkedHashMap<Path, String>();
+        scopes.put(entryDir, effectiveRoot);
+        coords.put(entryDir, dev.jkbuild.runtime.LockGoals.coordLabel(effectiveRoot, entryDir));
+        if (effectiveRoot.isWorkspaceRoot()) {
+            java.util.Map<Path, JkBuild> modules;
+            try {
+                modules = dev.jkbuild.config.WorkspaceLoader.loadModules(entryDir, effectiveRoot);
+            } catch (RuntimeException e) {
+                sendQuiet(writer, EngineProtocol.lockFinish(
+                        false, dev.jkbuild.model.command.Exit.CONFIG,
+                        java.util.List.of(String.valueOf(e.getMessage())), -1));
+                return;
+            }
+            for (var entry : modules.entrySet()) {
+                scopes.put(
+                        entry.getKey(),
+                        dev.jkbuild.model.WorkspaceMerge.applyToModule(effectiveRoot, entry.getValue(), modules.values()));
+                coords.put(entry.getKey(), dev.jkbuild.runtime.LockGoals.coordLabel(entry.getValue(), entry.getKey()));
+            }
+        }
+
+        for (var scope : scopes.entrySet()) {
+            Path dir = scope.getKey();
+            String dirTag = dir.toString();
+            sendQuiet(writer, EngineProtocol.lockModule(dirTag, coords.get(dir)));
+
+            dev.jkbuild.resolver.ResolveObserver observer = new dev.jkbuild.resolver.ResolveObserver() {
+                @Override
+                public void onTotal(int total) {
+                    // scope growth already rides the goal's scope-update events
+                }
+
+                @Override
+                public void onPackage(String module, String version) {
+                    sendQuiet(writer, EngineProtocol.lockPackage(dirTag, module, version));
+                }
+            };
+            dev.jkbuild.run.Goal goal = update
+                    ? dev.jkbuild.runtime.LockGoals.updateGoal(dir, scope.getValue(), cache, repoUrl, features, withDefaults)
+                    : dev.jkbuild.runtime.LockGoals.lockGoal(
+                            dir, scope.getValue(), cache, repoUrl, features, withDefaults, sources, observer, null);
+            for (Phase p : goal.phases()) {
+                sendQuiet(writer, EngineProtocol.planPhase(dirTag, p.name(), p.label()));
+            }
+            sendQuiet(writer, EngineProtocol.planDone(1));
+            goal.addListener(wireGoalListener(dirTag, writer, (java.util.function.Function<GoalResult, String>)
+                    result -> {
+                        dev.jkbuild.lock.Lockfile lock =
+                                goal.get(dev.jkbuild.runtime.LockGoals.LOCKFILE).orElse(null);
+                        return EngineProtocol.goalFinishLock(
+                                dirTag,
+                                result.success(),
+                                lock != null ? lock.artifacts().size() : -1,
+                                lock != null
+                                        ? lock.artifacts().stream()
+                                                .filter(a -> a.sourcesChecksum() != null)
+                                                .count()
+                                        : -1,
+                                lock != null ? lock.plugins().size() : -1);
+                    }));
+
+            GoalResult result = goal.run();
+            if (!result.success()) {
+                sendQuiet(writer, EngineProtocol.lockFinish(
+                        false, dev.jkbuild.runtime.LockGoals.failureExitCode(result), java.util.List.of(), -1));
+                return;
+            }
+        }
+        sendQuiet(writer, EngineProtocol.lockFinish(true, 0, java.util.List.of(), -1));
+    }
+
+    /**
+     * Reconstruct the request's {@link Session} from the flat config fields every lock/sync/update
+     * request carries ({@code offline}/{@code force}/{@code verbose}, plus sync's {@code refresh})
+     * — the same fields {@link #runBuild} decodes inline.
+     */
+    private static Session resolveSession(String requestLine, Session.CancelToken cancelToken, boolean refresh) {
+        Path entryDir = Path.of(Ndjson.str(requestLine, "entryDir"));
+        Path cache = Path.of(Ndjson.str(requestLine, "cache"));
+        JkConfig config = new JkConfig(
+                Optional.empty(),
+                Optional.of(Ndjson.bool(requestLine, "offline", false)),
+                Optional.empty(),
+                Optional.of(refresh),
+                Optional.empty(),
+                Optional.empty(),
+                Optional.of(Ndjson.bool(requestLine, "verbose", false)),
+                Optional.empty(),
+                Optional.of(Ndjson.bool(requestLine, "force", false)),
+                Optional.empty());
+        return Session.defaults()
+                .withConfig(config)
+                .withWorkingDir(entryDir)
+                .withCacheDir(cache)
+                .withCancel(cancelToken);
+    }
+
+    /** The optional {@code repoUrl} request field ({@code --repo-url} overrides), or {@code null}. */
+    private static java.net.URI repoUrlOf(String requestLine) {
+        String s = Ndjson.str(requestLine, "repoUrl");
+        return s != null ? java.net.URI.create(s) : null;
+    }
+
     /** Translate every {@link WorkspaceBuildListener} callback into a wire event on {@code writer}. */
     private WorkspaceBuildListener wireListener(BufferedWriter writer) {
         return new WorkspaceBuildListener() {
@@ -645,7 +916,7 @@ public final class EngineServer implements AutoCloseable {
             public GoalListener onModuleStart(BuildService.ModulePlan m) {
                 String dir = m.dir().toString();
                 sendQuiet(writer, EngineProtocol.moduleStart(dir));
-                return wireGoalListener(dir, writer, null);
+                return wireGoalListener(dir, writer, (dev.jkbuild.run.Goal) null);
             }
 
             @Override
@@ -666,6 +937,35 @@ public final class EngineServer implements AutoCloseable {
      * workspace-build goal (where neither applies at the module level).
      */
     private GoalListener wireGoalListener(String dir, BufferedWriter writer, dev.jkbuild.run.Goal realGoal) {
+        return wireGoalListener(dir, writer, (java.util.function.Function<GoalResult, String>) result -> {
+            dev.jkbuild.test.JUnitLauncher.Result testResult = realGoal == null
+                    ? null
+                    : realGoal.get(dev.jkbuild.runtime.BuildPipeline.TEST_RESULT).orElse(null);
+            String buildOutcome = realGoal == null
+                    ? null
+                    : realGoal.get(dev.jkbuild.runtime.BuildPipeline.BUILD_OUTCOME).orElse(null);
+            return testResult == null && buildOutcome == null
+                    ? EngineProtocol.goalFinish(dir, result.success())
+                    : EngineProtocol.goalFinish(
+                            dir,
+                            result.success(),
+                            buildOutcome,
+                            testResult != null ? testResult.total() : -1,
+                            testResult != null ? testResult.succeeded() : -1,
+                            testResult != null ? testResult.failed() : -1,
+                            testResult != null ? testResult.skipped() : -1);
+        });
+    }
+
+    /**
+     * As {@link #wireGoalListener(String, BufferedWriter, dev.jkbuild.run.Goal)}, but with a
+     * pluggable terminal encoder: {@code finishEncoder} maps the finished {@link GoalResult} to the
+     * {@link EngineProtocol#GOAL_FINISH} message to send (after the {@link
+     * EngineProtocol#GOAL_DIAGNOSTIC} burst) — how lock/update/sync ride their summary counts on the
+     * same message the build/test goals already send.
+     */
+    private GoalListener wireGoalListener(
+            String dir, BufferedWriter writer, java.util.function.Function<GoalResult, String> finishEncoder) {
         return new GoalListener() {
             @Override
             public void goalStart(GoalView view) {
@@ -749,24 +1049,7 @@ public final class EngineServer implements AutoCloseable {
                             EngineProtocol.goalDiagnostic(
                                     dir, d.phase(), d.code(), d.message(), d.test(), d.exceptionClass()));
                 }
-                dev.jkbuild.test.JUnitLauncher.Result testResult = realGoal == null
-                        ? null
-                        : realGoal.get(dev.jkbuild.runtime.BuildPipeline.TEST_RESULT).orElse(null);
-                String buildOutcome = realGoal == null
-                        ? null
-                        : realGoal.get(dev.jkbuild.runtime.BuildPipeline.BUILD_OUTCOME).orElse(null);
-                sendQuiet(
-                        writer,
-                        testResult == null && buildOutcome == null
-                                ? EngineProtocol.goalFinish(dir, result.success())
-                                : EngineProtocol.goalFinish(
-                                        dir,
-                                        result.success(),
-                                        buildOutcome,
-                                        testResult != null ? testResult.total() : -1,
-                                        testResult != null ? testResult.succeeded() : -1,
-                                        testResult != null ? testResult.failed() : -1,
-                                        testResult != null ? testResult.skipped() : -1));
+                sendQuiet(writer, finishEncoder.apply(result));
             }
         };
     }
