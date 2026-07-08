@@ -183,6 +183,59 @@ graalvmNative {
         // with -H:ExcludeResources so they are not baked into the image heap.
         buildArgs.add("-H:ExcludeResources=org/jline/nativ/.*")
     }
+
+    // Second image (slim-client Stage 4): the dedicated engine binary. Same classpath as the
+    // client until Stage 5 cuts :cli's Gradle deps — what differs is the entrypoint (EngineMain's
+    // main() IS the engine-server loop, no --engine-server flag) and the tuning: the engine is a
+    // long-lived resident process whose hot path is SHA-256-heavy (CAS/ClasspathFingerprint
+    // hashing on every no-op build), so it takes speed-first flags where the client takes
+    // size-first ones. Task names: :cli:nativeEngineCompile builds it, next to :cli:nativeCompile.
+    binaries.create("engine") {
+        imageName.set("jk-engine")
+        mainClass.set("dev.jkbuild.cli.EngineMain")
+        // Same 0.10.4/GraalVM-25 defaulting quirk as the main binary above.
+        sharedLibrary.set(false)
+        // Custom binaries don't inherit the application plugin's classpath wiring the way the
+        // "main" binary does — wire it explicitly (the module jar carries the resources,
+        // including the jline native-image hints).
+        classpath(tasks.named("jar"), configurations.runtimeClasspath)
+
+        // Speed-first build args — restores exactly the tuning the client's size-first commit
+        // removed (see the -Os history note above): -O3 plus SIMD -march, benchmarked ≈1.5x on
+        // no-op builds when the hashing ran in this process — which, in the engine, it does again.
+        //
+        // -march=x86-64-v3 on amd64 (AVX2-era baseline, where the 1.5x was measured);
+        // -march=compatibility elsewhere (aarch64's default baseline already includes the NEON
+        //           features SHA-256 intrinsics want — no equivalent -march bump to buy).
+        // -R:MaxHeapSize=268435456 / -R:MinHeapSize=100663296
+        //           The engine's own numbers: a hard 256 MiB ceiling — the docs/engine.md memory
+        //           target — with 96 MiB pre-sized (a long-lived process shouldn't churn through
+        //           growth steps). These are baked *defaults*: the spawning client keeps passing
+        //           -Xms/-Xmx from JkEngineConfig so user config max-heap-mb stays authoritative.
+        buildArgs.add("-O3")
+        val arch = System.getProperty("os.arch")
+        buildArgs.add("-march=" + if (arch == "amd64" || arch == "x86_64") "x86-64-v3" else "compatibility")
+        buildArgs.add("--gc=serial")
+        buildArgs.add("-R:MaxHeapSize=268435456")
+        buildArgs.add("-R:MinHeapSize=100663296")
+
+        // Shared with the client image (same classpath until Stage 5, so the same init/FFM
+        // concerns apply):
+        // --features=EngineDetachFeature is load-bearing here — the engine role's setsid(2)
+        //           self-detach is THE reason this process survives its spawner.
+        // --enable-native-access silences the same FFM restricted-method warning for that call.
+        // -H:+SharedArenaSupport: the engine never opens a terminal, but JLine's FFM terminal
+        //           (whose signal handler needs shared arenas) is still on — and reachable from —
+        //           the shared classpath; prune when Stage 5 drops the TUI from this image.
+        // The jline run-time init, antlr build-time init, and jline-native resource exclusion
+        // carry over verbatim for the same reasons as the main binary.
+        buildArgs.add("-H:+SharedArenaSupport")
+        buildArgs.add("--enable-native-access=ALL-UNNAMED")
+        buildArgs.add("--features=dev.jkbuild.cli.nativeimage.EngineDetachFeature")
+        buildArgs.add("--initialize-at-run-time=org.jline")
+        buildArgs.add("--initialize-at-build-time=org.antlr")
+        buildArgs.add("-H:ExcludeResources=org/jline/nativ/.*")
+    }
 }
 
 // JLine 4 FFM terminal provider ships native-image hints; we supplement them

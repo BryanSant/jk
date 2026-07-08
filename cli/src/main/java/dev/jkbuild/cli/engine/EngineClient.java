@@ -862,10 +862,42 @@ public final class EngineClient {
         });
     }
 
+    /**
+     * Which engine artifact a spawn chose. {@code dedicated} means {@code exe}'s {@code main()} IS
+     * the engine loop (the {@code jk-engine} image — no {@code --engine-server} flag); otherwise
+     * {@code exe} is the client binary itself, re-invoked with the flag. {@code how} is the one-word
+     * provenance for the log header.
+     */
+    record EngineExe(String exe, boolean dedicated, String how) {}
+
+    /**
+     * Resolution order for the engine artifact (docs/engine.md lifecycle §2, slim-client Stage 4):
+     * (a) the {@code JK_ENGINE_EXE} env override — always treated as a dedicated engine binary;
+     * (b) a {@code jk-engine[.exe]} sibling next to the resolved client binary — the native dist
+     * ships both images into one directory; (c) the client binary itself with {@code
+     * --engine-server} — the JVM dist (installDist ships no second start script) and dev workflows.
+     */
+    static EngineExe resolveEngineExe(String envOverride, String jkExe) {
+        if (envOverride != null && !envOverride.isBlank()) {
+            return new EngineExe(envOverride, true, "JK_ENGINE_EXE");
+        }
+        Path clientDir = Path.of(jkExe).toAbsolutePath().getParent();
+        if (clientDir != null) {
+            for (String name : new String[] {"jk-engine", "jk-engine.exe"}) {
+                Path sibling = clientDir.resolve(name);
+                if (Files.isRegularFile(sibling) && Files.isExecutable(sibling)) {
+                    return new EngineExe(sibling.toString(), true, "sibling");
+                }
+            }
+        }
+        return new EngineExe(jkExe, false, "fallback");
+    }
+
     /** Spawn a fresh engine, detached — mirrors {@link CachePruneScheduler}'s spawn-and-forget pattern. */
     private static void spawn(EnginePaths.Paths paths) throws IOException {
         String jkExe = CachePruneScheduler.resolveJkExe()
                 .orElseThrow(() -> new IOException("could not resolve the running jk binary's path"));
+        EngineExe engine = resolveEngineExe(System.getenv("JK_ENGINE_EXE"), jkExe);
         JkEngineConfig config = JkEngineConfig.resolve();
         Files.createDirectories(paths.dir());
         rotateLog(paths.log());
@@ -874,15 +906,19 @@ public final class EngineClient {
         // in the engine role) — without that it stays in THIS client's process group, and a
         // Ctrl-C/SIGTERM aimed at the client (or its whole group) would take down the engine and
         // every other build it is hosting.
-        command.add(jkExe);
-        command.add("--engine-server");
+        command.add(engine.exe());
+        if (!engine.dedicated()) command.add("--engine-server");
         // Size the engine process's own heap (docs/engine.md "Memory target") — the spawner is
         // the only place that can, since a process can't shrink its own -Xmx. The -Xms pre-sizing
         // matters for a long-lived process (no growth churn). Native image consumes -Xm* runtime
-        // options from argv (position-independent) before main(); placed after --engine-server so
-        // that if they ever *aren't* consumed, the engine still starts (unsized) instead of
-        // failing on an unknown verb. The native binary is already built with --gc=serial.
-        if (config.heapCapped() && isNativeImage()) {
+        // options from argv (position-independent) before main(); a dedicated jk-engine binary is
+        // a native image by construction, so the args always apply there (they override its baked
+        // -R:M{ax,in}HeapSize defaults, keeping user config max-heap-mb authoritative) — and its
+        // main() ignores argv, so an un-consumed -Xm* degrades to an unsized engine, never a dead
+        // one. For the fallback (this same binary + --engine-server) the args are placed after
+        // the flag for the same reason: if they aren't consumed, the engine still starts (unsized)
+        // instead of failing on an unknown verb. Both images are built with --gc=serial.
+        if (config.heapCapped() && (engine.dedicated() || isNativeImage())) {
             command.add("-Xms" + config.minHeapMb() + "m");
             command.add("-Xmx" + config.maxHeapMb() + "m");
         }
@@ -891,19 +927,42 @@ public final class EngineClient {
         // appended last so it wins over any blanket JK_OPTS the user exported. SerialGC matches
         // the native binary: lowest footprint/latency, and a ≤256 MiB heap is well inside its
         // comfort zone.
-        if (config.heapCapped() && !isNativeImage()) {
+        if (config.heapCapped() && !engine.dedicated() && !isNativeImage()) {
             String opts = System.getenv("JK_OPTS");
             String sizing = "-XX:+UseSerialGC -Xms" + config.minHeapMb() + "m -Xmx" + config.maxHeapMb() + "m";
             pb.environment().put("JK_OPTS", (opts == null || opts.isBlank() ? "" : opts + " ") + sizing);
         }
         // Merge stderr into stdout inside the child (one fd, no interleaving risk from two
         // independently-opened streams onto the same file), then route that to the log — a fresh
-        // file every start, per docs/engine.md.
+        // file every start, per docs/engine.md. The spawner writes the log's first line itself
+        // (which artifact it chose — the one fact the engine can't know), then the child appends;
+        // if that header can't be written, fall back to plain truncate-and-redirect.
         pb.redirectErrorStream(true);
-        pb.redirectOutput(ProcessBuilder.Redirect.to(paths.log().toFile()));
+        pb.redirectOutput(
+                writeSpawnHeader(paths.log(), engine)
+                        ? ProcessBuilder.Redirect.appendTo(paths.log().toFile())
+                        : ProcessBuilder.Redirect.to(paths.log().toFile()));
         pb.redirectInput(ProcessBuilder.Redirect.PIPE);
         Process p = pb.start();
         p.getOutputStream().close(); // EOF immediately; the engine doesn't read stdin
+    }
+
+    /**
+     * Start the fresh log with the spawn decision, truncating whatever {@link #rotateLog} left
+     * behind (it's best-effort). {@code false} — and no header — if the file isn't writable; the
+     * caller then falls back to the truncating redirect so log semantics stay identical.
+     */
+    private static boolean writeSpawnHeader(Path log, EngineExe engine) {
+        try {
+            Files.writeString(
+                    log,
+                    "jk engine: spawning " + engine.exe() + " (" + engine.how() + ")" + System.lineSeparator(),
+                    java.nio.file.StandardOpenOption.CREATE,
+                    java.nio.file.StandardOpenOption.TRUNCATE_EXISTING);
+            return true;
+        } catch (IOException e) {
+            return false;
+        }
     }
 
     /** True when this client runs as a GraalVM native image (so the spawned engine will too). */

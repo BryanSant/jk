@@ -1,6 +1,7 @@
 # The slim client: shrinking `jk` to a thin front-end
 
-Status: **direction locked, staged rollout pending** (2026-07-07). This is the successor arc to
+Status: **in flight — stages 1–4 landed, stage 5 (the dep cut) next** (2026-07-08). This is the
+successor arc to
 [re-foundation.md](./re-foundation.md): that effort made the engine a server behind the
 `BuildService` facade; this one makes the `jk` binary a genuinely thin client of it.
 
@@ -65,10 +66,20 @@ artifact that may re-tune for speed (`-march` benefits its SHA-256-heavy hot pat
 3. **Migrate the memory/CPU-heavy verbs first** (they're why the ceilings exist): `lock`/`sync`
    resolution + fetch, `audit`, git-source materialization. Each migration = protocol vocabulary +
    engine handler + client renderer, mirroring how `build`/`test`/`explain`/`verify` moved.
-4. **Split the artifacts:** once `:cli` no longer links the engine, produce two native images —
-   `jk` (client, -Os) and the engine binary — and teach the spawn path to locate the engine
-   artifact. Re-tune engine flags for speed independently. This is where the download-size win
-   lands.
+4. **Split the artifacts:** produce two native images — `jk` (client, -Os) and the engine binary —
+   and teach the spawn path to locate the engine artifact. Re-tune engine flags for speed
+   independently. (LANDED 2026-07-08: `EngineMain` is the dedicated entrypoint (`jk --engine-server`
+   delegates to the same code — the JVM-dist route and the spawn fallback); `:cli:nativeEngineCompile`
+   builds the `jk-engine` image speed-first — `-O3`, `-march=x86-64-v3` on amd64 /
+   `compatibility` elsewhere, the 256/96 MiB engine heap baked as `-R:` defaults, still
+   spawner-overridable via `-Xms`/`-Xmx` so `max-heap-mb` config keeps working — while
+   `:cli:nativeCompile`'s client flags stay size-first and untouched. `EngineClient.spawn` resolves
+   the artifact `JK_ENGINE_EXE` → `jk-engine[.exe]` sibling of the client binary → the client
+   binary + `--engine-server`, and records the choice as the engine log's first line. See
+   docs/engine.md "Two artifacts". Note the deliberate ordering vs. this plan's original "once
+   `:cli` no longer links the engine": the two-image pipeline landed *before* stage 5's dep cut, so
+   both images still link the full classpath — the download-size win lands when stage 5 shrinks the
+   client image.)
 5. **Then cut `:cli`'s Gradle deps to `:model` (+ api)** and let the compiler enforce it, the same
    way `BuildGraph.BuildUnit` is package-private today.
 

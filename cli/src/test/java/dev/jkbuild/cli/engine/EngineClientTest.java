@@ -158,6 +158,47 @@ class EngineClientTest {
         }
     }
 
+    /**
+     * The spawn path's artifact resolution (slim-client Stage 4): JK_ENGINE_EXE override, then a
+     * jk-engine sibling next to the client binary, then the client binary itself re-invoked with
+     * {@code --engine-server}. The actual OS-process spawn stays manual-verification territory
+     * (see class javadoc); this pins the decision logic.
+     */
+    @Test
+    void engine_exe_resolution_prefers_override_then_sibling_then_fallback() throws IOException {
+        Path dir = shortTempDir();
+        Path client = dir.resolve("jk");
+        Files.createFile(client);
+
+        // (c) no override, no sibling: the client binary itself, needing --engine-server
+        EngineClient.EngineExe fallback = EngineClient.resolveEngineExe(null, client.toString());
+        assertThat(fallback.dedicated()).isFalse();
+        assertThat(fallback.exe()).isEqualTo(client.toString());
+
+        // a non-executable jk-engine sibling doesn't count
+        Path sibling = dir.resolve("jk-engine");
+        Files.createFile(sibling);
+        if (!sibling.toFile().canExecute()) {
+            assertThat(EngineClient.resolveEngineExe(null, client.toString()).dedicated())
+                    .isFalse();
+        }
+
+        // (b) an executable jk-engine sibling: dedicated binary, no flag
+        assertThat(sibling.toFile().setExecutable(true)).isTrue();
+        EngineClient.EngineExe viaSibling = EngineClient.resolveEngineExe(null, client.toString());
+        assertThat(viaSibling.dedicated()).isTrue();
+        assertThat(viaSibling.exe()).isEqualTo(sibling.toString());
+
+        // (a) JK_ENGINE_EXE wins over the sibling, and is always treated as dedicated
+        EngineClient.EngineExe viaEnv = EngineClient.resolveEngineExe("/opt/jk/jk-engine", client.toString());
+        assertThat(viaEnv.dedicated()).isTrue();
+        assertThat(viaEnv.exe()).isEqualTo("/opt/jk/jk-engine");
+
+        // a blank override is ignored, not obeyed
+        assertThat(EngineClient.resolveEngineExe("  ", client.toString()).exe())
+                .isEqualTo(viaSibling.exe());
+    }
+
     @Test
     void ensure_running_returns_immediately_when_a_matching_version_engine_is_already_up() throws Exception {
         EnginePaths.Paths p = EnginePaths.resolve(shortTempDir());
