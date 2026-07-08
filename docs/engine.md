@@ -66,11 +66,12 @@ and the fallback when no engine artifact is installed. Both routes execute the e
    and jars — a global default pinned older for *project* builds is skipped, since it governs
    worker JVMs, not the engine host); when nothing installed qualifies, the client installs
    exactly the floor release, with no global-default side effects. The spawn line also carries
-   `-XX:+AutoCreateSharedArchive` pointing at `<engine-state>/engine.jsa`, so every cold start
-   after the first clean exit loads pre-parsed class metadata (the JVM regenerates the archive
-   itself when the JDK or jar set changes). Measured on linux/amd64 (2026-07-08): spawn→socket
-   ≈110 ms; a cold-engine no-op `jk build` ≈0.40 s with the archive (0.51 s without); warm no-op
-   builds settle at ≈0.08 s once the JIT has seen a few; **(c)**
+   an AOT cache (JEP 514, `<engine-state>/engine-<jarset-key>.aot`): the first spawn after a jar
+   change trains it (`-XX:AOTCacheOutput`, assembled on clean exit — idle recycling makes that
+   routine), and every later cold start maps pre-parsed class metadata plus AOT-compiled code,
+   taming the fresh JVM's JIT-warmup tail. The key ties the cache to the exact jar set because
+   `AOTMode=auto` silently ignores a mismatched cache — an unkeyed file would stop helping at
+   the first upgrade and never retrain; **(c)**
    the `jk` binary itself, re-invoked with the internal `--engine-server` flag — the JVM dist and
    dev workflows. The choice is recorded as the first line of the engine's log file. Every route
    sizes the heap from `max-heap-mb` (see [Memory target](#memory-target)): real JVM flags on the

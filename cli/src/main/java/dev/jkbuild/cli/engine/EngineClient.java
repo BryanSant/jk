@@ -1021,6 +1021,38 @@ public final class EngineClient {
     }
 
     /**
+     * The engine's AOT cache path, keyed to the current jar set (sorted name:size:mtime lines,
+     * hashed) so a changed {@code libexec/jk-engine/} yields a fresh key — the previous key's
+     * cache would be silently ignored by {@code AOTMode=auto} forever, never retrained. Caches
+     * for previous jar sets are deleted best-effort while resolving the current one.
+     */
+    private static Path aotCachePath(EnginePaths.Paths paths, Path libDir) {
+        StringBuilder signature = new StringBuilder();
+        try (var jars = Files.newDirectoryStream(libDir, "*.jar")) {
+            List<String> entries = new ArrayList<>();
+            for (Path jar : jars) {
+                entries.add(jar.getFileName() + ":" + Files.size(jar) + ":"
+                        + Files.getLastModifiedTime(jar).toMillis());
+            }
+            java.util.Collections.sort(entries);
+            entries.forEach(e -> signature.append(e).append('\n'));
+        } catch (IOException e) {
+            signature.append("unreadable");
+        }
+        Path cache = paths.dir()
+                .resolve("engine-" + dev.jkbuild.util.Hashing.sha256Hex(signature.toString()).substring(0, 16)
+                        + ".aot");
+        try (var stale = Files.newDirectoryStream(paths.dir(), "engine-*.aot")) {
+            for (Path p : stale) {
+                if (!p.equals(cache)) Files.deleteIfExists(p);
+            }
+        } catch (IOException ignored) {
+            // Cleanup is opportunistic; a leftover cache costs disk, not correctness.
+        }
+        return cache;
+    }
+
+    /**
      * True when the JDK at {@code home} is release {@code floor} or newer — one {@code release}-file
      * read via the discovery probes' shared helper. Unreadable/none → false (never spawn an engine
      * that dies on {@code UnsupportedClassVersionError} when a better tier is available).
@@ -1073,13 +1105,16 @@ public final class EngineClient {
                         .resolve(HostPlatform.isWindows() ? "java.exe" : "java")
                         .toString());
                 command.add("-XX:+UseSerialGC");
-                // Class-Data Sharing, self-managing: the first clean engine exit dumps the
-                // archive, every later cold start loads pre-parsed class metadata from it
-                // (and the JVM silently regenerates it when the JDK or the jar set changes).
-                // Engine cold start is user-visible latency — the first command after an idle
-                // timeout waits for this spawn.
-                command.add("-XX:+AutoCreateSharedArchive");
-                command.add("-XX:SharedArchiveFile=" + paths.dir().resolve("engine.jsa"));
+                // AOT cache (JEP 514, JDK 25+): pre-parsed class metadata AND AOT-compiled code,
+                // taming the cold engine's JIT-warmup tail. Engine cold start is user-visible
+                // latency — the first command after an idle timeout waits for this spawn. The
+                // cache file is keyed to the exact jar set because AOTMode=auto silently ignores
+                // a mismatched cache: an unkeyed name would stop helping at the first upgrade and
+                // never retrain. First spawn after a jar change trains (-XX:AOTCacheOutput,
+                // assembled on clean exit — idle recycling makes that routine); every later cold
+                // start maps the cache.
+                Path aotCache = aotCachePath(paths, Path.of(engine.path()));
+                command.add((Files.exists(aotCache) ? "-XX:AOTCache=" : "-XX:AOTCacheOutput=") + aotCache);
                 if (config.heapCapped()) {
                     command.add("-Xms" + config.minHeapMb() + "m");
                     command.add("-Xmx" + config.maxHeapMb() + "m");
