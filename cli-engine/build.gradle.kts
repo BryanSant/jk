@@ -75,6 +75,13 @@ dependencies {
 tasks.withType<Test>().configureEach {
     dependsOn(kotlinWorkerJar, testRunnerJar, auditorWorkerJar, publisherWorkerJar,
               imageBuilderWorkerJar, compatBridgeWorkerJar, gitClientWorkerJar)
+    // The TUI/highlighting tests assert ANSI escape sequences, and Theme/GlobalConfig read the
+    // ambient environment (TERM=dumb, CI=true/1, NO_COLOR all disable color). Pin the test JVMs'
+    // environment so the suite is deterministic on every host — a GitHub runner (TERM=dumb,
+    // CI=true) fails ~100 rendering tests otherwise.
+    environment("TERM", "xterm-256color")
+    environment("CI", "false")
+    environment("NO_COLOR", "")
     // A cache the end-to-end tests share (SharedTestCache) so the real deps they
     // resolve — Kotlin compiler, JUnit, … — are fetched from Maven Central once
     // and reused across tests and runs, instead of hammering it from a fresh

@@ -47,3 +47,9 @@ jobs:
         run: ./gradlew installLocal
       - name: jk builds jk
         run: build/dist/jk build
+        env:
+          # jk build runs the test suites through jk's forked test-runner workers,
+          # which inherit this step's environment — CI=true would turn ANSI off and
+          # fail the TUI tests (Gradle pins the same env for its own test JVMs in
+          # cli-engine/build.gradle.kts; jk workers have no such seam yet).
+          CI: 'false'
