@@ -4,9 +4,9 @@ resolution-algorithm = "pubgrub-v1"
 
 [[artifact]]
 name     = "net.bytebuddy:byte-buddy"
-version  = "1.18.10-jdk5"
+version  = "1.18.11-jdk5"
 source   = "central+https://repo.maven.apache.org/maven2/"
-checksum = "sha256:6d6978c78092da14d32558305b5ca58b847e2c4639d1b0aec7a3b55bec1391d7"
+checksum = "sha256:a178d5a44788a8461bc0b1cfb484aa69657077ba24d36438a1098e2e02efd2f0"
 scopes   = ["test"]
 
 [[artifact]]
@@ -23,34 +23,62 @@ source   = "central+https://repo.maven.apache.org/maven2/"
 checksum = "sha256:c4a445426c3c2861666863b842cc4ec7bbb1c4226fefd370b6d2fe83d6c4ff0f"
 scopes   = ["test"]
 deps = [
-  "net.bytebuddy:byte-buddy@1.18.10-jdk5",
+  "net.bytebuddy:byte-buddy@1.18.11-jdk5",
+]
+
+[[artifact]]
+name     = "org.bouncycastle:bcpg-jdk18on"
+version  = "1.84"
+source   = "central+https://repo.maven.apache.org/maven2/"
+checksum = "sha256:c0e6303a0d7589040f400950ecee87a14b81312e84ed15e5390ebb0c4566ddab"
+scopes   = ["test"]
+deps = [
+  "org.bouncycastle:bcprov-jdk18on@1.84",
+  "org.bouncycastle:bcutil-jdk18on@1.84",
+]
+
+[[artifact]]
+name     = "org.bouncycastle:bcprov-jdk18on"
+version  = "1.84"
+source   = "central+https://repo.maven.apache.org/maven2/"
+checksum = "sha256:64d6c5a6121fcd927152dd182cbed39afe0fda641a970d9bcc0c9cb1858b2731"
+scopes   = ["test"]
+
+[[artifact]]
+name     = "org.bouncycastle:bcutil-jdk18on"
+version  = "1.84"
+source   = "central+https://repo.maven.apache.org/maven2/"
+checksum = "sha256:b374e16963421fb9cfb01cc20d7ad8fd2f8b8188e3eef0ec0a8965e245f7619a"
+scopes   = ["test"]
+deps = [
+  "org.bouncycastle:bcprov-jdk18on@1.84",
 ]
 
 [[artifact]]
 name     = "org.jline:jline-native"
-version  = "4.1.3"
+version  = "4.3.1"
 source   = "central+https://repo.maven.apache.org/maven2/"
-checksum = "sha256:772246d37b5d13a07c7912d706854328823392e3243c8470ae362ebadb4ff185"
+checksum = "sha256:ff94ab4bccc3c1549444082ce07a2760cbf1ad4dae04e43508597bd802bcb231"
 scopes   = ["main"]
 
 [[artifact]]
 name     = "org.jline:jline-terminal"
-version  = "4.1.3"
+version  = "4.3.1"
 source   = "central+https://repo.maven.apache.org/maven2/"
-checksum = "sha256:abcf669ec701ffa49a1271fadbe15c93e8f8500bf8311b61b04beb45d472081f"
+checksum = "sha256:272927363471fdbf2f38710befbfe866acc1ed3472062a8ced02b16686f27bcc"
 scopes   = ["main"]
 deps = [
-  "org.jline:jline-native@4.1.3",
+  "org.jline:jline-native@4.3.1",
 ]
 
 [[artifact]]
 name     = "org.jline:jline-terminal-ffm"
-version  = "4.1.3"
+version  = "4.3.1"
 source   = "central+https://repo.maven.apache.org/maven2/"
-checksum = "sha256:c3a477a0a3b6d8d366209ed989fd591eb887ba469c53e3ca4330189858f9a79d"
+checksum = "sha256:2913cea48e5eac3e0763f5838059701b05c19d6dc41e829aee16a06364a340d6"
 scopes   = ["main"]
 deps = [
-  "org.jline:jline-terminal@4.1.3",
+  "org.jline:jline-terminal@4.3.1",
 ]
 
 [[artifact]]
@@ -62,59 +90,59 @@ scopes   = ["test"]
 
 [[artifact]]
 name     = "org.junit.jupiter:junit-jupiter"
-version  = "6.1.0"
+version  = "6.1.1"
 source   = "central+https://repo.maven.apache.org/maven2/"
-checksum = "sha256:a4e420b5c6e8170323b4c5c97ae35bca0d620be9f9cfe37006820f53931f27a3"
+checksum = "sha256:4ebf07c67017bd598c81bdc56bc7232a9506fed3478aa1077c793e749772cc6c"
 scopes   = ["test"]
 deps = [
-  "org.junit.jupiter:junit-jupiter-api@6.1.0",
-  "org.junit.jupiter:junit-jupiter-engine@6.1.0",
-  "org.junit.jupiter:junit-jupiter-params@6.1.0",
+  "org.junit.jupiter:junit-jupiter-api@6.1.1",
+  "org.junit.jupiter:junit-jupiter-engine@6.1.1",
+  "org.junit.jupiter:junit-jupiter-params@6.1.1",
 ]
 
 [[artifact]]
 name     = "org.junit.jupiter:junit-jupiter-api"
-version  = "6.1.0"
+version  = "6.1.1"
 source   = "central+https://repo.maven.apache.org/maven2/"
-checksum = "sha256:50f97eb800c2e888faa237a06f5a0ef445faed5567f994dac0c2b9d278a9ad20"
+checksum = "sha256:b1ab925878a3c57c03baf5e71dfb89bd89a812cd244276daeee6e04522b52981"
 scopes   = ["test"]
 deps = [
   "org.apiguardian:apiguardian-api@1.1.2",
   "org.jspecify:jspecify@1.0.0",
-  "org.junit.platform:junit-platform-commons@6.1.0",
+  "org.junit.platform:junit-platform-commons@6.1.1",
   "org.opentest4j:opentest4j@1.3.0",
 ]
 
 [[artifact]]
 name     = "org.junit.jupiter:junit-jupiter-engine"
-version  = "6.1.0"
+version  = "6.1.1"
 source   = "central+https://repo.maven.apache.org/maven2/"
-checksum = "sha256:ea707b9647084619a0fc911cefb25037540d58b2800f8ead1fc6a2baf58b1da5"
+checksum = "sha256:786c0dda79c0a952b3a388e69a29732ad031a1c84074a1768e2dbf0a19096371"
 scopes   = ["test"]
 deps = [
   "org.apiguardian:apiguardian-api@1.1.2",
   "org.jspecify:jspecify@1.0.0",
-  "org.junit.jupiter:junit-jupiter-api@6.1.0",
-  "org.junit.platform:junit-platform-engine@6.1.0",
+  "org.junit.jupiter:junit-jupiter-api@6.1.1",
+  "org.junit.platform:junit-platform-engine@6.1.1",
 ]
 
 [[artifact]]
 name     = "org.junit.jupiter:junit-jupiter-params"
-version  = "6.1.0"
+version  = "6.1.1"
 source   = "central+https://repo.maven.apache.org/maven2/"
-checksum = "sha256:b987eea3205185a76f3659a39e67503cb7b682d8b7be03be4b9f92b710f0eec0"
+checksum = "sha256:b3179b78b9ec368579db717a0d9535efd0720c77a93ae5de0b61db721f2d16c8"
 scopes   = ["test"]
 deps = [
   "org.apiguardian:apiguardian-api@1.1.2",
   "org.jspecify:jspecify@1.0.0",
-  "org.junit.jupiter:junit-jupiter-api@6.1.0",
+  "org.junit.jupiter:junit-jupiter-api@6.1.1",
 ]
 
 [[artifact]]
 name     = "org.junit.platform:junit-platform-commons"
-version  = "6.1.0"
+version  = "6.1.1"
 source   = "central+https://repo.maven.apache.org/maven2/"
-checksum = "sha256:1d9046ab17ec7edafb0bc7945d2e59d7180fff4f28c734b823b51001e769f71b"
+checksum = "sha256:84ca17df1482392e0c91faa43fec54a7f8312e601fd6c96823fe99851e9d5be2"
 scopes   = ["test"]
 deps = [
   "org.apiguardian:apiguardian-api@1.1.2",
@@ -123,27 +151,27 @@ deps = [
 
 [[artifact]]
 name     = "org.junit.platform:junit-platform-engine"
-version  = "6.1.0"
+version  = "6.1.1"
 source   = "central+https://repo.maven.apache.org/maven2/"
-checksum = "sha256:3fb6be76c26ab0f94fe084e3fd0a39e1d25e22129929a61b29bd80a052b93ea5"
+checksum = "sha256:3ae22ca7b990aa25ff566b224b31ec5a4087d9728c9bf879c44ec6e24a01db7c"
 scopes   = ["test"]
 deps = [
   "org.apiguardian:apiguardian-api@1.1.2",
   "org.jspecify:jspecify@1.0.0",
-  "org.junit.platform:junit-platform-commons@6.1.0",
+  "org.junit.platform:junit-platform-commons@6.1.1",
   "org.opentest4j:opentest4j@1.3.0",
 ]
 
 [[artifact]]
 name     = "org.junit.platform:junit-platform-launcher"
-version  = "6.1.0"
+version  = "6.1.1"
 source   = "central+https://repo.maven.apache.org/maven2/"
-checksum = "sha256:0995e6ed244d66196cbda019e2f879504d0b48971edae9cc3dea46a1b31c0377"
+checksum = "sha256:a5e12b743cf960df7be5c5a93428b0d9e2df76ca9282762f5ddc47c0d7170050"
 scopes   = ["test"]
 deps = [
   "org.apiguardian:apiguardian-api@1.1.2",
   "org.jspecify:jspecify@1.0.0",
-  "org.junit.platform:junit-platform-engine@6.1.0",
+  "org.junit.platform:junit-platform-engine@6.1.1",
 ]
 
 [[artifact]]

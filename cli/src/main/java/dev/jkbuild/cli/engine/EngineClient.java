@@ -985,28 +985,58 @@ public final class EngineClient {
     /**
      * The JDK that hosts the engine JVM — the jk-managed default ({@code current}, then {@code
      * default}: the same global tiers {@code JdkResolution} walks), then the JVM running jk /
-     * {@code $JAVA_HOME}. On a machine with none of those, bootstrap-install one through the same
-     * {@link JdkEnsure} walk first sync uses (which also records the install as the global
-     * default, so this pays once). The engine is deliberately NOT keyed to any project's JDK pin:
-     * one engine serves many workspaces, and project pins govern worker JVMs, not the host.
+     * {@code $JAVA_HOME} — but only a candidate that meets the engine's runtime floor: the engine
+     * jars are compiled by the same JDK release that built this client, and a user whose projects
+     * pin an older JDK can easily have that older release as their global default (it governs
+     * worker JVMs, not the engine host). When nothing installed qualifies, install exactly the
+     * floor release via {@link JdkEnsure#install(String, java.util.function.Consumer)} — no
+     * resolution walk, no global-default side effects. The engine is deliberately NOT keyed to any
+     * project's JDK pin: one engine serves many workspaces.
      */
     private static Path engineJavaHome() throws IOException {
+        int floor = Runtime.version().feature(); // the release that compiled this client AND the engine jars
         GlobalDefaultJdk defaults = GlobalDefaultJdk.current();
-        Optional<Path> managed = defaults.currentHome().or(defaults::defaultHome);
-        if (managed.isPresent()) return managed.get();
-        try {
-            return JavaHomes.runningJavaHome();
-        } catch (IllegalStateException freshMachine) {
-            System.err.println("jk: installing a JDK to host the build engine (first run) ...");
-            try {
-                JdkEnsure.Outcome outcome =
-                        JdkEnsure.ensure(Path.of("").toAbsolutePath(), null, null, null, System.err::println);
-                if (outcome.jdk().isPresent()) return outcome.jdk().get().home();
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-            throw new IOException("no JDK to host the jk engine: run `jk jdk install` or set JAVA_HOME");
+        for (Optional<Path> candidate : List.of(defaults.currentHome(), defaults.defaultHome())) {
+            if (candidate.isPresent() && meetsFloor(candidate.get(), floor)) return candidate.get();
         }
+        try {
+            Path running = JavaHomes.runningJavaHome();
+            if (meetsFloor(running, floor)) return running;
+        } catch (IllegalStateException noRunningJvm) {
+            // Native client with no JAVA_HOME — fall through to the bootstrap install.
+        }
+        System.err.println("jk: installing a JDK " + floor + " to host the build engine ...");
+        try {
+            Path home = JdkEnsure.install(String.valueOf(floor), System.err::println).home();
+            if (meetsFloor(home, floor)) return home;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        } catch (IOException e) {
+            throw new IOException("no JDK " + floor + "+ can host the jk engine (" + e.getMessage()
+                    + ") — run `jk jdk install " + floor + "` or point JAVA_HOME at one");
+        }
+        throw new IOException(
+                "no JDK " + floor + "+ can host the jk engine — run `jk jdk install " + floor
+                        + "` or point JAVA_HOME at one");
+    }
+
+    /**
+     * True when the JDK at {@code home} is release {@code floor} or newer — one {@code release}-file
+     * read via the discovery probes' shared helper. Unreadable/none → false (never spawn an engine
+     * that dies on {@code UnsupportedClassVersionError} when a better tier is available).
+     */
+    private static boolean meetsFloor(Path home, int floor) {
+        return dev.jkbuild.discovery.ProbeSupport.discoverJdk(home, "engine-host")
+                .map(hit -> {
+                    int dot = hit.version().indexOf('.');
+                    String feature = dot < 0 ? hit.version() : hit.version().substring(0, dot);
+                    try {
+                        return Integer.parseInt(feature) >= floor;
+                    } catch (NumberFormatException e) {
+                        return false;
+                    }
+                })
+                .orElse(false);
     }
 
     /** Spawn a fresh engine, detached — mirrors {@link CachePruneScheduler}'s spawn-and-forget pattern. */
@@ -1043,6 +1073,13 @@ public final class EngineClient {
                         .resolve(HostPlatform.isWindows() ? "java.exe" : "java")
                         .toString());
                 command.add("-XX:+UseSerialGC");
+                // Class-Data Sharing, self-managing: the first clean engine exit dumps the
+                // archive, every later cold start loads pre-parsed class metadata from it
+                // (and the JVM silently regenerates it when the JDK or the jar set changes).
+                // Engine cold start is user-visible latency — the first command after an idle
+                // timeout waits for this spawn.
+                command.add("-XX:+AutoCreateSharedArchive");
+                command.add("-XX:SharedArchiveFile=" + paths.dir().resolve("engine.jsa"));
                 if (config.heapCapped()) {
                     command.add("-Xms" + config.minHeapMb() + "m");
                     command.add("-Xmx" + config.maxHeapMb() + "m");

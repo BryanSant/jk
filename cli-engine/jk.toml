@@ -21,12 +21,6 @@ jk-engine-api      = { group = "dev.jkbuild", name = "jk-engine-api",      versi
 jk-plugin-api      = { group = "dev.jkbuild", name = "jk-plugin-api",      version = "0.10.0-SNAPSHOT" }
 jline-terminal-ffm = { group = "org.jline",   name = "jline-terminal-ffm", version = "4.1.2" }
 
-# Compile-only (native-image Feature API used by EngineDetachFeature); mirrors
-# cli-engine/build.gradle.kts's compileOnly(libs.graalvm.nativeimage). Not needed at runtime —
-# the JVM dist never loads the Feature; native-image links it at build time.
-[provided-dependencies]
-graalvm-nativeimage = { group = "org.graalvm.sdk", name = "nativeimage", version = "25.0.0" }
-
 [test-dependencies]
 bouncycastle-bcpg       = { group = "org.bouncycastle",   name = "bcpg-jdk18on",            version = "1.84" }
 assertj-core            = { group = "org.assertj",        name = "assertj-core",            version = "3.27.7" }

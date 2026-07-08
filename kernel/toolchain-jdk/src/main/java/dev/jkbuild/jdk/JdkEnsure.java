@@ -107,25 +107,8 @@ public final class JdkEnsure {
         }
 
         // A named pin (or the bootstrap latest-LTS) isn't on disk — install it.
-        if (!HostPlatform.supported()) {
-            throw new IOException("host "
-                    + System.getProperty("os.name")
-                    + "/"
-                    + System.getProperty("os.arch")
-                    + " is not covered by the JetBrains JDK feed (set JAVA_HOME explicitly)");
-        }
         String spec = r.installSpec();
-        JdkCatalog catalog = new JdkCatalogClient().onWarning(warn).fetch();
-        // selectPreferred biases a vendor-unqualified spec to jk's vendor order
-        // and resolves range specs (">=26") to the lowest available major.
-        Optional<JdkCatalog.Entry> entry =
-                JdkSelector.selectPreferred(catalog, spec, HostPlatform.currentOs(), HostPlatform.currentArch());
-        if (entry.isEmpty()) {
-            throw new IOException(
-                    "no JDK matches " + spec + " on " + HostPlatform.currentOs() + "/" + HostPlatform.currentArch());
-        }
-        JdkInstaller installer = new JdkInstaller(new Http(), registry);
-        InstalledJdk installed = installer.install(entry.get());
+        InstalledJdk installed = install(spec, registry, warn);
 
         // A bootstrap install (no JDK was pinned or configured) becomes the
         // de-facto default — but only when no default is set yet, and only for
@@ -141,5 +124,36 @@ public final class JdkEnsure {
     /** Map a resolution tier to the coarse {@link Source} used for status wording. */
     private static Source mapSource(JdkResolution.Tier tier) {
         return tier == JdkResolution.Tier.LOCKFILE ? Source.LOCKFILE_INSTALL : Source.ALREADY_PINNED;
+    }
+
+    /**
+     * Install exactly {@code spec} into the default registry, with no resolution walk and no
+     * default-JDK side effects. The engine-host bootstrap uses this to satisfy jk's own runtime
+     * floor without consulting (or disturbing) the user's project pins and global default.
+     */
+    public static InstalledJdk install(String spec, java.util.function.Consumer<String> warn)
+            throws IOException, InterruptedException {
+        return install(spec, new JdkRegistry(), warn);
+    }
+
+    private static InstalledJdk install(String spec, JdkRegistry registry, java.util.function.Consumer<String> warn)
+            throws IOException, InterruptedException {
+        if (!HostPlatform.supported()) {
+            throw new IOException("host "
+                    + System.getProperty("os.name")
+                    + "/"
+                    + System.getProperty("os.arch")
+                    + " is not covered by the JetBrains JDK feed (set JAVA_HOME explicitly)");
+        }
+        JdkCatalog catalog = new JdkCatalogClient().onWarning(warn).fetch();
+        // selectPreferred biases a vendor-unqualified spec to jk's vendor order
+        // and resolves range specs (">=26") to the lowest available major.
+        Optional<JdkCatalog.Entry> entry =
+                JdkSelector.selectPreferred(catalog, spec, HostPlatform.currentOs(), HostPlatform.currentArch());
+        if (entry.isEmpty()) {
+            throw new IOException(
+                    "no JDK matches " + spec + " on " + HostPlatform.currentOs() + "/" + HostPlatform.currentArch());
+        }
+        return new JdkInstaller(new Http(), registry).install(entry.get());
     }
 }
