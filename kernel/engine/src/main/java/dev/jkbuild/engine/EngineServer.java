@@ -768,22 +768,6 @@ public final class EngineServer implements AutoCloseable {
             int estimatedTestCount = dev.jkbuild.runtime.TestSupport.estimateTestCount(entryDir.resolve("src/test/java"))
                     + dev.jkbuild.runtime.TestSupport.estimateTestCount(entryDir.resolve("src/test/kotlin"));
 
-            dev.jkbuild.runtime.BuildPipeline.Inputs inputs = new dev.jkbuild.runtime.BuildPipeline.Inputs(
-                    entryDir,
-                    cache,
-                    buildFile,
-                    lockFile,
-                    lockFile.getParent(),
-                    workerCount,
-                    estimatedTestCount,
-                    profile,
-                    jdksDir,
-                    /* skipTests */ false,
-                    verbose, /* testOnly */
-                    true);
-            dev.jkbuild.run.Goal goal =
-                    dev.jkbuild.runtime.BuildPipeline.coreBuilder(inputs).build();
-
             // The request's cache-relevant flags ride the session config exactly as
             // runSingleBuild's do — without this, `jk test --force` was silently
             // dropped on the hosted path (the run-tests stamp skip guards on rerunOr,
@@ -805,6 +789,30 @@ public final class EngineServer implements AutoCloseable {
                     .withCacheDir(cache)
                     .withJdksDir(jdksDir)
                     .withCancel(cancelToken);
+
+            // The session rides Inputs EXPLICITLY (canonical constructor): the delegating
+            // constructors capture SessionContext.current() at construction time, which here —
+            // outside SessionContext.where — is the engine's ambient default, not this request.
+            // Phases read in.session() for the force/rerun guards, so the ambient capture was
+            // exactly how `--force` got dropped.
+            dev.jkbuild.runtime.BuildPipeline.Inputs inputs = new dev.jkbuild.runtime.BuildPipeline.Inputs(
+                    entryDir,
+                    cache,
+                    buildFile,
+                    lockFile,
+                    lockFile.getParent(),
+                    workerCount,
+                    estimatedTestCount,
+                    profile,
+                    jdksDir,
+                    /* skipTests */ false,
+                    verbose,
+                    /* testOnly */ true,
+                    /* compileOnly */ false,
+                    java.util.Set.of(),
+                    session);
+            dev.jkbuild.run.Goal goal =
+                    dev.jkbuild.runtime.BuildPipeline.coreBuilder(inputs).build();
 
             String dir = EngineProtocol.SINGLE_GOAL_DIR;
             for (Phase p : goal.phases()) {
@@ -854,24 +862,6 @@ public final class EngineServer implements AutoCloseable {
                     : dev.jkbuild.runtime.TestSupport.estimateTestCount(entryDir.resolve("src/test/java"))
                             + dev.jkbuild.runtime.TestSupport.estimateTestCount(entryDir.resolve("src/test/kotlin"));
 
-            dev.jkbuild.runtime.BuildPipeline.Inputs inputs = new dev.jkbuild.runtime.BuildPipeline.Inputs(
-                    entryDir,
-                    cache,
-                    buildFile,
-                    lockFile,
-                    lockFile.getParent(),
-                    workerCount,
-                    estimatedTestCount,
-                    profile,
-                    jdksDir,
-                    skipTests,
-                    verbose, /* testOnly */
-                    false);
-            dev.jkbuild.run.Goal.Builder builder = dev.jkbuild.runtime.BuildPipeline.coreBuilder(inputs, false);
-            dev.jkbuild.runtime.BuildPipeline.appendDeclaredTails(builder, inputs);
-            dev.jkbuild.run.Goal goal = builder.build();
-            long barWeight = goal.estimatedTotalWeight();
-
             JkConfig config = new JkConfig(
                     Optional.empty(),
                     Optional.of(offline),
@@ -889,6 +879,29 @@ public final class EngineServer implements AutoCloseable {
                     .withCacheDir(cache)
                     .withJdksDir(jdksDir)
                     .withCancel(cancelToken);
+
+            // Session threaded explicitly — see runTest: the delegating Inputs constructors
+            // capture the engine's ambient session at construction, dropping --force/--offline.
+            dev.jkbuild.runtime.BuildPipeline.Inputs inputs = new dev.jkbuild.runtime.BuildPipeline.Inputs(
+                    entryDir,
+                    cache,
+                    buildFile,
+                    lockFile,
+                    lockFile.getParent(),
+                    workerCount,
+                    estimatedTestCount,
+                    profile,
+                    jdksDir,
+                    skipTests,
+                    verbose,
+                    /* testOnly */ false,
+                    /* compileOnly */ false,
+                    java.util.Set.of(),
+                    session);
+            dev.jkbuild.run.Goal.Builder builder = dev.jkbuild.runtime.BuildPipeline.coreBuilder(inputs, false);
+            dev.jkbuild.runtime.BuildPipeline.appendDeclaredTails(builder, inputs);
+            dev.jkbuild.run.Goal goal = builder.build();
+            long barWeight = goal.estimatedTotalWeight();
 
             String dir = EngineProtocol.SINGLE_GOAL_DIR;
             for (Phase p : goal.phases()) {
@@ -1200,7 +1213,10 @@ public final class EngineServer implements AutoCloseable {
                     .withJdksDir(jdksDir)
                     .withCancel(cancelToken);
             String dir = EngineProtocol.SINGLE_GOAL_DIR;
-            dev.jkbuild.run.Goal goal = dev.jkbuild.runtime.ImageGoals.imageGoal(
+            // Constructed in-session: the goal factory's BuildPipeline.Inputs captures the
+            // ambient SessionContext at construction, so building it outside where() would
+            // silently pin this request to the engine's default config (dropping --force et al).
+            dev.jkbuild.run.Goal goal = SessionContext.where(session, () -> dev.jkbuild.runtime.ImageGoals.imageGoal(
                     entryDir,
                     cache,
                     jdksDir,
@@ -1210,7 +1226,7 @@ public final class EngineServer implements AutoCloseable {
                     Ndjson.str(requestLine, "registry"),
                     Ndjson.str(requestLine, "tag"),
                     Ndjson.str(requestLine, "tarball"),
-                    Ndjson.str(requestLine, "dockerExecutable"));
+                    Ndjson.str(requestLine, "dockerExecutable")));
             streamSingleGoal(goal, session, writer, result -> {
                 dev.jkbuild.run.TestSummary testResult =
                         goal.get(dev.jkbuild.runtime.BuildPipeline.TEST_RESULT).orElse(null);
@@ -1318,8 +1334,11 @@ public final class EngineServer implements AutoCloseable {
             boolean verbose = Ndjson.bool(requestLine, "verbose", false);
             Session session = resolveSession(requestLine, cancelToken, false);
             String dir = EngineProtocol.SINGLE_GOAL_DIR;
-            dev.jkbuild.run.Goal goal = dev.jkbuild.runtime.CompileGoals.compileGoal(
-                    session.workingDir(), session.cacheDir(), profile, verbose);
+            // Constructed in-session — see runImage's note on ambient-session capture.
+            dev.jkbuild.run.Goal goal = SessionContext.where(
+                    session,
+                    () -> dev.jkbuild.runtime.CompileGoals.compileGoal(
+                            session.workingDir(), session.cacheDir(), profile, verbose));
             streamSingleGoal(goal, session, writer, result -> EngineProtocol.goalFinish(dir, result.success()));
         } catch (Exception e) {
             sendQuiet(writer, EngineProtocol.buildError(String.valueOf(e.getMessage())));
@@ -1340,13 +1359,16 @@ public final class EngineServer implements AutoCloseable {
             String graalHomeStr = Ndjson.str(requestLine, "graalHome");
             Session session = resolveSession(requestLine, cancelToken, false);
             String dir = EngineProtocol.SINGLE_GOAL_DIR;
-            dev.jkbuild.run.Goal goal = dev.jkbuild.runtime.InstallGoals.projectInstallGoal(
-                    session.workingDir(),
-                    session.cacheDir(),
-                    Path.of(m2DirStr),
-                    skipTests,
-                    verbose,
-                    graalHomeStr != null ? Path.of(graalHomeStr) : null);
+            // Constructed in-session — see runImage's note on ambient-session capture.
+            dev.jkbuild.run.Goal goal = SessionContext.where(
+                    session,
+                    () -> dev.jkbuild.runtime.InstallGoals.projectInstallGoal(
+                            session.workingDir(),
+                            session.cacheDir(),
+                            Path.of(m2DirStr),
+                            skipTests,
+                            verbose,
+                            graalHomeStr != null ? Path.of(graalHomeStr) : null));
             streamSingleGoal(goal, session, writer, result -> {
                 dev.jkbuild.run.TestSummary testResult =
                         goal.get(dev.jkbuild.runtime.BuildPipeline.TEST_RESULT).orElse(null);
