@@ -3,7 +3,12 @@
 plugins {
     id("jk.java-conventions")
     application
+    id("com.gradleup.shadow") version "9.2.2"
 }
+
+// Must match dev.jkbuild.util.JkVersion.VERSION (and the worker-conventions version): the client
+// only spawns an engine jar whose filename version equals its own baked-in version.
+version = "0.10.0-SNAPSHOT"
 
 description = "jk engine application: EngineMain (the engine JVM's entrypoint), the engine's " +
         "POSIX self-detach plumbing, and the ServiceLoader-discovered InProcessEngine that backs " +
@@ -123,15 +128,16 @@ application {
 }
 
 // The engine artifact of the native dist (docs/engine.md "Two artifacts"): this module's runtime
-// classpath as a plain jar directory, shipped as libexec/jk-engine/ next to the native jk client,
-// which spawns it as `<managed-jdk>/bin/java … -cp 'libexec/jk-engine/*' dev.jkbuild.cli.EngineMain`.
-// The engine is deliberately NOT a native image: it is long-lived, so HotSpot's JIT and SHA-256
-// intrinsics serve its hashing-heavy hot path, and its heap/GC profile is plain JVM flags on the
-// spawn line (SerialGC, -Xms96m -Xmx256m from JkEngineConfig) instead of baked -R: defaults.
-val installEngineLibs by tasks.registering(Sync::class) {
-    description = "Installs the engine's runtime classpath as build/libexec/jk-engine/*.jar"
-    group = "distribution"
-    from(tasks.jar)
-    from(configurations.runtimeClasspath)
-    into(layout.buildDirectory.dir("libexec/jk-engine"))
+// classpath rolled up into a single fat jar, jk-engine-<version>.jar, installed to ~/.jk/lib/,
+// where the client spawns it as `<managed-jdk>/bin/java … -cp ~/.jk/lib/jk-engine-<version>.jar
+// dev.jkbuild.cli.EngineMain`. The version in the filename IS the compatibility contract: the
+// client only launches a jar whose version matches its own. The engine is deliberately NOT a
+// native image: it is long-lived, so HotSpot's JIT and SHA-256 intrinsics serve its hashing-heavy
+// hot path, and its heap/GC profile is plain JVM flags on the spawn line (SerialGC, -Xms96m
+// -Xmx256m from JkEngineConfig) instead of baked -R: defaults.
+tasks.shadowJar {
+    archiveBaseName.set("jk-engine")
+    archiveClassifier.set("")
+    // ServiceLoader seams (InProcessEngine, JLine terminal providers) must merge, not collide.
+    mergeServiceFiles()
 }

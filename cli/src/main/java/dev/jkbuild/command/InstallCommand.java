@@ -54,7 +54,7 @@ import java.util.Set;
  *       ~/.m2} when {@code project.m2install} is set). When the project is an <em>application</em>
  *       ({@code project.application}, default true when a {@code main} is set) it additionally does
  *       a <em>make install</em>: a native binary into {@code ~/.jk/bin}; a shadow jar into {@code
- *       ~/.jk/libexec} with a launcher; or a normal jar into {@code ~/.jk/libexec} alongside its
+ *       ~/.jk/lib} with a launcher; or a normal jar into {@code ~/.jk/lib} alongside its
  *       hard-linked runtime deps with a launcher in {@code ~/.jk/bin}.
  *   <li><b>Maven coord (g:a:v):</b> download the pre-built jar from declared Maven repositories and
  *       install a launcher (the legacy {@code jk tool install} behavior).
@@ -92,8 +92,7 @@ public final class InstallCommand implements CliCommand {
                 Opt.value("<dir>", "Override the tool state directory.", "--state-dir")
                         .hide(),
                 Opt.value("<dir>", "Override the bin directory.", "--bin-dir").hide(),
-                Opt.value("<dir>", "Override the libexec directory.", "--libexec-dir")
-                        .hide(),
+                Opt.value("<dir>", "Override the lib directory.", "--lib-dir").hide(),
                 Opt.value("<dir>", "Override the local Maven repo root (~/.m2) for m2install.", "--m2-dir")
                         .hide(),
                 Opt.value("<url>", "Override the Maven repository URL (for tests).", "--repo-url")
@@ -118,7 +117,7 @@ public final class InstallCommand implements CliCommand {
     Path cacheDirOverride;
     Path stateDirOverride;
     Path binDirOverride;
-    Path libexecDirOverride;
+    Path libDirOverride;
     Path m2DirOverride;
     URI repoUrl;
     dev.jkbuild.cli.BuildOptions buildOpts;
@@ -148,7 +147,7 @@ public final class InstallCommand implements CliCommand {
         this.cacheDirOverride = in.value("cache-dir").map(Path::of).orElse(null);
         this.stateDirOverride = in.value("state-dir").map(Path::of).orElse(null);
         this.binDirOverride = in.value("bin-dir").map(Path::of).orElse(null);
-        this.libexecDirOverride = in.value("libexec-dir").map(Path::of).orElse(null);
+        this.libDirOverride = in.value("lib-dir").map(Path::of).orElse(null);
         this.m2DirOverride = in.value("m2-dir").map(Path::of).orElse(null);
         this.repoUrl = in.value("repo-url").map(URI::create).orElse(null);
         this.buildOpts = new dev.jkbuild.cli.BuildOptions();
@@ -351,7 +350,7 @@ public final class InstallCommand implements CliCommand {
     private int runProjectInstallGoal(Path projectDir, String goalName) throws IOException {
         Path cacheDir = cacheDir();
         Path binDir = binDir();
-        Path libexecDir = libexecDir();
+        Path libDir = libDir();
 
         // Validate up front: a non-native application needs a main class for its
         // launcher. (Done here, not in a phase, so we fail before building.)
@@ -426,7 +425,7 @@ public final class InstallCommand implements CliCommand {
         if (proj.isApplication()) {
             try {
                 launcher = makeInstallApp(projectDir, proj, BuildLayout.of(projectDir, proj), cacheDir, binDir,
-                        libexecDir);
+                        libDir);
             } catch (IOException e) {
                 CliOutput.err("jk install: make install failed: " + e.getMessage());
                 return 1;
@@ -438,13 +437,13 @@ public final class InstallCommand implements CliCommand {
 
     /**
      * The {@code make install} step for applications. Dispatches by artifact type: a native binary
-     * goes straight into {@code ~/.jk/bin}; a shadow jar goes into {@code ~/.jk/libexec} with a
-     * launcher; a normal jar goes into {@code libexec} alongside its hard-linked runtime dependency
-     * jars, with a launcher whose classpath lists exactly those jars. Returns the launcher (or the
-     * binary) path.
+     * goes straight into {@code ~/.jk/bin}; a shadow jar goes into {@code ~/.jk/lib} with a
+     * launcher; a normal jar goes into {@code ~/.jk/lib} alongside its hard-linked runtime
+     * dependency jars, with a launcher whose classpath lists exactly those jars. Returns the
+     * launcher (or the binary) path.
      */
     private Path makeInstallApp(
-            Path projectDir, JkBuild project, BuildLayout layout, Path cacheDir, Path binDir, Path libexecDir)
+            Path projectDir, JkBuild project, BuildLayout layout, Path cacheDir, Path binDir, Path libDir)
             throws IOException {
         var p = project.project();
         String bin = binName != null && !binName.isBlank() ? binName : p.name();
@@ -460,18 +459,18 @@ public final class InstallCommand implements CliCommand {
             return dest;
         }
 
-        Files.createDirectories(libexecDir);
+        Files.createDirectories(libDir);
 
-        // Shadow/fat jar → a single self-contained jar in libexec.
+        // Shadow/fat jar → a single self-contained jar in lib.
         if (project.shadowJar()) {
-            Path dest = libexecDir.resolve(layout.shadowJar().getFileName().toString());
+            Path dest = libDir.resolve(layout.shadowJar().getFileName().toString());
             Linking.linkOrCopy(layout.shadowJar(), dest);
             return AppLauncher.install(binDir, javaHome, bin, mainCls, List.of(dest));
         }
 
-        // Normal jar → app jar + hard-linked runtime dependency jars in libexec.
+        // Normal jar → app jar + hard-linked runtime dependency jars in lib.
         List<Path> classpath = new ArrayList<>();
-        Path appDest = libexecDir.resolve(layout.mainJar().getFileName().toString());
+        Path appDest = libDir.resolve(layout.mainJar().getFileName().toString());
         Linking.linkOrCopy(layout.mainJar(), appDest);
         classpath.add(appDest);
 
@@ -488,7 +487,7 @@ public final class InstallCommand implements CliCommand {
                 Path blob = cas.pathFor(hex);
                 if (!Files.exists(blob)) continue;
                 String artifactId = pkg.moduleArtifact();
-                Path dest = libexecDir.resolve(artifactId + "-" + pkg.version() + ".jar");
+                Path dest = libDir.resolve(artifactId + "-" + pkg.version() + ".jar");
                 Linking.linkOrCopy(blob, dest);
                 classpath.add(dest);
             }
@@ -496,7 +495,7 @@ public final class InstallCommand implements CliCommand {
         // Workspace sibling jars (built locally) also belong on the classpath.
         WorkspaceClasspath.Result siblings = WorkspaceClasspath.resolve(projectDir, project, ClasspathResolver.RUNTIME);
         for (Path sib : siblings.jars()) {
-            Path dest = libexecDir.resolve(sib.getFileName().toString());
+            Path dest = libDir.resolve(sib.getFileName().toString());
             Linking.linkOrCopy(sib, dest);
             classpath.add(dest);
         }
@@ -550,8 +549,8 @@ public final class InstallCommand implements CliCommand {
         return binDirOverride != null ? binDirOverride : JkDirs.binDir();
     }
 
-    private Path libexecDir() {
-        return libexecDirOverride != null ? libexecDirOverride : JkDirs.libexec();
+    private Path libDir() {
+        return libDirOverride != null ? libDirOverride : JkDirs.lib();
     }
 
     private Path m2Dir() {

@@ -126,7 +126,7 @@ the same discriminated-envelope style, so this is vocabulary plumbing, not redes
 > `native-request` speaking `build-request`'s workspace vocabulary, `native-image` forked
 > engine-side, exit codes engine-computed via `NativeGoals`; GraalVM resolution/consent pre-flights
 > client-side and rides the request), and `install`'s project/git modes (`InstallGoals`: build +
-> cache-install hosted, plus a `git-fetch-request` for the clone; the `~/.jk/bin`/`libexec`
+> cache-install hosted, plus a `git-fetch-request` for the clone; the `~/.jk/bin`/`~/.jk/lib`
 > "make install" half stays client-side). `install`'s Maven-coord mode still resolves via
 > `ToolResolver` in-process — deferred to Wave 4 with `tool install/run`, whose stack it is. The
 > §1.1 `explain` ETA residue is closed: `BuildService.estimateEtaMillis` runs engine-side, fed by

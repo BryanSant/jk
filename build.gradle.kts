@@ -9,13 +9,14 @@ tasks.wrapper {
 }
 
 // The shippable native-dist layout (docs/engine.md "Two artifacts"): the size-tuned native jk
-// client next to the engine's plain-jar directory. The engine is a JVM app, never a native image —
-// the client spawns it on the jk-managed JDK as `java -cp 'libexec/jk-engine/*' EngineMain`.
+// client next to the engine's fat jar. The engine is a JVM app, never a native image — the
+// installed client spawns it on the jk-managed JDK as `java -cp ~/.jk/lib/jk-engine-<version>.jar
+// EngineMain`. dist/lib mirrors ~/.jk/lib so the installer copies it straight across.
 val dist by tasks.registering(Sync::class) {
-    description = "Assembles build/dist: the native jk client + libexec/jk-engine/*.jar"
+    description = "Assembles build/dist: the native jk client + lib/jk-engine-<version>.jar"
     group = "distribution"
-    dependsOn(":cli:nativeCompile", ":cli-engine:installEngineLibs")
+    dependsOn(":cli:nativeCompile")
     from(project(":cli").layout.buildDirectory.dir("native/nativeCompile")) { include("jk", "jk.exe") }
-    from(project(":cli-engine").layout.buildDirectory.dir("libexec")) { into("libexec") }
+    from(project(":cli-engine").tasks.named("shadowJar")) { into("lib") }
     into(layout.buildDirectory.dir("dist"))
 }

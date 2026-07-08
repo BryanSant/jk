@@ -75,9 +75,10 @@ compile).
    tuning were dropped with stage 5. What survives from stage 4: `EngineMain` as the dedicated
    engine entrypoint (`jk --engine-server` delegates to the same code — the JVM-dist route and
    the spawn fallback), the spawn-side artifact resolution with the choice recorded as the engine
-   log's first line, and the client image's size-first flags. The engine now ships as
-   `libexec/jk-engine/*.jar`, spawned on the jk-managed JDK with SerialGC + the 256/96 MiB heap
-   from `max-heap-mb` as plain JVM flags. See docs/engine.md "Two artifacts".)
+   log's first line, and the client image's size-first flags. The engine now ships as a single
+   fat jar, `~/.jk/lib/jk-engine-<version>.jar`, spawned on the jk-managed JDK with SerialGC +
+   the 256/96 MiB heap from `max-heap-mb` as plain JVM flags. See docs/engine.md "Two
+   artifacts".)
 5. **Then cut `:cli`'s Gradle deps to `:model` (+ api)** and let the compiler enforce it, the same
    way `BuildGraph.BuildUnit` is package-private today. (LANDED 2026-07-08 — see "Stage 5
    as-built" below.)
@@ -111,8 +112,8 @@ jk (client image, :cli:nativeCompile, -Os; 26.9 MiB on linux/amd64 — see docs/
 │                   WorkerJarNotFoundException
 └── :plugin-api     Ndjson codec
 
-libexec/jk-engine/*.jar (the engine: a JVM app on the jk-managed JDK, never a native image;
-:cli-engine:installEngineLibs) — additionally links
+~/.jk/lib/jk-engine-<version>.jar (the engine: a JVM app on the jk-managed JDK, never a native
+image; :cli-engine:shadowJar) — additionally links
 └── :cli-engine     EngineMain (the engine JVM's main), PosixDetach,
                     InProcessEngineImpl (the seam below), the JVM dist (installDist), and the
                     relocated CLI test suite
@@ -131,9 +132,9 @@ helpers). The client-side seam is the `dev.jkbuild.cli.engine.InProcessEngine` i
 - **JVM dist / test classpath:** `:cli-engine` is present, so `jk --engine-server` and the
   `jk.test.noEngine` in-process dispatch work exactly as before.
 - **Client native image:** `:cli-engine` is absent by construction — the binary physically cannot
-  host an engine, and `jk --engine-server` reports that plainly (`install the libexec/jk-engine/
-  jars next to jk`). `jk cache prune --background` on the slim binary delegates to the resident
-  engine instead of running in-process.
+  host an engine, and `jk --engine-server` reports that plainly (`install
+  ~/.jk/lib/jk-engine-<version>.jar`). `jk cache prune --background` on the slim binary delegates
+  to the resident engine instead of running in-process.
 
 Because the tests' in-process dispatch needs the full kernel, the CLI test suite moved to
 `:cli-engine` wholesale (same packages; the self-host `cli-engine/jk.toml` carries the

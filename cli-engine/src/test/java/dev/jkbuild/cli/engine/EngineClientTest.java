@@ -159,44 +159,50 @@ class EngineClientTest {
     }
 
     /**
-     * The spawn path's artifact resolution (slim-client Stage 5): JK_ENGINE_EXE override, then a
-     * {@code libexec/jk-engine/} jar directory next to the client binary (the native dist's
-     * JVM-hosted engine), then the client binary itself re-invoked with {@code --engine-server}.
-     * The actual OS-process spawn stays manual-verification territory (see class javadoc); this
-     * pins the decision logic.
+     * The spawn path's artifact resolution: JK_ENGINE_EXE override, then {@code
+     * ~/.jk/lib/jk-engine-<version>.jar} whose filename version matches this client's (the
+     * installed JVM-hosted engine), then the client binary itself re-invoked with {@code
+     * --engine-server}. The actual OS-process spawn stays manual-verification territory (see class
+     * javadoc); this pins the decision logic.
      */
     @Test
-    void engine_artifact_resolution_prefers_override_then_libexec_then_fallback() throws IOException {
+    void engine_artifact_resolution_prefers_override_then_versioned_lib_jar_then_fallback() throws IOException {
         Path dir = shortTempDir();
         Path client = dir.resolve("jk");
         Files.createFile(client);
+        Path libDir = dir.resolve("lib");
 
-        // (c) no override, no libexec: the client binary itself, needing --engine-server
-        EngineClient.EngineArtifact fallback = EngineClient.resolveEngineArtifact(null, client.toString());
+        // (c) no override, no lib dir: the client binary itself, needing --engine-server
+        EngineClient.EngineArtifact fallback =
+                EngineClient.resolveEngineArtifact(null, client.toString(), "1.2.3", libDir);
         assertThat(fallback.kind()).isEqualTo(EngineClient.EngineArtifact.Kind.FALLBACK);
         assertThat(fallback.path()).isEqualTo(client.toString());
 
-        // an empty libexec/jk-engine/ (no jars yet) doesn't count
-        Path libDir = dir.resolve("libexec").resolve("jk-engine");
+        // a version-skewed engine jar never launches — the version match is the contract
         Files.createDirectories(libDir);
-        assertThat(EngineClient.resolveEngineArtifact(null, client.toString()).kind())
+        Files.createFile(libDir.resolve("jk-engine-9.9.9.jar"));
+        assertThat(EngineClient.resolveEngineArtifact(null, client.toString(), "1.2.3", libDir)
+                        .kind())
                 .isEqualTo(EngineClient.EngineArtifact.Kind.FALLBACK);
 
-        // (b) a libexec/jk-engine/ holding jars: the JVM-hosted engine's jar directory
-        Files.createFile(libDir.resolve("cli-engine.jar"));
-        EngineClient.EngineArtifact viaLibexec = EngineClient.resolveEngineArtifact(null, client.toString());
-        assertThat(viaLibexec.kind()).isEqualTo(EngineClient.EngineArtifact.Kind.LIBEXEC);
-        assertThat(viaLibexec.path()).isEqualTo(libDir.toString());
+        // (b) lib/jk-engine-<client version>.jar: the JVM-hosted engine's fat jar
+        Path engineJar = libDir.resolve("jk-engine-1.2.3.jar");
+        Files.createFile(engineJar);
+        EngineClient.EngineArtifact viaLib =
+                EngineClient.resolveEngineArtifact(null, client.toString(), "1.2.3", libDir);
+        assertThat(viaLib.kind()).isEqualTo(EngineClient.EngineArtifact.Kind.JAR);
+        assertThat(viaLib.path()).isEqualTo(engineJar.toString());
 
-        // (a) JK_ENGINE_EXE wins over libexec, and is always treated as a dedicated executable
+        // (a) JK_ENGINE_EXE wins over the lib jar, and is always treated as a dedicated executable
         EngineClient.EngineArtifact viaEnv =
-                EngineClient.resolveEngineArtifact("/opt/jk/jk-engine", client.toString());
+                EngineClient.resolveEngineArtifact("/opt/jk/jk-engine", client.toString(), "1.2.3", libDir);
         assertThat(viaEnv.kind()).isEqualTo(EngineClient.EngineArtifact.Kind.EXE);
         assertThat(viaEnv.path()).isEqualTo("/opt/jk/jk-engine");
 
         // a blank override is ignored, not obeyed
-        assertThat(EngineClient.resolveEngineArtifact("  ", client.toString()).path())
-                .isEqualTo(viaLibexec.path());
+        assertThat(EngineClient.resolveEngineArtifact("  ", client.toString(), "1.2.3", libDir)
+                        .path())
+                .isEqualTo(viaLib.path());
     }
 
     @Test

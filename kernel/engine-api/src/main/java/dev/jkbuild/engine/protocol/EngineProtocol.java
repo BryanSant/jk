@@ -339,7 +339,7 @@ public final class EngineProtocol {
      * install}'s build + cache-install halves — jar/pom into {@code ~/.m2} and the local repo
      * index). Single goal ({@link #TEST_REQUEST}'s wire shape); the terminal {@code goal-finish}
      * carries the test counts the exit-code logic needs. The "make install" half (launcher/binary
-     * into {@code ~/.jk/bin} + {@code libexec}) stays client-side, after this goal succeeds.
+     * into {@code ~/.jk/bin} + {@code ~/.jk/lib}) stays client-side, after this goal succeeds.
      */
     public static final String INSTALL_REQUEST = "install-request";
 

@@ -26,7 +26,7 @@ jobs:
 
   # The self-hosted build is a separate correctness surface from the Gradle one: the per-module
   # jk.toml files drift silently when Gradle deps change (stage 5's module moves shipped exactly
-  # that). Building the real dist (native jk client + libexec/jk-engine jars) and running
+  # that). Building the real dist (native jk client + lib/jk-engine-<version>.jar) and running
   # `jk build` on this repo exercises the shipping client, the engine spawn, the resolver, and
   # the jk.toml/jk.lock graph end to end.
   dogfood:
@@ -41,6 +41,10 @@ jobs:
           cache: gradle
       - name: Build the native dist
         run: ./gradlew dist
+      - name: Install the engine jar into ~/.jk/lib
+        # The client resolves the engine at ~/.jk/lib/jk-engine-<its own version>.jar;
+        # the dist's lib/ mirrors that layout.
+        run: mkdir -p ~/.jk/lib && cp build/dist/lib/jk-engine-*.jar ~/.jk/lib/
       - name: Side-load worker jars into the jk CAS
         # jk's own workers (test-runner, compilers, …) aren't on Maven Central
         # yet; `jk build` forks them from the local CAS.

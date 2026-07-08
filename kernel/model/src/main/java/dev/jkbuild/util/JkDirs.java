@@ -17,6 +17,7 @@ import java.util.function.Function;
  *   ├── state/           # mutable per-host state
  *   ├── data/            # immutable installed data (ledgers, registries)
  *   ├── bin/             # user-installed tool launchers
+ *   ├── lib/             # jars backing the launchers + the jk-engine jar
  *   └── jdks/            # JDK installs
  * </pre>
  *
@@ -24,8 +25,8 @@ import java.util.function.Function;
  *
  * <ul>
  *   <li>Per-directory: {@code JK_CONFIG_FILE}, {@code JK_CACHE_DIR}, {@code JK_STATE_DIR}, {@code
- *       JK_DATA_DIR}, {@code JK_BIN_DIR}, {@code JK_JDKS_DIR}. Absolute paths; no jk suffix
- *       appended.
+ *       JK_DATA_DIR}, {@code JK_BIN_DIR}, {@code JK_LIB_DIR}, {@code JK_JDKS_DIR}. Absolute paths;
+ *       no jk suffix appended.
  *   <li>Root: {@code JK_HOME} relocates the entire tree. Defaults to {@code $HOME/.jk}.
  * </ul>
  *
@@ -94,8 +95,8 @@ public final class JkDirs {
         return current().tmpDir();
     }
 
-    public static Path libexec() {
-        return current().libexecDir();
+    public static Path lib() {
+        return current().libDir();
     }
 
     public static Path jdks() {
@@ -148,13 +149,14 @@ public final class JkDirs {
     }
 
     /**
-     * Where {@code jk install} places an application's jar(s) — the app jar and its hard-linked
-     * runtime dependencies, or a single fat jar. Defaults to {@code ~/.jk/libexec/}. Override via
-     * {@code JK_LIBEXEC_DIR}. Launchers in {@link #binDirectory()} reference jars here by absolute
+     * Where jk keeps the jars its binaries need: the engine's {@code jk-engine-<version>.jar} and
+     * the jar(s) {@code jk install} places for an application — the app jar and its hard-linked
+     * runtime dependencies, or a single fat jar. Defaults to {@code ~/.jk/lib/}. Override via
+     * {@code JK_LIB_DIR}. Launchers in {@link #binDirectory()} reference jars here by absolute
      * path.
      */
-    public Path libexecDir() {
-        return resolve("JK_LIBEXEC_DIR", "libexec");
+    public Path libDir() {
+        return resolve("JK_LIB_DIR", "lib");
     }
 
     /**

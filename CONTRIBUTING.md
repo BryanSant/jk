@@ -35,7 +35,7 @@ The native client binary is opt-in:
 ./gradlew dist
 ```
 
-(`dist` assembles `build/dist/`: the slim native `jk` client from `:cli:nativeCompile` next to `libexec/jk-engine/`, the engine's jar directory from `:cli-engine:installEngineLibs` — the engine is a plain JVM app the client spawns on the jk-managed JDK, never a native image.) `nativeCompile` requires a GraalVM-capable JDK (the pinned `25.0.3-graal` above satisfies this). After compilation, install locally with:
+(`dist` assembles `build/dist/`: the slim native `jk` client from `:cli:nativeCompile` next to `lib/jk-engine-<version>.jar`, the engine's fat jar from `:cli-engine:shadowJar` — the engine is a plain JVM app the client spawns from `~/.jk/lib/` on the jk-managed JDK, never a native image.) `nativeCompile` requires a GraalVM-capable JDK (the pinned `25.0.3-graal` above satisfies this). After compilation, install locally with:
 
 ```
 ./install.sh build/dist/jk

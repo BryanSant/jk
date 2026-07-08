@@ -924,7 +924,7 @@ public final class EngineClient {
             if (clientVersion.equals(existing.get().version())) return existing.get();
             killStale(existing.get().pid(), startTimeout);
         }
-        spawn(paths);
+        spawn(paths, clientVersion);
         return awaitStartup(paths, clientVersion, startTimeout)
                 .orElseThrow(() -> new IOException(
                         "could not start the build engine — see " + paths.log() + " for details"));
@@ -943,51 +943,38 @@ public final class EngineClient {
 
     /**
      * Which engine artifact a spawn chose. {@code EXE}: {@code path} is an executable whose {@code
-     * main()} IS the engine loop (no {@code --engine-server} flag). {@code LIBEXEC}: {@code path}
-     * is a directory of engine jars, launched as {@code <managed-jdk>/bin/java … -cp '<path>/*'
-     * dev.jkbuild.cli.EngineMain} — the engine is a plain JVM app, never a native image. {@code
-     * FALLBACK}: {@code path} is the client binary itself, re-invoked with the flag. {@code how}
-     * is the one-word provenance for the log header.
+     * main()} IS the engine loop (no {@code --engine-server} flag). {@code JAR}: {@code path} is
+     * the engine's fat jar ({@code ~/.jk/lib/jk-engine-<version>.jar}), launched as {@code
+     * <managed-jdk>/bin/java … -cp <path> dev.jkbuild.cli.EngineMain} — the engine is a plain JVM
+     * app, never a native image. {@code FALLBACK}: {@code path} is the client binary itself,
+     * re-invoked with the flag. {@code how} is the one-word provenance for the log header.
      */
     record EngineArtifact(Kind kind, String path, String how) {
         enum Kind {
             EXE,
-            LIBEXEC,
+            JAR,
             FALLBACK
         }
     }
 
     /**
-     * Resolution order for the engine artifact (docs/engine.md lifecycle §2, slim-client Stage 5):
+     * Resolution order for the engine artifact (docs/engine.md lifecycle §2):
      * (a) the {@code JK_ENGINE_EXE} env override — always treated as a dedicated engine
-     * executable; (b) a {@code libexec/jk-engine/} jar directory next to the resolved client
-     * binary — the native dist's layout, hosted on the jk-managed JDK; (c) the client binary
-     * itself with {@code --engine-server} — the JVM dist (installDist ships no second start
-     * script) and dev workflows.
+     * executable; (b) {@code jk-engine-<version>.jar} in {@code libDir} ({@code ~/.jk/lib/}) whose
+     * filename version equals this client's version — the installed layout, hosted on the
+     * jk-managed JDK; a missing or version-skewed jar never launches; (c) the client binary itself
+     * with {@code --engine-server} — the JVM dist (installDist ships no second start script) and
+     * dev workflows.
      */
-    static EngineArtifact resolveEngineArtifact(String envOverride, String jkExe) {
+    static EngineArtifact resolveEngineArtifact(String envOverride, String jkExe, String version, Path libDir) {
         if (envOverride != null && !envOverride.isBlank()) {
             return new EngineArtifact(EngineArtifact.Kind.EXE, envOverride, "JK_ENGINE_EXE");
         }
-        Path clientDir = Path.of(jkExe).toAbsolutePath().getParent();
-        if (clientDir != null) {
-            Path libDir = clientDir.resolve("libexec").resolve("jk-engine");
-            if (hasJars(libDir)) {
-                return new EngineArtifact(EngineArtifact.Kind.LIBEXEC, libDir.toString(), "libexec");
-            }
+        Path engineJar = libDir.resolve("jk-engine-" + version + ".jar");
+        if (Files.isRegularFile(engineJar)) {
+            return new EngineArtifact(EngineArtifact.Kind.JAR, engineJar.toString(), "lib");
         }
         return new EngineArtifact(EngineArtifact.Kind.FALLBACK, jkExe, "fallback");
-    }
-
-    /** An engine jar directory counts only when it actually holds jars — an empty or missing
-     * {@code libexec/jk-engine/} falls through to the {@code --engine-server} fallback. */
-    private static boolean hasJars(Path dir) {
-        if (!Files.isDirectory(dir)) return false;
-        try (var jars = Files.newDirectoryStream(dir, "*.jar")) {
-            return jars.iterator().hasNext();
-        } catch (IOException e) {
-            return false;
-        }
     }
 
     /**
@@ -1002,7 +989,7 @@ public final class EngineClient {
      * project's JDK pin: one engine serves many workspaces.
      */
     private static Path engineJavaHome() throws IOException {
-        int floor = Runtime.version().feature(); // the release that compiled this client AND the engine jars
+        int floor = Runtime.version().feature(); // the release that compiled this client AND the engine jar
         GlobalDefaultJdk defaults = GlobalDefaultJdk.current();
         for (Optional<Path> candidate : List.of(defaults.currentHome(), defaults.defaultHome())) {
             if (candidate.isPresent() && meetsFloor(candidate.get(), floor)) return candidate.get();
@@ -1029,21 +1016,20 @@ public final class EngineClient {
     }
 
     /**
-     * The engine's AOT cache path, keyed to the current jar set (sorted name:size:mtime lines,
-     * hashed) so a changed {@code libexec/jk-engine/} yields a fresh key — the previous key's
-     * cache would be silently ignored by {@code AOTMode=auto} forever, never retrained. Caches
-     * for previous jar sets are deleted best-effort while resolving the current one.
+     * The engine's AOT cache path, keyed to the engine jar (name:size:mtime, hashed) so a changed
+     * {@code jk-engine-<version>.jar} yields a fresh key — the previous key's cache would be
+     * silently ignored by {@code AOTMode=auto} forever, never retrained. Caches for previous jars
+     * are deleted best-effort while resolving the current one.
      */
-    private static Path aotCachePath(EnginePaths.Paths paths, Path libDir) {
+    private static Path aotCachePath(EnginePaths.Paths paths, Path engineJar) {
         StringBuilder signature = new StringBuilder();
-        try (var jars = Files.newDirectoryStream(libDir, "*.jar")) {
-            List<String> entries = new ArrayList<>();
-            for (Path jar : jars) {
-                entries.add(jar.getFileName() + ":" + Files.size(jar) + ":"
-                        + Files.getLastModifiedTime(jar).toMillis());
-            }
-            java.util.Collections.sort(entries);
-            entries.forEach(e -> signature.append(e).append('\n'));
+        try {
+            signature
+                    .append(engineJar.getFileName())
+                    .append(':')
+                    .append(Files.size(engineJar))
+                    .append(':')
+                    .append(Files.getLastModifiedTime(engineJar).toMillis());
         } catch (IOException e) {
             signature.append("unreadable");
         }
@@ -1080,10 +1066,11 @@ public final class EngineClient {
     }
 
     /** Spawn a fresh engine, detached — mirrors {@link CachePruneScheduler}'s spawn-and-forget pattern. */
-    private static void spawn(EnginePaths.Paths paths) throws IOException {
+    private static void spawn(EnginePaths.Paths paths, String clientVersion) throws IOException {
         String jkExe = CachePruneScheduler.resolveJkExe()
                 .orElseThrow(() -> new IOException("could not resolve the running jk binary's path"));
-        EngineArtifact engine = resolveEngineArtifact(System.getenv("JK_ENGINE_EXE"), jkExe);
+        EngineArtifact engine = resolveEngineArtifact(
+                System.getenv("JK_ENGINE_EXE"), jkExe, clientVersion, dev.jkbuild.util.JkDirs.lib());
         JkEngineConfig config = JkEngineConfig.resolve();
         Files.createDirectories(paths.dir());
         rotateLog(paths.log());
@@ -1099,15 +1086,14 @@ public final class EngineClient {
         // ride along differs per artifact form below; user config max-heap-mb stays authoritative
         // everywhere.
         switch (engine.kind()) {
-            case LIBEXEC -> {
-                // The native dist's engine: a plain JVM app on the jk-managed JDK. Tuning is
-                // ordinary JVM flags — SerialGC (lowest footprint/latency; a ≤256 MiB heap is well
-                // inside its comfort zone) plus the JkEngineConfig heap numbers. The long-lived
-                // engine is exactly what HotSpot's JIT and SHA-256 intrinsics want; there is no
-                // native engine image. --enable-native-access: PosixDetach's setsid(2) FFM
-                // downcall without the JDK's restricted-method warning. The trailing separator-*
-                // is the java launcher's own classpath wildcard (no shell involved), so the jar
-                // set can change across versions without this spawn line knowing.
+            case JAR -> {
+                // The installed engine: a plain JVM app on the jk-managed JDK, one fat jar on the
+                // classpath. Tuning is ordinary JVM flags — SerialGC (lowest footprint/latency; a
+                // ≤256 MiB heap is well inside its comfort zone) plus the JkEngineConfig heap
+                // numbers. The long-lived engine is exactly what HotSpot's JIT and SHA-256
+                // intrinsics want; there is no native engine image. --enable-native-access:
+                // PosixDetach's setsid(2) FFM downcall without the JDK's restricted-method
+                // warning.
                 command.add(engineJavaHome()
                         .resolve("bin")
                         .resolve(HostPlatform.isWindows() ? "java.exe" : "java")
@@ -1116,7 +1102,7 @@ public final class EngineClient {
                 // AOT cache (JEP 514, JDK 25+): pre-parsed class metadata AND AOT-compiled code,
                 // taming the cold engine's JIT-warmup tail. Engine cold start is user-visible
                 // latency — the first command after an idle timeout waits for this spawn. The
-                // cache file is keyed to the exact jar set because AOTMode=auto silently ignores
+                // cache file is keyed to the exact jar because AOTMode=auto silently ignores
                 // a mismatched cache: an unkeyed name would stop helping at the first upgrade and
                 // never retrain. First spawn after a jar change trains (-XX:AOTCacheOutput,
                 // assembled on clean exit — idle recycling makes that routine); every later cold
@@ -1129,7 +1115,7 @@ public final class EngineClient {
                 }
                 command.add("--enable-native-access=ALL-UNNAMED");
                 command.add("-cp");
-                command.add(engine.path() + java.io.File.separator + "*");
+                command.add(engine.path());
                 command.add("dev.jkbuild.cli.EngineMain");
             }
             case EXE -> {
@@ -1145,7 +1131,7 @@ public final class EngineClient {
             case FALLBACK -> {
                 // This same binary re-invoked with --engine-server. On the JVM dist the flag finds
                 // EngineMain through the InProcessEngine seam; on the slim native client (which
-                // links no engine code) the child reports plainly that the engine jars are missing
+                // links no engine code) the child reports plainly that the engine jar is missing
                 // and exits — the ensure-running timeout then surfaces that log line.
                 command.add(engine.path());
                 command.add("--engine-server");
@@ -1158,7 +1144,7 @@ public final class EngineClient {
         ProcessBuilder pb = new ProcessBuilder(command);
         // On the JVM dist the sizing knob is the start script's JVM-options env var — appended
         // last so it wins over any blanket JK_OPTS the user exported. SerialGC for the same
-        // reasons as the LIBEXEC spawn line.
+        // reasons as the JAR spawn line.
         if (config.heapCapped() && engine.kind() == EngineArtifact.Kind.FALLBACK && !isNativeImage()) {
             String opts = System.getenv("JK_OPTS");
             String sizing = "-XX:+UseSerialGC -Xms" + config.minHeapMb() + "m -Xmx" + config.maxHeapMb() + "m";

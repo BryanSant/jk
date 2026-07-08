@@ -34,7 +34,7 @@ import java.util.List;
  *       install.
  * </ul>
  *
- * <p>The "make install" half — launcher/binary into {@code ~/.jk/bin} + {@code libexec} — is
+ * <p>The "make install" half — launcher/binary into {@code ~/.jk/bin} + {@code ~/.jk/lib} — is
  * deliberately <em>not</em> here: it writes user-home shim files the client owns, so it runs
  * client-side after the hosted goal succeeds (see {@code InstallCommand}).
  */

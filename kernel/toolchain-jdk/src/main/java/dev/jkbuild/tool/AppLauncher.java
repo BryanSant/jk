@@ -15,11 +15,11 @@ import java.util.Set;
 /**
  * Writes a launcher script for an application installed by {@code jk install} (the {@code make
  * install} step). Unlike {@link ToolLauncher} — which embeds CAS paths and writes {@code env.json}
- * — this launcher points at an explicit set of jars under {@code ~/.jk/libexec} (the app jar plus
+ * — this launcher points at an explicit set of jars under {@code ~/.jk/lib} (the app jar plus
  * its hard-linked runtime dependencies, or a single fat jar).
  *
- * <p>The classpath is written out as an explicit jar list (not a {@code libexec/*} glob) so
- * multiple installed apps sharing the flat libexec directory never cross-contaminate each other's
+ * <p>The classpath is written out as an explicit jar list (not a {@code lib/*} glob) so
+ * multiple installed apps sharing the flat lib directory never cross-contaminate each other's
  * classpath.
  */
 public final class AppLauncher {

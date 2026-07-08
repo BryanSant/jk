@@ -382,10 +382,11 @@ IntelliJ / VS Code integration, the benchmark dashboard, and the GA release
 artifact pipeline.
 
 The shippable layout is built via `./gradlew dist` under `build/dist/`: the
-slim native `jk` client (`:cli:nativeCompile`) next to `libexec/jk-engine/`,
-the engine's jar directory — the engine runs as a normal Java app on the
-jk-managed JDK, never as a native image. A runnable all-JVM distribution is
-produced by `./gradlew :cli-engine:installDist` under `cli-engine/build/install/`.
+slim native `jk` client (`:cli:nativeCompile`) next to `lib/jk-engine-<version>.jar`,
+the engine's fat jar (installed to `~/.jk/lib/`) — the engine runs as a normal
+Java app on the jk-managed JDK, never as a native image. A runnable all-JVM
+distribution is produced by `./gradlew :cli-engine:installDist` under
+`cli-engine/build/install/`.
 
 ## Documentation
 

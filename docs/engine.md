@@ -42,8 +42,8 @@ Three things are worth knowing:
 
 ## Lifecycle
 
-The native dist ships the engine as a plain jar directory — `libexec/jk-engine/`, built from the
-same sources at the same version as the `jk` client that spawns it (see
+The native dist ships the engine as a single fat jar — `~/.jk/lib/jk-engine-<version>.jar`, built
+from the same sources at the same version as the `jk` client that spawns it (see
 [Two artifacts](#two-artifacts) below). The engine is a normal Java app on the jk-managed JDK,
 never a native image; the client — a JDK installer and JVM launcher by trade — launches it. The
 `jk` client binary itself can *also* run the engine role via an internal, hidden `--engine-server`
@@ -59,17 +59,18 @@ and the fallback when no engine artifact is installed. Both routes execute the e
    file, not the caller's terminal), and waits (a few seconds, bounded) for the new engine's socket
    to come up. Which artifact it spawns is resolved in order: **(a)** a `JK_ENGINE_EXE` env
    override (always treated as a dedicated engine executable — its `main` is the engine loop, no
-   flag); **(b)** a `libexec/jk-engine/` jar directory sitting next to the resolved `jk` client
-   binary — the native dist's layout, launched as `<managed-jdk>/bin/java -XX:+UseSerialGC
-   -Xms…/-Xmx… -cp 'libexec/jk-engine/*' dev.jkbuild.cli.EngineMain` on the jk-managed default
-   JDK. The host JDK must meet the engine's runtime floor (the release that compiled the client
-   and jars — a global default pinned older for *project* builds is skipped, since it governs
+   flag); **(b)** `~/.jk/lib/jk-engine-<version>.jar` — the installed layout, where the filename's
+   version must equal the client's own version (a missing or version-skewed jar never launches) —
+   launched as `<managed-jdk>/bin/java -XX:+UseSerialGC
+   -Xms…/-Xmx… -cp ~/.jk/lib/jk-engine-<version>.jar dev.jkbuild.cli.EngineMain` on the jk-managed
+   default JDK. The host JDK must meet the engine's runtime floor (the release that compiled the
+   client and jar — a global default pinned older for *project* builds is skipped, since it governs
    worker JVMs, not the engine host); when nothing installed qualifies, the client installs
    exactly the floor release, with no global-default side effects. The spawn line also carries
-   an AOT cache (JEP 514, `<engine-state>/engine-<jarset-key>.aot`): the first spawn after a jar
+   an AOT cache (JEP 514, `<engine-state>/engine-<jar-key>.aot`): the first spawn after a jar
    change trains it (`-XX:AOTCacheOutput`, assembled on clean exit — idle recycling makes that
    routine), and every later cold start maps pre-parsed class metadata plus AOT-compiled code,
-   taming the fresh JVM's JIT-warmup tail. The key ties the cache to the exact jar set because
+   taming the fresh JVM's JIT-warmup tail. The key ties the cache to the exact jar because
    `AOTMode=auto` silently ignores a mismatched cache — an unkeyed file would stop helping at
    the first upgrade and never retrain; **(c)**
    the `jk` binary itself, re-invoked with the internal `--engine-server` flag — the JVM dist and
@@ -125,7 +126,7 @@ command spin up a fresh one, or just wait for the current one to naturally recyc
 
 ## Two artifacts
 
-The native dist is one image plus one jar directory, with two *classpaths* (slim-client Stages
+The native dist is one image plus one fat jar, with two *classpaths* (slim-client Stages
 4+5 — see [slim-client.md](architecture/slim-client.md)), because the two processes have opposite
 performance budgets:
 
@@ -139,13 +140,13 @@ performance budgets:
   traffic, FFM for the terminal) plus the GraalVM runtime; `MinimalXml` keeps the `java.xml`
   module (Xerces, ~3.7 MiB of image) off the classpath the same way `MinimalTar` avoids
   commons-compress.
-- **`libexec/jk-engine/` (the engine, `:cli-engine:installEngineLibs`)** is a long-lived resident
-  process, which is exactly what a JVM is best at — so it is a plain Java app, never a native
-  image. The client spawns it on the jk-managed JDK; HotSpot's JIT and SHA-256 intrinsics serve
-  its hashing-heavy hot path (CAS and classpath fingerprinting on every no-op build), and its
+- **`~/.jk/lib/jk-engine-<version>.jar` (the engine, `:cli-engine:shadowJar`)** is a long-lived
+  resident process, which is exactly what a JVM is best at — so it is a plain Java app, never a
+  native image. The client spawns it on the jk-managed JDK; HotSpot's JIT and SHA-256 intrinsics
+  serve its hashing-heavy hot path (CAS and classpath fingerprinting on every no-op build), and its
   profile is ordinary JVM flags on the spawn line: SerialGC with the 256 MiB / 96 MiB heap
   numbers from `max-heap-mb`. Its `main` (`EngineMain`) *is* the engine-server loop — no verb
-  routing, no flag. Building it is `./gradlew dist` territory (jars, seconds) — no native-image
+  routing, no flag. Building it is `./gradlew dist` territory (one jar, seconds) — no native-image
   compile, no multi-gigabyte builder process.
 
 Both bake the same `JkVersion`, so the handshake's [version-skew](#version-skew) check works
@@ -153,7 +154,7 @@ identically whichever artifact is serving. The JVM dist (`:cli-engine:installDis
 stays a single start script: everything is on its classpath, and the JVM engine role is reached
 via the same hidden `--engine-server` flag the fallback spawn path uses — on the JVM dist that
 flag finds `EngineMain` through the `InProcessEngine` ServiceLoader seam; on the slim client
-image (where no engine code exists) it reports plainly that the engine jars are required.
+image (where no engine code exists) it reports plainly that the engine jar is required.
 
 ## Manual control
 
@@ -276,7 +277,7 @@ worker forks engine-side) and the build + cache-install of the project (jar/pom 
 the local repo index). Pre-flight stays client-side, same rule as always: GraalVM resolution — and,
 with consent, its install — happens in the client before the `native`/`install` request is sent
 (the prompt owns the terminal; the engine only ever runs an already-resolved toolchain), and `jk
-install`'s "make install" (launcher/binary into `~/.jk/bin` + `libexec`) runs client-side after the
+install`'s "make install" (launcher/binary into `~/.jk/bin` + `~/.jk/lib`) runs client-side after the
 hosted goal succeeds. `jk explain`'s build-time estimate also moved engine-side: the request
 carries the plan-affecting build options, `BuildService.estimateEtaMillis` computes the
 schedule-aware ETA next to the plan (closing the long-standing client-side

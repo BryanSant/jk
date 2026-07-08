@@ -92,8 +92,8 @@ class InstallCommandTest {
                 tempDir.resolve("state").toString(),
                 "--bin-dir",
                 bin.toString(),
-                "--libexec-dir",
-                tempDir.resolve("libexec").toString(),
+                "--lib-dir",
+                tempDir.resolve("lib").toString(),
                 "--m2-dir",
                 m2.toString());
         // A library is not a usage error any more — it cache-installs.
@@ -109,7 +109,7 @@ class InstallCommandTest {
 
     @Test
     @DisabledOnOs(OS.WINDOWS) // POSIX launcher only.
-    void application_install_writes_libexec_layout_and_launcher(@TempDir Path tempDir) throws Exception {
+    void application_install_writes_lib_layout_and_launcher(@TempDir Path tempDir) throws Exception {
         Jk.execute(
                 "new",
                 "--group",
@@ -130,7 +130,7 @@ class InstallCommandTest {
                 """);
 
         Path bin = tempDir.resolve("bin");
-        Path libexec = tempDir.resolve("libexec");
+        Path lib = tempDir.resolve("lib");
         int exit = Jk.execute(
                 "install",
                 "-C",
@@ -141,17 +141,17 @@ class InstallCommandTest {
                 tempDir.resolve("state").toString(),
                 "--bin-dir",
                 bin.toString(),
-                "--libexec-dir",
-                libexec.toString());
+                "--lib-dir",
+                lib.toString());
         assertThat(exit).isEqualTo(0);
 
         Path launcher = bin.resolve("widget");
-        Path appJar = libexec.resolve("widget-0.1.0.jar");
+        Path appJar = lib.resolve("widget-0.1.0.jar");
         assertThat(launcher).exists();
         assertThat(appJar).exists();
         String script = Files.readString(launcher);
         assertThat(script).contains("com.example.Main");
-        assertThat(script).contains(appJar.toString()); // classpath points at libexec
+        assertThat(script).contains(appJar.toString()); // classpath points at lib
     }
 
     @Test
@@ -180,8 +180,8 @@ class InstallCommandTest {
                 tempDir.resolve("state").toString(),
                 "--bin-dir",
                 tempDir.resolve("bin").toString(),
-                "--libexec-dir",
-                tempDir.resolve("libexec").toString(),
+                "--lib-dir",
+                tempDir.resolve("lib").toString(),
                 "--m2-dir",
                 m2.toString());
         assertThat(exit).isEqualTo(0);
