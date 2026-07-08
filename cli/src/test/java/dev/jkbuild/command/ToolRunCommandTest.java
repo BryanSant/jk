@@ -18,6 +18,7 @@ import java.util.jar.JarOutputStream;
 import java.util.jar.Manifest;
 import java.util.zip.ZipEntry;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -28,6 +29,15 @@ import org.junit.jupiter.api.io.TempDir;
  * RunCommandTest} when {@code jk run} stopped interpreting file arguments.
  */
 class ToolRunCommandTest {
+
+    // These tests drive the real fetch pipeline against a mock Maven server; fetched
+    // artifacts mirror into the Maven local repo. Point that at a throwaway dir (see
+    // M2Dirs) so stub artifacts never overwrite the developer's real ~/.m2 — the
+    // fixture reuses real coordinates (junit-jupiter et al).
+    @BeforeAll
+    static void isolateM2(@TempDir Path m2) {
+        System.setProperty("jk.m2.local", m2.toString());
+    }
 
     private HttpServer server;
     private URI base;

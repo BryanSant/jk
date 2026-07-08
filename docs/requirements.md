@@ -19,7 +19,7 @@ It exists because Maven is too verbose and non-reproducible, Gradle is too progr
 ### Design tenets
 
 1. **Declarative core, code at the edges.** `jk.toml` is data. Custom logic lives in single-file Java 25 task scripts with declared inputs and outputs.
-2. **Native binary, sub-50ms cold start.** A resident daemon (see §"Process model" and [`daemon.md`](./daemon.md)) hosts the engine across invocations so concurrent builds can coordinate memory safely — but the CLI itself stays a native binary with no JVM warmup tax, and a machine with no daemon running yet still gets a fast first build.
+2. **Native binary, sub-50ms cold start.** A resident engine (see §"Process model" and [`engine.md`](./engine.md)) hosts the build across invocations so concurrent builds can coordinate memory safely — but the CLI itself stays a native binary with no JVM warmup tax, and a machine with no engine running yet still gets a fast first build.
 3. **Reproducibility is a default, not a flag.** Locked deps, locked toolchain, scrubbed env, sorted jar entries, deterministic timestamps. Bit-identical artifacts on every box.
 4. **Diagnostics are a product, not infrastructure.** PubGrub-style English error messages, `jk why`, `jk explain`, `jk why-rebuilt`, all offline.
 5. **Adoption first.** `jk mvn` and `jk gradle` passthroughs from day one. Best-effort `pom.xml`/`build.gradle(.kts)` import. Round-trip POM export for publishing.
@@ -199,16 +199,16 @@ defaults.
 
 ### Process model
 
-- **A resident daemon hosts the engine.** Reversed from the original "no daemon" design: per-process
+- **A resident engine hosts the build.** Reversed from the original "no daemon" design: per-process
   memory planning can't stop two concurrent `jk` invocations from independently overcommitting the
-  same machine's RAM, so one long-lived daemon (started lazily, self-terminating when idle) now owns
+  same machine's RAM, so one long-lived engine (started lazily, self-terminating when idle) now owns
   dependency resolution, the build pipeline, and worker-JVM/memory accounting across every concurrent
-  request. The `jk` binary itself plays both roles (client and daemon) — see [`daemon.md`](./daemon.md)
+  request. The `jk` binary itself plays both roles (client and engine) — see [`engine.md`](./engine.md)
   for the full design, lifecycle, and wire protocol.
 - **The CLI stays a fast, disposable client.** Terminal rendering, shell integration, and JDK
-  management remain per-invocation and daemon-independent; a machine with no daemon running yet still
-  gets a fast first command, since the daemon only starts once something actually needs the engine.
-- **In-process parallelism** (within the daemon). Worker pool sized to `min(cores, 4)` in CI
+  management remain per-invocation and engine-independent; a machine with no engine running yet still
+  gets a fast first command, since the engine only starts once something actually needs it.
+- **In-process parallelism** (within the engine). Worker pool sized to `min(cores, 4)` in CI
   (auto-detected via env), `cores` on developer machines, override via `--jobs`.
 - **Out-of-process forks** only for: javac/kotlinc invocations that need a specific JDK, test JVMs,
   custom task scripts, native-image builds.
@@ -891,10 +891,10 @@ optimize = true
 inherits    = "dev"
 parallelism = "min(cores, 4)"
 tui         = false                 # plain text output
-daemon      = false                 # default for ephemeral, one-shot CI containers
+engine      = false                 # default for ephemeral, one-shot CI containers
 ```
 
-`ci` is auto-selected when the standard CI env vars are present (`CI`, `GITHUB_ACTIONS`, `GITLAB_CI`, etc.). Explicit `--profile=...` overrides. `daemon = false` here is a sane default for a fresh, single-build container — spawning a background process that outlives one job is pure overhead — not a statement that jk has no daemon (see [`daemon.md`](./daemon.md)). A persistent self-hosted CI runner that executes many jobs should instead set `[daemon] idle-minutes = -1` in `~/.jk/config.toml` to keep one daemon warm across jobs.
+`ci` is auto-selected when the standard CI env vars are present (`CI`, `GITHUB_ACTIONS`, `GITLAB_CI`, etc.). Explicit `--profile=...` overrides. `engine = false` here is a sane default for a fresh, single-build container — spawning a background process that outlives one job is pure overhead — not a statement that jk has no resident engine (see [`engine.md`](./engine.md)). A persistent self-hosted CI runner that executes many jobs should instead set `[engine] idle-minutes = -1` in `~/.jk/config.toml` to keep one engine warm across jobs.
 
 ---
 

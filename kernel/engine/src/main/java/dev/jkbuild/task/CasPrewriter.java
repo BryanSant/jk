@@ -158,8 +158,8 @@ public final class CasPrewriter implements AutoCloseable {
     }
 
     private String hashAndLink(Path file) throws IOException {
-        byte[] bytes = Files.readAllBytes(file);
-        String hex = Hashing.sha256Hex(bytes);
+        // Streamed hash + hard-link — the file's bytes never land in the heap.
+        String hex = Hashing.sha256Hex(file);
         cas.putByLink(file, hex);
         return hex;
     }

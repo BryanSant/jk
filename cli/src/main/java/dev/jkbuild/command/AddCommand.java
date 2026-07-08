@@ -355,8 +355,8 @@ public final class AddCommand implements CliCommand {
         // lock and build time (see ClasspathResolver), so no Maven-layout mirroring is needed.
         Path cache = JkDirs.cache();
         Files.createDirectories(cache);
-        byte[] bytes = Files.readAllBytes(filePath);
-        String sha256 = Hashing.sha256Hex(bytes);
+        // Streamed hash + hard-link — the jar never has to fit in the CLI's small heap.
+        String sha256 = Hashing.sha256Hex(filePath);
         Cas cas = new Cas(cache);
         cas.putByLink(filePath, sha256);
 

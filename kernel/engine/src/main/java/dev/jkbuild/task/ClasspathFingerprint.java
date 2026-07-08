@@ -54,11 +54,27 @@ public final class ClasspathFingerprint {
         if (isCasPath(abs)) return "cas:" + abs; // path encodes content hash
         if (Files.isDirectory(p)) return "dir:" + hashTree(p);
         if (Files.isRegularFile(p)) {
+            // Stat fast-path: an unchanged (size+mtime, settled) file keeps its memoized
+            // fingerprint — this is what stops every build from re-inflating and re-hashing
+            // each non-CAS jar (repos/ deps, sibling module jars, worker fat jars). The memo
+            // is validated per-read and fails open to the content hash below.
+            long size = Files.size(p);
+            long mtime = Files.getLastModifiedTime(p).toMillis();
+            String memoized = FileHashMemo.lookup(p, size, mtime);
+            if (memoized != null && (memoized.startsWith("jar:") || memoized.startsWith("file:"))) {
+                return memoized;
+            }
+            String token;
             if (isArchive(abs)) {
                 String logical = hashArchive(p);
-                if (logical != null) return "jar:" + logical; // logical content, not raw bytes
+                token = logical != null
+                        ? "jar:" + logical // logical content, not raw bytes
+                        : "file:" + Hashing.sha256Hex(p);
+            } else {
+                token = "file:" + Hashing.sha256Hex(p);
             }
-            return "file:" + Hashing.sha256Hex(p);
+            FileHashMemo.store(p, size, mtime, token);
+            return token;
         }
         return "missing:" + abs;
     }

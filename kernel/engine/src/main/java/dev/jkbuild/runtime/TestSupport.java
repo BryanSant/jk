@@ -207,11 +207,23 @@ public final class TestSupport {
         // Surface javac diagnostics by severity — errors fail, warnings (e.g.
         // deprecation/unchecked) are shown but don't. Mirrors the main-compile
         // phase so test sources report warnings the same way.
+        boolean errored = false;
         for (CompileResult.Diagnostic d : r.diagnostics()) {
-            if (d.severity() == CompileResult.Severity.ERROR) ctx.error("javac", d.describe());
-            else ctx.warn("javac", d.describe());
+            if (d.severity() == CompileResult.Severity.ERROR) {
+                ctx.error("javac", d.describe());
+                errored = true;
+            } else {
+                ctx.warn("javac", d.describe());
+            }
         }
-        if (!r.success()) return false;
+        if (!r.success()) {
+            // A failure must never be silent: if the compiler produced no ERROR
+            // diagnostic (crash, swallowed output), say so explicitly.
+            if (!errored) {
+                ctx.error("javac", "test compile failed without compiler diagnostics (outcome: " + r.outcome() + ")");
+            }
+            return false;
+        }
         ctx.label(
                 r.cacheHit()
                         ? taskId + ": cache hit " + r.actionKey().substring(0, 8)

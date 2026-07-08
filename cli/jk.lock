@@ -1,5 +1,5 @@
 version = 1
-generated-by = "jk 0.1.0-SNAPSHOT"
+generated-by = "jk 0.10.0-SNAPSHOT"
 resolution-algorithm = "pubgrub-v1"
 
 [[artifact]]
@@ -53,6 +53,23 @@ scopes   = ["test"]
 deps = [
   "org.bouncycastle:bcprov-jdk18on@1.84",
 ]
+
+[[artifact]]
+name     = "org.graalvm.sdk:nativeimage"
+version  = "25.1.3"
+source   = "central+https://repo.maven.apache.org/maven2/"
+checksum = "sha256:dc0516fb3007c33ebf0b7c8b654c4a5a8230e974c4b5f98bc67cbbfac725c40a"
+scopes   = ["provided"]
+deps = [
+  "org.graalvm.sdk:word@25.1.3",
+]
+
+[[artifact]]
+name     = "org.graalvm.sdk:word"
+version  = "25.1.3"
+source   = "central+https://repo.maven.apache.org/maven2/"
+checksum = "sha256:5b4aa7d7ef8d79cc22afaeab7396be832253140dd7758ff0a2ee0de853a6d57a"
+scopes   = ["provided"]
 
 [[artifact]]
 name     = "org.jline:jline-native"

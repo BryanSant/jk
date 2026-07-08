@@ -380,18 +380,40 @@ Independent re-audit of the invariants after all items landed (each verified by 
   `indexOf(':')` are the documented display-coloring (`DependencyTree`, `Diagnostics`) and
   lockfile-guard (`LockOrchestrator`) sites, intentionally left.
 
-Remaining documented follow-ups (not regressions — future work): **L7** `ScopedValue` propagation to
-the `JkThreads.io()` worker pool (`StructuredTaskScope`/per-task rebinding) for fully-isolated
-multi-tenant builds; **L8** first-class `installJdk`/single-module `build` facades (their mechanical
-cores already run on engine primitives); **Q2** an optional output-normalizing pass to dedup the CLI
-coordinate display-coloring. The `SessionCancel` bind-once DI seam and the accepted concurrency
+Remaining documented follow-ups (not regressions — future work): ~~**L7** `ScopedValue` propagation
+to the `JkThreads.io()` worker pool~~ (DONE since — both `JkThreads` pools are wrapped in
+`ContextPropagatingExecutorService`, which rebinds the session per submitted task via the
+`ContextPropagator` hook `SessionContext` installs); **L8** first-class `installJdk`/single-module
+`build` facades (their mechanical cores already run on engine primitives; `installJdk` has since
+landed as `JdkService`); **Q2** an optional output-normalizing pass to dedup the CLI coordinate
+display-coloring. The `SessionCancel` bind-once DI seam and the accepted concurrency
 primitives (`WorkerSlots`/`TEST_GATE`/`HeapPlan.heapPlan`) are not request-data globals.
 
 Verdict: every audited gap is FIXED or a documented, rationalized deferral; all logged compromises are
 resolved or intentional; the build is green.
 
+## Post-review regression: the daemon adapter re-leaked `BuildUnit` (2026-07-07, FIXED)
+
+The resident-daemon work (landed after the final review above) added
+`cli/.../engine/EngineBuildListenerAdapter.java` (the engine adapter, in the then-`daemon` package), which reconstructed `BuildService.ModulePlan` and
+`BuildPlanForecast.Module` from wire events by directly constructing synthetic
+`new BuildGraph.BuildUnit(...)` — re-breaking the "zero `BuildGraph.BuildUnit` in `cli/src/main`"
+invariant (M6/L8) that the review had just verified. The constructors were public precisely because
+the adapter needed them.
+
+**Fix (same day):** the reconstruction moved engine-side behind two wire factories —
+`BuildService.ModulePlan.fromWire(dir, coord, goal, weight, fullyCached, cache)` and
+`BuildPlanForecast.Module.fromWire(dir, coord, phases, …)`. Both `BuildUnit`-taking constructors
+dropped to package-private, and `BuildGraph.BuildUnit` itself is now **package-private**, so the
+boundary is compiler-enforced for good: no code outside `dev.jkbuild.runtime` can name or construct
+a unit. The adapter names only `BuildService`/`BuildPlanForecast` facade types. Re-verified: zero
+`BuildGraph.BuildUnit` references in `cli/src/main`; `NativeCommand`'s `orderModules(Map)` remains
+the sole (front-end-safe) `BuildGraph` mention.
+
 ## Change log
 
+- 2026-07-07 — daemon-adapter `BuildUnit` regression found in a docs-vs-code review and fixed
+  (`fromWire` factories; `BuildUnit` package-private, boundary now compiler-enforced).
 - 2026-07-06 — document created from the audit; all items OPEN.
 - 2026-07-06 — Quick (Q1/Q2/Q3), Medium (M4/M5/M6), and Large (L7/L8) all landed green; Q3 layering
   compromise revisited and resolved (`RepoSource`); re-audit + final review complete.

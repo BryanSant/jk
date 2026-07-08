@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
-package dev.jkbuild.daemon;
+package dev.jkbuild.engine;
 
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.config.JkConfig;
-import dev.jkbuild.config.JkDaemonConfig;
+import dev.jkbuild.config.JkEngineConfig;
 import dev.jkbuild.config.Session;
 import dev.jkbuild.config.SessionContext;
-import dev.jkbuild.daemon.protocol.DaemonProtocol;
+import dev.jkbuild.engine.protocol.EngineProtocol;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.plugin.protocol.Ndjson;
 import dev.jkbuild.run.GoalListener;
@@ -17,6 +17,7 @@ import dev.jkbuild.runtime.BuildService;
 import dev.jkbuild.runtime.WorkspaceBuildListener;
 import dev.jkbuild.worker.HeapPlan;
 import dev.jkbuild.worker.JvmOptions;
+import dev.jkbuild.worker.MemoryProbe;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.IOException;
@@ -47,21 +48,21 @@ import java.util.function.Consumer;
 import java.util.function.LongSupplier;
 
 /**
- * The daemon's server loop: single-instance election, socket bind, an accept loop that serves the
- * Phase 1 handshake/liveness/status/shutdown protocol on a virtual thread per connection, and the
- * idle-timeout policy. See {@code docs/daemon.md}.
+ * The engine's server loop: single-instance election, socket bind, an accept loop that serves the
+ * handshake/liveness/status/shutdown protocol on a virtual thread per connection, and the
+ * idle-timeout policy. See {@code docs/engine.md}.
  *
- * <p>Not yet hosting any real engine operation (no {@code buildWorkspace} dispatch) — that lands once
- * the wire protocol grows request/event types. This class only proves the daemon can come up, be
- * discovered, report itself, and go back down, either on request or after being idle.
+ * <p>Hosts the real engine operations: workspace builds ({@code buildWorkspace} dispatch), single
+ * project builds and tests, and explain forecasts — each request served on its own connection in
+ * its own {@link Session}, with goal events streamed back over the wire protocol.
  */
-public final class DaemonServer implements AutoCloseable {
+public final class EngineServer implements AutoCloseable {
 
     /** How often the idle-timeout check runs, in real (non-test) operation. */
     private static final long DEFAULT_TICK_MILLIS = 30_000;
 
-    private final DaemonPaths.Paths paths;
-    private final JkDaemonConfig config;
+    private final EnginePaths.Paths paths;
+    private final JkEngineConfig config;
     private final String version;
     private final Consumer<String> log;
     private final long tickMillis;
@@ -71,6 +72,7 @@ public final class DaemonServer implements AutoCloseable {
 
     private final Object lifecycleLock = new Object();
     private final AtomicInteger activeConnections = new AtomicInteger();
+    private final AtomicInteger activePipelines = new AtomicInteger();
     private volatile boolean shuttingDown;
     private volatile boolean hadActivity;
     private volatile long lastActivityAtMillis;
@@ -81,17 +83,17 @@ public final class DaemonServer implements AutoCloseable {
     private ExecutorService connectionExecutor;
     private ScheduledExecutorService idleTicker;
 
-    /** Non-null only on the loopback-TCP transport (Windows) — see {@link DaemonTransport}. */
+    /** Non-null only on the loopback-TCP transport (Windows) — see {@link EngineTransport}. */
     private String expectedToken;
 
-    public DaemonServer(DaemonPaths.Paths paths, JkDaemonConfig config, String version, Consumer<String> log) {
+    public EngineServer(EnginePaths.Paths paths, JkEngineConfig config, String version, Consumer<String> log) {
         this(paths, config, version, log, DEFAULT_TICK_MILLIS, System::currentTimeMillis);
     }
 
     /** Test seam: a short tick interval and an injectable clock, so idle-timeout tests don't sleep for real minutes. */
-    DaemonServer(
-            DaemonPaths.Paths paths,
-            JkDaemonConfig config,
+    EngineServer(
+            EnginePaths.Paths paths,
+            JkEngineConfig config,
             String version,
             Consumer<String> log,
             long tickMillis,
@@ -107,11 +109,11 @@ public final class DaemonServer implements AutoCloseable {
     }
 
     /**
-     * Try to become the daemon and serve until shutdown. Returns {@code false} immediately, having
-     * touched nothing but the lock file, if another daemon already holds {@link
-     * DaemonPaths.Paths#lock()} — the caller (a losing spawn-race participant) should treat that as
+     * Try to become the engine and serve until shutdown. Returns {@code false} immediately, having
+     * touched nothing but the lock file, if another engine already holds {@link
+     * EnginePaths.Paths#lock()} — the caller (a losing spawn-race participant) should treat that as
      * success-by-proxy, not an error. Blocks until the server stops (idle timeout, an explicit {@link
-     * DaemonProtocol#SHUTDOWN}, or {@link #close()}), then returns {@code true}.
+     * EngineProtocol#SHUTDOWN}, or {@link #close()}), then returns {@code true}.
      */
     public boolean run() throws IOException {
         Files.createDirectories(paths.dir());
@@ -124,23 +126,23 @@ public final class DaemonServer implements AutoCloseable {
         if (lock == null) {
             lockChannel.close();
             lockChannel = null;
-            return false; // another daemon already won the election
+            return false; // another engine already won the election
         }
 
         // A stale socket file (left by a killed process) makes bind() fail with "address already in
         // use" even though nothing is listening — safe to remove now: winning the lock proves no live
-        // daemon owns it.
+        // engine owns it.
         Files.deleteIfExists(paths.socket());
         Files.deleteIfExists(paths.token());
 
-        if (DaemonTransport.useLoopbackTcp()) {
+        if (EngineTransport.useLoopbackTcp()) {
             // Windows: no dependable Unix-domain-socket support — bind an ephemeral loopback TCP
-            // port instead, and gate every connection on a shared secret (see DaemonTransport),
+            // port instead, and gate every connection on a shared secret (see EngineTransport),
             // since a TCP port (unlike a socket file) isn't filesystem-permission-gated by default.
             serverChannel = ServerSocketChannel.open();
             serverChannel.bind(new java.net.InetSocketAddress(java.net.InetAddress.getLoopbackAddress(), 0));
             int port = ((java.net.InetSocketAddress) serverChannel.getLocalAddress()).getPort();
-            expectedToken = DaemonTransport.newToken();
+            expectedToken = EngineTransport.newToken();
             Files.writeString(paths.token(), expectedToken);
             Files.writeString(paths.socket(), Integer.toString(port));
         } else {
@@ -150,15 +152,15 @@ public final class DaemonServer implements AutoCloseable {
         writePidFile();
 
         connectionExecutor = Executors.newThreadPerTaskExecutor(
-                Thread.ofVirtual().name("jk-daemon-conn-", 0).factory());
+                Thread.ofVirtual().name("jk-engine-conn-", 0).factory());
         lastActivityAtMillis = clockMillis.getAsLong();
         startIdleTickerIfNeeded();
         planSharedWorkerMemoryOnce();
 
-        log.accept("jk daemon: listening on " + paths.socket() + " (pid " + pid + ")");
+        log.accept("jk engine: listening on " + paths.socket() + " (pid " + pid + ")");
         acceptLoop();
         cleanup();
-        log.accept("jk daemon: stopped");
+        log.accept("jk engine: stopped");
         return true;
     }
 
@@ -171,7 +173,7 @@ public final class DaemonServer implements AutoCloseable {
                 break; // close() / idle-timeout / shutdown message closed the listener
             } catch (IOException e) {
                 if (shuttingDown) break;
-                log.accept("jk daemon: accept failed: " + e.getMessage());
+                log.accept("jk engine: accept failed: " + e.getMessage());
                 continue;
             }
             synchronized (lifecycleLock) {
@@ -186,11 +188,11 @@ public final class DaemonServer implements AutoCloseable {
         }
     }
 
-    /** Loopback-TCP transport only: the connection's first line must be a matching {@link DaemonProtocol#AUTH}. */
+    /** Loopback-TCP transport only: the connection's first line must be a matching {@link EngineProtocol#AUTH}. */
     private boolean authenticate(BufferedReader reader) throws IOException {
         String line = reader.readLine();
         return line != null
-                && DaemonProtocol.AUTH.equals(DaemonProtocol.typeOf(line))
+                && EngineProtocol.AUTH.equals(EngineProtocol.typeOf(line))
                 && expectedToken.equals(Ndjson.str(line, "token"));
     }
 
@@ -205,40 +207,52 @@ public final class DaemonServer implements AutoCloseable {
             }
             String line;
             while ((line = reader.readLine()) != null) {
-                String type = DaemonProtocol.typeOf(line);
+                String type = EngineProtocol.typeOf(line);
                 if (type == null) continue; // ignore malformed/blank lines
                 switch (type) {
-                    case DaemonProtocol.HELLO -> send(writer, DaemonProtocol.helloAck(version, pid, startedAtMillis));
-                    case DaemonProtocol.PING -> send(writer, DaemonProtocol.pong());
-                    case DaemonProtocol.STATUS -> send(
-                            writer,
-                            DaemonProtocol.statusAck(
-                                    version, pid, startedAtMillis, config.idleMinutes(), activeConnections.get()));
-                    case DaemonProtocol.SHUTDOWN -> {
-                        send(writer, DaemonProtocol.bye());
+                    case EngineProtocol.HELLO -> send(writer, EngineProtocol.helloAck(version, pid, startedAtMillis));
+                    case EngineProtocol.PING -> send(writer, EngineProtocol.pong());
+                    case EngineProtocol.STATUS -> {
+                        Runtime rt = Runtime.getRuntime();
+                        long heapCommitted = rt.totalMemory();
+                        send(
+                                writer,
+                                EngineProtocol.statusAck(
+                                        version,
+                                        pid,
+                                        startedAtMillis,
+                                        config.idleMinutes(),
+                                        activeConnections.get(),
+                                        heapCommitted - rt.freeMemory(),
+                                        heapCommitted,
+                                        rt.maxMemory(),
+                                        MemoryProbe.ownRssBytes()));
+                    }
+                    case EngineProtocol.SHUTDOWN -> {
+                        send(writer, EngineProtocol.bye());
                         synchronized (lifecycleLock) {
                             shuttingDown = true;
                             closeServerChannelQuietly();
                         }
                         return;
                     }
-                    case DaemonProtocol.BUILD_REQUEST -> {
+                    case EngineProtocol.BUILD_REQUEST -> {
                         // Owns the rest of this connection's lifecycle: forks the build onto its own
                         // thread and keeps reading this loop for a build-cancel/EOF while it runs.
                         handleBuildRequest(line, reader, writer);
                         return;
                     }
-                    case DaemonProtocol.TEST_REQUEST -> {
+                    case EngineProtocol.TEST_REQUEST -> {
                         // Same shape as BUILD_REQUEST but for a single project's test goal (Phase 3).
                         handleTestRequest(line, reader, writer);
                         return;
                     }
-                    case DaemonProtocol.SINGLE_BUILD_REQUEST -> {
+                    case EngineProtocol.SINGLE_BUILD_REQUEST -> {
                         // Same shape as TEST_REQUEST but a real (non-testOnly) build goal.
                         handleSingleBuildRequest(line, reader, writer);
                         return;
                     }
-                    case DaemonProtocol.EXPLAIN_REQUEST -> {
+                    case EngineProtocol.EXPLAIN_REQUEST -> {
                         // Synchronous read, no worker JVM forked — handled inline, connection continues.
                         handleExplainRequest(line, writer);
                     }
@@ -256,15 +270,15 @@ public final class DaemonServer implements AutoCloseable {
 
     /**
      * Run a workspace build on its own thread (so this method can keep reading the connection for a
-     * {@link DaemonProtocol#BUILD_CANCEL} or EOF meanwhile) and stream every {@link
+     * {@link EngineProtocol#BUILD_CANCEL} or EOF meanwhile) and stream every {@link
      * WorkspaceBuildListener}/{@link GoalListener} callback back as a wire event. Returns once the
      * build finishes and its terminal message has been sent, or the connection drops.
      */
     private void handleBuildRequest(String requestLine, BufferedReader reader, BufferedWriter writer) {
-        handleAsyncGoalRequest(requestLine, reader, writer, "jk-daemon-build-", this::runBuild);
+        handleAsyncGoalRequest(requestLine, reader, writer, "jk-engine-build-", this::runBuild);
     }
 
-    /** A daemon-hosted operation's body: decode the request, run it, stream events to {@code writer}. */
+    /** An engine-hosted operation's body: decode the request, run it, stream events to {@code writer}. */
     @FunctionalInterface
     private interface GoalRunner {
         void run(String requestLine, Session.CancelToken cancelToken, BufferedWriter writer);
@@ -272,7 +286,7 @@ public final class DaemonServer implements AutoCloseable {
 
     /**
      * Fork {@code runner} onto its own thread (so this method can keep reading the connection for a
-     * {@link DaemonProtocol#BUILD_CANCEL} or EOF meanwhile) and wait for it to finish. Shared by every
+     * {@link EngineProtocol#BUILD_CANCEL} or EOF meanwhile) and wait for it to finish. Shared by every
      * request type that owns the rest of its connection's lifecycle ({@link #handleBuildRequest},
      * {@link #handleTestRequest}, {@link #handleSingleBuildRequest}) — they differ only in what
      * {@code runner} actually builds and runs.
@@ -281,30 +295,48 @@ public final class DaemonServer implements AutoCloseable {
             String requestLine, BufferedReader reader, BufferedWriter writer, String threadPrefix, GoalRunner runner) {
         Session.CancelToken cancelToken = Session.CancelToken.live();
         CountDownLatch done = new CountDownLatch(1);
-        Thread.ofVirtual().name(threadPrefix, 0).start(() -> {
-            try {
-                runner.run(requestLine, cancelToken, writer);
-            } finally {
-                done.countDown();
-            }
-        });
+        activePipelines.incrementAndGet();
         try {
-            String line;
-            while (done.getCount() > 0 && (line = reader.readLine()) != null) {
-                if (DaemonProtocol.BUILD_CANCEL.equals(DaemonProtocol.typeOf(line))) {
-                    cancelToken.cancel();
+            Thread.ofVirtual().name(threadPrefix, 0).start(() -> {
+                try {
+                    runner.run(requestLine, cancelToken, writer);
+                } finally {
+                    done.countDown();
                 }
+            });
+            try {
+                String line;
+                while (done.getCount() > 0 && (line = reader.readLine()) != null) {
+                    if (EngineProtocol.BUILD_CANCEL.equals(EngineProtocol.typeOf(line))) {
+                        cancelToken.cancel();
+                    }
+                }
+                if (done.getCount() > 0) {
+                    cancelToken.cancel(); // EOF: the client disconnected — best-effort cancel
+                }
+            } catch (IOException ignored) {
+                cancelToken.cancel();
             }
-            if (done.getCount() > 0) {
-                cancelToken.cancel(); // EOF: the client disconnected — best-effort cancel
+            try {
+                done.await();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
             }
-        } catch (IOException ignored) {
-            cancelToken.cancel();
+        } finally {
+            maybeIdleBoundaryGc();
         }
-        try {
-            done.await();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
+    }
+
+    /**
+     * After the last in-flight pipeline finishes (its terminal message already sent), run one full
+     * collection. SerialGC honors {@code System.gc()} with a compacting full GC that shrinks the
+     * committed heap back toward {@code -Xms}, so the resident engine's footprint between builds
+     * matches its idle target rather than its last build's peak — and the pause lands on an ideal
+     * boundary: no pipeline is running and no client is waiting on anything.
+     */
+    private void maybeIdleBoundaryGc() {
+        if (activePipelines.decrementAndGet() == 0) {
+            System.gc();
         }
     }
 
@@ -322,6 +354,9 @@ public final class DaemonServer implements AutoCloseable {
             boolean parallelTests = Ndjson.bool(requestLine, "parallelTests", false);
             boolean offline = Ndjson.bool(requestLine, "offline", false);
             boolean force = Ndjson.bool(requestLine, "force", false);
+            // Distinct from force: rerun bypasses the action cache / freshness stamps without
+            // implying refresh, so locked dependencies still come from the local CAS (jk verify).
+            boolean rerun = Ndjson.bool(requestLine, "rerun", false);
 
             Path entryDir = Path.of(entryDirStr);
             Path cache = Path.of(cacheStr);
@@ -338,13 +373,13 @@ public final class DaemonServer implements AutoCloseable {
                     skipTests,
                     verbose,
                     maxModuleConcurrency,
-                    null, // let the engine forecast dirty modules itself — see docs/daemon.md
-                    false); // this daemon plans memory once at startup, not per request
+                    null, // let the engine forecast dirty modules itself — see docs/engine.md
+                    false); // this engine plans memory once at startup, not per request
 
             JkConfig config = new JkConfig(
                     Optional.empty(),
                     Optional.of(offline),
-                    Optional.empty(),
+                    Optional.of(rerun),
                     Optional.empty(),
                     Optional.empty(),
                     Optional.empty(),
@@ -363,9 +398,9 @@ public final class DaemonServer implements AutoCloseable {
             WorkspaceBuildListener listener = wireListener(writer);
             BuildService.WorkspaceResult result =
                     SessionContext.where(session, () -> BuildService.buildWorkspace(req, listener));
-            send(writer, DaemonProtocol.workspaceFinish(result.success(), result.exitCode(), result.errors()));
+            send(writer, EngineProtocol.workspaceFinish(result.success(), result.exitCode(), result.errors()));
         } catch (Exception e) {
-            sendQuiet(writer, DaemonProtocol.buildError(String.valueOf(e.getMessage())));
+            sendQuiet(writer, EngineProtocol.buildError(String.valueOf(e.getMessage())));
         }
     }
 
@@ -374,20 +409,20 @@ public final class DaemonServer implements AutoCloseable {
      * onto its own thread and keeps reading the connection for a cancel/EOF meanwhile.
      */
     private void handleTestRequest(String requestLine, BufferedReader reader, BufferedWriter writer) {
-        handleAsyncGoalRequest(requestLine, reader, writer, "jk-daemon-test-", this::runTest);
+        handleAsyncGoalRequest(requestLine, reader, writer, "jk-engine-test-", this::runTest);
     }
 
     /**
      * As {@link #handleTestRequest}, but for a single (non-workspace) project's real build goal — the
-     * daemon-hosted counterpart of {@code BuildCommand.runForDir}.
+     * engine-hosted counterpart of {@code BuildCommand.runForDir}.
      */
     private void handleSingleBuildRequest(String requestLine, BufferedReader reader, BufferedWriter writer) {
-        handleAsyncGoalRequest(requestLine, reader, writer, "jk-daemon-1build-", this::runSingleBuild);
+        handleAsyncGoalRequest(requestLine, reader, writer, "jk-engine-1build-", this::runSingleBuild);
     }
 
     /**
      * Forecast a build via {@link BuildService#explain} and stream the plan as a burst of
-     * module/phase/edge messages — the daemon-hosted counterpart of {@code ExplainCommand}'s call
+     * module/phase/edge messages — the engine-hosted counterpart of {@code ExplainCommand}'s call
      * into the same facade. Synchronous and inline (no worker JVM forked, no cancel/EOF fork needed
      * unlike {@link #handleBuildRequest}/{@link #handleTestRequest}/{@link #handleSingleBuildRequest}).
      */
@@ -401,33 +436,33 @@ public final class DaemonServer implements AutoCloseable {
             BuildService.ExplainPlan plan = BuildService.explain(entryDir, entryBuild, cache);
             if (plan.hasErrors()) {
                 for (String err : plan.errors()) {
-                    sendQuiet(writer, DaemonProtocol.explainError(err));
+                    sendQuiet(writer, EngineProtocol.explainError(err));
                 }
-                sendQuiet(writer, DaemonProtocol.explainDone(1, 0));
+                sendQuiet(writer, EngineProtocol.explainDone(1, 0));
                 return;
             }
             for (dev.jkbuild.runtime.BuildPlanForecast.Module m : plan.modules()) {
                 String dir = m.dir().toString();
                 sendQuiet(
                         writer,
-                        DaemonProtocol.explainModule(
+                        EngineProtocol.explainModule(
                                 dir, m.coord(), m.sourceCount(), m.testCount(), m.producesJar(), m.producesImage()));
                 for (dev.jkbuild.runtime.BuildPlanForecast.Phase p : m.phases()) {
                     sendQuiet(
                             writer,
-                            DaemonProtocol.explainPhase(
+                            EngineProtocol.explainPhase(
                                     dir, p.name(), p.status().name(), p.text(), p.key()));
                 }
             }
             for (var e : plan.edges().entrySet()) {
                 for (Path dep : e.getValue()) {
-                    sendQuiet(writer, DaemonProtocol.explainEdge(e.getKey().toString(), dep.toString()));
+                    sendQuiet(writer, EngineProtocol.explainEdge(e.getKey().toString(), dep.toString()));
                 }
             }
-            sendQuiet(writer, DaemonProtocol.explainDone(plan.maxReadyWidth(), plan.modules().size()));
+            sendQuiet(writer, EngineProtocol.explainDone(plan.maxReadyWidth(), plan.modules().size()));
         } catch (Exception e) {
-            sendQuiet(writer, DaemonProtocol.explainError(String.valueOf(e.getMessage())));
-            sendQuiet(writer, DaemonProtocol.explainDone(0, 0));
+            sendQuiet(writer, EngineProtocol.explainError(String.valueOf(e.getMessage())));
+            sendQuiet(writer, EngineProtocol.explainDone(0, 0));
         }
     }
 
@@ -435,7 +470,7 @@ public final class DaemonServer implements AutoCloseable {
      * Build and run the test-only {@code Goal} exactly as {@code TestCommand} does in-process, but
      * streaming its {@link GoalListener} events over the wire via {@link #wireGoalListener} — the
      * same single-goal event vocabulary {@link #runBuild} already speaks per module, here tagged with
-     * the fixed {@link DaemonProtocol#SINGLE_GOAL_DIR} sentinel since there's only one goal.
+     * the fixed {@link EngineProtocol#SINGLE_GOAL_DIR} sentinel since there's only one goal.
      */
     private void runTest(String requestLine, Session.CancelToken cancelToken, BufferedWriter writer) {
         try {
@@ -478,28 +513,28 @@ public final class DaemonServer implements AutoCloseable {
                     .withJdksDir(jdksDir)
                     .withCancel(cancelToken);
 
-            String dir = DaemonProtocol.SINGLE_GOAL_DIR;
+            String dir = EngineProtocol.SINGLE_GOAL_DIR;
             for (Phase p : goal.phases()) {
-                sendQuiet(writer, DaemonProtocol.planPhase(dir, p.name(), p.label()));
+                sendQuiet(writer, EngineProtocol.planPhase(dir, p.name(), p.label()));
             }
-            sendQuiet(writer, DaemonProtocol.planDone(1));
+            sendQuiet(writer, EngineProtocol.planDone(1));
             goal.addListener(wireGoalListener(dir, writer, goal));
 
             dev.jkbuild.run.GoalResult result = SessionContext.where(session, goal::run);
             // goalFinish (with test counts, if any) was already sent by wireGoalListener's own
             // goalFinish handling — nothing further to send here; the connection close signals "done".
         } catch (Exception e) {
-            sendQuiet(writer, DaemonProtocol.buildError(String.valueOf(e.getMessage())));
+            sendQuiet(writer, EngineProtocol.buildError(String.valueOf(e.getMessage())));
         }
     }
 
     /**
-     * Build and run a single (non-workspace) project's real build goal — the daemon-hosted
+     * Build and run a single (non-workspace) project's real build goal — the engine-hosted
      * counterpart of {@code BuildCommand.runForDir}/{@code prepareModule}/{@code runPrepared}'s
      * {@code agg == null} branch. Same single-goal wire shape as {@link #runTest}, {@code
      * testOnly=false}. On success, folds the measured throughput into the host calibration and
      * kicks the opportunistic cache-prune scheduler — exactly {@code runPrepared}'s post-success
-     * logic, moved here since the daemon (not the CLI) is the process that actually ran the goal.
+     * logic, moved here since the engine (not the CLI) is the process that actually ran the goal.
      */
     private void runSingleBuild(String requestLine, Session.CancelToken cancelToken, BufferedWriter writer) {
         try {
@@ -561,11 +596,11 @@ public final class DaemonServer implements AutoCloseable {
                     .withJdksDir(jdksDir)
                     .withCancel(cancelToken);
 
-            String dir = DaemonProtocol.SINGLE_GOAL_DIR;
+            String dir = EngineProtocol.SINGLE_GOAL_DIR;
             for (Phase p : goal.phases()) {
-                sendQuiet(writer, DaemonProtocol.planPhase(dir, p.name(), p.label()));
+                sendQuiet(writer, EngineProtocol.planPhase(dir, p.name(), p.label()));
             }
-            sendQuiet(writer, DaemonProtocol.planDone(1));
+            sendQuiet(writer, EngineProtocol.planDone(1));
             goal.addListener(wireGoalListener(dir, writer, goal));
 
             long startNanos = System.nanoTime();
@@ -580,7 +615,7 @@ public final class DaemonServer implements AutoCloseable {
                         .ifPresent(exe -> dev.jkbuild.task.CachePruneScheduler.maybeRun(cacheConfig, cache, exe));
             }
         } catch (Exception e) {
-            sendQuiet(writer, DaemonProtocol.buildError(String.valueOf(e.getMessage())));
+            sendQuiet(writer, EngineProtocol.buildError(String.valueOf(e.getMessage())));
         }
     }
 
@@ -593,23 +628,23 @@ public final class DaemonServer implements AutoCloseable {
                     String dir = m.dir().toString();
                     sendQuiet(
                             writer,
-                            DaemonProtocol.planModule(dir, m.coord(), m.goal().name(), m.weight(), m.fullyCached()));
+                            EngineProtocol.planModule(dir, m.coord(), m.goal().name(), m.weight(), m.fullyCached()));
                     for (Phase p : m.goal().phases()) {
-                        sendQuiet(writer, DaemonProtocol.planPhase(dir, p.name(), p.label()));
+                        sendQuiet(writer, EngineProtocol.planPhase(dir, p.name(), p.label()));
                     }
                 }
-                sendQuiet(writer, DaemonProtocol.planDone(plan.size()));
+                sendQuiet(writer, EngineProtocol.planDone(plan.size()));
             }
 
             @Override
             public void onEtaEstimate(long millis) {
-                sendQuiet(writer, DaemonProtocol.eta(millis));
+                sendQuiet(writer, EngineProtocol.eta(millis));
             }
 
             @Override
             public GoalListener onModuleStart(BuildService.ModulePlan m) {
                 String dir = m.dir().toString();
-                sendQuiet(writer, DaemonProtocol.moduleStart(dir));
+                sendQuiet(writer, EngineProtocol.moduleStart(dir));
                 return wireGoalListener(dir, writer, null);
             }
 
@@ -617,7 +652,7 @@ public final class DaemonServer implements AutoCloseable {
             public void onModuleFinish(BuildService.ModuleOutcome o) {
                 sendQuiet(
                         writer,
-                        DaemonProtocol.moduleFinish(o.dir().toString(), o.coord(), o.success(), o.exitCode(), o.millis()));
+                        EngineProtocol.moduleFinish(o.dir().toString(), o.coord(), o.success(), o.exitCode(), o.millis()));
             }
         };
     }
@@ -626,7 +661,7 @@ public final class DaemonServer implements AutoCloseable {
      * Translate every {@link GoalListener} callback for one goal into a {@code dir}-tagged wire
      * event. {@code realGoal} is non-null only for {@link #runTest}/{@link #runSingleBuild} — its
      * {@code TEST_RESULT}/{@code BUILD_OUTCOME} keys (populated by the run-tests/parse-build phases)
-     * ride along on the {@link DaemonProtocol#GOAL_FINISH} message so the client can render its
+     * ride along on the {@link EngineProtocol#GOAL_FINISH} message so the client can render its
      * summary line before it even sees the terminal message; {@code null} for a plain per-module
      * workspace-build goal (where neither applies at the module level).
      */
@@ -636,7 +671,7 @@ public final class DaemonServer implements AutoCloseable {
             public void goalStart(GoalView view) {
                 sendQuiet(
                         writer,
-                        DaemonProtocol.goalStart(
+                        EngineProtocol.goalStart(
                                 dir,
                                 view.goalName(),
                                 view.numerator(),
@@ -648,14 +683,14 @@ public final class DaemonServer implements AutoCloseable {
 
             @Override
             public void phaseStart(String phase, int scope) {
-                sendQuiet(writer, DaemonProtocol.phaseStart(dir, phase, scope));
+                sendQuiet(writer, EngineProtocol.phaseStart(dir, phase, scope));
             }
 
             @Override
             public void progress(String phase, int delta, GoalView view) {
                 sendQuiet(
                         writer,
-                        DaemonProtocol.progress(
+                        EngineProtocol.progress(
                                 dir,
                                 phase,
                                 delta,
@@ -670,7 +705,7 @@ public final class DaemonServer implements AutoCloseable {
             public void scopeUpdate(String phase, int delta, GoalView view) {
                 sendQuiet(
                         writer,
-                        DaemonProtocol.scopeUpdate(
+                        EngineProtocol.scopeUpdate(
                                 dir,
                                 phase,
                                 delta,
@@ -683,27 +718,27 @@ public final class DaemonServer implements AutoCloseable {
 
             @Override
             public void label(String phase, String label) {
-                sendQuiet(writer, DaemonProtocol.label(dir, phase, label));
+                sendQuiet(writer, EngineProtocol.label(dir, phase, label));
             }
 
             @Override
             public void output(String phase, String line) {
-                sendQuiet(writer, DaemonProtocol.output(dir, phase, line));
+                sendQuiet(writer, EngineProtocol.output(dir, phase, line));
             }
 
             @Override
             public void warn(String phase, String code, String message) {
-                sendQuiet(writer, DaemonProtocol.warn(dir, phase, code, message));
+                sendQuiet(writer, EngineProtocol.warn(dir, phase, code, message));
             }
 
             @Override
             public void error(String phase, String code, String message, String test, String exceptionClass) {
-                sendQuiet(writer, DaemonProtocol.error(dir, phase, code, message, test, exceptionClass));
+                sendQuiet(writer, EngineProtocol.error(dir, phase, code, message, test, exceptionClass));
             }
 
             @Override
             public void phaseFinish(String phase, dev.jkbuild.run.PhaseStatus status, Duration duration) {
-                sendQuiet(writer, DaemonProtocol.phaseFinish(dir, phase, status.name()));
+                sendQuiet(writer, EngineProtocol.phaseFinish(dir, phase, status.name()));
             }
 
             @Override
@@ -711,7 +746,7 @@ public final class DaemonServer implements AutoCloseable {
                 for (GoalResult.Diagnostic d : result.errors()) {
                     sendQuiet(
                             writer,
-                            DaemonProtocol.goalDiagnostic(
+                            EngineProtocol.goalDiagnostic(
                                     dir, d.phase(), d.code(), d.message(), d.test(), d.exceptionClass()));
                 }
                 dev.jkbuild.test.JUnitLauncher.Result testResult = realGoal == null
@@ -723,8 +758,8 @@ public final class DaemonServer implements AutoCloseable {
                 sendQuiet(
                         writer,
                         testResult == null && buildOutcome == null
-                                ? DaemonProtocol.goalFinish(dir, result.success())
-                                : DaemonProtocol.goalFinish(
+                                ? EngineProtocol.goalFinish(dir, result.success())
+                                : EngineProtocol.goalFinish(
                                         dir,
                                         result.success(),
                                         buildOutcome,
@@ -757,11 +792,11 @@ public final class DaemonServer implements AutoCloseable {
     }
 
     private void startIdleTickerIfNeeded() {
-        if (config.neverExpires()) return; // idle-minutes = -1: only an explicit stop/kill ends this daemon
+        if (config.neverExpires()) return; // idle-minutes = -1: only an explicit stop/kill ends this engine
         if (config.exitAsSoonAsIdle()) return; // idle-minutes = 0: handled inline in onConnectionFinished
         long idleMillis = config.idleMinutes() * 60_000L;
         idleTicker = Executors.newSingleThreadScheduledExecutor(r -> {
-            Thread t = new Thread(r, "jk-daemon-idle-ticker");
+            Thread t = new Thread(r, "jk-engine-idle-ticker");
             t.setDaemon(true);
             return t;
         });
@@ -788,7 +823,7 @@ public final class DaemonServer implements AutoCloseable {
         }
     }
 
-    /** Caller-facing graceful stop — same effect as receiving a {@link DaemonProtocol#SHUTDOWN} message. */
+    /** Caller-facing graceful stop — same effect as receiving a {@link EngineProtocol#SHUTDOWN} message. */
     @Override
     public void close() {
         synchronized (lifecycleLock) {
@@ -840,11 +875,11 @@ public final class DaemonServer implements AutoCloseable {
     }
 
     /**
-     * Size the worker-JVM memory plan once, for the whole daemon process, against a coarse
+     * Size the worker-JVM memory plan once, for the whole engine process, against a coarse
      * assumed-worst-case concurrency (the host's core count) — not once per build request. Every
-     * daemon-hosted {@code buildWorkspace} call passes {@code applyMemoryPlan=false} so it doesn't
+     * engine-hosted {@code buildWorkspace} call passes {@code applyMemoryPlan=false} so it doesn't
      * overwrite this shared plan out from under a sibling request that's already forking workers
-     * under it (see {@code docs/daemon.md} and {@code BuildService.buildWorkspace}'s javadoc). This
+     * under it (see {@code docs/engine.md} and {@code BuildService.buildWorkspace}'s javadoc). This
      * trades today's single-invocation "burst to use all spare RAM when building alone" precision
      * for correctness under concurrency — the actual bug this plan exists to fix. A more precise
      * demand-registry (each in-flight request contributing its own share) is a documented, deferred

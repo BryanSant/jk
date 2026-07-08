@@ -24,6 +24,7 @@ renders the canonical verb's help.
 | `jk verify-target` | `jk verify` | Matches Maven's `verify` phase output naming. |
 | `jk verify-build` | `jk verify` | Pre-v1.0 name for the reproducibility check verb. Kept for back-compat. |
 | `jk check` | `jk compile` | Pre-v1.0 name for the type-check verb. Kept for back-compat. |
+| `jk why-rebuilt` | `jk explain` | Early-roadmap name for the cache-diff report; `explain` absorbed it. |
 
 ## How rewriting works
 

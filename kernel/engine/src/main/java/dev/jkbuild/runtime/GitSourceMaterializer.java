@@ -121,7 +121,8 @@ public final class GitSourceMaterializer {
             GitProjectBuilder.Built built = GitProjectBuilder.build(
                     projectDir, project, group, artifact, version, javaHome, cas, buildRepos, jkVersion);
             Files.createDirectories(jarPath.getParent());
-            Files.write(jarPath, built.jar());
+            // Streaming copy from the build-output jar — never buffers the whole jar in the heap.
+            Files.copy(built.jar(), jarPath, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
             Files.writeString(pomPath, built.pomXml());
         }
 

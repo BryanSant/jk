@@ -119,8 +119,8 @@ public final class GoalConsole {
 
     /**
      * The listener {@link #runGoal} picks per {@code mode} — split out so a caller that doesn't have
-     * a real {@code Goal} yet (a daemon-hosted test run reconstructing the phase list from wire
-     * events; see {@code DaemonBuildListenerAdapter}) can choose the same listener from just {@code
+     * a real {@code Goal} yet (a engine-hosted test run reconstructing the phase list from wire
+     * events; see {@code EngineBuildListenerAdapter}) can choose the same listener from just {@code
      * phases} once it knows them, instead of duplicating this switch.
      */
     public static GoalListener chooseConsoleListener(List<Phase> phases, Mode mode, ConsoleSpec spec, String module) {

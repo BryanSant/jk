@@ -42,8 +42,15 @@ public final class BuildGraph {
         MODULE
     }
 
-    /** One project to build. {@code dir} is canonical (real path) — the identity key. */
-    public record BuildUnit(Path dir, JkBuild manifest, String coord, Origin origin) {}
+    /**
+     * One project to build. {@code dir} is canonical (real path) — the identity key.
+     *
+     * <p>Package-private on purpose: front-ends must not see (let alone build) engine units. Client
+     * code reconstructing plan objects from wire data goes through {@link
+     * BuildService.ModulePlan#fromWire} / {@link BuildPlanForecast.Module#fromWire} instead, per
+     * {@code docs/architecture/re-foundation.md} M6.
+     */
+    record BuildUnit(Path dir, JkBuild manifest, String coord, Origin origin) {}
 
     /**
      * @param topoOrder dependency-first build order ({@code errors} empty ⇒ valid)

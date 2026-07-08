@@ -8,11 +8,11 @@ import dev.jkbuild.run.PhaseStatus;
 import java.time.Duration;
 
 /**
- * Fans every {@link GoalListener} callback out to two delegates. Needed because a daemon-hosted
+ * Fans every {@link GoalListener} callback out to two delegates. Needed because an engine-hosted
  * module's {@code Goal} is a client-side, never-{@code run()} reconstruction (see {@code
- * DaemonBuildListenerAdapter}) — a listener attached via {@code goal.addListener(...)} is never
+ * EngineBuildListenerAdapter}) — a listener attached via {@code goal.addListener(...)} is never
  * driven. The listener a caller <em>returns</em> from {@code onModuleStart}, by contrast, is driven
- * by both the in-process and daemon-hosted paths alike, so composing extra listeners (e.g. {@link
+ * by both the in-process and engine-hosted paths alike, so composing extra listeners (e.g. {@link
  * EventLogListener}) into the returned listener is the one place that works either way.
  */
 public final class CompositeGoalListener implements GoalListener {

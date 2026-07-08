@@ -1,13 +1,13 @@
 [project]
 group    = "dev.jkbuild"
 name     = "jk-io"
-version  = "0.6.0-SNAPSHOT"
+version  = "0.10.0-SNAPSHOT"
 description = "jk I/O foundations: HTTP client, CAS, repo/Maven access, forge credentials."
 jdk      = 25
 java     = 25
 
 [dependencies]
-jk-core = { group = "dev.jkbuild", name = "jk-core", version = "0.6.0-SNAPSHOT" }
+jk-core = { group = "dev.jkbuild", name = "jk-core", version = "0.10.0-SNAPSHOT" }
 
 [test-dependencies]
 assertj-core            = { group = "org.assertj",        name = "assertj-core",            version = "3.27.7" }

@@ -88,7 +88,7 @@ public final class BuildPlanForecast {
         private final boolean producesJar;
         private final boolean producesImage;
 
-        public Module(
+        Module(
                 BuildGraph.BuildUnit unit,
                 List<Phase> phases,
                 int sourceCount,
@@ -101,6 +101,24 @@ public final class BuildPlanForecast {
             this.testCount = testCount;
             this.producesJar = producesJar;
             this.producesImage = producesImage;
+        }
+
+        /**
+         * Reconstruct a forecast module client-side from wire-level data (engine front-ends). The
+         * synthetic unit is never executed and never crosses back into the engine — renderers read
+         * only the public accessors. The only construction path outside the engine package, so
+         * {@link BuildGraph.BuildUnit} stays invisible to front-ends.
+         */
+        public static Module fromWire(
+                Path dir,
+                String coord,
+                List<Phase> phases,
+                int sourceCount,
+                int testCount,
+                boolean producesJar,
+                boolean producesImage) {
+            BuildGraph.BuildUnit unit = new BuildGraph.BuildUnit(dir, null, coord, BuildGraph.Origin.MODULE);
+            return new Module(unit, phases, sourceCount, testCount, producesJar, producesImage);
         }
 
         /** Engine-internal build unit — package-private so front-ends can't reach {@link BuildGraph.BuildUnit}. */
@@ -145,6 +163,18 @@ public final class BuildPlanForecast {
 
     /** Forecast every module in {@code graph}, in topological (dependency) order. */
     public static List<Module> of(BuildGraph.Result graph, Cas cas, ActionCache actionCache, Path cache) {
+        return of(graph, cas, actionCache, cache, false);
+    }
+
+    /**
+     * As {@link #of(BuildGraph.Result, Cas, ActionCache, Path)} but honoring {@code skipTests}: a
+     * {@code --skip-tests} build composes no compile-test / run-tests phases, so the forecast must
+     * not consult them either. Otherwise a workspace whose tests were never run green (e.g. only
+     * ever built with {@code --skip-tests}) forecasts every module as perpetually dirty — forcing a
+     * full engine round-trip on a fully-cached build — and pays the test-stamp content hashing
+     * (main classes tree + every sibling/worker jar) for phases the build will not execute.
+     */
+    public static List<Module> of(BuildGraph.Result graph, Cas cas, ActionCache actionCache, Path cache, boolean skipTests) {
         List<Module> out = new ArrayList<>();
         // --force/--rerun bypasses jk's build caches, so every phase runs — the forecast must say
         // so too (otherwise the plan tree renders "Fully Cached" while the ETA, which honors force,
@@ -162,7 +192,9 @@ public final class BuildPlanForecast {
                     break;
                 }
             }
-            Module m = forecastModule(u, depDirty, force, cas, actionCache, cache);
+            long t0 = Perf.start();
+            Module m = forecastModule(u, depDirty, force, skipTests, cas, actionCache, cache);
+            Perf.end("forecast " + u.coord(), t0);
             // A module's consumed output changes — and so seeds downstream dirtiness —
             // when its compile does real work (classes change) OR its jar will be
             // (re)packaged, or a dependency already changed. Package matters on its own:
@@ -225,7 +257,13 @@ public final class BuildPlanForecast {
     }
 
     private static Module forecastModule(
-            BuildGraph.BuildUnit u, boolean depDirty, boolean force, Cas cas, ActionCache actionCache, Path cache) {
+            BuildGraph.BuildUnit u,
+            boolean depDirty,
+            boolean force,
+            boolean skipTests,
+            Cas cas,
+            ActionCache actionCache,
+            Path cache) {
         JkBuild project = u.manifest();
         Path dir = u.dir();
         List<Phase> phases = new ArrayList<>();
@@ -271,7 +309,9 @@ public final class BuildPlanForecast {
                 String taskId = ActionKey.qualifiedTaskId("compile-main", out);
                 Path stateDir =
                         cache.resolve("actions").resolve("incremental-java").resolve(taskId);
+                long tc = Perf.start();
                 var pred = JavaIncrementalCompile.predict(taskId, req, JkVersion.VERSION, actionCache, stateDir);
+                Perf.end("  predict-compile-main", tc);
                 phases.add(compilePhase("compile-main", pred, depDirty || force));
                 if (!phases.get(phases.size() - 1).cached()) compileDirty = true;
             }
@@ -307,7 +347,9 @@ public final class BuildPlanForecast {
             boolean haveTests = !javaTest.isEmpty() || !ktTest.isEmpty();
             sourceCount = mainSrc.size() + ktSrc.size() + javaTest.size() + ktTest.size();
             boolean testDirty = false;
-            if (haveTests) {
+            // --skip-tests composes no compile-test/run-tests phases, so don't forecast
+            // (or content-hash the inputs of) phases the build will not run.
+            if (haveTests && !skipTests) {
                 int testSrcCount = javaTest.size() + ktTest.size();
                 if (compileDirty) {
                     phases.add(new Phase("compile-test", Status.RUN, "recompile · main changed", null));
@@ -333,7 +375,9 @@ public final class BuildPlanForecast {
                     String taskId = ActionKey.qualifiedTaskId("compile-test", testOut);
                     Path stateDir =
                             cache.resolve("actions").resolve("incremental-java").resolve(taskId);
+                    long tt = Perf.start();
                     var pred = JavaIncrementalCompile.predict(taskId, req, JkVersion.VERSION, actionCache, stateDir);
+                    Perf.end("  predict-compile-test", tt);
                     Phase p = compilePhase("compile-test", pred, false);
                     phases.add(p);
                     if (!p.cached()) testDirty = true;
@@ -354,12 +398,14 @@ public final class BuildPlanForecast {
                     List<Path> testRt = testRuntimeClasspath(dir, project, lock, resolver);
                     List<Path> testSrc = new ArrayList<>(javaTest);
                     testSrc.addAll(ktTest);
+                    long ts = Perf.start();
                     String stampKey = TestStamp.computeKey(
                             testSrc,
                             layout.classesDir(),
                             lockFile,
                             testRt,
                             BuildPipeline.testStampExtras(dir, project));
+                    Perf.end("  test-stamp-key", ts);
                     boolean hit = stampKey != null && present(actionCache, stampKey);
                     phases.add(
                             hit
@@ -376,10 +422,12 @@ public final class BuildPlanForecast {
             } else {
                 Path jar = layout.mainJar();
                 String mainClass = project.project().main();
+                long tp = Perf.start();
                 List<String> tokens = List.of(
                         "classes:" + ClasspathFingerprint.entry(layout.classesDir()),
                         "main:" + (mainClass == null ? "" : mainClass),
                         "manifest:" + project.manifest());
+                Perf.end("  package-fingerprint", tp);
                 String pkgKey =
                         ActionKey.forArtifact(ActionKey.qualifiedTaskId("package-jar", jar), JkVersion.VERSION, tokens);
                 boolean hit = present(actionCache, pkgKey);

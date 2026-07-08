@@ -40,4 +40,11 @@ tasks.withType<Test>().configureEach {
     // (e.g. LibrarySearchCommandTest). Point JK_HOME at a throwaway per-module
     // dir to keep tests hermetic.
     environment("JK_HOME", layout.buildDirectory.dir("test-jk-home").get().asFile.absolutePath)
+    // Same isolation for the Maven local repository (M2Dirs honours JK_M2_LOCAL):
+    // tests that exercise the real fetch pipeline against a mock Maven server would
+    // otherwise mirror their stub artifacts into the developer's real ~/.m2 —
+    // overwriting genuine jars when a fixture reuses real coordinates (e.g. the
+    // injected junit-jupiter test deps) and corrupting every later build on the
+    // machine. The env var also reaches any jk subprocess a test forks.
+    environment("JK_M2_LOCAL", layout.buildDirectory.dir("test-m2").get().asFile.absolutePath)
 }

@@ -75,7 +75,8 @@ public final class ShadowPackager {
                     continue;
                 }
                 if (written.add(name)) {
-                    writeEntry(jos, name, Files.readAllBytes(file), request.timestampEpochSeconds());
+                    // Streamed — a large bundled resource never has to fit in the heap.
+                    writeEntryStreaming(jos, name, Files.newInputStream(file), request.timestampEpochSeconds());
                 }
             }
 
@@ -89,16 +90,16 @@ public final class ShadowPackager {
                     for (JarEntry e : entries) {
                         String name = e.getName();
                         if (name.equals("META-INF/MANIFEST.MF") || isSignatureFile(name)) continue;
-                        byte[] data;
-                        try (InputStream in = jf.getInputStream(e)) {
-                            data = in.readAllBytes();
-                        }
                         if (isServiceFile(name)) {
-                            accumulate(services, name, data);
+                            // Service files are tiny and must be buffered for the cross-jar merge.
+                            try (InputStream in = jf.getInputStream(e)) {
+                                accumulate(services, name, in.readAllBytes());
+                            }
                             continue;
                         }
                         if (written.add(name)) {
-                            writeEntry(jos, name, data, request.timestampEpochSeconds());
+                            // Streamed entry-to-entry copy — never buffers a whole entry.
+                            writeEntryStreaming(jos, name, jf.getInputStream(e), request.timestampEpochSeconds());
                         }
                     }
                 }
@@ -125,6 +126,18 @@ public final class ShadowPackager {
         entry.setTimeLocal(LocalDateTime.ofEpochSecond(epochSeconds, 0, ZoneOffset.UTC));
         jos.putNextEntry(entry);
         jos.write(data);
+        jos.closeEntry();
+    }
+
+    /** As {@link #writeEntry}, but streaming from {@code in} (closed here) — constant-memory. */
+    private static void writeEntryStreaming(JarOutputStream jos, String name, InputStream in, long epochSeconds)
+            throws IOException {
+        JarEntry entry = new JarEntry(name);
+        entry.setTimeLocal(LocalDateTime.ofEpochSecond(epochSeconds, 0, ZoneOffset.UTC));
+        jos.putNextEntry(entry);
+        try (in) {
+            in.transferTo(jos);
+        }
         jos.closeEntry();
     }
 

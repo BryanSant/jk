@@ -32,41 +32,53 @@ public final class Jk {
             Map.entry("nativeCompile", List.of("native")), // Gradle :nativeCompile task
             Map.entry("verify-target", List.of("verify")), // Maven's `verify` phase output naming
             Map.entry("verify-build", List.of("verify")), // renamed verb; verify-build kept for back-compat
-            Map.entry("check", List.of("compile"))); // renamed verb; check kept for back-compat
+            Map.entry("check", List.of("compile")), // renamed verb; check kept for back-compat
+            Map.entry("why-rebuilt", List.of("explain"))); // early-roadmap name for the cache-diff report
 
     /**
-     * Internal, hidden flag that re-invokes this same binary as the daemon server loop instead of a
+     * Internal, hidden flag that re-invokes this same binary as the engine server loop instead of a
      * normal client command — mirrors how {@code jk cache prune --background} reuses the binary as a
      * detached one-shot worker. Not registered with picocli; never appears in {@code --help} or shell
-     * completion. See {@code docs/daemon.md}.
+     * completion. See {@code docs/engine.md}.
      */
-    private static final String DAEMON_SERVER_FLAG = "--daemon-server";
+    private static final String ENGINE_SERVER_FLAG = "--engine-server";
 
     public static void main(String[] args) {
-        dev.jkbuild.cli.tui.GlobalCancel.install();
-        if (args.length > 0 && DAEMON_SERVER_FLAG.equals(args[0])) {
-            System.exit(runDaemonServer());
+        if (args.length > 0 && ENGINE_SERVER_FLAG.equals(args[0])) {
+            // Engine role: deliberately NOT GlobalCancel — its SIGINT handler halts the process,
+            // and a Ctrl-C aimed at the client that spawned us lands on the whole foreground
+            // process group. runEngineServer installs the engine's own signal policy instead.
+            System.exit(runEngineServer());
             return;
         }
+        dev.jkbuild.cli.tui.GlobalCancel.install();
         System.exit(execute(args));
     }
 
     /**
-     * The daemon server's whole life: resolve identity/config from the same env this process
-     * inherited from its spawner, serve until shutdown, then return. All daemon-lifecycle logging
+     * The engine server's whole life: resolve identity/config from the same env this process
+     * inherited from its spawner, serve until shutdown, then return. All engine-lifecycle logging
      * goes to {@code System.err} — the spawner already redirected this process's stdout/stderr to
-     * the daemon's log file, so nothing here writes to a real terminal.
+     * the engine's log file, so nothing here writes to a real terminal.
      */
-    private static int runDaemonServer() {
+    private static int runEngineServer() {
+        // The engine must survive its spawner's terminal: first detach into our own POSIX session
+        // (setsid(2) via FFM — see PosixDetach; no-op on Windows), then ignore terminal-generated
+        // SIGINT/SIGHUP as belt-and-suspenders for the platforms/windows-of-time detach can't
+        // cover. Cancelling an individual build is a wire-level concern (BUILD_CANCEL), never a
+        // signal; SIGTERM stays lethal on purpose so `kill <pid>` still works.
+        dev.jkbuild.cli.engine.PosixDetach.intoOwnSession();
+        org.jline.utils.Signals.register("INT", () -> {});
+        org.jline.utils.Signals.register("HUP", () -> {});
         try {
-            dev.jkbuild.daemon.DaemonPaths.Paths paths = dev.jkbuild.daemon.DaemonPaths.current();
-            dev.jkbuild.config.JkDaemonConfig config = dev.jkbuild.config.JkDaemonConfig.resolve();
-            dev.jkbuild.daemon.DaemonServer server =
-                    new dev.jkbuild.daemon.DaemonServer(paths, config, VERSION, System.err::println);
+            dev.jkbuild.engine.EnginePaths.Paths paths = dev.jkbuild.engine.EnginePaths.current();
+            dev.jkbuild.config.JkEngineConfig config = dev.jkbuild.config.JkEngineConfig.resolve();
+            dev.jkbuild.engine.EngineServer server =
+                    new dev.jkbuild.engine.EngineServer(paths, config, VERSION, System.err::println);
             server.run();
             return 0;
         } catch (java.io.IOException e) {
-            System.err.println("jk daemon: failed to start: " + e.getMessage());
+            System.err.println("jk engine: failed to start: " + e.getMessage());
             return 1;
         }
     }

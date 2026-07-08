@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
-package dev.jkbuild.cli.daemon;
+package dev.jkbuild.cli.engine;
 
 import dev.jkbuild.cli.Jk;
 import dev.jkbuild.config.Session;
 import dev.jkbuild.config.SessionContext;
-import dev.jkbuild.daemon.DaemonPaths;
-import dev.jkbuild.daemon.protocol.DaemonProtocol;
+import dev.jkbuild.engine.EnginePaths;
+import dev.jkbuild.engine.protocol.EngineProtocol;
 import dev.jkbuild.plugin.protocol.Ndjson;
 import dev.jkbuild.run.Goal;
 import dev.jkbuild.run.GoalListener;
@@ -13,7 +13,6 @@ import dev.jkbuild.run.GoalResult;
 import dev.jkbuild.run.GoalView;
 import dev.jkbuild.run.Phase;
 import dev.jkbuild.run.PhaseStatus;
-import dev.jkbuild.runtime.BuildGraph;
 import dev.jkbuild.runtime.BuildService;
 import dev.jkbuild.runtime.WorkspaceBuildListener;
 import java.io.BufferedReader;
@@ -32,18 +31,18 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Drives a {@code buildWorkspace} call against a daemon instead of in-process: sends a {@link
- * DaemonProtocol#BUILD_REQUEST}, decodes the resulting stream of wire events, and re-invokes the
+ * Drives a {@code buildWorkspace} call against an engine instead of in-process: sends a {@link
+ * EngineProtocol#BUILD_REQUEST}, decodes the resulting stream of wire events, and re-invokes the
  * <em>exact same</em> {@link WorkspaceBuildListener}/{@link GoalListener} instances the caller already
  * builds for the in-process path — {@code BuildCommand}'s rendering code doesn't need to know whether
- * it's watching a live {@code Goal} or a socket. See {@code docs/daemon.md}.
+ * it's watching a live {@code Goal} or a socket. See {@code docs/engine.md}.
  *
- * <p>Reconstructing {@link BuildService.ModulePlan} client-side needs a real (but never-executed)
- * {@link Goal} and {@link BuildGraph.BuildUnit} to satisfy their constructors — both are public
- * exactly because {@code ModulePlan.unit()} is the only engine-internal accessor (package-private by
- * design, per {@code docs/architecture/re-foundation.md} M6), and nothing here or in any renderer
- * calls it. The synthesized {@code Goal} is built with inert {@link Phase}s (default no-op body) via
- * the same public builder the engine itself uses — never {@code run()} — purely so {@code .name()}/
+ * <p>Reconstructing {@link BuildService.ModulePlan} client-side goes through the engine's {@code
+ * ModulePlan.fromWire} factory (and {@code BuildPlanForecast.Module.fromWire} for explain), so no
+ * engine-internal type is ever named here — per {@code docs/architecture/re-foundation.md} M6 the
+ * {@code BuildUnit} those factories synthesize is package-private to the engine and never executed.
+ * The synthesized {@link Goal} is built with inert {@link Phase}s (default no-op body) via the same
+ * public builder the engine itself uses — never {@code run()} — purely so {@code .name()}/
  * {@code .phases()} read correctly for the renderers that already only read those two accessors.
  *
  * <p><b>Resolved Phase 2 gap:</b> {@code BuildCommand}'s {@code onModuleStart} bodies used to call
@@ -51,12 +50,12 @@ import java.util.Map;
  * directly onto the live {@code Goal} — a no-op against this adapter's synthetic (never-{@code
  * run()}) {@code Goal}, since nothing ever drains it. Fixed by composing the log listener into the
  * listener {@code onModuleStart} <em>returns</em> instead ({@code CompositeGoalListener}) — that one
- * is driven by wire-replayed events in the daemon-hosted case and by {@code Goal.run()} directly in
+ * is driven by wire-replayed events in the engine-hosted case and by {@code Goal.run()} directly in
  * the in-process case, so it works either way with no protocol changes.
  */
-final class DaemonBuildListenerAdapter {
+final class EngineBuildListenerAdapter {
 
-    private DaemonBuildListenerAdapter() {}
+    private EngineBuildListenerAdapter() {}
 
     /** One module's identity/sizing, accumulated from the {@code plan-module}/{@code plan-phase} burst. */
     private static final class ModuleMeta {
@@ -75,24 +74,24 @@ final class DaemonBuildListenerAdapter {
     }
 
     /**
-     * Run {@code req} against the daemon at {@code paths}, spawning/reconnecting as needed, and drive
+     * Run {@code req} against the engine at {@code paths}, spawning/reconnecting as needed, and drive
      * {@code listener} exactly as {@link BuildService#buildWorkspace} would in-process. Throws with a
-     * clear message on any daemon-unreachable/protocol failure — per {@code docs/daemon.md} there is
+     * clear message on any engine-unreachable/protocol failure — per {@code docs/engine.md} there is
      * no in-process fallback.
      */
     static BuildService.WorkspaceResult buildWorkspace(
-            DaemonPaths.Paths paths, BuildService.WorkspaceRequest req, WorkspaceBuildListener listener)
+            EnginePaths.Paths paths, BuildService.WorkspaceRequest req, WorkspaceBuildListener listener)
             throws IOException {
-        DaemonClient.ensureRunning(paths, Jk.VERSION);
+        EngineClient.ensureRunning(paths, Jk.VERSION);
         Session session = SessionContext.current();
 
-        try (SocketChannel ch = DaemonClient.connect(paths.socket())) {
+        try (SocketChannel ch = EngineClient.connect(paths.socket())) {
             BufferedWriter writer =
                     new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
             BufferedReader reader =
                     new BufferedReader(new InputStreamReader(Channels.newInputStream(ch), StandardCharsets.UTF_8));
 
-            writer.write(DaemonProtocol.buildRequest(
+            writer.write(EngineProtocol.buildRequest(
                     req.entryDir().toString(),
                     req.cache().toString(),
                     req.jdksDir() != null ? req.jdksDir().toString() : null,
@@ -103,7 +102,10 @@ final class DaemonBuildListenerAdapter {
                     req.maxModuleConcurrency(),
                     session.parallelTests(),
                     session.offline(),
-                    session.force()));
+                    session.force(),
+                    // rerun rides separately from force: it bypasses the action cache without
+                    // implying refresh, so verify's scratch rebuild stays CAS-local (no re-download).
+                    session.config().rerunOr(false)));
             writer.write('\n');
             writer.flush();
 
@@ -112,7 +114,7 @@ final class DaemonBuildListenerAdapter {
     }
 
     /**
-     * Run a single project's test goal against the daemon (Phase 3). {@code listenerFactory} builds
+     * Run a single project's test goal against the engine (Phase 3). {@code listenerFactory} builds
      * the actual console {@link GoalListener} once the goal's phase list is known (mirroring {@code
      * GoalConsole.runGoal}'s own mode-based listener choice, which also needs {@code goal.phases()}
      * before it can construct a {@code CommandManagerListener}) — the wire doesn't have a real {@code
@@ -123,20 +125,20 @@ final class DaemonBuildListenerAdapter {
      * console listener's own {@code goalFinish} fires.
      */
     static GoalResult runTest(
-            DaemonPaths.Paths paths,
-            DaemonClient.TestRequest req,
+            EnginePaths.Paths paths,
+            EngineClient.TestRequest req,
             java.util.function.Function<List<Phase>, GoalListener> listenerFactory,
             dev.jkbuild.test.JUnitLauncher.Result[] testResultOut)
             throws IOException {
-        DaemonClient.ensureRunning(paths, Jk.VERSION);
+        EngineClient.ensureRunning(paths, Jk.VERSION);
 
-        try (SocketChannel ch = DaemonClient.connect(paths.socket())) {
+        try (SocketChannel ch = EngineClient.connect(paths.socket())) {
             BufferedWriter writer =
                     new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
             BufferedReader reader =
                     new BufferedReader(new InputStreamReader(Channels.newInputStream(ch), StandardCharsets.UTF_8));
 
-            writer.write(DaemonProtocol.testRequest(
+            writer.write(EngineProtocol.testRequest(
                     req.entryDir().toString(),
                     req.cache().toString(),
                     req.jdksDir() != null ? req.jdksDir().toString() : null,
@@ -151,28 +153,28 @@ final class DaemonBuildListenerAdapter {
     }
 
     /**
-     * Run a single (non-workspace) project's real build goal against the daemon — the counterpart of
+     * Run a single (non-workspace) project's real build goal against the engine — the counterpart of
      * {@code BuildCommand.runForDir}. Same shape as {@link #runTest}, plus {@code buildOutcomeOut}
      * (populated with {@code BuildPipeline.BUILD_OUTCOME}, if the goal reported one, before the
      * terminal {@code goal-finish} reaches {@code listenerFactory}'s listener) so the caller's
      * summary line (e.g. "project up to date" vs "project built") can match the in-process path.
      */
     static GoalResult runSingleBuild(
-            DaemonPaths.Paths paths,
-            DaemonClient.SingleBuildRequest req,
+            EnginePaths.Paths paths,
+            EngineClient.SingleBuildRequest req,
             java.util.function.Function<List<Phase>, GoalListener> listenerFactory,
             dev.jkbuild.test.JUnitLauncher.Result[] testResultOut,
             String[] buildOutcomeOut)
             throws IOException {
-        DaemonClient.ensureRunning(paths, Jk.VERSION);
+        EngineClient.ensureRunning(paths, Jk.VERSION);
 
-        try (SocketChannel ch = DaemonClient.connect(paths.socket())) {
+        try (SocketChannel ch = EngineClient.connect(paths.socket())) {
             BufferedWriter writer =
                     new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
             BufferedReader reader =
                     new BufferedReader(new InputStreamReader(Channels.newInputStream(ch), StandardCharsets.UTF_8));
 
-            writer.write(DaemonProtocol.singleBuildRequest(
+            writer.write(EngineProtocol.singleBuildRequest(
                     req.entryDir().toString(),
                     req.cache().toString(),
                     req.jdksDir() != null ? req.jdksDir().toString() : null,
@@ -190,24 +192,24 @@ final class DaemonBuildListenerAdapter {
     }
 
     /**
-     * Forecast a build against the daemon — the counterpart of {@code ExplainCommand}'s direct {@code
-     * BuildService.explain} call. Synchronous: sends {@link DaemonProtocol#EXPLAIN_REQUEST} and reads
+     * Forecast a build against the engine — the counterpart of {@code ExplainCommand}'s direct {@code
+     * BuildService.explain} call. Synchronous: sends {@link EngineProtocol#EXPLAIN_REQUEST} and reads
      * the module/phase/edge burst to completion, reconstructing a real {@link BuildService.ExplainPlan}.
      * Unlike {@link #buildModulePlan}, no inert-object trickery is needed here — {@link
-     * dev.jkbuild.runtime.BuildPlanForecast.Module}/{@code Phase} are pure public data, just built from
-     * a synthetic (never-executed) {@link BuildGraph.BuildUnit}, exactly as {@link #buildModulePlan}
-     * already does for the same reason ({@code Module.unit()} is package-private and never read here).
+     * dev.jkbuild.runtime.BuildPlanForecast.Module}/{@code Phase} are pure public data, reconstructed
+     * via {@code Module.fromWire}, exactly as {@link #buildModulePlan} does with {@code
+     * ModulePlan.fromWire} ({@code Module.unit()} is package-private and never read here).
      */
-    static BuildService.ExplainPlan explain(DaemonPaths.Paths paths, Path entryDir, Path cache) throws IOException {
-        DaemonClient.ensureRunning(paths, Jk.VERSION);
+    static BuildService.ExplainPlan explain(EnginePaths.Paths paths, Path entryDir, Path cache) throws IOException {
+        EngineClient.ensureRunning(paths, Jk.VERSION);
 
-        try (SocketChannel ch = DaemonClient.connect(paths.socket())) {
+        try (SocketChannel ch = EngineClient.connect(paths.socket())) {
             BufferedWriter writer =
                     new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
             BufferedReader reader =
                     new BufferedReader(new InputStreamReader(Channels.newInputStream(ch), StandardCharsets.UTF_8));
 
-            writer.write(DaemonProtocol.explainRequest(entryDir.toString(), cache.toString()));
+            writer.write(EngineProtocol.explainRequest(entryDir.toString(), cache.toString()));
             writer.write('\n');
             writer.flush();
 
@@ -222,10 +224,10 @@ final class DaemonBuildListenerAdapter {
 
             String line;
             while ((line = reader.readLine()) != null) {
-                String type = DaemonProtocol.typeOf(line);
+                String type = EngineProtocol.typeOf(line);
                 if (type == null) continue;
                 switch (type) {
-                    case DaemonProtocol.EXPLAIN_MODULE -> {
+                    case EngineProtocol.EXPLAIN_MODULE -> {
                         String dir = Ndjson.str(line, "dir");
                         order.add(dir);
                         coordByDir.put(dir, Ndjson.str(line, "coord"));
@@ -237,7 +239,7 @@ final class DaemonBuildListenerAdapter {
                         });
                         phasesByDir.put(dir, new ArrayList<>());
                     }
-                    case DaemonProtocol.EXPLAIN_PHASE -> {
+                    case EngineProtocol.EXPLAIN_PHASE -> {
                         String dir = Ndjson.str(line, "dir");
                         phasesByDir
                                 .get(dir)
@@ -248,20 +250,24 @@ final class DaemonBuildListenerAdapter {
                                         Ndjson.str(line, "text"),
                                         Ndjson.str(line, "key")));
                     }
-                    case DaemonProtocol.EXPLAIN_EDGE -> {
+                    case EngineProtocol.EXPLAIN_EDGE -> {
                         Path dir = Path.of(Ndjson.str(line, "dir"));
                         Path dependsOn = Path.of(Ndjson.str(line, "dependsOnDir"));
                         edges.computeIfAbsent(dir, d -> new java.util.LinkedHashSet<>()).add(dependsOn);
                     }
-                    case DaemonProtocol.EXPLAIN_ERROR -> errors.add(Ndjson.str(line, "message"));
-                    case DaemonProtocol.EXPLAIN_DONE -> {
+                    case EngineProtocol.EXPLAIN_ERROR -> errors.add(Ndjson.str(line, "message"));
+                    case EngineProtocol.EXPLAIN_DONE -> {
                         for (String dir : order) {
                             int[] counts = countsByDir.get(dir);
                             boolean[] flags = flagsByDir.get(dir);
-                            BuildGraph.BuildUnit unit =
-                                    new BuildGraph.BuildUnit(Path.of(dir), null, coordByDir.get(dir), BuildGraph.Origin.MODULE);
-                            modules.add(new dev.jkbuild.runtime.BuildPlanForecast.Module(
-                                    unit, phasesByDir.get(dir), counts[0], counts[1], flags[0], flags[1]));
+                            modules.add(dev.jkbuild.runtime.BuildPlanForecast.Module.fromWire(
+                                    Path.of(dir),
+                                    coordByDir.get(dir),
+                                    phasesByDir.get(dir),
+                                    counts[0],
+                                    counts[1],
+                                    flags[0],
+                                    flags[1]));
                         }
                         return new BuildService.ExplainPlan(
                                 modules, edges, Ndjson.intValue(line, "maxReadyWidth", 1), errors);
@@ -271,8 +277,8 @@ final class DaemonBuildListenerAdapter {
                     }
                 }
             }
-            throw new IOException("jk daemon: the build daemon disconnected unexpectedly before finishing "
-                    + "(it may have crashed); run `jk daemon status` for details");
+            throw new IOException("jk engine: the build engine disconnected unexpectedly before finishing "
+                    + "(it may have crashed); run `jk engine status` for details");
         }
     }
 
@@ -288,39 +294,39 @@ final class DaemonBuildListenerAdapter {
 
         String line;
         while ((line = reader.readLine()) != null) {
-            String type = DaemonProtocol.typeOf(line);
+            String type = EngineProtocol.typeOf(line);
             if (type == null) continue;
             switch (type) {
-                case DaemonProtocol.PLAN_PHASE -> phases.add(Phase.builder(Ndjson.str(line, "name"))
+                case EngineProtocol.PLAN_PHASE -> phases.add(Phase.builder(Ndjson.str(line, "name"))
                         .label(Ndjson.str(line, "label"))
                         .build());
-                case DaemonProtocol.PLAN_DONE -> listener = listenerFactory.apply(phases);
-                case DaemonProtocol.GOAL_START -> listener.goalStart(readGoalView(line));
-                case DaemonProtocol.PHASE_START -> listener.phaseStart(
+                case EngineProtocol.PLAN_DONE -> listener = listenerFactory.apply(phases);
+                case EngineProtocol.GOAL_START -> listener.goalStart(readGoalView(line));
+                case EngineProtocol.PHASE_START -> listener.phaseStart(
                         Ndjson.str(line, "phase"), Ndjson.intValue(line, "scope", 0));
-                case DaemonProtocol.PROGRESS -> listener.progress(
+                case EngineProtocol.PROGRESS -> listener.progress(
                         Ndjson.str(line, "phase"), Ndjson.intValue(line, "delta", 0), readGoalView(line));
-                case DaemonProtocol.SCOPE_UPDATE -> listener.scopeUpdate(
+                case EngineProtocol.SCOPE_UPDATE -> listener.scopeUpdate(
                         Ndjson.str(line, "phase"), Ndjson.intValue(line, "delta", 0), readGoalView(line));
-                case DaemonProtocol.LABEL -> listener.label(Ndjson.str(line, "phase"), Ndjson.str(line, "label"));
-                case DaemonProtocol.OUTPUT -> listener.output(Ndjson.str(line, "phase"), Ndjson.str(line, "line"));
-                case DaemonProtocol.WARN -> listener.warn(
+                case EngineProtocol.LABEL -> listener.label(Ndjson.str(line, "phase"), Ndjson.str(line, "label"));
+                case EngineProtocol.OUTPUT -> listener.output(Ndjson.str(line, "phase"), Ndjson.str(line, "line"));
+                case EngineProtocol.WARN -> listener.warn(
                         Ndjson.str(line, "phase"), Ndjson.str(line, "code"), Ndjson.str(line, "message"));
-                case DaemonProtocol.ERROR -> listener.error(
+                case EngineProtocol.ERROR -> listener.error(
                         Ndjson.str(line, "phase"),
                         Ndjson.str(line, "code"),
                         Ndjson.str(line, "message"),
                         Ndjson.str(line, "test"),
                         Ndjson.str(line, "exceptionClass"));
-                case DaemonProtocol.GOAL_DIAGNOSTIC -> diagnostics.add(new GoalResult.Diagnostic(
+                case EngineProtocol.GOAL_DIAGNOSTIC -> diagnostics.add(new GoalResult.Diagnostic(
                         Ndjson.str(line, "phase"),
                         Ndjson.str(line, "code"),
                         Ndjson.str(line, "message"),
                         Ndjson.str(line, "test"),
                         Ndjson.str(line, "exceptionClass")));
-                case DaemonProtocol.PHASE_FINISH -> listener.phaseFinish(
+                case EngineProtocol.PHASE_FINISH -> listener.phaseFinish(
                         Ndjson.str(line, "phase"), PhaseStatus.valueOf(Ndjson.str(line, "status")), Duration.ZERO);
-                case DaemonProtocol.GOAL_FINISH -> {
+                case EngineProtocol.GOAL_FINISH -> {
                     boolean success = Ndjson.bool(line, "success", false);
                     long total = Ndjson.longValue(line, "testTotal", -1);
                     if (total >= 0 && testResultOut != null) {
@@ -339,15 +345,15 @@ final class DaemonBuildListenerAdapter {
                     listener.goalFinish(result);
                     return result;
                 }
-                case DaemonProtocol.BUILD_ERROR -> throw new IOException(
-                        "jk daemon: run failed: " + Ndjson.str(line, "message"));
+                case EngineProtocol.BUILD_ERROR -> throw new IOException(
+                        "jk engine: run failed: " + Ndjson.str(line, "message"));
                 default -> {
                     /* forward-compatible no-op */
                 }
             }
         }
-        throw new IOException("jk daemon: the build daemon disconnected unexpectedly before finishing "
-                + "(it may have crashed); run `jk daemon status` for details");
+        throw new IOException("jk engine: the build engine disconnected unexpectedly before finishing "
+                + "(it may have crashed); run `jk engine status` for details");
     }
 
     private static BuildService.WorkspaceResult streamEvents(
@@ -360,11 +366,11 @@ final class DaemonBuildListenerAdapter {
 
         String line;
         while ((line = reader.readLine()) != null) {
-            String type = DaemonProtocol.typeOf(line);
+            String type = EngineProtocol.typeOf(line);
             if (type == null) continue;
             String dir = Ndjson.str(line, "dir");
             switch (type) {
-                case DaemonProtocol.PLAN_MODULE -> {
+                case EngineProtocol.PLAN_MODULE -> {
                     planByDir.put(
                             dir,
                             new ModuleMeta(
@@ -374,7 +380,7 @@ final class DaemonBuildListenerAdapter {
                                     Ndjson.bool(line, "fullyCached", false)));
                     pendingPlanDir = dir;
                 }
-                case DaemonProtocol.PLAN_PHASE -> {
+                case EngineProtocol.PLAN_PHASE -> {
                     ModuleMeta m = planByDir.get(dir != null ? dir : pendingPlanDir);
                     if (m != null) {
                         m.phases.add(Phase.builder(Ndjson.str(line, "name"))
@@ -382,35 +388,35 @@ final class DaemonBuildListenerAdapter {
                                 .build());
                     }
                 }
-                case DaemonProtocol.PLAN_DONE -> listener.onPlan(buildModulePlans(planByDir, cache));
-                case DaemonProtocol.ETA -> listener.onEtaEstimate(Ndjson.longValue(line, "millis", 0));
-                case DaemonProtocol.MODULE_START -> {
+                case EngineProtocol.PLAN_DONE -> listener.onPlan(buildModulePlans(planByDir, cache));
+                case EngineProtocol.ETA -> listener.onEtaEstimate(Ndjson.longValue(line, "millis", 0));
+                case EngineProtocol.MODULE_START -> {
                     BuildService.ModulePlan plan = buildModulePlan(dir, planByDir.get(dir), cache);
                     GoalListener gl = listener.onModuleStart(plan);
                     goalListenersByDir.put(dir, gl != null ? gl : new GoalListener() {});
                 }
-                case DaemonProtocol.GOAL_START -> goalListenersByDir
+                case EngineProtocol.GOAL_START -> goalListenersByDir
                         .getOrDefault(dir, NOOP)
                         .goalStart(readGoalView(line));
-                case DaemonProtocol.PHASE_START -> goalListenersByDir
+                case EngineProtocol.PHASE_START -> goalListenersByDir
                         .getOrDefault(dir, NOOP)
                         .phaseStart(Ndjson.str(line, "phase"), Ndjson.intValue(line, "scope", 0));
-                case DaemonProtocol.PROGRESS -> goalListenersByDir
+                case EngineProtocol.PROGRESS -> goalListenersByDir
                         .getOrDefault(dir, NOOP)
                         .progress(Ndjson.str(line, "phase"), Ndjson.intValue(line, "delta", 0), readGoalView(line));
-                case DaemonProtocol.SCOPE_UPDATE -> goalListenersByDir
+                case EngineProtocol.SCOPE_UPDATE -> goalListenersByDir
                         .getOrDefault(dir, NOOP)
                         .scopeUpdate(Ndjson.str(line, "phase"), Ndjson.intValue(line, "delta", 0), readGoalView(line));
-                case DaemonProtocol.LABEL -> goalListenersByDir
+                case EngineProtocol.LABEL -> goalListenersByDir
                         .getOrDefault(dir, NOOP)
                         .label(Ndjson.str(line, "phase"), Ndjson.str(line, "label"));
-                case DaemonProtocol.OUTPUT -> goalListenersByDir
+                case EngineProtocol.OUTPUT -> goalListenersByDir
                         .getOrDefault(dir, NOOP)
                         .output(Ndjson.str(line, "phase"), Ndjson.str(line, "line"));
-                case DaemonProtocol.WARN -> goalListenersByDir
+                case EngineProtocol.WARN -> goalListenersByDir
                         .getOrDefault(dir, NOOP)
                         .warn(Ndjson.str(line, "phase"), Ndjson.str(line, "code"), Ndjson.str(line, "message"));
-                case DaemonProtocol.ERROR -> goalListenersByDir
+                case EngineProtocol.ERROR -> goalListenersByDir
                         .getOrDefault(dir, NOOP)
                         .error(
                                 Ndjson.str(line, "phase"),
@@ -418,7 +424,7 @@ final class DaemonBuildListenerAdapter {
                                 Ndjson.str(line, "message"),
                                 Ndjson.str(line, "test"),
                                 Ndjson.str(line, "exceptionClass"));
-                case DaemonProtocol.GOAL_DIAGNOSTIC -> diagnosticsByDir
+                case EngineProtocol.GOAL_DIAGNOSTIC -> diagnosticsByDir
                         .computeIfAbsent(dir, d -> new ArrayList<>())
                         .add(new GoalResult.Diagnostic(
                                 Ndjson.str(line, "phase"),
@@ -426,13 +432,13 @@ final class DaemonBuildListenerAdapter {
                                 Ndjson.str(line, "message"),
                                 Ndjson.str(line, "test"),
                                 Ndjson.str(line, "exceptionClass")));
-                case DaemonProtocol.PHASE_FINISH -> goalListenersByDir
+                case EngineProtocol.PHASE_FINISH -> goalListenersByDir
                         .getOrDefault(dir, NOOP)
                         .phaseFinish(
                                 Ndjson.str(line, "phase"),
                                 PhaseStatus.valueOf(Ndjson.str(line, "status")),
                                 Duration.ZERO);
-                case DaemonProtocol.GOAL_FINISH -> {
+                case EngineProtocol.GOAL_FINISH -> {
                     ModuleMeta meta = planByDir.get(dir);
                     String goalName = meta != null ? meta.goalName : dir;
                     List<GoalResult.Diagnostic> diags = diagnosticsByDir.remove(dir);
@@ -447,7 +453,7 @@ final class DaemonBuildListenerAdapter {
                             false);
                     goalListenersByDir.getOrDefault(dir, NOOP).goalFinish(result);
                 }
-                case DaemonProtocol.MODULE_FINISH -> {
+                case EngineProtocol.MODULE_FINISH -> {
                     BuildService.ModuleOutcome outcome = new BuildService.ModuleOutcome(
                             Ndjson.str(line, "coord"),
                             Path.of(dir),
@@ -457,7 +463,7 @@ final class DaemonBuildListenerAdapter {
                     outcomes.add(outcome);
                     listener.onModuleFinish(outcome);
                 }
-                case DaemonProtocol.WORKSPACE_FINISH -> {
+                case EngineProtocol.WORKSPACE_FINISH -> {
                     BuildService.WorkspaceResult result = new BuildService.WorkspaceResult(
                             Ndjson.bool(line, "success", false),
                             Ndjson.intValue(line, "exitCode", 1),
@@ -466,15 +472,15 @@ final class DaemonBuildListenerAdapter {
                     listener.onWorkspaceFinish(result);
                     return result;
                 }
-                case DaemonProtocol.BUILD_ERROR -> throw new IOException(
-                        "jk daemon: build failed: " + Ndjson.str(line, "message"));
+                case EngineProtocol.BUILD_ERROR -> throw new IOException(
+                        "jk engine: build failed: " + Ndjson.str(line, "message"));
                 default -> {
                     /* forward-compatible no-op */
                 }
             }
         }
-        throw new IOException("jk daemon: the build daemon disconnected unexpectedly before finishing "
-                + "(it may have crashed); run `jk daemon status` for details");
+        throw new IOException("jk engine: the build engine disconnected unexpectedly before finishing "
+                + "(it may have crashed); run `jk engine status` for details");
     }
 
     private static List<BuildService.ModulePlan> buildModulePlans(Map<String, ModuleMeta> planByDir, Path cache) {
@@ -487,8 +493,7 @@ final class DaemonBuildListenerAdapter {
 
     private static BuildService.ModulePlan buildModulePlan(String dir, ModuleMeta m, Path cache) {
         Goal inertGoal = Goal.builder(m.goalName).addAllPhases(m.phases).build();
-        BuildGraph.BuildUnit unit = new BuildGraph.BuildUnit(Path.of(dir), null, m.coord, BuildGraph.Origin.ROOT);
-        return new BuildService.ModulePlan(unit, inertGoal, m.weight, m.fullyCached, cache);
+        return BuildService.ModulePlan.fromWire(Path.of(dir), m.coord, inertGoal, m.weight, m.fullyCached, cache);
     }
 
     private static GoalView readGoalView(String line) {

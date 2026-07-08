@@ -218,21 +218,28 @@ public final class BuildCommand implements CliCommand {
 
     /**
      * Escape hatch for the fast JVM unit-test suite ONLY: routes a workspace build through {@link
-     * dev.jkbuild.runtime.BuildService#buildWorkspace} in-process instead of the daemon. Set via
-     * {@code -Djk.test.noDaemon=true} by {@code cli/build.gradle.kts}'s {@code test {}} task —
+     * dev.jkbuild.runtime.BuildService#buildWorkspace} in-process instead of the engine. Set via
+     * {@code -Djk.test.noEngine=true} by {@code cli/build.gradle.kts}'s {@code test {}} task —
      * never a user-facing flag, and never read by any production entry point outside this check.
      *
      * <p>Why this exists: a Gradle test JVM has no real {@code jk} binary for {@link
-     * dev.jkbuild.cli.daemon.DaemonClient} to exec as a daemon, and the test suite doesn't isolate
-     * {@code ~/.jk/state/daemon/} per test — building that infrastructure (real subprocess spawn,
-     * per-test isolation, cleanup) for a fast unit-test suite is out of scope. The daemon transport
-     * itself is covered separately: {@code DaemonServer}/{@code DaemonClient} unit tests, and manual
-     * verification against the real native binary (see {@code docs/daemon.md}). Every other command
-     * (a real {@code jk build} invocation) always goes through the daemon, per its "no in-process
+     * dev.jkbuild.cli.engine.EngineClient} to exec as an engine, and the test suite doesn't isolate
+     * {@code ~/.jk/state/engine/} per test — building that infrastructure (real subprocess spawn,
+     * per-test isolation, cleanup) for a fast unit-test suite is out of scope. The engine transport
+     * itself is covered separately: {@code EngineServer}/{@code EngineClient} unit tests, and manual
+     * verification against the real native binary (see {@code docs/engine.md}). Every other command
+     * (a real {@code jk build} invocation) always goes through the engine, per its "no in-process
      * fallback" design — this bypass is deliberately not reachable any other way.
+     *
+     * <p>The same bypass applies inside a jk-forked test worker (identified by the {@code
+     * jk.plugin.class=JkRunner} property every such JVM carries): under the self-hosted {@code jk
+     * build}, cli tests dispatch commands in-process with no Gradle test task to set the property,
+     * and routing them through the resident engine would recurse into the very engine hosting the
+     * test run — which serves one build at a time, so the nested request deadlocks the build.
      */
-    private static boolean daemonDisabledForTests() {
-        return Boolean.getBoolean("jk.test.noDaemon");
+    private static boolean engineDisabledForTests() {
+        return Boolean.getBoolean("jk.test.noEngine")
+                || "dev.jkbuild.test.runner.JkRunner".equals(System.getProperty("jk.plugin.class"));
     }
 
     private static final Object OUT_LOCK = new Object();
@@ -281,7 +288,12 @@ public final class BuildCommand implements CliCommand {
             return 0;
         }
         long buildStart = System.nanoTime();
-        Set<Path> dirtyDirs = dev.jkbuild.runtime.BuildService.forecastDirtyDirs(graph, cache);
+        Set<Path> dirtyDirs =
+                dev.jkbuild.runtime.BuildService.forecastDirtyDirs(graph, cache, buildOpts.skipTests);
+        if (System.getenv("JK_PERF") != null) {
+            System.err.println("[jk-perf] client-forecast " + (System.nanoTime() - buildStart) / 1_000_000 + "ms dirty="
+                    + dirtyDirs.size());
+        }
         if (dirtyDirs.isEmpty()) {
             // Fully cached — print chip line directly with no spinner ever created.
             CliOutput.out(dev.jkbuild.cli.tui.GoalWedge.chipLine(
@@ -330,7 +342,7 @@ public final class BuildCommand implements CliCommand {
                     @Override
                     public dev.jkbuild.run.GoalListener onModuleStart(dev.jkbuild.runtime.BuildService.ModulePlan m) {
                         // Durable run log, same as the old buffered path. Composed into the *returned*
-                        // listener (not attached to m.goal() directly) since a daemon-hosted module's
+                        // listener (not attached to m.goal() directly) since an engine-hosted module's
                         // goal is a client-side reconstruction that's never run() — only the returned
                         // listener is actually driven by wire-replayed events either way.
                         var log = dev.jkbuild.cli.run.EventLogListener.open(
@@ -368,10 +380,10 @@ public final class BuildCommand implements CliCommand {
                         }
                     }
             };
-            result = daemonDisabledForTests()
+            result = engineDisabledForTests()
                     ? dev.jkbuild.runtime.BuildService.buildWorkspace(request, headlessListener)
-                    : dev.jkbuild.cli.daemon.DaemonClient.buildWorkspace(
-                            dev.jkbuild.daemon.DaemonPaths.current(), request, headlessListener);
+                    : dev.jkbuild.cli.engine.EngineClient.buildWorkspace(
+                            dev.jkbuild.engine.EnginePaths.current(), request, headlessListener);
         } catch (java.io.IOException e) {
             CliOutput.err("jk build: " + e.getMessage());
             return Exit.SOFTWARE;
@@ -474,10 +486,10 @@ public final class BuildCommand implements CliCommand {
                         }
                     }
             };
-            result = daemonDisabledForTests()
+            result = engineDisabledForTests()
                     ? dev.jkbuild.runtime.BuildService.buildWorkspace(request, liveListener)
-                    : dev.jkbuild.cli.daemon.DaemonClient.buildWorkspace(
-                            dev.jkbuild.daemon.DaemonPaths.current(), request, liveListener);
+                    : dev.jkbuild.cli.engine.EngineClient.buildWorkspace(
+                            dev.jkbuild.engine.EnginePaths.current(), request, liveListener);
         } catch (java.io.IOException e) {
             // finishGoalFailure's own `tail` already gets wrapped in GoalWedge.failureLine(goalName(),
             // nerdfont, tail) internally — pass the plain message, not a pre-rendered failure line
@@ -658,17 +670,17 @@ public final class BuildCommand implements CliCommand {
         }
         GoalResult result;
         JUnitLauncher.Result testResult;
-        // Daemon-hosted (a real single-project jk build always is, outside the test-only bypass):
-        // the daemon runs the goal and, on success, does the calibration-refine + cache-prune
+        // Engine-hosted (a real single-project jk build always is, outside the test-only bypass):
+        // the engine runs the goal and, on success, does the calibration-refine + cache-prune
         // itself (it's the process that actually measured the work) — see the `if (result.success())`
         // block below, which only repeats that logic for the two in-process branches.
-        boolean daemonHosted = agg == null && !daemonDisabledForTests();
+        boolean engineHosted = agg == null && !engineDisabledForTests();
         if (agg != null) {
             // Workspace module: feed the one shared aggregate view, scaling this
             // module's progress into its reserved slice of the calibrated total.
             result = GoalConsole.runGoalInto(goal, pm.cache(), pm.target(), agg, pm.barWeight());
             testResult = goal.get(TEST_RESULT).orElse(null);
-        } else if (!daemonHosted) {
+        } else if (!engineHosted) {
             // chip = true → settle through the goal chip (" ✓ Build ▶ Build successful …"),
             // matching the workspace path. onSuccess/onFailure return the tail after the verb.
             ConsoleSpec spec =
@@ -678,10 +690,10 @@ public final class BuildCommand implements CliCommand {
         } else {
             // The wire has no real Goal to read BUILD_OUTCOME/LAYOUT from ahead of time (they arrive
             // on the terminal goal-finish event), so projectTail's ingredients are supplied two ways:
-            // BUILD_OUTCOME rides the wire (only the daemon, which actually ran the goal, knows it);
+            // BUILD_OUTCOME rides the wire (only the engine, which actually ran the goal, knows it);
             // LAYOUT is reconstructed independently — it's a pure derivation from dir + the parsed
             // jk.toml, both of which the client already has, and the artifact file it points at lives
-            // on the same local filesystem the daemon just built into.
+            // on the same local filesystem the engine just built into.
             JUnitLauncher.Result[] testResultHolder = new JUnitLauncher.Result[1];
             String[] buildOutcomeHolder = new String[1];
             BuildLayout layout;
@@ -698,9 +710,9 @@ public final class BuildCommand implements CliCommand {
                     true);
             GoalConsole.Mode mode = GoalConsole.modeFor(global);
             try {
-                result = dev.jkbuild.cli.daemon.DaemonClient.runSingleBuild(
-                        dev.jkbuild.daemon.DaemonPaths.current(),
-                        new dev.jkbuild.cli.daemon.DaemonClient.SingleBuildRequest(
+                result = dev.jkbuild.cli.engine.EngineClient.runSingleBuild(
+                        dev.jkbuild.engine.EnginePaths.current(),
+                        new dev.jkbuild.cli.engine.EngineClient.SingleBuildRequest(
                                 pm.dir(),
                                 pm.cache(),
                                 jdksDir,
@@ -721,7 +733,7 @@ public final class BuildCommand implements CliCommand {
         }
 
         if (result.success()) {
-            if (!daemonHosted) {
+            if (!engineHosted) {
                 // Single-module (standalone) build: fold this run's measured throughput into the host
                 // calibration so the cold estimate self-heals — the common case never hits the
                 // workspace loops that do this. Skip fully-cached runs (near-zero time, not
@@ -807,9 +819,9 @@ public final class BuildCommand implements CliCommand {
 
     /**
      * As {@link #projectTail(Goal)}, but from already-resolved values instead of a live {@code Goal}
-     * — for a daemon-hosted build, where there's no local {@code Goal} to read {@code BUILD_OUTCOME}/
+     * — for an engine-hosted build, where there's no local {@code Goal} to read {@code BUILD_OUTCOME}/
      * {@code LAYOUT} off of (they arrive over the wire / get reconstructed independently instead; see
-     * {@code DaemonClient.runSingleBuild}).
+     * {@code EngineClient.runSingleBuild}).
      */
     static String projectTail(String buildOutcome, BuildLayout layout) {
         if ("up-to-date".equals(buildOutcome)) {

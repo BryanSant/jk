@@ -43,8 +43,8 @@ and repair broken links automatically. Never symlink on Windows.
 - We do not aggressively try to *upgrade* an external install if it's
   almost-but-not-exactly the requested version. Exact-match only;
   fuzzy-match is a follow-up.
-- We do not run a background daemon. Discovery happens once per verb
-  invocation and the symlink is the cache.
+- We do not host discovery in the resident engine. Discovery happens once
+  per verb invocation and the symlink is the cache.
 
 ---
 

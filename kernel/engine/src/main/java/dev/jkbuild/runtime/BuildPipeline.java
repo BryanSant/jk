@@ -900,11 +900,23 @@ public final class BuildPipeline {
                     // errors fail the build, warnings/notes (e.g. deprecation) are
                     // surfaced but don't. Strip the leading severity word — the
                     // console renderer adds its own ✗/⚠ marker.
+                    boolean errored = false;
                     for (CompileResult.Diagnostic d : r.diagnostics()) {
-                        if (d.severity() == CompileResult.Severity.ERROR) ctx.error("javac", d.describe());
-                        else ctx.warn("javac", d.describe());
+                        if (d.severity() == CompileResult.Severity.ERROR) {
+                            ctx.error("javac", d.describe());
+                            errored = true;
+                        } else {
+                            ctx.warn("javac", d.describe());
+                        }
                     }
-                    if (!r.success()) throw new RuntimeException("javac reported errors");
+                    if (!r.success()) {
+                        // Never fail silently: if no ERROR diagnostic surfaced (crash,
+                        // swallowed output), say so explicitly.
+                        if (!errored) {
+                            ctx.error("javac", "compile failed without compiler diagnostics (outcome: " + r.outcome() + ")");
+                        }
+                        throw new RuntimeException("javac reported errors");
+                    }
                     if (r.cacheHit()) ctx.label("cache hit " + r.actionKey().substring(0, 8));
                     ctx.put(BUILD_OUTCOME, r.outcome());
                     ctx.progress(sources.size());

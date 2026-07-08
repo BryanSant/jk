@@ -64,11 +64,15 @@ public final class ExplainCommand implements CliCommand {
 
     /**
      * Escape hatch for the fast JVM unit-test suite ONLY — see {@link
-     * BuildCommand#daemonDisabledForTests()} for why this exists; every real {@code jk explain}
-     * invocation goes through the daemon.
+     * BuildCommand#engineDisabledForTests()} for why this exists; every real {@code jk explain}
+     * invocation goes through the engine.
      */
-    private static boolean daemonDisabledForTests() {
-        return Boolean.getBoolean("jk.test.noDaemon");
+    private static boolean engineDisabledForTests() {
+        // Also bypass inside a jk-forked test worker (jk.plugin.class=JkRunner): under the
+        // self-hosted build, in-process dispatches would otherwise recurse into the very
+        // engine hosting the test run and deadlock — see BuildCommand's javadoc.
+        return Boolean.getBoolean("jk.test.noEngine")
+                || "dev.jkbuild.test.runner.JkRunner".equals(System.getProperty("jk.plugin.class"));
     }
 
     @Override
@@ -87,11 +91,11 @@ public final class ExplainCommand implements CliCommand {
 
         // Forecast the build through the engine facade — resolve the graph and run the truthful
         // per-phase plan, returning a front-end-safe view (modules + edges + concurrency width).
-        // Daemon-hosted like `jk build`/`jk test`, except in the fast unit-test suite (no real jk
-        // binary/daemon available there — see BuildCommand.daemonDisabledForTests()).
-        BuildService.ExplainPlan plan = daemonDisabledForTests()
+        // Engine-hosted like `jk build`/`jk test`, except in the fast unit-test suite (no real jk
+        // binary/engine available there — see BuildCommand.engineDisabledForTests()).
+        BuildService.ExplainPlan plan = engineDisabledForTests()
                 ? BuildService.explain(startDir, entry, cache)
-                : dev.jkbuild.cli.daemon.DaemonClient.explain(dev.jkbuild.daemon.DaemonPaths.current(), startDir, cache);
+                : dev.jkbuild.cli.engine.EngineClient.explain(dev.jkbuild.engine.EnginePaths.current(), startDir, cache);
         if (plan.hasErrors()) {
             for (String err : plan.errors()) CliOutput.err(ConsoleSpec.errorLine("composite", err));
             return Exit.CONFIG;

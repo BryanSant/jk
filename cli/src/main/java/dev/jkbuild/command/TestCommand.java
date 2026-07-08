@@ -73,11 +73,15 @@ public final class TestCommand implements CliCommand {
 
     /**
      * Escape hatch for the fast JVM unit-test suite ONLY — see {@link
-     * BuildCommand#daemonDisabledForTests()}'s javadoc for the full rationale. Same system property,
-     * same "never a user-facing flag" contract; a real {@code jk test} invocation always daemon-hosts.
+     * BuildCommand#engineDisabledForTests()}'s javadoc for the full rationale. Same system property,
+     * same "never a user-facing flag" contract; a real {@code jk test} invocation always engine-hosts.
      */
-    private static boolean daemonDisabledForTests() {
-        return Boolean.getBoolean("jk.test.noDaemon");
+    private static boolean engineDisabledForTests() {
+        // Also bypass inside a jk-forked test worker (jk.plugin.class=JkRunner): under the
+        // self-hosted build, in-process dispatches would otherwise recurse into the very
+        // engine hosting the test run and deadlock — see BuildCommand's javadoc.
+        return Boolean.getBoolean("jk.test.noEngine")
+                || "dev.jkbuild.test.runner.JkRunner".equals(System.getProperty("jk.plugin.class"));
     }
 
     @Override
@@ -100,7 +104,7 @@ public final class TestCommand implements CliCommand {
 
         GoalResult result;
         JUnitLauncher.Result testResult;
-        if (daemonDisabledForTests()) {
+        if (engineDisabledForTests()) {
             // Size the test-runner JVMs' heaps (and cap how many fork at once) to the
             // host's free memory before launching them.
             dev.jkbuild.worker.HeapPlan.Plan heapPlan =
@@ -142,9 +146,9 @@ public final class TestCommand implements CliCommand {
                     goal, GoalConsole.modeFor(global), cache, spec, BuildCommand.buildTarget(buildFile, dir));
             testResult = goal.get(TEST_RESULT).orElse(null);
         } else {
-            // Daemon-hosted (Phase 3): the wire has no real Goal to attach a console listener to
+            // Engine-hosted (Phase 3): the wire has no real Goal to attach a console listener to
             // ahead of time, so the listener is chosen once the phase list arrives over the socket —
-            // see DaemonBuildListenerAdapter.runTest. testResultHolder is populated (if the run-tests
+            // see EngineBuildListenerAdapter.runTest. testResultHolder is populated (if the run-tests
             // phase actually ran) before the terminal goal-finish reaches that listener, exactly
             // mirroring how goal.get(TEST_RESULT) is already populated by the in-process path above.
             JUnitLauncher.Result[] testResultHolder = new JUnitLauncher.Result[1];
@@ -153,9 +157,9 @@ public final class TestCommand implements CliCommand {
             String module = BuildCommand.buildTarget(buildFile, dir);
             GoalConsole.Mode mode = GoalConsole.modeFor(global);
             try {
-                result = dev.jkbuild.cli.daemon.DaemonClient.runTest(
-                        dev.jkbuild.daemon.DaemonPaths.current(),
-                        new dev.jkbuild.cli.daemon.DaemonClient.TestRequest(
+                result = dev.jkbuild.cli.engine.EngineClient.runTest(
+                        dev.jkbuild.engine.EnginePaths.current(),
+                        new dev.jkbuild.cli.engine.EngineClient.TestRequest(
                                 dir, cache, jdksDir, workerCount, profileName, global.verbose),
                         phases -> GoalConsole.chooseConsoleListener(phases, mode, spec, module),
                         testResultHolder);
@@ -176,7 +180,7 @@ public final class TestCommand implements CliCommand {
      * Success result line (sans the leading ✓): {@code Passed N tests in 32s}, or {@code No tests in
      * <t>} for a project with no test sources. Takes the resolved {@link JUnitLauncher.Result}
      * directly (rather than a {@code Goal} to look it up from) so both the in-process path (which
-     * reads it off {@code goal.get(TEST_RESULT)}) and the daemon-hosted path (which has no real
+     * reads it off {@code goal.get(TEST_RESULT)}) and the engine-hosted path (which has no real
      * {@code Goal}, only a wire-populated holder) share this one rendering method.
      */
     private static String testSummary(JUnitLauncher.Result testResult, GoalResult result) {

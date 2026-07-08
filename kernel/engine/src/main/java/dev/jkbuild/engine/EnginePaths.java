@@ -1,28 +1,28 @@
 // SPDX-License-Identifier: Apache-2.0
-package dev.jkbuild.daemon;
+package dev.jkbuild.engine;
 
 import dev.jkbuild.util.Hashing;
 import dev.jkbuild.util.JkDirs;
 import java.nio.file.Path;
 
 /**
- * Resolves the on-disk identity of the daemon for a given {@code ~/.jk} state directory: a short key
+ * Resolves the on-disk identity of the engine for a given {@code ~/.jk} state directory: a short key
  * derived from the resolved, absolute state-dir path, and the socket/lock/pid/log files under it.
  *
  * <p>Keying off the state dir (rather than a fixed machine-wide name) means a different {@code
- * JK_HOME}/{@code JK_STATE_DIR} naturally gets its own daemon, and every invocation that resolves the
- * same state dir naturally shares one — see {@code docs/daemon.md}.
+ * JK_HOME}/{@code JK_STATE_DIR} naturally gets its own engine, and every invocation that resolves the
+ * same state dir naturally shares one — see {@code docs/engine.md}.
  */
-public final class DaemonPaths {
+public final class EnginePaths {
 
-    private DaemonPaths() {}
+    private EnginePaths() {}
 
     /** How many hex characters of the state-dir hash to use as the identity key. */
     private static final int KEY_LENGTH = 16;
 
     /**
-     * The socket/lock/pid/log paths for one daemon identity, all siblings under {@code daemon/}.
-     * {@code token} is only ever written/read on the {@link DaemonTransport#useLoopbackTcp()} path
+     * The socket/lock/pid/log paths for one engine identity, all siblings under {@code engine/}.
+     * {@code token} is only ever written/read on the {@link EngineTransport#useLoopbackTcp()} path
      * (Windows) — on the Unix-domain-socket path it's simply never created.
      */
     public record Paths(String key, Path dir, Path socket, Path lock, Path pid, Path log, Path token) {}
@@ -35,7 +35,7 @@ public final class DaemonPaths {
     /** Resolve against an explicit state directory — the seam tests use. */
     public static Paths resolve(Path stateDir) {
         String key = keyFor(stateDir);
-        Path dir = stateDir.resolve("daemon");
+        Path dir = stateDir.resolve("engine");
         return new Paths(
                 key,
                 dir,

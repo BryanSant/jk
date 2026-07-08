@@ -1,18 +1,24 @@
 [project]
 group    = "dev.jkbuild"
 name     = "jk-cli"
-version  = "0.6.0-SNAPSHOT"
+version  = "0.10.0-SNAPSHOT"
 jdk      = 25
 java     = 25
 main     = "dev.jkbuild.cli.Jk"
 
 [dependencies]
-jk-core         = { group = "dev.jkbuild", name = "jk-core",         version = "0.6.0-SNAPSHOT" }
-jk-io           = { group = "dev.jkbuild", name = "jk-io",           version = "0.6.0-SNAPSHOT" }
-jk-resolver     = { group = "dev.jkbuild", name = "jk-resolver",     version = "0.6.0-SNAPSHOT" }
-jk-toolchain    = { group = "dev.jkbuild", name = "jk-toolchain",    version = "0.6.0-SNAPSHOT" }
-jk-engine       = { group = "dev.jkbuild", name = "jk-engine",       version = "0.6.0-SNAPSHOT" }
+jk-core         = { group = "dev.jkbuild", name = "jk-core",         version = "0.10.0-SNAPSHOT" }
+jk-io           = { group = "dev.jkbuild", name = "jk-io",           version = "0.10.0-SNAPSHOT" }
+jk-resolver     = { group = "dev.jkbuild", name = "jk-resolver",     version = "0.10.0-SNAPSHOT" }
+jk-toolchain    = { group = "dev.jkbuild", name = "jk-toolchain",    version = "0.10.0-SNAPSHOT" }
+jk-engine       = { group = "dev.jkbuild", name = "jk-engine",       version = "0.10.0-SNAPSHOT" }
 jline-terminal-ffm = { group = "org.jline", name = "jline-terminal-ffm", version = "4.1.2" }
+
+# Compile-only (native-image Feature API used by EngineDetachFeature); mirrors
+# cli/build.gradle.kts's compileOnly(libs.graalvm.nativeimage). Not needed at runtime —
+# the JVM dist never loads the Feature; native-image links it at build time.
+[provided-dependencies]
+graalvm-nativeimage = { group = "org.graalvm.sdk", name = "nativeimage", version = "25.0.0" }
 
 [test-dependencies]
 bouncycastle-bcpg       = { group = "org.bouncycastle",   name = "bcpg-jdk18on",            version = "1.84" }

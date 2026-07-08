@@ -92,12 +92,53 @@ public final class RepoArtifactStore {
     }
 
     /**
+     * Verification state of a stored artifact against an expected (lockfile-pinned) hash — see
+     * {@link #verify}.
+     */
+    public enum IndexState {
+        /** Sidecar or artifact file missing — never (fully) stored. */
+        ABSENT,
+        /** Present, and the stored hash equals the expected hash. */
+        VERIFIED,
+        /** Present, but the stored hash differs — the artifact was overwritten or corrupted. */
+        MISMATCH
+    }
+
+    /**
+     * Verify the artifact at {@code relativePath} against {@code expectedSha256} (the hash the
+     * lockfile pinned). Runs {@link #locate}'s mtime guard first, so an out-of-band rewrite of the
+     * {@code ~/.m2} file (a Maven re-download, corruption, a stray test write) is re-hashed before
+     * the comparison — poisoned content reports {@link IndexState#MISMATCH} instead of resolving.
+     */
+    public IndexState verify(String relativePath, String expectedSha256) {
+        if (locate(relativePath).isEmpty()) return IndexState.ABSENT;
+        try {
+            String stored = Files.readString(sidecarPath(relativePath)).strip();
+            return stored.equals(expectedSha256) ? IndexState.VERIFIED : IndexState.MISMATCH;
+        } catch (IOException unreadable) {
+            return IndexState.MISMATCH;
+        }
+    }
+
+    /**
+     * As {@link #locate(String)} but hash-verified: resolves only when {@link #verify} says the
+     * stored hash matches {@code expectedSha256}. A mismatching artifact is treated as absent so
+     * callers fall back to the CAS blob (whose path <em>is</em> its content) or re-fetch, rather
+     * than compile against bytes the lockfile never pinned.
+     */
+    public Optional<Path> locate(String relativePath, String expectedSha256) {
+        return verify(relativePath, expectedSha256) == IndexState.VERIFIED
+                ? locate(relativePath)
+                : Optional.empty();
+    }
+
+    /**
      * The stored artifact path if fully materialised, else empty.
      *
      * <p>For index-only repos: applies an <em>mtime guard</em>. If the {@code ~/.m2} artifact is
      * newer than the sidecar (e.g. Maven updated the file), the sidecar is re-hashed and
-     * overwritten. A lockfile checksum mismatch surfaces on the next {@code jk build}; run
-     * {@code jk lock --force} to re-pin.
+     * overwritten. Callers holding a lockfile hash should use {@link #locate(String, String)} (or
+     * {@link #verify}), which surfaces the mismatch instead of trusting the rewritten content.
      */
     public Optional<Path> locate(String relativePath) {
         if (root == null) return Optional.empty();
@@ -125,13 +166,18 @@ public final class RepoArtifactStore {
 
     /**
      * Index-only write: record that the artifact at {@code relativePath} was stored in
-     * {@code ~/.m2} with hash {@code sha256}. Writes only the sidecar. Idempotent; best-effort.
+     * {@code ~/.m2} with hash {@code sha256}. Writes only the sidecar. Idempotent; best-effort. A
+     * sidecar holding a <em>different</em> hash is overwritten — a corrective re-fetch (after the
+     * mtime guard recorded poisoned content) must update the index, not be ignored.
      */
     public void recordIndex(String relativePath, String sha256) {
         if (root == null) return;
         try {
             Path sidecar = sidecarPath(relativePath);
-            if (Files.exists(sidecar)) return;
+            if (Files.isRegularFile(sidecar)
+                    && sha256.equals(Files.readString(sidecar).strip())) {
+                return;
+            }
             Files.createDirectories(sidecar.getParent());
             Files.writeString(sidecar, sha256);
         } catch (IOException | RuntimeException ignored) {

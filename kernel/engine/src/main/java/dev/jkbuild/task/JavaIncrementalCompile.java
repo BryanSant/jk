@@ -603,8 +603,8 @@ public final class JavaIncrementalCompile {
             for (Path file : (Iterable<Path>) walk::iterator) {
                 if (!Files.isRegularFile(file)) continue;
                 if (FreshnessStamp.isStampFile(file.getFileName().toString())) continue;
-                byte[] bytes = Files.readAllBytes(file);
-                String hex = Hashing.sha256Hex(bytes);
+                // Streamed hash + hard-link (same pattern as ActionCache.store).
+                String hex = Hashing.sha256Hex(file);
                 cas.putByLink(file, hex);
                 outputs.put(out.relativize(file).toString().replace(File.separatorChar, '/'), hex);
             }

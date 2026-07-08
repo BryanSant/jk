@@ -76,7 +76,8 @@ public final class JkMavenLocalRepo {
             for (Path p : (Iterable<Path>) walk::iterator) {
                 if (!Files.isRegularFile(p)) continue;
                 try {
-                    String hex = Hashing.sha256Hex(Files.readAllBytes(p));
+                    // Streamed — repo files are jars; never buffer one whole.
+                    String hex = Hashing.sha256Hex(p);
                     out.computeIfAbsent(hex, k -> new ArrayList<>()).add(p);
                 } catch (IOException ignored) {
                     // unreadable file — skip

@@ -151,6 +151,16 @@ public final class BuildService {
      * error, pessimistically returns all modules (so nothing is under-reserved).
      */
     public static Set<Path> forecastDirtyDirs(BuildGraph.Result graph, Path cache) {
+        return forecastDirtyDirs(graph, cache, false);
+    }
+
+    /**
+     * As {@link #forecastDirtyDirs(BuildGraph.Result, Path)} but honoring {@code skipTests}: a
+     * {@code --skip-tests} build never runs the test phases, so their staleness must neither mark a
+     * module dirty (it would force an engine build of a fully-cached workspace) nor cost the
+     * test-stamp content hashing.
+     */
+    public static Set<Path> forecastDirtyDirs(BuildGraph.Result graph, Path cache, boolean skipTests) {
         Set<Path> all = new HashSet<>();
         for (BuildGraph.BuildUnit u : graph.topoOrder()) all.add(u.dir());
         if (SessionContext.current().config().rerunOr(false)) return all;
@@ -158,8 +168,15 @@ public final class BuildService {
             Cas cas = new Cas(cache);
             ActionCache ac = new ActionCache(cas, cache.resolve("actions"));
             Set<Path> dirty = new HashSet<>();
-            for (BuildPlanForecast.Module m : BuildPlanForecast.of(graph, cas, ac, cache)) {
+            for (BuildPlanForecast.Module m : BuildPlanForecast.of(graph, cas, ac, cache, skipTests)) {
                 if (m.dirty()) dirty.add(m.dir());
+                if (Perf.ENABLED && m.dirty()) {
+                    for (BuildPlanForecast.Phase p : m.phases()) {
+                        if (!p.cached())
+                            System.err.println(
+                                    "[jk-perf] dirty " + m.coord() + " " + p.name() + " (" + p.text() + ")");
+                    }
+                }
             }
             return dirty;
         } catch (RuntimeException e) {
@@ -269,6 +286,11 @@ public final class BuildService {
         return forecastDirtyDirs(graph.graph(), cache);
     }
 
+    /** {@link #forecastDirtyDirs(BuildGraph.Result, Path, boolean)} over a front-end-held {@link ResolvedGraph}. */
+    public static Set<Path> forecastDirtyDirs(ResolvedGraph graph, Path cache, boolean skipTests) {
+        return forecastDirtyDirs(graph.graph(), cache, skipTests);
+    }
+
     // =========================================================================
     // Workspace build (the front-end-callable event-emitting entry point)
     // =========================================================================
@@ -314,12 +336,25 @@ public final class BuildService {
         private final boolean fullyCached;
         private final Path cache;
 
-        public ModulePlan(BuildGraph.BuildUnit unit, Goal goal, int weight, boolean fullyCached, Path cache) {
+        ModulePlan(BuildGraph.BuildUnit unit, Goal goal, int weight, boolean fullyCached, Path cache) {
             this.unit = unit;
             this.goal = goal;
             this.weight = weight;
             this.fullyCached = fullyCached;
             this.cache = cache;
+        }
+
+        /**
+         * Reconstruct a plan client-side from wire-level data (engine front-ends). The synthetic
+         * unit this creates is never executed — renderers read only {@link #coord()}, {@link
+         * #dir()}, and {@link #goal()} — and it never crosses back into the engine. This is the
+         * only construction path outside the engine package, so {@link BuildGraph.BuildUnit} stays
+         * invisible to front-ends.
+         */
+        public static ModulePlan fromWire(
+                Path dir, String coord, Goal goal, int weight, boolean fullyCached, Path cache) {
+            BuildGraph.BuildUnit unit = new BuildGraph.BuildUnit(dir, null, coord, BuildGraph.Origin.ROOT);
+            return new ModulePlan(unit, goal, weight, fullyCached, cache);
         }
 
         /** Engine-internal build unit — package-private so front-ends can't reach {@link BuildGraph.BuildUnit}. */
@@ -374,7 +409,7 @@ public final class BuildService {
      * presentation — the caller renders from the events.
      *
      * <p>This method does not assume it is the only in-flight caller in the process: memory planning
-     * is opt-out precisely so a host running several concurrent builds in one JVM (a resident daemon)
+     * is opt-out precisely so a host running several concurrent builds in one JVM (a resident engine)
      * can plan once for its own concurrency instead of letting each call overwrite the shared
      * {@code HeapPlan}/{@code WorkerSlots} state sized for just itself.
      */
@@ -411,11 +446,15 @@ public final class BuildService {
 
         Set<Path> moduleDirs = new LinkedHashSet<>();
         for (BuildGraph.BuildUnit u : units) moduleDirs.add(u.dir());
-        Set<Path> dirty = req.dirtyHint() != null ? req.dirtyHint() : forecastDirtyDirs(graph, req.cache());
+        long tf = Perf.start();
+        Set<Path> dirty =
+                req.dirtyHint() != null ? req.dirtyHint() : forecastDirtyDirs(graph, req.cache(), req.skipTests());
+        Perf.end("ws-forecast(hint=" + (req.dirtyHint() != null) + ")", tf);
 
         // Each module's phase durations feed one shared sink, folded into the learned ledger on success.
         List<PhaseTimings.Sample> timingSamples = Collections.synchronizedList(new ArrayList<>());
         Map<Path, ModulePlan> plans = new LinkedHashMap<>();
+        long tp = Perf.start();
         for (BuildGraph.BuildUnit u : units) {
             ModulePlan p = prepareModule(u, req, moduleDirs, dirty.contains(u.dir()));
             if (p == null) {
@@ -428,15 +467,18 @@ public final class BuildService {
             p.goal().addListener(new PhaseTimingsRecorder(u.dir().toString(), timingSamples));
             plans.put(u.dir(), p);
         }
+        Perf.end("ws-prepare-modules", tp);
         listener.onPlan(List.copyOf(plans.values()));
 
         // ETA model (schedule-aware, per-module warm/cold rate) — engine knowledge, emitted as events.
+        long teta = Perf.start();
         Map<Path, EffortWeights.ModuleCost> costByDir = new LinkedHashMap<>();
         for (var e : plans.entrySet()) {
             costByDir.put(
                     e.getKey(),
                     EffortWeights.costOf(e.getKey(), graph.edges().getOrDefault(e.getKey(), Set.of()), e.getValue().goal()));
         }
+        Perf.end("ws-eta-costs", teta);
         int requestedJvms = HeapPlan.requestedJvms(width, req.workers() > 0 ? req.workers() : 1, parallelTests, cap);
         // Clamp the ETA's module concurrency to the cap so a serial build (cap 1) estimates serially.
         final int concurrency =
@@ -448,6 +490,7 @@ public final class BuildService {
         List<ModuleOutcome> outcomes = Collections.synchronizedList(new ArrayList<>());
         List<Double> observedRates = Collections.synchronizedList(new ArrayList<>());
         long start = System.nanoTime();
+        long tsched = Perf.start();
         ModuleOutcome failure = WorkspaceScheduler.run(
                 units,
                 BuildGraph.BuildUnit::dir,
@@ -478,6 +521,7 @@ public final class BuildService {
                     return null;
                 },
                 req.maxModuleConcurrency());
+        Perf.end("ws-schedule-run", tsched);
         boolean ok = failure == null;
         if (ok) {
             // Fold this run's phase durations + measured throughput into the learned ledger + host

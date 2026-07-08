@@ -1,13 +1,13 @@
 [project]
 group    = "dev.jkbuild"
 name     = "jk-core"
-version  = "0.6.0-SNAPSHOT"
+version  = "0.10.0-SNAPSHOT"
 description = "jk core foundations: TOML config parser, lockfile, layout, deny policy."
 jdk      = 25
 java     = 25
 
 [dependencies]
-jk-model = { group = "dev.jkbuild", name = "jk-model", version = "0.6.0-SNAPSHOT" }
+jk-model = { group = "dev.jkbuild", name = "jk-model", version = "0.10.0-SNAPSHOT" }
 tomlj    = { group = "org.tomlj",   name = "tomlj",    version = "1.1.1" }
 
 [test-dependencies]

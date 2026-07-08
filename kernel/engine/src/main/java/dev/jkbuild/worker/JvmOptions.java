@@ -202,7 +202,7 @@ public final class JvmOptions {
      * Test-only: undo {@link #planAndApply} — clears the shared heap plan and reopens the {@link
      * WorkerSlots} gate. Production code never calls this (a real process's plan is meant to live for
      * the process's whole lifetime); it exists because a test that spins up a real {@code
-     * DaemonServer} (which calls {@code planAndApply} as a side effect of starting) would otherwise
+     * EngineServer} (which calls {@code planAndApply} as a side effect of starting) would otherwise
      * leak that process-wide static into unrelated tests sharing the same test JVM.
      */
     public static void resetSharedPlanForTests() {

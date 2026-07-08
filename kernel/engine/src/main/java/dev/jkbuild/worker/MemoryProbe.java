@@ -28,6 +28,7 @@ public final class MemoryProbe {
     static final long CGROUP_UNLIMITED = Long.MAX_VALUE / 2;
 
     private static final Path PROC_MEMINFO = Path.of("/proc/meminfo");
+    private static final Path PROC_SELF_STATUS = Path.of("/proc/self/status");
     private static final Path CGROUP2_MAX = Path.of("/sys/fs/cgroup/memory.max");
     private static final Path CGROUP2_CURRENT = Path.of("/sys/fs/cgroup/memory.current");
     private static final Path CGROUP1_LIMIT = Path.of("/sys/fs/cgroup/memory/memory.limit_in_bytes");
@@ -48,6 +49,22 @@ public final class MemoryProbe {
             }
         }
         return m;
+    }
+
+    /**
+     * This process's resident set size — best-effort, uncached (callers want "now", not
+     * planning-time). Linux reads {@code VmRSS} from {@code /proc/self/status} (same format as
+     * {@code /proc/meminfo}); {@code -1} where the OS doesn't expose it (macOS, Windows).
+     */
+    public static long ownRssBytes() {
+        try {
+            if (Files.isReadable(PROC_SELF_STATUS)) {
+                return meminfoValueBytes(Files.readString(PROC_SELF_STATUS), "VmRSS");
+            }
+        } catch (IOException | RuntimeException ignored) {
+            // best-effort: fall through to unknown
+        }
+        return -1;
     }
 
     private static Memory measure() {

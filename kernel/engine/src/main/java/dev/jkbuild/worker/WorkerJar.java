@@ -67,7 +67,7 @@ public enum WorkerJar {
 
     /**
      * The m2-layout relative path for this worker at its current version.
-     * E.g. {@code dev/jkbuild/jk-formatter/0.1.0-SNAPSHOT/jk-formatter-0.1.0-SNAPSHOT.jar}.
+     * E.g. {@code dev/jkbuild/jk-formatter/0.10.0-SNAPSHOT/jk-formatter-0.10.0-SNAPSHOT.jar}.
      */
     private String relativePath() {
         String version = JkVersion.VERSION;

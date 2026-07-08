@@ -21,8 +21,8 @@ public final class GitProjectBuilder {
 
     private GitProjectBuilder() {}
 
-    /** The built artifact: its coordinate/version plus the jar and POM bytes. */
-    record Built(String group, String artifact, String version, byte[] jar, String pomXml) {
+    /** The built artifact: its coordinate/version plus the on-disk jar path and POM text. */
+    record Built(String group, String artifact, String version, Path jar, String pomXml) {
         String coordinate() {
             return group + ":" + artifact + ":" + version;
         }

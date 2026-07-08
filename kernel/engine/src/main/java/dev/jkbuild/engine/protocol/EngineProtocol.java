@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
-package dev.jkbuild.daemon.protocol;
+package dev.jkbuild.engine.protocol;
 
 import dev.jkbuild.plugin.protocol.Ndjson;
 import java.util.List;
 
 /**
- * The daemon wire protocol's message vocabulary: one newline-delimited JSON object per message, each
+ * The engine wire protocol's message vocabulary: one newline-delimited JSON object per message, each
  * carrying a {@code "t"} type discriminator — the same canonical envelope shape {@link
  * dev.jkbuild.worker.WorkerClient} already uses for jk's worker-process protocol (see {@code
- * docs/daemon.md}). Deliberately internal and unversioned: the client can only ever be a same-version
- * {@code jk} binary (enforced by the daemon spawn path), so this vocabulary is free to change between
+ * docs/engine.md}). Deliberately internal and unversioned: the client can only ever be a same-version
+ * {@code jk} binary (enforced by the engine spawn path), so this vocabulary is free to change between
  * jk releases.
  *
  * <p>Phase 1: connection handshake ({@link #HELLO}/{@link #HELLO_ACK}), liveness ({@link
@@ -25,15 +25,15 @@ import java.util.List;
  * #GOAL_DIAGNOSTIC} exist as separate repeatable message types instead of array-valued fields on
  * {@link #PLAN_DONE}/{@link #GOAL_FINISH}.
  */
-public final class DaemonProtocol {
+public final class EngineProtocol {
 
-    private DaemonProtocol() {}
+    private EngineProtocol() {}
 
     public static final String TYPE_FIELD = "t";
 
     /**
      * Client → server, once per connection, and only on the loopback-TCP transport (see {@code
-     * DaemonTransport}): the shared secret from {@code paths.token()}, required as the very first
+     * EngineTransport}): the shared secret from {@code paths.token()}, required as the very first
      * line before anything else is processed. Never sent/expected on the Unix-domain-socket
      * transport, where the socket file's own filesystem permissions already gate access.
      */
@@ -42,7 +42,7 @@ public final class DaemonProtocol {
     /** Client → server, once per connection: announces the client's jk version. */
     public static final String HELLO = "hello";
 
-    /** Server → client: the daemon's own jk version, pid, and start time. */
+    /** Server → client: the engine's own jk version, pid, and start time. */
     public static final String HELLO_ACK = "hello-ack";
 
     /** Client → server: liveness probe. */
@@ -57,7 +57,7 @@ public final class DaemonProtocol {
     /** Server → client: the status snapshot. */
     public static final String STATUS_ACK = "status-ack";
 
-    /** Client → server: ask the daemon to shut down gracefully. */
+    /** Client → server: ask the engine to shut down gracefully. */
     public static final String SHUTDOWN = "shutdown";
 
     /** Server → client: acknowledges {@link #SHUTDOWN} just before closing the connection. */
@@ -136,7 +136,7 @@ public final class DaemonProtocol {
     public static final String TEST_REQUEST = "test-request";
 
     /**
-     * Client → server: run a single (non-workspace) project's build goal — the daemon-hosted
+     * Client → server: run a single (non-workspace) project's build goal — the engine-hosted
      * counterpart of {@code BuildCommand.runForDir}. Same single-goal shape as {@link #TEST_REQUEST}
      * (one goal, {@link #SINGLE_GOAL_DIR}-tagged events), but {@code testOnly=false} server-side and
      * {@link #GOAL_FINISH} additionally carries the build outcome (see {@link
@@ -209,8 +209,20 @@ public final class DaemonProtocol {
         return "{\"t\":\"" + STATUS + "\"}";
     }
 
+    /**
+     * The status snapshot. Memory fields are best-effort observations of the engine process itself:
+     * heap from the runtime, {@code rssBytes} from the OS ({@code -1} where it exposes none).
+     */
     public static String statusAck(
-            String version, long pid, long startedAtMillis, int idleMinutes, int activeRequests) {
+            String version,
+            long pid,
+            long startedAtMillis,
+            int idleMinutes,
+            int activeRequests,
+            long heapUsedBytes,
+            long heapCommittedBytes,
+            long heapMaxBytes,
+            long rssBytes) {
         return "{\"t\":\""
                 + STATUS_ACK
                 + "\",\"version\":"
@@ -223,6 +235,14 @@ public final class DaemonProtocol {
                 + idleMinutes
                 + ",\"activeRequests\":"
                 + activeRequests
+                + ",\"heapUsedBytes\":"
+                + heapUsedBytes
+                + ",\"heapCommittedBytes\":"
+                + heapCommittedBytes
+                + ",\"heapMaxBytes\":"
+                + heapMaxBytes
+                + ",\"rssBytes\":"
+                + rssBytes
                 + "}";
     }
 
@@ -238,9 +258,15 @@ public final class DaemonProtocol {
 
     /**
      * Start a workspace build. {@code jdksDir}/{@code profile} may be {@code null}. Deliberately
-     * omits {@code dirtyHint} — the daemon always lets the engine forecast dirty modules itself
-     * (see {@code docs/daemon.md}); the CLI's own "fully cached, nothing to do" pre-check stays
+     * omits {@code dirtyHint} — the engine always forecasts dirty modules itself
+     * (see {@code docs/engine.md}); the CLI's own "fully cached, nothing to do" pre-check stays
      * client-side and cheap regardless.
+     *
+     * <p>{@code rerun} carries the session's rerun setting distinctly from {@code force}: rerun
+     * alone bypasses the action cache / freshness stamps (a genuine recompile+repackage) while
+     * still serving locked dependencies from the local CAS, whereas {@code force} additionally
+     * implies {@code refresh} (re-download every locked artifact). {@code jk verify}'s scratch
+     * rebuild needs exactly the former.
      */
     public static String buildRequest(
             String entryDir,
@@ -253,7 +279,8 @@ public final class DaemonProtocol {
             int maxModuleConcurrency,
             boolean parallelTests,
             boolean offline,
-            boolean force) {
+            boolean force,
+            boolean rerun) {
         return "{\"t\":\""
                 + BUILD_REQUEST
                 + "\",\"entryDir\":"
@@ -278,6 +305,8 @@ public final class DaemonProtocol {
                 + offline
                 + ",\"force\":"
                 + force
+                + ",\"rerun\":"
+                + rerun
                 + "}";
     }
 

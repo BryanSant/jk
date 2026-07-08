@@ -14,7 +14,7 @@ import java.util.concurrent.Callable;
  * {@code ScopedValue} binding established by {@code where(session, …)} does <b>not</b> propagate to a
  * task handed to a pre-existing shared executor — the worker thread would read the process-static
  * session instead. {@link JkThreads#io()}/{@link JkThreads#cpu()} run all async engine work, so a
- * daemon binding Session-A and dispatching a module build to a pool would leak the static session and
+ * engine binding Session-A and dispatching a module build to a pool would leak the static session and
  * two concurrent requests could not be isolated.
  *
  * <p>A core-aware layer ({@code SessionContext}'s static initializer) {@link #bind binds} a

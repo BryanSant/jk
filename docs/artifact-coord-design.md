@@ -521,7 +521,7 @@ internal-widget = "0.1.0"
 ```
 
 User-global overrides live in `~/.jk/libraries.toml` (same schema). The
-file is read at parser invocation time; no daemon caching.
+file is read at parser invocation time; no caching in the resident engine.
 
 ## Out of scope for v0.7
 

@@ -74,14 +74,14 @@ public final class ActionCache {
                     // outputDir but aren't action outputs — exclude them so we
                     // don't accidentally cache a stamp from a previous run.
                     if (FreshnessStamp.isStampFile(file.getFileName().toString())) continue;
-                    // Hash once, then hard-link the file into the CAS rather
+                    // Hash once (streamed — a large output never has to fit in
+                    // the heap), then hard-link the file into the CAS rather
                     // than re-reading + writing the bytes. On POSIX same-fs
                     // the output file in target/ and the CAS object share an
                     // inode from this point on; the storage cost of caching
                     // is zero. Cross-fs falls back to a byte copy via
                     // Cas.putByLink → Linking.linkOrCopy.
-                    byte[] bytes = Files.readAllBytes(file);
-                    String hex = Hashing.sha256Hex(bytes);
+                    String hex = Hashing.sha256Hex(file);
                     cas.putByLink(file, hex);
                     String relPath = outputDir.relativize(file).toString().replace(File.separatorChar, '/');
                     outputs.put(relPath, hex);

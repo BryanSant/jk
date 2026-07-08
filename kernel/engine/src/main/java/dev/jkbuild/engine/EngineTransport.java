@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
-package dev.jkbuild.daemon;
+package dev.jkbuild.engine;
 
 import java.security.SecureRandom;
 import java.util.Base64;
 import java.util.Locale;
 
 /**
- * Picks the daemon's transport by OS: a Unix domain socket everywhere the design was built and
- * verified against (macOS/Linux, including under {@code native-image} — see {@code docs/daemon.md}),
- * or loopback TCP plus a per-daemon shared-secret token on Windows, where JDK NIO's {@code
+ * Picks the engine's transport by OS: a Unix domain socket everywhere the design was built and
+ * verified against (macOS/Linux, including under {@code native-image} — see {@code docs/engine.md}),
+ * or loopback TCP plus a per-engine shared-secret token on Windows, where JDK NIO's {@code
  * StandardProtocolFamily.UNIX} support is newer and less consistently available across JDK/OS
- * version combinations. Kept behind this one seam so {@code DaemonServer}/{@code DaemonClient}'s
+ * version combinations. Kept behind this one seam so {@code EngineServer}/{@code EngineClient}'s
  * request handling — which only ever deals with an already-connected {@code SocketChannel} — never
  * needs to know which transport it's actually running over.
  *
@@ -20,16 +20,16 @@ import java.util.Locale;
  * profile directory) for the same protection a {@code .sock} file's filesystem permissions give the
  * Unix path for free.
  */
-public final class DaemonTransport {
+public final class EngineTransport {
 
-    private DaemonTransport() {}
+    private EngineTransport() {}
 
     /** True on Windows — the one platform where the Unix-domain-socket path isn't used. */
     public static boolean useLoopbackTcp() {
         return System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win");
     }
 
-    /** A fresh per-daemon secret, URL-safe base64 — written to {@code paths.token()}, never logged. */
+    /** A fresh per-engine secret, URL-safe base64 — written to {@code paths.token()}, never logged. */
     public static String newToken() {
         byte[] buf = new byte[24];
         new SecureRandom().nextBytes(buf);

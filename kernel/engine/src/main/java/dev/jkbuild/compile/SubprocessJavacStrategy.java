@@ -75,8 +75,22 @@ public final class SubprocessJavacStrategy implements JavaCompileStrategy {
                 command.add("@" + argfile);
                 ProcessBuilder pb = new ProcessBuilder(command).redirectErrorStream(true);
                 Process process = pb.start();
-                List<CompileResult.Diagnostic> diagnostics = parseStream(process);
+                List<String> stray = new ArrayList<>();
+                List<CompileResult.Diagnostic> diagnostics = parseStream(process, stray);
                 int exit = process.waitFor();
+                if (exit != 0 && !hasErrors(diagnostics)) {
+                    // javac died without any per-source diagnostic (bad flag, unreadable
+                    // classpath entry it didn't attribute, a crash, …). Surface whatever it
+                    // printed as an ERROR — a failed compile must never be silent.
+                    diagnostics = new ArrayList<>(diagnostics);
+                    diagnostics.add(new CompileResult.Diagnostic(
+                            CompileResult.Severity.ERROR,
+                            null,
+                            -1,
+                            -1,
+                            "javac exited with code " + exit
+                                    + (stray.isEmpty() ? " and no diagnostics" : ":\n" + String.join("\n", stray))));
+                }
                 return new CompileResult(exit == 0 && !hasErrors(diagnostics), diagnostics);
             } finally {
                 Files.deleteIfExists(argfile);
@@ -150,13 +164,29 @@ public final class SubprocessJavacStrategy implements JavaCompileStrategy {
     private static final Pattern SUMMARY = Pattern.compile("^\\d+ (?:error|warning)s?$");
 
     /**
+     * Header-less diagnostics javac emits without a {@code file:line:} anchor — fatal setup errors
+     * ({@code error: error reading <jar>; zip END header not found}, {@code error: invalid flag}),
+     * bare warnings ({@code warning: [options] …}), and trailing notes ({@code Note: … uses
+     * unchecked or unsafe operations.}).
+     */
+    private static final Pattern BARE_DIAGNOSTIC =
+            Pattern.compile("^(?<sev>error|warning|note): (?<msg>.*)$", Pattern.CASE_INSENSITIVE);
+
+    /**
      * Group javac's output into one {@link CompileResult.Diagnostic} per diagnostic, keeping each
      * block <em>verbatim</em> — the {@code file:line: severity: message} header plus the source
      * snippet, caret, and any {@code symbol:}/{@code location:} trailer lines. A block runs from one
      * header line up to (but not including) the next header or the {@code "N errors"} summary. The
      * full text is the diagnostic's message; the CLI relativizes paths and colorizes on top.
+     *
+     * <p>Header-less {@code error:}/{@code warning:}/{@code note:} lines outside a block (fatal
+     * setup errors like an unreadable classpath jar have no {@code file:line:} anchor) become
+     * standalone diagnostics; {@code javac: …} launcher failures become standalone errors. Any
+     * remaining unattributed lines (usage text, crash traces) are collected into {@code stray} so
+     * the caller can surface them when javac fails without a parsed error.
      */
-    private static List<CompileResult.Diagnostic> parseStream(Process process) throws IOException {
+    private static List<CompileResult.Diagnostic> parseStream(Process process, List<String> stray)
+            throws IOException {
         List<CompileResult.Diagnostic> diagnostics = new ArrayList<>();
         try (BufferedReader reader =
                 new BufferedReader(new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
@@ -167,6 +197,7 @@ public final class SubprocessJavacStrategy implements JavaCompileStrategy {
             String line;
             while ((line = reader.readLine()) != null) {
                 Matcher m = DIAGNOSTIC.matcher(line);
+                Matcher bare;
                 if (m.matches()) {
                     if (block != null) {
                         diagnostics.add(new CompileResult.Diagnostic(sev, file, lineNo, -1, block.toString()));
@@ -182,8 +213,19 @@ public final class SubprocessJavacStrategy implements JavaCompileStrategy {
                 } else if (block != null) {
                     // Snippet, caret, symbol:/location:, or wrapped message — keep verbatim.
                     block.append('\n').append(line);
+                } else if ((bare = BARE_DIAGNOSTIC.matcher(line)).matches()) {
+                    diagnostics.add(new CompileResult.Diagnostic(
+                            parseSeverity(bare.group("sev")), null, -1, -1, line));
+                } else if (line.startsWith("javac: ")) {
+                    // Launcher-level failure (invalid flag, file not found, bad argfile).
+                    diagnostics.add(
+                            new CompileResult.Diagnostic(CompileResult.Severity.ERROR, null, -1, -1, line));
+                } else if (SUMMARY.matcher(line).matches()) {
+                    // Tally after a bare error ("1 error") — already accounted for.
+                } else {
+                    // Unattributed noise (usage text, crash trace) — kept for the caller.
+                    stray.add(line);
                 }
-                // Lines before the first header (e.g. stray notes) are dropped.
             }
             if (block != null) {
                 diagnostics.add(new CompileResult.Diagnostic(sev, file, lineNo, -1, block.toString()));

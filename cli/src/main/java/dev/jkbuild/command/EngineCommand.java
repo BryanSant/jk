@@ -5,21 +5,21 @@ import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.GroupCommand;
 import java.util.List;
 
-/** {@code jk daemon} parent — manual control over the resident build daemon (see {@code docs/daemon.md}). */
-public final class DaemonCommand extends GroupCommand {
+/** {@code jk engine} parent — manual control over the resident build engine (see {@code docs/engine.md}). */
+public final class EngineCommand extends GroupCommand {
 
     @Override
     public String name() {
-        return "daemon";
+        return "engine";
     }
 
     @Override
     public String description() {
-        return "Manage the resident build daemon";
+        return "Manage the resident build engine";
     }
 
     @Override
     public List<CliCommand> subcommands() {
-        return List.of(new DaemonStartCommand(), new DaemonStopCommand(), new DaemonStatusCommand());
+        return List.of(new EngineStartCommand(), new EngineStopCommand(), new EngineStatusCommand());
     }
 }

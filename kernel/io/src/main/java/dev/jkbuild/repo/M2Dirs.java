@@ -19,11 +19,15 @@ public final class M2Dirs {
     /**
      * The Maven local repository root. Resolution order:
      * <ol>
+     *   <li>{@code jk.m2.local} system property (JVM-scoped — the seam in-process tests use to
+     *       keep mock-repo fetches out of the developer's real {@code ~/.m2})
      *   <li>{@code JK_M2_LOCAL} environment variable (absolute path)
      *   <li>{@code ~/.m2/repository} (Maven's own default)
      * </ol>
      */
     public static Path localRepository() {
+        String prop = System.getProperty("jk.m2.local");
+        if (prop != null && !prop.isBlank()) return Path.of(prop.trim());
         String override = System.getenv("JK_M2_LOCAL");
         if (override != null && !override.isBlank()) return Path.of(override.trim());
         return Path.of(System.getProperty("user.home"), ".m2", "repository");

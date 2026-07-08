@@ -15,5 +15,5 @@ shadow   = true   # runnable fat jar: bundles plugin-api (PluginWorkerMain) so t
 "Implementation-Version" = "0.1.0"
 
 [dependencies]
-jk-plugin-api         = { group = "dev.jkbuild", name = "jk-plugin-api", version = "0.6.0-SNAPSHOT" }
+jk-plugin-api         = { group = "dev.jkbuild", name = "jk-plugin-api", version = "0.10.0-SNAPSHOT" }
 junit-platform-engine = { group = "org.junit.platform", version = ">=6.0.0" }

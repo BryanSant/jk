@@ -22,7 +22,7 @@ plugins {
 // Coordinates + version must match dev.jkbuild.util.JkVersion.VERSION and the
 // dev.jkbuild.worker.WorkerJar registry (artifactId = jk-<projectName>).
 group = "dev.jkbuild"
-version = "0.1.0-SNAPSHOT"
+version = "0.10.0-SNAPSHOT"
 
 val workerArtifact = "jk-${project.name}"
 

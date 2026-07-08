@@ -53,7 +53,10 @@ public final class RepoArtifactResolver {
     public static Path locateOrMaterialize(Cas cas, String source, String relativePath, String hex) {
         String repoName = repoName(source);
         if (isNamedRemote(repoName)) {
-            Optional<Path> found = RepoArtifactStore.forRepoName(cas.root(), repoName).locate(relativePath);
+            // With a pinned hash, resolve hash-verified so a rewritten/poisoned ~/.m2 copy
+            // falls through to the local store / CAS instead of being served as-is.
+            RepoArtifactStore store = RepoArtifactStore.forRepoName(cas.root(), repoName);
+            Optional<Path> found = hex != null ? store.locate(relativePath, hex) : store.locate(relativePath);
             if (found.isPresent()) return found.get();
         }
         RepoArtifactStore local = RepoArtifactStore.forRepoName(cas.root(), "local");

@@ -69,10 +69,10 @@ public final class JkWorkerSync {
             }
 
             try {
-                byte[] jarBytes = Files.readAllBytes(m2Jar);
-                String hex = dev.jkbuild.util.Hashing.sha256Hex(jarBytes);
-                // Put into CAS first (hard-link source for materialize), then materialize into repos/local/
-                Path casBlob = cas.put(jarBytes);
+                // Streamed hash + hard-link into the CAS (cross-fs falls back to a copy) —
+                // a worker jar never has to fit in the heap.
+                String hex = dev.jkbuild.util.Hashing.sha256Hex(m2Jar);
+                Path casBlob = cas.putByLink(m2Jar, hex);
                 localStore.materialize(relPath, casBlob, hex);
                 fetched++;
                 obs.fetched(w.artifactId());

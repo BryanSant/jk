@@ -41,8 +41,12 @@ public final class LocalProjectBuilder {
 
     private LocalProjectBuilder() {}
 
-    /** The built artifact: its coordinate/version plus the jar and POM bytes. */
-    record Built(String group, String artifact, String version, byte[] jar, String pomXml) {
+    /**
+     * The built artifact: its coordinate/version plus the on-disk jar path and POM text. The jar is
+     * referenced by path (not bytes) so consumers copy/hash it streaming — a large jar never has to
+     * fit in the heap.
+     */
+    record Built(String group, String artifact, String version, Path jar, String pomXml) {
         String coordinate() {
             return group + ":" + artifact + ":" + version;
         }
@@ -147,14 +151,13 @@ public final class LocalProjectBuilder {
         new JarPackager()
                 .packageJar(new JarPackager.JarRequest(
                         classes, jarOut, project.project().main(), 0L, Map.of()));
-        byte[] jar = Files.readAllBytes(jarOut);
 
         // 4. Render the POM, stamped with the published coordinate + version.
         String pomXml = PublishablePom.render(
                         withCoordinate(project, group, artifact, version), PublishablePom.Metadata.empty())
                 .xml();
 
-        return new Built(group, artifact, version, jar, pomXml);
+        return new Built(group, artifact, version, jarOut, pomXml);
     }
 
     /** A copy of {@code project} whose {@code [project]} coordinate/version are replaced. */

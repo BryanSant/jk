@@ -18,11 +18,19 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Optional;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 class MavenRepoTest {
+
+    // Fetches mirror into the Maven local repo; point that at a throwaway dir (see
+    // M2Dirs) so these tests never write into the developer's real ~/.m2.
+    @BeforeAll
+    static void isolateM2(@TempDir Path m2) {
+        System.setProperty("jk.m2.local", m2.toString());
+    }
 
     private HttpServer server;
     private URI base;

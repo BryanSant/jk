@@ -79,6 +79,32 @@ class JavacDriverTest {
     }
 
     @Test
+    void surfaces_headerless_fatal_error_as_diagnostic(@TempDir Path tempDir) throws IOException {
+        // A corrupt classpath jar kills javac with a header-less line ("error: error
+        // reading …; zip END header not found") and a non-zero exit — no file:line:
+        // diagnostic at all. That text must still surface as an ERROR diagnostic;
+        // a failed compile must never be silent.
+        Path corrupt = tempDir.resolve("corrupt.jar");
+        Files.writeString(corrupt, "not-a-zip");
+        Path source = tempDir.resolve("Hello.java");
+        Files.writeString(source, "public class Hello {}\n");
+
+        CompileResult result = new JavacDriver()
+                .compile(CompileRequest.builder()
+                        .sources(List.of(source))
+                        .classpath(List.of(corrupt))
+                        .outputDir(tempDir.resolve("out"))
+                        .build());
+
+        assertThat(result.success()).isFalse();
+        assertThat(result.hasErrors()).isTrue();
+        assertThat(result.diagnostics()).anySatisfy(d -> {
+            assertThat(d.severity()).isEqualTo(CompileResult.Severity.ERROR);
+            assertThat(d.describe()).contains("error reading");
+        });
+    }
+
+    @Test
     void check_mode_does_not_write_class_files(@TempDir Path tempDir) throws IOException {
         Path source = tempDir.resolve("Hello.java");
         Files.writeString(source, """

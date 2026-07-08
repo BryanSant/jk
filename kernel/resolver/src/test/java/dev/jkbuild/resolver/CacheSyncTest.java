@@ -12,16 +12,26 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.FileTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 class CacheSyncTest {
+
+    // Fetches mirror into the Maven local repo; point that at a throwaway dir (see
+    // M2Dirs) so these tests never write into the developer's real ~/.m2.
+    @BeforeAll
+    static void isolateM2(@TempDir Path m2) {
+        System.setProperty("jk.m2.local", m2.toString());
+    }
 
     private HttpServer server;
     private URI base;
@@ -90,6 +100,30 @@ class CacheSyncTest {
 
         assertThat(report.fetched()).isZero();
         assertThat(report.errors()).singleElement().asString().contains("checksum mismatch");
+    }
+
+    @Test
+    void heals_poisoned_m2_artifact_from_cas(@TempDir Path tempDir) throws Exception {
+        byte[] jar = "genuine-bytes".getBytes(StandardCharsets.UTF_8);
+        String hex = Hashing.sha256Hex(jar);
+        registerJar("com.foo", "leaf", "1.0", jar);
+        Lockfile lock = lockOf(pkg("com.foo:leaf", "1.0", "sha256:" + hex));
+        assertThat(newSync(tempDir).sync(lock).fetched()).isEqualTo(1);
+
+        // Overwrite the mirrored ~/.m2 copy out-of-band (corruption, a stray write). The
+        // store's mtime guard re-hashes newer files and would otherwise trust the new
+        // content — the lockfile pin must win.
+        Path m2Jar = Path.of(System.getProperty("jk.m2.local"))
+                .resolve("com/foo/leaf/1.0/leaf-1.0.jar");
+        Files.write(m2Jar, "poisoned".getBytes(StandardCharsets.UTF_8));
+        Files.setLastModifiedTime(m2Jar, FileTime.fromMillis(System.currentTimeMillis() + 5_000));
+
+        CacheSync.Report report = newSync(tempDir).sync(lock);
+
+        // The CAS still holds the pinned bytes — the poisoned mirror heals without a fetch.
+        assertThat(report.upToDate()).isEqualTo(1);
+        assertThat(report.errors()).isEmpty();
+        assertThat(Files.readAllBytes(m2Jar)).isEqualTo(jar);
     }
 
     @Test

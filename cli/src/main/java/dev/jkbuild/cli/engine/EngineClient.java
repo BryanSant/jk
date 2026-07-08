@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
-package dev.jkbuild.cli.daemon;
+package dev.jkbuild.cli.engine;
 
-import dev.jkbuild.daemon.DaemonPaths;
-import dev.jkbuild.daemon.protocol.DaemonProtocol;
+import dev.jkbuild.config.JkEngineConfig;
+import dev.jkbuild.engine.EnginePaths;
+import dev.jkbuild.engine.protocol.EngineProtocol;
 import dev.jkbuild.plugin.protocol.Ndjson;
 import dev.jkbuild.runtime.BuildService;
 import dev.jkbuild.runtime.WorkspaceBuildListener;
@@ -25,35 +26,48 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * CLI-side counterpart to {@link dev.jkbuild.daemon.DaemonServer}: connects, spawns the daemon lazily
- * when none is reachable, and handles version-skew by killing a stale daemon and starting a fresh
- * one — all transparent to the caller. See {@code docs/daemon.md}.
+ * CLI-side counterpart to {@link dev.jkbuild.engine.EngineServer}: connects, spawns the engine lazily
+ * when none is reachable, and handles version-skew by killing a stale engine and starting a fresh
+ * one — all transparent to the caller. See {@code docs/engine.md}.
  */
-public final class DaemonClient {
+public final class EngineClient {
 
-    /** Per-read/connect socket timeout — a live daemon replies in well under this. */
+    /** Per-read/connect socket timeout — a live engine replies in well under this. */
     private static final int SOCKET_TIMEOUT_MILLIS = 2_000;
 
-    /** How long to wait for a freshly spawned daemon to come up before giving up. */
+    /** How long to wait for a freshly spawned engine to come up before giving up. */
     private static final Duration DEFAULT_START_TIMEOUT = Duration.ofSeconds(5);
 
-    private DaemonClient() {}
+    private EngineClient() {}
 
-    /** What a connection's {@code hello}/{@code hello-ack} handshake reveals about the daemon. */
+    /** What a connection's {@code hello}/{@code hello-ack} handshake reveals about the engine. */
     public record Handshake(String version, long pid, long startedAtMillis) {}
 
-    /** The {@code jk daemon status} snapshot. */
-    public record Status(String version, long pid, long startedAtMillis, int idleMinutes, int activeRequests) {}
+    /**
+     * The {@code jk engine status} snapshot. Memory fields are best-effort: {@code -1} means the
+     * engine couldn't observe that number (no OS RSS source, or an older engine that predates the
+     * fields).
+     */
+    public record Status(
+            String version,
+            long pid,
+            long startedAtMillis,
+            int idleMinutes,
+            int activeRequests,
+            long heapUsedBytes,
+            long heapCommittedBytes,
+            long heapMaxBytes,
+            long rssBytes) {}
 
     /**
-     * Connect, ping, and get {@code pong} back — the daemon-existence check per {@code docs/daemon.md}
+     * Connect, ping, and get {@code pong} back — the engine-existence check per {@code docs/engine.md}
      * (never trust a pidfile alone). {@code false} for anything from "nothing is listening" to "it
      * answered something unexpected."
      */
     public static boolean ping(Path socket) {
         try (SocketChannel ch = connect(socket)) {
-            String reply = exchange(ch, DaemonProtocol.ping());
-            return DaemonProtocol.PONG.equals(DaemonProtocol.typeOf(reply));
+            String reply = exchange(ch, EngineProtocol.ping());
+            return EngineProtocol.PONG.equals(EngineProtocol.typeOf(reply));
         } catch (IOException e) {
             return false;
         }
@@ -62,8 +76,8 @@ public final class DaemonClient {
     /** Connect and perform the {@code hello}/{@code hello-ack} handshake; empty if unreachable. */
     public static Optional<Handshake> handshake(Path socket, String clientVersion) {
         try (SocketChannel ch = connect(socket)) {
-            String ack = exchange(ch, DaemonProtocol.hello(clientVersion));
-            if (!DaemonProtocol.HELLO_ACK.equals(DaemonProtocol.typeOf(ack))) return Optional.empty();
+            String ack = exchange(ch, EngineProtocol.hello(clientVersion));
+            if (!EngineProtocol.HELLO_ACK.equals(EngineProtocol.typeOf(ack))) return Optional.empty();
             return Optional.of(new Handshake(
                     Ndjson.str(ack, "version"),
                     Ndjson.longValue(ack, "pid", -1),
@@ -73,26 +87,30 @@ public final class DaemonClient {
         }
     }
 
-    /** Connect and request a status snapshot; empty if no daemon is reachable. */
+    /** Connect and request a status snapshot; empty if no engine is reachable. */
     public static Optional<Status> status(Path socket) {
         try (SocketChannel ch = connect(socket)) {
-            exchange(ch, DaemonProtocol.hello("status-probe")); // handshake first, response discarded
-            String ack = exchange(ch, DaemonProtocol.statusRequest());
-            if (!DaemonProtocol.STATUS_ACK.equals(DaemonProtocol.typeOf(ack))) return Optional.empty();
+            exchange(ch, EngineProtocol.hello("status-probe")); // handshake first, response discarded
+            String ack = exchange(ch, EngineProtocol.statusRequest());
+            if (!EngineProtocol.STATUS_ACK.equals(EngineProtocol.typeOf(ack))) return Optional.empty();
             return Optional.of(new Status(
                     Ndjson.str(ack, "version"),
                     Ndjson.longValue(ack, "pid", -1),
                     Ndjson.longValue(ack, "startedAt", -1),
                     Ndjson.intValue(ack, "idleMinutes", -1),
-                    Ndjson.intValue(ack, "activeRequests", -1)));
+                    Ndjson.intValue(ack, "activeRequests", -1),
+                    Ndjson.longValue(ack, "heapUsedBytes", -1),
+                    Ndjson.longValue(ack, "heapCommittedBytes", -1),
+                    Ndjson.longValue(ack, "heapMaxBytes", -1),
+                    Ndjson.longValue(ack, "rssBytes", -1)));
         } catch (IOException e) {
             return Optional.empty();
         }
     }
 
     /**
-     * Ask a reachable daemon to shut down gracefully; {@code true} if one was reached and acknowledged
-     * (or was already not running — stopping a non-running daemon is not an error), {@code false} if
+     * Ask a reachable engine to shut down gracefully; {@code true} if one was reached and acknowledged
+     * (or was already not running — stopping a non-running engine is not an error), {@code false} if
      * one was reachable but didn't acknowledge cleanly.
      */
     public static boolean stop(Path socket) {
@@ -103,54 +121,54 @@ public final class DaemonClient {
             return true; // nothing reachable — a no-op "stop" is success
         }
         try (ch) {
-            String bye = exchange(ch, DaemonProtocol.shutdown());
-            return DaemonProtocol.BYE.equals(DaemonProtocol.typeOf(bye));
+            String bye = exchange(ch, EngineProtocol.shutdown());
+            return EngineProtocol.BYE.equals(EngineProtocol.typeOf(bye));
         } catch (IOException e) {
             return false; // reachable but didn't behave — a real problem, not "already stopped"
         }
     }
 
     /**
-     * The one entry point real commands use: a live, version-matched daemon is guaranteed to be
+     * The one entry point real commands use: a live, version-matched engine is guaranteed to be
      * reachable at {@code paths.socket()} when this returns normally. Spawns lazily if none is
-     * running; kills and replaces a stale (version-mismatched) daemon transparently. Throws with a
-     * message pointing at the daemon's log file if it still can't be reached after a fresh spawn —
-     * per {@code docs/daemon.md}, the daemon is load-bearing and this is not silently swallowed.
+     * running; kills and replaces a stale (version-mismatched) engine transparently. Throws with a
+     * message pointing at the engine's log file if it still can't be reached after a fresh spawn —
+     * per {@code docs/engine.md}, the engine is load-bearing and this is not silently swallowed.
      */
-    public static Handshake ensureRunning(DaemonPaths.Paths paths, String clientVersion) throws IOException {
+    public static Handshake ensureRunning(EnginePaths.Paths paths, String clientVersion) throws IOException {
         return ensureRunning(paths, clientVersion, DEFAULT_START_TIMEOUT);
     }
 
     /**
-     * Run a workspace build against the daemon at {@code paths} instead of in-process — the daemon
+     * Run a workspace build against the engine at {@code paths} instead of in-process — the engine
      * equivalent of {@link BuildService#buildWorkspace}, driving the exact same {@code listener}.
-     * Ensures a live, version-matched daemon first (spawning/replacing as needed), then streams the
+     * Ensures a live, version-matched engine first (spawning/replacing as needed), then streams the
      * build over a fresh connection. Throws with a clear message on any failure; per {@code
-     * docs/daemon.md} there is no in-process fallback.
+     * docs/engine.md} there is no in-process fallback.
      */
     public static BuildService.WorkspaceResult buildWorkspace(
-            DaemonPaths.Paths paths, BuildService.WorkspaceRequest req, WorkspaceBuildListener listener)
+            EnginePaths.Paths paths, BuildService.WorkspaceRequest req, WorkspaceBuildListener listener)
             throws IOException {
-        return DaemonBuildListenerAdapter.buildWorkspace(paths, req, listener);
+        return EngineBuildListenerAdapter.buildWorkspace(paths, req, listener);
     }
 
-    /** Everything a daemon-hosted {@code jk test} run needs — mirrors {@code TestCommand}'s own local fields. */
+    /** Everything an engine-hosted {@code jk test} run needs — mirrors {@code TestCommand}'s own local fields. */
     public record TestRequest(Path entryDir, Path cache, Path jdksDir, int workers, String profile, boolean verbose) {}
 
     /**
-     * Run a single project's test goal against the daemon (Phase 3) — see {@link
-     * DaemonBuildListenerAdapter#runTest} for the exact contract.
+     * Run a single project's test goal against the engine (Phase 3) — see {@link
+     * EngineBuildListenerAdapter#runTest} for the exact contract.
      */
     public static dev.jkbuild.run.GoalResult runTest(
-            DaemonPaths.Paths paths,
+            EnginePaths.Paths paths,
             TestRequest req,
             java.util.function.Function<List<dev.jkbuild.run.Phase>, dev.jkbuild.run.GoalListener> listenerFactory,
             dev.jkbuild.test.JUnitLauncher.Result[] testResultOut)
             throws IOException {
-        return DaemonBuildListenerAdapter.runTest(paths, req, listenerFactory, testResultOut);
+        return EngineBuildListenerAdapter.runTest(paths, req, listenerFactory, testResultOut);
     }
 
-    /** Everything a daemon-hosted single-project {@code jk build} needs — mirrors {@code BuildCommand}'s local fields. */
+    /** Everything an engine-hosted single-project {@code jk build} needs — mirrors {@code BuildCommand}'s local fields. */
     public record SingleBuildRequest(
             Path entryDir,
             Path cache,
@@ -163,30 +181,30 @@ public final class DaemonClient {
             boolean force) {}
 
     /**
-     * Run a single (non-workspace) project's build against the daemon — the daemon equivalent of
+     * Run a single (non-workspace) project's build against the engine — the engine equivalent of
      * {@code BuildCommand.runForDir}'s {@code agg == null} branch — see {@link
-     * DaemonBuildListenerAdapter#runSingleBuild} for the exact contract.
+     * EngineBuildListenerAdapter#runSingleBuild} for the exact contract.
      */
     public static dev.jkbuild.run.GoalResult runSingleBuild(
-            DaemonPaths.Paths paths,
+            EnginePaths.Paths paths,
             SingleBuildRequest req,
             java.util.function.Function<List<dev.jkbuild.run.Phase>, dev.jkbuild.run.GoalListener> listenerFactory,
             dev.jkbuild.test.JUnitLauncher.Result[] testResultOut,
             String[] buildOutcomeOut)
             throws IOException {
-        return DaemonBuildListenerAdapter.runSingleBuild(paths, req, listenerFactory, testResultOut, buildOutcomeOut);
+        return EngineBuildListenerAdapter.runSingleBuild(paths, req, listenerFactory, testResultOut, buildOutcomeOut);
     }
 
     /**
-     * Forecast a build against the daemon ({@code jk explain}) — see {@link
-     * DaemonBuildListenerAdapter#explain} for the exact contract.
+     * Forecast a build against the engine ({@code jk explain}) — see {@link
+     * EngineBuildListenerAdapter#explain} for the exact contract.
      */
-    public static BuildService.ExplainPlan explain(DaemonPaths.Paths paths, Path entryDir, Path cache)
+    public static BuildService.ExplainPlan explain(EnginePaths.Paths paths, Path entryDir, Path cache)
             throws IOException {
-        return DaemonBuildListenerAdapter.explain(paths, entryDir, cache);
+        return EngineBuildListenerAdapter.explain(paths, entryDir, cache);
     }
 
-    static Handshake ensureRunning(DaemonPaths.Paths paths, String clientVersion, Duration startTimeout)
+    static Handshake ensureRunning(EnginePaths.Paths paths, String clientVersion, Duration startTimeout)
             throws IOException {
         Optional<Handshake> existing = handshake(paths.socket(), clientVersion);
         if (existing.isPresent()) {
@@ -196,7 +214,7 @@ public final class DaemonClient {
         spawn(paths);
         return awaitStartup(paths, clientVersion, startTimeout)
                 .orElseThrow(() -> new IOException(
-                        "could not start the build daemon — see " + paths.log() + " for details"));
+                        "could not start the build engine — see " + paths.log() + " for details"));
     }
 
     private static void killStale(long pid, Duration timeout) {
@@ -210,33 +228,62 @@ public final class DaemonClient {
         });
     }
 
-    /** Spawn a fresh daemon, detached — mirrors {@link CachePruneScheduler}'s spawn-and-forget pattern. */
-    private static void spawn(DaemonPaths.Paths paths) throws IOException {
+    /** Spawn a fresh engine, detached — mirrors {@link CachePruneScheduler}'s spawn-and-forget pattern. */
+    private static void spawn(EnginePaths.Paths paths) throws IOException {
         String jkExe = CachePruneScheduler.resolveJkExe()
                 .orElseThrow(() -> new IOException("could not resolve the running jk binary's path"));
+        JkEngineConfig config = JkEngineConfig.resolve();
         Files.createDirectories(paths.dir());
         rotateLog(paths.log());
         List<String> command = new ArrayList<>();
+        // The child detaches ITSELF into its own session (setsid(2) via PosixDetach, first thing
+        // in the engine role) — without that it stays in THIS client's process group, and a
+        // Ctrl-C/SIGTERM aimed at the client (or its whole group) would take down the engine and
+        // every other build it is hosting.
         command.add(jkExe);
-        command.add("--daemon-server");
+        command.add("--engine-server");
+        // Size the engine process's own heap (docs/engine.md "Memory target") — the spawner is
+        // the only place that can, since a process can't shrink its own -Xmx. The -Xms pre-sizing
+        // matters for a long-lived process (no growth churn). Native image consumes -Xm* runtime
+        // options from argv (position-independent) before main(); placed after --engine-server so
+        // that if they ever *aren't* consumed, the engine still starts (unsized) instead of
+        // failing on an unknown verb. The native binary is already built with --gc=serial.
+        if (config.heapCapped() && isNativeImage()) {
+            command.add("-Xms" + config.minHeapMb() + "m");
+            command.add("-Xmx" + config.maxHeapMb() + "m");
+        }
         ProcessBuilder pb = new ProcessBuilder(command);
+        // On a JVM (installDist) the equivalent knob is the start script's JVM-options env var —
+        // appended last so it wins over any blanket JK_OPTS the user exported. SerialGC matches
+        // the native binary: lowest footprint/latency, and a ≤256 MiB heap is well inside its
+        // comfort zone.
+        if (config.heapCapped() && !isNativeImage()) {
+            String opts = System.getenv("JK_OPTS");
+            String sizing = "-XX:+UseSerialGC -Xms" + config.minHeapMb() + "m -Xmx" + config.maxHeapMb() + "m";
+            pb.environment().put("JK_OPTS", (opts == null || opts.isBlank() ? "" : opts + " ") + sizing);
+        }
         // Merge stderr into stdout inside the child (one fd, no interleaving risk from two
         // independently-opened streams onto the same file), then route that to the log — a fresh
-        // file every start, per docs/daemon.md.
+        // file every start, per docs/engine.md.
         pb.redirectErrorStream(true);
         pb.redirectOutput(ProcessBuilder.Redirect.to(paths.log().toFile()));
         pb.redirectInput(ProcessBuilder.Redirect.PIPE);
         Process p = pb.start();
-        p.getOutputStream().close(); // EOF immediately; the daemon doesn't read stdin
+        p.getOutputStream().close(); // EOF immediately; the engine doesn't read stdin
+    }
+
+    /** True when this client runs as a GraalVM native image (so the spawned engine will too). */
+    private static boolean isNativeImage() {
+        return System.getProperty("org.graalvm.nativeimage.imagecode") != null;
     }
 
     /**
      * Keep exactly one historical log ({@code <key>.log} → {@code <key>.log.1}) before each fresh
-     * daemon start truncates {@code <key>.log}. Without this, a crash followed by the next lazy
+     * engine start truncates {@code <key>.log}. Without this, a crash followed by the next lazy
      * respawn (which happens automatically, often before anyone looks) would silently destroy the
-     * crashed daemon's own log — the one file {@link #ensureRunning}'s error message and {@code jk
-     * daemon status} both point at for post-mortem. Best-effort: a failure here (e.g. permissions)
-     * never blocks starting the daemon.
+     * crashed engine's own log — the one file {@link #ensureRunning}'s error message and {@code jk
+     * engine status} both point at for post-mortem. Best-effort: a failure here (e.g. permissions)
+     * never blocks starting the engine.
      */
     private static void rotateLog(Path log) {
         if (!Files.exists(log)) return;
@@ -250,7 +297,7 @@ public final class DaemonClient {
         }
     }
 
-    private static Optional<Handshake> awaitStartup(DaemonPaths.Paths paths, String clientVersion, Duration timeout) {
+    private static Optional<Handshake> awaitStartup(EnginePaths.Paths paths, String clientVersion, Duration timeout) {
         long deadline = System.nanoTime() + timeout.toNanos();
         while (System.nanoTime() < deadline) {
             Optional<Handshake> h = handshake(paths.socket(), clientVersion);
@@ -269,22 +316,22 @@ public final class DaemonClient {
     }
 
     /**
-     * Package-visible: {@link DaemonBuildListenerAdapter} opens its own long-lived connection. On
-     * the loopback-TCP transport (Windows — see {@link dev.jkbuild.daemon.DaemonTransport}), {@code
+     * Package-visible: {@link EngineBuildListenerAdapter} opens its own long-lived connection. On
+     * the loopback-TCP transport (Windows — see {@link dev.jkbuild.engine.EngineTransport}), {@code
      * socket} holds the port number (not a real socket path) and this also sends the required
-     * {@link DaemonProtocol#AUTH} line before returning, so every caller authenticates transparently
+     * {@link EngineProtocol#AUTH} line before returning, so every caller authenticates transparently
      * without needing its own knowledge of the transport.
      */
     static SocketChannel connect(Path socket) throws IOException {
-        if (dev.jkbuild.daemon.DaemonTransport.useLoopbackTcp()) {
+        if (dev.jkbuild.engine.EngineTransport.useLoopbackTcp()) {
             int port = Integer.parseInt(Files.readString(socket).trim());
             String token =
-                    Files.readString(dev.jkbuild.daemon.DaemonPaths.tokenFor(socket)).trim();
+                    Files.readString(dev.jkbuild.engine.EnginePaths.tokenFor(socket)).trim();
             SocketChannel ch = SocketChannel.open(
                     new java.net.InetSocketAddress(java.net.InetAddress.getLoopbackAddress(), port));
             BufferedWriter authWriter =
                     new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
-            authWriter.write(DaemonProtocol.auth(token));
+            authWriter.write(EngineProtocol.auth(token));
             authWriter.write('\n');
             authWriter.flush();
             return ch;
@@ -297,7 +344,7 @@ public final class DaemonClient {
     /**
      * Send one line, read one reply line, over an already-connected channel. {@link SocketChannel}
      * (a Unix-domain channel doesn't support the legacy {@code .socket()}/{@code setSoTimeout}
-     * adapter) has no built-in read timeout, so a watchdog thread closes the channel if the daemon
+     * adapter) has no built-in read timeout, so a watchdog thread closes the channel if the engine
      * doesn't reply in time — an interruptible-channel read blocked on a closed channel throws
      * promptly, which this turns into a clear timeout error rather than hanging the CLI forever.
      */
@@ -320,15 +367,15 @@ public final class DaemonClient {
                         // already closing
                     }
                 },
-                "jk-daemon-client-watchdog");
+                "jk-engine-client-watchdog");
         watchdog.setDaemon(true);
         watchdog.start();
         try {
             String reply = reader.readLine();
-            if (reply == null) throw new IOException("daemon closed the connection without replying");
+            if (reply == null) throw new IOException("engine closed the connection without replying");
             return reply;
         } catch (java.nio.channels.AsynchronousCloseException e) {
-            throw new IOException("daemon did not reply within " + SOCKET_TIMEOUT_MILLIS + "ms", e);
+            throw new IOException("engine did not reply within " + SOCKET_TIMEOUT_MILLIS + "ms", e);
         } finally {
             watchdog.interrupt();
         }

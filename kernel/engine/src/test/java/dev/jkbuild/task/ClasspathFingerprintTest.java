@@ -114,6 +114,35 @@ class ClasspathFingerprintTest {
     }
 
     @Test
+    void settled_jar_fingerprint_is_memoized_and_a_content_change_invalidates(@TempDir Path dir) throws Exception {
+        // A jar whose mtime has settled takes the FileHashMemo stat fast-path on the
+        // second read; a content change (new size/mtime) must still re-fingerprint.
+        Path jar = writeJar(dir.resolve("dep.jar"), new String[][] {{"A.class", "AA"}}, 1000);
+        java.nio.file.attribute.FileTime old =
+                java.nio.file.attribute.FileTime.fromMillis(System.currentTimeMillis() - 60_000);
+        Files.setLastModifiedTime(jar, old);
+        Path cache = dir.resolve("cache");
+        dev.jkbuild.config.SessionContext.where(
+                dev.jkbuild.config.Session.defaults().withCacheDir(cache),
+                () -> {
+                    String fp1 = ClasspathFingerprint.entry(jar);
+                    assertThat(Files.isDirectory(cache.resolve("hash-memo")))
+                            .as("settled fingerprint recorded on disk")
+                            .isTrue();
+                    assertThat(ClasspathFingerprint.entry(jar))
+                            .as("memoized read agrees with the computed fingerprint")
+                            .isEqualTo(fp1);
+                    writeJar(jar, new String[][] {{"A.class", "CHANGED-CONTENT"}}, 2000);
+                    Files.setLastModifiedTime(
+                            jar, java.nio.file.attribute.FileTime.fromMillis(old.toMillis() + 5_000));
+                    assertThat(ClasspathFingerprint.entry(jar))
+                            .as("content change re-fingerprints despite the memo")
+                            .isNotEqualTo(fp1);
+                    return null;
+                });
+    }
+
+    @Test
     void of_is_order_independent(@TempDir Path dir) throws IOException {
         Path a = write(dir.resolve("a.jar"), "A");
         Path b = write(dir.resolve("b.jar"), "B");

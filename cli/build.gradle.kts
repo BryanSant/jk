@@ -28,6 +28,11 @@ dependencies {
     // src/main/resources/META-INF/native-image/org.jline/jline-terminal-ffm/.
     implementation(libs.jline.terminal.ffm)
 
+    // Native-image Feature API (EngineDetachFeature registers the setsid(2) FFM downcall at
+    // image-build time). compileOnly: the image builder supplies these classes itself; nothing
+    // references them on a hosted JVM.
+    compileOnly(libs.graalvm.nativeimage)
+
     // supply-chain-testkit deleted: GpgTestFixture copied to cli/src/test and publish-runner/src/test
     testImplementation(libs.bouncycastle.bcpg)
     // JdkCommandTest builds xz-compressed feed fixtures via XZCompressorOutputStream.
@@ -79,11 +84,11 @@ tasks.withType<Test>().configureEach {
     // @TempDir cache per test. Persisted under build/ (cleared by `gradle clean`).
     systemProperty("jk.test.cache.dir",
             layout.buildDirectory.dir("test-shared-cache").get().asFile.absolutePath)
-    // The fast unit-test suite has no real `jk` binary to exec as a daemon and doesn't isolate
-    // ~/.jk/state/daemon/ per test — see BuildCommand.daemonDisabledForTests()'s javadoc. The daemon
-    // transport itself is covered by DaemonServer/DaemonClient tests and manual verification against
-    // the real native binary (docs/daemon.md), not this suite.
-    systemProperty("jk.test.noDaemon", "true")
+    // The fast unit-test suite has no real `jk` binary to exec as an engine and doesn't isolate
+    // ~/.jk/state/engine/ per test — see BuildCommand.engineDisabledForTests()'s javadoc. The engine
+    // transport itself is covered by EngineServer/EngineClient tests and manual verification against
+    // the real native binary (docs/engine.md), not this suite.
+    systemProperty("jk.test.noEngine", "true")
     doFirst {
         systemProperty("jk.kotlin.worker.jar",       kotlinWorkerJar.singleFile.absolutePath)
         systemProperty("jk.test.runner.jar",         testRunnerJar.singleFile.absolutePath)
@@ -98,6 +103,13 @@ tasks.withType<Test>().configureEach {
 application {
     mainClass.set("dev.jkbuild.cli.Jk")
     applicationName = "jk"
+    // Mirror the native binary's runtime profile for the JVM dist: SerialGC + a small,
+    // capped heap. The engine spawn overrides the sizing for its own process via JK_OPTS
+    // (last in the start script's JVM-arg order, so its -Xms/-Xmx win).
+    // --enable-native-access: PosixDetach's setsid(2) FFM downcall (engine role) without the
+    // JDK's restricted-method warning; mirrors the native binary's build arg.
+    applicationDefaultJvmArgs =
+            listOf("-XX:+UseSerialGC", "-Xms24m", "-Xmx128m", "--enable-native-access=ALL-UNNAMED")
 }
 
 graalvmNative {
@@ -109,55 +121,47 @@ graalvmNative {
         // on this host. Force the executable mode explicitly.
         sharedLibrary.set(false)
 
-        // Runtime-perf build args.
+        // Size-first build args. The jk binary's primary UX budget is its download +
+        // on-disk size and shell-integration startup latency; per-verb CPU work is
+        // shrinking as the CLI delegates the heavy lifting (hashing, compiling,
+        // packaging) to the resident engine and its forked workers.
         //
-        // -O3       Max optimisation. (Was -Ob, build-time/size focused.) -O3 alone
-        //           is only ~10% here; the real win is letting -march light up the
-        //           CPU's vector/crypto instructions below.
-        // -march    Per-CPU baseline. native-image compiles for the BUILD HOST's arch,
-        //           so this is keyed off os.arch. On x86-64 we target x86-64-v3 (AVX2 +
-        //           BMI2 + FMA + F16C — portable to ~2015+ CPUs); benchmarked ≈1.5x
-        //           faster than -march=compatibility on jk's hashing/orchestration
-        //           (no-op `jk build`), since the CAS + ClasspathFingerprint SHA-256
-        //           dominates jk's own time and gets SIMD-accelerated. We deliberately
-        //           do NOT use -march=native (≈1.9x): it would only run on the build
-        //           machine's exact CPU (its extra ~20% is AVX-512 + AES-NI + SHA-NI,
-        //           none of which any portable -march level includes). aarch64/macOS
-        //           builds fall back to `compatibility` for now — tune a crypto-capable
-        //           baseline on aarch64 hardware in a follow-up.
+        // -Os       Optimize for size. (History: was -O3 + -march=x86-64-v3, tuned when
+        //           the CLI process itself did the CAS/ClasspathFingerprint SHA-256
+        //           work — the SIMD -march bought ≈1.5x on no-op builds then. The CLI
+        //           and engine still share this one binary, so dropping -march trades
+        //           some engine-side hashing speed for a smaller binary; when the
+        //           slim-client split lands, the engine artifact can re-tune for speed
+        //           independently.)
         // --gc=serial
-        //           Generational serial GC. Small/fast for short verbs, and —
-        //           unlike epsilon — it actually reclaims, so verbs that stream
-        //           data (sync/idea/build fetching artifacts) don't accumulate
-        //           every transient byte until the process dies.
-        // -R:MaxHeapSize=268435456
-        //           Hard 256 MiB max heap for the CLI process. jk's own work is
-        //           tiny; with a real collector under it, 256 MiB is plenty, and
-        //           the cap turns any runaway allocation into a fast, loud OOM
-        //           instead of dragging the whole machine into swap. Heavy work
-        //           (compile/test) runs in forked worker JVMs tuned separately
-        //           via JvmOptions, not in this process.
-        val march = when (System.getProperty("os.arch")) {
-            "amd64", "x86_64" -> "x86-64-v3"
-            else -> "compatibility"
-        }
-        buildArgs.add("-O3")
-        buildArgs.add("-march=$march")
+        //           Generational serial GC. Small/fast for short verbs and a ≤256 MiB
+        //           engine heap alike, and — unlike epsilon — it actually reclaims, so
+        //           verbs that stream data don't accumulate every transient byte until
+        //           the process dies.
+        // -R:MaxHeapSize=134217728
+        //           Hard 128 MiB max heap for the CLI process. jk's own work is tiny;
+        //           the cap turns any runaway allocation into a fast, loud OOM instead
+        //           of dragging the machine into swap. Heavy work runs in the engine
+        //           (spawned with its own -Xms/-Xmx, which override this baked default)
+        //           and in forked worker JVMs tuned via JvmOptions.
+        // -R:MinHeapSize=25165824
+        //           24 MiB initial heap — sized to what a trivial verb actually uses
+        //           (`jk --help` measured ~19 MiB RSS), so the smallest commands fit in
+        //           the floor without a growth step, while anything bigger still grows
+        //           lazily toward the 128 MiB cap.
+        buildArgs.add("-Os")
         buildArgs.add("--gc=serial")
-        buildArgs.add("-R:MaxHeapSize=268435456")
-        // -R:MinHeapSize=268435456
-        //           Pin the minimum heap to the same 256 MiB (the -Xms half of
-        //           the user's "-Xms/-Xmx 256 MiB" ask). The serial GC won't
-        //           collect below this, so a short verb that stays under 256 MiB
-        //           ideally never runs a GC cycle; pages aren't pre-touched, so
-        //           a trivial command's RSS stays small.
-        buildArgs.add("-R:MinHeapSize=268435456")
+        buildArgs.add("-R:MaxHeapSize=134217728")
+        buildArgs.add("-R:MinHeapSize=25165824")
         // JLine 4 FFM's signal handler uses Arena.ofShared(), gated behind this
         // flag in GraalVM 25. Without it the wizard crashes on Signal.INT setup.
         buildArgs.add("-H:+SharedArenaSupport")
         // Silence the FFM "restricted method" runtime warning. Without this,
         // every wizard invocation prints a 4-line WARNING block before the UI.
         buildArgs.add("--enable-native-access=ALL-UNNAMED")
+        // Registers the setsid(2) downcall descriptor (PosixDetach) — FFM downcalls must be
+        // registered at image-build time or they throw at first use in the native binary.
+        buildArgs.add("--features=dev.jkbuild.cli.nativeimage.EngineDetachFeature")
         // Push heavy deps to lazy init. Build-time <clinit> is faster at
         // runtime but blows up .svm_heap with cached objects we may never
         // touch. The crypto/SBOM/git/Jib closures (bouncycastle, sigstore,

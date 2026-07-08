@@ -1,9 +1,9 @@
-# The jk daemon
+# The jk engine
 
 `jk` is reversing a documented pillar: [`requirements.md`](requirements.md) said *"No daemon. Each
 `jk` invocation is a fresh process."* That was true through v1's early design and is a deliberate,
-permanent departure now — not a hedge, not an opt-in mode. This doc explains why, and how the
-daemon works.
+permanent departure now — not a hedge, not an opt-in mode. (The resident process was briefly called
+the daemon; it's the **engine** now.) This doc explains why it exists, and how it works.
 
 ## Why
 
@@ -17,70 +17,88 @@ overcommit real RAM — the OOM this project has hit in practice.
 The fix isn't smarter per-process math; no amount of per-process caution stops two independently
 "conservative" processes from colliding, because neither knows the other exists. The fix is for
 there to be exactly one process on the machine (per `jk` state directory — see below) that actually
-knows what's running: one resident daemon, hosting the build engine, coordinating memory and worker
-slots across every concurrent request.
+knows what's running: one resident engine, hosting the build pipeline, coordinating memory and
+worker slots across every concurrent request.
 
 ## What changes for you
 
 Nothing, most of the time. `jk build` still means `jk build`. The first `jk build` or `jk test`
-transparently starts the daemon if one isn't already running; every subsequent daemon-hosted command
-in that shell — or any other shell on the machine, for the same `~/.jk` — talks to the same daemon.
+transparently starts the engine if one isn't already running; every subsequent engine-hosted command
+in that shell — or any other shell on the machine, for the same `~/.jk` — talks to the same engine.
 It stays warm while you're actively using it and exits on its own after a period of inactivity.
 
 Three things are worth knowing:
 
-- **The daemon is load-bearing.** If it can't be reached and can't be started, the affected command
+- **The engine is load-bearing.** If it can't be reached and can't be started, the affected command
   fails with a clear error rather than silently falling back to running in-process. This is a
-  deliberate trade-off (see [Failure modes](#failure-modes)) — the daemon is now real infrastructure,
+  deliberate trade-off (see [Failure modes](#failure-modes)) — the engine is now real infrastructure,
   not a pure optimization you can ignore.
 - **It's per `jk` state directory, not per machine.** A different `JK_HOME`/`JK_STATE_DIR` gets its
-  own daemon. Two CI jobs, or a normal user account and a sandboxed test environment, don't share one
+  own engine. Two CI jobs, or a normal user account and a sandboxed test environment, don't share one
   unless they share that directory.
-- **It always matches your `jk` version.** If you upgrade `jk` while a daemon from the old version is
-  still resident, the next invocation detects the mismatch, restarts the daemon, and proceeds — no
+- **It always matches your `jk` version.** If you upgrade `jk` while an engine from the old version is
+  still resident, the next invocation detects the mismatch, restarts the engine, and proceeds — no
   manual step.
 
 ## Lifecycle
 
-The `jk` binary itself is both the client you invoke and the daemon it starts — there's no separate
-daemon binary. An internal, hidden flag distinguishes the two roles at startup (mirroring how `jk
+The `jk` binary itself is both the client you invoke and the engine it starts — there's no separate
+engine binary. An internal, hidden flag distinguishes the two roles at startup (mirroring how `jk
 cache prune --background` already reuses the same binary as a detached one-shot worker via
 `CachePruneScheduler`). Concretely:
 
-1. A CLI command that needs the engine checks for a live daemon by **connecting to its socket and
+1. A CLI command that needs the engine checks for a live one by **connecting to its socket and
    pinging it** — not by trusting a PID file, which can't tell "serving" from "still starting up" or
-   "PID reused after a reboot." A live daemon answers a `ping` with `pong` in well under a second.
-2. No answer → the CLI spawns a daemon: the same `jk` binary, re-invoked with the internal
-   daemon-server flag, detached (its own stdin closed, its output going to a log file, not the
-   caller's terminal), and waits (a few seconds, bounded) for the new daemon's socket to come up.
-3. If two `jk` invocations race to spawn a daemon at the same instant, both spawn a candidate
+   "PID reused after a reboot." A live engine answers a `ping` with `pong` in well under a second.
+2. No answer → the CLI spawns an engine: the same `jk` binary, re-invoked with the internal
+   engine-server flag, detached (its own stdin closed, its output going to a log file, not the
+   caller's terminal), and waits (a few seconds, bounded) for the new engine's socket to come up.
+   Detached means *really* detached: first thing in the engine role, the process moves itself
+   into its own POSIX session — `setsid(2)` called directly via an FFM downcall (works on Linux
+   *and* macOS, which ships no `setsid(1)` command; registered for native-image by
+   `EngineDetachFeature`) — and ignores terminal SIGINT/SIGHUP everywhere. So a Ctrl-C aimed at
+   the client that happened to spawn it can never take down the engine and the other builds it is
+   hosting. (`SIGTERM` to the engine's own PID stays lethal on purpose; cancelling one build is a
+   wire-level concern, never a signal.)
+3. If two `jk` invocations race to spawn an engine at the same instant, both spawn a candidate
    process; both try to win an advisory file lock (the same `FileChannel.tryLock()` pattern the
    opportunistic cache-prune background job already uses); the loser exits immediately and the
    winner's socket is what both original invocations end up talking to.
-4. The daemon serves requests — one build, test run, etc. at a time per request, but multiple
+4. The engine serves requests — one build, test run, etc. at a time per request, but multiple
    requests concurrently, each isolated in its own build session.
-5. After being idle (no in-flight requests) for a configured period, the daemon exits on its own. A
+5. After being idle (no in-flight requests) for a configured period, the engine exits on its own. A
    future `jk` invocation spins a fresh one back up exactly as in step 2 — this is silent and
    automatic, never something you need to think about.
 
-### Configuring the idle timeout
+### Configuring the engine
 
-`~/.jk/config.toml` — the single user-global config file, not a project's `jk.toml` (daemon lifetime
-is a machine/user policy, not something one project should be able to force on another):
+`~/.jk/config.toml` — the single user-global config file, not a project's `jk.toml` (engine lifetime
+and sizing are machine/user policy, not something one project should be able to force on another):
 
 ```toml
-[daemon]
-idle-minutes = 120   # default
+[engine]
+idle-minutes = 120   # default; env override JK_ENGINE_IDLE_MINUTES
+max-heap-mb  = 256   # default; env override JK_ENGINE_MAX_HEAP_MB
 ```
 
-- **A positive number** — minutes of no in-flight requests before the daemon exits. Default `120`.
+`idle-minutes`:
+
+- **A positive number** — minutes of no in-flight requests before the engine exits. Default `120`.
 - **`0`** — exit as soon as the current workload finishes; don't linger even briefly.
 - **`-1`** — never self-terminate. Useful on a CI runner or a workstation where you'd rather keep the
-  daemon (and whatever it's warmed — the resolved dependency graph, worker-slot accounting) resident
+  engine (and whatever it's warmed — the resolved dependency graph, worker-slot accounting) resident
   indefinitely and manage its lifetime yourself.
 
-Changing this value takes effect for the *next* daemon — `jk daemon stop` then let the next command
-spin up a fresh one, or just wait for the current one to naturally recycle.
+`max-heap-mb` — the heap ceiling for the engine *process itself*, applied by the spawning client
+(`-Xmx`, alongside `-Xms96m` pre-sizing and SerialGC; a process can't shrink its own ceiling, so
+this necessarily lives on the spawn path). Default `256` — this *is* the memory target, enforced.
+The engine never needs the runtime's uncapped default (¼ of RAM) because it is pure orchestration:
+compiles and tests run in separately-sized worker JVMs. Raise it on a CI box hosting many large
+concurrent builds; **`0`** = uncapped. Verify with the `heapMaxBytes` field of
+`jk engine status --output json`.
+
+Changing these values takes effect for the *next* engine — `jk engine stop` then let the next
+command spin up a fresh one, or just wait for the current one to naturally recycle.
 
 ## Manual control
 
@@ -88,55 +106,55 @@ Alongside the automatic lifecycle, three explicit commands:
 
 | Command | Effect |
 |---|---|
-| `jk daemon start` | Eagerly start the daemon and wait until it's confirmed live (or fail with a clear error). A no-op if one's already running. Useful for pre-warming a CI container. |
-| `jk daemon stop` | Gracefully shut the daemon down (waits briefly for in-flight work, then stops). Reports "not running" (not an error) if there isn't one. |
-| `jk daemon status` | Reports whether a daemon is running and, if so, its PID, `jk` version, uptime, the `idle-minutes` it's operating under, best-effort memory usage, and how many requests are in flight. |
+| `jk engine start` | Eagerly start the engine and wait until it's confirmed live (or fail with a clear error). A no-op if one's already running. Useful for pre-warming a CI container. |
+| `jk engine stop` | Gracefully shut the engine down (waits briefly for in-flight work, then stops). Reports "not running" (not an error) if there isn't one. |
+| `jk engine status` | Reports whether an engine is running and, if so, its PID, `jk` version, uptime, the `idle-minutes` it's operating under, best-effort memory usage (heap used/committed/max from the runtime, plus process RSS where the OS exposes it — Linux `/proc`), and how many requests are in flight. `--output json` carries the same numbers as `heapUsedBytes`/`heapCommittedBytes`/`heapMaxBytes`/`rssBytes` (`-1` = unobservable). |
 
 ## On-disk layout
 
-Everything lives under `~/.jk/state/daemon/` (`state/` because it's mutable per-host runtime state,
+Everything lives under `~/.jk/state/engine/` (`state/` because it's mutable per-host runtime state,
 not config or cache — see `JkDirs`), keyed by a short hash of the resolved state directory so
-different `JK_HOME`/`JK_STATE_DIR` values naturally get independent daemons:
+different `JK_HOME`/`JK_STATE_DIR` values naturally get independent engines:
 
 ```
-~/.jk/state/daemon/
-├── <key>.sock   # Unix domain socket the daemon listens on (or a loopback port number on Windows)
+~/.jk/state/engine/
+├── <key>.sock   # Unix domain socket the engine listens on (or a loopback port number on Windows)
 ├── <key>.token  # Windows only: the shared secret every connection must send first
 ├── <key>.lock   # advisory lock proving single-instance ownership
-├── <key>.pid    # PID + start time, for `jk daemon status` display only
-├── <key>.log    # the daemon's own stdout/stderr — check here if lazy-start fails
-└── <key>.log.1  # the previous daemon's log, kept one generation deep (see below)
+├── <key>.pid    # PID + start time, for `jk engine status` display only
+├── <key>.log    # the engine's own stdout/stderr — check here if lazy-start fails
+└── <key>.log.1  # the previous engine's log, kept one generation deep (see below)
 ```
 
-Each fresh daemon start rotates any existing `<key>.log` to `<key>.log.1` before truncating a new
-`<key>.log` — not truncate-in-place. Without this, a daemon that crashed would have its own log
+Each fresh engine start rotates any existing `<key>.log` to `<key>.log.1` before truncating a new
+`<key>.log` — not truncate-in-place. Without this, an engine that crashed would have its own log
 destroyed the moment the next command lazily respawns a replacement (which happens automatically,
-often before anyone's looked at it) — exactly the file `jk daemon status`/the lazy-start error
+often before anyone's looked at it) — exactly the file `jk engine status`/the lazy-start error
 message point you at for post-mortem. One historical generation is enough for that purpose; this
 isn't a general log archive.
 
-The `.lock` file is the actual source of truth for "is a daemon running here": it's held for the
-whole life of the daemon process and released automatically by the OS the instant that process
-exits, cleanly or via `kill -9`. The `.pid` file is a display convenience for `jk daemon status`,
+The `.lock` file is the actual source of truth for "is an engine running here": it's held for the
+whole life of the engine process and released automatically by the OS the instant that process
+exits, cleanly or via `kill -9`. The `.pid` file is a display convenience for `jk engine status`,
 never trusted on its own — only after a successful ping.
 
 ## Wire protocol
 
-Deliberately internal and unversioned. Since a daemon can only ever be started by a matching-version
+Deliberately internal and unversioned. Since an engine can only ever be started by a matching-version
 `jk` binary (see [version skew](#version-skew) below), the client and server are always the same
 build, and the protocol is free to change between `jk` releases with no compatibility concerns. (The
 same engine is expected to eventually back a web backend, IDE plugin, or MCP server too — formalizing
-a stable, versioned protocol is deferred until one of those actually needs to talk to a daemon it
+a stable, versioned protocol is deferred until one of those actually needs to talk to an engine it
 didn't just spawn itself.)
 
 - **Transport**: a Unix domain socket (plain JDK NIO, no third-party dependency) on macOS/Linux — the
   platform this whole design was built and verified against. On Windows, where JDK NIO's UDS support
-  is newer and less consistently available across JDK/OS version combinations, `DaemonTransport`
+  is newer and less consistently available across JDK/OS version combinations, `EngineTransport`
   switches to a loopback TCP port instead, picked by the OS at bind time (`:0`) and recorded (instead
   of a socket path) in the `.sock` file. Because a TCP port isn't filesystem-permission-gated the way
-  a socket file is, every connection on this path must send a per-daemon shared secret (`.token`,
+  a socket file is, every connection on this path must send a per-engine shared secret (`.token`,
   written alongside `.sock`) as its very first line, before anything else is processed — connections
-  that don't are closed without a reply. `DaemonServer`/`DaemonClient`'s request-handling code is
+  that don't are closed without a reply. `EngineServer`/`EngineClient`'s request-handling code is
   otherwise transport-agnostic; it only ever deals with an already-connected `SocketChannel`.
 - **Framing**: newline-delimited JSON, one message per line — the same style `jk`'s existing
   worker-process protocol already uses for compiler/test/git workers, rather than a new
@@ -150,67 +168,73 @@ didn't just spawn itself.)
   `workspace-finish` or `build-error`. A variable-length collection (the module plan, a goal's
   accumulated diagnostics) is always a burst of repeated single-item messages plus a terminal marker
   (`plan-module`+`plan-phase`+`plan-done`, `goal-diagnostic`*+`goal-finish`) rather than one message
-  with a nested JSON array — the hand-rolled codec (`DaemonProtocol`, mirroring `Ndjson`) only reads
+  with a nested JSON array — the hand-rolled codec (`EngineProtocol`, mirroring `Ndjson`) only reads
   flat scalar fields and string arrays, deliberately, to stay dependency-free. See
-  `DaemonProtocol`/`DaemonServer`/`DaemonBuildListenerAdapter` for the exact, current vocabulary —
+  `EngineProtocol`/`EngineServer`/`EngineBuildListenerAdapter` for the exact, current vocabulary —
   it's internal and expected to keep changing (see above), so this doc doesn't enumerate every type.
 - **Rendering stays identical.** The CLI's live progress bars, spinners, and `--output json` mode
   already consume a build as a stream of listener callbacks (`onPlan`, `onModuleStart`, ...) — that
-  was already true before the daemon existed, because the engine was already built to be driven by
-  any front-end, not just the CLI. The daemon just moves where those callbacks originate from: a
+  was already true before the resident engine existed, because the build core was already built to
+  be driven by any front-end, not just the CLI. The engine just moves where those callbacks
+  originate from: a
   thin adapter on the CLI side turns each wire message back into the exact same callback the
-  renderer already handles when running without a daemon. You should never notice a difference in
+  renderer already handles when running without an engine. You should never notice a difference in
   what a build prints.
 
 ## What runs where
 
-**In the daemon:** `jk build` (`BuildService.buildWorkspace` for a workspace, plus a dedicated
+**In the engine:** `jk build` (`BuildService.buildWorkspace` for a workspace, plus a dedicated
 single-goal path for a single project with no `[workspace]` table — both fork worker JVMs the same
 way, so both needed to move for the OOM fix to actually close), `jk test` (a single project's
 compile+test goal), and `jk explain` (`BuildService.explain`, a synchronous read with no worker JVM
-forked — hosted mainly for consistency: the daemon is the one process that always has a live,
+forked — hosted mainly for consistency: the engine is the one process that always has a live,
 correctly-resolved build graph and caches open) — dependency resolution, the build pipeline and
 scheduler, worker-JVM orchestration and the shared memory/heap-slot accounting that this whole
 effort exists to fix, and the on-disk build/action caches.
 
-**Always in the CLI, never the daemon:** anything tied to your terminal or shell — the live TUI,
+**Always in the CLI, never the engine:** anything tied to your terminal or shell — the live TUI,
 color/theme, Ctrl-C handling (a signal has to reach the actual foreground process you're looking
 at), shell completion generation — and, deliberately, all of `jk jdk install` (including its
 non-interactive core, not just the install wizard). A JDK install can't cause the kind of memory
-contention the daemon exists to prevent, installs are already safe to run concurrently without any
-coordination, and a machine that has never even built anything shouldn't need a daemon just to
+contention the engine exists to prevent, installs are already safe to run concurrently without any
+coordination, and a machine that has never even built anything shouldn't need an engine just to
 install a JDK. `jk explain`'s ETA computation also stays client-side — it reaches into
 `BuildPipeline`/`EffortWeights`/`Calibration` directly from the CLI (a known, pre-existing gap, not
 a new one); only the plan itself (`BuildService.explain`'s module/phase/edge forecast) is
-daemon-hosted.
+engine-hosted.
 
 ## Version skew
 
-Every connection starts with a handshake: the CLI states its version, the daemon states its own. If
-they don't match — you upgraded `jk` since the daemon started — the CLI kills the stale daemon,
+Every connection starts with a handshake: the CLI states its version, the engine states its own. If
+they don't match — you upgraded `jk` since the engine started — the CLI kills the stale engine,
 starts a fresh one (which, having just been launched by the current binary, necessarily matches),
 and retries your command against it. You never see this happen; it costs the one extra startup.
 
 ## Failure modes
 
-- **The daemon disconnects mid-request** (it crashed, or was killed): your command fails immediately
-  with a clear error pointing at `jk daemon status` for more detail, rather than hanging or silently
-  finishing without a result. This is the sharp edge of "the daemon is load-bearing" — earlier
+- **The engine disconnects mid-request** (it crashed, or was killed): your command fails immediately
+  with a clear error pointing at `jk engine status` for more detail, rather than hanging or silently
+  finishing without a result. This is the sharp edge of "the engine is load-bearing" — earlier
   versions of `jk` never had a background process that could disconnect out from under a build, and
   now this failure mode exists. It's an accepted trade-off, not an oversight.
-- **The daemon is killed externally** (`kill -9`, a machine reboot with no clean shutdown): the next
-  `jk` invocation's liveness check simply finds nothing listening, and starts a fresh daemon exactly
+- **The engine is killed externally** (`kill -9`, a machine reboot with no clean shutdown): the next
+  `jk` invocation's liveness check simply finds nothing listening, and starts a fresh engine exactly
   as it would if none had ever run. No stale-lock cleanup is needed — the advisory lock is released
   by the OS the moment the process is gone.
-- **A `jk daemon start`/lazy-start attempt itself fails** — the error points at the daemon's own log
-  file (`~/.jk/state/daemon/<key>.log`) rather than leaving you guessing.
+- **A `jk engine start`/lazy-start attempt itself fails** — the error points at the engine's own log
+  file (`~/.jk/state/engine/<key>.log`) rather than leaving you guessing.
 
 ## Memory target
 
-The daemon aims to sit near **256 MiB** while idle. It doesn't do the heavy lifting itself — compiles
+The engine targets **256 MiB** — no longer just an aim: the spawn-time heap ceiling defaults to
+exactly that (`max-heap-mb` — see [Configuring the engine](#configuring-the-engine)), with
+`-Xms96m` pre-sizing and SerialGC (the native binary is built `--gc=serial`; the JVM-dist spawn
+passes `-XX:+UseSerialGC`) for low GC overhead on a heap this size. Observable at any time via the
+memory line of `jk engine status`. It doesn't do the heavy lifting
+itself — compiles
 and test runs still happen in forked worker JVMs, sized by the same shared `HeapPlan` machinery as
 always, just now coordinated across every concurrent request instead of guessed independently per
-process. The daemon's own footprint stays small because it deliberately avoids new large resident
+process. The engine's own footprint stays small because it deliberately avoids new large resident
 caches: dependency-resolution ledgers and build-timing history are small and cheap enough to
 re-read from disk per request rather than hold in memory for hours, and anything that's already a
 disk-backed cache (the content-addressed build cache, the action cache) stays exactly that.
@@ -223,29 +247,29 @@ real native-image binary:
 1. **Prerequisite hardening (done).** The engine's per-request session state (`SessionContext`)
    propagates correctly across concurrent in-JVM work (`ContextPropagator`). Worker-JVM memory
    planning (`JvmOptions.planAndApply`) no longer runs unconditionally inside `buildWorkspace` — a
-   `WorkspaceRequest.applyMemoryPlan` flag lets a host serving concurrent requests (the daemon) plan
+   `WorkspaceRequest.applyMemoryPlan` flag lets a host serving concurrent requests (the engine) plan
    once for its own concurrency instead of letting each call overwrite the shared budget.
-2. **Daemon skeleton (done).** Process lifecycle, single-instance election (`.lock` `tryLock()`), the
+2. **Engine skeleton (done).** Process lifecycle, single-instance election (`.lock` `tryLock()`), the
    Unix-domain-socket handshake/liveness/status/shutdown protocol, the idle-timeout policy (0/-1/N),
-   and `jk daemon start/stop/status`. Verified end-to-end: start/status/stop, `kill -9` recovery
+   and `jk engine start/stop/status`. Verified end-to-end: start/status/stop, `kill -9` recovery
    (stale socket/lock cleanup), and `idle-minutes` semantics against the real binary.
 3. **`jk build` (done).** Every `WorkspaceBuildListener`/`GoalListener` callback streams over the
-   wire as its own message type (`DaemonServer`'s `wireListener`/`wireGoalListener`,
-   `DaemonBuildListenerAdapter` client-side); the CLI's existing renderers (`AggregateModuleListener`,
+   wire as its own message type (`EngineServer`'s `wireListener`/`wireGoalListener`,
+   `EngineBuildListenerAdapter` client-side); the CLI's existing renderers (`AggregateModuleListener`,
    the headless buffer listener) are unchanged — only where their events originate from changed.
    Verified with a real multi-module workspace: correct compilation/packaging/cross-module
-   dependencies, a clear error (no hang) when the daemon is killed mid-build, and — the actual bug
-   this exists to fix — two concurrent `jk build`s in different directories sharing one daemon
+   dependencies, a clear error (no hang) when the engine is killed mid-build, and — the actual bug
+   this exists to fix — two concurrent `jk build`s in different directories sharing one engine
    without OOMing.
 4. **`jk test` (done).** A single project's test goal reuses the exact same goal-level wire vocabulary
    `jk build` already speaks (tagged with a fixed sentinel `dir` since there's only one goal, not a
    module list) — no new protocol surface beyond the request/response pair and carrying the test
    pass/fail counts on the terminal `goal-finish` event. Verified: passing tests, a failing test
    (correct exit code 4, full failure detail rendered), and two concurrent `jk test` runs sharing one
-   daemon.
+   engine.
 5. **Single-project `jk build` (done).** Closed the gap where only *workspace* builds were
-   daemon-hosted: a single project with no `[workspace]` table now runs its real (non-test-only)
-   build goal through the same single-goal wire vocabulary as `jk test`, on the daemon. The build
+   engine-hosted: a single project with no `[workspace]` table now runs its real (non-test-only)
+   build goal through the same single-goal wire vocabulary as `jk test`, on the engine. The build
    outcome summary line (e.g. "project up to date" vs. "project built") carries over the wire on the
    terminal `goal-finish` event so the CLI's post-build message matches the in-process path exactly.
 6. **`jk explain` (done).** `BuildService.explain`'s module/phase/edge forecast streams over the wire
@@ -253,16 +277,23 @@ real native-image binary:
    client-side into a real `BuildService.ExplainPlan` — no in-process fallback for the plan itself,
    though the ETA estimate built on top of it stays client-side (see
    [What runs where](#what-runs-where)).
-7. **Windows transport (done).** `DaemonTransport` switches to a loopback TCP port plus a
+7. **Windows transport (done).** `EngineTransport` switches to a loopback TCP port plus a
    shared-secret token (see [Wire protocol](#wire-protocol)) when `os.name` says Windows, instead of
-   the Unix domain socket every other platform uses — `DaemonServer`/`DaemonClient`'s request
+   the Unix domain socket every other platform uses — `EngineServer`/`EngineClient`'s request
    handling is unchanged either way, since both only ever see an already-connected `SocketChannel`.
    Verified by forcing `os.name` in the JVM test suite (no real Windows host available in this
    environment) — a real Windows machine has not exercised this path. Treat it as implemented but
-   not field-verified until one does.
+   not field-verified until one does. For that first real Windows hardening pass, two spawn-detach
+   notes: the JVM-dist engine spawn should launch via `javaw.exe` (no console attachment, so
+   `CTRL_C_EVENT` from the client's console can never reach the engine, and no console window
+   flashes) instead of the `jk.bat` → `java.exe` start script; the native `jk.exe` equivalent is
+   the `DETACHED_PROCESS`/`CREATE_NEW_PROCESS_GROUP` creation flags, which Java's `ProcessBuilder`
+   cannot express — that wants the engine's own launcher (see the slim-client artifact split).
+   Until then, the engine role's SIGINT-ignore (which maps to a console-ctrl handler on Windows)
+   absorbs console Ctrl-C there too.
 8. **Explicitly deferred, not scheduled — precise concurrent memory accounting (demand registry).**
    **Status: DEFERRED (logged), not OPEN** — this is a considered decision, not a known bug. The
-   current daemon sizes one shared worker-JVM budget for the host's core count once at startup
+   current engine sizes one shared worker-JVM budget for the host's core count once at startup
    (`planSharedWorkerMemoryOnce`), not a live registry that grows/shrinks `HeapPlan`/`WorkerSlots` per
    in-flight request. A demand-registry is real complexity (live recomputation on request churn,
    re-plumbing `HeapPlan`/`WorkerSlots` from static to reactive) that's only worth paying for if the
@@ -276,11 +307,11 @@ real native-image binary:
    deferred, not a reason to skip the check below.
 
    **Revisit trigger — re-open this item once any of these is actually measured, not assumed:**
-   - *Concurrency distribution*: sample `activeConnections` (already tracked, surfaced via `jk daemon
+   - *Concurrency distribution*: sample `activeConnections` (already tracked, surfaced via `jk engine
      status`) over real usage. If concurrent in-flight requests are rare, the coarse plan already
      matches actual demand and there's nothing to optimize.
-   - *Single-build regression*: compare wall-clock time for one isolated build under the daemon's
-     coarse sizing vs. the pre-daemon per-invocation `JvmOptions.planAndApply` (which sized generously
+   - *Single-build regression*: compare wall-clock time for one isolated build under the engine's
+     coarse sizing vs. the pre-engine per-invocation `JvmOptions.planAndApply` (which sized generously
      for that build alone). A measurable regression in the common single-build case is the real cost
      of *not* having a demand-registry.
    - *Queuing-while-idle*: under synthetic concurrent load (2/4/8 simultaneous single-project or
@@ -290,5 +321,5 @@ real native-image binary:
    If none of these ever shows a real cost, this item should stay deferred indefinitely — it is not a
    TODO waiting for someone to get to it.
 9. **Explicitly deferred, not scheduled — a stable versioned protocol.** Only needed if a second
-   front-end besides this CLI ever needs to talk to a `jk` daemon directly; see
+   front-end besides this CLI ever needs to talk to a `jk` engine directly; see
    [Wire protocol](#wire-protocol).

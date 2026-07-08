@@ -10,7 +10,6 @@ import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.RepositorySpec;
 import dev.jkbuild.repo.MavenRepo;
 import dev.jkbuild.repo.RepoGroup;
-import java.io.ByteArrayInputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -49,7 +48,8 @@ class GitProjectBuilderTest {
         GitProjectBuilder.Built built =
                 GitProjectBuilder.build(dir, project, "com.acme", "widgets", version, javaHome, cas, repos, "test");
 
-        assertThat(built.jar()).isNotEmpty();
+        assertThat(built.jar()).isRegularFile();
+        assertThat(Files.size(built.jar())).isPositive();
         assertThat(jarEntryNames(built.jar())).contains("example/Hello.class");
 
         // The POM must carry the overridden coordinate and the git-derived version
@@ -61,9 +61,9 @@ class GitProjectBuilderTest {
                 .doesNotContain("<version>0.1.0</version>");
     }
 
-    private static List<String> jarEntryNames(byte[] jar) throws Exception {
+    private static List<String> jarEntryNames(Path jar) throws Exception {
         List<String> names = new ArrayList<>();
-        try (JarInputStream in = new JarInputStream(new ByteArrayInputStream(jar))) {
+        try (JarInputStream in = new JarInputStream(Files.newInputStream(jar))) {
             for (var e = in.getNextJarEntry(); e != null; e = in.getNextJarEntry()) {
                 names.add(e.getName());
             }

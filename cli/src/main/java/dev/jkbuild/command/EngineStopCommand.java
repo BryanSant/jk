@@ -2,8 +2,8 @@
 package dev.jkbuild.command;
 
 import dev.jkbuild.cli.CliOutput;
-import dev.jkbuild.cli.daemon.DaemonClient;
-import dev.jkbuild.daemon.DaemonPaths;
+import dev.jkbuild.cli.engine.EngineClient;
+import dev.jkbuild.engine.EnginePaths;
 import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Exit;
 import dev.jkbuild.model.command.Invocation;
@@ -11,10 +11,10 @@ import dev.jkbuild.model.command.Opt;
 import java.util.List;
 
 /**
- * {@code jk daemon stop} — graceful shutdown; stopping a daemon that isn't running is reported, not
+ * {@code jk engine stop} — graceful shutdown; stopping an engine that isn't running is reported, not
  * treated as an error (exit 0 either way).
  */
-public final class DaemonStopCommand implements CliCommand {
+public final class EngineStopCommand implements CliCommand {
 
     @Override
     public String name() {
@@ -23,7 +23,7 @@ public final class DaemonStopCommand implements CliCommand {
 
     @Override
     public String description() {
-        return "Stop the build daemon (no-op if not running)";
+        return "Stop the build engine (no-op if not running)";
     }
 
     @Override
@@ -33,13 +33,13 @@ public final class DaemonStopCommand implements CliCommand {
 
     @Override
     public int run(Invocation in) {
-        DaemonPaths.Paths paths = DaemonPaths.current();
-        boolean wasRunning = DaemonClient.ping(paths.socket());
-        if (!DaemonClient.stop(paths.socket())) {
-            CliOutput.err("jk daemon: stop request failed");
+        EnginePaths.Paths paths = EnginePaths.current();
+        boolean wasRunning = EngineClient.ping(paths.socket());
+        if (!EngineClient.stop(paths.socket())) {
+            CliOutput.err("jk engine: stop request failed");
             return Exit.SOFTWARE;
         }
-        CliOutput.out(wasRunning ? "jk daemon: stopped" : "jk daemon: not running");
+        CliOutput.out(wasRunning ? "jk engine: stopped" : "jk engine: not running");
         return Exit.SUCCESS;
     }
 }
