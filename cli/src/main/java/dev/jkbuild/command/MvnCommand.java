@@ -2,9 +2,7 @@
 package dev.jkbuild.command;
 
 import dev.jkbuild.cli.CliOutput;
-import dev.jkbuild.cache.Cas;
 import dev.jkbuild.compat.PassthroughEnv;
-import dev.jkbuild.jdk.HostPlatform;
 import dev.jkbuild.jdk.InstalledJdk;
 import dev.jkbuild.jdk.JdkResolver;
 import dev.jkbuild.model.command.Arity;
@@ -12,23 +10,21 @@ import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.model.command.Param;
-import dev.jkbuild.plugin.protocol.Ndjson;
-import dev.jkbuild.runtime.CompileToolchain;
+import dev.jkbuild.runtime.CompatGoals;
 import dev.jkbuild.util.JkDirs;
-import dev.jkbuild.worker.WorkerJar;
-import dev.jkbuild.worker.WorkerClient;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
 /**
- * {@code jk mvn ...} — passthrough to Maven (PRD §24.1). The {@code jk-compat-runner} worker
- * provisions the distribution if needed and returns its path; the main process then execs {@code
- * bin/mvn} directly so Maven's stdout/stderr reach the terminal unmodified.
+ * {@code jk mvn ...} — passthrough to Maven (PRD §24.1). Provisioning (link a discovered install or
+ * download a distribution via the {@code jk-compat-runner} worker) is <b>engine-hosted</b> (Wave 2
+ * of the slim-client migration, a one-shot request → {@code {bin, version, source}} result); the
+ * <em>exec</em> of the provisioned {@code bin/mvn} deliberately stays in this client process with
+ * inherited stdio, so Maven's own TTY output, prompts, and Ctrl-C semantics are untouched — hosting
+ * a foreign build's interactive run would be wrong, hosting its download is not.
  */
 public final class MvnCommand implements CliCommand {
 
@@ -69,6 +65,17 @@ public final class MvnCommand implements CliCommand {
     boolean noDiscover;
     List<String> args = new ArrayList<>();
 
+    /**
+     * Escape hatch for the fast JVM unit-test suite ONLY — see {@link
+     * BuildCommand#engineDisabledForTests()}'s javadoc for the full rationale. Same system property,
+     * same "never a user-facing flag" contract; real {@code jk mvn}/{@code gradle} provisioning
+     * always engine-hosts.
+     */
+    private static boolean engineDisabledForTests() {
+        return Boolean.getBoolean("jk.test.noEngine")
+                || "dev.jkbuild.test.runner.JkRunner".equals(System.getProperty("jk.plugin.class"));
+    }
+
     @Override
     public int run(Invocation in) throws IOException, InterruptedException {
         this.directory = in.value("directory").map(Path::of).orElse(null);
@@ -83,7 +90,7 @@ public final class MvnCommand implements CliCommand {
         Path toolsRoot = toolsDir != null ? toolsDir : JkDirs.cache().resolve("tools");
         Path cache = JkDirs.cache();
 
-        // Provision Maven via the compat-runner, get back the bin path.
+        // Provision Maven via the compat-runner (engine-hosted), get back the bin path.
         Path mvnBin = provision(cache, projectDir, toolsRoot, noDiscover, false);
         if (mvnBin == null) return 1;
 
@@ -98,49 +105,35 @@ public final class MvnCommand implements CliCommand {
         return pb.start().waitFor();
     }
 
+    /**
+     * Provision a Maven/Gradle distribution and return its launcher path, or {@code null} (with the
+     * error already rendered) on failure. Engine-hosted; the test-only in-process path runs the
+     * identical {@link CompatGoals#provision} code.
+     */
     static Path provision(Path cache, Path projectDir, Path toolsRoot, boolean noDiscover, boolean isGradle)
             throws IOException, InterruptedException {
-        Path workerJar = WorkerJar.COMPAT_BRIDGE.locate(new Cas(cache));
-        Path spec = Files.createTempFile("jk-compat-", ".spec");
-        try {
-            Files.write(
-                    spec,
-                    List.of(
-                            "COMMAND " + (isGradle ? "provision_gradle" : "provision_mvn"),
-                            "PROJECT_DIR " + projectDir.toAbsolutePath(),
-                            "TOOLS_ROOT " + toolsRoot.toAbsolutePath(),
-                            "NO_DISCOVER " + noDiscover),
-                    StandardCharsets.UTF_8);
-
-            Path javaExe = CompileToolchain.runningJavaHome()
-                    .resolve("bin")
-                    .resolve(HostPlatform.isWindows() ? "java.exe" : "java");
-            List<String> cmd = dev.jkbuild.worker.JvmOptions.javaCommand(
-                    javaExe.toString(),
-                    1,
-                    List.of("-jar", workerJar.toString(), spec.toAbsolutePath().toString()));
-            String[] bin = {null};
-            StringBuilder diag = new StringBuilder();
-            int exit = new WorkerClient("##JKCMP:")
-                    .on("result", json -> {
-                        bin[0] = Ndjson.str(json, "bin");
-                        String err = Ndjson.str(json, "error");
-                        if (err != null) CliOutput.err("jk " + (isGradle ? "gradle" : "mvn") + ": " + err);
-                        String src = Ndjson.str(json, "source");
-                        String ver = Ndjson.str(json, "version");
-                        if ("LINKED".equals(src) || "DOWNLOADED".equals(src)) {
-                            CliOutput.err((isGradle ? "Gradle " : "Maven ") + ver + " " + src.toLowerCase());
-                        }
-                    })
-                    .passthrough(ln -> diag.append(ln).append('\n'))
-                    .run(cmd);
-            if (exit != 0) {
-                if (diag.length() > 0) CliOutput.err(diag.toString().trim());
+        String tool = isGradle ? "gradle" : "mvn";
+        CompatGoals.Provision p;
+        if (engineDisabledForTests()) {
+            p = CompatGoals.provision(cache, projectDir, toolsRoot, noDiscover, isGradle);
+        } else {
+            try {
+                p = dev.jkbuild.cli.engine.EngineClient.provision(
+                        dev.jkbuild.engine.EnginePaths.current(), cache, projectDir, toolsRoot, noDiscover, isGradle);
+            } catch (IOException e) {
+                CliOutput.err("jk " + tool + ": " + e.getMessage());
                 return null;
             }
-            return bin[0] != null ? Path.of(bin[0]) : null;
-        } finally {
-            Files.deleteIfExists(spec);
         }
+        if (p.error() != null) CliOutput.err("jk " + tool + ": " + p.error());
+        if ("LINKED".equals(p.source()) || "DOWNLOADED".equals(p.source())) {
+            CliOutput.err((isGradle ? "Gradle " : "Maven ") + p.version() + " "
+                    + p.source().toLowerCase());
+        }
+        if (p.exit() != 0) {
+            if (p.diag() != null && !p.diag().isBlank()) CliOutput.err(p.diag());
+            return null;
+        }
+        return p.bin() != null ? Path.of(p.bin()) : null;
     }
 }

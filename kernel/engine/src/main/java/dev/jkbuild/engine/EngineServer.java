@@ -267,6 +267,33 @@ public final class EngineServer implements AutoCloseable {
                         handleAsyncGoalRequest(line, reader, writer, "jk-engine-sync-", this::runSync);
                         return;
                     }
+                    case EngineProtocol.AUDIT_REQUEST -> {
+                        // Wave 2 (hosted worker verbs): single goal, worker forked engine-side.
+                        handleAsyncGoalRequest(line, reader, writer, "jk-engine-audit-", this::runAudit);
+                        return;
+                    }
+                    case EngineProtocol.FORMAT_REQUEST -> {
+                        handleAsyncGoalRequest(line, reader, writer, "jk-engine-format-", this::runFormat);
+                        return;
+                    }
+                    case EngineProtocol.PUBLISH_REQUEST -> {
+                        handleAsyncGoalRequest(line, reader, writer, "jk-engine-publish-", this::runPublish);
+                        return;
+                    }
+                    case EngineProtocol.IMAGE_REQUEST -> {
+                        handleAsyncGoalRequest(line, reader, writer, "jk-engine-image-", this::runImage);
+                        return;
+                    }
+                    case EngineProtocol.IMPORT_REQUEST -> {
+                        handleAsyncGoalRequest(line, reader, writer, "jk-engine-import-", this::runImport);
+                        return;
+                    }
+                    case EngineProtocol.PROVISION_REQUEST -> {
+                        // One-shot (no goal events), but the worker may download a whole Maven/Gradle
+                        // distribution — same fork-and-watch shape so an EOF still cancels.
+                        handleAsyncGoalRequest(line, reader, writer, "jk-engine-provision-", this::runProvision);
+                        return;
+                    }
                     case EngineProtocol.EXPLAIN_REQUEST -> {
                         // Synchronous read, no worker JVM forked — handled inline, connection continues.
                         handleExplainRequest(line, writer);
@@ -751,6 +778,283 @@ public final class EngineServer implements AutoCloseable {
                 }
                 return null;
             });
+        } catch (Exception e) {
+            sendQuiet(writer, EngineProtocol.buildError(String.valueOf(e.getMessage())));
+        }
+    }
+
+    // ---- hosted worker verbs (Wave 2 of the slim-client migration) -------------------------------
+
+    /**
+     * Stream one single-goal verb over the wire — the shared tail of every Wave-2 handler: the
+     * {@link EngineProtocol#SINGLE_GOAL_DIR}-tagged plan-phase burst, the standard goal events via
+     * {@link #wireGoalListener}, and {@code finishEncoder}'s terminal {@code goal-finish} variant.
+     */
+    private void streamSingleGoal(
+            dev.jkbuild.run.Goal goal,
+            Session session,
+            BufferedWriter writer,
+            java.util.function.Function<GoalResult, String> finishEncoder)
+            throws Exception {
+        String dir = EngineProtocol.SINGLE_GOAL_DIR;
+        for (Phase p : goal.phases()) {
+            sendQuiet(writer, EngineProtocol.planPhase(dir, p.name(), p.label()));
+        }
+        sendQuiet(writer, EngineProtocol.planDone(1));
+        goal.addListener(wireGoalListener(dir, writer, finishEncoder));
+        SessionContext.where(session, goal::run);
+    }
+
+    /**
+     * Decode an {@link EngineProtocol#AUDIT_REQUEST} and run {@code jk audit}'s goal in-session,
+     * forking the auditor worker engine-side and streaming each finding as a structured {@link
+     * EngineProtocol#AUDIT_FINDING} event (the client assembles/renders the report and applies the
+     * severity threshold itself).
+     */
+    private void runAudit(String requestLine, Session.CancelToken cancelToken, BufferedWriter writer) {
+        try {
+            Path entryDir = Path.of(Ndjson.str(requestLine, "entryDir"));
+            Path cache = Path.of(Ndjson.str(requestLine, "cache"));
+            String severity = Ndjson.str(requestLine, "severity");
+            String batch = Ndjson.str(requestLine, "osvBatchUrl");
+            String vulns = Ndjson.str(requestLine, "osvVulnsUrl");
+            Session session = Session.defaults()
+                    .withWorkingDir(entryDir)
+                    .withCacheDir(cache)
+                    .withCancel(cancelToken);
+            String dir = EngineProtocol.SINGLE_GOAL_DIR;
+            dev.jkbuild.run.Goal goal = dev.jkbuild.runtime.AuditGoals.auditGoal(
+                    entryDir.resolve("jk.lock"),
+                    cache,
+                    severity,
+                    batch != null ? java.net.URI.create(batch) : null,
+                    vulns != null ? java.net.URI.create(vulns) : null,
+                    (module, version, vulnId, sev, summary) -> sendQuiet(
+                            writer, EngineProtocol.auditFinding(dir, module, version, vulnId, sev, summary)));
+            streamSingleGoal(goal, session, writer, result -> EngineProtocol.goalFinish(dir, result.success()));
+        } catch (Exception e) {
+            sendQuiet(writer, EngineProtocol.buildError(String.valueOf(e.getMessage())));
+        }
+    }
+
+    /**
+     * Decode a {@link EngineProtocol#FORMAT_REQUEST} and run {@code jk format}'s goal in-session:
+     * source collection, formatter-jar resolution (through jk's own resolver — previously done in
+     * the client process), and the formatter worker fork, with per-file results streaming as {@link
+     * EngineProtocol#FORMAT_FILE} events and the counts riding the terminal goal-finish.
+     */
+    private void runFormat(String requestLine, Session.CancelToken cancelToken, BufferedWriter writer) {
+        try {
+            boolean check = Ndjson.bool(requestLine, "check", false);
+            String javaStyle = Ndjson.str(requestLine, "javaStyle");
+            String kotlinStyle = Ndjson.str(requestLine, "kotlinStyle");
+            boolean optimizeImports = Ndjson.bool(requestLine, "optimizeImports", true);
+            String rewriteConfig = Ndjson.str(requestLine, "rewriteConfig");
+            Session session = resolveSession(requestLine, cancelToken, false);
+            String dir = EngineProtocol.SINGLE_GOAL_DIR;
+            dev.jkbuild.run.Goal goal = dev.jkbuild.runtime.FormatGoals.formatGoal(
+                    session.workingDir(),
+                    session.cacheDir(),
+                    check,
+                    javaStyle,
+                    kotlinStyle,
+                    optimizeImports,
+                    rewriteConfig != null ? Path.of(rewriteConfig) : null,
+                    (path, status, message, index, total) ->
+                            sendQuiet(writer, EngineProtocol.formatFile(dir, path, status, message, index, total)));
+            streamSingleGoal(goal, session, writer, result -> EngineProtocol.goalFinishFormat(
+                    dir,
+                    result.success(),
+                    goal.get(dev.jkbuild.runtime.FormatGoals.CHANGED).orElse(-1),
+                    goal.get(dev.jkbuild.runtime.FormatGoals.CLEAN).orElse(-1),
+                    goal.get(dev.jkbuild.runtime.FormatGoals.ERRORS).orElse(-1),
+                    goal.get(dev.jkbuild.runtime.FormatGoals.TOTAL).orElse(-1),
+                    goal.get(dev.jkbuild.runtime.FormatGoals.WORKER_EXIT).orElse(-1)));
+        } catch (Exception e) {
+            sendQuiet(writer, EngineProtocol.buildError(String.valueOf(e.getMessage())));
+        }
+    }
+
+    /**
+     * Decode a {@link EngineProtocol#PUBLISH_REQUEST} and run {@code jk publish}'s goal in-session.
+     * The credential/passphrase fields were resolved client-side (env/keychain live there); they
+     * pass straight through to the worker's 0600 spec file and are never logged.
+     */
+    private void runPublish(String requestLine, Session.CancelToken cancelToken, BufferedWriter writer) {
+        try {
+            Path entryDir = Path.of(Ndjson.str(requestLine, "entryDir"));
+            Path cache = Path.of(Ndjson.str(requestLine, "cache"));
+            String jar = Ndjson.str(requestLine, "jar");
+            String keyFile = Ndjson.str(requestLine, "keyFile");
+            dev.jkbuild.credential.RepoCredential credential =
+                    switch (String.valueOf(Ndjson.str(requestLine, "authType"))) {
+                        case "basic" -> new dev.jkbuild.credential.RepoCredential.Basic(
+                                Ndjson.str(requestLine, "user"),
+                                Ndjson.str(requestLine, "pass") != null ? Ndjson.str(requestLine, "pass") : "");
+                        case "bearer" -> new dev.jkbuild.credential.RepoCredential.Bearer(
+                                Ndjson.str(requestLine, "token"));
+                        default -> dev.jkbuild.credential.RepoCredential.ANONYMOUS;
+                    };
+            dev.jkbuild.runtime.PublishGoals.Request req = new dev.jkbuild.runtime.PublishGoals.Request(
+                    java.net.URI.create(Ndjson.str(requestLine, "repoUrl")),
+                    Ndjson.str(requestLine, "region"),
+                    Ndjson.str(requestLine, "endpoint"),
+                    jar != null ? Path.of(jar) : null,
+                    Ndjson.bool(requestLine, "allowSnapshot", false),
+                    Ndjson.bool(requestLine, "dryRun", false),
+                    keyFile != null ? Path.of(keyFile) : null,
+                    Ndjson.str(requestLine, "gpgPassphrase"),
+                    Ndjson.bool(requestLine, "sigstore", false),
+                    Ndjson.bool(requestLine, "slsa", false),
+                    Ndjson.bool(requestLine, "sbom", false),
+                    credential);
+            Session session = Session.defaults()
+                    .withWorkingDir(entryDir)
+                    .withCacheDir(cache)
+                    .withCancel(cancelToken);
+            String dir = EngineProtocol.SINGLE_GOAL_DIR;
+            dev.jkbuild.run.Goal goal = dev.jkbuild.runtime.PublishGoals.publishGoal(entryDir, cache, req);
+            streamSingleGoal(goal, session, writer, result -> EngineProtocol.goalFinishPublish(
+                    dir,
+                    result.success(),
+                    goal.get(dev.jkbuild.runtime.PublishGoals.FILES).orElse(-1)));
+        } catch (Exception e) {
+            sendQuiet(writer, EngineProtocol.buildError(String.valueOf(e.getMessage())));
+        }
+    }
+
+    /**
+     * Decode an {@link EngineProtocol#IMAGE_REQUEST} and run {@code jk image}'s goal in-session —
+     * the full build pipeline plus the image tail (Jib worker or Dockerfile child process), all
+     * engine-side. The terminal goal-finish carries the structured success-tail fields alongside
+     * the test counts the client's exit-code logic needs.
+     */
+    private void runImage(String requestLine, Session.CancelToken cancelToken, BufferedWriter writer) {
+        try {
+            Path entryDir = Path.of(Ndjson.str(requestLine, "entryDir"));
+            Path cache = Path.of(Ndjson.str(requestLine, "cache"));
+            String jdksDirStr = Ndjson.str(requestLine, "jdksDir");
+            Path jdksDir = jdksDirStr != null ? Path.of(jdksDirStr) : null;
+            boolean skipTests = Ndjson.bool(requestLine, "skipTests", false);
+            boolean verbose = Ndjson.bool(requestLine, "verbose", false);
+            JkConfig config = new JkConfig(
+                    Optional.empty(),
+                    Optional.of(Ndjson.bool(requestLine, "offline", false)),
+                    Optional.of(Ndjson.bool(requestLine, "rerun", false)),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.of(verbose),
+                    Optional.empty(),
+                    Optional.of(Ndjson.bool(requestLine, "force", false)),
+                    Optional.empty());
+            Session session = Session.defaults()
+                    .withConfig(config)
+                    .withWorkingDir(entryDir)
+                    .withCacheDir(cache)
+                    .withJdksDir(jdksDir)
+                    .withCancel(cancelToken);
+            String dir = EngineProtocol.SINGLE_GOAL_DIR;
+            dev.jkbuild.run.Goal goal = dev.jkbuild.runtime.ImageGoals.imageGoal(
+                    entryDir,
+                    cache,
+                    jdksDir,
+                    skipTests,
+                    verbose,
+                    Ndjson.str(requestLine, "mainClass"),
+                    Ndjson.str(requestLine, "registry"),
+                    Ndjson.str(requestLine, "tag"),
+                    Ndjson.str(requestLine, "tarball"),
+                    Ndjson.str(requestLine, "dockerExecutable"));
+            streamSingleGoal(goal, session, writer, result -> {
+                dev.jkbuild.test.JUnitLauncher.Result testResult =
+                        goal.get(dev.jkbuild.runtime.BuildPipeline.TEST_RESULT).orElse(null);
+                dev.jkbuild.image.ImageConfig cfg =
+                        goal.get(dev.jkbuild.runtime.ImageGoals.CONFIG).orElse(null);
+                Path tarball = goal.get(dev.jkbuild.runtime.ImageGoals.TARBALL_PATH)
+                        .orElse(null);
+                JkBuild project =
+                        goal.get(dev.jkbuild.runtime.BuildPipeline.PROJECT).orElse(null);
+                boolean daemonMode =
+                        tarball == null && (cfg == null || cfg.registry() == null || cfg.registry().isBlank());
+                String daemonExe = !daemonMode
+                        ? null
+                        : cfg != null && cfg.dockerExecutable() != null ? cfg.dockerExecutable() : "docker";
+                return EngineProtocol.goalFinishImage(
+                        dir,
+                        result.success(),
+                        testResult != null ? testResult.total() : -1,
+                        testResult != null ? testResult.succeeded() : -1,
+                        testResult != null ? testResult.failed() : -1,
+                        testResult != null ? testResult.skipped() : -1,
+                        goal.get(dev.jkbuild.runtime.ImageGoals.IMAGE_REF).orElse(null),
+                        tarball != null ? tarball.toString() : null,
+                        project != null ? project.project().name() : null,
+                        project != null ? project.project().version() : null,
+                        daemonExe);
+            });
+        } catch (Exception e) {
+            sendQuiet(writer, EngineProtocol.buildError(String.valueOf(e.getMessage())));
+        }
+    }
+
+    /**
+     * Decode an {@link EngineProtocol#IMPORT_REQUEST} and run {@code jk import}'s single-phase goal
+     * in-session, streaming the worker's progress notes as {@link EngineProtocol#IMPORT_NOTE}
+     * events. The worker's exit code/warnings/error ride the terminal goal-finish (a non-zero
+     * worker exit is a result the client renders, not a goal failure).
+     */
+    private void runImport(String requestLine, Session.CancelToken cancelToken, BufferedWriter writer) {
+        try {
+            Path baseDir = Path.of(Ndjson.str(requestLine, "baseDir"));
+            Path cache = Path.of(Ndjson.str(requestLine, "cache"));
+            String report = Ndjson.str(requestLine, "report");
+            Session session = Session.defaults()
+                    .withWorkingDir(baseDir)
+                    .withCacheDir(cache)
+                    .withCancel(cancelToken);
+            String dir = EngineProtocol.SINGLE_GOAL_DIR;
+            dev.jkbuild.run.Goal goal = dev.jkbuild.runtime.CompatGoals.importGoal(
+                    Path.of(Ndjson.str(requestLine, "source")),
+                    Path.of(Ndjson.str(requestLine, "out")),
+                    baseDir,
+                    Path.of(Ndjson.str(requestLine, "tmpDir")),
+                    Ndjson.bool(requestLine, "force", false),
+                    report != null ? Path.of(report) : null,
+                    cache,
+                    (kind, text) -> sendQuiet(writer, EngineProtocol.importNote(dir, kind, text)));
+            streamSingleGoal(goal, session, writer, result -> EngineProtocol.goalFinishImport(
+                    dir,
+                    result.success(),
+                    goal.get(dev.jkbuild.runtime.CompatGoals.EXIT).orElse(1),
+                    goal.get(dev.jkbuild.runtime.CompatGoals.WARNINGS).orElse(0),
+                    goal.get(dev.jkbuild.runtime.CompatGoals.ERROR).orElse(null),
+                    goal.get(dev.jkbuild.runtime.CompatGoals.DIAG).orElse(null)));
+        } catch (Exception e) {
+            sendQuiet(writer, EngineProtocol.buildError(String.valueOf(e.getMessage())));
+        }
+    }
+
+    /**
+     * Decode a {@link EngineProtocol#PROVISION_REQUEST}, provision the Maven/Gradle distribution
+     * via the compat-bridge worker, and reply with the one-shot {@link
+     * EngineProtocol#PROVISION_RESULT} terminal. The exec of the provisioned tool stays client-side.
+     */
+    private void runProvision(String requestLine, Session.CancelToken cancelToken, BufferedWriter writer) {
+        try {
+            var outcome = dev.jkbuild.runtime.CompatGoals.provision(
+                    Path.of(Ndjson.str(requestLine, "cache")),
+                    Path.of(Ndjson.str(requestLine, "projectDir")),
+                    Path.of(Ndjson.str(requestLine, "toolsRoot")),
+                    Ndjson.bool(requestLine, "noDiscover", false),
+                    Ndjson.bool(requestLine, "gradle", false));
+            sendQuiet(writer, EngineProtocol.provisionResult(
+                    outcome.bin(),
+                    outcome.version(),
+                    outcome.source(),
+                    outcome.error(),
+                    outcome.exit(),
+                    outcome.diag()));
         } catch (Exception e) {
             sendQuiet(writer, EngineProtocol.buildError(String.valueOf(e.getMessage())));
         }

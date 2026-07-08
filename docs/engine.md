@@ -197,6 +197,19 @@ build/action caches. `jk build` also freshens a stale merged workspace lock engi
 building (the request carries `freshenLock`; `jk verify`'s scratch rebuild opts out to keep the
 pinned lock verbatim).
 
+Also in the engine (slim-client Wave 2 — the hosted worker verbs): `jk audit`, `jk format`,
+`jk publish`, `jk image`, `jk import`, and `jk mvn`/`jk gradle`'s distribution *provisioning* —
+the six paths that used to fork plugin workers directly from the CLI process now fork them from
+the engine (sized by its shared worker-memory plan), with structured results streaming back as
+events (`audit-finding`, `format-file`, `import-note`) and count/summary-carrying `goal-finish`
+variants. `jk format`'s formatter-jar resolution (previously an in-client `ToolResolver` run)
+moved with it. Pre-flight stays client-side: `jk publish` resolves its repository credential and
+GPG passphrase in the client (env/keychain belong to the invocation, not to the engine's inherited
+environment) and passes them in the request over the user-owned socket; `jk import` does its
+source detection/overwrite checks before sending. The `jk mvn`/`gradle` *exec* of the provisioned
+tool deliberately stays in the client with inherited stdio — a foreign build's interactive run
+belongs to your terminal; only its download/link moved.
+
 **Always in the CLI, never the engine:** anything tied to your terminal or shell — the live TUI,
 color/theme, Ctrl-C handling (a signal has to reach the actual foreground process you're looking
 at), shell completion generation — and, deliberately, all of `jk jdk install` (including its

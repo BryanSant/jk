@@ -432,6 +432,103 @@ class EngineServerTest {
         }
     }
 
+    /**
+     * Engine-hosted {@code jk audit} round-trip (Wave 2 of the slim-client migration — the hosted
+     * worker verbs): a real server over the socket forks a real {@code jk-auditor} worker JVM
+     * (located via {@code -Djk.auditor.worker.jar}, wired by the Gradle build) against a mock OSV
+     * API. Asserts the single-goal wire conversation — plan burst → goal events → structured
+     * {@code audit-finding} stream → terminal {@code goal-finish} — carrying the mock vulnerability.
+     */
+    @Test
+    void audit_request_forks_the_worker_and_streams_findings_over_the_socket() throws Exception {
+        com.sun.net.httpserver.HttpServer osv =
+                com.sun.net.httpserver.HttpServer.create(new java.net.InetSocketAddress("127.0.0.1", 0), 0);
+        try {
+            osv.createContext("/querybatch", exchange -> {
+                byte[] body = "{\"results\":[{\"vulns\":[{\"id\":\"GHSA-test-1\"}]}]}".getBytes(StandardCharsets.UTF_8);
+                exchange.sendResponseHeaders(200, body.length);
+                exchange.getResponseBody().write(body);
+                exchange.close();
+            });
+            osv.createContext("/vulns/", exchange -> {
+                byte[] body = "{\"summary\":\"Stub vulnerability\",\"database_specific\":{\"severity\":\"HIGH\"}}"
+                        .getBytes(StandardCharsets.UTF_8);
+                exchange.sendResponseHeaders(200, body.length);
+                exchange.getResponseBody().write(body);
+                exchange.close();
+            });
+            osv.start();
+            String base = "http://127.0.0.1:" + osv.getAddress().getPort();
+
+            Path project = shortTempDir();
+            Files.writeString(
+                    project.resolve("jk.lock"),
+                    """
+                    version = 1
+                    generated-by = "jk test"
+                    resolution-algorithm = "pubgrub-v1"
+
+                    [[artifact]]
+                    name     = "com.foo:leaf"
+                    version  = "1.0"
+                    source   = "central+https://repo.maven.apache.org/maven2/"
+                    checksum = "sha256:d65226949713c4c61a784f41c51167e7b0316f93764398ebba9e4336b3d954c2"
+                    scopes   = ["main"]
+                    """);
+            Path cache = shortTempDir();
+
+            EnginePaths.Paths p = paths(shortTempDir());
+            EngineServer server = new EngineServer(p, JkEngineConfig.DEFAULTS, "1.0", null);
+            Thread serverThread = runInBackground(server);
+            waitUntil(Duration.ofSeconds(5), () -> Files.exists(p.socket()));
+
+            List<String> types = new ArrayList<>();
+            String finding = null;
+            String goalFinish = null;
+            String buildError = null;
+            try (Client c = new Client(p.socket())) {
+                c.sendLine(EngineProtocol.auditRequest(
+                        project.toString(), cache.toString(), "LOW", base + "/querybatch", base + "/vulns/"));
+                String line;
+                while ((line = c.readLine()) != null) {
+                    String type = EngineProtocol.typeOf(line);
+                    types.add(type);
+                    switch (type) {
+                        case EngineProtocol.AUDIT_FINDING -> finding = line;
+                        case EngineProtocol.GOAL_FINISH -> goalFinish = line;
+                        // Terminal too (e.g. the worker jar wasn't locatable): break instead of
+                        // waiting for a goal-finish that will never come — the real client
+                        // (EngineWorkerAdapter) treats build-error the same way.
+                        case EngineProtocol.BUILD_ERROR -> buildError = line;
+                        default -> {
+                            /* plan/progress events — presence asserted via `types` below */
+                        }
+                    }
+                    if (goalFinish != null || buildError != null) break;
+                }
+            }
+
+            assertThat(buildError)
+                    .as("engine reported a pre-goal error instead of hosting the audit")
+                    .isNull();
+            assertThat(types).contains(EngineProtocol.PLAN_PHASE, EngineProtocol.PLAN_DONE);
+            assertThat(finding).as("audit-finding event for the mock vulnerability").isNotNull();
+            assertThat(Ndjson.str(finding, "module")).isEqualTo("com.foo:leaf");
+            assertThat(Ndjson.str(finding, "version")).isEqualTo("1.0");
+            assertThat(Ndjson.str(finding, "vulnId")).isEqualTo("GHSA-test-1");
+            assertThat(Ndjson.str(finding, "summary")).isEqualTo("Stub vulnerability");
+
+            assertThat(goalFinish).isNotNull();
+            assertThat(Ndjson.bool(goalFinish, "success", false)).isTrue();
+
+            server.close();
+            serverThread.join(5_000);
+        } finally {
+            osv.stop(0);
+            dev.jkbuild.lock.LockfileReader.clearCache();
+        }
+    }
+
     /** Minimal metadata + dependency-free POM + stub jar for one coordinate on the mock repo. */
     private static void seedArtifact(java.util.Map<String, byte[]> served, String group, String artifact, String version) {
         String base = "/" + group.replace('.', '/') + "/" + artifact;

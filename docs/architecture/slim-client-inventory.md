@@ -107,6 +107,19 @@ Moving these forks engine-side removes `dev.jkbuild.worker.WorkerClient`/`Worker
 structured engine error. The workers' NDJSON event streams relay 1:1 over the engine protocol —
 the same discriminated-envelope style, so this is vocabulary plumbing, not redesign.
 
+> **Status: landed (Wave 2, 2026-07-07).** All six forks now happen engine-side, through shared
+> `dev.jkbuild.runtime.{Audit,Format,Publish,Image,Compat}Goals` factories that the commands'
+> test-only in-process path (`jk.test.noEngine`) also builds — so the table above now describes the
+> in-process *test* path only. The `mvn`/`gradle` split resolved exactly as classified: the
+> compat-bridge *provisioning* fork is hosted (one-shot `provision-request` →
+> `{bin, version, source}` result, no event stream), while the passthrough *exec* of the
+> provisioned tool stays client-side with inherited stdio — hosting a foreign build's interactive
+> TTY run would be wrong; hosting its download is not. `jk publish`'s env/keychain credential +
+> GPG-passphrase resolution stays client-side and rides the request (see `docs/engine.md`).
+> `CommandDispatch`'s `WorkerJarNotFoundException` rendering is retained for the in-process path;
+> hosted, a missing worker jar surfaces as the engine's structured error text (same side-load
+> instructions).
+
 ## 2. jdeps evidence
 
 `jdeps -verbose:class -cp <model,core,io,resolver,toolchain,engine,plugin-api jars> cli/build/libs/cli.jar`

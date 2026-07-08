@@ -2,32 +2,33 @@
 package dev.jkbuild.command;
 
 import dev.jkbuild.cli.CliOutput;
-import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.PathDisplay;
-import dev.jkbuild.jdk.HostPlatform;
 import dev.jkbuild.model.command.Arity;
 import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Exit;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.model.command.Param;
-import dev.jkbuild.plugin.protocol.Ndjson;
-import dev.jkbuild.runtime.CompileToolchain;
+import dev.jkbuild.run.Goal;
+import dev.jkbuild.run.GoalResult;
+import dev.jkbuild.runtime.CompatGoals;
 import dev.jkbuild.util.JkDirs;
-import dev.jkbuild.worker.WorkerJar;
-import dev.jkbuild.worker.WorkerClient;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
 /**
  * {@code jk import <file>} — convert a Maven or Gradle build to {@code jk.toml} via the {@code
  * jk-compat-runner} worker subprocess (PRD §24.2 / §24.3).
+ *
+ * <p><b>Engine-hosted</b> (Wave 2 of the slim-client migration): the worker forks inside the
+ * resident engine ({@link dev.jkbuild.cli.engine.EngineClient#runImport}); this command pre-flights
+ * source detection and overwrite checks, then renders the streamed progress notes. The goal lives
+ * in {@link CompatGoals} so the test-only in-process path (see {@link #engineDisabledForTests})
+ * runs the identical code.
  */
 public final class ImportCommand implements CliCommand {
 
@@ -54,6 +55,16 @@ public final class ImportCommand implements CliCommand {
     @Override
     public List<Param> parameters() {
         return List.of(Param.of("file", Arity.ZERO_OR_ONE, "The build file to import (auto-detected if omitted)."));
+    }
+
+    /**
+     * Escape hatch for the fast JVM unit-test suite ONLY — see {@link
+     * BuildCommand#engineDisabledForTests()}'s javadoc for the full rationale. Same system property,
+     * same "never a user-facing flag" contract; a real {@code jk import} invocation always engine-hosts.
+     */
+    private static boolean engineDisabledForTests() {
+        return Boolean.getBoolean("jk.test.noEngine")
+                || "dev.jkbuild.test.runner.JkRunner".equals(System.getProperty("jk.plugin.class"));
     }
 
     @Override
@@ -98,51 +109,74 @@ public final class ImportCommand implements CliCommand {
         }
 
         Path cache = JkDirs.cache();
-        List<String> lines = new ArrayList<>();
-        lines.add("COMMAND import");
-        lines.add("SOURCE " + source.toAbsolutePath());
-        lines.add("OUT " + target.toAbsolutePath());
-        lines.add("BASE_DIR " + projectDir.toAbsolutePath());
-        lines.add("TMP_DIR " + JkDirs.tmp().toAbsolutePath());
-        lines.add("FORCE " + force);
-        if (reportPath != null) lines.add("REPORT " + reportPath.toAbsolutePath());
 
-        return runWorker(cache, lines);
-    }
-
-    private int runWorker(Path cache, List<String> specLines) throws IOException, InterruptedException {
-        Path workerJar = WorkerJar.COMPAT_BRIDGE.locate(new Cas(cache));
-        Path spec = Files.createTempFile("jk-compat-", ".spec");
-        try {
-            Files.write(spec, specLines, StandardCharsets.UTF_8);
-            Path javaExe = CompileToolchain.runningJavaHome()
-                    .resolve("bin")
-                    .resolve(HostPlatform.isWindows() ? "java.exe" : "java");
-            List<String> cmd = dev.jkbuild.worker.JvmOptions.javaCommand(
-                    javaExe.toString(),
-                    1,
-                    List.of("-jar", workerJar.toString(), spec.toAbsolutePath().toString()));
-            StringBuilder diag = new StringBuilder();
-            int exit = new WorkerClient("##JKCMP:")
-                    .on("wrote", json -> CliOutput.out("Wrote " + Ndjson.str(json, "path")))
-                    .on("note", json -> CliOutput.out(Ndjson.str(json, "msg")))
-                    .on("result", json -> {
-                        String err = Ndjson.str(json, "error");
-                        if (err != null) CliOutput.err("jk import: " + err);
-                        int warnings = Ndjson.intValue(json, "warnings", 0);
-                        if (warnings != 0) {
-                            CliOutput.out("Import notes: " + warnings + " issue(s)");
-                        }
-                    })
-                    .passthrough(ln -> diag.append(ln).append('\n'))
-                    .run(cmd);
-            if (exit != 0 && diag.length() > 0) {
-                CliOutput.err("jk import: " + diag.toString().trim());
+        // Renders the worker's progress notes as they stream — identical for both transports.
+        CompatGoals.NoteObserver observer = (kind, text) -> {
+            if ("wrote".equals(kind)) {
+                CliOutput.out("Wrote " + text);
+            } else {
+                CliOutput.out(text);
             }
-            return exit;
-        } finally {
-            Files.deleteIfExists(spec);
+        };
+
+        int exit;
+        int warnings;
+        String error;
+        String diag;
+        if (engineDisabledForTests()) {
+            // CompatGoals.importGoal locates the worker jar eagerly; a missing worker throws
+            // WorkerJarNotFoundException here, which CommandDispatch renders with side-load hints.
+            Goal goal = CompatGoals.importGoal(
+                    source.toAbsolutePath(), target.toAbsolutePath(), projectDir, JkDirs.tmp(), force, reportPath,
+                    cache, observer);
+            GoalResult result = goal.run();
+            if (!result.success()) {
+                for (GoalResult.Diagnostic d : result.errors()) {
+                    CliOutput.err("jk import: " + d.message());
+                }
+                return 1;
+            }
+            exit = goal.get(CompatGoals.EXIT).orElse(1);
+            warnings = goal.get(CompatGoals.WARNINGS).orElse(0);
+            error = goal.get(CompatGoals.ERROR).orElse(null);
+            diag = goal.get(CompatGoals.DIAG).orElse(null);
+        } else {
+            dev.jkbuild.cli.engine.EngineClient.ImportOutcome outcome;
+            try {
+                outcome = dev.jkbuild.cli.engine.EngineClient.runImport(
+                        dev.jkbuild.engine.EnginePaths.current(),
+                        new dev.jkbuild.cli.engine.EngineClient.ImportRequest(
+                                source.toAbsolutePath(),
+                                target.toAbsolutePath(),
+                                projectDir,
+                                JkDirs.tmp(),
+                                force,
+                                reportPath,
+                                cache),
+                        phases -> new dev.jkbuild.run.GoalListener() {},
+                        observer);
+            } catch (IOException e) {
+                CliOutput.err("jk import: " + e.getMessage());
+                return Exit.SOFTWARE;
+            }
+            if (!outcome.result().success()) {
+                for (GoalResult.Diagnostic d : outcome.result().errors()) {
+                    CliOutput.err("jk import: " + d.message());
+                }
+                return 1;
+            }
+            exit = outcome.exitCode();
+            warnings = outcome.warnings();
+            error = outcome.error();
+            diag = outcome.diag();
         }
+
+        if (error != null) CliOutput.err("jk import: " + error);
+        if (warnings != 0) CliOutput.out("Import notes: " + warnings + " issue(s)");
+        if (exit != 0 && diag != null && !diag.isBlank()) {
+            CliOutput.err("jk import: " + diag);
+        }
+        return exit;
     }
 
     /**

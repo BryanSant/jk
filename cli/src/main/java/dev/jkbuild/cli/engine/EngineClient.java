@@ -312,6 +312,304 @@ public final class EngineClient {
         return EngineResolveAdapter.runSync(paths, req, listenerFactory, fetchedOut, upToDateOut);
     }
 
+    // ---- hosted worker verbs (Wave 2 of the slim client) ---------------------------------------
+
+    /** Everything an engine-hosted {@code jk audit} needs — mirrors {@code AuditCommand}'s local fields. */
+    public record AuditRequest(
+            Path entryDir, Path cache, String severity, java.net.URI osvBatchUrl, java.net.URI osvVulnsUrl) {}
+
+    /**
+     * Run {@code jk audit}'s goal against the engine (the worker forks engine-side). Findings
+     * stream to {@code findings} as plain structured strings — the command assembles/renders the
+     * report and applies the severity threshold itself.
+     */
+    public static dev.jkbuild.run.GoalResult runAudit(
+            EnginePaths.Paths paths,
+            AuditRequest req,
+            java.util.function.Function<List<dev.jkbuild.run.Phase>, dev.jkbuild.run.GoalListener> listenerFactory,
+            dev.jkbuild.runtime.AuditGoals.FindingObserver findings)
+            throws IOException {
+        return EngineWorkerAdapter.stream(
+                        paths,
+                        EngineProtocol.auditRequest(
+                                req.entryDir().toString(),
+                                req.cache().toString(),
+                                req.severity(),
+                                req.osvBatchUrl() != null ? req.osvBatchUrl().toString() : null,
+                                req.osvVulnsUrl() != null ? req.osvVulnsUrl().toString() : null),
+                        "audit",
+                        listenerFactory,
+                        (type, line) -> findings.onFinding(
+                                Ndjson.str(line, "module"),
+                                Ndjson.str(line, "version"),
+                                Ndjson.str(line, "vulnId"),
+                                Ndjson.str(line, "severity"),
+                                Ndjson.str(line, "summary")))
+                .result();
+    }
+
+    /** Everything an engine-hosted {@code jk format} needs — resolved styles, not raw flags. */
+    public record FormatRequest(
+            Path entryDir,
+            Path cache,
+            boolean check,
+            String javaStyle,
+            String kotlinStyle,
+            boolean optimizeImports,
+            Path rewriteConfig,
+            boolean offline,
+            boolean verbose) {}
+
+    /** A hosted {@code jk format} run's summary, decoded from the terminal goal-finish. */
+    public record FormatOutcome(
+            dev.jkbuild.run.GoalResult result, int changed, int clean, int errors, int total, int workerExit) {}
+
+    /**
+     * Run {@code jk format}'s goal against the engine (source collection, formatter-jar resolution,
+     * and the worker fork all engine-side). Per-file results stream to {@code files}; the counts
+     * (and the worker's check-mode exit code) ride the returned outcome.
+     */
+    public static FormatOutcome runFormat(
+            EnginePaths.Paths paths,
+            FormatRequest req,
+            java.util.function.Function<List<dev.jkbuild.run.Phase>, dev.jkbuild.run.GoalListener> listenerFactory,
+            dev.jkbuild.runtime.FormatGoals.FileObserver files)
+            throws IOException {
+        EngineWorkerAdapter.HostedFinish finish = EngineWorkerAdapter.stream(
+                paths,
+                EngineProtocol.formatRequest(
+                        req.entryDir().toString(),
+                        req.cache().toString(),
+                        req.check(),
+                        req.javaStyle(),
+                        req.kotlinStyle(),
+                        req.optimizeImports(),
+                        req.rewriteConfig() != null ? req.rewriteConfig().toString() : null,
+                        req.offline(),
+                        req.verbose()),
+                "format",
+                listenerFactory,
+                (type, line) -> files.onFile(
+                        Ndjson.str(line, "path"),
+                        Ndjson.str(line, "status"),
+                        Ndjson.str(line, "message"),
+                        Ndjson.intValue(line, "index", 0),
+                        Ndjson.intValue(line, "total", 0)));
+        return new FormatOutcome(
+                finish.result(),
+                Ndjson.intValue(finish.finishLine(), "formatChanged", -1),
+                Ndjson.intValue(finish.finishLine(), "formatClean", -1),
+                Ndjson.intValue(finish.finishLine(), "formatErrors", -1),
+                Ndjson.intValue(finish.finishLine(), "formatTotal", -1),
+                Ndjson.intValue(finish.finishLine(), "formatWorkerExit", -1));
+    }
+
+    /**
+     * Everything an engine-hosted {@code jk publish} needs. The credential and GPG passphrase were
+     * resolved client-side (env/keychain live here, not in the engine's inherited environment); they
+     * cross the user-owned socket and are never logged.
+     */
+    public record PublishRequest(
+            Path entryDir,
+            Path cache,
+            java.net.URI repoUrl,
+            String region,
+            String endpoint,
+            Path jarPath,
+            boolean allowSnapshot,
+            boolean dryRun,
+            Path keyFile,
+            String gpgPassphrase,
+            boolean sigstore,
+            boolean slsa,
+            boolean sbom,
+            dev.jkbuild.credential.RepoCredential credential,
+            boolean verbose) {}
+
+    /** A hosted {@code jk publish} run's summary, decoded from the terminal goal-finish. */
+    public record PublishOutcome(dev.jkbuild.run.GoalResult result, int files) {}
+
+    /** Run {@code jk publish}'s goal against the engine (the publisher worker forks engine-side). */
+    public static PublishOutcome runPublish(
+            EnginePaths.Paths paths,
+            PublishRequest req,
+            java.util.function.Function<List<dev.jkbuild.run.Phase>, dev.jkbuild.run.GoalListener> listenerFactory)
+            throws IOException {
+        String authType;
+        String user = null;
+        String pass = null;
+        String token = null;
+        if (req.credential() instanceof dev.jkbuild.credential.RepoCredential.Basic b) {
+            authType = "basic";
+            user = b.username();
+            pass = b.password();
+        } else if (req.credential() instanceof dev.jkbuild.credential.RepoCredential.Bearer b) {
+            authType = "bearer";
+            token = b.token();
+        } else {
+            authType = "anonymous";
+        }
+        EngineWorkerAdapter.HostedFinish finish = EngineWorkerAdapter.stream(
+                paths,
+                EngineProtocol.publishRequest(
+                        req.entryDir().toString(),
+                        req.cache().toString(),
+                        req.repoUrl().toString(),
+                        req.region(),
+                        req.endpoint(),
+                        req.jarPath() != null ? req.jarPath().toString() : null,
+                        req.allowSnapshot(),
+                        req.dryRun(),
+                        req.keyFile() != null ? req.keyFile().toString() : null,
+                        req.gpgPassphrase(),
+                        req.sigstore(),
+                        req.slsa(),
+                        req.sbom(),
+                        authType,
+                        user,
+                        pass,
+                        token,
+                        req.verbose()),
+                "publish",
+                listenerFactory,
+                (type, line) -> {});
+        return new PublishOutcome(finish.result(), Ndjson.intValue(finish.finishLine(), "publishFiles", -1));
+    }
+
+    /** Everything an engine-hosted {@code jk image} needs — mirrors {@code ImageCommand}'s local fields. */
+    public record ImageRequest(
+            Path entryDir,
+            Path cache,
+            Path jdksDir,
+            String mainClass,
+            String registry,
+            String tag,
+            String tarballArg,
+            String dockerExecutable,
+            boolean skipTests,
+            boolean offline,
+            boolean force,
+            boolean rerun,
+            boolean verbose) {}
+
+    /**
+     * A hosted {@code jk image} run's structured summary. Exactly one of {@code tarball} (tarball
+     * mode) or {@code daemonExe} (daemon-load mode) is non-null, or neither (registry push — render
+     * {@code ref}); {@code testResult} is non-null when the pipeline's run-tests phase reported
+     * counts.
+     */
+    public record ImageSummary(
+            dev.jkbuild.test.JUnitLauncher.Result testResult,
+            String ref,
+            String tarball,
+            String name,
+            String version,
+            String daemonExe) {}
+
+    /**
+     * Run {@code jk image}'s goal against the engine (full pipeline + image tail engine-side).
+     * {@code summaryOut} (a single-slot holder) is populated from the terminal goal-finish
+     * <em>before</em> it reaches {@code listenerFactory}'s listener — whose own {@code goalFinish}
+     * handler renders the success tail from those fields, exactly the {@code runTest} holder
+     * pattern.
+     */
+    public static dev.jkbuild.run.GoalResult runImage(
+            EnginePaths.Paths paths,
+            ImageRequest req,
+            java.util.function.Function<List<dev.jkbuild.run.Phase>, dev.jkbuild.run.GoalListener> listenerFactory,
+            ImageSummary[] summaryOut)
+            throws IOException {
+        return EngineWorkerAdapter.stream(
+                        paths,
+                        EngineProtocol.imageRequest(
+                                req.entryDir().toString(),
+                                req.cache().toString(),
+                                req.jdksDir() != null ? req.jdksDir().toString() : null,
+                                req.mainClass(),
+                                req.registry(),
+                                req.tag(),
+                                req.tarballArg(),
+                                req.dockerExecutable(),
+                                req.skipTests(),
+                                req.offline(),
+                                req.force(),
+                                req.rerun(),
+                                req.verbose()),
+                        "image",
+                        listenerFactory,
+                        (type, line) -> {},
+                        line -> {
+                            long total = Ndjson.longValue(line, "testTotal", -1);
+                            dev.jkbuild.test.JUnitLauncher.Result testResult = total < 0
+                                    ? null
+                                    : new dev.jkbuild.test.JUnitLauncher.Result(
+                                            total,
+                                            Ndjson.longValue(line, "testSucceeded", 0),
+                                            Ndjson.longValue(line, "testFailed", 0),
+                                            Ndjson.longValue(line, "testSkipped", 0),
+                                            List.of());
+                            summaryOut[0] = new ImageSummary(
+                                    testResult,
+                                    Ndjson.str(line, "imageRef"),
+                                    Ndjson.str(line, "imageTarball"),
+                                    Ndjson.str(line, "imageName"),
+                                    Ndjson.str(line, "imageVersion"),
+                                    Ndjson.str(line, "imageDaemonExe"));
+                        })
+                .result();
+    }
+
+    /** Everything an engine-hosted {@code jk import} needs — pre-flighted absolute paths. */
+    public record ImportRequest(
+            Path source, Path out, Path baseDir, Path tmpDir, boolean force, Path report, Path cache) {}
+
+    /** A hosted {@code jk import} run's summary, decoded from the terminal goal-finish. */
+    public record ImportOutcome(
+            dev.jkbuild.run.GoalResult result, int exitCode, int warnings, String error, String diag) {}
+
+    /** Run {@code jk import}'s goal against the engine, streaming progress notes to {@code notes}. */
+    public static ImportOutcome runImport(
+            EnginePaths.Paths paths,
+            ImportRequest req,
+            java.util.function.Function<List<dev.jkbuild.run.Phase>, dev.jkbuild.run.GoalListener> listenerFactory,
+            dev.jkbuild.runtime.CompatGoals.NoteObserver notes)
+            throws IOException {
+        EngineWorkerAdapter.HostedFinish finish = EngineWorkerAdapter.stream(
+                paths,
+                EngineProtocol.importRequest(
+                        req.source().toString(),
+                        req.out().toString(),
+                        req.baseDir().toString(),
+                        req.tmpDir().toString(),
+                        req.force(),
+                        req.report() != null ? req.report().toString() : null,
+                        req.cache().toString()),
+                "import",
+                listenerFactory,
+                (type, line) -> notes.onNote(Ndjson.str(line, "kind"), Ndjson.str(line, "text")));
+        String line = finish.finishLine();
+        return new ImportOutcome(
+                finish.result(),
+                Ndjson.intValue(line, "importExit", 1),
+                Ndjson.intValue(line, "importWarnings", 0),
+                Ndjson.str(line, "importError"),
+                Ndjson.str(line, "importDiag"));
+    }
+
+    /**
+     * Provision a Maven/Gradle distribution via the engine ({@code jk mvn}/{@code jk gradle}) — a
+     * one-shot request; the exec of the provisioned tool stays in this client process (it inherits
+     * this terminal's stdio, which the engine deliberately never touches).
+     */
+    public static dev.jkbuild.runtime.CompatGoals.Provision provision(
+            EnginePaths.Paths paths, Path cache, Path projectDir, Path toolsRoot, boolean noDiscover, boolean gradle)
+            throws IOException {
+        return EngineWorkerAdapter.provision(
+                paths,
+                EngineProtocol.provisionRequest(
+                        cache.toString(), projectDir.toString(), toolsRoot.toString(), noDiscover, gradle));
+    }
+
     static Handshake ensureRunning(EnginePaths.Paths paths, String clientVersion, Duration startTimeout)
             throws IOException {
         Optional<Handshake> existing = handshake(paths.socket(), clientVersion);

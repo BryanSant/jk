@@ -27,6 +27,8 @@ junit-platform-launcher = { group = "org.junit.platform", name = "junit-platform
 # the running jk's worker identity instead.
 #  - test-worker-jars: GitSource{Resolution,Materializer}Test fork the git-client
 #    worker, injected as -Djk.git-client.worker.jar (located from the running jk's
-#    repos/local/ store; requires `./gradlew :git-client:installLocal`).
+#    repos/local/ store; requires `./gradlew :git-client:installLocal`); the
+#    EngineServerTest hosted-audit round-trip forks the auditor the same way
+#    (-Djk.auditor.worker.jar; `./gradlew :auditor:installLocal`).
 [build]
-test-worker-jars = ["git-client"]
+test-worker-jars = ["git-client", "auditor"]

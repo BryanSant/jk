@@ -55,3 +55,12 @@ tasks.withType<Test>().configureEach {
     doFirst { systemProperty("jk.git-client.worker.jar", testGitWorkerJar.singleFile.absolutePath) }
 }
 
+// Pass the auditor jar path to tests (EngineServerTest's hosted jk audit round-trip forks it).
+val testAuditorWorkerJar by configurations.creating {
+    isCanBeConsumed = false; isCanBeResolved = true; isTransitive = false
+}
+dependencies { testAuditorWorkerJar(project(":auditor")) }
+tasks.withType<Test>().configureEach {
+    dependsOn(testAuditorWorkerJar)
+    doFirst { systemProperty("jk.auditor.worker.jar", testAuditorWorkerJar.singleFile.absolutePath) }
+}

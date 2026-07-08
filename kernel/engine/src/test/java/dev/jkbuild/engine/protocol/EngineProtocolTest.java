@@ -152,4 +152,157 @@ class EngineProtocolTest {
         assertThat(Ndjson.strArray(json, "errors")).containsExactly("boom", "again");
         assertThat(Ndjson.intValue(json, "refreshed", -1)).isEqualTo(3);
     }
+
+    // ---- Wave 2: hosted worker verbs ------------------------------------------------------------
+
+    @Test
+    void audit_request_round_trips_all_fields() {
+        String json = EngineProtocol.auditRequest("/work", "/cache", "HIGH", "http://osv/batch", "http://osv/vulns/");
+        assertThat(EngineProtocol.typeOf(json)).isEqualTo(EngineProtocol.AUDIT_REQUEST);
+        assertThat(Ndjson.str(json, "entryDir")).isEqualTo("/work");
+        assertThat(Ndjson.str(json, "cache")).isEqualTo("/cache");
+        assertThat(Ndjson.str(json, "severity")).isEqualTo("HIGH");
+        assertThat(Ndjson.str(json, "osvBatchUrl")).isEqualTo("http://osv/batch");
+        assertThat(Ndjson.str(json, "osvVulnsUrl")).isEqualTo("http://osv/vulns/");
+        // null overrides decode as absent (the real OSV endpoints)
+        assertThat(Ndjson.str(EngineProtocol.auditRequest("/w", "/c", "LOW", null, null), "osvBatchUrl"))
+                .isNull();
+    }
+
+    @Test
+    void audit_finding_event_round_trips_the_worker_fields() {
+        String json = EngineProtocol.auditFinding("", "com.foo:leaf", "1.0", "GHSA-x", "HIGH", "bad news");
+        assertThat(EngineProtocol.typeOf(json)).isEqualTo(EngineProtocol.AUDIT_FINDING);
+        assertThat(Ndjson.str(json, "module")).isEqualTo("com.foo:leaf");
+        assertThat(Ndjson.str(json, "version")).isEqualTo("1.0");
+        assertThat(Ndjson.str(json, "vulnId")).isEqualTo("GHSA-x");
+        assertThat(Ndjson.str(json, "severity")).isEqualTo("HIGH");
+        assertThat(Ndjson.str(json, "summary")).isEqualTo("bad news");
+    }
+
+    @Test
+    void format_request_round_trips_the_resolved_styles() {
+        String json = EngineProtocol.formatRequest(
+                "/work", "/cache", true, "palantir", "kotlinlang", false, "/rw.yml", true, false);
+        assertThat(EngineProtocol.typeOf(json)).isEqualTo(EngineProtocol.FORMAT_REQUEST);
+        assertThat(Ndjson.bool(json, "check", false)).isTrue();
+        assertThat(Ndjson.str(json, "javaStyle")).isEqualTo("palantir");
+        assertThat(Ndjson.str(json, "kotlinStyle")).isEqualTo("kotlinlang");
+        assertThat(Ndjson.bool(json, "optimizeImports", true)).isFalse();
+        assertThat(Ndjson.str(json, "rewriteConfig")).isEqualTo("/rw.yml");
+        assertThat(Ndjson.bool(json, "offline", false)).isTrue();
+    }
+
+    @Test
+    void format_file_event_and_finish_variant_round_trip() {
+        String file = EngineProtocol.formatFile("", "/src/A.java", "changed", null, 3, 12);
+        assertThat(EngineProtocol.typeOf(file)).isEqualTo(EngineProtocol.FORMAT_FILE);
+        assertThat(Ndjson.str(file, "path")).isEqualTo("/src/A.java");
+        assertThat(Ndjson.str(file, "status")).isEqualTo("changed");
+        assertThat(Ndjson.intValue(file, "index", -1)).isEqualTo(3);
+        assertThat(Ndjson.intValue(file, "total", -1)).isEqualTo(12);
+
+        String finish = EngineProtocol.goalFinishFormat("", true, 2, 9, 1, 12, 1);
+        assertThat(EngineProtocol.typeOf(finish)).isEqualTo(EngineProtocol.GOAL_FINISH);
+        assertThat(Ndjson.intValue(finish, "formatChanged", -1)).isEqualTo(2);
+        assertThat(Ndjson.intValue(finish, "formatClean", -1)).isEqualTo(9);
+        assertThat(Ndjson.intValue(finish, "formatErrors", -1)).isEqualTo(1);
+        assertThat(Ndjson.intValue(finish, "formatTotal", -1)).isEqualTo(12);
+        assertThat(Ndjson.intValue(finish, "formatWorkerExit", -1)).isEqualTo(1);
+    }
+
+    @Test
+    void publish_request_round_trips_the_credential_fields() {
+        String json = EngineProtocol.publishRequest(
+                "/work", "/cache", "https://repo/m2", "us-east-1", null, "/out/app.jar", true, false, "/key.asc",
+                "s3cret", false, true, true, "basic", "alice", "hunter2", null, false);
+        assertThat(EngineProtocol.typeOf(json)).isEqualTo(EngineProtocol.PUBLISH_REQUEST);
+        assertThat(Ndjson.str(json, "repoUrl")).isEqualTo("https://repo/m2");
+        assertThat(Ndjson.str(json, "region")).isEqualTo("us-east-1");
+        assertThat(Ndjson.str(json, "endpoint")).isNull();
+        assertThat(Ndjson.str(json, "jar")).isEqualTo("/out/app.jar");
+        assertThat(Ndjson.bool(json, "allowSnapshot", false)).isTrue();
+        assertThat(Ndjson.str(json, "keyFile")).isEqualTo("/key.asc");
+        assertThat(Ndjson.str(json, "gpgPassphrase")).isEqualTo("s3cret");
+        assertThat(Ndjson.bool(json, "slsa", false)).isTrue();
+        assertThat(Ndjson.bool(json, "sbom", false)).isTrue();
+        assertThat(Ndjson.str(json, "authType")).isEqualTo("basic");
+        assertThat(Ndjson.str(json, "user")).isEqualTo("alice");
+        assertThat(Ndjson.str(json, "pass")).isEqualTo("hunter2");
+        assertThat(Ndjson.str(json, "token")).isNull();
+
+        String finish = EngineProtocol.goalFinishPublish("", true, 9);
+        assertThat(EngineProtocol.typeOf(finish)).isEqualTo(EngineProtocol.GOAL_FINISH);
+        assertThat(Ndjson.intValue(finish, "publishFiles", -1)).isEqualTo(9);
+    }
+
+    @Test
+    void image_request_keeps_the_tarball_tristate() {
+        String none = EngineProtocol.imageRequest(
+                "/w", "/c", null, "com.example.Main", null, null, null, null, false, false, false, false, false);
+        assertThat(EngineProtocol.typeOf(none)).isEqualTo(EngineProtocol.IMAGE_REQUEST);
+        assertThat(Ndjson.str(none, "tarball")).isNull();
+        String defaulted = EngineProtocol.imageRequest(
+                "/w", "/c", null, null, null, null, "", null, false, false, false, false, false);
+        assertThat(Ndjson.str(defaulted, "tarball")).isEmpty();
+        String explicit = EngineProtocol.imageRequest(
+                "/w", "/c", null, null, "reg.io", "v2", "/out/img.tar", "podman", true, true, true, true, true);
+        assertThat(Ndjson.str(explicit, "tarball")).isEqualTo("/out/img.tar");
+        assertThat(Ndjson.str(explicit, "registry")).isEqualTo("reg.io");
+        assertThat(Ndjson.str(explicit, "dockerExecutable")).isEqualTo("podman");
+        assertThat(Ndjson.bool(explicit, "skipTests", false)).isTrue();
+        assertThat(Ndjson.bool(explicit, "rerun", false)).isTrue();
+    }
+
+    @Test
+    void goal_finish_image_variant_carries_the_success_tail_fields_and_test_counts() {
+        String json = EngineProtocol.goalFinishImage(
+                "", true, 12, 12, 0, 0, "reg.io/app:1.0", null, "app", "1.0", null);
+        assertThat(EngineProtocol.typeOf(json)).isEqualTo(EngineProtocol.GOAL_FINISH);
+        assertThat(Ndjson.longValue(json, "testTotal", -1)).isEqualTo(12);
+        assertThat(Ndjson.str(json, "imageRef")).isEqualTo("reg.io/app:1.0");
+        assertThat(Ndjson.str(json, "imageTarball")).isNull();
+        assertThat(Ndjson.str(json, "imageName")).isEqualTo("app");
+        assertThat(Ndjson.str(json, "imageVersion")).isEqualTo("1.0");
+        assertThat(Ndjson.str(json, "imageDaemonExe")).isNull();
+    }
+
+    @Test
+    void import_request_note_and_finish_variant_round_trip() {
+        String req = EngineProtocol.importRequest("/p/pom.xml", "/p/jk.toml", "/p", "/tmp/jk", true, null, "/cache");
+        assertThat(EngineProtocol.typeOf(req)).isEqualTo(EngineProtocol.IMPORT_REQUEST);
+        assertThat(Ndjson.str(req, "source")).isEqualTo("/p/pom.xml");
+        assertThat(Ndjson.str(req, "out")).isEqualTo("/p/jk.toml");
+        assertThat(Ndjson.bool(req, "force", false)).isTrue();
+        assertThat(Ndjson.str(req, "report")).isNull();
+
+        String note = EngineProtocol.importNote("", "wrote", "/p/jk.toml");
+        assertThat(EngineProtocol.typeOf(note)).isEqualTo(EngineProtocol.IMPORT_NOTE);
+        assertThat(Ndjson.str(note, "kind")).isEqualTo("wrote");
+        assertThat(Ndjson.str(note, "text")).isEqualTo("/p/jk.toml");
+
+        String finish = EngineProtocol.goalFinishImport("", true, 0, 3, null, null);
+        assertThat(EngineProtocol.typeOf(finish)).isEqualTo(EngineProtocol.GOAL_FINISH);
+        assertThat(Ndjson.intValue(finish, "importExit", -1)).isEqualTo(0);
+        assertThat(Ndjson.intValue(finish, "importWarnings", -1)).isEqualTo(3);
+        assertThat(Ndjson.str(finish, "importError")).isNull();
+    }
+
+    @Test
+    void provision_request_and_result_round_trip() {
+        String req = EngineProtocol.provisionRequest("/cache", "/proj", "/cache/tools", true, true);
+        assertThat(EngineProtocol.typeOf(req)).isEqualTo(EngineProtocol.PROVISION_REQUEST);
+        assertThat(Ndjson.str(req, "projectDir")).isEqualTo("/proj");
+        assertThat(Ndjson.str(req, "toolsRoot")).isEqualTo("/cache/tools");
+        assertThat(Ndjson.bool(req, "noDiscover", false)).isTrue();
+        assertThat(Ndjson.bool(req, "gradle", false)).isTrue();
+
+        String result = EngineProtocol.provisionResult("/cache/tools/mvn/bin/mvn", "3.9.9", "DOWNLOADED", null, 0, null);
+        assertThat(EngineProtocol.typeOf(result)).isEqualTo(EngineProtocol.PROVISION_RESULT);
+        assertThat(Ndjson.str(result, "bin")).isEqualTo("/cache/tools/mvn/bin/mvn");
+        assertThat(Ndjson.str(result, "version")).isEqualTo("3.9.9");
+        assertThat(Ndjson.str(result, "source")).isEqualTo("DOWNLOADED");
+        assertThat(Ndjson.str(result, "error")).isNull();
+        assertThat(Ndjson.intValue(result, "exit", -1)).isEqualTo(0);
+    }
 }

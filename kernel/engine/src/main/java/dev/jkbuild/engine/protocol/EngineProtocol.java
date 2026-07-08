@@ -214,6 +214,80 @@ public final class EngineProtocol {
     /** Server → client, terminal for {@link #LOCK_REQUEST}/{@link #UPDATE_REQUEST}: cascade outcome. */
     public static final String LOCK_FINISH = "lock-finish";
 
+    // ---- hosted worker verbs (Wave 2 of the slim-client migration) ------------------------------
+    //
+    // The six verbs that used to fork plugin workers directly from the CLI (audit, format, publish,
+    // image, import, and mvn/gradle provisioning) now run engine-side: the engine assembles the same
+    // goal the in-process test path uses (dev.jkbuild.runtime.*Goals), forks the worker JVM itself
+    // (sized by the engine's shared HeapPlan), and streams the single-goal wire shape TEST_REQUEST
+    // already defined — a SINGLE_GOAL_DIR-tagged PLAN_PHASE burst + PLAN_DONE, the standard
+    // GoalListener events, then a terminal GOAL_FINISH variant carrying the verb's structured
+    // summary fields. Variable-length structured results (audit findings, per-file format results,
+    // import notes) stream as their own repeated message types, mirroring LOCK_PACKAGE — never as
+    // nested JSON arrays (see the class javadoc).
+
+    /**
+     * Client → server: scan {@code jk.lock} against OSV ({@code jk audit}). Single goal; findings
+     * stream as repeated {@link #AUDIT_FINDING} events (plain structured fields — the client builds
+     * and renders the report, and applies the severity threshold to compute its own exit code).
+     */
+    public static final String AUDIT_REQUEST = "audit-request";
+
+    /** Server → client, repeated: one OSV finding, streamed as the audit worker reports it. */
+    public static final String AUDIT_FINDING = "audit-finding";
+
+    /**
+     * Client → server: format Java/Kotlin sources ({@code jk format}). The engine collects the
+     * source list, resolves the formatter implementation jars through jk's own resolver, and forks
+     * the formatter worker; per-file results stream as repeated {@link #FORMAT_FILE} events and the
+     * terminal {@code goal-finish} carries the counts ({@code formatTotal} of 0 = no sources found).
+     */
+    public static final String FORMAT_REQUEST = "format-request";
+
+    /** Server → client, repeated: one file's format result ({@code changed}/{@code clean}/{@code error}). */
+    public static final String FORMAT_FILE = "format-file";
+
+    /**
+     * Client → server: assemble/sign/upload publish artifacts ({@code jk publish}). Interactivity
+     * audit: everything env- or keychain-shaped is resolved <em>client-side</em> and rides the
+     * request — the repository credential ({@code PUBLISH_USER}/{@code PUBLISH_PASSWORD}, keychain,
+     * inline repo credential) and the GPG key passphrase ({@code --key-passphrase} /
+     * {@code JK_GPG_PASSPHRASE}) — because the engine's environment is whatever its first spawner
+     * had, not this invocation's. The socket is user-owned/permission-gated (see {@code
+     * docs/engine.md}); secrets are never logged and reach the worker via the same 0600 spec file
+     * as before.
+     */
+    public static final String PUBLISH_REQUEST = "publish-request";
+
+    /**
+     * Client → server: build an OCI image ({@code jk image}) — the full build pipeline plus the
+     * image tail (Jib worker, or a {@code docker build} child process in Dockerfile mode), all
+     * engine-side. The terminal {@code goal-finish} carries the structured success-tail fields
+     * (ref / tarball path / daemon executable) plus the test counts the exit code needs.
+     */
+    public static final String IMAGE_REQUEST = "image-request";
+
+    /**
+     * Client → server: convert a Maven/Gradle build to {@code jk.toml} ({@code jk import}) via the
+     * compat-bridge worker. Progress notes stream as repeated {@link #IMPORT_NOTE} events; the
+     * terminal {@code goal-finish} carries the worker's exit code, warning count, and error text.
+     */
+    public static final String IMPORT_REQUEST = "import-request";
+
+    /** Server → client, repeated: one import progress note ({@code kind} = {@code wrote}/{@code note}). */
+    public static final String IMPORT_NOTE = "import-note";
+
+    /**
+     * Client → server: provision a Maven/Gradle distribution via the compat-bridge worker ({@code
+     * jk mvn} / {@code jk gradle}). One-shot: no goal events, just the terminal {@link
+     * #PROVISION_RESULT} — the passthrough <em>exec</em> of the provisioned tool stays client-side
+     * (it inherits the client's terminal/stdio, which the engine deliberately never touches).
+     */
+    public static final String PROVISION_REQUEST = "provision-request";
+
+    /** Server → client, terminal for {@link #PROVISION_REQUEST}: the provisioned tool's bin path. */
+    public static final String PROVISION_RESULT = "provision-result";
+
     /** The {@code "t"} discriminator of a decoded message, or {@code null} if absent/malformed. */
     public static String typeOf(String json) {
         return Ndjson.str(json, TYPE_FIELD);
@@ -532,6 +606,228 @@ public final class EngineProtocol {
                 + refresh
                 + ",\"verbose\":"
                 + verbose
+                + "}";
+    }
+
+    /**
+     * Scan the lockfile against OSV (see {@link #AUDIT_REQUEST}). {@code severity} is the client's
+     * threshold, carried only for the evaluate phase's label (the client applies the threshold
+     * itself); {@code osvBatchUrl}/{@code osvVulnsUrl} are the hidden test overrides and may be
+     * {@code null}.
+     */
+    public static String auditRequest(
+            String entryDir, String cache, String severity, String osvBatchUrl, String osvVulnsUrl) {
+        return "{\"t\":\""
+                + AUDIT_REQUEST
+                + "\",\"entryDir\":"
+                + Ndjson.quote(entryDir)
+                + ",\"cache\":"
+                + Ndjson.quote(cache)
+                + ",\"severity\":"
+                + Ndjson.quote(severity)
+                + ",\"osvBatchUrl\":"
+                + Ndjson.quote(osvBatchUrl)
+                + ",\"osvVulnsUrl\":"
+                + Ndjson.quote(osvVulnsUrl)
+                + "}";
+    }
+
+    /**
+     * Format sources (see {@link #FORMAT_REQUEST}). Style names arrive already resolved (flags +
+     * env + the {@code [format]} block are client-side concerns); {@code rewriteConfig} may be
+     * {@code null}.
+     */
+    public static String formatRequest(
+            String entryDir,
+            String cache,
+            boolean check,
+            String javaStyle,
+            String kotlinStyle,
+            boolean optimizeImports,
+            String rewriteConfig,
+            boolean offline,
+            boolean verbose) {
+        return "{\"t\":\""
+                + FORMAT_REQUEST
+                + "\",\"entryDir\":"
+                + Ndjson.quote(entryDir)
+                + ",\"cache\":"
+                + Ndjson.quote(cache)
+                + ",\"check\":"
+                + check
+                + ",\"javaStyle\":"
+                + Ndjson.quote(javaStyle)
+                + ",\"kotlinStyle\":"
+                + Ndjson.quote(kotlinStyle)
+                + ",\"optimizeImports\":"
+                + optimizeImports
+                + ",\"rewriteConfig\":"
+                + Ndjson.quote(rewriteConfig)
+                + ",\"offline\":"
+                + offline
+                + ",\"verbose\":"
+                + verbose
+                + "}";
+    }
+
+    /**
+     * Publish artifacts (see {@link #PUBLISH_REQUEST}). The credential fields ({@code authType} =
+     * {@code basic}/{@code bearer}/{@code anonymous} + {@code user}/{@code pass}/{@code token}) and
+     * {@code gpgPassphrase} were resolved client-side; nullable string fields may be {@code null}.
+     */
+    public static String publishRequest(
+            String entryDir,
+            String cache,
+            String repoUrl,
+            String region,
+            String endpoint,
+            String jar,
+            boolean allowSnapshot,
+            boolean dryRun,
+            String keyFile,
+            String gpgPassphrase,
+            boolean sigstore,
+            boolean slsa,
+            boolean sbom,
+            String authType,
+            String user,
+            String pass,
+            String token,
+            boolean verbose) {
+        return "{\"t\":\""
+                + PUBLISH_REQUEST
+                + "\",\"entryDir\":"
+                + Ndjson.quote(entryDir)
+                + ",\"cache\":"
+                + Ndjson.quote(cache)
+                + ",\"repoUrl\":"
+                + Ndjson.quote(repoUrl)
+                + ",\"region\":"
+                + Ndjson.quote(region)
+                + ",\"endpoint\":"
+                + Ndjson.quote(endpoint)
+                + ",\"jar\":"
+                + Ndjson.quote(jar)
+                + ",\"allowSnapshot\":"
+                + allowSnapshot
+                + ",\"dryRun\":"
+                + dryRun
+                + ",\"keyFile\":"
+                + Ndjson.quote(keyFile)
+                + ",\"gpgPassphrase\":"
+                + Ndjson.quote(gpgPassphrase)
+                + ",\"sigstore\":"
+                + sigstore
+                + ",\"slsa\":"
+                + slsa
+                + ",\"sbom\":"
+                + sbom
+                + ",\"authType\":"
+                + Ndjson.quote(authType)
+                + ",\"user\":"
+                + Ndjson.quote(user)
+                + ",\"pass\":"
+                + Ndjson.quote(pass)
+                + ",\"token\":"
+                + Ndjson.quote(token)
+                + ",\"verbose\":"
+                + verbose
+                + "}";
+    }
+
+    /**
+     * Build an OCI image (see {@link #IMAGE_REQUEST}). {@code tarball} is tri-state: {@code null}
+     * (no tarball — daemon/push mode), {@code ""} (default layout path), or an explicit path — the
+     * same tri-state {@code --tarball}'s optional value has. {@code offline}/{@code force}/{@code
+     * rerun}/{@code verbose} reconstruct the session config engine-side, as on {@link
+     * #buildRequest}.
+     */
+    public static String imageRequest(
+            String entryDir,
+            String cache,
+            String jdksDir,
+            String mainClass,
+            String registry,
+            String tag,
+            String tarball,
+            String dockerExecutable,
+            boolean skipTests,
+            boolean offline,
+            boolean force,
+            boolean rerun,
+            boolean verbose) {
+        return "{\"t\":\""
+                + IMAGE_REQUEST
+                + "\",\"entryDir\":"
+                + Ndjson.quote(entryDir)
+                + ",\"cache\":"
+                + Ndjson.quote(cache)
+                + ",\"jdksDir\":"
+                + Ndjson.quote(jdksDir)
+                + ",\"mainClass\":"
+                + Ndjson.quote(mainClass)
+                + ",\"registry\":"
+                + Ndjson.quote(registry)
+                + ",\"tag\":"
+                + Ndjson.quote(tag)
+                + ",\"tarball\":"
+                + Ndjson.quote(tarball)
+                + ",\"dockerExecutable\":"
+                + Ndjson.quote(dockerExecutable)
+                + ",\"skipTests\":"
+                + skipTests
+                + ",\"offline\":"
+                + offline
+                + ",\"force\":"
+                + force
+                + ",\"rerun\":"
+                + rerun
+                + ",\"verbose\":"
+                + verbose
+                + "}";
+    }
+
+    /**
+     * Convert a foreign build to {@code jk.toml} (see {@link #IMPORT_REQUEST}). All paths are
+     * absolute (the client pre-flighted detection/overwrite checks); {@code report} may be {@code
+     * null}.
+     */
+    public static String importRequest(
+            String source, String out, String baseDir, String tmpDir, boolean force, String report, String cache) {
+        return "{\"t\":\""
+                + IMPORT_REQUEST
+                + "\",\"source\":"
+                + Ndjson.quote(source)
+                + ",\"out\":"
+                + Ndjson.quote(out)
+                + ",\"baseDir\":"
+                + Ndjson.quote(baseDir)
+                + ",\"tmpDir\":"
+                + Ndjson.quote(tmpDir)
+                + ",\"force\":"
+                + force
+                + ",\"report\":"
+                + Ndjson.quote(report)
+                + ",\"cache\":"
+                + Ndjson.quote(cache)
+                + "}";
+    }
+
+    /** Provision a Maven/Gradle distribution (see {@link #PROVISION_REQUEST}). */
+    public static String provisionRequest(
+            String cache, String projectDir, String toolsRoot, boolean noDiscover, boolean gradle) {
+        return "{\"t\":\""
+                + PROVISION_REQUEST
+                + "\",\"cache\":"
+                + Ndjson.quote(cache)
+                + ",\"projectDir\":"
+                + Ndjson.quote(projectDir)
+                + ",\"toolsRoot\":"
+                + Ndjson.quote(toolsRoot)
+                + ",\"noDiscover\":"
+                + noDiscover
+                + ",\"gradle\":"
+                + gradle
                 + "}";
     }
 
@@ -932,6 +1228,198 @@ public final class EngineProtocol {
                 + quoteArray(errors)
                 + ",\"refreshed\":"
                 + refreshed
+                + "}";
+    }
+
+    // ---- hosted worker-verb events (server → client) --------------------------------------------
+
+    /** One OSV finding (see {@link #AUDIT_FINDING}) — plain structured fields, no theming. */
+    public static String auditFinding(
+            String dir, String module, String version, String vulnId, String severity, String summary) {
+        return "{\"t\":\""
+                + AUDIT_FINDING
+                + "\",\"dir\":"
+                + Ndjson.quote(dir)
+                + ",\"module\":"
+                + Ndjson.quote(module)
+                + ",\"version\":"
+                + Ndjson.quote(version)
+                + ",\"vulnId\":"
+                + Ndjson.quote(vulnId)
+                + ",\"severity\":"
+                + Ndjson.quote(severity)
+                + ",\"summary\":"
+                + Ndjson.quote(summary)
+                + "}";
+    }
+
+    /**
+     * One file's format result (see {@link #FORMAT_FILE}). {@code index}/{@code total} drive the
+     * client's per-file progress bar ({@code total} is known engine-side before the worker forks).
+     */
+    public static String formatFile(String dir, String path, String status, String message, int index, int total) {
+        return "{\"t\":\""
+                + FORMAT_FILE
+                + "\",\"dir\":"
+                + Ndjson.quote(dir)
+                + ",\"path\":"
+                + Ndjson.quote(path)
+                + ",\"status\":"
+                + Ndjson.quote(status)
+                + ",\"message\":"
+                + Ndjson.quote(message)
+                + ",\"index\":"
+                + index
+                + ",\"total\":"
+                + total
+                + "}";
+    }
+
+    /** One import progress note (see {@link #IMPORT_NOTE}). */
+    public static String importNote(String dir, String kind, String text) {
+        return "{\"t\":\""
+                + IMPORT_NOTE
+                + "\",\"dir\":"
+                + Ndjson.quote(dir)
+                + ",\"kind\":"
+                + Ndjson.quote(kind)
+                + ",\"text\":"
+                + Ndjson.quote(text)
+                + "}";
+    }
+
+    /**
+     * Terminal for {@link #PROVISION_REQUEST}. {@code bin} is the provisioned tool's launcher path
+     * ({@code null} on failure); {@code source}/{@code version} feed the client's one-line
+     * "Maven X downloaded" note; {@code diag} is the worker's passthrough chatter, carried only when
+     * {@code exit != 0}.
+     */
+    public static String provisionResult(String bin, String version, String source, String error, int exit, String diag) {
+        return "{\"t\":\""
+                + PROVISION_RESULT
+                + "\",\"bin\":"
+                + Ndjson.quote(bin)
+                + ",\"version\":"
+                + Ndjson.quote(version)
+                + ",\"source\":"
+                + Ndjson.quote(source)
+                + ",\"error\":"
+                + Ndjson.quote(error)
+                + ",\"exit\":"
+                + exit
+                + ",\"diag\":"
+                + Ndjson.quote(diag)
+                + "}";
+    }
+
+    /**
+     * As {@link #goalFinish(String, boolean)}, additionally carrying a {@code jk format} run's
+     * counts and the formatter worker's exit code ({@code jk format --check} exits non-zero when
+     * files need formatting — a legitimate outcome, not a goal failure, so it rides here rather
+     * than failing the goal). {@code total} of 0 means no sources were found.
+     */
+    public static String goalFinishFormat(
+            String dir, boolean success, int changed, int clean, int errors, int total, int workerExit) {
+        return "{\"t\":\""
+                + GOAL_FINISH
+                + "\",\"dir\":"
+                + Ndjson.quote(dir)
+                + ",\"success\":"
+                + success
+                + ",\"formatChanged\":"
+                + changed
+                + ",\"formatClean\":"
+                + clean
+                + ",\"formatErrors\":"
+                + errors
+                + ",\"formatTotal\":"
+                + total
+                + ",\"formatWorkerExit\":"
+                + workerExit
+                + "}";
+    }
+
+    /** As {@link #goalFinish(String, boolean)}, additionally carrying a {@code jk publish} run's uploaded-file count. */
+    public static String goalFinishPublish(String dir, boolean success, int files) {
+        return "{\"t\":\""
+                + GOAL_FINISH
+                + "\",\"dir\":"
+                + Ndjson.quote(dir)
+                + ",\"success\":"
+                + success
+                + ",\"publishFiles\":"
+                + files
+                + "}";
+    }
+
+    /**
+     * As {@link #goalFinish(String, boolean)}, additionally carrying a {@code jk import} run's
+     * worker exit code, warning count, and error/diagnostic text (all plain — the client prefixes
+     * and renders).
+     */
+    public static String goalFinishImport(
+            String dir, boolean success, int exitCode, int warnings, String error, String diag) {
+        return "{\"t\":\""
+                + GOAL_FINISH
+                + "\",\"dir\":"
+                + Ndjson.quote(dir)
+                + ",\"success\":"
+                + success
+                + ",\"importExit\":"
+                + exitCode
+                + ",\"importWarnings\":"
+                + warnings
+                + ",\"importError\":"
+                + Ndjson.quote(error)
+                + ",\"importDiag\":"
+                + Ndjson.quote(diag)
+                + "}";
+    }
+
+    /**
+     * As {@link #goalFinish(String, boolean, long, long, long, long)} (the image goal runs the full
+     * pipeline, so test counts ride along for the exit-code logic), additionally carrying the
+     * structured ingredients of the Image chip's success tail: exactly one of {@code imageTarball}
+     * (tarball mode), {@code imageDaemonExe} (local-daemon load), or neither (registry push, render
+     * {@code imageRef}) is non-null; {@code imageName}/{@code imageVersion} name the image in
+     * daemon mode.
+     */
+    public static String goalFinishImage(
+            String dir,
+            boolean success,
+            long testTotal,
+            long testSucceeded,
+            long testFailed,
+            long testSkipped,
+            String ref,
+            String tarball,
+            String name,
+            String version,
+            String daemonExe) {
+        return "{\"t\":\""
+                + GOAL_FINISH
+                + "\",\"dir\":"
+                + Ndjson.quote(dir)
+                + ",\"success\":"
+                + success
+                + ",\"testTotal\":"
+                + testTotal
+                + ",\"testSucceeded\":"
+                + testSucceeded
+                + ",\"testFailed\":"
+                + testFailed
+                + ",\"testSkipped\":"
+                + testSkipped
+                + ",\"imageRef\":"
+                + Ndjson.quote(ref)
+                + ",\"imageTarball\":"
+                + Ndjson.quote(tarball)
+                + ",\"imageName\":"
+                + Ndjson.quote(name)
+                + ",\"imageVersion\":"
+                + Ndjson.quote(version)
+                + ",\"imageDaemonExe\":"
+                + Ndjson.quote(daemonExe)
                 + "}";
     }
 
