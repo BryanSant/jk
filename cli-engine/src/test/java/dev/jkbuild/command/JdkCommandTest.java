@@ -153,10 +153,10 @@ class JdkCommandTest {
 
         // --all surfaces catalog rows alongside installed rows. Higher major
         // (catalog-only) appears first; installed row follows.
-        int idxAvailable25 = stdout.indexOf("temurin-25");
+        int idxAvailable99 = stdout.indexOf("temurin-99");
         int idxInstalled21 = stdout.indexOf("temurin-21.0.5");
-        assertThat(idxAvailable25).isGreaterThanOrEqualTo(0);
-        assertThat(idxInstalled21).isGreaterThan(idxAvailable25);
+        assertThat(idxAvailable99).isGreaterThanOrEqualTo(0);
+        assertThat(idxInstalled21).isGreaterThan(idxAvailable99);
         // Installed row's status column reads "installed".
         assertThat(stdout).contains("installed");
     }
@@ -185,7 +185,7 @@ class JdkCommandTest {
 
         assertThat(stdout).contains("temurin-21.0.5");
         assertThat(stdout).contains("installed");
-        assertThat(stdout).doesNotContain("temurin-25");
+        assertThat(stdout).doesNotContain("temurin-99");
     }
 
     @Test
@@ -537,12 +537,16 @@ class JdkCommandTest {
 
     /** Feed JSON with a Temurin 25 entry alongside the 21 entry — used by `list`. */
     private static String multiEntryFeedJson(long size, String sha256, String baseUrl) {
+        // Major 99 is a sentinel no host can have installed or discoverable: the assertions
+        // about catalog rows appearing (--all) or not appearing (default) must not be
+        // satisfiable/breakable by JDKs on the machine running the tests — CI runners ship
+        // real temurin installs that a temurin-25 entry collided with.
         return feedJson(size, sha256, baseUrl + "/dummy.tar.gz")
                 .replaceFirst(
                         "\"jdks\": \\[\\s*",
                         "\"jdks\": [\n"
                                 + entryJson(
-                                        "Eclipse", "Temurin", "temurin-25", 25, "25.0.1", false, size, sha256, baseUrl)
+                                        "Eclipse", "Temurin", "temurin-99", 99, "99.0.1", false, size, sha256, baseUrl)
                                 + ",\n");
     }
 
