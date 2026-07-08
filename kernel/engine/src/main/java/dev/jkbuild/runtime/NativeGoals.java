@@ -23,25 +23,28 @@ public final class NativeGoals {
     private NativeGoals() {}
 
     /**
-     * A module is native-eligible only when it sets {@code native = true} (NativeMode.ALWAYS).
-     * Absent {@code native} (SUPPORTED) and {@code native = false} (DISABLED) are both skipped by
-     * {@code jk native}. A main class is <em>not</em> required: with one we build an executable,
-     * without one a shared library.
+     * A module is native-eligible only when it sets {@code [native] always = true}
+     * (NativeMode.ALWAYS). {@code [native]} absent (DISABLED) or declared without {@code always}
+     * (SUPPORTED) are both skipped by {@code jk native}. A main class is <em>not</em> required:
+     * with one we build an executable, without one a shared library.
      */
     public static boolean isNativeEligible(JkBuild build) {
-        return build.project().nativeMode() == JkBuild.NativeMode.ALWAYS;
+        return build.nativeMode() == JkBuild.NativeMode.ALWAYS;
     }
 
     /**
      * The native-image main class: the CLI {@code --main} override wins, then {@code
      * [native].main-class}, then {@code [image].main}; {@code null} falls through to {@code
-     * [project].main} inside {@link BuildPipeline#nativePhase}.
+     * [application].main} inside {@link BuildPipeline#nativePhase}.
      */
     public static String resolveMain(Path buildFile, String mainOverride) {
         if (mainOverride != null && !mainOverride.isBlank()) return mainOverride;
         try {
-            String fromNative = JkBuildParser.parse(buildFile).nativeConfig().mainClass();
-            if (fromNative != null && !fromNative.isBlank()) return fromNative;
+            String fromNative = JkBuildParser.parse(buildFile)
+                    .nativeConfig()
+                    .map(JkBuild.NativeConfig::mainClass)
+                    .orElse(null);
+            if (fromNative != null) return fromNative;
         } catch (Exception ignored) {
         }
         try {

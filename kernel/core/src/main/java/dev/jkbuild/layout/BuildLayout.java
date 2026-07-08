@@ -81,8 +81,7 @@ public final class BuildLayout {
     }
 
     private static boolean hasMain(JkBuild project) {
-        String main = project.project().main();
-        return main != null && !main.isBlank();
+        return project.mainClass() != null;
     }
 
     // ---- Roots --------------------------------------------------------

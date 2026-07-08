@@ -37,22 +37,20 @@ class JkBuildRendererTest {
     }
 
     @Test
-    void renders_main_shadow_and_native_when_set() {
-        JkBuild model = new JkBuild(
-                JkBuild.Project.builder("com.example", "widget", "1.0.0")
+    void renders_application_and_native_blocks_when_set() {
+        JkBuild model = JkBuild.builder(JkBuild.Project.builder("com.example", "widget", "1.0.0")
                         .jdkMajor(21)
                         .kotlin(VersionSelector.parseFloating("=2.3.21"))
-                        .main("com.example.App")
-                        .shadow(true)
-                        .nativeMode(JkBuild.NativeMode.SUPPORTED)
-                        .application(true)
-                        .build(),
-                JkBuild.Dependencies.empty());
+                        .build())
+                .application(new JkBuild.Application("com.example.App", true))
+                .nativeConfig(new JkBuild.NativeConfig(null, null, List.of(), null, false))
+                .build();
         String out = JkBuildRenderer.render(model);
         assertThat(out).contains("kotlin   = \"=2.3.21\"");
-        assertThat(out).contains("main     = \"com.example.App\"");
-        assertThat(out).contains("shadow   = true");
-        assertThat(out).contains("native   = true");
+        assertThat(out).contains("[application]");
+        assertThat(out).contains("main       = \"com.example.App\"");
+        assertThat(out).contains("shadow-jar = true");
+        assertThat(out).contains("[native]");
     }
 
     @Test
@@ -72,37 +70,36 @@ class JkBuildRendererTest {
     }
 
     @Test
-    void application_false_with_main_round_trips() {
-        // main is set (would imply application=true) but explicitly false.
+    void m2install_round_trips() {
         JkBuild model = JkBuild.of(JkBuild.Project.builder("com.example", "widget", "1.0.0")
                 .jdkMajor(21)
                 .java(21)
-                .main("com.example.Main")
-                .application(false)
                 .m2install(true)
                 .build());
         String out = JkBuildRenderer.render(model);
-        assertThat(out).contains("application = false");
         assertThat(out).contains("m2install = true");
 
         JkBuild reparsed = JkBuildParser.parse(out);
-        assertThat(reparsed.project().isApplication()).isFalse();
         assertThat(reparsed.project().m2install()).isTrue();
     }
 
     @Test
-    void derived_application_is_not_emitted() {
-        // main set → application derives true → no explicit key emitted.
-        JkBuild withMain = JkBuild.of(JkBuild.Project.builder("com.example", "app", "1.0.0")
-                .jdkMajor(21)
-                .java(21)
-                .main("com.example.Main")
-                .application(true)
-                .build());
-        assertThat(JkBuildRenderer.render(withMain)).doesNotContain("application =");
-        // library (no main) → application derives false → no explicit key.
+    void application_presence_alone_drives_is_application() {
+        // [application] declared (even without main) → isApplication() true.
+        JkBuild withApplication = JkBuild.builder(JkBuild.Project.builder("com.example", "app", "1.0.0")
+                        .jdkMajor(21)
+                        .java(21)
+                        .build())
+                .application(new JkBuild.Application(null, false))
+                .build();
+        assertThat(JkBuildRenderer.render(withApplication)).contains("[application]");
+        assertThat(JkBuildParser.parse(JkBuildRenderer.render(withApplication)).isApplication())
+                .isTrue();
+
+        // No [application] at all → isApplication() false, nothing emitted.
         JkBuild lib = JkBuild.of(new JkBuild.Project("com.example", "lib", "1.0.0", 21));
-        assertThat(JkBuildRenderer.render(lib)).doesNotContain("application =");
+        assertThat(JkBuildRenderer.render(lib)).doesNotContain("[application]");
+        assertThat(JkBuildParser.parse(JkBuildRenderer.render(lib)).isApplication()).isFalse();
     }
 
     @Test

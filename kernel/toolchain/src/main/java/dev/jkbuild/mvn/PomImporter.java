@@ -84,7 +84,13 @@ public final class PomImporter {
         warnUnsupportedSections(doc, report, /* isWorkspaceRoot= */ false);
 
         JkBuild.Dependencies dependencies = new JkBuild.Dependencies(byScope);
-        JkBuild jkBuild = new JkBuild(project, dependencies, repos);
+        String mainClass = mainClassFromPom(doc);
+        JkBuild.Application application = mainClass != null ? new JkBuild.Application(mainClass, false) : null;
+        JkBuild jkBuild = JkBuild.builder(project)
+                .dependencies(dependencies)
+                .repositories(repos)
+                .application(application)
+                .build();
         Map<String, String> manifest = manifestFromPom(doc);
         if (!manifest.isEmpty()) jkBuild = jkBuild.withManifest(manifest);
         return new Result(jkBuild, report.build());
@@ -93,7 +99,7 @@ public final class PomImporter {
     /**
      * Custom jar-manifest attributes from a build plugin's {@code <archive><manifestEntries>}
      * (maven-jar / assembly / shade). {@code Main-Class} is excluded — it routes to {@code
-     * project.main} via {@link #mainClassFromPom}. Unresolved {@code ${...}} property values and
+     * [application].main} via {@link #mainClassFromPom}. Unresolved {@code ${...}} property values and
      * blanks are skipped. Insertion order preserved.
      */
     private static Map<String, String> manifestFromPom(Document doc) {
@@ -107,7 +113,7 @@ public final class PomImporter {
                 if (name == null || name.isBlank() || value == null) continue;
                 value = value.trim();
                 if (value.isEmpty() || value.startsWith("${")) continue;
-                if (name.equalsIgnoreCase("Main-Class")) continue; // routed to project.main
+                if (name.equalsIgnoreCase("Main-Class")) continue; // routed to [application].main
                 attrs.put(name, value);
             }
         }
@@ -137,8 +143,12 @@ public final class PomImporter {
         warnUnsupportedSections(rootDoc, report, /* isWorkspaceRoot= */ true);
 
         Workspace workspace = new Workspace(modules);
+        String rootMainClass = mainClassFromPom(rootDoc);
+        JkBuild.Application rootApplication =
+                rootMainClass != null ? new JkBuild.Application(rootMainClass, false) : null;
         // The workspace root is a coordination point — no deps of its own.
-        JkBuild rootJkBuild = JkBuild.builder(rootProject).workspace(workspace).build();
+        JkBuild rootJkBuild =
+                JkBuild.builder(rootProject).workspace(workspace).application(rootApplication).build();
 
         Map<String, JkBuild> moduleBuilds = new LinkedHashMap<>();
         Path projectDir = rootPom.toAbsolutePath().getParent();
@@ -208,16 +218,13 @@ public final class PomImporter {
         String description = childText(doc.getDocumentElement(), "description");
         if (description != null && description.isBlank()) description = null;
         VersionSelector kotlin = kotlinFromPom(doc, report);
-        String mainClass = mainClassFromPom(doc);
         // A Kotlin project sets `kotlin` and leaves `java` at 0 (mutually exclusive).
         int java = kotlin != null ? 0 : jdk;
         return JkBuild.Project.builder(group, pom.artifactId(), version)
                 .jdkMajor(jdk)
                 .java(java)
                 .kotlin(kotlin)
-                .main(mainClass)
                 .description(description)
-                .application(mainClass != null)
                 .build();
     }
 

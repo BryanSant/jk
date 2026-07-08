@@ -314,7 +314,7 @@ public final class BuildPlanForecast {
                 phases.add(new BuildPlan.Phase("package-jar", BuildPlan.Status.RUN, "repackage · compile changed", null));
             } else {
                 Path jar = layout.mainJar();
-                String mainClass = project.project().main();
+                String mainClass = project.mainClass();
                 long tp = Perf.start();
                 List<String> tokens = List.of(
                         "classes:" + ClasspathFingerprint.entry(layout.classesDir()),
@@ -331,7 +331,7 @@ public final class BuildPlanForecast {
             }
 
             // ---- package-shadow (fat jar) — only when configured ----
-            if (project.project().shadow() && !(mainSrc.isEmpty() && ktSrc.isEmpty())) {
+            if (project.shadowJar() && !(mainSrc.isEmpty() && ktSrc.isEmpty())) {
                 boolean fresh = !compileDirty && Files.isRegularFile(layout.shadowJar());
                 phases.add(
                         fresh

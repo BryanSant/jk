@@ -309,8 +309,8 @@ public final class VscodeIdeGenerator implements IdeGenerator {
         Map<Path, JkBuild> targets =
                 model.modules().isEmpty() ? model.allModules() : model.modules();
         for (JkBuild module : targets.values()) {
-            String main = module.project().main();
-            if (main == null || main.isBlank()) continue;
+            String main = module.mainClass();
+            if (main == null) continue;
             String name = IdeSupport.moduleName(module);
             configs.add("    {\n"
                     + "      \"type\": \"java\",\n"

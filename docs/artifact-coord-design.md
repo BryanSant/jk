@@ -61,7 +61,7 @@ optional metadata.
 
 ## Schema
 
-### `[project]` — unchanged
+### `[project]`, `[application]`, `[native]`
 
 ```toml
 [project]
@@ -72,12 +72,16 @@ description = "..."              # optional
 jdk         = 25                 # optional, ≥17
 java        = 25                 # optional, mutually exclusive with `kotlin`
 kotlin      = 21                 # optional, mutually exclusive with `java`
-main        = "dev.jkbuild.cli.Jk"  # optional, runnable entry point
-shadow      = false              # optional, shaded JAR opt-in
-native      = false              # optional, false|true|"always"
-```
 
-No changes from v0.6.
+# [application] and [native] are separate top-level tables, not [project] keys.
+# Their mere presence is the enable switch — a library declares neither.
+[application]
+main       = "dev.jkbuild.cli.Jk"  # optional, runnable entry point
+shadow-jar = false                 # optional, shaded JAR opt-in
+
+[native]
+always = false   # optional; false → eligible via `jk native` only, true → auto-built too
+```
 
 ### `[workspace]` — adds `[workspace.dependencies]`
 
@@ -306,7 +310,9 @@ name = "jk-cli"
 version  = "0.7.0-SNAPSHOT"
 jdk      = 25
 java     = 25
-main     = "dev.jkbuild.cli.Jk"
+
+[application]
+main = "dev.jkbuild.cli.Jk"
 
 [dependencies]
 # Workspace siblings — short-name resolves to the matching module.

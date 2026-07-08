@@ -44,9 +44,10 @@ public final class RepoGroupBuilder {
     public static RepoGroup buildFor(JkBuild project, URI overrideUrl, Cas cas) {
         Http http = new Http();
         List<MavenRepo> repos = new ArrayList<>();
+        boolean mirrorToM2 = project.project().m2install();
         if (overrideUrl != null) {
             // Tests pin one URL; project-declared repos are ignored.
-            repos.add(new MavenRepo("central", overrideUrl, http, cas));
+            repos.add(new MavenRepo("central", overrideUrl, http, cas, RepoCredential.ANONYMOUS, mirrorToM2));
         } else {
             // Merge: project repos > global repos > built-in Maven Central.
             // Deduplicate by name: first declaration wins (project beats global,
@@ -82,7 +83,7 @@ public final class RepoGroupBuilder {
                 // transport; HTTP credentials still ride the MavenRepo credential.
                 RepoTransport transport = RepoTransports.forUrl(
                         spec.url(), http, spec.objectStore().orElse(ObjectStoreConfig.EMPTY));
-                repos.add(new MavenRepo(spec.name(), spec.url(), transport, cas, cred));
+                repos.add(new MavenRepo(spec.name(), spec.url(), transport, cas, cred, mirrorToM2));
             }
         }
         return new RepoGroup(repos);

@@ -146,7 +146,7 @@ public final class NativeCommand implements CliCommand {
      * {@code NativeGoals.isNativeEligible} (a one-line enum check on the shared model).
      */
     static boolean nativeEligible(JkBuild build) {
-        return build.project().nativeMode() == JkBuild.NativeMode.ALWAYS;
+        return build.nativeMode() == JkBuild.NativeMode.ALWAYS;
     }
 
     /** The engine request for {@code entryDir}, with the client-resolved GraalVM homes attached. */
@@ -195,7 +195,7 @@ public final class NativeCommand implements CliCommand {
         for (Path moduleDir : sorted) {
             JkBuild module = modulesByDir.get(moduleDir);
             if (!nativeEligible(module)) continue;
-            Optional<Path> home = graal.resolve(moduleDir, module.project().graal());
+            Optional<Path> home = graal.resolve(moduleDir, module.graal());
             if (home.isEmpty()) return Exit.CONFIG; // GraalResolver already printed why
             graalHomes.put(moduleDir, home.get());
         }
@@ -330,20 +330,20 @@ public final class NativeCommand implements CliCommand {
     // --- single-project (unchanged behaviour) --------------------------------
 
     private int runSingleProject(Path projectDir, Path buildFile, Path cache) throws IOException, InterruptedException {
-        // Native builds are opt-in: require native = true (ALWAYS). Absent or
-        // native = false → not eligible, even for an explicit `jk native`.
+        // Native builds are opt-in: require [native] always = true. Absent, or
+        // [native] declared without always, → not eligible, even for an explicit `jk native`.
         JkBuild build = JkBuildParser.parse(buildFile);
-        if (build.project().nativeMode() != JkBuild.NativeMode.ALWAYS) {
+        if (build.nativeMode() != JkBuild.NativeMode.ALWAYS) {
             CliOutput.err("jk native: "
                     + projectDir.getFileName()
-                    + " is not native-eligible — set `native = true` under [project] to enable.");
+                    + " is not native-eligible — set `always = true` under [native] to enable.");
             return Exit.CONFIG;
         }
 
         // Resolve GraalVM before the goal/progress UI starts (a prompt/install
         // can't run inside the captured-output region, and must never run inside
         // the engine — see docs/engine.md).
-        Optional<Path> graalHome = graal.resolve(projectDir, build.project().graal());
+        Optional<Path> graalHome = graal.resolve(projectDir, build.graal());
         if (graalHome.isEmpty()) return Exit.CONFIG; // GraalResolver already printed why
 
         String coord = BuildCommand.buildTarget(buildFile, projectDir);

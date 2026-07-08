@@ -33,9 +33,9 @@ public final class RepoArtifactResolver {
     }
 
     /**
-     * True for a <em>named remote</em> repo — one whose sidecar index in {@code repos/<name>/} points
-     * at a real {@code ~/.m2} artifact. The {@code local} full store and {@code git:} sources are not
-     * named remotes (they resolve through the local store / the CAS instead).
+     * True for a <em>named remote</em> repo — one whose full store under {@code repos/<name>/} holds
+     * a real jar fetched from that repository. The {@code local} full store and {@code git:} sources
+     * are not named remotes (they resolve through the local store / the CAS instead).
      */
     public static boolean isNamedRemote(String repoName) {
         return repoName != null

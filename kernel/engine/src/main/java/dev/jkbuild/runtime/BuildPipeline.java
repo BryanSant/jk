@@ -678,6 +678,8 @@ public final class BuildPipeline {
                 })
                 .execute(ctx -> {
                     Lockfile lock = ctx.require(LOCKFILE);
+                    JkBuild project = ctx.require(PROJECT);
+                    boolean mirrorToM2 = project.project().m2install();
                     // Scope is already counted up front by estimateScope() (artifact
                     // count); progress(1)-per-artifact below fills it.
                     var observer = new CacheSync.ProgressObserver() {
@@ -704,7 +706,7 @@ public final class BuildPipeline {
                         }
                     };
                     boolean refresh = in.session().config().refreshOr(false);
-                    var report = new CacheSync(cas, new Http()).sync(lock, observer, refresh);
+                    var report = new CacheSync(cas, new Http(), mirrorToM2).sync(lock, observer, refresh);
                     if (report.hasErrors()) throw new RuntimeException("dep sync had errors");
                 })
                 .build();
@@ -1404,7 +1406,7 @@ public final class BuildPipeline {
                     Path classes = ctx.require(MAIN_CLASSES);
                     Path jarPath = layout.mainJar();
                     Files.createDirectories(jarPath.getParent());
-                    String mainClass = project.project().main();
+                    String mainClass = project.mainClass();
                     // Packaging cache: the jar is a pure function of the main classes
                     // (resources already copied in), the main-class, and the manifest.
                     List<String> tokens = List.of(
@@ -1575,7 +1577,7 @@ public final class BuildPipeline {
     public static void appendDeclaredTails(Goal.Builder b, Inputs in) {
         try {
             JkBuild project = JkBuildParser.parse(in.buildFile());
-            if (project.project().shadow()) {
+            if (project.shadowJar()) {
                 b.addPhase(shadowPhase(in.cache(), in.lockFile()));
             }
             if (project.project().sourcesMode() == JkBuild.SourcesMode.ALWAYS) {
@@ -1630,10 +1632,7 @@ public final class BuildPipeline {
                     List<String> tokens = List.of(
                             "classes:" + dev.jkbuild.task.ClasspathFingerprint.entry(classes),
                             "deps:" + dev.jkbuild.task.ClasspathFingerprint.of(depJars),
-                            "main:"
-                                    + (project.project().main() == null
-                                            ? ""
-                                            : project.project().main()),
+                            "main:" + (project.mainClass() == null ? "" : project.mainClass()),
                             "manifest:" + project.manifest());
                     String shTask = ActionKey.qualifiedTaskId("package-shadow", shadowJar);
                     String shKey = ActionKey.forArtifact(shTask, dev.jkbuild.util.JkVersion.VERSION, tokens);
@@ -1645,12 +1644,7 @@ public final class BuildPipeline {
                     ctx.label("package " + shadowJar.getFileName());
                     new ShadowPackager()
                             .packageShadow(new ShadowPackager.ShadowRequest(
-                                    classes,
-                                    depJars,
-                                    shadowJar,
-                                    project.project().main(),
-                                    project.manifest(),
-                                    0L));
+                                    classes, depJars, shadowJar, project.mainClass(), project.manifest(), 0L));
                     storePackaged(cache, shTask, shKey, tokens, shadowJar.getParent(), List.of(shadowJar));
                     ctx.progress(1);
                 })
@@ -1751,20 +1745,19 @@ public final class BuildPipeline {
                     }
 
                     JkBuild project = ctx.require(PROJECT);
-                    JkBuild.NativeConfig nativeCfg = project.nativeConfig();
+                    JkBuild.NativeConfig nativeCfg = project.nativeConfig()
+                            .orElseGet(() -> new JkBuild.NativeConfig(null, null, List.of(), null, false));
                     BuildLayout layout = ctx.require(LAYOUT);
                     Path mainJar = layout.mainJar();
                     if (!Files.exists(mainJar)) {
                         ctx.error("native", "jar not found at " + mainJar);
                         throw new RuntimeException("missing main jar for native-image");
                     }
-                    // Resolution order: --main CLI flag > [native].main-class > [project].main.
+                    // Resolution order: --main CLI flag > [native].main-class > [application].main.
                     // A resolvable main → executable; none → shared library (--shared).
                     String mainClass = (mainOverride != null && !mainOverride.isBlank())
                             ? mainOverride
-                            : (nativeCfg.mainClass() != null
-                                    ? nativeCfg.mainClass()
-                                    : project.project().main());
+                            : (nativeCfg.mainClass() != null ? nativeCfg.mainClass() : project.mainClass());
                     boolean shared = (mainClass == null || mainClass.isBlank());
                     if (shared) mainClass = null;
                     // Output path: [native].name overrides the artifact-derived name.
@@ -2040,7 +2033,7 @@ public final class BuildPipeline {
             // A shadow (fat) worker runs from its -all.jar — that's the artifact
             // that bundles plugin-api/PluginWorkerMain and the worker's deps; a
             // plain module ships only its main jar.
-            Path jar = sib.project().shadow() ? layout.shadowJar() : layout.mainJar();
+            Path jar = sib.shadowJar() ? layout.shadowJar() : layout.mainJar();
             out.put(sib.project().name(), jar);
             out.put(sib.project().group() + ":" + sib.project().name(), jar);
         }

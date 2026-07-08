@@ -94,8 +94,8 @@ class SelfHostingTomlTest {
     @Test
     void cli_module_declares_a_main_class_and_image_main_class() throws Exception {
         JkBuild cli = JkBuildParser.parse(REPO.resolve("cli/jk.toml"));
-        assertThat(cli.project().main()).isEqualTo("dev.jkbuild.cli.Jk");
-        assertThat(cli.project().isRunnable()).isTrue();
+        assertThat(cli.mainClass()).isEqualTo("dev.jkbuild.cli.Jk");
+        assertThat(cli.isRunnable()).isTrue();
 
         // The project's jk.toml files declare sibling coordinates
         // explicitly (no `.workspace = true` shorthand) so module builds

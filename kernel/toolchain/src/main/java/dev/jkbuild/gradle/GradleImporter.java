@@ -144,7 +144,7 @@ public final class GradleImporter {
         }
 
         // Jar-manifest attributes from `jar { manifest { attributes(...) } }`
-        // (or tasks.jar / tasks.named("jar")). Main-Class routes to project.main.
+        // (or tasks.jar / tasks.named("jar")). Main-Class routes to [application].main.
         Map<String, String> manifest = detectManifestAttributes(stripped, group, defaultArtifact, version, report);
         String mainClass = detectMainClass(stripped);
         String manifestMain = manifest.remove("Main-Class");
@@ -161,11 +161,14 @@ public final class GradleImporter {
                 .jdkMajor(jdk)
                 .java(java)
                 .kotlin(kotlin)
-                .main(mainClass)
                 .description(description)
-                .application(mainClass != null)
                 .build();
-        JkBuild jkBuild = new JkBuild(project, new JkBuild.Dependencies(deps), repos);
+        JkBuild.Application application = mainClass != null ? new JkBuild.Application(mainClass, false) : null;
+        JkBuild jkBuild = JkBuild.builder(project)
+                .dependencies(new JkBuild.Dependencies(deps))
+                .repositories(repos)
+                .application(application)
+                .build();
         if (!manifest.isEmpty()) jkBuild = jkBuild.withManifest(manifest);
         return new Result(jkBuild, report.build());
     }
@@ -177,7 +180,7 @@ public final class GradleImporter {
      * expressions {@code project.version}/{@code name}/{@code group} resolve to the imported
      * coordinates; other expressions are skipped with a report note. The returned map preserves
      * declaration order and may contain {@code Main-Class} (the caller routes it to {@code
-     * project.main}).
+     * [application].main}).
      */
     private static Map<String, String> detectManifestAttributes(
             String text, String group, String artifact, String version, ImportReport.Builder report) {

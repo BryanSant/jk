@@ -253,7 +253,7 @@ class NewScaffolderTest {
                 false,
                 Optional.empty());
         NewScaffolder.write(on);
-        assertThat(Files.readString(sub.resolve("jk.toml"))).contains("shadow   = true");
+        assertThat(Files.readString(sub.resolve("jk.toml"))).contains("shadow-jar = true");
     }
 
     @Test
@@ -285,7 +285,7 @@ class NewScaffolderTest {
                 false,
                 Optional.empty());
         NewScaffolder.write(on);
-        assertThat(Files.readString(sub.resolve("jk.toml"))).contains("native   = true");
+        assertThat(Files.readString(sub.resolve("jk.toml"))).contains("[native]").contains("always     = true");
     }
 
     @Test

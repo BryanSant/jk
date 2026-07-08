@@ -144,8 +144,11 @@ defaults.
   credentials.toml              # per-host secrets (0600), or delegated to keychain/.netrc
 
   cache/                        # JK_CACHE_DIR
-    sha256/                     # content-addressed blob store; jars, source jars, javadoc jars, metadata
-      ab/cd/ef.../artifact.jar
+    sha256/                     # content-addressed blob store; jars, source jars, javadoc jars, generated sources, compiled classes — one CAS for everything
+      ab/cd/ef.../<hash>
+    repos/                      # human-readable Maven-layout view, hardlinked to sha256/ blobs — regenerable, never authoritative
+      <repo>/<group-path>/<artifact>/<version>/<artifact>-<version>.jar
+    index.toml                  # global sha256 <-> {repo, group, artifact, version, filename}, built from lockfile data
     actions/                    # action cache: hash(action) -> hash(outputs)
     metadata/                   # cached maven-metadata.xml, repo index entries
     exec/                       # ephemeral tool environments (LRU-evicted)
@@ -610,9 +613,17 @@ A clean replacement for Maven's `<mirrorOf>` machinery.
 - HTTP/2 preferred where supported.
 - Sparse-index optimization: if a repo advertises `/.well-known/jk-index/`, jk uses it; otherwise walks Maven layout.
 
-### 10.6 Cache layout interoperability
+### 10.6 Cache layout and Maven/Gradle interop
 
-jk's cache (`$JK_CACHE_DIR/sha256/...`) is content-addressed. A *view* is maintained at `$JK_CACHE_DIR/m2/` mirroring the Maven `groupId/artifactId/version/` layout (via hardlinks or copies, OS-dependent), so existing Maven and Gradle invocations can use the cache. jk also reads `~/.m2/repository` as a fallback source on cache miss, with full SHA-256 verification.
+jk's cache is a single content-addressed store: `$JK_CACHE_DIR/sha256/<hash>` holds every blob — resolved jars, source/javadoc jars, generated sources, and compiled classes alike. Writes always land here first (temp file + atomic rename), giving dependencies and build outputs identical integrity and GC semantics. There is one CAS, not one per kind of data.
+
+A second, purely-derived tree, `$JK_CACHE_DIR/repos/<repo>/<group-path>/<artifact>/<version>/<artifact>-<version>.jar`, gives dependencies human-readable names for classpaths and `ps` output instead of opaque hashes. Each entry is a hardlink to its `sha256/` blob — safe because both ends of the link are exclusively jk-owned, so nothing outside jk can mutate the shared inode. The mapping (`sha256 <-> group/artifact/version/repo/filename`) lives in a global `index.toml`, built from the per-project lockfile data already recorded under §9.2. `repos/` is never authoritative: `jk sync`/`jk repo reconcile` can fully regenerate it from `sha256/` + `index.toml`.
+
+jk does not write into the real `~/.m2` or `~/.gradle` by default. On a cache miss, jk opportunistically checks whether the target artifact already exists in `~/.m2/repository/...` or `~/.gradle/caches/modules-2/files-2.1/...`; if a file there hashes to what the lockfile/repo metadata expects, jk **copies** it into `sha256/` instead of downloading over the network — strictly read-only toward those directories, never linking to or writing back into them. A hardlink from a directory jk doesn't own would leave jk's own CAS open to silent corruption if that external tool ever replaced the file in place rather than via atomic rename (see §31 for a copy-on-write follow-up under consideration for macOS). The saved cost here is network bandwidth; one resident copy per machine is accepted as the disk-space trade-off for that safety.
+
+### 10.7 `project.m2install` (opt-in Maven interop)
+
+`project.m2install = false` by default. When `true`, jk additionally **copies** (never hardlinks) resolved artifacts into `~/.m2/repository/...` in standard Maven layout, so a system-installed Maven/Gradle can use them without going through jk. This is a plain one-way copy with no ongoing integrity pinning — `~/.m2` is external and mutable, so there's nothing for jk to reconcile; if it drifts afterward, that's between the user and their own Maven install, not jk's concern.
 
 ---
 
@@ -1556,7 +1567,7 @@ Explicit non-goals at v1.0 (most have a future-phase home, see §30):
 1. **IntelliJ plugin staffing** — without a credible plugin, jk is dead in the water for the enterprise audience. Who builds it?
 2. **`jk fmt` source-formatting scope** — does jk ship google-java-format / ktlint blessed, or stay out of source-style entirely? Recommend: ship blessed defaults but allow override.
 3. **TOML syntax-error UX** — TOML's diagnostics are mediocre. jk must wrap the parser with line-precise error rendering.
-4. **`~/.m2`-cache sharing safety** — reading existing `~/.m2/repository` entries means trusting a cache jk didn't populate. Mitigate via SHA-256 verification against the Maven Central metadata; refuse on mismatch.
+4. **Import-from-existing-cache disk cost** — jk avoids re-downloading artifacts already present in `~/.m2`/`~/.gradle` (hash-verified against lockfile/repo metadata before trusting them), but always *copies* rather than hardlinks, since jk doesn't control writes to those directories and a hardlink would risk silent corruption of jk's own CAS if the external tool ever replaced a file in place instead of atomically renaming it. **Future enhancement (macOS):** `clonefile(2)` (APFS copy-on-write clone, callable directly via FFM the same way `MemoryProbe` calls `host_statistics64`) would give the same near-zero disk cost as a hardlink at creation time while staying corruption-safe, since a later in-place write on either side triggers copy-on-write isolation instead of silently mutating shared data. Deferred: needs a small `CloneFile` FFM utility with graceful fallback to `Files.copy` on any failure (non-APFS volume, cross-volume paths, missing symbol). Linux `FICLONE` and Windows ReFS block-cloning are lower-value (raw-fd handling and Btrfs/XFS-only on Linux; ReFS is not the Windows default) and out of scope for now. Plain copy is the correct default everywhere until this lands.
 5. **`gh auth token` reuse trust boundary** — automatically reusing the `gh` CLI's token is convenient but security-flavored. Should it require explicit opt-in?
 6. **Workspace module discovery cost** — glob-based `modules = [ "libs/*" ]` requires filesystem walks. On huge monorepos this can be slow. Cache the resolved list and invalidate on directory mtime.
 

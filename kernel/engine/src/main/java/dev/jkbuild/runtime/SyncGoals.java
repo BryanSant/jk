@@ -193,6 +193,8 @@ public final class SyncGoals {
 
                     Cas cas = new Cas(cache);
                     Http http = new Http();
+                    JkBuild build = ctx.get(BUILD).orElse(null);
+                    boolean mirrorToM2 = build != null && build.project().m2install();
                     var observer = new CacheSync.ProgressObserver() {
                         @Override
                         public void fetched(Lockfile.Artifact pkg) {
@@ -219,7 +221,7 @@ public final class SyncGoals {
                         }
                     };
                     boolean refresh = SessionContext.current().config().refreshOr(false);
-                    var report = new CacheSync(cas, http).sync(lock, observer, refresh);
+                    var report = new CacheSync(cas, http, mirrorToM2).sync(lock, observer, refresh);
                     ctx.put(CAS_REPORT, report);
                     if (report.hasErrors()) {
                         throw new RuntimeException("dep fetch had errors");
@@ -389,6 +391,7 @@ public final class SyncGoals {
                         Path moduleDir = entry.getKey();
                         Path moduleLock = moduleDir.resolve("jk.lock");
                         if (!Files.isRegularFile(moduleLock)) continue;
+                        boolean moduleMirrorToM2 = entry.getValue().project().m2install();
                         try {
                             Lockfile lock = LockfileReader.read(moduleLock);
                             int modArtifacts = CacheSync.countArtifacts(lock);
@@ -421,7 +424,7 @@ public final class SyncGoals {
                                     ctx.progress(1);
                                 }
                             };
-                            new CacheSync(cas, http).sync(lock, observer, refresh);
+                            new CacheSync(cas, http, moduleMirrorToM2).sync(lock, observer, refresh);
                         } catch (Exception e) {
                             ctx.warn("modules", dir.relativize(moduleDir) + ": " + e.getMessage());
                         }

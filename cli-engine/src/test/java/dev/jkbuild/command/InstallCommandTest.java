@@ -99,12 +99,12 @@ class InstallCommandTest {
         // A library is not a usage error any more — it cache-installs.
         assertThat(exit).isEqualTo(0);
         assertThat(bin.resolve("lib-only")).doesNotExist(); // no launcher
-        // ~/.m2 is primary now: the JAR lands in the local Maven repo so other projects
-        // resolve it, with an index sidecar in the cache's repos/local/ pointing at it.
+        // m2install defaults to false: repos/local/ is primary — the real jar lands there —
+        // and ~/.m2 is untouched since this project didn't opt in.
+        assertThat(cache.resolve("repos/local/com/example/lib-only/0.1.0/lib-only-0.1.0.jar"))
+                .exists();
         assertThat(m2.resolve("repository/com/example/lib-only/0.1.0/lib-only-0.1.0.jar"))
-                .exists();
-        assertThat(cache.resolve("repos/local/com/example/lib-only/0.1.0/lib-only-0.1.0.jar.sha256"))
-                .exists();
+                .doesNotExist();
     }
 
     @Test

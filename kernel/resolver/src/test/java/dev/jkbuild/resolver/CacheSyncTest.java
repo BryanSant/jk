@@ -14,7 +14,6 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.attribute.FileTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -103,27 +102,41 @@ class CacheSyncTest {
     }
 
     @Test
-    void heals_poisoned_m2_artifact_from_cas(@TempDir Path tempDir) throws Exception {
+    void heals_poisoned_m2_mirror_from_cas_when_mirroring_is_enabled(@TempDir Path tempDir) throws Exception {
         byte[] jar = "genuine-bytes".getBytes(StandardCharsets.UTF_8);
         String hex = Hashing.sha256Hex(jar);
         registerJar("com.foo", "leaf", "1.0", jar);
         Lockfile lock = lockOf(pkg("com.foo:leaf", "1.0", "sha256:" + hex));
-        assertThat(newSync(tempDir).sync(lock).fetched()).isEqualTo(1);
+        assertThat(newSync(tempDir, true).sync(lock).fetched()).isEqualTo(1);
 
-        // Overwrite the mirrored ~/.m2 copy out-of-band (corruption, a stray write). The
-        // store's mtime guard re-hashes newer files and would otherwise trust the new
-        // content — the lockfile pin must win.
-        Path m2Jar = Path.of(System.getProperty("jk.m2.local"))
-                .resolve("com/foo/leaf/1.0/leaf-1.0.jar");
+        // Poison both jk's own index sidecar (repos/<name>/ is exclusively jk-owned, so this
+        // models local corruption rather than an external rewrite — see repoStoreState's
+        // IndexState.MISMATCH) and the opt-in ~/.m2 mirror. The CAS blob is untouched.
+        Path sidecar =
+                tempDir.resolve("cache/repos/central/com/foo/leaf/1.0/leaf-1.0.jar.sha256");
+        Files.writeString(sidecar, "0".repeat(64));
+        Path m2Jar = Path.of(System.getProperty("jk.m2.local")).resolve("com/foo/leaf/1.0/leaf-1.0.jar");
         Files.write(m2Jar, "poisoned".getBytes(StandardCharsets.UTF_8));
-        Files.setLastModifiedTime(m2Jar, FileTime.fromMillis(System.currentTimeMillis() + 5_000));
 
-        CacheSync.Report report = newSync(tempDir).sync(lock);
+        CacheSync.Report report = newSync(tempDir, true).sync(lock);
 
-        // The CAS still holds the pinned bytes — the poisoned mirror heals without a fetch.
+        // The CAS still holds the pinned bytes — the poisoned mirror heals without a re-fetch.
         assertThat(report.upToDate()).isEqualTo(1);
         assertThat(report.errors()).isEmpty();
         assertThat(Files.readAllBytes(m2Jar)).isEqualTo(jar);
+    }
+
+    @Test
+    void does_not_touch_m2_when_mirroring_is_disabled(@TempDir Path tempDir) throws Exception {
+        byte[] jar = "abc".getBytes(StandardCharsets.UTF_8);
+        String hex = Hashing.sha256Hex(jar);
+        registerJar("com.foo", "leaf", "1.0", jar);
+        Lockfile lock = lockOf(pkg("com.foo:leaf", "1.0", "sha256:" + hex));
+
+        assertThat(newSync(tempDir).sync(lock).fetched()).isEqualTo(1);
+
+        Path m2Jar = Path.of(System.getProperty("jk.m2.local")).resolve("com/foo/leaf/1.0/leaf-1.0.jar");
+        assertThat(m2Jar).doesNotExist();
     }
 
     @Test
@@ -137,7 +150,11 @@ class CacheSyncTest {
     // --- helpers -----------------------------------------------------------
 
     private CacheSync newSync(Path tempDir) {
-        return new CacheSync(new Cas(tempDir.resolve("cache")), new Http());
+        return newSync(tempDir, false);
+    }
+
+    private CacheSync newSync(Path tempDir, boolean mirrorToM2) {
+        return new CacheSync(new Cas(tempDir.resolve("cache")), new Http(), mirrorToM2);
     }
 
     private void registerJar(String group, String artifact, String version, byte[] bytes) {

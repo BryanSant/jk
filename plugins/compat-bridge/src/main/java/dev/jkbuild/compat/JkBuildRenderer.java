@@ -20,8 +20,9 @@ import java.util.TreeMap;
  * <p>Output shape:
  *
  * <ul>
- *   <li>{@code [project]} block — group/artifact/version/jdk/language always emitted;
- *       main/shadow/native emitted only when set.
+ *   <li>{@code [project]} block — group/artifact/version/jdk/language always emitted.
+ *   <li>{@code [application]} block, emitted only when {@code jkBuild.application()} is present.
+ *   <li>{@code [native]} block, emitted only when {@code jkBuild.nativeConfig()} is present.
  *   <li>{@code [workspace]} block when this is a workspace root.
  *   <li>{@code [repositories]} block with per-name URL strings.
  *   <li>Top-level per-scope sections ({@code [dependencies]} for MAIN, {@code [test-dependencies]},
@@ -45,6 +46,8 @@ public final class JkBuildRenderer {
         Objects.requireNonNull(jkBuild, "jkBuild");
         StringBuilder sb = new StringBuilder();
         renderProject(sb, jkBuild.project());
+        renderApplication(sb, jkBuild.application().orElse(null));
+        renderNative(sb, jkBuild.nativeConfig().orElse(null));
         renderManifest(sb, jkBuild.manifest());
         renderWorkspace(sb, jkBuild);
         renderRepositories(sb, jkBuild.repositories());
@@ -81,17 +84,37 @@ public final class JkBuildRenderer {
         } else if (p.java() > 0) {
             sb.append("java     = ").append(p.java()).append('\n');
         }
-        if (p.main() != null) {
-            sb.append("main     = ").append(quote(p.main())).append('\n');
-        }
-        // application defaults to (main != null); emit only when it differs.
-        boolean derivedApplication = p.main() != null;
-        if (p.isApplication() != derivedApplication) {
-            sb.append("application = ").append(p.isApplication()).append('\n');
-        }
         if (p.m2install()) sb.append("m2install = true\n");
-        if (p.shadow()) sb.append("shadow   = true\n");
-        if (p.nativeImage()) sb.append("native   = true\n");
+    }
+
+    /** {@code [application]} table — its presence alone marks the project as an application. */
+    private static void renderApplication(StringBuilder sb, JkBuild.Application app) {
+        if (app == null) return;
+        sb.append("\n[application]\n");
+        if (app.main() != null) sb.append("main       = ").append(quote(app.main())).append('\n');
+        if (app.shadowJar()) sb.append("shadow-jar = true\n");
+    }
+
+    /** {@code [native]} table — its presence alone marks the project as native-image-eligible. */
+    private static void renderNative(StringBuilder sb, JkBuild.NativeConfig nc) {
+        if (nc == null) return;
+        sb.append("\n[native]\n");
+        if (nc.mainClass() != null) sb.append("main-class = ").append(quote(nc.mainClass())).append('\n');
+        if (nc.name() != null) sb.append("name       = ").append(quote(nc.name())).append('\n');
+        if (!nc.args().isEmpty()) {
+            sb.append("args       = [");
+            for (int i = 0; i < nc.args().size(); i++) {
+                if (i > 0) sb.append(", ");
+                sb.append(quote(nc.args().get(i)));
+            }
+            sb.append("]\n");
+        }
+        // graal defaults to "native" at parse time when [native] is declared and the key is
+        // omitted — only emit it when it differs, so a round-trip stays minimal.
+        if (nc.graal() != null && !nc.graal().equals("native")) {
+            sb.append("graal      = ").append(quote(nc.graal())).append('\n');
+        }
+        if (nc.always()) sb.append("always     = true\n");
     }
 
     private static void renderWorkspace(StringBuilder sb, JkBuild jkBuild) {

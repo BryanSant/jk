@@ -212,6 +212,8 @@ class VscodeCommandTest {
                 name = "app"
                 version = "0.1.0"
                 jdk = 25
+
+                [application]
                 main = "app.Main"
                 """);
 

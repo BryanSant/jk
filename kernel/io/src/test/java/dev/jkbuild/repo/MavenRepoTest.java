@@ -129,6 +129,66 @@ class MavenRepoTest {
     }
 
     @Test
+    void default_fetch_never_touches_m2(@TempDir Path tempDir, @TempDir Path m2) throws Exception {
+        String previous = System.setProperty("jk.m2.local", m2.toString());
+        try {
+            byte[] jar = "fake-jar-bytes".getBytes(StandardCharsets.UTF_8);
+            serve("/com/example/widget/1.0/widget-1.0.jar", 200, jar);
+            // mirrorToM2 defaults to false — no project has opted in.
+            MavenRepo repo = new MavenRepo("test", base, new Http(), new Cas(tempDir));
+
+            Coordinate coord = Coordinate.of("com.example", "widget", "1.0");
+            repo.fetchArtifact(coord);
+
+            // Primary store: repos/<name>/ holds the real, human-readable jar.
+            assertThat(RepoArtifactStore.forRepoName(tempDir, "test")
+                            .locate(MavenLayout.artifactPath(coord)))
+                    .isPresent();
+            // ~/.m2 (the temp dir standing in for it) is untouched.
+            assertThat(m2.resolve(MavenLayout.artifactPath(coord))).doesNotExist();
+        } finally {
+            restoreM2Local(previous);
+        }
+    }
+
+    @Test
+    void mirror_to_m2_true_also_populates_m2(@TempDir Path tempDir, @TempDir Path m2) throws Exception {
+        String previous = System.setProperty("jk.m2.local", m2.toString());
+        try {
+            byte[] jar = "fake-jar-bytes".getBytes(StandardCharsets.UTF_8);
+            serve("/com/example/widget/1.0/widget-1.0.jar", 200, jar);
+            MavenRepo repo = new MavenRepo(
+                    "test", base, new Http(), new Cas(tempDir), dev.jkbuild.credential.RepoCredential.ANONYMOUS, true);
+
+            Coordinate coord = Coordinate.of("com.example", "widget", "1.0");
+            repo.fetchArtifact(coord);
+
+            // Primary store, as always.
+            assertThat(RepoArtifactStore.forRepoName(tempDir, "test")
+                            .locate(MavenLayout.artifactPath(coord)))
+                    .isPresent();
+            // Opt-in mirror: jar + Maven-compatible sidecars land in ~/.m2 too.
+            Path m2Jar = m2.resolve(MavenLayout.artifactPath(coord));
+            assertThat(m2Jar).exists();
+            assertThat(Files.readAllBytes(m2Jar)).isEqualTo(jar);
+            assertThat(m2Jar.resolveSibling(m2Jar.getFileName() + ".sha1")).exists();
+            assertThat(m2Jar.resolveSibling(m2Jar.getFileName() + ".md5")).exists();
+            assertThat(m2Jar.resolveSibling("_remote.repositories")).exists();
+        } finally {
+            restoreM2Local(previous);
+        }
+    }
+
+    /** Restore {@code jk.m2.local} to its prior value (the class-level {@link #isolateM2} temp dir). */
+    private static void restoreM2Local(String previous) {
+        if (previous != null) {
+            System.setProperty("jk.m2.local", previous);
+        } else {
+            System.clearProperty("jk.m2.local");
+        }
+    }
+
+    @Test
     void offline_fetch_is_served_from_the_named_repo_store(@TempDir Path tempDir) throws Exception {
         byte[] pom = "<project/>".getBytes(StandardCharsets.UTF_8);
         serve("/com/example/widget/1.0/widget-1.0.pom", 200, pom);
@@ -158,9 +218,16 @@ class MavenRepoTest {
 
     @Test
     void offline_available_versions_come_from_the_named_repo_store(@TempDir Path tempDir) throws Exception {
+        Cas cas = new Cas(tempDir);
         RepoArtifactStore store = RepoArtifactStore.forRepoName(tempDir, "test");
-        store.recordIndex(MavenLayout.artifactPath(Coordinate.of("com.example", "widget", "1.0")), "sha-1");
-        store.recordIndex(MavenLayout.artifactPath(Coordinate.of("com.example", "widget", "2.0")), "sha-2");
+        store.materialize(
+                MavenLayout.artifactPath(Coordinate.of("com.example", "widget", "1.0")),
+                cas.put("jar-1".getBytes(StandardCharsets.UTF_8)),
+                "sha-1");
+        store.materialize(
+                MavenLayout.artifactPath(Coordinate.of("com.example", "widget", "2.0")),
+                cas.put("jar-2".getBytes(StandardCharsets.UTF_8)),
+                "sha-2");
         goOffline();
 
         MavenRepo repo = new MavenRepo("test", base, new Http(), new Cas(tempDir));

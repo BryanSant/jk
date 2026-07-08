@@ -65,6 +65,8 @@ class PomExporterTest {
                 version = "1.0.0"
                 jdk  = 21
                 java = 21
+
+                [application]
                 main = "com.example.Main"
                 """);
 
@@ -83,10 +85,14 @@ class PomExporterTest {
                 name  = "app"
                 version = "1.0.0"
                 java = 21
-                main = "com.example.Main"
                 kotlin = "2.3.21"
-                shadow = true
-                native = true
+
+                [application]
+                main       = "com.example.Main"
+                shadow-jar = true
+
+                [native]
+                always = true
                 """);
 
         String xml = PomExporter.export(b).xml();

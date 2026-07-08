@@ -82,8 +82,8 @@ public final class IntellijIdeGenerator implements IdeGenerator {
 
         Path runDir = ideaDir.resolve("runConfigurations");
         for (Map.Entry<Path, JkBuild> me : modules.entrySet()) {
-            String main = me.getValue().project().main();
-            if (main != null && !main.isBlank()) {
+            String main = me.getValue().mainClass();
+            if (main != null) {
                 Files.createDirectories(runDir);
                 String modName = IdeSupport.moduleName(me.getValue());
                 write(runDir.resolve(IdeSupport.sanitize(modName) + ".xml"), runConfigXml(modName, main));
@@ -91,12 +91,10 @@ public final class IntellijIdeGenerator implements IdeGenerator {
             }
         }
         // Single-project run config
-        if (modules.isEmpty()
-                && rootBuild.project().main() != null
-                && !rootBuild.project().main().isBlank()) {
+        if (modules.isEmpty() && rootBuild.mainClass() != null) {
             Files.createDirectories(runDir);
             String modName = IdeSupport.moduleName(rootBuild);
-            write(runDir.resolve(IdeSupport.sanitize(modName) + ".xml"), runConfigXml(modName, rootBuild.project().main()));
+            write(runDir.resolve(IdeSupport.sanitize(modName) + ".xml"), runConfigXml(modName, rootBuild.mainClass()));
             files++;
         }
 

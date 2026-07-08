@@ -24,7 +24,8 @@ public record JkBuild(
         Workspace workspace,
         Map<String, String> manifest,
         List<PluginDeclaration> plugins,
-        NativeConfig nativeConfig,
+        Optional<Application> application,
+        Optional<NativeConfig> nativeConfig,
         Build build,
         FormatConfig format) {
 
@@ -37,12 +38,13 @@ public record JkBuild(
         repositories = List.copyOf(repositories);
         // Custom jar-manifest attributes (the [manifest] table). Insertion
         // order preserved for faithful round-tripping. Main-Class is NOT here —
-        // it derives from project.main.
+        // it derives from [application].main.
         manifest = manifest == null || manifest.isEmpty()
                 ? Map.of()
                 : Collections.unmodifiableMap(new LinkedHashMap<>(manifest));
         plugins = plugins == null ? List.of() : List.copyOf(plugins);
-        nativeConfig = nativeConfig == null ? NativeConfig.EMPTY : nativeConfig;
+        application = application == null ? Optional.empty() : application;
+        nativeConfig = nativeConfig == null ? Optional.empty() : nativeConfig;
         build = build == null ? Build.EMPTY : build;
         format = format == null ? FormatConfig.EMPTY : format;
     }
@@ -52,7 +54,9 @@ public record JkBuild(
      * shortcut; anything richer uses {@link #builder(Project)}.
      */
     public JkBuild(Project project, Dependencies dependencies) {
-        this(project, dependencies, List.of(), Profiles.empty(), Features.empty(), null, null, List.of(), null, null, null);
+        this(
+                project, dependencies, List.of(), Profiles.empty(), Features.empty(), null, null, List.of(), null,
+                null, null, null);
     }
 
     /**
@@ -60,7 +64,55 @@ public record JkBuild(
      * shortcut; anything richer uses {@link #builder(Project)}.
      */
     public JkBuild(Project project, Dependencies dependencies, List<RepositorySpec> repositories) {
-        this(project, dependencies, repositories, Profiles.empty(), Features.empty(), null, null, List.of(), null, null, null);
+        this(
+                project, dependencies, repositories, Profiles.empty(), Features.empty(), null, null, List.of(), null,
+                null, null, null);
+    }
+
+    /** {@code [application].main}, or {@code null} when {@code [application]} is absent or unset. */
+    public String mainClass() {
+        return application.map(Application::main).orElse(null);
+    }
+
+    /** True when a {@code main} class is set — the {@code [application]} table declares one. */
+    public boolean isRunnable() {
+        return mainClass() != null;
+    }
+
+    /**
+     * True when this project is an <em>application</em> — {@code jk install} additionally performs
+     * a {@code make install} (launcher / native binary under {@code ~/.jk}). Driven purely by
+     * whether {@code [application]} is declared at all.
+     */
+    public boolean isApplication() {
+        return application.isPresent();
+    }
+
+    /** {@code [application].shadow-jar} — bundle an all-in-one (shadow / fat) jar. */
+    public boolean shadowJar() {
+        return application.map(Application::shadowJar).orElse(false);
+    }
+
+    /** {@code [native].graal} — the GraalVM spec {@code jk native} uses, or {@code null} if unset. */
+    public String graal() {
+        return nativeConfig.map(NativeConfig::graal).orElse(null);
+    }
+
+    /**
+     * Native-image participation, derived from whether {@code [native]} is declared and its
+     * {@code always} flag: absent → {@link NativeMode#DISABLED}, present with {@code always =
+     * false} (default) → {@link NativeMode#SUPPORTED}, present with {@code always = true} →
+     * {@link NativeMode#ALWAYS}.
+     */
+    public NativeMode nativeMode() {
+        return nativeConfig
+                .map(nc -> nc.always() ? NativeMode.ALWAYS : NativeMode.SUPPORTED)
+                .orElse(NativeMode.DISABLED);
+    }
+
+    /** Backward-compat: true when native mode is not DISABLED. */
+    public boolean nativeImage() {
+        return nativeMode() != NativeMode.DISABLED;
     }
 
     public static JkBuild of(Project project) {
@@ -87,7 +139,8 @@ public record JkBuild(
         private Workspace workspace;
         private Map<String, String> manifest = Map.of();
         private List<PluginDeclaration> plugins = List.of();
-        private NativeConfig nativeConfig;
+        private Optional<Application> application = Optional.empty();
+        private Optional<NativeConfig> nativeConfig = Optional.empty();
         private Build build;
         private FormatConfig format;
 
@@ -109,7 +162,9 @@ public record JkBuild(
 
         public Builder plugins(List<PluginDeclaration> plugins) { this.plugins = plugins; return this; }
 
-        public Builder nativeConfig(NativeConfig nativeConfig) { this.nativeConfig = nativeConfig; return this; }
+        public Builder application(Application application) { this.application = Optional.ofNullable(application); return this; }
+
+        public Builder nativeConfig(NativeConfig nativeConfig) { this.nativeConfig = Optional.ofNullable(nativeConfig); return this; }
 
         public Builder build(Build build) { this.build = build; return this; }
 
@@ -118,7 +173,7 @@ public record JkBuild(
         public JkBuild build() {
             return new JkBuild(
                     project, dependencies, repositories, profiles, features, workspace,
-                    manifest, plugins, nativeConfig, build, format);
+                    manifest, plugins, application, nativeConfig, build, format);
         }
     }
 
@@ -133,6 +188,7 @@ public record JkBuild(
                 workspace,
                 manifest,
                 plugins,
+                application,
                 nativeConfig,
                 build,
                 format);
@@ -161,22 +217,21 @@ public record JkBuild(
      *       =}-pinnable, range-capable — like a dependency version). Resolved to a concrete version
      *       in {@code jk.lock}. Non-{@code null} only for Kotlin projects; mutually exclusive with
      *       {@code java}.
-     *   <li>{@code main} — fully qualified main class of a runnable project, or {@code null} for a
-     *       library.
-     *   <li>{@code shadow} — bundle an all-in-one (shadow / fat) jar.
-     *   <li>{@code nativeMode} — controls GraalVM native-image participation. TOML key {@code
-     *       native}: {@code false} → DISABLED (never), absent → SUPPORTED (only when {@code jk
-     *       native} is run explicitly), {@code true}/{@code "always"} → ALWAYS ({@code jk build} and
-     *       {@code jk native} both produce the binary).
      *   <li>{@code description} — free-form human-readable description. Surfaces as {@code
      *       <description>} in {@code jk publish} POMs and {@code jk export pom.xml}; {@code null}
      *       when omitted.
-     *   <li>{@code application} — when true, {@code jk install} also performs a {@code make install}
-     *       (launcher / native binary under {@code ~/.jk}). Defaults to {@code main != null}; the
-     *       {@code application} key overrides (e.g. {@code application = false} with a {@code main}).
-     *   <li>{@code m2install} — when true, {@code jk install} additionally hard-links/copies the
-     *       jar+pom into {@code ~/.m2/repository}. Default false.
+     *   <li>{@code m2install} — when true, {@code jk install} additionally copies the jar+pom into
+     *       {@code ~/.m2/repository} for Maven/Gradle interop; also enables mirroring this
+     *       project's resolved dependencies into {@code ~/.m2} as they're fetched. Default false —
+     *       {@code ~/.jk/cache} is the primary artifact store either way.
      * </ul>
+     *
+     * <p>{@code main}, {@code shadow-jar} (application packaging) and {@code graal}, {@code always}
+     * (native-image participation) live in the separate {@link Application} / {@link NativeConfig}
+     * top-level blocks — see {@link JkBuild#application} / {@link JkBuild#nativeConfig}. Whether a
+     * project is an application, or builds a native image at all, is driven purely by whether
+     * {@code [application]} / {@code [native]} is declared, not by a boolean flag on {@code
+     * [project]}.
      *
      * <p>Java and Kotlin are independent opt-ins — a project may compile both (sources under {@code
      * src/main/java} and {@code src/main/kotlin}). Given a required {@code jdk}, {@code java = <int>}
@@ -186,7 +241,6 @@ public record JkBuild(
      * {@code CompileSupport.resolveLanguages}.
      */
 
-    /** Controls how native-image compilation participates in the build. */
     /**
      * Source layout strategy for a project.
      *
@@ -227,17 +281,18 @@ public record JkBuild(
         }
     }
 
+    /** Derived from whether {@code [native]} is declared and its {@code always} flag — see {@link JkBuild#nativeMode}. */
     public enum NativeMode {
-        /** {@code native = false} — never run native-image (explicit opt-out). */
+        /** {@code [native]} absent — no native-image participation at all. */
         DISABLED,
         /**
-         * {@code native} key absent — eligible for {@code jk native} workspace cascade but NOT
-         * auto-built by {@code jk build} or other build commands.
+         * {@code [native]} declared, {@code always} absent/false — eligible for {@code jk native}
+         * workspace cascade but NOT auto-built by {@code jk build} or other build commands.
          */
         SUPPORTED,
         /**
-         * {@code native = true} or {@code native = "always"} — native-image runs on {@code jk build},
-         * {@code jk install}, and {@code jk native}.
+         * {@code [native] always = true} — native-image runs on {@code jk build}, {@code jk
+         * install}, and {@code jk native}.
          */
         ALWAYS;
 
@@ -276,15 +331,10 @@ public record JkBuild(
             String name,
             String version,
             String jdk,
-            String graal,
             int java,
             VersionSelector kotlin,
-            String main,
-            boolean shadow,
-            NativeMode nativeMode,
             SourcesMode sourcesMode,
             String description,
-            boolean application,
             boolean m2install,
             Layout layout) {
 
@@ -299,31 +349,14 @@ public record JkBuild(
                 throw new IllegalArgumentException("project.java must be non-negative");
             }
             if (jdk != null && jdk.isBlank()) jdk = null;
-            if (graal != null && graal.isBlank()) graal = null;
-            if (nativeMode == null) nativeMode = NativeMode.DISABLED;
             if (sourcesMode == null) sourcesMode = SourcesMode.DISABLED;
             if (layout == null) layout = Layout.AUTO;
             if (description != null && description.isBlank()) description = null;
         }
 
-        /** Library project — no main, no shadow, no native; bare-major {@code jdk} (0 → unset). */
+        /** Library project — bare-major {@code jdk} (0 → unset). */
         public Project(String group, String name, String version, int jdk) {
-            this(
-                    group,
-                    name,
-                    version,
-                    majorSpec(jdk),
-                    null,
-                    jdk,
-                    null,
-                    null,
-                    false,
-                    NativeMode.DISABLED,
-                    null,
-                    null,
-                    false,
-                    false,
-                    Layout.AUTO);
+            this(group, name, version, majorSpec(jdk), jdk, null, null, null, false, Layout.AUTO);
         }
 
         /** A bare-major int as a jdk spec string ({@code 25} → {@code "25"}); 0/negative → unset. */
@@ -347,15 +380,10 @@ public record JkBuild(
             private final String name;
             private final String version;
             private String jdk;
-            private String graal;
             private int java;
             private VersionSelector kotlin;
-            private String main;
-            private boolean shadow;
-            private NativeMode nativeMode = NativeMode.DISABLED;
             private SourcesMode sourcesMode = SourcesMode.DISABLED;
             private String description;
-            private boolean application;
             private boolean m2install;
             private Layout layout = Layout.AUTO;
 
@@ -371,54 +399,22 @@ public record JkBuild(
             /** Toolchain JDK from a bare major ({@code 25} → {@code "25"}; 0/negative → unset). */
             public Builder jdkMajor(int major) { this.jdk = majorSpec(major); return this; }
 
-            /** GraalVM spec for native builds. */
-            public Builder graal(String graal) { this.graal = graal; return this; }
-
             /** {@code --release} target for javac (0 → falls back to the jdk major). */
             public Builder java(int java) { this.java = java; return this; }
 
             public Builder kotlin(VersionSelector kotlin) { this.kotlin = kotlin; return this; }
 
-            public Builder main(String main) { this.main = main; return this; }
-
-            public Builder shadow(boolean shadow) { this.shadow = shadow; return this; }
-
-            public Builder nativeMode(NativeMode nativeMode) { this.nativeMode = nativeMode; return this; }
-
             public Builder sourcesMode(SourcesMode sourcesMode) { this.sourcesMode = sourcesMode; return this; }
 
             public Builder description(String description) { this.description = description; return this; }
-
-            public Builder application(boolean application) { this.application = application; return this; }
 
             public Builder m2install(boolean m2install) { this.m2install = m2install; return this; }
 
             public Builder layout(Layout layout) { this.layout = layout; return this; }
 
             public Project build() {
-                return new Project(
-                        group, name, version, jdk, graal, java, kotlin, main, shadow,
-                        nativeMode, sourcesMode, description, application, m2install, layout);
+                return new Project(group, name, version, jdk, java, kotlin, sourcesMode, description, m2install, layout);
             }
-        }
-
-        /** Backward-compat: true when native mode is not DISABLED. */
-        public boolean nativeImage() {
-            return nativeMode != NativeMode.DISABLED;
-        }
-
-        /** True when an explicit {@code main} class is set. */
-        public boolean isRunnable() {
-            return main != null;
-        }
-
-        /**
-         * True when this project is an <em>application</em> — {@code jk install} additionally performs
-         * a {@code make install} (launcher / native binary under {@code ~/.jk}). Defaults to whether a
-         * {@code main} is set; the {@code application} key overrides either way.
-         */
-        public boolean isApplication() {
-            return application;
         }
 
         /** True when this is a Kotlin project (i.e. a {@code kotlin} version is set). */
@@ -441,11 +437,6 @@ public record JkBuild(
          */
         public int jdkMajor() {
             return majorOf(jdk);
-        }
-
-        /** Major version implied by the {@code graal} spec, or {@code 0} when unset. */
-        public int graalMajor() {
-            return majorOf(graal);
         }
 
         /**
@@ -491,20 +482,45 @@ public record JkBuild(
     }
 
     /**
-     * Configuration for {@code jk native} / GraalVM native-image. Declared in the {@code [native]}
-     * table of {@code jk.toml}.
+     * The {@code [application]} block of {@code jk.toml}. Its mere presence marks the project as
+     * an application — {@code jk install} additionally performs a {@code make install} (launcher /
+     * native binary under {@code ~/.jk}). Absent entirely (not this record with defaulted fields —
+     * see {@link JkBuild#application}) means "library, not an application."
      *
-     * @param mainClass overrides {@code [project].main} for the native binary entry point
+     * @param main fully qualified main class of a runnable project, or {@code null}
+     * @param shadowJar bundle an all-in-one (shadow / fat) jar
+     */
+    public record Application(String main, boolean shadowJar) {
+
+        public Application {
+            if (main != null && main.isBlank()) main = null;
+        }
+    }
+
+    /**
+     * Configuration for {@code jk native} / GraalVM native-image. Declared in the {@code [native]}
+     * table of {@code jk.toml}. Its mere presence marks the project as native-image-eligible — see
+     * {@link JkBuild#nativeMode}. Absent entirely (not this record with defaulted fields — see
+     * {@link JkBuild#nativeConfig}) means native-image participation is {@link NativeMode#DISABLED}.
+     *
+     * @param mainClass overrides {@code [application].main} for the native binary entry point
      * @param name output binary filename; defaults to {@code [project].name}
      * @param args extra arguments prepended to every native-image invocation (CLI {@code --} args are
      *     appended after these)
+     * @param graal GraalVM spec {@code jk native} uses (same grammar as {@code [project].jdk});
+     *     defaults to the {@code "native"} keyword (latest Oracle GraalVM) when {@code [native]} is
+     *     declared and this key is omitted
+     * @param always when true, native-image runs on {@code jk build}/{@code jk install} in addition
+     *     to {@code jk native}; when false (default), native-image only runs when {@code jk native}
+     *     is invoked explicitly
      */
-    public record NativeConfig(String mainClass, String name, List<String> args) {
-
-        public static final NativeConfig EMPTY = new NativeConfig(null, null, List.of());
+    public record NativeConfig(String mainClass, String name, List<String> args, String graal, boolean always) {
 
         public NativeConfig {
             args = args == null ? List.of() : List.copyOf(args);
+            if (mainClass != null && mainClass.isBlank()) mainClass = null;
+            if (name != null && name.isBlank()) name = null;
+            if (graal != null && graal.isBlank()) graal = null;
         }
     }
 

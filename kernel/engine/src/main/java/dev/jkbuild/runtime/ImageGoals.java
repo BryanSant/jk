@@ -437,8 +437,8 @@ public final class ImageGoals {
      * <ol>
      *   <li>{@code --main} CLI flag
      *   <li>{@code image.main} in jk.toml
-     *   <li>{@code project.main} in jk.toml
-     *   <li>The sole {@code project.main} across all workspace modules (fails if more than one)
+     *   <li>{@code [application].main} in jk.toml
+     *   <li>The sole {@code [application].main} across all workspace modules (fails if more than one)
      * </ol>
      *
      * Returns {@code null} when no main class can be determined. Error text is plain — the client
@@ -447,16 +447,16 @@ public final class ImageGoals {
     private static String resolveMainClass(String cliMain, ImageConfig config, JkBuild project, Path projectDir) {
         if (cliMain != null && !cliMain.isBlank()) return cliMain;
         if (config.main() != null && !config.main().isBlank()) return config.main();
-        if (project.project().main() != null && !project.project().main().isBlank()) {
-            return project.project().main();
+        if (project.mainClass() != null) {
+            return project.mainClass();
         }
-        // Workspace fallback: scan modules for a project.main.
+        // Workspace fallback: scan modules for an [application].main.
         if (!project.isWorkspaceRoot()) return null;
         try {
             var modules = WorkspaceLoader.loadModules(projectDir, project);
             List<String> mains = modules.values().stream()
-                    .map(m -> m.project().main())
-                    .filter(m -> m != null && !m.isBlank())
+                    .map(JkBuild::mainClass)
+                    .filter(java.util.Objects::nonNull)
                     .distinct()
                     .toList();
             if (mains.size() == 1) return mains.get(0);

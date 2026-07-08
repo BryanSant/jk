@@ -185,7 +185,7 @@ are **not** accepted.)
 | Pin locally (not committed) | `jk jdk pin <spec>` → writes `.jdk-version` | 3 |
 | Override for one command | `jk build --jdk temurin-21` | 1 |
 | Override for a shell / CI | `export JK_JDK=temurin-21` | 2 |
-| Choose the GraalVM for `jk native` | `[project].graal = "graalvm-25"` (or `native`), or `--graal` / `JK_GRAAL` | graal chain |
+| Choose the GraalVM for `jk native` | `[native].graal = "graalvm-25"` (or `native`, the default when `[native]` is declared and this key is omitted), or `--graal` / `JK_GRAAL` | graal chain |
 | Set the machine default | `jk jdk default <spec>` | 8 |
 | Set the machine default GraalVM | `jk jdk graal <spec>` | graal chain |
 

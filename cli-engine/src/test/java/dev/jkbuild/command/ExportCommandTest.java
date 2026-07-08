@@ -26,6 +26,8 @@ class ExportCommandTest {
                 version = "1.2.3"
                 jdk  = 21
                 java = 21
+
+                [application]
                 main = "com.example.Main"
 
                 [dependencies]

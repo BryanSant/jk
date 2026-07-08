@@ -30,6 +30,7 @@ import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -46,8 +47,11 @@ import org.tomlj.TomlTable;
  *
  * <ul>
  *   <li>{@code [project]} — required; {@code group}, {@code name}, {@code version} required;
- *       optional {@code jdk}, {@code main}, {@code java}/{@code kotlin}, {@code shadow}, {@code
- *       native}, {@code description}.
+ *       optional {@code jdk}, {@code java}/{@code kotlin}, {@code description}.
+ *   <li>{@code [application]} — optional; presence marks the project as an application. {@code
+ *       main}, {@code shadow-jar}.
+ *   <li>{@code [native]} — optional; presence marks the project as native-image-eligible. {@code
+ *       main-class}, {@code name}, {@code args}, {@code graal}, {@code always}.
  *   <li>{@code [dependencies]} — MAIN scope; library-as-key flat table, each entry is {@code <lib>
  *       = { group, name?, version | path | git | workspace }}. Additional scopes use top-level
  *       section names: {@code [test-dependencies]}, {@code [provided-dependencies]}, {@code
@@ -123,11 +127,13 @@ public final class JkBuildParser {
         Features features = parseFeatures(result);
         Map<String, String> manifest = parseManifest(result);
         List<PluginDeclaration> plugins = parsePlugins(result);
-        JkBuild.NativeConfig nativeConfig = parseNativeConfig(result);
+        Optional<JkBuild.Application> application = parseApplication(result);
+        Optional<JkBuild.NativeConfig> nativeConfig = parseNativeConfig(result);
         JkBuild.Build build = parseBuild(result);
         JkBuild.FormatConfig format = parseFormat(result);
         return new JkBuild(
-                project, deps, repos, profiles, features, workspace, manifest, plugins, nativeConfig, build, format);
+                project, deps, repos, profiles, features, workspace, manifest, plugins, application, nativeConfig,
+                build, format);
     }
 
     /**
@@ -203,29 +209,9 @@ public final class JkBuildParser {
         String name = requireString(project, "name", "project.name");
         String version = requireString(project, "version", "project.version");
         String jdk = parseJdkSpec(project);
-        String graal = parseGraalSpec(project);
-        int java = intOrZero(project, "java", "project.java");
+        int java = parseJavaRelease(project);
         VersionSelector kotlin = parseKotlinVersion(project);
         requireSupportedMajor("project.java", java);
-        String main = project.getString("main");
-        boolean shadow = Boolean.TRUE.equals(project.getBoolean("shadow"));
-        // native = true           → ALWAYS    (eligible: `jk native` builds it; `jk install` of an app
-        // builds+deploys
-        // it)
-        // native = "always"       → ALWAYS    (same as true)
-        // native = false          → DISABLED  (never build a native artifact)
-        // native absent           → SUPPORTED (not eligible — `jk native` skips it)
-        // Only ALWAYS is native-eligible; `jk build` never builds native artifacts.
-        Object nativeRaw = project.get("native");
-        JkBuild.NativeMode nativeMode;
-        if ("always".equalsIgnoreCase(nativeRaw instanceof String s ? s : "") || Boolean.TRUE.equals(nativeRaw)) {
-            nativeMode = JkBuild.NativeMode.ALWAYS;
-        } else if (Boolean.FALSE.equals(nativeRaw)) {
-            nativeMode = JkBuild.NativeMode.DISABLED;
-        } else {
-            // absent → SUPPORTED: eligible for `jk native` cascade but not auto-built
-            nativeMode = JkBuild.NativeMode.SUPPORTED;
-        }
         // sources = true        → PUBLISH  (assembled during `jk publish` only)
         // sources = "always"   → ALWAYS   (built as package-sources phase + published)
         // sources absent/false → DISABLED (no sources jar)
@@ -239,15 +225,11 @@ public final class JkBuildParser {
             sourcesMode = JkBuild.SourcesMode.DISABLED;
         }
         String description = project.getString("description");
-        // application defaults to "has a main class"; an explicit key overrides
-        // (e.g. application = false for a runnable project that shouldn't be
-        // make-installed). m2install defaults to true: ~/.m2 is the primary artifact store.
-        // Set m2install = false for jk-internal worker modules that must land in repos/local/.
-        boolean application =
-                project.contains("application") ? Boolean.TRUE.equals(project.getBoolean("application")) : main != null;
-        boolean m2install = !Boolean.FALSE.equals(project.getBoolean("m2install"));
-        // project.layout = "simple"|"traditional"|"auto" (preferred).
-        // Legacy: compact = true → "simple", compact = false → keep auto-detect.
+        // m2install defaults to false: ~/.jk/cache is the primary artifact store. Set
+        // m2install = true to additionally mirror into ~/.m2 for Maven/Gradle interop.
+        boolean m2install = Boolean.TRUE.equals(project.getBoolean("m2install"));
+        // project.layout = "simple"|"traditional"|"auto" (preferred). `compact` is no longer
+        // supported — a stray `compact = true` in an old jk.toml is simply inert.
         JkBuild.Layout layout;
         if (project.contains("layout")) {
             String layoutRaw = project.getString("layout");
@@ -256,27 +238,10 @@ public final class JkBuildParser {
             } catch (IllegalArgumentException e) {
                 throw new JkBuildParseException(e.getMessage());
             }
-        } else if (Boolean.TRUE.equals(project.getBoolean("compact"))) {
-            layout = JkBuild.Layout.SIMPLE; // legacy compact = true
         } else {
             layout = JkBuild.Layout.AUTO;
         }
-        return new JkBuild.Project(
-                group,
-                name,
-                version,
-                jdk,
-                graal,
-                java,
-                kotlin,
-                main,
-                shadow,
-                nativeMode,
-                sourcesMode,
-                description,
-                application,
-                m2install,
-                layout);
+        return new JkBuild.Project(group, name, version, jdk, java, kotlin, sourcesMode, description, m2install, layout);
     }
 
     /**
@@ -284,27 +249,15 @@ public final class JkBuildParser {
      * except a vendorless bare major is allowed: a vendor+major ({@code "temurin-25"}) or a bare
      * major ({@code "25"}) pins the feature release; a point release ({@code "25.0.3"}) is rejected
      * because jk keeps the patch current behind the major pointer. For convenience an unquoted
-     * integer ({@code jdk = 25}) is accepted too and treated as that bare major. Absent/blank →
-     * {@code null} (unset).
+     * integer ({@code jdk = 25}) is accepted too and treated as that bare major. The keyword forms
+     * {@code lts}/{@code stable}/{@code latest}/{@code native} — the same ones {@code --jdk}/{@code
+     * JK_JDK}/{@code .jdk-version} accept, resolved by {@code JdkKeywords} at install/activate time —
+     * are also accepted as-is here. Absent/blank → {@code null} (unset, defaults to the LTS release
+     * downstream).
      */
     private static String parseJdkSpec(TomlTable project) {
-        if (!project.contains("jdk")) return null;
-        Object raw = project.get("jdk");
-        String spec;
-        if (raw instanceof Long l) {
-            spec = Long.toString(l);
-        } else if (raw instanceof String s) {
-            spec = s.trim();
-        } else {
-            throw new JkBuildParseException("project.jdk must be a string, e.g. \"temurin-25\" or \"25\"");
-        }
-        if (spec.isEmpty()) return null;
-        if (JkBuild.Project.hasPointRelease(spec)) {
-            throw new JkBuildParseException("project.jdk = \""
-                    + spec
-                    + "\" must not pin a point release — use \"<vendor>-<major>\" or "
-                    + "\"<major>\" (e.g. \"temurin-25\" or \"25\"); jk keeps the patch current.");
-        }
+        String spec = parseVersionSpec(project, "jdk", "project.jdk", "\"temurin-25\" or \"25\"");
+        if (spec == null || isVersionKeyword(spec)) return spec;
         int major = JkBuild.Project.majorOf(spec);
         if (major == 0) {
             throw new JkBuildParseException(
@@ -315,45 +268,83 @@ public final class JkBuildParser {
     }
 
     /**
-     * {@code project.graal} selects the GraalVM whose {@code bin/native-image} {@code jk native}
+     * {@code [native].graal} selects the GraalVM whose {@code bin/native-image} {@code jk native}
      * uses. Same shape as {@code project.jdk} — a bare major ({@code 25} or {@code "25"}) or
      * vendor-hinted spec ({@code "graalvm-25"}) — plus the keyword {@code "native"} (latest Oracle
      * GraalVM). A point release is rejected; jk keeps the patch current. Resolution and any
      * auto-install happen at native-build time (see the CLI's {@code GraalResolver}), so this parser
-     * only normalizes the spec. Absent/blank → {@code null} (unset).
+     * only normalizes the spec. Absent/blank → {@code null} (caller defaults to {@code "native"} when
+     * {@code [native]} itself is declared).
      */
-    private static String parseGraalSpec(TomlTable project) {
-        if (!project.contains("graal")) return null;
-        Object raw = project.get("graal");
+    private static String parseGraalSpec(TomlTable native_) {
+        return parseVersionSpec(native_, "graal", "[native].graal", "\"graalvm-25\", \"25\", or \"native\"");
+    }
+
+    /**
+     * Shared spec-string parser for {@code jdk}/{@code graal}: accepts an unquoted integer or a
+     * string, passes the {@code lts}/{@code stable}/{@code latest}/{@code native} keyword forms
+     * through as-is (no major/point-release notion applies to a keyword), and otherwise rejects a
+     * point release. {@code null} when {@code key} is absent or blank.
+     */
+    private static String parseVersionSpec(TomlTable table, String key, String pathLabel, String exampleHint) {
+        if (!table.contains(key)) return null;
+        Object raw = table.get(key);
         String spec;
         if (raw instanceof Long l) {
             spec = Long.toString(l);
         } else if (raw instanceof String s) {
             spec = s.trim();
         } else {
-            throw new JkBuildParseException(
-                    "project.graal must be a string, e.g. \"graalvm-25\", \"25\", or \"native\"");
+            throw new JkBuildParseException(pathLabel + " must be a string, e.g. " + exampleHint);
         }
         if (spec.isEmpty()) return null;
+        if (isVersionKeyword(spec)) return spec;
         if (JkBuild.Project.hasPointRelease(spec)) {
-            throw new JkBuildParseException("project.graal = \""
+            throw new JkBuildParseException(pathLabel
+                    + " = \""
                     + spec
-                    + "\" must not pin a point release — use \"graalvm-<major>\", "
-                    + "\"<major>\", or \"native\"; jk keeps the patch current.");
+                    + "\" must not pin a point release — use \"<vendor>-<major>\" or "
+                    + "\"<major>\" (e.g. "
+                    + exampleHint
+                    + "); jk keeps the patch current.");
         }
         return spec;
     }
 
-    private static int intOrZero(TomlTable table, String key, String path) {
-        if (!table.contains(key)) return 0;
-        Long value = table.getLong(key);
-        if (value == null) {
-            throw new JkBuildParseException(path + " must be an integer");
+    /**
+     * {@code lts}/{@code stable}/{@code latest}/{@code native} — recognized here (duplicated, not
+     * imported) so this JDK-agnostic parser doesn't take a dependency on {@code :toolchain-jdk};
+     * mirrors {@code JdkKeywords.isKeyword}, which is the actual resolver for these keywords at
+     * install/activate time.
+     */
+    private static boolean isVersionKeyword(String spec) {
+        String norm = spec.toLowerCase(Locale.ROOT);
+        return norm.equals("lts") || norm.equals("stable") || norm.equals("latest") || norm.equals("native");
+    }
+
+    /**
+     * {@code project.java} accepts either an unquoted TOML integer or a quoted numeric string
+     * (coerced). Absent → {@code 0} ({@code javaRelease()} falls back to the {@code jdk} major).
+     */
+    private static int parseJavaRelease(TomlTable project) {
+        if (!project.contains("java")) return 0;
+        Object raw = project.get("java");
+        long value;
+        if (raw instanceof Long l) {
+            value = l;
+        } else if (raw instanceof String s) {
+            try {
+                value = Long.parseLong(s.trim());
+            } catch (NumberFormatException e) {
+                throw new JkBuildParseException("project.java must be an integer, got: \"" + s + "\"");
+            }
+        } else {
+            throw new JkBuildParseException("project.java must be an integer");
         }
         if (value < 0 || value > Integer.MAX_VALUE) {
-            throw new JkBuildParseException(path + " out of range: " + value);
+            throw new JkBuildParseException("project.java out of range: " + value);
         }
-        return value.intValue();
+        return (int) value;
     }
 
     /**
@@ -1091,9 +1082,29 @@ public final class JkBuildParser {
 
     // -----------------------------------------------------------------------
 
-    private static JkBuild.NativeConfig parseNativeConfig(TomlTable root) {
+    /**
+     * The optional {@code [application]} table. Its mere presence marks the project as an
+     * application ({@link JkBuild#isApplication()}) — {@code Optional.empty()} when absent, never a
+     * defaulted-fields sentinel, so presence and "declared but empty" stay distinguishable.
+     */
+    private static Optional<JkBuild.Application> parseApplication(TomlTable root) {
+        TomlTable application = root.getTable("application");
+        if (application == null) return Optional.empty();
+        String main = application.getString("main");
+        boolean shadowJar = Boolean.TRUE.equals(application.getBoolean("shadow-jar"));
+        return Optional.of(new JkBuild.Application(main, shadowJar));
+    }
+
+    /**
+     * The optional {@code [native]} table. Its mere presence marks the project as
+     * native-image-eligible ({@link JkBuild#nativeMode()}) — {@code Optional.empty()} when absent,
+     * never a defaulted-fields sentinel, so presence and "declared but empty" stay distinguishable.
+     * When declared and {@code graal} is omitted, defaults to the {@code "native"} keyword (latest
+     * Oracle GraalVM) rather than leaving it unset.
+     */
+    private static Optional<JkBuild.NativeConfig> parseNativeConfig(TomlTable root) {
         TomlTable native_ = root.getTable("native");
-        if (native_ == null) return JkBuild.NativeConfig.EMPTY;
+        if (native_ == null) return Optional.empty();
         String mainClass = native_.getString("main-class");
         String name = native_.getString("name");
         List<String> args = new ArrayList<>();
@@ -1106,9 +1117,10 @@ public final class JkBuildParser {
                 args.add(s);
             }
         }
-        if (mainClass != null && mainClass.isBlank()) mainClass = null;
-        if (name != null && name.isBlank()) name = null;
-        return new JkBuild.NativeConfig(mainClass, name, args);
+        String graal = parseGraalSpec(native_);
+        if (graal == null) graal = "native";
+        boolean always = Boolean.TRUE.equals(native_.getBoolean("always"));
+        return Optional.of(new JkBuild.NativeConfig(mainClass, name, args, graal, always));
     }
 
     /**

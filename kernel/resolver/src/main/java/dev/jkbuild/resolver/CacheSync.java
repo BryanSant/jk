@@ -34,16 +34,28 @@ public final class CacheSync {
     private final Cas cas;
     private final Http http;
     private final dev.jkbuild.repo.RepoCredentialResolver creds;
+    private final boolean mirrorToM2;
 
     public CacheSync(Cas cas, Http http) {
-        this(cas, http, new dev.jkbuild.repo.RepoCredentialResolver());
+        this(cas, http, new dev.jkbuild.repo.RepoCredentialResolver(), false);
     }
 
-    /** Visible for tests — inject a credential resolver. */
+    /** As above, with the resolving project's {@code project.m2install} value. */
+    public CacheSync(Cas cas, Http http, boolean mirrorToM2) {
+        this(cas, http, new dev.jkbuild.repo.RepoCredentialResolver(), mirrorToM2);
+    }
+
+    /** Visible for tests — inject a credential resolver. {@code mirrorToM2} defaults to false. */
     public CacheSync(Cas cas, Http http, dev.jkbuild.repo.RepoCredentialResolver creds) {
+        this(cas, http, creds, false);
+    }
+
+    /** Visible for tests — inject a credential resolver and {@code mirrorToM2} explicitly. */
+    public CacheSync(Cas cas, Http http, dev.jkbuild.repo.RepoCredentialResolver creds, boolean mirrorToM2) {
         this.cas = Objects.requireNonNull(cas, "cas");
         this.http = Objects.requireNonNull(http, "http");
         this.creds = Objects.requireNonNull(creds, "creds");
+        this.mirrorToM2 = mirrorToM2;
     }
 
     /**
@@ -95,10 +107,10 @@ public final class CacheSync {
             String hex = pkg.checksumHex();
 
             // Check the named-repo store first (repos/<name>/<m2-path>.sha256), verifying the
-            // recorded hash against the lockfile's pin — presence alone isn't enough, because the
-            // ~/.m2 artifact can be rewritten out-of-band (corruption, another tool) and the
-            // store's mtime guard then records the *new* content. Fall back to the CAS for
-            // artifacts fetched before this store existed (old lockfiles / old builds).
+            // recorded hash against the lockfile's pin — presence alone isn't enough, since the
+            // pin can change (a re-lock) even though this store is otherwise exclusively
+            // jk-owned. Fall back to the CAS for artifacts fetched before this store existed (old
+            // lockfiles / old builds).
             if (!refresh) {
                 RepoArtifactStore.IndexState state = repoStoreState(pkg);
                 if (state == RepoArtifactStore.IndexState.VERIFIED) {
@@ -107,10 +119,10 @@ public final class CacheSync {
                     continue;
                 }
                 if (cas.contains(hex)) {
-                    // The CAS holds the pinned bytes. MISMATCH means the ~/.m2 copy went bad —
-                    // heal the shared mirror from the CAS blob (no network) so Maven/Gradle and
-                    // the human-readable classpath recover too. Best-effort: even unhealed, the
-                    // classpath resolver serves the verified CAS path.
+                    // The CAS holds the pinned bytes. On MISMATCH, re-mirror them into the opt-in
+                    // ~/.m2 copy (no network) so Maven/Gradle recover too, when mirroring is
+                    // enabled. Best-effort: even unhealed, the classpath resolver serves the
+                    // verified CAS path.
                     if (state == RepoArtifactStore.IndexState.MISMATCH) healM2FromCas(pkg, hex);
                     upToDate++;
                     observer.upToDate(pkg);
@@ -278,27 +290,30 @@ public final class CacheSync {
     /**
      * The artifact's state in its named-repo store, verified against the lockfile checksum:
      * {@code VERIFIED} when present with the pinned hash, {@code MISMATCH} when present but the
-     * content changed out-of-band, {@code ABSENT} when never stored — or for non-Maven sources
-     * (git, path) and malformed source strings.
+     * content changed (corruption/tampering — {@code repos/<name>/} is exclusively jk-owned, so
+     * this should be rare), {@code ABSENT} when never stored — or for non-Maven sources (git,
+     * path) and malformed source strings.
      */
     private RepoArtifactStore.IndexState repoStoreState(Lockfile.Artifact pkg) {
         String repoName = dev.jkbuild.repo.RepoArtifactResolver.repoName(pkg.source());
         if (repoName == null) return RepoArtifactStore.IndexState.ABSENT;
         Coordinate coord = toCoord(pkg);
         String m2Path = dev.jkbuild.repo.MavenLayout.artifactPath(coord);
-        // forRepoName() creates an index-only store for non-local repos — verify() checks the
-        // sidecar in repos/<name>/ AND the actual artifact in ~/.m2 against the pinned hash.
         dev.jkbuild.repo.RepoArtifactStore store = dev.jkbuild.repo.RepoArtifactStore.forRepoName(cas.root(), repoName);
         return store.verify(m2Path, pkg.checksumHex());
     }
 
     /**
-     * Re-mirror the lock-pinned CAS blob over a poisoned/overwritten {@code ~/.m2} copy and
-     * correct the index sidecar (named remote repos only — the {@code local} full store and git
-     * sources don't mirror into {@code ~/.m2}). Best-effort: on failure the classpath resolver
-     * still serves the verified CAS path, only the shared m2 mirror stays stale.
+     * Re-mirror the lock-pinned CAS blob over a poisoned/overwritten {@code ~/.m2} copy (named
+     * remote repos only — the {@code local} full store and git sources don't mirror into {@code
+     * ~/.m2}). No-op unless {@code mirrorToM2} is enabled for this sync — with it disabled jk isn't
+     * maintaining a {@code ~/.m2} mirror for this project, so there's nothing to heal. jk's own
+     * {@code repos/<name>/} sidecar needs no correction here: it was written correctly at fetch
+     * time and nothing external can have touched it. Best-effort: on failure the classpath
+     * resolver still serves the verified {@code repos/<name>/} path, only the mirror stays stale.
      */
     private void healM2FromCas(Lockfile.Artifact pkg, String hex) {
+        if (!mirrorToM2) return;
         String repoName = dev.jkbuild.repo.RepoArtifactResolver.repoName(pkg.source());
         if (!dev.jkbuild.repo.RepoArtifactResolver.isNamedRemote(repoName)) return;
         try {
@@ -306,7 +321,6 @@ public final class CacheSync {
             java.nio.file.Path target = dev.jkbuild.repo.M2Dirs.localRepository().resolve(m2Path);
             var hashes = dev.jkbuild.repo.M2CompatWriter.copyToM2AndHash(cas.pathFor(hex), target);
             dev.jkbuild.repo.M2CompatWriter.writeMavenSidecars(target, hashes.sha1(), hashes.md5());
-            dev.jkbuild.repo.RepoArtifactStore.forRepoName(cas.root(), repoName).recordIndex(m2Path, hex);
         } catch (IOException | RuntimeException ignored) {
             // Best-effort — the CAS path keeps this build correct either way.
         }
@@ -342,7 +356,7 @@ public final class CacheSync {
         }
         URI url = URI.create(rs.url());
         var cred = creds.resolve(name, url, java.util.Optional.empty());
-        MavenRepo repo = new MavenRepo(name, url, http, cas, cred);
+        MavenRepo repo = new MavenRepo(name, url, http, cas, cred, mirrorToM2);
         cache.put(source, repo);
         return repo;
     }

@@ -26,10 +26,11 @@ import java.util.Optional;
  * install} of a native app) uses. Resolution mirrors {@code project.jdk}:
  *
  * <ol>
- *   <li>{@code project.graal} set → an already-installed GraalVM matching the spec, else
- *       auto-install it (no prompt — the pin is explicit intent, same as {@code project.jdk}).
- *   <li>{@code project.graal} unset → the current {@code native-image} search (project JDK → {@code
- *       $GRAALVM_HOME} → {@code PATH}).
+ *   <li>{@code [native].graal} set (defaults to the {@code "native"} keyword whenever {@code
+ *       [native]} is declared) → an already-installed GraalVM matching the spec, else auto-install
+ *       it (no prompt — the pin is explicit intent, same as {@code project.jdk}).
+ *   <li>No {@code [native]} table at all → the current {@code native-image} search (project JDK →
+ *       {@code $GRAALVM_HOME} → {@code PATH}).
  *   <li>Still missing → offer to install Oracle GraalVM: prompt with the {@link Confirm} widget on
  *       a TTY, install silently with {@code --yes}, or fail with an actionable hint on a non-TTY.
  * </ol>
@@ -137,7 +138,7 @@ public final class GraalResolver {
         if (!assumeYes && !Confirm.isInteractiveTerminal()) {
             // Can't prompt — fail with the same actionable hint as the driver.
             System.err.println(NativeImageDriver.notFoundError(searchedJavaHome).getMessage());
-            System.err.println("  Or pin a GraalVM with `graal = \"native\"` under [project], "
+            System.err.println("  Or pin a GraalVM with `graal = \"native\"` under [native], "
                     + "or pass --yes to install Oracle GraalVM automatically.");
             return null;
         }

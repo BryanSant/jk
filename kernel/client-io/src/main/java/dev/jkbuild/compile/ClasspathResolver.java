@@ -54,9 +54,9 @@ public final class ClasspathResolver {
             if (checksum == null) continue;
             String hex = checksum.startsWith("sha256:") ? checksum.substring("sha256:".length()) : checksum;
             // Prefer the human-readable repos/<name>/<m2-path>.jar path; fall back to the CAS
-            // hash path for artifacts fetched before the named-repo store was introduced —
-            // or when the ~/.m2 copy no longer matches the locked hash (rewritten out-of-band),
-            // where the CAS blob is the only path guaranteed to hold the pinned bytes.
+            // hash path for artifacts fetched before the named-repo store was introduced, or in
+            // the rare case repos/<name>/ itself no longer matches the locked hash — the CAS blob
+            // is the only path guaranteed to hold the pinned bytes.
             Path repoPath = resolveFromRepos(pkg, hex);
             result.add(repoPath != null ? repoPath : cas.pathFor(hex));
             ledger.touch(hex);
@@ -67,19 +67,19 @@ public final class ClasspathResolver {
     /**
      * Resolve the artifact path from the named-repo store ({@code repos/<name>/<m2-path>.jar}),
      * verified against the locked hash {@code hex}. Returns {@code null} when the artifact is
-     * absent from the store, its content no longer matches the lock (a poisoned/rewritten
-     * {@code ~/.m2} file must never reach the classpath), the source is not a Maven repo (git,
-     * path, local), or the source field is missing — callers fall back to the CAS path.
+     * absent from the store, its content no longer matches the lock (corruption/tampering —
+     * jk's own store should never legitimately drift), the source is not a Maven repo (git, path,
+     * local), or the source field is missing — callers fall back to the CAS path.
      */
     private Path resolveFromRepos(Lockfile.Artifact pkg, String hex) {
         String repoName = dev.jkbuild.repo.RepoArtifactResolver.repoName(pkg.source());
-        // Only a named remote repo has a sidecar index pointing at ~/.m2; skip local/git/missing.
+        // Only a named remote repo has a full store under repos/<name>/; skip local/git/missing.
         if (!dev.jkbuild.repo.RepoArtifactResolver.isNamedRemote(repoName)) return null;
         if (pkg.name().indexOf(':') < 0) return null;
         dev.jkbuild.model.Coordinate coord = pkg.coordinate();
         String m2Path = dev.jkbuild.repo.MavenLayout.artifactPath(coord);
-        // forRepoName() returns an index-only store for non-local repos so locate() gives the
-        // ~/.m2 artifact path (human-readable) rather than a sha256/AB/CD/… CAS path.
+        // locate() gives the repos/<name>/<m2-path> artifact path (human-readable) rather than a
+        // sha256/AB/CD/… CAS path.
         dev.jkbuild.repo.RepoArtifactStore store = dev.jkbuild.repo.RepoArtifactStore.forRepoName(cas.root(), repoName);
         return store.locate(m2Path, hex).orElse(null);
     }

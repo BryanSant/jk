@@ -52,20 +52,25 @@ public final class NewJkBuildRenderer {
             case KOTLIN ->
                 sb.append("kotlin   = \"").append(DEFAULT_KOTLIN_VERSION).append("\"\n");
         }
-        if (inputs.main().isPresent()) {
-            sb.append("main     = \"").append(inputs.main().get()).append("\"\n");
-        }
-        if (inputs.shadow()) {
-            sb.append("shadow   = true\n");
-        }
-        if (inputs.nativeImage()) {
-            sb.append("native   = true\n");
-        }
         if (inputs.layout() != null && !inputs.layout().isBlank() && !"auto".equalsIgnoreCase(inputs.layout())) {
             sb.append("layout   = \"").append(inputs.layout().toLowerCase()).append("\"\n");
         }
         inputs.kotlinModuleName()
                 .ifPresent(m -> sb.append("module   = \"").append(m).append("\"\n"));
+
+        if (inputs.main().isPresent() || inputs.shadow()) {
+            sb.append("\n[application]\n");
+            if (inputs.main().isPresent()) {
+                sb.append("main       = \"").append(inputs.main().get()).append("\"\n");
+            }
+            if (inputs.shadow()) {
+                sb.append("shadow-jar = true\n");
+            }
+        }
+        if (inputs.nativeImage()) {
+            sb.append("\n[native]\n");
+            sb.append("always     = true\n");
+        }
 
         var picks = resolvePicks(inputs.deps());
         if (picks.isEmpty()) return sb.toString();

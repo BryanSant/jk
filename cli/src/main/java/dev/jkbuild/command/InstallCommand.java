@@ -357,15 +357,15 @@ public final class InstallCommand implements CliCommand {
         // launcher. (Done here, not in a phase, so we fail before building.)
         JkBuild proj = JkBuildParser.parse(projectDir.resolve("jk.toml"));
         var pj = proj.project();
-        if (pj.isApplication() && pj.nativeMode() == JkBuild.NativeMode.DISABLED && pj.main() == null) {
+        if (proj.isApplication() && proj.nativeMode() == JkBuild.NativeMode.DISABLED && proj.mainClass() == null) {
             CliOutput.err("jk install: application project at "
                     + dev.jkbuild.cli.PathDisplay.styledRaw(projectDir)
-                    + " has no `main` class set in [project]");
+                    + " has no `main` class set in [application]");
             return Exit.USAGE;
         }
         // ALWAYS: native is part of the standard build and install produces a native binary.
         // SUPPORTED: user runs `jk native` explicitly; install deploys the jar.
-        boolean isNative = pj.isApplication() && pj.nativeMode() == JkBuild.NativeMode.ALWAYS;
+        boolean isNative = proj.isApplication() && proj.nativeMode() == JkBuild.NativeMode.ALWAYS;
 
         // `jk build` no longer auto-builds native (that's `jk native`), so an installed native
         // application builds its binary here. Resolve the GraalVM up front — before any progress
@@ -374,7 +374,7 @@ public final class InstallCommand implements CliCommand {
         Path graalHome = null;
         if (isNative) {
             java.util.Optional<Path> resolved =
-                    new dev.jkbuild.cli.GraalResolver(null, false).resolve(projectDir, pj.graal());
+                    new dev.jkbuild.cli.GraalResolver(null, false).resolve(projectDir, proj.graal());
             if (resolved.isEmpty()) return 1; // GraalResolver already printed why
             graalHome = resolved.get();
         }
@@ -423,7 +423,7 @@ public final class InstallCommand implements CliCommand {
         // Only for applications: place a runnable artifact under ~/.jk (the "make install").
         Coordinate coord = Coordinate.of(pj.group(), pj.name(), pj.version());
         Path launcher = null;
-        if (pj.isApplication()) {
+        if (proj.isApplication()) {
             try {
                 launcher = makeInstallApp(projectDir, proj, BuildLayout.of(projectDir, proj), cacheDir, binDir,
                         libexecDir);
@@ -448,11 +448,11 @@ public final class InstallCommand implements CliCommand {
             throws IOException {
         var p = project.project();
         String bin = binName != null && !binName.isBlank() ? binName : p.name();
-        String mainCls = mainClass != null && !mainClass.isBlank() ? mainClass : p.main();
+        String mainCls = mainClass != null && !mainClass.isBlank() ? mainClass : project.mainClass();
         Path javaHome = JavaHomes.runningJavaHome();
 
         // Native binary → ~/.jk/bin/<bin>. Only for ALWAYS (auto-build) mode.
-        if (p.nativeMode() == JkBuild.NativeMode.ALWAYS) {
+        if (project.nativeMode() == JkBuild.NativeMode.ALWAYS) {
             Files.createDirectories(binDir);
             Path dest = binDir.resolve(bin);
             Linking.linkOrCopy(layout.nativeBinary(), dest);
@@ -463,7 +463,7 @@ public final class InstallCommand implements CliCommand {
         Files.createDirectories(libexecDir);
 
         // Shadow/fat jar → a single self-contained jar in libexec.
-        if (p.shadow()) {
+        if (project.shadowJar()) {
             Path dest = libexecDir.resolve(layout.shadowJar().getFileName().toString());
             Linking.linkOrCopy(layout.shadowJar(), dest);
             return AppLauncher.install(binDir, javaHome, bin, mainCls, List.of(dest));

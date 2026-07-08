@@ -117,11 +117,11 @@ public final class RunCommand implements CliCommand {
 
     private int runProject(Path projectDir, List<String> appArgs) throws IOException, InterruptedException {
         JkBuild project = JkBuildParser.parse(projectDir.resolve("jk.toml"));
-        if (project.project().main() == null) {
+        if (project.mainClass() == null) {
             boolean nerdfont = dev.jkbuild.config.GlobalConfig.nerdfont();
             String msg = "No " + Theme.colorize("main", Theme.active().cyan())
                     + " class specified in "
-                    + Theme.colorize("[project]", Theme.active().cyan());
+                    + Theme.colorize("[application]", Theme.active().cyan());
             CliOutput.out(GoalWedge.failureLine("Exec", nerdfont, msg));
             return Exit.USAGE;
         }
@@ -227,7 +227,7 @@ public final class RunCommand implements CliCommand {
         } else {
             command.add("-cp");
             command.add(joinClasspath(assembleRuntimeClasspath(projectDir, project, layout.mainJar())));
-            command.add(project.project().main());
+            command.add(project.mainClass());
         }
         return command;
     }

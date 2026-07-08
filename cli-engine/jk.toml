@@ -5,7 +5,9 @@ version  = "0.10.0-SNAPSHOT"
 description = "jk engine application: EngineMain, POSIX self-detach, and the in-process engine seam."
 jdk      = 25
 java     = 25
-main     = "dev.jkbuild.cli.Jk"
+
+[application]
+main = "dev.jkbuild.cli.Jk"
 
 [dependencies]
 jk-cli             = { group = "dev.jkbuild", name = "jk-cli",    version = "0.10.0-SNAPSHOT" }

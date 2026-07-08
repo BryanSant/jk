@@ -33,11 +33,12 @@ class JkBuildParserTest {
         assertThat(parsed.project().jdk()).isEqualTo("21");
         assertThat(parsed.project().java()).isEqualTo(21);
         assertThat(parsed.project().isKotlin()).isFalse();
-        assertThat(parsed.project().main()).isNull();
-        assertThat(parsed.project().shadow()).isFalse();
-        // native absent → SUPPORTED (eligible via jk native; NOT auto-built on jk build)
-        assertThat(parsed.project().nativeMode()).isEqualTo(JkBuild.NativeMode.SUPPORTED);
-        assertThat(parsed.project().nativeImage()).isTrue(); // isTrue: != DISABLED
+        assertThat(parsed.mainClass()).isNull();
+        assertThat(parsed.isApplication()).isFalse();
+        assertThat(parsed.shadowJar()).isFalse();
+        // [native] absent entirely → DISABLED (its presence is the enable switch now)
+        assertThat(parsed.nativeMode()).isEqualTo(JkBuild.NativeMode.DISABLED);
+        assertThat(parsed.nativeImage()).isFalse();
         assertThat(parsed.project().description()).isNull();
     }
 
@@ -130,6 +131,31 @@ class JkBuildParserTest {
     }
 
     @Test
+    void java_accepts_quoted_string_and_coerces() {
+        JkBuild parsed = JkBuildParser.parse("""
+                [project]
+                group    = "com.example"
+                name     = "widget"
+                version  = "1.0.0"
+                java     = "25"
+                """);
+        assertThat(parsed.project().java()).isEqualTo(25);
+    }
+
+    @Test
+    void rejects_non_numeric_java_string() {
+        assertThatThrownBy(() -> JkBuildParser.parse("""
+                [project]
+                group    = "com.example"
+                name     = "widget"
+                version  = "1.0.0"
+                java     = "twenty-five"
+                """))
+                .isInstanceOf(JkBuildParseException.class)
+                .hasMessageContaining("project.java");
+    }
+
+    @Test
     void rejects_project_jdk_below_17() {
         assertThatThrownBy(() -> JkBuildParser.parse("""
                 [project]
@@ -184,6 +210,22 @@ class JkBuildParserTest {
     }
 
     @Test
+    void parses_jdk_keyword_specs() {
+        // lts/stable/latest/native are accepted as-is (the same keywords --jdk/JK_JDK/
+        // .jdk-version accept) — resolved downstream by JdkKeywords, not by this parser.
+        for (String keyword : new String[] {"lts", "stable", "latest", "native"}) {
+            JkBuild parsed = JkBuildParser.parse("""
+                    [project]
+                    group    = "com.example"
+                    name     = "widget"
+                    version  = "1.0.0"
+                    jdk      = "%s"
+                    """.formatted(keyword));
+            assertThat(parsed.project().jdk()).isEqualTo(keyword);
+        }
+    }
+
+    @Test
     void parses_jdk_bare_major_string() {
         JkBuild parsed = JkBuildParser.parse("""
                 [project]
@@ -198,31 +240,26 @@ class JkBuildParserTest {
 
     @Test
     void parses_graal_spec_variants() {
-        assertThat(JkBuildParser.parse(graal("\"graalvm-25\"")).project().graal())
-                .isEqualTo("graalvm-25");
-        assertThat(JkBuildParser.parse(graal("25")).project().graal()).isEqualTo("25");
-        assertThat(JkBuildParser.parse(graal("\"native\"")).project().graal()).isEqualTo("native");
-        // Absent → null (the common case).
-        assertThat(JkBuildParser.parse("""
-                [project]
-                group = "com.example"
-                name = "widget"
-                version = "1.0.0"
-                """).project().graal()).isNull();
+        assertThat(JkBuildParser.parse(graal("\"graalvm-25\"")).graal()).isEqualTo("graalvm-25");
+        assertThat(JkBuildParser.parse(graal("25")).graal()).isEqualTo("25");
+        assertThat(JkBuildParser.parse(graal("\"native\"")).graal()).isEqualTo("native");
+        // [native] declared, graal key omitted → defaults to the "native" keyword.
+        assertThat(JkBuildParser.parse(PROJECT + "\n[native]\n").graal()).isEqualTo("native");
+        // No [native] table at all → null.
+        assertThat(JkBuildParser.parse(PROJECT).graal()).isNull();
     }
 
     @Test
     void rejects_graal_point_release() {
         assertThatThrownBy(() -> JkBuildParser.parse(graal("\"graalvm-25.0.3\"")))
-                .hasMessageContaining("project.graal");
+                .hasMessageContaining("[native].graal");
     }
 
     private static String graal(String value) {
-        return """
-                [project]
-                group = "com.example"
-                name = "widget"
-                version = "1.0.0"
+        return PROJECT
+                + """
+
+                [native]
                 graal = %s
                 """.formatted(value);
     }
@@ -1269,29 +1306,65 @@ class JkBuildParserTest {
         assertThat(parsed.features().byName().get("postgres").deps()).containsExactly("postgres-jdbc", "hikari");
     }
 
-    // --- application / m2install -------------------------------------------
+    // --- application / native / m2install -----------------------------------
 
     @Test
-    void application_defaults_false_without_main() {
-        assertThat(JkBuildParser.parse(PROJECT).project().isApplication()).isFalse();
+    void application_absent_means_not_an_application() {
+        assertThat(JkBuildParser.parse(PROJECT).isApplication()).isFalse();
+        assertThat(JkBuildParser.parse(PROJECT).mainClass()).isNull();
     }
 
     @Test
-    void application_defaults_true_when_main_is_set() {
-        JkBuild parsed = JkBuildParser.parse(PROJECT + "main = \"com.example.Main\"\n");
-        assertThat(parsed.project().isApplication()).isTrue();
+    void application_present_with_main() {
+        JkBuild parsed = JkBuildParser.parse(PROJECT + "\n[application]\nmain = \"com.example.Main\"\n");
+        assertThat(parsed.isApplication()).isTrue();
+        assertThat(parsed.mainClass()).isEqualTo("com.example.Main");
     }
 
     @Test
-    void explicit_application_false_overrides_main_default() {
-        JkBuild parsed = JkBuildParser.parse(PROJECT + "main = \"com.example.Main\"\napplication = false\n");
-        assertThat(parsed.project().isApplication()).isFalse();
+    void application_present_without_main_is_still_an_application() {
+        // [application]'s mere presence is the signal — a main class is not required
+        // (e.g. a project that only wants shadow-jar packaging).
+        JkBuild parsed = JkBuildParser.parse(PROJECT + "\n[application]\nshadow-jar = true\n");
+        assertThat(parsed.isApplication()).isTrue();
+        assertThat(parsed.mainClass()).isNull();
+        assertThat(parsed.shadowJar()).isTrue();
     }
 
     @Test
-    void explicit_application_true_without_main() {
-        JkBuild parsed = JkBuildParser.parse(PROJECT + "application = true\n");
-        assertThat(parsed.project().isApplication()).isTrue();
+    void native_absent_means_disabled_present_means_supported_or_always() {
+        assertThat(JkBuildParser.parse(PROJECT).nativeMode()).isEqualTo(JkBuild.NativeMode.DISABLED);
+        assertThat(JkBuildParser.parse(PROJECT + "\n[native]\n").nativeMode())
+                .isEqualTo(JkBuild.NativeMode.SUPPORTED);
+        assertThat(JkBuildParser.parse(PROJECT + "\n[native]\nalways = true\n").nativeMode())
+                .isEqualTo(JkBuild.NativeMode.ALWAYS);
+    }
+
+    @Test
+    void native_config_fields_parsed() {
+        JkBuild parsed = JkBuildParser.parse(PROJECT
+                + """
+
+                [native]
+                main-class = "com.example.NativeMain"
+                name       = "myapp"
+                args       = ["-O3", "--gc=serial"]
+                always     = true
+                """);
+        assertThat(parsed.nativeConfig()).isPresent();
+        JkBuild.NativeConfig nc = parsed.nativeConfig().orElseThrow();
+        assertThat(nc.mainClass()).isEqualTo("com.example.NativeMain");
+        assertThat(nc.name()).isEqualTo("myapp");
+        assertThat(nc.args()).containsExactly("-O3", "--gc=serial");
+        assertThat(nc.always()).isTrue();
+        assertThat(nc.graal()).isEqualTo("native"); // defaulted — no graal key given
+    }
+
+    @Test
+    void compact_key_is_inert() {
+        // `compact` is no longer supported; a stray one in an old jk.toml has no effect.
+        JkBuild parsed = JkBuildParser.parse(PROJECT + "compact = true\n");
+        assertThat(parsed.project().layout()).isEqualTo(JkBuild.Layout.AUTO);
     }
 
     @Test
@@ -1307,12 +1380,12 @@ class JkBuildParserTest {
     }
 
     @Test
-    void m2install_defaults_true_explicit_false_opts_out() {
-        assertThat(JkBuildParser.parse(PROJECT).project().m2install()).isTrue();
-        assertThat(JkBuildParser.parse(PROJECT + "m2install = false\n").project().m2install())
-                .isFalse();
+    void m2install_defaults_false_explicit_true_opts_in() {
+        assertThat(JkBuildParser.parse(PROJECT).project().m2install()).isFalse();
         assertThat(JkBuildParser.parse(PROJECT + "m2install = true\n").project().m2install())
                 .isTrue();
+        assertThat(JkBuildParser.parse(PROJECT + "m2install = false\n").project().m2install())
+                .isFalse();
     }
 
     // ── splitEmbeddedUrl unit tests ──────────────────────────────────────────

@@ -17,7 +17,7 @@ class BuildLayoutTest {
         return JkBuild.of(new JkBuild.Project("com.acme", artifact, version, 25));
     }
 
-    /** Application project: has {@code project.main}. Artifacts land in {@code target/}. */
+    /** Application project: has {@code [application].main}. Artifacts land in {@code target/}. */
     private static JkBuild appProject(String artifact, String version) {
         return dev.jkbuild.config.JkBuildParser.parse("""
                 [project]
@@ -25,6 +25,8 @@ class BuildLayoutTest {
                 name    = "%s"
                 version = "%s"
                 java    = 25
+
+                [application]
                 main    = "com.acme.Main"
                 """.formatted(artifact, version));
     }
@@ -76,7 +78,7 @@ class BuildLayoutTest {
 
     @Test
     void application_artifacts_live_under_target(@TempDir Path dir) {
-        // project.main declared → application; all deliverables go to target/
+        // [application].main declared → application; all deliverables go to target/
         BuildLayout layout = BuildLayout.of(dir, appProject("widget", "1.2.3"));
 
         assertThat(layout.artifactDir()).isEqualTo(dir.resolve("target"));

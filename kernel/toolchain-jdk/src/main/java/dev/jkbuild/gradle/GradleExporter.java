@@ -100,9 +100,9 @@ public final class GradleExporter {
             JkBuild jk, JkBuild.Layout layout, Map<String, String> locked, ImportReport.Builder report) {
         JkBuild.Project p = jk.project();
         boolean kotlin = p.kotlin() != null;
-        boolean app = p.main() != null && !p.main().isBlank();
-        boolean shadow = p.shadow();
-        boolean nativeImg = p.nativeMode() == JkBuild.NativeMode.ALWAYS;
+        boolean app = jk.mainClass() != null;
+        boolean shadow = jk.shadowJar();
+        boolean nativeImg = jk.nativeMode() == JkBuild.NativeMode.ALWAYS;
 
         StringBuilder sb = new StringBuilder();
         sb.append("plugins {\n");
@@ -132,7 +132,7 @@ public final class GradleExporter {
         appendSourceSets(sb, layout, kotlin);
         if (app) {
             sb.append("\napplication {\n    mainClass = \"")
-                    .append(kEsc(p.main()))
+                    .append(kEsc(jk.mainClass()))
                     .append("\"\n}\n");
         }
         appendManifest(sb, jk.manifest());

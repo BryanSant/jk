@@ -72,7 +72,7 @@ public final class JkEnv {
                 var build = dev.jkbuild.config.JkBuildParser.parse(root.get().resolve("jk.toml"));
                 if (build.project() != null) {
                     projectJdk = build.project().jdk();
-                    projectGraal = build.project().graal();
+                    projectGraal = build.graal();
                     javaRelease = build.project().javaRelease();
                 }
             } catch (Exception ignored) {

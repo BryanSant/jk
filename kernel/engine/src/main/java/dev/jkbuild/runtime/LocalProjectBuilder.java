@@ -149,8 +149,7 @@ public final class LocalProjectBuilder {
         Path jarOut = layout.mainJar();
         Files.createDirectories(jarOut.getParent());
         new JarPackager()
-                .packageJar(new JarPackager.JarRequest(
-                        classes, jarOut, project.project().main(), 0L, Map.of()));
+                .packageJar(new JarPackager.JarRequest(classes, jarOut, project.mainClass(), 0L, Map.of()));
 
         // 4. Render the POM, stamped with the published coordinate + version.
         String pomXml = PublishablePom.render(
@@ -168,15 +167,10 @@ public final class LocalProjectBuilder {
                 artifact,
                 version,
                 p.jdk(),
-                p.graal(),
                 p.java(),
                 p.kotlin(),
-                p.main(),
-                p.shadow(),
-                p.nativeMode(),
                 p.sourcesMode(),
                 p.description(),
-                p.application(),
                 p.m2install(),
                 p.layout());
         return JkBuild.builder(overridden)
@@ -186,6 +180,8 @@ public final class LocalProjectBuilder {
                 .features(project.features())
                 .workspace(project.workspace())
                 .manifest(project.manifest())
+                .application(project.application().orElse(null))
+                .nativeConfig(project.nativeConfig().orElse(null))
                 .build();
     }
 

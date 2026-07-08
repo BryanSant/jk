@@ -23,6 +23,8 @@ class GradleExporterTest {
                 version = "1.2.3"
                 jdk  = 21
                 java = 21
+
+                [application]
                 main = "com.example.Main"
 
                 [dependencies]
@@ -90,10 +92,14 @@ class GradleExporterTest {
                 name  = "app"
                 version = "1.0.0"
                 java = 21
-                main = "com.example.Main"
                 kotlin = "2.3.21"
-                shadow = true
-                native = true
+
+                [application]
+                main       = "com.example.Main"
+                shadow-jar = true
+
+                [native]
+                always = true
                 """);
 
         String kts = GradleExporter.export(b, Map.of()).buildFiles().get("");

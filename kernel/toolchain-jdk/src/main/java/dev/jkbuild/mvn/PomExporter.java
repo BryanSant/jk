@@ -233,10 +233,9 @@ public final class PomExporter {
         List<Dependency> processors = jkBuild.dependencies().of(Scope.PROCESSOR);
         boolean kotlin = p.kotlin() != null;
         boolean toolchain = p.jdk() != null && !p.jdk().isBlank();
-        boolean shade = p.shadow();
-        boolean nativeImg = p.nativeMode() == JkBuild.NativeMode.ALWAYS;
-        boolean jarManifest =
-                (p.main() != null && !p.main().isBlank()) || !jkBuild.manifest().isEmpty();
+        boolean shade = jkBuild.shadowJar();
+        boolean nativeImg = jkBuild.nativeMode() == JkBuild.NativeMode.ALWAYS;
+        boolean jarManifest = jkBuild.mainClass() != null || !jkBuild.manifest().isEmpty();
         boolean anyPlugin = !processors.isEmpty() || kotlin || toolchain || shade || nativeImg || jarManifest;
         boolean simple = layout == JkBuild.Layout.SIMPLE;
         if (!anyPlugin && !simple) return;
@@ -255,7 +254,7 @@ public final class PomExporter {
             if (kotlin) appendKotlinPlugin(sb, p, report);
             if (!processors.isEmpty()) appendCompilerProcessorPlugin(sb, processors, p.javaRelease(), locked, report);
             if (toolchain) appendToolchainsPlugin(sb, p);
-            if (jarManifest) appendJarPlugin(sb, p, jkBuild.manifest());
+            if (jarManifest) appendJarPlugin(sb, jkBuild.mainClass(), jkBuild.manifest());
             if (shade) appendShadePlugin(sb);
             if (nativeImg) appendNativePlugin(sb, jkBuild);
             sb.append("    </plugins>\n");
@@ -324,14 +323,14 @@ public final class PomExporter {
         sb.append("      </plugin>\n");
     }
 
-    private static void appendJarPlugin(StringBuilder sb, JkBuild.Project p, Map<String, String> manifest) {
+    private static void appendJarPlugin(StringBuilder sb, String mainClass, Map<String, String> manifest) {
         sb.append("      <plugin>\n");
         sb.append("        <groupId>org.apache.maven.plugins</groupId>\n");
         sb.append("        <artifactId>maven-jar-plugin</artifactId>\n");
         sb.append("        <version>").append(JAR_PLUGIN).append("</version>\n");
         sb.append("        <configuration>\n          <archive>\n            <manifest>\n");
-        if (p.main() != null && !p.main().isBlank()) {
-            sb.append("              <mainClass>").append(escape(p.main())).append("</mainClass>\n");
+        if (mainClass != null) {
+            sb.append("              <mainClass>").append(escape(mainClass)).append("</mainClass>\n");
         }
         if (!manifest.isEmpty()) {
             sb.append("            </manifest>\n            <manifestEntries>\n");
@@ -363,10 +362,9 @@ public final class PomExporter {
     }
 
     private static void appendNativePlugin(StringBuilder sb, JkBuild jkBuild) {
-        JkBuild.Project p = jkBuild.project();
-        String main = jkBuild.nativeConfig() != null && jkBuild.nativeConfig().mainClass() != null
-                ? jkBuild.nativeConfig().mainClass()
-                : p.main();
+        String main = jkBuild.nativeConfig()
+                .map(JkBuild.NativeConfig::mainClass)
+                .orElseGet(jkBuild::mainClass);
         sb.append("      <plugin>\n");
         sb.append("        <groupId>org.graalvm.buildtools</groupId>\n");
         sb.append("        <artifactId>native-maven-plugin</artifactId>\n");

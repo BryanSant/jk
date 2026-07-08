@@ -15,18 +15,18 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * A single Maven-style repository. Fetches POMs and artifacts over HTTP, writes them to
- * {@code ~/.m2/repository} (via {@link M2CompatWriter}) and records a {@code .sha256} sidecar in
- * {@code repos/<name>/} (via {@link RepoArtifactStore}). Also writes Maven-compatible {@code .sha1}
- * and {@code .md5} sidecars and a {@code _remote.repositories} hint so Maven, Gradle, and IDEs
- * find the artifacts without a separate download step.
+ * A single Maven-style repository. Fetches POMs and artifacts over HTTP, streams them into the
+ * content-addressed {@link Cas}, and materialises a human-readable copy — hard-linked from the CAS
+ * blob — under {@code repos/<name>/} (via {@link RepoArtifactStore#materialize}). This is the
+ * primary, permanent store; nothing outside jk writes there.
  *
- * <p>The CAS is still written for backward compatibility: old lockfiles whose
- * {@code ClasspathResolver} resolves via {@code sha256/AB/CD/…} paths continue to work until the
- * project is re-locked. CAS blobs for Maven artifacts become unreferenced as lockfiles are
- * regenerated and are collected by {@code jk cache prune --sweep}.
+ * <p>When {@code mirrorToM2} is enabled (a project opted in via {@code project.m2install}),
+ * fetched artifacts are additionally copied — never hard-linked — into {@code ~/.m2/repository}
+ * (via {@link M2CompatWriter}), with Maven-compatible {@code .sha1}/{@code .md5} sidecars and a
+ * {@code _remote.repositories} hint, so Maven, Gradle, and IDEs can use them without going through
+ * jk. This mirror is a one-way, best-effort convenience: jk never reads it back.
  *
- * <p>When {@code --offline} is in effect, fetches are served from {@code ~/.m2/repository} via the
+ * <p>When {@code --offline} is in effect, fetches are served from {@code repos/<name>/} via the
  * {@link RepoArtifactStore} index; a coordinate that isn't present surfaces as
  * {@link ArtifactNotFoundException} so {@link RepoGroup}'s try-each gives a clean "not found".
  */
@@ -36,8 +36,9 @@ public final class MavenRepo {
     private final URI baseUrl;
     private final RepoTransport transport;
     private final Cas cas;
-    private final RepoArtifactStore repoStore; // index-only: .sha256 sidecars, JARs in ~/.m2
+    private final RepoArtifactStore repoStore; // full store: artifact + .sha256 sidecar under repos/<name>/
     private final RepoCredential credential;
+    private final boolean mirrorToM2; // project.m2install: also copy fetched artifacts into ~/.m2
 
     /** TTL + conditional-GET cache for maven-metadata.xml; null for non-HTTP transports. */
     private final MavenMetadataCache metadataCache;
@@ -49,40 +50,63 @@ public final class MavenRepo {
     /**
      * HTTP convenience constructor: selects an {@link HttpTransport} for the URL's scheme via {@link
      * RepoTransports} (which rejects non-http(s)), and authenticates with {@code credential}
-     * (anonymous repos pass {@link RepoCredential#ANONYMOUS}).
+     * (anonymous repos pass {@link RepoCredential#ANONYMOUS}). {@code mirrorToM2} defaults to
+     * {@code false} — use {@link #MavenRepo(String, URI, Http, Cas, RepoCredential, boolean)} to
+     * opt a project's resolve into the {@code ~/.m2} mirror.
      */
     public MavenRepo(String name, URI baseUrl, Http http, Cas cas, RepoCredential credential) {
+        this(name, baseUrl, http, cas, credential, false);
+    }
+
+    /** As above, with an explicit {@code mirrorToM2}. */
+    public MavenRepo(String name, URI baseUrl, Http http, Cas cas, RepoCredential credential, boolean mirrorToM2) {
         this(
                 name,
                 baseUrl,
                 RepoTransports.forUrl(baseUrl, Objects.requireNonNull(http, "http")),
                 cas,
                 credential,
-                http);
+                http,
+                mirrorToM2);
     }
 
     /**
      * General constructor over any {@link RepoTransport} — the entry point for non-HTTP backends
      * (s3://, file://, …) selected by the caller. These don't get the HTTP metadata cache (it has no
-     * status/headers to revalidate against).
+     * status/headers to revalidate against). {@code mirrorToM2} defaults to {@code false}.
      */
     public MavenRepo(String name, URI baseUrl, RepoTransport transport, Cas cas, RepoCredential credential) {
-        this(name, baseUrl, transport, cas, credential, null);
+        this(name, baseUrl, transport, cas, credential, null, false);
+    }
+
+    /** As above, with an explicit {@code mirrorToM2}. */
+    public MavenRepo(
+            String name, URI baseUrl, RepoTransport transport, Cas cas, RepoCredential credential, boolean mirrorToM2) {
+        this(name, baseUrl, transport, cas, credential, null, mirrorToM2);
     }
 
     /**
      * Field-setting constructor. {@code httpOrNull} is the HTTP client when the repo is http(s)
-     * (enabling the metadata cache), or {@code null} for a non-HTTP transport.
+     * (enabling the metadata cache), or {@code null} for a non-HTTP transport. {@code mirrorToM2}
+     * is the resolving project's {@code project.m2install} value — {@code false} for resolvers not
+     * tied to a specific project's declared dependencies (tool/plugin/script/git resolution).
      */
     private MavenRepo(
-            String name, URI baseUrl, RepoTransport transport, Cas cas, RepoCredential credential, Http httpOrNull) {
+            String name,
+            URI baseUrl,
+            RepoTransport transport,
+            Cas cas,
+            RepoCredential credential,
+            Http httpOrNull,
+            boolean mirrorToM2) {
         this.name = Objects.requireNonNull(name, "name");
         this.baseUrl = normalize(Objects.requireNonNull(baseUrl, "baseUrl"));
         this.transport = Objects.requireNonNull(transport, "transport");
         this.cas = Objects.requireNonNull(cas, "cas");
-        // Index-only store for non-local repos: sidecars in repos/<name>/, JARs in ~/.m2.
+        // Full store for every repo: artifact + .sha256 sidecar under repos/<name>/.
         this.repoStore = RepoArtifactStore.forRepoName(cas.root(), name);
         this.credential = Objects.requireNonNull(credential, "credential");
+        this.mirrorToM2 = mirrorToM2;
         // The metadata cache speaks HTTP directly (conditional GET), so it only
         // applies to http(s) repos — a file:// (or other) baseUrl can be paired
         // with an Http client but must keep enumerating via the transport.
@@ -156,25 +180,29 @@ public final class MavenRepo {
             stored = cas.putStream(in);
         }
         if (mirror) {
-            // Write to ~/.m2 (primary store) and record the index sidecar in repos/<name>/.
-            Path m2Target = M2Dirs.localRepository().resolve(relativePath);
-            try {
-                M2CompatWriter.MavenHashes mavenHashes = M2CompatWriter.copyToM2AndHash(stored.path(), m2Target);
-                M2CompatWriter.writeMavenSidecars(m2Target, mavenHashes.sha1(), mavenHashes.md5());
-                M2CompatWriter.writeRemoteRepositories(
-                        m2Target.getParent(), name, m2Target.getFileName().toString());
-            } catch (IOException ignored) {
-                // Best-effort: the CAS blob is already written; a ~/.m2 failure is non-fatal.
+            // Primary store: materialise a human-readable, hard-linked copy under repos/<name>/.
+            repoStore.materialize(relativePath, stored.path(), stored.sha256());
+            if (mirrorToM2) {
+                // Opt-in mirror: copy (never hard-link — jk doesn't control writes to ~/.m2).
+                Path m2Target = M2Dirs.localRepository().resolve(relativePath);
+                try {
+                    M2CompatWriter.MavenHashes mavenHashes = M2CompatWriter.copyToM2AndHash(stored.path(), m2Target);
+                    M2CompatWriter.writeMavenSidecars(m2Target, mavenHashes.sha1(), mavenHashes.md5());
+                    M2CompatWriter.writeRemoteRepositories(
+                            m2Target.getParent(), name, m2Target.getFileName().toString());
+                } catch (IOException ignored) {
+                    // Best-effort: the CAS blob and repos/<name>/ copy are already written; a
+                    // ~/.m2 mirror failure is non-fatal.
+                }
             }
-            repoStore.recordIndex(relativePath, stored.sha256());
         }
         return new Fetched(uri, stored.path(), stored.sha256(), stored.size());
     }
 
     /**
-     * Serve a fetch from the named repo's index. Index-only repos resolve to the artifact in
-     * {@code ~/.m2/repository}; a coordinate that was never indexed here is treated as not-found and
-     * the resolver falls through cleanly.
+     * Serve a fetch from the named repo's full store under {@code repos/<name>/}; a coordinate
+     * that was never fetched (or mirrored) here is treated as not-found and the resolver falls
+     * through cleanly.
      */
     private Fetched fetchOffline(Coordinate coord, String relativePath) throws IOException {
         Optional<Path> found = repoStore.locate(relativePath);

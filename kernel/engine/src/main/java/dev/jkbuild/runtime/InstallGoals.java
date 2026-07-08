@@ -27,7 +27,8 @@ import java.util.List;
  *   <li>{@link #projectInstallGoal} — the full {@link BuildPipeline} (plus declared tails and, for
  *       a native application, the {@link BuildPipeline#nativePhase} tail with a client-resolved
  *       GraalVM) followed by the {@code cache-install} phase: jar + generated pom into {@code
- *       ~/.m2} (or {@code repos/local/} when {@code m2install = false}) with index sidecars.
+ *       repos/local/} (or additionally mirrored to {@code ~/.m2} when {@code m2install = true})
+ *       with index sidecars.
  *   <li>{@link #gitFetchGoal} — materialize a git checkout (clone via the engine-forked git-client
  *       worker), publishing {@link #CHECKOUT}/{@link #FETCHED_SHA} for the follow-up project
  *       install.
@@ -59,7 +60,7 @@ public final class InstallGoals {
         var pj = proj.project();
         // ALWAYS: native is part of the standard build and install produces a native binary.
         // SUPPORTED: user runs `jk native` explicitly; install deploys the jar.
-        boolean isNative = pj.isApplication() && pj.nativeMode() == JkBuild.NativeMode.ALWAYS;
+        boolean isNative = proj.isApplication() && proj.nativeMode() == JkBuild.NativeMode.ALWAYS;
 
         Path lockFile = projectDir.resolve("jk.lock");
         int estimatedTestCount = TestSupport.estimateTestCount(projectDir.resolve("src/test/java"));
@@ -89,7 +90,7 @@ public final class InstallGoals {
         // this project produces (so a follow-up client-side make-install finds them all built).
         java.util.List<String> requires = new java.util.ArrayList<>(List.of("package-jar"));
         if (isNative) requires.add("native-image");
-        if (pj.isApplication() && pj.shadow() && !isNative) requires.add("package-shadow");
+        if (proj.isApplication() && proj.shadowJar() && !isNative) requires.add("package-shadow");
 
         Phase cacheInstall = Phase.builder("cache-install")
                 .requires(requires.toArray(new String[0]))
@@ -173,13 +174,15 @@ public final class InstallGoals {
      * Install the built JAR and a generated POM into the artifact store.
      *
      * <ul>
-     *   <li><b>m2install = true (default)</b> — {@code m2Dir/repository} is primary. The JAR and
-     *       POM are written there with full Maven-compatible {@code .sha1}/{@code .md5} sidecars and
-     *       a {@code _remote.repositories} hint. jk records a {@code .sha256} index sidecar in
-     *       {@code repos/local/} so the artifact is discoverable via the local index.</li>
-     *   <li><b>m2install = false</b> — {@code repos/local/} is primary (used for jk's own worker
-     *       modules that must be found by {@link dev.jkbuild.worker.WorkerJar#locate} without going
-     *       through {@code ~/.m2}).</li>
+     *   <li><b>m2install = false (default)</b> — {@code repos/local/} is primary. Used as-is for
+     *       jk's own worker modules and any project that hasn't opted into Maven/Gradle interop;
+     *       found by {@link dev.jkbuild.worker.WorkerJar#locate} without going through {@code
+     *       ~/.m2}.</li>
+     *   <li><b>m2install = true</b> — {@code repos/local/} is still written (jk's own O(1) index),
+     *       and the JAR and POM are additionally mirrored to {@code m2Dir/repository} with full
+     *       Maven-compatible {@code .sha1}/{@code .md5} sidecars and a {@code
+     *       _remote.repositories} hint, so a system Maven/Gradle can use them without going through
+     *       jk.</li>
      * </ul>
      */
     private static void cacheInstallArtifact(JkBuild project, BuildLayout layout, Path cacheDir, Path m2Dir)

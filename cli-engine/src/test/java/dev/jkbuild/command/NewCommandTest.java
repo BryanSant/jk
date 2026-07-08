@@ -72,8 +72,9 @@ class NewCommandTest {
     @Test
     void native_project_keeps_a_normal_jdk_and_writes_no_graal(@TempDir Path tempDir) throws IOException {
         // A native project's build JDK follows the normal rules (here an explicit
-        // bare major); the GraalVM is never chosen here — it's resolved into
-        // jk.lock when project.native is set — so no `graal` lands in jk.toml.
+        // bare major); the GraalVM is never chosen here — it's resolved into jk.lock
+        // when [native] is declared — so no `graal` key lands in jk.toml (it's
+        // defaulted to the "native" keyword at parse time instead).
         int exit = Jk.execute(
                 "new",
                 "--group",
@@ -89,11 +90,11 @@ class NewCommandTest {
 
         JkBuild parsed = JkBuildParser.parse(tempDir.resolve("jk.toml"));
         assertThat(parsed.project().jdk()).isEqualTo("21"); // not forced to a GraalVM
-        assertThat(parsed.project().graal()).isNull(); // graal stays out of jk.toml
-        assertThat(parsed.project().nativeMode()).isEqualTo(JkBuild.NativeMode.ALWAYS);
+        assertThat(parsed.graal()).isEqualTo("native"); // defaulted — no graal key written
+        assertThat(parsed.nativeMode()).isEqualTo(JkBuild.NativeMode.ALWAYS);
 
         String toml = Files.readString(tempDir.resolve("jk.toml"));
-        assertThat(toml).contains("native   = true");
+        assertThat(toml).contains("[native]").contains("always     = true");
         assertThat(toml).doesNotContain("graal");
     }
 
@@ -163,8 +164,8 @@ class NewCommandTest {
         assertThat(exit).isEqualTo(0);
 
         JkBuild parsed = JkBuildParser.parse(tempDir.resolve("jk.toml"));
-        assertThat(parsed.project().main()).isEqualTo("com.example.Main");
-        assertThat(parsed.project().isRunnable()).isTrue();
+        assertThat(parsed.mainClass()).isEqualTo("com.example.Main");
+        assertThat(parsed.isRunnable()).isTrue();
     }
 
     @Test
@@ -182,8 +183,8 @@ class NewCommandTest {
         assertThat(exit).isEqualTo(0);
 
         JkBuild parsed = JkBuildParser.parse(tempDir.resolve("jk.toml"));
-        assertThat(parsed.project().main()).isEqualTo("com.example.Main");
-        assertThat(parsed.project().isRunnable()).isTrue();
+        assertThat(parsed.mainClass()).isEqualTo("com.example.Main");
+        assertThat(parsed.isRunnable()).isTrue();
     }
 
     @Test
@@ -199,8 +200,8 @@ class NewCommandTest {
         assertThat(Files.readString(main)).contains("package com.example;");
 
         JkBuild parsed = JkBuildParser.parse(tempDir.resolve("jk.toml"));
-        assertThat(parsed.project().main()).isEqualTo("com.example.Main");
-        assertThat(parsed.project().isRunnable()).isTrue();
+        assertThat(parsed.mainClass()).isEqualTo("com.example.Main");
+        assertThat(parsed.isRunnable()).isTrue();
     }
 
     @Test
@@ -209,8 +210,8 @@ class NewCommandTest {
         assertThat(exit).isEqualTo(0);
 
         JkBuild parsed = JkBuildParser.parse(tempDir.resolve("jk.toml"));
-        assertThat(parsed.project().main()).isNull();
-        assertThat(parsed.project().isRunnable()).isFalse();
+        assertThat(parsed.mainClass()).isNull();
+        assertThat(parsed.isRunnable()).isFalse();
     }
 
     @Test

@@ -146,9 +146,11 @@ public final class M2CompatWriter {
     public record MavenHashes(String sha1, String md5) {}
 
     /**
-     * Copy or hard-link {@code source} to {@code target} (atomic temp-rename), then compute and
-     * return the SHA-1 and MD5 of the bytes. Used when the artifact is already in the CAS and we
-     * need to materialise it into {@code ~/.m2}. I/O errors in the copy propagate; errors in
+     * Copy {@code source} to {@code target} (atomic temp-rename), then compute and return the
+     * SHA-1 and MD5 of the bytes. Used when the artifact is already in the CAS and we need to
+     * mirror it into {@code ~/.m2}. Always a copy, never a hard link — jk doesn't control writes
+     * to {@code ~/.m2}, and a hard link would risk silently corrupting the CAS-backed original if
+     * something ever rewrote this file in place. I/O errors in the copy propagate; errors in
      * sidecar writing are swallowed.
      */
     public static MavenHashes copyToM2AndHash(Path source, Path target) throws IOException {

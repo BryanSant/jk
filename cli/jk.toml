@@ -5,7 +5,9 @@ version  = "0.10.0-SNAPSHOT"
 description = "jk command-line client: verb dispatch, rendering, the thin kernel slice (Stage 5)."
 jdk      = 25
 java     = 25
-main     = "dev.jkbuild.cli.Jk"
+
+[application]
+main = "dev.jkbuild.cli.Jk"
 
 # The slim client's whole kernel surface — NO jk-io, jk-resolver, jk-toolchain, or jk-engine
 # (slim-client Stage 5): heavy verbs reach the engine over the wire; the test suite (which needs
