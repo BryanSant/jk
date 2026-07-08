@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: Gradle test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: gradle
+      - run: ./gradlew test
+
+  # The self-hosted build is a separate correctness surface from the Gradle one: the per-module
+  # jk.toml files drift silently when Gradle deps change (stage 5's module moves shipped exactly
+  # that). Building the real dist (native jk client + libexec/jk-engine jars) and running
+  # `jk build` on this repo exercises the shipping client, the engine spawn, the resolver, and
+  # the jk.toml/jk.lock graph end to end.
+  dogfood:
+    name: Self-hosted jk build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: graalvm
+          java-version: '25'
+          cache: gradle
+      - name: Build the native dist
+        run: ./gradlew dist
+      - name: jk builds jk
+        run: build/dist/jk build
