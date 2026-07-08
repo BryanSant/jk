@@ -5,6 +5,7 @@ import dev.jkbuild.cache.Cas;
 import dev.jkbuild.compile.CompileRequest;
 import dev.jkbuild.compile.CompileResult;
 import dev.jkbuild.run.PhaseContext;
+import dev.jkbuild.run.TestSummary;
 import dev.jkbuild.task.ActionCache;
 import dev.jkbuild.task.ActionKey;
 import dev.jkbuild.test.JUnitLauncher;
@@ -61,13 +62,13 @@ public final class TestSupport {
      * trace, indented. Mirrors what Maven/Gradle print on failure so {@code jk} doesn't just report a
      * count. Returns an empty list when nothing failed.
      */
-    public static List<String> renderFailures(JUnitLauncher.Result result) {
+    public static List<String> renderFailures(TestSummary result) {
         List<String> out = new ArrayList<>();
-        List<JUnitLauncher.Failure> failures = result.failures();
+        List<TestSummary.Failure> failures = result.failures();
         if (failures.isEmpty()) return out;
         out.add("");
         out.add(failures.size() + " test" + (failures.size() == 1 ? "" : "s") + " failed:");
-        for (JUnitLauncher.Failure f : failures) {
+        for (TestSummary.Failure f : failures) {
             out.add("");
             out.add("  FAILED  " + f.testName());
             if (f.details() != null && !f.details().isBlank()) {

@@ -17,11 +17,8 @@ import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Exit;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
-import dev.jkbuild.run.Goal;
+import dev.jkbuild.config.ModuleOrder;
 import dev.jkbuild.run.GoalResult;
-import dev.jkbuild.runtime.BuildGraph;
-import dev.jkbuild.runtime.BuildPipeline;
-import dev.jkbuild.runtime.NativeGoals;
 import dev.jkbuild.util.JkDirs;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -144,6 +141,14 @@ public final class NativeCommand implements CliCommand {
         return runSingleProject(startDir, buildFile, cache);
     }
 
+    /**
+     * Native builds are opt-in ({@code native = true} → ALWAYS) — the same rule as the engine's
+     * {@code NativeGoals.isNativeEligible} (a one-line enum check on the shared model).
+     */
+    static boolean nativeEligible(JkBuild build) {
+        return build.project().nativeMode() == JkBuild.NativeMode.ALWAYS;
+    }
+
     /** The engine request for {@code entryDir}, with the client-resolved GraalVM homes attached. */
     private dev.jkbuild.cli.engine.EngineClient.NativeRequest hostedRequest(
             Path entryDir, Path cache, Map<Path, Path> graalHomes) {
@@ -176,7 +181,7 @@ public final class NativeCommand implements CliCommand {
             return 0;
         }
 
-        List<Path> sorted = BuildGraph.orderModules(modulesByDir);
+        List<Path> sorted = ModuleOrder.orderModules(modulesByDir);
         GoalConsole.Mode mode = GoalConsole.modeFor(global);
         long buildStart = System.nanoTime();
 
@@ -189,7 +194,7 @@ public final class NativeCommand implements CliCommand {
         Map<Path, Path> graalHomes = new java.util.HashMap<>();
         for (Path moduleDir : sorted) {
             JkBuild module = modulesByDir.get(moduleDir);
-            if (!NativeGoals.isNativeEligible(module)) continue;
+            if (!nativeEligible(module)) continue;
             Optional<Path> home = graal.resolve(moduleDir, module.project().graal());
             if (home.isEmpty()) return Exit.CONFIG; // GraalResolver already printed why
             graalHomes.put(moduleDir, home.get());
@@ -197,11 +202,13 @@ public final class NativeCommand implements CliCommand {
 
         long nativeCount = sorted.stream()
                 .map(modulesByDir::get)
-                .filter(NativeGoals::isNativeEligible)
+                .filter(NativeCommand::nativeEligible)
                 .count();
 
         if (engineDisabledForTests()) {
-            return runWorkspaceInProcess(wsRoot, modulesByDir, sorted, cache, graalHomes, mode, buildStart, nativeCount);
+            return dev.jkbuild.cli.engine.InProcessEngine.require()
+                    .nativeWorkspaceInProcess(wsRoot, modulesByDir, sorted, cache, graalHomes, mode, buildStart,
+                            nativeCount, jdksDir, mainClass, extra, buildOpts.skipTests, global.verbose);
         }
         return runWorkspaceHosted(wsRoot, cache, graalHomes, mode, buildStart, sorted.size(), nativeCount);
     }
@@ -222,7 +229,7 @@ public final class NativeCommand implements CliCommand {
             int[] idx = {0};
             var listener = new dev.jkbuild.runtime.WorkspaceBuildListener() {
                 @Override
-                public dev.jkbuild.run.GoalListener onModuleStart(dev.jkbuild.runtime.BuildService.ModulePlan m) {
+                public dev.jkbuild.run.GoalListener onModuleStart(dev.jkbuild.runtime.ModulePlan m) {
                     CliOutput.out();
                     CliOutput.out("══ " + wsRoot.relativize(m.dir()) + " (" + (++idx[0]) + "/" + totalModules
                             + ") ══");
@@ -232,14 +239,14 @@ public final class NativeCommand implements CliCommand {
                 }
 
                 @Override
-                public void onModuleFinish(dev.jkbuild.runtime.BuildService.ModuleOutcome o) {
+                public void onModuleFinish(dev.jkbuild.runtime.ModuleOutcome o) {
                     if (!o.success()) {
                         CliOutput.err(
                                 "jk native: " + wsRoot.relativize(o.dir()) + " failed (exit " + o.exitCode() + ")");
                     }
                 }
             };
-            dev.jkbuild.runtime.BuildService.WorkspaceResult result;
+            dev.jkbuild.runtime.WorkspaceResult result;
             try {
                 result = dev.jkbuild.cli.engine.EngineClient.runNative(paths, req, listener);
             } catch (IOException e) {
@@ -258,14 +265,14 @@ public final class NativeCommand implements CliCommand {
         int[] built = {0};
         var listener = new dev.jkbuild.runtime.WorkspaceBuildListener() {
             @Override
-            public void onPlan(List<dev.jkbuild.runtime.BuildService.ModulePlan> plan) {
+            public void onPlan(List<dev.jkbuild.runtime.ModulePlan> plan) {
                 long total = 0;
                 for (var p : plan) total += p.weight();
                 agg.calibrate(total);
             }
 
             @Override
-            public dev.jkbuild.run.GoalListener onModuleStart(dev.jkbuild.runtime.BuildService.ModulePlan m) {
+            public dev.jkbuild.run.GoalListener onModuleStart(dev.jkbuild.runtime.ModulePlan m) {
                 var log = dev.jkbuild.cli.run.EventLogListener.open(m.cache(), m.goal().name());
                 return dev.jkbuild.cli.run.CompositeGoalListener.of(
                         new dev.jkbuild.cli.run.AggregateModuleListener(
@@ -274,11 +281,11 @@ public final class NativeCommand implements CliCommand {
             }
 
             @Override
-            public void onModuleFinish(dev.jkbuild.runtime.BuildService.ModuleOutcome o) {
+            public void onModuleFinish(dev.jkbuild.runtime.ModuleOutcome o) {
                 if (o.success()) built[0]++;
             }
         };
-        dev.jkbuild.runtime.BuildService.WorkspaceResult result;
+        dev.jkbuild.runtime.WorkspaceResult result;
         try {
             result = dev.jkbuild.cli.engine.EngineClient.runNative(paths, req, listener);
         } catch (IOException e) {
@@ -293,7 +300,7 @@ public final class NativeCommand implements CliCommand {
         if (!result.success()) {
             String failedCoord = result.modules().stream()
                     .filter(m -> !m.success())
-                    .map(dev.jkbuild.runtime.BuildService.ModuleOutcome::coord)
+                    .map(dev.jkbuild.runtime.ModuleOutcome::coord)
                     .findFirst()
                     .orElse("build");
             view.finishGoalFailure(GoalWedge.coord(failedCoord) + " " + BuildCommand.elapsedSince(buildStart));
@@ -310,89 +317,8 @@ public final class NativeCommand implements CliCommand {
         return 0;
     }
 
-    /** In-process workspace cascade — the test-only bypass; builds the exact same goals via {@link NativeGoals}. */
-    private int runWorkspaceInProcess(
-            Path wsRoot,
-            Map<Path, JkBuild> modulesByDir,
-            List<Path> sorted,
-            Path cache,
-            Map<Path, Path> graalHomes,
-            GoalConsole.Mode mode,
-            long buildStart,
-            long nativeCount)
-            throws Exception {
-        // JSON / verbose: per-module banners.
-        if (mode != GoalConsole.Mode.AUTO && mode != GoalConsole.Mode.QUIET) {
-            for (int i = 0; i < sorted.size(); i++) {
-                Path moduleDir = sorted.get(i);
-                JkBuild module = modulesByDir.get(moduleDir);
-                CliOutput.out();
-                CliOutput.out(
-                        "══ " + wsRoot.relativize(moduleDir) + " (" + (i + 1) + "/" + sorted.size() + ") ══");
-                int exit = runPreparedNative(
-                        prepareNativeModule(moduleDir, module, cache, graalHomes.get(moduleDir)), null);
-                if (exit != 0) {
-                    CliOutput.err("jk native: " + wsRoot.relativize(moduleDir) + " failed (exit " + exit + ")");
-                    return exit;
-                }
-            }
-            return 0;
-        }
-
-        // AUTO / QUIET: one shared aggregate view.
-        boolean animate = mode == GoalConsole.Mode.AUTO && GoalConsole.isInteractiveTerminal();
-        CommandManager view = CommandManager.goal(CliOutput.stdout(), "Build", animate);
-        dev.jkbuild.cli.run.AggregateContext agg = new dev.jkbuild.cli.run.AggregateContext(view);
-        int built = 0;
-
-        try (var cap = view.captureOutput()) {
-            // Pre-scan every module's goal — the core phases plus the
-            // native-image tail for eligible modules — and sum its estimated
-            // ticks so the bar calibrates to the whole-workspace total up front
-            // (the native-image build's W_NATIVE weight and its per-stage scope
-            // included) and advances 0→100% without resetting per module,
-            // instead of the denominator growing as modules start. These are the
-            // very goals we then run, one module at a time.
-            List<PreparedNativeModule> prepared = new ArrayList<>(sorted.size());
-            long total = 0;
-            for (Path moduleDir : sorted) {
-                PreparedNativeModule pm =
-                        prepareNativeModule(moduleDir, modulesByDir.get(moduleDir), cache, graalHomes.get(moduleDir));
-                total += pm.barWeight();
-                prepared.add(pm);
-            }
-            agg.calibrate(total);
-
-            for (PreparedNativeModule pm : prepared) {
-                String moduleName = wsRoot.relativize(pm.dir()).toString();
-                int exit;
-                try {
-                    exit = runPreparedNative(pm, agg);
-                } catch (Exception e) {
-                    view.finishGoalFailure(GoalWedge.coord(moduleName) + " " + BuildCommand.elapsedSince(buildStart));
-                    throw e;
-                }
-                if (exit != 0) {
-                    view.finishGoalFailure(GoalWedge.coord(moduleName) + " " + BuildCommand.elapsedSince(buildStart));
-                    for (GoalResult.Diagnostic d : agg.lastErrors()) {
-                        CliOutput.err(ConsoleSpec.renderError(d));
-                    }
-                    return exit;
-                }
-                built++;
-            }
-        }
-
-        view.finishGoalSuccess(Theme.colorize("Native build successful", Theme.active().success())
-                + ", "
-                + workspaceSummary(built, nativeCount)
-                + " "
-                + BuildCommand.elapsedSince(buildStart));
-        return 0;
-    }
-
     /** Success-summary tail shared by the hosted and in-process workspace paths. */
-    private static String workspaceSummary(int built, long nativeCount) {
+    static String workspaceSummary(int built, long nativeCount) {
         return built
                 + " module"
                 + (built == 1 ? "" : "s")
@@ -400,51 +326,6 @@ public final class NativeCommand implements CliCommand {
                 + (nativeCount > 0 ? ", " + nativeCount + " native artifact" + (nativeCount == 1 ? "" : "s") : "");
     }
 
-    /**
-     * Construct (but do not run) one module's goal via the shared {@link NativeGoals} factory (the
-     * same assembly the engine hosts). Split out of the run step so the workspace path can build
-     * every module's goal up front and sum {@link Goal#estimatedTotalWeight()} — including the
-     * native phase's weight — to calibrate the shared progress bar before any module runs.
-     */
-    private PreparedNativeModule prepareNativeModule(Path moduleDir, JkBuild module, Path cache, Path graalHome) {
-        Goal goal = NativeGoals.moduleGoal(
-                moduleDir, module, cache, jdksDir, graalHome, mainClass, extra, buildOpts.skipTests, global.verbose);
-        return new PreparedNativeModule(
-                moduleDir,
-                BuildCommand.buildTarget(moduleDir.resolve("jk.toml"), moduleDir),
-                cache,
-                goal,
-                goal.estimatedTotalWeight(),
-                NativeGoals.isNativeEligible(module));
-    }
-
-    /**
-     * Run an already-built module goal and map its result to an exit code. When {@code agg} is
-     * non-null the module feeds the one shared calibrated bar, scaling its progress into its reserved
-     * slice; otherwise it renders on its own (the verbose/JSON per-module path).
-     */
-    private int runPreparedNative(PreparedNativeModule pm, dev.jkbuild.cli.run.AggregateContext agg) {
-        GoalResult result;
-        if (agg != null) {
-            result = GoalConsole.runGoalInto(pm.goal(), pm.cache(), pm.target(), agg, pm.barWeight());
-        } else {
-            String verb = pm.eligible() ? "Native build successful" : "Build successful";
-            ConsoleSpec spec = new ConsoleSpec(
-                    "Build",
-                    r -> Theme.colorize(verb, Theme.active().success()) + BuildCommand.builtArtifact(pm.goal()),
-                    r -> GoalWedge.coord(pm.target()),
-                    true);
-            result = GoalConsole.runGoal(pm.goal(), GoalConsole.modeFor(global), pm.cache(), spec, pm.target());
-        }
-        return result.success() ? 0 : 1;
-    }
-
-    /**
-     * A workspace module's goal, built and ready to run, paired with its pre-scan bar weight (its
-     * slice of the calibrated aggregate total) and whether it carries the native-image tail.
-     */
-    private record PreparedNativeModule(
-            Path dir, String target, Path cache, Goal goal, long barWeight, boolean eligible) {}
 
     // --- single-project (unchanged behaviour) --------------------------------
 
@@ -469,24 +350,9 @@ public final class NativeCommand implements CliCommand {
         GoalConsole.Mode mode = GoalConsole.modeFor(global);
 
         if (engineDisabledForTests()) {
-            Goal goal = NativeGoals.moduleGoal(
-                    projectDir,
-                    build,
-                    cache,
-                    jdksDir,
-                    graalHome.get(),
-                    mainClass,
-                    extra,
-                    buildOpts.skipTests,
-                    global.verbose);
-            ConsoleSpec spec = new ConsoleSpec(
-                    "Build",
-                    r -> Theme.colorize("Native build successful", Theme.active().success())
-                            + BuildCommand.builtArtifact(goal),
-                    r -> GoalWedge.coord(coord),
-                    true);
-            GoalResult result = GoalConsole.runGoal(goal, mode, cache, spec, coord);
-            return result.success() ? 0 : NativeGoals.failureExitCode(goal, result);
+            return dev.jkbuild.cli.engine.InProcessEngine.require()
+                    .nativeSingleInProcess(projectDir, build, cache, graalHome.get(), coord, mode, jdksDir,
+                            mainClass, extra, buildOpts.skipTests, global.verbose);
         }
 
         // Engine-hosted (a cascade of one): the wire has no real Goal to read LAYOUT off of, so
@@ -507,13 +373,13 @@ public final class NativeCommand implements CliCommand {
                 true);
         var listener = new dev.jkbuild.runtime.WorkspaceBuildListener() {
             @Override
-            public dev.jkbuild.run.GoalListener onModuleStart(dev.jkbuild.runtime.BuildService.ModulePlan m) {
+            public dev.jkbuild.run.GoalListener onModuleStart(dev.jkbuild.runtime.ModulePlan m) {
                 var log = dev.jkbuild.cli.run.EventLogListener.open(m.cache(), m.goal().name());
                 return dev.jkbuild.cli.run.CompositeGoalListener.of(
                         GoalConsole.chooseConsoleListener(m.goal().phases(), mode, spec, coord), log);
             }
         };
-        dev.jkbuild.runtime.BuildService.WorkspaceResult result;
+        dev.jkbuild.runtime.WorkspaceResult result;
         try {
             result = dev.jkbuild.cli.engine.EngineClient.runNative(
                     dev.jkbuild.engine.EnginePaths.current(),

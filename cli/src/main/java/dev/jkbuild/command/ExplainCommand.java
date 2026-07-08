@@ -12,8 +12,8 @@ import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Exit;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
-import dev.jkbuild.runtime.BuildPlanForecast;
-import dev.jkbuild.runtime.BuildService;
+import dev.jkbuild.runtime.BuildPlan;
+import dev.jkbuild.runtime.ExplainPlan;
 import dev.jkbuild.util.JkDirs;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -22,7 +22,7 @@ import java.util.List;
 /**
  * {@code jk explain} — forecast the build (the same plan the build driver uses, via {@link
  * BuildService#explain}): every module (workspace root + modules + transitive {@code path} /
- * branch-git deps) in dependency order, and — via {@link BuildPlanForecast} — what each of its phases
+ * branch-git deps) in dependency order, and — via the engine's forecaster — what each of its phases
  * (compile → test → package) would do when {@code jk build} runs: restore from cache or do real
  * work. Fully-cached modules collapse to a summary line; modules that will rebuild expand to their
  * phase sub-tree ({@code --verbose} expands all). {@code --run} executes the plan ({@code jk
@@ -105,14 +105,14 @@ public final class ExplainCommand implements CliCommand {
         // binary/engine available there — see BuildCommand.engineDisabledForTests()). The
         // schedule-aware build-time estimate is computed engine-side alongside the plan
         // (BuildService.estimateEtaMillis) and rides back as an `eta` event; 0 = unknown.
-        BuildService.ExplainPlan plan;
+        ExplainPlan plan;
         long etaMillis;
         if (engineDisabledForTests()) {
-            plan = BuildService.explain(startDir, entry, cache);
-            etaMillis = plan.hasErrors()
-                    ? 0
-                    : BuildService.estimateEtaMillis(
-                            plan, cache, workers, jdksDir, profile, skipTests, global.verbose, serial, parallelTests);
+            long[] etaOut = new long[1];
+            plan = dev.jkbuild.cli.engine.InProcessEngine.require()
+                    .explain(startDir, entry, cache, workers, jdksDir, profile, skipTests, global.verbose,
+                            serial, parallelTests, etaOut);
+            etaMillis = etaOut[0];
         } else {
             long[] etaOut = new long[1];
             plan = dev.jkbuild.cli.engine.EngineClient.explain(
@@ -139,10 +139,10 @@ public final class ExplainCommand implements CliCommand {
 
         // Forecast every module's full phase pipeline (compile → test → package),
         // truthfully — see BuildPlanForecast.
-        List<BuildPlanForecast.Module> modules = plan.modules();
+        List<BuildPlan.Module> modules = plan.modules();
         boolean all = in.isSet("verbose");
         int total = modules.size();
-        long rebuild = modules.stream().filter(BuildPlanForecast.Module::dirty).count();
+        long rebuild = modules.stream().filter(BuildPlan.Module::dirty).count();
 
         // Header: a dark royal blue (#0F4786) " ≡ Build Plan " chip, capped by a matching ▶
         // segment arrow when nerdfont, then the build-time estimate (yellow).
@@ -167,13 +167,13 @@ public final class ExplainCommand implements CliCommand {
         // Workspace-wide stats directly under the root bullet.
         int totalModules = modules.size();
         int totalSources =
-                modules.stream().mapToInt(BuildPlanForecast.Module::sourceCount).sum();
+                modules.stream().mapToInt(BuildPlan.Module::sourceCount).sum();
         int totalTests =
-                modules.stream().mapToInt(BuildPlanForecast.Module::testCount).sum();
+                modules.stream().mapToInt(BuildPlan.Module::testCount).sum();
         int totalJars = (int)
-                modules.stream().filter(BuildPlanForecast.Module::producesJar).count();
+                modules.stream().filter(BuildPlan.Module::producesJar).count();
         int totalImages = (int)
-                modules.stream().filter(BuildPlanForecast.Module::producesImage).count();
+                modules.stream().filter(BuildPlan.Module::producesImage).count();
         String rootPfx = ansi ? " " + Theme.colorize("│", t.darkGray()) + " · " : " | - ";
         if (totalModules > 1) CliOutput.out(rootPfx + "Modules: " + String.format("%,d", totalModules));
         CliOutput.out(rootPfx + "Sources: " + fmtCount(totalSources, "file", "files"));
@@ -234,12 +234,12 @@ public final class ExplainCommand implements CliCommand {
             String secPfx = ansi ? "    " + Theme.colorize("│", t.darkGray()) + " · " : "    | - ";
             int dirtyModules = dirtyIdx.size();
             int dirtySources = modules.stream()
-                    .filter(BuildPlanForecast.Module::dirty)
-                    .mapToInt(BuildPlanForecast.Module::sourceCount)
+                    .filter(BuildPlan.Module::dirty)
+                    .mapToInt(BuildPlan.Module::sourceCount)
                     .sum();
             int dirtyTests = modules.stream()
-                    .filter(BuildPlanForecast.Module::dirty)
-                    .mapToInt(BuildPlanForecast.Module::testCount)
+                    .filter(BuildPlan.Module::dirty)
+                    .mapToInt(BuildPlan.Module::testCount)
                     .sum();
             int dirtyJars = (int)
                     modules.stream().filter(m -> m.dirty() && m.producesJar()).count();
@@ -286,7 +286,7 @@ public final class ExplainCommand implements CliCommand {
      * rebuilds, or always under {@code verbose}.
      */
     private static void renderModuleRow(
-            BuildPlanForecast.Module m,
+            BuildPlan.Module m,
             int idx,
             boolean last,
             String prefix,
@@ -310,10 +310,10 @@ public final class ExplainCommand implements CliCommand {
             String spine = ansi
                     ? prefix + (last ? "   " : Theme.colorize("│", t.darkGray()) + "  ")
                     : prefix + (last ? "   " : "|  ");
-            List<BuildPlanForecast.Phase> ph = m.phases();
+            List<BuildPlan.Phase> ph = m.phases();
             // Pad each □ phase's verb to the widest in this module so the · column lines up.
             int verbCol = 0;
-            for (BuildPlanForecast.Phase p : ph) {
+            for (BuildPlan.Phase p : ph) {
                 if (!p.cached()) verbCol = Math.max(verbCol, verbWidth(p.text()));
             }
             for (int k = 0; k < ph.size(); k++) {
@@ -378,7 +378,7 @@ public final class ExplainCommand implements CliCommand {
      * across the module's phases), the {@code ·} bright-black, and the trailing detail in italic.
      * When {@code !ansi}: {@code (cached)} / {@code [run]} ASCII equivalents, no color.
      */
-    private static String renderStatus(BuildPlanForecast.Phase p, int verbCol, Theme t, boolean ansi) {
+    private static String renderStatus(BuildPlan.Phase p, int verbCol, Theme t, boolean ansi) {
         if (p.cached()) {
             if (!ansi) {
                 StringBuilder s = new StringBuilder("(cached)");

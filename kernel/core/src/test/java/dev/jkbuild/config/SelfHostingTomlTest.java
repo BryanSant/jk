@@ -67,11 +67,15 @@ class SelfHostingTomlTest {
                         "kernel/model",
                         "plugin-api",
                         "kernel/core",
+                        "kernel/client-io",
                         "kernel/io",
                         "kernel/resolver",
+                        "kernel/toolchain-jdk",
                         "kernel/toolchain",
+                        "kernel/engine-api",
                         "kernel/engine",
-                        "cli");
+                        "cli",
+                        "cli-engine");
     }
 
     @Test
@@ -99,7 +103,17 @@ class SelfHostingTomlTest {
         // to apply WorkspaceMerge.
         List<String> mainModules =
                 cli.dependencies().of(Scope.MAIN).stream().map(d -> d.module()).toList();
-        assertThat(mainModules).contains("dev.jkbuild:jk-core", "dev.jkbuild:jk-engine");
+        // The slim client (Stage 5): the wire contract, never the engine itself.
+        assertThat(mainModules).contains("dev.jkbuild:jk-core", "dev.jkbuild:jk-engine-api");
+        assertThat(mainModules)
+                .doesNotContain("dev.jkbuild:jk-engine", "dev.jkbuild:jk-io", "dev.jkbuild:jk-resolver",
+                        "dev.jkbuild:jk-toolchain");
+
+        // The engine application is the one module that links both halves.
+        JkBuild cliEngine = JkBuildParser.parse(REPO.resolve("cli-engine/jk.toml"));
+        List<String> cliEngineMain =
+                cliEngine.dependencies().of(Scope.MAIN).stream().map(d -> d.module()).toList();
+        assertThat(cliEngineMain).contains("dev.jkbuild:jk-cli", "dev.jkbuild:jk-engine");
 
         // Confirm the workspace-root merge still rewrites/dedupes the
         // module coords cleanly when invoked from the root.

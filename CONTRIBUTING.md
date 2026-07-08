@@ -27,18 +27,18 @@ With SDKMAN: `sdk env install && sdk env`. Without SDKMAN: Gradle will toolchain
 ./gradlew classes
 ```
 
-Run `./gradlew :cli:installDist` to produce a runnable JVM distribution under `cli/build/install/`. The end-to-end test suite (`./gradlew build`) downloads artifacts from Maven Central; avoid running it in environments with rate-limited network access.
+Run `./gradlew :cli-engine:installDist` to produce a runnable JVM distribution under `cli-engine/build/install/`. The end-to-end test suite (`./gradlew build`) downloads artifacts from Maven Central; avoid running it in environments with rate-limited network access.
 
-The native binary is opt-in:
-
-```
-./gradlew :cli:nativeCompile
-```
-
-`nativeCompile` requires a GraalVM-capable JDK (the pinned `25.0.3-graal` above satisfies this). After compilation, install locally with:
+The native client binary is opt-in:
 
 ```
-./install.sh cli/build/native/nativeCompile/jk
+./gradlew dist
+```
+
+(`dist` assembles `build/dist/`: the slim native `jk` client from `:cli:nativeCompile` next to `libexec/jk-engine/`, the engine's jar directory from `:cli-engine:installEngineLibs` — the engine is a plain JVM app the client spawns on the jk-managed JDK, never a native image.) `nativeCompile` requires a GraalVM-capable JDK (the pinned `25.0.3-graal` above satisfies this). After compilation, install locally with:
+
+```
+./install.sh build/dist/jk
 ```
 
 ## Project layout

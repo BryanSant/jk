@@ -128,7 +128,7 @@ final class EngineWorkerAdapter {
      * events stream (see the protocol docs); the worker may still take a while (a distribution
      * download), which is fine on this blocking read.
      */
-    static dev.jkbuild.runtime.CompatGoals.Provision provision(EnginePaths.Paths paths, String requestLine)
+    static dev.jkbuild.runtime.HostedEvents.Provision provision(EnginePaths.Paths paths, String requestLine)
             throws IOException {
         EngineClient.ensureRunning(paths, Jk.VERSION);
 
@@ -145,7 +145,7 @@ final class EngineWorkerAdapter {
                 if (type == null) continue;
                 switch (type) {
                     case EngineProtocol.PROVISION_RESULT -> {
-                        return new dev.jkbuild.runtime.CompatGoals.Provision(
+                        return new dev.jkbuild.runtime.HostedEvents.Provision(
                                 Ndjson.str(line, "bin"),
                                 Ndjson.str(line, "version"),
                                 Ndjson.str(line, "source"),

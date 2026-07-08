@@ -504,67 +504,15 @@ public final class CacheCommand extends GroupCommand {
                 return runHosted(root, cacheDir == null, olderThanDays, dryRun, sweep, maxSize, global);
             }
 
-            FileChannel lockChan = null;
-            FileLock lock = null;
-            PrintStream originalOut = null, originalErr = null;
-            if (background) {
-                Files.createDirectories(root);
-                Path lockFile = root.resolve(".prune.lock");
-                lockChan = FileChannel.open(lockFile, StandardOpenOption.CREATE, StandardOpenOption.WRITE);
-                lock = lockChan.tryLock();
-                if (lock == null) {
-                    lockChan.close();
-                    return 0;
-                }
-                Path logFile = root.resolve(".prune-log");
-                var logStream = new PrintStream(Files.newOutputStream(
-                        logFile, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING));
-                originalOut = CliOutput.stdout();
-                originalErr = CliOutput.stderr();
-                System.setOut(logStream);
-                System.setErr(logStream);
+            // In-process prune: the test-only bypass and the legacy `--background` detached child.
+            // On the slim client binary there is no in-process engine at all — delegate a stray
+            // `--background` to the resident engine instead (same idle-boundary semantics).
+            var inProcess = dev.jkbuild.cli.engine.InProcessEngine.find().orElse(null);
+            if (inProcess == null) {
+                return runHosted(root, cacheDir == null, olderThanDays, dryRun, sweep, maxSize, global);
             }
-            try {
-                Goal goal = dev.jkbuild.runtime.CacheGoals.pruneGoal(
-                        root, olderThanDays, dryRun, sweep, maxSize, cacheDir == null);
-
-                ConsoleSpec spec = pruneSpec(
-                        dryRun,
-                        () -> goal.get(dev.jkbuild.runtime.CacheGoals.FILES).orElse(0L),
-                        () -> goal.get(dev.jkbuild.runtime.CacheGoals.BYTES).orElse(0L));
-
-                GoalResult goalResult = GoalConsole.runGoal(
-                        goal, GoalConsole.modeFor(global), root, spec, "Cache");
-
-                warnReachableEvicted(
-                        goal.get(dev.jkbuild.runtime.CacheGoals.REACHABLE_EVICTED).orElse(0L));
-
-                return goalResult.success() ? 0 : 1;
-            } finally {
-                if (background && !dryRun) {
-                    try {
-                        Files.writeString(
-                                root.resolve(dev.jkbuild.task.CachePruneScheduler.LAST_PRUNED_FILE),
-                                Long.toString(System.currentTimeMillis()),
-                                StandardCharsets.UTF_8);
-                    } catch (IOException ignored) {
-                    }
-                }
-                if (originalOut != null) System.setOut(originalOut);
-                if (originalErr != null) System.setErr(originalErr);
-                if (lock != null) {
-                    try {
-                        lock.release();
-                    } catch (IOException ignored) {
-                    }
-                }
-                if (lockChan != null) {
-                    try {
-                        lockChan.close();
-                    } catch (IOException ignored) {
-                    }
-                }
-            }
+            return inProcess.pruneInProcess(root, cacheDir == null, olderThanDays, dryRun, sweep, maxSize,
+                    background, global);
         }
 
         /** The engine-hosted foreground path: send the request, explain any wait, render the stream. */
@@ -601,7 +549,7 @@ public final class CacheCommand extends GroupCommand {
         }
 
         /** The Cache chip spec; counts are read lazily, at result-line render time. */
-        private static ConsoleSpec pruneSpec(
+        static ConsoleSpec pruneSpec(
                 boolean dryRun, java.util.function.LongSupplier files, java.util.function.LongSupplier bytes) {
             return new ConsoleSpec(
                     "Cache",
@@ -623,7 +571,7 @@ public final class CacheCommand extends GroupCommand {
                     true);
         }
 
-        private static void warnReachableEvicted(long evicted) {
+        static void warnReachableEvicted(long evicted) {
             if (evicted <= 0) return;
             Theme pt = Theme.active();
             CliOutput.err(
@@ -699,9 +647,7 @@ public final class CacheCommand extends GroupCommand {
                     true);
             GoalConsole.Mode mode = GoalConsole.modeFor(global);
             if (engineDisabledForTests()) {
-                Goal goal = dev.jkbuild.runtime.CacheGoals.purgeGoal(root);
-                GoalResult goalResult = GoalConsole.runGoal(goal, mode, root, spec, "Cache");
-                return goalResult.success() ? 0 : 1;
+                return dev.jkbuild.cli.engine.InProcessEngine.require().purgeInProcess(root, mode, spec);
             }
             dev.jkbuild.run.GoalResult goalResult;
             try {

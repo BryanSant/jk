@@ -14,9 +14,7 @@ import dev.jkbuild.model.command.Exit;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.repo.RepoCredentialResolver;
-import dev.jkbuild.run.Goal;
 import dev.jkbuild.run.GoalResult;
-import dev.jkbuild.runtime.PublishGoals;
 import dev.jkbuild.util.JkDirs;
 import java.io.IOException;
 import java.net.URI;
@@ -148,24 +146,11 @@ public final class PublishCommand implements CliCommand {
         GoalResult result;
         int files;
         if (engineDisabledForTests()) {
-            Goal goal = PublishGoals.publishGoal(
-                    projectDir,
-                    cache,
-                    new PublishGoals.Request(
-                            repoUrl,
-                            region,
-                            endpoint,
-                            jarPath,
-                            allowSnapshot,
-                            dryRun,
-                            sign ? keyFile : null,
-                            gpgPass,
-                            sigstore,
-                            slsa,
-                            sbom,
-                            cred));
-            result = GoalConsole.run(goal, mode, cache);
-            files = goal.get(PublishGoals.FILES).orElse(0);
+            var o = dev.jkbuild.cli.engine.InProcessEngine.require()
+                    .publishGoal(projectDir, cache, repoUrl, region, endpoint, jarPath, allowSnapshot, dryRun,
+                            sign ? keyFile : null, gpgPass, sigstore, slsa, sbom, cred, mode);
+            result = o.result();
+            files = o.files();
         } else {
             dev.jkbuild.cli.engine.EngineClient.PublishOutcome outcome;
             try {

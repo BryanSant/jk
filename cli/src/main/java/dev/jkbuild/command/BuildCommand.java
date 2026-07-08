@@ -22,9 +22,7 @@ import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.run.Goal;
 import dev.jkbuild.run.GoalKey;
 import dev.jkbuild.run.GoalResult;
-import dev.jkbuild.runtime.BuildPipeline;
-import dev.jkbuild.runtime.BuildPlanForecast;
-import dev.jkbuild.test.JUnitLauncher;
+import dev.jkbuild.run.TestSummary;
 import dev.jkbuild.util.JkDirs;
 import dev.jkbuild.util.JkThreads;
 import java.nio.file.Files;
@@ -90,11 +88,6 @@ public final class BuildCommand implements CliCommand {
     GlobalOptions global;
     boolean noParallel;
     boolean parallelTests;
-    // Dirs of all modules in the build graph, set once the graph is known so prepareModule can pass
-    // them to the effort-weight prediction for the project-tier learned fallback. Empty for the
-    // single-module paths (a lone module's "project" is itself → the fallback is just host-median).
-    private Set<Path> workspaceModuleDirs = Set.of();
-
     // ---- GoalKeys -------------------------------------------------------
     //
     // BuildPipeline owns the phase DAG and all of its keys; BuildCommand only
@@ -104,8 +97,8 @@ public final class BuildCommand implements CliCommand {
     private static final GoalKey<String> BUILD_OUTCOME = GoalKey.of("build-outcome", String.class);
     private static final GoalKey<Path> JAR_PATH = GoalKey.of("jar-path", Path.class);
     private static final GoalKey<BuildLayout> LAYOUT = GoalKey.of("layout", BuildLayout.class);
-    private static final GoalKey<JUnitLauncher.Result> TEST_RESULT =
-            GoalKey.of("test-result", JUnitLauncher.Result.class);
+    private static final GoalKey<TestSummary> TEST_RESULT =
+            GoalKey.of("test-result", TestSummary.class);
 
     // ---- Entry point ----------------------------------------------------
 
@@ -161,7 +154,6 @@ public final class BuildCommand implements CliCommand {
         } catch (java.io.IOException e) {
             // Workspace discovery failed — fall through to single-project build.
         }
-        applyMemoryPlan(1); // single project: one module, tests fork `workers` JVMs
         return runForDir(startDir);
     }
 
@@ -173,22 +165,6 @@ public final class BuildCommand implements CliCommand {
         // planner; --no-parallel just caps module concurrency to 1 (strict serial) via the request
         // the view layer builds below.
         return runGraphParallel(root, rootBuild);
-    }
-
-    /**
-     * Size worker-JVM concurrency and per-JVM heaps from the host's free memory before any fork.
-     * {@code requestedModules} is the peak number of modules that could build at once; folded with
-     * {@code --workers} and {@code --parallel-tests} into a desired JVM count, which the memory plan
-     * may shrink (down to serial). A no-op when the user pinned heap tuning.
-     */
-    private void applyMemoryPlan(int requestedModules) {
-        int w = workers != null && workers > 0 ? workers : 1;
-        int cap = Runtime.getRuntime().availableProcessors();
-        int requested = dev.jkbuild.worker.HeapPlan.requestedJvms(requestedModules, w, parallelTests, cap);
-        dev.jkbuild.worker.HeapPlan.Plan plan = dev.jkbuild.worker.JvmOptions.planAndApply(requested);
-        if (plan != null && plan.warning() != null && !global.outputIsJson()) {
-            CliOutput.err("jk build: " + plan.warning());
-        }
     }
 
     /**
@@ -250,21 +226,33 @@ public final class BuildCommand implements CliCommand {
         boolean animate = mode == GoalConsole.Mode.AUTO && GoalConsole.isInteractiveTerminal();
         boolean nerdfont = dev.jkbuild.config.GlobalConfig.nerdfont();
 
-        dev.jkbuild.runtime.BuildService.ResolvedGraph graph =
-                dev.jkbuild.runtime.BuildService.resolveGraph(entryDir, entryBuild);
-        if (graph.hasErrors()) {
-            for (String err : graph.errors()) CliOutput.err(ConsoleSpec.errorLine("composite", err));
+        long buildStart = System.nanoTime();
+        // Pre-flight forecast — engine-hosted since the Stage 5 dependency cut (the client no
+        // longer links the forecaster; the resident engine answers one synchronous round-trip,
+        // and its -O3 hashing runs the same stat/CAS lookups faster than this -Os client did).
+        // The test-only bypass runs the identical BuildService calls in-process via the seam.
+        dev.jkbuild.runtime.BuildForecast forecast;
+        try {
+            forecast = engineDisabledForTests()
+                    ? dev.jkbuild.cli.engine.InProcessEngine.require()
+                            .forecast(entryDir, entryBuild, cache, buildOpts.skipTests)
+                    : dev.jkbuild.cli.engine.EngineClient.forecast(
+                            dev.jkbuild.engine.EnginePaths.current(), entryDir, cache, buildOpts.skipTests);
+        } catch (java.io.IOException e) {
+            CliOutput.err("jk build: " + e.getMessage());
+            return Exit.SOFTWARE;
+        }
+        if (forecast.hasErrors()) {
+            for (String err : forecast.errors()) CliOutput.err(ConsoleSpec.errorLine("composite", err));
             CliOutput.err(dev.jkbuild.cli.tui.GoalWedge.failureLine("Build", nerdfont, "dependency resolution failed"));
             return Exit.CONFIG;
         }
-        if (graph.isEmpty()) {
+        if (forecast.empty()) {
             CliOutput.out(dev.jkbuild.cli.tui.GoalWedge.chipLine(
                     dev.jkbuild.cli.tui.Glyphs.CHECK, "Build", nerdfont, "workspace declares no modules"));
             return 0;
         }
-        long buildStart = System.nanoTime();
-        Set<Path> dirtyDirs =
-                dev.jkbuild.runtime.BuildService.forecastDirtyDirs(graph, cache, buildOpts.skipTests);
+        Set<Path> dirtyDirs = forecast.dirtyDirs();
         if (System.getenv("JK_PERF") != null) {
             System.err.println("[jk-perf] client-forecast " + (System.nanoTime() - buildStart) / 1_000_000 + "ms dirty="
                     + dirtyDirs.size());
@@ -272,10 +260,9 @@ public final class BuildCommand implements CliCommand {
         // The forecast runs against the per-module locks; when the merged workspace lock is stale
         // the engine will re-lock (freshenLock on the request) and the forecast may be wrong — so a
         // stale lock disables the fully-cached shortcut AND the dirty hint (the engine re-forecasts
-        // after freshening). Cheap: stat-only, no resolution.
-        boolean lockStale = dev.jkbuild.runtime.BuildService.workspaceLockStale(
-                entryDir, entryBuild, entryDir.resolve("jk.lock"));
-        if (dirtyDirs.isEmpty() && !lockStale) {
+        // after freshening).
+        boolean lockStale = forecast.lockStale();
+        if (forecast.fullyCached()) {
             // Fully cached — print chip line directly with no spinner ever created.
             CliOutput.out(dev.jkbuild.cli.tui.GoalWedge.chipLine(
                     dev.jkbuild.cli.tui.Glyphs.CHECK, "Build", nerdfont,
@@ -296,7 +283,7 @@ public final class BuildCommand implements CliCommand {
      * pure renderer over the engine's events.
      */
     private int runWorkspaceHeadless(Path entryDir, JkBuild entryBuild, Path cache) {
-        var request = new dev.jkbuild.runtime.BuildService.WorkspaceRequest(
+        var request = new dev.jkbuild.runtime.WorkspaceRequest(
                 entryDir,
                 entryBuild,
                 cache,
@@ -313,16 +300,16 @@ public final class BuildCommand implements CliCommand {
         int[] total = {0};
         java.util.concurrent.atomic.AtomicInteger done = new java.util.concurrent.atomic.AtomicInteger();
         long start = System.nanoTime();
-        dev.jkbuild.runtime.BuildService.WorkspaceResult result;
+        dev.jkbuild.runtime.WorkspaceResult result;
         try {
             dev.jkbuild.runtime.WorkspaceBuildListener headlessListener = new dev.jkbuild.runtime.WorkspaceBuildListener() {
                     @Override
-                    public void onPlan(List<dev.jkbuild.runtime.BuildService.ModulePlan> plan) {
+                    public void onPlan(List<dev.jkbuild.runtime.ModulePlan> plan) {
                         total[0] = plan.size();
                     }
 
                     @Override
-                    public dev.jkbuild.run.GoalListener onModuleStart(dev.jkbuild.runtime.BuildService.ModulePlan m) {
+                    public dev.jkbuild.run.GoalListener onModuleStart(dev.jkbuild.runtime.ModulePlan m) {
                         // Durable run log, same as the old buffered path. Composed into the *returned*
                         // listener (not attached to m.goal() directly) since an engine-hosted module's
                         // goal is a client-side reconstruction that's never run() — only the returned
@@ -352,7 +339,7 @@ public final class BuildCommand implements CliCommand {
                     }
 
                     @Override
-                    public void onModuleFinish(dev.jkbuild.runtime.BuildService.ModuleOutcome o) {
+                    public void onModuleFinish(dev.jkbuild.runtime.ModuleOutcome o) {
                         if (global.outputIsJson()) return;
                         List<String> buf = buffers.getOrDefault(o.dir(), List.of());
                         synchronized (OUT_LOCK) {
@@ -363,7 +350,7 @@ public final class BuildCommand implements CliCommand {
                     }
             };
             result = engineDisabledForTests()
-                    ? dev.jkbuild.runtime.BuildService.buildWorkspace(request, headlessListener)
+                    ? dev.jkbuild.cli.engine.InProcessEngine.require().buildWorkspace(request, headlessListener)
                     : dev.jkbuild.cli.engine.EngineClient.buildWorkspace(
                             dev.jkbuild.engine.EnginePaths.current(), request, headlessListener);
         } catch (java.io.IOException e) {
@@ -413,7 +400,7 @@ public final class BuildCommand implements CliCommand {
         List<String> deferredOutput = java.util.Collections.synchronizedList(new ArrayList<>());
         java.util.concurrent.atomic.AtomicInteger completed = new java.util.concurrent.atomic.AtomicInteger();
         int[] total = {0};
-        var request = new dev.jkbuild.runtime.BuildService.WorkspaceRequest(
+        var request = new dev.jkbuild.runtime.WorkspaceRequest(
                 entryDir,
                 entryBuild,
                 cache,
@@ -428,11 +415,11 @@ public final class BuildCommand implements CliCommand {
                 lockStale ? null : dirtyDirs,
                 true, // single-process CLI: plan our own worker-JVM memory budget
                 true); // jk build: auto-freshen a stale workspace lock engine-side
-        dev.jkbuild.runtime.BuildService.WorkspaceResult result;
+        dev.jkbuild.runtime.WorkspaceResult result;
         try {
             dev.jkbuild.runtime.WorkspaceBuildListener liveListener = new dev.jkbuild.runtime.WorkspaceBuildListener() {
                     @Override
-                    public void onPlan(List<dev.jkbuild.runtime.BuildService.ModulePlan> plan) {
+                    public void onPlan(List<dev.jkbuild.runtime.ModulePlan> plan) {
                         total[0] = plan.size();
                         long tw = 0;
                         for (var p : plan) tw += p.weight();
@@ -445,7 +432,7 @@ public final class BuildCommand implements CliCommand {
                     }
 
                     @Override
-                    public dev.jkbuild.run.GoalListener onModuleStart(dev.jkbuild.runtime.BuildService.ModulePlan m) {
+                    public dev.jkbuild.run.GoalListener onModuleStart(dev.jkbuild.runtime.ModulePlan m) {
                         // Composed into the returned listener, not attached to m.goal() directly — see
                         // the headless path's onModuleStart above for why.
                         var log = dev.jkbuild.cli.run.EventLogListener.open(m.cache(), m.goal().name());
@@ -460,7 +447,7 @@ public final class BuildCommand implements CliCommand {
                     }
 
                     @Override
-                    public void onModuleFinish(dev.jkbuild.runtime.BuildService.ModuleOutcome o) {
+                    public void onModuleFinish(dev.jkbuild.runtime.ModuleOutcome o) {
                         List<String> buf = buffers.getOrDefault(o.dir(), List.of());
                         String completion =
                                 completionLine(o.success(), completed.incrementAndGet(), total[0], o.coord(), o.millis());
@@ -480,7 +467,7 @@ public final class BuildCommand implements CliCommand {
                     }
             };
             result = engineDisabledForTests()
-                    ? dev.jkbuild.runtime.BuildService.buildWorkspace(request, liveListener)
+                    ? dev.jkbuild.cli.engine.InProcessEngine.require().buildWorkspace(request, liveListener)
                     : dev.jkbuild.cli.engine.EngineClient.buildWorkspace(
                             dev.jkbuild.engine.EnginePaths.current(), request, liveListener);
         } catch (java.io.IOException e) {
@@ -507,7 +494,7 @@ public final class BuildCommand implements CliCommand {
             }
             String failedCoord = result.modules().stream()
                     .filter(m -> !m.success())
-                    .map(dev.jkbuild.runtime.BuildService.ModuleOutcome::coord)
+                    .map(dev.jkbuild.runtime.ModuleOutcome::coord)
                     .findFirst()
                     .orElse("build");
             view.finishGoalFailure(failureTail(failedCoord, start), above);
@@ -560,204 +547,100 @@ public final class BuildCommand implements CliCommand {
         return sb.toString();
     }
 
-    private int runForDir(Path dir) throws Exception {
-        return runForDir(dir, null);
-    }
-
     /**
-     * Build one project directory. When {@code agg} is non-null this is a workspace module whose
-     * events feed the shared aggregate view rather than a per-module progress display.
+     * Build one (non-workspace) project directory. Engine-hosted since the slim-client migration:
+     * a synchronous forecast round-trip backs the fully-cached "project up to date" shortcut (the
+     * client no longer links the forecaster — Stage 5), then the build itself streams over {@link
+     * dev.jkbuild.cli.engine.EngineClient#runSingleBuild}. The test-only bypass runs the identical
+     * pipeline in-process through the {@link dev.jkbuild.cli.engine.InProcessEngine} seam.
      */
-    private int runForDir(Path dir, AggregateContext agg) throws Exception {
-        long startNanos = System.nanoTime(); // captured before prepareModule so timing includes the predict
+    private int runForDir(Path dir) throws Exception {
+        long startNanos = System.nanoTime(); // captured before the forecast so timing includes it
         Path buildFile = dir.resolve("jk.toml");
         if (!Files.exists(buildFile)) {
             CliOutput.err("jk build: no jk.toml in " + dev.jkbuild.cli.PathDisplay.styledRaw(dir));
             return Exit.CONFIG;
         }
-        return runPrepared(prepareModule(dir), agg, startNanos);
-    }
-
-    /**
-     * Construct (but do not run) a module's build goal: inputs → core phases → declared tails.
-     * Returns {@code null} when {@code dir} has no {@code jk.toml}. Split out of {@link #runForDir}
-     * so the workspace path can build every module's goal up front and sum {@link
-     * Goal#estimatedTotalWeight()} to calibrate the shared progress bar before any module runs.
-     */
-    private PreparedModule prepareModule(Path dir) {
-        return prepareModule(dir, buildOpts.skipTests);
-    }
-
-    /**
-     * As {@link #prepareModule(Path)} but with an explicit {@code skipTests} — used to build
-     * composite dependency units compile-only (a dependency's tests aren't run when it's consumed as
-     * a source dependency).
-     */
-    private PreparedModule prepareModule(Path dir, boolean skipTests) {
-        return prepareModule(dir, skipTests, false);
-    }
-
-    /**
-     * As {@link #prepareModule(Path, boolean)} but with a {@code forceRebuild} hint (this module will
-     * rebuild because an upstream sibling changed) so its compile/test slice is reserved in the
-     * calibrated total up front — keeping the aggregate bar honest from the start. Set from {@link
-     * dev.jkbuild.runtime.BuildService#forecastDirtyDirs}.
-     */
-    private PreparedModule prepareModule(Path dir, boolean skipTests, boolean forceRebuild) {
+        Path cache = cacheDir != null ? cacheDir : JkDirs.cache();
+        if (engineDisabledForTests()) {
+            return dev.jkbuild.cli.engine.InProcessEngine.require()
+                    .buildProjectInProcess(dir, cache, jdksDir, workers != null ? workers : 1, profileName,
+                            buildOpts.skipTests, global, startNanos);
+        }
         try {
             dir = dir.toRealPath();
         } catch (java.io.IOException ignored) {
         }
-        Path cache = cacheDir != null ? cacheDir : JkDirs.cache();
-        Path buildFile = dir.resolve("jk.toml");
-        if (!Files.exists(buildFile)) return null;
-        // One shared Inputs factory with jk explain (see BuildPlanForecast.inputsFor) so the two
-        // can't drift in what they feed the effort-weight prediction — it also does the lexical
-        // run-tests pre-discovery so the phase's scope is known before any phase runs.
-        BuildPipeline.Inputs inputs = BuildPlanForecast.inputsFor(
-                dir, cache, workers != null ? workers : 1, jdksDir, profileName, skipTests, global.verbose,
-                workspaceModuleDirs);
-        // Quick pre-check: is every work phase already cached? Uses only stat/CAS
-        // lookups — the same operations the parse-build phase would run lazily.
-        // Doubles as a gate for the single-module TUI bypass in runPrepared().
-        boolean fullyCached = false;
-        if (!forceRebuild) {
-            try {
-                dev.jkbuild.cache.Cas cas = new dev.jkbuild.cache.Cas(inputs.cache());
-                JkBuild build = JkBuildParser.parse(buildFile); // memoized; effectively free
-                dev.jkbuild.runtime.CompileSupport.Languages langs =
-                        dev.jkbuild.runtime.CompileSupport.resolveLanguages(build.project(), dir);
-                boolean useJava = langs.java();
-                boolean useKotlin = langs.kotlin();
-                boolean compact = dev.jkbuild.runtime.CompileSupport.isSimpleLayout(build.project(), dir);
-                dev.jkbuild.runtime.EffortWeights.Plan plan =
-                        dev.jkbuild.runtime.EffortWeights.predict(inputs, cas, compact, useJava, useKotlin);
-                fullyCached = plan.fullyCached();
-            } catch (Exception ignored) {
-                // best-effort; proceed normally if prediction throws
-            }
-        }
-        Goal.Builder builder = BuildPipeline.coreBuilder(inputs, forceRebuild);
-        BuildPipeline.appendDeclaredTails(builder, inputs);
-        Goal goal = builder.build();
-        // Estimate the module's bar weight once, here — the workspace pre-scan sums
-        // these into the calibrated total, and the same value is the module's slice
-        // of the aggregate bar (see AggregateModuleListener). Computing it once
-        // keeps the slice byte-for-byte equal to what was summed into `total`.
-        return new PreparedModule(
-                dir, buildTarget(buildFile, dir), cache, goal, goal.estimatedTotalWeight(), fullyCached);
-    }
+        String target = buildTarget(buildFile, dir);
 
-    /** Run an already-built module goal and map its result to an exit code. */
-    private int runPrepared(PreparedModule pm, AggregateContext agg, long startNanos) {
-        Goal goal = pm.goal();
-        // Single-module fast path: skip the TUI entirely when every work phase is already
-        // cached. The pre-check in prepareModule() confirmed this with stat/CAS lookups only.
-        // Workspace modules (agg != null) always run so the aggregate view stays consistent.
-        if (agg == null && pm.fullyCached() && GoalConsole.isInteractiveTerminal() && !global.outputIsJson()) {
-            CliOutput.out(dev.jkbuild.cli.tui.GoalWedge.chipLine(
-                    dev.jkbuild.cli.tui.Glyphs.CHECK,
-                    "Build",
-                    dev.jkbuild.config.GlobalConfig.nerdfont(),
-                    buildOk() + ", project up to date " + elapsedSince(startNanos)));
-            return 0;
-        }
-        GoalResult result;
-        JUnitLauncher.Result testResult;
-        // Engine-hosted (a real single-project jk build always is, outside the test-only bypass):
-        // the engine runs the goal and, on success, does the calibration-refine + cache-prune
-        // itself (it's the process that actually measured the work) — see the `if (result.success())`
-        // block below, which only repeats that logic for the two in-process branches.
-        boolean engineHosted = agg == null && !engineDisabledForTests();
-        if (agg != null) {
-            // Workspace module: feed the one shared aggregate view, scaling this
-            // module's progress into its reserved slice of the calibrated total.
-            result = GoalConsole.runGoalInto(goal, pm.cache(), pm.target(), agg, pm.barWeight());
-            testResult = goal.get(TEST_RESULT).orElse(null);
-        } else if (!engineHosted) {
-            // chip = true → settle through the goal chip (" ✓ Build ▶ Build successful …"),
-            // matching the workspace path. onSuccess/onFailure return the tail after the verb.
-            ConsoleSpec spec =
-                    new ConsoleSpec("Build", r -> projectTail(goal), r -> GoalWedge.coord(pm.target()), true);
-            result = GoalConsole.runGoal(goal, GoalConsole.modeFor(global), pm.cache(), spec, pm.target());
-            testResult = goal.get(TEST_RESULT).orElse(null);
-        } else {
-            // The wire has no real Goal to read BUILD_OUTCOME/LAYOUT from ahead of time (they arrive
-            // on the terminal goal-finish event), so projectTail's ingredients are supplied two ways:
-            // BUILD_OUTCOME rides the wire (only the engine, which actually ran the goal, knows it);
-            // LAYOUT is reconstructed independently — it's a pure derivation from dir + the parsed
-            // jk.toml, both of which the client already has, and the artifact file it points at lives
-            // on the same local filesystem the engine just built into.
-            JUnitLauncher.Result[] testResultHolder = new JUnitLauncher.Result[1];
-            String[] buildOutcomeHolder = new String[1];
-            BuildLayout layout;
+        // Single-module fast path: skip the TUI entirely when the engine's forecast says every
+        // work phase is already cached (stat/CAS lookups engine-side, one round trip here).
+        if (GoalConsole.isInteractiveTerminal() && !global.outputIsJson()) {
             try {
-                layout = BuildLayout.of(pm.dir(), JkBuildParser.parse(pm.dir().resolve("jk.toml")));
-            } catch (RuntimeException | java.io.IOException e) {
-                layout = null; // best-effort — projectTail degrades to a plain "project built"
-            }
-            BuildLayout finalLayout = layout;
-            ConsoleSpec spec = new ConsoleSpec(
-                    "Build",
-                    r -> projectTail(buildOutcomeHolder[0], finalLayout),
-                    r -> GoalWedge.coord(pm.target()),
-                    true);
-            GoalConsole.Mode mode = GoalConsole.modeFor(global);
-            try {
-                result = dev.jkbuild.cli.engine.EngineClient.runSingleBuild(
-                        dev.jkbuild.engine.EnginePaths.current(),
-                        new dev.jkbuild.cli.engine.EngineClient.SingleBuildRequest(
-                                pm.dir(),
-                                pm.cache(),
-                                jdksDir,
-                                workers != null ? workers : 1,
-                                profileName,
-                                buildOpts.skipTests,
-                                global.verbose,
-                                dev.jkbuild.config.SessionContext.current().offline(),
-                                dev.jkbuild.config.SessionContext.current().force()),
-                        phases -> GoalConsole.chooseConsoleListener(phases, mode, spec, pm.target()),
-                        testResultHolder,
-                        buildOutcomeHolder);
-            } catch (java.io.IOException e) {
-                CliOutput.err("jk build: " + e.getMessage());
-                return Exit.SOFTWARE;
-            }
-            testResult = testResultHolder[0];
-        }
-
-        if (result.success()) {
-            if (!engineHosted) {
-                // Single-module (standalone) build: fold this run's measured throughput into the host
-                // calibration so the cold estimate self-heals — the common case never hits the
-                // workspace loops that do this. Skip fully-cached runs (near-zero time, not
-                // representative of work); workspace paths (agg != null) refine themselves.
-                if (agg == null && !pm.fullyCached() && pm.barWeight() > 0) {
-                    long moduleMs = (System.nanoTime() - startNanos) / 1_000_000;
-                    if (moduleMs > 0) {
-                        dev.jkbuild.runtime.Calibration.refine(
-                                moduleMs / (double) pm.barWeight(), System.currentTimeMillis());
-                    }
+                var forecast = dev.jkbuild.cli.engine.EngineClient.forecast(
+                        dev.jkbuild.engine.EnginePaths.current(), dir, cache, buildOpts.skipTests);
+                if (!forecast.hasErrors() && !forecast.empty() && forecast.fullyCached()) {
+                    CliOutput.out(dev.jkbuild.cli.tui.GoalWedge.chipLine(
+                            dev.jkbuild.cli.tui.Glyphs.CHECK,
+                            "Build",
+                            dev.jkbuild.config.GlobalConfig.nerdfont(),
+                            buildOk() + ", project up to date " + elapsedSince(startNanos)));
+                    return 0;
                 }
-                // Cache settings are user-global only; resolve() reads ~/.jk/config.toml
-                // (a project jk.toml's [cache] is intentionally ignored).
-                var cacheConfig = dev.jkbuild.config.JkCacheConfig.resolve();
-                dev.jkbuild.task.CachePruneScheduler.resolveJkExe()
-                        .ifPresent(exe -> dev.jkbuild.task.CachePruneScheduler.maybeRun(cacheConfig, pm.cache(), exe));
+            } catch (java.io.IOException | RuntimeException ignored) {
+                // best-effort shortcut — fall through to the real build
             }
-            return 0;
         }
+
+        // The wire has no real Goal to read BUILD_OUTCOME/LAYOUT from ahead of time (they arrive
+        // on the terminal goal-finish event), so projectTail's ingredients are supplied two ways:
+        // BUILD_OUTCOME rides the wire (only the engine, which actually ran the goal, knows it);
+        // LAYOUT is reconstructed independently — it's a pure derivation from dir + the parsed
+        // jk.toml, both of which the client already has, and the artifact file it points at lives
+        // on the same local filesystem the engine just built into. The engine does the
+        // calibration-refine + cache-prune itself on success (it measured the work).
+        TestSummary[] testResultHolder = new TestSummary[1];
+        String[] buildOutcomeHolder = new String[1];
+        BuildLayout layout;
+        try {
+            layout = BuildLayout.of(dir, JkBuildParser.parse(buildFile));
+        } catch (RuntimeException | java.io.IOException e) {
+            layout = null; // best-effort — projectTail degrades to a plain "project built"
+        }
+        BuildLayout finalLayout = layout;
+        ConsoleSpec spec = new ConsoleSpec(
+                "Build",
+                r -> projectTail(buildOutcomeHolder[0], finalLayout),
+                r -> GoalWedge.coord(target),
+                true);
+        GoalConsole.Mode mode = GoalConsole.modeFor(global);
+        GoalResult result;
+        try {
+            result = dev.jkbuild.cli.engine.EngineClient.runSingleBuild(
+                    dev.jkbuild.engine.EnginePaths.current(),
+                    new dev.jkbuild.cli.engine.EngineClient.SingleBuildRequest(
+                            dir,
+                            cache,
+                            jdksDir,
+                            workers != null ? workers : 1,
+                            profileName,
+                            buildOpts.skipTests,
+                            global.verbose,
+                            dev.jkbuild.config.SessionContext.current().offline(),
+                            dev.jkbuild.config.SessionContext.current().force()),
+                    phases -> GoalConsole.chooseConsoleListener(phases, mode, spec, target),
+                    testResultHolder,
+                    buildOutcomeHolder);
+        } catch (java.io.IOException e) {
+            CliOutput.err("jk build: " + e.getMessage());
+            return Exit.SOFTWARE;
+        }
+        if (result.success()) return 0;
         // Test failures get exit 4; other failures exit 1.
+        TestSummary testResult = testResultHolder[0];
         if (testResult != null && !testResult.allPassed()) return 4;
         return 1;
     }
-
-    /**
-     * A workspace module's goal, built and ready to run, paired with its pre-scan bar weight — the
-     * module's slice of the calibrated aggregate total.
-     */
-    private record PreparedModule(
-            Path dir, String target, Path cache, Goal goal, long barWeight, boolean fullyCached) {}
 
     // ---- success summary -----------------------------------------------
 
@@ -780,7 +663,7 @@ public final class BuildCommand implements CliCommand {
     }
 
     /** The green {@code Build successful} lead that opens every build success message. */
-    private static String buildOk() {
+    static String buildOk() {
         return Theme.colorize("Build successful", Theme.active().success());
     }
 

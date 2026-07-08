@@ -1,0 +1,16 @@
+[project]
+group    = "dev.jkbuild"
+name     = "jk-toolchain-jdk"
+version  = "0.10.0-SNAPSHOT"
+description = "jk toolchain (client slice): JDK flow, discovery probes, launcher shims, exporters."
+jdk      = 25
+java     = 25
+
+[dependencies]
+jk-core      = { group = "dev.jkbuild", name = "jk-core",      version = "0.10.0-SNAPSHOT" }
+jk-client-io = { group = "dev.jkbuild", name = "jk-client-io", version = "0.10.0-SNAPSHOT" }
+
+[test-dependencies]
+assertj-core            = { group = "org.assertj",        name = "assertj-core",            version = "3.27.7" }
+junit-jupiter           = { group = "org.junit.jupiter",  name = "junit-jupiter",           version = "6.1.0" }
+junit-platform-launcher = { group = "org.junit.platform", name = "junit-platform-launcher", version = "6.1.0" }

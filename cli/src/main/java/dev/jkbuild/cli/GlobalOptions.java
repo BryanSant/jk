@@ -116,7 +116,7 @@ public final class GlobalOptions {
         // read them from the request instead of process-global system properties / static channels.
         dev.jkbuild.config.SessionContext.install(dev.jkbuild.config.SessionContext.current()
                 .withToolchainSpecs(g.jdk, g.graal)
-                .withJvm(dev.jkbuild.worker.JvmOptions.resolve(g.jvmCli(), g.workingDir())));
+                .withJvm(dev.jkbuild.config.WorkerTunings.resolve(g.jvmCli(), g.workingDir())));
         return g;
     }
 

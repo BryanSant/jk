@@ -27,6 +27,8 @@ include(
     ":io",
     ":resolver",
     ":toolchain",
+    ":toolchain-jdk",
+    ":client-io",
     // Plugins — first-party, shipped with jk
     ":test-runner",
     ":kotlin-compiler",
@@ -38,8 +40,10 @@ include(
     ":git-client",     // was :git-runner
     ":formatter",      // jk format — Spotless-wrapped Java/Kotlin formatter
     // Host + CLI
+    ":engine-api",
     ":engine",
     ":cli",
+    ":cli-engine",
 )
 
 // Kernel modules live under kernel/
@@ -48,6 +52,9 @@ project(":core").projectDir      = file("kernel/core")
 project(":io").projectDir        = file("kernel/io")
 project(":resolver").projectDir  = file("kernel/resolver")
 project(":toolchain").projectDir = file("kernel/toolchain")
+project(":toolchain-jdk").projectDir = file("kernel/toolchain-jdk")
+project(":client-io").projectDir = file("kernel/client-io")
+project(":engine-api").projectDir  = file("kernel/engine-api")
 project(":engine").projectDir      = file("kernel/engine")
 
 // Plugin modules live under plugins/

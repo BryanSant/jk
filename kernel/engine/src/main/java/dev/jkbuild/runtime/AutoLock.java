@@ -3,6 +3,7 @@ package dev.jkbuild.runtime;
 
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.config.JkBuildParser;
+import dev.jkbuild.jdk.JavaHomes;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.lock.LockfileReader;
 import dev.jkbuild.lock.LockfileWriter;
@@ -232,7 +233,7 @@ public final class AutoLock {
             dev.jkbuild.runtime.GitSourceResolution.Prepared prep;
             try {
                 prep = GitSourceResolution.prepare(
-                        effective, repos, cas, CompileToolchain.runningJavaHome(), jkVersion, lockedShas);
+                        effective, repos, cas, JavaHomes.runningJavaHome(), jkVersion, lockedShas);
                 updated = GitSourceResolution.stamp(updated, prep.gitInfoByKey());
             } catch (Exception ignored) {
                 // Git-source stamping is best-effort in auto-lock

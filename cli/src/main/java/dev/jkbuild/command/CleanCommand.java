@@ -15,7 +15,6 @@ import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
-import dev.jkbuild.task.CacheGc;
 import dev.jkbuild.util.JkDirs;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -128,11 +127,17 @@ public final class CleanCommand implements CliCommand {
 
     /** Run the cache GC (engine-hosted for a real invocation) and print a one-line summary. */
     private static void gcCache() throws IOException {
-        CacheGc.Report report;
+        long purgedBlobs;
+        long freedBytes;
+        long repoLinksRemoved;
         if (engineDisabledForTests()) {
+            dev.jkbuild.cli.engine.EngineClient.CacheMaintSummary summary;
             try (Spinner spinner = Spinner.show(CliOutput.stdout(), "Collecting cache...")) {
-                report = CacheGc.run(JkDirs.cache(), false);
+                summary = dev.jkbuild.cli.engine.InProcessEngine.require().cacheGc(JkDirs.cache());
             }
+            purgedBlobs = Math.max(0, summary.files());
+            freedBytes = Math.max(0, summary.bytes());
+            repoLinksRemoved = Math.max(0, summary.repoLinks());
         } else {
             // Hosted: the spinner stays client-side (the goal has no per-file progress worth a
             // bar); the counts ride the terminal goal-finish.
@@ -150,22 +155,21 @@ public final class CleanCommand implements CliCommand {
                     return;
                 }
             }
-            report = new CacheGc.Report(
-                    (int) Math.max(0, summary[0].files()),
-                    Math.max(0, summary[0].bytes()),
-                    (int) Math.max(0, summary[0].repoLinks()));
+            purgedBlobs = Math.max(0, summary[0].files());
+            freedBytes = Math.max(0, summary[0].bytes());
+            repoLinksRemoved = Math.max(0, summary[0].repoLinks());
         }
         boolean nerdfont = GlobalConfig.nerdfont();
-        if (report.purgedBlobs() == 0) {
+        if (purgedBlobs == 0) {
             CliOutput.out(GoalWedge.chipLine(Glyphs.CHECK, "Cache GC", nerdfont, "nothing idle past 90 days"));
         } else {
             String msg = String.format(
                     "purged %,d blob%s (%s), %,d repo link%s",
-                    report.purgedBlobs(),
-                    report.purgedBlobs() == 1 ? "" : "s",
-                    CacheCommand.fmtBytes(report.freedBytes()),
-                    report.repoLinksRemoved(),
-                    report.repoLinksRemoved() == 1 ? "" : "s");
+                    purgedBlobs,
+                    purgedBlobs == 1 ? "" : "s",
+                    CacheCommand.fmtBytes(freedBytes),
+                    repoLinksRemoved,
+                    repoLinksRemoved == 1 ? "" : "s");
             CliOutput.out(GoalWedge.chipLine(Glyphs.CHECK, "Cache GC", nerdfont, msg));
         }
     }

@@ -230,18 +230,9 @@ public final class InstallGoals {
         }
     }
 
-    /** Write a file directly into {@code repos/local/} as a full-store entry (actual JAR on disk). */
+    /** See {@link dev.jkbuild.repo.RepoArtifactStore#writeToLocalStore} — the one shared local-install write. */
     public static void writeToLocalStore(Path cacheDir, String relativePath, Path source) throws IOException {
-        Path target = cacheDir.resolve("repos/local/" + relativePath);
-        Files.createDirectories(target.getParent());
-        Path tmp = target.resolveSibling(target.getFileName() + ".part");
-        Files.copy(source, tmp, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-        Files.move(
-                tmp,
-                target,
-                java.nio.file.StandardCopyOption.ATOMIC_MOVE,
-                java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-        Files.writeString(Path.of(target + ".sha256"), Hashing.sha256Hex(target));
+        dev.jkbuild.repo.RepoArtifactStore.writeToLocalStore(cacheDir, relativePath, source);
     }
 
     /** Write byte content directly into {@code repos/local/} as a full-store entry. */

@@ -155,7 +155,7 @@ class JvmOptionsTest {
                 string-dedup = false
                 args = ["-XX:+AlwaysPreTouch"]
                 """);
-        WorkerTuning s = JvmOptions.fromToml(toml);
+        WorkerTuning s = dev.jkbuild.config.WorkerTunings.fromToml(toml);
         assertThat(s.maxRamPercent()).isEqualTo(33.0);
         assertThat(s.gc()).isEqualTo("g1");
         assertThat(s.stringDedup()).isFalse();
@@ -166,7 +166,7 @@ class JvmOptionsTest {
     void missing_jvm_table_is_empty(@TempDir Path dir) throws Exception {
         Path toml = dir.resolve("jk.toml");
         Files.writeString(toml, "[project]\ngroup=\"x\"\nname=\"y\"\nversion=\"1\"\n");
-        assertThat(JvmOptions.fromToml(toml)).isEqualTo(WorkerTuning.NONE);
+        assertThat(dev.jkbuild.config.WorkerTunings.fromToml(toml)).isEqualTo(WorkerTuning.NONE);
     }
 
     @Test
@@ -181,7 +181,7 @@ class JvmOptionsTest {
                 """);
         // CLI maxRam is non-null → wins over the toml layer regardless of env.
         WorkerTuning cli = new WorkerTuning(80.0, null, null, List.of());
-        WorkerTuning eff = JvmOptions.resolve(cli, dir);
+        WorkerTuning eff = dev.jkbuild.config.WorkerTunings.resolve(cli, dir);
         assertThat(eff.maxRamPercent()).isEqualTo(80.0);
     }
 }

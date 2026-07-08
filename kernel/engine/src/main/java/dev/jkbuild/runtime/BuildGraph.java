@@ -47,7 +47,7 @@ public final class BuildGraph {
      *
      * <p>Package-private on purpose: front-ends must not see (let alone build) engine units. Client
      * code reconstructing plan objects from wire data goes through {@link
-     * BuildService.ModulePlan#fromWire} / {@link BuildPlanForecast.Module#fromWire} instead, per
+     * ModulePlan#fromWire} / {@link BuildPlan.Module#fromWire} instead, per
      * {@code docs/architecture/re-foundation.md} M6.
      */
     record BuildUnit(Path dir, JkBuild manifest, String coord, Origin origin) {}
@@ -126,82 +126,18 @@ public final class BuildGraph {
      * progress — a cycle never silently drops a module.
      */
     public static List<Path> orderModules(Map<Path, JkBuild> modulesByDir) {
-        Map<String, Path> dirByCoord = new LinkedHashMap<>();
-        Map<String, Path> dirByName = new LinkedHashMap<>(); // for workspace: references
-        for (var e : modulesByDir.entrySet()) {
-            dirByCoord.put(coord(e.getValue()), e.getKey());
-            dirByName.put(e.getValue().project().name(), e.getKey());
-        }
-        Map<Path, Set<Path>> edges = new LinkedHashMap<>();
-        for (var e : modulesByDir.entrySet()) {
-            edges.put(e.getKey(), modulePrereqs(e.getKey(), e.getValue(), dirByCoord, dirByName));
-        }
-        List<Path> sorted = new ArrayList<>(kahnSort(modulesByDir.keySet(), edges));
-        if (sorted.size() != modulesByDir.size()) {
-            // Cycle. Fall back to declaration order for the stragglers
-            // so the build still tries to make progress.
-            for (Path p : modulesByDir.keySet()) {
-                if (!sorted.contains(p)) sorted.add(p);
-            }
-        }
-        return sorted;
+        return dev.jkbuild.config.ModuleOrder.orderModules(modulesByDir);
     }
 
-    private static String coord(JkBuild m) {
-        return m.project().group() + ":" + m.project().name();
-    }
-
-    /**
-     * Sibling-dep + {@code [build].order-after} prereqs for one module, resolved against the
-     * workspace's coord/name indexes. Self-references are dropped. Shared by the graph {@link
-     * Builder} and the map-based {@link #orderModules} entry so both compute identical edges.
-     */
+    /** See {@link dev.jkbuild.config.ModuleOrder#modulePrereqs} — the one shared edge computation. */
     private static Set<Path> modulePrereqs(
             Path moduleDir, JkBuild m, Map<String, Path> dirByCoord, Map<String, Path> dirByName) {
-        Set<Path> prereqs = new LinkedHashSet<>();
-        for (Scope scope : Scope.values()) {
-            for (Dependency d : m.dependencies().of(scope)) {
-                String module = d.module();
-                Path depDir = dirByCoord.get(module);
-                // workspace placeholders resolve by their bare sibling name
-                if (depDir == null && d.isWorkspace()) {
-                    depDir = dirByName.get(d.workspaceName());
-                }
-                if (depDir != null && !depDir.equals(moduleDir)) prereqs.add(depDir);
-            }
-        }
-        // [build].order-after: build-order-only edges (no classpath/lock). Each entry names a
-        // sibling by project name or group:artifact coord.
-        for (String ref : m.build().allOrderAfter()) {
-            Path depDir = dirByCoord.get(ref);
-            if (depDir == null) depDir = dirByName.get(ref);
-            if (depDir != null && !depDir.equals(moduleDir)) prereqs.add(depDir);
-        }
-        return prereqs;
+        return dev.jkbuild.config.ModuleOrder.modulePrereqs(moduleDir, m, dirByCoord, dirByName);
     }
 
-    /**
-     * Kahn topo-sort (prereqs first) over an explicit prereq-edge map. Returns the nodes in
-     * dependency-first order; a returned list SHORTER than {@code nodes} means a cycle left some
-     * nodes unplaced — callers apply their own leftover policy. Shared by {@link Builder#topoSort}
-     * and {@link #orderModules}.
-     */
+    /** See {@link dev.jkbuild.config.ModuleOrder#kahnSort} — the one shared topo-sort. */
     private static List<Path> kahnSort(Collection<Path> nodes, Map<Path, Set<Path>> edges) {
-        Map<Path, Integer> remaining = new LinkedHashMap<>();
-        for (Path n : nodes) remaining.put(n, edges.getOrDefault(n, Set.of()).size());
-        Deque<Path> queue = new ArrayDeque<>();
-        for (var e : remaining.entrySet()) if (e.getValue() == 0) queue.add(e.getKey());
-        List<Path> sorted = new ArrayList<>();
-        while (!queue.isEmpty()) {
-            Path next = queue.removeFirst();
-            sorted.add(next);
-            for (var e : edges.entrySet()) {
-                if (e.getValue().contains(next)) {
-                    if (remaining.merge(e.getKey(), -1, Integer::sum) == 0) queue.add(e.getKey());
-                }
-            }
-        }
-        return sorted;
+        return dev.jkbuild.config.ModuleOrder.kahnSort(nodes, edges);
     }
 
     // ---------------------------------------------------------------------

@@ -5,6 +5,7 @@ import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.cli.theme.Coords;
+import dev.jkbuild.jdk.JavaHomes;
 import dev.jkbuild.model.Coordinate;
 import dev.jkbuild.model.command.Arity;
 import dev.jkbuild.model.command.CliCommand;
@@ -12,10 +13,6 @@ import dev.jkbuild.model.command.Exit;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.model.command.Param;
-import dev.jkbuild.run.Goal;
-import dev.jkbuild.run.GoalResult;
-import dev.jkbuild.runtime.CompileToolchain;
-import dev.jkbuild.runtime.ToolGoals;
 import dev.jkbuild.tool.ToolEnv;
 import dev.jkbuild.tool.ToolLauncher;
 import dev.jkbuild.util.JkDirs;
@@ -128,11 +125,11 @@ public final class ToolRunCommand implements CliCommand {
 
         ToolEnv env;
         if (engineDisabledForTests()) {
-            Goal goal = ToolGoals.resolveGoal(
-                    primary, primary.artifact(), mainClass, repoUrl, cacheDir, Coords.gav(primary));
-            GoalResult result = GoalConsole.run(goal, GoalConsole.modeFor(global), cacheDir);
-            if (!result.success()) return 1;
-            env = goal.get(ToolGoals.TOOL_ENV).orElseThrow();
+            var o = dev.jkbuild.cli.engine.InProcessEngine.require()
+                    .toolResolveGoal(primary, primary.artifact(), mainClass, repoUrl, cacheDir,
+                            Coords.gav(primary), GoalConsole.modeFor(global));
+            if (o.env() == null) return 1;
+            env = o.env();
         } else {
             dev.jkbuild.cli.engine.EngineClient.ToolResolveOutcome outcome;
             try {
@@ -151,7 +148,7 @@ public final class ToolRunCommand implements CliCommand {
         }
 
         // The exec deliberately stays client-side: the tool inherits this terminal's stdio.
-        Path javaHome = CompileToolchain.runningJavaHome();
+        Path javaHome = JavaHomes.runningJavaHome();
         return ToolLauncher.execEphemeral(javaHome, env, toolArgs);
     }
 }

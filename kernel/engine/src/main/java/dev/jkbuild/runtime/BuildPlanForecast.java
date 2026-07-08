@@ -54,115 +54,8 @@ public final class BuildPlanForecast {
 
     private BuildPlanForecast() {}
 
-    /** Per-phase verdict. CACHED = restored from cache; the rest do real work. */
-    public enum Status {
-        CACHED,
-        FULL,
-        PARTIAL,
-        RUN
-    }
-
-    /**
-     * One phase of a module's build. {@code text} is the right-hand detail after the status glyph;
-     * {@code key} is the 8-char action key when known (cached).
-     */
-    public record Phase(String name, Status status, String text, String key) {
-        public boolean cached() {
-            return status == Status.CACHED;
-        }
-    }
-
-    /**
-     * A module's forecast: its build unit and the ordered phases that apply to it. Front-ends read
-     * only {@link #coord()}, {@link #dir()}, {@link #phases()}, {@link #sourceCount()}, {@link
-     * #testCount()}, {@link #producesJar()}, {@link #producesImage()}, and {@link #dirty()}. The
-     * engine-internal {@link BuildGraph.BuildUnit} is reachable only through the package-private
-     * {@link #unit()} accessor — a {@code final class} (not a {@code record}) so that accessor can
-     * drop below {@code public}, keeping {@code BuildGraph.BuildUnit} invisible to the CLI.
-     */
-    public static final class Module {
-        private final BuildGraph.BuildUnit unit;
-        private final List<Phase> phases;
-        private final int sourceCount;
-        private final int testCount;
-        private final boolean producesJar;
-        private final boolean producesImage;
-
-        Module(
-                BuildGraph.BuildUnit unit,
-                List<Phase> phases,
-                int sourceCount,
-                int testCount,
-                boolean producesJar,
-                boolean producesImage) {
-            this.unit = unit;
-            this.phases = phases;
-            this.sourceCount = sourceCount;
-            this.testCount = testCount;
-            this.producesJar = producesJar;
-            this.producesImage = producesImage;
-        }
-
-        /**
-         * Reconstruct a forecast module client-side from wire-level data (engine front-ends). The
-         * synthetic unit is never executed and never crosses back into the engine — renderers read
-         * only the public accessors. The only construction path outside the engine package, so
-         * {@link BuildGraph.BuildUnit} stays invisible to front-ends.
-         */
-        public static Module fromWire(
-                Path dir,
-                String coord,
-                List<Phase> phases,
-                int sourceCount,
-                int testCount,
-                boolean producesJar,
-                boolean producesImage) {
-            BuildGraph.BuildUnit unit = new BuildGraph.BuildUnit(dir, null, coord, BuildGraph.Origin.MODULE);
-            return new Module(unit, phases, sourceCount, testCount, producesJar, producesImage);
-        }
-
-        /** Engine-internal build unit — package-private so front-ends can't reach {@link BuildGraph.BuildUnit}. */
-        BuildGraph.BuildUnit unit() {
-            return unit;
-        }
-
-        /** The module's {@code group:artifact} coordinate. */
-        public String coord() {
-            return unit.coord();
-        }
-
-        /** The module's directory. */
-        public Path dir() {
-            return unit.dir();
-        }
-
-        public List<Phase> phases() {
-            return phases;
-        }
-
-        public int sourceCount() {
-            return sourceCount;
-        }
-
-        public int testCount() {
-            return testCount;
-        }
-
-        public boolean producesJar() {
-            return producesJar;
-        }
-
-        public boolean producesImage() {
-            return producesImage;
-        }
-
-        public boolean dirty() {
-            return phases.stream().anyMatch(p -> !p.cached());
-        }
-    }
-
     /** Forecast every module in {@code graph}, in topological (dependency) order. */
-    public static List<Module> of(BuildGraph.Result graph, Cas cas, ActionCache actionCache, Path cache) {
+    public static List<BuildPlan.Module> of(BuildGraph.Result graph, Cas cas, ActionCache actionCache, Path cache) {
         return of(graph, cas, actionCache, cache, false);
     }
 
@@ -174,8 +67,8 @@ public final class BuildPlanForecast {
      * full engine round-trip on a fully-cached build — and pays the test-stamp content hashing
      * (main classes tree + every sibling/worker jar) for phases the build will not execute.
      */
-    public static List<Module> of(BuildGraph.Result graph, Cas cas, ActionCache actionCache, Path cache, boolean skipTests) {
-        List<Module> out = new ArrayList<>();
+    public static List<BuildPlan.Module> of(BuildGraph.Result graph, Cas cas, ActionCache actionCache, Path cache, boolean skipTests) {
+        List<BuildPlan.Module> out = new ArrayList<>();
         // --force/--rerun bypasses jk's build caches, so every phase runs — the forecast must say
         // so too (otherwise the plan tree renders "Fully Cached" while the ETA, which honors force,
         // predicts a full rebuild — a self-contradiction).
@@ -193,7 +86,7 @@ public final class BuildPlanForecast {
                 }
             }
             long t0 = Perf.start();
-            Module m = forecastModule(u, depDirty, force, skipTests, cas, actionCache, cache);
+            BuildPlan.Module m = forecastModule(u, depDirty, force, skipTests, cas, actionCache, cache);
             Perf.end("forecast " + u.coord(), t0);
             // A module's consumed output changes — and so seeds downstream dirtiness —
             // when its compile does real work (classes change) OR its jar will be
@@ -256,7 +149,7 @@ public final class BuildPlanForecast {
                 .withProjectModules(projectModules);
     }
 
-    private static Module forecastModule(
+    private static BuildPlan.Module forecastModule(
             BuildGraph.BuildUnit u,
             boolean depDirty,
             boolean force,
@@ -266,16 +159,16 @@ public final class BuildPlanForecast {
             Path cache) {
         JkBuild project = u.manifest();
         Path dir = u.dir();
-        List<Phase> phases = new ArrayList<>();
+        List<BuildPlan.Phase> phases = new ArrayList<>();
         Path lockFile = dir.resolve("jk.lock");
         if (!Files.isRegularFile(lockFile)) {
-            phases.add(new Phase("compile-main", Status.RUN, "not locked yet (run `jk build`)", null));
-            return new Module(u, phases, 0, 0, false, false);
+            phases.add(new BuildPlan.Phase("compile-main", BuildPlan.Status.RUN, "not locked yet (run `jk build`)", null));
+            return new BuildPlan.Module(u.dir(), u.coord(), phases, 0, 0, false, false);
         }
         // Two-tier lock check: mtime first (cheap), deep dep validation only when stale.
         if (dev.jkbuild.runtime.AutoLock.needsRelocking(dir, lockFile)) {
-            phases.add(new Phase("compile-main", Status.RUN, "jk.toml changed — lock update needed", null));
-            return new Module(u, phases, 0, 0, false, false);
+            phases.add(new BuildPlan.Phase("compile-main", BuildPlan.Status.RUN, "jk.toml changed — lock update needed", null));
+            return new BuildPlan.Module(u.dir(), u.coord(), phases, 0, 0, false, false);
         }
         int sourceCount = 0, testCount = 0;
         boolean producesJar = false, producesImage = false;
@@ -324,10 +217,10 @@ public final class BuildPlanForecast {
                         && FreshnessStamp.looksFresh(layout.kotlinClassesDir(), FreshnessStamp.KOTLIN_STAMP, ktSrc);
                 phases.add(
                         fresh
-                                ? new Phase("compile-kotlin", Status.CACHED, "", null)
-                                : new Phase(
+                                ? new BuildPlan.Phase("compile-kotlin", BuildPlan.Status.CACHED, "", null)
+                                : new BuildPlan.Phase(
                                         "compile-kotlin",
-                                        Status.FULL,
+                                        BuildPlan.Status.FULL,
                                         "full compile · " + count(ktSrc.size(), "source"),
                                         null));
                 if (!fresh) compileDirty = true;
@@ -352,7 +245,7 @@ public final class BuildPlanForecast {
             if (haveTests && !skipTests) {
                 int testSrcCount = javaTest.size() + ktTest.size();
                 if (compileDirty) {
-                    phases.add(new Phase("compile-test", Status.RUN, "recompile · main changed", null));
+                    phases.add(new BuildPlan.Phase("compile-test", BuildPlan.Status.RUN, "recompile · main changed", null));
                     testDirty = true;
                 } else if (!javaTest.isEmpty()) {
                     List<Path> baseCp = new ArrayList<>();
@@ -378,12 +271,12 @@ public final class BuildPlanForecast {
                     long tt = Perf.start();
                     var pred = JavaIncrementalCompile.predict(taskId, req, JkVersion.VERSION, actionCache, stateDir);
                     Perf.end("  predict-compile-test", tt);
-                    Phase p = compilePhase("compile-test", pred, false);
+                    BuildPlan.Phase p = compilePhase("compile-test", pred, false);
                     phases.add(p);
                     if (!p.cached()) testDirty = true;
                 } else {
                     // Kotlin-only tests: no content predictor — assume fresh when main is clean.
-                    phases.add(new Phase("compile-test", Status.CACHED, "", null));
+                    phases.add(new BuildPlan.Phase("compile-test", BuildPlan.Status.CACHED, "", null));
                 }
 
                 // ---- run-tests ----
@@ -391,7 +284,7 @@ public final class BuildPlanForecast {
                 testCount = estimated;
                 String tests = estimated > 0 ? "~" + count(estimated, "test") : "tests";
                 if (compileDirty || testDirty) {
-                    phases.add(new Phase("run-tests", Status.RUN, "run tests · " + tests, null));
+                    phases.add(new BuildPlan.Phase("run-tests", BuildPlan.Status.RUN, "run tests · " + tests, null));
                 } else {
                     // Mirror the build's run-tests stamp EXACTLY: main classes are a
                     // separate computeKey arg, NOT part of the runtime classpath.
@@ -409,8 +302,8 @@ public final class BuildPlanForecast {
                     boolean hit = stampKey != null && present(actionCache, stampKey);
                     phases.add(
                             hit
-                                    ? new Phase("run-tests", Status.CACHED, "· " + tests, null)
-                                    : new Phase("run-tests", Status.RUN, "run tests · " + tests, null));
+                                    ? new BuildPlan.Phase("run-tests", BuildPlan.Status.CACHED, "· " + tests, null)
+                                    : new BuildPlan.Phase("run-tests", BuildPlan.Status.RUN, "run tests · " + tests, null));
                 }
             }
 
@@ -418,7 +311,7 @@ public final class BuildPlanForecast {
             if (mainSrc.isEmpty() && ktSrc.isEmpty()) {
                 // Source-less aggregator module — nothing to package.
             } else if (compileDirty) {
-                phases.add(new Phase("package-jar", Status.RUN, "repackage · compile changed", null));
+                phases.add(new BuildPlan.Phase("package-jar", BuildPlan.Status.RUN, "repackage · compile changed", null));
             } else {
                 Path jar = layout.mainJar();
                 String mainClass = project.project().main();
@@ -433,8 +326,8 @@ public final class BuildPlanForecast {
                 boolean hit = present(actionCache, pkgKey);
                 phases.add(
                         hit
-                                ? new Phase("package-jar", Status.CACHED, "", key8(pkgKey))
-                                : new Phase("package-jar", Status.RUN, "repackage", null));
+                                ? new BuildPlan.Phase("package-jar", BuildPlan.Status.CACHED, "", key8(pkgKey))
+                                : new BuildPlan.Phase("package-jar", BuildPlan.Status.RUN, "repackage", null));
             }
 
             // ---- package-shadow (fat jar) — only when configured ----
@@ -442,30 +335,30 @@ public final class BuildPlanForecast {
                 boolean fresh = !compileDirty && Files.isRegularFile(layout.shadowJar());
                 phases.add(
                         fresh
-                                ? new Phase("package-shadow", Status.CACHED, "", null)
-                                : new Phase("package-shadow", Status.RUN, "repackage", null));
+                                ? new BuildPlan.Phase("package-shadow", BuildPlan.Status.CACHED, "", null)
+                                : new BuildPlan.Phase("package-shadow", BuildPlan.Status.RUN, "repackage", null));
             }
         } catch (Exception e) {
             // Degrade gracefully — never crash explain over one unparseable module.
-            phases.add(new Phase(
+            phases.add(new BuildPlan.Phase(
                     "compile-main",
-                    Status.RUN,
+                    BuildPlan.Status.RUN,
                     "could not predict (" + e.getClass().getSimpleName() + ")",
                     null));
         }
-        return new Module(u, phases, sourceCount, testCount, producesJar, producesImage);
+        return new BuildPlan.Module(u.dir(), u.coord(), phases, sourceCount, testCount, producesJar, producesImage);
     }
 
     /** Map a {@link JavaIncrementalCompile.Prediction} to a phase, honoring upstream dirtiness. */
-    private static Phase compilePhase(String name, JavaIncrementalCompile.Prediction pred, boolean depDirty) {
+    private static BuildPlan.Phase compilePhase(String name, JavaIncrementalCompile.Prediction pred, boolean depDirty) {
         return switch (pred.outcome()) {
             case CACHE_HIT ->
                 depDirty
-                        ? new Phase(name, Status.RUN, "recompile · dependency changed", null)
-                        : new Phase(name, Status.CACHED, "", key8(pred.actionKey()));
+                        ? new BuildPlan.Phase(name, BuildPlan.Status.RUN, "recompile · dependency changed", null)
+                        : new BuildPlan.Phase(name, BuildPlan.Status.CACHED, "", key8(pred.actionKey()));
             case INCREMENTAL ->
-                new Phase(name, Status.PARTIAL, "compile · " + count(pred.sourceCount(), "source"), null);
-            case FULL -> new Phase(name, Status.FULL, "full compile · " + count(pred.sourceCount(), "source"), null);
+                new BuildPlan.Phase(name, BuildPlan.Status.PARTIAL, "compile · " + count(pred.sourceCount(), "source"), null);
+            case FULL -> new BuildPlan.Phase(name, BuildPlan.Status.FULL, "full compile · " + count(pred.sourceCount(), "source"), null);
         };
     }
 

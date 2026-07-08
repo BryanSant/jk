@@ -14,10 +14,9 @@ import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Exit;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
-import dev.jkbuild.run.Goal;
 import dev.jkbuild.run.GoalResult;
-import dev.jkbuild.runtime.JdkEnsure;
-import dev.jkbuild.runtime.SyncGoals;
+import dev.jkbuild.config.JkBuildParser;
+import dev.jkbuild.jdk.JdkEnsure;
 import dev.jkbuild.util.JkDirs;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -28,14 +27,14 @@ import java.util.concurrent.atomic.AtomicInteger;
 /**
  * {@code jk sync} — bring the local toolchain + dependency cache in line with the project's {@code
  * jk.lock}. The goal itself (parse-lock → ensure-jdk ∥ sync-cas ∥ … → sync-modules) lives in
- * {@link SyncGoals}; see its javadoc for the phase breakdown.
+ * the engine's {@code SyncGoals}; see its javadoc for the phase breakdown.
  *
  * <p><b>Engine-hosted</b> (Wave 1 of the slim-client migration): the CAS fetches and any auto-lock
  * run inside the resident engine ({@link EngineClient#runSync}); this command pre-flights the JDK
  * ensure (installs stay client-side — the engine only ever <em>resolves</em> an installed JDK, per
  * {@code docs/engine.md}), sends the request, and renders the streamed events with the same console
  * listener the in-process path attaches. The test-only in-process path (see {@link
- * #engineDisabledForTests}) builds the identical goal via {@link SyncGoals}.
+ * #engineDisabledForTests}) builds the identical goal via {@code SyncGoals}.
  */
 public final class SyncCommand implements CliCommand {
 
@@ -99,7 +98,8 @@ public final class SyncCommand implements CliCommand {
         GoalConsole.Mode mode = GoalConsole.modeFor(global);
 
         if (engineDisabledForTests()) {
-            return runInProcess(dir, cache, mode, targetLabel);
+            return dev.jkbuild.cli.engine.InProcessEngine.require()
+                    .syncInProcess(dir, cache, jdksDir, repoUrl, sources, mode, targetLabel);
         }
 
         // Pre-flight the JDK ensure client-side: a missing pinned JDK is downloaded HERE, before
@@ -107,7 +107,7 @@ public final class SyncCommand implements CliCommand {
         // interactive consent, client-side). The engine's own ensure-jdk phase then only resolves
         // the already-installed JDK (JdkEnsure with allowInstall=false).
         Path lockFile = dir.resolve("jk.lock");
-        JkBuild build = SyncGoals.parseBuildIfPresent(dir);
+        JkBuild build = parseBuildIfPresent(dir);
         Lockfile lock = null;
         if (Files.isRegularFile(lockFile)) {
             try {
@@ -157,32 +157,18 @@ public final class SyncCommand implements CliCommand {
         return result.success() ? 0 : 1;
     }
 
-    // ---- test-only in-process path (identical goal via SyncGoals) ------------
-
-    private int runInProcess(Path dir, Path cache, GoalConsole.Mode mode, String targetLabel) {
-        AtomicInteger totalFetched = new AtomicInteger(0);
-        AtomicInteger totalUpToDate = new AtomicInteger(0);
-
-        Goal goal = SyncGoals.syncGoal(
-                dir, cache, jdksDir, repoUrl, sources, totalFetched, totalUpToDate, Coords::module, true);
-
-        ConsoleSpec spec = syncSpec(totalFetched::get, totalUpToDate::get);
-        GoalResult result = GoalConsole.runGoal(goal, mode, cache, spec, targetLabel);
-
-        if (result.success()) {
-            // Opportunistic cache prune — no-op when auto-prune is off.
-            var cacheConfig = dev.jkbuild.config.JkCacheConfig.resolve();
-            dev.jkbuild.task.CachePruneScheduler.resolveJkExe()
-                    .ifPresent(exe -> dev.jkbuild.task.CachePruneScheduler.maybeRun(cacheConfig, cache, exe));
-            return 0;
+    /** Soft parse of {@code dir/jk.toml} — {@code null} when absent/unparseable (mirrors the goal's own parse). */
+    private static JkBuild parseBuildIfPresent(Path dir) {
+        try {
+            Path toml = dir.resolve("jk.toml");
+            return Files.isRegularFile(toml) ? JkBuildParser.parse(toml) : null;
+        } catch (RuntimeException | java.io.IOException e) {
+            return null;
         }
-        // The progress-bar listener (or SilentListener on a pipe) has
-        // already surfaced the failure — no command-side summary.
-        return 1;
     }
 
     /** The Sync chip spec; counts are read lazily, at result-line render time. */
-    private static ConsoleSpec syncSpec(java.util.function.LongSupplier fetched, java.util.function.LongSupplier upToDate) {
+    static ConsoleSpec syncSpec(java.util.function.LongSupplier fetched, java.util.function.LongSupplier upToDate) {
         return new ConsoleSpec(
                 "Sync",
                 r -> {

@@ -35,7 +35,7 @@ import java.util.Optional;
  * where it lives.
  *
  * <p>Satisfaction is freshness-aware (unlike the project-scoped {@link
- * dev.jkbuild.runtime.JdkEnsure}, whose match is exact):
+ * dev.jkbuild.jdk.JdkEnsure}, whose match is exact):
  *
  * <ul>
  *   <li>a bare major ({@code 25}) is satisfied by <em>any</em> installed point release of that

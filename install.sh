@@ -113,6 +113,19 @@ chmod +x "$JK_BIN"
 
 note "Installed $JK_BIN"
 
+# The engine ships as a jar directory next to the client (libexec/jk-engine/ —
+# see docs/engine.md "Two artifacts"; the engine is a JVM app, not a second
+# binary). A local install from a dist layout carries it along; the download
+# flow will grow an archive holding both once the release pipeline exists.
+if [ -n "$LOCAL_FILE" ]; then
+  SRC_LIBEXEC="$(cd "$(dirname "$LOCAL_FILE")" && pwd)/libexec"
+  if [ -d "$SRC_LIBEXEC/jk-engine" ]; then
+    rm -rf "$INSTALL_DIR/libexec"
+    cp -R "$SRC_LIBEXEC" "$INSTALL_DIR/libexec"
+    note "Installed $INSTALL_DIR/libexec/jk-engine"
+  fi
+fi
+
 # ---- activate --------------------------------------------------------------
 
 info "Running jk activate"

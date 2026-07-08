@@ -8,7 +8,6 @@ import dev.jkbuild.compat.ToolInstaller;
 import dev.jkbuild.compat.ToolProvisioning;
 import dev.jkbuild.compat.ToolRegistry;
 import dev.jkbuild.http.Http;
-import dev.jkbuild.jdk.JdkResolution;
 import dev.jkbuild.kotlin.KotlinResolver;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.util.JkDirs;
@@ -19,16 +18,9 @@ import java.nio.file.Path;
 import java.util.function.Consumer;
 
 /**
- * Resolves the toolchain paths the subprocess compile strategies need: the JDK that hosts {@code
- * javac} and the Kotlin distribution that hosts {@code kotlinc}. Centralised so {@code
- * BuildCommand}, {@code CompileCommand} and {@code TestCommand} agree on lookup order.
- *
- * <p>Java home order:
- *
- * <ol>
- *   <li>{@code JdkResolver.resolve(projectDir)} — the project's pinned JDK.
- *   <li>{@code System.getProperty("java.home")} — the JVM running jk.
- * </ol>
+ * Resolves the Kotlin distribution that hosts {@code kotlinc} (the Java-home half moved to
+ * {@link dev.jkbuild.jdk.JavaHomes} in the slim-client Stage 5 split — the client's exec paths
+ * need it engine-less).
  *
  * <p>Kotlin home order:
  *
@@ -41,64 +33,6 @@ import java.util.function.Consumer;
 public final class CompileToolchain {
 
     private CompileToolchain() {}
-
-    public static Path resolveJavaHome(Path projectDir) {
-        try {
-            dev.jkbuild.lock.Lockfile lock = readLockSoft(projectDir);
-            JkBuild build = readBuildSoft(projectDir);
-            JdkResolution.Request req = new JdkResolution.Request(
-                    projectDir,
-                    dev.jkbuild.config.SessionContext.current().jdkSpec(),
-                    System.getenv("JK_JDK"),
-                    lock != null ? lock.jdk() : null,
-                    (build != null && build.project() != null) ? build.project().jdk() : null,
-                    (build != null && build.project() != null) ? build.project().javaRelease() : 0,
-                    System::getenv);
-            // Non-installing walk of the canonical order — JdkEnsure already
-            // installed any pin during sync, so this just locates it. Falls back
-            // to the running JVM when nothing resolves.
-            JdkResolution.Resolved r = JdkResolution.resolveForHook(
-                    req, new dev.jkbuild.jdk.JdkRegistry(), dev.jkbuild.jdk.GlobalDefaultJdk.current());
-            if (r.jdk().isPresent()) return r.jdk().get().home();
-        } catch (RuntimeException ignored) {
-            // fall through to the running JVM
-        }
-        return runningJavaHome();
-    }
-
-    private static dev.jkbuild.lock.Lockfile readLockSoft(Path projectDir) {
-        try {
-            Path lock = projectDir.resolve("jk.lock");
-            return Files.isRegularFile(lock) ? dev.jkbuild.lock.LockfileReader.read(lock) : null;
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    private static JkBuild readBuildSoft(Path projectDir) {
-        try {
-            Path toml = projectDir.resolve("jk.toml");
-            return Files.isRegularFile(toml) ? dev.jkbuild.config.JkBuildParser.parse(toml) : null;
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    /**
-     * The JDK that's hosting the current jk process, or {@code $JAVA_HOME} when running under GraalVM
-     * native-image (which doesn't expose {@code java.home}). Used as the last-resort fallback when no
-     * project JDK is pinned; throws an explanatory error if neither is available.
-     */
-    public static Path runningJavaHome() {
-        String home = System.getProperty("java.home");
-        if (home == null || home.isBlank()) home = System.getenv("JAVA_HOME");
-        if (home == null || home.isBlank()) {
-            throw new IllegalStateException("Cannot resolve a JDK: no project pin (`.jdk-version` or `.sdkmanrc`), "
-                    + "no `java.home` (running under native-image?), and `JAVA_HOME` is unset. "
-                    + "Pin a JDK with a `.jdk-version` file, set `JAVA_HOME`, or run jk on a JVM.");
-        }
-        return Path.of(home);
-    }
 
     /**
      * Resolve a Kotlin installation, auto-downloading via {@link ToolInstaller} if neither {@code

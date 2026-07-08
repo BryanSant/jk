@@ -5,6 +5,7 @@ import dev.jkbuild.cache.Cas;
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.config.WorkspaceLoader;
 import dev.jkbuild.config.WorkspaceLocator;
+import dev.jkbuild.jdk.JavaHomes;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.lock.LockfileWriter;
 import dev.jkbuild.model.JkBuild;
@@ -93,7 +94,7 @@ public final class LockFlow {
                     effective,
                     baseRepos,
                     cas,
-                    CompileToolchain.resolveJavaHome(dir),
+                    JavaHomes.resolveJavaHome(dir),
                     dev.jkbuild.util.JkVersion.VERSION);
         } catch (Exception e) {
             return new Result(6, e.getMessage(), null, effective, moduleCount);

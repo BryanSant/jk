@@ -9,6 +9,9 @@ description = "jk build engine: the Goal/Phase scheduler and the build pipeline,
         "run in-process by the CLI. Absorbs the former :engine and :runtime modules."
 
 dependencies {
+    // The client<->engine wire contract (protocol codec, EnginePaths, build DTOs) — api so a
+    // caller of BuildService sees the DTO types (slim-client Stage 5).
+    api(project(":engine-api"))
     implementation(project(":core"))
     implementation(project(":io"))
     implementation(project(":plugin-api"))

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.test;
 
+import dev.jkbuild.run.TestSummary;
+
 /**
  * Streaming callback surface for live test progress UI. {@link JUnitLauncher} invokes these as each
  * {@code ##JK:} protocol event flows past the parent's aggregator, so a CLI can render a pinned

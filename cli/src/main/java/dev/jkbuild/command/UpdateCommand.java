@@ -8,20 +8,13 @@ import dev.jkbuild.cli.engine.EngineClient;
 import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.cli.tui.Glyphs;
-import dev.jkbuild.config.JkBuildParser;
-import dev.jkbuild.config.WorkspaceLoader;
-import dev.jkbuild.lock.Lockfile;
-import dev.jkbuild.model.JkBuild;
-import dev.jkbuild.model.WorkspaceMerge;
 import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Exit;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
-import dev.jkbuild.run.Goal;
 import dev.jkbuild.run.GoalListener;
 import dev.jkbuild.run.GoalResult;
 import dev.jkbuild.run.Phase;
-import dev.jkbuild.runtime.LockGoals;
 import dev.jkbuild.util.JkDirs;
 import java.net.URI;
 import java.nio.file.Files;
@@ -133,7 +126,9 @@ public final class UpdateCommand implements CliCommand {
         }
 
         if (engineDisabledForTests()) {
-            return runInProcess(dir, cache, in.has("git"), gitTarget);
+            return dev.jkbuild.cli.engine.InProcessEngine.require()
+                    .updateInProcess(dir, cache, in.has("git"), gitTarget, features, noDefaultFeatures,
+                            repoUrl, global);
         }
         return in.has("git") ? runHostedGitOnly(dir, cache, gitTarget) : runHosted(dir, cache);
     }
@@ -158,7 +153,7 @@ public final class UpdateCommand implements CliCommand {
             @Override
             public void onModuleFinish(String moduleDir, GoalResult result, EngineClient.LockCounts counts) {
                 if (result.success() && !global.outputIsJson()) {
-                    printUpdatedLine(Path.of(moduleDir).resolve("jk.lock"), (int) counts.packages());
+                    printUpdatedLine(Path.of(moduleDir).resolve("jk.lock"), (int) counts.packages(), global.workingDir());
                 }
             }
         };
@@ -195,83 +190,14 @@ public final class UpdateCommand implements CliCommand {
         return outcome.exitCode();
     }
 
-    // ---- test-only in-process path (identical pipeline via LockGoals) --------
-
-    private int runInProcess(Path dir, Path cache, boolean gitOnly, String gitTarget) throws Exception {
-        JkBuild root;
-        try {
-            root = JkBuildParser.parse(dir.resolve("jk.toml"));
-        } catch (RuntimeException e) {
-            CliOutput.err("jk update: " + e.getMessage());
-            return Exit.CONFIG;
-        }
-
-        // `jk update --git [<name>]`: re-resolve git dependencies only, leaving every
-        // other dependency's locked version untouched.
-        if (gitOnly) {
-            LockGoals.GitUpdateOutcome outcome =
-                    LockGoals.updateGitOnly(dir, root, cache, repoUrl, features, !noDefaultFeatures, gitTarget);
-            if (outcome.exitCode() != 0) {
-                CliOutput.err("jk update: " + outcome.error());
-                return outcome.exitCode();
-            }
-            if (!global.outputIsJson()) {
-                printGitSummary(outcome.refreshed());
-            }
-            return 0;
-        }
-
-        // When updating a workspace module directly, filter sibling-internal deps.
-        JkBuild effectiveRoot = LockGoals.applyWorkspaceContextIfModule(dir, root);
-
-        // Re-resolve the current directory (root or standalone project).
-        int result = updateSingleProject(dir, effectiveRoot, cache);
-        if (result != 0) return result;
-
-        // Cascade: re-resolve each declared workspace module in declaration order.
-        if (effectiveRoot.isWorkspaceRoot()) {
-            Map<Path, JkBuild> modules;
-            try {
-                modules = WorkspaceLoader.loadModules(dir, effectiveRoot);
-            } catch (RuntimeException e) {
-                CliOutput.err("jk update: " + e.getMessage());
-                return Exit.CONFIG;
-            }
-            for (Map.Entry<Path, JkBuild> entry : modules.entrySet()) {
-                Path moduleDir = entry.getKey();
-                JkBuild rawModule = entry.getValue();
-                JkBuild effectiveModule = WorkspaceMerge.applyToModule(effectiveRoot, rawModule, modules.values());
-                int moduleResult = updateSingleProject(moduleDir, effectiveModule, cache);
-                if (moduleResult != 0) return moduleResult;
-            }
-        }
-        return 0;
-    }
-
-    private int updateSingleProject(Path dir, JkBuild effective, Path cache) throws Exception {
-        Path lockFile = dir.resolve("jk.lock");
-        Goal goal = LockGoals.updateGoal(dir, effective, cache, repoUrl, features, !noDefaultFeatures);
-
-        GoalResult result = GoalConsole.run(goal, GoalConsole.modeFor(global), cache);
-        if (!result.success()) {
-            return LockGoals.failureExitCode(result);
-        }
-
-        Lockfile lock = goal.get(LockGoals.LOCKFILE).orElseThrow();
-        if (!global.outputIsJson()) {
-            printUpdatedLine(lockFile, lock.artifacts().size());
-        }
-        return 0;
-    }
-
     // ---- shared rendering helpers --------------------------------------------
 
     /** {@code ✓ Updated: path/to/jk.lock › N packages} — shared by the hosted and in-process paths. */
-    private void printUpdatedLine(Path lockFile, int packages) {
+    static void printUpdatedLine(Path lockFile, int packages, Path workingDir) {
         var th = Theme.active();
         CliOutput.out(Theme.colorize(Glyphs.CHECK, th.success())
                 + " Updated: "
-                + Theme.colorize(PathDisplay.of(lockFile, global.workingDir()), th.path())
+                + Theme.colorize(PathDisplay.of(lockFile, workingDir), th.path())
                 + " "
                 + Theme.colorize("›", th.darkGray())
                 + " "
@@ -281,7 +207,7 @@ public final class UpdateCommand implements CliCommand {
     }
 
     /** {@code Refreshed N git dependencies.} / {@code No git dependencies to refresh.} */
-    private static void printGitSummary(int refreshed) {
+    static void printGitSummary(int refreshed) {
         CliOutput.out(
                 refreshed == 0
                         ? "No git dependencies to refresh."

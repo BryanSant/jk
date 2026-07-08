@@ -11,6 +11,8 @@ import dev.jkbuild.compile.ShadowPackager;
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.config.WorkspaceClasspath;
 import dev.jkbuild.http.Http;
+import dev.jkbuild.jdk.JavaHomes;
+import dev.jkbuild.jdk.JdkEnsure;
 import dev.jkbuild.layout.BuildLayout;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.lock.LockfileReader;
@@ -24,6 +26,7 @@ import dev.jkbuild.run.GoalKey;
 import dev.jkbuild.run.Phase;
 import dev.jkbuild.run.PhaseContext;
 import dev.jkbuild.run.PhaseKind;
+import dev.jkbuild.run.TestSummary;
 import dev.jkbuild.task.ActionCache;
 import dev.jkbuild.task.ActionKey;
 import dev.jkbuild.test.JUnitLauncher;
@@ -110,8 +113,8 @@ public final class BuildPipeline {
     public static final GoalKey<Path> MAIN_CLASSES = GoalKey.of("main-classes", Path.class);
     public static final GoalKey<Path> TEST_CLASSES = GoalKey.of("test-classes", Path.class);
     public static final GoalKey<BuildLayout> LAYOUT = GoalKey.of("layout", BuildLayout.class);
-    public static final GoalKey<JUnitLauncher.Result> TEST_RESULT =
-            GoalKey.of("test-result", JUnitLauncher.Result.class);
+    public static final GoalKey<TestSummary> TEST_RESULT =
+            GoalKey.of("test-result", TestSummary.class);
     public static final GoalKey<Boolean> NO_TEST_SOURCES = GoalKey.of("no-test-sources", Boolean.class);
 
     /**
@@ -640,7 +643,7 @@ public final class BuildPipeline {
                     }
                     ctx.put(KOTLIN_SOURCES, kotlinMainSrcs);
                     ctx.put(RELEASE, project.project().javaRelease());
-                    ctx.put(JAVA_HOME, CompileToolchain.resolveJavaHome(in.dir()));
+                    ctx.put(JAVA_HOME, JavaHomes.resolveJavaHome(in.dir()));
                     ctx.put(MAIN_CLASSES, layout.classesDir());
                     ctx.put(TEST_CLASSES, layout.testClassesDir());
                     ctx.progress(1);
@@ -1295,7 +1298,7 @@ public final class BuildPipeline {
                     }
 
                     TestProgressListener listener = TestSupport.bridgeListener(ctx, in.workerCount(), in.verbose());
-                    JUnitLauncher.Result result;
+                    TestSummary result;
                     // Serialize test execution across concurrently-built units unless the
                     // user opted into parallel tests — shared ports/locks/fixtures.
                     boolean gated = !in.session().parallelTests();
@@ -1706,7 +1709,7 @@ public final class BuildPipeline {
                             ? graalHome
                             : dev.jkbuild.jdk.JdkResolver.forProject(dir, jdksDir)
                                     .map(dev.jkbuild.jdk.InstalledJdk::home)
-                                    .orElseGet(CompileToolchain::runningJavaHome);
+                                    .orElseGet(JavaHomes::runningJavaHome);
                     if (dev.jkbuild.tool.NativeImageDriver.resolve(javaHomeEarly)
                             .isEmpty()) {
                         ctx.error(

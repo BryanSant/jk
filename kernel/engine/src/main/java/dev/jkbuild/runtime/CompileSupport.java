@@ -85,13 +85,7 @@ public final class CompileSupport {
      * </ul>
      */
     public static boolean isSimpleLayout(JkBuild.Project project, Path projectDir) {
-        return switch (project.layout()) {
-            case SIMPLE -> true;
-            case TRADITIONAL -> false;
-            case AUTO ->
-                !anySourceUnder(projectDir.resolve("src/main/kotlin"), ".kt", ".java")
-                        && !anySourceUnder(projectDir.resolve("src/main/java"), ".kt", ".java");
-        };
+        return dev.jkbuild.layout.SourceLayout.isSimpleLayout(project, projectDir);
     }
 
     private static boolean anySourceUnder(Path root, String... extensions) {

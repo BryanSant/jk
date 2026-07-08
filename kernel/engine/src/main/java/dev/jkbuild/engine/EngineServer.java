@@ -13,8 +13,15 @@ import dev.jkbuild.run.GoalListener;
 import dev.jkbuild.run.GoalResult;
 import dev.jkbuild.run.GoalView;
 import dev.jkbuild.run.Phase;
+import dev.jkbuild.run.TestSummary;
+import dev.jkbuild.runtime.BuildPlan;
 import dev.jkbuild.runtime.BuildService;
+import dev.jkbuild.runtime.ExplainPlan;
+import dev.jkbuild.runtime.ModuleOutcome;
+import dev.jkbuild.runtime.ModulePlan;
 import dev.jkbuild.runtime.WorkspaceBuildListener;
+import dev.jkbuild.runtime.WorkspaceRequest;
+import dev.jkbuild.runtime.WorkspaceResult;
 import dev.jkbuild.worker.HeapPlan;
 import dev.jkbuild.worker.JvmOptions;
 import dev.jkbuild.worker.MemoryProbe;
@@ -37,6 +44,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.time.Duration;
+import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -335,6 +343,10 @@ public final class EngineServer implements AutoCloseable {
                         handleAsyncGoalRequest(line, reader, writer, "jk-engine-gitfetch-", this::runGitFetch);
                         return;
                     }
+                    case EngineProtocol.SCRIPT_PREPARE_REQUEST -> {
+                        handleAsyncGoalRequest(line, reader, writer, "jk-engine-script-", this::runScriptPrepare);
+                        return;
+                    }
                     case EngineProtocol.TOOL_RESOLVE_REQUEST -> {
                         // Wave 4 (hosted long-tail verbs): jk tool install/run's Maven resolve+fetch.
                         handleAsyncGoalRequest(line, reader, writer, "jk-engine-tool-", this::runToolResolve);
@@ -349,6 +361,11 @@ public final class EngineServer implements AutoCloseable {
                     case EngineProtocol.EXPLAIN_REQUEST -> {
                         // Synchronous read, no worker JVM forked — handled inline, connection continues.
                         handleExplainRequest(line, writer);
+                    }
+                    case EngineProtocol.FORECAST_REQUEST -> {
+                        // Synchronous read-only pre-flight (jk build's fully-cached shortcut) —
+                        // handled inline, connection continues.
+                        handleForecastRequest(line, writer);
                     }
                     default -> {
                         /* unknown type — forward-compatible no-op */
@@ -522,7 +539,7 @@ public final class EngineServer implements AutoCloseable {
         }
     }
 
-    /** Decode the request, reconstruct a {@link Session}/{@link BuildService.WorkspaceRequest}, and run it. */
+    /** Decode the request, reconstruct a {@link Session}/{@link WorkspaceRequest}, and run it. */
     private void runBuild(String requestLine, Session.CancelToken cancelToken, BufferedWriter writer) {
         try {
             String entryDirStr = Ndjson.str(requestLine, "entryDir");
@@ -548,7 +565,7 @@ public final class EngineServer implements AutoCloseable {
             Path jdksDir = jdksDirStr != null ? Path.of(jdksDirStr) : null;
 
             JkBuild entryBuild = JkBuildParser.parse(entryDir.resolve("jk.toml"));
-            BuildService.WorkspaceRequest req = new BuildService.WorkspaceRequest(
+            WorkspaceRequest req = new WorkspaceRequest(
                     entryDir,
                     entryBuild,
                     cache,
@@ -582,7 +599,7 @@ public final class EngineServer implements AutoCloseable {
                     .withCancel(cancelToken);
 
             WorkspaceBuildListener listener = wireListener(writer);
-            BuildService.WorkspaceResult result =
+            WorkspaceResult result =
                     SessionContext.where(session, () -> BuildService.buildWorkspace(req, listener));
             send(writer, EngineProtocol.workspaceFinish(result.success(), result.exitCode(), result.errors()));
         } catch (Exception e) {
@@ -607,6 +624,63 @@ public final class EngineServer implements AutoCloseable {
     }
 
     /**
+     * Answer {@code jk build}'s pre-flight ({@link EngineProtocol#FORECAST_REQUEST}): resolve the
+     * graph, run the dirty forecast, and stat the workspace lock — one synchronous {@link
+     * EngineProtocol#FORECAST_ACK} back. Read-only (the same calls the client used to make
+     * in-process before the slim-client Stage 5 cut); honors the request's force/rerun flags via a
+     * request-scoped session, exactly as the in-process path honored the CLI's.
+     */
+    private void handleForecastRequest(String requestLine, BufferedWriter writer) {
+        try {
+            Path entryDir = Path.of(Ndjson.str(requestLine, "entryDir"));
+            Path cache = Path.of(Ndjson.str(requestLine, "cache"));
+            boolean skipTests = Ndjson.bool(requestLine, "skipTests", false);
+            JkConfig config = new JkConfig(
+                    Optional.empty(),
+                    Optional.of(Ndjson.bool(requestLine, "offline", false)),
+                    Optional.of(Ndjson.bool(requestLine, "rerun", false)),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.of(Ndjson.bool(requestLine, "force", false)),
+                    Optional.empty());
+            Session session = Session.defaults()
+                    .withConfig(config)
+                    .withWorkingDir(entryDir)
+                    .withCacheDir(cache);
+            JkBuild entryBuild = JkBuildParser.parse(entryDir.resolve("jk.toml"));
+            SessionContext.where(session, () -> {
+                BuildService.ResolvedGraph graph;
+                try {
+                    graph = BuildService.resolveGraph(entryDir, entryBuild);
+                } catch (java.io.IOException e) {
+                    sendQuiet(
+                            writer,
+                            EngineProtocol.forecastAck(
+                                    List.of(), false, false, List.of(String.valueOf(e.getMessage()))));
+                    return null;
+                }
+                if (graph.hasErrors()) {
+                    sendQuiet(writer, EngineProtocol.forecastAck(List.of(), false, false, graph.errors()));
+                    return null;
+                }
+                List<String> dirty = new java.util.ArrayList<>();
+                for (Path d : BuildService.forecastDirtyDirs(graph, cache, skipTests)) dirty.add(d.toString());
+                boolean lockStale =
+                        BuildService.workspaceLockStale(entryDir, entryBuild, entryDir.resolve("jk.lock"));
+                sendQuiet(writer, EngineProtocol.forecastAck(dirty, lockStale, graph.isEmpty(), List.of()));
+                return null;
+            });
+        } catch (Exception e) {
+            sendQuiet(
+                    writer,
+                    EngineProtocol.forecastAck(List.of(), false, false, List.of(String.valueOf(e.getMessage()))));
+        }
+    }
+
+    /**
      * Forecast a build via {@link BuildService#explain} and stream the plan as a burst of
      * module/phase/edge messages — the engine-hosted counterpart of {@code ExplainCommand}'s call
      * into the same facade. Synchronous and inline (no worker JVM forked, no cancel/EOF fork needed
@@ -619,7 +693,7 @@ public final class EngineServer implements AutoCloseable {
             Path entryDir = Path.of(entryDirStr);
             Path cache = Path.of(cacheStr);
             JkBuild entryBuild = JkBuildParser.parse(entryDir.resolve("jk.toml"));
-            BuildService.ExplainPlan plan = BuildService.explain(entryDir, entryBuild, cache);
+            ExplainPlan plan = BuildService.explain(entryDir, entryBuild, cache);
             if (plan.hasErrors()) {
                 for (String err : plan.errors()) {
                     sendQuiet(writer, EngineProtocol.explainError(err));
@@ -627,13 +701,13 @@ public final class EngineServer implements AutoCloseable {
                 sendQuiet(writer, EngineProtocol.explainDone(1, 0));
                 return;
             }
-            for (dev.jkbuild.runtime.BuildPlanForecast.Module m : plan.modules()) {
+            for (dev.jkbuild.runtime.BuildPlan.Module m : plan.modules()) {
                 String dir = m.dir().toString();
                 sendQuiet(
                         writer,
                         EngineProtocol.explainModule(
                                 dir, m.coord(), m.sourceCount(), m.testCount(), m.producesJar(), m.producesImage()));
-                for (dev.jkbuild.runtime.BuildPlanForecast.Phase p : m.phases()) {
+                for (dev.jkbuild.runtime.BuildPlan.Phase p : m.phases()) {
                     sendQuiet(
                             writer,
                             EngineProtocol.explainPhase(
@@ -1120,7 +1194,7 @@ public final class EngineServer implements AutoCloseable {
                     Ndjson.str(requestLine, "tarball"),
                     Ndjson.str(requestLine, "dockerExecutable"));
             streamSingleGoal(goal, session, writer, result -> {
-                dev.jkbuild.test.JUnitLauncher.Result testResult =
+                dev.jkbuild.run.TestSummary testResult =
                         goal.get(dev.jkbuild.runtime.BuildPipeline.TEST_RESULT).orElse(null);
                 dev.jkbuild.image.ImageConfig cfg =
                         goal.get(dev.jkbuild.runtime.ImageGoals.CONFIG).orElse(null);
@@ -1256,7 +1330,7 @@ public final class EngineServer implements AutoCloseable {
                     verbose,
                     graalHomeStr != null ? Path.of(graalHomeStr) : null);
             streamSingleGoal(goal, session, writer, result -> {
-                dev.jkbuild.test.JUnitLauncher.Result testResult =
+                dev.jkbuild.run.TestSummary testResult =
                         goal.get(dev.jkbuild.runtime.BuildPipeline.TEST_RESULT).orElse(null);
                 return testResult == null
                         ? EngineProtocol.goalFinish(dir, result.success())
@@ -1316,6 +1390,57 @@ public final class EngineServer implements AutoCloseable {
     }
 
     // ---- hosted long-tail verbs (Wave 4 of the slim-client migration) -----------------------------
+
+    /**
+     * Decode a {@link EngineProtocol#SCRIPT_PREPARE_REQUEST} and run the shared script-preparation
+     * goal ({@code jk tool run <file>}'s parse/resolve/compile half — see {@link
+     * dev.jkbuild.runtime.ScriptGoals}). The terminal goal-finish carries the exec ingredients; the
+     * exec stays client-side.
+     */
+    private void runScriptPrepare(String requestLine, Session.CancelToken cancelToken, BufferedWriter writer) {
+        try {
+            String mode = String.valueOf(Ndjson.str(requestLine, "mode"));
+            Path script = Path.of(Ndjson.str(requestLine, "script"));
+            Path cache = Path.of(Ndjson.str(requestLine, "cache"));
+            String stateDirStr = Ndjson.str(requestLine, "stateDir");
+            Path stateDir = stateDirStr != null ? Path.of(stateDirStr) : dev.jkbuild.util.JkDirs.state();
+            java.net.URI repoUrl = repoUrlOf(requestLine);
+            boolean forceRecompile = Ndjson.bool(requestLine, "forceRecompile", false);
+            java.nio.file.Files.createDirectories(cache);
+            Session session = Session.defaults()
+                    .withWorkingDir(script.toAbsolutePath().getParent())
+                    .withCacheDir(cache)
+                    .withCancel(cancelToken);
+            dev.jkbuild.run.Goal goal =
+                    switch (mode) {
+                        case "java" -> dev.jkbuild.runtime.ScriptGoals.javaScriptGoal(
+                                script, cache, stateDir, repoUrl, forceRecompile);
+                        case "kt" -> dev.jkbuild.runtime.ScriptGoals.kotlinScriptGoal(
+                                script, cache, stateDir, repoUrl, forceRecompile);
+                        case "kts" -> dev.jkbuild.runtime.ScriptGoals.ktsScriptGoal(cache);
+                        case "jar" -> dev.jkbuild.runtime.ScriptGoals.jarGoal(script, cache, repoUrl);
+                        default -> throw new IllegalArgumentException("unknown script mode: " + mode);
+                    };
+            String dir = EngineProtocol.SINGLE_GOAL_DIR;
+            streamSingleGoal(goal, session, writer, result -> {
+                Path classesDir = goal.get(dev.jkbuild.runtime.ScriptGoals.CLASSES_DIR).orElse(null);
+                Path kotlincBin = goal.get(dev.jkbuild.runtime.ScriptGoals.KOTLINC_BIN).orElse(null);
+                Path stdlib = goal.get(dev.jkbuild.runtime.ScriptGoals.KT_STDLIB).orElse(null);
+                return EngineProtocol.goalFinishScript(
+                        dir,
+                        result.success(),
+                        goal.get(dev.jkbuild.runtime.ScriptGoals.MAIN_CLASS).orElse(null),
+                        dev.jkbuild.runtime.ScriptGoals.classpathOf(goal).stream()
+                                .map(Path::toString)
+                                .toList(),
+                        classesDir != null ? classesDir.toString() : null,
+                        kotlincBin != null ? kotlincBin.toString() : null,
+                        stdlib != null ? stdlib.toString() : null);
+            });
+        } catch (Exception e) {
+            sendQuiet(writer, EngineProtocol.buildError(String.valueOf(e.getMessage())));
+        }
+    }
 
     /**
      * Decode a {@link EngineProtocol#TOOL_RESOLVE_REQUEST} and run the shared tool-resolution goal
@@ -1690,8 +1815,8 @@ public final class EngineServer implements AutoCloseable {
     private WorkspaceBuildListener wireListener(BufferedWriter writer) {
         return new WorkspaceBuildListener() {
             @Override
-            public void onPlan(java.util.List<BuildService.ModulePlan> plan) {
-                for (BuildService.ModulePlan m : plan) {
+            public void onPlan(java.util.List<ModulePlan> plan) {
+                for (ModulePlan m : plan) {
                     String dir = m.dir().toString();
                     sendQuiet(
                             writer,
@@ -1709,14 +1834,14 @@ public final class EngineServer implements AutoCloseable {
             }
 
             @Override
-            public GoalListener onModuleStart(BuildService.ModulePlan m) {
+            public GoalListener onModuleStart(ModulePlan m) {
                 String dir = m.dir().toString();
                 sendQuiet(writer, EngineProtocol.moduleStart(dir));
                 return wireGoalListener(dir, writer, (dev.jkbuild.run.Goal) null);
             }
 
             @Override
-            public void onModuleFinish(BuildService.ModuleOutcome o) {
+            public void onModuleFinish(ModuleOutcome o) {
                 sendQuiet(
                         writer,
                         EngineProtocol.moduleFinish(o.dir().toString(), o.coord(), o.success(), o.exitCode(), o.millis()));
@@ -1734,7 +1859,7 @@ public final class EngineServer implements AutoCloseable {
      */
     private GoalListener wireGoalListener(String dir, BufferedWriter writer, dev.jkbuild.run.Goal realGoal) {
         return wireGoalListener(dir, writer, (java.util.function.Function<GoalResult, String>) result -> {
-            dev.jkbuild.test.JUnitLauncher.Result testResult = realGoal == null
+            dev.jkbuild.run.TestSummary testResult = realGoal == null
                     ? null
                     : realGoal.get(dev.jkbuild.runtime.BuildPipeline.TEST_RESULT).orElse(null);
             String buildOutcome = realGoal == null

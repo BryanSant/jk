@@ -7,6 +7,7 @@ jdk         = 25
 java        = 25
 
 [dependencies]
+jk-engine-api = { group = "dev.jkbuild", name = "jk-engine-api", version = "0.10.0-SNAPSHOT" }
 jk-core       = { group = "dev.jkbuild", name = "jk-core",       version = "0.10.0-SNAPSHOT" }
 jk-io         = { group = "dev.jkbuild", name = "jk-io",         version = "0.10.0-SNAPSHOT" }
 jk-plugin-api = { group = "dev.jkbuild", name = "jk-plugin-api", version = "0.10.0-SNAPSHOT" }

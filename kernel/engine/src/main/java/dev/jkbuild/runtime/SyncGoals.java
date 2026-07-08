@@ -6,6 +6,7 @@ import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.config.SessionContext;
 import dev.jkbuild.config.WorkspaceLoader;
 import dev.jkbuild.http.Http;
+import dev.jkbuild.jdk.JdkEnsure;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.lock.LockfileReader;
 import dev.jkbuild.model.JkBuild;

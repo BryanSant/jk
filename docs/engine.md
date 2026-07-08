@@ -42,12 +42,14 @@ Three things are worth knowing:
 
 ## Lifecycle
 
-The native dist ships the engine as its own binary — `jk-engine`, built from the same sources at
-the same version as the `jk` client that spawns it (see [Two artifacts](#two-artifacts) below). The
+The native dist ships the engine as a plain jar directory — `libexec/jk-engine/`, built from the
+same sources at the same version as the `jk` client that spawns it (see
+[Two artifacts](#two-artifacts) below). The engine is a normal Java app on the jk-managed JDK,
+never a native image; the client — a JDK installer and JVM launcher by trade — launches it. The
 `jk` client binary itself can *also* run the engine role via an internal, hidden `--engine-server`
 flag (mirroring how `jk cache prune --background` already reuses the same binary as a detached
 one-shot worker via `CachePruneScheduler`) — that flag route is how the JVM dist runs the engine,
-and the fallback when no `jk-engine` is installed. Both routes execute the exact same code
+and the fallback when no engine artifact is installed. Both routes execute the exact same code
 (`EngineMain`). Concretely:
 
 1. A CLI command that needs the engine checks for a live one by **connecting to its socket and
@@ -56,17 +58,19 @@ and the fallback when no `jk-engine` is installed. Both routes execute the exact
 2. No answer → the CLI spawns an engine, detached (its own stdin closed, its output going to a log
    file, not the caller's terminal), and waits (a few seconds, bounded) for the new engine's socket
    to come up. Which artifact it spawns is resolved in order: **(a)** a `JK_ENGINE_EXE` env
-   override (always treated as a dedicated engine binary — its `main` is the engine loop, no flag);
-   **(b)** a `jk-engine` (`jk-engine.exe` on Windows) executable sitting next to the resolved `jk`
-   client binary — the native dist's layout; **(c)** the `jk` binary itself, re-invoked with the
-   internal `--engine-server` flag — the JVM dist and dev workflows. The choice is recorded as the
-   first line of the engine's log file. Either way the spawner passes `-Xms`/`-Xmx` sizing from
-   `max-heap-mb` (see [Memory target](#memory-target); on the JVM-dist route it rides the start
-   script's `JK_OPTS` instead).
+   override (always treated as a dedicated engine executable — its `main` is the engine loop, no
+   flag); **(b)** a `libexec/jk-engine/` jar directory sitting next to the resolved `jk` client
+   binary — the native dist's layout, launched as `<managed-jdk>/bin/java -XX:+UseSerialGC
+   -Xms…/-Xmx… -cp 'libexec/jk-engine/*' dev.jkbuild.cli.EngineMain` on the jk-managed default
+   JDK (bootstrap-installed on a machine that has none, the same way first sync would); **(c)**
+   the `jk` binary itself, re-invoked with the internal `--engine-server` flag — the JVM dist and
+   dev workflows. The choice is recorded as the first line of the engine's log file. Every route
+   sizes the heap from `max-heap-mb` (see [Memory target](#memory-target)): real JVM flags on the
+   `java` spawn line, `JK_OPTS` on the JVM-dist start-script route.
    Detached means *really* detached: first thing in the engine role, the process moves itself
    into its own POSIX session — `setsid(2)` called directly via an FFM downcall (works on Linux
-   *and* macOS, which ships no `setsid(1)` command; registered for native-image by
-   `EngineDetachFeature`) — and ignores terminal SIGINT/SIGHUP everywhere. So a Ctrl-C aimed at
+   *and* macOS, which ships no `setsid(1)` command) — and ignores terminal SIGINT/SIGHUP
+   everywhere. So a Ctrl-C aimed at
    the client that happened to spawn it can never take down the engine and the other builds it is
    hosting. (`SIGTERM` to the engine's own PID stays lethal on purpose; cancelling one build is a
    wire-level concern, never a signal.)
@@ -112,23 +116,31 @@ command spin up a fresh one, or just wait for the current one to naturally recyc
 
 ## Two artifacts
 
-The native dist is two images built from one codebase (slim-client Stage 4 — see
-[slim-client.md](architecture/slim-client.md)), because the two processes have opposite
+The native dist is one image plus one jar directory, with two *classpaths* (slim-client Stages
+4+5 — see [slim-client.md](architecture/slim-client.md)), because the two processes have opposite
 performance budgets:
 
-- **`jk` (the client)** is judged on download size, on-disk size, and startup latency (`jk
-  hook-env` runs on every `cd`) — it's built size-first: `-Os`, no `-march`, a 128 MiB heap cap.
-- **`jk-engine`** is a long-lived resident process whose hot path is SHA-256-heavy (CAS and
-  classpath fingerprinting on every no-op build) — it's built speed-first: `-O3` plus
-  `-march=x86-64-v3` on amd64 (benchmarked ≈1.5x on no-op builds; `compatibility` elsewhere), with
-  the 256 MiB / 96 MiB engine heap numbers baked as its `-R:` defaults. Its `main`
-  (`EngineMain`) *is* the engine-server loop — no verb routing, no flag.
+- **`jk` (the client, `:cli:nativeCompile`)** is judged on download size, on-disk size, and
+  startup latency (`jk hook-env` runs on every `cd`) — a native image built size-first (`-Os`, no
+  `-march`, a 128 MiB heap cap) **from the slim classpath**: since Stage 5 the `:cli` module no
+  longer links `:engine`/`:io`/`:resolver`/`:toolchain` at all, so the image physically contains
+  no engine code. Measured on linux/amd64: **~19 MiB, down from 32.8 MiB** when the image carried
+  the full classpath.
+- **`libexec/jk-engine/` (the engine, `:cli-engine:installEngineLibs`)** is a long-lived resident
+  process, which is exactly what a JVM is best at — so it is a plain Java app, never a native
+  image. The client spawns it on the jk-managed JDK; HotSpot's JIT and SHA-256 intrinsics serve
+  its hashing-heavy hot path (CAS and classpath fingerprinting on every no-op build), and its
+  profile is ordinary JVM flags on the spawn line: SerialGC with the 256 MiB / 96 MiB heap
+  numbers from `max-heap-mb`. Its `main` (`EngineMain`) *is* the engine-server loop — no verb
+  routing, no flag. Building it is `./gradlew dist` territory (jars, seconds) — no native-image
+  compile, no multi-gigabyte builder process.
 
 Both bake the same `JkVersion`, so the handshake's [version-skew](#version-skew) check works
-identically whichever artifact is serving. The JVM dist (installDist) deliberately stays a single
-start script: the artifact split is a native-image tuning concern, and the JVM engine role is
-reached via the same hidden `--engine-server` flag the fallback spawn path uses — one
-implementation either way.
+identically whichever artifact is serving. The JVM dist (`:cli-engine:installDist`) deliberately
+stays a single start script: everything is on its classpath, and the JVM engine role is reached
+via the same hidden `--engine-server` flag the fallback spawn path uses — on the JVM dist that
+flag finds `EngineMain` through the `InProcessEngine` ServiceLoader seam; on the slim client
+image (where no engine code exists) it reports plainly that the engine jars are required.
 
 ## Manual control
 
@@ -318,8 +330,8 @@ and retries your command against it. You never see this happen; it costs the one
 
 The engine targets **256 MiB** — no longer just an aim: the spawn-time heap ceiling defaults to
 exactly that (`max-heap-mb` — see [Configuring the engine](#configuring-the-engine)), with
-`-Xms96m` pre-sizing and SerialGC (the native binary is built `--gc=serial`; the JVM-dist spawn
-passes `-XX:+UseSerialGC`) for low GC overhead on a heap this size. Observable at any time via the
+`-Xms96m` pre-sizing and `-XX:+UseSerialGC` on the spawn line for low GC overhead on a heap this
+size. Observable at any time via the
 memory line of `jk engine status`. It doesn't do the heavy lifting
 itself — compiles
 and test runs still happen in forked worker JVMs, sized by the same shared `HeapPlan` machinery as

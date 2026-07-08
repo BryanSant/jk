@@ -4,6 +4,7 @@ package dev.jkbuild.test;
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.jdk.HostPlatform;
 import dev.jkbuild.plugin.protocol.Ndjson;
+import dev.jkbuild.run.TestSummary;
 import dev.jkbuild.worker.WorkerJar;
 import dev.jkbuild.worker.WorkerProcess;
 import java.io.File;
@@ -80,7 +81,7 @@ public final class JUnitLauncher {
      * worker-jar paths, forwarded to the test JVM so worker-forking tests can locate their worker by
      * path (see {@link #workerJarProps}).
      */
-    public Result run(
+    public TestSummary run(
             Path javaHome,
             Path testClassesDir,
             List<Path> runtimeClasspath,
@@ -97,7 +98,7 @@ public final class JUnitLauncher {
      * Gradle-compatible {@code TEST-<classname>.xml} files into {@code testResultsDir} after the run
      * completes. {@code testResultsDir} may be {@code null} to skip XML output.
      */
-    public Result run(
+    public TestSummary run(
             Path javaHome,
             Path testClassesDir,
             List<Path> runtimeClasspath,
@@ -131,7 +132,7 @@ public final class JUnitLauncher {
 
     // -------- single-worker ---------------------------------------------
 
-    private Result runSingle(
+    private TestSummary runSingle(
             Path javaBinary, String classpath, Path testClassesDir, TestProgressListener listener, Path testResultsDir)
             throws IOException, InterruptedException {
         XmlTestReport xml = testResultsDir != null ? new XmlTestReport() : null;
@@ -152,7 +153,7 @@ public final class JUnitLauncher {
                     crash.add(line);
                     listener.onUserOutput(0, line);
                 });
-        Result result = aggregator.toResult(exit, crash.text());
+        TestSummary result = aggregator.toResult(exit, crash.text());
         if (xml != null) {
             try {
                 xml.writeAll(testResultsDir);
@@ -172,7 +173,7 @@ public final class JUnitLauncher {
 
     // -------- parallel pull-queue ---------------------------------------
 
-    private Result runParallel(
+    private TestSummary runParallel(
             Path javaBinary,
             String classpath,
             Path testClassesDir,
@@ -183,7 +184,7 @@ public final class JUnitLauncher {
         // 1. Discovery — one fork, list-only mode, harvest class FQCNs.
         List<String> classes = discoverClasses(javaBinary, classpath, testClassesDir, listener);
         if (classes.isEmpty()) {
-            return new Result(0, 0, 0, 0, List.of());
+            return new TestSummary(0, 0, 0, 0, List.of());
         }
         // Don't waste workers on small suites — N workers > N classes leaves
         // some idle waiting for a class that'll never come.
@@ -223,16 +224,16 @@ public final class JUnitLauncher {
         for (int e : exits) {
             if (e != 0) worstExit = e;
         }
-        // Merge per-worker aggregators into one Result.
+        // Merge per-worker aggregators into one TestSummary.
         long total = 0, succeeded = 0, failed = 0, skipped = 0;
-        var allFailures = new ArrayList<Failure>();
+        var allFailures = new ArrayList<TestSummary.Failure>();
         for (var agg : aggregators) {
             var r = agg.snapshot();
-            total += r.total;
-            succeeded += r.succeeded;
-            failed += r.failed;
-            skipped += r.skipped;
-            allFailures.addAll(r.failures);
+            total += r.total();
+            succeeded += r.succeeded();
+            failed += r.failed();
+            skipped += r.skipped();
+            allFailures.addAll(r.failures());
         }
         if (total == 0 && worstExit != 0) {
             // No test events but a worker died — surface what the crashed worker(s)
@@ -244,8 +245,8 @@ public final class JUnitLauncher {
                     crash.append(captures.get(i).text());
                 }
             }
-            return new Result(
-                    1, 0, 1, 0, List.of(new Failure("(test run)", "", "runner exited " + worstExit, crash.toString())));
+            return new TestSummary(
+                    1, 0, 1, 0, List.of(new TestSummary.Failure("(test run)", "", "runner exited " + worstExit, crash.toString())));
         }
         if (xml != null) {
             try {
@@ -261,7 +262,7 @@ public final class JUnitLauncher {
                 /* non-fatal */
             }
         }
-        return new Result(total, succeeded, failed, skipped, allFailures);
+        return new TestSummary(total, succeeded, failed, skipped, allFailures);
     }
 
     /**
@@ -408,7 +409,7 @@ public final class JUnitLauncher {
         private long succeeded;
         private long failed;
         private long skipped;
-        private final List<Failure> failures = new ArrayList<>();
+        private final List<TestSummary.Failure> failures = new ArrayList<>();
         // Tests whose `dynamic_registered` event we observed at execute-time
         // — i.e., @ParameterizedTest / @TestFactory / @TestTemplate /
         // @RepeatedTest invocations that weren't in the static plan. Used
@@ -512,7 +513,7 @@ public final class JUnitLauncher {
             // The runner emits the full stack trace under "stack"; keep it so the
             // build can print it (we used to read only class + message).
             String stack = throwableJson != null ? Ndjson.str(throwableJson, "stack") : null;
-            failures.add(new Failure(display, exClass, message, stack == null ? "" : stack));
+            failures.add(new TestSummary.Failure(display, exClass, message, stack == null ? "" : stack));
             listener.onFailure(id, display, exClass, message, workerId);
         }
 
@@ -531,7 +532,7 @@ public final class JUnitLauncher {
             }
         }
 
-        synchronized Result toResult(int exitCode) {
+        synchronized TestSummary toResult(int exitCode) {
             return toResult(exitCode, "");
         }
 
@@ -540,27 +541,27 @@ public final class JUnitLauncher {
          * stdout/stderr) to the synthetic "runner exited" failure so a hard crash with no test events
          * still explains itself.
          */
-        synchronized Result toResult(int exitCode, String crashOutput) {
+        synchronized TestSummary toResult(int exitCode, String crashOutput) {
             long total = succeeded + failed + skipped;
             if (total == 0 && exitCode != 0) {
-                return new Result(
+                return new TestSummary(
                         1,
                         0,
                         1,
                         0,
-                        List.of(new Failure(
+                        List.of(new TestSummary.Failure(
                                 "(test run)",
                                 "",
                                 "runner exited " + exitCode,
                                 crashOutput == null ? "" : crashOutput)));
             }
-            return new Result(total, succeeded, failed, skipped, List.copyOf(failures));
+            return new TestSummary(total, succeeded, failed, skipped, List.copyOf(failures));
         }
 
         /** Snapshot of just the counters — used by the parallel-merge path. */
-        synchronized Result snapshot() {
+        synchronized TestSummary snapshot() {
             long total = succeeded + failed + skipped;
-            return new Result(total, succeeded, failed, skipped, List.copyOf(failures));
+            return new TestSummary(total, succeeded, failed, skipped, List.copyOf(failures));
         }
     }
 
@@ -589,23 +590,4 @@ public final class JUnitLauncher {
         }
     }
 
-    public record Result(long total, long succeeded, long failed, long skipped, List<Failure> failures) {
-
-        public Result {
-            failures = List.copyOf(failures);
-        }
-
-        public boolean allPassed() {
-            return failed == 0;
-        }
-    }
-
-    /**
-     * One failed test. {@code exceptionClass} and {@code message} are the failure's throwable split
-     * into discrete fields (the exception's class name and its message); either may be empty when the
-     * failure carries no throwable — e.g. a non-zero runner exit, where {@code message} holds the
-     * synthetic "runner exited N" summary and {@code exceptionClass} is empty. {@code details} is the
-     * full stack trace as the runner rendered it (empty when there is no captured throwable).
-     */
-    public record Failure(String testName, String exceptionClass, String message, String details) {}
 }

@@ -12,6 +12,7 @@ import dev.jkbuild.run.Goal;
 import dev.jkbuild.run.GoalKey;
 import dev.jkbuild.run.GoalListener;
 import dev.jkbuild.run.GoalResult;
+import dev.jkbuild.run.TestSummary;
 import dev.jkbuild.task.ActionCache;
 import dev.jkbuild.test.JUnitLauncher;
 import dev.jkbuild.worker.HeapPlan;
@@ -168,10 +169,10 @@ public final class BuildService {
             Cas cas = new Cas(cache);
             ActionCache ac = new ActionCache(cas, cache.resolve("actions"));
             Set<Path> dirty = new HashSet<>();
-            for (BuildPlanForecast.Module m : BuildPlanForecast.of(graph, cas, ac, cache, skipTests)) {
+            for (BuildPlan.Module m : BuildPlanForecast.of(graph, cas, ac, cache, skipTests)) {
                 if (m.dirty()) dirty.add(m.dir());
                 if (Perf.ENABLED && m.dirty()) {
-                    for (BuildPlanForecast.Phase p : m.phases()) {
+                    for (BuildPlan.Phase p : m.phases()) {
                         if (!p.cached())
                             System.err.println(
                                     "[jk-perf] dirty " + m.coord() + " " + p.name() + " (" + p.text() + ")");
@@ -189,29 +190,6 @@ public final class BuildService {
     // =========================================================================
 
     /**
-     * A front-end-facing forecast of {@code jk build}: the workspace's modules in dependency order
-     * (each already front-end-safe — see {@link BuildPlanForecast.Module}), the prereq edges and
-     * peak-concurrency width the ETA model needs, and any graph-resolution errors. Deliberately free
-     * of {@link BuildGraph}/{@link BuildGraph.BuildUnit}: edges are exposed as a plain {@code dir →
-     * prereq dirs} map (keyed by the same {@link BuildPlanForecast.Module#dir()} the caller iterates),
-     * so a non-CLI client can render the plan and compute the estimate without engine internals.
-     *
-     * @param modules dependency-first modules; empty when {@link #hasErrors()}
-     * @param edges module dir → the dirs that must build before it
-     * @param maxReadyWidth widest wave of independent modules (drives ETA concurrency)
-     * @param errors graph-resolution errors (cycle / depth-cap / missing jk.toml); non-empty ⇒ no plan
-     */
-    public record ExplainPlan(
-            List<BuildPlanForecast.Module> modules,
-            Map<Path, Set<Path>> edges,
-            int maxReadyWidth,
-            List<String> errors) {
-        public boolean hasErrors() {
-            return !errors.isEmpty();
-        }
-    }
-
-    /**
      * Forecast the build without running it: resolve the module graph and run the truthful
      * per-phase {@link BuildPlanForecast} over it, returning an {@link ExplainPlan} the caller
      * renders. Pure policy — nothing here writes to {@code stdout}/{@code stderr}. Graph-resolution
@@ -225,7 +203,7 @@ public final class BuildService {
         }
         Cas cas = new Cas(cache);
         ActionCache actionCache = new ActionCache(cas, cache.resolve("actions"));
-        List<BuildPlanForecast.Module> modules = BuildPlanForecast.of(graph, cas, actionCache, cache);
+        List<BuildPlan.Module> modules = BuildPlanForecast.of(graph, cas, actionCache, cache);
         return new ExplainPlan(modules, graph.edges(), graph.maxReadyWidth(), List.of());
     }
 
@@ -259,8 +237,8 @@ public final class BuildService {
             // All modules of this build graph — the project/workspace set each module's prediction
             // borrows a learned rate from when it has no history of its own (EffortWeights.learned).
             Set<Path> projectModules = new HashSet<>();
-            for (BuildPlanForecast.Module m : plan.modules()) projectModules.add(m.dir());
-            for (BuildPlanForecast.Module m : plan.modules()) {
+            for (BuildPlan.Module m : plan.modules()) projectModules.add(m.dir());
+            for (BuildPlan.Module m : plan.modules()) {
                 Path mdir = m.dir();
                 BuildPipeline.Inputs inputs = BuildPlanForecast.inputsFor(
                         mdir, cache, workers, jdksDir, profile, skipTests, verbose, projectModules);
@@ -359,115 +337,8 @@ public final class BuildService {
     // Workspace build (the front-end-callable event-emitting entry point)
     // =========================================================================
 
-    /** What a front-end asks the engine to build. */
-    public record WorkspaceRequest(
-            Path entryDir,
-            JkBuild entryBuild,
-            Path cache,
-            Path jdksDir,
-            int workers,
-            String profile,
-            boolean skipTests,
-            boolean verbose,
-            // Max modules to build concurrently. 0 = auto (schedule every ready level's units at once,
-            // memory permitting — the parallel default); 1 = strictly serial; N = a rolling window of N.
-            int maxModuleConcurrency,
-            // Pre-computed dirty module dirs, or null to forecast internally. Lets a caller that
-            // already forecasted (the CLI's fully-cached "all up to date" shortcut) skip a redundant pass.
-            Set<Path> dirtyHint,
-            // True (the single-CLI-process default): this call sizes and applies its own worker-JVM
-            // memory plan (see the buildWorkspace javadoc). False: the caller already owns memory
-            // planning for the process — e.g. a host serving several concurrent buildWorkspace calls
-            // in one JVM plans once for its own assumed concurrency, and a per-call plan here would
-            // stomp the shared HeapPlan/WorkerSlots state out from under a sibling call in flight.
-            boolean applyMemoryPlan,
-            // True (jk build): auto-freshen the merged workspace lock before any build decision via
-            // ensureWorkspaceLockFresh — the guard BuildCommand used to run client-side, now applied
-            // here so an engine-hosted build request freshens the lock engine-side. False for callers
-            // that must use the pinned lock verbatim (jk verify's scratch rebuild).
-            boolean freshenLock) {}
-
-    /**
-     * A module's assembled goal + the estimates a caller needs to render/calibrate. The front-end
-     * contract is {@link #coord()}, {@link #dir()}, {@link #goal()}, {@link #weight()}, {@link
-     * #fullyCached()}, and {@link #cache()}. The engine-internal {@link BuildGraph.BuildUnit} used to
-     * run the module is exposed only through the package-private {@link #unit()} accessor, so the
-     * boundary is compiler-enforced: engine consumers in {@code dev.jkbuild.runtime} can reach it,
-     * front-ends in other packages (the CLI) cannot.
-     *
-     * <p>A {@code final class} rather than a {@code record} precisely so {@code unit()} can drop below
-     * {@code public} — a record's canonical accessors are always {@code public}.
-     */
-    public static final class ModulePlan {
-        private final BuildGraph.BuildUnit unit;
-        private final Goal goal;
-        private final int weight;
-        private final boolean fullyCached;
-        private final Path cache;
-
-        ModulePlan(BuildGraph.BuildUnit unit, Goal goal, int weight, boolean fullyCached, Path cache) {
-            this.unit = unit;
-            this.goal = goal;
-            this.weight = weight;
-            this.fullyCached = fullyCached;
-            this.cache = cache;
-        }
-
-        /**
-         * Reconstruct a plan client-side from wire-level data (engine front-ends). The synthetic
-         * unit this creates is never executed — renderers read only {@link #coord()}, {@link
-         * #dir()}, and {@link #goal()} — and it never crosses back into the engine. This is the
-         * only construction path outside the engine package, so {@link BuildGraph.BuildUnit} stays
-         * invisible to front-ends.
-         */
-        public static ModulePlan fromWire(
-                Path dir, String coord, Goal goal, int weight, boolean fullyCached, Path cache) {
-            BuildGraph.BuildUnit unit = new BuildGraph.BuildUnit(dir, null, coord, BuildGraph.Origin.ROOT);
-            return new ModulePlan(unit, goal, weight, fullyCached, cache);
-        }
-
-        /** Engine-internal build unit — package-private so front-ends can't reach {@link BuildGraph.BuildUnit}. */
-        BuildGraph.BuildUnit unit() {
-            return unit;
-        }
-
-        public String coord() {
-            return unit.coord();
-        }
-
-        public Path dir() {
-            return unit.dir();
-        }
-
-        public Goal goal() {
-            return goal;
-        }
-
-        public int weight() {
-            return weight;
-        }
-
-        public boolean fullyCached() {
-            return fullyCached;
-        }
-
-        public Path cache() {
-            return cache;
-        }
-    }
-
-    /** The result of one module's build. */
-    public record ModuleOutcome(String coord, Path dir, boolean success, int exitCode, long millis) {}
-
-    /**
-     * The whole workspace build result.
-     *
-     * @param errors graph-resolution errors (composite deps); non-empty ⇒ nothing built
-     */
-    public record WorkspaceResult(boolean success, int exitCode, List<ModuleOutcome> modules, List<String> errors) {}
-
-    private static final GoalKey<JUnitLauncher.Result> TEST_RESULT =
-            GoalKey.of("test-result", JUnitLauncher.Result.class);
+    private static final GoalKey<TestSummary> TEST_RESULT =
+            GoalKey.of("test-result", TestSummary.class);
 
     /**
      * Build a whole workspace: resolve the module graph, size the worker-JVM memory plan (unless
@@ -689,7 +560,7 @@ public final class BuildService {
         Goal.Builder b = BuildPipeline.coreBuilder(inputs, forceRebuild);
         BuildPipeline.appendDeclaredTails(b, inputs);
         Goal goal = b.build();
-        return new ModulePlan(u, goal, goal.estimatedTotalWeight(), fullyCached, req.cache());
+        return new ModulePlan(u.dir(), u.coord(), goal, goal.estimatedTotalWeight(), fullyCached, req.cache());
     }
 
     /** Run one module's goal, attaching the caller's per-module listener; map the result to an outcome. */
@@ -714,7 +585,7 @@ public final class BuildService {
 
     /** Test failures exit 4; every other goal failure exits 1. */
     private static int exitCodeFor(Goal goal) {
-        JUnitLauncher.Result tr = goal.get(TEST_RESULT).orElse(null);
+        TestSummary tr = goal.get(TEST_RESULT).orElse(null);
         return tr != null && !tr.allPassed() ? 4 : 1;
     }
 

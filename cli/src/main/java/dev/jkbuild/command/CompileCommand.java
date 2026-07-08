@@ -11,9 +11,7 @@ import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Exit;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
-import dev.jkbuild.run.Goal;
 import dev.jkbuild.run.GoalResult;
-import dev.jkbuild.runtime.BuildPipeline;
 import dev.jkbuild.util.JkDirs;
 import java.io.IOException;
 import java.nio.file.Path;
@@ -21,7 +19,7 @@ import java.util.List;
 
 /**
  * {@code jk compile} — lock, sync, then compile this project's sources to {@code target/classes}
- * (no resources, tests, or packaging). It runs the shared {@link BuildPipeline} in compile-only
+ * (no resources, tests, or packaging). It runs the shared engine pipeline in compile-only
  * mode, so it auto-locks and syncs on first run, re-locks when {@code jk.toml} changed, and reuses
  * the same incremental compile cache as {@code jk build}/{@code jk test}.
  *
@@ -78,10 +76,8 @@ public final class CompileCommand implements CliCommand {
         GoalConsole.Mode mode = GoalConsole.modeFor(global);
         GoalResult result;
         if (engineDisabledForTests()) {
-            // compileOnly → lock → sync → compile. The pipeline resolves jk.lock on
-            // first run and re-locks when jk.toml changed; no "run jk lock first".
-            Goal goal = dev.jkbuild.runtime.CompileGoals.compileGoal(dir, cache, profileName, global.verbose);
-            result = GoalConsole.runGoal(goal, mode, cache, spec, target);
+            result = dev.jkbuild.cli.engine.InProcessEngine.require()
+                    .compileGoal(dir, cache, profileName, global.verbose, mode, spec, target);
         } else {
             // Engine-hosted (slim-client Wave 3): the engine assembles the exact same goal
             // (CompileGoals) and streams the single-goal event vocabulary back; the listener is

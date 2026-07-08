@@ -20,8 +20,10 @@ import dev.jkbuild.run.GoalListener;
 import dev.jkbuild.run.GoalResult;
 import dev.jkbuild.run.Phase;
 import dev.jkbuild.run.PhaseKind;
-import dev.jkbuild.runtime.BuildService;
+import dev.jkbuild.runtime.ModulePlan;
 import dev.jkbuild.runtime.WorkspaceBuildListener;
+import dev.jkbuild.runtime.WorkspaceRequest;
+import dev.jkbuild.runtime.WorkspaceResult;
 import dev.jkbuild.util.Hashing;
 import dev.jkbuild.util.JkDirs;
 import dev.jkbuild.util.PathUtil;
@@ -224,7 +226,7 @@ public final class VerifyBuildCommand implements CliCommand {
      */
     private static void buildScratch(Path scratch, Path cache, ErrorSink errors) throws Exception {
         JkBuild scratchBuild = JkBuildParser.parse(scratch.resolve("jk.toml"));
-        var request = new BuildService.WorkspaceRequest(
+        var request = new WorkspaceRequest(
                 scratch,
                 scratchBuild,
                 cache,
@@ -244,7 +246,7 @@ public final class VerifyBuildCommand implements CliCommand {
         List<String> buildErrors = Collections.synchronizedList(new ArrayList<>());
         WorkspaceBuildListener listener = new WorkspaceBuildListener() {
             @Override
-            public GoalListener onModuleStart(BuildService.ModulePlan m) {
+            public GoalListener onModuleStart(ModulePlan m) {
                 return new GoalListener() {
                     @Override
                     public void error(String phase, String code, String message) {
@@ -253,10 +255,10 @@ public final class VerifyBuildCommand implements CliCommand {
                 };
             }
         };
-        BuildService.WorkspaceResult result = SessionContext.where(
+        WorkspaceResult result = SessionContext.where(
                 session,
                 () -> engineDisabledForTests()
-                        ? BuildService.buildWorkspace(request, listener)
+                        ? dev.jkbuild.cli.engine.InProcessEngine.require().buildWorkspace(request, listener)
                         : dev.jkbuild.cli.engine.EngineClient.buildWorkspace(
                                 dev.jkbuild.engine.EnginePaths.current(), request, listener));
         if (!result.errors().isEmpty()) {
@@ -271,8 +273,8 @@ public final class VerifyBuildCommand implements CliCommand {
     }
 
     /**
-     * Escape hatch for the fast JVM unit-test suite ONLY: routes the scratch rebuild through {@link
-     * BuildService#buildWorkspace} in-process instead of the engine. Set via {@code
+     * Escape hatch for the fast JVM unit-test suite ONLY: routes the scratch rebuild through the
+     * in-process engine seam ({@code BuildService.buildWorkspace}) instead of the wire. Set via {@code
      * -Djk.test.noEngine=true} by {@code cli/build.gradle.kts}'s {@code test {}} task — never a
      * user-facing flag. Mirrors {@code BuildCommand}'s identical check; see the rationale there
      * (a Gradle test JVM has no real {@code jk} binary to exec as an engine).

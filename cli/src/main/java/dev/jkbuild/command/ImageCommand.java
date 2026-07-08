@@ -7,16 +7,12 @@ import dev.jkbuild.cli.run.ConsoleSpec;
 import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.cli.theme.Coords;
 import dev.jkbuild.cli.theme.Theme;
-import dev.jkbuild.image.ImageConfig;
-import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Exit;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.run.Goal;
 import dev.jkbuild.run.GoalResult;
-import dev.jkbuild.runtime.BuildPipeline;
-import dev.jkbuild.runtime.ImageGoals;
 import dev.jkbuild.util.JkDirs;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -106,22 +102,13 @@ public final class ImageCommand implements CliCommand {
         String module = BuildCommand.buildTarget(jkBuildPath, projectDir);
 
         GoalResult result;
-        dev.jkbuild.test.JUnitLauncher.Result testResult;
+        dev.jkbuild.run.TestSummary testResult;
         if (engineDisabledForTests()) {
-            Goal goal = ImageGoals.imageGoal(
-                    projectDir,
-                    cache,
-                    jdksDir,
-                    buildOpts.skipTests,
-                    global.verbose,
-                    mainClass,
-                    registry,
-                    tag,
-                    tarballArg,
-                    dockerExecutableArg);
-            ConsoleSpec spec = new ConsoleSpec("Image", r -> imageSuccessTail(goal), r -> "Image build failed", true);
-            result = GoalConsole.runGoal(goal, mode, cache, spec, module);
-            testResult = goal.get(BuildPipeline.TEST_RESULT).orElse(null);
+            var o = dev.jkbuild.cli.engine.InProcessEngine.require()
+                    .imageGoal(projectDir, cache, jdksDir, buildOpts.skipTests, global.verbose, mainClass,
+                            registry, tag, tarballArg, dockerExecutableArg, mode, module);
+            result = o.result();
+            testResult = o.testResult();
         } else {
             // The wire has no real Goal, so the success tail renders from the structured fields the
             // terminal goal-finish carries — the summary holder is populated before the console
@@ -177,23 +164,6 @@ public final class ImageCommand implements CliCommand {
         return 0;
     }
 
-    /** Success tail for the in-process path — reads the finished goal's structured keys. */
-    private static String imageSuccessTail(Goal goal) {
-        JkBuild project = goal.get(BuildPipeline.PROJECT).orElse(null);
-        ImageConfig cfg = goal.get(ImageGoals.CONFIG).orElse(null);
-        Path tarballPath = goal.get(ImageGoals.TARBALL_PATH).orElse(null);
-        String name = project != null ? project.project().name() : "";
-        String version = project != null ? project.project().version() : "";
-        boolean daemonMode = tarballPath == null
-                && (cfg == null || cfg.registry() == null || cfg.registry().isBlank());
-        String daemonExe = !daemonMode
-                ? null
-                : cfg != null && cfg.dockerExecutable() != null ? cfg.dockerExecutable() : "docker";
-        String ref = goal.get(ImageGoals.IMAGE_REF)
-                .orElse(cfg != null ? cfg.targetReference(name, version) : "");
-        return imageSuccessTail(tarballPath != null ? tarballPath.toString() : null, name, version, daemonExe, ref);
-    }
-
     /**
      * Success tail for the Image chip line, from the structured mode fields:
      *
@@ -206,7 +176,7 @@ public final class ImageCommand implements CliCommand {
      * The framework appends {@code took Xs} automatically. Theming happens here, client-side — the
      * engine only ever supplies the plain field values.
      */
-    private static String imageSuccessTail(String tarball, String name, String version, String daemonExe, String ref) {
+    static String imageSuccessTail(String tarball, String name, String version, String daemonExe, String ref) {
         if (tarball != null) {
             return "Wrote OCI tarball " + Theme.colorize(tarball, Theme.active().path());
         }

@@ -15,6 +15,7 @@ import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.config.WorkspaceClasspath;
 import dev.jkbuild.config.WorkspaceLocator;
 import dev.jkbuild.jdk.HostPlatform;
+import dev.jkbuild.jdk.JavaHomes;
 import dev.jkbuild.layout.BuildLayout;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.lock.LockfileReader;
@@ -25,10 +26,7 @@ import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.model.command.Param;
-import dev.jkbuild.run.Goal;
 import dev.jkbuild.run.GoalResult;
-import dev.jkbuild.runtime.BuildPipeline;
-import dev.jkbuild.runtime.CompileToolchain;
 import dev.jkbuild.util.JkDirs;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -37,10 +35,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * {@code jk run [-- <args>...]} — build the current project through the shared {@link
- * BuildPipeline} and run its best artifact, forwarding every argument to the program.
+ * {@code jk run [-- <args>...]} — build the current project through the shared engine pipeline
+ * and run its best artifact, forwarding every argument to the program.
  *
- * <p>The build runs in a {@link Goal} (so progress/warnings/run-log behave like every other verb)
+ * <p>The build runs in a {@link dev.jkbuild.run.Goal} (so progress/warnings/run-log behave like every other verb)
  * and produces whatever {@code jk.toml} declares — a plain jar, a shadow jar, and/or a native
  * binary. We then exec the most self-contained artifact available, in order of preference:
  * <strong>native binary &gt; shadow jar &gt; plain jar</strong>. The subprocess starts
@@ -149,36 +147,18 @@ public final class RunCommand implements CliCommand {
                 true);
 
         GoalResult result;
-        dev.jkbuild.test.JUnitLauncher.Result testResult;
+        dev.jkbuild.run.TestSummary testResult;
         if (engineDisabledForTests()) {
-            // Build through the one pipeline, producing whatever jk.toml declares
-            // (jar always; shadow/native when configured). Cache-aware, so a clean
-            // tree is near-instant.
-            Path lockFile = projectDir.resolve("jk.lock");
-            int estimatedTestCount = TestCommand.estimateTestCount(projectDir.resolve("src/test/java"));
-            BuildPipeline.Inputs inputs = new BuildPipeline.Inputs(
-                    projectDir,
-                    cache,
-                    projectDir.resolve("jk.toml"),
-                    lockFile,
-                    projectDir,
-                    1,
-                    estimatedTestCount,
-                    null,
-                    jdksDir,
-                    buildOpts.skipTests,
-                    global.verbose);
-            Goal.Builder builder = BuildPipeline.coreBuilder(inputs);
-            BuildPipeline.appendDeclaredTails(builder, inputs);
-            Goal goal = builder.build();
-            result = GoalConsole.runGoal(goal, mode, cache, spec, coord);
-            testResult = goal.get(BuildPipeline.TEST_RESULT).orElse(null);
+            var o = dev.jkbuild.cli.engine.InProcessEngine.require()
+                    .runBuildGoal(projectDir, cache, jdksDir, buildOpts.skipTests, global.verbose, mode, spec, coord);
+            result = o.result();
+            testResult = o.testResult();
         } else {
             // Engine-hosted build half (slim-client Wave 3): jk run's build is exactly the
             // single-project build goal the engine already hosts (SINGLE_BUILD_REQUEST, with
             // skipTests=true) — only the exec below stays in this process, which owns the TTY.
             var session = dev.jkbuild.config.SessionContext.current();
-            dev.jkbuild.test.JUnitLauncher.Result[] testResultHolder = new dev.jkbuild.test.JUnitLauncher.Result[1];
+            dev.jkbuild.run.TestSummary[] testResultHolder = new dev.jkbuild.run.TestSummary[1];
             try {
                 result = dev.jkbuild.cli.engine.EngineClient.runSingleBuild(
                         dev.jkbuild.engine.EnginePaths.current(),
@@ -233,7 +213,7 @@ public final class RunCommand implements CliCommand {
             return command;
         }
 
-        String javaExe = CompileToolchain.runningJavaHome()
+        String javaExe = JavaHomes.runningJavaHome()
                 .resolve("bin")
                 .resolve(HostPlatform.isWindows() ? "java.exe" : "java")
                 .toString();

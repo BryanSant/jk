@@ -13,8 +13,13 @@ import dev.jkbuild.run.GoalResult;
 import dev.jkbuild.run.GoalView;
 import dev.jkbuild.run.Phase;
 import dev.jkbuild.run.PhaseStatus;
-import dev.jkbuild.runtime.BuildService;
+import dev.jkbuild.runtime.BuildPlan;
+import dev.jkbuild.runtime.ExplainPlan;
+import dev.jkbuild.runtime.ModuleOutcome;
+import dev.jkbuild.runtime.ModulePlan;
 import dev.jkbuild.runtime.WorkspaceBuildListener;
+import dev.jkbuild.runtime.WorkspaceRequest;
+import dev.jkbuild.runtime.WorkspaceResult;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.IOException;
@@ -37,8 +42,8 @@ import java.util.Map;
  * builds for the in-process path — {@code BuildCommand}'s rendering code doesn't need to know whether
  * it's watching a live {@code Goal} or a socket. See {@code docs/engine.md}.
  *
- * <p>Reconstructing {@link BuildService.ModulePlan} client-side goes through the engine's {@code
- * ModulePlan.fromWire} factory (and {@code BuildPlanForecast.Module.fromWire} for explain), so no
+ * <p>Reconstructing {@link ModulePlan} client-side goes through the engine's {@code
+ * ModulePlan.fromWire} factory (and {@code BuildPlan.Module.fromWire} for explain), so no
  * engine-internal type is ever named here — per {@code docs/architecture/re-foundation.md} M6 the
  * {@code BuildUnit} those factories synthesize is package-private to the engine and never executed.
  * The synthesized {@link Goal} is built with inert {@link Phase}s (default no-op body) via the same
@@ -75,12 +80,12 @@ final class EngineBuildListenerAdapter {
 
     /**
      * Run {@code req} against the engine at {@code paths}, spawning/reconnecting as needed, and drive
-     * {@code listener} exactly as {@link BuildService#buildWorkspace} would in-process. Throws with a
+     * {@code listener} exactly as the engine's {@code BuildService.buildWorkspace} would in-process. Throws with a
      * clear message on any engine-unreachable/protocol failure — per {@code docs/engine.md} there is
      * no in-process fallback.
      */
-    static BuildService.WorkspaceResult buildWorkspace(
-            EnginePaths.Paths paths, BuildService.WorkspaceRequest req, WorkspaceBuildListener listener)
+    static WorkspaceResult buildWorkspace(
+            EnginePaths.Paths paths, WorkspaceRequest req, WorkspaceBuildListener listener)
             throws IOException {
         EngineClient.ensureRunning(paths, Jk.VERSION);
         Session session = SessionContext.current();
@@ -131,7 +136,7 @@ final class EngineBuildListenerAdapter {
             EnginePaths.Paths paths,
             EngineClient.TestRequest req,
             java.util.function.Function<List<Phase>, GoalListener> listenerFactory,
-            dev.jkbuild.test.JUnitLauncher.Result[] testResultOut)
+            dev.jkbuild.run.TestSummary[] testResultOut)
             throws IOException {
         EngineClient.ensureRunning(paths, Jk.VERSION);
 
@@ -166,7 +171,7 @@ final class EngineBuildListenerAdapter {
             EnginePaths.Paths paths,
             EngineClient.SingleBuildRequest req,
             java.util.function.Function<List<Phase>, GoalListener> listenerFactory,
-            dev.jkbuild.test.JUnitLauncher.Result[] testResultOut,
+            dev.jkbuild.run.TestSummary[] testResultOut,
             String[] buildOutcomeOut)
             throws IOException {
         EngineClient.ensureRunning(paths, Jk.VERSION);
@@ -201,7 +206,7 @@ final class EngineBuildListenerAdapter {
      * WorkspaceBuildListener} plumbing {@link #buildWorkspace} uses. Module and workspace exit
      * codes are engine-computed ({@code jk native}'s 64/4/1 mapping).
      */
-    static BuildService.WorkspaceResult runNative(
+    static WorkspaceResult runNative(
             EnginePaths.Paths paths, EngineClient.NativeRequest req, WorkspaceBuildListener listener)
             throws IOException {
         EngineClient.ensureRunning(paths, Jk.VERSION);
@@ -247,7 +252,7 @@ final class EngineBuildListenerAdapter {
             EnginePaths.Paths paths,
             EngineClient.InstallRequest req,
             java.util.function.Function<List<Phase>, GoalListener> listenerFactory,
-            dev.jkbuild.test.JUnitLauncher.Result[] testResultOut)
+            dev.jkbuild.run.TestSummary[] testResultOut)
             throws IOException {
         EngineClient.ensureRunning(paths, Jk.VERSION);
 
@@ -276,9 +281,9 @@ final class EngineBuildListenerAdapter {
     /**
      * Forecast a build against the engine — the counterpart of {@code ExplainCommand}'s direct {@code
      * BuildService.explain} call. Synchronous: sends {@link EngineProtocol#EXPLAIN_REQUEST} and reads
-     * the module/phase/edge burst to completion, reconstructing a real {@link BuildService.ExplainPlan}.
+     * the module/phase/edge burst to completion, reconstructing a real {@link ExplainPlan}.
      * Unlike {@link #buildModulePlan}, no inert-object trickery is needed here — {@link
-     * dev.jkbuild.runtime.BuildPlanForecast.Module}/{@code Phase} are pure public data, reconstructed
+     * dev.jkbuild.runtime.BuildPlan.Module}/{@code Phase} are pure public data, reconstructed
      * via {@code Module.fromWire}, exactly as {@link #buildModulePlan} does with {@code
      * ModulePlan.fromWire} ({@code Module.unit()} is package-private and never read here).
      *
@@ -287,7 +292,7 @@ final class EngineBuildListenerAdapter {
      * eta} event inside the burst and settles {@code etaOut[0]} ({@code 0} = unknown) before the
      * terminal {@code explain-done}.
      */
-    static BuildService.ExplainPlan explain(
+    static ExplainPlan explain(
             EnginePaths.Paths paths, EngineClient.ExplainRequest req, long[] etaOut) throws IOException {
         EngineClient.ensureRunning(paths, Jk.VERSION);
 
@@ -310,8 +315,8 @@ final class EngineBuildListenerAdapter {
             writer.write('\n');
             writer.flush();
 
-            List<dev.jkbuild.runtime.BuildPlanForecast.Module> modules = new ArrayList<>();
-            Map<String, List<dev.jkbuild.runtime.BuildPlanForecast.Phase>> phasesByDir = new LinkedHashMap<>();
+            List<dev.jkbuild.runtime.BuildPlan.Module> modules = new ArrayList<>();
+            Map<String, List<dev.jkbuild.runtime.BuildPlan.Phase>> phasesByDir = new LinkedHashMap<>();
             Map<String, String> coordByDir = new LinkedHashMap<>();
             Map<String, int[]> countsByDir = new LinkedHashMap<>(); // [sourceCount, testCount]
             Map<String, boolean[]> flagsByDir = new LinkedHashMap<>(); // [producesJar, producesImage]
@@ -340,9 +345,9 @@ final class EngineBuildListenerAdapter {
                         String dir = Ndjson.str(line, "dir");
                         phasesByDir
                                 .get(dir)
-                                .add(new dev.jkbuild.runtime.BuildPlanForecast.Phase(
+                                .add(new dev.jkbuild.runtime.BuildPlan.Phase(
                                         Ndjson.str(line, "name"),
-                                        dev.jkbuild.runtime.BuildPlanForecast.Status.valueOf(
+                                        dev.jkbuild.runtime.BuildPlan.Status.valueOf(
                                                 Ndjson.str(line, "status")),
                                         Ndjson.str(line, "text"),
                                         Ndjson.str(line, "key")));
@@ -360,7 +365,7 @@ final class EngineBuildListenerAdapter {
                         for (String dir : order) {
                             int[] counts = countsByDir.get(dir);
                             boolean[] flags = flagsByDir.get(dir);
-                            modules.add(dev.jkbuild.runtime.BuildPlanForecast.Module.fromWire(
+                            modules.add(dev.jkbuild.runtime.BuildPlan.Module.fromWire(
                                     Path.of(dir),
                                     coordByDir.get(dir),
                                     phasesByDir.get(dir),
@@ -369,7 +374,7 @@ final class EngineBuildListenerAdapter {
                                     flags[0],
                                     flags[1]));
                         }
-                        return new BuildService.ExplainPlan(
+                        return new ExplainPlan(
                                 modules, edges, Ndjson.intValue(line, "maxReadyWidth", 1), errors);
                     }
                     default -> {
@@ -382,10 +387,50 @@ final class EngineBuildListenerAdapter {
         }
     }
 
+    /**
+     * Pre-flight a build's dirty forecast against the engine ({@code jk build}'s fully-cached
+     * shortcut + dirty hint — see {@link EngineProtocol#FORECAST_REQUEST}). Synchronous: one
+     * request line, one {@code forecast-ack} back. The session's offline/force/rerun flags ride
+     * the request so the engine's forecast honors them exactly as the in-process one did.
+     */
+    static dev.jkbuild.runtime.BuildForecast forecast(
+            EnginePaths.Paths paths, Path entryDir, Path cache, boolean skipTests) throws IOException {
+        EngineClient.ensureRunning(paths, Jk.VERSION);
+        Session session = SessionContext.current();
+        try (SocketChannel ch = EngineClient.connect(paths.socket())) {
+            BufferedWriter writer =
+                    new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
+            BufferedReader reader =
+                    new BufferedReader(new InputStreamReader(Channels.newInputStream(ch), StandardCharsets.UTF_8));
+            writer.write(EngineProtocol.forecastRequest(
+                    entryDir.toString(),
+                    cache.toString(),
+                    skipTests,
+                    session.offline(),
+                    session.force(),
+                    session.config().rerunOr(false)));
+            writer.write('\n');
+            writer.flush();
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (!EngineProtocol.FORECAST_ACK.equals(EngineProtocol.typeOf(line))) continue;
+                java.util.Set<Path> dirty = new java.util.LinkedHashSet<>();
+                for (String d : Ndjson.strArray(line, "dirtyDirs")) dirty.add(Path.of(d));
+                return new dev.jkbuild.runtime.BuildForecast(
+                        dirty,
+                        Ndjson.bool(line, "lockStale", false),
+                        Ndjson.bool(line, "empty", false),
+                        Ndjson.strArray(line, "errors"));
+            }
+            throw new IOException("jk engine: the build engine disconnected unexpectedly before finishing "
+                    + "(it may have crashed); run `jk engine status` for details");
+        }
+    }
+
     private static GoalResult streamSingleGoalEvents(
             BufferedReader reader,
             java.util.function.Function<List<Phase>, GoalListener> listenerFactory,
-            dev.jkbuild.test.JUnitLauncher.Result[] testResultOut,
+            dev.jkbuild.run.TestSummary[] testResultOut,
             String[] buildOutcomeOut)
             throws IOException {
         List<Phase> phases = new ArrayList<>();
@@ -430,7 +475,7 @@ final class EngineBuildListenerAdapter {
                     boolean success = Ndjson.bool(line, "success", false);
                     long total = Ndjson.longValue(line, "testTotal", -1);
                     if (total >= 0 && testResultOut != null) {
-                        testResultOut[0] = new dev.jkbuild.test.JUnitLauncher.Result(
+                        testResultOut[0] = new dev.jkbuild.run.TestSummary(
                                 total,
                                 Ndjson.longValue(line, "testSucceeded", 0),
                                 Ndjson.longValue(line, "testFailed", 0),
@@ -456,12 +501,12 @@ final class EngineBuildListenerAdapter {
                 + "(it may have crashed); run `jk engine status` for details");
     }
 
-    private static BuildService.WorkspaceResult streamEvents(
+    private static WorkspaceResult streamEvents(
             BufferedReader reader, WorkspaceBuildListener listener, Path cache) throws IOException {
         Map<String, ModuleMeta> planByDir = new LinkedHashMap<>();
         Map<String, GoalListener> goalListenersByDir = new LinkedHashMap<>();
         Map<String, List<GoalResult.Diagnostic>> diagnosticsByDir = new LinkedHashMap<>();
-        List<BuildService.ModuleOutcome> outcomes = new ArrayList<>();
+        List<ModuleOutcome> outcomes = new ArrayList<>();
         String pendingPlanDir = null; // the dir most recently opened by plan-module, for plan-phase lines
 
         String line;
@@ -491,7 +536,7 @@ final class EngineBuildListenerAdapter {
                 case EngineProtocol.PLAN_DONE -> listener.onPlan(buildModulePlans(planByDir, cache));
                 case EngineProtocol.ETA -> listener.onEtaEstimate(Ndjson.longValue(line, "millis", 0));
                 case EngineProtocol.MODULE_START -> {
-                    BuildService.ModulePlan plan = buildModulePlan(dir, planByDir.get(dir), cache);
+                    ModulePlan plan = buildModulePlan(dir, planByDir.get(dir), cache);
                     GoalListener gl = listener.onModuleStart(plan);
                     goalListenersByDir.put(dir, gl != null ? gl : new GoalListener() {});
                 }
@@ -554,7 +599,7 @@ final class EngineBuildListenerAdapter {
                     goalListenersByDir.getOrDefault(dir, NOOP).goalFinish(result);
                 }
                 case EngineProtocol.MODULE_FINISH -> {
-                    BuildService.ModuleOutcome outcome = new BuildService.ModuleOutcome(
+                    ModuleOutcome outcome = new ModuleOutcome(
                             Ndjson.str(line, "coord"),
                             Path.of(dir),
                             Ndjson.bool(line, "success", false),
@@ -564,7 +609,7 @@ final class EngineBuildListenerAdapter {
                     listener.onModuleFinish(outcome);
                 }
                 case EngineProtocol.WORKSPACE_FINISH -> {
-                    BuildService.WorkspaceResult result = new BuildService.WorkspaceResult(
+                    WorkspaceResult result = new WorkspaceResult(
                             Ndjson.bool(line, "success", false),
                             Ndjson.intValue(line, "exitCode", 1),
                             List.copyOf(outcomes),
@@ -583,17 +628,17 @@ final class EngineBuildListenerAdapter {
                 + "(it may have crashed); run `jk engine status` for details");
     }
 
-    private static List<BuildService.ModulePlan> buildModulePlans(Map<String, ModuleMeta> planByDir, Path cache) {
-        List<BuildService.ModulePlan> plans = new ArrayList<>(planByDir.size());
+    private static List<ModulePlan> buildModulePlans(Map<String, ModuleMeta> planByDir, Path cache) {
+        List<ModulePlan> plans = new ArrayList<>(planByDir.size());
         for (Map.Entry<String, ModuleMeta> e : planByDir.entrySet()) {
             plans.add(buildModulePlan(e.getKey(), e.getValue(), cache));
         }
         return plans;
     }
 
-    private static BuildService.ModulePlan buildModulePlan(String dir, ModuleMeta m, Path cache) {
+    private static ModulePlan buildModulePlan(String dir, ModuleMeta m, Path cache) {
         Goal inertGoal = Goal.builder(m.goalName).addAllPhases(m.phases).build();
-        return BuildService.ModulePlan.fromWire(Path.of(dir), m.coord, inertGoal, m.weight, m.fullyCached, cache);
+        return ModulePlan.fromWire(Path.of(dir), m.coord, inertGoal, m.weight, m.fullyCached, cache);
     }
 
     private static GoalView readGoalView(String line) {

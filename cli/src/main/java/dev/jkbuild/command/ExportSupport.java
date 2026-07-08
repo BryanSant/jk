@@ -11,7 +11,7 @@ import dev.jkbuild.config.WorkspaceLoader;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.lock.LockfileReader;
 import dev.jkbuild.model.JkBuild;
-import dev.jkbuild.runtime.CompileSupport;
+import dev.jkbuild.layout.SourceLayout;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -61,7 +61,7 @@ final class ExportSupport {
 
     /** Resolve a project's concrete source layout (jk's own {@code AUTO} tree-probe rule). */
     static JkBuild.Layout resolveLayout(Path dir, JkBuild b) {
-        return CompileSupport.isSimpleLayout(b.project(), dir) ? JkBuild.Layout.SIMPLE : JkBuild.Layout.TRADITIONAL;
+        return SourceLayout.isSimpleLayout(b.project(), dir) ? JkBuild.Layout.SIMPLE : JkBuild.Layout.TRADITIONAL;
     }
 
     /**

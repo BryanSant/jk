@@ -381,9 +381,11 @@ shipped — including self-hosting (jk builds itself). v1.0 work focuses on
 IntelliJ / VS Code integration, the benchmark dashboard, and the GA release
 artifact pipeline.
 
-The native binary is built via `./gradlew :cli:nativeCompile`. A runnable JVM
-distribution is produced by `./gradlew :cli:installDist` under
-`cli/build/install/`.
+The shippable layout is built via `./gradlew dist` under `build/dist/`: the
+slim native `jk` client (`:cli:nativeCompile`) next to `libexec/jk-engine/`,
+the engine's jar directory — the engine runs as a normal Java app on the
+jk-managed JDK, never as a native image. A runnable all-JVM distribution is
+produced by `./gradlew :cli-engine:installDist` under `cli-engine/build/install/`.
 
 ## Documentation
 

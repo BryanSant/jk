@@ -9,9 +9,8 @@ import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Exit;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
-import dev.jkbuild.run.Goal;
 import dev.jkbuild.run.GoalResult;
-import dev.jkbuild.runtime.AuditGoals;
+import dev.jkbuild.runtime.HostedEvents;
 import dev.jkbuild.util.JkDirs;
 import java.io.IOException;
 import java.net.URI;
@@ -30,8 +29,8 @@ import java.util.List;
  * <p><b>Engine-hosted</b> (Wave 2 of the slim-client migration): the worker forks inside the
  * resident engine ({@link dev.jkbuild.cli.engine.EngineClient#runAudit}); findings stream back as
  * structured events and this command assembles/renders the report and applies the threshold. The
- * goal machinery lives in {@link AuditGoals} so the test-only in-process path (see {@link
- * #engineDisabledForTests}) builds the identical goal.
+ * goal machinery lives in the engine's {@code AuditGoals} so the test-only in-process path (see
+ * {@link #engineDisabledForTests}) builds the identical goal.
  */
 public final class AuditCommand implements CliCommand {
 
@@ -93,7 +92,7 @@ public final class AuditCommand implements CliCommand {
         // Findings accumulate here from either transport — raw worker fields in, typed report rows
         // out — so the report/threshold tail below is transport-agnostic.
         List<AuditReport.Finding> findings = new ArrayList<>();
-        AuditGoals.FindingObserver observer = (module, version, vulnId, sev, summary) -> {
+        HostedEvents.FindingObserver observer = (module, version, vulnId, sev, summary) -> {
             if (module != null && version != null && vulnId != null) {
                 findings.add(new AuditReport.Finding(
                         module, version, vulnId, summary != null ? summary : "", AuditReport.Severity.parse(sev)));
@@ -102,8 +101,8 @@ public final class AuditCommand implements CliCommand {
 
         GoalResult result;
         if (engineDisabledForTests()) {
-            Goal goal = AuditGoals.auditGoal(lockPath, cache, threshold.toString(), osvBatchUrl, osvVulnsUrl, observer);
-            result = GoalConsole.run(goal, mode, cache);
+            result = dev.jkbuild.cli.engine.InProcessEngine.require()
+                    .auditGoal(lockPath, cache, threshold.toString(), osvBatchUrl, osvVulnsUrl, observer, mode);
         } else {
             try {
                 result = dev.jkbuild.cli.engine.EngineClient.runAudit(

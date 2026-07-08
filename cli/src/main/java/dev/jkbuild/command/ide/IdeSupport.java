@@ -22,7 +22,6 @@ import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.Scope;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.repo.MavenLayout;
-import dev.jkbuild.resolver.CacheSync;
 import dev.jkbuild.util.JkDirs;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -349,13 +348,7 @@ public final class IdeSupport {
         // Fetch any missing JARs so the repo has entries to reference (mirrors `jk sync` — the IDE
         // export should work without a prior sync).
         if (fetchMissing) {
-            try {
-                new CacheSync(cas, new Http()).sync(lock, CacheSync.ProgressObserver.NOOP);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            } catch (Exception ignored) {
-                /* best-effort; missing JARs are skipped below */
-            }
+            dev.jkbuild.cli.engine.InProcessEngine.require().ideFetchMissing(cas, lock);
         }
 
         Set<String> siblingCoords = siblingCoordinates(module, modules);

@@ -5,6 +5,7 @@ import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.cli.theme.Coords;
+import dev.jkbuild.jdk.JavaHomes;
 import dev.jkbuild.model.Coordinate;
 import dev.jkbuild.model.command.Arity;
 import dev.jkbuild.model.command.CliCommand;
@@ -12,10 +13,6 @@ import dev.jkbuild.model.command.Exit;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.model.command.Param;
-import dev.jkbuild.run.Goal;
-import dev.jkbuild.run.GoalResult;
-import dev.jkbuild.runtime.CompileToolchain;
-import dev.jkbuild.runtime.ToolGoals;
 import dev.jkbuild.tool.ToolEnv;
 import dev.jkbuild.tool.ToolLauncher;
 import dev.jkbuild.util.JkDirs;
@@ -33,7 +30,7 @@ import java.util.List;
  * <p><b>Engine-hosted</b> (Wave 4 of the slim-client migration): the Maven resolve + fetch runs
  * inside the resident engine ({@link dev.jkbuild.cli.engine.EngineClient#runToolResolve}); the
  * launcher write into {@code $JK_BIN_DIR} stays client-side, after the hosted goal succeeds. The
- * test-only in-process path builds the identical goal via {@link ToolGoals}.
+ * test-only in-process path builds the identical goal via the engine's {@code ToolGoals}.
  */
 public final class ToolInstallCommand implements CliCommand {
 
@@ -107,10 +104,10 @@ public final class ToolInstallCommand implements CliCommand {
 
         ToolEnv env;
         if (engineDisabledForTests()) {
-            Goal goal = ToolGoals.resolveGoal(primary, bin, mainClass, repoUrl, cacheDir, Coords.gav(primary));
-            GoalResult result = GoalConsole.run(goal, mode, cacheDir);
-            if (!result.success()) return 1;
-            env = goal.get(ToolGoals.TOOL_ENV).orElseThrow();
+            var o = dev.jkbuild.cli.engine.InProcessEngine.require()
+                    .toolResolveGoal(primary, bin, mainClass, repoUrl, cacheDir, Coords.gav(primary), mode);
+            if (o.env() == null) return 1;
+            env = o.env();
         } else {
             dev.jkbuild.cli.engine.EngineClient.ToolResolveOutcome outcome;
             try {
@@ -128,7 +125,7 @@ public final class ToolInstallCommand implements CliCommand {
         }
 
         // The "make install" half stays client-side: the launcher into the user-owned bin dir.
-        Path javaHome = CompileToolchain.runningJavaHome();
+        Path javaHome = JavaHomes.runningJavaHome();
         Path launcher = ToolLauncher.install(envsRoot, binDir, javaHome, env);
 
         if (!global.outputIsJson()) {

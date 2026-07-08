@@ -11,24 +11,16 @@ import dev.jkbuild.cli.theme.Coords;
 import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.cli.tui.CommandManager;
 import dev.jkbuild.cli.tui.Glyphs;
-import dev.jkbuild.config.JkBuildParser;
-import dev.jkbuild.config.WorkspaceLoader;
 import dev.jkbuild.http.Http;
 import dev.jkbuild.library.LibraryCatalog;
-import dev.jkbuild.lock.Lockfile;
-import dev.jkbuild.model.JkBuild;
-import dev.jkbuild.model.WorkspaceMerge;
 import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Exit;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.repo.LibraryRegistryClient;
-import dev.jkbuild.resolver.ResolveObserver;
-import dev.jkbuild.run.Goal;
 import dev.jkbuild.run.GoalListener;
 import dev.jkbuild.run.GoalResult;
 import dev.jkbuild.run.Phase;
-import dev.jkbuild.runtime.LockGoals;
 import dev.jkbuild.util.JkDirs;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -58,8 +50,8 @@ import java.util.concurrent.atomic.AtomicInteger;
  * git-source materialization run inside the resident engine ({@link EngineClient#runLock}); this
  * command is the renderer — it pre-flights the library-registry refresh, sends the request, and
  * replays the wire events into the exact same live/plain views the in-process path drives. The
- * goal machinery itself lives in {@link LockGoals} so the test-only in-process path (see {@link
- * #engineDisabledForTests}) runs the identical pipeline.
+ * goal machinery itself lives in the engine's {@code LockGoals} so the test-only in-process path
+ * (see {@link #engineDisabledForTests}) runs the identical pipeline.
  */
 public final class LockCommand implements CliCommand {
 
@@ -144,7 +136,8 @@ public final class LockCommand implements CliCommand {
         boolean live = mode == GoalConsole.Mode.AUTO || mode == GoalConsole.Mode.QUIET;
 
         if (engineDisabledForTests()) {
-            return runInProcess(dir, cache, mode, live);
+            return dev.jkbuild.cli.engine.InProcessEngine.require()
+                    .lockInProcess(dir, cache, mode, live, features, noDefaultFeatures, sources, repoUrl);
         }
         return live ? runHostedLive(dir, cache, mode) : runHostedPlain(dir, cache, mode);
     }
@@ -264,199 +257,15 @@ public final class LockCommand implements CliCommand {
         return outcome.exitCode();
     }
 
-    // ---- test-only in-process path (identical pipeline via LockGoals) --------
-
-    private int runInProcess(Path dir, Path cache, GoalConsole.Mode mode, boolean live) throws Exception {
-        JkBuild root;
-        try {
-            root = JkBuildParser.parse(dir.resolve("jk.toml"));
-        } catch (RuntimeException e) {
-            CliOutput.err("jk lock: " + e.getMessage());
-            return Exit.CONFIG;
-        }
-
-        JkBuild effectiveRoot = LockGoals.applyWorkspaceContextIfModule(dir, root);
-
-        if (!live) {
-            // --verbose / --output json: existing simple-task rendering.
-            int result = lockSingleProject(dir, effectiveRoot, cache, "Lock", mode);
-            if (result != 0) return result;
-            if (effectiveRoot.isWorkspaceRoot()) {
-                Map<Path, JkBuild> modules;
-                try {
-                    modules = WorkspaceLoader.loadModules(dir, effectiveRoot);
-                } catch (RuntimeException e) {
-                    CliOutput.err("jk lock: " + e.getMessage());
-                    return Exit.CONFIG;
-                }
-                for (Map.Entry<Path, JkBuild> entry : modules.entrySet()) {
-                    Path moduleDir = entry.getKey();
-                    JkBuild rawModule = entry.getValue();
-                    JkBuild effectiveModule = WorkspaceMerge.applyToModule(effectiveRoot, rawModule, modules.values());
-                    String moduleLabel = dir.getFileName() + "/" + dir.relativize(moduleDir);
-                    int moduleResult = lockSingleProject(moduleDir, effectiveModule, cache, moduleLabel, mode);
-                    if (moduleResult != 0) return moduleResult;
-                }
-            }
-            return 0;
-        }
-
-        // Live goal-mode TUI: one shared CommandManager spanning root + all workspace modules.
-        boolean animate = mode == GoalConsole.Mode.AUTO && GoalConsole.isInteractiveTerminal();
-        return runLive(dir, effectiveRoot, cache, animate);
-    }
-
-    /**
-     * Live path: one {@link CommandManager} in goal mode, one row per module, a shared progress bar
-     * calibrated to total packages across all modules, and a completed-package tail.
-     */
-    private int runLive(Path dir, JkBuild effectiveRoot, Path cache, boolean animate) throws Exception {
-        CommandManager view = CommandManager.goal(CliOutput.stdout(), "Lock", animate);
-        long start = System.nanoTime();
-
-        AtomicInteger globalLocked = new AtomicInteger(0);
-        List<String> errorLines = new ArrayList<>();
-
-        String rootCoord = LockGoals.coordLabel(effectiveRoot, dir);
-        int exit = lockModuleLive(dir, effectiveRoot, cache, rootCoord, view, globalLocked, errorLines);
-        if (exit != 0) {
-            view.finishGoalFailure(lockFailTail(), errorLines);
-            return exit;
-        }
-
-        if (effectiveRoot.isWorkspaceRoot()) {
-            Map<Path, JkBuild> modules;
-            try {
-                modules = WorkspaceLoader.loadModules(dir, effectiveRoot);
-            } catch (RuntimeException e) {
-                errorLines.add(e.getMessage());
-                view.finishGoalFailure(lockFailTail(), errorLines);
-                return Exit.CONFIG;
-            }
-            for (Map.Entry<Path, JkBuild> entry : modules.entrySet()) {
-                Path moduleDir = entry.getKey();
-                JkBuild rawModule = entry.getValue();
-                JkBuild effectiveModule = WorkspaceMerge.applyToModule(effectiveRoot, rawModule, modules.values());
-                String moduleCoord = LockGoals.coordLabel(rawModule, moduleDir);
-                exit = lockModuleLive(moduleDir, effectiveModule, cache, moduleCoord, view, globalLocked, errorLines);
-                if (exit != 0) {
-                    view.finishGoalFailure(lockFailTail(), errorLines);
-                    return exit;
-                }
-            }
-        }
-
-        view.finishGoalSuccess(lockSuccessTail(globalLocked.get(), start));
-        return 0;
-    }
-
-    /**
-     * Lock one module with the goal-mode TUI. Registers an active row in {@code view}, runs the full
-     * lock goal (parse → resolve → lock-plugins → write), feeds per-package completions into the
-     * tail, then marks the row done. Returns 0 on success, or a non-zero exit code on failure
-     * (errors collected into {@code errorLines} for the caller to print above the failure chip).
-     */
-    private int lockModuleLive(
-            Path dir,
-            JkBuild effective,
-            Path cache,
-            String coord,
-            CommandManager view,
-            AtomicInteger globalLocked,
-            List<String> errorLines)
-            throws Exception {
-        // Register one phase row for this module. The display label is empty so
-        // renderActiveRow produces "module › dep" (two segments, not three).
-        view.addPhaseLabeled(coord, "lock", "");
-        view.phaseRunning(coord, "lock");
-
-        // Lock is purely resolution — total is unknown upfront, so we show a
-        // static top-line label and record each resolved dep as a completion line.
-        view.solveLabel("Locking versions…");
-
-        ResolveObserver observer = new ResolveObserver() {
-            @Override
-            public void onTotal(int total) {
-                // total growth already rides the goal's scope updates
-            }
-
-            @Override
-            public void onPackage(String pkg, String version) {
-                // Show active dep in the phase row (module › dep via renderActiveRow).
-                view.phaseMessage(coord, "lock", Coords.module(pkg, version));
-                // Record as a completion line with an absolute count bracket.
-                int n = globalLocked.incrementAndGet();
-                Theme t = Theme.active();
-                String line = Theme.colorize(Glyphs.CHECK, t.success())
-                        + " "
-                        + ConsoleSpec.countBracket(n, t)
-                        + " "
-                        + Coords.module(pkg, version);
-                if (view.animating()) {
-                    view.addCompletion(line);
-                } else {
-                    CliOutput.out(line);
-                }
-            }
-        };
-
-        // Build and run the lock goal directly (no GoalConsole wrapper).
-        Goal goal = LockGoals.lockGoal(
-                dir, effective, cache, repoUrl, features, !noDefaultFeatures, sources, observer, Coords::module);
-        GoalResult result = goal.run();
-
-        if (result.success()) {
-            view.phaseDone(coord, "lock", true);
-            return 0;
-        }
-
-        // Failure: collect diagnostics, mark row failed.
-        view.phaseDone(coord, "lock", false);
-        for (GoalResult.Diagnostic d : result.errors()) {
-            errorLines.add(ConsoleSpec.renderError(d));
-        }
-        return LockGoals.failureExitCode(result);
-    }
-
-    /**
-     * Run the lock pipeline (parse → resolve → lock-plugins → write) for one project directory.
-     * Used by the non-live in-process path (--verbose / --output json). {@code effective} is the
-     * pre-parsed {@link JkBuild} with any {@code workspace:} placeholders already resolved.
-     */
-    private int lockSingleProject(Path dir, JkBuild effective, Path cache, String label, GoalConsole.Mode mode)
-            throws Exception {
-        Goal goal = LockGoals.lockGoal(
-                dir, effective, cache, repoUrl, features, !noDefaultFeatures, sources,
-                ResolveObserver.NOOP, Coords::module);
-
-        ConsoleSpec spec = new ConsoleSpec(
-                label,
-                r -> {
-                    Lockfile lock = goal.get(LockGoals.LOCKFILE).orElseThrow();
-                    int pkgs = lock.artifacts().size();
-                    int plgs = lock.plugins().size();
-                    long srcs = lock.artifacts().stream()
-                            .filter(p -> p.sourcesChecksum() != null)
-                            .count();
-                    String depStr = "Resolved " + pkgs + " dependenc" + (pkgs == 1 ? "y" : "ies");
-                    if (srcs > 0) depStr += ", " + srcs + " with sources";
-                    return plgs > 0 ? depStr + ", " + plgs + " plugin" + (plgs == 1 ? "" : "s") : depStr;
-                },
-                r -> "Failed to resolve dependencies");
-
-        GoalResult result = GoalConsole.run(goal, mode, cache, spec);
-        return result.success() ? 0 : LockGoals.failureExitCode(result);
-    }
-
     // ---- shared rendering helpers --------------------------------------------
 
     /** Failure result tail for the Lock chip (GoalWedge prepends "Failed to lock"). */
-    private static String lockFailTail() {
+    static String lockFailTail() {
         return "dependencies";
     }
 
     /** Success chip tail: {@code Lock successful. Resolved N dependencies took T}. */
-    private static String lockSuccessTail(int pkgs, long startNanos) {
+    static String lockSuccessTail(int pkgs, long startNanos) {
         return Theme.colorize("Lock successful", Theme.active().success())
                 + ". Resolved "
                 + Theme.colorize(String.valueOf(pkgs), Theme.active().focused())

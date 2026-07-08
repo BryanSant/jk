@@ -10,7 +10,7 @@ import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.model.command.Param;
-import dev.jkbuild.runtime.CompatGoals;
+import dev.jkbuild.runtime.HostedEvents;
 import dev.jkbuild.util.JkDirs;
 import java.io.IOException;
 import java.nio.file.Path;
@@ -108,14 +108,15 @@ public final class MvnCommand implements CliCommand {
     /**
      * Provision a Maven/Gradle distribution and return its launcher path, or {@code null} (with the
      * error already rendered) on failure. Engine-hosted; the test-only in-process path runs the
-     * identical {@link CompatGoals#provision} code.
+     * identical {@code CompatGoals.provision} code.
      */
     static Path provision(Path cache, Path projectDir, Path toolsRoot, boolean noDiscover, boolean isGradle)
             throws IOException, InterruptedException {
         String tool = isGradle ? "gradle" : "mvn";
-        CompatGoals.Provision p;
+        HostedEvents.Provision p;
         if (engineDisabledForTests()) {
-            p = CompatGoals.provision(cache, projectDir, toolsRoot, noDiscover, isGradle);
+            p = dev.jkbuild.cli.engine.InProcessEngine.require()
+                    .provision(cache, projectDir, toolsRoot, noDiscover, isGradle);
         } else {
             try {
                 p = dev.jkbuild.cli.engine.EngineClient.provision(

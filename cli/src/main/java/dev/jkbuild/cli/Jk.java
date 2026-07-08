@@ -39,9 +39,14 @@ public final class Jk {
      * Internal, hidden flag that re-invokes this same binary as the engine server loop instead of a
      * normal client command — mirrors how {@code jk cache prune --background} reuses the binary as a
      * detached one-shot worker. Not registered with picocli; never appears in {@code --help} or shell
-     * completion. This is the JVM-dist path and the fallback when no dedicated {@code jk-engine}
-     * binary is installed; the native dist ships {@link EngineMain} as its own image. Both routes
-     * run the exact same {@link EngineMain#run} — see {@code docs/engine.md} ("Two artifacts").
+     * completion. This is the JVM-dist path and the fallback when no engine artifact is installed;
+     * the native dist ships the engine as a plain jar directory ({@code libexec/jk-engine/}, from
+     * {@code :cli-engine}) that the client runs on the jk-managed JDK — the engine is a JVM app,
+     * never a native image. Both routes run the exact same {@code EngineMain.run} — reached here through the
+     * {@link dev.jkbuild.cli.engine.InProcessEngine} ServiceLoader seam, because the slim client
+     * module no longer links the engine (Stage 5): on the JVM dist the seam finds the engine; the
+     * client native image (which physically has no engine code) reports it plainly instead. See
+     * {@code docs/engine.md} ("Two artifacts").
      */
     private static final String ENGINE_SERVER_FLAG = "--engine-server";
 
@@ -50,7 +55,14 @@ public final class Jk {
             // Engine role: deliberately NOT GlobalCancel — its SIGINT handler halts the process,
             // and a Ctrl-C aimed at the client that spawned us lands on the whole foreground
             // process group. EngineMain.run installs the engine's own signal policy instead.
-            System.exit(EngineMain.run());
+            var engine = dev.jkbuild.cli.engine.InProcessEngine.find().orElse(null);
+            if (engine == null) {
+                System.err.println("jk: this binary does not include the engine; "
+                        + "install the libexec/jk-engine/ jars next to jk (or set JK_ENGINE_EXE)");
+                System.exit(70);
+                return;
+            }
+            System.exit(engine.engineServerMain());
             return;
         }
         dev.jkbuild.cli.tui.GlobalCancel.install();

@@ -6,6 +6,7 @@ import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.config.SessionContext;
 import dev.jkbuild.config.WorkspaceLoader;
 import dev.jkbuild.config.WorkspaceLocator;
+import dev.jkbuild.jdk.JavaHomes;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.lock.LockfileReader;
 import dev.jkbuild.lock.LockfileWriter;
@@ -140,7 +141,7 @@ public final class LockGoals {
                                 eff,
                                 baseRepos,
                                 cas,
-                                CompileToolchain.resolveJavaHome(dir),
+                                JavaHomes.resolveJavaHome(dir),
                                 JkVersion.VERSION,
                                 lockedShas);
                     } catch (Exception e) {
@@ -271,7 +272,7 @@ public final class LockGoals {
                         // Git-source deps: re-materialize against the current ref tip and accept
                         // any movement (no tag-rewrite check; see docs/git-source-deps.md).
                         GitSourceResolution.Prepared prep = GitSourceResolution.prepare(
-                                eff, baseRepos, cas, CompileToolchain.resolveJavaHome(dir), JkVersion.VERSION);
+                                eff, baseRepos, cas, JavaHomes.resolveJavaHome(dir), JkVersion.VERSION);
                         Lockfile lock = new LockOrchestrator(prep.repos())
                                 .lock(prep.project(), JkVersion.VERSION, features, withDefaultFeatures);
                         lock = GitSourceResolution.stamp(lock, prep.gitInfoByKey());
@@ -384,7 +385,7 @@ public final class LockGoals {
         Cas cas = new Cas(cache);
         RepoGroup baseRepos = RepoGroupBuilder.buildFor(effective, repoUrl, cas);
         GitSourceResolution.Prepared prep = GitSourceResolution.prepare(
-                effective, baseRepos, cas, CompileToolchain.resolveJavaHome(dir), JkVersion.VERSION);
+                effective, baseRepos, cas, JavaHomes.resolveJavaHome(dir), JkVersion.VERSION);
         Lockfile newLock = new LockOrchestrator(prep.repos())
                 .lock(prep.project(), JkVersion.VERSION, features, withDefaultFeatures);
         newLock = GitSourceResolution.stamp(newLock, prep.gitInfoByKey());

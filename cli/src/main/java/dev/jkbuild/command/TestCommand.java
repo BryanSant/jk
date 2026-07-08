@@ -11,13 +11,9 @@ import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Exit;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
-import dev.jkbuild.run.Goal;
-import dev.jkbuild.run.GoalKey;
 import dev.jkbuild.run.GoalResult;
 import dev.jkbuild.run.PhaseContext;
-import dev.jkbuild.runtime.BuildPipeline;
-import dev.jkbuild.test.JUnitLauncher;
-import dev.jkbuild.test.TestProgressListener;
+import dev.jkbuild.run.TestSummary;
 import dev.jkbuild.util.JkDirs;
 import java.io.IOException;
 import java.nio.file.Path;
@@ -26,7 +22,7 @@ import java.util.List;
 /**
  * {@code jk test} — compile main + test sources and run JUnit Platform tests.
  *
- * <p>Runs the same {@linkplain BuildPipeline#coreBuilder core pipeline} as {@code jk build}, in
+ * <p>Runs the same core pipeline ({@code BuildPipeline.coreBuilder}) as {@code jk build}, in
  * {@code testOnly} mode: parse → sync → jdk → compile (Kotlin and/or Java, main and test) →
  * resources → compile-test → run-tests, stopping short of packaging a jar. Sharing the pipeline
  * means Kotlin test sources compile and run exactly as they do under {@code jk build} — no
@@ -65,12 +61,6 @@ public final class TestCommand implements CliCommand {
     Path jdksDir;
     GlobalOptions global;
 
-    // Populated by the pipeline's run-tests phase; read for the summary + exit code.
-    // Value-equal to BuildPipeline.TEST_RESULT (same name + type), so it resolves
-    // the same slot in the shared goal state.
-    private static final GoalKey<JUnitLauncher.Result> TEST_RESULT =
-            GoalKey.of("test-result", JUnitLauncher.Result.class);
-
     /**
      * Escape hatch for the fast JVM unit-test suite ONLY — see {@link
      * BuildCommand#engineDisabledForTests()}'s javadoc for the full rationale. Same system property,
@@ -103,55 +93,21 @@ public final class TestCommand implements CliCommand {
         int workerCount = workers != null && workers > 0 ? workers : 1;
 
         GoalResult result;
-        JUnitLauncher.Result testResult;
+        TestSummary testResult;
         if (engineDisabledForTests()) {
-            // Size the test-runner JVMs' heaps (and cap how many fork at once) to the
-            // host's free memory before launching them.
-            dev.jkbuild.worker.HeapPlan.Plan heapPlan =
-                    dev.jkbuild.worker.JvmOptions.planAndApply(dev.jkbuild.worker.HeapPlan.requestedJvms(
-                            1, workerCount, false, Runtime.getRuntime().availableProcessors()));
-            if (heapPlan != null && heapPlan.warning() != null && !global.outputIsJson()) {
-                CliOutput.err("jk test: " + heapPlan.warning());
-            }
-            // Up-front lexical estimate (Java + Kotlin test sources) so the bar's
-            // denominator is set once; the static plan gates the numerator and
-            // phase-end auto-fill closes any residual gap.
-            int estimatedTestCount = estimateTestCount(dir.resolve("src/test/java"))
-                    + estimateTestCount(dir.resolve("src/test/kotlin"));
-
-            // testOnly → the core pipeline runs through run-tests but never packages.
-            BuildPipeline.Inputs inputs = new BuildPipeline.Inputs(
-                    dir,
-                    cache,
-                    buildFile,
-                    lockFile,
-                    lockFile.getParent(),
-                    workerCount,
-                    estimatedTestCount,
-                    profileName,
-                    jdksDir,
-                    /* skipTests */ false,
-                    global.verbose, /* testOnly */
-                    true);
-            Goal goal = BuildPipeline.coreBuilder(inputs).build();
-
-            // Deferred lookup: goal.get(TEST_RESULT) is empty until the run-tests phase populates it
-            // mid-run, so these lambdas must read it at invocation time (when the console listener's
-            // own goalFinish fires), not eagerly here.
-            ConsoleSpec spec = new ConsoleSpec(
-                    "Test",
-                    r -> testSummary(goal.get(TEST_RESULT).orElse(null), r),
-                    r -> testFailureMessage(goal.get(TEST_RESULT).orElse(null), r));
-            result = GoalConsole.runGoal(
-                    goal, GoalConsole.modeFor(global), cache, spec, BuildCommand.buildTarget(buildFile, dir));
-            testResult = goal.get(TEST_RESULT).orElse(null);
+            // The in-process goal assembly lives behind the ServiceLoader seam (:cli-engine) since
+            // Stage 5 cut the engine off this module's classpath — same code, different module.
+            var outcome = dev.jkbuild.cli.engine.InProcessEngine.require()
+                    .testGoal(dir, cache, buildFile, lockFile, workerCount, profileName, jdksDir, global);
+            result = outcome.result();
+            testResult = outcome.testResult();
         } else {
             // Engine-hosted (Phase 3): the wire has no real Goal to attach a console listener to
             // ahead of time, so the listener is chosen once the phase list arrives over the socket —
             // see EngineBuildListenerAdapter.runTest. testResultHolder is populated (if the run-tests
             // phase actually ran) before the terminal goal-finish reaches that listener, exactly
             // mirroring how goal.get(TEST_RESULT) is already populated by the in-process path above.
-            JUnitLauncher.Result[] testResultHolder = new JUnitLauncher.Result[1];
+            TestSummary[] testResultHolder = new TestSummary[1];
             ConsoleSpec spec = new ConsoleSpec(
                     "Test", r -> testSummary(testResultHolder[0], r), r -> testFailureMessage(testResultHolder[0], r));
             String module = BuildCommand.buildTarget(buildFile, dir);
@@ -178,39 +134,20 @@ public final class TestCommand implements CliCommand {
 
     /**
      * Success result line (sans the leading ✓): {@code Passed N tests in 32s}, or {@code No tests in
-     * <t>} for a project with no test sources. Takes the resolved {@link JUnitLauncher.Result}
+     * <t>} for a project with no test sources. Takes the resolved {@link TestSummary}
      * directly (rather than a {@code Goal} to look it up from) so both the in-process path (which
      * reads it off {@code goal.get(TEST_RESULT)}) and the engine-hosted path (which has no real
      * {@code Goal}, only a wire-populated holder) share this one rendering method.
      */
-    private static String testSummary(JUnitLauncher.Result testResult, GoalResult result) {
+    static String testSummary(TestSummary testResult, GoalResult result) {
         if (testResult == null || testResult.total() == 0) return "No tests";
         long total = testResult.total();
         String passed = Theme.colorize("Passed", Theme.active().focused());
         return passed + " " + total + " test" + (total == 1 ? "" : "s");
     }
 
-    private static String testFailureMessage(JUnitLauncher.Result testResult, GoalResult result) {
+    static String testFailureMessage(TestSummary testResult, GoalResult result) {
         return (testResult != null && !testResult.allPassed()) ? "Tests failed" : "Build failed";
     }
 
-    /**
-     * Up-front lexical estimate of the test count for the run-tests phase's scope. Counts
-     * {@code @Test}, {@code @ParameterizedTest}, {@code @TestFactory}, {@code @TestTemplate}, and
-     * {@code @RepeatedTest} occurrences across every {@code .java}/{@code .kt} file under {@code
-     * root}.
-     *
-     * <p>The estimate is intentionally generous (a parameterized method counts once; an annotation in
-     * a comment over-counts). Both biases are safe — the numerator is gated on the static plan, so
-     * over-estimation just means the bar reaches ~98% and phase-end auto-fill closes the rest.
-     */
-    /** Bridge test-runner NDJSON events onto the goal's progress bar (delegates to TestSupport). */
-    static TestProgressListener bridgeListener(PhaseContext ctx, int workerCount, boolean verbose) {
-        return dev.jkbuild.runtime.TestSupport.bridgeListener(ctx, workerCount, verbose);
-    }
-
-    /** Delegates to the engine ({@link dev.jkbuild.runtime.TestSupport#estimateTestCount}). */
-    static int estimateTestCount(Path testSrcDir) {
-        return dev.jkbuild.runtime.TestSupport.estimateTestCount(testSrcDir);
-    }
 }

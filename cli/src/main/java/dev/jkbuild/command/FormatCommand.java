@@ -15,10 +15,9 @@ import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Exit;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
-import dev.jkbuild.run.Goal;
 import dev.jkbuild.run.GoalListener;
 import dev.jkbuild.run.GoalResult;
-import dev.jkbuild.runtime.FormatGoals;
+import dev.jkbuild.runtime.HostedEvents;
 import dev.jkbuild.util.JkDirs;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -35,7 +34,7 @@ import java.util.function.Consumer;
  * resolution (through jk's own resolver — previously in this process), and the worker fork all run
  * inside the resident engine ({@link dev.jkbuild.cli.engine.EngineClient#runFormat}); per-file
  * results stream back as structured events and this command renders them. The goal machinery lives
- * in {@link FormatGoals} so the test-only in-process path (see {@link #engineDisabledForTests})
+ * in the engine's {@code FormatGoals} so the test-only in-process path (see {@link #engineDisabledForTests})
  * builds the identical goal.
  *
  * <p>On an interactive TTY (apply mode, non-quiet) the command renders a live {@link
@@ -131,7 +130,7 @@ public final class FormatCommand implements CliCommand {
         if (!animate) {
             // Plain path: --check, piped output, CI, --no-progress.
             int[] counts = {0, 0, 0}; // changed, clean, errors
-            FormatGoals.FileObserver observer = (path, status, msg, index, total) -> {
+            HostedEvents.FileObserver observer = (path, status, msg, index, total) -> {
                 if ("changed".equals(status)) {
                     counts[0]++;
                     if (!global.outputIsJson()) {
@@ -188,7 +187,7 @@ public final class FormatCommand implements CliCommand {
             cm.phaseRunning("", "fmt");
 
             int[] counts = {0, 0, 0}; // changed, clean, errors
-            FormatGoals.FileObserver observer = (path, status, msg, index, total) -> {
+            HostedEvents.FileObserver observer = (path, status, msg, index, total) -> {
                 // Advance bar on every file so the scan is visually smooth.
                 cm.progress(index, total);
                 if ("changed".equals(status)) {
@@ -247,7 +246,7 @@ public final class FormatCommand implements CliCommand {
     }
 
     /**
-     * Run the shared {@link FormatGoals} goal — engine-hosted normally, in-process under {@link
+     * Run the shared {@code FormatGoals} goal — engine-hosted normally, in-process under {@link
      * #engineDisabledForTests()} — driving the same {@code observer} either way. {@code listener}
      * receives the standard goal events (only worker passthrough chatter is rendered from it).
      */
@@ -259,22 +258,14 @@ public final class FormatCommand implements CliCommand {
             boolean optimizeImports,
             Path rewriteConfig,
             GlobalOptions global,
-            FormatGoals.FileObserver observer,
+            HostedEvents.FileObserver observer,
             GoalListener listener)
             throws IOException {
         if (engineDisabledForTests()) {
-            Goal goal = FormatGoals.formatGoal(
-                    projectDir, cache, check, styles.java(), styles.kotlin(), optimizeImports, rewriteConfig,
-                    observer);
-            goal.addListener(listener);
-            GoalResult result = goal.run();
-            return new Outcome(
-                    result,
-                    goal.get(FormatGoals.CHANGED).orElse(-1),
-                    goal.get(FormatGoals.CLEAN).orElse(-1),
-                    goal.get(FormatGoals.ERRORS).orElse(-1),
-                    goal.get(FormatGoals.TOTAL).orElse(-1),
-                    goal.get(FormatGoals.WORKER_EXIT).orElse(-1));
+            var o = dev.jkbuild.cli.engine.InProcessEngine.require()
+                    .formatGoal(projectDir, cache, check, styles.java(), styles.kotlin(), optimizeImports,
+                            rewriteConfig, observer, listener);
+            return new Outcome(o.result(), o.changed(), o.clean(), o.errors(), o.total(), o.workerExit());
         }
         var session = dev.jkbuild.config.SessionContext.current();
         var outcome = dev.jkbuild.cli.engine.EngineClient.runFormat(

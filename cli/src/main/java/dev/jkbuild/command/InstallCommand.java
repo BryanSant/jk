@@ -12,6 +12,7 @@ import dev.jkbuild.compile.ClasspathResolver;
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.config.WorkspaceClasspath;
 import dev.jkbuild.config.WorkspaceLocator;
+import dev.jkbuild.jdk.JavaHomes;
 import dev.jkbuild.layout.BuildLayout;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.lock.LockfileReader;
@@ -26,9 +27,7 @@ import dev.jkbuild.model.command.Param;
 import dev.jkbuild.repo.MavenLayout;
 import dev.jkbuild.run.Goal;
 import dev.jkbuild.run.GoalResult;
-import dev.jkbuild.runtime.BuildPipeline;
-import dev.jkbuild.runtime.CompileToolchain;
-import dev.jkbuild.test.JUnitLauncher;
+import dev.jkbuild.run.TestSummary;
 import dev.jkbuild.tool.AppLauncher;
 import dev.jkbuild.tool.JarManifest;
 import dev.jkbuild.tool.ToolEnv;
@@ -229,7 +228,7 @@ public final class InstallCommand implements CliCommand {
         Coordinate coord = Coordinate.of(group, artifact, version);
         // File-install writes directly to repos/local/ (the JAR is already on disk, no project
         // metadata for a POM, so ~/.m2 write is not appropriate here).
-        dev.jkbuild.runtime.InstallGoals.writeToLocalStore(cache, MavenLayout.artifactPath(coord), filePath);
+        dev.jkbuild.repo.RepoArtifactStore.writeToLocalStore(cache, MavenLayout.artifactPath(coord), filePath);
 
         if (!global.outputIsJson()) {
             CliOutput.out("Installed " + dev.jkbuild.cli.theme.Coords.gav(coord) + " to the local cache");
@@ -265,11 +264,10 @@ public final class InstallCommand implements CliCommand {
 
         ToolEnv env;
         if (engineDisabledForTests()) {
-            Goal goal = dev.jkbuild.runtime.ToolGoals.resolveGoal(
-                    parsed, bin, mainClass, repoUrl, cacheDir, Coords.gav(parsed));
-            GoalResult result = GoalConsole.run(goal, mode, cacheDir);
-            if (!result.success()) return failureExit(result, "jk install", cacheDir);
-            env = goal.get(dev.jkbuild.runtime.ToolGoals.TOOL_ENV).orElseThrow();
+            var o = dev.jkbuild.cli.engine.InProcessEngine.require()
+                    .toolResolveGoal(parsed, bin, mainClass, repoUrl, cacheDir, Coords.gav(parsed), mode);
+            if (o.env() == null) return failureExit(o.result(), "jk install", cacheDir);
+            env = o.env();
         } else {
             dev.jkbuild.cli.engine.EngineClient.ToolResolveOutcome outcome;
             try {
@@ -288,7 +286,7 @@ public final class InstallCommand implements CliCommand {
             env = new ToolEnv(bin, parsed, outcome.mainClass(), outcome.classpath());
         }
 
-        Path launcher = ToolLauncher.install(envsRoot, binDir, CompileToolchain.runningJavaHome(), env);
+        Path launcher = ToolLauncher.install(envsRoot, binDir, JavaHomes.runningJavaHome(), env);
         announceInstall(Coords.gav(parsed), launcher, binDir);
         return 0;
     }
@@ -309,11 +307,11 @@ public final class InstallCommand implements CliCommand {
         Path checkout;
         String sha;
         if (engineDisabledForTests()) {
-            Goal fetchGoal =
-                    dev.jkbuild.runtime.InstallGoals.gitFetchGoal(expanded, canonical, refStr, cacheDir, refresh);
-            fetchResult = GoalConsole.run(fetchGoal, mode, cacheDir);
-            checkout = fetchGoal.get(dev.jkbuild.runtime.InstallGoals.CHECKOUT).orElse(null);
-            sha = fetchGoal.get(dev.jkbuild.runtime.InstallGoals.FETCHED_SHA).orElse(null);
+            var o = dev.jkbuild.cli.engine.InProcessEngine.require()
+                    .gitFetchGoal(expanded, canonical, refStr, cacheDir, refresh, mode);
+            fetchResult = o.result();
+            checkout = o.checkout();
+            sha = o.sha();
         } else {
             // Engine-hosted clone (slim-client Wave 3): the git-client worker forks engine-side;
             // the checkout path + sha ride the terminal goal-finish.
@@ -387,15 +385,16 @@ public final class InstallCommand implements CliCommand {
         // client-side either way: it writes the user-home launcher/binary this process owns.
         GoalConsole.Mode mode = GoalConsole.modeFor(global);
         GoalResult result;
-        JUnitLauncher.Result testResult;
+        TestSummary testResult;
         if (engineDisabledForTests()) {
-            Goal goal = dev.jkbuild.runtime.InstallGoals.projectInstallGoal(
-                    projectDir, cacheDir, m2Dir(), buildOpts.skipTests, global.verbose, graalHome);
-            result = GoalConsole.run(goal, mode, cacheDir);
-            testResult = goal.get(BuildPipeline.TEST_RESULT).orElse(null);
+            var o = dev.jkbuild.cli.engine.InProcessEngine.require()
+                    .installProjectGoal(projectDir, cacheDir, m2Dir(), buildOpts.skipTests, global.verbose,
+                            graalHome, mode);
+            result = o.result();
+            testResult = o.testResult();
         } else {
             var session = dev.jkbuild.config.SessionContext.current();
-            JUnitLauncher.Result[] testResultHolder = new JUnitLauncher.Result[1];
+            TestSummary[] testResultHolder = new TestSummary[1];
             try {
                 result = dev.jkbuild.cli.engine.EngineClient.runInstall(
                         dev.jkbuild.engine.EnginePaths.current(),
@@ -450,7 +449,7 @@ public final class InstallCommand implements CliCommand {
         var p = project.project();
         String bin = binName != null && !binName.isBlank() ? binName : p.name();
         String mainCls = mainClass != null && !mainClass.isBlank() ? mainClass : p.main();
-        Path javaHome = CompileToolchain.runningJavaHome();
+        Path javaHome = JavaHomes.runningJavaHome();
 
         // Native binary → ~/.jk/bin/<bin>. Only for ALWAYS (auto-build) mode.
         if (p.nativeMode() == JkBuild.NativeMode.ALWAYS) {

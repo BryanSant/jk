@@ -2,6 +2,7 @@
 package dev.jkbuild.runtime;
 
 import dev.jkbuild.jdk.HostPlatform;
+import dev.jkbuild.jdk.JavaHomes;
 import dev.jkbuild.worker.JvmOptions;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -19,7 +20,7 @@ final class WorkerCommands {
 
     /** {@code java [extraJvmArgs] -jar workerJar spec}, heap-sized for one requested JVM. */
     static List<String> javaCommand(Path workerJar, List<String> extraJvmArgs, Path spec) {
-        Path javaExe = CompileToolchain.runningJavaHome()
+        Path javaExe = JavaHomes.runningJavaHome()
                 .resolve("bin")
                 .resolve(HostPlatform.isWindows() ? "java.exe" : "java");
         List<String> rest = new ArrayList<>(extraJvmArgs);

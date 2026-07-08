@@ -323,6 +323,48 @@ Concrete moves/extractions, in dependency order (what must move first):
    protocol/`jk-api` types) and let the compiler enforce it — only possible after every §1
    ENGINE-HOSTED/WORKER-DELEGATED verb has migrated (Stage 3) and the `explain`-ETA residue moved.
 
+> **Status: Stage 5 LANDED (2026-07-08).** The move order above held; the as-built graph (and the
+> `engineDisabledForTests` ServiceLoader mechanism) is documented in
+> [slim-client.md "Stage 5 as-built"](./slim-client.md#stage-5-as-built). Deviations/resolutions
+> against this section, move by move:
+>
+> 1. `JdkService`/`JdkInstallListener` rehomed to `dev.jkbuild.jdk` as proposed — plus `JdkEnsure`
+>    (same package), which `jk sync`'s client-side ensure pre-flight needs engine-less.
+> 2. The small rehomes landed with different (better) homes than guessed: `Versions` +
+>    `DependencyTree` + `Provenance` moved to **:core wholesale** (package `dev.jkbuild.resolver`
+>    kept — a deliberate split package so no import changed; :core gained the tiny
+>    `maven-artifact` dep). `ClasspathResolver` moved **whole** to `:client-io` (not just the
+>    scope constants — `jk run`/`jk install`'s exec-classpath assembly is a local CAS read, the
+>    blessed surface), and pulled `AccessLedger` with it. `CompileSupport.isSimpleLayout` became
+>    :core's `SourceLayout` (CompileSupport delegates); `CompileToolchain`'s Java-home statics
+>    became `dev.jkbuild.jdk.JavaHomes`; `CachePruneScheduler` moved whole into `:engine-api`;
+>    `JvmOptions`' config-layer statics became :core's `WorkerTunings`; `BuildGraph.orderModules`
+>    (+ shared edge/sort primitives) became :core's `ModuleOrder` (BuildGraph delegates). One move
+>    §4 didn't predict: `KotlinResolver` + the exporters' `ToolDistribution` to `:toolchain-jdk`
+>    (`jk new` renders the default Kotlin version).
+> 3. `:client-io` extracted with :io depending on it (the listed alternative). The `Cas` ambiguity
+>    resolved as "bless the local surface": the whole 3-class `cache` package moved (it is pure
+>    hashing+fs), plus `RepoArtifactStore`/`RepoArtifactResolver`/`MavenLayout`/`M2Dirs` and the
+>    credential/catalog classes. `InstallGoals.writeToLocalStore` (the `jk install <file.jar>`
+>    write) rehomed to `RepoArtifactStore` — same blessed local-write family as `putByLink`.
+> 4. `:toolchain-jdk` extracted with :toolchain depending on it. Doctor's ambiguity resolved
+>    client-side: the whole `discovery/` package (jdk↔discovery are mutually coupled) plus
+>    `compat.{BuildTool,InstalledTool,PassthroughEnv,ImportReport}` and the exporters moved into
+>    the slice — all :core/:model-clean; the resolver-backed `ToolResolver`/`ToolInstaller`
+>    machinery stayed engine-side.
+> 5. The cut itself: `:cli` → `:model` + `:core` + `:client-io` + `:toolchain-jdk` +
+>    `:engine-api` + `:plugin-api` only, with the new `:cli-engine` module holding
+>    `EngineMain`/`PosixDetach`/`EngineDetachFeature`, the `InProcessEngine` implementation, the
+>    JVM dist, and the **relocated CLI test suite** (its in-process dispatch needs the kernel).
+>    Two client-side pre-flights had to become wire vocabulary to finish the cut:
+>    `forecast-request` (`jk build`'s fully-cached shortcut/dirty hint — the §2 jdeps chokepoint's
+>    residue) and `script-prepare-request` (the §1 ScriptRunner residue, now `ScriptGoals`
+>    engine-side). `LockCommand`'s pubgrub-Palette worry was already moot — hosted diagnostics
+>    cross the wire structured since Wave 1; the in-process TUI path simply moved to
+>    `:cli-engine`. `cache purge` stayed as Wave 4 left it (client confirm, hosted delete);
+>    `export gradle/maven` stayed client-only per the Wave 4 reclassification, with the exporter
+>    classes riding `:toolchain-jdk`.
+
 Flagged risky/ambiguous overall: the `export gradle/maven` classification (client-only possible,
 engine-hosted recommended); `cache purge`'s delete-vs-engine coordination; the client-side CAS
 touches (move 3); `SyncCommand`'s `ensure-jdk` phase, which entangles an engine-bound goal with

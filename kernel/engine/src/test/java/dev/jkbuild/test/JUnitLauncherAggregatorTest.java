@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.test;
 
+import dev.jkbuild.run.TestSummary;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import org.junit.jupiter.api.Test;
@@ -128,7 +129,7 @@ class JUnitLauncherAggregatorTest {
         assertThat(result.allPassed()).isFalse();
         assertThat(result.failures())
                 .singleElement()
-                .extracting(JUnitLauncher.Failure::testName)
+                .extracting(TestSummary.Failure::testName)
                 .isEqualTo("(test run)");
     }
 

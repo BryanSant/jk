@@ -10,9 +10,8 @@ import dev.jkbuild.model.command.Exit;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.model.command.Param;
-import dev.jkbuild.run.Goal;
 import dev.jkbuild.run.GoalResult;
-import dev.jkbuild.runtime.CompatGoals;
+import dev.jkbuild.runtime.HostedEvents;
 import dev.jkbuild.util.JkDirs;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -111,7 +110,7 @@ public final class ImportCommand implements CliCommand {
         Path cache = JkDirs.cache();
 
         // Renders the worker's progress notes as they stream — identical for both transports.
-        CompatGoals.NoteObserver observer = (kind, text) -> {
+        HostedEvents.NoteObserver observer = (kind, text) -> {
             if ("wrote".equals(kind)) {
                 CliOutput.out("Wrote " + text);
             } else {
@@ -124,22 +123,19 @@ public final class ImportCommand implements CliCommand {
         String error;
         String diag;
         if (engineDisabledForTests()) {
-            // CompatGoals.importGoal locates the worker jar eagerly; a missing worker throws
-            // WorkerJarNotFoundException here, which CommandDispatch renders with side-load hints.
-            Goal goal = CompatGoals.importGoal(
-                    source.toAbsolutePath(), target.toAbsolutePath(), projectDir, JkDirs.tmp(), force, reportPath,
-                    cache, observer);
-            GoalResult result = goal.run();
-            if (!result.success()) {
-                for (GoalResult.Diagnostic d : result.errors()) {
+            var o = dev.jkbuild.cli.engine.InProcessEngine.require()
+                    .importGoal(source.toAbsolutePath(), target.toAbsolutePath(), projectDir, JkDirs.tmp(),
+                            force, reportPath, cache, observer);
+            if (!o.result().success()) {
+                for (GoalResult.Diagnostic d : o.result().errors()) {
                     CliOutput.err("jk import: " + d.message());
                 }
                 return 1;
             }
-            exit = goal.get(CompatGoals.EXIT).orElse(1);
-            warnings = goal.get(CompatGoals.WARNINGS).orElse(0);
-            error = goal.get(CompatGoals.ERROR).orElse(null);
-            diag = goal.get(CompatGoals.DIAG).orElse(null);
+            exit = o.exitCode();
+            warnings = o.warnings();
+            error = o.error();
+            diag = o.diag();
         } else {
             dev.jkbuild.cli.engine.EngineClient.ImportOutcome outcome;
             try {

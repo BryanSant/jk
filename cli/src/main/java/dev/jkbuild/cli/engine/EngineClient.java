@@ -3,10 +3,16 @@ package dev.jkbuild.cli.engine;
 
 import dev.jkbuild.config.JkEngineConfig;
 import dev.jkbuild.engine.EnginePaths;
+import dev.jkbuild.jdk.GlobalDefaultJdk;
+import dev.jkbuild.jdk.HostPlatform;
+import dev.jkbuild.jdk.JavaHomes;
+import dev.jkbuild.jdk.JdkEnsure;
 import dev.jkbuild.engine.protocol.EngineProtocol;
 import dev.jkbuild.plugin.protocol.Ndjson;
-import dev.jkbuild.runtime.BuildService;
+import dev.jkbuild.runtime.ExplainPlan;
 import dev.jkbuild.runtime.WorkspaceBuildListener;
+import dev.jkbuild.runtime.WorkspaceRequest;
+import dev.jkbuild.runtime.WorkspaceResult;
 import dev.jkbuild.task.CachePruneScheduler;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
@@ -141,13 +147,13 @@ public final class EngineClient {
 
     /**
      * Run a workspace build against the engine at {@code paths} instead of in-process — the engine
-     * equivalent of {@link BuildService#buildWorkspace}, driving the exact same {@code listener}.
+     * equivalent of the engine's {@code BuildService.buildWorkspace}, driving the exact same {@code listener}.
      * Ensures a live, version-matched engine first (spawning/replacing as needed), then streams the
      * build over a fresh connection. Throws with a clear message on any failure; per {@code
      * docs/engine.md} there is no in-process fallback.
      */
-    public static BuildService.WorkspaceResult buildWorkspace(
-            EnginePaths.Paths paths, BuildService.WorkspaceRequest req, WorkspaceBuildListener listener)
+    public static WorkspaceResult buildWorkspace(
+            EnginePaths.Paths paths, WorkspaceRequest req, WorkspaceBuildListener listener)
             throws IOException {
         return EngineBuildListenerAdapter.buildWorkspace(paths, req, listener);
     }
@@ -163,7 +169,7 @@ public final class EngineClient {
             EnginePaths.Paths paths,
             TestRequest req,
             java.util.function.Function<List<dev.jkbuild.run.Phase>, dev.jkbuild.run.GoalListener> listenerFactory,
-            dev.jkbuild.test.JUnitLauncher.Result[] testResultOut)
+            dev.jkbuild.run.TestSummary[] testResultOut)
             throws IOException {
         return EngineBuildListenerAdapter.runTest(paths, req, listenerFactory, testResultOut);
     }
@@ -189,7 +195,7 @@ public final class EngineClient {
             EnginePaths.Paths paths,
             SingleBuildRequest req,
             java.util.function.Function<List<dev.jkbuild.run.Phase>, dev.jkbuild.run.GoalListener> listenerFactory,
-            dev.jkbuild.test.JUnitLauncher.Result[] testResultOut,
+            dev.jkbuild.run.TestSummary[] testResultOut,
             String[] buildOutcomeOut)
             throws IOException {
         return EngineBuildListenerAdapter.runSingleBuild(paths, req, listenerFactory, testResultOut, buildOutcomeOut);
@@ -212,12 +218,21 @@ public final class EngineClient {
             boolean verbose) {}
 
     /**
+     * Pre-flight a build's dirty forecast against the engine — {@code jk build}'s fully-cached
+     * shortcut and dirty hint (see {@link EngineBuildListenerAdapter#forecast}).
+     */
+    public static dev.jkbuild.runtime.BuildForecast forecast(
+            EnginePaths.Paths paths, Path entryDir, Path cache, boolean skipTests) throws IOException {
+        return EngineBuildListenerAdapter.forecast(paths, entryDir, cache, skipTests);
+    }
+
+    /**
      * Forecast a build against the engine ({@code jk explain}) — see {@link
      * EngineBuildListenerAdapter#explain} for the exact contract. {@code etaOut} (a single-slot
      * holder, may be {@code null}) receives the engine-computed build-time estimate in millis
      * ({@code 0} = unknown).
      */
-    public static BuildService.ExplainPlan explain(EnginePaths.Paths paths, ExplainRequest req, long[] etaOut)
+    public static ExplainPlan explain(EnginePaths.Paths paths, ExplainRequest req, long[] etaOut)
             throws IOException {
         return EngineBuildListenerAdapter.explain(paths, req, etaOut);
     }
@@ -345,7 +360,7 @@ public final class EngineClient {
             EnginePaths.Paths paths,
             AuditRequest req,
             java.util.function.Function<List<dev.jkbuild.run.Phase>, dev.jkbuild.run.GoalListener> listenerFactory,
-            dev.jkbuild.runtime.AuditGoals.FindingObserver findings)
+            dev.jkbuild.runtime.HostedEvents.FindingObserver findings)
             throws IOException {
         return EngineWorkerAdapter.stream(
                         paths,
@@ -391,7 +406,7 @@ public final class EngineClient {
             EnginePaths.Paths paths,
             FormatRequest req,
             java.util.function.Function<List<dev.jkbuild.run.Phase>, dev.jkbuild.run.GoalListener> listenerFactory,
-            dev.jkbuild.runtime.FormatGoals.FileObserver files)
+            dev.jkbuild.runtime.HostedEvents.FileObserver files)
             throws IOException {
         EngineWorkerAdapter.HostedFinish finish = EngineWorkerAdapter.stream(
                 paths,
@@ -517,7 +532,7 @@ public final class EngineClient {
      * counts.
      */
     public record ImageSummary(
-            dev.jkbuild.test.JUnitLauncher.Result testResult,
+            dev.jkbuild.run.TestSummary testResult,
             String ref,
             String tarball,
             String name,
@@ -558,9 +573,9 @@ public final class EngineClient {
                         (type, line) -> {},
                         line -> {
                             long total = Ndjson.longValue(line, "testTotal", -1);
-                            dev.jkbuild.test.JUnitLauncher.Result testResult = total < 0
+                            dev.jkbuild.run.TestSummary testResult = total < 0
                                     ? null
-                                    : new dev.jkbuild.test.JUnitLauncher.Result(
+                                    : new dev.jkbuild.run.TestSummary(
                                             total,
                                             Ndjson.longValue(line, "testSucceeded", 0),
                                             Ndjson.longValue(line, "testFailed", 0),
@@ -590,7 +605,7 @@ public final class EngineClient {
             EnginePaths.Paths paths,
             ImportRequest req,
             java.util.function.Function<List<dev.jkbuild.run.Phase>, dev.jkbuild.run.GoalListener> listenerFactory,
-            dev.jkbuild.runtime.CompatGoals.NoteObserver notes)
+            dev.jkbuild.runtime.HostedEvents.NoteObserver notes)
             throws IOException {
         EngineWorkerAdapter.HostedFinish finish = EngineWorkerAdapter.stream(
                 paths,
@@ -619,7 +634,7 @@ public final class EngineClient {
      * one-shot request; the exec of the provisioned tool stays in this client process (it inherits
      * this terminal's stdio, which the engine deliberately never touches).
      */
-    public static dev.jkbuild.runtime.CompatGoals.Provision provision(
+    public static dev.jkbuild.runtime.HostedEvents.Provision provision(
             EnginePaths.Paths paths, Path cache, Path projectDir, Path toolsRoot, boolean noDiscover, boolean gradle)
             throws IOException {
         return EngineWorkerAdapter.provision(
@@ -682,7 +697,7 @@ public final class EngineClient {
      * single project is a cascade of one). The returned result's {@code exitCode} is authoritative
      * — computed engine-side with {@code jk native}'s 64/4/1 mapping.
      */
-    public static BuildService.WorkspaceResult runNative(
+    public static WorkspaceResult runNative(
             EnginePaths.Paths paths, NativeRequest req, WorkspaceBuildListener listener) throws IOException {
         return EngineBuildListenerAdapter.runNative(paths, req, listener);
     }
@@ -711,7 +726,7 @@ public final class EngineClient {
             EnginePaths.Paths paths,
             InstallRequest req,
             java.util.function.Function<List<dev.jkbuild.run.Phase>, dev.jkbuild.run.GoalListener> listenerFactory,
-            dev.jkbuild.test.JUnitLauncher.Result[] testResultOut)
+            dev.jkbuild.run.TestSummary[] testResultOut)
             throws IOException {
         return EngineBuildListenerAdapter.runInstall(paths, req, listenerFactory, testResultOut);
     }
@@ -789,6 +804,62 @@ public final class EngineClient {
     }
 
     /**
+     * Everything an engine-hosted script/jar preparation needs ({@code jk tool run <file>}).
+     * {@code mode} = {@code java}/{@code kt}/{@code kts}/{@code jar}; {@code stateDir}/{@code
+     * repoUrl} may be {@code null} (defaults).
+     */
+    public record ScriptPrepareRequest(
+            String mode, Path script, Path cache, Path stateDir, java.net.URI repoUrl, boolean forceRecompile) {}
+
+    /**
+     * A hosted script preparation's outcome: the goal result plus the exec ingredients — fields not
+     * applicable to the mode (and everything on failure) are {@code null}/empty.
+     */
+    public record ScriptPrepareOutcome(
+            dev.jkbuild.run.GoalResult result,
+            String mainClass,
+            List<Path> classpath,
+            Path classesDir,
+            Path kotlincBin,
+            Path stdlib) {}
+
+    /**
+     * Prepare a loose script/jar against the engine ({@code jk tool run <file>}: header parse, dep
+     * resolution, compile / kotlinc provision / manifest inspection all engine-side — see {@code
+     * ScriptGoals}). The exec of the prepared program stays in the calling command — it owns this
+     * terminal.
+     */
+    public static ScriptPrepareOutcome runScriptPrepare(
+            EnginePaths.Paths paths,
+            ScriptPrepareRequest req,
+            java.util.function.Function<List<dev.jkbuild.run.Phase>, dev.jkbuild.run.GoalListener> listenerFactory)
+            throws IOException {
+        EngineWorkerAdapter.HostedFinish finish = EngineWorkerAdapter.stream(
+                paths,
+                EngineProtocol.scriptPrepareRequest(
+                        req.mode(),
+                        req.script().toString(),
+                        req.cache().toString(),
+                        req.stateDir() != null ? req.stateDir().toString() : null,
+                        req.repoUrl() != null ? req.repoUrl().toString() : null,
+                        req.forceRecompile()),
+                "script-prepare",
+                listenerFactory,
+                (type, line) -> {});
+        String line = finish.finishLine();
+        String classesDir = Ndjson.str(line, "scriptClassesDir");
+        String kotlincBin = Ndjson.str(line, "scriptKotlincBin");
+        String stdlib = Ndjson.str(line, "scriptStdlib");
+        return new ScriptPrepareOutcome(
+                finish.result(),
+                Ndjson.str(line, "scriptMainClass"),
+                Ndjson.strArray(line, "scriptClasspath").stream().map(Path::of).toList(),
+                classesDir != null ? Path.of(classesDir) : null,
+                kotlincBin != null ? Path.of(kotlincBin) : null,
+                stdlib != null ? Path.of(stdlib) : null);
+    }
+
+    /**
      * Everything an engine-hosted cache maintenance op needs ({@code op} = {@code prune}/{@code
      * purge}/{@code gc} — {@code jk cache prune}/{@code purge}, {@code jk clean --cache}). {@code
      * maxSize} may be {@code null}; the non-prune ops ignore the prune-only fields.
@@ -863,41 +934,86 @@ public final class EngineClient {
     }
 
     /**
-     * Which engine artifact a spawn chose. {@code dedicated} means {@code exe}'s {@code main()} IS
-     * the engine loop (the {@code jk-engine} image — no {@code --engine-server} flag); otherwise
-     * {@code exe} is the client binary itself, re-invoked with the flag. {@code how} is the one-word
-     * provenance for the log header.
+     * Which engine artifact a spawn chose. {@code EXE}: {@code path} is an executable whose {@code
+     * main()} IS the engine loop (no {@code --engine-server} flag). {@code LIBEXEC}: {@code path}
+     * is a directory of engine jars, launched as {@code <managed-jdk>/bin/java … -cp '<path>/*'
+     * dev.jkbuild.cli.EngineMain} — the engine is a plain JVM app, never a native image. {@code
+     * FALLBACK}: {@code path} is the client binary itself, re-invoked with the flag. {@code how}
+     * is the one-word provenance for the log header.
      */
-    record EngineExe(String exe, boolean dedicated, String how) {}
+    record EngineArtifact(Kind kind, String path, String how) {
+        enum Kind {
+            EXE,
+            LIBEXEC,
+            FALLBACK
+        }
+    }
 
     /**
-     * Resolution order for the engine artifact (docs/engine.md lifecycle §2, slim-client Stage 4):
-     * (a) the {@code JK_ENGINE_EXE} env override — always treated as a dedicated engine binary;
-     * (b) a {@code jk-engine[.exe]} sibling next to the resolved client binary — the native dist
-     * ships both images into one directory; (c) the client binary itself with {@code
-     * --engine-server} — the JVM dist (installDist ships no second start script) and dev workflows.
+     * Resolution order for the engine artifact (docs/engine.md lifecycle §2, slim-client Stage 5):
+     * (a) the {@code JK_ENGINE_EXE} env override — always treated as a dedicated engine
+     * executable; (b) a {@code libexec/jk-engine/} jar directory next to the resolved client
+     * binary — the native dist's layout, hosted on the jk-managed JDK; (c) the client binary
+     * itself with {@code --engine-server} — the JVM dist (installDist ships no second start
+     * script) and dev workflows.
      */
-    static EngineExe resolveEngineExe(String envOverride, String jkExe) {
+    static EngineArtifact resolveEngineArtifact(String envOverride, String jkExe) {
         if (envOverride != null && !envOverride.isBlank()) {
-            return new EngineExe(envOverride, true, "JK_ENGINE_EXE");
+            return new EngineArtifact(EngineArtifact.Kind.EXE, envOverride, "JK_ENGINE_EXE");
         }
         Path clientDir = Path.of(jkExe).toAbsolutePath().getParent();
         if (clientDir != null) {
-            for (String name : new String[] {"jk-engine", "jk-engine.exe"}) {
-                Path sibling = clientDir.resolve(name);
-                if (Files.isRegularFile(sibling) && Files.isExecutable(sibling)) {
-                    return new EngineExe(sibling.toString(), true, "sibling");
-                }
+            Path libDir = clientDir.resolve("libexec").resolve("jk-engine");
+            if (hasJars(libDir)) {
+                return new EngineArtifact(EngineArtifact.Kind.LIBEXEC, libDir.toString(), "libexec");
             }
         }
-        return new EngineExe(jkExe, false, "fallback");
+        return new EngineArtifact(EngineArtifact.Kind.FALLBACK, jkExe, "fallback");
+    }
+
+    /** An engine jar directory counts only when it actually holds jars — an empty or missing
+     * {@code libexec/jk-engine/} falls through to the {@code --engine-server} fallback. */
+    private static boolean hasJars(Path dir) {
+        if (!Files.isDirectory(dir)) return false;
+        try (var jars = Files.newDirectoryStream(dir, "*.jar")) {
+            return jars.iterator().hasNext();
+        } catch (IOException e) {
+            return false;
+        }
+    }
+
+    /**
+     * The JDK that hosts the engine JVM — the jk-managed default ({@code current}, then {@code
+     * default}: the same global tiers {@code JdkResolution} walks), then the JVM running jk /
+     * {@code $JAVA_HOME}. On a machine with none of those, bootstrap-install one through the same
+     * {@link JdkEnsure} walk first sync uses (which also records the install as the global
+     * default, so this pays once). The engine is deliberately NOT keyed to any project's JDK pin:
+     * one engine serves many workspaces, and project pins govern worker JVMs, not the host.
+     */
+    private static Path engineJavaHome() throws IOException {
+        GlobalDefaultJdk defaults = GlobalDefaultJdk.current();
+        Optional<Path> managed = defaults.currentHome().or(defaults::defaultHome);
+        if (managed.isPresent()) return managed.get();
+        try {
+            return JavaHomes.runningJavaHome();
+        } catch (IllegalStateException freshMachine) {
+            System.err.println("jk: installing a JDK to host the build engine (first run) ...");
+            try {
+                JdkEnsure.Outcome outcome =
+                        JdkEnsure.ensure(Path.of("").toAbsolutePath(), null, null, null, System.err::println);
+                if (outcome.jdk().isPresent()) return outcome.jdk().get().home();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            throw new IOException("no JDK to host the jk engine: run `jk jdk install` or set JAVA_HOME");
+        }
     }
 
     /** Spawn a fresh engine, detached — mirrors {@link CachePruneScheduler}'s spawn-and-forget pattern. */
     private static void spawn(EnginePaths.Paths paths) throws IOException {
         String jkExe = CachePruneScheduler.resolveJkExe()
                 .orElseThrow(() -> new IOException("could not resolve the running jk binary's path"));
-        EngineExe engine = resolveEngineExe(System.getenv("JK_ENGINE_EXE"), jkExe);
+        EngineArtifact engine = resolveEngineArtifact(System.getenv("JK_ENGINE_EXE"), jkExe);
         JkEngineConfig config = JkEngineConfig.resolve();
         Files.createDirectories(paths.dir());
         rotateLog(paths.log());
@@ -906,28 +1022,64 @@ public final class EngineClient {
         // in the engine role) — without that it stays in THIS client's process group, and a
         // Ctrl-C/SIGTERM aimed at the client (or its whole group) would take down the engine and
         // every other build it is hosting.
-        command.add(engine.exe());
-        if (!engine.dedicated()) command.add("--engine-server");
-        // Size the engine process's own heap (docs/engine.md "Memory target") — the spawner is
-        // the only place that can, since a process can't shrink its own -Xmx. The -Xms pre-sizing
-        // matters for a long-lived process (no growth churn). Native image consumes -Xm* runtime
-        // options from argv (position-independent) before main(); a dedicated jk-engine binary is
-        // a native image by construction, so the args always apply there (they override its baked
-        // -R:M{ax,in}HeapSize defaults, keeping user config max-heap-mb authoritative) — and its
-        // main() ignores argv, so an un-consumed -Xm* degrades to an unsized engine, never a dead
-        // one. For the fallback (this same binary + --engine-server) the args are placed after
-        // the flag for the same reason: if they aren't consumed, the engine still starts (unsized)
-        // instead of failing on an unknown verb. Both images are built with --gc=serial.
-        if (config.heapCapped() && (engine.dedicated() || isNativeImage())) {
-            command.add("-Xms" + config.minHeapMb() + "m");
-            command.add("-Xmx" + config.maxHeapMb() + "m");
+        //
+        // Sizing the engine's heap (docs/engine.md "Memory target") happens on the spawn line —
+        // the spawner is the only place that can, since a process can't shrink its own -Xmx, and
+        // the -Xms pre-sizing matters for a long-lived process (no growth churn). How the numbers
+        // ride along differs per artifact form below; user config max-heap-mb stays authoritative
+        // everywhere.
+        switch (engine.kind()) {
+            case LIBEXEC -> {
+                // The native dist's engine: a plain JVM app on the jk-managed JDK. Tuning is
+                // ordinary JVM flags — SerialGC (lowest footprint/latency; a ≤256 MiB heap is well
+                // inside its comfort zone) plus the JkEngineConfig heap numbers. The long-lived
+                // engine is exactly what HotSpot's JIT and SHA-256 intrinsics want; there is no
+                // native engine image. --enable-native-access: PosixDetach's setsid(2) FFM
+                // downcall without the JDK's restricted-method warning. The trailing separator-*
+                // is the java launcher's own classpath wildcard (no shell involved), so the jar
+                // set can change across versions without this spawn line knowing.
+                command.add(engineJavaHome()
+                        .resolve("bin")
+                        .resolve(HostPlatform.isWindows() ? "java.exe" : "java")
+                        .toString());
+                command.add("-XX:+UseSerialGC");
+                if (config.heapCapped()) {
+                    command.add("-Xms" + config.minHeapMb() + "m");
+                    command.add("-Xmx" + config.maxHeapMb() + "m");
+                }
+                command.add("--enable-native-access=ALL-UNNAMED");
+                command.add("-cp");
+                command.add(engine.path() + java.io.File.separator + "*");
+                command.add("dev.jkbuild.cli.EngineMain");
+            }
+            case EXE -> {
+                // A dedicated engine executable (JK_ENGINE_EXE): its main() IS the engine loop, no
+                // flag. The -Xm* args land as argv; EngineMain ignores argv, so a wrapper that
+                // doesn't consume them degrades to an unsized engine, never a dead one.
+                command.add(engine.path());
+                if (config.heapCapped()) {
+                    command.add("-Xms" + config.minHeapMb() + "m");
+                    command.add("-Xmx" + config.maxHeapMb() + "m");
+                }
+            }
+            case FALLBACK -> {
+                // This same binary re-invoked with --engine-server. On the JVM dist the flag finds
+                // EngineMain through the InProcessEngine seam; on the slim native client (which
+                // links no engine code) the child reports plainly that the engine jars are missing
+                // and exits — the ensure-running timeout then surfaces that log line.
+                command.add(engine.path());
+                command.add("--engine-server");
+                if (config.heapCapped() && isNativeImage()) {
+                    command.add("-Xms" + config.minHeapMb() + "m");
+                    command.add("-Xmx" + config.maxHeapMb() + "m");
+                }
+            }
         }
         ProcessBuilder pb = new ProcessBuilder(command);
-        // On a JVM (installDist) the equivalent knob is the start script's JVM-options env var —
-        // appended last so it wins over any blanket JK_OPTS the user exported. SerialGC matches
-        // the native binary: lowest footprint/latency, and a ≤256 MiB heap is well inside its
-        // comfort zone.
-        if (config.heapCapped() && !engine.dedicated() && !isNativeImage()) {
+        // On the JVM dist the sizing knob is the start script's JVM-options env var — appended
+        // last so it wins over any blanket JK_OPTS the user exported. SerialGC for the same
+        // reasons as the LIBEXEC spawn line.
+        if (config.heapCapped() && engine.kind() == EngineArtifact.Kind.FALLBACK && !isNativeImage()) {
             String opts = System.getenv("JK_OPTS");
             String sizing = "-XX:+UseSerialGC -Xms" + config.minHeapMb() + "m -Xmx" + config.maxHeapMb() + "m";
             pb.environment().put("JK_OPTS", (opts == null || opts.isBlank() ? "" : opts + " ") + sizing);
@@ -952,11 +1104,11 @@ public final class EngineClient {
      * behind (it's best-effort). {@code false} — and no header — if the file isn't writable; the
      * caller then falls back to the truncating redirect so log semantics stay identical.
      */
-    private static boolean writeSpawnHeader(Path log, EngineExe engine) {
+    private static boolean writeSpawnHeader(Path log, EngineArtifact engine) {
         try {
             Files.writeString(
                     log,
-                    "jk engine: spawning " + engine.exe() + " (" + engine.how() + ")" + System.lineSeparator(),
+                    "jk engine: spawning " + engine.path() + " (" + engine.how() + ")" + System.lineSeparator(),
                     java.nio.file.StandardOpenOption.CREATE,
                     java.nio.file.StandardOpenOption.TRUNCATE_EXISTING);
             return true;

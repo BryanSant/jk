@@ -1,7 +1,7 @@
 # The slim client: shrinking `jk` to a thin front-end
 
-Status: **in flight — stages 1–4 landed, stage 5 (the dep cut) next** (2026-07-08). This is the
-successor arc to
+Status: **COMPLETE — all five stages landed** (2026-07-08; stage 5, the dependency cut, closed the
+arc). This is the successor arc to
 [re-foundation.md](./re-foundation.md): that effort made the engine a server behind the
 `BuildService` facade; this one makes the `jk` binary a genuinely thin client of it.
 
@@ -35,9 +35,11 @@ truly heavy lifting) over the existing wire protocol.
 
 Dependency rule at end-state: `:cli` depends on `:model` (+ the future thin `jk-api` client
 library) and the toolchain-flow code only. No `:io`, no `:resolver`, no `:engine` on the CLI
-classpath. Two build artifacts: a size-optimized client binary (`-Os`, no `-march`) and an engine
-artifact that may re-tune for speed (`-march` benefits its SHA-256-heavy hot path, benchmarked
-≈1.5x on no-op builds).
+classpath. Two build artifacts: a size-optimized native client binary (`-Os`, no `-march`) and
+the engine as a plain jar directory hosted on the jk-managed JDK — the engine is a normal Java
+app, never a native image (long-lived process: HotSpot's JIT and SHA-256 intrinsics serve its
+hashing-heavy hot path, and building jars takes seconds instead of a multi-gigabyte image
+compile).
 
 ## Constraints discovered so far
 
@@ -66,24 +68,90 @@ artifact that may re-tune for speed (`-march` benefits its SHA-256-heavy hot pat
 3. **Migrate the memory/CPU-heavy verbs first** (they're why the ceilings exist): `lock`/`sync`
    resolution + fetch, `audit`, git-source materialization. Each migration = protocol vocabulary +
    engine handler + client renderer, mirroring how `build`/`test`/`explain`/`verify` moved.
-4. **Split the artifacts:** produce two native images — `jk` (client, -Os) and the engine binary —
-   and teach the spawn path to locate the engine artifact. Re-tune engine flags for speed
-   independently. (LANDED 2026-07-08: `EngineMain` is the dedicated entrypoint (`jk --engine-server`
-   delegates to the same code — the JVM-dist route and the spawn fallback); `:cli:nativeEngineCompile`
-   builds the `jk-engine` image speed-first — `-O3`, `-march=x86-64-v3` on amd64 /
-   `compatibility` elsewhere, the 256/96 MiB engine heap baked as `-R:` defaults, still
-   spawner-overridable via `-Xms`/`-Xmx` so `max-heap-mb` config keeps working — while
-   `:cli:nativeCompile`'s client flags stay size-first and untouched. `EngineClient.spawn` resolves
-   the artifact `JK_ENGINE_EXE` → `jk-engine[.exe]` sibling of the client binary → the client
-   binary + `--engine-server`, and records the choice as the engine log's first line. See
-   docs/engine.md "Two artifacts". Note the deliberate ordering vs. this plan's original "once
-   `:cli` no longer links the engine": the two-image pipeline landed *before* stage 5's dep cut, so
-   both images still link the full classpath — the download-size win lands when stage 5 shrinks the
-   client image.)
+4. **Split the artifacts:** `jk` (client, -Os native image) and a dedicated engine artifact —
+   and teach the spawn path to locate the engine artifact. (LANDED 2026-07-08 as two native
+   images; REVISED the same day: the engine image was a design overshoot — the engine was always
+   meant to run as a normal Java app, so the `jk-engine` image and its `-O3`/`-march` speed
+   tuning were dropped with stage 5. What survives from stage 4: `EngineMain` as the dedicated
+   engine entrypoint (`jk --engine-server` delegates to the same code — the JVM-dist route and
+   the spawn fallback), the spawn-side artifact resolution with the choice recorded as the engine
+   log's first line, and the client image's size-first flags. The engine now ships as
+   `libexec/jk-engine/*.jar`, spawned on the jk-managed JDK with SerialGC + the 256/96 MiB heap
+   from `max-heap-mb` as plain JVM flags. See docs/engine.md "Two artifacts".)
 5. **Then cut `:cli`'s Gradle deps to `:model` (+ api)** and let the compiler enforce it, the same
-   way `BuildGraph.BuildUnit` is package-private today.
+   way `BuildGraph.BuildUnit` is package-private today. (LANDED 2026-07-08 — see "Stage 5
+   as-built" below.)
 
 Each stage lands green on its own; no big-bang.
+
+## Stage 5 as-built
+
+The dependency cut landed as real Gradle modules (compiler-enforced forever), following the
+[inventory §4](./slim-client-inventory.md) move order. The as-built module graph:
+
+```
+jk (client image, :cli:nativeCompile, -Os)
+├── :cli            presentation, arg parsing, renderers, EngineClient + wire adapters
+├── :model          jk-api: domain currency, Goal/Phase event types, CliCommand model, TestSummary
+├── :core           jk.toml/jk.lock parse+edit, GlobalConfig, LibraryCatalog, deny policy,
+│                   ModuleOrder (shared topo-sort), SourceLayout, WorkerTunings,
+│                   Versions/DependencyTree/Provenance (offline lock walkers, still package
+│                   dev.jkbuild.resolver)
+├── :client-io      http (3 classes) · forge (device-flow auth) · credential stores ·
+│                   LibraryRegistryClient · Cas/Linking + AccessLedger + ClasspathResolver +
+│                   RepoArtifactStore/RepoArtifactResolver/MavenLayout/M2Dirs — the blessed local
+│                   CAS read/link surface (add --file, run/install exec classpaths, ide links)
+├── :toolchain-jdk  the complete JDK flow (JdkService/JdkEnsure rehomed here) · JavaHomes ·
+│                   discovery probes (doctor) · tool/app launcher shims + JarManifest ·
+│                   script headers · Gradle/Pom exporters · KotlinResolver constants
+├── :engine-api     the wire contract: EngineProtocol codec, EnginePaths/EngineTransport,
+│                   WorkspaceRequest/Result, ModulePlan/ModuleOutcome, ExplainPlan, BuildPlan,
+│                   BuildForecast, HostedEvents, WorkspaceBuildListener, CachePruneScheduler,
+│                   WorkerJarNotFoundException
+└── :plugin-api     Ndjson codec
+
+libexec/jk-engine/*.jar (the engine: a JVM app on the jk-managed JDK, never a native image;
+:cli-engine:installEngineLibs) — additionally links
+└── :cli-engine     EngineMain (the engine JVM's main), PosixDetach,
+                    InProcessEngineImpl (the seam below), the JVM dist (installDist), and the
+                    relocated CLI test suite
+    ├── :engine     EngineServer + BuildService/goal factories + pipeline/tasks/workers
+    ├── :toolchain  resolver-backed tool installs, compat/import machinery
+    ├── :resolver   PubGrub + orchestrators
+    └── :io         repo/Maven machinery, transports, effective POMs
+```
+
+**The `engineDisabledForTests()` mechanism** (the crux the plan called out): every command's
+test-only in-process branch was moved verbatim into `InProcessEngineImpl` (module `:cli-engine`,
+package `dev.jkbuild.command` so the bodies keep calling the commands' package-private rendering
+helpers). The client-side seam is the `dev.jkbuild.cli.engine.InProcessEngine` interface in
+`:cli`, discovered via `java.util.ServiceLoader` (the repo's established pattern — `Probes`):
+
+- **JVM dist / test classpath:** `:cli-engine` is present, so `jk --engine-server` and the
+  `jk.test.noEngine` in-process dispatch work exactly as before.
+- **Client native image:** `:cli-engine` is absent by construction — the binary physically cannot
+  host an engine, and `jk --engine-server` reports that plainly (`install the libexec/jk-engine/
+  jars next to jk`). `jk cache prune --background` on the slim binary delegates to the resident
+  engine instead of running in-process.
+
+Because the tests' in-process dispatch needs the full kernel, the CLI test suite moved to
+`:cli-engine` wholesale (same packages; the self-host `cli-engine/jk.toml` carries the
+`test-worker-jars` list that used to live in `cli/jk.toml`).
+
+**Wire vocabulary added by the cut** (the two residues that had kept engine code on the client):
+
+- `forecast-request`/`forecast-ack` — `jk build`'s pre-flight (fully-cached shortcut + dirty
+  hint + lock-staleness). Previously the client ran `BuildService.resolveGraph`/
+  `forecastDirtyDirs`/`workspaceLockStale` in-process — the whole forecaster (and its SHA-256
+  hashing) on the -Os client. Now one synchronous round-trip; the engine JVM (whose HotSpot
+  SHA-256 intrinsics are exactly right for this) does the hashing. Cost honestly stated: a
+  fully-cached `jk build` now touches (and lazily spawns) the engine, which it previously
+  avoided.
+- `script-prepare-request` — `jk tool run <file>`'s parse/resolve/compile half (`ScriptGoals` in
+  the engine, the close of the inventory's flagged ScriptRunner residue). The exec stays
+  client-side; only `//JAVA_OPTIONS` is re-parsed locally.
+
+Everything else rides vocabulary that already existed.
 
 ## Non-goals
 
