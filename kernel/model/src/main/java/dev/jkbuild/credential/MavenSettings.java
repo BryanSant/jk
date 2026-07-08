@@ -1,17 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.credential;
 
+import dev.jkbuild.util.MinimalXml;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
-import javax.xml.parsers.DocumentBuilder;
-import javax.xml.parsers.DocumentBuilderFactory;
-import org.w3c.dom.Document;
-import org.w3c.dom.Element;
-import org.w3c.dom.Node;
-import org.w3c.dom.NodeList;
 
 /**
  * Reads {@code <server>} credentials from Maven's {@code ~/.m2/settings.xml} so teams already on
@@ -58,21 +53,12 @@ public final class MavenSettings {
     public static MavenSettings loadFrom(Path settingsXml) {
         if (settingsXml == null || !Files.isRegularFile(settingsXml)) return empty();
         try {
-            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
-            // Harden the parser: no DTDs / external entities (XXE-safe).
-            factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
-            factory.setExpandEntityReferences(false);
-            factory.setNamespaceAware(false);
-            DocumentBuilder builder = factory.newDocumentBuilder();
-            Document doc;
-            try (var in = Files.newInputStream(settingsXml)) {
-                doc = builder.parse(in);
-            }
+            // MinimalXml is DOCTYPE-free by construction — the XXE hardening the old JAXP
+            // parser needed feature flags for.
+            MinimalXml.Element doc = MinimalXml.parse(Files.readString(settingsXml));
 
             Map<String, Server> byId = new HashMap<>();
-            NodeList servers = doc.getElementsByTagName("server");
-            for (int i = 0; i < servers.getLength(); i++) {
-                if (!(servers.item(i) instanceof Element server)) continue;
+            for (MinimalXml.Element server : doc.descendants("server")) {
                 String id = childText(server, "id");
                 if (id == null || id.isBlank()) continue;
                 String username = childText(server, "username");
@@ -88,15 +74,7 @@ public final class MavenSettings {
     }
 
     /** Text of the first direct child element named {@code tag}, or null. */
-    private static String childText(Element parent, String tag) {
-        NodeList kids = parent.getChildNodes();
-        for (int i = 0; i < kids.getLength(); i++) {
-            Node n = kids.item(i);
-            if (n.getNodeType() == Node.ELEMENT_NODE && n.getNodeName().equals(tag)) {
-                String text = n.getTextContent();
-                return text == null ? null : text.strip();
-            }
-        }
-        return null;
+    private static String childText(MinimalXml.Element parent, String tag) {
+        return parent.element(tag).map(MinimalXml.Element::text).orElse(null);
     }
 }

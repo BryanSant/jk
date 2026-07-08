@@ -124,8 +124,12 @@ performance budgets:
   startup latency (`jk hook-env` runs on every `cd`) — a native image built size-first (`-Os`, no
   `-march`, a 128 MiB heap cap) **from the slim classpath**: since Stage 5 the `:cli` module no
   longer links `:engine`/`:io`/`:resolver`/`:toolchain` at all, so the image physically contains
-  no engine code. Measured on linux/amd64: **~19 MiB, down from 32.8 MiB** when the image carried
-  the full classpath.
+  no engine code. Measured on linux/amd64: **26.9 MiB on disk (8.3 MiB xz-compressed download),
+  down from 32.8 MiB** when the image carried the full classpath. Roughly half the remaining size
+  is JDK infrastructure the client's own duties require (TLS + HTTP for JDK/auth/registry
+  traffic, FFM for the terminal) plus the GraalVM runtime; `MinimalXml` keeps the `java.xml`
+  module (Xerces, ~3.7 MiB of image) off the classpath the same way `MinimalTar` avoids
+  commons-compress.
 - **`libexec/jk-engine/` (the engine, `:cli-engine:installEngineLibs`)** is a long-lived resident
   process, which is exactly what a JVM is best at — so it is a plain Java app, never a native
   image. The client spawns it on the jk-managed JDK; HotSpot's JIT and SHA-256 intrinsics serve

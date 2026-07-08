@@ -90,9 +90,10 @@ The dependency cut landed as real Gradle modules (compiler-enforced forever), fo
 [inventory §4](./slim-client-inventory.md) move order. The as-built module graph:
 
 ```
-jk (client image, :cli:nativeCompile, -Os)
+jk (client image, :cli:nativeCompile, -Os; 26.9 MiB on linux/amd64 — see docs/engine.md)
 ├── :cli            presentation, arg parsing, renderers, EngineClient + wire adapters
-├── :model          jk-api: domain currency, Goal/Phase event types, CliCommand model, TestSummary
+├── :model          jk-api: domain currency, Goal/Phase event types, CliCommand model, TestSummary,
+│                   MinimalXml (keeps java.xml/Xerces — ~3.7 MiB of image — off this classpath)
 ├── :core           jk.toml/jk.lock parse+edit, GlobalConfig, LibraryCatalog, deny policy,
 │                   ModuleOrder (shared topo-sort), SourceLayout, WorkerTunings,
 │                   Versions/DependencyTree/Provenance (offline lock walkers, still package

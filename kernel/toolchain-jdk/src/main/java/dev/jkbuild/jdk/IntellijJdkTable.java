@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.jdk;
 
+import dev.jkbuild.util.MinimalXml;
 import java.io.IOException;
-import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashSet;
@@ -11,10 +11,6 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Stream;
-import javax.xml.stream.XMLInputFactory;
-import javax.xml.stream.XMLStreamConstants;
-import javax.xml.stream.XMLStreamException;
-import javax.xml.stream.XMLStreamReader;
 
 /**
  * Read-only view of the JDKs an IDE has registered in its {@code jdk.table.xml}.
@@ -114,23 +110,17 @@ public final class IntellijJdkTable {
     }
 
     private void parseHomePaths(Path table, Set<Path> out) {
-        XMLInputFactory factory = XMLInputFactory.newInstance();
-        // Harden against XXE — these files are trusted, but there's no reason
-        // to resolve external entities while scanning for a single attribute.
-        factory.setProperty(XMLInputFactory.IS_SUPPORTING_EXTERNAL_ENTITIES, false);
-        factory.setProperty(XMLInputFactory.SUPPORT_DTD, false);
-        try (InputStream in = Files.newInputStream(table)) {
-            XMLStreamReader r = factory.createXMLStreamReader(in);
-            while (r.hasNext()) {
-                if (r.next() == XMLStreamConstants.START_ELEMENT && "homePath".equals(r.getLocalName())) {
-                    String value = r.getAttributeValue(null, "value");
-                    if (value != null && !value.isBlank()) {
-                        out.add(canonicalize(value));
-                    }
+        // MinimalXml rejects DOCTYPE outright, so the XXE hardening the old StAX scan needed
+        // feature flags for is structural. Tables are a few KB; a full parse is fine.
+        try {
+            MinimalXml.Element doc = MinimalXml.parse(Files.readString(table));
+            for (MinimalXml.Element homePath : doc.descendants("homePath")) {
+                String value = homePath.attr("value");
+                if (value != null && !value.isBlank()) {
+                    out.add(canonicalize(value));
                 }
             }
-            r.close();
-        } catch (IOException | XMLStreamException ignored) {
+        } catch (IOException | RuntimeException ignored) {
             // Malformed/partial table — skip it rather than fail discovery.
         }
     }

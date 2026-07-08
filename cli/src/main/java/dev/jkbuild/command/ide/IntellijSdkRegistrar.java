@@ -2,9 +2,9 @@
 package dev.jkbuild.command.ide;
 
 import dev.jkbuild.jdk.IntellijJdkTable;
+import dev.jkbuild.util.MinimalXml;
+import dev.jkbuild.util.MinimalXml.Element;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -13,17 +13,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.stream.Stream;
-import javax.xml.parsers.DocumentBuilder;
-import javax.xml.parsers.DocumentBuilderFactory;
-import javax.xml.transform.OutputKeys;
-import javax.xml.transform.Transformer;
-import javax.xml.transform.TransformerFactory;
-import javax.xml.transform.dom.DOMSource;
-import javax.xml.transform.stream.StreamResult;
-import org.w3c.dom.Document;
-import org.w3c.dom.Element;
-import org.w3c.dom.Node;
-import org.w3c.dom.NodeList;
 
 /**
  * Writes {@code <jdk>} entries into the JetBrains IDEs' global SDK tables ({@code
@@ -121,60 +110,47 @@ public final class IntellijSdkRegistrar {
     }
 
     private void upsert(Path table, Collection<SdkEntry> sdks) throws Exception {
-        DocumentBuilder db = newDocumentBuilder();
-        Document doc;
+        Element application;
         if (Files.isRegularFile(table)) {
-            try (InputStream in = Files.newInputStream(table)) {
-                doc = db.parse(in);
-            }
+            application = MinimalXml.parse(Files.readString(table));
         } else {
-            doc = db.newDocument();
-            doc.appendChild(doc.createElement("application"));
+            application = Element.of("application");
         }
 
-        Element application = doc.getDocumentElement();
-        if (application == null) {
-            application = doc.createElement("application");
-            doc.appendChild(application);
-        }
         Element component = findComponent(application, "ProjectJdkTable");
         if (component == null) {
-            component = doc.createElement("component");
-            component.setAttribute("name", "ProjectJdkTable");
-            application.appendChild(component);
+            component = Element.of("component").setAttr("name", "ProjectJdkTable");
+            application.append(component);
         }
 
         for (SdkEntry sdk : sdks) {
             Element existing = findJdkByName(component, sdk.name());
-            if (existing != null) component.removeChild(existing);
-            component.appendChild(buildJdk(doc, sdk));
+            if (existing != null) component.remove(existing);
+            component.append(buildJdk(sdk));
         }
 
         Files.createDirectories(table.getParent());
-        try (OutputStream out = Files.newOutputStream(table)) {
-            writeDocument(doc, out);
-        }
+        Files.writeString(table, MinimalXml.write(application));
     }
 
-    private static Element buildJdk(Document doc, SdkEntry sdk) {
+    private static Element buildJdk(SdkEntry sdk) {
         String home = sdk.javaHome().toAbsolutePath().normalize().toString().replace('\\', '/');
 
-        Element jdk = doc.createElement("jdk");
-        jdk.setAttribute("version", "2");
-        jdk.appendChild(valued(doc, "name", sdk.name()));
-        jdk.appendChild(valued(doc, "type", "JavaSDK"));
+        Element jdk = Element.of("jdk").setAttr("version", "2");
+        jdk.append(valued("name", sdk.name()));
+        jdk.append(valued("type", "JavaSDK"));
         if (sdk.version() != null && !sdk.version().isBlank()) {
-            jdk.appendChild(valued(doc, "version", "java version \"" + sdk.version() + "\""));
+            jdk.append(valued("version", "java version \"" + sdk.version() + "\""));
         }
-        jdk.appendChild(valued(doc, "homePath", home));
+        jdk.append(valued("homePath", home));
 
-        Element roots = doc.createElement("roots");
-        Element annotations = doc.createElement("annotationsPath");
-        annotations.appendChild(rootEl(doc, "composite", null));
-        roots.appendChild(annotations);
+        Element roots = Element.of("roots");
+        Element annotations = Element.of("annotationsPath");
+        annotations.append(rootEl("composite", null));
+        roots.append(annotations);
 
-        Element classPath = doc.createElement("classPath");
-        Element composite = rootEl(doc, "composite", null);
+        Element classPath = Element.of("classPath");
+        Element composite = rootEl("composite", null);
         // Modular JDK (9+): IntelliJ represents the platform classpath as one
         // jrt root PER MODULE (jrt://<home>!/<module>), exactly as it writes
         // them itself. A single jrt://<home>!/ root over the whole image does
@@ -184,17 +160,17 @@ public final class IntellijSdkRegistrar {
         // pre-9 JDK or an unreadable home).
         List<String> modules = moduleNames(sdk.javaHome());
         if (modules.isEmpty()) {
-            composite.appendChild(rootEl(doc, "simple", "jrt://" + home + "!/"));
+            composite.append(rootEl("simple", "jrt://" + home + "!/"));
         } else {
             for (String module : modules) {
-                composite.appendChild(rootEl(doc, "simple", "jrt://" + home + "!/" + module));
+                composite.append(rootEl("simple", "jrt://" + home + "!/" + module));
             }
         }
-        classPath.appendChild(composite);
-        roots.appendChild(classPath);
-        jdk.appendChild(roots);
+        classPath.append(composite);
+        roots.append(classPath);
+        jdk.append(roots);
 
-        jdk.appendChild(doc.createElement("additional"));
+        jdk.append(Element.of("additional"));
         return jdk;
     }
 
@@ -238,70 +214,30 @@ public final class IntellijSdkRegistrar {
         return List.of();
     }
 
-    private static Element valued(Document doc, String tag, String value) {
-        Element e = doc.createElement(tag);
-        e.setAttribute("value", value);
-        return e;
+    private static Element valued(String tag, String value) {
+        return Element.of(tag).setAttr("value", value);
     }
 
-    private static Element rootEl(Document doc, String type, String url) {
-        Element e = doc.createElement("root");
-        if (url != null) e.setAttribute("url", url);
-        e.setAttribute("type", type);
+    private static Element rootEl(String type, String url) {
+        Element e = Element.of("root");
+        if (url != null) e.setAttr("url", url);
+        e.setAttr("type", type);
         return e;
     }
 
     private static Element findComponent(Element application, String name) {
-        for (Element c : children(application, "component")) {
-            if (name.equals(c.getAttribute("name"))) return c;
+        for (Element c : application.elements("component")) {
+            if (name.equals(c.attr("name"))) return c;
         }
         return null;
     }
 
     private static Element findJdkByName(Element component, String name) {
-        for (Element jdk : children(component, "jdk")) {
-            for (Element n : children(jdk, "name")) {
-                if (name.equals(n.getAttribute("value"))) return jdk;
+        for (Element jdk : component.elements("jdk")) {
+            for (Element n : jdk.elements("name")) {
+                if (name.equals(n.attr("value"))) return jdk;
             }
         }
         return null;
-    }
-
-    private static List<Element> children(Element parent, String tag) {
-        List<Element> out = new ArrayList<>();
-        NodeList nl = parent.getChildNodes();
-        for (int i = 0; i < nl.getLength(); i++) {
-            Node n = nl.item(i);
-            if (n.getNodeType() == Node.ELEMENT_NODE && tag.equals(n.getNodeName())) {
-                out.add((Element) n);
-            }
-        }
-        return out;
-    }
-
-    private static DocumentBuilder newDocumentBuilder() throws Exception {
-        DocumentBuilderFactory f = DocumentBuilderFactory.newInstance();
-        // Harden against XXE — these files are trusted, but there's no reason to
-        // resolve external entities (mirrors IntellijJdkTable's reader).
-        setFeature(f, "http://apache.org/xml/features/disallow-doctype-decl", true);
-        setFeature(f, "http://xml.org/sax/features/external-general-entities", false);
-        setFeature(f, "http://xml.org/sax/features/external-parameter-entities", false);
-        f.setExpandEntityReferences(false);
-        return f.newDocumentBuilder();
-    }
-
-    private static void setFeature(DocumentBuilderFactory f, String feature, boolean value) {
-        try {
-            f.setFeature(feature, value);
-        } catch (Exception ignored) {
-            // Feature unsupported by this parser — fine, the others still apply.
-        }
-    }
-
-    private static void writeDocument(Document doc, OutputStream out) throws Exception {
-        Transformer t = TransformerFactory.newInstance().newTransformer();
-        t.setOutputProperty(OutputKeys.INDENT, "yes");
-        t.setOutputProperty("{http://xml.apache.org/xslt}indent-amount", "2");
-        t.transform(new DOMSource(doc), new StreamResult(out));
     }
 }
