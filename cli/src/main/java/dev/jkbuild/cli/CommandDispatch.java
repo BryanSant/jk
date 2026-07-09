@@ -106,7 +106,6 @@ public final class CommandDispatch {
             new ImportCommand(),
             new PublishCommand(),
             new RunCommand(),
-            new InstallCommand(),
             new CompileCommand(),
             new BuildCommand(),
             new TestCommand(),

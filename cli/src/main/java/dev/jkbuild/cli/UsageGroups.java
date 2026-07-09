@@ -22,7 +22,7 @@ public final class UsageGroups {
     public static final List<CommandGroup> COMMAND_GROUPS = List.of(
             new CommandGroup(
                     "Build commands:",
-                    List.of("build", "run", "clean", "image", "test", "compile", "native", "install", "publish")),
+                    List.of("build", "run", "clean", "image", "test", "compile", "native", "publish")),
             new CommandGroup(
                     "Project commands:",
                     List.of(
@@ -39,7 +39,7 @@ public final class UsageGroups {
      */
     public static final List<CommandGroup> SHORT_COMMAND_GROUPS = List.of(
             new CommandGroup(
-                    "Build commands:", List.of("build", "run", "clean", "image", "native", "install", "publish")),
+                    "Build commands:", List.of("build", "run", "clean", "image", "native", "publish")),
             new CommandGroup("Project commands:", List.of("new", "init", "add", "remove", "lock", "update")),
             new CommandGroup("Toolchain commands:", List.of("jdk", "tool", "shell", "activate")));
 

@@ -24,9 +24,11 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * {@code jk tool install <coord>} — install a Maven-published tool as a launcher under {@code
- * $JK_BIN_DIR} (PRD §20.1). Was {@code jk install} pre-v1.0; {@code install} remains a hidden
- * alias.
+ * {@code jk tool install [<target>]} — the converged install verb (tool-targets-plan §9; {@code jk
+ * install} is its hidden verb alias). Targets: a catalog name or Maven coordinate spec (launcher
+ * under {@code $JK_BIN_DIR}, PRD §20.1); a script/jar file (snapshot env, §4.3 — or a local-cache
+ * store when {@code --group/--name/--ver} carry m2 intent); a jk-project directory (defaulting to
+ * {@code .}) or a git URL, both delegated to {@link InstallCommand}'s app pipeline.
  *
  * <p><b>Engine-hosted</b> (Wave 4 of the slim-client migration): the Maven resolve + fetch runs
  * inside the resident engine ({@link dev.jkbuild.cli.engine.EngineClient#runToolResolve}); the
@@ -42,7 +44,7 @@ public final class ToolInstallCommand implements CliCommand {
 
     @Override
     public String description() {
-        return "Install a tool from a Maven coordinate";
+        return "Install a tool, script, project, or git repo";
     }
 
     @Override
@@ -51,11 +53,18 @@ public final class ToolInstallCommand implements CliCommand {
                 Opt.value("<name>", "Launcher name under $JK_BIN_DIR. Default: the artifact id.", "--bin"),
                 Opt.value("<class>", "Override the Main-Class (default: read from the jar manifest).", "--main"),
                 Opt.value("<coord>", "Add an extra dependency to the tool's classpath (repeatable).", "--with"),
+                Opt.value("<group>", "Maven groupId — switches a file target to a local-cache install.", "--group"),
+                Opt.value("<name>", "Maven artifactId for a local-cache file install.", "--name"),
+                Opt.value("<ver>", "Version for a local-cache file install.", "--ver"),
+                Opt.flag("Skip compiling and running tests (project targets).", "--skip-tests"),
                 Opt.value("<dir>", "Override the jk cache directory.", "--cache-dir")
                         .hide(),
                 Opt.value("<dir>", "Override the tool state directory.", "--state-dir")
                         .hide(),
                 Opt.value("<dir>", "Override the bin directory.", "--bin-dir").hide(),
+                Opt.value("<dir>", "Override the lib directory.", "--lib-dir").hide(),
+                Opt.value("<dir>", "Override the local Maven repo root (~/.m2) for m2install.", "--m2-dir")
+                        .hide(),
                 Opt.value("<url>", "Override the Maven repository URL (for tests).", "--repo-url")
                         .hide());
     }
@@ -73,9 +82,15 @@ public final class ToolInstallCommand implements CliCommand {
     String coord;
     String binName;
     String mainClass;
+    String groupFlag;
+    String nameFlag;
+    String verFlag;
+    boolean skipTests;
     Path cacheDirOverride;
     Path stateDirOverride;
     Path binDirOverride;
+    Path libDirOverride;
+    Path m2DirOverride;
     URI repoUrl;
     GlobalOptions global;
 
@@ -97,23 +112,42 @@ public final class ToolInstallCommand implements CliCommand {
         this.cacheDirOverride = in.value("cache-dir").map(Path::of).orElse(null);
         this.stateDirOverride = in.value("state-dir").map(Path::of).orElse(null);
         this.binDirOverride = in.value("bin-dir").map(Path::of).orElse(null);
+        this.groupFlag = in.value("group").orElse(null);
+        this.nameFlag = in.value("name").orElse(null);
+        this.verFlag = in.value("ver").orElse(null);
+        this.skipTests = in.isSet("skip-tests");
+        this.libDirOverride = in.value("lib-dir").map(Path::of).orElse(null);
+        this.m2DirOverride = in.value("m2-dir").map(Path::of).orElse(null);
         this.repoUrl = in.value("repo-url").map(URI::create).orElse(null);
         this.global = GlobalOptions.from(in);
 
         // A local script/jar installs as a snapshot env (plan §4.3) — the launcher must not
         // depend on the source file continuing to exist. Project dirs and git URLs delegate to
         // the app-install pipeline (plan §9 convergence: one pipeline, two spellings).
+        // Local paths (including the "." default) resolve against -C/--directory, not the
+        // process cwd — same base InstallCommand's project mode always used.
+        Path base = global.workingDir();
         dev.jkbuild.tool.ToolTarget classified = dev.jkbuild.tool.ToolTarget.classify(coord);
+        boolean m2Intent = groupFlag != null || nameFlag != null || verFlag != null;
+        if (m2Intent && classified instanceof dev.jkbuild.tool.ToolTarget.RunnableFile file) {
+            // Coordinate flags = "store this artifact in the local cache" (the mvn install
+            // equivalent), not "give me a launcher".
+            return appInstallDelegate().installFromFile(base.resolve(file.path()).toAbsolutePath().normalize());
+        }
+        if (m2Intent && classified instanceof dev.jkbuild.tool.ToolTarget.UnsupportedFile file) {
+            return appInstallDelegate().installFromFile(base.resolve(file.path()).toAbsolutePath().normalize());
+        }
         if (classified instanceof dev.jkbuild.tool.ToolTarget.RunnableFile file) {
-            return installFile(file.path());
+            return installFile(base.resolve(file.path()).normalize());
         }
         if (classified instanceof dev.jkbuild.tool.ToolTarget.Directory dir) {
-            if (!Files.isRegularFile(dir.path().resolve("jk.toml"))) {
-                CliOutput.err("jk tool install: no jk.toml in " + dir.path()
+            Path projectDir = base.resolve(dir.path()).toAbsolutePath().normalize();
+            if (!Files.isRegularFile(projectDir.resolve("jk.toml"))) {
+                CliOutput.err("jk tool install: no jk.toml in " + projectDir
                         + " — a directory target must be a jk project.");
                 return Exit.USAGE;
             }
-            return appInstallDelegate().runProjectInstallGoal(dir.path().toAbsolutePath().normalize(), "install");
+            return appInstallDelegate().runProjectInstallGoal(projectDir, "install");
         }
         if (classified instanceof dev.jkbuild.tool.ToolTarget.Git git) {
             return appInstallDelegate().installFromGit(git.raw());
@@ -183,16 +217,13 @@ public final class ToolInstallCommand implements CliCommand {
     private int installFile(Path file) throws IOException, InterruptedException {
         String name = file.getFileName().toString();
         String lower = name.toLowerCase(java.util.Locale.ROOT);
-        if (lower.endsWith(".kts")) {
-            CliOutput.err("jk tool install: .kts scripts can't be installed yet — run one with `jk tool run "
-                    + file + "` (docs/tool-targets-plan.md §4.3).");
-            return Exit.USAGE;
-        }
         if (!Files.isRegularFile(file)) {
             CliOutput.err("jk tool install: file not found: " + file);
             return Exit.NO_INPUT;
         }
-        String mode = lower.endsWith(".jar") ? "jar" : lower.endsWith(".kt") ? "kt" : "java";
+        String mode = lower.endsWith(".jar")
+                ? "jar"
+                : lower.endsWith(".kts") ? "kts" : lower.endsWith(".kt") ? "kt" : "java";
         String bin = binName != null && !binName.isBlank()
                 ? binName
                 : name.substring(0, name.lastIndexOf('.')).toLowerCase(java.util.Locale.ROOT);
@@ -220,11 +251,31 @@ public final class ToolInstallCommand implements CliCommand {
                 return Exit.SOFTWARE;
             }
         }
-        if (!prep.result().success() || prep.mainClass() == null) return 1;
+        if (!prep.result().success() || (prep.mainClass() == null && !"kts".equals(mode))) return 1;
 
         // Snapshot into the env dir so the launcher survives the source moving/vanishing.
         Path envDir = envsRoot.resolve(bin);
         List<Path> classpath = new ArrayList<>();
+        if ("kts".equals(mode)) {
+            // Kotlin script: snapshot a neutralized copy (jk resolved its @file:DependsOn) and
+            // write a kotlinc -script launcher over it + the resolved dep classpath.
+            if (prep.kotlincBin() == null) return 1;
+            Files.createDirectories(envDir);
+            String source = Files.readString(file, java.nio.charset.StandardCharsets.UTF_8);
+            String neutralized = dev.jkbuild.script.ScriptHeaderParser.neutralizeKotlinAnnotations(source);
+            Path scriptCopy = envDir.resolve(name);
+            Files.writeString(scriptCopy, neutralized != null ? neutralized : source);
+            ToolEnv ktsEnv =
+                    new ToolEnv(bin, Coordinate.of("script", bin, "local"), "kotlin-script", prep.classpath());
+            Path ktsLauncher = ToolLauncher.installKotlinScript(
+                    envsRoot, binDir, JavaHomes.runningJavaHome(), prep.kotlincBin(), scriptCopy, ktsEnv);
+            if (!global.outputIsJson()) {
+                CliOutput.out("Installed " + file.getFileName() + " → " + ktsLauncher);
+                CliOutput.out("Add to PATH if needed:");
+                CliOutput.out("  export PATH=\"" + binDir + ":$PATH\"");
+            }
+            return 0;
+        }
         if ("jar".equals(mode)) {
             Files.createDirectories(envDir);
             Path jarCopy = envDir.resolve(name);
@@ -255,12 +306,17 @@ public final class ToolInstallCommand implements CliCommand {
         InstallCommand delegate = new InstallCommand();
         delegate.binName = binName;
         delegate.mainClass = mainClass;
+        delegate.groupFlag = groupFlag;
+        delegate.nameFlag = nameFlag;
+        delegate.verFlag = verFlag;
         delegate.cacheDirOverride = cacheDirOverride;
         delegate.stateDirOverride = stateDirOverride;
         delegate.binDirOverride = binDirOverride;
+        delegate.libDirOverride = libDirOverride;
+        delegate.m2DirOverride = m2DirOverride;
         delegate.repoUrl = repoUrl;
         delegate.buildOpts = new dev.jkbuild.cli.BuildOptions();
-        delegate.buildOpts.skipTests = false;
+        delegate.buildOpts.skipTests = skipTests;
         delegate.global = global;
         return delegate;
     }

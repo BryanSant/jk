@@ -373,14 +373,6 @@ class InstallExecCommandTest {
     }
 
     @Test
-    void tool_install_of_kts_is_gated_with_a_pointer(@TempDir Path tempDir) throws Exception {
-        Path script = tempDir.resolve("x.kts");
-        Files.writeString(script, "println(1)\n");
-        assertThat(run("tool", "install", "--state-dir", tempDir.toString(), script.toString()))
-                .isEqualTo(64);
-    }
-
-    @Test
     void tool_install_of_a_project_dir_delegates_to_the_app_pipeline(@TempDir Path tempDir) throws Exception {
         // Convergence (plan §9): `jk tool install <dir>` == `jk install` run in that dir.
         run("new", "--group", "com.example", "--name", "widget", "--executable", "--layout", "traditional",

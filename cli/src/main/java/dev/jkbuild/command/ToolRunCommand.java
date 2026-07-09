@@ -174,7 +174,7 @@ public final class ToolRunCommand implements CliCommand {
                     .run(file.path(), toolArgs);
         }
         if (classified instanceof dev.jkbuild.tool.ToolTarget.Directory dir) {
-            return runDirectory(dir.path(), toolArgs);
+            return runDirectory(global.workingDir().resolve(dir.path()).normalize(), toolArgs);
         }
 
         ToolTargets.Resolved resolved;

@@ -430,6 +430,13 @@ updates, this plan.
    → `tool install` convergence (§9); `.kts` dependency fix +
    `@file:DependsOn`; JBang directive completeness.
    *(After this, every JBang **local** workflow works.)*
+   **Implemented 2026-07-09**: directives + `.kts` deps (annotations
+   neutralized line-preservingly for plain kotlinc); dir targets for
+   run; file installs snapshot envs (`.kts` launcher wraps
+   `kotlinc -script`); `install` is now a verb alias of `tool install`
+   (default target `.`; `--group/--name/--ver` on a file target keeps
+   the m2 local-cache mode; `InstallCommand` survives only as the
+   delegated app-install pipeline).
 3. **Remote** — trust store + `jk trust`; URL targets with rewrites,
    gists, URL-relative `//SOURCES`/`//FILES`, ETag cache.
 4. **Git + catalogs** — git targets for `tool run|install`;
@@ -450,6 +457,7 @@ local HTTP server + local git repos — no live network in CI).
 2. **`jk install` and `jk tool install` converge now** — one pipeline;
    `install` becomes a verb alias for `tool install` defaulting the
    target to `.`; `InstallCommand` absorbed (§9), landing in phase 2.
+   **Done** — shipped with phase 2.
 3. **`jkx` ships as a real binary** — argv[0]-dispatched hardlink with
    shim fallbacks (§8.1), phase 1; the activate-installed shell
    functions are removed.

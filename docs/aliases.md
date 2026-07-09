@@ -26,6 +26,7 @@ renders the canonical verb's help.
 | `jk check` | `jk compile` | Pre-v1.0 name for the type-check verb. Kept for back-compat. |
 | `jk why-rebuilt` | `jk explain` | Early-roadmap name for the cache-diff report; `explain` absorbed it. |
 | `jk tool exec` | `jk tool run` | Matches `dotnet tool exec`. Subcommand alias (`CliCommand.aliases()`), not a verb rewrite. |
+| `jk install` | `jk tool install` | The converged install verb (tool-targets-plan §9); multi-word expansion. |
 
 ## How rewriting works
 

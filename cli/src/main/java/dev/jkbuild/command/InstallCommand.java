@@ -45,7 +45,9 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * {@code jk install [<source>]} — install a jk artifact. Three modes:
+ * The app-install pipeline behind {@code jk tool install} (and its {@code jk install} verb alias —
+ * this class is no longer a registered top-level command; {@link ToolInstallCommand} routes to it
+ * per tool-targets-plan §9). Three modes:
  *
  * <ul>
  *   <li><b>No source:</b> build the current project (per {@code jk.toml}) and install it. Always
@@ -186,7 +188,8 @@ public final class InstallCommand implements CliCommand {
      * from {@code META-INF/maven/.../pom.properties} for {@code .jar} files; {@code --group}, {@code
      * --name}, and {@code --ver} override or supply missing fields.
      */
-    private int installFromFile(Path filePath) throws IOException {
+    /** Package-private: `jk tool install <file> --group/--name/--ver` delegates here. */
+    int installFromFile(Path filePath) throws IOException {
         if (!Files.exists(filePath)) {
             CliOutput.err("jk install: " + PathDisplay.styled(filePath) + ": no such file");
             return Exit.CONFIG;
