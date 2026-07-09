@@ -28,6 +28,11 @@ dependencies {
     // src/main/resources/META-INF/native-image/org.jline/jline-terminal-ffm/.
     implementation(libs.jline.terminal.ffm)
 
+    // ProcessProperties.getArgumentVectorProgramName() for argv[0] `jkx` dispatch
+    // (Argv0). compileOnly: inside the image the builder provides the implementation;
+    // on a JVM every use is gated behind the imagecode property so the class never loads.
+    compileOnly(libs.graalvm.nativeimage)
+
 }
 
 

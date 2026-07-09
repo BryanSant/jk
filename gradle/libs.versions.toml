@@ -9,6 +9,7 @@ bouncycastle = "1.84"
 commons-compress = "1.28.0"
 cyclonedx-core = "12.2.0"
 graalvm-native = "0.10.4"
+graalvm-sdk = "25.0.0"
 jackson = "3.2.0"
 jgit = "7.6.0.202603022253-r"
 jline = "4.1.2"
@@ -73,6 +74,9 @@ slf4j-nop              = { module = "org.slf4j:slf4j-nop",                      
 # CLI
 picocli                = { module = "info.picocli:picocli",                         version.ref = "picocli" }
 jline-terminal-ffm     = { module = "org.jline:jline-terminal-ffm",                 version.ref = "jline" }
+# native-image runtime API (compileOnly: the image builder provides the implementation;
+# JVM mode guards every use behind the imagecode property so the class never loads there)
+graalvm-nativeimage    = { module = "org.graalvm.sdk:nativeimage",                  version.ref = "graalvm-sdk" }
 
 # testing (consumed by jk.java-conventions; applied to every module)
 junit-jupiter           = { module = "org.junit.jupiter:junit-jupiter",              version.ref = "junit" }

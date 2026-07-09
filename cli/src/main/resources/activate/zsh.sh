@@ -26,10 +26,8 @@ jk() {
     command "$__JK_EXE" "$cmd" "$@"
 }
 
-# `jkx` — uvx-style ephemeral tool exec; expands to `jk tool run`.
-jkx() {
-    command "$__JK_EXE" tool run "$@"
-}
+# (`jkx` is a real binary in $JK_BIN_DIR — a hardlink to jk with argv[0]
+# dispatch — not a shell function, so shebangs and CI work without this file.)
 
 autoload -Uz add-zsh-hook
 

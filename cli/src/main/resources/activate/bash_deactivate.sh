@@ -18,4 +18,4 @@ else
 fi
 unset -f _jk_hook 2>/dev/null
 unset -f jk 2>/dev/null
-unset -f jkx 2>/dev/null
+unset -f jkx 2>/dev/null  # legacy: jkx was a function before it became a real binary

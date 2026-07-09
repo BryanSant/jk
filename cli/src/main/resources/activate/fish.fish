@@ -29,10 +29,8 @@ function jk
     end
 end
 
-# `jkx` — uvx-style ephemeral tool exec; expands to `jk tool run`.
-function jkx
-    command $__JK_EXE tool run $argv
-end
+# (`jkx` is a real binary in $JK_BIN_DIR — a hardlink to jk with argv[0]
+# dispatch — not a shell function, so shebangs and CI work without this file.)
 
 function __jk_env_eval --on-event fish_prompt --description 'jk: refresh env'
     command $__JK_EXE hook-env -s fish | source

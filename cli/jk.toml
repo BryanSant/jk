@@ -20,6 +20,11 @@ jk-engine-api      = { group = "dev.jkbuild", name = "jk-engine-api",      versi
 jk-plugin-api      = { group = "dev.jkbuild", name = "jk-plugin-api",      version = "0.10.0-SNAPSHOT" }
 jline-terminal-ffm = { group = "org.jline",   name = "jline-terminal-ffm", version = "4.1.2" }
 
+# ProcessProperties for argv[0] `jkx` dispatch (Argv0) — compile-time only; the
+# native-image builder provides the implementation and JVM mode never loads it.
+[provided-dependencies]
+graalvm-nativeimage = { group = "org.graalvm.sdk", name = "nativeimage", version = "25.0.0" }
+
 [test-dependencies]
 assertj-core            = { group = "org.assertj",        name = "assertj-core",            version = "3.27.7" }
 junit-jupiter           = { group = "org.junit.jupiter",  name = "junit-jupiter",           version = "6.1.0" }

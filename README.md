@@ -136,7 +136,9 @@ Say goodbye to fighting `JAVA_HOME`.
 - **Directory-aware shells** (`bash`, `zsh`, `fish`, `pwsh`):
   `eval "$(jk activate bash)"` keeps `JAVA_HOME` / `GRAALVM_HOME` pointed at
   whatever JDK your current project pins — `cd` and your environment follows.
-  It also exposes `jkx`, the uvx-style alias for `jk tool run`.
+  (`jkx`, the uvx-style alias for `jk tool run`, is a real binary
+  installed next to `jk` — it works in shebangs and CI without any
+  shell integration.)
 - Maven, Gradle, and the Kotlin compiler are auto-discovered or fetched on
   demand. See [docs/jdk-resolution.md](./docs/jdk-resolution.md).
 
@@ -265,7 +267,7 @@ We know you can't migrate overnight. `jk` meets you where you are.
   through a layered catalog (project → per-user → global registry → bundled
   floor). The bundled layer works offline; `jk library update` refreshes.
 - **Scripting:** `jk run script.java` runs JBang-compatible single-file
-  scripts; `jk tool run <coord>` (or `jkx`) resolves, caches, runs, and
+  scripts; `jk tool run <coord>` (or the `jkx` binary) resolves, caches, runs, and
   LRU-evicts any published CLI without polluting your project.
 
 ---

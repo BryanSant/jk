@@ -42,8 +42,9 @@ import java.util.List;
  * {@code jk mvn}/{@code jk run} reasoning. The test-only in-process path builds the identical goal
  * via {@link ToolGoals}.
  *
- * <p>{@code jk activate} scripts also expose this on the path as a {@code jkx} alias for uvx-style
- * muscle memory.
+ * <p>{@code jkx} — the uvx-style alias for this verb — is a real binary: a hardlink to {@code jk}
+ * dispatched on argv[0] in {@link dev.jkbuild.cli.Jk#main} (created by {@code install.sh},
+ * self-healed by {@code jk activate}; see {@code JkxLink}).
  */
 public final class ToolRunCommand implements CliCommand {
 

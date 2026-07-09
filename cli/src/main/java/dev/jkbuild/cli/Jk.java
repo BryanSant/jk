@@ -51,6 +51,17 @@ public final class Jk {
     private static final String ENGINE_SERVER_FLAG = "--engine-server";
 
     public static void main(String[] args) {
+        // The internal --engine-server re-invocation is checked BEFORE the jkx
+        // argv[0] dispatch: the engine spawn re-execs this same binary, and when
+        // the user's command was `jkx …` that child can inherit the jkx identity
+        // (hardlinked argv[0], propagated JAVA_OPTS). Rewriting it to `tool run
+        // --engine-server` would kill the engine before it starts.
+        if (args.length == 0 || !ENGINE_SERVER_FLAG.equals(args[0])) {
+            // Invoked as `jkx` (hardlink/link to this binary): behave exactly like
+            // `jk tool run …` in every case — including --help — so the alias has
+            // one mental model.
+            args = rewriteForProgramName(args, Argv0.programName());
+        }
         if (args.length > 0 && ENGINE_SERVER_FLAG.equals(args[0])) {
             // Engine role: deliberately NOT GlobalCancel — its SIGINT handler halts the process,
             // and a Ctrl-C aimed at the client that spawned us lands on the whole foreground
@@ -290,6 +301,20 @@ public final class Jk {
             }
         }
         return out != null ? out : args;
+    }
+
+    /**
+     * When the binary was invoked as {@code jkx} (per {@link Argv0}), prepend {@code tool run} so
+     * the whole invocation is exactly {@code jk tool run …}. Any other program name (including
+     * null) passes through untouched.
+     */
+    static String[] rewriteForProgramName(String[] args, String programName) {
+        if (!"jkx".equals(programName)) return args;
+        String[] out = new String[args.length + 2];
+        out[0] = "tool";
+        out[1] = "run";
+        System.arraycopy(args, 0, out, 2, args.length);
+        return out;
     }
 
     static String[] rewriteAlias(String[] args) {

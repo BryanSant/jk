@@ -59,8 +59,22 @@ public final class ActivateCommand implements CliCommand {
             CliOutput.err("jk activate: unsupported shell `" + shellName + "` (supported: bash, zsh, fish, pwsh)");
             return Exit.USAGE;
         }
+        // Runs on every shell startup (the rc line evals this command), so jkx
+        // self-heals — and must stay silent: stdout here is eval'd shell code.
+        ensureJkxLauncher();
         CliOutput.outRaw(shell.get().activateScript(resolveJkExe()));
         return 0;
+    }
+
+    /**
+     * Best-effort {@code $JK_BIN_DIR/jkx} launcher (hardlink → symlink → shim; see {@link
+     * JkxLink}). {@code jkx} is a real binary so shebangs/CI work without shell integration; the
+     * happy path is two stats. Foreign files under the {@code jkx} name are left alone.
+     */
+    private static JkxLink.Result ensureJkxLauncher() {
+        String exe = resolveJkExe();
+        Path jkExe = exe.startsWith("/") || exe.contains(":\\") ? Path.of(exe) : null;
+        return JkxLink.ensure(dev.jkbuild.util.JkDirs.binDir(), jkExe);
     }
 
     private int runInstaller() throws IOException {
@@ -90,6 +104,7 @@ public final class ActivateCommand implements CliCommand {
         if (Files.exists(rcFile)) {
             String existing = Files.readString(rcFile, StandardCharsets.UTF_8);
             if (existing.contains(activationLine)) {
+                ensureJkxLauncher();
                 Theme t = Theme.active();
                 CliOutput.out(GoalWedge.chipLine(Glyphs.CHECK, "Activate", nerdfont,
                         "Shell integration is already configured in "
@@ -126,9 +141,17 @@ public final class ActivateCommand implements CliCommand {
             return 0;
         }
         appendActivationLine(rcFile, activationLine);
+        JkxLink.Result jkx = ensureJkxLauncher();
         Theme t = Theme.active();
         CliOutput.out(GoalWedge.chipLine(Glyphs.CHECK, "Activate", nerdfont,
                 "Shell integration configured in " + Theme.colorize(rcDisplay, t.path())));
+        if (jkx.status() == JkxLink.Status.CREATED) {
+            CliOutput.out("Installed " + Theme.colorize("jkx", t.shell()) + " (uvx-style `jk tool run`) → "
+                    + Theme.colorize(jkx.path().toString(), t.path()));
+        } else if (jkx.status() == JkxLink.Status.SKIPPED_FOREIGN) {
+            CliOutput.out("Note: " + Theme.colorize(jkx.path().toString(), t.path())
+                    + " exists but wasn't created by jk — left untouched.");
+        }
         CliOutput.out("Open a new shell (or " + sourceHint(shell, rcDisplay, t) + ") to pick up the change.");
         return 0;
     }

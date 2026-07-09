@@ -97,25 +97,19 @@ class ShellTest {
     }
 
     @Test
-    void activate_scripts_define_jkx_as_tool_run_shorthand() {
-        // Every activate script should expose `jkx` so the uvx-style ephemeral
-        // exec UX works in any shell the user activates.
-        assertThat(new BashShell().activateScript("/opt/jk/bin/jk"))
-                .contains("jkx()")
-                .contains("tool run");
-        assertThat(new ZshShell().activateScript("/opt/jk/bin/jk"))
-                .contains("jkx()")
-                .contains("tool run");
-        assertThat(new FishShell().activateScript("/opt/jk/bin/jk"))
-                .contains("function jkx")
-                .contains("tool run");
-        assertThat(new PwshShell().activateScript("/opt/jk/bin/jk"))
-                .contains("global:jkx")
-                .contains("tool run");
+    void activate_scripts_no_longer_define_a_jkx_function() {
+        // `jkx` is a real binary in $JK_BIN_DIR (hardlink to jk, argv[0] dispatch
+        // in Jk.main) — a shell function here would shadow it.
+        assertThat(new BashShell().activateScript("/opt/jk/bin/jk")).doesNotContain("jkx()");
+        assertThat(new ZshShell().activateScript("/opt/jk/bin/jk")).doesNotContain("jkx()");
+        assertThat(new FishShell().activateScript("/opt/jk/bin/jk")).doesNotContain("function jkx");
+        assertThat(new PwshShell().activateScript("/opt/jk/bin/jk")).doesNotContain("function global:jkx");
     }
 
     @Test
-    void deactivate_scripts_remove_jkx_too() {
+    void deactivate_scripts_still_clear_legacy_jkx_functions() {
+        // Sessions activated by a pre-binary jk still carry the old function;
+        // deactivation clears it so it can't shadow the real jkx afterwards.
         assertThat(new BashShell().deactivateScript()).contains("unset -f jkx");
         assertThat(new ZshShell().deactivateScript()).contains("unset -f jkx");
         assertThat(new FishShell().deactivateScript()).contains("functions --erase jkx");

@@ -280,7 +280,7 @@ A small, stable, Cargo-style verb set. No verbs are pluggable in v1.
 | `jk image [--registry <url>] [--push]` | Build an OCI image (Jib-style). |
 | `jk native` | Build a GraalVM native binary from a `--bin` artifact. (Verb is `native`, not `native-image`, to keep it distinct from `jk image` which builds OCI container images.) |
 | `jk tool install --git ... --bin ...` or `jk tool install <coord> --bin <name>` | Install a JVM CLI as a tool. `jk install <coord>` also installs from a coord (and can build+install the current project when no arg is given). |
-| `jk tool run <coord>[@ver] [-- args...]` | Ephemeral tool execution. `jkx` is a shell alias (installed by `jk activate`) that expands to `jk tool run`. |
+| `jk tool run <coord>[@ver] [-- args...]` | Ephemeral tool execution. `jkx` is a real binary (a hardlink to `jk` with argv[0] dispatch, installed next to it) that runs `jk tool run`. |
 | `jk tool {list,uninstall,run}` | Manage installed tools. |
 | `jk jdk {install,list,use,uninstall,pin,gc}` | JDK management. |
 | `jk activate <shell>` / `jk shell` | Install the directory-aware `JAVA_HOME`/`GRAALVM_HOME` hook (`eval "$(jk activate bash)"`), or spawn a one-off subshell for the project's JDK. (`jk jdk home` prints a single export line.) |
@@ -1088,7 +1088,7 @@ jk tool run com.diffplug.spotless:spotless-cli:2.45.0 -- check
 jk tool run --from com.foo:bar --bin baz -- arg1 arg2
 ```
 
-Resolves, caches under `$JK_CACHE_DIR`, executes. LRU-evicted. Subsequent runs of the same coord+version are near-instant. `jkx` is a shell function (installed by `eval "$(jk activate <shell>)"`) that expands to `jk tool run` for muscle-memory continuity with `uvx`.
+Resolves, caches under `$JK_CACHE_DIR`, executes. LRU-evicted. Subsequent runs of the same coord+version are near-instant. `jkx` is a real binary for muscle-memory continuity with `uvx`: a hardlink to `jk` (argv[0] dispatch; exec-shim fallback), created by `install.sh` and self-healed by `jk activate`, so `///usr/bin/env jkx` shebangs and CI steps work without shell integration.
 
 ### 20.4 Native-image tools
 
