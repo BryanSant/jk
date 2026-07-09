@@ -41,6 +41,17 @@ The native client binary is opt-in:
 ./install.sh build/dist/jk
 ```
 
+### One build at a time per checkout
+
+Builds in the same checkout are serialized by an OS file lock taken in
+`settings.gradle.kts` (`.gradle/cross-daemon-build.lock`). A second `./gradlew`
+invocation — another terminal, another agent session — prints
+"Another Gradle build is running in this checkout…" and waits instead of
+running concurrently. This is deliberate: Gradle does not protect task output
+directories across daemons, and concurrent runs corrupted
+`:cli-engine:test`'s binary results (`java.io.EOFException` at the end of a
+green run). For truly parallel work, use a separate worktree.
+
 ## Project layout
 
 See [`docs/implementation-plan.md`](docs/implementation-plan.md) for the module map and dependency tier ordering, and [`docs/requirements.md`](docs/requirements.md) for the product spec.
