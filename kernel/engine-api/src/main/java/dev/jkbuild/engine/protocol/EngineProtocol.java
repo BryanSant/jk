@@ -1786,15 +1786,21 @@ public final class EngineProtocol {
     // ---- hosted long-tail verbs (Wave 4) ---------------------------------------------------------
 
     /**
-     * Resolve a Maven-published CLI tool (see {@link #TOOL_RESOLVE_REQUEST}). {@code mainClass} is
-     * the {@code --main} override ({@code null} = read the primary jar's manifest engine-side);
-     * {@code repoUrl} overrides Maven Central ({@code null} = Central).
+     * Resolve a Maven-published CLI tool (see {@link #TOOL_RESOLVE_REQUEST}). {@code coord} is a
+     * {@code ToolCoordSpec} string — pinned {@code g:a:v} or floating {@code g:a[@selector]},
+     * pinned engine-side against maven-metadata. {@code with} carries {@code --with} extras (same
+     * grammar, may be empty). {@code mainClass} is the {@code --main} override ({@code null} =
+     * read the primary jar's manifest engine-side); {@code repoUrl} overrides Maven Central
+     * ({@code null} = Central).
      */
-    public static String toolResolveRequest(String coord, String bin, String mainClass, String repoUrl, String cache) {
+    public static String toolResolveRequest(
+            String coord, List<String> with, String bin, String mainClass, String repoUrl, String cache) {
         return "{\"t\":\""
                 + TOOL_RESOLVE_REQUEST
                 + "\",\"coord\":"
                 + Ndjson.quote(coord)
+                + ",\"with\":"
+                + quoteArray(with)
                 + ",\"bin\":"
                 + Ndjson.quote(bin)
                 + ",\"mainClass\":"
@@ -1808,17 +1814,21 @@ public final class EngineProtocol {
 
     /**
      * As {@link #goalFinish(String, boolean)}, additionally carrying a {@link #TOOL_RESOLVE_REQUEST}
-     * result: the resolved {@code Main-Class} and the transitive classpath in resolution order
-     * (absolute CAS paths — a flat string array, per the codec's no-nested-objects rule). Both
-     * {@code null}/empty when the resolve failed.
+     * result: the pinned {@code g:a:v} the resolve landed on (a floating spec's concrete version is
+     * decided engine-side against maven-metadata), the resolved {@code Main-Class}, and the
+     * transitive classpath in resolution order (absolute CAS paths — a flat string array, per the
+     * codec's no-nested-objects rule). All {@code null}/empty when the resolve failed.
      */
-    public static String goalFinishTool(String dir, boolean success, String mainClass, List<String> classpath) {
+    public static String goalFinishTool(
+            String dir, boolean success, String coord, String mainClass, List<String> classpath) {
         return "{\"t\":\""
                 + GOAL_FINISH
                 + "\",\"dir\":"
                 + Ndjson.quote(dir)
                 + ",\"success\":"
                 + success
+                + ",\"toolCoord\":"
+                + Ndjson.quote(coord)
                 + ",\"toolMainClass\":"
                 + Ndjson.quote(mainClass)
                 + ",\"toolClasspath\":"

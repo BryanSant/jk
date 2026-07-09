@@ -774,13 +774,16 @@ public final class EngineClient {
      * run}/{@code jk install <g:a:v>}). {@code mainClass} is the {@code --main} override (may be
      * {@code null}); {@code repoUrl} overrides Maven Central (may be {@code null}).
      */
-    public record ToolResolveRequest(String coord, String bin, String mainClass, java.net.URI repoUrl, Path cache) {}
+    public record ToolResolveRequest(
+            String coord, List<String> with, String bin, String mainClass, java.net.URI repoUrl, Path cache) {}
 
     /**
-     * A hosted tool resolution's outcome: the goal result plus the resolved main class and
-     * classpath (empty on failure) — the ingredients of a client-side {@code ToolEnv}.
+     * A hosted tool resolution's outcome: the goal result plus the pinned {@code g:a:v} the engine
+     * landed on, the resolved main class, and the classpath (null/empty on failure) — the
+     * ingredients of a client-side {@code ToolEnv}.
      */
-    public record ToolResolveOutcome(dev.jkbuild.run.GoalResult result, String mainClass, List<Path> classpath) {}
+    public record ToolResolveOutcome(
+            dev.jkbuild.run.GoalResult result, String coord, String mainClass, List<Path> classpath) {}
 
     /**
      * Resolve a Maven-published CLI tool against the engine (the POM walk + jar fetches run
@@ -796,6 +799,7 @@ public final class EngineClient {
                 paths,
                 EngineProtocol.toolResolveRequest(
                         req.coord(),
+                        req.with(),
                         req.bin(),
                         req.mainClass(),
                         req.repoUrl() != null ? req.repoUrl().toString() : null,
@@ -805,6 +809,7 @@ public final class EngineClient {
                 (type, line) -> {});
         return new ToolResolveOutcome(
                 finish.result(),
+                Ndjson.str(finish.finishLine(), "toolCoord"),
                 Ndjson.str(finish.finishLine(), "toolMainClass"),
                 Ndjson.strArray(finish.finishLine(), "toolClasspath").stream()
                         .map(Path::of)

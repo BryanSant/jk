@@ -122,6 +122,91 @@ class ToolResolverTest {
         assertThat(env.classpath()).hasSize(2);
     }
 
+    @Test
+    void floating_latest_picks_the_highest_stable_version(@TempDir Path tempDir) throws Exception {
+        serveMetadata("com.example", "widget-cli", "1.0.0", "1.1.0", "2.0.0-rc1", "1.2.0-SNAPSHOT");
+        servePomAndJar("com.example", "widget-cli", "1.1.0", "com.example.Main");
+
+        ToolResolver resolver = resolver(tempDir);
+        ToolEnv env = resolver.resolve(
+                dev.jkbuild.model.ToolCoordSpec.parse("com.example:widget-cli"), "widget", null, java.util.List.of());
+
+        assertThat(env.primary().toGav()).isEqualTo("com.example:widget-cli:1.1.0");
+        assertThat(env.mainClass()).isEqualTo("com.example.Main");
+    }
+
+    @Test
+    void floating_selector_picks_the_highest_match(@TempDir Path tempDir) throws Exception {
+        serveMetadata("com.example", "widget-cli", "1.0.0", "1.4.2", "2.1.0");
+        servePomAndJar("com.example", "widget-cli", "1.4.2", "com.example.Main");
+
+        ToolResolver resolver = resolver(tempDir);
+        ToolEnv env = resolver.resolve(
+                dev.jkbuild.model.ToolCoordSpec.parse("com.example:widget-cli@1.0"),
+                "widget",
+                null,
+                java.util.List.of());
+
+        // Caret ^1.0 — highest within the 1.x line, not 2.1.0.
+        assertThat(env.primary().toGav()).isEqualTo("com.example:widget-cli:1.4.2");
+    }
+
+    @Test
+    void unmatched_selector_reports_the_available_versions(@TempDir Path tempDir) {
+        serveMetadata("com.example", "widget-cli", "1.0.0", "1.1.0");
+        ToolResolver resolver = resolver(tempDir);
+        assertThatThrownBy(() -> resolver.resolve(
+                        dev.jkbuild.model.ToolCoordSpec.parse("com.example:widget-cli@^3.0"),
+                        "widget",
+                        null,
+                        java.util.List.of()))
+                .hasMessageContaining("no version of com.example:widget-cli matches")
+                .hasMessageContaining("1.1.0");
+    }
+
+    @Test
+    void with_extras_join_the_classpath(@TempDir Path tempDir) throws Exception {
+        servePomAndJar("com.example", "widget-cli", "1.0.0", "com.example.Main");
+        servePomAndJar("com.example", "extra", "2.0.0", null);
+
+        ToolResolver resolver = resolver(tempDir);
+        ToolEnv env = resolver.resolve(
+                dev.jkbuild.model.ToolCoordSpec.parse("com.example:widget-cli:1.0.0"),
+                "widget",
+                null,
+                java.util.List.of(dev.jkbuild.model.ToolCoordSpec.parse("com.example:extra:2.0.0")));
+
+        assertThat(env.classpath()).hasSize(2);
+        assertThat(env.classpath().getFirst().toString()).isNotEmpty();
+    }
+
+    private ToolResolver resolver(Path tempDir) {
+        Cas cas = new Cas(tempDir.resolve("cas"));
+        try {
+            Files.createDirectories(tempDir.resolve("cas"));
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        return new ToolResolver(RepoGroup.of(new MavenRepo("central", base, new Http(), cas)));
+    }
+
+    private void serveMetadata(String group, String artifact, String... versions) {
+        StringBuilder vs = new StringBuilder();
+        for (String v : versions) vs.append("      <version>").append(v).append("</version>\n");
+        String xml = """
+                <?xml version="1.0" encoding="UTF-8"?>
+                <metadata>
+                  <groupId>%s</groupId>
+                  <artifactId>%s</artifactId>
+                  <versioning>
+                    <versions>
+                %s    </versions>
+                  </versioning>
+                </metadata>
+                """.formatted(group, artifact, vs.toString());
+        served.put("/" + group.replace('.', '/') + "/" + artifact + "/maven-metadata.xml", xml.getBytes());
+    }
+
     private void servePomAndJar(String group, String artifact, String version, String mainClass) throws IOException {
         servePom(group, artifact, version, "");
         serveJar(group, artifact, version, mainClass);

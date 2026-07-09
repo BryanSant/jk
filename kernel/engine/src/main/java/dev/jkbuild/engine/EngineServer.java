@@ -1496,18 +1496,22 @@ public final class EngineServer implements AutoCloseable {
             String mainClass = Ndjson.str(requestLine, "mainClass");
             java.net.URI repoUrl = repoUrlOf(requestLine);
             java.nio.file.Files.createDirectories(cache);
-            dev.jkbuild.model.Coordinate primary = dev.jkbuild.model.Coordinate.parse(coord);
+            dev.jkbuild.model.ToolCoordSpec spec = dev.jkbuild.model.ToolCoordSpec.parse(coord);
+            java.util.List<dev.jkbuild.model.ToolCoordSpec> with = Ndjson.strArray(requestLine, "with").stream()
+                    .map(dev.jkbuild.model.ToolCoordSpec::parse)
+                    .toList();
             Session session = Session.defaults().withCacheDir(cache).withCancel(cancelToken);
             String dir = EngineProtocol.SINGLE_GOAL_DIR;
-            // Plain g:a:v label — coordinate colorization is a client-side concern.
+            // Plain g:a[:v] label — coordinate colorization is a client-side concern.
             dev.jkbuild.run.Goal goal = dev.jkbuild.runtime.ToolGoals.resolveGoal(
-                    primary, bin, mainClass, repoUrl, cache, coord);
+                    spec, with, bin, mainClass, repoUrl, cache, coord);
             streamSingleGoal(goal, session, writer, result -> {
                 dev.jkbuild.tool.ToolEnv env =
                         goal.get(dev.jkbuild.runtime.ToolGoals.TOOL_ENV).orElse(null);
                 return EngineProtocol.goalFinishTool(
                         dir,
                         result.success(),
+                        env != null ? env.primary().toGav() : null,
                         env != null ? env.mainClass() : null,
                         env != null
                                 ? env.classpath().stream().map(Path::toString).toList()

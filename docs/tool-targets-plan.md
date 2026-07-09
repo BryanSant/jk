@@ -420,6 +420,11 @@ updates, this plan.
    (argv[0] hardlink, §8.1); version-less GAV + `@selector` + `latest`;
    jk-catalog short-names; `--with`.
    *(No new I/O kinds; low risk, immediate daily-driver value.)*
+   **Implemented 2026-07-09**: `ToolTarget` (toolchain-jdk) + `ToolCoordSpec`
+   (model) + `ToolResolver.pickVersion` (metadata pick, stable-only `latest`);
+   the `tool-resolve` wire request carries the spec grammar + `with` array and
+   returns the pinned `toolCoord`; phase-gated kinds (dir/url/git/jbang) error
+   with a pointer here.
 2. **Local completeness** — directory targets (jk-project delegate +
    JBang folder rules); `install` parity for file targets; `jk install`
    → `tool install` convergence (§9); `.kts` dependency fix +

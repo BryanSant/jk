@@ -49,6 +49,7 @@ public final class ToolInstallCommand implements CliCommand {
         return List.of(
                 Opt.value("<name>", "Launcher name under $JK_BIN_DIR. Default: the artifact id.", "--bin"),
                 Opt.value("<class>", "Override the Main-Class (default: read from the jar manifest).", "--main"),
+                Opt.value("<coord>", "Add an extra dependency to the tool's classpath (repeatable).", "--with"),
                 Opt.value("<dir>", "Override the jk cache directory.", "--cache-dir")
                         .hide(),
                 Opt.value("<dir>", "Override the tool state directory.", "--state-dir")
@@ -60,7 +61,8 @@ public final class ToolInstallCommand implements CliCommand {
 
     @Override
     public List<Param> parameters() {
-        return List.of(Param.of("coord", Arity.ONE, "Maven coordinate (group:artifact:version)."));
+        return List.of(Param.of(
+                "target", Arity.ONE, "Catalog name or Maven coordinate spec (g:a[:version|@selector])."));
     }
 
     String coord;
@@ -92,8 +94,17 @@ public final class ToolInstallCommand implements CliCommand {
         this.binDirOverride = in.value("bin-dir").map(Path::of).orElse(null);
         this.repoUrl = in.value("repo-url").map(URI::create).orElse(null);
         this.global = GlobalOptions.from(in);
-        Coordinate primary = Coordinate.parse(coord);
-        String bin = binName != null && !binName.isBlank() ? binName : primary.artifact();
+
+        ToolTargets.Resolved resolved;
+        List<String> with;
+        try {
+            resolved = ToolTargets.resolve(coord);
+            with = ToolTargets.resolveWith(in.values("with"));
+        } catch (ToolTargets.TargetException e) {
+            CliOutput.err(e.getMessage());
+            return Exit.USAGE;
+        }
+        String bin = binName != null && !binName.isBlank() ? binName : resolved.defaultBin();
 
         Path cacheDir = cacheDirOverride != null ? cacheDirOverride : JkDirs.cache();
         Path stateDir = stateDirOverride != null ? stateDirOverride : JkDirs.state();
@@ -105,7 +116,10 @@ public final class ToolInstallCommand implements CliCommand {
         ToolEnv env;
         if (engineDisabledForTests()) {
             var o = dev.jkbuild.cli.engine.InProcessEngine.require()
-                    .toolResolveGoal(primary, bin, mainClass, repoUrl, cacheDir, Coords.gav(primary), mode);
+                    .toolResolveGoal(
+                            dev.jkbuild.model.ToolCoordSpec.parse(resolved.coordSpec()),
+                            with.stream().map(dev.jkbuild.model.ToolCoordSpec::parse).toList(),
+                            bin, mainClass, repoUrl, cacheDir, resolved.coordSpec(), mode);
             if (o.env() == null) return 1;
             env = o.env();
         } else {
@@ -114,14 +128,14 @@ public final class ToolInstallCommand implements CliCommand {
                 outcome = dev.jkbuild.cli.engine.EngineClient.runToolResolve(
                         dev.jkbuild.engine.EnginePaths.current(),
                         new dev.jkbuild.cli.engine.EngineClient.ToolResolveRequest(
-                                coord, bin, mainClass, repoUrl, cacheDir),
+                                resolved.coordSpec(), with, bin, mainClass, repoUrl, cacheDir),
                         phases -> GoalConsole.chooseConsoleListener("tool-install", phases, mode));
             } catch (IOException e) {
                 CliOutput.err("jk tool install: " + e.getMessage());
                 return Exit.SOFTWARE;
             }
-            if (!outcome.result().success() || outcome.mainClass() == null) return 1;
-            env = new ToolEnv(bin, primary, outcome.mainClass(), outcome.classpath());
+            if (!outcome.result().success() || outcome.mainClass() == null || outcome.coord() == null) return 1;
+            env = new ToolEnv(bin, Coordinate.parse(outcome.coord()), outcome.mainClass(), outcome.classpath());
         }
 
         // The "make install" half stays client-side: the launcher into the user-owned bin dir.
@@ -129,7 +143,7 @@ public final class ToolInstallCommand implements CliCommand {
         Path launcher = ToolLauncher.install(envsRoot, binDir, javaHome, env);
 
         if (!global.outputIsJson()) {
-            CliOutput.out("Installed " + Coords.gav(primary) + " → " + launcher);
+            CliOutput.out("Installed " + Coords.gav(env.primary()) + " → " + launcher);
             CliOutput.out("Add to PATH if needed:");
             CliOutput.out("  export PATH=\"" + binDir + ":$PATH\"");
         }

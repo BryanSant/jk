@@ -4,7 +4,6 @@ package dev.jkbuild.command;
 import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.run.GoalConsole;
-import dev.jkbuild.cli.theme.Coords;
 import dev.jkbuild.jdk.JavaHomes;
 import dev.jkbuild.model.Coordinate;
 import dev.jkbuild.model.command.Arity;
@@ -27,11 +26,14 @@ import java.util.List;
  * {@code jk tool run <coord|file> -- <args>} — ephemerally run a tool or a standalone file (PRD
  * §20.3), forwarding {@code <args>} to the program.
  *
- * <p>The target may be either:
+ * <p>The target may be (docs/tool-targets-plan.md §2, phase-1 kinds):
  *
  * <ul>
- *   <li>a Maven coordinate ({@code group:artifact:version}) — resolved, cached under {@code
- *       $JK_CACHE_DIR}, and exec'd via its {@code Main-Class}; or
+ *   <li>a library-catalog short name ({@code ktlint}, {@code ktlint@1.3.0}) — resolved via the
+ *       layered catalog, default version {@code latest} (stable);
+ *   <li>a Maven coordinate spec ({@code g:a:v} pinned, {@code g:a@selector} floating, {@code g:a}
+ *       = latest) — resolved, cached under {@code $JK_CACHE_DIR}, and exec'd via its {@code
+ *       Main-Class}; or
  *   <li>a {@code .java}/{@code .kt}/{@code .kts}/{@code .jar} file — compiled (if needed) and run
  *       via {@link ScriptRunner}.
  * </ul>
@@ -54,6 +56,13 @@ public final class ToolRunCommand implements CliCommand {
     }
 
     @Override
+    public List<String> aliases() {
+        // `jk tool exec` — dotnet-tool muscle memory. Hidden per the
+        // hidden-surface policy; documented in docs/aliases.md.
+        return List.of("exec");
+    }
+
+    @Override
     public String description() {
         return "Run a tool from a Maven coord or .java/.kt/.kts/.jar file";
     }
@@ -62,6 +71,7 @@ public final class ToolRunCommand implements CliCommand {
     public List<Opt> options() {
         return List.of(
                 Opt.value("<class>", "Override the Main-Class to exec (coordinate targets only).", "--main"),
+                Opt.value("<coord>", "Add an extra dependency to the tool's classpath (repeatable).", "--with"),
                 Opt.value("<dir>", "Override the jk cache directory.", "--cache-dir")
                         .hide(),
                 Opt.value("<dir>", "Override the jk state directory.", "--state-dir")
@@ -76,7 +86,10 @@ public final class ToolRunCommand implements CliCommand {
     public List<Param> parameters() {
         // The tool args after the target are captured as trailing positionals via ZERO_OR_MORE
         return List.of(
-                Param.of("coord|file", Arity.ONE, "Maven coordinate or .java/.kt/.kts/.jar file."),
+                Param.of(
+                        "target",
+                        Arity.ONE,
+                        "Catalog name, Maven coordinate (g:a[:version|@selector]), or .java/.kt/.kts/.jar file."),
                 Param.of("args", Arity.ZERO_OR_MORE, "Arguments forwarded to the program."));
     }
 
@@ -112,23 +125,36 @@ public final class ToolRunCommand implements CliCommand {
         // --force (global) and legacy --force-recompile both force recompilation.
         this.forceRecompile = in.isSet("force") || in.isSet("force-recompile");
         this.global = GlobalOptions.from(in);
-        // A file target (by extension) is compiled/run by ScriptRunner; the
-        // extension is the signal even when the file is missing, so the user
-        // gets a proper "not found" error from the matching mode handler.
-        if (ScriptRunner.isRunnableFile(target)) {
+        // A local file target (by extension) is compiled/run by ScriptRunner; the
+        // extension is the signal even when the file is missing, so the user gets
+        // a proper "not found" error from the matching mode handler. Routing goes
+        // through the classifier so a remote `https://…/tool.jar` is NOT a file.
+        if (dev.jkbuild.tool.ToolTarget.classify(target) instanceof dev.jkbuild.tool.ToolTarget.RunnableFile file) {
             return new ScriptRunner(global, cacheDirOverride, stateDirOverride, repoUrl, forceRecompile)
-                    .run(Path.of(target), toolArgs);
+                    .run(file.path(), toolArgs);
         }
 
-        Coordinate primary = Coordinate.parse(target);
+        ToolTargets.Resolved resolved;
+        List<String> with;
+        try {
+            resolved = ToolTargets.resolve(target);
+            with = ToolTargets.resolveWith(in.values("with"));
+        } catch (ToolTargets.TargetException e) {
+            CliOutput.err(e.getMessage());
+            return Exit.USAGE;
+        }
+        String bin = resolved.defaultBin();
         Path cacheDir = cacheDirOverride != null ? cacheDirOverride : JkDirs.cache();
         Files.createDirectories(cacheDir);
 
         ToolEnv env;
         if (engineDisabledForTests()) {
             var o = dev.jkbuild.cli.engine.InProcessEngine.require()
-                    .toolResolveGoal(primary, primary.artifact(), mainClass, repoUrl, cacheDir,
-                            Coords.gav(primary), GoalConsole.modeFor(global));
+                    .toolResolveGoal(
+                            dev.jkbuild.model.ToolCoordSpec.parse(resolved.coordSpec()),
+                            with.stream().map(dev.jkbuild.model.ToolCoordSpec::parse).toList(),
+                            bin, mainClass, repoUrl, cacheDir,
+                            resolved.coordSpec(), GoalConsole.modeFor(global));
             if (o.env() == null) return 1;
             env = o.env();
         } else {
@@ -137,15 +163,15 @@ public final class ToolRunCommand implements CliCommand {
                 outcome = dev.jkbuild.cli.engine.EngineClient.runToolResolve(
                         dev.jkbuild.engine.EnginePaths.current(),
                         new dev.jkbuild.cli.engine.EngineClient.ToolResolveRequest(
-                                target, primary.artifact(), mainClass, repoUrl, cacheDir),
+                                resolved.coordSpec(), with, bin, mainClass, repoUrl, cacheDir),
                         phases -> GoalConsole.chooseConsoleListener(
                                 "tool-run", phases, GoalConsole.modeFor(global)));
             } catch (IOException e) {
                 CliOutput.err("jk tool run: " + e.getMessage());
                 return Exit.SOFTWARE;
             }
-            if (!outcome.result().success() || outcome.mainClass() == null) return 1;
-            env = new ToolEnv(primary.artifact(), primary, outcome.mainClass(), outcome.classpath());
+            if (!outcome.result().success() || outcome.mainClass() == null || outcome.coord() == null) return 1;
+            env = new ToolEnv(bin, Coordinate.parse(outcome.coord()), outcome.mainClass(), outcome.classpath());
         }
 
         // The exec deliberately stays client-side: the tool inherits this terminal's stdio.

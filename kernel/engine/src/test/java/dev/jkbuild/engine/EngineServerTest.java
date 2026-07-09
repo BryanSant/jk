@@ -661,7 +661,12 @@ class EngineServerTest {
             String buildError = null;
             try (Client c = new Client(p.socket())) {
                 c.sendLine(EngineProtocol.toolResolveRequest(
-                        "com.example:widget-cli:1.0.0", "widget", "com.example.Main", repoUrl, cache.toString()));
+                        "com.example:widget-cli:1.0.0",
+                        List.of(),
+                        "widget",
+                        "com.example.Main",
+                        repoUrl,
+                        cache.toString()));
                 String line;
                 while ((line = c.readLine()) != null) {
                     String type = EngineProtocol.typeOf(line);

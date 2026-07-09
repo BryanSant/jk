@@ -401,26 +401,36 @@ class EngineProtocolTest {
     @Test
     void tool_resolve_request_and_finish_variant_round_trip() {
         String req = EngineProtocol.toolResolveRequest(
-                "com.example:widget-cli:1.0.0", "widget", "com.example.Main", "http://repo", "/cache");
+                "com.example:widget-cli:1.0.0",
+                java.util.List.of("com.example:extra@1.2"),
+                "widget",
+                "com.example.Main",
+                "http://repo",
+                "/cache");
         assertThat(EngineProtocol.typeOf(req)).isEqualTo(EngineProtocol.TOOL_RESOLVE_REQUEST);
         assertThat(Ndjson.str(req, "coord")).isEqualTo("com.example:widget-cli:1.0.0");
+        assertThat(Ndjson.strArray(req, "with")).containsExactly("com.example:extra@1.2");
         assertThat(Ndjson.str(req, "bin")).isEqualTo("widget");
         assertThat(Ndjson.str(req, "mainClass")).isEqualTo("com.example.Main");
         assertThat(Ndjson.str(req, "repoUrl")).isEqualTo("http://repo");
         assertThat(Ndjson.str(req, "cache")).isEqualTo("/cache");
 
-        String defaults = EngineProtocol.toolResolveRequest("g:a:1", "a", null, null, "/c");
+        String defaults = EngineProtocol.toolResolveRequest("g:a:1", java.util.List.of(), "a", null, null, "/c");
         assertThat(Ndjson.str(defaults, "mainClass")).isNull();
         assertThat(Ndjson.str(defaults, "repoUrl")).isNull();
+        assertThat(Ndjson.strArray(defaults, "with")).isEmpty();
 
         String finish = EngineProtocol.goalFinishTool(
-                "", true, "com.example.Main", java.util.List.of("/cas/aa/1.jar", "/cas/bb/2.jar"));
+                "", true, "com.example:widget-cli:1.0.0", "com.example.Main",
+                java.util.List.of("/cas/aa/1.jar", "/cas/bb/2.jar"));
         assertThat(EngineProtocol.typeOf(finish)).isEqualTo(EngineProtocol.GOAL_FINISH);
         assertThat(Ndjson.bool(finish, "success", false)).isTrue();
+        assertThat(Ndjson.str(finish, "toolCoord")).isEqualTo("com.example:widget-cli:1.0.0");
         assertThat(Ndjson.str(finish, "toolMainClass")).isEqualTo("com.example.Main");
         assertThat(Ndjson.strArray(finish, "toolClasspath")).containsExactly("/cas/aa/1.jar", "/cas/bb/2.jar");
 
-        String failed = EngineProtocol.goalFinishTool("", false, null, java.util.List.of());
+        String failed = EngineProtocol.goalFinishTool("", false, null, null, java.util.List.of());
+        assertThat(Ndjson.str(failed, "toolCoord")).isNull();
         assertThat(Ndjson.str(failed, "toolMainClass")).isNull();
         assertThat(Ndjson.strArray(failed, "toolClasspath")).isEmpty();
     }

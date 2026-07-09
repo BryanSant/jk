@@ -163,7 +163,8 @@ public interface InProcessEngine {
      * resolution: the POM walk + jar fetches, returning the launch env (already rendered on failure).
      */
     ToolGoalOutcome toolResolveGoal(
-            dev.jkbuild.model.Coordinate primary,
+            dev.jkbuild.model.ToolCoordSpec spec,
+            java.util.List<dev.jkbuild.model.ToolCoordSpec> with,
             String bin,
             String mainClass,
             java.net.URI repoUrl,

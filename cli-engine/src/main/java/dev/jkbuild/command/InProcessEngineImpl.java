@@ -272,7 +272,8 @@ public final class InProcessEngineImpl implements InProcessEngine {
 
     @Override
     public ToolGoalOutcome toolResolveGoal(
-            dev.jkbuild.model.Coordinate primary,
+            dev.jkbuild.model.ToolCoordSpec spec,
+            List<dev.jkbuild.model.ToolCoordSpec> with,
             String bin,
             String mainClass,
             java.net.URI repoUrl,
@@ -280,7 +281,7 @@ public final class InProcessEngineImpl implements InProcessEngine {
             String label,
             GoalConsole.Mode mode)
             throws IOException, InterruptedException {
-        Goal goal = ToolGoals.resolveGoal(primary, bin, mainClass, repoUrl, cacheDir, label);
+        Goal goal = ToolGoals.resolveGoal(spec, with, bin, mainClass, repoUrl, cacheDir, label);
         GoalResult result = GoalConsole.run(goal, mode, cacheDir);
         if (!result.success()) return new ToolGoalOutcome(result, null);
         return new ToolGoalOutcome(result, goal.get(ToolGoals.TOOL_ENV).orElseThrow());

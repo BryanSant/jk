@@ -78,6 +78,16 @@ class ToolCommandTest {
         assertThat(stdout).contains("not installed");
     }
 
+    @Test
+    void exec_is_a_hidden_alias_of_run() {
+        // `jk tool exec --help` renders `jk tool run`'s help (dotnet muscle memory).
+        String stdout = capture(() -> Jk.execute("tool", "exec", "--help"));
+        assertThat(stdout).contains("jk tool run");
+        // Hidden per the hidden-surface policy: the parent's help lists only `run`.
+        String toolHelp = capture(() -> Jk.execute("tool", "--help"));
+        assertThat(toolHelp).doesNotContain("exec");
+    }
+
     private static void writeEnvJson(Path home, String bin, String coord) throws Exception {
         Path envDir = home.resolve("tools/envs/").resolve(bin);
         Files.createDirectories(envDir);

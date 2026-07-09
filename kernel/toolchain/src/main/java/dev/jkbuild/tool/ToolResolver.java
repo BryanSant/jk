@@ -5,6 +5,7 @@ import dev.jkbuild.cache.Cas;
 import dev.jkbuild.http.Http;
 import dev.jkbuild.model.Coordinate;
 import dev.jkbuild.model.Dependency;
+import dev.jkbuild.model.ToolCoordSpec;
 import dev.jkbuild.model.VersionSelector;
 import dev.jkbuild.repo.EffectivePomBuilder;
 import dev.jkbuild.repo.MavenRepo;
@@ -12,6 +13,9 @@ import dev.jkbuild.repo.RepoGroup;
 import dev.jkbuild.resolver.NaiveResolver;
 import dev.jkbuild.resolver.Resolution;
 import dev.jkbuild.resolver.Resolver;
+import dev.jkbuild.resolver.Versions;
+import dev.jkbuild.resolver.VersionSelectors;
+import dev.jkbuild.resolver.pubgrub.VersionSet;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Path;
@@ -49,16 +53,51 @@ public final class ToolResolver {
         return new ToolResolver(RepoGroup.of(central));
     }
 
+    /**
+     * Resolve a {@link ToolCoordSpec} — pinning a {@link ToolCoordSpec.Floating} spec against the
+     * repos' version list first (highest match; {@code latest} considers stable releases only),
+     * then running the normal pipeline. {@code withSpecs} are {@code --with} injections (PRD
+     * §20.1): additional root deps, each pinned the same way, resolved into the env's classpath
+     * alongside the primary.
+     */
+    public ToolEnv resolve(ToolCoordSpec spec, String binName, String mainClassOverride, List<ToolCoordSpec> withSpecs)
+            throws IOException, InterruptedException {
+        Coordinate primary = pin(spec);
+        List<Dependency> extras = new ArrayList<>();
+        for (ToolCoordSpec w : withSpecs) {
+            Coordinate c = pin(w);
+            extras.add(new Dependency(c.module(), VersionSelector.parse("=" + c.version())));
+        }
+        return resolve(primary, binName, mainClassOverride, extras);
+    }
+
+    private Coordinate pin(ToolCoordSpec spec) throws IOException, InterruptedException {
+        return switch (spec) {
+            case ToolCoordSpec.Pinned p -> p.coordinate();
+            case ToolCoordSpec.Floating f ->
+                Coordinate.of(f.group(), f.artifact(), pickVersion(f.module(), f.selector()));
+        };
+    }
+
     public ToolEnv resolve(Coordinate primary, String binName, String mainClassOverride)
+            throws IOException, InterruptedException {
+        return resolve(primary, binName, mainClassOverride, List.of());
+    }
+
+    public ToolEnv resolve(Coordinate primary, String binName, String mainClassOverride, List<Dependency> extras)
             throws IOException, InterruptedException {
         Objects.requireNonNull(primary, "primary");
         Objects.requireNonNull(binName, "binName");
+        Objects.requireNonNull(extras, "extras");
 
-        // 1. Transitive resolution from the primary coord.
+        // 1. Transitive resolution from the primary coord (+ any --with extras).
         Resolver resolver = new NaiveResolver(new EffectivePomBuilder(repos));
         Dependency root = new Dependency(
                 primary.group() + ":" + primary.artifact(), VersionSelector.parse("=" + primary.version()));
-        Resolution resolution = resolver.resolve(List.of(root));
+        List<Dependency> roots = new ArrayList<>();
+        roots.add(root);
+        roots.addAll(extras);
+        Resolution resolution = resolver.resolve(roots);
 
         // 2. Fetch each resolved jar. Primary first so classpath order is stable.
         Path primaryJar = fetchJar(primary);
@@ -78,6 +117,32 @@ public final class ToolResolver {
                     () -> new IOException(primary + " has no Main-Class in its manifest — pass --main <class>."));
         }
         return new ToolEnv(binName, primary, mainClass, classpath);
+    }
+
+    /**
+     * Pin a floating selector against the union of versions the repos advertise (maven-metadata,
+     * TTL-cached). Highest match wins; {@code latest} considers {@linkplain Versions#isStable
+     * stable} releases only, falling back to the overall highest when nothing stable exists.
+     */
+    private String pickVersion(String module, VersionSelector selector) throws IOException, InterruptedException {
+        if (selector instanceof VersionSelector.Exact e) return e.version();
+        List<String> available = repos.availableVersions(Coordinate.ofModule(module, "any"));
+        if (available.isEmpty()) {
+            throw new MavenRepo.ArtifactNotFoundException(
+                    "no versions of " + module + " found in any declared repo");
+        }
+        VersionSet set = VersionSelectors.toVersionSet(selector);
+        List<String> matching =
+                available.stream().filter(set::contains).toList();
+        if (selector instanceof VersionSelector.Latest) {
+            List<String> stable = matching.stream().filter(Versions::isStable).toList();
+            if (!stable.isEmpty()) matching = stable;
+        }
+        return matching.stream()
+                .max(Versions::compare)
+                .orElseThrow(() -> new MavenRepo.ArtifactNotFoundException(
+                        "no version of " + module + " matches " + selector.raw() + " (available: "
+                                + String.join(", ", available) + ")"));
     }
 
     private Path fetchJar(Coordinate coord) throws IOException, InterruptedException {

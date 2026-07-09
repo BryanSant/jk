@@ -267,8 +267,10 @@ We know you can't migrate overnight. `jk` meets you where you are.
   through a layered catalog (project → per-user → global registry → bundled
   floor). The bundled layer works offline; `jk library update` refreshes.
 - **Scripting:** `jk run script.java` runs JBang-compatible single-file
-  scripts; `jk tool run <coord>` (or the `jkx` binary) resolves, caches, runs, and
-  LRU-evicts any published CLI without polluting your project.
+  scripts; `jk tool run <tool>` (or the `jkx` binary) takes a catalog name
+  (`jkx ktlint`), a coordinate spec (`g:a` = latest, `g:a@1.2`, `g:a:v`), or
+  a script/jar file — resolving, caching, running, and LRU-evicting any
+  published CLI without polluting your project.
 
 ---
 

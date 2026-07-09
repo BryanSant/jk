@@ -191,7 +191,144 @@ class InstallExecCommandTest {
         assertThat(exit).isEqualTo(0);
     }
 
+    @Test
+    void tool_install_version_less_coord_resolves_latest_stable(@TempDir Path tempDir) throws Exception {
+        serveMetadata("com.example", "widget-cli", "1.0.0", "1.1.0", "2.0.0-rc1");
+        servePom("com.example", "widget-cli", "1.1.0");
+        serveJar("com.example", "widget-cli", "1.1.0", "com.example.Main");
+
+        Path bin = tempDir.resolve("bin");
+        int exit = run(
+                "tool",
+                "install",
+                "--cache-dir",
+                tempDir.resolve("cache").toString(),
+                "--state-dir",
+                tempDir.toString(),
+                "--bin-dir",
+                bin.toString(),
+                "--repo-url",
+                base.toString(),
+                "com.example:widget-cli");
+        assertThat(exit).isEqualTo(0);
+        String json = Files.readString(tempDir.resolve("tools/envs/widget-cli/env.json"));
+        // latest = highest stable — 2.0.0-rc1 is skipped.
+        assertThat(json).contains("\"primary\": \"com.example:widget-cli:1.1.0\"");
+    }
+
+    @Test
+    void tool_install_catalog_short_name_resolves_via_libs_toml(@TempDir Path tempDir) throws Exception {
+        serveMetadata("com.example", "widget-cli", "1.0.0");
+        servePom("com.example", "widget-cli", "1.0.0");
+        serveJar("com.example", "widget-cli", "1.0.0", "com.example.Main");
+
+        // The user-local catalog layer (JK_HOME is redirected per-module by the build).
+        Path jkHome = Path.of(System.getenv("JK_HOME"));
+        Files.createDirectories(jkHome);
+        Path libsToml = jkHome.resolve("libs.toml");
+        Files.writeString(libsToml, "[libraries]\ntesttool-fixture = \"com.example:widget-cli\"\n");
+        try {
+            Path bin = tempDir.resolve("bin");
+            int exit = run(
+                    "tool",
+                    "install",
+                    "--cache-dir",
+                    tempDir.resolve("cache").toString(),
+                    "--state-dir",
+                    tempDir.toString(),
+                    "--bin-dir",
+                    bin.toString(),
+                    "--repo-url",
+                    base.toString(),
+                    "testtool-fixture");
+            assertThat(exit).isEqualTo(0);
+            // The catalog name is the launcher name; the module resolved through the catalog.
+            assertThat(bin.resolve("testtool-fixture")).exists();
+            String json = Files.readString(tempDir.resolve("tools/envs/testtool-fixture/env.json"));
+            assertThat(json).contains("\"primary\": \"com.example:widget-cli:1.0.0\"");
+        } finally {
+            Files.deleteIfExists(libsToml);
+        }
+    }
+
+    @Test
+    void tool_install_with_injects_extra_deps(@TempDir Path tempDir) throws Exception {
+        servePom("com.example", "widget-cli", "1.0.0");
+        serveJar("com.example", "widget-cli", "1.0.0", "com.example.Main");
+        servePom("com.example", "extra", "2.0.0");
+        serveJar("com.example", "extra", "2.0.0", null);
+
+        Path bin = tempDir.resolve("bin");
+        int exit = run(
+                "tool",
+                "install",
+                "--cache-dir",
+                tempDir.resolve("cache").toString(),
+                "--state-dir",
+                tempDir.toString(),
+                "--bin-dir",
+                bin.toString(),
+                "--repo-url",
+                base.toString(),
+                "--with",
+                "com.example:extra:2.0.0",
+                "com.example:widget-cli:1.0.0");
+        assertThat(exit).isEqualTo(0);
+        // The classpath is absolute CAS paths (content-hashed, no artifact names):
+        // primary + the --with extra = two entries.
+        String launcher = Files.readString(bin.resolve("widget-cli"));
+        String cp = launcher.lines()
+                .filter(l -> l.contains("-cp "))
+                .findFirst()
+                .orElseThrow()
+                .replace("-cp", "")
+                .replace("\\", "")
+                .trim();
+        assertThat(cp.split(":")).hasSize(2);
+    }
+
+    @Test
+    void unknown_catalog_name_fails_with_usage_error(@TempDir Path tempDir) {
+        int exit = run(
+                "tool",
+                "install",
+                "--cache-dir",
+                tempDir.resolve("cache").toString(),
+                "--state-dir",
+                tempDir.toString(),
+                "--bin-dir",
+                tempDir.resolve("bin").toString(),
+                "no-such-tool-name");
+        assertThat(exit).isEqualTo(64); // Exit.USAGE — catalog miss, message names the fix
+    }
+
+    @Test
+    void phase_gated_targets_point_at_the_plan(@TempDir Path tempDir) {
+        // URL / git / JBang-alias targets classify but aren't supported yet — usage error, not a
+        // coordinate parse error.
+        assertThat(run("tool", "run", "https://example.com/tool.jar")).isEqualTo(64);
+        assertThat(run("tool", "run", "gh:acme/widgets")).isEqualTo(64);
+        assertThat(run("tool", "run", "hello@jbangdev/jbang-catalog")).isEqualTo(64);
+    }
+
     // --- fixture helpers ----------------------------------------------------
+
+    private void serveMetadata(String group, String artifact, String... versions) {
+        StringBuilder vs = new StringBuilder();
+        for (String v : versions) vs.append("      <version>").append(v).append("</version>\n");
+        String xml = """
+                <?xml version="1.0" encoding="UTF-8"?>
+                <metadata>
+                  <groupId>%s</groupId>
+                  <artifactId>%s</artifactId>
+                  <versioning>
+                    <versions>
+                %s    </versions>
+                  </versioning>
+                </metadata>
+                """.formatted(group, artifact, vs.toString());
+        served.put("/" + group.replace('.', '/') + "/" + artifact + "/maven-metadata.xml", xml.getBytes());
+    }
 
     private void servePom(String group, String artifact, String version) {
         String pom = """

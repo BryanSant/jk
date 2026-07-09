@@ -247,14 +247,14 @@ public final class InstallCommand implements CliCommand {
      * write the launcher client-side.
      */
     private int installFromMaven(String coord) throws IOException, InterruptedException {
-        Coordinate parsed;
+        ToolTargets.Resolved resolved;
         try {
-            parsed = Coordinate.parse(coord);
-        } catch (IllegalArgumentException e) {
-            CliOutput.err("jk install: " + e.getMessage());
+            resolved = ToolTargets.resolve(coord);
+        } catch (ToolTargets.TargetException e) {
+            CliOutput.err(e.getMessage());
             return Exit.USAGE;
         }
-        String bin = binName != null && !binName.isBlank() ? binName : parsed.artifact();
+        String bin = binName != null && !binName.isBlank() ? binName : resolved.defaultBin();
         Path cacheDir = cacheDir();
         Path envsRoot = stateDir().resolve("tools").resolve("envs");
         Path binDir = binDir();
@@ -264,7 +264,10 @@ public final class InstallCommand implements CliCommand {
         ToolEnv env;
         if (engineDisabledForTests()) {
             var o = dev.jkbuild.cli.engine.InProcessEngine.require()
-                    .toolResolveGoal(parsed, bin, mainClass, repoUrl, cacheDir, Coords.gav(parsed), mode);
+                    .toolResolveGoal(
+                            dev.jkbuild.model.ToolCoordSpec.parse(resolved.coordSpec()),
+                            java.util.List.of(),
+                            bin, mainClass, repoUrl, cacheDir, resolved.coordSpec(), mode);
             if (o.env() == null) return failureExit(o.result(), "jk install", cacheDir);
             env = o.env();
         } else {
@@ -273,20 +276,20 @@ public final class InstallCommand implements CliCommand {
                 outcome = dev.jkbuild.cli.engine.EngineClient.runToolResolve(
                         dev.jkbuild.engine.EnginePaths.current(),
                         new dev.jkbuild.cli.engine.EngineClient.ToolResolveRequest(
-                                coord, bin, mainClass, repoUrl, cacheDir),
+                                resolved.coordSpec(), java.util.List.of(), bin, mainClass, repoUrl, cacheDir),
                         phases -> GoalConsole.chooseConsoleListener("install-maven", phases, mode));
             } catch (IOException e) {
                 CliOutput.err("jk install: " + e.getMessage());
                 return Exit.SOFTWARE;
             }
-            if (!outcome.result().success() || outcome.mainClass() == null) {
+            if (!outcome.result().success() || outcome.mainClass() == null || outcome.coord() == null) {
                 return failureExit(outcome.result(), "jk install", cacheDir);
             }
-            env = new ToolEnv(bin, parsed, outcome.mainClass(), outcome.classpath());
+            env = new ToolEnv(bin, Coordinate.parse(outcome.coord()), outcome.mainClass(), outcome.classpath());
         }
 
         Path launcher = ToolLauncher.install(envsRoot, binDir, JavaHomes.runningJavaHome(), env);
-        announceInstall(Coords.gav(parsed), launcher, binDir);
+        announceInstall(Coords.gav(env.primary()), launcher, binDir);
         return 0;
     }
 

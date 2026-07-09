@@ -73,15 +73,9 @@ final class ScriptRunner {
                 || "dev.jkbuild.test.runner.JkRunner".equals(System.getProperty("jk.plugin.class"));
     }
 
-    /** True when {@code arg} names a file type this runner can execute. */
-    static boolean isRunnableFile(String arg) {
-        String s = arg.toLowerCase(Locale.ROOT);
-        return s.endsWith(".java") || s.endsWith(".kt") || s.endsWith(".kts") || s.endsWith(".jar");
-    }
-
     /**
      * Run {@code file} (dispatched by extension) with {@code args} forwarded to the program. The
-     * caller guarantees {@link #isRunnableFile} held for the original argument.
+     * caller guarantees the target classified as {@link dev.jkbuild.tool.ToolTarget.RunnableFile}.
      */
     int run(Path file, List<String> args) throws IOException, InterruptedException {
         String name = file.getFileName().toString().toLowerCase(Locale.ROOT);

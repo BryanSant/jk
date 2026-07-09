@@ -3,8 +3,8 @@ package dev.jkbuild.runtime;
 
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.http.Http;
-import dev.jkbuild.model.Coordinate;
 import dev.jkbuild.model.RepositorySpec;
+import dev.jkbuild.model.ToolCoordSpec;
 import dev.jkbuild.repo.MavenRepo;
 import dev.jkbuild.repo.RepoGroup;
 import dev.jkbuild.run.Goal;
@@ -16,6 +16,7 @@ import dev.jkbuild.tool.ToolResolver;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Path;
+import java.util.List;
 
 /**
  * The shared tool-resolution goal behind {@code jk tool install}, {@code jk tool run}, and {@code
@@ -33,17 +34,26 @@ public final class ToolGoals {
     public static final GoalKey<ToolEnv> TOOL_ENV = GoalKey.of("tool-env", ToolEnv.class);
 
     /**
-     * Build the single-phase resolve goal for {@code primary}.
+     * Build the single-phase resolve goal for {@code spec}.
      *
+     * @param spec the tool coordinate — pinned {@code g:a:v} or floating {@code g:a[@selector]}
+     *     (the floating pick against maven-metadata happens inside the phase)
+     * @param withSpecs {@code --with} extras injected into the env's resolution (may be empty)
      * @param mainClassOverride the {@code --main} override, or {@code null} to read the primary
      *     jar's manifest
      * @param repoUrl overrides Maven Central ({@code null} = Central)
      * @param coordLabel the preformatted coordinate for the phase label — the CLI's in-process path
-     *     passes its themed {@code Coords.gav}, the engine passes plain {@code g:a:v} so no
-     *     pre-themed text ever crosses the wire
+     *     passes its themed {@code Coords.gav}, the engine passes the plain spec so no pre-themed
+     *     text ever crosses the wire
      */
     public static Goal resolveGoal(
-            Coordinate primary, String bin, String mainClassOverride, URI repoUrl, Path cache, String coordLabel) {
+            ToolCoordSpec spec,
+            List<ToolCoordSpec> withSpecs,
+            String bin,
+            String mainClassOverride,
+            URI repoUrl,
+            Path cache,
+            String coordLabel) {
         Phase resolve = Phase.builder("resolve-coord")
                 .kind(PhaseKind.IO)
                 .scope(1)
@@ -53,7 +63,7 @@ public final class ToolGoals {
                     URI url = repoUrl != null ? repoUrl : RepositorySpec.MAVEN_CENTRAL.url();
                     RepoGroup repos = RepoGroup.of(new MavenRepo("central", url, new Http(), cas));
                     try {
-                        ctx.put(TOOL_ENV, new ToolResolver(repos).resolve(primary, bin, mainClassOverride));
+                        ctx.put(TOOL_ENV, new ToolResolver(repos).resolve(spec, bin, mainClassOverride, withSpecs));
                     } catch (RuntimeException | IOException e) {
                         ctx.error("resolve", e.getMessage());
                         throw new RuntimeException(e);
