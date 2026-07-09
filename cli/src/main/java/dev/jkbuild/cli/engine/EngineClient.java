@@ -1069,8 +1069,22 @@ public final class EngineClient {
     private static void spawn(EnginePaths.Paths paths, String clientVersion) throws IOException {
         String jkExe = CachePruneScheduler.resolveJkExe()
                 .orElseThrow(() -> new IOException("could not resolve the running jk binary's path"));
-        EngineArtifact engine = resolveEngineArtifact(
-                System.getenv("JK_ENGINE_EXE"), jkExe, clientVersion, dev.jkbuild.util.JkDirs.lib());
+        Path libDir = dev.jkbuild.util.JkDirs.lib();
+        EngineArtifact engine =
+                resolveEngineArtifact(System.getenv("JK_ENGINE_EXE"), jkExe, clientVersion, libDir);
+        // Self-heal a missing/version-skewed engine jar before falling back: the released native
+        // client can't host the engine itself, but it can download the matching jar — the same
+        // move as installing a JDK to host it (and the reason there's no `jk engine fetch` verb).
+        // JVM dist, offline, and -SNAPSHOT builds skip this — see EngineJarFetcher.applicable.
+        if (engine.kind() == EngineArtifact.Kind.FALLBACK
+                && EngineJarFetcher.applicable(
+                        clientVersion,
+                        isNativeImage(),
+                        dev.jkbuild.config.SessionContext.current().offline())) {
+            System.err.println("jk: downloading the build engine (jk-engine-" + clientVersion + ".jar) ...");
+            EngineJarFetcher.fetch(EngineJarFetcher.releasesBase(), clientVersion, libDir);
+            engine = resolveEngineArtifact(System.getenv("JK_ENGINE_EXE"), jkExe, clientVersion, libDir);
+        }
         JkEngineConfig config = JkEngineConfig.resolve();
         Files.createDirectories(paths.dir());
         rotateLog(paths.log());

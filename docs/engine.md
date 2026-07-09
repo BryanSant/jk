@@ -60,7 +60,14 @@ and the fallback when no engine artifact is installed. Both routes execute the e
    to come up. Which artifact it spawns is resolved in order: **(a)** a `JK_ENGINE_EXE` env
    override (always treated as a dedicated engine executable — its `main` is the engine loop, no
    flag); **(b)** `~/.jk/lib/jk-engine-<version>.jar` — the installed layout, where the filename's
-   version must equal the client's own version (a missing or version-skewed jar never launches) —
+   version must equal the client's own version (a missing or version-skewed jar never launches).
+   When the released native client finds no matching jar, it downloads one itself before falling
+   back — `releases/<its own version>/jk-engine-<version>.jar` from the release site, verified
+   against the release's `SHA256SUMS` and moved into `~/.jk/lib/` atomically (`EngineJarFetcher`;
+   the client is a JDK installer and JVM launcher by trade — fetching its own engine is the same
+   move as installing a JDK to host it, and it makes upgrades self-healing). There is deliberately
+   no `jk engine fetch` verb: the fetch is built into the spawn. The JVM dist (which hosts the
+   engine itself), `--offline` runs, and `-SNAPSHOT` builds never auto-fetch. The jar is
    launched as `<managed-jdk>/bin/java -XX:+UseSerialGC
    -Xms…/-Xmx… -cp ~/.jk/lib/jk-engine-<version>.jar dev.jkbuild.cli.EngineMain` on the jk-managed
    default JDK. The host JDK must meet the engine's runtime floor (the release that compiled the
