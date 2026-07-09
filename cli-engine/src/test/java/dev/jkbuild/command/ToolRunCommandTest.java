@@ -93,6 +93,82 @@ class ToolRunCommandTest {
     }
 
     @Test
+    void sources_directive_compiles_companion_files(@TempDir Path tempDir) throws Exception {
+        Files.writeString(tempDir.resolve("Helper.java"), """
+                public class Helper {
+                    static int code() { return 0; }
+                }
+                """, StandardCharsets.UTF_8);
+        Path script = tempDir.resolve("Main.java");
+        Files.writeString(script, """
+                //SOURCES Helper.java
+                public class Main {
+                    public static void main(String[] args) {
+                        System.exit(Helper.code());
+                    }
+                }
+                """, StandardCharsets.UTF_8);
+
+        int exit = run(
+                "tool",
+                "run",
+                "--cache-dir",
+                tempDir.resolve("home/cache").toString(),
+                "--state-dir",
+                tempDir.resolve("home").toString(),
+                script.toString());
+        assertThat(exit).isEqualTo(0);
+    }
+
+    @Test
+    void files_directive_puts_resources_on_the_runtime_classpath(@TempDir Path tempDir) throws Exception {
+        Files.writeString(tempDir.resolve("greeting.txt"), "ok", StandardCharsets.UTF_8);
+        Path script = tempDir.resolve("Res.java");
+        Files.writeString(script, """
+                //FILES msg/greeting.txt=greeting.txt
+                public class Res {
+                    public static void main(String[] args) throws Exception {
+                        System.exit(Res.class.getResourceAsStream("/msg/greeting.txt") != null ? 0 : 1);
+                    }
+                }
+                """, StandardCharsets.UTF_8);
+
+        int exit = run(
+                "tool",
+                "run",
+                "--cache-dir",
+                tempDir.resolve("home/cache").toString(),
+                "--state-dir",
+                tempDir.resolve("home").toString(),
+                script.toString());
+        assertThat(exit).isEqualTo(0);
+    }
+
+    @Test
+    void main_directive_overrides_the_filename_convention(@TempDir Path tempDir) throws Exception {
+        Path script = tempDir.resolve("Wrapper.java");
+        Files.writeString(script, """
+                //MAIN Entry
+                public class Wrapper {
+                    public static void main(String[] args) { System.exit(1); }
+                }
+                class Entry {
+                    public static void main(String[] args) { System.exit(0); }
+                }
+                """, StandardCharsets.UTF_8);
+
+        int exit = run(
+                "tool",
+                "run",
+                "--cache-dir",
+                tempDir.resolve("home/cache").toString(),
+                "--state-dir",
+                tempDir.resolve("home").toString(),
+                script.toString());
+        assertThat(exit).isEqualTo(0);
+    }
+
+    @Test
     void exit_code_is_propagated_from_script(@TempDir Path tempDir) throws Exception {
         Path script = tempDir.resolve("Fail.java");
         Files.writeString(script, """

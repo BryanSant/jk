@@ -95,7 +95,7 @@ public final class ScriptGoals {
         byte[] bytes = Files.readAllBytes(script);
         ScriptHeader header = ScriptHeaderParser.parse(new String(bytes, StandardCharsets.UTF_8));
         Path classesDir = classesDirFor(stateDir, bytes);
-        String mainClass = simpleMainClassName(script, ".java");
+        String mainClass = header.main() != null ? header.main() : simpleMainClassName(script, ".java");
 
         Phase parseHeader = Phase.builder("parse-script")
                 .scope(1)
@@ -136,8 +136,9 @@ public final class ScriptGoals {
                 .execute(ctx -> {
                     boolean rerun = forceRecompile
                             || dev.jkbuild.config.SessionContext.current().config().rerunOr(false);
-                    if (!rerun && Files.exists(classesDir.resolve(mainClass + ".class"))) {
+                    if (!rerun && Files.exists(classesDir.resolve(mainClass.replace('.', '/') + ".class"))) {
                         ctx.label("cache hit (" + mainClass + ".class)");
+                        materializeFiles(script, header, classesDir);
                         ctx.progress(1);
                         return;
                     }
@@ -160,6 +161,7 @@ public final class ScriptGoals {
                         }
                         throw new RuntimeException("javac failed");
                     }
+                    materializeFiles(script, header, classesDir);
                     ctx.progress(1);
                 })
                 .build();
@@ -176,7 +178,7 @@ public final class ScriptGoals {
         int release =
                 header.release() != null ? header.release() : Runtime.version().feature();
         CompileRequest request = CompileRequest.builder()
-                .sources(List.of(script.toAbsolutePath()))
+                .sources(withDeclaredSources(script, header))
                 .classpath(classpath)
                 .outputDir(classesDir)
                 .release(release)
@@ -192,9 +194,10 @@ public final class ScriptGoals {
     public static Goal kotlinScriptGoal(Path script, Path cacheDir, Path stateDir, URI repoUrl, boolean forceRecompile)
             throws IOException {
         byte[] bytes = Files.readAllBytes(script);
-        ScriptHeader header = ScriptHeaderParser.parse(new String(bytes, StandardCharsets.UTF_8));
+        // parseKotlin: // directives + @file:DependsOn/@file:Repository annotations.
+        ScriptHeader header = ScriptHeaderParser.parseKotlin(new String(bytes, StandardCharsets.UTF_8));
         Path classesDir = classesDirFor(stateDir, bytes);
-        String mainClass = kotlinMainClassName(script);
+        String mainClass = header.main() != null ? header.main() : kotlinMainClassName(script);
 
         Phase parseHeader = Phase.builder("parse-script")
                 .scope(1)
@@ -263,8 +266,9 @@ public final class ScriptGoals {
                 .execute(ctx -> {
                     boolean rerun = forceRecompile
                             || dev.jkbuild.config.SessionContext.current().config().rerunOr(false);
-                    if (!rerun && Files.exists(classesDir.resolve(mainClass + ".class"))) {
+                    if (!rerun && Files.exists(classesDir.resolve(mainClass.replace('.', '/') + ".class"))) {
                         ctx.label("cache hit (" + mainClass + ".class)");
+                        materializeFiles(script, header, classesDir);
                         ctx.progress(1);
                         return;
                     }
@@ -286,8 +290,20 @@ public final class ScriptGoals {
                             .resolve(dev.jkbuild.task.ActionKey.qualifiedTaskId("script", classesDir));
                     @SuppressWarnings("unchecked")
                     List<Path> workerCp = (List<Path>) ctx.require(WORKER_CP);
+                    // @file:DependsOn/@file:Repository were resolved by jk (parseKotlin);
+                    // kotlinc can't compile them — feed it a line-preserving neutralized copy.
+                    List<Path> ktSources = withDeclaredSources(script, header);
+                    String neutralized = ScriptHeaderParser.neutralizeKotlinAnnotations(
+                            new String(bytes, StandardCharsets.UTF_8));
+                    if (neutralized != null) {
+                        Path srcDir = classesDir.resolveSibling("src");
+                        Files.createDirectories(srcDir);
+                        Path copy = srcDir.resolve(script.getFileName().toString());
+                        Files.writeString(copy, neutralized, StandardCharsets.UTF_8);
+                        ktSources.set(0, copy);
+                    }
                     KotlincRequest req = KotlincRequest.builder()
-                            .sources(List.of(script.toAbsolutePath()))
+                            .sources(ktSources)
                             .classpath(compileCp)
                             .outputDir(classesDir)
                             .jvmTarget(CompileSupport.kotlinJvmTarget(jvmTarget))
@@ -302,6 +318,7 @@ public final class ScriptGoals {
                         ctx.error("kotlinc", result.output());
                         throw new RuntimeException("kotlinc failed");
                     }
+                    materializeFiles(script, header, classesDir);
                     ctx.progress(1);
                 })
                 .build();
@@ -316,8 +333,33 @@ public final class ScriptGoals {
 
     // --- .kts ------------------------------------------------------------
 
-    /** {@code resolve-kotlinc} for a {@code .kts} script (delegated to {@code kotlinc -script} client-side). */
-    public static Goal ktsScriptGoal(Path cacheDir) {
+    /**
+     * {@code parse-script → (resolve-deps ∥ resolve-kotlinc)} for a {@code .kts} script. The exec
+     * is delegated to {@code kotlinc -script} client-side; the script's declared deps ({@code
+     * @file:DependsOn} / {@code //DEPS} / {@code //jk dep}) resolve here and reach kotlinc via
+     * {@code -classpath} — jk's own CAS-first resolution, not kotlin-main-kts's embedded Ivy.
+     */
+    public static Goal ktsScriptGoal(Path script, Path cacheDir, URI repoUrl) throws IOException {
+        ScriptHeader header =
+                ScriptHeaderParser.parseKotlin(new String(Files.readAllBytes(script), StandardCharsets.UTF_8));
+
+        Phase resolveDeps = Phase.builder("resolve-deps")
+                .kind(PhaseKind.IO)
+                .scope(1)
+                .execute(ctx -> {
+                    ctx.label("resolve script dependencies");
+                    Cas cas = new Cas(cacheDir);
+                    RepoGroup repos = buildRepos(header, repoUrl, new Http(), cas);
+                    try {
+                        ctx.put(CLASSPATH, resolveClasspath(header.deps(), repos));
+                    } catch (RuntimeException e) {
+                        ctx.error("resolve", e.getMessage());
+                        throw e;
+                    }
+                    ctx.progress(1);
+                })
+                .build();
+
         Phase resolveKotlinc = Phase.builder("resolve-kotlinc")
                 .kind(PhaseKind.IO)
                 .scope(1)
@@ -334,7 +376,10 @@ public final class ScriptGoals {
                     ctx.progress(1);
                 })
                 .build();
-        return Goal.builder("run-kts").addPhase(resolveKotlinc).build();
+        return Goal.builder("run-kts")
+                .addPhase(resolveDeps)
+                .addPhase(resolveKotlinc)
+                .build();
     }
 
     // --- .jar ------------------------------------------------------------
@@ -419,6 +464,44 @@ public final class ScriptGoals {
     }
 
     // --- shared helpers --------------------------------------------------
+
+    /** The script plus its {@code //SOURCES} declarations, resolved against the script's dir. */
+    private static List<Path> withDeclaredSources(Path script, ScriptHeader header) {
+        List<Path> sources = new ArrayList<>();
+        sources.add(script.toAbsolutePath());
+        Path dir = script.toAbsolutePath().getParent();
+        for (String s : header.sources()) {
+            Path p = dir.resolve(s).normalize();
+            if (!sources.contains(p)) sources.add(p);
+        }
+        return sources;
+    }
+
+    /**
+     * Copy each {@code //FILES target=source} resource into {@code classesDir} so it rides the
+     * runtime classpath (JBang semantics). Source is relative to the script's dir; a bare name
+     * means target == source. Runs on cache hits too — the resources must exist even when the
+     * compile was skipped.
+     */
+    private static void materializeFiles(Path script, ScriptHeader header, Path classesDir) throws IOException {
+        if (header.files().isEmpty()) return;
+        Path dir = script.toAbsolutePath().getParent();
+        for (String spec : header.files()) {
+            int eq = spec.indexOf('=');
+            String target = eq >= 0 ? spec.substring(0, eq) : spec;
+            String source = eq >= 0 ? spec.substring(eq + 1) : spec;
+            Path from = dir.resolve(source).normalize();
+            Path to = classesDir.resolve(target).normalize();
+            if (!to.startsWith(classesDir)) {
+                throw new IOException("//FILES target escapes the classpath dir: " + spec);
+            }
+            if (!Files.isRegularFile(from)) {
+                throw new IOException("//FILES source not found: " + from + " (from `" + spec + "`)");
+            }
+            Files.createDirectories(to.getParent());
+            Files.copy(from, to, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        }
+    }
 
     /** Kotlin's convention for top-level {@code main()}: {@code Foo.kt} → {@code FooKt}. */
     private static String kotlinMainClassName(Path script) {

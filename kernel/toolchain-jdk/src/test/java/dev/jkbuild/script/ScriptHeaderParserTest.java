@@ -185,4 +185,87 @@ class ScriptHeaderParserTest {
                 """);
         assertThat(h.kotlinVersion()).isNull();
     }
+
+    @Test
+    void repos_directive_accepts_named_and_bare_urls() {
+        ScriptHeader h = ScriptHeaderParser.parse("""
+                //REPOS central=https://repo.maven.apache.org/maven2,https://jitpack.io
+                class X {}
+                """);
+        assertThat(h.repos())
+                .containsExactly(
+                        java.net.URI.create("https://repo.maven.apache.org/maven2"),
+                        java.net.URI.create("https://jitpack.io"));
+    }
+
+    @Test
+    void runtime_and_compile_options_are_aliases() {
+        ScriptHeader h = ScriptHeaderParser.parse("""
+                //COMPILE_OPTIONS -parameters
+                //RUNTIME_OPTIONS -Xmx64m
+                class X {}
+                """);
+        assertThat(h.javacOptions()).containsExactly("-parameters");
+        assertThat(h.javaOptions()).containsExactly("-Xmx64m");
+    }
+
+    @Test
+    void preview_folds_enable_preview_into_both_option_lists() {
+        ScriptHeader h = ScriptHeaderParser.parse("""
+                //PREVIEW
+                class X {}
+                """);
+        assertThat(h.javacOptions()).containsExactly("--enable-preview");
+        assertThat(h.javaOptions()).containsExactly("--enable-preview");
+    }
+
+    @Test
+    void main_files_gav_description_are_recorded() {
+        ScriptHeader h = ScriptHeaderParser.parse("""
+                //MAIN com.acme.Entry
+                //FILES config.yml logging.properties=cfg/logging.properties
+                //GAV com.acme:tool:1.0
+                //DESCRIPTION Does the thing
+                class X {}
+                """);
+        assertThat(h.main()).isEqualTo("com.acme.Entry");
+        assertThat(h.files()).containsExactly("config.yml", "logging.properties=cfg/logging.properties");
+        assertThat(h.gav()).isEqualTo("com.acme:tool:1.0");
+        assertThat(h.description()).isEqualTo("Does the thing");
+    }
+
+    @Test
+    void java_plus_suffix_means_minimum_release() {
+        ScriptHeader h = ScriptHeaderParser.parse("""
+                //JAVA 17+
+                class X {}
+                """);
+        assertThat(h.release()).isEqualTo(17);
+    }
+
+    @Test
+    void parse_kotlin_collects_file_annotations_anywhere() {
+        ScriptHeader h = ScriptHeaderParser.parseKotlin("""
+                //DEPS com.example:first:1.0
+                @file:DependsOn("com.example:second:2.0", "com.example:third:3.0")
+                @file:Repository("https://jitpack.io")
+
+                import com.example.Thing
+                fun main() {}
+                """);
+        assertThat(h.deps()).hasSize(3);
+        assertThat(h.deps().get(1).module()).isEqualTo("com.example:second");
+        assertThat(h.repos()).containsExactly(java.net.URI.create("https://jitpack.io"));
+    }
+
+    @Test
+    void unknown_directives_stay_ignored() {
+        ScriptHeader h = ScriptHeaderParser.parse("""
+                //MODULE com.acme
+                //MANIFEST Key=Value
+                //CDS
+                class X {}
+                """);
+        assertThat(h.deps()).isEmpty();
+    }
 }

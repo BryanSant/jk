@@ -1130,7 +1130,7 @@ public final class InProcessEngineImpl implements InProcessEngine {
                             script, cacheDir, stateDir, repoUrl, forceRecompile);
                     case "kt" -> dev.jkbuild.runtime.ScriptGoals.kotlinScriptGoal(
                             script, cacheDir, stateDir, repoUrl, forceRecompile);
-                    case "kts" -> dev.jkbuild.runtime.ScriptGoals.ktsScriptGoal(cacheDir);
+                    case "kts" -> dev.jkbuild.runtime.ScriptGoals.ktsScriptGoal(script, cacheDir, repoUrl);
                     case "jar" -> dev.jkbuild.runtime.ScriptGoals.jarGoal(script, cacheDir, repoUrl);
                     default -> throw new IllegalArgumentException("unknown script mode: " + mode);
                 };

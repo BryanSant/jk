@@ -134,10 +134,32 @@ final class ScriptRunner {
             return failureExitCode(prep.result());
         }
 
+        // jk resolved any @file:DependsOn/@file:Repository annotations itself (engine-side);
+        // plain kotlinc can't compile them (they're main-kts constructs), so exec a
+        // line-preserving copy with those annotations commented out.
+        String source = new String(Files.readAllBytes(script), StandardCharsets.UTF_8);
+        Path execScript = script.toAbsolutePath();
+        String neutralized = dev.jkbuild.script.ScriptHeaderParser.neutralizeKotlinAnnotations(source);
+        if (neutralized != null) {
+            Path srcDir = stateDir()
+                    .resolve("script-cache")
+                    .resolve(dev.jkbuild.util.Hashing.sha256Hex(source.getBytes(StandardCharsets.UTF_8)))
+                    .resolve("src");
+            Files.createDirectories(srcDir);
+            execScript = srcDir.resolve(script.getFileName().toString());
+            Files.writeString(execScript, neutralized, StandardCharsets.UTF_8);
+        }
+
         List<String> command = new ArrayList<>();
         command.add(prep.kotlincBin().toString());
         command.add("-script");
-        command.add(script.toAbsolutePath().toString());
+        // The script's declared deps (@file:DependsOn / //DEPS / //jk dep) — resolved
+        // engine-side through jk's CAS, handed to kotlinc instead of main-kts's Ivy.
+        if (!prep.classpath().isEmpty()) {
+            command.add("-classpath");
+            command.add(joinClasspath(prep.classpath()));
+        }
+        command.add(execScript.toString());
         if (!args.isEmpty()) {
             command.add("--");
             command.addAll(args);

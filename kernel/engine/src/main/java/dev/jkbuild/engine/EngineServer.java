@@ -1457,7 +1457,7 @@ public final class EngineServer implements AutoCloseable {
                                 script, cache, stateDir, repoUrl, forceRecompile);
                         case "kt" -> dev.jkbuild.runtime.ScriptGoals.kotlinScriptGoal(
                                 script, cache, stateDir, repoUrl, forceRecompile);
-                        case "kts" -> dev.jkbuild.runtime.ScriptGoals.ktsScriptGoal(cache);
+                        case "kts" -> dev.jkbuild.runtime.ScriptGoals.ktsScriptGoal(script, cache, repoUrl);
                         case "jar" -> dev.jkbuild.runtime.ScriptGoals.jarGoal(script, cache, repoUrl);
                         default -> throw new IllegalArgumentException("unknown script mode: " + mode);
                     };
