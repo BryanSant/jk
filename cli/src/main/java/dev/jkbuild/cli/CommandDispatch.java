@@ -43,6 +43,8 @@ import dev.jkbuild.command.ShellCommand;
 import dev.jkbuild.command.SyncCommand;
 import dev.jkbuild.command.TestCommand;
 import dev.jkbuild.command.ToolCommand;
+import dev.jkbuild.command.ToolInstallCommand;
+import dev.jkbuild.command.ToolRunCommand;
 import dev.jkbuild.command.TrustCommand;
 import dev.jkbuild.command.TreeCommand;
 import dev.jkbuild.command.UpdateCommand;
@@ -107,7 +109,11 @@ public final class CommandDispatch {
             new ExportCommand(),
             new ImportCommand(),
             new PublishCommand(),
-            new RunCommand(),
+            // `run` and `install` are the primary verbs; the same instances are also mounted
+            // under `jk tool` (one implementation, two mounts — tool-targets-plan §9 inverted
+            // 2026-07-09: the short spelling is canonical).
+            new ToolRunCommand(),
+            new ToolInstallCommand(),
             new CompileCommand(),
             new BuildCommand(),
             new TestCommand(),

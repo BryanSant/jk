@@ -25,8 +25,13 @@ renders the canonical verb's help.
 | `jk verify-build` | `jk verify` | Pre-v1.0 name for the reproducibility check verb. Kept for back-compat. |
 | `jk check` | `jk compile` | Pre-v1.0 name for the type-check verb. Kept for back-compat. |
 | `jk why-rebuilt` | `jk explain` | Early-roadmap name for the cache-diff report; `explain` absorbed it. |
-| `jk tool exec` | `jk tool run` | Matches `dotnet tool exec`. Subcommand alias (`CliCommand.aliases()`), not a verb rewrite. |
-| `jk install` | `jk tool install` | The converged install verb (tool-targets-plan §9); multi-word expansion. |
+| `jk exec` / `jk tool exec` | `jk run` / `jk tool run` | Matches `dotnet tool exec`. Command alias (`CliCommand.aliases()`), not a verb rewrite. |
+
+Since the 2026-07-09 inversion, `jk run` and `jk install` are the primary
+verbs; `jk tool run` and `jk tool install` are second mounts of the same
+command instances (not rewrites): the universal target grammar is
+identical at both spellings, and a bare invocation runs/installs the
+current jk.toml project.
 
 ## How rewriting works
 

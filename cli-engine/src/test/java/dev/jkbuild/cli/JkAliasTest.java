@@ -29,9 +29,11 @@ class JkAliasTest {
     }
 
     @Test
-    void rewrite_can_expand_an_alias_into_multiple_positionals() {
-        String[] out = Jk.rewriteAlias(new String[] {"install", "com.example:foo:1.0"});
-        assertThat(out).containsExactly("tool", "install", "com.example:foo:1.0");
+    void install_is_a_real_verb_not_an_alias() {
+        // The 2026-07-09 inversion: `install` (and `run`) are the primary verbs, mounted
+        // directly; `jk tool install|run` are the secondary mounts of the same commands.
+        String[] in = {"install", "com.example:foo:1.0"};
+        assertThat(Jk.rewriteAlias(in)).isSameAs(in);
     }
 
     @Test

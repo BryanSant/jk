@@ -19,11 +19,10 @@ public final class Jk {
      * docs/aliases.md}. Keys are alias names; values are the canonical verb path (one or more
      * positionals). We don't register these with picocli (so they stay out of {@code --help} and
      * shell completion); instead we rewrite the first positional arg before parsing — possibly
-     * expanding it into multiple positionals (e.g. {@code install} → {@code tool install}).
+     * expanding it into multiple positionals.
      */
     static final Map<String, List<String>> VERB_ALIASES = Map.ofEntries(
             Map.entry("generate", List.of("new")), // Maven mvn archetype:generate
-            Map.entry("install", List.of("tool", "install")), // converged verb (tool-targets-plan §9)
             Map.entry("dependencies", List.of("tree")), // Gradle gradle dependencies
             Map.entry("package", List.of("build")), // Maven mvn package
             Map.entry("deploy", List.of("publish")), // Maven mvn deploy

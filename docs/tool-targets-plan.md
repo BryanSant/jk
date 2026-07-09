@@ -477,7 +477,11 @@ local HTTP server + local git repos — no live network in CI).
 2. **`jk install` and `jk tool install` converge now** — one pipeline;
    `install` becomes a verb alias for `tool install` defaulting the
    target to `.`; `InstallCommand` absorbed (§9), landing in phase 2.
-   **Done** — shipped with phase 2.
+   **Done** — shipped with phase 2. **Inverted 2026-07-09**: the short
+   spellings are canonical — `jk run` and `jk install` are the primary
+   verbs (same command instances also mounted under `jk tool`); bare
+   `jk run`/`jk tool run` runs the current project, and app args ride
+   `jk run . <args>` (the first positional is always the target).
 3. **`jkx` ships as a real binary** — argv[0]-dispatched hardlink with
    shim fallbacks (§8.1), phase 1; the activate-installed shell
    functions are removed.

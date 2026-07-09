@@ -35,8 +35,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * {@code jk run [-- <args>...]} — build the current project through the shared engine pipeline
- * and run its best artifact, forwarding every argument to the program.
+ * The current-project run pipeline — build through the shared engine pipeline, then exec the best
+ * artifact. <b>Not a registered verb since the 2026-07-09 inversion</b>: {@code jk run} (and its
+ * {@code jk tool run} mount) is {@link ToolRunCommand}, which delegates project and directory
+ * targets here via {@link #runProject}; app args ride {@code jk run . <args>}.
  *
  * <p>The build runs in a {@link dev.jkbuild.run.Goal} (so progress/warnings/run-log behave like every other verb)
  * and produces whatever {@code jk.toml} declares — a plain jar, a shadow jar, and/or a native
@@ -46,9 +48,6 @@ import java.util.List;
  * TTY); a native binary is exec'd directly, a jar via {@code java -cp … <main>}. We never hoist a
  * jar into this JVM.
  *
- * <p>{@code jk run} does not interpret file arguments — a {@code .java} / {@code .jar} argument is
- * forwarded to the program, not executed. Use {@code jk tool run} for a loose file or a published
- * tool.
  */
 public final class RunCommand implements CliCommand {
 

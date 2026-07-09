@@ -45,8 +45,10 @@ class RunCommandTest {
         assertThat(exit).isEqualTo(0);
         assertThat(tempDir.resolve("target/widget-0.1.0.jar")).exists();
 
-        // Args after `--` reach the main method.
-        int withArgs = run("run", "-C", tempDir.toString(), "--cache-dir", SharedTestCache.arg(), "--", "a", "b", "c");
+        // App args ride the `.` target (the first positional is always the target since
+        // the 2026-07-09 inversion made `jk run` the universal runner).
+        int withArgs = run(
+                "run", "-C", tempDir.toString(), "--cache-dir", SharedTestCache.arg(), ".", "a", "b", "c");
         assertThat(withArgs).isEqualTo(3);
     }
 

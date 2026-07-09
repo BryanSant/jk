@@ -23,8 +23,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * {@code jk tool run <coord|file> -- <args>} — ephemerally run a tool or a standalone file (PRD
- * §20.3), forwarding {@code <args>} to the program.
+ * {@code jk run [<target>] [<args>…]} — the universal runner, mounted both as the top-level
+ * {@code run} verb and as {@code jk tool run} (one implementation, two mounts; {@code jkx} is the
+ * argv[0] binary alias). No target runs the current jk.toml project; to pass the project args, use
+ * {@code jk run . <args>} (the first positional is always the target — uv's model).
  *
  * <p>The target may be (docs/tool-targets-plan.md §2, phase-1 kinds):
  *
@@ -64,7 +66,7 @@ public final class ToolRunCommand implements CliCommand {
 
     @Override
     public String description() {
-        return "Run a tool from a Maven coord or .java/.kt/.kts/.jar file";
+        return "Run the current project, a tool, script, directory, git repo, or URL";
     }
 
     @Override
@@ -75,6 +77,8 @@ public final class ToolRunCommand implements CliCommand {
                 Opt.value("<dir>", "Override the jk cache directory.", "--cache-dir")
                         .hide(),
                 Opt.value("<dir>", "Override the jk state directory.", "--state-dir")
+                        .hide(),
+                Opt.value("<dir>", "Override the JDK install root.", "--jdks-dir")
                         .hide(),
                 Opt.value("<url>", "Override the Maven repository URL (for tests).", "--repo-url")
                         .hide(),
@@ -88,8 +92,11 @@ public final class ToolRunCommand implements CliCommand {
         return List.of(
                 Param.of(
                         "target",
-                        Arity.ONE,
-                        "Catalog name, Maven coordinate (g:a[:version|@selector]), or .java/.kt/.kts/.jar file."),
+                        Arity.ZERO_OR_ONE,
+                        "Catalog name, Maven coordinate (g:a[:version|@selector]),\n"
+                                + ".java/.kt/.kts/.jar file, directory, git URL, web URL, or\n"
+                                + "alias@catalog. Omit to run the current jk.toml project\n"
+                                + "(pass its args via `jk run . <args>`)."),
                 Param.of("args", Arity.ZERO_OR_MORE, "Arguments forwarded to the program."));
     }
 
@@ -97,6 +104,7 @@ public final class ToolRunCommand implements CliCommand {
     String mainClass;
     Path cacheDirOverride;
     Path stateDirOverride;
+    Path jdksDir;
     URI repoUrl;
     boolean forceRecompile;
     List<String> toolArgs = new ArrayList<>();
@@ -115,6 +123,7 @@ public final class ToolRunCommand implements CliCommand {
         if (Files.isRegularFile(dir.resolve("jk.toml"))) {
             RunCommand delegate = new RunCommand();
             delegate.cacheDirOverride = cacheDirOverride;
+            delegate.jdksDir = jdksDir;
             delegate.buildOpts = new dev.jkbuild.cli.BuildOptions();
             delegate.buildOpts.skipTests = true;
             delegate.global = global;
@@ -263,11 +272,13 @@ public final class ToolRunCommand implements CliCommand {
     @Override
     public int run(Invocation in) throws IOException, InterruptedException {
         List<String> positionals = in.positionals();
-        this.target = positionals.isEmpty() ? "" : positionals.get(0);
+        // No target = the current project (the `.` directory rules: jk.toml → build + exec).
+        this.target = positionals.isEmpty() ? "." : positionals.get(0);
         this.toolArgs = positionals.size() > 1 ? positionals.subList(1, positionals.size()) : List.of();
         this.mainClass = in.value("main").orElse(null);
         this.cacheDirOverride = in.value("cache-dir").map(Path::of).orElse(null);
         this.stateDirOverride = in.value("state-dir").map(Path::of).orElse(null);
+        this.jdksDir = in.value("jdks-dir").map(Path::of).orElse(null);
         this.repoUrl = in.value("repo-url").map(URI::create).orElse(null);
         // --force (global) and legacy --force-recompile both force recompilation.
         this.forceRecompile = in.isSet("force") || in.isSet("force-recompile");
