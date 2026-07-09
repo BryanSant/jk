@@ -307,6 +307,7 @@ public interface InProcessEngine {
             String ref,
             java.nio.file.Path cache,
             boolean refresh,
+            boolean requireJkToml,
             dev.jkbuild.cli.run.GoalConsole.Mode mode)
             throws java.io.IOException, InterruptedException;
 

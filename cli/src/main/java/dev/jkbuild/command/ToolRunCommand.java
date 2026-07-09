@@ -142,6 +142,95 @@ public final class ToolRunCommand implements CliCommand {
     }
 
     /**
+     * A git target (docs/tool-targets-plan.md §4.6): trust-gate the repo's https form, clone at
+     * the requested ref (engine-hosted, no jk.toml requirement), then apply the §4.4 directory
+     * rules to the checkout — a jk project builds and execs, a JBang-convention repo runs its
+     * script.
+     */
+    private int runGit(String input, List<String> args) throws IOException, InterruptedException {
+        String raw = input.startsWith("git+") ? input.substring("git+".length()) : input;
+        InstallCommand.UrlAndRef split = InstallCommand.splitUrlRef(raw);
+        String expanded = dev.jkbuild.util.GitUrl.expand(split.url());
+        String canonical = dev.jkbuild.util.GitUrl.canonicalize(split.url());
+        Path stateDir = stateDirOverride != null ? stateDirOverride : JkDirs.state();
+        Integer gated = UrlToolSource.gate(UrlToolSource.gitTrustUrl(canonical), stateDir, "jk tool run");
+        if (gated != null) return gated;
+
+        String refStr = split.ref() != null ? split.ref() : "main";
+        Path cacheDir = cacheDirOverride != null ? cacheDirOverride : JkDirs.cache();
+        Files.createDirectories(cacheDir);
+        boolean refresh = dev.jkbuild.config.SessionContext.current().config().refreshOr(false);
+        GoalConsole.Mode mode = GoalConsole.modeFor(global);
+
+        Path checkout;
+        if (engineDisabledForTests()) {
+            var o = dev.jkbuild.cli.engine.InProcessEngine.require()
+                    .gitFetchGoal(expanded, canonical, refStr, cacheDir, refresh, /* requireJkToml */ false, mode);
+            if (!o.result().success() || o.checkout() == null) return 1;
+            checkout = o.checkout();
+        } else {
+            dev.jkbuild.cli.engine.EngineClient.GitFetchOutcome outcome;
+            try {
+                outcome = dev.jkbuild.cli.engine.EngineClient.runGitFetch(
+                        dev.jkbuild.engine.EnginePaths.current(),
+                        new dev.jkbuild.cli.engine.EngineClient.GitFetchRequest(
+                                expanded, canonical, refStr, cacheDir, refresh, /* requireJkToml */ false),
+                        phases -> GoalConsole.chooseConsoleListener("tool-git-fetch", phases, mode));
+            } catch (IOException e) {
+                CliOutput.err("jk tool run: " + e.getMessage());
+                return Exit.SOFTWARE;
+            }
+            if (!outcome.result().success() || outcome.checkout() == null) return 1;
+            checkout = outcome.checkout();
+        }
+        return runDirectory(checkout, args);
+    }
+
+    /**
+     * A JBang {@code alias@catalog} target (docs/tool-targets-plan.md §6): locate the catalog,
+     * trust-gate its page origin, then run the alias's {@code script-ref} — a relative ref fetches
+     * from the catalog's raw base under that same gate; an absolute URL passes its own gate; a
+     * coordinate falls through into the normal flow by rewriting {@code target}/{@code toolArgs}
+     * (in that case this returns {@code null}).
+     */
+    private Integer resolveJBangAlias(String verb) throws IOException, InterruptedException {
+        JBangCatalog.Resolved r;
+        try {
+            r = JBangCatalog.resolve(target, new dev.jkbuild.http.Http());
+        } catch (IOException e) {
+            CliOutput.err(verb + ": " + e.getMessage());
+            return Exit.SOFTWARE;
+        }
+        Path stateDir = stateDirOverride != null ? stateDirOverride : JkDirs.state();
+        Integer gated = UrlToolSource.gate(r.pageOrigin(), stateDir, verb);
+        if (gated != null) return gated;
+        if (r.hasUnhonored()) {
+            CliOutput.err(verb + ": warning — this alias declares dependencies/java-options,"
+                    + " which jk does not honor yet.");
+        }
+        List<String> merged = new ArrayList<>(r.arguments());
+        merged.addAll(toolArgs);
+        String ref = r.scriptRef();
+        Path cacheDir = cacheDirOverride != null ? cacheDirOverride : JkDirs.cache();
+        if (ref.contains("://")) {
+            Integer urlGate = UrlToolSource.gate(ref, stateDir, verb);
+            if (urlGate != null) return urlGate;
+            Path fetched = UrlToolSource.fetch(ref, cacheDir, forceRecompile);
+            return new ScriptRunner(global, cacheDirOverride, stateDirOverride, repoUrl, forceRecompile)
+                    .run(fetched, merged);
+        }
+        if (ref.contains(":")) {
+            // Coordinate script-ref: rewrite the target and let the normal flow resolve it.
+            target = ref;
+            toolArgs = merged;
+            return null;
+        }
+        Path fetched = UrlToolSource.fetch(r.rawBase().resolve(ref).toString(), cacheDir, forceRecompile);
+        return new ScriptRunner(global, cacheDirOverride, stateDirOverride, repoUrl, forceRecompile)
+                .run(fetched, merged);
+    }
+
+    /**
      * Escape hatch for the fast JVM unit-test suite ONLY — see {@link
      * BuildCommand#engineDisabledForTests()} for the full rationale. A real {@code jk tool run} of
      * a coordinate hosts its resolve+fetch on the engine; the exec always runs here (it inherits
@@ -176,6 +265,9 @@ public final class ToolRunCommand implements CliCommand {
         if (classified instanceof dev.jkbuild.tool.ToolTarget.Directory dir) {
             return runDirectory(global.workingDir().resolve(dir.path()).normalize(), toolArgs);
         }
+        if (classified instanceof dev.jkbuild.tool.ToolTarget.Git g) {
+            return runGit(g.raw(), toolArgs);
+        }
         if (classified instanceof dev.jkbuild.tool.ToolTarget.Url u) {
             Path stateDir = stateDirOverride != null ? stateDirOverride : JkDirs.state();
             Integer gated = UrlToolSource.gate(u.raw(), stateDir, "jk tool run");
@@ -190,6 +282,12 @@ public final class ToolRunCommand implements CliCommand {
             }
             return new ScriptRunner(global, cacheDirOverride, stateDirOverride, repoUrl, forceRecompile)
                     .run(fetched, toolArgs);
+        }
+
+        if (classified instanceof dev.jkbuild.tool.ToolTarget.JBangAlias) {
+            Integer aliasExit = resolveJBangAlias("jk tool run");
+            if (aliasExit != null) return aliasExit;
+            // A GAV script-ref fell through: `target`/`toolArgs` were rewritten in place.
         }
 
         ToolTargets.Resolved resolved;

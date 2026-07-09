@@ -92,8 +92,8 @@ public sealed interface ToolTarget {
             return new UnsupportedFile(asPath, raw);
         }
 
-        // 3. Git syntax.
-        if (s.startsWith("git+http://") || s.startsWith("git+https://")) return new Git(raw);
+        // 3. Git syntax. Any git+<transport> forces git classification (npm-style).
+        if (s.startsWith("git+")) return new Git(raw);
         if (s.startsWith("git://") || s.startsWith("ssh://") || s.startsWith("git@")) return new Git(raw);
         if (s.startsWith("gh:") || s.startsWith("gl:") || s.startsWith("bb:") || s.startsWith("sr:")) {
             return new Git(raw);
@@ -103,11 +103,13 @@ public sealed interface ToolTarget {
         }
         if (s.startsWith("file://")) return new Url(raw);
 
-        // 4. Coordinate spec.
-        if (s.contains(":")) return new Gav(raw);
+        // 4. Coordinate spec — the colon must be in the body (before any `@`): g:a[:v|@sel].
+        // A colon only after the `@` is a catalog ref's host:port, not a coordinate.
+        int at = s.indexOf('@');
+        String body = at >= 0 ? s.substring(0, at) : s;
+        if (body.contains(":")) return new Gav(raw);
 
         // 5/6. name[@suffix] — §6.1 syntax discriminators, then the bare catalog name.
-        int at = s.indexOf('@');
         if (at > 0 && at < s.length() - 1) {
             String name = s.substring(0, at);
             String suffix = s.substring(at + 1);

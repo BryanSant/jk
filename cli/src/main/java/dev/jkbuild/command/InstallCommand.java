@@ -314,7 +314,7 @@ public final class InstallCommand implements CliCommand {
         String sha;
         if (engineDisabledForTests()) {
             var o = dev.jkbuild.cli.engine.InProcessEngine.require()
-                    .gitFetchGoal(expanded, canonical, refStr, cacheDir, refresh, mode);
+                    .gitFetchGoal(expanded, canonical, refStr, cacheDir, refresh, /* requireJkToml */ true, mode);
             fetchResult = o.result();
             checkout = o.checkout();
             sha = o.sha();

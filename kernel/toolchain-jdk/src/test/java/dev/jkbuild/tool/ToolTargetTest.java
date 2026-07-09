@@ -63,6 +63,8 @@ class ToolTargetTest {
         // Suffix with `/` or infix `~` → JBang catalog ref.
         assertThat(ToolTarget.classify("hello@user/repo")).isInstanceOf(ToolTarget.JBangAlias.class);
         assertThat(ToolTarget.classify("hello@acme~experimental")).isInstanceOf(ToolTarget.JBangAlias.class);
+        // A colon after the `@` is a catalog host:port, not a coordinate.
+        assertThat(ToolTarget.classify("hello@127.0.0.1:8080/cat")).isInstanceOf(ToolTarget.JBangAlias.class);
         // Leading `~` is a selector, not a catalog path.
         var tilde = ToolTarget.classify("hibernate@~7.0.0");
         assertThat(tilde).isInstanceOf(ToolTarget.CatalogName.class);

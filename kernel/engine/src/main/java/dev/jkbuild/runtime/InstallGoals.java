@@ -123,6 +123,16 @@ public final class InstallGoals {
      * #CHECKOUT} + {@link #FETCHED_SHA}.
      */
     public static Goal gitFetchGoal(String url, String canonicalUrl, String ref, Path cacheDir, boolean refresh) {
+        return gitFetchGoal(url, canonicalUrl, ref, cacheDir, refresh, /* requireJkToml */ true);
+    }
+
+    /**
+     * As above, with {@code requireJkToml} switchable: {@code jk tool run <git-url>} accepts
+     * JBang-convention checkouts (main.java, single script) too, so it fetches without the
+     * jk.toml gate and applies the directory rules client-side (tool-targets-plan §4.6).
+     */
+    public static Goal gitFetchGoal(
+            String url, String canonicalUrl, String ref, Path cacheDir, boolean refresh, boolean requireJkToml) {
         Phase fetch = Phase.builder("fetch-git")
                 .kind(PhaseKind.IO)
                 .scope(1)
@@ -137,7 +147,7 @@ public final class InstallGoals {
                         throw new RuntimeException(e);
                     }
                     Path checkout = fetched.checkoutPath();
-                    if (!Files.exists(checkout.resolve("jk.toml"))) {
+                    if (requireJkToml && !Files.exists(checkout.resolve("jk.toml"))) {
                         ctx.error("no-jk-toml", url + " has no jk.toml at " + ref);
                         throw new RuntimeException("no jk.toml in checkout");
                     }

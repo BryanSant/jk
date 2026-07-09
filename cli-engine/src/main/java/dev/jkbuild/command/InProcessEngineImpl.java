@@ -982,9 +982,16 @@ public final class InProcessEngineImpl implements InProcessEngine {
 
     @Override
     public EngineClient.GitFetchOutcome gitFetchGoal(
-            String url, String canonicalUrl, String ref, Path cache, boolean refresh, GoalConsole.Mode mode)
+            String url,
+            String canonicalUrl,
+            String ref,
+            Path cache,
+            boolean refresh,
+            boolean requireJkToml,
+            GoalConsole.Mode mode)
             throws IOException, InterruptedException {
-        Goal fetchGoal = dev.jkbuild.runtime.InstallGoals.gitFetchGoal(url, canonicalUrl, ref, cache, refresh);
+        Goal fetchGoal =
+                dev.jkbuild.runtime.InstallGoals.gitFetchGoal(url, canonicalUrl, ref, cache, refresh, requireJkToml);
         GoalResult result = GoalConsole.run(fetchGoal, mode, cache);
         return new EngineClient.GitFetchOutcome(
                 result,

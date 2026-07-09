@@ -269,8 +269,11 @@ We know you can't migrate overnight. `jk` meets you where you are.
 - **Scripting:** `jk run script.java` runs JBang-compatible single-file
   scripts; `jk tool run <tool>` (or the `jkx` binary) takes a catalog name
   (`jkx ktlint`), a coordinate spec (`g:a` = latest, `g:a@1.2`, `g:a:v`), or
-  a script/jar file — resolving, caching, running, and LRU-evicting any
-  published CLI without polluting your project.
+  a script/jar file, a directory, a git repo, a web URL, or a JBang
+  `alias@catalog` — resolving, caching, running, and LRU-evicting any
+  published CLI without polluting your project. Remote code is gated by
+  `jk trust`. Migrating from JBang? See
+  [docs/jbang-migration.md](./docs/jbang-migration.md).
 
 ---
 

@@ -1417,7 +1417,8 @@ public final class EngineServer implements AutoCloseable {
                     Ndjson.str(requestLine, "canonicalUrl"),
                     Ndjson.str(requestLine, "ref"),
                     cache,
-                    refresh);
+                    refresh,
+                    Ndjson.bool(requestLine, "requireJkToml", true));
             streamSingleGoal(goal, session, writer, result -> {
                 Path checkout = goal.get(dev.jkbuild.runtime.InstallGoals.CHECKOUT).orElse(null);
                 String sha = goal.get(dev.jkbuild.runtime.InstallGoals.FETCHED_SHA).orElse(null);

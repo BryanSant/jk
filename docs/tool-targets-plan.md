@@ -455,6 +455,15 @@ updates, this plan.
    import --jbang`; publish a "jbang → jkx" migration note with the
    honest caveat list (`.jsh`, Groovy, `@Grab`, templates/init are out of
    scope — see Decisions).
+   **Implemented 2026-07-09**: `tool run <git>` clones (engine GitFetch,
+   jk.toml requirement lifted for run) and applies the §4.4 directory
+   rules; git origins trust-gate on their https page form for run and
+   install alike; `JBangCatalog` resolves `alias@user[/repo][/branch][~path]`
+   and `alias@host/path` (GitHub→GitLab→Bitbucket), honoring `script-ref`
+   + `arguments` (deps/java-options warn-unsupported; coordinate refs
+   fall through to the normal flow); docs/jbang-migration.md is the
+   drop-in inventory. Deferred: `!subdir` on tool-run git targets,
+   alias deps/java-options.
 
 Compat proof for phase 4: a vendored corpus test that runs a handful of
 real published JBang catalog aliases and scripts (fixtures served from a

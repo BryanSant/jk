@@ -740,7 +740,12 @@ public final class EngineClient {
     }
 
     /** Everything an engine-hosted {@code jk install <git-url>} fetch needs — pre-split/expanded client-side. */
-    public record GitFetchRequest(String url, String canonicalUrl, String ref, Path cache, boolean refresh) {}
+    public record GitFetchRequest(
+            String url, String canonicalUrl, String ref, Path cache, boolean refresh, boolean requireJkToml) {
+        public GitFetchRequest(String url, String canonicalUrl, String ref, Path cache, boolean refresh) {
+            this(url, canonicalUrl, ref, cache, refresh, true);
+        }
+    }
 
     /** A hosted git fetch's outcome: the goal result plus the materialized checkout + sha (null on failure). */
     public record GitFetchOutcome(dev.jkbuild.run.GoalResult result, Path checkout, String sha) {}
@@ -758,7 +763,12 @@ public final class EngineClient {
         EngineWorkerAdapter.HostedFinish finish = EngineWorkerAdapter.stream(
                 paths,
                 EngineProtocol.gitFetchRequest(
-                        req.url(), req.canonicalUrl(), req.ref(), req.cache().toString(), req.refresh()),
+                        req.url(),
+                        req.canonicalUrl(),
+                        req.ref(),
+                        req.cache().toString(),
+                        req.refresh(),
+                        req.requireJkToml()),
                 "install-git-fetch",
                 listenerFactory,
                 (type, line) -> {});

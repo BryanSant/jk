@@ -1063,7 +1063,8 @@ public final class EngineProtocol {
      * fetch URL, {@code canonicalUrl} its canonical identity, {@code ref} the tag-or-branch name;
      * {@code refresh} forces a re-fetch of an already-materialized ref.
      */
-    public static String gitFetchRequest(String url, String canonicalUrl, String ref, String cache, boolean refresh) {
+    public static String gitFetchRequest(
+            String url, String canonicalUrl, String ref, String cache, boolean refresh, boolean requireJkToml) {
         return "{\"t\":\""
                 + GIT_FETCH_REQUEST
                 + "\",\"url\":"
@@ -1076,6 +1077,8 @@ public final class EngineProtocol {
                 + Ndjson.quote(cache)
                 + ",\"refresh\":"
                 + refresh
+                + ",\"requireJkToml\":"
+                + requireJkToml
                 + "}";
     }
 

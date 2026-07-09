@@ -150,7 +150,13 @@ public final class ToolInstallCommand implements CliCommand {
             return appInstallDelegate().runProjectInstallGoal(projectDir, "install");
         }
         if (classified instanceof dev.jkbuild.tool.ToolTarget.Git git) {
-            return appInstallDelegate().installFromGit(git.raw());
+            String raw = git.raw().startsWith("git+") ? git.raw().substring("git+".length()) : git.raw();
+            String canonical =
+                    dev.jkbuild.util.GitUrl.canonicalize(InstallCommand.splitUrlRef(raw).url());
+            Path stateDirForGit = stateDirOverride != null ? stateDirOverride : JkDirs.state();
+            Integer gitGate = UrlToolSource.gate(UrlToolSource.gitTrustUrl(canonical), stateDirForGit, "jk install");
+            if (gitGate != null) return gitGate;
+            return appInstallDelegate().installFromGit(raw);
         }
         if (classified instanceof dev.jkbuild.tool.ToolTarget.Url u) {
             Path stateDirForTrust = stateDirOverride != null ? stateDirOverride : JkDirs.state();
@@ -165,6 +171,12 @@ public final class ToolInstallCommand implements CliCommand {
                 return Exit.SOFTWARE;
             }
             return installFile(fetched);
+        }
+
+        if (classified instanceof dev.jkbuild.tool.ToolTarget.JBangAlias) {
+            Integer aliasExit = resolveJBangAliasForInstall();
+            if (aliasExit != null) return aliasExit;
+            // A GAV script-ref fell through: `coord` (and the default --bin) were rewritten.
         }
 
         ToolTargets.Resolved resolved;
@@ -220,6 +232,49 @@ public final class ToolInstallCommand implements CliCommand {
             CliOutput.out("  export PATH=\"" + binDir + ":$PATH\"");
         }
         return 0;
+    }
+
+    /**
+     * A JBang {@code alias@catalog} install (plan §6): locate + trust-gate the catalog, then
+     * install the alias's script-ref — fetched scripts snapshot an env named after the alias; a
+     * coordinate ref rewrites {@code coord} and returns {@code null} to fall through. Alias
+     * default {@code arguments} can't ride a launcher yet and warn when present.
+     */
+    private Integer resolveJBangAliasForInstall() throws IOException, InterruptedException {
+        String aliasName = coord.substring(0, coord.indexOf('@'));
+        JBangCatalog.Resolved r;
+        try {
+            r = JBangCatalog.resolve(coord, new dev.jkbuild.http.Http());
+        } catch (IOException e) {
+            CliOutput.err("jk tool install: " + e.getMessage());
+            return Exit.SOFTWARE;
+        }
+        Path stateDirForTrust = stateDirOverride != null ? stateDirOverride : JkDirs.state();
+        Integer gated = UrlToolSource.gate(r.pageOrigin(), stateDirForTrust, "jk tool install");
+        if (gated != null) return gated;
+        if (r.hasUnhonored() || !r.arguments().isEmpty()) {
+            CliOutput.err("jk tool install: warning — this alias declares arguments/dependencies/java-options,"
+                    + " which installed launchers do not honor yet.");
+        }
+        if (binName == null || binName.isBlank()) binName = aliasName;
+        String ref = r.scriptRef();
+        if (!ref.contains("://") && ref.contains(":")) {
+            coord = ref; // coordinate script-ref — the normal flow takes it from here
+            return null;
+        }
+        String url = ref.contains("://") ? ref : r.rawBase().resolve(ref).toString();
+        if (ref.contains("://")) {
+            Integer urlGate = UrlToolSource.gate(url, stateDirForTrust, "jk tool install");
+            if (urlGate != null) return urlGate;
+        }
+        Path fetched;
+        try {
+            fetched = UrlToolSource.fetch(url, cacheDirOverride != null ? cacheDirOverride : JkDirs.cache(), false);
+        } catch (IOException e) {
+            CliOutput.err("jk tool install: " + e.getMessage());
+            return Exit.SOFTWARE;
+        }
+        return installFile(fetched);
     }
 
     /**

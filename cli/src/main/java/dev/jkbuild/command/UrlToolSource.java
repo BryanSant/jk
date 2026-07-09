@@ -105,6 +105,23 @@ final class UrlToolSource {
         return file;
     }
 
+    /**
+     * The https page-style form of a git URL for trust matching: {@code git@github.com:acme/x.git}
+     * and {@code gh:acme/x} both gate as {@code https://github.com/acme/x} — the prefix the user
+     * would trust reads like the address bar regardless of transport.
+     */
+    static String gitTrustUrl(String canonicalGitUrl) {
+        try {
+            URI uri = URI.create(canonicalGitUrl);
+            if (uri.getHost() == null) return canonicalGitUrl;
+            String path = uri.getPath() == null ? "" : uri.getPath();
+            if (path.endsWith(".git")) path = path.substring(0, path.length() - 4);
+            return "https://" + uri.getHost().toLowerCase(Locale.ROOT) + path;
+        } catch (RuntimeException e) {
+            return canonicalGitUrl;
+        }
+    }
+
     private static byte[] get(Http http, URI uri) throws IOException, InterruptedException {
         var response = http.get(uri);
         if (response.statusCode() != 200) {

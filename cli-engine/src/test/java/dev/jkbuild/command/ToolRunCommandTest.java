@@ -93,6 +93,93 @@ class ToolRunCommandTest {
     }
 
     @Test
+    void jbang_alias_resolves_the_catalog_and_runs_the_script(@TempDir Path tempDir) throws Exception {
+        served.put("/cat/jbang-catalog.json", """
+                {
+                  "aliases": {
+                    "hello": {
+                      "script-ref": "scripts/Hello.java",
+                      "arguments": ["seed"]
+                    }
+                  }
+                }
+                """.getBytes(StandardCharsets.UTF_8));
+        served.put("/cat/scripts/Hello.java", """
+                public class Hello {
+                    public static void main(String[] args) { System.exit(args.length); }
+                }
+                """.getBytes(StandardCharsets.UTF_8));
+
+        Path state = tempDir.resolve("home");
+        run("trust", "add", "--state-dir", state.toString(), base.toString() + "/");
+        String host = base.getHost() + ":" + base.getPort();
+        int exit = run(
+                "tool",
+                "run",
+                "--cache-dir",
+                tempDir.resolve("home/cache").toString(),
+                "--state-dir",
+                state.toString(),
+                "hello@" + host + "/cat",
+                "extra");
+        // alias default arguments (["seed"]) + CLI args (["extra"]) reach the script.
+        assertThat(exit).isEqualTo(2);
+    }
+
+    @Test
+    void jbang_alias_with_unknown_name_reports_the_catalog(@TempDir Path tempDir) throws Exception {
+        served.put("/cat/jbang-catalog.json", "{ \"aliases\": {} }".getBytes(StandardCharsets.UTF_8));
+        Path state = tempDir.resolve("home");
+        run("trust", "add", "--state-dir", state.toString(), base.toString() + "/");
+        String host = base.getHost() + ":" + base.getPort();
+        int exit = run(
+                "tool",
+                "run",
+                "--state-dir",
+                state.toString(),
+                "nope@" + host + "/cat");
+        assertThat(exit).isEqualTo(70); // rendered IOException: catalog has no such alias
+    }
+
+    @Test
+    void git_target_clones_and_runs_a_jbang_convention_repo(@TempDir Path tempDir) throws Exception {
+        Path repo = tempDir.resolve("repo");
+        Files.createDirectories(repo);
+        Files.writeString(repo.resolve("main.java"), """
+                public class main {
+                    public static void main(String[] args) { System.exit(args.length); }
+                }
+                """, StandardCharsets.UTF_8);
+        git(repo, "init", "-b", "main");
+        git(repo, "add", ".");
+        git(repo, "commit", "-m", "init");
+
+        Path state = tempDir.resolve("home");
+        run("trust", "add", "--state-dir", state.toString(), "file://" + tempDir.toAbsolutePath() + "/");
+        int exit = run(
+                "tool",
+                "run",
+                "--cache-dir",
+                tempDir.resolve("home/cache").toString(),
+                "--state-dir",
+                state.toString(),
+                "git+file://" + repo.toAbsolutePath(),
+                "x");
+        assertThat(exit).isEqualTo(1); // args reach the repo's main.java
+    }
+
+    @Test
+    void untrusted_git_target_is_rejected(@TempDir Path tempDir) throws Exception {
+        int exit = run(
+                "tool",
+                "run",
+                "--state-dir",
+                tempDir.resolve("home").toString(),
+                "git+file://" + tempDir.toAbsolutePath() + "/nope");
+        assertThat(exit).isEqualTo(64);
+    }
+
+    @Test
     void untrusted_url_is_rejected_with_the_trust_hint(@TempDir Path tempDir) throws Exception {
         served.put("/scripts/Remote.java", """
                 public class Remote {
@@ -679,6 +766,19 @@ class ToolRunCommandTest {
                 + version
                 + "."
                 + ext;
+    }
+
+    /** Drive the system git for local-repo fixtures (identity + signing pinned for hermeticity). */
+    private static void git(Path dir, String... args) throws Exception {
+        java.util.List<String> cmd = new java.util.ArrayList<>(java.util.List.of(
+                "git", "-C", dir.toString(), "-c", "user.name=t", "-c", "user.email=t@t",
+                "-c", "commit.gpgsign=false"));
+        cmd.addAll(java.util.List.of(args));
+        Process p = new ProcessBuilder(cmd).redirectErrorStream(true).start();
+        String out = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+        if (p.waitFor() != 0) {
+            throw new IllegalStateException("git " + String.join(" ", args) + " failed:\n" + out);
+        }
     }
 
     private static int run(String... args) {

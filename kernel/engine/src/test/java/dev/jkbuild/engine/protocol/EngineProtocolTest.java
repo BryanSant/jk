@@ -363,12 +363,13 @@ class EngineProtocolTest {
     @Test
     void git_fetch_request_and_finish_variant_round_trip() {
         String req = EngineProtocol.gitFetchRequest(
-                "https://github.com/o/r.git", "github.com/o/r", "v1.2", "/cache", true);
+                "https://github.com/o/r.git", "github.com/o/r", "v1.2", "/cache", true, false);
         assertThat(EngineProtocol.typeOf(req)).isEqualTo(EngineProtocol.GIT_FETCH_REQUEST);
         assertThat(Ndjson.str(req, "url")).isEqualTo("https://github.com/o/r.git");
         assertThat(Ndjson.str(req, "canonicalUrl")).isEqualTo("github.com/o/r");
         assertThat(Ndjson.str(req, "ref")).isEqualTo("v1.2");
         assertThat(Ndjson.bool(req, "refresh", false)).isTrue();
+        assertThat(Ndjson.bool(req, "requireJkToml", true)).isFalse();
 
         String finish = EngineProtocol.goalFinishGitFetch("", true, "/cache/git/co/abc", "abc123");
         assertThat(EngineProtocol.typeOf(finish)).isEqualTo(EngineProtocol.GOAL_FINISH);
