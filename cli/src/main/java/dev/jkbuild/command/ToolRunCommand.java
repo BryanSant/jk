@@ -103,6 +103,45 @@ public final class ToolRunCommand implements CliCommand {
     GlobalOptions global;
 
     /**
+     * A directory target (docs/tool-targets-plan.md §4.4): a jk project builds (tests skipped) and
+     * execs like {@code jk run} without the {@code cd}; a JBang-convention folder runs its {@code
+     * main.java}; a folder holding exactly one script runs that (gist-checkout shape).
+     */
+    private int runDirectory(Path dir, List<String> args) throws IOException, InterruptedException {
+        if (Files.isRegularFile(dir.resolve("jk.toml"))) {
+            RunCommand delegate = new RunCommand();
+            delegate.cacheDirOverride = cacheDirOverride;
+            delegate.buildOpts = new dev.jkbuild.cli.BuildOptions();
+            delegate.buildOpts.skipTests = true;
+            delegate.global = global;
+            return delegate.runProject(dir, args);
+        }
+        if (Files.isRegularFile(dir.resolve("jbang-catalog.json"))) {
+            CliOutput.err("jk tool run: " + dir + " is a JBang catalog — `alias@…` references aren't"
+                    + " supported yet (docs/tool-targets-plan.md §6).");
+            return Exit.USAGE;
+        }
+        ScriptRunner runner = new ScriptRunner(global, cacheDirOverride, stateDirOverride, repoUrl, forceRecompile);
+        Path mainJava = dir.resolve("main.java");
+        if (Files.isRegularFile(mainJava)) return runner.run(mainJava, args);
+        List<Path> scripts;
+        try (var listing = Files.list(dir)) {
+            scripts = listing.filter(Files::isRegularFile)
+                    .filter(p -> {
+                        String n = p.getFileName().toString().toLowerCase(java.util.Locale.ROOT);
+                        return n.endsWith(".java") || n.endsWith(".kt") || n.endsWith(".kts");
+                    })
+                    .sorted()
+                    .toList();
+        }
+        if (scripts.size() == 1) return runner.run(scripts.get(0), args);
+        CliOutput.err("jk tool run: nothing runnable in " + dir
+                + " — looked for jk.toml, main.java, or exactly one .java/.kt/.kts (found "
+                + scripts.size() + ").");
+        return Exit.USAGE;
+    }
+
+    /**
      * Escape hatch for the fast JVM unit-test suite ONLY — see {@link
      * BuildCommand#engineDisabledForTests()} for the full rationale. A real {@code jk tool run} of
      * a coordinate hosts its resolve+fetch on the engine; the exec always runs here (it inherits
@@ -129,9 +168,13 @@ public final class ToolRunCommand implements CliCommand {
         // extension is the signal even when the file is missing, so the user gets
         // a proper "not found" error from the matching mode handler. Routing goes
         // through the classifier so a remote `https://…/tool.jar` is NOT a file.
-        if (dev.jkbuild.tool.ToolTarget.classify(target) instanceof dev.jkbuild.tool.ToolTarget.RunnableFile file) {
+        dev.jkbuild.tool.ToolTarget classified = dev.jkbuild.tool.ToolTarget.classify(target);
+        if (classified instanceof dev.jkbuild.tool.ToolTarget.RunnableFile file) {
             return new ScriptRunner(global, cacheDirOverride, stateDirOverride, repoUrl, forceRecompile)
                     .run(file.path(), toolArgs);
+        }
+        if (classified instanceof dev.jkbuild.tool.ToolTarget.Directory dir) {
+            return runDirectory(dir.path(), toolArgs);
         }
 
         ToolTargets.Resolved resolved;

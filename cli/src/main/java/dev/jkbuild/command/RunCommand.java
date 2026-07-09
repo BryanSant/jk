@@ -115,7 +115,8 @@ public final class RunCommand implements CliCommand {
         return runProject(projectDir, positional);
     }
 
-    private int runProject(Path projectDir, List<String> appArgs) throws IOException, InterruptedException {
+    /** Package-private: {@code jk tool run <dir>} delegates a jk-project directory here. */
+    int runProject(Path projectDir, List<String> appArgs) throws IOException, InterruptedException {
         JkBuild project = JkBuildParser.parse(projectDir.resolve("jk.toml"));
         if (project.mainClass() == null) {
             boolean nerdfont = dev.jkbuild.config.GlobalConfig.nerdfont();

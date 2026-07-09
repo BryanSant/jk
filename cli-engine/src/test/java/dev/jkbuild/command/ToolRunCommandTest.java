@@ -93,6 +93,77 @@ class ToolRunCommandTest {
     }
 
     @Test
+    void directory_with_main_java_runs_the_jbang_folder_convention(@TempDir Path tempDir) throws Exception {
+        Path dir = tempDir.resolve("app");
+        Files.createDirectories(dir);
+        Files.writeString(dir.resolve("main.java"), """
+                public class main {
+                    public static void main(String[] args) { System.exit(0); }
+                }
+                """, StandardCharsets.UTF_8);
+
+        int exit = run(
+                "tool",
+                "run",
+                "--cache-dir",
+                tempDir.resolve("home/cache").toString(),
+                "--state-dir",
+                tempDir.resolve("home").toString(),
+                dir.toString());
+        assertThat(exit).isEqualTo(0);
+    }
+
+    @Test
+    void directory_with_a_single_script_runs_it(@TempDir Path tempDir) throws Exception {
+        Path dir = tempDir.resolve("gist");
+        Files.createDirectories(dir);
+        Files.writeString(dir.resolve("Only.java"), """
+                public class Only {
+                    public static void main(String[] args) { System.exit(0); }
+                }
+                """, StandardCharsets.UTF_8);
+
+        int exit = run(
+                "tool",
+                "run",
+                "--cache-dir",
+                tempDir.resolve("home/cache").toString(),
+                "--state-dir",
+                tempDir.resolve("home").toString(),
+                dir.toString());
+        assertThat(exit).isEqualTo(0);
+    }
+
+    @Test
+    void ambiguous_directory_is_a_usage_error(@TempDir Path tempDir) throws Exception {
+        Path dir = tempDir.resolve("multi");
+        Files.createDirectories(dir);
+        Files.writeString(dir.resolve("A.java"), "public class A {}", StandardCharsets.UTF_8);
+        Files.writeString(dir.resolve("B.java"), "public class B {}", StandardCharsets.UTF_8);
+
+        int exit = run("tool", "run", dir.toString());
+        assertThat(exit).isEqualTo(64);
+    }
+
+    @Test
+    void directory_with_jk_toml_builds_and_execs_the_project(@TempDir Path tempDir) throws Exception {
+        // `jk tool run <dir>` on a jk project == `jk run` without the cd.
+        run("new", "--group", "com.example", "--name", "widget", "--executable", "--layout", "traditional",
+                tempDir.toString());
+        Path src = tempDir.resolve("src/main/java/com/example/Main.java");
+        Files.createDirectories(src.getParent());
+        Files.writeString(src, """
+                package com.example;
+                public final class Main {
+                    public static void main(String[] args) { System.exit(args.length); }
+                }
+                """);
+
+        int exit = run("tool", "run", "--cache-dir", SharedTestCache.arg(), tempDir.toString(), "--", "a", "b");
+        assertThat(exit).isEqualTo(2);
+    }
+
+    @Test
     void sources_directive_compiles_companion_files(@TempDir Path tempDir) throws Exception {
         Files.writeString(tempDir.resolve("Helper.java"), """
                 public class Helper {
