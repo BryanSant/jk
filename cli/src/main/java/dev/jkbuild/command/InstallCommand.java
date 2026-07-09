@@ -295,7 +295,8 @@ public final class InstallCommand implements CliCommand {
 
     // --- mode 4: git URL -------------------------------------------------
 
-    private int installFromGit(String input) throws IOException, InterruptedException {
+    /** Package-private: `jk tool install <git-url>` delegates here (plan §9 convergence). */
+    int installFromGit(String input) throws IOException, InterruptedException {
         UrlAndRef split = splitUrlRef(input);
         String expanded = GitUrl.expand(split.url());
         String canonical = GitUrl.canonicalize(split.url());
@@ -350,7 +351,8 @@ public final class InstallCommand implements CliCommand {
 
     // --- shared project-install pipeline ---------------------------------
 
-    private int runProjectInstallGoal(Path projectDir, String goalName) throws IOException {
+    /** Package-private: `jk tool install <project-dir>` delegates here (plan §9 convergence). */
+    int runProjectInstallGoal(Path projectDir, String goalName) throws IOException {
         Path cacheDir = cacheDir();
         Path binDir = binDir();
         Path libDir = libDir();

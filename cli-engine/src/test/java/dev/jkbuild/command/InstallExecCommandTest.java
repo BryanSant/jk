@@ -380,6 +380,42 @@ class InstallExecCommandTest {
                 .isEqualTo(64);
     }
 
+    @Test
+    void tool_install_of_a_project_dir_delegates_to_the_app_pipeline(@TempDir Path tempDir) throws Exception {
+        // Convergence (plan §9): `jk tool install <dir>` == `jk install` run in that dir.
+        run("new", "--group", "com.example", "--name", "widget", "--executable", "--layout", "traditional",
+                tempDir.resolve("proj").toString());
+        Path src = tempDir.resolve("proj/src/main/java/com/example/Main.java");
+        Files.createDirectories(src.getParent());
+        Files.writeString(src, """
+                package com.example;
+                public final class Main {
+                    public static void main(String[] args) { System.exit(0); }
+                }
+                """);
+
+        Path bin = tempDir.resolve("bin");
+        int exit = run(
+                "tool",
+                "install",
+                "--cache-dir",
+                SharedTestCache.arg(),
+                "--state-dir",
+                tempDir.toString(),
+                "--bin-dir",
+                bin.toString(),
+                tempDir.resolve("proj").toString());
+        assertThat(exit).isEqualTo(0);
+        assertThat(bin.resolve("widget")).exists();
+    }
+
+    @Test
+    void tool_install_of_a_non_project_dir_is_a_usage_error(@TempDir Path tempDir) throws Exception {
+        Path dir = tempDir.resolve("empty");
+        Files.createDirectories(dir);
+        assertThat(run("tool", "install", dir.toString())).isEqualTo(64);
+    }
+
     // --- fixture helpers ----------------------------------------------------
 
     private void serveMetadata(String group, String artifact, String... versions) {

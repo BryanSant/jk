@@ -63,7 +63,11 @@ public final class ToolInstallCommand implements CliCommand {
     @Override
     public List<Param> parameters() {
         return List.of(Param.of(
-                "target", Arity.ONE, "Catalog name or Maven coordinate spec (g:a[:version|@selector])."));
+                "target",
+                Arity.ZERO_OR_ONE,
+                "Catalog name, Maven coordinate spec (g:a[:version|@selector]),\n"
+                        + "script/jar file, project directory, or git URL. Omit to\n"
+                        + "install the current jk.toml project."));
     }
 
     String coord;
@@ -87,7 +91,7 @@ public final class ToolInstallCommand implements CliCommand {
 
     @Override
     public int run(Invocation in) throws IOException, InterruptedException {
-        this.coord = in.positionals().get(0);
+        this.coord = in.positionals().isEmpty() ? "." : in.positionals().get(0);
         this.binName = in.value("bin").orElse(null);
         this.mainClass = in.value("main").orElse(null);
         this.cacheDirOverride = in.value("cache-dir").map(Path::of).orElse(null);
@@ -97,9 +101,22 @@ public final class ToolInstallCommand implements CliCommand {
         this.global = GlobalOptions.from(in);
 
         // A local script/jar installs as a snapshot env (plan §4.3) — the launcher must not
-        // depend on the source file continuing to exist.
-        if (dev.jkbuild.tool.ToolTarget.classify(coord) instanceof dev.jkbuild.tool.ToolTarget.RunnableFile file) {
+        // depend on the source file continuing to exist. Project dirs and git URLs delegate to
+        // the app-install pipeline (plan §9 convergence: one pipeline, two spellings).
+        dev.jkbuild.tool.ToolTarget classified = dev.jkbuild.tool.ToolTarget.classify(coord);
+        if (classified instanceof dev.jkbuild.tool.ToolTarget.RunnableFile file) {
             return installFile(file.path());
+        }
+        if (classified instanceof dev.jkbuild.tool.ToolTarget.Directory dir) {
+            if (!Files.isRegularFile(dir.path().resolve("jk.toml"))) {
+                CliOutput.err("jk tool install: no jk.toml in " + dir.path()
+                        + " — a directory target must be a jk project.");
+                return Exit.USAGE;
+            }
+            return appInstallDelegate().runProjectInstallGoal(dir.path().toAbsolutePath().normalize(), "install");
+        }
+        if (classified instanceof dev.jkbuild.tool.ToolTarget.Git git) {
+            return appInstallDelegate().installFromGit(git.raw());
         }
 
         ToolTargets.Resolved resolved;
@@ -231,6 +248,21 @@ public final class ToolInstallCommand implements CliCommand {
             CliOutput.out("  export PATH=\"" + binDir + ":$PATH\"");
         }
         return 0;
+    }
+
+    /** The app-install pipeline, shared with `jk install` (plan §9: converged, two spellings). */
+    private InstallCommand appInstallDelegate() {
+        InstallCommand delegate = new InstallCommand();
+        delegate.binName = binName;
+        delegate.mainClass = mainClass;
+        delegate.cacheDirOverride = cacheDirOverride;
+        delegate.stateDirOverride = stateDirOverride;
+        delegate.binDirOverride = binDirOverride;
+        delegate.repoUrl = repoUrl;
+        delegate.buildOpts = new dev.jkbuild.cli.BuildOptions();
+        delegate.buildOpts.skipTests = false;
+        delegate.global = global;
+        return delegate;
     }
 
     private static void copyTree(Path from, Path to) throws IOException {
