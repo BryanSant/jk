@@ -176,6 +176,21 @@ public final class ToolRunCommand implements CliCommand {
         if (classified instanceof dev.jkbuild.tool.ToolTarget.Directory dir) {
             return runDirectory(global.workingDir().resolve(dir.path()).normalize(), toolArgs);
         }
+        if (classified instanceof dev.jkbuild.tool.ToolTarget.Url u) {
+            Path stateDir = stateDirOverride != null ? stateDirOverride : JkDirs.state();
+            Integer gated = UrlToolSource.gate(u.raw(), stateDir, "jk tool run");
+            if (gated != null) return gated;
+            Path fetched;
+            try {
+                fetched = UrlToolSource.fetch(
+                        u.raw(), cacheDirOverride != null ? cacheDirOverride : JkDirs.cache(), forceRecompile);
+            } catch (IOException e) {
+                CliOutput.err("jk tool run: " + e.getMessage());
+                return Exit.SOFTWARE;
+            }
+            return new ScriptRunner(global, cacheDirOverride, stateDirOverride, repoUrl, forceRecompile)
+                    .run(fetched, toolArgs);
+        }
 
         ToolTargets.Resolved resolved;
         List<String> with;

@@ -93,6 +93,74 @@ class ToolRunCommandTest {
     }
 
     @Test
+    void untrusted_url_is_rejected_with_the_trust_hint(@TempDir Path tempDir) throws Exception {
+        served.put("/scripts/Remote.java", """
+                public class Remote {
+                    public static void main(String[] args) { System.exit(0); }
+                }
+                """.getBytes(StandardCharsets.UTF_8));
+
+        // Non-interactive (test JVM has no TTY): hard error naming `jk trust add`.
+        int exit = run(
+                "tool",
+                "run",
+                "--cache-dir",
+                tempDir.resolve("home/cache").toString(),
+                "--state-dir",
+                tempDir.resolve("home").toString(),
+                base + "/scripts/Remote.java");
+        assertThat(exit).isEqualTo(64);
+    }
+
+    @Test
+    void trusted_url_downloads_and_runs(@TempDir Path tempDir) throws Exception {
+        served.put("/scripts/Remote.java", """
+                public class Remote {
+                    public static void main(String[] args) { System.exit(args.length); }
+                }
+                """.getBytes(StandardCharsets.UTF_8));
+
+        Path state = tempDir.resolve("home");
+        assertThat(run("trust", "add", "--state-dir", state.toString(), base.toString() + "/")).isEqualTo(0);
+        int exit = run(
+                "tool",
+                "run",
+                "--cache-dir",
+                tempDir.resolve("home/cache").toString(),
+                "--state-dir",
+                state.toString(),
+                base + "/scripts/Remote.java",
+                "a",
+                "b");
+        assertThat(exit).isEqualTo(2);
+    }
+
+    @Test
+    void url_script_pulls_its_sources_siblings(@TempDir Path tempDir) throws Exception {
+        served.put("/x/Main.java", """
+                //SOURCES Helper.java
+                public class Main {
+                    public static void main(String[] args) { System.exit(Helper.code()); }
+                }
+                """.getBytes(StandardCharsets.UTF_8));
+        served.put("/x/Helper.java", """
+                public class Helper { static int code() { return 0; } }
+                """.getBytes(StandardCharsets.UTF_8));
+
+        Path state = tempDir.resolve("home");
+        run("trust", "add", "--state-dir", state.toString(), base.toString() + "/");
+        int exit = run(
+                "tool",
+                "run",
+                "--cache-dir",
+                tempDir.resolve("home/cache").toString(),
+                "--state-dir",
+                state.toString(),
+                base + "/x/Main.java");
+        assertThat(exit).isEqualTo(0);
+    }
+
+    @Test
     void directory_with_main_java_runs_the_jbang_folder_convention(@TempDir Path tempDir) throws Exception {
         Path dir = tempDir.resolve("app");
         Files.createDirectories(dir);

@@ -43,6 +43,7 @@ import dev.jkbuild.command.ShellCommand;
 import dev.jkbuild.command.SyncCommand;
 import dev.jkbuild.command.TestCommand;
 import dev.jkbuild.command.ToolCommand;
+import dev.jkbuild.command.TrustCommand;
 import dev.jkbuild.command.TreeCommand;
 import dev.jkbuild.command.UpdateCommand;
 import dev.jkbuild.command.VerifyBuildCommand;
@@ -97,6 +98,7 @@ public final class CommandDispatch {
             new CacheCommand(),
             new JdkCommand(),
             new ToolCommand(),
+            new TrustCommand(),
             new LibraryCommand(),
             new RepoCommand(),
             new IdeCommand(),

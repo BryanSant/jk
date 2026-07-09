@@ -408,6 +408,45 @@ class InstallExecCommandTest {
         assertThat(run("tool", "install", dir.toString())).isEqualTo(64);
     }
 
+    @Test
+    void tool_install_from_a_trusted_url_snapshots_an_env(@TempDir Path tempDir) throws Exception {
+        served.put("/r/Web.java", """
+                public class Web {
+                    public static void main(String[] args) { System.exit(0); }
+                }
+                """.getBytes());
+
+        run("trust", "add", "--state-dir", tempDir.toString(), base.toString() + "/");
+        Path bin = tempDir.resolve("bin");
+        int exit = run(
+                "tool",
+                "install",
+                "--cache-dir",
+                tempDir.resolve("cache").toString(),
+                "--state-dir",
+                tempDir.toString(),
+                "--bin-dir",
+                bin.toString(),
+                base + "/r/Web.java");
+        assertThat(exit).isEqualTo(0);
+        assertThat(tempDir.resolve("tools/envs/web/classes/Web.class")).exists();
+
+        Process p = new ProcessBuilder(bin.resolve("web").toString()).start();
+        assertThat(p.waitFor()).isEqualTo(0);
+    }
+
+    @Test
+    void tool_install_from_an_untrusted_url_is_rejected(@TempDir Path tempDir) throws Exception {
+        served.put("/r/Web.java", "public class Web {}".getBytes());
+        int exit = run(
+                "tool",
+                "install",
+                "--state-dir",
+                tempDir.toString(),
+                base + "/r/Web.java");
+        assertThat(exit).isEqualTo(64);
+    }
+
     // --- fixture helpers ----------------------------------------------------
 
     private void serveMetadata(String group, String artifact, String... versions) {

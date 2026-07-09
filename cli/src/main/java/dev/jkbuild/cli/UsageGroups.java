@@ -28,7 +28,7 @@ public final class UsageGroups {
                     List.of(
                             "new", "init", "add", "remove", "lock", "update", "sync", "deny", "tree", "why", "explain",
                             "audit", "verify")),
-            new CommandGroup("Toolchain commands:", List.of("jdk", "tool", "shell", "activate", "deactivate")),
+            new CommandGroup("Toolchain commands:", List.of("jdk", "tool", "trust", "shell", "activate", "deactivate")),
             new CommandGroup("Interop commands:", List.of("import", "mvn", "gradle", "export")),
             new CommandGroup("System commands:", List.of("doctor", "cache")));
 
@@ -41,7 +41,7 @@ public final class UsageGroups {
             new CommandGroup(
                     "Build commands:", List.of("build", "run", "clean", "image", "native", "publish")),
             new CommandGroup("Project commands:", List.of("new", "init", "add", "remove", "lock", "update")),
-            new CommandGroup("Toolchain commands:", List.of("jdk", "tool", "shell", "activate")));
+            new CommandGroup("Toolchain commands:", List.of("jdk", "tool", "trust", "shell", "activate")));
 
     /**
      * The long-name set every {@code GlobalOptions} option declares. Used to partition the merged

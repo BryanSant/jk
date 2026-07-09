@@ -152,6 +152,20 @@ public final class ToolInstallCommand implements CliCommand {
         if (classified instanceof dev.jkbuild.tool.ToolTarget.Git git) {
             return appInstallDelegate().installFromGit(git.raw());
         }
+        if (classified instanceof dev.jkbuild.tool.ToolTarget.Url u) {
+            Path stateDirForTrust = stateDirOverride != null ? stateDirOverride : JkDirs.state();
+            Integer gated = UrlToolSource.gate(u.raw(), stateDirForTrust, "jk tool install");
+            if (gated != null) return gated;
+            Path fetched;
+            try {
+                fetched = UrlToolSource.fetch(
+                        u.raw(), cacheDirOverride != null ? cacheDirOverride : JkDirs.cache(), false);
+            } catch (IOException e) {
+                CliOutput.err("jk tool install: " + e.getMessage());
+                return Exit.SOFTWARE;
+            }
+            return installFile(fetched);
+        }
 
         ToolTargets.Resolved resolved;
         List<String> with;

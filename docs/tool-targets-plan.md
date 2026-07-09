@@ -439,6 +439,17 @@ updates, this plan.
    delegated app-install pipeline).
 3. **Remote** — trust store + `jk trust`; URL targets with rewrites,
    gists, URL-relative `//SOURCES`/`//FILES`, ETag cache.
+   **Implemented 2026-07-09**: `TrustedSources`
+   ($JK_STATE_DIR/trusted-sources.toml, prefix-matched, checked
+   client-side against the URL the user typed), `jk trust
+   add|list|remove|import --jbang`, TTY once-prompt with the trust-add
+   hint / hard error non-interactively; `UrlRewriter` (GitHub blob,
+   GitLab, Bitbucket, single-file gists), download to
+   $JK_CACHE_DIR/tool-src/<sha256(url)>/ with payload sniffing for
+   extension-less URLs, `//SOURCES`/`//FILES` siblings mirrored from the
+   raw base, then the local file pipeline (run + install). Deviations:
+   cache is reuse-unless---force instead of ETag conditional GET;
+   multi-file gists (API) deferred.
 4. **Git + catalogs** — git targets for `tool run|install`;
    `jbang-catalog.json` + `alias@…` (disambiguation per §6.1); `jk trust
    import --jbang`; publish a "jbang → jkx" migration note with the
