@@ -347,6 +347,41 @@ class JdkSelectorTest {
     }
 
     @Test
+    void select_flexible_bare_graalvm_hint_prefers_oracle_over_community_edition() {
+        // Both vendors' feed metadata contain "graalvm" (Oracle: vendor "Oracle" /
+        // product "GraalVM"; CE: vendor "GraalVM" / product "Community Edition"), so
+        // the hint alone ties them. CE also publishes a more specific version string
+        // (25.0.2 vs Oracle's bare "25"), which would otherwise win the version
+        // tie-break — vendor preference must be checked first.
+        JdkCatalog catalog = catalogOf(
+                entry(
+                        "GraalVM",
+                        "Community Edition",
+                        "graalvm-ce-25",
+                        25,
+                        "25.0.2",
+                        false,
+                        false,
+                        List.of("graalvm-ce-25.0.2", "graalvm-ce-25"),
+                        "linux",
+                        "x86_64"),
+                entry(
+                        "Oracle",
+                        "GraalVM",
+                        "graalvm-jdk-25",
+                        25,
+                        "25",
+                        false,
+                        false,
+                        List.of("graalvm-jdk-25"),
+                        "linux",
+                        "x86_64"));
+
+        var pick = JdkSelector.selectFlexible(catalog, "graalvm", "linux", "x86_64");
+        assertThat(pick).isPresent().get().extracting(JdkCatalog.Entry::vendor).isEqualTo("Oracle");
+    }
+
+    @Test
     void select_flexible_returns_empty_when_no_match() {
         JdkCatalog catalog = catalogOf(entry(
                 "Eclipse",

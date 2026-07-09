@@ -243,8 +243,8 @@ class JkBuildParserTest {
         assertThat(JkBuildParser.parse(graal("\"graalvm-25\"")).graal()).isEqualTo("graalvm-25");
         assertThat(JkBuildParser.parse(graal("25")).graal()).isEqualTo("25");
         assertThat(JkBuildParser.parse(graal("\"native\"")).graal()).isEqualTo("native");
-        // [native] declared, graal key omitted → defaults to the "native" keyword.
-        assertThat(JkBuildParser.parse(PROJECT + "\n[native]\n").graal()).isEqualTo("native");
+        // [native] declared, graal key omitted → defaults to the "graalvm" spec.
+        assertThat(JkBuildParser.parse(PROJECT + "\n[native]\n").graal()).isEqualTo("graalvm");
         // No [native] table at all → null.
         assertThat(JkBuildParser.parse(PROJECT).graal()).isNull();
     }
@@ -1357,7 +1357,7 @@ class JkBuildParserTest {
         assertThat(nc.name()).isEqualTo("myapp");
         assertThat(nc.args()).containsExactly("-O3", "--gc=serial");
         assertThat(nc.always()).isTrue();
-        assertThat(nc.graal()).isEqualTo("native"); // defaulted — no graal key given
+        assertThat(nc.graal()).isEqualTo("graalvm"); // defaulted — no graal key given
     }
 
     @Test

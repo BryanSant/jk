@@ -26,9 +26,9 @@ import java.util.Optional;
  * install} of a native app) uses. Resolution mirrors {@code project.jdk}:
  *
  * <ol>
- *   <li>{@code [native].graal} set (defaults to the {@code "native"} keyword whenever {@code
- *       [native]} is declared) → an already-installed GraalVM matching the spec, else auto-install
- *       it (no prompt — the pin is explicit intent, same as {@code project.jdk}).
+ *   <li>{@code [native].graal} set (defaults to the vendor-hinted {@code "graalvm"} spec whenever
+ *       {@code [native]} is declared) → an already-installed GraalVM matching the spec, else
+ *       auto-install one (no prompt — the pin is explicit intent, same as {@code project.jdk}).
  *   <li>No {@code [native]} table at all → the current {@code native-image} search (project JDK →
  *       {@code $GRAALVM_HOME} → {@code PATH}).
  *   <li>Still missing → offer to install Oracle GraalVM: prompt with the {@link Confirm} widget on

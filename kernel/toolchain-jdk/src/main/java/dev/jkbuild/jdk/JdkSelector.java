@@ -137,6 +137,11 @@ public final class JdkSelector {
                     // Higher hint score first.
                     .comparingInt((Scored s) -> s.score)
                     .reversed()
+                    // Vendor preference breaks ties a hint alone can't — e.g. "graalvm"
+                    // matches both Oracle GraalVM and GraalVM CE feed entries equally;
+                    // JdkVendor#preferenceRank ranks Oracle GraalVM ahead of GraalVM CE
+                    // (and any other vendor a hint can't disambiguate) by enum order.
+                    .thenComparingInt((Scored s) -> vendorRank(s.entry))
                     // Default-for-major preferred when there are no hint scores to
                     // separate (esp. bare-major inputs like "25").
                     .thenComparing(s -> s.entry.defaultForMajor() ? 0 : 1)

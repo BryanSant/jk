@@ -269,12 +269,13 @@ public final class JkBuildParser {
 
     /**
      * {@code [native].graal} selects the GraalVM whose {@code bin/native-image} {@code jk native}
-     * uses. Same shape as {@code project.jdk} — a bare major ({@code 25} or {@code "25"}) or
-     * vendor-hinted spec ({@code "graalvm-25"}) — plus the keyword {@code "native"} (latest Oracle
-     * GraalVM). A point release is rejected; jk keeps the patch current. Resolution and any
-     * auto-install happen at native-build time (see the CLI's {@code GraalResolver}), so this parser
-     * only normalizes the spec. Absent/blank → {@code null} (caller defaults to {@code "native"} when
-     * {@code [native]} itself is declared).
+     * uses. Same shape as {@code project.jdk} — a bare major ({@code 25} or {@code "25"}), a
+     * vendor-hinted spec ({@code "graalvm-25"} or bare {@code "graalvm"}), or the legacy keyword
+     * {@code "native"} (kept for backward compatibility; equivalent to {@code "graalvm"}). A point
+     * release is rejected; jk keeps the patch current. Resolution and any auto-install happen at
+     * native-build time (see the CLI's {@code GraalResolver}), so this parser only normalizes the
+     * spec. Absent/blank → {@code null} (caller defaults to {@code "graalvm"} when {@code [native]}
+     * itself is declared).
      */
     private static String parseGraalSpec(TomlTable native_) {
         return parseVersionSpec(native_, "graal", "[native].graal", "\"graalvm-25\", \"25\", or \"native\"");
@@ -1099,8 +1100,9 @@ public final class JkBuildParser {
      * The optional {@code [native]} table. Its mere presence marks the project as
      * native-image-eligible ({@link JkBuild#nativeMode()}) — {@code Optional.empty()} when absent,
      * never a defaulted-fields sentinel, so presence and "declared but empty" stay distinguishable.
-     * When declared and {@code graal} is omitted, defaults to the {@code "native"} keyword (latest
-     * Oracle GraalVM) rather than leaving it unset.
+     * When declared and {@code graal} is omitted, defaults to the vendor-hinted {@code "graalvm"}
+     * spec (any installed GraalVM satisfies it; auto-install prefers Oracle GraalVM) rather than
+     * leaving it unset.
      */
     private static Optional<JkBuild.NativeConfig> parseNativeConfig(TomlTable root) {
         TomlTable native_ = root.getTable("native");
@@ -1118,7 +1120,7 @@ public final class JkBuildParser {
             }
         }
         String graal = parseGraalSpec(native_);
-        if (graal == null) graal = "native";
+        if (graal == null) graal = "graalvm";
         boolean always = Boolean.TRUE.equals(native_.getBoolean("always"));
         return Optional.of(new JkBuild.NativeConfig(mainClass, name, args, graal, always));
     }

@@ -134,6 +134,21 @@ class JdkRegistryTest {
     }
 
     @Test
+    void find_by_spec_bare_graalvm_hint_matches_installed_oracle_graalvm(@TempDir Path tempDir) throws IOException {
+        // [native].graal defaults to "graalvm" — verifies a bare vendor hint finds an
+        // already-installed Oracle GraalVM (e.g. via SDKMAN) instead of missing it, the
+        // way the old "native" keyword did against JdkSelector's hint matcher.
+        makeJdkInstall(tempDir.resolve("temurin-25.0.1"), "25.0.1", "Eclipse Adoptium");
+        makeGraalvmInstall(tempDir.resolve("graalvm-jdk-25"), "25");
+        JdkRegistry registry = isolatedRegistry(tempDir);
+        assertThat(registry.findBySpec("graalvm"))
+                .isPresent()
+                .get()
+                .extracting(InstalledJdk::identifier)
+                .isEqualTo("graalvm-jdk-25");
+    }
+
+    @Test
     void list_hits_prefers_manager_source_over_java_home(@TempDir Path tempDir) {
         // EnvVarProbe ($JAVA_HOME → "java-home") sits first in the chain, but a
         // manager probe that reports the same home must win the attribution.
@@ -279,5 +294,15 @@ class JdkRegistryTest {
         Files.writeString(home.resolve("bin").resolve("java"), "#!/fake");
         Files.writeString(
                 home.resolve("release"), "JAVA_VERSION=\"" + version + "\"\nIMPLEMENTOR=\"" + implementor + "\"\n");
+    }
+
+    private static void makeGraalvmInstall(Path home, String version) throws IOException {
+        Files.createDirectories(home.resolve("bin"));
+        Files.writeString(home.resolve("bin").resolve("java"), "#!/fake");
+        Files.writeString(home.resolve("bin").resolve("native-image"), "#!/fake");
+        Files.writeString(
+                home.resolve("release"),
+                "JAVA_VERSION=\"" + version + "\"\nIMPLEMENTOR=\"Oracle Corporation\"\n"
+                        + "IMPLEMENTOR_VERSION=\"Oracle GraalVM " + version + "\"\n");
     }
 }

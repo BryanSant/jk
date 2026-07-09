@@ -74,7 +74,7 @@ class NewCommandTest {
         // A native project's build JDK follows the normal rules (here an explicit
         // bare major); the GraalVM is never chosen here — it's resolved into jk.lock
         // when [native] is declared — so no `graal` key lands in jk.toml (it's
-        // defaulted to the "native" keyword at parse time instead).
+        // defaulted to the "graalvm" spec at parse time instead).
         int exit = Jk.execute(
                 "new",
                 "--group",
@@ -90,7 +90,7 @@ class NewCommandTest {
 
         JkBuild parsed = JkBuildParser.parse(tempDir.resolve("jk.toml"));
         assertThat(parsed.project().jdk()).isEqualTo("21"); // not forced to a GraalVM
-        assertThat(parsed.graal()).isEqualTo("native"); // defaulted — no graal key written
+        assertThat(parsed.graal()).isEqualTo("graalvm"); // defaulted — no graal key written
         assertThat(parsed.nativeMode()).isEqualTo(JkBuild.NativeMode.ALWAYS);
 
         String toml = Files.readString(tempDir.resolve("jk.toml"));
