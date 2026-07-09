@@ -13,7 +13,7 @@ in unchanged, and what doesn't (yet).
 | `@file:DependsOn` / `@file:Repository` in `.kt`/`.kts` | Resolved by jk's own CAS-first resolver (not main-kts's Ivy) and fed to kotlinc via `-classpath`. |
 | `jbang https://github.com/u/r/blob/main/x.java` | `jkx <same url>` — blob→raw rewrites for GitHub/GitLab/Bitbucket, single-file gists too. |
 | `jbang g:a:v` | `jkx g:a:v`; also `g:a` (latest stable) and `g:a@1.2` selectors, which JBang doesn't have. |
-| `jbang hello@user[/repo][/branch][~path]` | Same alias grammar; `jbang-catalog.json` located on GitHub → GitLab → Bitbucket; alias `script-ref` + default `arguments` honored. |
+| `jbang hello@user[/repo][/branch][~path]` | Same alias grammar; `jbang-catalog.json` located on GitHub → GitLab → Bitbucket; alias `script-ref`, `arguments`, `dependencies`, and `java-options` honored. |
 | `jbang folder/` (a `main.java` folder) | `jkx folder/` — plus jk projects (`jk.toml`) and single-script folders. |
 | `jbang app install …` | `jk tool install <anything jkx runs>` — launchers under `~/.jk/bin`. |
 | Trusted sources | Same prefix model. One-time import: `jk trust import --jbang`. |
@@ -27,12 +27,9 @@ treats directives it doesn't know.
 - **`.jsh` (JShell) scripts** — not supported; no current plan.
 - **Groovy scripts and `@Grab`** — deferred until jk grows Groovy
   support.
-- **Alias `dependencies` / `java-options`** — the alias resolves and
-  runs, but these two fields aren't honored yet; jk warns loudly instead
-  of silently dropping them. Installed launchers also don't bake alias
-  default `arguments` yet.
-- **Multi-file gists** — only a gist's first file (the `/raw` redirect)
-  is fetched; use the raw URL of the specific file instead.
+- **Alias default `arguments` on installed launchers** — honored for
+  `jkx alias@…` runs, but an installed launcher doesn't bake them yet
+  (jk warns at install time).
 - **`//MODULE`, `//MANIFEST`, `//JAVAAGENT`, `//NATIVE_OPTIONS`,
   `//CDS`** — parsed and ignored.
 - **`jbang init` / `edit` / `export` / templates** — out of scope; jk has
@@ -41,6 +38,9 @@ treats directives it doesn't know.
 ## The jk extras JBang doesn't have
 
 Catalog short-names (`jkx ktlint`), floating version selectors
-(`g:a@^1.2`), `--with` extra deps, engine-cached resolution shared with
-your project builds, and installs that snapshot an immutable env (the
-launcher survives the source file moving).
+(`g:a@^1.2`), `--with` extra deps, multi-file gists via the gist API,
+native-binary tools picked automatically when a `native-<arch>-<os>` (or
+protoc-style) classifier is published (PRD §20.4), engine-cached
+resolution shared with your project builds, and installs that snapshot
+an immutable env (the launcher survives the source file moving) with
+provenance in `env.json`.

@@ -357,8 +357,23 @@ public interface InProcessEngine {
             java.nio.file.Path stateDir,
             java.net.URI repoUrl,
             boolean forceRecompile,
+            java.util.List<String> with,
             dev.jkbuild.cli.run.GoalConsole.Mode consoleMode)
             throws java.io.IOException, InterruptedException;
+
+    /** As above without extra deps. */
+    default dev.jkbuild.cli.engine.EngineClient.ScriptPrepareOutcome scriptPrepare(
+            String mode,
+            java.nio.file.Path script,
+            java.nio.file.Path cacheDir,
+            java.nio.file.Path stateDir,
+            java.net.URI repoUrl,
+            boolean forceRecompile,
+            dev.jkbuild.cli.run.GoalConsole.Mode consoleMode)
+            throws java.io.IOException, InterruptedException {
+        return scriptPrepare(mode, script, cacheDir, stateDir, repoUrl, forceRecompile, java.util.List.of(),
+                consoleMode);
+    }
 
     /** The discovered implementation, or empty when {@code :cli-engine} is not on the classpath. */
     static Optional<InProcessEngine> find() {

@@ -1844,11 +1844,19 @@ public final class EngineProtocol {
      * stateDir}/{@code repoUrl} may be {@code null} (defaults).
      */
     public static String scriptPrepareRequest(
-            String mode, String script, String cache, String stateDir, String repoUrl, boolean forceRecompile) {
+            String mode,
+            String script,
+            String cache,
+            String stateDir,
+            String repoUrl,
+            boolean forceRecompile,
+            List<String> with) {
         return "{\"t\":\""
                 + SCRIPT_PREPARE_REQUEST
                 + "\",\"mode\":"
                 + Ndjson.quote(mode)
+                + ",\"with\":"
+                + quoteArray(with)
                 + ",\"script\":"
                 + Ndjson.quote(script)
                 + ",\"cache\":"

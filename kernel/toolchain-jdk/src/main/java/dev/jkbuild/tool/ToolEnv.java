@@ -15,6 +15,17 @@ import java.util.Objects;
  */
 public record ToolEnv(String binName, Coordinate primary, String mainClass, List<Path> classpath) {
 
+    /**
+     * {@link #mainClass} sentinel for a platform-native binary (PRD §20.4): {@link #classpath}
+     * holds exactly the binary to exec — there is no JVM in the launch at all.
+     */
+    public static final String NATIVE_BINARY = "native-binary";
+
+    /** True when this env execs a native binary instead of {@code java -cp}. */
+    public boolean isNativeBinary() {
+        return NATIVE_BINARY.equals(mainClass);
+    }
+
     public ToolEnv {
         Objects.requireNonNull(binName, "binName");
         Objects.requireNonNull(primary, "primary");

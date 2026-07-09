@@ -97,6 +97,9 @@ class InstallExecCommandTest {
         assertThat(json).contains("\"binName\": \"widget-cli\"");
         assertThat(json).contains("\"mainClass\": \"com.example.Main\"");
         assertThat(json).contains("\"primary\": \"com.example:widget-cli:1.0.0\"");
+        // Provenance: how the tool was installed (plan §3).
+        assertThat(json).contains("\"kind\": \"gav\"");
+        assertThat(json).contains("\"spec\": \"com.example:widget-cli:1.0.0\"");
     }
 
     @Test
@@ -445,6 +448,37 @@ class InstallExecCommandTest {
                 tempDir.toString(),
                 base + "/r/Web.java");
         assertThat(exit).isEqualTo(64);
+    }
+
+    @Test
+    void native_classifier_tool_installs_a_direct_exec_launcher(@TempDir Path tempDir) throws Exception {
+        // PRD §20.4: a published native binary for this platform beats the JVM path.
+        servePom("com.example", "fastcli", "1.0.0");
+        String classifier = "native-" + dev.jkbuild.jdk.HostPlatform.currentArch() + "-"
+                + dev.jkbuild.jdk.HostPlatform.currentOs();
+        served.put(
+                "/com/example/fastcli/1.0.0/fastcli-1.0.0-" + classifier + ".exe",
+                "#!/bin/sh\nexit 7\n".getBytes());
+
+        Path bin = tempDir.resolve("bin");
+        int exit = run(
+                "tool",
+                "install",
+                "--cache-dir",
+                tempDir.resolve("cache").toString(),
+                "--state-dir",
+                tempDir.toString(),
+                "--bin-dir",
+                bin.toString(),
+                "--repo-url",
+                base.toString(),
+                "com.example:fastcli:1.0.0");
+        assertThat(exit).isEqualTo(0);
+        String json = Files.readString(tempDir.resolve("tools/envs/fastcli/env.json"));
+        assertThat(json).contains("\"mainClass\": \"native-binary\"");
+
+        Process p = new ProcessBuilder(bin.resolve("fastcli").toString()).start();
+        assertThat(p.waitFor()).isEqualTo(7);
     }
 
     // --- fixture helpers ----------------------------------------------------

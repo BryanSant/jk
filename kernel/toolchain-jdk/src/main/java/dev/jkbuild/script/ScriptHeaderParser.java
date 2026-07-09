@@ -181,6 +181,11 @@ public final class ScriptHeaderParser {
         return null;
     }
 
+    /** Parse one script-dep coordinate — {@code g:a:v} pinned or {@code g:a@sel} floating. */
+    public static Dependency parseDependency(String coord) {
+        return parseDep(coord);
+    }
+
     private static Dependency parseDep(String coord) {
         String spec = coord.trim();
         int firstColon = spec.indexOf(':');

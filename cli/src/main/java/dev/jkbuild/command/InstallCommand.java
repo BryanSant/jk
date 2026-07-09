@@ -291,7 +291,13 @@ public final class InstallCommand implements CliCommand {
             env = new ToolEnv(bin, Coordinate.parse(outcome.coord()), outcome.mainClass(), outcome.classpath());
         }
 
-        Path launcher = ToolLauncher.install(envsRoot, binDir, JavaHomes.runningJavaHome(), env);
+        Path launcher = ToolLauncher.install(
+                envsRoot,
+                binDir,
+                JavaHomes.runningJavaHome(),
+                env,
+                new dev.jkbuild.tool.ToolProvenance("gav", coord, env.primary().toGav()),
+                java.util.List.of());
         announceInstall(Coords.gav(env.primary()), launcher, binDir);
         return 0;
     }

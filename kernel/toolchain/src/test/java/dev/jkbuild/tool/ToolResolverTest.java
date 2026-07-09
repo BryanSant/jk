@@ -180,6 +180,39 @@ class ToolResolverTest {
         assertThat(env.classpath().getFirst().toString()).isNotEmpty();
     }
 
+    @Test
+    void native_classifier_binary_wins_over_the_jar(@TempDir Path tempDir) throws Exception {
+        servePomAndJar("com.example", "widget-cli", "1.0.0", "com.example.Main");
+        String classifier = "native-" + dev.jkbuild.jdk.HostPlatform.currentArch() + "-"
+                + dev.jkbuild.jdk.HostPlatform.currentOs();
+        served.put(
+                "/com/example/widget-cli/1.0.0/widget-cli-1.0.0-" + classifier + ".exe",
+                "#!/bin/sh\nexit 0\n".getBytes());
+
+        ToolEnv env = resolver(tempDir)
+                .resolve(Coordinate.of("com.example", "widget-cli", "1.0.0"), "widget", null);
+
+        assertThat(env.isNativeBinary()).isTrue();
+        assertThat(env.mainClass()).isEqualTo(ToolEnv.NATIVE_BINARY);
+        assertThat(env.classpath()).hasSize(1);
+    }
+
+    @Test
+    void main_override_skips_the_native_probe(@TempDir Path tempDir) throws Exception {
+        servePomAndJar("com.example", "widget-cli", "1.0.0", "com.example.Main");
+        String classifier = "native-" + dev.jkbuild.jdk.HostPlatform.currentArch() + "-"
+                + dev.jkbuild.jdk.HostPlatform.currentOs();
+        served.put(
+                "/com/example/widget-cli/1.0.0/widget-cli-1.0.0-" + classifier + ".exe",
+                "#!/bin/sh\nexit 0\n".getBytes());
+
+        ToolEnv env = resolver(tempDir)
+                .resolve(Coordinate.of("com.example", "widget-cli", "1.0.0"), "widget", "com.example.Alt");
+
+        assertThat(env.isNativeBinary()).isFalse();
+        assertThat(env.mainClass()).isEqualTo("com.example.Alt");
+    }
+
     private ToolResolver resolver(Path tempDir) {
         Cas cas = new Cas(tempDir.resolve("cas"));
         try {

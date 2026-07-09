@@ -1129,15 +1129,19 @@ public final class InProcessEngineImpl implements InProcessEngine {
             Path stateDir,
             java.net.URI repoUrl,
             boolean forceRecompile,
+            List<String> with,
             GoalConsole.Mode consoleMode)
             throws IOException, InterruptedException {
+        List<dev.jkbuild.model.Dependency> extraDeps = with.stream()
+                .map(dev.jkbuild.script.ScriptHeaderParser::parseDependency)
+                .toList();
         Goal goal =
                 switch (mode) {
                     case "java" -> dev.jkbuild.runtime.ScriptGoals.javaScriptGoal(
-                            script, cacheDir, stateDir, repoUrl, forceRecompile);
+                            script, cacheDir, stateDir, repoUrl, forceRecompile, extraDeps);
                     case "kt" -> dev.jkbuild.runtime.ScriptGoals.kotlinScriptGoal(
-                            script, cacheDir, stateDir, repoUrl, forceRecompile);
-                    case "kts" -> dev.jkbuild.runtime.ScriptGoals.ktsScriptGoal(script, cacheDir, repoUrl);
+                            script, cacheDir, stateDir, repoUrl, forceRecompile, extraDeps);
+                    case "kts" -> dev.jkbuild.runtime.ScriptGoals.ktsScriptGoal(script, cacheDir, repoUrl, extraDeps);
                     case "jar" -> dev.jkbuild.runtime.ScriptGoals.jarGoal(script, cacheDir, repoUrl);
                     default -> throw new IllegalArgumentException("unknown script mode: " + mode);
                 };

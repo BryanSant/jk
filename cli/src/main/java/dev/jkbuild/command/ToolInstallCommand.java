@@ -82,6 +82,8 @@ public final class ToolInstallCommand implements CliCommand {
     String coord;
     String binName;
     String mainClass;
+    List<String> aliasDeps = List.of();
+    List<String> aliasJavaOptions = List.of();
     String groupFlag;
     String nameFlag;
     String verFlag;
@@ -138,7 +140,19 @@ public final class ToolInstallCommand implements CliCommand {
             return appInstallDelegate().installFromFile(base.resolve(file.path()).toAbsolutePath().normalize());
         }
         if (classified instanceof dev.jkbuild.tool.ToolTarget.RunnableFile file) {
-            return installFile(base.resolve(file.path()).normalize());
+            Path resolved = base.resolve(file.path()).normalize();
+            List<String> fileWith;
+            try {
+                fileWith = ToolTargets.resolveWith(in.values("with"));
+            } catch (ToolTargets.TargetException e) {
+                CliOutput.err(e.getMessage());
+                return Exit.USAGE;
+            }
+            return installFile(
+                    resolved,
+                    new dev.jkbuild.tool.ToolProvenance("file", coord, resolved.toAbsolutePath().toString()),
+                    fileWith,
+                    List.of());
         }
         if (classified instanceof dev.jkbuild.tool.ToolTarget.Directory dir) {
             Path projectDir = base.resolve(dir.path()).toAbsolutePath().normalize();
@@ -170,7 +184,9 @@ public final class ToolInstallCommand implements CliCommand {
                 CliOutput.err("jk tool install: " + e.getMessage());
                 return Exit.SOFTWARE;
             }
-            return installFile(fetched);
+            return installFile(
+                    fetched,
+                    new dev.jkbuild.tool.ToolProvenance("url", coord, dev.jkbuild.tool.UrlRewriter.rewrite(u.raw())));
         }
 
         if (classified instanceof dev.jkbuild.tool.ToolTarget.JBangAlias) {
@@ -183,7 +199,9 @@ public final class ToolInstallCommand implements CliCommand {
         List<String> with;
         try {
             resolved = ToolTargets.resolve(coord);
-            with = ToolTargets.resolveWith(in.values("with"));
+            List<String> withInputs = new ArrayList<>(in.values("with"));
+            withInputs.addAll(aliasDeps);
+            with = ToolTargets.resolveWith(withInputs);
         } catch (ToolTargets.TargetException e) {
             CliOutput.err(e.getMessage());
             return Exit.USAGE;
@@ -224,7 +242,14 @@ public final class ToolInstallCommand implements CliCommand {
 
         // The "make install" half stays client-side: the launcher into the user-owned bin dir.
         Path javaHome = JavaHomes.runningJavaHome();
-        Path launcher = ToolLauncher.install(envsRoot, binDir, javaHome, env);
+        String kind = classified instanceof dev.jkbuild.tool.ToolTarget.CatalogName ? "catalog" : "gav";
+        Path launcher = ToolLauncher.install(
+                envsRoot,
+                binDir,
+                javaHome,
+                env,
+                new dev.jkbuild.tool.ToolProvenance(kind, coord, env.primary().toGav()),
+                aliasJavaOptions);
 
         if (!global.outputIsJson()) {
             CliOutput.out("Installed " + Coords.gav(env.primary()) + " → " + launcher);
@@ -252,14 +277,17 @@ public final class ToolInstallCommand implements CliCommand {
         Path stateDirForTrust = stateDirOverride != null ? stateDirOverride : JkDirs.state();
         Integer gated = UrlToolSource.gate(r.pageOrigin(), stateDirForTrust, "jk tool install");
         if (gated != null) return gated;
-        if (r.hasUnhonored() || !r.arguments().isEmpty()) {
-            CliOutput.err("jk tool install: warning — this alias declares arguments/dependencies/java-options,"
+        if (!r.arguments().isEmpty()) {
+            // Default arguments can't ride a launcher's "$@" cleanly yet.
+            CliOutput.err("jk tool install: warning — this alias declares default arguments,"
                     + " which installed launchers do not honor yet.");
         }
         if (binName == null || binName.isBlank()) binName = aliasName;
         String ref = r.scriptRef();
         if (!ref.contains("://") && ref.contains(":")) {
             coord = ref; // coordinate script-ref — the normal flow takes it from here
+            aliasDeps = r.dependencies();
+            aliasJavaOptions = r.javaOptions();
             return null;
         }
         String url = ref.contains("://") ? ref : r.rawBase().resolve(ref).toString();
@@ -274,7 +302,11 @@ public final class ToolInstallCommand implements CliCommand {
             CliOutput.err("jk tool install: " + e.getMessage());
             return Exit.SOFTWARE;
         }
-        return installFile(fetched);
+        return installFile(
+                fetched,
+                new dev.jkbuild.tool.ToolProvenance("jbang-alias", coord, url),
+                r.dependencies(),
+                r.javaOptions());
     }
 
     /**
@@ -283,7 +315,14 @@ public final class ToolInstallCommand implements CliCommand {
      * snapshotted into the env dir — immutable, independent of the source file — and the standard
      * launcher is written over that snapshot + the resolved dep classpath.
      */
-    private int installFile(Path file) throws IOException, InterruptedException {
+    private int installFile(Path file, dev.jkbuild.tool.ToolProvenance provenance)
+            throws IOException, InterruptedException {
+        return installFile(file, provenance, List.of(), List.of());
+    }
+
+    private int installFile(
+            Path file, dev.jkbuild.tool.ToolProvenance provenance, List<String> with, List<String> jvmArgs)
+            throws IOException, InterruptedException {
         String name = file.getFileName().toString();
         String lower = name.toLowerCase(java.util.Locale.ROOT);
         if (!Files.isRegularFile(file)) {
@@ -307,13 +346,13 @@ public final class ToolInstallCommand implements CliCommand {
         dev.jkbuild.cli.engine.EngineClient.ScriptPrepareOutcome prep;
         if (engineDisabledForTests()) {
             prep = dev.jkbuild.cli.engine.InProcessEngine.require()
-                    .scriptPrepare(mode, file.toAbsolutePath(), cacheDir, stateDir, repoUrl, false, consoleMode);
+                    .scriptPrepare(mode, file.toAbsolutePath(), cacheDir, stateDir, repoUrl, false, with, consoleMode);
         } else {
             try {
                 prep = dev.jkbuild.cli.engine.EngineClient.runScriptPrepare(
                         dev.jkbuild.engine.EnginePaths.current(),
                         new dev.jkbuild.cli.engine.EngineClient.ScriptPrepareRequest(
-                                mode, file.toAbsolutePath(), cacheDir, stateDir, repoUrl, false),
+                                mode, file.toAbsolutePath(), cacheDir, stateDir, repoUrl, false, with),
                         phases -> GoalConsole.chooseConsoleListener("tool-install", phases, consoleMode));
             } catch (IOException e) {
                 CliOutput.err("jk tool install: " + e.getMessage());
@@ -337,7 +376,7 @@ public final class ToolInstallCommand implements CliCommand {
             ToolEnv ktsEnv =
                     new ToolEnv(bin, Coordinate.of("script", bin, "local"), "kotlin-script", prep.classpath());
             Path ktsLauncher = ToolLauncher.installKotlinScript(
-                    envsRoot, binDir, JavaHomes.runningJavaHome(), prep.kotlincBin(), scriptCopy, ktsEnv);
+                    envsRoot, binDir, JavaHomes.runningJavaHome(), prep.kotlincBin(), scriptCopy, ktsEnv, provenance);
             if (!global.outputIsJson()) {
                 CliOutput.out("Installed " + file.getFileName() + " → " + ktsLauncher);
                 CliOutput.out("Add to PATH if needed:");
@@ -361,7 +400,8 @@ public final class ToolInstallCommand implements CliCommand {
         }
 
         ToolEnv env = new ToolEnv(bin, Coordinate.of("script", bin, "local"), prep.mainClass(), classpath);
-        Path launcher = ToolLauncher.install(envsRoot, binDir, JavaHomes.runningJavaHome(), env);
+        Path launcher =
+                ToolLauncher.install(envsRoot, binDir, JavaHomes.runningJavaHome(), env, provenance, jvmArgs);
         if (!global.outputIsJson()) {
             CliOutput.out("Installed " + file.getFileName() + " → " + launcher);
             CliOutput.out("Add to PATH if needed:");

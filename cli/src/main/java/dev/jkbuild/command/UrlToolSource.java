@@ -28,6 +28,11 @@ import java.util.Locale;
  */
 final class UrlToolSource {
 
+    private static final java.util.regex.Pattern GIST_PAGE =
+            java.util.regex.Pattern.compile("https://gist\\.github\\.com/([^/]+)/([0-9a-fA-F]+)/?");
+    private static final java.util.regex.Pattern GIST_RAW_URL =
+            java.util.regex.Pattern.compile("\"raw_url\":\"([^\"]+)\"");
+
     private UrlToolSource() {}
 
     /**
@@ -61,6 +66,10 @@ final class UrlToolSource {
      * had.
      */
     static Path fetch(String url, Path cacheDir, boolean refresh) throws IOException, InterruptedException {
+        java.util.regex.Matcher gist = GIST_PAGE.matcher(url.trim());
+        if (gist.matches()) {
+            return fetchGist(gist.group(2), url.trim(), cacheDir, refresh);
+        }
         String raw = UrlRewriter.rewrite(url);
         URI uri = URI.create(raw);
         Path dir = cacheDir.resolve("tool-src").resolve(Hashing.sha256Hex(raw.getBytes(StandardCharsets.UTF_8)));
@@ -120,6 +129,46 @@ final class UrlToolSource {
         } catch (RuntimeException e) {
             return canonicalGitUrl;
         }
+    }
+
+    /**
+     * A gist page URL: ask the gist API for every file (multi-file gists!) and mirror them into
+     * one cache dir. Entry pick: {@code main.java} → the single runnable file → the first
+     * runnable alphabetically.
+     */
+    private static Path fetchGist(String id, String pageUrl, Path cacheDir, boolean refresh)
+            throws IOException, InterruptedException {
+        Path dir = cacheDir.resolve("tool-src").resolve(Hashing.sha256Hex(pageUrl.getBytes(StandardCharsets.UTF_8)));
+        if (!refresh && Files.isDirectory(dir)) {
+            Path cached = pickGistEntry(dir);
+            if (cached != null) return cached;
+        }
+        Http http = new Http();
+        String api = new String(get(http, URI.create("https://api.github.com/gists/" + id)), StandardCharsets.UTF_8);
+        Files.createDirectories(dir);
+        var m = GIST_RAW_URL.matcher(JBangCatalog.compact(api));
+        int count = 0;
+        while (m.find()) {
+            String rawUrl = m.group(1);
+            String name = rawUrl.substring(rawUrl.lastIndexOf('/') + 1);
+            Files.write(dir.resolve(name), get(http, URI.create(rawUrl)));
+            count++;
+        }
+        if (count == 0) throw new IOException("gist " + id + " has no files (or the API response was unreadable)");
+        Path entry = pickGistEntry(dir);
+        if (entry == null) throw new IOException("gist " + id + " has no runnable file (.java/.kt/.kts/.jar)");
+        return entry;
+    }
+
+    private static Path pickGistEntry(Path dir) throws IOException {
+        List<Path> runnable = topLevelFiles(dir).stream()
+                .filter(p -> isRunnable(p.getFileName().toString()))
+                .toList();
+        if (runnable.isEmpty()) return null;
+        for (Path p : runnable) {
+            if (p.getFileName().toString().equalsIgnoreCase("main.java")) return p;
+        }
+        return runnable.get(0);
     }
 
     private static byte[] get(Http http, URI uri) throws IOException, InterruptedException {

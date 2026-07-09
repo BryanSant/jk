@@ -101,6 +101,10 @@ public final class ToolRunCommand implements CliCommand {
     boolean forceRecompile;
     List<String> toolArgs = new ArrayList<>();
     GlobalOptions global;
+    // Set by a JBang alias whose script-ref is a coordinate: the alias's dependencies and
+    // java-options ride the normal coordinate flow (extra deps + exec JVM args).
+    List<String> aliasDeps = List.of();
+    List<String> aliasJavaOptions = List.of();
 
     /**
      * A directory target (docs/tool-targets-plan.md §4.4): a jk project builds (tests skipped) and
@@ -149,6 +153,13 @@ public final class ToolRunCommand implements CliCommand {
      */
     private int runGit(String input, List<String> args) throws IOException, InterruptedException {
         String raw = input.startsWith("git+") ? input.substring("git+".length()) : input;
+        // url[@ref|#rev][!subdir] — the same embedded-subdir grammar git deps use.
+        String subdir = null;
+        int bang = raw.indexOf('!');
+        if (bang > 0) {
+            subdir = raw.substring(bang + 1);
+            raw = raw.substring(0, bang);
+        }
         InstallCommand.UrlAndRef split = InstallCommand.splitUrlRef(raw);
         String expanded = dev.jkbuild.util.GitUrl.expand(split.url());
         String canonical = dev.jkbuild.util.GitUrl.canonicalize(split.url());
@@ -183,6 +194,14 @@ public final class ToolRunCommand implements CliCommand {
             if (!outcome.result().success() || outcome.checkout() == null) return 1;
             checkout = outcome.checkout();
         }
+        if (subdir != null) {
+            Path sub = checkout.resolve(subdir).normalize();
+            if (!sub.startsWith(checkout) || !Files.isDirectory(sub)) {
+                CliOutput.err("jk tool run: no directory `" + subdir + "` in " + input);
+                return Exit.USAGE;
+            }
+            checkout = sub;
+        }
         return runDirectory(checkout, args);
     }
 
@@ -204,10 +223,6 @@ public final class ToolRunCommand implements CliCommand {
         Path stateDir = stateDirOverride != null ? stateDirOverride : JkDirs.state();
         Integer gated = UrlToolSource.gate(r.pageOrigin(), stateDir, verb);
         if (gated != null) return gated;
-        if (r.hasUnhonored()) {
-            CliOutput.err(verb + ": warning — this alias declares dependencies/java-options,"
-                    + " which jk does not honor yet.");
-        }
         List<String> merged = new ArrayList<>(r.arguments());
         merged.addAll(toolArgs);
         String ref = r.scriptRef();
@@ -216,17 +231,21 @@ public final class ToolRunCommand implements CliCommand {
             Integer urlGate = UrlToolSource.gate(ref, stateDir, verb);
             if (urlGate != null) return urlGate;
             Path fetched = UrlToolSource.fetch(ref, cacheDir, forceRecompile);
-            return new ScriptRunner(global, cacheDirOverride, stateDirOverride, repoUrl, forceRecompile)
+            return new ScriptRunner(global, cacheDirOverride, stateDirOverride, repoUrl, forceRecompile,
+                            r.dependencies(), r.javaOptions())
                     .run(fetched, merged);
         }
         if (ref.contains(":")) {
             // Coordinate script-ref: rewrite the target and let the normal flow resolve it.
             target = ref;
             toolArgs = merged;
+            aliasDeps = r.dependencies();
+            aliasJavaOptions = r.javaOptions();
             return null;
         }
         Path fetched = UrlToolSource.fetch(r.rawBase().resolve(ref).toString(), cacheDir, forceRecompile);
-        return new ScriptRunner(global, cacheDirOverride, stateDirOverride, repoUrl, forceRecompile)
+        return new ScriptRunner(global, cacheDirOverride, stateDirOverride, repoUrl, forceRecompile,
+                        r.dependencies(), r.javaOptions())
                 .run(fetched, merged);
     }
 
@@ -259,7 +278,15 @@ public final class ToolRunCommand implements CliCommand {
         // through the classifier so a remote `https://…/tool.jar` is NOT a file.
         dev.jkbuild.tool.ToolTarget classified = dev.jkbuild.tool.ToolTarget.classify(target);
         if (classified instanceof dev.jkbuild.tool.ToolTarget.RunnableFile file) {
-            return new ScriptRunner(global, cacheDirOverride, stateDirOverride, repoUrl, forceRecompile)
+            List<String> fileWith;
+            try {
+                fileWith = ToolTargets.resolveWith(in.values("with"));
+            } catch (ToolTargets.TargetException e) {
+                CliOutput.err(e.getMessage());
+                return Exit.USAGE;
+            }
+            return new ScriptRunner(
+                            global, cacheDirOverride, stateDirOverride, repoUrl, forceRecompile, fileWith, List.of())
                     .run(file.path(), toolArgs);
         }
         if (classified instanceof dev.jkbuild.tool.ToolTarget.Directory dir) {
@@ -294,7 +321,9 @@ public final class ToolRunCommand implements CliCommand {
         List<String> with;
         try {
             resolved = ToolTargets.resolve(target);
-            with = ToolTargets.resolveWith(in.values("with"));
+            List<String> withInputs = new ArrayList<>(in.values("with"));
+            withInputs.addAll(aliasDeps);
+            with = ToolTargets.resolveWith(withInputs);
         } catch (ToolTargets.TargetException e) {
             CliOutput.err(e.getMessage());
             return Exit.USAGE;
@@ -332,6 +361,6 @@ public final class ToolRunCommand implements CliCommand {
 
         // The exec deliberately stays client-side: the tool inherits this terminal's stdio.
         Path javaHome = JavaHomes.runningJavaHome();
-        return ToolLauncher.execEphemeral(javaHome, env, toolArgs);
+        return ToolLauncher.execEphemeral(javaHome, env, aliasJavaOptions, toolArgs);
     }
 }

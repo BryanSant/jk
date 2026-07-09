@@ -832,7 +832,18 @@ public final class EngineClient {
      * repoUrl} may be {@code null} (defaults).
      */
     public record ScriptPrepareRequest(
-            String mode, Path script, Path cache, Path stateDir, java.net.URI repoUrl, boolean forceRecompile) {}
+            String mode,
+            Path script,
+            Path cache,
+            Path stateDir,
+            java.net.URI repoUrl,
+            boolean forceRecompile,
+            List<String> with) {
+        public ScriptPrepareRequest(
+                String mode, Path script, Path cache, Path stateDir, java.net.URI repoUrl, boolean forceRecompile) {
+            this(mode, script, cache, stateDir, repoUrl, forceRecompile, List.of());
+        }
+    }
 
     /**
      * A hosted script preparation's outcome: the goal result plus the exec ingredients — fields not
@@ -865,7 +876,8 @@ public final class EngineClient {
                         req.cache().toString(),
                         req.stateDir() != null ? req.stateDir().toString() : null,
                         req.repoUrl() != null ? req.repoUrl().toString() : null,
-                        req.forceRecompile()),
+                        req.forceRecompile(),
+                        req.with()),
                 "script-prepare",
                 listenerFactory,
                 (type, line) -> {});

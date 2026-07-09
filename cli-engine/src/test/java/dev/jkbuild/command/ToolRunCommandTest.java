@@ -127,6 +127,49 @@ class ToolRunCommandTest {
     }
 
     @Test
+    void jbang_alias_dependencies_and_java_options_are_honored(@TempDir Path tempDir) throws Exception {
+        servePom("com.example", "greeter", "1.0.0");
+        served.put(mavenPath("com.example", "greeter", "1.0.0", "jar"), Files.readAllBytes(buildGreeterJar(tempDir)));
+        served.put("/cat/jbang-catalog.json", """
+                {
+                  "aliases": {
+                    "probe": {
+                      "script-ref": "Probe.java",
+                      "dependencies": ["com.example:greeter:1.0.0"],
+                      "java-options": ["-Dprobe.flag=on"]
+                    }
+                  }
+                }
+                """.getBytes(StandardCharsets.UTF_8));
+        served.put("/cat/Probe.java", """
+                public class Probe {
+                    public static void main(String[] args) {
+                        // The alias dep must be on the classpath (Greeter.exitCode() = 17)
+                        // and its java-option set — exit 0 only when both hold.
+                        boolean dep = com.example.Greeter.exitCode() == 17;
+                        boolean opt = "on".equals(System.getProperty("probe.flag"));
+                        System.exit(dep && opt ? 0 : 3);
+                    }
+                }
+                """.getBytes(StandardCharsets.UTF_8));
+
+        Path state = tempDir.resolve("home");
+        run("trust", "add", "--state-dir", state.toString(), base.toString() + "/");
+        String host = base.getHost() + ":" + base.getPort();
+        int exit = run(
+                "tool",
+                "run",
+                "--cache-dir",
+                tempDir.resolve("home/cache").toString(),
+                "--state-dir",
+                state.toString(),
+                "--repo-url",
+                base.toString(),
+                "probe@" + host + "/cat");
+        assertThat(exit).isEqualTo(0);
+    }
+
+    @Test
     void jbang_alias_with_unknown_name_reports_the_catalog(@TempDir Path tempDir) throws Exception {
         served.put("/cat/jbang-catalog.json", "{ \"aliases\": {} }".getBytes(StandardCharsets.UTF_8));
         Path state = tempDir.resolve("home");
@@ -166,6 +209,32 @@ class ToolRunCommandTest {
                 "git+file://" + repo.toAbsolutePath(),
                 "x");
         assertThat(exit).isEqualTo(1); // args reach the repo's main.java
+    }
+
+    @Test
+    void git_target_with_subdir_runs_that_directory(@TempDir Path tempDir) throws Exception {
+        Path repo = tempDir.resolve("mono");
+        Files.createDirectories(repo.resolve("tools/greeter"));
+        Files.writeString(repo.resolve("tools/greeter/main.java"), """
+                public class main {
+                    public static void main(String[] args) { System.exit(0); }
+                }
+                """, StandardCharsets.UTF_8);
+        git(repo, "init", "-b", "main");
+        git(repo, "add", ".");
+        git(repo, "commit", "-m", "init");
+
+        Path state = tempDir.resolve("home");
+        run("trust", "add", "--state-dir", state.toString(), "file://" + tempDir.toAbsolutePath() + "/");
+        int exit = run(
+                "tool",
+                "run",
+                "--cache-dir",
+                tempDir.resolve("home/cache").toString(),
+                "--state-dir",
+                state.toString(),
+                "git+file://" + repo.toAbsolutePath() + "!tools/greeter");
+        assertThat(exit).isEqualTo(0);
     }
 
     @Test

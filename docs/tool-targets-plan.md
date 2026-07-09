@@ -485,11 +485,20 @@ local HTTP server + local git repos — no live network in CI).
    support; until then they are documented drop-in caveats in the
    "jbang → jkx" migration note.
 
-## 12. Open questions
+## 12. Open questions — all resolved 2026-07-09
 
-1. **`latest` TTL** — 24h feels right (matches typical metadata caching);
-   `--refresh` escapes. Stable-only filter: exclude SNAPSHOT and
-   pre-release qualifiers?
-2. **Native-classifier tools (PRD §20.4)** — orthogonal; slots in as a
-   post-resolve substitution once targets land.
-3. **Zip/tarball project URLs** — defer until someone asks.
+1. **`latest` TTL** — the metadata cache's 24h TTL (+ conditional-GET
+   revalidation) already matched; `--force` now skips the freshness
+   window (the 304 keeps an unchanged index cheap). Stable-only: yes —
+   `Versions.isStable` filters SNAPSHOT/pre-release from `latest`.
+2. **Native-classifier tools (PRD §20.4)** — **implemented**: the tool
+   resolve probes `native-<arch>-<os>` (PRD) then `<os>-<arch>`
+   (protoc-style, `osx`/`aarch_64` vocabulary), both `@exe`; a hit
+   short-circuits the JVM path — the env/launcher exec the binary
+   directly (`mainClass` sentinel `native-binary`); `--main` opts out.
+3. **Zip/tarball project URLs** — still deferred until someone asks.
+
+Post-plan niceties also landed 2026-07-09: `!subdir` on git run targets,
+multi-file gists via the gist API, alias `dependencies`/`java-options`
+(and `--with` on script targets via the same script-prepare extension),
+and the env.json provenance block surfaced by `jk tool list`.

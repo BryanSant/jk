@@ -1452,13 +1452,16 @@ public final class EngineServer implements AutoCloseable {
                     .withWorkingDir(script.toAbsolutePath().getParent())
                     .withCacheDir(cache)
                     .withCancel(cancelToken);
+            java.util.List<dev.jkbuild.model.Dependency> extraDeps = Ndjson.strArray(requestLine, "with").stream()
+                    .map(dev.jkbuild.script.ScriptHeaderParser::parseDependency)
+                    .toList();
             dev.jkbuild.run.Goal goal =
                     switch (mode) {
                         case "java" -> dev.jkbuild.runtime.ScriptGoals.javaScriptGoal(
-                                script, cache, stateDir, repoUrl, forceRecompile);
+                                script, cache, stateDir, repoUrl, forceRecompile, extraDeps);
                         case "kt" -> dev.jkbuild.runtime.ScriptGoals.kotlinScriptGoal(
-                                script, cache, stateDir, repoUrl, forceRecompile);
-                        case "kts" -> dev.jkbuild.runtime.ScriptGoals.ktsScriptGoal(script, cache, repoUrl);
+                                script, cache, stateDir, repoUrl, forceRecompile, extraDeps);
+                        case "kts" -> dev.jkbuild.runtime.ScriptGoals.ktsScriptGoal(script, cache, repoUrl, extraDeps);
                         case "jar" -> dev.jkbuild.runtime.ScriptGoals.jarGoal(script, cache, repoUrl);
                         default -> throw new IllegalArgumentException("unknown script mode: " + mode);
                     };

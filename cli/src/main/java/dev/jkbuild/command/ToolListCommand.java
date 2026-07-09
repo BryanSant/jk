@@ -60,20 +60,28 @@ public final class ToolListCommand implements CliCommand {
         Theme t = Theme.active();
         for (Path envDir : envs) {
             String bin = envDir.getFileName().toString();
-            String coord = readCoord(envDir.resolve("env.json")).orElse("(unknown coord)");
+            Path envJson = envDir.resolve("env.json");
+            String coord = readField(envJson, "primary").orElse("(unknown coord)");
             Path launcher = binDir.resolve(bin);
             CliOutput.stdout().printf("%-24s %s%n", Theme.colorize(bin, t.cyan()), coord);
+            // Provenance: how this tool was installed (kind + the spec the user typed).
+            Optional<String> kind = readField(envJson, "kind");
+            Optional<String> spec = readField(envJson, "spec");
+            if (kind.isPresent() && spec.isPresent() && !spec.get().equals(coord)) {
+                CliOutput.stdout().printf("%-24s %s%n",
+                        "", Theme.colorize(kind.get() + " " + spec.get(), t.darkGray()));
+            }
             if (Files.exists(launcher)) CliOutput.stdout().printf("%-24s %s %s%n",
                     "", Theme.colorize("→", t.darkGray()), Theme.colorize(launcher.toString(), t.path()));
         }
         return 0;
     }
 
-    private static Optional<String> readCoord(Path envJson) {
+    private static Optional<String> readField(Path envJson, String field) {
         if (!Files.exists(envJson)) return Optional.empty();
         try {
             String body = Files.readString(envJson);
-            int i = body.indexOf("\"primary\"");
+            int i = body.indexOf("\"" + field + "\"");
             if (i < 0) return Optional.empty();
             int colon = body.indexOf(':', i);
             int q1 = body.indexOf('"', colon + 1);

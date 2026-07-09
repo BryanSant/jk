@@ -90,6 +90,18 @@ public final class ToolResolver {
         Objects.requireNonNull(binName, "binName");
         Objects.requireNonNull(extras, "extras");
 
+        // 0. A published native binary for this platform beats the JVM path (PRD §20.4) —
+        // unless the caller pinned a Main-Class, which only makes sense on the JVM.
+        if (mainClassOverride == null || mainClassOverride.isBlank()) {
+            var nativeBinary = fetchNativeBinary(primary);
+            if (nativeBinary.isPresent()) {
+                Path bin = nativeBinary.get();
+                //noinspection ResultOfMethodCallIgnored — best-effort; exec fails loudly if it didn't stick
+                bin.toFile().setExecutable(true, false);
+                return new ToolEnv(binName, primary, ToolEnv.NATIVE_BINARY, List.of(bin));
+            }
+        }
+
         // 1. Transitive resolution from the primary coord (+ any --with extras).
         Resolver resolver = new NaiveResolver(new EffectivePomBuilder(repos));
         Dependency root = new Dependency(
@@ -143,6 +155,32 @@ public final class ToolResolver {
                 .orElseThrow(() -> new MavenRepo.ArtifactNotFoundException(
                         "no version of " + module + " matches " + selector.raw() + " (available: "
                                 + String.join(", ", available) + ")"));
+    }
+
+    /**
+     * Probe for a platform-native binary of {@code primary}: the PRD §20.4 classifier convention
+     * ({@code native-<arch>-<os>}) first, then the protoc-style one ({@code <os>-<arch>} with
+     * {@code osx}/{@code aarch_64} vocabulary). Both use packaging type {@code exe}. Empty when
+     * the repo publishes neither — the normal jar path takes over silently.
+     */
+    private java.util.Optional<Path> fetchNativeBinary(Coordinate primary) throws IOException, InterruptedException {
+        String os = dev.jkbuild.jdk.HostPlatform.currentOs();
+        String arch = dev.jkbuild.jdk.HostPlatform.currentArch();
+        if (dev.jkbuild.jdk.HostPlatform.UNSUPPORTED.equals(os)
+                || dev.jkbuild.jdk.HostPlatform.UNSUPPORTED.equals(arch)) {
+            return java.util.Optional.empty();
+        }
+        String protocOs = "macos".equals(os) ? "osx" : os;
+        String protocArch = "aarch64".equals(arch) ? "aarch_64" : arch;
+        List<String> classifiers = List.of("native-" + arch + "-" + os, protocOs + "-" + protocArch);
+        for (String classifier : classifiers) {
+            var fetched = repos.tryFetchArtifact(
+                    new Coordinate(primary.group(), primary.artifact(), primary.version(), classifier, "exe"));
+            if (fetched.isPresent()) {
+                return java.util.Optional.of(fetched.get().fetched().cachePath());
+            }
+        }
+        return java.util.Optional.empty();
     }
 
     private Path fetchJar(Coordinate coord) throws IOException, InterruptedException {

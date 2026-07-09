@@ -53,14 +53,30 @@ final class ScriptRunner {
     private final Path stateDirOverride;
     private final URI repoUrl;
     private final boolean forceRecompile;
+    private final List<String> extraDeps;
+    private final List<String> extraJavaOptions;
 
     ScriptRunner(
             GlobalOptions global, Path cacheDirOverride, Path stateDirOverride, URI repoUrl, boolean forceRecompile) {
+        this(global, cacheDirOverride, stateDirOverride, repoUrl, forceRecompile, List.of(), List.of());
+    }
+
+    /** As above with {@code --with}/alias dep injections and extra JVM options for the exec. */
+    ScriptRunner(
+            GlobalOptions global,
+            Path cacheDirOverride,
+            Path stateDirOverride,
+            URI repoUrl,
+            boolean forceRecompile,
+            List<String> extraDeps,
+            List<String> extraJavaOptions) {
         this.global = global;
         this.cacheDirOverride = cacheDirOverride;
         this.stateDirOverride = stateDirOverride;
         this.repoUrl = repoUrl;
         this.forceRecompile = forceRecompile;
+        this.extraDeps = extraDeps;
+        this.extraJavaOptions = extraJavaOptions;
     }
 
     /**
@@ -152,6 +168,10 @@ final class ScriptRunner {
 
         List<String> command = new ArrayList<>();
         command.add(prep.kotlincBin().toString());
+        // kotlinc -script runs the script in kotlinc's own JVM; -J passes options to it.
+        for (String opt : extraJavaOptions) {
+            command.add("-J" + opt);
+        }
         command.add("-script");
         // The script's declared deps (@file:DependsOn / //DEPS / //jk dep) — resolved
         // engine-side through jk's CAS, handed to kotlinc instead of main-kts's Ivy.
@@ -188,6 +208,7 @@ final class ScriptRunner {
                 .resolve(HostPlatform.isWindows() ? "java.exe" : "java");
         List<String> command = new ArrayList<>();
         command.add(java.toString());
+        command.addAll(extraJavaOptions);
         if (classpath.size() == 1) {
             // No extra deps — `java -jar` is cleaner and honors the jar's Class-Path attribute.
             command.add("-jar");
@@ -214,12 +235,12 @@ final class ScriptRunner {
         if (engineDisabledForTests()) {
             return dev.jkbuild.cli.engine.InProcessEngine.require()
                     .scriptPrepare(mode, file.toAbsolutePath(), cacheDir(), stateDir(), repoUrl, forceRecompile,
-                            consoleMode);
+                            extraDeps, consoleMode);
         }
         return EngineClient.runScriptPrepare(
                 dev.jkbuild.engine.EnginePaths.current(),
                 new EngineClient.ScriptPrepareRequest(
-                        mode, file.toAbsolutePath(), cacheDir(), stateDir(), repoUrl, forceRecompile),
+                        mode, file.toAbsolutePath(), cacheDir(), stateDir(), repoUrl, forceRecompile, extraDeps),
                 phases -> GoalConsole.chooseConsoleListener("script", phases, consoleMode));
     }
 
@@ -257,6 +278,7 @@ final class ScriptRunner {
         List<String> command = new ArrayList<>();
         command.add(java.toString());
         command.addAll(jvmArgs);
+        command.addAll(extraJavaOptions);
         command.add("-cp");
         command.add(joinClasspath(full));
         command.add(mainClass);

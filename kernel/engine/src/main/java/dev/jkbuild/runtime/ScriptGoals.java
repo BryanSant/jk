@@ -92,8 +92,15 @@ public final class ScriptGoals {
     /** {@code parse-script → resolve-deps → compile-java} for a {@code .java} script. */
     public static Goal javaScriptGoal(Path script, Path cacheDir, Path stateDir, URI repoUrl, boolean forceRecompile)
             throws IOException {
+        return javaScriptGoal(script, cacheDir, stateDir, repoUrl, forceRecompile, List.of());
+    }
+
+    /** As above with {@code extraDeps} — alias/{@code --with} injections joining the header's deps. */
+    public static Goal javaScriptGoal(
+            Path script, Path cacheDir, Path stateDir, URI repoUrl, boolean forceRecompile, List<Dependency> extraDeps)
+            throws IOException {
         byte[] bytes = Files.readAllBytes(script);
-        ScriptHeader header = ScriptHeaderParser.parse(new String(bytes, StandardCharsets.UTF_8));
+        ScriptHeader header = withExtras(ScriptHeaderParser.parse(new String(bytes, StandardCharsets.UTF_8)), extraDeps);
         Path classesDir = classesDirFor(stateDir, bytes);
         String mainClass = header.main() != null ? header.main() : simpleMainClassName(script, ".java");
 
@@ -193,9 +200,17 @@ public final class ScriptGoals {
     /** {@code parse-script → (resolve-deps ∥ resolve-kotlinc) → compile-kt} for a {@code .kt} script. */
     public static Goal kotlinScriptGoal(Path script, Path cacheDir, Path stateDir, URI repoUrl, boolean forceRecompile)
             throws IOException {
+        return kotlinScriptGoal(script, cacheDir, stateDir, repoUrl, forceRecompile, List.of());
+    }
+
+    /** As above with {@code extraDeps} — alias/{@code --with} injections joining the header's deps. */
+    public static Goal kotlinScriptGoal(
+            Path script, Path cacheDir, Path stateDir, URI repoUrl, boolean forceRecompile, List<Dependency> extraDeps)
+            throws IOException {
         byte[] bytes = Files.readAllBytes(script);
         // parseKotlin: // directives + @file:DependsOn/@file:Repository annotations.
-        ScriptHeader header = ScriptHeaderParser.parseKotlin(new String(bytes, StandardCharsets.UTF_8));
+        ScriptHeader header =
+                withExtras(ScriptHeaderParser.parseKotlin(new String(bytes, StandardCharsets.UTF_8)), extraDeps);
         Path classesDir = classesDirFor(stateDir, bytes);
         String mainClass = header.main() != null ? header.main() : kotlinMainClassName(script);
 
@@ -340,8 +355,15 @@ public final class ScriptGoals {
      * {@code -classpath} — jk's own CAS-first resolution, not kotlin-main-kts's embedded Ivy.
      */
     public static Goal ktsScriptGoal(Path script, Path cacheDir, URI repoUrl) throws IOException {
-        ScriptHeader header =
-                ScriptHeaderParser.parseKotlin(new String(Files.readAllBytes(script), StandardCharsets.UTF_8));
+        return ktsScriptGoal(script, cacheDir, repoUrl, List.of());
+    }
+
+    /** As above with {@code extraDeps} — alias/{@code --with} injections joining the header's deps. */
+    public static Goal ktsScriptGoal(Path script, Path cacheDir, URI repoUrl, List<Dependency> extraDeps)
+            throws IOException {
+        ScriptHeader header = withExtras(
+                ScriptHeaderParser.parseKotlin(new String(Files.readAllBytes(script), StandardCharsets.UTF_8)),
+                extraDeps);
 
         Phase resolveDeps = Phase.builder("resolve-deps")
                 .kind(PhaseKind.IO)
@@ -464,6 +486,26 @@ public final class ScriptGoals {
     }
 
     // --- shared helpers --------------------------------------------------
+
+    /** The header with {@code extraDeps} appended to its dependency list. */
+    private static ScriptHeader withExtras(ScriptHeader header, List<Dependency> extraDeps) {
+        if (extraDeps.isEmpty()) return header;
+        List<Dependency> deps = new ArrayList<>(header.deps());
+        deps.addAll(extraDeps);
+        return new ScriptHeader(
+                deps,
+                header.release(),
+                header.repos(),
+                header.features(),
+                header.javacOptions(),
+                header.javaOptions(),
+                header.sources(),
+                header.files(),
+                header.main(),
+                header.gav(),
+                header.description(),
+                header.kotlinVersion());
+    }
 
     /** The script plus its {@code //SOURCES} declarations, resolved against the script's dir. */
     private static List<Path> withDeclaredSources(Path script, ScriptHeader header) {

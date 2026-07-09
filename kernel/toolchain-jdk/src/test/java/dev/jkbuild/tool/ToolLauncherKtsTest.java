@@ -26,7 +26,9 @@ class ToolLauncherKtsTest {
         Path dep = tmp.resolve("cas/aa/gson.jar");
 
         ToolEnv env = new ToolEnv("hello", Coordinate.of("script", "hello", "local"), "kotlin-script", List.of(dep));
-        Path launcher = ToolLauncher.installKotlinScript(envs, bin, tmp.resolve("jdk"), kotlinc, script, env);
+        Path launcher = ToolLauncher.installKotlinScript(
+                envs, bin, tmp.resolve("jdk"), kotlinc, script, env,
+                new ToolProvenance("file", "hello.kts", script.toString()));
 
         assertThat(launcher).isEqualTo(bin.resolve("hello"));
         assertThat(Files.isExecutable(launcher)).isTrue();
@@ -46,7 +48,8 @@ class ToolLauncherKtsTest {
         Files.writeString(script, "println(1)\n");
         ToolEnv env = new ToolEnv("s", Coordinate.of("script", "s", "local"), "kotlin-script", List.of());
         Path launcher = ToolLauncher.installKotlinScript(
-                tmp.resolve("envs"), tmp.resolve("bin"), tmp.resolve("jdk"), tmp.resolve("kotlinc"), script, env);
+                tmp.resolve("envs"), tmp.resolve("bin"), tmp.resolve("jdk"), tmp.resolve("kotlinc"), script, env,
+                null);
         assertThat(Files.readString(launcher)).doesNotContain("-classpath");
     }
 }

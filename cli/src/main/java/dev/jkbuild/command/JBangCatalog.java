@@ -23,13 +23,19 @@ import java.util.List;
  * <p>The catalog file itself is data; the trust gate (§7) runs on the catalog's page-style origin
  * before any script it names is fetched or run. Relative {@code script-ref}s resolve against the
  * catalog's raw base and inherit that gate; absolute URLs and coordinates re-enter the normal
- * target flow. Alias {@code dependencies}/{@code java-options} are not honored yet — a loud
- * warning says so rather than silently dropping them.
+ * target flow. Alias {@code dependencies} join the script's resolution and {@code java-options}
+ * ride the exec (or the installed launcher's exec line).
  */
 final class JBangCatalog {
 
     /** A located catalog: where it came from (for trust + relative refs) and the alias entry. */
-    record Resolved(String pageOrigin, URI rawBase, String scriptRef, List<String> arguments, boolean hasUnhonored) {}
+    record Resolved(
+            String pageOrigin,
+            URI rawBase,
+            String scriptRef,
+            List<String> arguments,
+            List<String> dependencies,
+            List<String> javaOptions) {}
 
     private JBangCatalog() {}
 
@@ -75,10 +81,14 @@ final class JBangCatalog {
         if (scriptRef == null || scriptRef.isBlank()) {
             throw new IOException("alias `" + alias + "` in " + c.catalogUrl() + " has no script-ref");
         }
-        boolean unhonored = Ndjson.has(entry, "dependencies") || Ndjson.has(entry, "java-options");
         String base = c.catalogUrl().substring(0, c.catalogUrl().lastIndexOf('/') + 1);
-        return new Resolved(c.pageOrigin(), URI.create(base), scriptRef, Ndjson.strArray(entry, "arguments"),
-                unhonored);
+        return new Resolved(
+                c.pageOrigin(),
+                URI.create(base),
+                scriptRef,
+                Ndjson.strArray(entry, "arguments"),
+                Ndjson.strArray(entry, "dependencies"),
+                Ndjson.strArray(entry, "java-options"));
     }
 
     /** Strip whitespace outside string literals so Ndjson's compact-form lookups match. */

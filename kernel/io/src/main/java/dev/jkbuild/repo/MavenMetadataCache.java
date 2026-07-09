@@ -65,7 +65,10 @@ public final class MavenMetadataCache {
         Path body = dir.resolve(Hashing.sha256Hex(uri.toString()));
         Path meta = body.resolveSibling(body.getFileName() + ".h");
 
-        if (fresh(body)) {
+        // --force skips the freshness window: the conditional GET below still makes an
+        // unchanged index cheap (304), but a moved `latest` is picked up immediately.
+        boolean force = dev.jkbuild.config.SessionContext.current().config().forceOr(false);
+        if (!force && fresh(body)) {
             return Files.readAllBytes(body);
         }
         Map<String, String> headers = new LinkedHashMap<>(AuthHeaders.of(credential));
