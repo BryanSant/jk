@@ -311,6 +311,75 @@ class InstallExecCommandTest {
         assertThat(run("tool", "run", "hello@jbangdev/jbang-catalog")).isEqualTo(64);
     }
 
+    @Test
+    void tool_install_of_a_script_snapshots_an_env(@TempDir Path tempDir) throws Exception {
+        Path script = tempDir.resolve("Hello.java");
+        Files.writeString(script, """
+                public class Hello {
+                    public static void main(String[] args) { System.exit(0); }
+                }
+                """);
+
+        Path bin = tempDir.resolve("bin");
+        int exit = run(
+                "tool",
+                "install",
+                "--cache-dir",
+                tempDir.resolve("cache").toString(),
+                "--state-dir",
+                tempDir.toString(),
+                "--bin-dir",
+                bin.toString(),
+                script.toString());
+        assertThat(exit).isEqualTo(0);
+
+        // The env holds an immutable snapshot: deleting the source must not break the launcher.
+        Files.delete(script);
+        Path launcher = bin.resolve("hello");
+        assertThat(launcher).exists();
+        Path classes = tempDir.resolve("tools/envs/hello/classes/Hello.class");
+        assertThat(classes).exists();
+        String json = Files.readString(tempDir.resolve("tools/envs/hello/env.json"));
+        assertThat(json).contains("\"mainClass\": \"Hello\"");
+        // Launcher classpath points at the snapshot, not the script-cache.
+        assertThat(Files.readString(launcher)).contains("tools/envs/hello/classes");
+
+        Process p = new ProcessBuilder(launcher.toString()).start();
+        assertThat(p.waitFor()).isEqualTo(0);
+    }
+
+    @Test
+    void tool_install_of_a_jar_copies_it_into_the_env(@TempDir Path tempDir) throws Exception {
+        Path jar = buildRealRunnableJar(tempDir, "JarMain");
+        Path bin = tempDir.resolve("bin");
+        int exit = run(
+                "tool",
+                "install",
+                "--cache-dir",
+                tempDir.resolve("cache").toString(),
+                "--state-dir",
+                tempDir.toString(),
+                "--bin-dir",
+                bin.toString(),
+                "--bin",
+                "jartool",
+                jar.toString());
+        assertThat(exit).isEqualTo(0);
+        assertThat(tempDir.resolve("tools/envs/jartool/real-tool.jar")).exists();
+
+        Files.delete(jar);
+        Process p = new ProcessBuilder(bin.resolve("jartool").toString()).start();
+        assertThat(p.waitFor()).isEqualTo(0);
+    }
+
+    @Test
+    void tool_install_of_kts_is_gated_with_a_pointer(@TempDir Path tempDir) throws Exception {
+        Path script = tempDir.resolve("x.kts");
+        Files.writeString(script, "println(1)\n");
+        assertThat(run("tool", "install", "--state-dir", tempDir.toString(), script.toString()))
+                .isEqualTo(64);
+    }
+
     // --- fixture helpers ----------------------------------------------------
 
     private void serveMetadata(String group, String artifact, String... versions) {

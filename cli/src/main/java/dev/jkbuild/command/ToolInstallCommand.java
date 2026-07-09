@@ -20,6 +20,7 @@ import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -95,6 +96,12 @@ public final class ToolInstallCommand implements CliCommand {
         this.repoUrl = in.value("repo-url").map(URI::create).orElse(null);
         this.global = GlobalOptions.from(in);
 
+        // A local script/jar installs as a snapshot env (plan §4.3) — the launcher must not
+        // depend on the source file continuing to exist.
+        if (dev.jkbuild.tool.ToolTarget.classify(coord) instanceof dev.jkbuild.tool.ToolTarget.RunnableFile file) {
+            return installFile(file.path());
+        }
+
         ToolTargets.Resolved resolved;
         List<String> with;
         try {
@@ -148,5 +155,95 @@ public final class ToolInstallCommand implements CliCommand {
             CliOutput.out("  export PATH=\"" + binDir + ":$PATH\"");
         }
         return 0;
+    }
+
+    /**
+     * Install a local {@code .java}/{@code .kt}/{@code .jar} as a tool (plan §4.3): the engine's
+     * script-prepare goal compiles/inspects it, then the compiled classes (or the jar itself) are
+     * snapshotted into the env dir — immutable, independent of the source file — and the standard
+     * launcher is written over that snapshot + the resolved dep classpath.
+     */
+    private int installFile(Path file) throws IOException, InterruptedException {
+        String name = file.getFileName().toString();
+        String lower = name.toLowerCase(java.util.Locale.ROOT);
+        if (lower.endsWith(".kts")) {
+            CliOutput.err("jk tool install: .kts scripts can't be installed yet — run one with `jk tool run "
+                    + file + "` (docs/tool-targets-plan.md §4.3).");
+            return Exit.USAGE;
+        }
+        if (!Files.isRegularFile(file)) {
+            CliOutput.err("jk tool install: file not found: " + file);
+            return Exit.NO_INPUT;
+        }
+        String mode = lower.endsWith(".jar") ? "jar" : lower.endsWith(".kt") ? "kt" : "java";
+        String bin = binName != null && !binName.isBlank()
+                ? binName
+                : name.substring(0, name.lastIndexOf('.')).toLowerCase(java.util.Locale.ROOT);
+
+        Path cacheDir = cacheDirOverride != null ? cacheDirOverride : JkDirs.cache();
+        Path stateDir = stateDirOverride != null ? stateDirOverride : JkDirs.state();
+        Path binDir = binDirOverride != null ? binDirOverride : JkDirs.binDir();
+        Path envsRoot = stateDir.resolve("tools").resolve("envs");
+        Files.createDirectories(cacheDir);
+        GoalConsole.Mode consoleMode = GoalConsole.modeFor(global);
+
+        dev.jkbuild.cli.engine.EngineClient.ScriptPrepareOutcome prep;
+        if (engineDisabledForTests()) {
+            prep = dev.jkbuild.cli.engine.InProcessEngine.require()
+                    .scriptPrepare(mode, file.toAbsolutePath(), cacheDir, stateDir, repoUrl, false, consoleMode);
+        } else {
+            try {
+                prep = dev.jkbuild.cli.engine.EngineClient.runScriptPrepare(
+                        dev.jkbuild.engine.EnginePaths.current(),
+                        new dev.jkbuild.cli.engine.EngineClient.ScriptPrepareRequest(
+                                mode, file.toAbsolutePath(), cacheDir, stateDir, repoUrl, false),
+                        phases -> GoalConsole.chooseConsoleListener("tool-install", phases, consoleMode));
+            } catch (IOException e) {
+                CliOutput.err("jk tool install: " + e.getMessage());
+                return Exit.SOFTWARE;
+            }
+        }
+        if (!prep.result().success() || prep.mainClass() == null) return 1;
+
+        // Snapshot into the env dir so the launcher survives the source moving/vanishing.
+        Path envDir = envsRoot.resolve(bin);
+        List<Path> classpath = new ArrayList<>();
+        if ("jar".equals(mode)) {
+            Files.createDirectories(envDir);
+            Path jarCopy = envDir.resolve(name);
+            Files.copy(file, jarCopy, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            classpath.add(jarCopy);
+            // prep.classpath() leads with the source jar; keep only the resolved deps.
+            prep.classpath().stream().skip(1).forEach(classpath::add);
+        } else {
+            Path classesCopy = envDir.resolve("classes");
+            copyTree(prep.classesDir(), classesCopy);
+            classpath.add(classesCopy);
+            classpath.addAll(prep.classpath());
+            if (prep.stdlib() != null) classpath.add(prep.stdlib());
+        }
+
+        ToolEnv env = new ToolEnv(bin, Coordinate.of("script", bin, "local"), prep.mainClass(), classpath);
+        Path launcher = ToolLauncher.install(envsRoot, binDir, JavaHomes.runningJavaHome(), env);
+        if (!global.outputIsJson()) {
+            CliOutput.out("Installed " + file.getFileName() + " → " + launcher);
+            CliOutput.out("Add to PATH if needed:");
+            CliOutput.out("  export PATH=\"" + binDir + ":$PATH\"");
+        }
+        return 0;
+    }
+
+    private static void copyTree(Path from, Path to) throws IOException {
+        try (var walk = Files.walk(from)) {
+            for (Path src : walk.toList()) {
+                Path dst = to.resolve(from.relativize(src).toString());
+                if (Files.isDirectory(src)) {
+                    Files.createDirectories(dst);
+                } else {
+                    Files.createDirectories(dst.getParent());
+                    Files.copy(src, dst, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                }
+            }
+        }
     }
 }
