@@ -35,6 +35,11 @@
 
 [v-cloak] { display: none; }
 
+/* Text-selection highlight: the browser default is a glaring solid block on this dark
+ * theme — pin it to the theme's bright tone (--bright #eceff1) at 20% opacity so
+ * selected text stays readable without the white flash. */
+::selection { background: rgba(236, 239, 241, 0.2); }
+
 * { box-sizing: border-box; }
 
 body {
