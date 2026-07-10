@@ -72,6 +72,10 @@
           <span v-if="outcome(card) !== 'running'" class="ago">{{ ago(card) }}</span>
         </div>
 
+        <div v-if="outcome(card) === 'running'" class="cardbar" role="progressbar">
+          <span class="cardbar-fill" :style="{ width: progress(card) + '%' }"></span>
+        </div>
+
         <phase-chain v-if="card.phases.length" :phases="card.phases"></phase-chain>
 
         <div v-if="outcome(card) === 'running' && card.output.length" class="console">

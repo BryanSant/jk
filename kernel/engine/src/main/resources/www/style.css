@@ -238,6 +238,24 @@ main { max-width: 66rem; margin: 0 auto; padding: 18px 20px 3rem; }
 
 /* phase chain — the design's DAG strip */
 
+/* Running-card progress bar: same indigo→magenta gradient as the CLI progress bars
+ * (Theme PROGRESS_GRADIENT: PRIMARY #3F51B5 → BRIGHT_MAGENTA #E040FB). The width transition
+ * glides smoothly from phase to phase as the fold's phasesDone counter advances. */
+.cardbar {
+  height: 4px;
+  margin: 10px 0 2px;
+  border-radius: 3px;
+  background: var(--s2);
+  overflow: hidden;
+}
+.cardbar-fill {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, #3f51b5, #e040fb);
+  transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
 /* The phase strip never wraps: it's one horizontal chain that scrolls under ◂ / ▸ nav buttons.
  * overflow:hidden (not auto/scroll) means no scrollbar — the buttons are the only way to page,
  * and the track is moved programmatically via scrollLeft (see app.js PhaseChain). */

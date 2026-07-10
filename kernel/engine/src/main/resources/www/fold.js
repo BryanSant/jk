@@ -36,6 +36,7 @@ export function foldEvent(cards, event) {
         success: null, // tri-state: null = engine didn't say (socket requests) — derive from modules
         modules: [],
         phases: [],
+        phasesDone: 0, // completed phase-finish events — drives the running card's progress bar
         output: [],
         diagnostics: [],
       });
@@ -54,7 +55,13 @@ export function foldEvent(cards, event) {
     }
     case 'phase-finish': {
       const card = byId(cards, d.requestId);
-      if (card) phaseRow(card, d.phase).state = phaseState(d.status);
+      if (card) {
+        phaseRow(card, d.phase).state = phaseState(d.status);
+        // Monotonic completed-phase counter (per module-phase, so it grows with real work);
+        // the progress bar reads this — see app.js progress(). Never decreases, so the bar only
+        // ever glides forward.
+        card.phasesDone = (card.phasesDone || 0) + 1;
+      }
       break;
     }
     case 'output': {

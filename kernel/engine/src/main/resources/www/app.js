@@ -124,6 +124,17 @@ Vue.createApp({
       if (view === 'status') this.refresh();
     },
 
+    // Progress percentage for a running card's bar. The total phase count isn't known up front
+    // (phase events stream in as the build advances), so this is a monotonic estimate keyed on the
+    // completed-phase counter — done/(done+PENDING) — which only ever moves forward and eases toward
+    // 100%. A finished card is 100%; the CSS width transition does the smooth gliding.
+    progress(card) {
+      if (this.outcome(card) !== 'running') return 100;
+      const done = card.phasesDone || 0;
+      const PENDING = 2; // assume ~2 phases still to come — keeps the bar shy of 100% until finish
+      return Math.max(6, Math.round((100 * done) / (done + PENDING)));
+    },
+
     outcome(card) {
       return outcomeOf(card);
     },
