@@ -107,7 +107,10 @@ Three small layers, one file each:
   carries a **delete** affordance (like removing a GitHub Actions run) — `DELETE /api/history?id=`,
   then the card is dropped locally. A "Build…" button (POST `/api/build` with a directory string)
   exists but is secondary — the CLI remains the primary trigger; the button proves the mutation
-  path end-to-end.
+  path end-to-end. Each card's phase strip is a self-contained `phase-chain` component that never
+  wraps: it's one horizontal chain anchored to the newest phase, with earlier phases pushed off the
+  left. There is no scrollbar — when phases are hidden, a `◂` / `▸` button appears at that edge to
+  page the view (the track is moved via `scrollLeft`, `overflow:hidden`).
 - **Status** — the `jk engine status` numbers, rendered: version, pid, uptime, heap used/committed
   /max and RSS (with a small inline bar, no chart library), active connections/pipelines, idle
   policy, the resolved `www-root`.

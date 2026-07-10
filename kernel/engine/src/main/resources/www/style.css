@@ -238,7 +238,53 @@ main { max-width: 66rem; margin: 0 auto; padding: 18px 20px 3rem; }
 
 /* phase chain — the design's DAG strip */
 
-.phase-chain { display: flex; align-items: center; flex-wrap: wrap; margin-top: 11px; }
+/* The phase strip never wraps: it's one horizontal chain that scrolls under ◂ / ▸ nav buttons.
+ * overflow:hidden (not auto/scroll) means no scrollbar — the buttons are the only way to page,
+ * and the track is moved programmatically via scrollLeft (see app.js PhaseChain). */
+.phase-chain-wrap { position: relative; margin-top: 11px; }
+.phase-chain {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  overflow: hidden;
+  scroll-behavior: smooth;
+}
+
+/* Edge nav buttons — shown only when phases are hidden on that side. */
+.chain-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 3;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--bd);
+  border-radius: 6px;
+  background: var(--s2);
+  color: var(--mu);
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+}
+.chain-nav:hover { color: var(--bright); border-color: var(--mu); }
+.chain-nav.left { left: 0; }
+.chain-nav.right { right: 0; }
+
+/* A soft fade under each active nav button so a partially-hidden phase reads as "cut off". */
+.chain-fade {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 40px;
+  z-index: 2;
+  pointer-events: none;
+}
+.chain-fade.left { left: 0; background: linear-gradient(to right, var(--s1), transparent); }
+.chain-fade.right { right: 0; background: linear-gradient(to left, var(--s1), transparent); }
 
 .phase-node {
   display: flex;

@@ -8,6 +8,71 @@ import { foldEvent, outcomeOf, moduleSummary, seedFromHistory } from './fold.js'
 
 bootstrapToken();
 
+// The build-phase strip: a single horizontal chain that never wraps. New phases advance rightward
+// and push earlier ones off the left (out of, or partially out of, view). There is no scrollbar —
+// when phases are hidden a ◂ / ▸ nav button appears at that edge to page the view. Anchored to the
+// newest phase on mount and whenever the chain grows. See docs/webclient.md.
+const PhaseChain = {
+  props: { phases: { type: Array, required: true } },
+  data: () => ({ atStart: true, atEnd: true }),
+  template: `
+    <div class="phase-chain-wrap">
+      <button v-show="!atStart" type="button" class="chain-nav left" @click="page(-1)"
+              aria-label="show earlier phases" title="earlier phases">◂</button>
+      <span v-show="!atStart" class="chain-fade left" aria-hidden="true"></span>
+      <div class="phase-chain" ref="track">
+        <template v-for="(p, i) in phases" :key="p.name">
+          <span v-if="i > 0" class="phase-edge" :class="phases[i - 1].state"></span>
+          <span class="phase-node" :class="p.state">
+            <span v-if="p.state === 'running'" class="spin small"></span>
+            <span v-else-if="p.state === 'success'" class="phase-glyph ok">✓</span>
+            <span v-else-if="p.state === 'failed'" class="phase-glyph err">✘</span>
+            {{ p.name }}
+          </span>
+        </template>
+      </div>
+      <span v-show="!atEnd" class="chain-fade right" aria-hidden="true"></span>
+      <button v-show="!atEnd" type="button" class="chain-nav right" @click="page(1)"
+              aria-label="show later phases" title="later phases">▸</button>
+    </div>`,
+  mounted() {
+    // Re-measure on size changes (window resize, card expanding) without yanking the view.
+    this.observer = new ResizeObserver(() => this.measure());
+    this.observer.observe(this.$refs.track);
+    this.$nextTick(() => this.anchorEnd());
+  },
+  beforeUnmount() {
+    if (this.observer) this.observer.disconnect();
+  },
+  watch: {
+    // A new phase (live build) advances the chain: keep the newest end in view.
+    'phases.length'() {
+      this.$nextTick(() => this.anchorEnd());
+    },
+  },
+  methods: {
+    measure() {
+      const t = this.$refs.track;
+      if (!t) return;
+      const max = t.scrollWidth - t.clientWidth;
+      this.atStart = t.scrollLeft <= 1;
+      this.atEnd = t.scrollLeft >= max - 1;
+    },
+    anchorEnd() {
+      const t = this.$refs.track;
+      if (!t) return;
+      t.scrollLeft = t.scrollWidth; // newest phase visible; earlier ones pushed off the left
+      this.measure();
+    },
+    page(dir) {
+      const t = this.$refs.track;
+      if (!t) return;
+      t.scrollLeft += dir * Math.max(90, Math.round(t.clientWidth * 0.6));
+      setTimeout(() => this.measure(), 260); // after the smooth scroll settles
+    },
+  },
+};
+
 Vue.createApp({
   data: () => ({
     view: location.hash === '#status' ? 'status' : 'activity',
@@ -220,4 +285,6 @@ Vue.createApp({
       }[this.connection];
     },
   },
-}).mount('#app');
+})
+  .component('phase-chain', PhaseChain)
+  .mount('#app');

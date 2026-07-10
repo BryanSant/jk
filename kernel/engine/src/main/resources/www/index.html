@@ -10,6 +10,9 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/style.css">
+  <!-- Icons are Unicode dingbats/geometric glyphs (✓ ✘ ⊘ · ◂ ▸), never emoji or images, and
+       resolve through the JetBrains Mono → system-mono fallback stack; the only image is the SVG
+       brand mark. -->
   <!-- Version-pinned + SRI: a CDN compromise must not be able to script a page that can trigger
        builds. Update the integrity hash whenever the pin moves (docs/webclient.md). -->
   <script src="https://unpkg.com/vue@3.5.39/dist/vue.global.prod.js"
@@ -69,17 +72,7 @@
           <span v-if="outcome(card) !== 'running'" class="ago">{{ ago(card) }}</span>
         </div>
 
-        <div v-if="card.phases.length" class="phase-chain">
-          <template v-for="(p, i) in card.phases" :key="p.name">
-            <span v-if="i > 0" class="phase-edge" :class="card.phases[i - 1].state"></span>
-            <span class="phase-node" :class="p.state">
-              <span v-if="p.state === 'running'" class="spin small"></span>
-              <span v-else-if="p.state === 'success'" class="phase-glyph ok">✓</span>
-              <span v-else-if="p.state === 'failed'" class="phase-glyph err">✘</span>
-              {{ p.name }}
-            </span>
-          </template>
-        </div>
+        <phase-chain v-if="card.phases.length" :phases="card.phases"></phase-chain>
 
         <div v-if="outcome(card) === 'running' && card.output.length" class="console">
           <div v-for="(o, i) in card.output" :key="i">
