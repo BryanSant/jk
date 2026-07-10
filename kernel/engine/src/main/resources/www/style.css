@@ -247,7 +247,6 @@ main { max-width: 66rem; margin: 0 auto; padding: 18px 20px 3rem; }
   align-items: center;
   flex-wrap: nowrap;
   overflow: hidden;
-  scroll-behavior: smooth;
 }
 
 /* Edge nav buttons — shown only when phases are hidden on that side. */

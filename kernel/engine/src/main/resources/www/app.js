@@ -35,22 +35,28 @@ const PhaseChain = {
       <button v-show="!atEnd" type="button" class="chain-nav right" @click="page(1)"
               aria-label="show later phases" title="later phases">▸</button>
     </div>`,
+  // `follow` = keep pinned to the newest phase. True until the user pages away with ◂/▸; re-armed
+  // when they page back to the end. While following, every render (new phase, or a phase's node
+  // resizing as it goes running→success) re-anchors, so a build that scrolls phases off the left
+  // still finishes pinned to the right end — not stranded mid-chain with a ▸ showing.
+  data: () => ({ atStart: true, atEnd: true, follow: true }),
   mounted() {
-    // Re-measure on size changes (window resize, card expanding) without yanking the view.
-    this.observer = new ResizeObserver(() => this.measure());
+    this.observer = new ResizeObserver(() => this.reflow());
     this.observer.observe(this.$refs.track);
     this.$nextTick(() => this.anchorEnd());
+  },
+  updated() {
+    // Fires after each phase update (state/width change); nextTick lets layout settle first.
+    this.$nextTick(() => this.reflow());
   },
   beforeUnmount() {
     if (this.observer) this.observer.disconnect();
   },
-  watch: {
-    // A new phase (live build) advances the chain: keep the newest end in view.
-    'phases.length'() {
-      this.$nextTick(() => this.anchorEnd());
-    },
-  },
   methods: {
+    reflow() {
+      if (this.follow) this.anchorEnd();
+      else this.measure();
+    },
     measure() {
       const t = this.$refs.track;
       if (!t) return;
@@ -61,14 +67,21 @@ const PhaseChain = {
     anchorEnd() {
       const t = this.$refs.track;
       if (!t) return;
-      t.scrollLeft = t.scrollWidth; // newest phase visible; earlier ones pushed off the left
+      // Instant jump (not the smooth CSS path): a synchronous read in measure() must see the final
+      // scrollLeft, and only user paging should animate.
+      const max = Math.max(0, t.scrollWidth - t.clientWidth);
+      if (Math.abs(t.scrollLeft - max) > 1) t.scrollLeft = max;
       this.measure();
     },
     page(dir) {
       const t = this.$refs.track;
       if (!t) return;
-      t.scrollLeft += dir * Math.max(90, Math.round(t.clientWidth * 0.6));
-      setTimeout(() => this.measure(), 260); // after the smooth scroll settles
+      this.follow = false; // manual navigation — stop auto-pinning to the end
+      t.scrollTo({ left: t.scrollLeft + dir * Math.max(90, Math.round(t.clientWidth * 0.6)), behavior: 'smooth' });
+      setTimeout(() => {
+        this.measure();
+        if (this.atEnd) this.follow = true; // paged back to the newest end → resume following
+      }, 260);
     },
   },
 };
