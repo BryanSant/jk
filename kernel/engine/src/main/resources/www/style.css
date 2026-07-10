@@ -418,15 +418,34 @@ main { max-width: 66rem; margin: 0 auto; padding: 18px 20px 3rem; }
 .panel dt { color: var(--mu); }
 .panel dd { margin: 0; overflow-wrap: anywhere; }
 
-/* ---- failure details ---- */
+/* ---- per-module roll-ups (multi-module cards) ---- */
+
+/* Successful modules collapse into a "success details" accordion (open while running); failed
+   modules live in a peer "failure details" accordion that stays open. */
+.module-group { margin-top: 12px; }
+
+.module-group > summary {
+  cursor: pointer;
+  font: 600 10.5px/1 var(--mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--dim);
+  user-select: none;
+}
+
+.module-group.fail > summary { color: var(--err); }
+/* the first module row sits snug under the summary; the shared .module top-margin spaces the rest */
+.module-group[open] > .module:first-of-type { margin-top: 8px; }
+
+/* ---- failure output (never collapsed) ---- */
 
 .diag { margin-top: 11px; }
 
-.diag summary {
-  cursor: pointer;
-  font-size: 12px;
+.diag-head {
+  font: 600 10.5px/1 var(--mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   color: var(--err);
-  user-select: none;
 }
 
 .diag .console { margin-top: 8px; }

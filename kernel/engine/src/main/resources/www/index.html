@@ -80,17 +80,34 @@
         <!-- Compact (single-module): one phase chain directly under the header. -->
         <phase-chain v-if="compact(card) && singleChain(card).length" :phases="singleChain(card)"></phase-chain>
 
-        <!-- Multi-module workspace: a bullet + name + duration row per module, each with its chain. -->
+        <!-- Multi-module workspace: successful modules roll up under an accordion that is open while
+             the build runs and collapses once it finishes; failed modules sit in a peer accordion
+             that stays open. Both reuse the same bullet+name+duration row and per-module chain. -->
         <template v-if="!compact(card)">
-          <div v-for="m in card.modules" :key="m.dir" class="module">
-            <div class="module-row">
-              <span class="dot" :class="m.state"></span>
-              <span class="mname" :title="m.dir">{{ moduleLabel(m) }}</span>
-              <span class="spacer"></span>
-              <span class="millis">{{ duration(m.millis) }}</span>
+          <details v-if="okModules(card).length" class="module-group" :open="outcome(card) === 'running'">
+            <summary>success details ({{ okModules(card).length }})</summary>
+            <div v-for="m in okModules(card)" :key="m.dir" class="module">
+              <div class="module-row">
+                <span class="dot" :class="m.state"></span>
+                <span class="mname" :title="m.dir">{{ moduleLabel(m) }}</span>
+                <span class="spacer"></span>
+                <span class="millis">{{ duration(m.millis) }}</span>
+              </div>
+              <phase-chain v-if="m.phases.length" :phases="m.phases"></phase-chain>
             </div>
-            <phase-chain v-if="m.phases.length" :phases="m.phases"></phase-chain>
-          </div>
+          </details>
+          <details v-if="failedModules(card).length" class="module-group fail" open>
+            <summary>failure details ({{ failedModules(card).length }})</summary>
+            <div v-for="m in failedModules(card)" :key="m.dir" class="module">
+              <div class="module-row">
+                <span class="dot" :class="m.state"></span>
+                <span class="mname" :title="m.dir">{{ moduleLabel(m) }}</span>
+                <span class="spacer"></span>
+                <span class="millis">{{ duration(m.millis) }}</span>
+              </div>
+              <phase-chain v-if="m.phases.length" :phases="m.phases"></phase-chain>
+            </div>
+          </details>
         </template>
 
         <div v-if="outcome(card) === 'running' && card.output.length" class="console">
@@ -99,8 +116,9 @@
           </div>
         </div>
 
-        <details v-if="card.diagnostics.length" class="diag" :open="outcome(card) === 'failed'">
-          <summary>failure details ({{ card.diagnostics.length }})</summary>
+        <!-- The actual failure output is never collapsed — a peer to the failure-details accordion. -->
+        <div v-if="card.diagnostics.length" class="diag">
+          <div class="diag-head">failure output ({{ card.diagnostics.length }})</div>
           <div class="console">
             <div v-for="(d, i) in card.diagnostics" :key="i" class="diag-line">
               <span class="console-err">✘</span>
@@ -108,7 +126,7 @@
               <span class="console-sep">—</span> {{ d.message }}
             </div>
           </div>
-        </details>
+        </div>
 
       </article>
       <div v-if="browser" class="modal-bg" @click.self="closeBrowser()">

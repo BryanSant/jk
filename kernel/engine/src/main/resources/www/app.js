@@ -176,6 +176,16 @@ Vue.createApp({
       return card.modules[0] ? card.modules[0].phases : [];
     },
 
+    // Multi-module cards split their module rows across two peer accordions: the failed modules
+    // (kept open) and everything else — succeeded, still-running, skipped, cancelled — which rolls
+    // up under a "success details" accordion that is open while running and collapsed once done.
+    failedModules(card) {
+      return card.modules.filter((m) => m.state === 'failed');
+    },
+    okModules(card) {
+      return card.modules.filter((m) => m.state !== 'failed');
+    },
+
     // A module row's label: the artifact name from its coord (e.g. "core"), else the dir's tail.
     moduleLabel(m) {
       if (m.coord) {
