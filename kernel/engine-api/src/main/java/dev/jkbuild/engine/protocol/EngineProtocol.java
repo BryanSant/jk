@@ -438,7 +438,10 @@ public final class EngineProtocol {
 
     /**
      * The status snapshot. Memory fields are best-effort observations of the engine process itself:
-     * heap from the runtime, {@code rssBytes} from the OS ({@code -1} where it exposes none).
+     * heap from the runtime, {@code rssBytes} from the OS ({@code -1} where it exposes none). The
+     * http fields describe the embedded HTTP server ({@code docs/http.md}) and are simply omitted
+     * when they don't apply: {@code httpUrl} is present while it's serving, {@code httpError} when
+     * the {@code [http]} table is enabled but the server failed to start; neither means disabled.
      */
     public static String statusAck(
             String version,
@@ -449,7 +452,9 @@ public final class EngineProtocol {
             long heapUsedBytes,
             long heapCommittedBytes,
             long heapMaxBytes,
-            long rssBytes) {
+            long rssBytes,
+            String httpUrl,
+            String httpError) {
         return "{\"t\":\""
                 + STATUS_ACK
                 + "\",\"version\":"
@@ -470,6 +475,8 @@ public final class EngineProtocol {
                 + heapMaxBytes
                 + ",\"rssBytes\":"
                 + rssBytes
+                + (httpUrl != null ? ",\"httpUrl\":" + Ndjson.quote(httpUrl) : "")
+                + (httpError != null ? ",\"httpError\":" + Ndjson.quote(httpError) : "")
                 + "}";
     }
 

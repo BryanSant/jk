@@ -804,4 +804,192 @@ class EngineServerTest {
         server.close();
         serverThread.join(5_000);
     }
+
+    // ---- embedded HTTP server (docs/http.md) ----------------------------------------------------
+
+    private static dev.jkbuild.config.JkHttpConfig httpOnEphemeralPort(Path wwwRoot) {
+        return new dev.jkbuild.config.JkHttpConfig("127.0.0.1", 0, 16, wwwRoot.toString());
+    }
+
+    @Test
+    void http_enabled_serves_writes_url_file_and_reports_in_status() throws Exception {
+        Path stateDir = shortTempDir();
+        EnginePaths.Paths p = paths(stateDir);
+        Path www = Files.createDirectories(stateDir.resolve("www"));
+        Files.writeString(www.resolve("hello.txt"), "hi from the engine");
+
+        EngineServer server =
+                new EngineServer(p, JkEngineConfig.DEFAULTS, httpOnEphemeralPort(www), "1.0", null);
+        Thread serverThread = runInBackground(server);
+        waitUntil(Duration.ofSeconds(5), () -> Files.exists(p.http()));
+        String url = Files.readString(p.http());
+        assertThat(url).startsWith("http://127.0.0.1:").endsWith("/");
+
+        var httpClient = java.net.http.HttpClient.newHttpClient();
+        var response = httpClient.send(
+                java.net.http.HttpRequest.newBuilder(java.net.URI.create(url + "hello.txt")).build(),
+                java.net.http.HttpResponse.BodyHandlers.ofString());
+        assertThat(response.statusCode()).isEqualTo(200);
+        assertThat(response.body()).isEqualTo("hi from the engine");
+
+        // The REST surface serves the same vitals the socket status-ack carries.
+        var apiStatus = httpClient.send(
+                java.net.http.HttpRequest.newBuilder(java.net.URI.create(url + "api/status")).build(),
+                java.net.http.HttpResponse.BodyHandlers.ofString());
+        assertThat(apiStatus.statusCode()).isEqualTo(200);
+        assertThat(apiStatus.body()).contains("\"version\":\"1.0\"").contains("\"httpUrl\":\"" + url + "\"");
+
+        assertThat(Files.readString(p.httpToken()).trim()).isNotEmpty(); // minted alongside the URL file
+
+        try (Client c = new Client(p.socket())) {
+            String ack = c.send(EngineProtocol.statusRequest());
+            assertThat(Ndjson.str(ack, "httpUrl")).isEqualTo(url);
+            assertThat(Ndjson.str(ack, "httpError")).isNull();
+            assertThat(c.send(EngineProtocol.shutdown())).isNotNull(); // bye
+        }
+        serverThread.join(5_000);
+        assertThat(serverThread.isAlive()).isFalse();
+        assertThat(Files.exists(p.http())).isFalse(); // cleaned up with the other engine files
+        assertThat(Files.exists(p.httpToken())).isFalse();
+    }
+
+    @Test
+    void http_bind_failure_is_advisory_not_fatal() throws Exception {
+        Path stateDir = shortTempDir();
+        EnginePaths.Paths p = paths(stateDir);
+        try (var blocker = new java.net.ServerSocket(0, 1, java.net.InetAddress.getLoopbackAddress())) {
+            var http = new dev.jkbuild.config.JkHttpConfig(
+                    "127.0.0.1", blocker.getLocalPort(), 16, stateDir.resolve("www").toString());
+            EngineServer server = new EngineServer(p, JkEngineConfig.DEFAULTS, http, "1.0", null);
+            Thread serverThread = runInBackground(server);
+            waitUntil(Duration.ofSeconds(5), () -> Files.exists(p.socket()));
+
+            try (Client c = new Client(p.socket())) {
+                // The engine's primary role is unharmed...
+                assertThat(EngineProtocol.typeOf(c.send(EngineProtocol.ping()))).isEqualTo(EngineProtocol.PONG);
+                // ...and status reports the bind failure instead of a URL.
+                String ack = c.send(EngineProtocol.statusRequest());
+                assertThat(Ndjson.str(ack, "httpUrl")).isNull();
+                assertThat(Ndjson.str(ack, "httpError")).isNotEmpty();
+            }
+            assertThat(Files.exists(p.http())).isFalse(); // no URL file for a server that isn't up
+            server.close();
+            serverThread.join(5_000);
+        }
+    }
+
+    @Test
+    void http_enabled_overrides_exit_as_soon_as_idle() throws Exception {
+        Path stateDir = shortTempDir();
+        EnginePaths.Paths p = paths(stateDir);
+        // idle-minutes=0 exits the moment the workload drains — [http] must override that.
+        EngineServer server = new EngineServer(
+                p,
+                new JkEngineConfig(0),
+                httpOnEphemeralPort(stateDir.resolve("www")),
+                "1.0",
+                null,
+                10,
+                System::currentTimeMillis);
+        Thread serverThread = runInBackground(server);
+        waitUntil(Duration.ofSeconds(5), () -> Files.exists(p.socket()));
+
+        try (Client c = new Client(p.socket())) {
+            c.send(EngineProtocol.ping());
+        } // with idle-minutes=0 and no [http] the engine would exit right after this close
+
+        Thread.sleep(200); // generous vs. the 10ms tick — an idle exit would have happened by now
+        assertThat(serverThread.isAlive()).isTrue();
+        server.close();
+        serverThread.join(5_000);
+    }
+
+    @Test
+    void http_build_trigger_streams_lifecycle_events_over_sse() throws Exception {
+        Path stateDir = shortTempDir();
+        EnginePaths.Paths p = paths(stateDir);
+        EngineServer server = new EngineServer(
+                p, JkEngineConfig.DEFAULTS, httpOnEphemeralPort(stateDir.resolve("www")), "1.0", null);
+        Thread serverThread = runInBackground(server);
+        waitUntil(Duration.ofSeconds(5), () -> Files.exists(p.http()) && Files.exists(p.httpToken()));
+        String url = Files.readString(p.http());
+        String token = Files.readString(p.httpToken()).trim();
+        var httpClient = java.net.http.HttpClient.newHttpClient();
+
+        // Subscribe to the event stream first, so the request events can't race past us.
+        var sse = httpClient.send(
+                java.net.http.HttpRequest.newBuilder(java.net.URI.create(url + "api/events")).build(),
+                java.net.http.HttpResponse.BodyHandlers.ofLines());
+        assertThat(sse.statusCode()).isEqualTo(200);
+        var lines = sse.body().iterator();
+
+        // A dir whose jk.toml exists but won't parse: the trigger accepts it (202), the build fails
+        // fast and deterministically, and both lifecycle events flow — exactly the plumbing under test.
+        Path project = Files.createDirectories(stateDir.resolve("broken-project"));
+        Files.writeString(project.resolve("jk.toml"), "this is [not] valid = toml =");
+
+        var rejected = httpClient.send(
+                java.net.http.HttpRequest.newBuilder(java.net.URI.create(url + "api/build"))
+                        .header("Authorization", "Bearer " + token)
+                        .POST(java.net.http.HttpRequest.BodyPublishers.ofString(
+                                "{\"dir\":\"" + stateDir.resolve("no-such-project") + "\"}"))
+                        .build(),
+                java.net.http.HttpResponse.BodyHandlers.ofString());
+        assertThat(rejected.statusCode()).isEqualTo(400); // validation runs before any thread forks
+
+        var accepted = httpClient.send(
+                java.net.http.HttpRequest.newBuilder(java.net.URI.create(url + "api/build"))
+                        .header("Authorization", "Bearer " + token)
+                        .POST(java.net.http.HttpRequest.BodyPublishers.ofString(
+                                "{\"dir\":\"" + project + "\"}"))
+                        .build(),
+                java.net.http.HttpResponse.BodyHandlers.ofString());
+        assertThat(accepted.statusCode()).isEqualTo(202);
+        assertThat(accepted.body()).contains("\"requestId\":");
+
+        String startData = awaitSseData(lines, "request-start");
+        assertThat(startData).contains("\"kind\":\"build\"").contains(project.toString());
+        String finishData = awaitSseData(lines, "request-finish");
+        assertThat(finishData).contains("\"success\":false").contains("\"millis\":");
+
+        server.close();
+        serverThread.join(5_000);
+    }
+
+    /** Read SSE lines until an {@code event: <type>} frame, returning its {@code data:} payload. */
+    private static String awaitSseData(java.util.Iterator<String> lines, String type) throws Exception {
+        return java.util.concurrent.CompletableFuture.supplyAsync(() -> {
+                    while (lines.hasNext()) {
+                        if (lines.next().equals("event: " + type)) {
+                            String data = lines.next();
+                            return data.startsWith("data: ") ? data.substring("data: ".length()) : data;
+                        }
+                    }
+                    throw new AssertionError("stream ended without an 'event: " + type + "' frame");
+                })
+                .get(10, java.util.concurrent.TimeUnit.SECONDS);
+    }
+
+    @Test
+    void http_enabled_overrides_positive_idle_minutes() throws Exception {
+        Path stateDir = shortTempDir();
+        EnginePaths.Paths p = paths(stateDir);
+        AtomicLong clock = new AtomicLong(0);
+        // idle-minutes=1 with the clock jumped a year past the window: an (incorrectly) running
+        // idle ticker at a 10ms tick would fire almost immediately.
+        EngineServer server = new EngineServer(
+                p, new JkEngineConfig(1), httpOnEphemeralPort(stateDir.resolve("www")), "1.0", null, 10, clock::get);
+        Thread serverThread = runInBackground(server);
+        waitUntil(Duration.ofSeconds(5), () -> Files.exists(p.socket()));
+
+        try (Client c = new Client(p.socket())) {
+            c.send(EngineProtocol.ping());
+        }
+        clock.addAndGet(Duration.ofDays(365).toMillis());
+        Thread.sleep(200);
+
+        assertThat(serverThread.isAlive()).isTrue(); // never self-terminates while [http] is enabled
+        server.close();
+        serverThread.join(5_000);
+    }
 }

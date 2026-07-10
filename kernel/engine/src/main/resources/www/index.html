@@ -1,0 +1,72 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: Apache-2.0 — the jk engine dashboard shell (docs/webclient.md) -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>jk</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/style.css">
+  <script src="/vendor/petite-vue.iife.js" defer></script>
+  <script src="/app.js" type="module"></script>
+</head>
+<body>
+  <div id="app" v-cloak>
+    <header>
+      <h1>jk <span class="subtitle">engine</span></h1>
+      <nav>
+        <button :class="{ active: view === 'activity' }" @click="setView('activity')">Activity</button>
+        <button :class="{ active: view === 'status' }" @click="setView('status')">Status</button>
+      </nav>
+      <span class="connection" :class="connection">{{ connectionLabel() }}</span>
+    </header>
+
+    <main v-if="view === 'activity'">
+      <form class="trigger" @submit.prevent="triggerBuild()">
+        <input v-model="buildDir" placeholder="/absolute/path/to/workspace" spellcheck="false">
+        <button type="submit">Build</button>
+      </form>
+      <p v-if="buildError" class="error">{{ buildError }}</p>
+
+      <p v-if="cards.length === 0" class="empty">
+        No activity yet — run a <code>jk build</code> (or any hosted command) and it appears here live.
+      </p>
+
+      <article v-for="card in cards" :key="card.id" class="card" :class="outcome(card)">
+        <div class="card-head">
+          <span class="badge" :class="outcome(card)">{{ outcome(card) }}</span>
+          <span class="kind">{{ card.kind }}</span>
+          <span class="dir" :title="card.dir">{{ shortDir(card.dir) }}</span>
+          <span class="millis">{{ duration(card.millis) }}</span>
+        </div>
+        <ul v-if="card.modules.length">
+          <li v-for="m in card.modules" :key="m.dir">
+            <span class="dot" :class="m.state"></span>
+            <span class="dir" :title="m.dir">{{ shortDir(m.dir) }}</span>
+            <span class="millis">{{ duration(m.millis) }}</span>
+          </li>
+        </ul>
+      </article>
+    </main>
+
+    <main v-if="view === 'status'">
+      <p v-if="!status" class="empty">No status yet — the engine hasn't answered.</p>
+      <dl v-if="status">
+        <dt>version</dt><dd>{{ status.version }}</dd>
+        <dt>pid</dt><dd>{{ status.pid }}</dd>
+        <dt>uptime</dt><dd>{{ uptime(status.uptimeSeconds) }}</dd>
+        <dt>idle policy</dt><dd>never — [http] enabled</dd>
+        <dt>active requests</dt><dd>{{ status.activeRequests }}</dd>
+        <dt>heap</dt>
+        <dd>
+          {{ mib(status.heapUsedBytes) }} used / {{ mib(status.heapCommittedBytes) }} committed
+          (max {{ mib(status.heapMaxBytes) }})
+          <span class="meter"><span class="meter-fill" :style="{ width: heapPercent() + '%' }"></span></span>
+        </dd>
+        <dt>rss</dt><dd>{{ mib(status.rssBytes) }}</dd>
+        <dt>url</dt><dd>{{ status.httpUrl }}</dd>
+      </dl>
+    </main>
+  </div>
+</body>
+</html>

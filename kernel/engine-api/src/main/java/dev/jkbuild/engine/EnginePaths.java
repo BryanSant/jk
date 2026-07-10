@@ -23,9 +23,13 @@ public final class EnginePaths {
     /**
      * The socket/lock/pid/log paths for one engine identity, all siblings under {@code engine/}.
      * {@code token} is only ever written/read on the {@link EngineTransport#useLoopbackTcp()} path
-     * (Windows) — on the Unix-domain-socket path it's simply never created.
+     * (Windows) — on the Unix-domain-socket path it's simply never created. {@code http} holds the
+     * embedded HTTP server's actual bound URL and {@code httpToken} its bearer token (owner-only
+     * permissions); both exist only while an engine with an enabled {@code [http]} table is serving
+     * (see {@code docs/http.md}).
      */
-    public record Paths(String key, Path dir, Path socket, Path lock, Path pid, Path log, Path token) {}
+    public record Paths(
+            String key, Path dir, Path socket, Path lock, Path pid, Path log, Path token, Path http, Path httpToken) {}
 
     /** Resolve against the live {@link JkDirs} (honors {@code JK_HOME}/{@code JK_STATE_DIR}). */
     public static Paths current() {
@@ -43,7 +47,9 @@ public final class EnginePaths {
                 dir.resolve(key + ".lock"),
                 dir.resolve(key + ".pid"),
                 dir.resolve(key + ".log"),
-                dir.resolve(key + ".token"));
+                dir.resolve(key + ".token"),
+                dir.resolve(key + ".http"),
+                dir.resolve(key + ".http-token"));
     }
 
     /**

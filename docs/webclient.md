@@ -42,14 +42,17 @@ kernel/engine/src/main/resources/www/
 ├── index.html          # the whole app shell: header, view tabs, petite-vue templates
 ├── app.js              # createApp + store + view logic (ES module)
 ├── api.js              # fetch wrapper, token bootstrap, SSE client (ES module)
+├── fold.js             # pure event-folding logic — no browser globals, node-testable
 ├── style.css           # hand-written; dark/light via prefers-color-scheme
 └── vendor/
-    └── petite-vue.iife.js   # vendored, version-pinned in a header comment
+    └── petite-vue.iife.js   # vendored, version-pinned in a header comment (v0.4.1)
 ```
 
-`index.html` loads `vendor/petite-vue.iife.js` and `app.js` with `defer`. No inline scripts, so a
-strict `Content-Security-Policy` header (`default-src 'self'`) can ride every static response from
-the server.
+`index.html` loads `vendor/petite-vue.iife.js` and `app.js` with `defer`. No inline scripts or
+style attributes, so a `Content-Security-Policy` header rides every <em>classpath</em>-served
+response: `default-src 'self'; script-src 'self' 'unsafe-eval'` — the `unsafe-eval` is petite-vue's
+expression compiler (`new Function`), the price of the no-build-step constraint. Disk-served
+`www-root` content (user reports with inline styles of their own) is deliberately not CSP-gated.
 
 ## Architecture
 
@@ -126,10 +129,11 @@ load. Ship by simply having the same files in the jar and removing the override.
 
 ## Testing
 
-- The store's event-folding logic (SSE events → activity cards) is the only real logic; keep it a
-  pure function of `(state, event)` in `app.js` and test it headlessly with `node --test` — no
+- The store's event-folding logic (SSE events → activity cards) is the only real logic; it lives
+  as pure functions in `fold.js` (no browser globals) and is tested headlessly with `node --test`
+  (`kernel/engine/src/test/js/fold.test.mjs`, run via the `WebClientFoldTest` JUnit wrapper) — no
   browser, no framework, no new toolchain (Node is only a *test-time* convenience, not a build
-  dependency; the suite is optional-skip when Node is absent).
+  dependency; the suite is skipped when Node is absent).
 - End-to-end: the engine's HTTP test suite (see `http.md`) already binds a real server; one
   Playwright-driven smoke pass (load, see status numbers, trigger a build, watch the card close)
   runs manually per release rather than in CI, matching how the TUI is verified against a real

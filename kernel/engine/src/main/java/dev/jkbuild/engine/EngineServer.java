@@ -4,8 +4,10 @@ package dev.jkbuild.engine;
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.config.JkConfig;
 import dev.jkbuild.config.JkEngineConfig;
+import dev.jkbuild.config.JkHttpConfig;
 import dev.jkbuild.config.Session;
 import dev.jkbuild.config.SessionContext;
+import dev.jkbuild.engine.http.HttpEngineServer;
 import dev.jkbuild.engine.protocol.EngineProtocol;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.plugin.protocol.Ndjson;
@@ -71,6 +73,15 @@ public final class EngineServer implements AutoCloseable {
 
     private final EnginePaths.Paths paths;
     private final JkEngineConfig config;
+
+    /**
+     * The {@code [http]} table when present, else {@code null} — the embedded HTTP server's enable
+     * switch. Enabled also means this engine never self-terminates (see {@code docs/http.md} and
+     * {@link #startIdleTickerIfNeeded}): the dashboard it serves must not vanish out from under an
+     * open browser tab.
+     */
+    private final JkHttpConfig httpConfig;
+
     private final String version;
     private final Consumer<String> log;
     private final long tickMillis;
@@ -81,6 +92,25 @@ public final class EngineServer implements AutoCloseable {
     private final Object lifecycleLock = new Object();
     private final AtomicInteger activeConnections = new AtomicInteger();
     private final AtomicInteger activePipelines = new AtomicInteger();
+
+    /**
+     * Dashboard event plumbing ({@code docs/http.md}) — non-null exactly when {@link #httpConfig}
+     * is. Every hosted request publishes coarse lifecycle events through {@link #publishEvent};
+     * with no SSE subscriber connected that's one {@code hasSubscribers} check and nothing else.
+     */
+    private final dev.jkbuild.engine.http.HttpEvents httpEvents;
+
+    /** Ids for {@code request-start}/{@code request-finish} events and {@code POST /api/build} acks. */
+    private final java.util.concurrent.atomic.AtomicLong requestIds = new java.util.concurrent.atomic.AtomicLong();
+
+    /**
+     * The event-request id of the hosted operation this thread is running, set around {@code
+     * runner.run} by {@link #handleAsyncGoalRequest} — how {@link #wireListener}/{@link
+     * #wireGoalListener} tag their module/goal events with the right request without threading an
+     * id through every runner signature. Captured at listener <em>creation</em> (which happens on
+     * the runner's thread); callbacks may later fire on any worker thread.
+     */
+    private final ThreadLocal<Long> currentEventRequestId = new ThreadLocal<>();
 
     /**
      * Serializes cache mutation against cache consumption (Wave 4): every pipeline holds the read
@@ -112,11 +142,27 @@ public final class EngineServer implements AutoCloseable {
     private ExecutorService connectionExecutor;
     private ScheduledExecutorService idleTicker;
 
+    /** Non-null once the embedded HTTP server is up; stays null when disabled or bind failed. */
+    private HttpEngineServer httpServer;
+
+    /** Non-null when {@code [http]} is enabled but the server failed to start — surfaced in status. */
+    private volatile String httpError;
+
     /** Non-null only on the loopback-TCP transport (Windows) — see {@link EngineTransport}. */
     private String expectedToken;
 
     public EngineServer(EnginePaths.Paths paths, JkEngineConfig config, String version, Consumer<String> log) {
-        this(paths, config, version, log, DEFAULT_TICK_MILLIS, System::currentTimeMillis);
+        this(paths, config, null, version, log, DEFAULT_TICK_MILLIS, System::currentTimeMillis);
+    }
+
+    /** As above plus the optional {@code [http]} table ({@code null} = feature off). */
+    public EngineServer(
+            EnginePaths.Paths paths,
+            JkEngineConfig config,
+            JkHttpConfig httpConfig,
+            String version,
+            Consumer<String> log) {
+        this(paths, config, httpConfig, version, log, DEFAULT_TICK_MILLIS, System::currentTimeMillis);
     }
 
     /** Test seam: a short tick interval and an injectable clock, so idle-timeout tests don't sleep for real minutes. */
@@ -127,8 +173,22 @@ public final class EngineServer implements AutoCloseable {
             Consumer<String> log,
             long tickMillis,
             LongSupplier clockMillis) {
+        this(paths, config, null, version, log, tickMillis, clockMillis);
+    }
+
+    /** The full test seam, plus the optional {@code [http]} table ({@code null} = feature off). */
+    EngineServer(
+            EnginePaths.Paths paths,
+            JkEngineConfig config,
+            JkHttpConfig httpConfig,
+            String version,
+            Consumer<String> log,
+            long tickMillis,
+            LongSupplier clockMillis) {
         this.paths = paths;
         this.config = config;
+        this.httpConfig = httpConfig;
+        this.httpEvents = httpConfig != null ? new dev.jkbuild.engine.http.HttpEvents() : null;
         this.version = version;
         this.log = log != null ? log : s -> {};
         this.tickMillis = tickMillis;
@@ -184,6 +244,7 @@ public final class EngineServer implements AutoCloseable {
                 Thread.ofVirtual().name("jk-engine-conn-", 0).factory());
         lastActivityAtMillis = clockMillis.getAsLong();
         startIdleTickerIfNeeded();
+        startHttpIfEnabled();
         planSharedWorkerMemoryOnce();
 
         log.accept("jk engine: listening on " + paths.socket() + " (pid " + pid + ")");
@@ -242,20 +303,21 @@ public final class EngineServer implements AutoCloseable {
                     case EngineProtocol.HELLO -> send(writer, EngineProtocol.helloAck(version, pid, startedAtMillis));
                     case EngineProtocol.PING -> send(writer, EngineProtocol.pong());
                     case EngineProtocol.STATUS -> {
-                        Runtime rt = Runtime.getRuntime();
-                        long heapCommitted = rt.totalMemory();
+                        dev.jkbuild.engine.http.StatusSnapshot s = statusSnapshot();
                         send(
                                 writer,
                                 EngineProtocol.statusAck(
-                                        version,
-                                        pid,
-                                        startedAtMillis,
-                                        config.idleMinutes(),
-                                        activeConnections.get(),
-                                        heapCommitted - rt.freeMemory(),
-                                        heapCommitted,
-                                        rt.maxMemory(),
-                                        MemoryProbe.ownRssBytes()));
+                                        s.version(),
+                                        s.pid(),
+                                        s.startedAtMillis(),
+                                        s.idleMinutes(),
+                                        s.activeRequests(),
+                                        s.heapUsedBytes(),
+                                        s.heapCommittedBytes(),
+                                        s.heapMaxBytes(),
+                                        s.rssBytes(),
+                                        httpServer != null ? httpServer.url() : null,
+                                        httpError));
                     }
                     case EngineProtocol.SHUTDOWN -> {
                         send(writer, EngineProtocol.bye());
@@ -421,13 +483,25 @@ public final class EngineServer implements AutoCloseable {
             boolean pipeline) {
         Session.CancelToken cancelToken = Session.CancelToken.live();
         CountDownLatch done = new CountDownLatch(1);
+        long eventRequestId = requestIds.incrementAndGet();
+        String eventKind = requestKind(threadPrefix);
+        String eventDir = String.valueOf(Ndjson.str(requestLine, "entryDir"));
+        long eventStartMillis = clockMillis.getAsLong();
+        publishEvent(
+                "request-start",
+                dev.jkbuild.engine.http.JsonOut.object()
+                        .put("requestId", eventRequestId)
+                        .put("kind", eventKind)
+                        .put("dir", eventDir));
         if (pipeline) activePipelines.incrementAndGet();
         try {
             Thread.ofVirtual().name(threadPrefix, 0).start(() -> {
                 if (pipeline) cacheGate.readLock().lock();
+                currentEventRequestId.set(eventRequestId);
                 try {
                     runner.run(requestLine, cancelToken, writer);
                 } finally {
+                    currentEventRequestId.remove();
                     if (pipeline) cacheGate.readLock().unlock();
                     done.countDown();
                 }
@@ -452,7 +526,35 @@ public final class EngineServer implements AutoCloseable {
             }
         } finally {
             if (pipeline) maybeIdleBoundaryGc();
+            publishEvent(
+                    "request-finish",
+                    dev.jkbuild.engine.http.JsonOut.object()
+                            .put("requestId", eventRequestId)
+                            .put("kind", eventKind)
+                            .put("dir", eventDir)
+                            .put("cancelled", cancelToken.cancelled())
+                            .put("millis", clockMillis.getAsLong() - eventStartMillis));
         }
+    }
+
+    /** {@code "jk-engine-build-"} → {@code "build"} — the event vocabulary's request kind. */
+    private static String requestKind(String threadPrefix) {
+        String kind = threadPrefix.startsWith("jk-engine-") ? threadPrefix.substring("jk-engine-".length()) : threadPrefix;
+        return kind.endsWith("-") ? kind.substring(0, kind.length() - 1) : kind;
+    }
+
+    /** Publish to the dashboard event hub — free (one subscriber check) when no dashboard is open. */
+    private void publishEvent(String type, dev.jkbuild.engine.http.JsonOut payload) {
+        if (httpEvents != null && httpEvents.hasSubscribers()) httpEvents.publish(type, payload);
+    }
+
+    /**
+     * Guard for event publishers: build the payload only when someone is listening. Split from
+     * {@link #publishEvent} so hot listener callbacks (per-goal, per-module) pay one boolean check,
+     * not a {@code JsonOut} allocation, when no dashboard is open.
+     */
+    private boolean eventsWanted() {
+        return httpEvents != null && httpEvents.hasSubscribers();
     }
 
     /**
@@ -1861,6 +1963,9 @@ public final class EngineServer implements AutoCloseable {
 
     /** Translate every {@link WorkspaceBuildListener} callback into a wire event on {@code writer}. */
     private WorkspaceBuildListener wireListener(BufferedWriter writer) {
+        // Created on the runner's thread — capture the request id for the dashboard events now;
+        // the callbacks below fire on scheduler/worker threads where the ThreadLocal isn't set.
+        long eventRequestId = eventRequestId();
         return new WorkspaceBuildListener() {
             @Override
             public void onPlan(java.util.List<ModulePlan> plan) {
@@ -1885,6 +1990,7 @@ public final class EngineServer implements AutoCloseable {
             public GoalListener onModuleStart(ModulePlan m) {
                 String dir = m.dir().toString();
                 sendQuiet(writer, EngineProtocol.moduleStart(dir));
+                publishModuleStart(eventRequestId, dir);
                 return wireGoalListener(dir, writer, (dev.jkbuild.run.Goal) null);
             }
 
@@ -1893,8 +1999,43 @@ public final class EngineServer implements AutoCloseable {
                 sendQuiet(
                         writer,
                         EngineProtocol.moduleFinish(o.dir().toString(), o.coord(), o.success(), o.exitCode(), o.millis()));
+                publishModuleFinish(eventRequestId, o.dir().toString(), o.success(), o.millis());
             }
         };
+    }
+
+    /** The current thread's hosted-request id for dashboard events; {@code -1} outside a request. */
+    private long eventRequestId() {
+        Long id = currentEventRequestId.get();
+        return id != null ? id : -1;
+    }
+
+    private void publishModuleStart(long requestId, String dir) {
+        if (!eventsWanted()) return;
+        publishEvent(
+                "module-start",
+                dev.jkbuild.engine.http.JsonOut.object().put("requestId", requestId).put("dir", dir));
+    }
+
+    private void publishModuleFinish(long requestId, String dir, boolean success, long millis) {
+        if (!eventsWanted()) return;
+        publishEvent(
+                "module-finish",
+                dev.jkbuild.engine.http.JsonOut.object()
+                        .put("requestId", requestId)
+                        .put("dir", dir)
+                        .put("success", success)
+                        .put("millis", millis));
+    }
+
+    private void publishGoalFinish(long requestId, String dir, boolean success) {
+        if (!eventsWanted()) return;
+        publishEvent(
+                "goal-finish",
+                dev.jkbuild.engine.http.JsonOut.object()
+                        .put("requestId", requestId)
+                        .put("dir", dir)
+                        .put("success", success));
     }
 
     /**
@@ -1935,6 +2076,9 @@ public final class EngineServer implements AutoCloseable {
      */
     private GoalListener wireGoalListener(
             String dir, BufferedWriter writer, java.util.function.Function<GoalResult, String> finishEncoder) {
+        // Created on the runner's thread (directly, or via wireListener's onModuleStart which runs
+        // on a scheduler thread — there the ThreadLocal is unset and module events carry the id).
+        long eventRequestId = eventRequestId();
         return new GoalListener() {
             @Override
             public void goalStart(GoalView view) {
@@ -2019,6 +2163,7 @@ public final class EngineServer implements AutoCloseable {
                                     dir, d.phase(), d.code(), d.message(), d.test(), d.exceptionClass()));
                 }
                 sendQuiet(writer, finishEncoder.apply(result));
+                publishGoalFinish(eventRequestId, dir, result.success());
             }
         };
     }
@@ -2036,7 +2181,8 @@ public final class EngineServer implements AutoCloseable {
         synchronized (lifecycleLock) {
             int remaining = activeConnections.decrementAndGet();
             lastActivityAtMillis = clockMillis.getAsLong();
-            if (remaining == 0 && hadActivity && config.exitAsSoonAsIdle() && !shuttingDown) {
+            // httpConfig == null: [http] overrides idle-minutes = 0 too — never self-terminate.
+            if (remaining == 0 && hadActivity && httpConfig == null && config.exitAsSoonAsIdle() && !shuttingDown) {
                 shuttingDown = true;
                 closeServerChannelQuietly();
             }
@@ -2044,6 +2190,10 @@ public final class EngineServer implements AutoCloseable {
     }
 
     private void startIdleTickerIfNeeded() {
+        // [http] enabled: never self-terminate, overriding any idle-minutes (docs/http.md) — the
+        // dashboard is served by this process and only a CLI invocation can respawn one, so a web
+        // client that works until the engine idles out would be an astonishing experience.
+        if (httpConfig != null) return;
         if (config.neverExpires()) return; // idle-minutes = -1: only an explicit stop/kill ends this engine
         if (config.exitAsSoonAsIdle()) return; // idle-minutes = 0: handled inline in onConnectionFinished
         long idleMillis = config.idleMinutes() * 60_000L;
@@ -2063,6 +2213,154 @@ public final class EngineServer implements AutoCloseable {
                 tickMillis,
                 tickMillis,
                 TimeUnit.MILLISECONDS);
+    }
+
+    /**
+     * Start the embedded HTTP server when the {@code [http]} table is present — advisory, never
+     * load-bearing: a bind failure (port already claimed, unusable host) is logged, remembered for
+     * {@code jk engine status}, and the engine serves builds without HTTP. See {@code docs/http.md}.
+     */
+    private void startHttpIfEnabled() {
+        if (httpConfig == null) return;
+        HttpEngineServer candidate = new HttpEngineServer(
+                httpConfig,
+                httpConfig.wwwRootPath(),
+                paths.httpToken(),
+                version,
+                this::statusSnapshot,
+                httpEvents,
+                this::triggerHttpBuild,
+                log);
+        try {
+            candidate.start();
+            Files.writeString(paths.http(), candidate.url());
+            httpServer = candidate;
+            log.accept("jk engine: http listening on " + candidate.url());
+        } catch (IOException | RuntimeException e) {
+            candidate.close();
+            httpError = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+            log.accept("jk engine: http failed to start (" + httpError + ") — continuing without http");
+        }
+    }
+
+    /**
+     * {@code POST /api/build}'s trigger ({@code docs/http.md}): run a build of {@code dirStr} on
+     * the same {@link BuildService#buildWorkspace} path the socket protocol uses, with the same
+     * pipeline discipline ({@link #activePipelines}, {@link #cacheGate} read side, idle-boundary
+     * GC), acknowledged immediately with a request id. There is no wire connection — progress goes
+     * only to the dashboard event hub, and the terminal {@code request-finish} carries {@code
+     * success} (the socket-request variant can't; its outcome is encoded in wire messages).
+     */
+    private long triggerHttpBuild(String dirStr) {
+        Path entryDir = Path.of(dirStr);
+        if (!entryDir.isAbsolute()) {
+            throw new IllegalArgumentException("dir must be an absolute path");
+        }
+        if (!Files.isRegularFile(entryDir.resolve("jk.toml"))) {
+            throw new IllegalArgumentException("no jk.toml in " + entryDir);
+        }
+        long eventRequestId = requestIds.incrementAndGet();
+        long startMillis = clockMillis.getAsLong();
+        publishEvent(
+                "request-start",
+                dev.jkbuild.engine.http.JsonOut.object()
+                        .put("requestId", eventRequestId)
+                        .put("kind", "build")
+                        .put("dir", entryDir.toString()));
+        activePipelines.incrementAndGet();
+        Thread.ofVirtual().name("jk-engine-http-build-", 0).start(() -> {
+            cacheGate.readLock().lock();
+            currentEventRequestId.set(eventRequestId);
+            boolean success = false;
+            try {
+                success = runHttpBuild(entryDir);
+            } finally {
+                currentEventRequestId.remove();
+                cacheGate.readLock().unlock();
+                maybeIdleBoundaryGc();
+                publishEvent(
+                        "request-finish",
+                        dev.jkbuild.engine.http.JsonOut.object()
+                                .put("requestId", eventRequestId)
+                                .put("kind", "build")
+                                .put("dir", entryDir.toString())
+                                .put("success", success)
+                                .put("cancelled", false)
+                                .put("millis", clockMillis.getAsLong() - startMillis));
+            }
+        });
+        return eventRequestId;
+    }
+
+    /** The build body of {@link #triggerHttpBuild} — {@link #runBuild} with defaults, hub-only events. */
+    private boolean runHttpBuild(Path entryDir) {
+        try {
+            JkBuild entryBuild = JkBuildParser.parse(entryDir.resolve("jk.toml"));
+            Path cache = dev.jkbuild.util.JkDirs.cache();
+            Path jdksDir = dev.jkbuild.util.JkDirs.jdks();
+            WorkspaceRequest req = new WorkspaceRequest(
+                    entryDir,
+                    entryBuild,
+                    cache,
+                    jdksDir,
+                    Runtime.getRuntime().availableProcessors(), // the shared plan's own worst-case cap
+                    null,
+                    false,
+                    false,
+                    0,
+                    null, // let the engine forecast dirty modules itself — see docs/engine.md
+                    false, // this engine plans memory once at startup, not per request
+                    true); // auto-freshen a stale lock, like jk build
+            Session session = Session.defaults()
+                    .withWorkingDir(entryDir)
+                    .withCacheDir(cache)
+                    .withJdksDir(jdksDir);
+            WorkspaceResult result =
+                    SessionContext.where(session, () -> BuildService.buildWorkspace(req, hubListener()));
+            return result.success();
+        } catch (Exception e) {
+            log.accept("jk engine: http-triggered build of " + entryDir + " failed: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /** Module/goal events to the dashboard hub only — the HTTP trigger's counterpart of {@link #wireListener}. */
+    private WorkspaceBuildListener hubListener() {
+        long eventRequestId = eventRequestId();
+        return new WorkspaceBuildListener() {
+            @Override
+            public GoalListener onModuleStart(ModulePlan m) {
+                String dir = m.dir().toString();
+                publishModuleStart(eventRequestId, dir);
+                return new GoalListener() {
+                    @Override
+                    public void goalFinish(GoalResult result) {
+                        publishGoalFinish(eventRequestId, dir, result.success());
+                    }
+                };
+            }
+
+            @Override
+            public void onModuleFinish(ModuleOutcome o) {
+                publishModuleFinish(eventRequestId, o.dir().toString(), o.success(), o.millis());
+            }
+        };
+    }
+
+    /** The one source of engine vitals — feeds both the socket {@code status-ack} and {@code /api/status}. */
+    private dev.jkbuild.engine.http.StatusSnapshot statusSnapshot() {
+        Runtime rt = Runtime.getRuntime();
+        long heapCommitted = rt.totalMemory();
+        return new dev.jkbuild.engine.http.StatusSnapshot(
+                version,
+                pid,
+                startedAtMillis,
+                config.idleMinutes(),
+                activeConnections.get(),
+                heapCommitted - rt.freeMemory(),
+                heapCommitted,
+                rt.maxMemory(),
+                MemoryProbe.ownRssBytes());
     }
 
     private void checkIdleTimeout(long idleMillis) {
@@ -2095,6 +2393,9 @@ public final class EngineServer implements AutoCloseable {
     }
 
     private void cleanup() {
+        if (httpServer != null) httpServer.close();
+        deleteQuietly(paths.http());
+        deleteQuietly(paths.httpToken());
         if (idleTicker != null) idleTicker.shutdownNow();
         if (connectionExecutor != null) connectionExecutor.shutdown();
         try {

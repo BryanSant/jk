@@ -48,8 +48,10 @@ public final class EngineMain {
         try {
             dev.jkbuild.engine.EnginePaths.Paths paths = dev.jkbuild.engine.EnginePaths.current();
             dev.jkbuild.config.JkEngineConfig config = dev.jkbuild.config.JkEngineConfig.resolve();
-            dev.jkbuild.engine.EngineServer server =
-                    new dev.jkbuild.engine.EngineServer(paths, config, Jk.VERSION, System.err::println);
+            dev.jkbuild.config.JkHttpConfig httpConfig =
+                    dev.jkbuild.config.JkHttpConfig.resolve().orElse(null);
+            dev.jkbuild.engine.EngineServer server = new dev.jkbuild.engine.EngineServer(
+                    paths, config, httpConfig, Jk.VERSION, System.err::println);
             server.run();
             return 0;
         } catch (java.io.IOException e) {

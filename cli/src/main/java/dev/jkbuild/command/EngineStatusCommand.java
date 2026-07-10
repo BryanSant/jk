@@ -65,16 +65,39 @@ public final class EngineStatusCommand implements CliCommand {
                     + ",\"heapCommittedBytes\":" + s.heapCommittedBytes()
                     + ",\"heapMaxBytes\":" + s.heapMaxBytes()
                     + ",\"rssBytes\":" + s.rssBytes()
+                    + ",\"httpUrl\":" + (s.httpUrl() != null ? Ndjson.quote(s.httpUrl()) : "null")
+                    + ",\"httpError\":" + (s.httpError() != null ? Ndjson.quote(s.httpError()) : "null")
                     + "}");
             return Exit.SUCCESS;
         }
         CliOutput.out("jk engine: running (pid " + s.pid() + ", version " + s.version() + ")");
         CliOutput.out("  uptime:          " + formatUptime(uptimeSeconds));
-        CliOutput.out("  idle-minutes:    " + describeIdleMinutes(s.idleMinutes()));
+        CliOutput.out("  idle-minutes:    " + describeIdleMinutes(s));
         CliOutput.out("  active requests: " + s.activeRequests());
         String memory = formatMemory(s);
         if (memory != null) CliOutput.out("  memory:          " + memory);
+        CliOutput.out("  http:            " + describeHttp(s, paths));
         return Exit.SUCCESS;
+    }
+
+    /**
+     * The embedded HTTP server's state — serving URL, bind error, or disabled ({@code docs/http.md}).
+     * The serving URL carries the bearer token as a fragment ({@code #t=…}) when the engine's
+     * owner-only token file is readable: fragments never leave the browser, and this line is how
+     * the dashboard SPA bootstraps its token — click/open the printed URL and it's authenticated.
+     */
+    private static String describeHttp(EngineClient.Status s, EnginePaths.Paths paths) {
+        if (s.httpUrl() != null) {
+            try {
+                String token = java.nio.file.Files.readString(paths.httpToken()).trim();
+                if (!token.isEmpty()) return s.httpUrl() + "#t=" + token;
+            } catch (java.io.IOException e) {
+                // token file unreadable/missing — the plain URL still serves static + loopback reads
+            }
+            return s.httpUrl();
+        }
+        if (s.httpError() != null) return "failed to start (" + s.httpError() + ")";
+        return "disabled";
     }
 
     /**
@@ -105,7 +128,11 @@ public final class EngineStatusCommand implements CliCommand {
         return (bytes + (1 << 19)) / (1 << 20) + " MiB"; // round to nearest MiB
     }
 
-    private static String describeIdleMinutes(int idleMinutes) {
+    private static String describeIdleMinutes(EngineClient.Status s) {
+        // [http] forces never-self-terminate regardless of the configured value (docs/http.md) —
+        // report the effective policy, not a number the engine isn't actually honoring.
+        if (s.httpEnabled()) return "never ([http] enabled)";
+        int idleMinutes = s.idleMinutes();
         if (idleMinutes == 0) return "0 (exits as soon as idle)";
         if (idleMinutes == -1) return "-1 (never expires)";
         return String.valueOf(idleMinutes);

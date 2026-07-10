@@ -1,0 +1,175 @@
+/* SPDX-License-Identifier: Apache-2.0
+ * jk engine dashboard. Palette lifted from docs/tui-style.md (Jk Dark) so the dashboard and the
+ * terminal UI read as one product: color means state, never decoration. Light theme derives the
+ * same hues onto a paper background via prefers-color-scheme. */
+
+:root {
+  --bg: #14161a;
+  --surface: #1d2026;
+  --border: #2c313a;
+  --text: #d7dae0;
+  --text-dim: #8b919c;
+  --accent: #00bcd4;      /* coord-group cyan */
+  --working: #0f4786;     /* chip-working */
+  --success: #4caf50;     /* success-text */
+  --success-deep: #357b38;/* chip-success */
+  --error: #e91e63;       /* chip-error */
+  --warning: #ffc107;     /* warning-text */
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f6f7f9;
+    --surface: #ffffff;
+    --border: #d9dde3;
+    --text: #23272e;
+    --text-dim: #6b7280;
+    --working: #1565c0;
+  }
+}
+
+[v-cloak] { display: none; }
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.5 system-ui, sans-serif;
+}
+
+code, .dir, .millis { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+#app { max-width: 60rem; margin: 0 auto; padding: 1rem 1.25rem 3rem; }
+
+header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.5rem 0 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+h1 { font-size: 1.25rem; margin: 0; }
+.subtitle { color: var(--text-dim); font-weight: normal; }
+
+nav { display: flex; gap: 0.25rem; }
+
+nav button {
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--text-dim);
+  padding: 0.3rem 0.8rem;
+  font: inherit;
+  cursor: pointer;
+}
+
+nav button.active { color: var(--text); border-color: var(--border); background: var(--surface); }
+
+.connection { margin-left: auto; font-size: 0.85rem; color: var(--text-dim); }
+.connection.live::before { content: '● '; color: var(--success); }
+.connection.connecting::before { content: '● '; color: var(--warning); }
+.connection.offline, .connection.unauthorized { color: var(--warning); }
+.connection.offline::before, .connection.unauthorized::before { content: '● '; color: var(--warning); }
+
+main { padding-top: 1rem; }
+
+.empty { color: var(--text-dim); }
+.error { color: var(--error); }
+
+/* ---- activity ---- */
+
+.trigger { display: flex; gap: 0.5rem; margin-bottom: 1.25rem; }
+
+.trigger input {
+  flex: 1;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  padding: 0.45rem 0.7rem;
+  font: inherit;
+}
+
+.trigger button {
+  background: var(--working);
+  border: none;
+  border-radius: 6px;
+  color: #fff;
+  padding: 0.45rem 1.1rem;
+  font: inherit;
+  cursor: pointer;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border);
+  border-radius: 8px;
+  padding: 0.7rem 0.9rem;
+  margin-bottom: 0.75rem;
+}
+
+.card.running { border-left-color: var(--working); }
+.card.success { border-left-color: var(--success-deep); }
+.card.failed { border-left-color: var(--error); }
+.card.cancelled, .card.finished { border-left-color: var(--warning); }
+
+.card-head { display: flex; align-items: baseline; gap: 0.7rem; }
+
+.badge {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-radius: 4px;
+  padding: 0.1rem 0.45rem;
+  color: #fff;
+  background: var(--working);
+}
+
+.badge.success { background: var(--success-deep); }
+.badge.failed { background: var(--error); }
+.badge.cancelled, .badge.finished { background: var(--warning); color: #1d2026; }
+
+.kind { color: var(--accent); }
+.dir { color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card .millis, .card li .millis { margin-left: auto; color: var(--text-dim); font-size: 0.85rem; }
+
+.card ul { list-style: none; margin: 0.6rem 0 0; padding: 0; }
+.card li { display: flex; align-items: baseline; gap: 0.5rem; padding: 0.15rem 0; }
+
+.dot { width: 0.6rem; height: 0.6rem; border-radius: 50%; flex: none; align-self: center; }
+.dot.running { background: var(--working); }
+.dot.success { background: var(--success); }
+.dot.failed { background: var(--error); }
+
+/* ---- status ---- */
+
+dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.5rem 1.5rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+  margin: 0;
+}
+
+dt { color: var(--text-dim); }
+dd { margin: 0; overflow-wrap: anywhere; }
+
+.meter {
+  display: inline-block;
+  width: 10rem;
+  height: 0.5rem;
+  margin-left: 0.6rem;
+  border-radius: 4px;
+  background: var(--border);
+  overflow: hidden;
+  vertical-align: middle;
+}
+
+.meter-fill { display: block; height: 100%; background: var(--success-deep); }

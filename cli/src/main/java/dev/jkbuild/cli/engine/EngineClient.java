@@ -52,7 +52,9 @@ public final class EngineClient {
     /**
      * The {@code jk engine status} snapshot. Memory fields are best-effort: {@code -1} means the
      * engine couldn't observe that number (no OS RSS source, or an older engine that predates the
-     * fields).
+     * fields). The http fields mirror the wire ({@code docs/http.md}): {@code httpUrl} non-null
+     * while the embedded HTTP server is serving, {@code httpError} non-null when {@code [http]} is
+     * enabled but it failed to start, both null when the feature is disabled.
      */
     public record Status(
             String version,
@@ -63,7 +65,15 @@ public final class EngineClient {
             long heapUsedBytes,
             long heapCommittedBytes,
             long heapMaxBytes,
-            long rssBytes) {}
+            long rssBytes,
+            String httpUrl,
+            String httpError) {
+
+        /** {@code true} when the engine has an {@code [http]} table — serving or bind-failed. */
+        public boolean httpEnabled() {
+            return httpUrl != null || httpError != null;
+        }
+    }
 
     /**
      * Connect, ping, and get {@code pong} back — the engine-existence check per {@code docs/engine.md}
@@ -108,7 +118,9 @@ public final class EngineClient {
                     Ndjson.longValue(ack, "heapUsedBytes", -1),
                     Ndjson.longValue(ack, "heapCommittedBytes", -1),
                     Ndjson.longValue(ack, "heapMaxBytes", -1),
-                    Ndjson.longValue(ack, "rssBytes", -1)));
+                    Ndjson.longValue(ack, "rssBytes", -1),
+                    Ndjson.str(ack, "httpUrl"),
+                    Ndjson.str(ack, "httpError")));
         } catch (IOException e) {
             return Optional.empty();
         }
