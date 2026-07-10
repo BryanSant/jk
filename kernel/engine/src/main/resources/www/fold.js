@@ -114,6 +114,68 @@ export function foldEvent(cards, event) {
 }
 
 /**
+ * Seed the feed with persisted history records (the `/api/history` array of full `record.json`
+ * objects) so a reload or an engine restart doesn't lose past builds. Idempotent and safe to call
+ * repeatedly (on load and after every reconnect): a run already present as a live SSE card is not
+ * duplicated — instead the live card is tagged with its `historyId` so it becomes deletable. Live
+ * cards key on the numeric engine request id (which resets per engine start); history entries key on
+ * the durable string id, so the two never collide and are reconciled here by (dir, finishedAt).
+ */
+export function seedFromHistory(cards, records) {
+  for (const rec of records || []) {
+    if (!rec || !rec.id) continue;
+    const live = cards.find(
+      (c) =>
+        c.historyId === rec.id ||
+        (typeof c.id === 'number' &&
+          c.dir === rec.dir &&
+          c.finishedAt != null &&
+          Math.abs(c.finishedAt - rec.finishedAt) < 2000),
+    );
+    if (live) {
+      live.historyId = rec.id; // reconcile: the live card is this run — make it deletable
+      continue;
+    }
+    if (cards.some((c) => c.id === 'h:' + rec.id)) continue; // already seeded
+    cards.push(historyCard(rec));
+  }
+  cards.sort((a, b) => (b.finishedAt ?? b.startedAt ?? 0) - (a.finishedAt ?? a.startedAt ?? 0));
+  if (cards.length > MAX_CARDS) cards.length = MAX_CARDS;
+  return cards;
+}
+
+/** One persisted record → a finished card matching {@link foldEvent}'s shape. */
+function historyCard(rec) {
+  return {
+    id: 'h:' + rec.id,
+    historyId: rec.id,
+    kind: rec.kind || 'build',
+    dir: rec.dir || '',
+    coord: rec.coord || null,
+    state: 'finished',
+    startedAt: rec.startedAt ?? null,
+    finishedAt: rec.finishedAt ?? null,
+    millis: rec.millis ?? null,
+    cancelled: !!rec.cancelled,
+    success: typeof rec.success === 'boolean' ? rec.success : null,
+    modules: (rec.modules || []).map((m) => ({
+      dir: m.dir || '',
+      state: m.success ? 'success' : 'failed',
+      millis: m.millis ?? null,
+    })),
+    phases: (rec.phases || []).map((p) => ({ name: p.name || '?', state: phaseState(p.status) })),
+    output: [],
+    diagnostics: (rec.diagnostics || []).map((d) => ({
+      phase: d.phase || '',
+      code: d.code || '',
+      message: d.message || '',
+      test: d.test || '',
+      exceptionClass: d.exceptionClass || '',
+    })),
+  };
+}
+
+/**
  * A finished card's outcome badge: the engine's explicit success when it sent one (HTTP-triggered
  * builds do), else derived from module rows (socket requests encode their outcome in wire
  * messages, not events): any failed module → failed; all finished and some succeeded → success.

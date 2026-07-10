@@ -50,6 +50,7 @@ public final class HttpEngineServer implements AutoCloseable {
     private final Supplier<StatusSnapshot> status;
     private final HttpEvents events;
     private final BuildTrigger buildTrigger;
+    private final dev.jkbuild.engine.journal.BuildJournal journal;
     private final ApiRouter api = new ApiRouter();
     private final Consumer<String> log;
 
@@ -82,6 +83,7 @@ public final class HttpEngineServer implements AutoCloseable {
             Supplier<StatusSnapshot> status,
             HttpEvents events,
             BuildTrigger buildTrigger,
+            dev.jkbuild.engine.journal.BuildJournal journal,
             Consumer<String> log) {
         this.config = config;
         this.staticContent = new StaticContent(wwwRoot, version);
@@ -92,12 +94,16 @@ public final class HttpEngineServer implements AutoCloseable {
         this.status = status;
         this.events = events;
         this.buildTrigger = buildTrigger;
+        this.journal = journal;
         this.log = log != null ? log : s -> {};
         api.register("GET", "/api/status", this::handleStatus);
         api.register("GET", "/api/events", this::handleEvents);
         api.register("GET", "/api/log", this::handleLog);
         api.register("GET", "/api/fs", this::handleFs);
         api.register("POST", "/api/build", this::handleBuild);
+        api.register("GET", "/api/history", this::handleHistory);
+        api.register("GET", "/api/history/artifact", this::handleHistoryArtifact);
+        api.register("DELETE", "/api/history", this::handleHistoryDelete);
     }
 
     /**
@@ -395,6 +401,62 @@ public final class HttpEngineServer implements AutoCloseable {
                 exchange,
                 202,
                 JsonOut.object().put("requestId", requestId).put("events", "/api/events").toString());
+    }
+
+    /** Cap on the {@code GET /api/history} list — a picker of recent runs, not a full dump. */
+    private static final int HISTORY_LIST_LIMIT = 200;
+
+    /**
+     * {@code GET /api/history} — the persisted build journal (survives engine restarts). With no
+     * {@code ?id=}, a JSON array of the newest entries' full records; with {@code ?id=}, that one
+     * entry's {@code record.json}. Each stored record is already valid JSON, so it streams verbatim
+     * (no re-serialization, and {@link JsonOut}'s flat-only shape never has to express the nested
+     * arrays). Read-tier auth, like every other GET.
+     */
+    private void handleHistory(HttpExchange exchange) throws IOException {
+        String id = decode(queryParam(exchange.getRequestURI().getQuery(), "id"));
+        if (id != null && !id.isBlank()) {
+            var record = journal.recordFile(id);
+            if (record.isEmpty()) {
+                sendJson(exchange, 404, JsonOut.object().put("error", "no such build: " + id).toString());
+                return;
+            }
+            sendJson(exchange, 200, Files.readString(record.get(), StandardCharsets.UTF_8));
+            return;
+        }
+        sendJson(exchange, 200, "[" + String.join(",", journal.rawRecords(HISTORY_LIST_LIMIT)) + "]");
+    }
+
+    /**
+     * {@code GET /api/history/artifact?id=…&name=…} — a snapshot file (test-results markdown, the
+     * {@code jk.lock} snapshot, or the diagnostics text) served as plain text. {@code name} is
+     * whitelisted by the journal, so a hostile value cannot escape the entry directory.
+     */
+    private void handleHistoryArtifact(HttpExchange exchange) throws IOException {
+        String query = exchange.getRequestURI().getQuery();
+        var artifact = journal.artifact(decode(queryParam(query, "id")), decode(queryParam(query, "name")));
+        if (artifact.isEmpty()) {
+            sendJson(exchange, 404, JsonOut.object().put("error", "no such artifact").toString());
+            return;
+        }
+        sendText(exchange, 200, Files.readString(artifact.get(), StandardCharsets.UTF_8));
+    }
+
+    /**
+     * {@code DELETE /api/history?id=…} — remove one entry, like deleting a CI run. DELETE is a
+     * mutation, so {@link #authorized} requires the bearer token even on loopback (CSRF defense).
+     */
+    private void handleHistoryDelete(HttpExchange exchange) throws IOException {
+        String id = decode(queryParam(exchange.getRequestURI().getQuery(), "id"));
+        if (id == null || !journal.delete(id)) {
+            sendJson(exchange, 404, JsonOut.object().put("error", "no such build").toString());
+            return;
+        }
+        sendJson(exchange, 200, JsonOut.object().put("deleted", true).toString());
+    }
+
+    private static String decode(String raw) {
+        return raw == null ? null : java.net.URLDecoder.decode(raw, StandardCharsets.UTF_8);
     }
 
     /** Test seam: shrink the SSE heartbeat so quiet-stream behavior is testable in milliseconds. */

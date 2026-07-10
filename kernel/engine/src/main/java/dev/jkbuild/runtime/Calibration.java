@@ -34,9 +34,11 @@ import org.tomlj.TomlParseResult;
  * estimate. {@link #refine} then folds every subsequent real build's throughput back in (EWMA), so
  * the anchor tracks the machine over time.
  *
- * <p>Stored as TOML at {@code ~/.jk/state/calibration.toml} (state, not cache — it describes the
- * machine and must survive {@code jk clean}). Reads are memoized per process. A probe or IO
- * failure is always swallowed: calibration is advisory and must never fail a build or an explain.
+ * <p>Stored as TOML at {@code ~/.jk/state/builds/calibration.toml} (state, not cache — it describes
+ * the machine and must survive {@code jk clean}; it lives alongside the build-history journal). A
+ * file left at the legacy {@code ~/.jk/state/calibration.toml} is migrated on first read. Reads are
+ * memoized per process. A probe or IO failure is always swallowed: calibration is advisory and must
+ * never fail a build or an explain.
  */
 public final class Calibration {
 
@@ -115,9 +117,29 @@ public final class Calibration {
 
     // --- load / ensure -------------------------------------------------------
 
-    /** The calibration file: {@code ~/.jk/state/calibration.toml}. */
+    /** The calibration file: {@code ~/.jk/state/builds/calibration.toml}. */
     static Path file() {
-        return JkDirs.state().resolve("calibration.toml");
+        return JkDirs.builds().resolve("calibration.toml");
+    }
+
+    /**
+     * Best-effort one-time move of a pre-existing {@code state/calibration.toml} into {@code
+     * state/builds/}. The file self-regenerates (an absent one just triggers a fresh probe on the
+     * next build), so migration is a nicety — it preserves the learned EWMA and skips one ~1–2s cold
+     * probe. Any failure is swallowed.
+     */
+    private static void migrateLegacy() {
+        try {
+            Path legacy = JkDirs.state().resolve("calibration.toml");
+            Path now = file();
+            if (Files.isRegularFile(legacy) && !Files.exists(now)) {
+                Path parent = now.getParent();
+                if (parent != null) Files.createDirectories(parent);
+                Files.move(legacy, now, StandardCopyOption.ATOMIC_MOVE);
+            }
+        } catch (IOException | RuntimeException ignored) {
+            // advisory — the file regenerates if the move fails
+        }
     }
 
     /**
@@ -128,6 +150,7 @@ public final class Calibration {
     public static Calibration load() {
         Calibration cached = MEMO.get();
         if (cached != null) return cached;
+        migrateLegacy();
         Calibration read = readOrAbsent();
         MEMO.set(read);
         return read;

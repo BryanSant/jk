@@ -399,6 +399,44 @@ public final class EngineProtocol {
      */
     public static final String PRUNE_WAIT = "prune-wait";
 
+    // ---- build-history journal ({@code jk history}) --------------------------------
+    // The engine owns the journal on disk; the thin CLI reaches it only over these RPCs. Responses
+    // are flat NDJSON lines (one object per line, scalar fields) so the CLI renders them with the
+    // Ndjson helpers it already has — it never parses nested JSON.
+
+    /** Client → server: list journal entries (newest first, up to {@code limit}). */
+    public static final String HISTORY_LIST_REQUEST = "history-list-request";
+
+    /** Client → server: the full detail of one entry by {@code id}. */
+    public static final String HISTORY_SHOW_REQUEST = "history-show-request";
+
+    /** Client → server: delete one entry by {@code id}. */
+    public static final String HISTORY_DELETE_REQUEST = "history-delete-request";
+
+    /** Server → client, repeated for {@code HISTORY_LIST}: one entry's flat summary. */
+    public static final String HISTORY_ENTRY = "history-entry";
+
+    /** Server → client, once for {@code HISTORY_SHOW}: the entry's flat scalar header. */
+    public static final String HISTORY_RECORD = "history-record";
+
+    /** Server → client, repeated for {@code HISTORY_SHOW}: one module row. */
+    public static final String HISTORY_MODULE = "history-module";
+
+    /** Server → client, repeated for {@code HISTORY_SHOW}: one phase row. */
+    public static final String HISTORY_PHASE = "history-phase";
+
+    /** Server → client, repeated for {@code HISTORY_SHOW}: one diagnostic row. */
+    public static final String HISTORY_DIAG = "history-diag";
+
+    /** Server → client: terminal for a list/show stream ({@code count} entries/rows emitted). */
+    public static final String HISTORY_DONE = "history-done";
+
+    /** Server → client: terminal for a delete ({@code deleted} true/false). */
+    public static final String HISTORY_DELETED = "history-deleted";
+
+    /** Server → client: a history request failed (e.g. the id was not found). */
+    public static final String HISTORY_ERROR = "history-error";
+
     /** The {@code "t"} discriminator of a decoded message, or {@code null} if absent/malformed. */
     public static String typeOf(String json) {
         return Ndjson.str(json, TYPE_FIELD);
@@ -1981,5 +2019,19 @@ public final class EngineProtocol {
             b.append(Ndjson.quote(values.get(i)));
         }
         return b.append(']').toString();
+    }
+
+    // ---- build-history request builders (responses are built engine-side with JsonOut) ----------
+
+    public static String historyListRequest(int limit) {
+        return "{\"t\":\"" + HISTORY_LIST_REQUEST + "\",\"limit\":" + limit + "}";
+    }
+
+    public static String historyShowRequest(String id) {
+        return "{\"t\":\"" + HISTORY_SHOW_REQUEST + "\",\"id\":" + Ndjson.quote(id) + "}";
+    }
+
+    public static String historyDeleteRequest(String id) {
+        return "{\"t\":\"" + HISTORY_DELETE_REQUEST + "\",\"id\":" + Ndjson.quote(id) + "}";
     }
 }

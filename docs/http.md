@@ -183,11 +183,13 @@ already parses — the same deliberate flat-message discipline as the engine wir
 | `/api/status` | GET | read-tier | Engine vitals — the same numbers as `jk engine status --output json` (version, pid, uptime, heap/rss, active connections/pipelines, idle policy), plus `httpUrl`. |
 | `/api/events` | GET | read-tier | SSE stream of engine lifecycle events (see below). |
 | `/api/build` | POST | **token, always** | `{"dir": "/abs/workspace"}` — triggers a build via the same `BuildService` path the socket protocol uses; responds `202` with a request id. Progress is observed on `/api/events`, not the response. |
+| `/api/history` | GET | read-tier | The persisted build journal. No `?id=` → a JSON array of the newest entries' full records; `?id=<id>` → that one entry's `record.json`. Backfills the Activity feed on load. See [`build-history.md`](build-history.md). |
+| `/api/history/artifact` | GET | read-tier | `?id=<id>&name=<test-results.md\|jk.lock\|diagnostics.txt>` — a snapshot artifact as plain text; `name` is whitelisted so it can't escape the entry dir. |
+| `/api/history` | DELETE | **token, always** | `?id=<id>` — delete one entry (like removing a CI run). `200 {"deleted":true}` or `404`. |
 
-Anything mutating is POST and token-gated everywhere, including on loopback (see Security).
-Build-history/trends endpoints (`/api/builds`, `/api/stats/…`) come later, reading the on-disk
-build-timing history the engine already re-reads per request — they are additive and don't change
-this design.
+Anything mutating is POST/DELETE and token-gated everywhere, including on loopback (see Security).
+Build-**trends** endpoints (`/api/stats/…`) come later, aggregating over the same journal — they
+are additive and don't change this design.
 
 ### SSE (`/api/events`)
 

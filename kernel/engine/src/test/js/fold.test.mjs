@@ -6,9 +6,25 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { pathToFileURL } from 'node:url';
 
-const { foldEvent, outcomeOf, moduleSummary, MAX_CARDS, MAX_OUTPUT_LINES } = await import(
+const { foldEvent, outcomeOf, moduleSummary, seedFromHistory, MAX_CARDS, MAX_OUTPUT_LINES } = await import(
   pathToFileURL(process.env.JK_FOLD_MJS)
 );
+
+const historyRecord = (id, dir, extra = {}) => ({
+  id,
+  kind: 'build',
+  dir,
+  coord: 'g:a',
+  startedAt: 1000,
+  finishedAt: 2000,
+  millis: 1000,
+  cancelled: false,
+  success: true,
+  modules: [],
+  phases: [],
+  diagnostics: [],
+  ...extra,
+});
 
 const start = (id, dir, extra = {}) => ({
   type: 'request-start',
@@ -152,4 +168,45 @@ test('module summary counts modules and failures', () => {
   assert.equal(moduleSummary(cards[0]), '1 module');
   foldEvent(cards, { type: 'module-finish', data: { requestId: 1, dir: '/w/b', success: false, millis: 5 } });
   assert.equal(moduleSummary(cards[0]), '2 modules · 1 failed');
+});
+
+test('seedFromHistory adds finished cards, newest first', () => {
+  const cards = [];
+  seedFromHistory(cards, [
+    historyRecord('20260101T000000000-aaaa', '/w/a', { finishedAt: 1000 }),
+    historyRecord('20260101T000001000-bbbb', '/w/b', { finishedAt: 5000 }),
+  ]);
+  assert.equal(cards.length, 2);
+  assert.equal(cards[0].historyId, '20260101T000001000-bbbb'); // newest first
+  assert.equal(outcomeOf(cards[0]), 'success');
+  assert.equal(cards[0].id, 'h:20260101T000001000-bbbb');
+});
+
+test('seedFromHistory is idempotent (no duplicate on re-seed)', () => {
+  const cards = [];
+  const rec = historyRecord('20260101T000000000-aaaa', '/w/a');
+  seedFromHistory(cards, [rec]);
+  seedFromHistory(cards, [rec]);
+  assert.equal(cards.length, 1);
+});
+
+test('seedFromHistory reconciles a live card instead of duplicating it', () => {
+  const cards = [];
+  foldEvent(cards, start(7, '/w/a'));
+  foldEvent(cards, finish(7, { success: true, millis: 1000 }));
+  cards[0].finishedAt = 2000; // matches the record below
+  seedFromHistory(cards, [historyRecord('20260101T000000000-aaaa', '/w/a', { finishedAt: 2000 })]);
+  assert.equal(cards.length, 1); // live card reused, not duplicated
+  assert.equal(cards[0].id, 7); // still the live numeric-id card
+  assert.equal(cards[0].historyId, '20260101T000000000-aaaa'); // now deletable
+});
+
+test('seedFromHistory respects MAX_CARDS', () => {
+  const cards = [];
+  const records = [];
+  for (let i = 0; i < MAX_CARDS + 10; i++) {
+    records.push(historyRecord('id-' + String(i).padStart(4, '0'), '/w/' + i, { finishedAt: 1000 + i }));
+  }
+  seedFromHistory(cards, records);
+  assert.equal(cards.length, MAX_CARDS);
 });
