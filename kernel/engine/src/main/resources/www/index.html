@@ -84,9 +84,10 @@
           <div v-if="singleModule(card) && singleModule(card).diagnostics.length" class="diag">
             <div class="console">
               <div v-for="(d, i) in singleModule(card).diagnostics" :key="i" class="diag-line">
-                <span class="console-err">✘</span>
-                <span class="console-dir">{{ d.phase }}</span><template v-if="d.test"> <span class="console-sep">›</span> {{ d.test }}</template><template v-if="d.exceptionClass"> <span class="console-sep">({{ d.exceptionClass }})</span></template>
-                <span class="console-sep">—</span> {{ d.message }}
+                <!-- Separators live INSIDE spans (&nbsp;) — inter-element whitespace is not
+                     preserved reliably through the template pipeline, which squashed segments
+                     together. Shape: ✘ phase › test › ExceptionClass › message -->
+                <span class="console-err">✘&nbsp;</span><span class="console-dir">{{ d.phase }}</span><template v-if="d.test"><span class="console-sep">&nbsp;›&nbsp;</span><span>{{ d.test }}</span></template><template v-if="d.exceptionClass"><span class="console-sep">&nbsp;›&nbsp;</span><span>{{ d.exceptionClass }}</span></template><span class="console-sep">&nbsp;›&nbsp;</span><span>{{ d.message }}</span>
               </div>
             </div>
           </div>
@@ -122,9 +123,7 @@
               <div v-if="m.diagnostics.length" class="diag">
                 <div class="console">
                   <div v-for="(d, i) in m.diagnostics" :key="i" class="diag-line">
-                    <span class="console-err">✘</span>
-                    <span class="console-dir">{{ d.phase }}</span><template v-if="d.test"> <span class="console-sep">›</span> {{ d.test }}</template><template v-if="d.exceptionClass"> <span class="console-sep">({{ d.exceptionClass }})</span></template>
-                    <span class="console-sep">—</span> {{ d.message }}
+                    <span class="console-err">✘&nbsp;</span><span class="console-dir">{{ d.phase }}</span><template v-if="d.test"><span class="console-sep">&nbsp;›&nbsp;</span><span>{{ d.test }}</span></template><template v-if="d.exceptionClass"><span class="console-sep">&nbsp;›&nbsp;</span><span>{{ d.exceptionClass }}</span></template><span class="console-sep">&nbsp;›&nbsp;</span><span>{{ d.message }}</span>
                   </div>
                 </div>
               </div>
