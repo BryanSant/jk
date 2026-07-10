@@ -74,6 +74,7 @@ final class Json {
             BuildRecord.Diag d = r.diagnostics().get(i);
             if (i > 0) b.append(',');
             b.append("\n    {\"severity\":").append(q(d.severity()))
+                    .append(",\"dir\":").append(q(d.dir()))
                     .append(",\"phase\":").append(q(d.phase()))
                     .append(",\"code\":").append(q(d.code()))
                     .append(",\"message\":").append(q(d.message()))
@@ -146,7 +147,7 @@ final class Json {
         for (Object e : arr(o, "diagnostics")) {
             Map<String, Object> dm = (Map<String, Object>) e;
             diagnostics.add(new BuildRecord.Diag(
-                    str(dm, "severity"), str(dm, "phase"), str(dm, "code"),
+                    str(dm, "severity"), str(dm, "dir"), str(dm, "phase"), str(dm, "code"),
                     str(dm, "message"), str(dm, "test"), str(dm, "exceptionClass")));
         }
 

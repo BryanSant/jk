@@ -19,7 +19,7 @@ class JsonTest {
                                 new BuildRecord.Phase("test", "FAIL", 1200)))),
                 List.of(new BuildRecord.Phase("compile", "SUCCESS", 800),
                         new BuildRecord.Phase("test", "FAIL", 1200)),
-                List.of(new BuildRecord.Diag("error", "test", "JUNIT", "expected 1 but was 2\nline two",
+                List.of(new BuildRecord.Diag("error", "/proj", "test", "JUNIT", "expected 1 but was 2\nline two",
                         "com.example.AppTest#adds", "org.opentest4j.AssertionFailedError")));
 
         BuildRecord back = Json.read(Json.write(original));
@@ -38,6 +38,7 @@ class JsonTest {
         assertThat(back.modules().get(0).phases()).extracting(BuildRecord.Phase::name).containsExactly("compile", "test");
         assertThat(back.phases()).extracting(BuildRecord.Phase::status).containsExactly("SUCCESS", "FAIL");
         assertThat(back.diagnostics()).hasSize(1);
+        assertThat(back.diagnostics().get(0).dir()).isEqualTo("/proj");
         assertThat(back.diagnostics().get(0).message()).isEqualTo("expected 1 but was 2\nline two");
         assertThat(back.diagnostics().get(0).exceptionClass()).isEqualTo("org.opentest4j.AssertionFailedError");
     }

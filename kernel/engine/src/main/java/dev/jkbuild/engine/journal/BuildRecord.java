@@ -57,7 +57,11 @@ public record BuildRecord(
     /** One phase's aggregate outcome: {@code SUCCESS} / {@code FAIL} / {@code CANCELLED} / {@code SKIPPED}. */
     public record Phase(String name, String status, long millis) {}
 
-    /** One diagnostic: {@code severity} is {@code "error"} or {@code "warning"}. */
+    /**
+     * One diagnostic: {@code severity} is {@code "error"} or {@code "warning"}; {@code dir} is the
+     * module the failure belongs to ({@code ""} for a single-goal build), so the dashboard can nest
+     * the failure output under the failed module inside its "failure details" roll-up.
+     */
     public record Diag(
-            String severity, String phase, String code, String message, String test, String exceptionClass) {}
+            String severity, String dir, String phase, String code, String message, String test, String exceptionClass) {}
 }

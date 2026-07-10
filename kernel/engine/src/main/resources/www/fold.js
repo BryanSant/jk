@@ -47,7 +47,8 @@ export function foldEvent(cards, event) {
         etaMillis: null,
         etaAt: null,
         output: [],
-        diagnostics: [],
+        // Failure output is kept per module (moduleRow.diagnostics), keyed by the diagnostic's dir,
+        // so the dashboard nests each failure under its failed module inside "failure details".
       });
       if (cards.length > MAX_CARDS) cards.length = MAX_CARDS;
       break;
@@ -99,14 +100,17 @@ export function foldEvent(cards, event) {
     }
     case 'diagnostic': {
       const card = byId(cards, d.requestId);
-      if (card && card.diagnostics.length < MAX_DIAGNOSTICS) {
-        card.diagnostics.push({
-          phase: d.phase || '',
-          code: d.code || '',
-          message: d.message || '',
-          test: d.test || '',
-          exceptionClass: d.exceptionClass || '',
-        });
+      if (card) {
+        const mod = moduleRow(card, d.dir);
+        if (mod.diagnostics.length < MAX_DIAGNOSTICS) {
+          mod.diagnostics.push({
+            phase: d.phase || '',
+            code: d.code || '',
+            message: d.message || '',
+            test: d.test || '',
+            exceptionClass: d.exceptionClass || '',
+          });
+        }
       }
       break;
     }
@@ -211,14 +215,20 @@ function historyCard(rec) {
     success: typeof rec.success === 'boolean' ? rec.success : null,
     modules: historyModules(rec),
     output: [],
-    diagnostics: (rec.diagnostics || []).map((d) => ({
+  };
+}
+
+/** A persisted diagnostic → the client's flat failure-output shape (errors only; warnings dropped). */
+function historyDiags(diags, dir) {
+  return (diags || [])
+    .filter((d) => d.severity !== 'warning' && (d.dir || '') === (dir || ''))
+    .map((d) => ({
       phase: d.phase || '',
       code: d.code || '',
       message: d.message || '',
       test: d.test || '',
       exceptionClass: d.exceptionClass || '',
-    })),
-  };
+    }));
 }
 
 /**
@@ -235,14 +245,26 @@ function historyModules(rec) {
       state: m.success ? 'success' : 'failed',
       millis: m.millis ?? null,
       phases: toPhases(m.phases),
+      diagnostics: historyDiags(rec.diagnostics, m.dir || ''),
     }));
   }
+  // Single-project: no modules, phases at top level. Its diagnostics live in the "" bucket, so take
+  // every error the record carries (there is only one module to own them).
   return [{
     dir: rec.dir || '',
     coord: rec.coord || null,
     state: rec.cancelled ? 'cancelled' : rec.success === false ? 'failed' : 'success',
     millis: rec.millis ?? null,
     phases: toPhases(rec.phases),
+    diagnostics: (rec.diagnostics || [])
+      .filter((d) => d.severity !== 'warning')
+      .map((d) => ({
+        phase: d.phase || '',
+        code: d.code || '',
+        message: d.message || '',
+        test: d.test || '',
+        exceptionClass: d.exceptionClass || '',
+      })),
   }];
 }
 
@@ -283,7 +305,7 @@ function moduleRow(card, dir) {
   const key = dir || '';
   let row = card.modules.find((m) => m.dir === key);
   if (!row) {
-    row = { dir: key, coord: null, state: 'running', millis: null, phases: [] };
+    row = { dir: key, coord: null, state: 'running', millis: null, phases: [], diagnostics: [] };
     card.modules.push(row);
   }
   return row;

@@ -143,24 +143,38 @@ test('single-goal phase events (empty dir) become one module with a chain', () =
 
 test('history backfill maps per-module phases; single-project synthesizes one module', async () => {
   const { seedFromHistory } = await import(pathToFileURL(process.env.JK_FOLD_MJS));
-  // workspace record: modules carry their own phases
+  // workspace record: modules carry their own phases, and each diagnostic attaches to its module dir
   const ws = [];
   seedFromHistory(ws, [{
-    id: 'w1', kind: 'build', dir: '/w', coord: 'g:w', finishedAt: 5000, success: true,
-    modules: [{ coord: 'g:core', dir: '/w/core', success: true, millis: 100, phases: [{ name: 'compile', status: 'SUCCESS' }] }],
-    phases: [], diagnostics: [],
+    id: 'w1', kind: 'build', dir: '/w', coord: 'g:w', finishedAt: 5000, success: false,
+    modules: [
+      { coord: 'g:core', dir: '/w/core', success: true, millis: 100, phases: [{ name: 'compile', status: 'SUCCESS' }] },
+      { coord: 'g:api', dir: '/w/api', success: false, millis: 90, phases: [{ name: 'test', status: 'FAIL' }] },
+    ],
+    phases: [],
+    diagnostics: [
+      { severity: 'error', dir: '/w/api', phase: 'test', message: 'boom', test: 'it()', exceptionClass: '' },
+      { severity: 'warning', dir: '/w/core', phase: 'lint', message: 'unused import' },
+    ],
   }]);
-  assert.equal(ws[0].modules.length, 1);
-  assert.equal(ws[0].modules[0].coord, 'g:core');
-  assert.deepEqual(ws[0].modules[0].phases.map((p) => p.name + ':' + p.state), ['compile:success']);
-  // single-project record: no modules, phases at top level → synthesize one module
+  assert.equal(ws[0].modules.length, 2);
+  const wcore = ws[0].modules.find((m) => m.dir === '/w/core');
+  const wapi = ws[0].modules.find((m) => m.dir === '/w/api');
+  assert.deepEqual(wcore.phases.map((p) => p.name + ':' + p.state), ['compile:success']);
+  assert.equal(wcore.diagnostics.length, 0); // the warning is dropped, not shown as failure output
+  assert.equal(wapi.diagnostics.length, 1);
+  assert.equal(wapi.diagnostics[0].message, 'boom');
+  // single-project record: no modules, phases at top level → synthesize one module owning the errors
   const sp = [];
   seedFromHistory(sp, [{
-    id: 's1', kind: 'build', dir: '/p', coord: 'g:p', finishedAt: 6000, success: true,
-    modules: [], phases: [{ name: 'compile-java', status: 'SUCCESS' }], diagnostics: [],
+    id: 's1', kind: 'build', dir: '/p', coord: 'g:p', finishedAt: 6000, success: false,
+    modules: [], phases: [{ name: 'compile-java', status: 'FAIL' }],
+    diagnostics: [{ severity: 'error', dir: '', phase: 'compile-java', message: 'cannot find symbol' }],
   }]);
   assert.equal(sp[0].modules.length, 1);
-  assert.deepEqual(sp[0].modules[0].phases.map((p) => p.name + ':' + p.state), ['compile-java:success']);
+  assert.deepEqual(sp[0].modules[0].phases.map((p) => p.name + ':' + p.state), ['compile-java:failed']);
+  assert.equal(sp[0].modules[0].diagnostics.length, 1);
+  assert.equal(sp[0].modules[0].diagnostics[0].message, 'cannot find symbol');
 });
 
 test('output keeps a bounded tail and clears on finish', () => {
@@ -175,27 +189,30 @@ test('output keeps a bounded tail and clears on finish', () => {
   assert.equal(cards[0].output.length, 0); // the console tail is an in-flight affordance
 });
 
-test('diagnostics accumulate, survive finish, and are capped', async () => {
+test('diagnostics attach to their module by dir, survive finish, and are capped per module', async () => {
   const { MAX_DIAGNOSTICS } = await import(pathToFileURL(process.env.JK_FOLD_MJS));
   const cards = [];
   foldEvent(cards, start(1, '/w'));
   foldEvent(cards, {
     type: 'diagnostic',
-    data: { requestId: 1, dir: '/w', phase: 'test', code: 'fail', message: 'expected 3 but was 4',
+    data: { requestId: 1, dir: '/w/core', phase: 'test', code: 'fail', message: 'expected 3 but was 4',
             test: 'adds()', exceptionClass: 'AssertionFailedError' },
   });
   foldEvent(cards, {
     type: 'diagnostic',
-    data: { requestId: 1, dir: '/w', phase: 'lock', code: 'resolve', message: 'no versions for com.foo:bar' },
+    data: { requestId: 1, dir: '/w/api', phase: 'lock', code: 'resolve', message: 'no versions for com.foo:bar' },
   });
   foldEvent(cards, finish(1, { success: false }));
-  assert.equal(cards[0].diagnostics.length, 2); // NOT cleared on finish, unlike output
-  assert.equal(cards[0].diagnostics[0].test, 'adds()');
-  assert.equal(cards[0].diagnostics[1].phase, 'lock');
+  const core = cards[0].modules.find((m) => m.dir === '/w/core');
+  const api = cards[0].modules.find((m) => m.dir === '/w/api');
+  assert.equal(core.diagnostics.length, 1); // NOT cleared on finish, unlike output
+  assert.equal(core.diagnostics[0].test, 'adds()');
+  assert.equal(api.diagnostics.length, 1);
+  assert.equal(api.diagnostics[0].phase, 'lock');
   for (let i = 0; i < MAX_DIAGNOSTICS + 5; i++) {
-    foldEvent(cards, { type: 'diagnostic', data: { requestId: 1, dir: '/w', phase: 'p', message: 'm' + i } });
+    foldEvent(cards, { type: 'diagnostic', data: { requestId: 1, dir: '/w/core', phase: 'p', message: 'm' + i } });
   }
-  assert.equal(cards[0].diagnostics.length, MAX_DIAGNOSTICS);
+  assert.equal(core.diagnostics.length, MAX_DIAGNOSTICS); // capped per module
 });
 
 test('module summary counts modules and failures', () => {

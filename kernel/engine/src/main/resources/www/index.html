@@ -77,12 +77,25 @@
           <span class="cardbar-fill" :style="{ width: progress(card) + '%' }"></span>
         </div>
 
-        <!-- Compact (single-module): one phase chain directly under the header. -->
-        <phase-chain v-if="compact(card) && singleChain(card).length" :phases="singleChain(card)"></phase-chain>
+        <!-- Compact (single-module): one phase chain directly under the header, with that module's
+             failure output (if any) shown inline beneath it. -->
+        <template v-if="compact(card)">
+          <phase-chain v-if="singleChain(card).length" :phases="singleChain(card)"></phase-chain>
+          <div v-if="singleModule(card) && singleModule(card).diagnostics.length" class="diag">
+            <div class="console">
+              <div v-for="(d, i) in singleModule(card).diagnostics" :key="i" class="diag-line">
+                <span class="console-err">✘</span>
+                <span class="console-dir">{{ d.phase }}</span><template v-if="d.test"> <span class="console-sep">›</span> {{ d.test }}</template><template v-if="d.exceptionClass"> <span class="console-sep">({{ d.exceptionClass }})</span></template>
+                <span class="console-sep">—</span> {{ d.message }}
+              </div>
+            </div>
+          </div>
+        </template>
 
         <!-- Multi-module workspace: successful modules roll up under an accordion that is open while
              the build runs and collapses once it finishes; failed modules sit in a peer accordion
-             that stays open. Both reuse the same bullet+name+duration row and per-module chain. -->
+             that stays open, each with its own phase chain AND its own failure output nested under
+             it — the error belongs to the module and rolls up with it. -->
         <template v-if="!compact(card)">
           <details v-if="okModules(card).length" class="module-group" :open="outcome(card) === 'running'">
             <summary>success details ({{ okModules(card).length }})</summary>
@@ -106,6 +119,15 @@
                 <span class="millis">{{ duration(m.millis) }}</span>
               </div>
               <phase-chain v-if="m.phases.length" :phases="m.phases"></phase-chain>
+              <div v-if="m.diagnostics.length" class="diag">
+                <div class="console">
+                  <div v-for="(d, i) in m.diagnostics" :key="i" class="diag-line">
+                    <span class="console-err">✘</span>
+                    <span class="console-dir">{{ d.phase }}</span><template v-if="d.test"> <span class="console-sep">›</span> {{ d.test }}</template><template v-if="d.exceptionClass"> <span class="console-sep">({{ d.exceptionClass }})</span></template>
+                    <span class="console-sep">—</span> {{ d.message }}
+                  </div>
+                </div>
+              </div>
             </div>
           </details>
         </template>
@@ -113,18 +135,6 @@
         <div v-if="outcome(card) === 'running' && card.output.length" class="console">
           <div v-for="(o, i) in card.output" :key="i">
             <span class="console-dir">{{ lastSegment(o.dir) }}</span> <span class="console-sep">›</span> {{ o.line }}
-          </div>
-        </div>
-
-        <!-- The actual failure output is never collapsed — a peer to the failure-details accordion. -->
-        <div v-if="card.diagnostics.length" class="diag">
-          <div class="diag-head">failure output ({{ card.diagnostics.length }})</div>
-          <div class="console">
-            <div v-for="(d, i) in card.diagnostics" :key="i" class="diag-line">
-              <span class="console-err">✘</span>
-              <span class="console-dir">{{ d.phase }}</span><template v-if="d.test"> <span class="console-sep">›</span> {{ d.test }}</template><template v-if="d.exceptionClass"> <span class="console-sep">({{ d.exceptionClass }})</span></template>
-              <span class="console-sep">—</span> {{ d.message }}
-            </div>
           </div>
         </div>
 

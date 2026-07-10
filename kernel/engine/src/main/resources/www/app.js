@@ -176,14 +176,21 @@ Vue.createApp({
       return card.modules[0] ? card.modules[0].phases : [];
     },
 
+    // The lone module of a compact card — carries the phases and any failure output shown inline.
+    singleModule(card) {
+      return card.modules[0] || null;
+    },
+
     // Multi-module cards split their module rows across two peer accordions: the failed modules
     // (kept open) and everything else — succeeded, still-running, skipped, cancelled — which rolls
-    // up under a "success details" accordion that is open while running and collapsed once done.
+    // up under a "success details" accordion that is open while running and collapsed once done. A
+    // module carrying failure output counts as failed even if its state was never marked (covers
+    // request-level errors that land on a synthetic row).
     failedModules(card) {
-      return card.modules.filter((m) => m.state === 'failed');
+      return card.modules.filter((m) => m.state === 'failed' || m.diagnostics.length > 0);
     },
     okModules(card) {
-      return card.modules.filter((m) => m.state !== 'failed');
+      return card.modules.filter((m) => m.state !== 'failed' && m.diagnostics.length === 0);
     },
 
     // A module row's label: the artifact name from its coord (e.g. "core"), else the dir's tail.

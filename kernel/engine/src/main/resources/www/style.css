@@ -437,18 +437,10 @@ main { max-width: 66rem; margin: 0 auto; padding: 18px 20px 3rem; }
 /* the first module row sits snug under the summary; the shared .module top-margin spaces the rest */
 .module-group[open] > .module:first-of-type { margin-top: 8px; }
 
-/* ---- failure output (never collapsed) ---- */
+/* ---- failure output (never collapsed; nested under its failed module) ---- */
 
-.diag { margin-top: 11px; }
-
-.diag-head {
-  font: 600 10.5px/1 var(--mono);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--err);
-}
-
-.diag .console { margin-top: 8px; }
+.diag { margin-top: 6px; }
+.diag .console { margin-top: 0; }
 .diag-line { padding: 1px 0; }
 .console-err { color: var(--err); }
 

@@ -2302,7 +2302,7 @@ public final class EngineServer implements AutoCloseable {
 
     private void accGoalFinish(long requestId, String dir, GoalResult result) {
         BuildAccumulator a = accumulators.get(requestId);
-        if (a != null) a.addGoal(result);
+        if (a != null) a.addGoal(dir, result);
     }
 
     /**
@@ -3009,14 +3009,15 @@ public final class EngineServer implements AutoCloseable {
         }
 
         /** Diagnostics + failure flag from a finished goal (phases come from {@link #addPhase}). */
-        void addGoal(GoalResult result) {
+        void addGoal(String dir, GoalResult result) {
+            String d0 = dir == null ? "" : dir;
             for (GoalResult.Diagnostic d : result.errors()) {
                 diagnostics.add(new BuildRecord.Diag(
-                        "error", d.phase(), d.code(), d.message(), d.test(), d.exceptionClass()));
+                        "error", d0, d.phase(), d.code(), d.message(), d.test(), d.exceptionClass()));
             }
             for (GoalResult.Diagnostic d : result.warnings()) {
                 diagnostics.add(new BuildRecord.Diag(
-                        "warning", d.phase(), d.code(), d.message(), d.test(), d.exceptionClass()));
+                        "warning", d0, d.phase(), d.code(), d.message(), d.test(), d.exceptionClass()));
             }
             if (!result.success()) anyFailure = true;
             if (result.userCancelled()) userCancelled = true;
