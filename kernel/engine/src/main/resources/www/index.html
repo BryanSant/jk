@@ -57,8 +57,8 @@
         <div class="card-head">
           <span v-if="outcome(card) === 'running'" class="spin"></span>
           <span v-else class="badge" :class="outcome(card)">{{ glyph(outcome(card)) }} {{ outcome(card) }}</span>
-          <span class="coord" :title="coordTip(card)">
-            <template v-if="showCoordGroup(card) && coordParts(card).group"><span class="cg">{{ coordParts(card).group }}</span><span class="csep">:</span></template>
+          <span class="coord">
+            <template v-if="coordParts(card).group"><span class="cg">{{ coordParts(card).group }}</span><span class="csep">:</span></template>
             <span class="cn">{{ coordParts(card).name }}</span>
           </span>
           <span class="kind">{{ card.kind }}</span>

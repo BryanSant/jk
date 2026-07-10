@@ -241,15 +241,6 @@ Vue.createApp({
       const parts = card.dir.split('/').filter(Boolean);
       return { group: null, name: parts.length ? parts[parts.length - 1] : card.dir };
     },
-    // Finished cards render just the artifact name (the group prefix is one hover away); a running
-    // card keeps the full group:name inline while it's the feed's focus.
-    showCoordGroup(card) {
-      return this.outcome(card) === 'running';
-    },
-    // Tooltip for the coord: the full group:name coordinate when the engine sent one, else the dir.
-    coordTip(card) {
-      return card.coord || card.dir;
-    },
     mib(bytes) {
       return bytes < 0 ? '—' : Math.round(bytes / 1048576) + ' MiB';
     },
