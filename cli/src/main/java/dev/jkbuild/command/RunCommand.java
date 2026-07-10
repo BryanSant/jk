@@ -117,14 +117,9 @@ public final class RunCommand implements CliCommand {
     /** Package-private: {@code jk tool run <dir>} delegates a jk-project directory here. */
     int runProject(Path projectDir, List<String> appArgs) throws IOException, InterruptedException {
         JkBuild project = JkBuildParser.parse(projectDir.resolve("jk.toml"));
-        if (project.mainClass() == null) {
-            boolean nerdfont = dev.jkbuild.config.GlobalConfig.nerdfont();
-            String msg = "No " + Theme.colorize("main", Theme.active().cyan())
-                    + " class specified in "
-                    + Theme.colorize("[application]", Theme.active().cyan());
-            CliOutput.out(GoalWedge.failureLine("Exec", nerdfont, msg));
-            return Exit.USAGE;
-        }
+        // No [application] main is no longer an up-front error: after the build we scan the
+        // compiled output for the single `public static void main` (Boot's resolveMainClass
+        // posture, spring-boot plan §3.8). Explicit main always wins.
         BuildLayout layout = BuildLayout.of(projectDir, project);
         Path cache = cacheDir();
 
@@ -187,7 +182,14 @@ public final class RunCommand implements CliCommand {
         }
 
         // Exec the most self-contained artifact: native > shadow > plain jar.
-        List<String> command = execCommand(projectDir, project, layout);
+        List<String> command;
+        try {
+            command = execCommand(projectDir, project, layout);
+        } catch (IOException e) {
+            // Typically the main-class scan: none/several found — message is ready to print.
+            CliOutput.err("jk run: " + e.getMessage());
+            return Exit.USAGE;
+        }
         if (mode == GoalConsole.Mode.VERBOSE || mode == GoalConsole.Mode.JSON) {
             // No chip was printed in these modes — show the banner line as before.
             printExecBanner(projectDir, command);
@@ -227,10 +229,25 @@ public final class RunCommand implements CliCommand {
         } else {
             command.add("-cp");
             command.add(joinClasspath(assembleRuntimeClasspath(projectDir, project, layout.mainJar())));
-            command.add(project.mainClass());
+            command.add(mainClassFor(project, layout));
         }
         return command;
     }
+
+    /**
+     * The class to exec: explicit {@code [application] main} wins; otherwise scan the built
+     * classes once (memoized — the console's exec-tail closure and the real exec must agree).
+     * Errors from the scan carry a ready-to-print message (none found / several found).
+     */
+    private String mainClassFor(JkBuild project, BuildLayout layout) throws IOException {
+        if (project.mainClass() != null) return project.mainClass();
+        if (scannedMainClass == null) {
+            scannedMainClass = dev.jkbuild.layout.MainClassScanner.scanUnique(layout.classesDir());
+        }
+        return scannedMainClass;
+    }
+
+    private String scannedMainClass;
 
     /**
      * The styled tail shown in the exec chip line or banner: {@code "[cyan]{jdk}[/]: [yellow]java

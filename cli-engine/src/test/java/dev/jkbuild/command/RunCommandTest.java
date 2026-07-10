@@ -53,6 +53,30 @@ class RunCommandTest {
     }
 
     @Test
+    void project_without_declared_main_runs_via_the_scan(@TempDir Path tempDir) throws Exception {
+        // No [application] main: after the build jk scans the compiled output for the single
+        // `public static void main` (spring-boot plan §3.8).
+        run("new", "--group", "com.example", "--name", "widget", "--executable", "--layout", "traditional",
+                tempDir.toString());
+        // Strip the scaffolded main declaration but keep the [application] table.
+        Path toml = tempDir.resolve("jk.toml");
+        Files.writeString(
+                toml,
+                Files.readString(toml).replaceAll("(?m)^main\\s*=.*$", ""));
+        Path src = tempDir.resolve("src/main/java/com/example/Main.java");
+        Files.createDirectories(src.getParent());
+        Files.writeString(src, """
+                package com.example;
+                public final class Main {
+                    public static void main(String[] args) { System.exit(args.length); }
+                }
+                """);
+
+        int exit = run("run", "-C", tempDir.toString(), "--cache-dir", SharedTestCache.arg(), ".", "a");
+        assertThat(exit).isEqualTo(1); // scanned main ran and saw one arg
+    }
+
+    @Test
     void project_mode_without_main_returns_usage_error(@TempDir Path tempDir) throws Exception {
         Files.writeString(tempDir.resolve("jk.toml"), """
                 [project]
