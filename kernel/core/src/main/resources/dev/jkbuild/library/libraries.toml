@@ -170,3 +170,18 @@ jline                        = "org.jline:jline"
 jakarta-servlet-api          = "jakarta.servlet:jakarta.servlet-api"
 jakarta-persistence-api      = "jakarta.persistence:jakarta.persistence-api"
 jakarta-annotation-api       = "jakarta.annotation:jakarta.annotation-api"
+
+# Spring Boot 4+ additions (post-4.0 starter names; the pre-4.0 set is curated above —
+# docs/spring-boot-plan.md)
+spring-boot-starter-webmvc          = "org.springframework.boot:spring-boot-starter-webmvc"
+spring-boot-starter-data-jdbc       = "org.springframework.boot:spring-boot-starter-data-jdbc"
+spring-boot-starter-validation      = "org.springframework.boot:spring-boot-starter-validation"
+spring-boot-starter-restclient      = "org.springframework.boot:spring-boot-starter-restclient"
+spring-boot-starter-webclient       = "org.springframework.boot:spring-boot-starter-webclient"
+spring-boot-starter-flyway          = "org.springframework.boot:spring-boot-starter-flyway"
+spring-boot-starter-liquibase       = "org.springframework.boot:spring-boot-starter-liquibase"
+spring-boot-starter-opentelemetry   = "org.springframework.boot:spring-boot-starter-opentelemetry"
+spring-boot-starter-webmvc-test     = "org.springframework.boot:spring-boot-starter-webmvc-test"
+spring-boot-devtools                = "org.springframework.boot:spring-boot-devtools"
+spring-boot-docker-compose          = "org.springframework.boot:spring-boot-docker-compose"
+spring-boot-testcontainers          = "org.springframework.boot:spring-boot-testcontainers"
