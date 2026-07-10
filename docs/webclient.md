@@ -1,7 +1,7 @@
-# The web dashboard (petite-vue SPA)
+# The web dashboard (Vue SPA)
 
-**Status: planned, not yet implemented.** Companion doc: [`http.md`](http.md) (the embedded engine
-HTTP server that hosts this). This doc covers phase 5 of that plan.
+**Status: implemented (v1 — Activity + Status views).** Companion doc: [`http.md`](http.md) (the
+embedded engine HTTP server that hosts this). This doc covers phase 5 of that plan.
 
 A single-page dashboard for the resident engine: live build activity, engine vitals, and — over
 time — build history and trends. The long-term shape is a stripped-down, JVM-centric, single-user
@@ -13,46 +13,53 @@ step, served straight from the engine jar.
 - **No build toolchain.** No npm, no bundler, no transpile. The dashboard is plain files checked
   into `kernel/engine/src/main/resources/www/`, served as-is. A contributor edits a file, restarts
   the engine (or points `www-root` at their checkout — see Development below), refreshes.
-- **No CDN, no network.** Everything the page loads comes from the engine itself — the dashboard
-  must work on an offline machine, and the server's security posture (no CORS, strict Host
-  checking) assumes a self-contained origin. petite-vue is vendored, not linked.
-- **Tiny.** petite-vue's IIFE is ~6 KB gzipped; the whole `/www` tree should stay well under
-  ~100 KB so it's invisible in the fat jar and in the engine's heap (assets stream from the jar;
-  nothing is cached in memory).
+- **The framework comes from the CDN; everything else is self-hosted.** Vue loads from unpkg —
+  version-pinned in the URL and integrity-locked with SRI (a compromised CDN must not be able to
+  script a page that can trigger builds); the classpath CSP allows exactly that one external
+  script origin. Deliberate trade-off: the dashboard's first load needs internet (unpkg serves
+  pinned URLs `immutable`, so the browser caches it thereafter), and jk ships no framework bytes.
+  Everything else — app code, styles, icons — comes from the engine itself, and the rest of the
+  security posture (no CORS, strict Host checking) still assumes a self-contained origin.
+- **Small.** The shipped tree is a handful of hand-written files; assets stream from the jar
+  (nothing is cached in the engine's heap). Keep it that way.
 
-## Why petite-vue
+## Why full Vue (global build, from the CDN)
 
-petite-vue is Vue's official minimal distribution for progressive enhancement: `@vue/reactivity`
-reactive state + template directives (`v-if`, `v-for`, `v-on`, `v-model`, `{{ }}`) directly over
-in-page DOM, with no virtual DOM, no components-as-files, no compiler. That is exactly this
-dashboard's shape — a few reactive views over JSON endpoints — and it keeps the no-build-step
-constraint effortlessly. Two caveats, accepted with eyes open: it is feature-frozen upstream
-(fine: it's ~600 lines we vendor and could maintain ourselves), and it has no router (fine: the
-dashboard is one page with tab-like view switching on a reactive field; `location.hash` mirrors
-the active view so links/refresh work).
+The dashboard started on petite-vue (Vue's ~6 KB progressive-enhancement distribution) and moved
+to full Vue 3 once the trajectory was clear: the Buildkite-shaped roadmap (history, trends,
+richer components) outgrows a feature-frozen library, and full Vue keeps the same template
+syntax while adding real components, computed properties, watchers, and an ecosystem escape
+hatch. The pinned artifact is `vue.global.prod.js` — the *full* build whose runtime compiler
+compiles the in-DOM template in `index.html` at load, which is what preserves the no-build-step
+constraint (the runtime-only build would require precompiled render functions, i.e. a bundler).
+The production build, not `vue.global.js` — the dev build is 3× the size and exists for its
+warnings; point `www-root` at a checkout and swap the `<script>` line when debugging Vue itself.
+**Moving the pin** means updating both the URL and the `integrity` hash in `index.html`
+(`openssl dgst -sha384 -binary vue.global.prod.js | openssl base64 -A`).
 
-If the dashboard ever outgrows this (client-side routing, component libraries, charts with heavy
-interactivity), the escape hatch is full Vue's ESM build vendored the same way — the store/API
-layer below is framework-portable on purpose.
+Still no router (the dashboard is one page with tab-like view switching on a reactive field;
+`location.hash` mirrors the active view so links/refresh work) — vendor `vue-router` the same
+way if real routes ever appear.
 
 ## File layout
 
 ```
 kernel/engine/src/main/resources/www/
-├── index.html          # the whole app shell: header, view tabs, petite-vue templates
+├── index.html          # the whole app shell: header, view tabs, the in-DOM Vue template
 ├── app.js              # createApp + store + view logic (ES module)
 ├── api.js              # fetch wrapper, token bootstrap, SSE client (ES module)
 ├── fold.js             # pure event-folding logic — no browser globals, node-testable
-├── style.css           # hand-written; dark/light via prefers-color-scheme
-└── vendor/
-    └── petite-vue.iife.js   # vendored, version-pinned in a header comment (v0.4.1)
+├── favicon.svg
+└── style.css           # hand-written; dark/light via prefers-color-scheme
 ```
 
-`index.html` loads `vendor/petite-vue.iife.js` and `app.js` with `defer`. No inline scripts or
+`index.html` loads Vue from `https://unpkg.com/vue@3.5.39/dist/vue.global.prod.js`
+(version-pinned, SRI `integrity` + `crossorigin`) and `app.js` with `defer`. No inline scripts or
 style attributes, so a `Content-Security-Policy` header rides every <em>classpath</em>-served
-response: `default-src 'self'; script-src 'self' 'unsafe-eval'` — the `unsafe-eval` is petite-vue's
-expression compiler (`new Function`), the price of the no-build-step constraint. Disk-served
-`www-root` content (user reports with inline styles of their own) is deliberately not CSP-gated.
+response: `default-src 'self'; script-src 'self' 'unsafe-eval' https://unpkg.com` — the
+`unsafe-eval` is Vue's runtime template compiler, the price of the no-build-step constraint, and
+unpkg is the one permitted external script origin. Disk-served `www-root` content (user reports
+with inline styles of their own) is deliberately not CSP-gated.
 
 ## Architecture
 
@@ -71,16 +78,17 @@ Three small layers, one file each:
     only ever means an explicit `jk engine stop`, a version-skew respawn after a `jk` upgrade, or
     a crash — the offline banner says so ("engine stopped — run any jk command to restart it"),
     and the first successful reconnect refetches `/api/status` to resync.
-- **`app.js`** — one `PetiteVue.reactive` store, one `createApp(store).mount('#app')`:
-  - `store.view` — `'activity' | 'status'` (v1), mirrored to `location.hash`.
-  - `store.status` — the `/api/status` payload, refreshed on load, on SSE reconnect, and on a slow
+- **`app.js`** — one root component (`Vue.createApp({...}).mount('#app')`, Options API — the
+  in-DOM template needs no SFC/build machinery):
+  - `view` — `'activity' | 'status'` (v1), mirrored to `location.hash`.
+  - `status` — the `/api/status` payload, refreshed on load, on SSE reconnect, and on a slow
     (30 s) timer as a fallback; the SSE stream is the primary freshness signal, not polling.
-  - `store.activity` — a bounded ring (last ~200 events) of `/api/events` entries, folded into
-    per-request groups: a `request-start` opens a card, `module-start`/`goal-finish` events update
-    its rows, `request-finish` closes it with outcome + duration. Bounded so a long-lived tab
-    can't grow the page without limit.
-  - `store.connection` — `'live' | 'offline' | 'unauthorized'`, driving the banner.
-- **`index.html` templates** — petite-vue directives over the store. No component framework;
+  - `cards` — `/api/events` entries folded (via `fold.js`, bounded at 50 cards) into per-request
+    cards: a `request-start` opens a card, `module-start`/`goal-finish`/`module-finish` events
+    update its rows, `request-finish` closes it with outcome + duration. Bounded so a long-lived
+    tab can't grow the page without limit.
+  - `connection` — `'connecting' | 'live' | 'offline' | 'unauthorized'`, driving the banner.
+- **`index.html` templates** — Vue directives over the store, compiled in-DOM at load. One root component so far;
   `v-for` over activity cards, `v-if` per view.
 
 ## Views

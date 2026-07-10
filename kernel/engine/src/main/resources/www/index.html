@@ -7,7 +7,11 @@
   <title>jk</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/style.css">
-  <script src="/vendor/petite-vue.iife.js" defer></script>
+  <!-- Version-pinned + SRI: a CDN compromise must not be able to script a page that can trigger
+       builds. Update the integrity hash whenever the pin moves (docs/webclient.md). -->
+  <script src="https://unpkg.com/vue@3.5.39/dist/vue.global.prod.js"
+          integrity="sha384-yrrm1s9PCS0I4n39ldjMqQlTorYls89GAS3wXVJooje/BSWnC2vTgky2LIyzRLEo"
+          crossorigin="anonymous" defer></script>
   <script src="/app.js" type="module"></script>
 </head>
 <body>

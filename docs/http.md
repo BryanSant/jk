@@ -1,6 +1,6 @@
 # The embedded HTTP server (`[http]`)
 
-**Status: planned, not yet implemented.** Companion doc: [`webclient.md`](webclient.md) (the
+**Status: implemented (phases 1–5).** Companion doc: [`webclient.md`](webclient.md) (the
 dashboard SPA this server hosts).
 
 The engine grows an optional, embedded HTTP server: a single-user, localhost-by-default web

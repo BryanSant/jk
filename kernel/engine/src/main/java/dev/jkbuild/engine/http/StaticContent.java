@@ -157,11 +157,14 @@ final class StaticContent {
         }
         exchange.getResponseHeaders().set("Cache-Control", "max-age=3600");
         exchange.getResponseHeaders().set("ETag", classpathEtag);
-        // The shipped SPA is fully self-contained; pin it that way. 'unsafe-eval' is petite-vue's
-        // expression compiler (new Function) — see docs/webclient.md. Disk content (user reports,
-        // possibly with inline styles/scripts of their own) is deliberately not CSP-gated.
+        // The shipped SPA loads exactly one external resource: Vue from unpkg (version-pinned +
+        // SRI in index.html — see docs/webclient.md). 'unsafe-eval' is Vue's runtime template
+        // compiler. Disk content (user reports, possibly with inline styles/scripts of their own)
+        // is deliberately not CSP-gated.
         exchange.getResponseHeaders()
-                .set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-eval'");
+                .set(
+                        "Content-Security-Policy",
+                        "default-src 'self'; script-src 'self' 'unsafe-eval' https://unpkg.com");
         if (classpathEtag.equals(exchange.getRequestHeaders().getFirst("If-None-Match"))) {
             exchange.sendResponseHeaders(304, -1);
             return true;

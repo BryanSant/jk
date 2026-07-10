@@ -126,16 +126,25 @@ class HttpEngineServerTest {
     void ships_the_dashboard_spa_on_the_classpath() throws Exception {
         // The real SPA (kernel/engine/src/main/resources/www) rides the same classpath fallback the
         // test resources exercise — a bare [http] table gives a working dashboard with no file copying.
-        assertThat(get("/app.js").body()).contains("PetiteVue.createApp");
+        assertThat(get("/app.js").body()).contains("Vue.createApp");
         assertThat(get("/fold.js").body()).contains("export function foldEvent");
         assertThat(get("/api.js").body()).contains("bootstrapToken");
-        assertThat(get("/vendor/petite-vue.iife.js").body()).startsWith("/*! petite-vue v0.4.1");
         assertThat(get("/favicon.svg").headers().firstValue("Content-Type")).contains("image/svg+xml");
         HttpResponse<String> css = get("/style.css");
         assertThat(css.headers().firstValue("Content-Type")).contains("text/css; charset=utf-8");
+        // Vue rides the CDN, version-pinned and integrity-locked (docs/webclient.md) — the shell
+        // must carry the pin + SRI, and the CSP must allow exactly that one external origin.
+        // (Read from the classpath: this test's www-root shadows /index.html with its own.)
+        String shell;
+        try (var in = getClass().getResourceAsStream("/www/index.html")) {
+            shell = new String(in.readAllBytes(), UTF_8);
+        }
+        assertThat(shell).contains("https://unpkg.com/vue@3.5.39/dist/vue.global.prod.js");
+        assertThat(shell).contains("integrity=\"sha384-");
+        assertThat(shell).contains("crossorigin=\"anonymous\"");
         HttpResponse<String> js = get("/app.js");
         assertThat(js.headers().firstValue("Content-Security-Policy"))
-                .contains("default-src 'self'; script-src 'self' 'unsafe-eval'");
+                .contains("default-src 'self'; script-src 'self' 'unsafe-eval' https://unpkg.com");
     }
 
     @Test
