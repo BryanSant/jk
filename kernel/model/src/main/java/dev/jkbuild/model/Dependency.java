@@ -12,12 +12,14 @@ import java.util.Objects;
  * segment of {@code module} is exposed as {@link #name()} (Gradle's "name" for that coordinate
  * segment).
  *
- * <p>There is no local-path dependency source: a local, hand-edited sibling project is always a
- * {@code [workspace] modules} entry, resolved via {@code WorkspaceClasspath}, never a {@code
- * Dependency}.
+ * <p>A local, hand-edited sibling project can be consumed two ways: as a {@code [workspace] modules}
+ * entry (resolved via {@code WorkspaceClasspath}, built fully with tests, jk-only), or — via
+ * {@link #pathSource} — as a consume-only <em>path dependency</em> (built compile/package-only, no
+ * tests, jk/Gradle/Maven). Workspace membership and a path dependency are distinct source kinds.
  *
- * <p>For git deps the version field carries the synthetic marker {@code "git"} so the record's
- * non-null invariant holds; consumers gate on {@link #isGit()} rather than reading the marker.
+ * <p>For git and path deps the version field carries a synthetic marker ({@code "git"} / {@code
+ * "path"}) so the record's non-null invariant holds; consumers gate on {@link #isGit()} /
+ * {@link #isPath()} rather than reading the marker.
  *
  * <h2>Source discriminators (no magic-string sniffing)</h2>
  *
@@ -26,6 +28,7 @@ import java.util.Objects;
  *
  * <ul>
  *   <li>{@link #isGit()} — a git-sourced dep ({@code gitSource != null}).
+ *   <li>{@link #isPath()} — a local-path-sourced dep ({@code pathSource != null}).
  *   <li>{@link #isFile()} — a CAS file-sourced dep ({@code sha256 != null}).
  *   <li>{@link #isWorkspace()} — an unresolved workspace-sibling placeholder.
  *   <li>otherwise — a Maven coordinate.
@@ -43,7 +46,7 @@ import java.util.Objects;
  *
  * <ul>
  *   <li>Exact selector ({@code =1.2.3}) → pinned.
- *   <li>Git source → pinned (the source itself is the pin).
+ *   <li>Git or path source → pinned (the source itself is the pin).
  *   <li>Caret, Tilde, Range, Latest → floating.
  * </ul>
  */
@@ -54,7 +57,8 @@ public record Dependency(
         GitSource gitSource,
         String sha256,
         boolean pinned,
-        boolean optional) {
+        boolean optional,
+        PathSource pathSource) {
 
     /**
      * Synthetic {@code module} prefix for an unresolved workspace-sibling placeholder ({@code
@@ -71,6 +75,13 @@ public record Dependency(
      */
     public static final String GIT_PREFIX = "git:";
 
+    /**
+     * Synthetic {@code module} prefix for a bare-name path dep whose real coordinate isn't known at
+     * parse time ({@code path:<name>}). Write-only: nothing reads it back — path deps discriminate
+     * via {@link #isPath()}. It exists only to satisfy the {@code group:artifact} invariant.
+     */
+    public static final String PATH_PREFIX = "path:";
+
     public Dependency {
         Objects.requireNonNull(library, "library");
         Objects.requireNonNull(module, "module");
@@ -78,14 +89,23 @@ public record Dependency(
         if (!module.contains(":") || module.indexOf(':') != module.lastIndexOf(':')) {
             throw new IllegalArgumentException("dependency module must be 'group:artifact' (got: " + module + ")");
         }
-        int sourceBits = (gitSource != null ? 1 : 0) + (sha256 != null ? 1 : 0);
+        int sourceBits = (gitSource != null ? 1 : 0) + (sha256 != null ? 1 : 0) + (pathSource != null ? 1 : 0);
         if (sourceBits > 1) {
-            throw new IllegalArgumentException("dependency cannot set more than one of git or sha256 sources");
+            throw new IllegalArgumentException("dependency cannot set more than one of git, path, or sha256 sources");
         }
         // Derive pinned from the resolution mode, regardless of the
         // value the caller passed. Source-backed deps are always pinned;
         // for coord deps, only an Exact selector pins.
-        pinned = derivePinned(version, gitSource, sha256);
+        pinned = derivePinned(version, gitSource, sha256, pathSource);
+    }
+
+    /**
+     * Back-compat constructor for the pre-{@code pathSource} 7-arg shape — every existing factory and
+     * caller routes through here, defaulting to no path source.
+     */
+    public Dependency(
+            String library, String module, VersionSelector version, GitSource gitSource, String sha256, boolean pinned, boolean optional) {
+        this(library, module, version, gitSource, sha256, pinned, optional, null);
     }
 
     /**
@@ -93,12 +113,12 @@ public record Dependency(
      * caller routes through here, defaulting to a non-optional (always-resolved) dependency.
      */
     public Dependency(String library, String module, VersionSelector version, GitSource gitSource, String sha256, boolean pinned) {
-        this(library, module, version, gitSource, sha256, pinned, false);
+        this(library, module, version, gitSource, sha256, pinned, false, null);
     }
 
     /** A copy of this dependency flagged optional (feature-gated) or not. */
     public Dependency withOptional(boolean optional) {
-        return new Dependency(library, module, version, gitSource, sha256, pinned, optional);
+        return new Dependency(library, module, version, gitSource, sha256, pinned, optional, pathSource);
     }
 
     /** Maven-coord constructor (no source override). Library defaults to artifactId. */
@@ -138,6 +158,18 @@ public record Dependency(
     }
 
     /**
+     * Bare-name path dep whose real coordinate isn't known at parse time — the {@code module} is the
+     * synthetic {@link #PATH_PREFIX}{@code <name>} placeholder and the version a {@code =path}
+     * marker. Callers must not spell the prefix. The coordinate/version are discovered when the
+     * target directory is built at materialization time.
+     */
+    public static Dependency pathByName(String name, PathSource source) {
+        Objects.requireNonNull(source, "source");
+        return new Dependency(
+                name, PATH_PREFIX + name, VersionSelector.parse("=path"), null, null, false, false, source);
+    }
+
+    /**
      * Unresolved workspace-sibling placeholder — the {@code module} is {@link #WORKSPACE_PREFIX}{@code
      * <name>} and the version a synthetic {@code Latest("workspace")} marker. {@code WorkspaceMerge}
      * rewrites this to the sibling's real coord (or errors) before the resolver ever sees it.
@@ -173,6 +205,11 @@ public record Dependency(
 
     public boolean isGit() {
         return gitSource != null;
+    }
+
+    /** True when this is a local-path-sourced dep ({@code pathSource != null}). */
+    public boolean isPath() {
+        return pathSource != null;
     }
 
     public boolean isFile() {
@@ -220,8 +257,9 @@ public record Dependency(
         return module.substring(idx + 1);
     }
 
-    private static boolean derivePinned(VersionSelector version, GitSource gitSource, String sha256) {
-        if (gitSource != null || sha256 != null) return true;
+    private static boolean derivePinned(
+            VersionSelector version, GitSource gitSource, String sha256, PathSource pathSource) {
+        if (gitSource != null || sha256 != null || pathSource != null) return true;
         return version instanceof VersionSelector.Exact;
     }
 }

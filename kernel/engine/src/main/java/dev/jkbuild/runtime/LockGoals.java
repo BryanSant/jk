@@ -136,19 +136,23 @@ public final class LockGoals {
                         }
                     }
                     GitSourceResolution.Prepared prep;
+                    PathSourceResolution.Prepared pathPrep;
                     try {
+                        Path javaHome = JavaHomes.resolveJavaHome(dir);
                         prep = GitSourceResolution.prepare(
                                 eff,
                                 baseRepos,
                                 cas,
-                                JavaHomes.resolveJavaHome(dir),
+                                javaHome,
                                 JkVersion.VERSION,
                                 lockedShas);
+                        pathPrep = PathSourceResolution.prepare(
+                                prep.project(), prep.repos(), cas, dir, javaHome, JkVersion.VERSION);
                     } catch (Exception e) {
                         ctx.error("resolve", e.getMessage());
                         throw new RuntimeException(e);
                     }
-                    RepoGroup repos = prep.repos();
+                    RepoGroup repos = pathPrep.repos();
                     // Deliberately no Diagnostics.Palette here — see the class javadoc.
                     LockOrchestrator orchestrator = new LockOrchestrator(repos);
                     // Wrap the caller's observer so it also drives ctx.label/progress
@@ -173,9 +177,9 @@ public final class LockGoals {
                     try {
                         Lockfile lock = sources
                                 ? orchestrator.lockWithSources(
-                                        prep.project(), JkVersion.VERSION, features, withDefaultFeatures, wrappedObserver)
+                                        pathPrep.project(), JkVersion.VERSION, features, withDefaultFeatures, wrappedObserver)
                                 : orchestrator.lock(
-                                        prep.project(), JkVersion.VERSION, features, withDefaultFeatures, wrappedObserver);
+                                        pathPrep.project(), JkVersion.VERSION, features, withDefaultFeatures, wrappedObserver);
                         lock = GitSourceResolution.stamp(lock, prep.gitInfoByKey());
                         String kotlinVersion = resolveKotlinVersion(eff, repos);
                         if (kotlinVersion != null) {
@@ -271,10 +275,13 @@ public final class LockGoals {
                     try {
                         // Git-source deps: re-materialize against the current ref tip and accept
                         // any movement (no tag-rewrite check; see docs/git-source-deps.md).
+                        Path javaHome = JavaHomes.resolveJavaHome(dir);
                         GitSourceResolution.Prepared prep = GitSourceResolution.prepare(
-                                eff, baseRepos, cas, JavaHomes.resolveJavaHome(dir), JkVersion.VERSION);
-                        Lockfile lock = new LockOrchestrator(prep.repos())
-                                .lock(prep.project(), JkVersion.VERSION, features, withDefaultFeatures);
+                                eff, baseRepos, cas, javaHome, JkVersion.VERSION);
+                        PathSourceResolution.Prepared pathPrep = PathSourceResolution.prepare(
+                                prep.project(), prep.repos(), cas, dir, javaHome, JkVersion.VERSION);
+                        Lockfile lock = new LockOrchestrator(pathPrep.repos())
+                                .lock(pathPrep.project(), JkVersion.VERSION, features, withDefaultFeatures);
                         lock = GitSourceResolution.stamp(lock, prep.gitInfoByKey());
                         ctx.put(LOCKFILE, lock);
                     } catch (Exception e) {
@@ -384,10 +391,13 @@ public final class LockGoals {
 
         Cas cas = new Cas(cache);
         RepoGroup baseRepos = RepoGroupBuilder.buildFor(effective, repoUrl, cas);
+        Path javaHome = JavaHomes.resolveJavaHome(dir);
         GitSourceResolution.Prepared prep = GitSourceResolution.prepare(
-                effective, baseRepos, cas, JavaHomes.resolveJavaHome(dir), JkVersion.VERSION);
-        Lockfile newLock = new LockOrchestrator(prep.repos())
-                .lock(prep.project(), JkVersion.VERSION, features, withDefaultFeatures);
+                effective, baseRepos, cas, javaHome, JkVersion.VERSION);
+        PathSourceResolution.Prepared pathPrep = PathSourceResolution.prepare(
+                prep.project(), prep.repos(), cas, dir, javaHome, JkVersion.VERSION);
+        Lockfile newLock = new LockOrchestrator(pathPrep.repos())
+                .lock(pathPrep.project(), JkVersion.VERSION, features, withDefaultFeatures);
         newLock = GitSourceResolution.stamp(newLock, prep.gitInfoByKey());
 
         java.util.Set<String> targetKeys = new java.util.LinkedHashSet<>();

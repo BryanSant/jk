@@ -235,6 +235,13 @@ public final class GradleExporter {
                     + " git-source — dropped. Consider `includeBuild` of a local checkout.");
             return true;
         }
+        if (d.isPath()) {
+            report.warning("dependency `"
+                    + d.pathSource().rawPath()
+                    + "` is a local path dependency; Gradle has no built-in"
+                    + " equivalent — dropped. Consider `includeBuild` of that directory.");
+            return true;
+        }
         if (d.isFile()) {
             report.warning("dependency `"
                     + d.module()

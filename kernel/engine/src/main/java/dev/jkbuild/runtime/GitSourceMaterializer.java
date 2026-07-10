@@ -20,10 +20,11 @@ import java.nio.file.Path;
 
 /**
  * Materializes a git-source dependency into a locally-published Maven artifact
- * (docs/git-source-deps.md): clone the repo at the ref, derive a version, build it with {@link
- * GitProjectBuilder}, and write the jar + POM into a per-commit {@code file://} Maven repository.
- * The result hands the resolver a concrete coordinate it can pin and a {@code file://} repo to
- * fetch from — so the PubGrub solver never has to know about git.
+ * (docs/git-source-deps.md): clone the repo at the ref, build it with {@link SourceProjectBuilder}
+ * (a jk, Gradle, or Maven target — compile/package only, never tests), and write the jar + POM into
+ * a per-commit {@code file://} Maven repository. The result hands the resolver a concrete coordinate
+ * it can pin and a {@code file://} repo to fetch from — so the PubGrub solver never has to know
+ * about git. A jk target's version is ref-derived; a foreign target declares its own.
  *
  * <p>The local repo lives under {@code $JK_CACHE_DIR/git-artifacts/<urlhash>/<sha>/repo} keyed by
  * commit SHA, so an immutable tag/rev is built once and cached, while a branch rebuilds when its
@@ -90,53 +91,81 @@ public final class GitSourceMaterializer {
         GitFetcher fetcher = new GitFetcher(gitRoot, credentials);
         GitFetcher.Fetched fetched = fetcher.fetch(source);
         String sha = fetched.sha();
-        String version = deriveVersion(fetcher, source, sha);
 
         Path projectDir = source.path() != null && !source.path().isBlank()
                 ? fetched.checkoutPath().resolve(source.path())
                 : fetched.checkoutPath();
-        Path buildFile = projectDir.resolve("jk.toml");
-        if (!Files.isRegularFile(buildFile)) {
-            throw new IOException("git dependency "
-                    + source.canonicalUrl()
-                    + " has no jk.toml at "
-                    + (source.path() == null ? "repo root" : source.path())
-                    + " (only jk.toml builds are supported)");
-        }
-        JkBuild project = JkBuildParser.parse(Files.readString(buildFile));
-        // Coordinate is always read from the cloned repo's [project] — no overrides.
-        String group = project.project().group();
-        String artifact = project.project().name();
 
-        // Per-commit local Maven repo; reused on a cache hit (immutable tag/rev).
-        Path repo = artifactsRoot
-                .resolve(GitUrl.canonicalHash(source.canonicalUrl()))
-                .resolve(sha)
-                .resolve("repo");
-        String dir = group.replace('.', '/') + "/" + artifact + "/" + version + "/";
-        Path jarPath = repo.resolve(dir + artifact + "-" + version + ".jar");
-        Path pomPath = repo.resolve(dir + artifact + "-" + version + ".pom");
-
-        if (!Files.isRegularFile(jarPath) || !Files.isRegularFile(pomPath)) {
-            GitProjectBuilder.Built built = GitProjectBuilder.build(
-                    projectDir, project, group, artifact, version, javaHome, cas, buildRepos, jkVersion);
-            Files.createDirectories(jarPath.getParent());
-            // Streaming copy from the build-output jar — never buffers the whole jar in the heap.
-            Files.copy(built.jar(), jarPath, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-            Files.writeString(pomPath, built.pomXml());
-        }
-
-        // maven-metadata.xml lets the resolver enumerate this artifact's
-        // versions through the file:// repo (one version per commit dir).
-        Path metaPath = repo.resolve(group.replace('.', '/') + "/" + artifact + "/maven-metadata.xml");
-        if (!Files.isRegularFile(metaPath)) {
-            Files.createDirectories(metaPath.getParent());
-            Files.writeString(metaPath, metadataXml(group, artifact, version));
-        }
-
+        // Per-commit dirs; reused on a cache hit (immutable tag/rev).
+        Path shaDir = artifactsRoot.resolve(GitUrl.canonicalHash(source.canonicalUrl())).resolve(sha);
+        Path repo = shaDir.resolve("repo");
         Lockfile.Artifact.GitInfo gitInfo = new Lockfile.Artifact.GitInfo(
                 source.canonicalUrl(), sha, source.ref().token());
+
+        boolean isJk = Files.isRegularFile(projectDir.resolve("jk.toml"));
+
+        // Determine the coordinate. For a jk target it's read cheaply from [project] (+ the
+        // ref-derived version), so an already-built commit is a cache hit with no build. A foreign
+        // (Gradle/Maven) target only reveals its GAV once built — cache it in a coordinate marker.
+        String group = null;
+        String artifact = null;
+        String version = null;
+        String versionOverride = null;
+        Path marker = shaDir.resolve("coordinate.txt");
+        if (isJk) {
+            JkBuild project = JkBuildParser.parse(Files.readString(projectDir.resolve("jk.toml")));
+            group = project.project().group();
+            artifact = project.project().name();
+            version = deriveVersion(fetcher, source, sha);
+            versionOverride = version; // git deps override the jk.toml version with the ref-derived one
+        } else if (Files.isRegularFile(marker)) {
+            String[] gav = Files.readString(marker).strip().split(":", 3);
+            group = gav[0];
+            artifact = gav[1];
+            version = gav[2];
+        }
+
+        // Cache hit: coordinate known and the artifact is already installed.
+        if (group != null && Files.isRegularFile(artifactJar(repo, group, artifact, version))
+                && Files.isRegularFile(artifactPom(repo, group, artifact, version))) {
+            return new Materialized(group, artifact, version, repo.toUri(), gitInfo);
+        }
+
+        SourceProjectBuilder.Built built = SourceProjectBuilder.build(
+                projectDir, versionOverride, javaHome, cas, buildRepos, jkVersion);
+        group = built.group();
+        artifact = built.artifact();
+        version = built.version();
+        installArtifact(repo, group, artifact, version, built.jar(), built.pomXml());
+        if (!isJk) {
+            Files.writeString(marker, built.coordinate());
+        }
         return new Materialized(group, artifact, version, repo.toUri(), gitInfo);
+    }
+
+    private static Path artifactJar(Path repo, String group, String artifact, String version) {
+        return repo.resolve(group.replace('.', '/') + "/" + artifact + "/" + version + "/" + artifact + "-" + version + ".jar");
+    }
+
+    private static Path artifactPom(Path repo, String group, String artifact, String version) {
+        return repo.resolve(group.replace('.', '/') + "/" + artifact + "/" + version + "/" + artifact + "-" + version + ".pom");
+    }
+
+    /** Copy the built jar + POM into the {@code file://} repo and (re)write maven-metadata.xml. */
+    static void installArtifact(Path repo, String group, String artifact, String version, Path builtJar, String pomXml)
+            throws IOException {
+        Path jarPath = artifactJar(repo, group, artifact, version);
+        Path pomPath = artifactPom(repo, group, artifact, version);
+        Files.createDirectories(jarPath.getParent());
+        // Streaming copy from the build-output jar — never buffers the whole jar in the heap.
+        Files.copy(builtJar, jarPath, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        Files.writeString(pomPath, pomXml);
+
+        // maven-metadata.xml lets the resolver enumerate this artifact's versions through the
+        // file:// repo (one version per source dir).
+        Path metaPath = repo.resolve(group.replace('.', '/') + "/" + artifact + "/maven-metadata.xml");
+        Files.createDirectories(metaPath.getParent());
+        Files.writeString(metaPath, metadataXml(group, artifact, version));
     }
 
     private static String deriveVersion(GitFetcher fetcher, GitSource source, String sha) throws IOException {

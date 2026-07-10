@@ -10,6 +10,7 @@ import dev.jkbuild.model.GitRefSpec;
 import dev.jkbuild.model.GitSource;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.ObjectStoreConfig;
+import dev.jkbuild.model.PathSource;
 import dev.jkbuild.model.PluginDeclaration;
 import dev.jkbuild.model.Profile;
 import dev.jkbuild.model.Profiles;
@@ -455,8 +456,9 @@ public final class JkBuildParser {
      *       treated as a floating version selector (the Cargo-style {@code name = "1.2.3"} form).
      * </ul>
      *
-     * <p>There is no local-path shorthand: a local sibling project is declared as a {@code
-     * [workspace] modules} entry, never as a {@code [dependencies]} value.
+     * <p>A leading {@code .} or {@code /} is a local-path shorthand — a consume-only path dependency
+     * ({@link Dependency#pathByName}), built compile/package-only. A local sibling that should be
+     * built fully (with tests) belongs in {@code [workspace] modules} instead.
      */
     private static Dependency parseShorthandEntry(String name, String value, Scope scope, LibraryCatalog catalog) {
         String displayPath = scope.tomlSection() + "." + name;
@@ -464,12 +466,11 @@ public final class JkBuildParser {
             throw new JkBuildParseException(displayPath + " has an empty value string");
         }
 
+        // Local-path shorthand: a relative (`./x`, `../x`) or absolute (`/x`) path is a consume-only
+        // path dependency. `isVersionSpecOrKeyword` already excludes `.`/`/`-leading strings, so this
+        // never shadows a version spec.
         if (value.startsWith(".") || value.startsWith("/")) {
-            throw new JkBuildParseException(displayPath + " = \"" + value + "\" looks like a local path, but jk"
-                    + " has no inline path dependency. Add `" + value + "` to the root jk.toml's `[workspace]"
-                    + " modules = [...]` instead, then declare `" + name + " = { group = \"...\", version ="
-                    + " \"...\" }` here pointing at that sibling's coordinate — jk resolves workspace siblings"
-                    + " automatically.");
+            return Dependency.pathByName(name, new PathSource(value));
         }
 
         // Git URL shorthand: starts with "git://" or "https://".
@@ -567,22 +568,15 @@ public final class JkBuildParser {
         boolean hasVersion = entry.contains("version");
         boolean hasGit = entry.contains("git");
         boolean hasSha256 = entry.contains("sha256");
-
-        // `path` (standalone, not the git sub-directory modifier) is no longer a source
-        // type — reject it up front with a dedicated message rather than letting it fall
-        // into the generic "no source set" branch below, where the offending key would be
-        // invisible.
-        if (entry.contains("path") && !hasGit) {
-            throw new JkBuildParseException(displayPath + " uses `path = \"...\"` — inline path dependencies are"
-                    + " no longer supported. Add the target directory to the root jk.toml's `[workspace]"
-                    + " modules = [...]`, then declare `" + name + " = { group = \"...\", version = \"...\" }`"
-                    + " here matching that module's coordinate — jk resolves workspace siblings automatically.");
-        }
+        // A standalone `path` (not the git sub-directory modifier, which only applies alongside
+        // `git`) is a consume-only path dependency.
+        boolean hasPath = entry.contains("path") && !hasGit;
 
         int sourceCount = (hasVersion ? 1 : 0)
                 + (hasGit ? 1 : 0)
                 + (hasWorkspace ? 1 : 0)
-                + (hasSha256 ? 1 : 0);
+                + (hasSha256 ? 1 : 0)
+                + (hasPath ? 1 : 0);
         // The only legal multi-source pairing: sha256 + version (version records the coordinate).
         boolean sha256WithVersion = hasSha256 && hasVersion && !hasGit && !hasWorkspace;
         // No source at all + a known coordinate = platform-managed: the version comes from an
@@ -591,12 +585,13 @@ public final class JkBuildParser {
         boolean platformManaged = sourceCount == 0 && (entry.contains("group") || entry.contains("name"));
         if (sourceCount == 0 && !platformManaged) {
             throw new JkBuildParseException(
-                    displayPath + " must set exactly one of `version`, `git`, `sha256`, or `workspace = true`"
-                    + " — or `group`/`name` alone for a version managed by a [platform-dependencies] BOM");
+                    displayPath + " must set exactly one of `version`, `git`, `path`, `sha256`, or"
+                    + " `workspace = true` — or `group`/`name` alone for a version managed by a"
+                    + " [platform-dependencies] BOM");
         }
         if (sourceCount > 1 && !sha256WithVersion) {
             throw new JkBuildParseException(displayPath
-                    + " sets more than one of `version` / `git` / `sha256` / `workspace`; "
+                    + " sets more than one of `version` / `git` / `path` / `sha256` / `workspace`; "
                     + "pick exactly one");
         }
 
@@ -659,6 +654,24 @@ public final class JkBuildParser {
                 }
             }
             return Dependency.gitByName(name, parseGitSource(entry, displayPath));
+        }
+
+        if (hasPath) {
+            // Like git, a path dep is pure discovery: the coordinate and version are read from the
+            // target project when it's built (its jk.toml for a jk project, or the derived GAV for a
+            // Gradle/Maven project). Specifying `group`/`name`/`version` here is an error.
+            for (String forbidden : new String[]{"group", "name", "version"}) {
+                if (entry.contains(forbidden)) {
+                    throw new JkBuildParseException(displayPath
+                            + " with `path` must not set `" + forbidden + "` — the coordinate"
+                            + " and version are always read from the target project");
+                }
+            }
+            String pathValue = entry.getString("path");
+            if (pathValue == null || pathValue.isBlank()) {
+                throw new JkBuildParseException(displayPath + ".path must not be blank");
+            }
+            return Dependency.pathByName(name, new PathSource(pathValue));
         }
 
         if (platformManaged) {

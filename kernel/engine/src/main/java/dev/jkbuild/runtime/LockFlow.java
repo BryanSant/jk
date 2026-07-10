@@ -86,24 +86,24 @@ public final class LockFlow {
         Cas cas = new Cas(cache);
         RepoGroup baseRepos = RepoGroupBuilder.buildFor(effective, repoUrl, cas);
 
-        // Git-source deps: materialize each into a local file:// repo and rewrite
+        // Git- and path-source deps: materialize each into a local file:// repo and rewrite
         // them to exact coordinate pins before the solver runs (git-source-deps.md).
         GitSourceResolution.Prepared prep;
+        PathSourceResolution.Prepared pathPrep;
         try {
+            Path javaHome = JavaHomes.resolveJavaHome(dir);
             prep = GitSourceResolution.prepare(
-                    effective,
-                    baseRepos,
-                    cas,
-                    JavaHomes.resolveJavaHome(dir),
-                    dev.jkbuild.util.JkVersion.VERSION);
+                    effective, baseRepos, cas, javaHome, dev.jkbuild.util.JkVersion.VERSION);
+            pathPrep = PathSourceResolution.prepare(
+                    prep.project(), prep.repos(), cas, dir, javaHome, dev.jkbuild.util.JkVersion.VERSION);
         } catch (Exception e) {
             return new Result(6, e.getMessage(), null, effective, moduleCount);
         }
-        LockOrchestrator orchestrator = new LockOrchestrator(prep.repos());
+        LockOrchestrator orchestrator = new LockOrchestrator(pathPrep.repos());
 
         Lockfile lock;
         try {
-            lock = orchestrator.lock(prep.project(), dev.jkbuild.util.JkVersion.VERSION, features, !noDefaultFeatures);
+            lock = orchestrator.lock(pathPrep.project(), dev.jkbuild.util.JkVersion.VERSION, features, !noDefaultFeatures);
         } catch (IOException e) {
             return new Result(6, e.getMessage(), null, effective, moduleCount);
         }

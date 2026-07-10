@@ -28,9 +28,8 @@ import java.util.stream.Collectors;
 /**
  * Builds a {@code jk.toml} project on disk into a jar + POM headlessly — composing the standalone
  * build primitives (resolve → classpath → kotlinc → javac → merge → jar → POM) without the CLI
- * goal/console machinery. The engine of immutable git-source dependencies (via {@link
- * GitProjectBuilder} / {@link GitSourceMaterializer}). Composite {@code path}/branch-git deps now
- * build through the full pipeline ({@code BuildPipeline.coreBuilder}) instead.
+ * goal/console machinery. The jk-project engine of source dependencies, invoked via {@link
+ * SourceProjectBuilder} (which dispatches jk vs Gradle vs Maven targets) for both git and path deps.
  *
  * <p>Scope: Java + Kotlin sources, layout-aware (jk's flat {@code SIMPLE} layout and Maven-style
  * {@code TRADITIONAL}), plus the project's own (Maven) dependencies. Test execution, native image,

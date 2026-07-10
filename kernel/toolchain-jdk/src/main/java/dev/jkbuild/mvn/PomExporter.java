@@ -200,6 +200,15 @@ public final class PomExporter {
                     + " as a normal <dependency>.");
             return true;
         }
+        if (d.isPath()) {
+            report.warning("dependency `"
+                    + d.pathSource().rawPath()
+                    + "` is a local path dependency; Maven has no path-source"
+                    + " equivalent — dropped. Build & install that project to your local repo"
+                    + " (`mvn install`, or `jk install`) so it resolves by coordinate, then add it"
+                    + " as a normal <dependency>.");
+            return true;
+        }
         if (d.isFile()) {
             report.warning("dependency `"
                     + d.module()

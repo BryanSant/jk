@@ -422,26 +422,28 @@ class JkBuildParserTest {
     }
 
     @Test
-    void inline_path_dependency_is_rejected() {
-        assertThatThrownBy(() -> JkBuildParser.parse(PROJECT + """
+    void inline_path_dependency_is_a_path_source() {
+        JkBuild parsed = JkBuildParser.parse(PROJECT + """
                 [dependencies]
                 shared-utils = { path = "../shared-utils" }
-                """))
-                .isInstanceOf(JkBuildParseException.class)
-                .hasMessageContaining("[workspace] modules");
+                """);
+        var dep = parsed.dependencies().of(Scope.MAIN).getFirst();
+        assertThat(dep.isPath()).isTrue();
+        assertThat(dep.pathSource().rawPath()).isEqualTo("../shared-utils");
+        assertThat(dep.module()).isEqualTo("path:shared-utils");
+        assertThat(dep.pinned()).isTrue();
     }
 
     @Test
-    void inline_path_dependency_is_rejected_even_with_other_fields() {
-        // The `path` check fires before the general "pick exactly one source"
-        // validation, so the error names `path` specifically rather than a
-        // generic multi-source complaint.
+    void inline_path_dependency_rejects_an_explicit_coordinate() {
+        // Like git, a path dep discovers its coordinate from the target — declaring
+        // group/name/version here is an error (named specifically, not a multi-source complaint).
         assertThatThrownBy(() -> JkBuildParser.parse(PROJECT + """
                 [dependencies]
                 picocli = { path = "../picocli", group = "info.picocli" }
                 """))
                 .isInstanceOf(JkBuildParseException.class)
-                .hasMessageContaining("[workspace] modules");
+                .hasMessageContaining("with `path` must not set `group`");
     }
 
     @Test
@@ -990,33 +992,37 @@ class JkBuildParserTest {
             "picocli", new LibraryCatalog.Module("info.picocli", "picocli")));
 
     @Test
-    void shorthand_relative_path_is_rejected() {
-        assertThatThrownBy(() -> JkBuildParser.parse(PROJECT + """
+    void shorthand_relative_path_is_a_path_source() {
+        JkBuild parsed = JkBuildParser.parse(PROJECT + """
                 [dependencies]
                 my-lib = "./some/local/path"
-                """))
-                .isInstanceOf(JkBuildParseException.class)
-                .hasMessageContaining("[workspace] modules");
+                """);
+        var dep = parsed.dependencies().of(Scope.MAIN).getFirst();
+        assertThat(dep.isPath()).isTrue();
+        assertThat(dep.pathSource().rawPath()).isEqualTo("./some/local/path");
+        assertThat(dep.module()).isEqualTo("path:my-lib");
     }
 
     @Test
-    void shorthand_parent_relative_path_is_rejected() {
-        assertThatThrownBy(() -> JkBuildParser.parse(PROJECT + """
+    void shorthand_parent_relative_path_is_a_path_source() {
+        JkBuild parsed = JkBuildParser.parse(PROJECT + """
                 [dependencies]
                 shared = "../shared-utils"
-                """))
-                .isInstanceOf(JkBuildParseException.class)
-                .hasMessageContaining("[workspace] modules");
+                """);
+        var dep = parsed.dependencies().of(Scope.MAIN).getFirst();
+        assertThat(dep.isPath()).isTrue();
+        assertThat(dep.pathSource().rawPath()).isEqualTo("../shared-utils");
     }
 
     @Test
-    void shorthand_absolute_path_is_rejected() {
-        assertThatThrownBy(() -> JkBuildParser.parse(PROJECT + """
+    void shorthand_absolute_path_is_a_path_source() {
+        JkBuild parsed = JkBuildParser.parse(PROJECT + """
                 [dependencies]
                 shared = "/opt/libs/shared"
-                """))
-                .isInstanceOf(JkBuildParseException.class)
-                .hasMessageContaining("[workspace] modules");
+                """);
+        var dep = parsed.dependencies().of(Scope.MAIN).getFirst();
+        assertThat(dep.isPath()).isTrue();
+        assertThat(dep.pathSource().rawPath()).isEqualTo("/opt/libs/shared");
     }
 
     @Test
