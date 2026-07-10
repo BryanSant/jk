@@ -1258,6 +1258,13 @@ public final class EngineClient {
             }
         }
         ProcessBuilder pb = new ProcessBuilder(command);
+        // Anchor the detached daemon's working directory to its own state dir (created just above),
+        // never the spawning client's CWD. A resident engine outlives the shell that started it, and
+        // if it inherited an ephemeral CWD (a /tmp scratch dir, a git worktree, a since-deleted
+        // checkout) every subprocess it later forks — javac, workers — inherits that dead CWD and
+        // dies at JVM init with "Could not determine current working directory". The state dir is
+        // stable for the engine's whole life and is never removed by cache maintenance.
+        pb.directory(paths.dir().toFile());
         // On the JVM dist the sizing knob is the start script's JVM-options env var — appended
         // last so it wins over any blanket JK_OPTS the user exported. SerialGC for the same
         // reasons as the JAR spawn line.
