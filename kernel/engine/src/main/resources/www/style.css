@@ -67,11 +67,11 @@ header {
   z-index: 10;
 }
 
-/* The mark itself is /jk-logo.svg — outlined JetBrains Mono glyphs, CRT-green treatment.
- * Deliberately large relative to the 52px bar: the mark is the room's only decoration. */
+/* The mark itself is /jumpkick-logo.svg — the wordmark banner (240×64), CRT-green treatment.
+ * Height-locked to the bar; width follows the banner's aspect ratio so it never squishes. */
 .logo {
-  width: 42px;
   height: 42px;
+  width: auto;
   display: block;
   flex: none;
 }

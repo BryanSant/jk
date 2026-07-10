@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 64">
+  <!-- SPDX-License-Identifier: Apache-2.0 — the "jumpkick" wordmark: the same green-screen CRT
+       treatment as jk-logo.svg, widened into a banner. Unlike the "jk" mark (which outlines
+       JetBrains Mono glyphs so no font must load), the full word is set as live text in a
+       JetBrains Mono / monospace stack — it falls back to the system monospace face wherever
+       JetBrains Mono isn't installed. -->
+  <defs>
+    <radialGradient id="crt-bg" cx="50%" cy="46%" r="75%">
+      <stop offset="0%" stop-color="#37672f"/>
+      <stop offset="100%" stop-color="#2a3e21"/>
+    </radialGradient>
+    <clipPath id="crt-clip"><rect width="240" height="64" rx="14"/></clipPath>
+    <pattern id="scanlines" width="240" height="1.8" patternUnits="userSpaceOnUse">
+      <rect y="1.1" width="240" height="0.7" fill="#08130a"/>
+    </pattern>
+    <text id="jumpkick-word" x="120" y="44" text-anchor="middle"
+          font-family="'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace"
+          font-weight="700" font-size="33" letter-spacing="0.5">jumpkick</text>
+    <filter id="glow-halo" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="8"/>
+    </filter>
+    <filter id="glow-wide" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="4.5"/>
+    </filter>
+    <filter id="glow-tight" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="1.4"/>
+    </filter>
+  </defs>
+
+  <rect width="240" height="64" rx="14" fill="url(#crt-bg)"/>
+  <g clip-path="url(#crt-clip)">
+    <!-- phosphor glow: bright at the letter edges, decaying to transparent in every direction -->
+    <use href="#jumpkick-word" fill="#44ff5c" filter="url(#glow-halo)" opacity="0.5"/>
+    <use href="#jumpkick-word" fill="#44ff5c" filter="url(#glow-wide)" opacity="0.85"/>
+    <use href="#jumpkick-word" fill="#44ff5c" filter="url(#glow-tight)"/>
+    <!-- the lit phosphor itself -->
+    <use href="#jumpkick-word" fill="#ebfbec"/>
+    <!-- faint CRT scanlines over everything -->
+    <rect width="240" height="64" fill="url(#scanlines)" opacity="0.22"/>
+  </g>
+</svg>
