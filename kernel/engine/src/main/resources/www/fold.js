@@ -36,7 +36,14 @@ export function foldEvent(cards, event) {
         success: null, // tri-state: null = engine didn't say (socket requests) — derive from modules
         modules: [],
         phases: [],
-        phasesDone: 0, // completed phase-finish events — drives the running card's progress bar
+        // Weight-based progress, identical to the CLI: the engine streams per-module goal
+        // numerator/denominator (weight units); mods holds the latest per dir, and the card's bar
+        // is their sum over the plan total. planWeight seeds the denominator so a workspace bar
+        // never jumps backward as later modules start. etaMillis/etaAt drive the ETA countdown.
+        mods: {},
+        planWeight: 0,
+        etaMillis: null,
+        etaAt: null,
         output: [],
         diagnostics: [],
       });
@@ -55,12 +62,24 @@ export function foldEvent(cards, event) {
     }
     case 'phase-finish': {
       const card = byId(cards, d.requestId);
+      if (card) phaseRow(card, d.phase).state = phaseState(d.status);
+      break;
+    }
+    case 'plan': {
+      const card = byId(cards, d.requestId);
+      if (card) card.planWeight = d.weight || 0;
+      break;
+    }
+    case 'goal-progress': {
+      const card = byId(cards, d.requestId);
+      if (card) card.mods[d.dir || ''] = { num: d.numerator || 0, den: d.denominator || 0 };
+      break;
+    }
+    case 'eta': {
+      const card = byId(cards, d.requestId);
       if (card) {
-        phaseRow(card, d.phase).state = phaseState(d.status);
-        // Monotonic completed-phase counter (per module-phase, so it grows with real work);
-        // the progress bar reads this — see app.js progress(). Never decreases, so the bar only
-        // ever glides forward.
-        card.phasesDone = (card.phasesDone || 0) + 1;
+        card.etaMillis = typeof d.millis === 'number' ? d.millis : null;
+        card.etaAt = event.at ?? null;
       }
       break;
     }
@@ -111,6 +130,7 @@ export function foldEvent(cards, event) {
         card.cancelled = !!d.cancelled;
         card.success = typeof d.success === 'boolean' ? d.success : null;
         card.output = []; // the console tail is an in-flight affordance; finished cards are compact
+        card.etaMillis = null; // the countdown is an in-flight affordance; a finished card is 100%
       }
       break;
     }
@@ -118,6 +138,23 @@ export function foldEvent(cards, event) {
       break; // unknown event types are future vocabulary, never an error
   }
   return cards;
+}
+
+/** Sum of the latest per-module weight numerators — the completed weight so far. */
+export function weightNumerator(card) {
+  let n = 0;
+  for (const dir in card.mods || {}) n += card.mods[dir].num || 0;
+  return n;
+}
+
+/**
+ * The bar's denominator: the plan total when known (stable, so a workspace bar can't jump backward
+ * as later modules start), else the sum of per-module denominators (a single-goal build has one).
+ */
+export function weightDenominator(card) {
+  let den = 0;
+  for (const dir in card.mods || {}) den += card.mods[dir].den || 0;
+  return Math.max(card.planWeight || 0, den);
 }
 
 /**

@@ -234,13 +234,15 @@ main { max-width: 66rem; margin: 0 auto; padding: 18px 20px 3rem; }
 .summary { color: var(--mu); font-size: 12px; }
 .millis { color: var(--mu); font-size: 12px; }
 .ago { color: var(--dim); font-size: 11.5px; }
+/* ETA countdown on a running card — dim mono, sits just before the elapsed timer. */
+.eta { color: var(--dim); font-size: 11.5px; font-family: "JetBrainsMono Nerd Font Mono", "JetBrains Mono Nerd Font Mono", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace; }
 .dir { color: var(--path); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* phase chain — the design's DAG strip */
 
 /* Running-card progress bar: same indigo→magenta gradient as the CLI progress bars
  * (Theme PROGRESS_GRADIENT: PRIMARY #3F51B5 → BRIGHT_MAGENTA #E040FB). The width transition
- * glides smoothly from phase to phase as the fold's phasesDone counter advances. */
+ * glides smoothly as the engine's weight numerator/denominator advance (app.js progress()). */
 .cardbar {
   height: 4px;
   margin: 10px 0 2px;

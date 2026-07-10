@@ -87,10 +87,16 @@ Three small layers, one file each:
   - `cards` — `/api/events` entries folded (via `fold.js`, bounded at 50 cards) into per-request
     cards: a `request-start` opens a card, `module-start`/`goal-finish`/`module-finish` events
     update its rows, `request-finish` closes it with outcome + duration. Bounded so a long-lived
-    tab can't grow the page without limit. A running card carries a **progress bar** in the CLI's
-    indigo→magenta gradient; since the total phase count isn't known up front, it's a monotonic
-    estimate off the completed-phase counter (`done/(done+2)`) that only glides forward (CSS width
-    transition) and reaches 100% at finish. On load (and after every reconnect) the feed is also
+    tab can't grow the page without limit. A running card carries a **progress bar** and an **ETA
+    countdown** using the *identical* method as the CLI: the engine already computes the weight-based
+    plan (`EffortWeights`/`PhaseTimings`/`Calibration`) and the re-projected ETA, and now publishes
+    the same numbers to the SSE hub — `plan` (total weight), `goal-progress` (per-module
+    `numerator`/`denominator`) and `eta` (millis). `fold.js` aggregates the per-module counters
+    (`weightNumerator`/`weightDenominator`, plan-seeded so a workspace bar can't jump backward);
+    `app.js` `progress()` is `numerator/denominator` clamped to 99% while running (100% on finish),
+    and `eta()` is `eta − elapsed` as a live countdown (`~` remaining, `+` on overrun) — matching
+    `ProgressBar`/`CommandManager`. The bar uses the CLI's indigo→magenta gradient and a CSS width
+    transition. On load (and after every reconnect) the feed is also
     **backfilled** from the persisted journal via `GET /api/history` (`fold.js` `seedFromHistory`),
     so a reload or an engine restart no longer starts from an empty feed. Seeding is reconciled
     with live cards by `(dir, finishedAt)` — a run present in both feeds yields one card, tagged

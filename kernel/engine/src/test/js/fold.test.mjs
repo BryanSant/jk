@@ -210,3 +210,42 @@ test('seedFromHistory respects MAX_CARDS', () => {
   seedFromHistory(cards, records);
   assert.equal(cards.length, MAX_CARDS);
 });
+
+test('weight progress aggregates numerator/denominator across modules', async () => {
+  const { weightNumerator, weightDenominator } = await import(pathToFileURL(process.env.JK_FOLD_MJS));
+  const cards = [];
+  foldEvent(cards, start(1, '/w'));
+  foldEvent(cards, { type: 'plan', data: { requestId: 1, weight: 300 } });
+  foldEvent(cards, { type: 'goal-progress', data: { requestId: 1, dir: '/w/a', numerator: 50, denominator: 100 } });
+  foldEvent(cards, { type: 'goal-progress', data: { requestId: 1, dir: '/w/b', numerator: 20, denominator: 100 } });
+  assert.equal(weightNumerator(cards[0]), 70);
+  // denominator = max(planWeight 300, sum of module dens 200) = 300 — stable, no backward jump
+  assert.equal(weightDenominator(cards[0]), 300);
+});
+
+test('weight denominator falls back to summed module dens when no plan (single build)', async () => {
+  const { weightDenominator } = await import(pathToFileURL(process.env.JK_FOLD_MJS));
+  const cards = [];
+  foldEvent(cards, start(1, '/w'));
+  foldEvent(cards, { type: 'goal-progress', data: { requestId: 1, dir: '', numerator: 4, denominator: 12 } });
+  assert.equal(weightDenominator(cards[0]), 12);
+});
+
+test('goal-progress updates latest per dir (no double count on repeat)', async () => {
+  const { weightNumerator } = await import(pathToFileURL(process.env.JK_FOLD_MJS));
+  const cards = [];
+  foldEvent(cards, start(1, '/w'));
+  foldEvent(cards, { type: 'goal-progress', data: { requestId: 1, dir: '/w/a', numerator: 10, denominator: 100 } });
+  foldEvent(cards, { type: 'goal-progress', data: { requestId: 1, dir: '/w/a', numerator: 80, denominator: 100 } });
+  assert.equal(weightNumerator(cards[0]), 80); // latest wins, not 10+80
+});
+
+test('eta is captured and cleared on finish', () => {
+  const cards = [];
+  foldEvent(cards, { ...start(1, '/w'), at: 1000 });
+  foldEvent(cards, { ...{ type: 'eta', data: { requestId: 1, millis: 5000 } }, at: 1200 });
+  assert.equal(cards[0].etaMillis, 5000);
+  assert.equal(cards[0].etaAt, 1200);
+  foldEvent(cards, finish(1, { success: true }));
+  assert.equal(cards[0].etaMillis, null); // countdown stops on finish
+});

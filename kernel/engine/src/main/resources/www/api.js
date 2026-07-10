@@ -65,9 +65,12 @@ export async function del(path) {
 /** The engine event types the dashboard folds (EventSource needs a listener per named event). */
 const EVENT_TYPES = [
   'request-start',
+  'plan',
   'module-start',
   'phase-start',
   'phase-finish',
+  'goal-progress',
+  'eta',
   'output',
   'diagnostic',
   'goal-finish',

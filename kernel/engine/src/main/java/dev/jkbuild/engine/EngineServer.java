@@ -682,6 +682,52 @@ public final class EngineServer implements AutoCloseable {
     }
 
     /**
+     * The build's total weight (Σ module weights) — seeds the dashboard bar's denominator up front so
+     * the aggregate never jumps backward as later modules start. Mirrors what {@code onPlan} already
+     * sends the CLI as per-module {@code plan-module} weights. Weight is the same abstract unit the
+     * CLI bar uses ({@code EffortWeights}, ≈150 ms/unit); the dashboard only needs the ratio.
+     */
+    private void publishPlan(long requestId, long totalWeight) {
+        if (!eventsWanted()) return;
+        publishEvent(
+                "plan",
+                dev.jkbuild.engine.http.JsonOut.object()
+                        .put("requestId", requestId)
+                        .put("weight", totalWeight));
+    }
+
+    /**
+     * Weight-based progress for one module goal — the identical {@code numerator}/{@code denominator}
+     * the CLI progress bar renders (from {@link GoalView}). The dashboard sums these across modules
+     * for the request-level bar. Emitted on goal-start / progress / scope-update, exactly where the
+     * socket path sends {@code EngineProtocol.goalStart/progress/scopeUpdate}.
+     */
+    private void publishGoalProgress(long requestId, String dir, GoalView view) {
+        if (!eventsWanted()) return;
+        publishEvent(
+                "goal-progress",
+                dev.jkbuild.engine.http.JsonOut.object()
+                        .put("requestId", requestId)
+                        .put("dir", dir)
+                        .put("numerator", view.numerator())
+                        .put("denominator", view.denominator()));
+    }
+
+    /**
+     * The calibrated ETA in millis — the same value {@code jk build}'s countdown and {@code jk
+     * explain}'s estimate show ({@code BuildService.seedEta} + live re-projections). Emitted for the
+     * seed and every re-projection, exactly where the socket path sends {@code EngineProtocol.eta}.
+     */
+    private void publishEta(long requestId, long millis) {
+        if (!eventsWanted()) return;
+        publishEvent(
+                "eta",
+                dev.jkbuild.engine.http.JsonOut.object()
+                        .put("requestId", requestId)
+                        .put("millis", millis));
+    }
+
+    /**
      * Guard for event publishers: build the payload only when someone is listening. Split from
      * {@link #publishEvent} so hot listener callbacks (per-goal, per-module) pay one boolean check,
      * not a {@code JsonOut} allocation, when no dashboard is open.
@@ -2145,11 +2191,13 @@ public final class EngineServer implements AutoCloseable {
                     }
                 }
                 sendQuiet(writer, EngineProtocol.planDone(plan.size()));
+                publishPlan(eventRequestId, plan.stream().mapToLong(ModulePlan::weight).sum());
             }
 
             @Override
             public void onEtaEstimate(long millis) {
                 sendQuiet(writer, EngineProtocol.eta(millis));
+                publishEta(eventRequestId, millis);
             }
 
             @Override
@@ -2431,6 +2479,7 @@ public final class EngineServer implements AutoCloseable {
                                 view.phasesTotal(),
                                 view.phasesComplete(),
                                 view.cancelled()));
+                publishGoalProgress(eventRequestId, dir, view);
             }
 
             @Override
@@ -2452,6 +2501,7 @@ public final class EngineServer implements AutoCloseable {
                                 view.phasesTotal(),
                                 view.phasesComplete(),
                                 view.cancelled()));
+                publishGoalProgress(eventRequestId, dir, view);
             }
 
             @Override
@@ -2467,6 +2517,7 @@ public final class EngineServer implements AutoCloseable {
                                 view.phasesTotal(),
                                 view.phasesComplete(),
                                 view.cancelled()));
+                publishGoalProgress(eventRequestId, dir, view);
             }
 
             @Override
@@ -2680,10 +2731,35 @@ public final class EngineServer implements AutoCloseable {
         long eventRequestId = eventRequestId();
         return new WorkspaceBuildListener() {
             @Override
+            public void onPlan(java.util.List<ModulePlan> plan) {
+                publishPlan(eventRequestId, plan.stream().mapToLong(ModulePlan::weight).sum());
+            }
+
+            @Override
+            public void onEtaEstimate(long millis) {
+                publishEta(eventRequestId, millis);
+            }
+
+            @Override
             public GoalListener onModuleStart(ModulePlan m) {
                 String dir = m.dir().toString();
                 publishModuleStart(eventRequestId, dir);
                 return new GoalListener() {
+                    @Override
+                    public void goalStart(GoalView view) {
+                        publishGoalProgress(eventRequestId, dir, view);
+                    }
+
+                    @Override
+                    public void progress(String phase, int delta, GoalView view) {
+                        publishGoalProgress(eventRequestId, dir, view);
+                    }
+
+                    @Override
+                    public void scopeUpdate(String phase, int delta, GoalView view) {
+                        publishGoalProgress(eventRequestId, dir, view);
+                    }
+
                     @Override
                     public void phaseStart(String phase, int scope) {
                         publishPhaseStart(eventRequestId, dir, phase);

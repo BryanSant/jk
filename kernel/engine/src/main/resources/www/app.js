@@ -4,7 +4,7 @@
 // runtime compiler turns it into render functions at load (the CSP 'unsafe-eval' grant).
 
 import { bootstrapToken, get, getText, post, del, events } from './api.js';
-import { foldEvent, outcomeOf, moduleSummary, seedFromHistory } from './fold.js';
+import { foldEvent, outcomeOf, moduleSummary, seedFromHistory, weightNumerator, weightDenominator } from './fold.js';
 
 bootstrapToken();
 
@@ -124,15 +124,36 @@ Vue.createApp({
       if (view === 'status') this.refresh();
     },
 
-    // Progress percentage for a running card's bar. The total phase count isn't known up front
-    // (phase events stream in as the build advances), so this is a monotonic estimate keyed on the
-    // completed-phase counter — done/(done+PENDING) — which only ever moves forward and eases toward
-    // 100%. A finished card is 100%; the CSS width transition does the smooth gliding.
+    // Progress percentage for a running card's bar — the identical weight-based model as the CLI
+    // (ProgressBar): fraction = numerator/denominator of the engine's weight units, aggregated across
+    // modules (fold.js). Clamped to 99% while running; only a finished card is 100% — matching
+    // ProgressBarListener. No client-side estimation: the engine already did all the weight math.
     progress(card) {
       if (this.outcome(card) !== 'running') return 100;
-      const done = card.phasesDone || 0;
-      const PENDING = 2; // assume ~2 phases still to come — keeps the bar shy of 100% until finish
-      return Math.max(6, Math.round((100 * done) / (done + PENDING)));
+      const den = weightDenominator(card);
+      if (den <= 0) return 0; // no weight yet (before goal-start) — the bar fills in a beat
+      return Math.min(99, Math.round((100 * weightNumerator(card)) / den));
+    },
+
+    // Live ETA countdown for a running card — the same calibrated millis the CLI countdown and
+    // `jk explain` show. remaining = eta − elapsed; overrun flips to '+'. Empty when no estimate
+    // (the elapsed "+Ns" timer already covers count-up). Re-emitted eta events retarget it.
+    eta(card) {
+      if (this.outcome(card) !== 'running') return '';
+      const ms = card.etaMillis;
+      if (ms == null || ms <= 0 || card.startedAt == null) return '';
+      const remaining = ms - (this.now - card.startedAt);
+      return remaining >= 0 ? '~' + this.fmtClock(remaining) : '+' + this.fmtClock(-remaining);
+    },
+
+    // mm:ss-style clock mirroring the CLI's CommandManager.fmtClock: "42s" / "1m 02s" / "1h 05m 09s".
+    fmtClock(ms) {
+      const s = Math.max(0, Math.round(ms / 1000));
+      if (s < 60) return s + 's';
+      const pad = (n) => String(n).padStart(2, '0');
+      const m = Math.floor(s / 60);
+      if (m < 60) return m + 'm ' + pad(s % 60) + 's';
+      return Math.floor(m / 60) + 'h ' + pad(m % 60) + 'm ' + pad(s % 60) + 's';
     },
 
     outcome(card) {
