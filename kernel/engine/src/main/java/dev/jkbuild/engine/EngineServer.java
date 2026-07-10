@@ -2887,6 +2887,11 @@ public final class EngineServer implements AutoCloseable {
         BuildRecord toRecord(long finishedAt, boolean cancelled, long millis, String jkVersion) {
             boolean ok = success != null ? success : (!anyFailure && !cancelled);
             int exit = success != null ? exitCode : (ok ? 0 : 1);
+            // A build that reported success was not cancelled: cancelToken.cancelled() also fires on
+            // the benign end-of-request EOF (the client closes the socket the instant it reads the
+            // terminal message, which can land just before the runner marks itself done), so trust
+            // the outcome over that flag and never label a successful run "cancelled".
+            boolean cancelledEffective = cancelled && !ok;
             java.util.List<BuildRecord.Phase> phaseList;
             synchronized (phases) {
                 phaseList = new java.util.ArrayList<>(phases.values());
@@ -2894,7 +2899,7 @@ public final class EngineServer implements AutoCloseable {
             return new BuildRecord(
                     null, BuildRecord.SCHEMA, kind, dir, coord,
                     finishedAt - millis, finishedAt, millis,
-                    ok, cancelled, exit, jkVersion,
+                    ok, cancelledEffective, exit, jkVersion,
                     tests, new java.util.ArrayList<>(modules), phaseList, new java.util.ArrayList<>(diagnostics));
         }
 
