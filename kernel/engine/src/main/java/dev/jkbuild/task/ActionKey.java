@@ -149,7 +149,16 @@ public final class ActionKey {
      * and classpath paths); this only disambiguates the per-task pointer.
      */
     public static String qualifiedTaskId(String base, Path moduleDir) {
-        String tag = Hashing.sha256Hex(moduleDir.toAbsolutePath().normalize().toString());
-        return base + "@" + tag.substring(0, 12);
+        return base + "@" + taskTag(moduleDir);
+    }
+
+    /**
+     * The 12-hex-char tag {@link #qualifiedTaskId} appends after {@code @} — a stable hash of a
+     * module-unique directory. Exposed so cache maintenance ({@code jk cache clear}) can recompute
+     * the tags for a project's output dirs and match every {@code tasks/<base>@<tag>} pointer that
+     * belongs to it, regardless of the base task name.
+     */
+    public static String taskTag(Path moduleDir) {
+        return Hashing.sha256Hex(moduleDir.toAbsolutePath().normalize().toString()).substring(0, 12);
     }
 }

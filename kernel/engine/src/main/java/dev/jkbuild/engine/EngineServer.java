@@ -1825,6 +1825,8 @@ public final class EngineServer implements AutoCloseable {
                                 switch (op) {
                                     case "purge" -> dev.jkbuild.runtime.CacheGoals.purgeGoal(cache);
                                     case "gc" -> dev.jkbuild.runtime.CacheGoals.gcGoal(cache);
+                                    case "clear" -> dev.jkbuild.runtime.CacheGoals.clearGoal(
+                                            cache, Path.of(Ndjson.str(requestLine, "projectRoot")), dryRun);
                                     default -> dev.jkbuild.runtime.CacheGoals.pruneGoal(
                                             cache,
                                             Ndjson.intValue(requestLine, "olderThanDays", 30),

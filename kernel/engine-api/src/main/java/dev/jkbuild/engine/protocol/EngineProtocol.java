@@ -1975,6 +1975,24 @@ public final class EngineProtocol {
                 + "}";
     }
 
+    /**
+     * A project-scoped cache-clear request (see {@link #CACHE_PRUNE_REQUEST}, {@code op="clear"}):
+     * invalidate the action-cache entries for the project at {@code projectRoot} and its workspace.
+     * Reuses the maintenance channel; {@code projectRoot} is the extra field the server reads for
+     * this op, and {@code dryRun} reports what would be removed without deleting.
+     */
+    public static String cacheClearRequest(String cache, String projectRoot, boolean dryRun) {
+        return "{\"t\":\""
+                + CACHE_PRUNE_REQUEST
+                + "\",\"op\":\"clear\",\"cache\":"
+                + Ndjson.quote(cache)
+                + ",\"projectRoot\":"
+                + Ndjson.quote(projectRoot)
+                + ",\"dryRun\":"
+                + dryRun
+                + "}";
+    }
+
     /** The maintenance job is waiting for the cache to quiesce (see {@link #PRUNE_WAIT}). */
     public static String pruneWait(int pipelines, boolean external) {
         return "{\"t\":\""

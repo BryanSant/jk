@@ -803,6 +803,17 @@ public final class InProcessEngineImpl implements InProcessEngine {
         return goalResult.success() ? 0 : 1;
     }
 
+    @Override
+    public int clearInProcess(Path root, Path projectDir, boolean dryRun, GoalConsole.Mode mode) throws IOException {
+        Goal goal = dev.jkbuild.runtime.CacheGoals.clearGoal(root, projectDir, dryRun);
+        ConsoleSpec spec = CacheCommand.CacheClearCommand.clearSpec(
+                dryRun,
+                () -> goal.get(dev.jkbuild.runtime.CacheGoals.FILES).orElse(0L),
+                () -> goal.get(dev.jkbuild.runtime.CacheGoals.BYTES).orElse(0L));
+        GoalResult goalResult = GoalConsole.runGoal(goal, mode, root, spec, "Cache");
+        return goalResult.success() ? 0 : 1;
+    }
+
     // ---- jk native's test-only in-process cascade (identical goals via NativeGoals) ------------
 
     /** In-process workspace cascade — the test-only bypass; builds the exact same goals via {@link NativeGoals}. */

@@ -51,6 +51,7 @@ public final class CacheCommand extends GroupCommand {
                 new CacheDirCommand(),
                 new CacheInfoCommand(),
                 new CacheSearchCommand(),
+                new CacheClearCommand(),
                 new CachePruneCommand(),
                 new CachePurgeCommand());
     }
@@ -437,6 +438,129 @@ public final class CacheCommand extends GroupCommand {
                 if (!found) return false;
             }
             return true;
+        }
+    }
+
+    /**
+     * {@code jk cache clear} — invalidate the action-cache entries for the current project <em>and
+     * its whole workspace</em> (the cascade), so the next build can't hit a cached compile, test,
+     * or packaged artifact. Refuses to run outside a project (no {@code jk.toml} in the working
+     * dir). Engine-hosted like {@code prune}/{@code purge} (Wave 4): the deletion runs at an idle
+     * boundary so it can't race an in-flight pipeline. Only the action-cache mapping is removed —
+     * CAS blobs survive and are reclaimed later by {@code jk cache prune --sweep}.
+     */
+    public static final class CacheClearCommand implements CliCommand {
+        @Override
+        public String name() {
+            return "clear";
+        }
+
+        @Override
+        public String description() {
+            return "Invalidate this project's build cache (project + workspace)";
+        }
+
+        @Override
+        public List<Opt> options() {
+            return List.of(
+                    Opt.flag("Print what would be invalidated; touch nothing.", "--dry-run"),
+                    Opt.flag("Skip the confirmation prompt.", "-y", "--yes"),
+                    Opt.value("<dir>", "Override the jk cache directory.", "--cache-dir")
+                            .hide());
+        }
+
+        private static boolean engineDisabledForTests() {
+            return Boolean.getBoolean("jk.test.noEngine")
+                    || "dev.jkbuild.test.runner.JkRunner".equals(System.getProperty("jk.plugin.class"));
+        }
+
+        @Override
+        public int run(Invocation in) throws IOException {
+            GlobalOptions global = GlobalOptions.from(in);
+            Path projectDir = global.workingDir();
+            Path manifest = projectDir.resolve("jk.toml");
+            boolean nerdfont = dev.jkbuild.config.GlobalConfig.nerdfont();
+            if (!Files.isRegularFile(manifest)) {
+                Theme t = Theme.active();
+                CliOutput.err(Theme.colorize(Glyphs.CROSS, t.error())
+                        + " Not a jk project — no "
+                        + Theme.colorize("jk.toml", t.warning())
+                        + " in "
+                        + dev.jkbuild.cli.PathDisplay.styledRaw(projectDir)
+                        + ".");
+                CliOutput.err("  Run this from a project directory; it clears that project and its workspace.");
+                return dev.jkbuild.model.command.Exit.CONFIG;
+            }
+
+            boolean dryRun = in.isSet("dry-run");
+            boolean assumeYes = in.isSet("yes");
+            Path cacheDir = in.value("cache-dir").map(Path::of).orElse(null);
+            Path root = resolveCacheRoot(cacheDir);
+
+            if (!dryRun && !assumeYes && !confirmClear()) {
+                CliOutput.out(dev.jkbuild.cli.tui.GoalWedge.chipLine(
+                        Glyphs.CROSS, "Cache", nerdfont, "Clear aborted."));
+                return 1;
+            }
+
+            GoalConsole.Mode mode = GoalConsole.modeFor(global);
+
+            if (engineDisabledForTests()) {
+                return dev.jkbuild.cli.engine.InProcessEngine.require().clearInProcess(root, projectDir, dryRun, mode);
+            }
+            // Counts settle from the terminal goal-finish before the console listener renders.
+            var summary = new dev.jkbuild.cli.engine.EngineClient.CacheMaintSummary[1];
+            ConsoleSpec spec = clearSpec(
+                    dryRun,
+                    () -> summary[0] != null ? summary[0].files() : 0L,
+                    () -> summary[0] != null ? summary[0].bytes() : 0L);
+            dev.jkbuild.run.GoalResult result;
+            try {
+                result = dev.jkbuild.cli.engine.EngineClient.runCacheMaintenance(
+                        dev.jkbuild.engine.EnginePaths.current(),
+                        new dev.jkbuild.cli.engine.EngineClient.CacheMaintRequest(
+                                "clear", root, 0, dryRun, false, null, false, projectDir),
+                        phases -> GoalConsole.chooseConsoleListener(phases, mode, spec, "Cache"),
+                        CacheCommand::printWait,
+                        summary);
+            } catch (IOException e) {
+                CliOutput.err("jk cache clear: " + e.getMessage());
+                return dev.jkbuild.model.command.Exit.SOFTWARE;
+            }
+            return result.success() ? 0 : 1;
+        }
+
+        /** The Cache chip spec; counts are read lazily, at result-line render time. */
+        static ConsoleSpec clearSpec(
+                boolean dryRun, java.util.function.LongSupplier files, java.util.function.LongSupplier bytes) {
+            return new ConsoleSpec(
+                    "Cache",
+                    r -> {
+                        long f = Math.max(0, files.getAsLong());
+                        long b = Math.max(0, bytes.getAsLong());
+                        if (f == 0) {
+                            return dryRun
+                                    ? "Dry run: nothing cached for this project."
+                                    : "Build cache already clear for this project.";
+                        }
+                        String noun = f == 1 ? "entry" : "entries";
+                        return dryRun
+                                ? "Dry run: would invalidate " + fmtCount(f) + " " + noun + ", " + fmtBytes(b)
+                                        + " reclaimable."
+                                : "Invalidated " + fmtCount(f) + " cache " + noun + ", " + fmtBytes(b) + " freed.";
+                    },
+                    r -> "Failed to clear the build cache.",
+                    true);
+        }
+
+        /** Default-to-yes confirmation ({@code [Y/n]}) — the mutation is recoverable (a rebuild). */
+        private static boolean confirmClear() {
+            Theme t = Theme.active();
+            CliOutput.out("This invalidates the build cache for this project and its workspace;");
+            CliOutput.out("  the next build re-runs from scratch. CAS blobs are kept.");
+            return dev.jkbuild.cli.tui.Confirm.of(
+                            Theme.colorize(Glyphs.BANG, t.warning()) + " Clear the build cache?", true)
+                    .ask();
         }
     }
 

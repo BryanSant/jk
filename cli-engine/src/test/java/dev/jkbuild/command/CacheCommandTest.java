@@ -162,7 +162,146 @@ class CacheCommandTest {
         assertThat(exit).isEqualTo(1);
     }
 
+    @Test
+    void clear_requires_a_jk_toml(@TempDir Path tempDir) {
+        Path cache = tempDir.resolve("cache");
+        int exit = run("cache", "clear", "-C", tempDir.toString(), "--cache-dir", cache.toString(), "--yes");
+        // Exit.CONFIG — no jk.toml in the working dir.
+        assertThat(exit).isEqualTo(2);
+    }
+
+    @Test
+    void clear_with_yes_invalidates_this_projects_entries(@TempDir Path tempDir) throws Exception {
+        Path proj = tempDir.resolve("proj");
+        writeProject(proj, "com.example", "proj", "0.1.0");
+        Path cache = tempDir.resolve("cache");
+        String tag = classesTag(proj);
+        seedRecord(cache, "keyProject", "compile-main@" + tag, null);
+        seedRecord(cache, "keyTests", "run-tests@" + tag, null); // path-less: matched by tag
+        seedRecord(cache, "keyOther", "compile-main@ffffffffffff", null); // different project
+
+        String stdout = capture(() ->
+                run("cache", "clear", "-C", proj.toString(), "--cache-dir", cache.toString(), "--yes"));
+
+        assertThat(Files.exists(cache.resolve("actions/keys/keyProject"))).isFalse();
+        assertThat(Files.exists(cache.resolve("actions/keys/keyTests"))).isFalse();
+        assertThat(Files.exists(cache.resolve("actions/tasks/compile-main@" + tag))).isFalse();
+        assertThat(Files.exists(cache.resolve("actions/keys/keyOther"))).isTrue();
+        // Two records matched (compile + test), each with its tasks/ pointer → 4 files removed.
+        assertThat(stdout).contains("Invalidated").contains("4 cache entries");
+    }
+
+    @Test
+    void clear_matches_records_by_input_path(@TempDir Path tempDir) throws Exception {
+        Path proj = tempDir.resolve("proj");
+        writeProject(proj, "com.example", "proj", "0.1.0");
+        Path cache = tempDir.resolve("cache");
+        // Unknown tag, but an INPUT source path under the project → still this project's.
+        String src = proj.toAbsolutePath().normalize().resolve("src/main/java/A.java").toString();
+        seedRecord(cache, "keyPath", "compile-main@ffffffffffff", "INPUT abc123 " + src);
+
+        run("cache", "clear", "-C", proj.toString(), "--cache-dir", cache.toString(), "--yes");
+
+        assertThat(Files.exists(cache.resolve("actions/keys/keyPath"))).isFalse();
+        assertThat(Files.exists(cache.resolve("actions/tasks/compile-main@ffffffffffff")))
+                .isFalse();
+    }
+
+    @Test
+    void clear_cascades_to_workspace_modules(@TempDir Path tempDir) throws Exception {
+        Files.writeString(
+                tempDir.resolve("jk.toml"),
+                """
+                [project]
+                group = "com.example"
+                name  = "ws"
+                version = "1.0.0"
+                java = 25
+
+                [workspace]
+                modules = ["mod"]
+                """,
+                StandardCharsets.UTF_8);
+        Path mod = tempDir.resolve("mod");
+        writeProject(mod, "com.example", "mod", "1.0.0");
+        Path cache = tempDir.resolve("cache");
+        seedRecord(cache, "keyMod", "compile-main@" + classesTag(mod), null);
+
+        // Clear from the workspace root — the module's entry must go too (the cascade).
+        run("cache", "clear", "-C", tempDir.toString(), "--cache-dir", cache.toString(), "--yes");
+
+        assertThat(Files.exists(cache.resolve("actions/keys/keyMod"))).isFalse();
+    }
+
+    @Test
+    void clear_dry_run_reports_without_deleting(@TempDir Path tempDir) throws Exception {
+        Path proj = tempDir.resolve("proj");
+        writeProject(proj, "com.example", "proj", "0.1.0");
+        Path cache = tempDir.resolve("cache");
+        seedRecord(cache, "keyProject", "compile-main@" + classesTag(proj), null);
+
+        String stdout = capture(() ->
+                run("cache", "clear", "-C", proj.toString(), "--cache-dir", cache.toString(), "--dry-run"));
+
+        assertThat(Files.exists(cache.resolve("actions/keys/keyProject"))).isTrue();
+        assertThat(stdout).contains("Dry run: would invalidate");
+    }
+
+    @Test
+    void clear_aborts_when_not_confirmed(@TempDir Path tempDir) throws Exception {
+        Path proj = tempDir.resolve("proj");
+        writeProject(proj, "com.example", "proj", "0.1.0");
+        Path cache = tempDir.resolve("cache");
+        seedRecord(cache, "keyProject", "compile-main@" + classesTag(proj), null);
+
+        String stdout = withStdin(
+                "n\n",
+                () -> capture(() -> run("cache", "clear", "-C", proj.toString(), "--cache-dir", cache.toString())));
+
+        assertThat(stdout).contains("aborted");
+        assertThat(Files.exists(cache.resolve("actions/keys/keyProject"))).isTrue();
+    }
+
     // --- helpers -----------------------------------------------------------
+
+    /** Minimal buildable project manifest. */
+    private static void writeProject(Path dir, String group, String name, String version) throws Exception {
+        Files.createDirectories(dir);
+        Files.writeString(
+                dir.resolve("jk.toml"),
+                """
+                [project]
+                group = "%s"
+                name  = "%s"
+                version = "%s"
+                java = 25
+                """
+                        .formatted(group, name, version),
+                StandardCharsets.UTF_8);
+    }
+
+    /** The qualified-task tag the build would use for {@code projectDir}'s main classes dir. */
+    private static String classesTag(Path projectDir) throws Exception {
+        Path norm = projectDir.toAbsolutePath().normalize();
+        dev.jkbuild.model.JkBuild jb = dev.jkbuild.config.JkBuildParser.parse(norm.resolve("jk.toml"));
+        return dev.jkbuild.task.ActionKey.taskTag(
+                dev.jkbuild.layout.BuildLayout.of(norm, jb).classesDir());
+    }
+
+    /** Write an action record ({@code keys/<key>}) plus its {@code tasks/<taskId>} pointer. */
+    private static void seedRecord(Path cache, String key, String taskId, String extraInputLine) throws Exception {
+        Path keyFile = cache.resolve("actions/keys").resolve(key);
+        Files.createDirectories(keyFile.getParent());
+        StringBuilder sb = new StringBuilder();
+        sb.append("TASK ").append(taskId).append('\n');
+        sb.append("KEY ").append(key).append('\n');
+        if (extraInputLine != null) sb.append(extraInputLine).append('\n');
+        sb.append("OUTPUT deadbeef foo.class\n");
+        Files.writeString(keyFile, sb.toString());
+        Path ptr = cache.resolve("actions/tasks").resolve(taskId);
+        Files.createDirectories(ptr.getParent());
+        Files.writeString(ptr, key);
+    }
 
     /** Materialise a jar for {@code group:artifact:version} into the "central" named-repo store. */
     private static void seedRepo(Path cache, String group, String artifact, String version) {

@@ -767,6 +767,71 @@ class EngineServerTest {
         serverThread.join(5_000);
     }
 
+    /**
+     * Engine-hosted {@code jk cache clear} round-trip: a real server over the socket invalidates the
+     * action-cache entries for a fixture project, matching a record by its qualified-task tag while
+     * leaving an unrelated project's record untouched. Also asserts the {@code .prune.lock} guard.
+     */
+    @Test
+    void cache_clear_request_invalidates_the_projects_entries_over_the_socket() throws Exception {
+        Path cache = shortTempDir();
+        Path project = shortTempDir();
+        Files.writeString(
+                project.resolve("jk.toml"),
+                """
+                [project]
+                group = "com.example"
+                name  = "proj"
+                version = "0.1.0"
+                java = 25
+                """);
+        String tag = dev.jkbuild.task.ActionKey.taskTag(
+                dev.jkbuild.layout.BuildLayout.of(project, dev.jkbuild.config.JkBuildParser.parse(project.resolve("jk.toml")))
+                        .classesDir());
+        Path mine = cache.resolve("actions/keys/mine");
+        Files.createDirectories(mine.getParent());
+        Files.writeString(mine, "TASK compile-main@" + tag + "\nKEY mine\nOUTPUT deadbeef foo.class\n");
+        Files.createDirectories(cache.resolve("actions/tasks"));
+        Files.writeString(cache.resolve("actions/tasks/compile-main@" + tag), "mine");
+        Path other = cache.resolve("actions/keys/other");
+        Files.writeString(other, "TASK compile-main@ffffffffffff\nKEY other\nOUTPUT deadbeef foo.class\n");
+
+        EnginePaths.Paths p = paths(shortTempDir());
+        EngineServer server = new EngineServer(p, JkEngineConfig.DEFAULTS, "1.0", null);
+        Thread serverThread = runInBackground(server);
+        waitUntil(Duration.ofSeconds(5), () -> Files.exists(p.socket()));
+
+        String goalFinish = null;
+        String buildError = null;
+        try (Client c = new Client(p.socket())) {
+            c.sendLine(EngineProtocol.cacheClearRequest(cache.toString(), project.toString(), false));
+            String line;
+            while ((line = c.readLine()) != null) {
+                String type = EngineProtocol.typeOf(line);
+                switch (type) {
+                    case EngineProtocol.GOAL_FINISH -> goalFinish = line;
+                    case EngineProtocol.BUILD_ERROR -> buildError = line;
+                    default -> {
+                        /* plan/progress events */
+                    }
+                }
+                if (goalFinish != null || buildError != null) break;
+            }
+        }
+
+        assertThat(buildError).isNull();
+        assertThat(goalFinish).isNotNull();
+        assertThat(Ndjson.bool(goalFinish, "success", false)).isTrue();
+        assertThat(Ndjson.longValue(goalFinish, "cacheFiles", -1)).isEqualTo(2); // record + pointer
+        assertThat(Files.exists(mine)).isFalse();
+        assertThat(Files.exists(cache.resolve("actions/tasks/compile-main@" + tag))).isFalse();
+        assertThat(Files.exists(other)).isTrue();
+        assertThat(Files.exists(cache.resolve(".prune.lock"))).isTrue();
+
+        server.close();
+        serverThread.join(5_000);
+    }
+
     /** Minimal metadata + dependency-free POM + stub jar for one coordinate on the mock repo. */
     private static void seedArtifact(java.util.Map<String, byte[]> served, String group, String artifact, String version) {
         String base = "/" + group.replace('.', '/') + "/" + artifact;

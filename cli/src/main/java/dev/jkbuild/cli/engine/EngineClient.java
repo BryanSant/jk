@@ -957,7 +957,21 @@ public final class EngineClient {
      * maxSize} may be {@code null}; the non-prune ops ignore the prune-only fields.
      */
     public record CacheMaintRequest(
-            String op, Path cache, int olderThanDays, boolean dryRun, boolean sweep, String maxSize, boolean includeJkTmp) {}
+            String op,
+            Path cache,
+            int olderThanDays,
+            boolean dryRun,
+            boolean sweep,
+            String maxSize,
+            boolean includeJkTmp,
+            Path projectRoot) {
+
+        /** Prune/purge/gc request — no project scope. */
+        public CacheMaintRequest(
+                String op, Path cache, int olderThanDays, boolean dryRun, boolean sweep, String maxSize, boolean includeJkTmp) {
+            this(op, cache, olderThanDays, dryRun, sweep, maxSize, includeJkTmp, null);
+        }
+    }
 
     /** A hosted cache maintenance op's summary, decoded from the terminal goal-finish ({@code -1} = n/a). */
     public record CacheMaintSummary(long files, long bytes, long reachableEvicted, long repoLinks) {}
@@ -979,16 +993,20 @@ public final class EngineClient {
             java.util.function.ObjIntConsumer<Boolean> onWait,
             CacheMaintSummary[] summaryOut)
             throws IOException {
+        String requestLine = "clear".equals(req.op())
+                ? EngineProtocol.cacheClearRequest(
+                        req.cache().toString(), req.projectRoot().toString(), req.dryRun())
+                : EngineProtocol.cachePruneRequest(
+                        req.op(),
+                        req.cache().toString(),
+                        req.olderThanDays(),
+                        req.dryRun(),
+                        req.sweep(),
+                        req.maxSize(),
+                        req.includeJkTmp());
         return EngineWorkerAdapter.stream(
                         paths,
-                        EngineProtocol.cachePruneRequest(
-                                req.op(),
-                                req.cache().toString(),
-                                req.olderThanDays(),
-                                req.dryRun(),
-                                req.sweep(),
-                                req.maxSize(),
-                                req.includeJkTmp()),
+                        requestLine,
                         "cache-" + req.op(),
                         listenerFactory,
                         (type, line) -> onWait.accept(

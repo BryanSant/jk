@@ -269,6 +269,17 @@ public interface InProcessEngine {
             dev.jkbuild.cli.run.ConsoleSpec spec)
             throws java.io.IOException;
 
+    /**
+     * {@code jk cache clear}'s in-process invalidation (test-only; the jk.toml check + confirm stay
+     * in the command). Invalidates the action-cache entries for {@code projectDir} and its workspace.
+     */
+    int clearInProcess(
+            java.nio.file.Path root,
+            java.nio.file.Path projectDir,
+            boolean dryRun,
+            dev.jkbuild.cli.run.GoalConsole.Mode mode)
+            throws java.io.IOException;
+
     /** {@code jk native}'s in-process workspace cascade (test-only; identical goals via {@code NativeGoals}). */
     int nativeWorkspaceInProcess(
             java.nio.file.Path wsRoot,
