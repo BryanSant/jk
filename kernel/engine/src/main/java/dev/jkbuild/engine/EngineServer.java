@@ -565,15 +565,15 @@ public final class EngineServer implements AutoCloseable {
     }
 
     /**
-     * {@code cancelToken.cancelled()} corrected against the build's real outcome: a build the runner
-     * reported successful was not cancelled (the token also fires on the client closing the socket
-     * the instant it reads the terminal message). Non-build requests have no accumulator and pass
-     * the raw flag through.
+     * Whether the build was genuinely cancelled. {@code cancelToken.cancelled()} is unreliable — it
+     * also trips on the benign end-of-request EOF (the client closing the socket the instant it reads
+     * the terminal message), which would mislabel a plain success or a real test failure as
+     * "cancelled". For a build we trust the runner's own {@link GoalResult#userCancelled()} (captured
+     * in the accumulator); only non-build requests (no accumulator) fall back to the raw token.
      */
     private boolean effectiveCancelled(long requestId, boolean rawCancelled) {
-        if (!rawCancelled) return false;
         BuildAccumulator a = accumulators.get(requestId);
-        return a == null || !a.succeeded();
+        return a != null ? a.wasCancelled() : rawCancelled;
     }
 
     /** {@code "jk-engine-build-"} → {@code "build"} — the event vocabulary's request kind. */
@@ -2971,6 +2971,7 @@ public final class EngineServer implements AutoCloseable {
         private final java.util.List<BuildRecord.Diag> diagnostics = new java.util.concurrent.CopyOnWriteArrayList<>();
         private volatile BuildRecord.Tests tests;
         private volatile boolean anyFailure;
+        private volatile boolean userCancelled;
         private volatile Boolean success;
         private volatile int exitCode;
 
@@ -2987,6 +2988,11 @@ public final class EngineServer implements AutoCloseable {
         /** True only when the runner explicitly reported success (not merely "no failure seen yet"). */
         boolean succeeded() {
             return Boolean.TRUE.equals(success);
+        }
+
+        /** Genuine cancellation, from the runner's own signal (not the racy end-of-request EOF). */
+        boolean wasCancelled() {
+            return userCancelled;
         }
 
         void addModule(ModuleOutcome o) {
@@ -3013,6 +3019,7 @@ public final class EngineServer implements AutoCloseable {
                         "warning", d.phase(), d.code(), d.message(), d.test(), d.exceptionClass()));
             }
             if (!result.success()) anyFailure = true;
+            if (result.userCancelled()) userCancelled = true;
         }
 
         private java.util.List<BuildRecord.Phase> phasesFor(String dir) {
