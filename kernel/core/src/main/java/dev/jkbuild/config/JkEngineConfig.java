@@ -41,7 +41,7 @@ public record JkEngineConfig(int idleMinutes, int maxHeapMb) {
      * Initial heap the spawner requests ({@code -Xms}, clamped to {@link #maxHeapMb} when the user
      * configures a smaller ceiling). The engine is long-lived; pre-sizing avoids growth churn.
      */
-    public static final int MIN_HEAP_MB = 96;
+    public static final int MIN_HEAP_MB = 32;
 
     public static final JkEngineConfig DEFAULTS = new JkEngineConfig(DEFAULT_IDLE_MINUTES, DEFAULT_MAX_HEAP_MB);
 

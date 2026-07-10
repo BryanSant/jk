@@ -121,7 +121,7 @@ max-heap-mb  = 256   # default; env override JK_ENGINE_MAX_HEAP_MB
   indefinitely and manage its lifetime yourself.
 
 `max-heap-mb` — the heap ceiling for the engine *process itself*, applied by the spawning client
-(`-Xmx`, alongside `-Xms96m` pre-sizing and SerialGC; a process can't shrink its own ceiling, so
+(`-Xmx`, alongside `-Xms32m` pre-sizing and SerialGC; a process can't shrink its own ceiling, so
 this necessarily lives on the spawn path). Default `256` — this *is* the memory target, enforced.
 The engine never needs the runtime's uncapped default (¼ of RAM) because it is pure orchestration:
 compiles and tests run in separately-sized worker JVMs. Raise it on a CI box hosting many large
@@ -351,7 +351,7 @@ and retries your command against it. You never see this happen; it costs the one
 
 The engine targets **256 MiB** — no longer just an aim: the spawn-time heap ceiling defaults to
 exactly that (`max-heap-mb` — see [Configuring the engine](#configuring-the-engine)), with
-`-Xms96m` pre-sizing and `-XX:+UseSerialGC` on the spawn line for low GC overhead on a heap this
+`-Xms32m` pre-sizing and `-XX:+UseSerialGC` on the spawn line for low GC overhead on a heap this
 size. Observable at any time via the
 memory line of `jk engine status`. It doesn't do the heavy lifting
 itself — compiles

@@ -133,7 +133,7 @@ application {
 // dev.jkbuild.cli.EngineMain`. The version in the filename IS the compatibility contract: the
 // client only launches a jar whose version matches its own. The engine is deliberately NOT a
 // native image: it is long-lived, so HotSpot's JIT and SHA-256 intrinsics serve its hashing-heavy
-// hot path, and its heap/GC profile is plain JVM flags on the spawn line (SerialGC, -Xms96m
+// hot path, and its heap/GC profile is plain JVM flags on the spawn line (SerialGC, -Xms32m
 // -Xmx256m from JkEngineConfig) instead of baked -R: defaults.
 tasks.shadowJar {
     archiveBaseName.set("jk-engine")
