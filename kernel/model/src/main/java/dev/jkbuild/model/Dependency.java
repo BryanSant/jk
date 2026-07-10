@@ -152,6 +152,25 @@ public record Dependency(
         return new Dependency(library, module, VersionSelector.parse("=" + version), null, sha256, false);
     }
 
+    /**
+     * Synthetic {@link #version} literal for a dep declared with no version at all: the pin comes
+     * from an imported {@code [platform-dependencies]} BOM at resolve time (spring-boot plan
+     * §3.1). Same pattern as git deps' {@code =git} marker; consumers gate on
+     * {@link #isPlatformManaged()}.
+     */
+    public static final String PLATFORM_MANAGED_VERSION = "platform-managed";
+
+    /** A versionless dep whose version an imported platform BOM must supply. */
+    public static Dependency platformManaged(String library, String module) {
+        return new Dependency(
+                library, module, VersionSelector.parse("=" + PLATFORM_MANAGED_VERSION), null, null, false);
+    }
+
+    /** True when {@link #version} is the {@link #PLATFORM_MANAGED_VERSION} placeholder. */
+    public boolean isPlatformManaged() {
+        return version instanceof VersionSelector.Exact e && PLATFORM_MANAGED_VERSION.equals(e.version());
+    }
+
     public boolean isGit() {
         return gitSource != null;
     }

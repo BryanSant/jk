@@ -585,9 +585,14 @@ public final class JkBuildParser {
                 + (hasSha256 ? 1 : 0);
         // The only legal multi-source pairing: sha256 + version (version records the coordinate).
         boolean sha256WithVersion = hasSha256 && hasVersion && !hasGit && !hasWorkspace;
-        if (sourceCount == 0) {
+        // No source at all + a known coordinate = platform-managed: the version comes from an
+        // imported [platform-dependencies] BOM at resolve time (spring-boot plan §3.1) —
+        // `starter-webmvc = { group = "org.springframework.boot", name = "..." }`.
+        boolean platformManaged = sourceCount == 0 && (entry.contains("group") || entry.contains("name"));
+        if (sourceCount == 0 && !platformManaged) {
             throw new JkBuildParseException(
-                    displayPath + " must set exactly one of `version`, `git`, `sha256`, or `workspace = true`");
+                    displayPath + " must set exactly one of `version`, `git`, `sha256`, or `workspace = true`"
+                    + " — or `group`/`name` alone for a version managed by a [platform-dependencies] BOM");
         }
         if (sourceCount > 1 && !sha256WithVersion) {
             throw new JkBuildParseException(displayPath
@@ -654,6 +659,15 @@ public final class JkBuildParser {
                 }
             }
             return Dependency.gitByName(name, parseGitSource(entry, displayPath));
+        }
+
+        if (platformManaged) {
+            if (group == null || group.isBlank()) {
+                throw new JkBuildParseException(displayPath
+                        + " has no `version` and no resolvable `group` — a platform-managed dep needs"
+                        + " an explicit `group` (or a catalog short name)");
+            }
+            return Dependency.platformManaged(name, group + ":" + artifact);
         }
 
         // version-only.

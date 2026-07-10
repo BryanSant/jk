@@ -199,6 +199,57 @@ class LockOrchestratorBomTest {
     }
 
     @Test
+    void platform_managed_versionless_root_resolves_through_the_bom(@TempDir Path tempDir) throws Exception {
+        // The Spring Boot flow: import spring-boot-dependencies, declare starters with
+        // NO version at all (spring-boot plan §3.1) — the BOM supplies the pin.
+        servePom("org.example", "the-bom", "1.0", """
+                <project>
+                  <groupId>org.example</groupId>
+                  <artifactId>the-bom</artifactId>
+                  <version>1.0</version>
+                  <packaging>pom</packaging>
+                  <dependencyManagement>
+                    <dependencies>
+                      <dependency>
+                        <groupId>com.foo</groupId>
+                        <artifactId>widget</artifactId>
+                        <version>1.0</version>
+                      </dependency>
+                    </dependencies>
+                  </dependencyManagement>
+                </project>
+                """);
+        servePom("com.foo", "widget", "1.0", """
+                <project>
+                  <groupId>com.foo</groupId>
+                  <artifactId>widget</artifactId>
+                  <version>1.0</version>
+                </project>
+                """);
+
+        JkBuild project = jkBuildWithDeps(Map.of(
+                Scope.PLATFORM,
+                        List.of(Dependency.of("the-bom", "org.example:the-bom", VersionSelector.parse("=1.0"))),
+                Scope.MAIN, List.of(Dependency.platformManaged("widget", "com.foo:widget"))));
+
+        Lockfile lock = new LockOrchestrator(repoGroup(tempDir)).lock(project, "test");
+        Lockfile.Artifact widget = lock.artifacts().stream()
+                .filter(p -> p.name().equals("com.foo:widget"))
+                .findFirst()
+                .orElseThrow();
+        assertThat(widget.version()).isEqualTo("1.0");
+    }
+
+    @Test
+    void platform_managed_dep_with_no_bom_covering_it_errors_with_the_fix(@TempDir Path tempDir) {
+        JkBuild project =
+                jkBuildWithDeps(Map.of(Scope.MAIN, List.of(Dependency.platformManaged("widget", "com.foo:widget"))));
+        org.assertj.core.api.Assertions.assertThatThrownBy(
+                        () -> new LockOrchestrator(repoGroup(tempDir)).lock(project, "test"))
+                .hasMessageContaining("no [platform-dependencies] BOM manages it");
+    }
+
+    @Test
     void processor_scope_dependency_is_resolved_and_tagged_processor(@TempDir Path tempDir) throws Exception {
         serveMetadata("/com/foo/proc/maven-metadata.xml", "com.foo", "proc", List.of("1.0"));
         servePom("com.foo", "proc", "1.0", """

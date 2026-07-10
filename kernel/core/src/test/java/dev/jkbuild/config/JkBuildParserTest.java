@@ -651,13 +651,16 @@ class JkBuildParserTest {
     }
 
     @Test
-    void no_source_on_dep_is_rejected() {
-        assertThatThrownBy(() -> JkBuildParser.parse(PROJECT + """
+    void no_source_on_dep_parses_as_platform_managed() {
+        // Contract change (spring-boot plan §3.1): group-only = version supplied by an
+        // imported [platform-dependencies] BOM at resolve time. Resolve errors clearly
+        // when no BOM covers the module.
+        JkBuild b = JkBuildParser.parse(PROJECT + """
                 [dependencies]
-                bad = { group = "com.example" }
-                """))
-                .isInstanceOf(JkBuildParseException.class)
-                .hasMessageContaining("must set exactly one of");
+                widget = { group = "com.example" }
+                """);
+        assertThat(b.dependencies().of(dev.jkbuild.model.Scope.MAIN).get(0).isPlatformManaged())
+                .isTrue();
     }
 
     @Test
@@ -1473,6 +1476,39 @@ class JkBuildParserTest {
         assertThat(b.dependencies().of(dev.jkbuild.model.Scope.DEV).get(0).module())
                 .isEqualTo("org.springframework.boot:spring-boot-devtools");
         assertThat(b.dependencies().of(dev.jkbuild.model.Scope.TEST_DEV)).hasSize(1);
+    }
+
+    @Test
+    void versionless_dep_with_group_parses_as_platform_managed() {
+        JkBuild b = JkBuildParser.parse("""
+                [project]
+                group = "com.example"
+                name = "app"
+                version = "1.0"
+
+                [platform-dependencies]
+                spring-boot = { group = "org.springframework.boot", name = "spring-boot-dependencies", version = "4.0.0" }
+
+                [dependencies]
+                starter-webmvc = { group = "org.springframework.boot", name = "spring-boot-starter-webmvc" }
+                """);
+        var dep = b.dependencies().of(dev.jkbuild.model.Scope.MAIN).get(0);
+        assertThat(dep.isPlatformManaged()).isTrue();
+        assertThat(dep.module()).isEqualTo("org.springframework.boot:spring-boot-starter-webmvc");
+    }
+
+    @Test
+    void versionless_dep_without_group_still_errors() {
+        assertThatThrownBy(() -> JkBuildParser.parse("""
+                [project]
+                group = "com.example"
+                name = "app"
+                version = "1.0"
+
+                [dependencies]
+                mystery = { optional = false }
+                """))
+                .hasMessageContaining("must set exactly one of");
     }
 
     @Test

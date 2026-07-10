@@ -274,10 +274,34 @@ public final class LockOrchestrator {
             }
         }
 
+        // Platform-managed root deps (declared with no version) pin from the BOM constraints
+        // gathered above — the Maven "managed dependency" semantics Boot starters rely on.
+        List<Dependency> roots = new ArrayList<>(declared.size());
+        for (Dependency d : declared) {
+            if (d.isPlatformManaged()) {
+                String managed = bomConstraints.get(d.module());
+                if (managed == null) {
+                    throw new IllegalStateException("`" + d.module()
+                            + "` is declared without a version, but no [platform-dependencies] BOM manages it"
+                            + " — add a `version`, or import the BOM that pins it.");
+                }
+                roots.add(new Dependency(
+                        d.library(),
+                        d.module(),
+                        dev.jkbuild.model.VersionSelector.parse("=" + managed),
+                        null,
+                        null,
+                        true,
+                        d.optional()));
+            } else {
+                roots.add(d);
+            }
+        }
+
         Resolver resolver = resolverOverride != null
                 ? resolverOverride
                 : buildResolver(repos, bomConstraints, lockedVersionPrefs);
-        Resolution resolution = resolver.resolve(declared);
+        Resolution resolution = resolver.resolve(roots);
         observer.onTotal(resolution.modules().size() + fileDeps.size());
 
         // For each scope, BFS the resolution graph from that scope's roots.
