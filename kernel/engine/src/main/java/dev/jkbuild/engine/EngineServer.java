@@ -4,10 +4,14 @@ package dev.jkbuild.engine;
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.config.JkConfig;
 import dev.jkbuild.config.JkEngineConfig;
+import dev.jkbuild.config.JkHistoryConfig;
 import dev.jkbuild.config.JkHttpConfig;
 import dev.jkbuild.config.Session;
 import dev.jkbuild.config.SessionContext;
 import dev.jkbuild.engine.http.HttpEngineServer;
+import dev.jkbuild.engine.http.JsonOut;
+import dev.jkbuild.engine.journal.BuildJournal;
+import dev.jkbuild.engine.journal.BuildRecord;
 import dev.jkbuild.engine.protocol.EngineProtocol;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.plugin.protocol.Ndjson;
@@ -102,6 +106,19 @@ public final class EngineServer implements AutoCloseable {
 
     /** Ids for {@code request-start}/{@code request-finish} events and {@code POST /api/build} acks. */
     private final java.util.concurrent.atomic.AtomicLong requestIds = new java.util.concurrent.atomic.AtomicLong();
+
+    /**
+     * Build-history capture: per-request outcome accumulators keyed by the event-request id, folded
+     * from the same listener callbacks that publish dashboard events but written unconditionally (a
+     * build is journaled whether or not a dashboard is watching). Persisted at request-finish to
+     * {@link #journal}; retention is enforced at the idle boundary per {@link #historyConfig}.
+     */
+    private final java.util.concurrent.ConcurrentHashMap<Long, BuildAccumulator> accumulators =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    private final JkHistoryConfig historyConfig = JkHistoryConfig.resolve();
+
+    private final BuildJournal journal = BuildJournal.current();
 
     /**
      * The event-request id of the hosted operation this thread is running, set around {@code
@@ -327,6 +344,9 @@ public final class EngineServer implements AutoCloseable {
                         }
                         return;
                     }
+                    case EngineProtocol.HISTORY_LIST_REQUEST -> handleHistoryList(line, writer);
+                    case EngineProtocol.HISTORY_SHOW_REQUEST -> handleHistoryShow(line, writer);
+                    case EngineProtocol.HISTORY_DELETE_REQUEST -> handleHistoryDelete(line, writer);
                     case EngineProtocol.BUILD_REQUEST -> {
                         // Owns the rest of this connection's lifecycle: forks the build onto its own
                         // thread and keeps reading this loop for a build-cancel/EOF while it runs.
@@ -488,6 +508,7 @@ public final class EngineServer implements AutoCloseable {
         String eventDir = String.valueOf(Ndjson.str(requestLine, "entryDir"));
         long eventStartMillis = clockMillis.getAsLong();
         publishRequestStart(eventRequestId, eventKind, eventDir);
+        registerAccumulator(eventRequestId, eventKind, eventDir);
         if (pipeline) activePipelines.incrementAndGet();
         try {
             Thread.ofVirtual().name(threadPrefix, 0).start(() -> {
@@ -521,6 +542,7 @@ public final class EngineServer implements AutoCloseable {
             }
         } finally {
             if (pipeline) maybeIdleBoundaryGc();
+            long elapsedMillis = clockMillis.getAsLong() - eventStartMillis;
             publishEvent(
                     "request-finish",
                     dev.jkbuild.engine.http.JsonOut.object()
@@ -528,7 +550,8 @@ public final class EngineServer implements AutoCloseable {
                             .put("kind", eventKind)
                             .put("dir", eventDir)
                             .put("cancelled", cancelToken.cancelled())
-                            .put("millis", clockMillis.getAsLong() - eventStartMillis));
+                            .put("millis", elapsedMillis));
+            writeJournal(eventRequestId, cancelToken.cancelled(), elapsedMillis);
         }
     }
 
@@ -664,6 +687,26 @@ public final class EngineServer implements AutoCloseable {
         if (activePipelines.decrementAndGet() == 0) {
             System.gc();
             drainPendingPrune();
+            pruneJournal();
+        }
+    }
+
+    /**
+     * Enforce build-history retention at the idle boundary, off the hot path: drop entries past the
+     * configured age, then oldest-first past the disk budget (reclaiming the copied snapshots). The
+     * journal is its own dir tree — no {@link #cacheGate} needed. Best-effort; a failure is logged.
+     */
+    private void pruneJournal() {
+        if (!historyConfig.enabled()) return;
+        try {
+            long now = clockMillis.getAsLong();
+            BuildJournal.PruneResult r = journal.prune(historyConfig.maxAgeMillis(), historyConfig.maxDiskBytes(), now);
+            if (r.removedEntries() > 0) {
+                log.accept("jk engine: build journal prune removed " + r.removedEntries()
+                        + " entries (" + r.removedBytes() + " bytes)");
+            }
+        } catch (RuntimeException e) {
+            log.accept("jk engine: build journal prune failed: " + e.getMessage());
         }
     }
 
@@ -797,6 +840,7 @@ public final class EngineServer implements AutoCloseable {
             WorkspaceBuildListener listener = wireListener(writer);
             WorkspaceResult result =
                     SessionContext.where(session, () -> BuildService.buildWorkspace(req, listener));
+            accOutcome(eventRequestId(), result.success(), result.exitCode());
             send(writer, EngineProtocol.workspaceFinish(result.success(), result.exitCode(), result.errors()));
             if (!result.success()) {
                 for (String error : result.errors().stream().limit(5).toList()) {
@@ -1024,6 +1068,8 @@ public final class EngineServer implements AutoCloseable {
             goal.addListener(wireGoalListener(dir, writer, goal));
 
             dev.jkbuild.run.GoalResult result = SessionContext.where(session, goal::run);
+            accTests(eventRequestId(), goal.get(dev.jkbuild.runtime.BuildPipeline.TEST_RESULT).orElse(null));
+            accOutcome(eventRequestId(), result.success(), result.success() ? 0 : 1);
             // goalFinish (with test counts, if any) was already sent by wireGoalListener's own
             // goalFinish handling — nothing further to send here; the connection close signals "done".
         } catch (Exception e) {
@@ -1114,6 +1160,8 @@ public final class EngineServer implements AutoCloseable {
 
             long startNanos = System.nanoTime();
             dev.jkbuild.run.GoalResult result = SessionContext.where(session, goal::run);
+            accTests(eventRequestId(), goal.get(dev.jkbuild.runtime.BuildPipeline.TEST_RESULT).orElse(null));
+            accOutcome(eventRequestId(), result.success(), result.success() ? 0 : 1);
             if (result.success() && barWeight > 0) {
                 long moduleMs = (System.nanoTime() - startNanos) / 1_000_000;
                 if (moduleMs > 0) {
@@ -2100,6 +2148,7 @@ public final class EngineServer implements AutoCloseable {
                         writer,
                         EngineProtocol.moduleFinish(o.dir().toString(), o.coord(), o.success(), o.exitCode(), o.millis()));
                 publishModuleFinish(eventRequestId, o.dir().toString(), o.success(), o.millis());
+                accModule(eventRequestId, o);
             }
         };
     }
@@ -2136,6 +2185,178 @@ public final class EngineServer implements AutoCloseable {
                         .put("requestId", requestId)
                         .put("dir", dir)
                         .put("success", success));
+    }
+
+    // ---- build-history journal capture (docs: state/builds) ---------------------
+
+    /** Request kinds we journal — the actual "build" verbs; lock/sync/tool/etc. are not history. */
+    private static final java.util.Set<String> JOURNALED_KINDS = java.util.Set.of("build", "test", "1build");
+
+    /** Open an accumulator for a journaled build kind (no-op when history is off or kind is other). */
+    private void registerAccumulator(long requestId, String kind, String dir) {
+        if (!historyConfig.enabled() || !JOURNALED_KINDS.contains(kind)) return;
+        accumulators.put(requestId, new BuildAccumulator(kind.equals("1build") ? "build" : kind, dir, coordOf(dir)));
+    }
+
+    /** The project's {@code group:name}, or {@code null} when its {@code jk.toml} doesn't parse. */
+    private static String coordOf(String dir) {
+        try {
+            var project = JkBuildParser.parse(Path.of(dir).resolve("jk.toml")).project();
+            return project.group() + ":" + project.name();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private void accModule(long requestId, ModuleOutcome o) {
+        BuildAccumulator a = accumulators.get(requestId);
+        if (a != null) a.addModule(o);
+    }
+
+    private void accGoalFinish(long requestId, GoalResult result) {
+        BuildAccumulator a = accumulators.get(requestId);
+        if (a != null) a.addGoal(result);
+    }
+
+    private void accTests(long requestId, TestSummary tests) {
+        BuildAccumulator a = accumulators.get(requestId);
+        if (a != null && tests != null) a.setTests(tests);
+    }
+
+    private void accOutcome(long requestId, boolean success, int exitCode) {
+        BuildAccumulator a = accumulators.get(requestId);
+        if (a != null) a.setOutcome(success, exitCode);
+    }
+
+    /**
+     * Persist the finished build to the journal — ungated by dashboard subscribers, so every build
+     * is captured whether or not a browser is watching, and survives an engine restart. Best-effort:
+     * a failure here is logged, never propagated (journaling must not affect the build's outcome).
+     */
+    private void writeJournal(long requestId, boolean cancelled, long millis) {
+        BuildAccumulator a = accumulators.remove(requestId);
+        if (a == null) return;
+        try {
+            long finishedAt = clockMillis.getAsLong();
+            BuildRecord record = a.toRecord(finishedAt, cancelled, millis, version);
+            Path dir = Path.of(a.dir());
+            // Snapshot paths mirror BuildLayout.markdownTestResults() and the project's jk.lock; each
+            // is copied only if it exists at finish, so a skip-tests or lock-less build just omits it.
+            BuildJournal.Snapshot snapshot = new BuildJournal.Snapshot(
+                    dir.resolve("target").resolve("reports").resolve("test-results.md"),
+                    dir.resolve("jk.lock"),
+                    a.diagnosticsText());
+            journal.append(record, snapshot);
+        } catch (RuntimeException e) {
+            log.accept("jk engine: build journal append failed: " + e);
+        }
+    }
+
+    /** {@code history-list-request} → one flat {@code history-entry} per entry, then {@code history-done}. */
+    private void handleHistoryList(String requestLine, BufferedWriter writer) throws IOException {
+        int limit = Math.max(1, Ndjson.intValue(requestLine, "limit", 200));
+        java.util.List<BuildRecord> records = journal.list();
+        int n = Math.min(records.size(), limit);
+        for (int i = 0; i < n; i++) {
+            BuildRecord r = records.get(i);
+            BuildRecord.Tests t = r.tests();
+            int failedModules = (int) r.modules().stream().filter(m -> !m.success()).count();
+            send(writer, JsonOut.object()
+                    .put("t", EngineProtocol.HISTORY_ENTRY)
+                    .put("id", r.id())
+                    .put("kind", r.kind())
+                    .put("dir", r.dir())
+                    .put("coord", r.coord())
+                    .put("startedAt", r.startedAt())
+                    .put("finishedAt", r.finishedAt())
+                    .put("millis", r.millis())
+                    .put("success", r.success())
+                    .put("cancelled", r.cancelled())
+                    .put("exitCode", r.exitCode())
+                    .put("testsTotal", t != null ? t.total() : -1)
+                    .put("testsFailed", t != null ? t.failed() : -1)
+                    .put("moduleCount", r.modules().size())
+                    .put("failedModules", failedModules)
+                    .toString());
+        }
+        send(writer, JsonOut.object().put("t", EngineProtocol.HISTORY_DONE).put("count", n).toString());
+    }
+
+    /** {@code history-show-request} → a {@code history-record} header + module/phase/diag rows + {@code history-done}. */
+    private void handleHistoryShow(String requestLine, BufferedWriter writer) throws IOException {
+        String id = Ndjson.str(requestLine, "id");
+        java.util.Optional<BuildRecord> found = id == null ? java.util.Optional.empty() : journal.get(id);
+        if (found.isEmpty()) {
+            send(writer, JsonOut.object()
+                    .put("t", EngineProtocol.HISTORY_ERROR)
+                    .put("message", "no such build: " + id)
+                    .toString());
+            return;
+        }
+        BuildRecord r = found.get();
+        BuildRecord.Tests t = r.tests();
+        send(writer, JsonOut.object()
+                .put("t", EngineProtocol.HISTORY_RECORD)
+                .put("id", r.id())
+                .put("kind", r.kind())
+                .put("dir", r.dir())
+                .put("coord", r.coord())
+                .put("startedAt", r.startedAt())
+                .put("finishedAt", r.finishedAt())
+                .put("millis", r.millis())
+                .put("success", r.success())
+                .put("cancelled", r.cancelled())
+                .put("exitCode", r.exitCode())
+                .put("jkVersion", r.jkVersion())
+                .put("testsTotal", t != null ? t.total() : -1)
+                .put("testsSucceeded", t != null ? t.succeeded() : -1)
+                .put("testsFailed", t != null ? t.failed() : -1)
+                .put("testsSkipped", t != null ? t.skipped() : -1)
+                .toString());
+        for (BuildRecord.Module m : r.modules()) {
+            send(writer, JsonOut.object()
+                    .put("t", EngineProtocol.HISTORY_MODULE)
+                    .put("coord", m.coord())
+                    .put("dir", m.dir())
+                    .put("success", m.success())
+                    .put("exitCode", m.exitCode())
+                    .put("millis", m.millis())
+                    .toString());
+        }
+        for (BuildRecord.Phase p : r.phases()) {
+            send(writer, JsonOut.object()
+                    .put("t", EngineProtocol.HISTORY_PHASE)
+                    .put("name", p.name())
+                    .put("status", p.status())
+                    .put("millis", p.millis())
+                    .toString());
+        }
+        for (BuildRecord.Diag d : r.diagnostics()) {
+            send(writer, JsonOut.object()
+                    .put("t", EngineProtocol.HISTORY_DIAG)
+                    .put("severity", d.severity())
+                    .put("phase", d.phase())
+                    .put("code", d.code())
+                    .put("message", d.message())
+                    .put("test", d.test())
+                    .put("exceptionClass", d.exceptionClass())
+                    .toString());
+        }
+        send(writer, JsonOut.object()
+                .put("t", EngineProtocol.HISTORY_DONE)
+                .put("count", r.modules().size() + r.phases().size() + r.diagnostics().size())
+                .toString());
+    }
+
+    /** {@code history-delete-request} → {@code history-deleted} carrying whether the entry existed. */
+    private void handleHistoryDelete(String requestLine, BufferedWriter writer) throws IOException {
+        String id = Ndjson.str(requestLine, "id");
+        boolean deleted = id != null && journal.delete(id);
+        send(writer, JsonOut.object()
+                .put("t", EngineProtocol.HISTORY_DELETED)
+                .put("id", id)
+                .put("deleted", deleted)
+                .toString());
     }
 
     /**
@@ -2268,6 +2489,7 @@ public final class EngineServer implements AutoCloseable {
                 sendQuiet(writer, finishEncoder.apply(result));
                 publishGoalFinish(eventRequestId, dir, result.success());
                 if (!result.success()) publishDiagnostics(eventRequestId, dir, result.errors());
+                accGoalFinish(eventRequestId, result);
             }
         };
     }
@@ -2335,6 +2557,7 @@ public final class EngineServer implements AutoCloseable {
                 this::statusSnapshot,
                 httpEvents,
                 this::triggerHttpBuild,
+                journal,
                 log);
         try {
             candidate.start();
@@ -2367,6 +2590,7 @@ public final class EngineServer implements AutoCloseable {
         long eventRequestId = requestIds.incrementAndGet();
         long startMillis = clockMillis.getAsLong();
         publishRequestStart(eventRequestId, "build", entryDir.toString());
+        registerAccumulator(eventRequestId, "build", entryDir.toString());
         activePipelines.incrementAndGet();
         Thread.ofVirtual().name("jk-engine-http-build-", 0).start(() -> {
             cacheGate.readLock().lock();
@@ -2378,6 +2602,7 @@ public final class EngineServer implements AutoCloseable {
                 currentEventRequestId.remove();
                 cacheGate.readLock().unlock();
                 maybeIdleBoundaryGc();
+                long elapsedMillis = clockMillis.getAsLong() - startMillis;
                 publishEvent(
                         "request-finish",
                         dev.jkbuild.engine.http.JsonOut.object()
@@ -2386,7 +2611,8 @@ public final class EngineServer implements AutoCloseable {
                                 .put("dir", entryDir.toString())
                                 .put("success", success)
                                 .put("cancelled", false)
-                                .put("millis", clockMillis.getAsLong() - startMillis));
+                                .put("millis", elapsedMillis));
+                writeJournal(eventRequestId, false, elapsedMillis);
             }
         });
         return eventRequestId;
@@ -2417,6 +2643,7 @@ public final class EngineServer implements AutoCloseable {
                     .withJdksDir(jdksDir);
             WorkspaceResult result =
                     SessionContext.where(session, () -> BuildService.buildWorkspace(req, hubListener()));
+            accOutcome(eventRequestId(), result.success(), result.exitCode());
             if (!result.success()) {
                 for (String error : result.errors().stream().limit(5).toList()) {
                     publishRequestError(eventRequestId(), entryDir.toString(), error);
@@ -2458,6 +2685,7 @@ public final class EngineServer implements AutoCloseable {
                     public void goalFinish(GoalResult result) {
                         publishGoalFinish(eventRequestId, dir, result.success());
                         if (!result.success()) publishDiagnostics(eventRequestId, dir, result.errors());
+                        accGoalFinish(eventRequestId, result);
                     }
                 };
             }
@@ -2465,6 +2693,7 @@ public final class EngineServer implements AutoCloseable {
             @Override
             public void onModuleFinish(ModuleOutcome o) {
                 publishModuleFinish(eventRequestId, o.dir().toString(), o.success(), o.millis());
+                accModule(eventRequestId, o);
             }
         };
     }
@@ -2577,6 +2806,100 @@ public final class EngineServer implements AutoCloseable {
             ch.close();
         } catch (IOException ignored) {
             // best-effort
+        }
+    }
+
+    /**
+     * Thread-safe collector of one build's outcome, folded from {@link WorkspaceBuildListener}/{@link
+     * GoalListener} callbacks that fire on scheduler/worker threads, then frozen into a {@link
+     * BuildRecord} at request-finish. Success is taken from the runner's terminal result when set,
+     * else derived (no failed module/goal and not cancelled).
+     */
+    private static final class BuildAccumulator {
+        private final String kind;
+        private final String dir;
+        private final String coord;
+        private final java.util.List<BuildRecord.Module> modules = new java.util.concurrent.CopyOnWriteArrayList<>();
+        // Phases aggregate by name in arrival order (a workspace build interleaves many modules'
+        // phases into one chain), last status wins — mirrors the dashboard's single phase strip.
+        private final java.util.Map<String, BuildRecord.Phase> phases =
+                java.util.Collections.synchronizedMap(new java.util.LinkedHashMap<>());
+        private final java.util.List<BuildRecord.Diag> diagnostics = new java.util.concurrent.CopyOnWriteArrayList<>();
+        private volatile BuildRecord.Tests tests;
+        private volatile boolean anyFailure;
+        private volatile Boolean success;
+        private volatile int exitCode;
+
+        BuildAccumulator(String kind, String dir, String coord) {
+            this.kind = kind;
+            this.dir = dir;
+            this.coord = coord;
+        }
+
+        String dir() {
+            return dir;
+        }
+
+        void addModule(ModuleOutcome o) {
+            modules.add(new BuildRecord.Module(
+                    o.coord(), o.dir() == null ? null : o.dir().toString(), o.success(), o.exitCode(), o.millis()));
+            if (!o.success()) anyFailure = true;
+        }
+
+        void addGoal(GoalResult result) {
+            for (GoalResult.PhaseReport p : result.phases()) {
+                phases.put(p.name(), new BuildRecord.Phase(p.name(), p.status().name(), p.duration().toMillis()));
+            }
+            for (GoalResult.Diagnostic d : result.errors()) {
+                diagnostics.add(new BuildRecord.Diag(
+                        "error", d.phase(), d.code(), d.message(), d.test(), d.exceptionClass()));
+            }
+            for (GoalResult.Diagnostic d : result.warnings()) {
+                diagnostics.add(new BuildRecord.Diag(
+                        "warning", d.phase(), d.code(), d.message(), d.test(), d.exceptionClass()));
+            }
+            if (!result.success()) anyFailure = true;
+        }
+
+        void setTests(TestSummary t) {
+            tests = new BuildRecord.Tests(t.total(), t.succeeded(), t.failed(), t.skipped());
+        }
+
+        void setOutcome(boolean ok, int exit) {
+            this.success = ok;
+            this.exitCode = exit;
+            if (!ok) anyFailure = true;
+        }
+
+        String diagnosticsText() {
+            if (diagnostics.isEmpty()) return null;
+            StringBuilder b = new StringBuilder();
+            for (BuildRecord.Diag d : diagnostics) {
+                b.append('[').append(d.severity()).append("] ");
+                if (notBlank(d.phase())) b.append(d.phase()).append(": ");
+                if (notBlank(d.test())) b.append(d.test()).append(" — ");
+                if (notBlank(d.exceptionClass())) b.append('(').append(d.exceptionClass()).append(") ");
+                b.append(d.message() == null ? "" : d.message()).append('\n');
+            }
+            return b.toString();
+        }
+
+        BuildRecord toRecord(long finishedAt, boolean cancelled, long millis, String jkVersion) {
+            boolean ok = success != null ? success : (!anyFailure && !cancelled);
+            int exit = success != null ? exitCode : (ok ? 0 : 1);
+            java.util.List<BuildRecord.Phase> phaseList;
+            synchronized (phases) {
+                phaseList = new java.util.ArrayList<>(phases.values());
+            }
+            return new BuildRecord(
+                    null, BuildRecord.SCHEMA, kind, dir, coord,
+                    finishedAt - millis, finishedAt, millis,
+                    ok, cancelled, exit, jkVersion,
+                    tests, new java.util.ArrayList<>(modules), phaseList, new java.util.ArrayList<>(diagnostics));
+        }
+
+        private static boolean notBlank(String s) {
+            return s != null && !s.isBlank();
         }
     }
 }

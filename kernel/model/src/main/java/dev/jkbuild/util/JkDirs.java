@@ -15,6 +15,7 @@ import java.util.function.Function;
  *   ├── config.toml      # the single user-global config file (jk never reads ~/.config)
  *   ├── cache/           # downloads + content-addressed action cache
  *   ├── state/           # mutable per-host state
+ *   │   └── builds/      # calibration + the persisted build-history journal
  *   ├── data/            # immutable installed data (ledgers, registries)
  *   ├── bin/             # user-installed tool launchers
  *   ├── lib/             # jars backing the launchers + the jk-engine jar
@@ -25,8 +26,8 @@ import java.util.function.Function;
  *
  * <ul>
  *   <li>Per-directory: {@code JK_CONFIG_FILE}, {@code JK_CACHE_DIR}, {@code JK_STATE_DIR}, {@code
- *       JK_DATA_DIR}, {@code JK_BIN_DIR}, {@code JK_LIB_DIR}, {@code JK_JDKS_DIR}. Absolute paths;
- *       no jk suffix appended.
+ *       JK_BUILDS_DIR}, {@code JK_DATA_DIR}, {@code JK_BIN_DIR}, {@code JK_LIB_DIR}, {@code
+ *       JK_JDKS_DIR}. Absolute paths; no jk suffix appended.
  *   <li>Root: {@code JK_HOME} relocates the entire tree. Defaults to {@code $HOME/.jk}.
  * </ul>
  *
@@ -83,6 +84,10 @@ public final class JkDirs {
         return current().stateDir();
     }
 
+    public static Path builds() {
+        return current().buildsDir();
+    }
+
     public static Path data() {
         return current().dataDir();
     }
@@ -125,6 +130,15 @@ public final class JkDirs {
 
     public Path stateDir() {
         return resolve("JK_STATE_DIR", "state");
+    }
+
+    /**
+     * Machine-scoped build state that must survive {@code jk clean}: the host calibration and the
+     * persisted build-history journal. Defaults to {@code ~/.jk/state/builds/}; override via {@code
+     * JK_BUILDS_DIR} (an absolute path, not relative to {@code state/}).
+     */
+    public Path buildsDir() {
+        return resolve("JK_BUILDS_DIR", "state/builds");
     }
 
     /**

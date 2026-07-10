@@ -63,6 +63,8 @@
           <span class="spacer"></span>
           <button v-if="outcome(card) !== 'running' && card.kind === 'build'" class="rebuild"
                   @click="triggerBuild(card.dir)" title="Build this directory again">rebuild</button>
+          <button v-if="outcome(card) !== 'running' && card.historyId" class="rebuild"
+                  @click="deleteCard(card)" title="Delete this run from history">delete</button>
           <span class="millis">{{ outcome(card) === 'running' ? elapsed(card) : duration(card.millis) }}</span>
           <span v-if="outcome(card) !== 'running'" class="ago">{{ ago(card) }}</span>
         </div>

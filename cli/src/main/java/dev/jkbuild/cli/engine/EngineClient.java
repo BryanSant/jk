@@ -146,6 +146,51 @@ public final class EngineClient {
         }
     }
 
+    // ---- build history ({@code jk history}) — thin RPC over the engine's journal ----------------
+
+    /** Newest-first {@code history-entry} lines (flat NDJSON), spawning the engine if none is running. */
+    public static List<String> historyList(EnginePaths.Paths paths, int limit) throws IOException {
+        return streamHistory(paths, EngineProtocol.historyListRequest(limit));
+    }
+
+    /** One entry's detail: a {@code history-record} header line plus module/phase/diag lines. */
+    public static List<String> historyShow(EnginePaths.Paths paths, String id) throws IOException {
+        return streamHistory(paths, EngineProtocol.historyShowRequest(id));
+    }
+
+    /** Delete one entry; {@code true} if it existed. */
+    public static boolean historyDelete(EnginePaths.Paths paths, String id) throws IOException {
+        for (String line : streamHistory(paths, EngineProtocol.historyDeleteRequest(id))) {
+            if (EngineProtocol.HISTORY_DELETED.equals(EngineProtocol.typeOf(line))) {
+                return Ndjson.bool(line, "deleted", false);
+            }
+        }
+        return false;
+    }
+
+    /** Send a history request, collect the flat reply lines up to (not including) {@code history-done}. */
+    private static List<String> streamHistory(EnginePaths.Paths paths, String request) throws IOException {
+        ensureRunning(paths, dev.jkbuild.cli.Jk.VERSION);
+        List<String> out = new java.util.ArrayList<>();
+        try (SocketChannel ch = connect(paths.socket())) {
+            BufferedWriter writer =
+                    new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
+            writer.write(request);
+            writer.write('\n');
+            writer.flush();
+            BufferedReader reader =
+                    new BufferedReader(new InputStreamReader(Channels.newInputStream(ch), StandardCharsets.UTF_8));
+            String line;
+            while ((line = reader.readLine()) != null) {
+                String type = EngineProtocol.typeOf(line);
+                if (EngineProtocol.HISTORY_DONE.equals(type)) break;
+                out.add(line);
+                if (EngineProtocol.HISTORY_DELETED.equals(type) || EngineProtocol.HISTORY_ERROR.equals(type)) break;
+            }
+        }
+        return out;
+    }
+
     /**
      * The one entry point real commands use: a live, version-matched engine is guaranteed to be
      * reachable at {@code paths.socket()} when this returns normally. Spawns lazily if none is

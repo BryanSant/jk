@@ -55,6 +55,13 @@ export async function getText(path) {
   return resp.text();
 }
 
+/** DELETE an /api path (a mutation — always token-bearing). Throws {status} on non-2xx. */
+export async function del(path) {
+  const resp = await fetch(path, { method: 'DELETE', headers: headers() });
+  if (!resp.ok) throw { status: resp.status };
+  return resp.json().catch(() => ({}));
+}
+
 /** The engine event types the dashboard folds (EventSource needs a listener per named event). */
 const EVENT_TYPES = [
   'request-start',

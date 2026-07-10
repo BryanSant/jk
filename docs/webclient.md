@@ -87,7 +87,11 @@ Three small layers, one file each:
   - `cards` — `/api/events` entries folded (via `fold.js`, bounded at 50 cards) into per-request
     cards: a `request-start` opens a card, `module-start`/`goal-finish`/`module-finish` events
     update its rows, `request-finish` closes it with outcome + duration. Bounded so a long-lived
-    tab can't grow the page without limit.
+    tab can't grow the page without limit. On load (and after every reconnect) the feed is also
+    **backfilled** from the persisted journal via `GET /api/history` (`fold.js` `seedFromHistory`),
+    so a reload or an engine restart no longer starts from an empty feed. Seeding is reconciled
+    with live cards by `(dir, finishedAt)` — a run present in both feeds yields one card, tagged
+    with its durable `historyId` so it becomes deletable.
   - `connection` — `'connecting' | 'live' | 'offline' | 'unauthorized'`, driving the banner.
 - **`index.html` templates** — Vue directives over the store, compiled in-DOM at load. One root component so far;
   `v-for` over activity cards, `v-if` per view.
@@ -98,17 +102,27 @@ Three small layers, one file each:
 
 - **Activity** (default) — live feed of engine requests as cards: workspace/project dir, per-goal
   rows appearing as `goal-finish` events land, outcome badge and wall-clock on completion. This is
-  the "trigger something with the CLI, watch it here" feedback loop. A "Build…" button (POST
-  `/api/build` with a directory string) exists but is secondary — the CLI remains the primary
-  trigger; the button proves the mutation path end-to-end.
+  the "trigger something with the CLI, watch it here" feedback loop. Past runs are backfilled from
+  the persisted journal (see below), so the feed is populated even on a cold load. A finished card
+  carries a **delete** affordance (like removing a GitHub Actions run) — `DELETE /api/history?id=`,
+  then the card is dropped locally. A "Build…" button (POST `/api/build` with a directory string)
+  exists but is secondary — the CLI remains the primary trigger; the button proves the mutation
+  path end-to-end.
 - **Status** — the `jk engine status` numbers, rendered: version, pid, uptime, heap used/committed
   /max and RSS (with a small inline bar, no chart library), active connections/pipelines, idle
   policy, the resolved `www-root`.
 
-**Later, additive (needs the `/api/builds` + `/api/stats` endpoints from `http.md`'s later
-phases):** a **Builds** history view and **Trends** (duration over time, cache-hit rates). Charts
-at that point are hand-drawn inline SVG (sparklines, bars) before any charting library is
-considered — the data volumes here are tiny.
+Build **history now persists** (implemented): every engine build — whether or not a dashboard is
+watching — is journaled to `~/.jk/state/builds/journal/<id>/` (`record.json` plus snapshot copies
+of `test-results.md`, `jk.lock`, and flattened diagnostics), served by `GET /api/history`
+(list + `?id=` detail) and `GET /api/history/artifact`, deletable via `DELETE /api/history?id=`,
+and reachable headlessly through `jk history list|show|rm`. Retention is bounded by age and total
+disk usage (`[history]` in `config.toml`) and enforced at the engine's idle-boundary GC. See
+[`build-history.md`](build-history.md).
+
+**Later, additive:** a dedicated **Builds** history view and **Trends** (duration over time,
+cache-hit rates) on top of the same journal. Charts at that point are hand-drawn inline SVG
+(sparklines, bars) before any charting library is considered — the data volumes here are tiny.
 
 Server-rendered content in `www-root` (build reports a pipeline drops as `.html`/`.json`/`.md`)
 is linked, not embedded: activity cards and future build-detail views link to

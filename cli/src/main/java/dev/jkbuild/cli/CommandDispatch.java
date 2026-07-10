@@ -15,6 +15,7 @@ import dev.jkbuild.command.CacheCommand;
 import dev.jkbuild.command.CleanCommand;
 import dev.jkbuild.command.CompileCommand;
 import dev.jkbuild.command.EngineCommand;
+import dev.jkbuild.command.HistoryCommand;
 import dev.jkbuild.command.DeactivateCommand;
 import dev.jkbuild.command.DenyCommand;
 import dev.jkbuild.command.DoctorCommand;
@@ -81,6 +82,7 @@ public final class CommandDispatch {
     private static final List<CliCommand> COMMANDS = List.of(
             new CleanCommand(),
             new EngineCommand(),
+            new HistoryCommand(),
             new TreeCommand(),
             new WhyCommand(),
             new ExplainCommand(),

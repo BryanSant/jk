@@ -43,6 +43,11 @@ class HttpEngineServerTest {
     private String baseUrl;
     private int port;
 
+    /** A journal rooted under the test's temp state dir — endpoints exist; content is per-test. */
+    private dev.jkbuild.engine.journal.BuildJournal testJournal() {
+        return new dev.jkbuild.engine.journal.BuildJournal(stateDir.resolve("builds").resolve("journal"));
+    }
+
     /** The stub {@link BuildTrigger}: records the dir, returns a fixed id, rejects "reject me". */
     private long stubTrigger(String dir) {
         if (dir.contains("reject")) throw new IllegalArgumentException("no jk.toml in " + dir);
@@ -62,7 +67,8 @@ class HttpEngineServerTest {
         events = new HttpEvents();
         JkHttpConfig config = new JkHttpConfig("127.0.0.1", 0, 16, wwwRoot.toString());
         server = new HttpEngineServer(
-                config, wwwRoot, tokenFile, logFile, "9.9.9-test", () -> SNAPSHOT, events, this::stubTrigger, null);
+                config, wwwRoot, tokenFile, logFile, "9.9.9-test", () -> SNAPSHOT, events, this::stubTrigger,
+                testJournal(), null);
         server.start();
         baseUrl = server.url();
         port = Integer.parseInt(baseUrl.replaceAll(".*:(\\d+)/$", "$1"));
@@ -175,6 +181,7 @@ class HttpEngineServerTest {
                 () -> SNAPSHOT,
                 new HttpEvents(),
                 this::stubTrigger,
+                testJournal(),
                 null);
         try {
             snapshot.start();
@@ -418,7 +425,7 @@ class HttpEngineServerTest {
         JkHttpConfig config = new JkHttpConfig("0.0.0.0", 0, 16, wwwRoot.toString());
         Path lanTokenFile = stateDir.resolve("lan.http-token");
         HttpEngineServer lan = new HttpEngineServer(
-                config, wwwRoot, lanTokenFile, stateDir.resolve("lan.log"), "9.9.9-test", () -> SNAPSHOT, new HttpEvents(), this::stubTrigger, null);
+                config, wwwRoot, lanTokenFile, stateDir.resolve("lan.log"), "9.9.9-test", () -> SNAPSHOT, new HttpEvents(), this::stubTrigger, testJournal(), null);
         try {
             lan.start();
             String lanUrl = lan.url(); // advertises the always-valid loopback form for a wildcard bind
@@ -508,6 +515,7 @@ class HttpEngineServerTest {
                 () -> SNAPSHOT,
                 new HttpEvents(),
                 this::stubTrigger,
+                testJournal(),
                 null);
         try {
             lan.start();

@@ -3,8 +3,8 @@
 // build from the CDN — see docs/webclient.md). The in-DOM template lives in index.html; Vue's
 // runtime compiler turns it into render functions at load (the CSP 'unsafe-eval' grant).
 
-import { bootstrapToken, get, getText, post, events } from './api.js';
-import { foldEvent, outcomeOf, moduleSummary } from './fold.js';
+import { bootstrapToken, get, getText, post, del, events } from './api.js';
+import { foldEvent, outcomeOf, moduleSummary, seedFromHistory } from './fold.js';
 
 bootstrapToken();
 
@@ -27,10 +27,14 @@ Vue.createApp({
       (state) => {
         const wasOffline = this.connection === 'offline';
         if (this.connection !== 'unauthorized' || state === 'live') this.connection = state;
-        if (state === 'live' && wasOffline) this.refresh(); // resync after an engine restart
+        if (state === 'live' && wasOffline) {
+          this.refresh(); // resync after an engine restart
+          this.loadHistory(); // re-seed persisted runs (dedupe keeps this idempotent)
+        }
       },
     );
     this.refresh();
+    this.loadHistory(); // backfill past builds so a reload/restart doesn't start from an empty feed
     setInterval(() => this.refresh(), 30_000); // slow fallback; SSE is the primary signal
     setInterval(() => (this.now = Date.now()), 1_000);
   },
@@ -59,6 +63,31 @@ Vue.createApp({
         }
       } catch (e) {
         if (e.status === 401) this.connection = 'unauthorized';
+      }
+    },
+
+    // Backfill the feed from the persisted journal (/api/history), reconciled with live cards.
+    async loadHistory() {
+      try {
+        const records = await get('/api/history');
+        seedFromHistory(this.cards, records);
+      } catch (e) {
+        if (e.status === 401) this.connection = 'unauthorized';
+      }
+    },
+
+    // Delete a finished run from history (engine + disk), then drop its card locally.
+    async deleteCard(card) {
+      if (!card.historyId) return;
+      try {
+        await del('/api/history?id=' + encodeURIComponent(card.historyId));
+        const i = this.cards.indexOf(card);
+        if (i >= 0) this.cards.splice(i, 1);
+      } catch (e) {
+        this.buildError =
+          e.status === 401
+            ? 'unauthorized — open the tokenized URL printed by `jk engine status`'
+            : 'could not delete this run';
       }
     },
 
