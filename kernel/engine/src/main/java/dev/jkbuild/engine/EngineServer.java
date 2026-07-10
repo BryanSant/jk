@@ -504,7 +504,12 @@ public final class EngineServer implements AutoCloseable {
         Session.CancelToken cancelToken = Session.CancelToken.live();
         CountDownLatch done = new CountDownLatch(1);
         long eventRequestId = requestIds.incrementAndGet();
+        // A single-project build ("1build" thread prefix) is still a "build" to the dashboard — the
+        // internal distinction (workspace scheduler vs one goal) is not a user-facing kind. Normalize
+        // once here so the request-start/finish events, the journal, and the rebuild-button gate all
+        // agree on "build".
         String eventKind = requestKind(threadPrefix);
+        if (eventKind.equals("1build")) eventKind = "build";
         String eventDir = String.valueOf(Ndjson.str(requestLine, "entryDir"));
         long eventStartMillis = clockMillis.getAsLong();
         publishRequestStart(eventRequestId, eventKind, eventDir);
@@ -2204,8 +2209,20 @@ public final class EngineServer implements AutoCloseable {
             public GoalListener onModuleStart(ModulePlan m) {
                 String dir = m.dir().toString();
                 sendQuiet(writer, EngineProtocol.moduleStart(dir));
-                publishModuleStart(eventRequestId, dir);
-                return wireGoalListener(dir, writer, (dev.jkbuild.run.Goal) null);
+                publishModuleStart(eventRequestId, dir, m.coord());
+                // wireGoalListener captures the dashboard request id from the currentEventRequestId
+                // ThreadLocal — but onModuleStart runs on a WorkspaceScheduler thread where it isn't
+                // set, so without this seed every per-module phase/goal-progress hub event would
+                // publish under id -1 and be dropped (no per-module chains or weight bar). Seed it
+                // with the request id captured on the request thread when wireListener was created.
+                Long prev = currentEventRequestId.get();
+                currentEventRequestId.set(eventRequestId);
+                try {
+                    return wireGoalListener(dir, writer, (dev.jkbuild.run.Goal) null);
+                } finally {
+                    if (prev == null) currentEventRequestId.remove();
+                    else currentEventRequestId.set(prev);
+                }
             }
 
             @Override
@@ -2213,7 +2230,7 @@ public final class EngineServer implements AutoCloseable {
                 sendQuiet(
                         writer,
                         EngineProtocol.moduleFinish(o.dir().toString(), o.coord(), o.success(), o.exitCode(), o.millis()));
-                publishModuleFinish(eventRequestId, o.dir().toString(), o.success(), o.millis());
+                publishModuleFinish(eventRequestId, o.dir().toString(), o.coord(), o.success(), o.millis());
                 accModule(eventRequestId, o);
             }
         };
@@ -2225,20 +2242,24 @@ public final class EngineServer implements AutoCloseable {
         return id != null ? id : -1;
     }
 
-    private void publishModuleStart(long requestId, String dir) {
+    private void publishModuleStart(long requestId, String dir, String coord) {
         if (!eventsWanted()) return;
         publishEvent(
                 "module-start",
-                dev.jkbuild.engine.http.JsonOut.object().put("requestId", requestId).put("dir", dir));
+                dev.jkbuild.engine.http.JsonOut.object()
+                        .put("requestId", requestId)
+                        .put("dir", dir)
+                        .put("coord", coord));
     }
 
-    private void publishModuleFinish(long requestId, String dir, boolean success, long millis) {
+    private void publishModuleFinish(long requestId, String dir, String coord, boolean success, long millis) {
         if (!eventsWanted()) return;
         publishEvent(
                 "module-finish",
                 dev.jkbuild.engine.http.JsonOut.object()
                         .put("requestId", requestId)
                         .put("dir", dir)
+                        .put("coord", coord)
                         .put("success", success)
                         .put("millis", millis));
     }
@@ -2256,12 +2277,12 @@ public final class EngineServer implements AutoCloseable {
     // ---- build-history journal capture (docs: state/builds) ---------------------
 
     /** Request kinds we journal — the actual "build" verbs; lock/sync/tool/etc. are not history. */
-    private static final java.util.Set<String> JOURNALED_KINDS = java.util.Set.of("build", "test", "1build");
+    private static final java.util.Set<String> JOURNALED_KINDS = java.util.Set.of("build", "test");
 
     /** Open an accumulator for a journaled build kind (no-op when history is off or kind is other). */
     private void registerAccumulator(long requestId, String kind, String dir) {
         if (!historyConfig.enabled() || !JOURNALED_KINDS.contains(kind)) return;
-        accumulators.put(requestId, new BuildAccumulator(kind.equals("1build") ? "build" : kind, dir, coordOf(dir)));
+        accumulators.put(requestId, new BuildAccumulator(kind, dir, coordOf(dir)));
     }
 
     /** The project's {@code group:name}, or {@code null} when its {@code jk.toml} doesn't parse. */
@@ -2279,9 +2300,20 @@ public final class EngineServer implements AutoCloseable {
         if (a != null) a.addModule(o);
     }
 
-    private void accGoalFinish(long requestId, GoalResult result) {
+    private void accGoalFinish(long requestId, String dir, GoalResult result) {
         BuildAccumulator a = accumulators.get(requestId);
         if (a != null) a.addGoal(result);
+    }
+
+    /**
+     * Record one finished phase under its module dir — the same {@code phaseFinish} signal the
+     * dashboard renders, so the journal's per-module chains match the live cards exactly (a
+     * workspace module's {@code GoalResult.phases()} isn't reliably populated, so we capture the
+     * events directly).
+     */
+    private void accPhaseFinish(long requestId, String dir, String phase, String status, long millis) {
+        BuildAccumulator a = accumulators.get(requestId);
+        if (a != null) a.addPhase(dir, phase, status, millis);
     }
 
     private void accTests(long requestId, TestSummary tests) {
@@ -2379,6 +2411,7 @@ public final class EngineServer implements AutoCloseable {
                 .put("testsFailed", t != null ? t.failed() : -1)
                 .put("testsSkipped", t != null ? t.skipped() : -1)
                 .toString());
+        int phaseCount = 0;
         for (BuildRecord.Module m : r.modules()) {
             send(writer, JsonOut.object()
                     .put("t", EngineProtocol.HISTORY_MODULE)
@@ -2388,14 +2421,17 @@ public final class EngineServer implements AutoCloseable {
                     .put("exitCode", m.exitCode())
                     .put("millis", m.millis())
                     .toString());
+            // Each module's own phase chain, tagged with the module so the CLI can group them.
+            String label = m.coord() != null ? m.coord() : m.dir();
+            for (BuildRecord.Phase p : m.phases()) {
+                send(writer, phaseLine(p, label));
+                phaseCount++;
+            }
         }
+        // Single-goal builds carry their phases at the record's top level (no module rows).
         for (BuildRecord.Phase p : r.phases()) {
-            send(writer, JsonOut.object()
-                    .put("t", EngineProtocol.HISTORY_PHASE)
-                    .put("name", p.name())
-                    .put("status", p.status())
-                    .put("millis", p.millis())
-                    .toString());
+            send(writer, phaseLine(p, null));
+            phaseCount++;
         }
         for (BuildRecord.Diag d : r.diagnostics()) {
             send(writer, JsonOut.object()
@@ -2410,8 +2446,19 @@ public final class EngineServer implements AutoCloseable {
         }
         send(writer, JsonOut.object()
                 .put("t", EngineProtocol.HISTORY_DONE)
-                .put("count", r.modules().size() + r.phases().size() + r.diagnostics().size())
+                .put("count", r.modules().size() + phaseCount + r.diagnostics().size())
                 .toString());
+    }
+
+    /** A {@code history-phase} line, optionally tagged with its module label (null for single-goal). */
+    private static String phaseLine(BuildRecord.Phase p, String module) {
+        return JsonOut.object()
+                .put("t", EngineProtocol.HISTORY_PHASE)
+                .put("module", module)
+                .put("name", p.name())
+                .put("status", p.status())
+                .put("millis", p.millis())
+                .toString();
     }
 
     /** {@code history-delete-request} → {@code history-deleted} carrying whether the entry existed. */
@@ -2545,6 +2592,7 @@ public final class EngineServer implements AutoCloseable {
             public void phaseFinish(String phase, dev.jkbuild.run.PhaseStatus status, Duration duration) {
                 sendQuiet(writer, EngineProtocol.phaseFinish(dir, phase, status.name()));
                 publishPhaseFinish(eventRequestId, dir, phase, status.name());
+                accPhaseFinish(eventRequestId, dir, phase, status.name(), duration.toMillis());
             }
 
             @Override
@@ -2558,7 +2606,7 @@ public final class EngineServer implements AutoCloseable {
                 sendQuiet(writer, finishEncoder.apply(result));
                 publishGoalFinish(eventRequestId, dir, result.success());
                 if (!result.success()) publishDiagnostics(eventRequestId, dir, result.errors());
-                accGoalFinish(eventRequestId, result);
+                accGoalFinish(eventRequestId, dir, result);
             }
         };
     }
@@ -2743,7 +2791,7 @@ public final class EngineServer implements AutoCloseable {
             @Override
             public GoalListener onModuleStart(ModulePlan m) {
                 String dir = m.dir().toString();
-                publishModuleStart(eventRequestId, dir);
+                publishModuleStart(eventRequestId, dir, m.coord());
                 return new GoalListener() {
                     @Override
                     public void goalStart(GoalView view) {
@@ -2768,6 +2816,7 @@ public final class EngineServer implements AutoCloseable {
                     @Override
                     public void phaseFinish(String phase, dev.jkbuild.run.PhaseStatus status, Duration duration) {
                         publishPhaseFinish(eventRequestId, dir, phase, status.name());
+                        accPhaseFinish(eventRequestId, dir, phase, status.name(), duration.toMillis());
                     }
 
                     @Override
@@ -2779,14 +2828,14 @@ public final class EngineServer implements AutoCloseable {
                     public void goalFinish(GoalResult result) {
                         publishGoalFinish(eventRequestId, dir, result.success());
                         if (!result.success()) publishDiagnostics(eventRequestId, dir, result.errors());
-                        accGoalFinish(eventRequestId, result);
+                        accGoalFinish(eventRequestId, dir, result);
                     }
                 };
             }
 
             @Override
             public void onModuleFinish(ModuleOutcome o) {
-                publishModuleFinish(eventRequestId, o.dir().toString(), o.success(), o.millis());
+                publishModuleFinish(eventRequestId, o.dir().toString(), o.coord(), o.success(), o.millis());
                 accModule(eventRequestId, o);
             }
         };
@@ -2913,11 +2962,12 @@ public final class EngineServer implements AutoCloseable {
         private final String kind;
         private final String dir;
         private final String coord;
-        private final java.util.List<BuildRecord.Module> modules = new java.util.concurrent.CopyOnWriteArrayList<>();
-        // Phases aggregate by name in arrival order (a workspace build interleaves many modules'
-        // phases into one chain), last status wins — mirrors the dashboard's single phase strip.
-        private final java.util.Map<String, BuildRecord.Phase> phases =
-                java.util.Collections.synchronizedMap(new java.util.LinkedHashMap<>());
+        private final java.util.List<ModuleOutcome> modules = new java.util.concurrent.CopyOnWriteArrayList<>();
+        // Phases per module dir (name → Phase, arrival order, last status wins). The single-goal path
+        // uses the "" (SINGLE_GOAL_DIR) bucket; workspace modules use their real dir. Rendered as a
+        // chain per module (the dashboard shows one chain per module, not one merged strip).
+        private final java.util.Map<String, java.util.Map<String, BuildRecord.Phase>> phasesByDir =
+                new java.util.concurrent.ConcurrentHashMap<>();
         private final java.util.List<BuildRecord.Diag> diagnostics = new java.util.concurrent.CopyOnWriteArrayList<>();
         private volatile BuildRecord.Tests tests;
         private volatile boolean anyFailure;
@@ -2940,15 +2990,20 @@ public final class EngineServer implements AutoCloseable {
         }
 
         void addModule(ModuleOutcome o) {
-            modules.add(new BuildRecord.Module(
-                    o.coord(), o.dir() == null ? null : o.dir().toString(), o.success(), o.exitCode(), o.millis()));
+            modules.add(o);
             if (!o.success()) anyFailure = true;
         }
 
+        /** One finished phase, stored under its module dir ("" for a single-goal build). */
+        void addPhase(String dir, String phase, String status, long millis) {
+            phasesByDir
+                    .computeIfAbsent(dir == null ? "" : dir,
+                            k -> java.util.Collections.synchronizedMap(new java.util.LinkedHashMap<>()))
+                    .put(phase, new BuildRecord.Phase(phase, status, millis));
+        }
+
+        /** Diagnostics + failure flag from a finished goal (phases come from {@link #addPhase}). */
         void addGoal(GoalResult result) {
-            for (GoalResult.PhaseReport p : result.phases()) {
-                phases.put(p.name(), new BuildRecord.Phase(p.name(), p.status().name(), p.duration().toMillis()));
-            }
             for (GoalResult.Diagnostic d : result.errors()) {
                 diagnostics.add(new BuildRecord.Diag(
                         "error", d.phase(), d.code(), d.message(), d.test(), d.exceptionClass()));
@@ -2958,6 +3013,14 @@ public final class EngineServer implements AutoCloseable {
                         "warning", d.phase(), d.code(), d.message(), d.test(), d.exceptionClass()));
             }
             if (!result.success()) anyFailure = true;
+        }
+
+        private java.util.List<BuildRecord.Phase> phasesFor(String dir) {
+            java.util.Map<String, BuildRecord.Phase> m = phasesByDir.get(dir == null ? "" : dir);
+            if (m == null) return java.util.List.of();
+            synchronized (m) {
+                return new java.util.ArrayList<>(m.values());
+            }
         }
 
         void setTests(TestSummary t) {
@@ -2991,15 +3054,21 @@ public final class EngineServer implements AutoCloseable {
             // terminal message, which can land just before the runner marks itself done), so trust
             // the outcome over that flag and never label a successful run "cancelled".
             boolean cancelledEffective = cancelled && !ok;
-            java.util.List<BuildRecord.Phase> phaseList;
-            synchronized (phases) {
-                phaseList = new java.util.ArrayList<>(phases.values());
+            // Each workspace module carries its own phase chain (keyed by its dir); a single-goal
+            // build has no module rows, so its phases live in the record's top-level list (the ""
+            // bucket). This is exactly the two shapes the dashboard renders (per-module vs compact).
+            java.util.List<BuildRecord.Module> moduleList = new java.util.ArrayList<>();
+            for (ModuleOutcome o : modules) {
+                String mdir = o.dir() == null ? "" : o.dir().toString();
+                moduleList.add(new BuildRecord.Module(
+                        o.coord(), mdir, o.success(), o.exitCode(), o.millis(), phasesFor(mdir)));
             }
+            java.util.List<BuildRecord.Phase> topPhases = moduleList.isEmpty() ? phasesFor("") : java.util.List.of();
             return new BuildRecord(
                     null, BuildRecord.SCHEMA, kind, dir, coord,
                     finishedAt - millis, finishedAt, millis,
                     ok, cancelledEffective, exit, jkVersion,
-                    tests, new java.util.ArrayList<>(modules), phaseList, new java.util.ArrayList<>(diagnostics));
+                    tests, moduleList, topPhases, new java.util.ArrayList<>(diagnostics));
         }
 
         private static boolean notBlank(String s) {

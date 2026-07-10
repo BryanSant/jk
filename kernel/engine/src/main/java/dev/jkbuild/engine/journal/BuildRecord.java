@@ -43,8 +43,16 @@ public record BuildRecord(
     /** Aggregate test counts for the run, or {@code null} when no tests ran. */
     public record Tests(long total, long succeeded, long failed, long skipped) {}
 
-    /** One module's outcome in a workspace build (empty for a single-goal build/test). */
-    public record Module(String coord, String dir, boolean success, int exitCode, long millis) {}
+    /**
+     * One module's outcome in a workspace build (the {@code modules} list is empty for a single-goal
+     * build/test, whose phases sit in the record's top-level {@code phases}). {@code phases} is this
+     * module's own phase chain, so the dashboard shows a chain per module.
+     */
+    public record Module(String coord, String dir, boolean success, int exitCode, long millis, List<Phase> phases) {
+        public Module {
+            phases = phases == null ? List.of() : List.copyOf(phases);
+        }
+    }
 
     /** One phase's aggregate outcome: {@code SUCCESS} / {@code FAIL} / {@code CANCELLED} / {@code SKIPPED}. */
     public record Phase(String name, String status, long millis) {}

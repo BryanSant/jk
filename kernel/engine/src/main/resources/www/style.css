@@ -348,16 +348,19 @@ main { max-width: 66rem; margin: 0 auto; padding: 18px 20px 3rem; }
 
 .log-tail { max-height: 260px; overflow-y: auto; margin: 0; }
 
-/* module rows */
+/* per-module sections (multi-module workspace): a bullet+name+duration row, then that module's chain */
 
-.card ul { list-style: none; margin: 10px 0 0; padding: 0; }
-.card li { display: flex; align-items: baseline; gap: 8px; padding: 2px 0; }
-.card li .millis { margin-left: auto; }
+.module { margin-top: 12px; }
+.module-row { display: flex; align-items: center; gap: 8px; }
+.mname { color: var(--path); font-size: 12px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* the module's phase-chain sits just beneath its row, slightly tightened */
+.module .phase-chain-wrap { margin-top: 6px; }
 
 .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; align-self: center; }
 .dot.running { background: var(--run); animation: pulse 1.4s ease-in-out infinite; }
 .dot.success { background: var(--ok); }
 .dot.failed { background: var(--err); }
+.dot.cancelled, .dot.skipped { background: var(--warn); }
 
 /* ---- status view ---- */
 

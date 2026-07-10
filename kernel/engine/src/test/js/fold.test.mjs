@@ -111,7 +111,7 @@ test('coord and client timestamps ride the card', () => {
   assert.equal(cards[0].finishedAt, 1500);
 });
 
-test('phases fold into one aggregated chain in arrival order', () => {
+test('phases fold per module, each module keeping its own chain', () => {
   const cards = [];
   foldEvent(cards, start(1, '/w'));
   foldEvent(cards, { type: 'phase-start', data: { requestId: 1, dir: '/w/a', phase: 'compile' } });
@@ -119,10 +119,48 @@ test('phases fold into one aggregated chain in arrival order', () => {
   foldEvent(cards, { type: 'phase-finish', data: { requestId: 1, dir: '/w/a', phase: 'compile', status: 'SUCCESS' } });
   foldEvent(cards, { type: 'phase-start', data: { requestId: 1, dir: '/w/a', phase: 'test' } });
   foldEvent(cards, { type: 'phase-finish', data: { requestId: 1, dir: '/w/a', phase: 'test', status: 'FAIL' } });
+  const byDir = (dir) => cards[0].modules.find((m) => m.dir === dir);
+  assert.equal(cards[0].modules.length, 2); // two modules, not one merged chain
   assert.deepEqual(
-    cards[0].phases.map((p) => p.name + ':' + p.state),
-    ['compile:success', 'test:failed'], // deduped by name; latest state wins
+    byDir('/w/a').phases.map((p) => p.name + ':' + p.state),
+    ['compile:success', 'test:failed'],
   );
+  assert.deepEqual(
+    byDir('/w/b').phases.map((p) => p.name + ':' + p.state),
+    ['compile:running'], // /w/b's compile is independent of /w/a's
+  );
+});
+
+test('single-goal phase events (empty dir) become one module with a chain', () => {
+  const cards = [];
+  foldEvent(cards, start(1, '/proj'));
+  foldEvent(cards, { type: 'phase-start', data: { requestId: 1, dir: '', phase: 'compile-java' } });
+  foldEvent(cards, { type: 'phase-finish', data: { requestId: 1, dir: '', phase: 'compile-java', status: 'SUCCESS' } });
+  assert.equal(cards[0].modules.length, 1);
+  assert.equal(cards[0].modules[0].dir, '');
+  assert.deepEqual(cards[0].modules[0].phases.map((p) => p.name + ':' + p.state), ['compile-java:success']);
+});
+
+test('history backfill maps per-module phases; single-project synthesizes one module', async () => {
+  const { seedFromHistory } = await import(pathToFileURL(process.env.JK_FOLD_MJS));
+  // workspace record: modules carry their own phases
+  const ws = [];
+  seedFromHistory(ws, [{
+    id: 'w1', kind: 'build', dir: '/w', coord: 'g:w', finishedAt: 5000, success: true,
+    modules: [{ coord: 'g:core', dir: '/w/core', success: true, millis: 100, phases: [{ name: 'compile', status: 'SUCCESS' }] }],
+    phases: [], diagnostics: [],
+  }]);
+  assert.equal(ws[0].modules.length, 1);
+  assert.equal(ws[0].modules[0].coord, 'g:core');
+  assert.deepEqual(ws[0].modules[0].phases.map((p) => p.name + ':' + p.state), ['compile:success']);
+  // single-project record: no modules, phases at top level → synthesize one module
+  const sp = [];
+  seedFromHistory(sp, [{
+    id: 's1', kind: 'build', dir: '/p', coord: 'g:p', finishedAt: 6000, success: true,
+    modules: [], phases: [{ name: 'compile-java', status: 'SUCCESS' }], diagnostics: [],
+  }]);
+  assert.equal(sp[0].modules.length, 1);
+  assert.deepEqual(sp[0].modules[0].phases.map((p) => p.name + ':' + p.state), ['compile-java:success']);
 });
 
 test('output keeps a bounded tail and clears on finish', () => {

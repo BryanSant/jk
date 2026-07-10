@@ -164,6 +164,27 @@ Vue.createApp({
       return moduleSummary(card);
     },
 
+    // A build is "compact" (one phase chain under the header, no module-name rows) when it has at
+    // most one module — a single-project build, or a 1-module workspace. Multi-module builds render
+    // a bullet+name row per module, each with its own chain.
+    compact(card) {
+      return card.modules.length <= 1;
+    },
+
+    // The single chain shown under the header for a compact card (the one module's phases, if any).
+    singleChain(card) {
+      return card.modules[0] ? card.modules[0].phases : [];
+    },
+
+    // A module row's label: the artifact name from its coord (e.g. "core"), else the dir's tail.
+    moduleLabel(m) {
+      if (m.coord) {
+        const i = m.coord.lastIndexOf(':');
+        return i >= 0 ? m.coord.slice(i + 1) : m.coord;
+      }
+      return this.shortDir(m.dir);
+    },
+
     async refresh() {
       try {
         this.status = await get('/api/status');

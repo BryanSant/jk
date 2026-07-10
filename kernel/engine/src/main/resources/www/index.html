@@ -62,7 +62,7 @@
             <span class="cn">{{ coordParts(card).name }}</span>
           </span>
           <span class="kind">{{ card.kind }}</span>
-          <span v-if="outcome(card) !== 'running' && summary(card)" class="summary">{{ summary(card) }}</span>
+          <span v-if="card.modules.length > 1" class="summary">{{ summary(card) }}</span>
           <span class="spacer"></span>
           <button v-if="outcome(card) !== 'running' && card.kind === 'build'" class="rebuild"
                   @click="triggerBuild(card.dir)" title="Build this directory again">rebuild</button>
@@ -77,7 +77,21 @@
           <span class="cardbar-fill" :style="{ width: progress(card) + '%' }"></span>
         </div>
 
-        <phase-chain v-if="card.phases.length" :phases="card.phases"></phase-chain>
+        <!-- Compact (single-module): one phase chain directly under the header. -->
+        <phase-chain v-if="compact(card) && singleChain(card).length" :phases="singleChain(card)"></phase-chain>
+
+        <!-- Multi-module workspace: a bullet + name + duration row per module, each with its chain. -->
+        <template v-if="!compact(card)">
+          <div v-for="m in card.modules" :key="m.dir" class="module">
+            <div class="module-row">
+              <span class="dot" :class="m.state"></span>
+              <span class="mname" :title="m.dir">{{ moduleLabel(m) }}</span>
+              <span class="spacer"></span>
+              <span class="millis">{{ duration(m.millis) }}</span>
+            </div>
+            <phase-chain v-if="m.phases.length" :phases="m.phases"></phase-chain>
+          </div>
+        </template>
 
         <div v-if="outcome(card) === 'running' && card.output.length" class="console">
           <div v-for="(o, i) in card.output" :key="i">
@@ -96,13 +110,6 @@
           </div>
         </details>
 
-        <ul v-if="card.modules.length > 1">
-          <li v-for="m in card.modules" :key="m.dir">
-            <span class="dot" :class="m.state"></span>
-            <span class="dir" :title="m.dir">{{ shortDir(m.dir) }}</span>
-            <span class="millis">{{ duration(m.millis) }}</span>
-          </li>
-        </ul>
       </article>
       <div v-if="browser" class="modal-bg" @click.self="closeBrowser()">
         <div class="modal">

@@ -58,19 +58,16 @@ final class Json {
                     .append(",\"dir\":").append(q(m.dir()))
                     .append(",\"success\":").append(m.success())
                     .append(",\"exitCode\":").append(m.exitCode())
-                    .append(",\"millis\":").append(m.millis()).append('}');
+                    .append(",\"millis\":").append(m.millis())
+                    .append(",\"phases\":");
+            appendPhases(b, m.phases());
+            b.append('}');
         }
         b.append(r.modules().isEmpty() ? "],\n" : "\n  ],\n");
 
-        b.append("  \"phases\": [");
-        for (int i = 0; i < r.phases().size(); i++) {
-            BuildRecord.Phase p = r.phases().get(i);
-            if (i > 0) b.append(',');
-            b.append("\n    {\"name\":").append(q(p.name()))
-                    .append(",\"status\":").append(q(p.status()))
-                    .append(",\"millis\":").append(p.millis()).append('}');
-        }
-        b.append(r.phases().isEmpty() ? "],\n" : "\n  ],\n");
+        b.append("  \"phases\": ");
+        appendPhases(b, r.phases());
+        b.append(",\n");
 
         b.append("  \"diagnostics\": [");
         for (int i = 0; i < r.diagnostics().size(); i++) {
@@ -106,6 +103,19 @@ final class Json {
         return s == null ? "null" : Ndjson.quote(s);
     }
 
+    /** A compact JSON array of phase objects — reused for a module's chain and the top-level list. */
+    private static void appendPhases(StringBuilder b, List<BuildRecord.Phase> phases) {
+        b.append('[');
+        for (int i = 0; i < phases.size(); i++) {
+            BuildRecord.Phase p = phases.get(i);
+            if (i > 0) b.append(',');
+            b.append("{\"name\":").append(q(p.name()))
+                    .append(",\"status\":").append(q(p.status()))
+                    .append(",\"millis\":").append(p.millis()).append('}');
+        }
+        b.append(']');
+    }
+
     // ---------------------------------------------------------------- read
 
     @SuppressWarnings("unchecked")
@@ -126,14 +136,11 @@ final class Json {
         for (Object e : arr(o, "modules")) {
             Map<String, Object> mm = (Map<String, Object>) e;
             modules.add(new BuildRecord.Module(
-                    str(mm, "coord"), str(mm, "dir"), bool(mm, "success"), (int) lng(mm, "exitCode"), lng(mm, "millis")));
+                    str(mm, "coord"), str(mm, "dir"), bool(mm, "success"),
+                    (int) lng(mm, "exitCode"), lng(mm, "millis"), readPhases(mm)));
         }
 
-        List<BuildRecord.Phase> phases = new ArrayList<>();
-        for (Object e : arr(o, "phases")) {
-            Map<String, Object> pm = (Map<String, Object>) e;
-            phases.add(new BuildRecord.Phase(str(pm, "name"), str(pm, "status"), lng(pm, "millis")));
-        }
+        List<BuildRecord.Phase> phases = readPhases(o);
 
         List<BuildRecord.Diag> diagnostics = new ArrayList<>();
         for (Object e : arr(o, "diagnostics")) {
@@ -165,6 +172,17 @@ final class Json {
     @SuppressWarnings("unchecked")
     private static List<Object> arr(Map<String, Object> o, String key) {
         return o.get(key) instanceof List<?> l ? (List<Object>) l : List.of();
+    }
+
+    /** Read a {@code "phases"} array from a record or a module object. */
+    @SuppressWarnings("unchecked")
+    private static List<BuildRecord.Phase> readPhases(Map<String, Object> o) {
+        List<BuildRecord.Phase> phases = new ArrayList<>();
+        for (Object e : arr(o, "phases")) {
+            Map<String, Object> pm = (Map<String, Object>) e;
+            phases.add(new BuildRecord.Phase(str(pm, "name"), str(pm, "status"), lng(pm, "millis")));
+        }
+        return phases;
     }
 
     /** A tiny, tolerant recursive-descent JSON reader for the exact shapes {@link #write} emits. */

@@ -34,8 +34,10 @@ export function foldEvent(cards, event) {
         millis: null,
         cancelled: false,
         success: null, // tri-state: null = engine didn't say (socket requests) — derive from modules
+        // Every build is a list of module rows (a single-project build has one, keyed by the empty
+        // SINGLE_GOAL_DIR); each row carries its OWN phase chain, so the card shows a chain per
+        // module rather than one merged strip.
         modules: [],
-        phases: [],
         // Weight-based progress, identical to the CLI: the engine streams per-module goal
         // numerator/denominator (weight units); mods holds the latest per dir, and the card's bar
         // is their sum over the plan total. planWeight seeds the denominator so a workspace bar
@@ -52,17 +54,21 @@ export function foldEvent(cards, event) {
     }
     case 'module-start': {
       const card = byId(cards, d.requestId);
-      if (card) moduleRow(card, d.dir).state = 'running';
+      if (card) {
+        const row = moduleRow(card, d.dir);
+        row.state = 'running';
+        if (d.coord) row.coord = d.coord;
+      }
       break;
     }
     case 'phase-start': {
       const card = byId(cards, d.requestId);
-      if (card) phaseRow(card, d.phase).state = 'running';
+      if (card) phaseRow(card, d.dir, d.phase).state = 'running';
       break;
     }
     case 'phase-finish': {
       const card = byId(cards, d.requestId);
-      if (card) phaseRow(card, d.phase).state = phaseState(d.status);
+      if (card) phaseRow(card, d.dir, d.phase).state = phaseState(d.status);
       break;
     }
     case 'plan': {
@@ -118,6 +124,7 @@ export function foldEvent(cards, event) {
         const row = moduleRow(card, d.dir);
         row.state = d.success ? 'success' : 'failed';
         row.millis = d.millis ?? row.millis;
+        if (d.coord) row.coord = d.coord;
       }
       break;
     }
@@ -202,12 +209,7 @@ function historyCard(rec) {
     millis: rec.millis ?? null,
     cancelled: !!rec.cancelled,
     success: typeof rec.success === 'boolean' ? rec.success : null,
-    modules: (rec.modules || []).map((m) => ({
-      dir: m.dir || '',
-      state: m.success ? 'success' : 'failed',
-      millis: m.millis ?? null,
-    })),
-    phases: (rec.phases || []).map((p) => ({ name: p.name || '?', state: phaseState(p.status) })),
+    modules: historyModules(rec),
     output: [],
     diagnostics: (rec.diagnostics || []).map((d) => ({
       phase: d.phase || '',
@@ -217,6 +219,31 @@ function historyCard(rec) {
       exceptionClass: d.exceptionClass || '',
     })),
   };
+}
+
+/**
+ * Module rows for a persisted record, matching the live card shape (each with its own phase chain).
+ * A workspace record has `modules[]` each carrying `phases`; a single-project record has no modules
+ * and its phases at the top level — synthesize one row from them so backfilled cards match live.
+ */
+function historyModules(rec) {
+  const toPhases = (ps) => (ps || []).map((p) => ({ name: p.name || '?', state: phaseState(p.status) }));
+  if ((rec.modules || []).length > 0) {
+    return rec.modules.map((m) => ({
+      dir: m.dir || '',
+      coord: m.coord || null,
+      state: m.success ? 'success' : 'failed',
+      millis: m.millis ?? null,
+      phases: toPhases(m.phases),
+    }));
+  }
+  return [{
+    dir: rec.dir || '',
+    coord: rec.coord || null,
+    state: rec.cancelled ? 'cancelled' : rec.success === false ? 'failed' : 'success',
+    millis: rec.millis ?? null,
+    phases: toPhases(rec.phases),
+  }];
 }
 
 /**
@@ -247,26 +274,32 @@ function byId(cards, requestId) {
   return cards.find((c) => c.id === requestId);
 }
 
-/** The card's row for a module dir, created on first sight (single-goal requests skip module-start). */
+/**
+ * The card's row for a module dir, created on first sight. A single-goal (single-project) build
+ * emits its phase/goal events under the empty SINGLE_GOAL_DIR, so it gets exactly one row keyed by
+ * `''`. Each row owns its phase chain (`phases`).
+ */
 function moduleRow(card, dir) {
-  let row = card.modules.find((m) => m.dir === dir);
+  const key = dir || '';
+  let row = card.modules.find((m) => m.dir === key);
   if (!row) {
-    row = { dir: dir || '', state: 'running', millis: null };
+    row = { dir: key, coord: null, state: 'running', millis: null, phases: [] };
     card.modules.push(row);
   }
   return row;
 }
 
 /**
- * The card's chain entry for a phase name, created in arrival order. Workspace builds interleave
- * many modules' phases; folding by name aggregates them into one chain (a phase is running while
- * any module runs it), which matches the design's single lock→compile→test→build strip.
+ * The chain entry for a phase name WITHIN its module (keyed by the event's dir), created in arrival
+ * order. Unlike the old global-by-name folding, each module keeps its own chain, so the dashboard
+ * shows one lock→compile→test→build strip per module.
  */
-function phaseRow(card, phase) {
-  let row = card.phases.find((p) => p.name === phase);
+function phaseRow(card, dir, phase) {
+  const mod = moduleRow(card, dir);
+  let row = mod.phases.find((p) => p.name === phase);
   if (!row) {
     row = { name: phase || '?', state: 'running' };
-    card.phases.push(row);
+    mod.phases.push(row);
   }
   return row;
 }
