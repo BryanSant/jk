@@ -1,32 +1,34 @@
 /* SPDX-License-Identifier: Apache-2.0
- * jk engine dashboard. Palette lifted from docs/tui-style.md (Jk Dark) so the dashboard and the
- * terminal UI read as one product: color means state, never decoration. Light theme derives the
- * same hues onto a paper background via prefers-color-scheme. */
+ * jk engine dashboard. Surface/state tokens adopted from the jk.dc design exploration, which in
+ * turn derives from docs/tui-style.md (Jk Dark) — dashboard and terminal read as one product:
+ * color means state, never decoration. Dark-only, deliberately (the TUI is Jk Dark; so is this).
+ * Mono type is JetBrainsMono Nerd Font Mono when installed locally (the TUI wants it anyway),
+ * falling back to Google's JetBrains Mono webfont, then the system mono stack. */
 
 :root {
-  --bg: #14161a;
-  --surface: #1d2026;
-  --border: #2c313a;
-  --text: #d7dae0;
-  --text-dim: #8b919c;
-  --accent: #00bcd4;      /* coord-group cyan */
-  --working: #0f4786;     /* chip-working */
-  --success: #4caf50;     /* success-text */
-  --success-deep: #357b38;/* chip-success */
-  --error: #e91e63;       /* chip-error */
-  --warning: #ffc107;     /* warning-text */
+  --bg: #0f141a;
+  --s1: #161d25;
+  --s2: #1c2630;
+  --s3: #232f3a;
+  --bd: #2a3742;
+  --bd2: #1e2830;
+  --tx: #cfd8dc;
+  --bright: #eceff1;
+  --mu: #90a4ae;
+  --dim: #5c6d78;
+  --ok: #4caf50;
+  --okc: #357b38;
+  --err: #e91e63;
+  --run: #3d8fe0;
+  --runc: #0f4786;
+  --warn: #ffc107;
+  --cg: #00bcd4;
+  --cn: #18ffff;
+  --path: #969dd4;
+  --console-bg: #0b1116;
 }
 
-@media (prefers-color-scheme: light) {
-  :root {
-    --bg: #f6f7f9;
-    --surface: #ffffff;
-    --border: #d9dde3;
-    --text: #23272e;
-    --text-dim: #6b7280;
-    --working: #1565c0;
-  }
-}
+
 
 [v-cloak] { display: none; }
 
@@ -35,141 +37,396 @@
 body {
   margin: 0;
   background: var(--bg);
-  color: var(--text);
-  font: 15px/1.5 system-ui, sans-serif;
+  color: var(--tx);
+  font: 13.5px/1.5 system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
 
-code, .dir, .millis { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+code, .mono, .coord, .millis, .dir, .console, .kpi { font-family: "JetBrainsMono Nerd Font Mono", "JetBrains Mono Nerd Font Mono", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace; }
 
-#app { max-width: 60rem; margin: 0 auto; padding: 1rem 1.25rem 3rem; }
+.spacer { flex: 1; }
+.dim { color: var(--dim); }
+.small { font-size: 11.5px; }
+.warn { color: var(--warn); }
+.accent { color: var(--cg); }
+.error { color: var(--err); }
+.empty { color: var(--mu); }
+
+/* ---- header (always dark, like the design's nav) ---- */
 
 header {
   display: flex;
   align-items: center;
-  gap: 1rem;
-  padding: 0.5rem 0 1rem;
-  border-bottom: 1px solid var(--border);
+  gap: 14px;
+  height: 52px;
+  padding: 0 18px;
+  background: #0a0d11;
+  border-bottom: 1px solid #1c2833;
+  position: sticky;
+  top: 0;
+  z-index: 10;
 }
 
-h1 { font-size: 1.25rem; margin: 0; }
-.subtitle { color: var(--text-dim); font-weight: normal; }
+/* The mark itself is /jk-logo.svg — outlined JetBrains Mono glyphs, CRT-green treatment.
+ * Deliberately large relative to the 52px bar: the mark is the room's only decoration. */
+.logo {
+  width: 42px;
+  height: 42px;
+  display: block;
+  flex: none;
+}
 
-nav { display: flex; gap: 0.25rem; }
+nav { display: flex; gap: 2px; }
 
 nav button {
   background: none;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  color: var(--text-dim);
-  padding: 0.3rem 0.8rem;
-  font: inherit;
+  border: none;
+  border-radius: 7px;
+  color: #90a4ae;
+  padding: 7px 13px;
+  font: 600 12.5px system-ui;
   cursor: pointer;
 }
 
-nav button.active { color: var(--text); border-color: var(--border); background: var(--surface); }
+nav button.active { background: #1c2630; color: #eceff1; }
 
-.connection { margin-left: auto; font-size: 0.85rem; color: var(--text-dim); }
-.connection.live::before { content: '● '; color: var(--success); }
-.connection.connecting::before { content: '● '; color: var(--warning); }
-.connection.offline, .connection.unauthorized { color: var(--warning); }
-.connection.offline::before, .connection.unauthorized::before { content: '● '; color: var(--warning); }
+.engine-pill {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  background: #161d25;
+  border: 1px solid #2a3742;
+  border-radius: 999px;
+  padding: 5px 12px 5px 10px;
+  font-size: 12px;
+  color: #cfd8dc;
+  cursor: pointer;
+  max-width: 46vw;
+  white-space: nowrap;
+  overflow: hidden;
+}
 
-main { padding-top: 1rem; }
+.pill-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--warn); }
+.engine-pill.live .pill-dot { background: var(--ok); }
+.engine-pill.connecting .pill-dot { animation: pulse 1.4s ease-in-out infinite; }
+.engine-pill.offline, .engine-pill.unauthorized { color: var(--warn); border-color: rgba(255, 193, 7, 0.4); }
+.pill-version { color: #5c6d78; font-family: "JetBrainsMono Nerd Font Mono", "JetBrains Mono Nerd Font Mono", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace; }
 
-.empty { color: var(--text-dim); }
-.error { color: var(--error); }
+.icon-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid #2a3742;
+  background: #161d25;
+  color: #90a4ae;
+  font-size: 14px;
+  cursor: pointer;
+}
 
-/* ---- activity ---- */
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
 
-.trigger { display: flex; gap: 0.5rem; margin-bottom: 1.25rem; }
+.spin {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  border: 2px solid rgba(128, 160, 190, 0.35);
+  border-top-color: var(--run);
+  animation: sp 0.7s linear infinite;
+  flex: none;
+}
+
+.spin.small { width: 10px; height: 10px; border-width: 2px; }
+
+@keyframes sp { to { transform: rotate(360deg); } }
+
+/* ---- layout ---- */
+
+main { max-width: 66rem; margin: 0 auto; padding: 18px 20px 3rem; }
+
+.feed-head { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.feed-head h2 { font: 700 15px system-ui; color: var(--bright); margin: 0; }
+
+.retention {
+  font-size: 11px;
+  color: var(--mu);
+  border: 1px solid var(--bd);
+  border-radius: 6px;
+  padding: 2px 8px;
+}
+
+.trigger { display: flex; gap: 7px; }
 
 .trigger input {
-  flex: 1;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  color: var(--text);
-  padding: 0.45rem 0.7rem;
-  font: inherit;
+  width: 260px;
+  background: var(--s1);
+  border: 1px solid var(--bd);
+  border-radius: 8px;
+  color: var(--tx);
+  padding: 7px 10px;
+  font: 12px "JetBrainsMono Nerd Font Mono", "JetBrains Mono Nerd Font Mono", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
-.trigger button {
-  background: var(--working);
+.trigger button.ghost {
+  background: var(--s1);
+  color: var(--mu);
+  border: 1px solid var(--bd);
+}
+
+.trigger button.ghost:hover { color: var(--tx); }
+
+.trigger button, .rebuild {
+  background: var(--okc);
   border: none;
-  border-radius: 6px;
+  border-radius: 8px;
   color: #fff;
-  padding: 0.45rem 1.1rem;
-  font: inherit;
+  padding: 7px 13px;
+  font: 600 12.5px system-ui;
   cursor: pointer;
 }
 
-.card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-left: 3px solid var(--border);
-  border-radius: 8px;
-  padding: 0.7rem 0.9rem;
-  margin-bottom: 0.75rem;
+.rebuild {
+  background: var(--s2);
+  color: var(--mu);
+  border: 1px solid var(--bd);
+  padding: 3px 9px;
+  font-size: 11px;
 }
 
-.card.running { border-left-color: var(--working); }
-.card.success { border-left-color: var(--success-deep); }
-.card.failed { border-left-color: var(--error); }
-.card.cancelled, .card.finished { border-left-color: var(--warning); }
+.rebuild:hover { color: var(--tx); }
 
-.card-head { display: flex; align-items: baseline; gap: 0.7rem; }
+/* ---- activity cards ---- */
+
+.card {
+  background: var(--s1);
+  border: 1px solid var(--bd2);
+  border-left: 3px solid var(--bd);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+}
+
+.card.running { border-left-color: var(--run); border-color: rgba(15, 71, 134, 0.65); }
+.card.success { border-left-color: var(--okc); }
+.card.failed { border-left-color: var(--err); }
+.card.cancelled, .card.finished { border-left-color: var(--warn); }
+
+.card-head { display: flex; align-items: baseline; gap: 10px; }
 
 .badge {
-  font-size: 0.72rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  border-radius: 4px;
-  padding: 0.1rem 0.45rem;
+  font: 600 11px/1 system-ui;
+  border-radius: 6px;
+  padding: 3px 9px;
   color: #fff;
-  background: var(--working);
+  background: var(--runc);
+  white-space: nowrap;
 }
 
-.badge.success { background: var(--success-deep); }
-.badge.failed { background: var(--error); }
-.badge.cancelled, .badge.finished { background: var(--warning); color: #1d2026; }
+.badge.success { background: var(--okc); }
+.badge.failed { background: var(--err); }
+.badge.cancelled, .badge.finished { background: var(--warn); color: #1d2026; }
 
-.kind { color: var(--accent); }
-.dir { color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.card .millis, .card li .millis { margin-left: auto; color: var(--text-dim); font-size: 0.85rem; }
+.coord { font-size: 12.5px; font-weight: 500; }
+.coord .cg { color: var(--cg); }
+.coord .cn { color: var(--cn); }
+.coord .csep { color: var(--dim); }
 
-.card ul { list-style: none; margin: 0.6rem 0 0; padding: 0; }
-.card li { display: flex; align-items: baseline; gap: 0.5rem; padding: 0.15rem 0; }
+.kind { color: var(--mu); font-size: 12px; }
+.summary { color: var(--mu); font-size: 12px; }
+.millis { color: var(--mu); font-size: 12px; }
+.ago { color: var(--dim); font-size: 11.5px; }
+.dir { color: var(--path); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-.dot { width: 0.6rem; height: 0.6rem; border-radius: 50%; flex: none; align-self: center; }
-.dot.running { background: var(--working); }
-.dot.success { background: var(--success); }
-.dot.failed { background: var(--error); }
+/* phase chain — the design's DAG strip */
 
-/* ---- status ---- */
+.phase-chain { display: flex; align-items: center; flex-wrap: wrap; margin-top: 11px; }
 
-dl {
-  display: grid;
-  grid-template-columns: max-content 1fr;
-  gap: 0.5rem 1.5rem;
-  background: var(--surface);
-  border: 1px solid var(--border);
+.phase-node {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
   border-radius: 8px;
-  padding: 1rem 1.25rem;
-  margin: 0;
+  border: 1px solid var(--bd);
+  background: var(--s2);
+  font: 600 11px/1 system-ui;
+  color: var(--mu);
+  white-space: nowrap;
 }
 
-dt { color: var(--text-dim); }
-dd { margin: 0; overflow-wrap: anywhere; }
+.phase-node.running { border-color: #2f7dd6; color: #cfe6ff; background: var(--runc); }
+.phase-node.success { border-color: rgba(76, 175, 80, 0.4); color: var(--ok); background: rgba(53, 123, 56, 0.14); }
+.phase-node.failed { border-color: rgba(233, 30, 99, 0.5); color: var(--err); background: rgba(233, 30, 99, 0.12); }
+.phase-node.skipped, .phase-node.cancelled { opacity: 0.55; }
+.phase-glyph.ok { color: var(--ok); }
+.phase-glyph.err { color: var(--err); }
+
+.phase-edge { height: 2px; width: 18px; background: var(--bd); flex: none; }
+.phase-edge.success { background: rgba(76, 175, 80, 0.45); }
+
+/* console tail (in-flight output + engine log) */
+
+.console {
+  font: 11.5px/1.8 "JetBrainsMono Nerd Font Mono", "JetBrains Mono Nerd Font Mono", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: #90a4ae;
+  background: var(--console-bg);
+  border: 1px solid var(--bd2);
+  border-radius: 8px;
+  padding: 9px 12px;
+  margin-top: 11px;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.console-dir { color: #18ffff; }
+.console-sep { color: #5c6d78; }
+
+.log-tail { max-height: 260px; overflow-y: auto; margin: 0; }
+
+/* module rows */
+
+.card ul { list-style: none; margin: 10px 0 0; padding: 0; }
+.card li { display: flex; align-items: baseline; gap: 8px; padding: 2px 0; }
+.card li .millis { margin-left: auto; }
+
+.dot { width: 8px; height: 8px; border-radius: 50%; flex: none; align-self: center; }
+.dot.running { background: var(--run); animation: pulse 1.4s ease-in-out infinite; }
+.dot.success { background: var(--ok); }
+.dot.failed { background: var(--err); }
+
+/* ---- status view ---- */
+
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 14px; }
+
+.tile {
+  background: var(--s1);
+  border: 1px solid var(--bd2);
+  border-radius: 10px;
+  padding: 12px 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.lbl {
+  font: 600 10.5px/1 system-ui;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+
+.kpi { font: 700 17px/1.2 "JetBrainsMono Nerd Font Mono", "JetBrains Mono Nerd Font Mono", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--bright); overflow-wrap: anywhere; }
+.kpi.ok { color: var(--ok); }
+
+.panels { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
+@media (max-width: 860px) { .panels { grid-template-columns: 1fr; } }
+
+.panel {
+  background: var(--s1);
+  border: 1px solid var(--bd2);
+  border-radius: 10px;
+  padding: 14px 16px;
+  min-width: 0;
+}
+
+.panel-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 11px; }
+.panel-head .mono { font-size: 11px; }
 
 .meter {
-  display: inline-block;
-  width: 10rem;
-  height: 0.5rem;
-  margin-left: 0.6rem;
-  border-radius: 4px;
-  background: var(--border);
+  display: block;
+  position: relative;
+  height: 10px;
+  border-radius: 5px;
+  background: var(--s3);
   overflow: hidden;
-  vertical-align: middle;
 }
 
-.meter-fill { display: block; height: 100%; background: var(--success-deep); }
+.meter-fill { position: absolute; top: 0; left: 0; height: 100%; border-radius: 5px; }
+.meter-fill.committed { background: var(--runc); opacity: 0.55; }
+.meter-fill.used { background: var(--cg); }
+
+.panel dl { display: grid; grid-template-columns: max-content 1fr; gap: 7px 18px; margin: 0; font-size: 12.5px; }
+.panel dt { color: var(--mu); }
+.panel dd { margin: 0; overflow-wrap: anywhere; }
+
+/* ---- failure details ---- */
+
+.diag { margin-top: 11px; }
+
+.diag summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--err);
+  user-select: none;
+}
+
+.diag .console { margin-top: 8px; }
+.diag-line { padding: 1px 0; }
+.console-err { color: var(--err); }
+
+/* ---- workspace picker (Browse…) ---- */
+
+.modal-bg {
+  position: fixed;
+  inset: 0;
+  background: rgba(4, 8, 11, 0.66);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 78px;
+  z-index: 60;
+}
+
+.modal {
+  width: 560px;
+  max-width: 92vw;
+  background: var(--s1);
+  border: 1px solid var(--bd);
+  border-radius: 14px;
+  box-shadow: 0 30px 80px -20px rgba(0, 0, 0, 0.7);
+  overflow: hidden;
+}
+
+.modal-head { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--bd2); }
+
+.modal-path {
+  font-family: "JetBrainsMono Nerd Font Mono", "JetBrains Mono Nerd Font Mono", "JetBrains Mono", ui-monospace, monospace;
+  font-size: 12px;
+  color: var(--path);
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--bd2);
+  overflow-wrap: anywhere;
+}
+
+.modal-list { max-height: 320px; overflow-y: auto; }
+
+.fs-entry {
+  padding: 8px 16px;
+  font-family: "JetBrainsMono Nerd Font Mono", "JetBrains Mono Nerd Font Mono", "JetBrains Mono", ui-monospace, monospace;
+  font-size: 12.5px;
+  color: var(--tx);
+  cursor: pointer;
+  border-bottom: 1px solid var(--bd2);
+}
+
+.fs-entry:hover { background: var(--s2); }
+.fs-entry.up { color: var(--mu); }
+.fs-entry.none { color: var(--dim); cursor: default; }
+.fs-entry.none:hover { background: none; }
+.fs-arrow { color: var(--dim); margin-right: 4px; }
+
+.modal-foot { display: flex; align-items: center; gap: 10px; padding: 12px 16px; }
+
+.jk-found { color: var(--ok); font-size: 12.5px; }
+
+.use-folder {
+  background: var(--okc);
+  border: none;
+  border-radius: 8px;
+  color: #fff;
+  padding: 7px 14px;
+  font: 600 12.5px system-ui;
+  cursor: pointer;
+}
+
+.use-folder:disabled { opacity: 0.4; cursor: default; }

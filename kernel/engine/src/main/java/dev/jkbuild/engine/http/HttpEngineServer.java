@@ -44,7 +44,9 @@ public final class HttpEngineServer implements AutoCloseable {
     private final JkHttpConfig config;
     private final StaticContent staticContent;
     private final Semaphore admission;
+    private final Path wwwRoot;
     private final Path tokenFile;
+    private final Path logFile;
     private final Supplier<StatusSnapshot> status;
     private final HttpEvents events;
     private final BuildTrigger buildTrigger;
@@ -64,6 +66,8 @@ public final class HttpEngineServer implements AutoCloseable {
      *     the live {@code JkDirs}; tests pass a temp dir) — need not exist
      * @param tokenFile where to persist the minted bearer token (owner-only permissions) so the CLI
      *     can hand the user a tokenized URL — {@code EnginePaths.Paths#httpToken()} in real use
+     * @param logFile the engine's own log ({@code EnginePaths.Paths#log()}), tailed by {@code
+     *     GET /api/log} for the dashboard's Status view
      * @param version the engine version, used for classpath-asset {@code ETag}s
      * @param status supplies the vitals {@code GET /api/status} reports, fresh per request
      * @param events the hub {@code GET /api/events} streams from ({@code EngineServer} publishes)
@@ -73,6 +77,7 @@ public final class HttpEngineServer implements AutoCloseable {
             JkHttpConfig config,
             Path wwwRoot,
             Path tokenFile,
+            Path logFile,
             String version,
             Supplier<StatusSnapshot> status,
             HttpEvents events,
@@ -81,13 +86,17 @@ public final class HttpEngineServer implements AutoCloseable {
         this.config = config;
         this.staticContent = new StaticContent(wwwRoot, version);
         this.admission = new Semaphore(config.effectiveMaxConcurrentRequests());
+        this.wwwRoot = wwwRoot;
         this.tokenFile = tokenFile;
+        this.logFile = logFile;
         this.status = status;
         this.events = events;
         this.buildTrigger = buildTrigger;
         this.log = log != null ? log : s -> {};
         api.register("GET", "/api/status", this::handleStatus);
         api.register("GET", "/api/events", this::handleEvents);
+        api.register("GET", "/api/log", this::handleLog);
+        api.register("GET", "/api/fs", this::handleFs);
         api.register("POST", "/api/build", this::handleBuild);
     }
 
@@ -196,7 +205,10 @@ public final class HttpEngineServer implements AutoCloseable {
     private boolean authorized(HttpExchange exchange) {
         String method = exchange.getRequestMethod();
         boolean read = method.equals("GET") || method.equals("HEAD");
-        if (read && !readsRequireToken) return true;
+        // /api/fs lists the filesystem with the engine owner's permissions — on a shared machine
+        // another local user must not browse it over loopback, so it is never token-exempt.
+        boolean sensitiveRead = exchange.getRequestURI().getPath().equals("/api/fs");
+        if (read && !readsRequireToken && !sensitiveRead) return true;
         if (tokenValid(bearerToken(exchange.getRequestHeaders().getFirst("Authorization")))) return true;
         return read
                 && exchange.getRequestURI().getPath().equals("/api/events")
@@ -233,13 +245,64 @@ public final class HttpEngineServer implements AutoCloseable {
                 .put("idleMinutes", s.idleMinutes())
                 .put("neverIdles", true) // [http] enabled forces never-self-terminate (docs/http.md)
                 .put("activeRequests", s.activeRequests())
+                .put("activePipelines", s.activePipelines())
                 .put("heapUsedBytes", s.heapUsedBytes())
                 .put("heapCommittedBytes", s.heapCommittedBytes())
                 .put("heapMaxBytes", s.heapMaxBytes())
                 .put("rssBytes", s.rssBytes())
                 .put("httpUrl", url())
+                .put("maxConcurrentRequests", config.effectiveMaxConcurrentRequests())
+                .put("wwwRoot", wwwRoot.toString())
                 .toString();
         sendJson(exchange, 200, body);
+    }
+
+    /**
+     * The tail of the engine's own log for the Status view — plain text, newest lines last.
+     * Read-tier auth like every {@code /api} GET; IO-shaped (a bounded read of the file's tail).
+     */
+    private void handleLog(HttpExchange exchange) throws IOException {
+        int requested = 120;
+        String param = queryParam(exchange.getRequestURI().getQuery(), "lines");
+        if (param != null) {
+            try {
+                requested = Math.max(1, Math.min(400, Integer.parseInt(param)));
+            } catch (NumberFormatException ignored) {
+                // keep the default
+            }
+        }
+        String tail;
+        try {
+            tail = tailOf(logFile, requested);
+        } catch (IOException e) {
+            tail = "";
+        }
+        exchange.getResponseHeaders().set("Content-Type", "text/plain; charset=utf-8");
+        exchange.getResponseHeaders().set("Cache-Control", "no-store");
+        byte[] bytes = tail.getBytes(StandardCharsets.UTF_8);
+        if (bytes.length == 0) {
+            exchange.sendResponseHeaders(200, -1);
+            return;
+        }
+        exchange.sendResponseHeaders(200, bytes.length);
+        exchange.getResponseBody().write(bytes);
+    }
+
+    /** Last {@code lines} lines of {@code file}, reading at most the final 256 KiB of it. */
+    private static String tailOf(Path file, int lines) throws IOException {
+        if (!Files.isRegularFile(file)) return "";
+        long size = Files.size(file);
+        long from = Math.max(0, size - 256 * 1024);
+        var buf = java.nio.ByteBuffer.allocate((int) (size - from));
+        try (var channel = java.nio.channels.FileChannel.open(file)) {
+            channel.position(from);
+            while (buf.hasRemaining() && channel.read(buf) >= 0) {}
+        }
+        byte[] bytes = buf.array();
+        String[] all = new String(bytes, StandardCharsets.UTF_8).split("\n", -1);
+        int end = all.length > 0 && all[all.length - 1].isEmpty() ? all.length - 1 : all.length;
+        int start = Math.max(0, end - lines);
+        return String.join("\n", java.util.Arrays.copyOfRange(all, start, end));
     }
 
     /**
@@ -266,6 +329,51 @@ public final class HttpEngineServer implements AutoCloseable {
         } catch (IOException e) {
             // The client closed the tab — routine stream end, not an error.
         }
+    }
+
+    /** Directory listings above this are truncated — a picker, not a filesystem dump. */
+    private static final int MAX_FS_ENTRIES = 400;
+
+    /**
+     * {@code GET /api/fs?dir=…} — the workspace picker behind the dashboard's Browse button:
+     * subdirectory names of an absolute path (default: the user's home), whether it holds a
+     * {@code jk.toml}, and its parent for the up-navigation. Token-required even on loopback —
+     * see {@link #authorized}.
+     */
+    private void handleFs(HttpExchange exchange) throws IOException {
+        String requested = queryParam(exchange.getRequestURI().getQuery(), "dir");
+        Path dir = requested == null || requested.isBlank()
+                ? Path.of(System.getProperty("user.home"))
+                : Path.of(requested);
+        if (!dir.isAbsolute()) {
+            sendJson(exchange, 400, JsonOut.object().put("error", "dir must be an absolute path").toString());
+            return;
+        }
+        dir = dir.normalize();
+        java.util.List<String> subdirs = new java.util.ArrayList<>();
+        try (var entries = Files.newDirectoryStream(dir)) {
+            for (Path entry : entries) {
+                String name = entry.getFileName().toString();
+                if (!name.startsWith(".") && Files.isDirectory(entry)) subdirs.add(name);
+            }
+        } catch (IOException | java.nio.file.DirectoryIteratorException e) {
+            sendJson(exchange, 400, JsonOut.object().put("error", "not a readable directory: " + dir).toString());
+            return;
+        }
+        subdirs.sort(String.CASE_INSENSITIVE_ORDER);
+        boolean truncated = subdirs.size() > MAX_FS_ENTRIES;
+        if (truncated) subdirs = subdirs.subList(0, MAX_FS_ENTRIES);
+        Path parent = dir.getParent();
+        sendJson(
+                exchange,
+                200,
+                JsonOut.object()
+                        .put("dir", dir.toString())
+                        .put("parent", parent != null ? parent.toString() : null)
+                        .put("hasJkToml", Files.isRegularFile(dir.resolve("jk.toml")))
+                        .put("truncated", truncated)
+                        .putStrings("dirs", subdirs)
+                        .toString());
     }
 
     /** {@code POST /api/build} — acknowledge with a request id; progress streams on {@code /api/events}. */

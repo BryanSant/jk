@@ -487,12 +487,7 @@ public final class EngineServer implements AutoCloseable {
         String eventKind = requestKind(threadPrefix);
         String eventDir = String.valueOf(Ndjson.str(requestLine, "entryDir"));
         long eventStartMillis = clockMillis.getAsLong();
-        publishEvent(
-                "request-start",
-                dev.jkbuild.engine.http.JsonOut.object()
-                        .put("requestId", eventRequestId)
-                        .put("kind", eventKind)
-                        .put("dir", eventDir));
+        publishRequestStart(eventRequestId, eventKind, eventDir);
         if (pipeline) activePipelines.incrementAndGet();
         try {
             Thread.ofVirtual().name(threadPrefix, 0).start(() -> {
@@ -546,6 +541,105 @@ public final class EngineServer implements AutoCloseable {
     /** Publish to the dashboard event hub — free (one subscriber check) when no dashboard is open. */
     private void publishEvent(String type, dev.jkbuild.engine.http.JsonOut payload) {
         if (httpEvents != null && httpEvents.hasSubscribers()) httpEvents.publish(type, payload);
+    }
+
+    /**
+     * {@code request-start}, enriched with the project's {@code group:name} coordinate when the
+     * dir's {@code jk.toml} parses — the dashboard renders coordinates, not paths, when it can
+     * (the design's coord coloring). Best-effort and only attempted with a subscriber connected.
+     */
+    private void publishRequestStart(long requestId, String kind, String dir) {
+        if (!eventsWanted()) return;
+        String coord = null;
+        try {
+            var project = JkBuildParser.parse(Path.of(dir).resolve("jk.toml")).project();
+            coord = project.group() + ":" + project.name();
+        } catch (Exception e) {
+            // unparseable/missing jk.toml — the dashboard falls back to showing the dir
+        }
+        publishEvent(
+                "request-start",
+                dev.jkbuild.engine.http.JsonOut.object()
+                        .put("requestId", requestId)
+                        .put("kind", kind)
+                        .put("dir", dir)
+                        .put("coord", coord));
+    }
+
+    private void publishPhaseStart(long requestId, String dir, String phase) {
+        if (!eventsWanted()) return;
+        publishEvent(
+                "phase-start",
+                dev.jkbuild.engine.http.JsonOut.object()
+                        .put("requestId", requestId)
+                        .put("dir", dir)
+                        .put("phase", phase));
+    }
+
+    private void publishPhaseFinish(long requestId, String dir, String phase, String status) {
+        if (!eventsWanted()) return;
+        publishEvent(
+                "phase-finish",
+                dev.jkbuild.engine.http.JsonOut.object()
+                        .put("requestId", requestId)
+                        .put("dir", dir)
+                        .put("phase", phase)
+                        .put("status", status));
+    }
+
+    private void publishOutput(long requestId, String dir, String phase, String line) {
+        if (!eventsWanted()) return;
+        publishEvent(
+                "output",
+                dev.jkbuild.engine.http.JsonOut.object()
+                        .put("requestId", requestId)
+                        .put("dir", dir)
+                        .put("phase", phase)
+                        .put("line", line));
+    }
+
+    /** Failure detail is bounded on the wire: a compile explosion must not flood the event stream. */
+    private static final int MAX_DIAGNOSTIC_EVENTS = 8;
+
+    /**
+     * The failure context behind a failed card ({@code docs/webclient.md}): the same structured
+     * {@link GoalResult.Diagnostic}s the CLI renders — test failures carry test/exceptionClass,
+     * and lock/sync/parse/worker failures arrive as plain phase diagnostics through the same seam.
+     */
+    private void publishDiagnostics(long requestId, String dir, java.util.List<GoalResult.Diagnostic> errors) {
+        if (!eventsWanted() || errors.isEmpty()) return;
+        int shown = Math.min(errors.size(), MAX_DIAGNOSTIC_EVENTS);
+        for (int i = 0; i < shown; i++) {
+            GoalResult.Diagnostic d = errors.get(i);
+            publishEvent(
+                    "diagnostic",
+                    dev.jkbuild.engine.http.JsonOut.object()
+                            .put("requestId", requestId)
+                            .put("dir", dir)
+                            .put("phase", d.phase())
+                            .put("code", d.code())
+                            .put("message", d.message())
+                            .put("test", d.test())
+                            .put("exceptionClass", d.exceptionClass()));
+        }
+        if (errors.size() > shown) {
+            publishRequestError(requestId, dir, "+ " + (errors.size() - shown) + " more errors — see the CLI output");
+        }
+    }
+
+    /** A single request-level failure line (bad jk.toml, workspace orchestration error, …). */
+    private void publishRequestError(long requestId, String dir, String message) {
+        if (!eventsWanted() || message == null || message.isBlank()) return;
+        publishEvent(
+                "diagnostic",
+                dev.jkbuild.engine.http.JsonOut.object()
+                        .put("requestId", requestId)
+                        .put("dir", dir)
+                        .put("phase", "request")
+                        .put("code", "error")
+                        .put("message", message)
+                        .put("test", "")
+                        .put("exceptionClass", ""));
     }
 
     /**
@@ -704,8 +798,14 @@ public final class EngineServer implements AutoCloseable {
             WorkspaceResult result =
                     SessionContext.where(session, () -> BuildService.buildWorkspace(req, listener));
             send(writer, EngineProtocol.workspaceFinish(result.success(), result.exitCode(), result.errors()));
+            if (!result.success()) {
+                for (String error : result.errors().stream().limit(5).toList()) {
+                    publishRequestError(eventRequestId(), entryDirStr, error);
+                }
+            }
         } catch (Exception e) {
             sendQuiet(writer, EngineProtocol.buildError(String.valueOf(e.getMessage())));
+            publishRequestError(eventRequestId(), Ndjson.str(requestLine, "entryDir"), String.valueOf(e.getMessage()));
         }
     }
 
@@ -2097,6 +2197,7 @@ public final class EngineServer implements AutoCloseable {
             @Override
             public void phaseStart(String phase, int scope) {
                 sendQuiet(writer, EngineProtocol.phaseStart(dir, phase, scope));
+                publishPhaseStart(eventRequestId, dir, phase);
             }
 
             @Override
@@ -2137,6 +2238,7 @@ public final class EngineServer implements AutoCloseable {
             @Override
             public void output(String phase, String line) {
                 sendQuiet(writer, EngineProtocol.output(dir, phase, line));
+                publishOutput(eventRequestId, dir, phase, line);
             }
 
             @Override
@@ -2152,6 +2254,7 @@ public final class EngineServer implements AutoCloseable {
             @Override
             public void phaseFinish(String phase, dev.jkbuild.run.PhaseStatus status, Duration duration) {
                 sendQuiet(writer, EngineProtocol.phaseFinish(dir, phase, status.name()));
+                publishPhaseFinish(eventRequestId, dir, phase, status.name());
             }
 
             @Override
@@ -2164,6 +2267,7 @@ public final class EngineServer implements AutoCloseable {
                 }
                 sendQuiet(writer, finishEncoder.apply(result));
                 publishGoalFinish(eventRequestId, dir, result.success());
+                if (!result.success()) publishDiagnostics(eventRequestId, dir, result.errors());
             }
         };
     }
@@ -2226,6 +2330,7 @@ public final class EngineServer implements AutoCloseable {
                 httpConfig,
                 httpConfig.wwwRootPath(),
                 paths.httpToken(),
+                paths.log(),
                 version,
                 this::statusSnapshot,
                 httpEvents,
@@ -2261,12 +2366,7 @@ public final class EngineServer implements AutoCloseable {
         }
         long eventRequestId = requestIds.incrementAndGet();
         long startMillis = clockMillis.getAsLong();
-        publishEvent(
-                "request-start",
-                dev.jkbuild.engine.http.JsonOut.object()
-                        .put("requestId", eventRequestId)
-                        .put("kind", "build")
-                        .put("dir", entryDir.toString()));
+        publishRequestStart(eventRequestId, "build", entryDir.toString());
         activePipelines.incrementAndGet();
         Thread.ofVirtual().name("jk-engine-http-build-", 0).start(() -> {
             cacheGate.readLock().lock();
@@ -2317,9 +2417,15 @@ public final class EngineServer implements AutoCloseable {
                     .withJdksDir(jdksDir);
             WorkspaceResult result =
                     SessionContext.where(session, () -> BuildService.buildWorkspace(req, hubListener()));
+            if (!result.success()) {
+                for (String error : result.errors().stream().limit(5).toList()) {
+                    publishRequestError(eventRequestId(), entryDir.toString(), error);
+                }
+            }
             return result.success();
         } catch (Exception e) {
             log.accept("jk engine: http-triggered build of " + entryDir + " failed: " + e.getMessage());
+            publishRequestError(eventRequestId(), entryDir.toString(), String.valueOf(e.getMessage()));
             return false;
         }
     }
@@ -2334,8 +2440,24 @@ public final class EngineServer implements AutoCloseable {
                 publishModuleStart(eventRequestId, dir);
                 return new GoalListener() {
                     @Override
+                    public void phaseStart(String phase, int scope) {
+                        publishPhaseStart(eventRequestId, dir, phase);
+                    }
+
+                    @Override
+                    public void phaseFinish(String phase, dev.jkbuild.run.PhaseStatus status, Duration duration) {
+                        publishPhaseFinish(eventRequestId, dir, phase, status.name());
+                    }
+
+                    @Override
+                    public void output(String phase, String line) {
+                        publishOutput(eventRequestId, dir, phase, line);
+                    }
+
+                    @Override
                     public void goalFinish(GoalResult result) {
                         publishGoalFinish(eventRequestId, dir, result.success());
+                        if (!result.success()) publishDiagnostics(eventRequestId, dir, result.errors());
                     }
                 };
             }
@@ -2357,6 +2479,7 @@ public final class EngineServer implements AutoCloseable {
                 startedAtMillis,
                 config.idleMinutes(),
                 activeConnections.get(),
+                activePipelines.get(),
                 heapCommitted - rt.freeMemory(),
                 heapCommitted,
                 rt.maxMemory(),

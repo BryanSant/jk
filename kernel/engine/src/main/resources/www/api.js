@@ -48,8 +48,25 @@ export async function post(path, body) {
   return json;
 }
 
+/** GET an /api path as plain text (the log tail). Throws {status} on any non-2xx. */
+export async function getText(path) {
+  const resp = await fetch(path, { headers: headers() });
+  if (!resp.ok) throw { status: resp.status };
+  return resp.text();
+}
+
 /** The engine event types the dashboard folds (EventSource needs a listener per named event). */
-const EVENT_TYPES = ['request-start', 'module-start', 'goal-finish', 'module-finish', 'request-finish'];
+const EVENT_TYPES = [
+  'request-start',
+  'module-start',
+  'phase-start',
+  'phase-finish',
+  'output',
+  'diagnostic',
+  'goal-finish',
+  'module-finish',
+  'request-finish',
+];
 
 /**
  * Open the SSE stream. `onEvent({type, data})` per engine event; `onState('live'|'offline')` as the

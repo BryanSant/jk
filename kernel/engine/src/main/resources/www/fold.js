@@ -5,11 +5,19 @@
 /** Cards kept in the activity feed — a long-lived tab must not grow the page without limit. */
 export const MAX_CARDS = 50;
 
+/** Console-tail lines kept per running card. */
+export const MAX_OUTPUT_LINES = 8;
+
+/** Failure diagnostics kept per card (the server already bounds what it publishes). */
+export const MAX_DIAGNOSTICS = 12;
+
 /**
  * Fold one SSE event into the newest-first card list, mutating and returning it.
- * An event is `{type, data}` where `data` is the parsed flat JSON payload the engine publishes:
- * request-start/finish carry requestId/kind/dir (+ success/cancelled/millis on finish);
- * module-start/module-finish/goal-finish carry requestId/dir (+ success/millis).
+ * An event is `{type, data, at}` where `data` is the parsed flat JSON payload the engine
+ * publishes and `at` is the client-clock receipt time (fold stays clock-free and pure):
+ * request-start/finish carry requestId/kind/dir (+ coord on start when the project's jk.toml
+ * parses; + success/cancelled/millis on finish); module/phase/output/goal events carry
+ * requestId/dir plus their specifics.
  */
 export function foldEvent(cards, event) {
   const d = event.data || {};
@@ -19,11 +27,17 @@ export function foldEvent(cards, event) {
         id: d.requestId,
         kind: d.kind || 'request',
         dir: d.dir || '',
+        coord: d.coord || null,
         state: 'running',
+        startedAt: event.at ?? null,
+        finishedAt: null,
         millis: null,
         cancelled: false,
         success: null, // tri-state: null = engine didn't say (socket requests) — derive from modules
         modules: [],
+        phases: [],
+        output: [],
+        diagnostics: [],
       });
       if (cards.length > MAX_CARDS) cards.length = MAX_CARDS;
       break;
@@ -31,6 +45,37 @@ export function foldEvent(cards, event) {
     case 'module-start': {
       const card = byId(cards, d.requestId);
       if (card) moduleRow(card, d.dir).state = 'running';
+      break;
+    }
+    case 'phase-start': {
+      const card = byId(cards, d.requestId);
+      if (card) phaseRow(card, d.phase).state = 'running';
+      break;
+    }
+    case 'phase-finish': {
+      const card = byId(cards, d.requestId);
+      if (card) phaseRow(card, d.phase).state = phaseState(d.status);
+      break;
+    }
+    case 'output': {
+      const card = byId(cards, d.requestId);
+      if (card && typeof d.line === 'string') {
+        card.output.push({ dir: d.dir || '', line: d.line });
+        if (card.output.length > MAX_OUTPUT_LINES) card.output.splice(0, card.output.length - MAX_OUTPUT_LINES);
+      }
+      break;
+    }
+    case 'diagnostic': {
+      const card = byId(cards, d.requestId);
+      if (card && card.diagnostics.length < MAX_DIAGNOSTICS) {
+        card.diagnostics.push({
+          phase: d.phase || '',
+          code: d.code || '',
+          message: d.message || '',
+          test: d.test || '',
+          exceptionClass: d.exceptionClass || '',
+        });
+      }
       break;
     }
     case 'goal-finish': {
@@ -54,9 +99,11 @@ export function foldEvent(cards, event) {
       const card = byId(cards, d.requestId);
       if (card) {
         card.state = 'finished';
+        card.finishedAt = event.at ?? null;
         card.millis = d.millis ?? null;
         card.cancelled = !!d.cancelled;
         card.success = typeof d.success === 'boolean' ? d.success : null;
+        card.output = []; // the console tail is an in-flight affordance; finished cards are compact
       }
       break;
     }
@@ -81,6 +128,15 @@ export function outcomeOf(card) {
   return 'finished';
 }
 
+/** One line summarizing a card's module work, e.g. "3 modules · 1 failed" — '' when nothing to say. */
+export function moduleSummary(card) {
+  const n = card.modules.length;
+  if (n === 0) return '';
+  const failed = card.modules.filter((m) => m.state === 'failed').length;
+  const noun = n === 1 ? 'module' : 'modules';
+  return failed > 0 ? `${n} ${noun} · ${failed} failed` : `${n} ${noun}`;
+}
+
 function byId(cards, requestId) {
   return cards.find((c) => c.id === requestId);
 }
@@ -93,4 +149,34 @@ function moduleRow(card, dir) {
     card.modules.push(row);
   }
   return row;
+}
+
+/**
+ * The card's chain entry for a phase name, created in arrival order. Workspace builds interleave
+ * many modules' phases; folding by name aggregates them into one chain (a phase is running while
+ * any module runs it), which matches the design's single lock→compile→test→build strip.
+ */
+function phaseRow(card, phase) {
+  let row = card.phases.find((p) => p.name === phase);
+  if (!row) {
+    row = { name: phase || '?', state: 'running' };
+    card.phases.push(row);
+  }
+  return row;
+}
+
+/** Engine PhaseStatus → chain-node state. */
+function phaseState(status) {
+  switch (status) {
+    case 'SUCCESS':
+      return 'success';
+    case 'FAIL':
+      return 'failed';
+    case 'CANCELLED':
+      return 'cancelled';
+    case 'SKIPPED':
+      return 'skipped';
+    default:
+      return 'running';
+  }
 }

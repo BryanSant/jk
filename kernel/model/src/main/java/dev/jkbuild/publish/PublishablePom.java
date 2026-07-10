@@ -205,6 +205,9 @@ public final class PublishablePom {
             case PROVIDED -> "provided";
             case TEST -> "test";
             case PLATFORM, PROCESSOR -> null;
+            // Dev-loop scopes never publish: they are not in the `order` array above, and a
+            // published POM must not leak development-only deps to consumers.
+            case DEV, TEST_DEV -> null;
         };
     }
 

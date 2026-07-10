@@ -1453,4 +1453,45 @@ class JkBuildParserTest {
         assertThat(p.baseUrl()).isEqualTo("git@github.com:user/repo");
         assertThat(p.refSpec()).isNull();
     }
+
+    @Test
+    void dev_and_test_dev_scope_tables_parse() {
+        // Dev-loop scopes (spring-boot plan §3.2): run-only / run+test, never packaged.
+        JkBuild b = JkBuildParser.parse("""
+                [project]
+                group = "com.example"
+                name = "app"
+                version = "1.0"
+
+                [dev-dependencies]
+                devtools = { group = "org.springframework.boot", name = "spring-boot-devtools", version = "4.0.0" }
+
+                [test-dev-dependencies]
+                testcontainers = { group = "org.springframework.boot", name = "spring-boot-testcontainers", version = "4.0.0" }
+                """);
+        assertThat(b.dependencies().of(dev.jkbuild.model.Scope.DEV)).hasSize(1);
+        assertThat(b.dependencies().of(dev.jkbuild.model.Scope.DEV).get(0).module())
+                .isEqualTo("org.springframework.boot:spring-boot-devtools");
+        assertThat(b.dependencies().of(dev.jkbuild.model.Scope.TEST_DEV)).hasSize(1);
+    }
+
+    @Test
+    void runtime_and_platform_scope_tables_parse() {
+        // [platform-dependencies] (BOM imports) and [runtime-dependencies] were previously
+        // importer-only; hand-written manifests must be able to declare them (Boot BOM flow).
+        JkBuild b = JkBuildParser.parse("""
+                [project]
+                group = "com.example"
+                name = "app"
+                version = "1.0"
+
+                [platform-dependencies]
+                spring-boot = { group = "org.springframework.boot", name = "spring-boot-dependencies", version = "4.0.0" }
+
+                [runtime-dependencies]
+                postgres-jdbc = { group = "org.postgresql", name = "postgresql", version = "42.7.4" }
+                """);
+        assertThat(b.dependencies().of(dev.jkbuild.model.Scope.PLATFORM)).hasSize(1);
+        assertThat(b.dependencies().of(dev.jkbuild.model.Scope.RUNTIME)).hasSize(1);
+    }
 }

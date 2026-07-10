@@ -12,6 +12,7 @@ public record StatusSnapshot(
         long startedAtMillis,
         int idleMinutes,
         int activeRequests,
+        int activePipelines,
         long heapUsedBytes,
         long heapCommittedBytes,
         long heapMaxBytes,

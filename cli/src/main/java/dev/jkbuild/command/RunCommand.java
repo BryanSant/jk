@@ -309,9 +309,11 @@ public final class RunCommand implements CliCommand {
         Cas cas = new Cas(cacheDir());
         if (Files.exists(lockFile)) {
             Lockfile lock = LockfileReader.read(lockFile);
-            classpath.addAll(new ClasspathResolver(cas).classpathFor(lock, ClasspathResolver.RUNTIME));
+            // RUN, not RUNTIME: dev-loop deps (DevTools, Docker Compose support) ride local
+            // runs; packagers keep consuming the production RUNTIME set.
+            classpath.addAll(new ClasspathResolver(cas).classpathFor(lock, ClasspathResolver.RUN));
         }
-        WorkspaceClasspath.Result siblings = WorkspaceClasspath.resolve(projectDir, project, ClasspathResolver.RUNTIME);
+        WorkspaceClasspath.Result siblings = WorkspaceClasspath.resolve(projectDir, project, ClasspathResolver.RUN);
         classpath.addAll(siblings.jars());
         return classpath;
     }

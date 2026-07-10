@@ -396,6 +396,7 @@ public final class PomExporter {
             case PROVIDED -> "provided";
             case TEST -> "test";
             case PLATFORM, PROCESSOR -> null; // emitted elsewhere
+            case DEV, TEST_DEV -> null; // dev-only: never exported to a POM
         };
     }
 

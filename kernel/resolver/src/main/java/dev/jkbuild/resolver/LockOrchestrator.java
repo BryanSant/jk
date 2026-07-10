@@ -40,7 +40,15 @@ import java.util.Set;
 public final class LockOrchestrator {
 
     private static final List<Scope> SCOPES =
-            List.of(Scope.EXPORT, Scope.MAIN, Scope.RUNTIME, Scope.PROVIDED, Scope.TEST, Scope.PROCESSOR);
+            List.of(
+                    Scope.EXPORT,
+                    Scope.MAIN,
+                    Scope.RUNTIME,
+                    Scope.PROVIDED,
+                    Scope.TEST,
+                    Scope.PROCESSOR,
+                    Scope.DEV,
+                    Scope.TEST_DEV);
 
     /**
      * jk test infrastructure: always injected into the TEST classpath via {@code putIfAbsent} so

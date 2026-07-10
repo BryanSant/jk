@@ -22,16 +22,27 @@ import java.util.Set;
 public final class ClasspathResolver {
 
     /** Scopes used to build the runtime / test runtime classpath. */
-    public static final Set<Scope> TEST = EnumSet.of(Scope.EXPORT, Scope.MAIN, Scope.RUNTIME, Scope.TEST);
+    public static final Set<Scope> TEST =
+            EnumSet.of(Scope.EXPORT, Scope.MAIN, Scope.RUNTIME, Scope.TEST, Scope.TEST_DEV);
 
     /** Scopes bundled into a runnable app (shadow jar / installed ~/.jk/lib). */
     public static final Set<Scope> RUNTIME = EnumSet.of(Scope.EXPORT, Scope.MAIN, Scope.RUNTIME);
+
+    /**
+     * The {@code jk run}/{@code jk dev} exec classpath: production runtime plus the dev-loop
+     * scopes ({@code [dev-dependencies]}, {@code [test-dev-dependencies]}) — DevTools, Docker
+     * Compose support, and friends ride local runs but never artifacts ({@link #RUNTIME} is what
+     * packagers consume).
+     */
+    public static final Set<Scope> RUN =
+            EnumSet.of(Scope.EXPORT, Scope.MAIN, Scope.RUNTIME, Scope.DEV, Scope.TEST_DEV);
 
     /** Scopes visible while compiling main sources. */
     public static final Set<Scope> COMPILE_MAIN = EnumSet.of(Scope.EXPORT, Scope.MAIN, Scope.PROVIDED);
 
     /** Scopes visible while compiling test sources. */
-    public static final Set<Scope> COMPILE_TEST = EnumSet.of(Scope.EXPORT, Scope.MAIN, Scope.PROVIDED, Scope.TEST);
+    public static final Set<Scope> COMPILE_TEST =
+            EnumSet.of(Scope.EXPORT, Scope.MAIN, Scope.PROVIDED, Scope.TEST, Scope.TEST_DEV);
 
     private final Cas cas;
 

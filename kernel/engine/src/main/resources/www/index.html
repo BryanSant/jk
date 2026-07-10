@@ -5,7 +5,10 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>jk</title>
-  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="/jk-logo.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/style.css">
   <!-- Version-pinned + SRI: a CDN compromise must not be able to script a page that can trigger
        builds. Update the integrity hash whenever the pin moves (docs/webclient.md). -->
@@ -17,19 +20,30 @@
 <body>
   <div id="app" v-cloak>
     <header>
-      <h1>jk <span class="subtitle">engine</span></h1>
+      <img class="logo" src="/jk-logo.svg" alt="jk">
       <nav>
         <button :class="{ active: view === 'activity' }" @click="setView('activity')">Activity</button>
         <button :class="{ active: view === 'status' }" @click="setView('status')">Status</button>
       </nav>
-      <span class="connection" :class="connection">{{ connectionLabel() }}</span>
+      <span class="spacer"></span>
+      <span class="engine-pill" :class="connection" @click="setView('status')">
+        <span class="pill-dot"></span>
+        <span>{{ connectionLabel() }}</span>
+        <span v-if="status && connection === 'live'" class="pill-version">{{ status.version }}</span>
+      </span>
     </header>
 
     <main v-if="view === 'activity'">
-      <form class="trigger" @submit.prevent="triggerBuild()">
-        <input v-model="buildDir" placeholder="/absolute/path/to/workspace" spellcheck="false">
-        <button type="submit">Build</button>
-      </form>
+      <div class="feed-head">
+        <h2>Live activity</h2>
+        <span class="retention">last 50 requests</span>
+        <span class="spacer"></span>
+        <form class="trigger" @submit.prevent="triggerBuild()">
+          <input v-model="buildDir" placeholder="/absolute/path/to/workspace" spellcheck="false">
+          <button type="button" class="ghost" @click="openBrowser()">Browse…</button>
+          <button type="submit">Build</button>
+        </form>
+      </div>
       <p v-if="buildError" class="error">{{ buildError }}</p>
 
       <p v-if="cards.length === 0" class="empty">
@@ -38,12 +52,51 @@
 
       <article v-for="card in cards" :key="card.id" class="card" :class="outcome(card)">
         <div class="card-head">
-          <span class="badge" :class="outcome(card)">{{ outcome(card) }}</span>
+          <span v-if="outcome(card) === 'running'" class="spin"></span>
+          <span v-else class="badge" :class="outcome(card)">{{ glyph(outcome(card)) }} {{ outcome(card) }}</span>
+          <span class="coord" :title="coordTip(card)">
+            <template v-if="showCoordGroup(card) && coordParts(card).group"><span class="cg">{{ coordParts(card).group }}</span><span class="csep">:</span></template>
+            <span class="cn">{{ coordParts(card).name }}</span>
+          </span>
           <span class="kind">{{ card.kind }}</span>
-          <span class="dir" :title="card.dir">{{ shortDir(card.dir) }}</span>
-          <span class="millis">{{ duration(card.millis) }}</span>
+          <span v-if="outcome(card) !== 'running' && summary(card)" class="summary">{{ summary(card) }}</span>
+          <span class="spacer"></span>
+          <button v-if="outcome(card) !== 'running' && card.kind === 'build'" class="rebuild"
+                  @click="triggerBuild(card.dir)" title="Build this directory again">rebuild</button>
+          <span class="millis">{{ outcome(card) === 'running' ? elapsed(card) : duration(card.millis) }}</span>
+          <span v-if="outcome(card) !== 'running'" class="ago">{{ ago(card) }}</span>
         </div>
-        <ul v-if="card.modules.length">
+
+        <div v-if="card.phases.length" class="phase-chain">
+          <template v-for="(p, i) in card.phases" :key="p.name">
+            <span v-if="i > 0" class="phase-edge" :class="card.phases[i - 1].state"></span>
+            <span class="phase-node" :class="p.state">
+              <span v-if="p.state === 'running'" class="spin small"></span>
+              <span v-else-if="p.state === 'success'" class="phase-glyph ok">✓</span>
+              <span v-else-if="p.state === 'failed'" class="phase-glyph err">✘</span>
+              {{ p.name }}
+            </span>
+          </template>
+        </div>
+
+        <div v-if="outcome(card) === 'running' && card.output.length" class="console">
+          <div v-for="(o, i) in card.output" :key="i">
+            <span class="console-dir">{{ lastSegment(o.dir) }}</span> <span class="console-sep">›</span> {{ o.line }}
+          </div>
+        </div>
+
+        <details v-if="card.diagnostics.length" class="diag" :open="outcome(card) === 'failed'">
+          <summary>failure details ({{ card.diagnostics.length }})</summary>
+          <div class="console">
+            <div v-for="(d, i) in card.diagnostics" :key="i" class="diag-line">
+              <span class="console-err">✘</span>
+              <span class="console-dir">{{ d.phase }}</span><template v-if="d.test"> <span class="console-sep">›</span> {{ d.test }}</template><template v-if="d.exceptionClass"> <span class="console-sep">({{ d.exceptionClass }})</span></template>
+              <span class="console-sep">—</span> {{ d.message }}
+            </div>
+          </div>
+        </details>
+
+        <ul v-if="card.modules.length > 1">
           <li v-for="m in card.modules" :key="m.dir">
             <span class="dot" :class="m.state"></span>
             <span class="dir" :title="m.dir">{{ shortDir(m.dir) }}</span>
@@ -51,25 +104,75 @@
           </li>
         </ul>
       </article>
+      <div v-if="browser" class="modal-bg" @click.self="closeBrowser()">
+        <div class="modal">
+          <div class="modal-head">
+            <span class="lbl">choose a workspace</span>
+            <span class="spacer"></span>
+            <button class="rebuild" @click="closeBrowser()">close</button>
+          </div>
+          <div class="modal-path">{{ browser.dir }}</div>
+          <div class="modal-list">
+            <div v-if="browser.parent" class="fs-entry up" @click="browseTo(browser.parent)">‹ ..</div>
+            <div v-for="d in browser.dirs" :key="d" class="fs-entry" @click="browseTo(joinPath(browser.dir, d))">
+              <span class="fs-arrow">▸</span> {{ d }}
+            </div>
+            <div v-if="browser.dirs.length === 0" class="fs-entry none">no subfolders</div>
+            <div v-if="browser.truncated" class="fs-entry none">… list truncated</div>
+          </div>
+          <div class="modal-foot">
+            <span v-if="browser.hasJkToml" class="jk-found">✓ jk.toml found</span>
+            <span v-else class="dim small">no jk.toml in this folder</span>
+            <span class="spacer"></span>
+            <button class="use-folder" :disabled="!browser.hasJkToml" @click="chooseBrowsed()">Use this folder</button>
+          </div>
+        </div>
+      </div>
     </main>
 
     <main v-if="view === 'status'">
       <p v-if="!status" class="empty">No status yet — the engine hasn't answered.</p>
-      <dl v-if="status">
-        <dt>version</dt><dd>{{ status.version }}</dd>
-        <dt>pid</dt><dd>{{ status.pid }}</dd>
-        <dt>uptime</dt><dd>{{ uptime(status.uptimeSeconds) }}</dd>
-        <dt>idle policy</dt><dd>never — [http] enabled</dd>
-        <dt>active requests</dt><dd>{{ status.activeRequests }}</dd>
-        <dt>heap</dt>
-        <dd>
-          {{ mib(status.heapUsedBytes) }} used / {{ mib(status.heapCommittedBytes) }} committed
-          (max {{ mib(status.heapMaxBytes) }})
-          <span class="meter"><span class="meter-fill" :style="{ width: heapPercent() + '%' }"></span></span>
-        </dd>
-        <dt>rss</dt><dd>{{ mib(status.rssBytes) }}</dd>
-        <dt>url</dt><dd>{{ status.httpUrl }}</dd>
-      </dl>
+      <template v-if="status">
+        <div class="tiles">
+          <div class="tile"><span class="lbl">version</span><span class="kpi">{{ status.version }}</span></div>
+          <div class="tile"><span class="lbl">pid</span><span class="kpi">{{ status.pid }}</span></div>
+          <div class="tile"><span class="lbl">uptime</span><span class="kpi">{{ uptime() }}</span></div>
+          <div class="tile"><span class="lbl">connections</span><span class="kpi">{{ status.activeRequests }}</span></div>
+          <div class="tile"><span class="lbl">pipelines</span><span class="kpi" :class="{ ok: status.activePipelines > 0 }">{{ status.activePipelines }}</span></div>
+        </div>
+
+        <div class="panels">
+          <div class="panel">
+            <div class="panel-head"><span class="lbl">heap</span><span class="spacer"></span>
+              <span class="mono dim">{{ mib(status.heapUsedBytes) }} used / {{ mib(status.heapCommittedBytes) }} committed / {{ mib(status.heapMaxBytes) }} max</span></div>
+            <span class="meter tall">
+              <span class="meter-fill committed" :style="{ width: heapCommittedPercent() + '%' }"></span>
+              <span class="meter-fill used" :style="{ width: heapUsedPercent() + '%' }"></span>
+            </span>
+          </div>
+          <div class="panel">
+            <div class="panel-head"><span class="lbl">process rss</span><span class="spacer"></span>
+              <span class="mono dim">{{ mib(status.rssBytes) }}</span></div>
+            <div class="dim small">compiles and tests run in separately-sized worker JVMs</div>
+          </div>
+        </div>
+
+        <div class="panels">
+          <div class="panel">
+            <div class="panel-head"><span class="lbl">configuration</span><span class="spacer"></span><span class="mono dim">~/.jk/config.toml</span></div>
+            <dl>
+              <dt>idle policy</dt><dd class="warn">never — [http] enabled</dd>
+              <dt>max-concurrent-requests</dt><dd>{{ status.maxConcurrentRequests }}</dd>
+              <dt>www-root</dt><dd class="mono">{{ status.wwwRoot }}</dd>
+              <dt>url</dt><dd class="mono accent">{{ status.httpUrl }}</dd>
+            </dl>
+          </div>
+          <div class="panel">
+            <div class="panel-head"><span class="lbl">engine log</span><span class="spacer"></span><span class="mono dim">state/engine/&lt;key&gt;.log</span></div>
+            <pre class="console log-tail">{{ engineLog || '(log empty)' }}</pre>
+          </div>
+        </div>
+      </template>
     </main>
   </div>
 </body>

@@ -49,16 +49,17 @@ kernel/engine/src/main/resources/www/
 ├── app.js              # createApp + store + view logic (ES module)
 ├── api.js              # fetch wrapper, token bootstrap, SSE client (ES module)
 ├── fold.js             # pure event-folding logic — no browser globals, node-testable
-├── favicon.svg
-└── style.css           # hand-written; dark/light via prefers-color-scheme
+├── jk-logo.svg         # favicon + header mark: outlined JetBrains Mono glyphs (OFL), CRT-green
+└── style.css           # hand-written; dark-only (Jk Dark)
 ```
 
 `index.html` loads Vue from `https://unpkg.com/vue@3.5.39/dist/vue.global.prod.js`
 (version-pinned, SRI `integrity` + `crossorigin`) and `app.js` with `defer`. No inline scripts or
 style attributes, so a `Content-Security-Policy` header rides every <em>classpath</em>-served
-response: `default-src 'self'; script-src 'self' 'unsafe-eval' https://unpkg.com` — the
-`unsafe-eval` is Vue's runtime template compiler, the price of the no-build-step constraint, and
-unpkg is the one permitted external script origin. Disk-served `www-root` content (user reports
+response: `default-src 'self'; script-src 'self' 'unsafe-eval' https://unpkg.com; style-src
+'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com` — the `unsafe-eval` is
+Vue's runtime template compiler, the price of the no-build-step constraint; unpkg (Vue) and
+Google Fonts (JetBrains Mono) are the only permitted external origins. Disk-served `www-root` content (user reports
 with inline styles of their own) is deliberately not CSP-gated.
 
 ## Architecture
@@ -116,11 +117,13 @@ assumes those files exist.
 
 ## Styling
 
-Hand-written `style.css`, no framework. Dark and light themes via `prefers-color-scheme`, with the
-palette lifted from [`tui-style.md`](tui-style.md) so the dashboard and the terminal UI read as one
-product: same accent hues for ok/warn/error/building states, same restraint (color means state,
-not decoration). System font stack (`system-ui, sans-serif` + `ui-monospace` for paths/durations),
-one spacing scale, no icon font (a few inline SVGs).
+Hand-written `style.css`, no framework. **Dark only, deliberately** — the palette is lifted from
+[`tui-style.md`](tui-style.md) (Jk Dark) so the dashboard and the terminal UI read as one product:
+same accent hues for ok/warn/error/building states, same restraint (color means state, not
+decoration). UI text is the system stack (`system-ui, sans-serif`); paths, coords, durations, and
+consoles use **JetBrainsMono Nerd Font Mono when installed locally** (the TUI already wants a Nerd
+Font), falling back to Google's JetBrains Mono webfont (`fonts.googleapis.com`, the CSP's one
+permitted style/font origin), then `ui-monospace`. One spacing scale, no icon font.
 
 ## Development workflow
 

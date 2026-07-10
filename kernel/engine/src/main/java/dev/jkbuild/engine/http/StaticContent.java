@@ -68,10 +68,19 @@ final class StaticContent {
     private final Path root;
     private final String classpathEtag;
 
+    /**
+     * Snapshot builds revalidate classpath assets on every load: the version-derived ETag never
+     * moves between {@code -SNAPSHOT} jars, so an hour of {@code max-age} would keep serving the
+     * previous jar's dashboard from the browser cache after an upgrade. Releases bump the
+     * version, so they keep real caching.
+     */
+    private final boolean snapshotVersion;
+
     /** @param root the resolved {@code www-root} — need not exist (classpath still serves) */
     StaticContent(Path root, String version) {
         this.root = root.normalize();
         this.classpathEtag = "\"jk-" + version + "\"";
+        this.snapshotVersion = version.endsWith("-SNAPSHOT");
     }
 
     void serve(HttpExchange exchange) throws IOException {
@@ -155,19 +164,25 @@ final class StaticContent {
                 return false;
             }
         }
-        exchange.getResponseHeaders().set("Cache-Control", "max-age=3600");
-        exchange.getResponseHeaders().set("ETag", classpathEtag);
-        // The shipped SPA loads exactly one external resource: Vue from unpkg (version-pinned +
-        // SRI in index.html — see docs/webclient.md). 'unsafe-eval' is Vue's runtime template
-        // compiler. Disk content (user reports, possibly with inline styles/scripts of their own)
-        // is deliberately not CSP-gated.
+        // The shipped SPA's only external resources: Vue from unpkg (version-pinned + SRI in
+        // index.html) and the JetBrains Mono webfont from Google Fonts — see docs/webclient.md.
+        // 'unsafe-eval' is Vue's runtime template compiler. Disk content (user reports, possibly
+        // with inline styles/scripts of their own) is deliberately not CSP-gated.
         exchange.getResponseHeaders()
                 .set(
                         "Content-Security-Policy",
-                        "default-src 'self'; script-src 'self' 'unsafe-eval' https://unpkg.com");
-        if (classpathEtag.equals(exchange.getRequestHeaders().getFirst("If-None-Match"))) {
-            exchange.sendResponseHeaders(304, -1);
-            return true;
+                        "default-src 'self'; script-src 'self' 'unsafe-eval' https://unpkg.com; "
+                                + "style-src 'self' https://fonts.googleapis.com; "
+                                + "font-src https://fonts.gstatic.com");
+        if (snapshotVersion) {
+            exchange.getResponseHeaders().set("Cache-Control", "no-cache"); // see snapshotVersion javadoc
+        } else {
+            exchange.getResponseHeaders().set("Cache-Control", "max-age=3600");
+            exchange.getResponseHeaders().set("ETag", classpathEtag);
+            if (classpathEtag.equals(exchange.getRequestHeaders().getFirst("If-None-Match"))) {
+                exchange.sendResponseHeaders(304, -1);
+                return true;
+            }
         }
         exchange.getResponseHeaders().set("Content-Type", contentType(rel));
         if (head) {

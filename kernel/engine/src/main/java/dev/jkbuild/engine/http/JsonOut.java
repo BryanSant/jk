@@ -31,6 +31,16 @@ public final class JsonOut {
         return raw(key, Boolean.toString(value));
     }
 
+    /** A flat array of strings — the one non-scalar shape the jk wire discipline allows. */
+    public JsonOut putStrings(String key, java.util.List<String> values) {
+        StringBuilder arr = new StringBuilder("[");
+        for (int i = 0; i < values.size(); i++) {
+            if (i > 0) arr.append(',');
+            arr.append(Ndjson.quote(values.get(i)));
+        }
+        return raw(key, arr.append(']').toString());
+    }
+
     private JsonOut raw(String key, String rendered) {
         if (!first) sb.append(',');
         first = false;

@@ -399,6 +399,12 @@ public final class JkBuildParser {
         addScopeDeps(byScope, root, Scope.PROVIDED,  workspace, catalog);
         addScopeDeps(byScope, root, Scope.PROCESSOR, workspace, catalog);
         addScopeDeps(byScope, root, Scope.EXPORT,    workspace, catalog);
+        addScopeDeps(byScope, root, Scope.RUNTIME,   workspace, catalog);
+        // [platform-dependencies] — BOM imports (version constraints, not classpath entries).
+        addScopeDeps(byScope, root, Scope.PLATFORM,  workspace, catalog);
+        // Dev-loop scopes (spring-boot plan §3.2): run-time only / run+test, never packaged.
+        addScopeDeps(byScope, root, Scope.DEV,       workspace, catalog);
+        addScopeDeps(byScope, root, Scope.TEST_DEV,  workspace, catalog);
 
         return new JkBuild.Dependencies(byScope);
     }

@@ -6,9 +6,14 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { pathToFileURL } from 'node:url';
 
-const { foldEvent, outcomeOf, MAX_CARDS } = await import(pathToFileURL(process.env.JK_FOLD_MJS));
+const { foldEvent, outcomeOf, moduleSummary, MAX_CARDS, MAX_OUTPUT_LINES } = await import(
+  pathToFileURL(process.env.JK_FOLD_MJS)
+);
 
-const start = (id, dir) => ({ type: 'request-start', data: { requestId: id, kind: 'build', dir } });
+const start = (id, dir, extra = {}) => ({
+  type: 'request-start',
+  data: { requestId: id, kind: 'build', dir, ...extra },
+});
 const finish = (id, data = {}) => ({ type: 'request-finish', data: { requestId: id, ...data } });
 
 test('request-start opens a running card, newest first', () => {
@@ -79,4 +84,72 @@ test('the feed is bounded at MAX_CARDS', () => {
   for (let i = 1; i <= MAX_CARDS + 7; i++) foldEvent(cards, start(i, '/w/' + i));
   assert.equal(cards.length, MAX_CARDS);
   assert.equal(cards[0].id, MAX_CARDS + 7); // newest kept, oldest shed
+});
+
+test('coord and client timestamps ride the card', () => {
+  const cards = [];
+  foldEvent(cards, { ...start(1, '/w', { coord: 'dev.jkbuild:jk' }), at: 1000 });
+  assert.equal(cards[0].coord, 'dev.jkbuild:jk');
+  assert.equal(cards[0].startedAt, 1000);
+  foldEvent(cards, { ...finish(1, { millis: 500 }), at: 1500 });
+  assert.equal(cards[0].finishedAt, 1500);
+});
+
+test('phases fold into one aggregated chain in arrival order', () => {
+  const cards = [];
+  foldEvent(cards, start(1, '/w'));
+  foldEvent(cards, { type: 'phase-start', data: { requestId: 1, dir: '/w/a', phase: 'compile' } });
+  foldEvent(cards, { type: 'phase-start', data: { requestId: 1, dir: '/w/b', phase: 'compile' } });
+  foldEvent(cards, { type: 'phase-finish', data: { requestId: 1, dir: '/w/a', phase: 'compile', status: 'SUCCESS' } });
+  foldEvent(cards, { type: 'phase-start', data: { requestId: 1, dir: '/w/a', phase: 'test' } });
+  foldEvent(cards, { type: 'phase-finish', data: { requestId: 1, dir: '/w/a', phase: 'test', status: 'FAIL' } });
+  assert.deepEqual(
+    cards[0].phases.map((p) => p.name + ':' + p.state),
+    ['compile:success', 'test:failed'], // deduped by name; latest state wins
+  );
+});
+
+test('output keeps a bounded tail and clears on finish', () => {
+  const cards = [];
+  foldEvent(cards, start(1, '/w'));
+  for (let i = 1; i <= MAX_OUTPUT_LINES + 5; i++) {
+    foldEvent(cards, { type: 'output', data: { requestId: 1, dir: '/w/m', phase: 'test', line: 'line ' + i } });
+  }
+  assert.equal(cards[0].output.length, MAX_OUTPUT_LINES);
+  assert.equal(cards[0].output.at(-1).line, 'line ' + (MAX_OUTPUT_LINES + 5));
+  foldEvent(cards, finish(1, { success: true }));
+  assert.equal(cards[0].output.length, 0); // the console tail is an in-flight affordance
+});
+
+test('diagnostics accumulate, survive finish, and are capped', async () => {
+  const { MAX_DIAGNOSTICS } = await import(pathToFileURL(process.env.JK_FOLD_MJS));
+  const cards = [];
+  foldEvent(cards, start(1, '/w'));
+  foldEvent(cards, {
+    type: 'diagnostic',
+    data: { requestId: 1, dir: '/w', phase: 'test', code: 'fail', message: 'expected 3 but was 4',
+            test: 'adds()', exceptionClass: 'AssertionFailedError' },
+  });
+  foldEvent(cards, {
+    type: 'diagnostic',
+    data: { requestId: 1, dir: '/w', phase: 'lock', code: 'resolve', message: 'no versions for com.foo:bar' },
+  });
+  foldEvent(cards, finish(1, { success: false }));
+  assert.equal(cards[0].diagnostics.length, 2); // NOT cleared on finish, unlike output
+  assert.equal(cards[0].diagnostics[0].test, 'adds()');
+  assert.equal(cards[0].diagnostics[1].phase, 'lock');
+  for (let i = 0; i < MAX_DIAGNOSTICS + 5; i++) {
+    foldEvent(cards, { type: 'diagnostic', data: { requestId: 1, dir: '/w', phase: 'p', message: 'm' + i } });
+  }
+  assert.equal(cards[0].diagnostics.length, MAX_DIAGNOSTICS);
+});
+
+test('module summary counts modules and failures', () => {
+  const cards = [];
+  foldEvent(cards, start(1, '/w'));
+  assert.equal(moduleSummary(cards[0]), '');
+  foldEvent(cards, { type: 'module-finish', data: { requestId: 1, dir: '/w/a', success: true, millis: 5 } });
+  assert.equal(moduleSummary(cards[0]), '1 module');
+  foldEvent(cards, { type: 'module-finish', data: { requestId: 1, dir: '/w/b', success: false, millis: 5 } });
+  assert.equal(moduleSummary(cards[0]), '2 modules · 1 failed');
 });

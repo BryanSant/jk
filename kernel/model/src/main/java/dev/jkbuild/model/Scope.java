@@ -12,7 +12,17 @@ public enum Scope {
     RUNTIME("runtime", "runtime-dependencies"),
     TEST("test", "test-dependencies"),
     PROCESSOR("processor", "processor-dependencies"),
-    PLATFORM("platform", "platform-dependencies");
+    PLATFORM("platform", "platform-dependencies"),
+    /**
+     * Development-time only (Gradle's {@code developmentOnly}, tool-targets/spring-boot plan):
+     * on the {@code jk run}/{@code jk dev} runtime classpath, never in any artifact or POM.
+     */
+    DEV("dev", "dev-dependencies"),
+    /**
+     * Development + test only (Gradle's {@code testAndDevelopmentOnly}): {@link #DEV} plus the
+     * test source set's compile/runtime classpaths. Never in artifacts or POMs.
+     */
+    TEST_DEV("test-dev", "test-dev-dependencies");
 
     // Precomputed once at class-load rather than reallocated on every call: canonical() and
     // tomlSection() are hot (dependency loops, ~21 + ~call sites) and effectively constant.

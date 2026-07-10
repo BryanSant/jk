@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- SPDX-License-Identifier: Apache-2.0 — the jk mark: "jk" as it looks zoomed into an old
+       green-screen monitor. Letterforms are outlined from JetBrains Mono Bold (SIL OFL 1.1,
+       (c) The JetBrains Mono Project Authors) so no font needs to load anywhere this renders. -->
+  <defs>
+    <radialGradient id="crt-bg" cx="50%" cy="46%" r="75%">
+      <stop offset="0%" stop-color="#37672f"/>
+      <stop offset="100%" stop-color="#2a3e21"/>
+    </radialGradient>
+    <clipPath id="crt-clip"><rect width="64" height="64" rx="14"/></clipPath>
+    <pattern id="scanlines" width="64" height="1.8" patternUnits="userSpaceOnUse">
+      <rect y="1.1" width="64" height="0.7" fill="#08130a"/>
+    </pattern>
+    <g id="jk-glyphs" transform="translate(10.363 42.515) scale(0.03470 -0.03470)">
+      <path d="M81 -180V-67H226Q274 -67 302.0 -38.5Q330 -10 330 39V437H76V550H455V36Q455 -64 395.0 -122.0Q335 -180 233 -180ZM386 642Q348 642 326.0 661.5Q304 681 304 714Q304 747 326.0 766.5Q348 786 386 786Q424 786 446.0 766.5Q468 747 468 714Q468 681 446.0 661.5Q424 642 386 642Z"/>
+      <path d="M682 0V730H807V334H895L1026 550H1165L1002 284L1171 0H1029L895 228H807V0Z"/>
+    </g>
+    <filter id="glow-halo" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="8"/>
+    </filter>
+    <filter id="glow-wide" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="4.5"/>
+    </filter>
+    <filter id="glow-tight" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="1.4"/>
+    </filter>
+  </defs>
+
+  <rect width="64" height="64" rx="14" fill="url(#crt-bg)"/>
+  <g clip-path="url(#crt-clip)">
+    <!-- phosphor glow: bright at the letter edges, decaying to transparent in every direction -->
+    <use href="#jk-glyphs" fill="#44ff5c" filter="url(#glow-halo)" opacity="0.5"/>
+    <use href="#jk-glyphs" fill="#44ff5c" filter="url(#glow-wide)" opacity="0.85"/>
+    <use href="#jk-glyphs" fill="#44ff5c" filter="url(#glow-tight)"/>
+    <!-- the lit phosphor itself -->
+    <use href="#jk-glyphs" fill="#ebfbec"/>
+    <!-- faint CRT scanlines over everything -->
+    <rect width="64" height="64" fill="url(#scanlines)" opacity="0.22"/>
+  </g>
+</svg>

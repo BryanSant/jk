@@ -26,7 +26,7 @@ import org.junit.jupiter.api.io.TempDir;
 class HttpEngineServerTest {
 
     private static final StatusSnapshot SNAPSHOT =
-            new StatusSnapshot("9.9.9-test", 42, 1_000, 120, 1, 1_000, 2_000, 3_000, -1);
+            new StatusSnapshot("9.9.9-test", 42, 1_000, 120, 1, 0, 1_000, 2_000, 3_000, -1);
 
     @TempDir
     Path wwwRoot;
@@ -35,6 +35,7 @@ class HttpEngineServerTest {
     Path stateDir;
 
     private Path tokenFile;
+    private Path logFile;
     private HttpEvents events;
     private final java.util.List<String> triggeredDirs = new java.util.ArrayList<>();
     private HttpEngineServer server;
@@ -56,10 +57,12 @@ class HttpEngineServerTest {
         Files.writeString(wwwRoot.resolve("shared.txt"), "from disk");
         // The token file lives OUTSIDE www-root (a token inside it would be served as content).
         tokenFile = stateDir.resolve("e2e.http-token");
+        logFile = stateDir.resolve("e2e.log");
+        Files.writeString(logFile, "jk engine: listening\njk engine: http listening\nline three\n");
         events = new HttpEvents();
         JkHttpConfig config = new JkHttpConfig("127.0.0.1", 0, 16, wwwRoot.toString());
         server = new HttpEngineServer(
-                config, wwwRoot, tokenFile, "9.9.9-test", () -> SNAPSHOT, events, this::stubTrigger, null);
+                config, wwwRoot, tokenFile, logFile, "9.9.9-test", () -> SNAPSHOT, events, this::stubTrigger, null);
         server.start();
         baseUrl = server.url();
         port = Integer.parseInt(baseUrl.replaceAll(".*:(\\d+)/$", "$1"));
@@ -129,7 +132,7 @@ class HttpEngineServerTest {
         assertThat(get("/app.js").body()).contains("Vue.createApp");
         assertThat(get("/fold.js").body()).contains("export function foldEvent");
         assertThat(get("/api.js").body()).contains("bootstrapToken");
-        assertThat(get("/favicon.svg").headers().firstValue("Content-Type")).contains("image/svg+xml");
+        assertThat(get("/jk-logo.svg").headers().firstValue("Content-Type")).contains("image/svg+xml");
         HttpResponse<String> css = get("/style.css");
         assertThat(css.headers().firstValue("Content-Type")).contains("text/css; charset=utf-8");
         // Vue rides the CDN, version-pinned and integrity-locked (docs/webclient.md) — the shell
@@ -144,7 +147,9 @@ class HttpEngineServerTest {
         assertThat(shell).contains("crossorigin=\"anonymous\"");
         HttpResponse<String> js = get("/app.js");
         assertThat(js.headers().firstValue("Content-Security-Policy"))
-                .contains("default-src 'self'; script-src 'self' 'unsafe-eval' https://unpkg.com");
+                .contains("default-src 'self'; script-src 'self' 'unsafe-eval' https://unpkg.com; "
+                        + "style-src 'self' https://fonts.googleapis.com; "
+                        + "font-src https://fonts.gstatic.com");
     }
 
     @Test
@@ -154,6 +159,34 @@ class HttpEngineServerTest {
         assertThat(resp.body()).isEqualTo("from classpath\n");
         assertThat(resp.headers().firstValue("ETag")).contains("\"jk-9.9.9-test\"");
         assertThat(resp.headers().firstValue("Cache-Control")).contains("max-age=3600");
+    }
+
+    @Test
+    void snapshot_versions_revalidate_classpath_assets_every_load() throws Exception {
+        // A -SNAPSHOT jar swap doesn't move the version-derived ETag, so snapshot builds must not
+        // let the browser cache classpath assets — otherwise an upgraded engine serves last jar's
+        // dashboard for up to an hour.
+        HttpEngineServer snapshot = new HttpEngineServer(
+                new JkHttpConfig("127.0.0.1", 0, 16, wwwRoot.toString()),
+                wwwRoot,
+                stateDir.resolve("snap.http-token"),
+                stateDir.resolve("snap.log"),
+                "0.10.0-SNAPSHOT",
+                () -> SNAPSHOT,
+                new HttpEvents(),
+                this::stubTrigger,
+                null);
+        try {
+            snapshot.start();
+            HttpResponse<String> resp = client.send(
+                    HttpRequest.newBuilder(URI.create(snapshot.url() + "classpath-only.txt")).build(),
+                    HttpResponse.BodyHandlers.ofString());
+            assertThat(resp.statusCode()).isEqualTo(200);
+            assertThat(resp.headers().firstValue("Cache-Control")).contains("no-cache");
+            assertThat(resp.headers().firstValue("ETag")).isEmpty();
+        } finally {
+            snapshot.close();
+        }
     }
 
     @Test
@@ -265,6 +298,70 @@ class HttpEngineServerTest {
     }
 
     @Test
+    void api_status_carries_config_and_pipeline_fields() throws Exception {
+        String body = get("/api/status").body();
+        assertThat(body)
+                .contains("\"activePipelines\":0")
+                .contains("\"maxConcurrentRequests\":16")
+                .contains("\"wwwRoot\":\"" + wwwRoot + "\"");
+    }
+
+    @Test
+    void api_log_tails_the_engine_log() throws Exception {
+        HttpResponse<String> resp = get("/api/log");
+        assertThat(resp.statusCode()).isEqualTo(200);
+        assertThat(resp.headers().firstValue("Content-Type")).contains("text/plain; charset=utf-8");
+        assertThat(resp.body())
+                .contains("jk engine: listening")
+                .contains("line three");
+    }
+
+    @Test
+    void api_log_respects_the_lines_parameter() throws Exception {
+        assertThat(get("/api/log?lines=1").body()).isEqualTo("line three");
+        assertThat(get("/api/log?lines=garbage").statusCode()).isEqualTo(200); // default kicks in
+    }
+
+    @Test
+    void api_log_of_a_missing_file_is_empty_200() throws Exception {
+        Files.delete(logFile);
+        HttpResponse<String> resp = get("/api/log");
+        assertThat(resp.statusCode()).isEqualTo(200);
+        assertThat(resp.body()).isEmpty();
+    }
+
+    @Test
+    void fs_listing_requires_the_token_even_on_loopback() throws Exception {
+        // It lists the filesystem with the engine owner's permissions — never token-exempt.
+        assertThat(get("/api/fs").statusCode()).isEqualTo(401);
+    }
+
+    @Test
+    void fs_lists_subdirectories_and_flags_jk_toml() throws Exception {
+        Files.createDirectories(stateDir.resolve("workspace/module-a"));
+        Files.createDirectories(stateDir.resolve("workspace/module-b"));
+        Files.createDirectories(stateDir.resolve("workspace/.git")); // hidden: skipped
+        Files.writeString(stateDir.resolve("workspace/jk.toml"), "[project]");
+        Files.writeString(stateDir.resolve("workspace/README.md"), "not a dir");
+        HttpResponse<String> resp = get(
+                "/api/fs?dir=" + stateDir.resolve("workspace"), "Authorization", "Bearer " + token());
+        assertThat(resp.statusCode()).isEqualTo(200);
+        assertThat(resp.body())
+                .contains("\"dirs\":[\"module-a\",\"module-b\"]")
+                .contains("\"hasJkToml\":true")
+                .contains("\"parent\":\"" + stateDir + "\"");
+    }
+
+    @Test
+    void fs_rejects_relative_and_unreadable_paths() throws Exception {
+        assertThat(get("/api/fs?dir=relative/path", "Authorization", "Bearer " + token()).statusCode())
+                .isEqualTo(400);
+        assertThat(get("/api/fs?dir=" + stateDir.resolve("no-such-dir"), "Authorization", "Bearer " + token())
+                        .statusCode())
+                .isEqualTo(400);
+    }
+
+    @Test
     void unknown_api_endpoint_is_404() throws Exception {
         assertThat(get("/api/no-such-thing").statusCode()).isEqualTo(404);
     }
@@ -321,7 +418,7 @@ class HttpEngineServerTest {
         JkHttpConfig config = new JkHttpConfig("0.0.0.0", 0, 16, wwwRoot.toString());
         Path lanTokenFile = stateDir.resolve("lan.http-token");
         HttpEngineServer lan = new HttpEngineServer(
-                config, wwwRoot, lanTokenFile, "9.9.9-test", () -> SNAPSHOT, new HttpEvents(), this::stubTrigger, null);
+                config, wwwRoot, lanTokenFile, stateDir.resolve("lan.log"), "9.9.9-test", () -> SNAPSHOT, new HttpEvents(), this::stubTrigger, null);
         try {
             lan.start();
             String lanUrl = lan.url(); // advertises the always-valid loopback form for a wildcard bind
@@ -406,6 +503,7 @@ class HttpEngineServerTest {
                 config,
                 wwwRoot,
                 stateDir.resolve("sse.http-token"),
+                stateDir.resolve("sse.log"),
                 "9.9.9-test",
                 () -> SNAPSHOT,
                 new HttpEvents(),
