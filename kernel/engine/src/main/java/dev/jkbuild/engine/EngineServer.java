@@ -543,16 +543,32 @@ public final class EngineServer implements AutoCloseable {
         } finally {
             if (pipeline) maybeIdleBoundaryGc();
             long elapsedMillis = clockMillis.getAsLong() - eventStartMillis;
+            // cancelToken.cancelled() also trips on the benign end-of-request EOF, so a successful
+            // build can look cancelled. Correct it once here for both the dashboard event and the
+            // journal (a build that succeeded was not cancelled).
+            boolean cancelled = effectiveCancelled(eventRequestId, cancelToken.cancelled());
             publishEvent(
                     "request-finish",
                     dev.jkbuild.engine.http.JsonOut.object()
                             .put("requestId", eventRequestId)
                             .put("kind", eventKind)
                             .put("dir", eventDir)
-                            .put("cancelled", cancelToken.cancelled())
+                            .put("cancelled", cancelled)
                             .put("millis", elapsedMillis));
-            writeJournal(eventRequestId, cancelToken.cancelled(), elapsedMillis);
+            writeJournal(eventRequestId, cancelled, elapsedMillis);
         }
+    }
+
+    /**
+     * {@code cancelToken.cancelled()} corrected against the build's real outcome: a build the runner
+     * reported successful was not cancelled (the token also fires on the client closing the socket
+     * the instant it reads the terminal message). Non-build requests have no accumulator and pass
+     * the raw flag through.
+     */
+    private boolean effectiveCancelled(long requestId, boolean rawCancelled) {
+        if (!rawCancelled) return false;
+        BuildAccumulator a = accumulators.get(requestId);
+        return a == null || !a.succeeded();
     }
 
     /** {@code "jk-engine-build-"} → {@code "build"} — the event vocabulary's request kind. */
@@ -2838,6 +2854,11 @@ public final class EngineServer implements AutoCloseable {
 
         String dir() {
             return dir;
+        }
+
+        /** True only when the runner explicitly reported success (not merely "no failure seen yet"). */
+        boolean succeeded() {
+            return Boolean.TRUE.equals(success);
         }
 
         void addModule(ModuleOutcome o) {
