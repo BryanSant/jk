@@ -332,8 +332,9 @@ public final class NativeCommand implements CliCommand {
     private int runSingleProject(Path projectDir, Path buildFile, Path cache) throws IOException, InterruptedException {
         // Native builds are opt-in: require [native] always = true. Absent, or
         // [native] declared without always, → not eligible, even for an explicit `jk native`.
-        JkBuild build = JkBuildParser.parse(buildFile);
-        if (build.nativeMode() != JkBuild.NativeMode.ALWAYS) {
+        // Thin client: the gate reads the engine's summary, never a client-side parse.
+        dev.jkbuild.engine.protocol.ProjectInfo build = BuildCommand.projectInfoOrNull(projectDir);
+        if (build == null || !"ALWAYS".equals(build.nativeMode())) {
             CliOutput.err("jk native: "
                     + projectDir.getFileName()
                     + " is not native-eligible — set `always = true` under [native] to enable.");
@@ -350,25 +351,19 @@ public final class NativeCommand implements CliCommand {
         GoalConsole.Mode mode = GoalConsole.modeFor(global);
 
         if (engineDisabledForTests()) {
+            // The in-process seam still takes the parsed model — acceptable in the JVM test
+            // dist, which links the parser anyway; the native client never reaches this.
             return dev.jkbuild.cli.engine.InProcessEngine.require()
-                    .nativeSingleInProcess(projectDir, build, cache, graalHome.get(), coord, mode, jdksDir,
-                            mainClass, extra, buildOpts.skipTests, global.verbose);
+                    .nativeSingleInProcess(projectDir, JkBuildParser.parse(buildFile), cache, graalHome.get(),
+                            coord, mode, jdksDir, mainClass, extra, buildOpts.skipTests, global.verbose);
         }
 
-        // Engine-hosted (a cascade of one): the wire has no real Goal to read LAYOUT off of, so
-        // the success tail reconstructs it — a pure derivation from dir + the parsed jk.toml, and
-        // the artifact it names lives on the same local filesystem the engine just built into.
-        BuildLayout layout;
-        try {
-            layout = BuildLayout.of(projectDir, build);
-        } catch (RuntimeException e) {
-            layout = null; // best-effort — the tail degrades to the plain verb
-        }
-        BuildLayout finalLayout = layout;
+        // Engine-hosted (a cascade of one): the success tail names the built artifact from
+        // the engine summary's candidate paths (thin client — no local layout derivation).
         ConsoleSpec spec = new ConsoleSpec(
                 "Build",
                 r -> Theme.colorize("Native build successful", Theme.active().success())
-                        + BuildCommand.builtArtifact(finalLayout),
+                        + BuildCommand.builtArtifact(projectDir, build),
                 r -> GoalWedge.coord(coord),
                 true);
         var listener = new dev.jkbuild.runtime.WorkspaceBuildListener() {

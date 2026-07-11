@@ -183,15 +183,12 @@ public final class CleanCommand implements CliCommand {
         dirs.add(workspaceRoot);
         Path rootToml = workspaceRoot.resolve("jk.toml");
         if (!Files.exists(rootToml)) return dirs;
-        try {
-            JkBuild root = JkBuildParser.parse(rootToml);
-            if (root.isWorkspaceRoot()) {
-                for (String module : root.workspace().modules()) {
-                    Path moduleDir = workspaceRoot.resolve(module);
-                    if (Files.isDirectory(moduleDir)) dirs.add(moduleDir);
-                }
+        var info = BuildCommand.projectInfoOrNull(workspaceRoot);
+        if (info != null && info.workspaceRoot()) {
+            for (String module : info.moduleDirs()) {
+                Path moduleDir = workspaceRoot.resolve(module);
+                if (Files.isDirectory(moduleDir)) dirs.add(moduleDir);
             }
-        } catch (IOException | RuntimeException ignored) {
         }
         return dirs;
     }

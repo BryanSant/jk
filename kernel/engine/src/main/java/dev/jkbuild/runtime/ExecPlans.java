@@ -98,9 +98,22 @@ public final class ExecPlans {
                     orEmpty(format.kotlin()),
                     Boolean.TRUE.equals(format.optimizeImports()),
                     hasLock,
-                    lockJdk);
+                    lockJdk,
+                    layoutOf(build, dir, BuildLayout::mainJar),
+                    layoutOf(build, dir, BuildLayout::shadowJar),
+                    layoutOf(build, dir, BuildLayout::nativeBinary),
+                    layoutOf(build, dir, BuildLayout::nativeLibrary));
         } catch (RuntimeException | IOException e) {
             return ProjectInfo.error(String.valueOf(e.getMessage()));
+        }
+    }
+
+    private static String layoutOf(
+            JkBuild build, Path dir, java.util.function.Function<BuildLayout, Path> f) {
+        try {
+            return f.apply(BuildLayout.of(dir, build)).toAbsolutePath().toString();
+        } catch (RuntimeException e) {
+            return "";
         }
     }
 

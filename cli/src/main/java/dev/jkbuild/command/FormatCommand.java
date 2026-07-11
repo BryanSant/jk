@@ -95,7 +95,11 @@ public final class FormatCommand implements CliCommand {
             CliOutput.err("jk format: no jk.toml in " + PathDisplay.styledRaw(projectDir));
             return Exit.CONFIG;
         }
-        JkBuild build = JkBuildParser.parse(buildFile);
+        dev.jkbuild.engine.protocol.ProjectInfo build = BuildCommand.projectInfoOrNull(projectDir);
+        if (build == null) {
+            CliOutput.err("jk format: could not read the project summary (is the engine reachable?)");
+            return Exit.CONFIG;
+        }
 
         // --optimize-imports / --no-optimize-imports / env var / jk.toml / default true
         Boolean cliOptimize = in.isSet("optimize-imports")
@@ -114,7 +118,11 @@ public final class FormatCommand implements CliCommand {
                     in.value("kotlin-style").orElse(null),
                     in.value("style").orElse(null),
                     cliOptimize,
-                    build.format());
+                    new dev.jkbuild.model.JkBuild.FormatConfig(
+                            emptyToNull(build.formatStyle()),
+                            emptyToNull(build.formatJava()),
+                            emptyToNull(build.formatKotlin()),
+                            build.formatOptimizeImports() ? Boolean.TRUE : null));
         } catch (IllegalArgumentException e) {
             CliOutput.err("jk format: " + e.getMessage());
             return Exit.USAGE;
@@ -310,6 +318,10 @@ public final class FormatCommand implements CliCommand {
     }
 
     /** Read an env var as a Boolean; returns null when absent or empty. */
+    private static String emptyToNull(String s) {
+        return s == null || s.isEmpty() ? null : s;
+    }
+
     private static Boolean envBool(String name) {
         String v = System.getenv(name);
         if (v == null || v.isBlank()) return null;

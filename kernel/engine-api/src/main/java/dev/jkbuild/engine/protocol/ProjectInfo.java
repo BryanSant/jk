@@ -37,7 +37,11 @@ public record ProjectInfo(
         String formatKotlin,
         boolean formatOptimizeImports,
         boolean hasLock,
-        String lockJdk) {
+        String lockJdk,
+        String mainJarPath,
+        String shadowJarPath,
+        String nativeBinPath,
+        String nativeLibPath) {
 
     /** The {@code group:name} display coordinate. */
     public String coord() {
@@ -47,7 +51,7 @@ public record ProjectInfo(
     public static ProjectInfo error(String message) {
         return new ProjectInfo(
                 message, "", "", "", "", 0, false, "", true, false, "", List.of(), false, "", false, "DISABLED",
-                "", false, "", "", "", "", false, false, "");
+                "", false, "", "", "", "", false, false, "", "", "", "", "");
     }
 
     public String encode() {
@@ -77,6 +81,10 @@ public record ProjectInfo(
                 + ",\"formatOptimizeImports\":" + formatOptimizeImports
                 + ",\"hasLock\":" + hasLock
                 + ",\"lockJdk\":" + Ndjson.quote(lockJdk)
+                + ",\"mainJarPath\":" + Ndjson.quote(mainJarPath)
+                + ",\"shadowJarPath\":" + Ndjson.quote(shadowJarPath)
+                + ",\"nativeBinPath\":" + Ndjson.quote(nativeBinPath)
+                + ",\"nativeLibPath\":" + Ndjson.quote(nativeLibPath)
                 + "}";
     }
 
@@ -107,7 +115,11 @@ public record ProjectInfo(
                 orEmpty(Ndjson.str(line, "formatKotlin")),
                 Ndjson.bool(line, "formatOptimizeImports", false),
                 Ndjson.bool(line, "hasLock", false),
-                orEmpty(Ndjson.str(line, "lockJdk")));
+                orEmpty(Ndjson.str(line, "lockJdk")),
+                orEmpty(Ndjson.str(line, "mainJarPath")),
+                orEmpty(Ndjson.str(line, "shadowJarPath")),
+                orEmpty(Ndjson.str(line, "nativeBinPath")),
+                orEmpty(Ndjson.str(line, "nativeLibPath")));
     }
 
     private static String quoteOrNull(String s) {

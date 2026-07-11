@@ -126,41 +126,37 @@ public final class BuildCommand implements CliCommand {
             CliOutput.err("jk build: no jk.toml in " + dev.jkbuild.cli.PathDisplay.styledRaw(startDir));
             return Exit.CONFIG;
         }
-        // Peek at the manifest before committing to a per-dir build. A
-        // workspace root dispatches to buildWorkspace. A workspace module
-        // also redirects — jk build from any module builds the whole workspace
-        // in topological order, same as running from the root.
-        JkBuild peek;
-        try {
-            peek = JkBuildParser.parse(buildFile);
-        } catch (RuntimeException e) {
-            CliOutput.err("jk build: " + e.getMessage());
+        // Peek at the engine's project summary before committing to a per-dir build. A
+        // workspace root dispatches to buildWorkspace. A workspace module also redirects —
+        // jk build from any module builds the whole workspace in topological order.
+        // (The workspace view still threads a client-parsed JkBuild into WorkspaceRequest —
+        // that request-shape refactor is thin-client Milestone B.)
+        dev.jkbuild.engine.protocol.ProjectInfo peek = projectInfoOrNull(startDir);
+        if (peek == null && engineDisabledForTests()) {
+            // In-process summary failed → surface the parse error like the old direct parse.
+            var raw = dev.jkbuild.cli.engine.InProcessEngine.require().projectInfo(startDir);
+            CliOutput.err("jk build: " + raw.error());
             return Exit.CONFIG;
         }
-        if (peek.isWorkspaceRoot()) {
+        if (peek != null && peek.workspaceRoot()) {
             if (aotCache) {
                 CliOutput.err("jk build: --aot-cache packages a single application project;"
                         + " run it from the module directory.");
                 return Exit.USAGE;
             }
-            return buildWorkspace(startDir, peek);
+            return buildWorkspace(startDir, JkBuildParser.parse(buildFile));
         }
-        // Module redirect: discover the enclosing workspace and build from there.
-        try {
-            var rootOpt = WorkspaceLocator.findRoot(startDir);
-            if (rootOpt.isPresent()) {
-                Path root = rootOpt.get();
-                if (!global.outputIsJson()) {
-                    CliOutput.err("jk build: building workspace from "
-                            + root.getFileName()
-                            + " (module: "
-                            + startDir.getFileName()
-                            + ")");
-                }
-                return buildWorkspace(root, JkBuildParser.parse(root.resolve("jk.toml")));
+        if (peek != null && !peek.workspaceRootDir().isEmpty()
+                && !peek.workspaceRootDir().equals(startDir.toString())) {
+            Path root = Path.of(peek.workspaceRootDir());
+            if (!global.outputIsJson()) {
+                CliOutput.err("jk build: building workspace from "
+                        + root.getFileName()
+                        + " (module: "
+                        + startDir.getFileName()
+                        + ")");
             }
-        } catch (java.io.IOException e) {
-            // Workspace discovery failed — fall through to single-project build.
+            return buildWorkspace(root, JkBuildParser.parse(root.resolve("jk.toml")));
         }
         int code = runForDir(startDir);
         if (code == 0 && aotCache) {
@@ -615,16 +611,11 @@ public final class BuildCommand implements CliCommand {
         // calibration-refine + cache-prune itself on success (it measured the work).
         TestSummary[] testResultHolder = new TestSummary[1];
         String[] buildOutcomeHolder = new String[1];
-        BuildLayout layout;
-        try {
-            layout = BuildLayout.of(dir, JkBuildParser.parse(buildFile));
-        } catch (RuntimeException | java.io.IOException e) {
-            layout = null; // best-effort — projectTail degrades to a plain "project built"
-        }
-        BuildLayout finalLayout = layout;
+        dev.jkbuild.engine.protocol.ProjectInfo tailInfo = projectInfoOrNull(dir);
+        final Path tailDir = dir;
         ConsoleSpec spec = new ConsoleSpec(
                 "Build",
-                r -> projectTail(buildOutcomeHolder[0], finalLayout),
+                r -> projectTail(buildOutcomeHolder[0], tailDir, tailInfo),
                 r -> GoalWedge.coord(target),
                 true);
         GoalConsole.Mode mode = GoalConsole.modeFor(global);
@@ -660,11 +651,25 @@ public final class BuildCommand implements CliCommand {
 
     /** Header module label for the goal view: the project's {@code group:artifact}. */
     static String buildTarget(Path buildFile, Path dir) {
+        var info = projectInfoOrNull(dir);
+        if (info != null) return info.coord();
+        return dir.getFileName() == null ? "" : dir.getFileName().toString();
+    }
+
+    /**
+     * The engine's parsed-project summary, or {@code null} when it can't be had (engine
+     * unreachable, no jk.toml, parse error) — thin-client replacement for client-side peeks.
+     * In-process twin under jk.test.noEngine.
+     */
+    static dev.jkbuild.engine.protocol.ProjectInfo projectInfoOrNull(Path dir) {
         try {
-            var p = JkBuildParser.parse(buildFile).project();
-            return p.group() + ":" + p.name();
+            dev.jkbuild.engine.protocol.ProjectInfo info = engineDisabledForTests()
+                    ? dev.jkbuild.cli.engine.InProcessEngine.require().projectInfo(dir)
+                    : dev.jkbuild.cli.engine.EngineClient.projectInfo(
+                            dev.jkbuild.engine.EnginePaths.current(), dir);
+            return info.error() != null ? null : info;
         } catch (Exception e) {
-            return dir.getFileName() == null ? "" : dir.getFileName().toString();
+            return null;
         }
     }
 
@@ -720,6 +725,28 @@ public final class BuildCommand implements CliCommand {
         }
         String art = builtArtifact(layout);
         return buildOk() + (art.isEmpty() ? ", project built" : art);
+    }
+
+    /** As above, from the engine's project summary (thin-client path — no client-side layout). */
+    static String projectTail(String buildOutcome, Path moduleRoot, dev.jkbuild.engine.protocol.ProjectInfo info) {
+        if ("up-to-date".equals(buildOutcome)) {
+            return buildOk() + ", project up to date";
+        }
+        String art = info == null ? "" : builtArtifact(moduleRoot, info);
+        return buildOk() + (art.isEmpty() ? ", project built" : art);
+    }
+
+    /** The headline artifact from ProjectInfo's candidate paths (native > shadow > jar). */
+    static String builtArtifact(Path moduleRoot, dev.jkbuild.engine.protocol.ProjectInfo info) {
+        for (String candidate : java.util.List.of(
+                info.nativeBinPath(), info.nativeLibPath(), info.shadowJarPath(), info.mainJarPath())) {
+            if (candidate.isEmpty()) continue;
+            Path p = Path.of(candidate);
+            if (Files.isRegularFile(p)) {
+                return ". Built " + Theme.colorize(relForDisplay(moduleRoot, p), Theme.active().path());
+            }
+        }
+        return "";
     }
 
     /**
