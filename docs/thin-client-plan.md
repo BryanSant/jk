@@ -16,9 +16,16 @@ via a graph vocabulary OR engine-side rendering (DependencyTree.render already r
 string; relocate it engine-side and pass client-detected ansi/nerdfont capability flags —
 the engine reads the same theme config); IdeSupport/ExportSupport/VerifyBuildCommand are
 full-model generators → engine-hosted requests returning file payloads.
-**Remaining — Milestone C**: config family (~11 readers, incl. GlobalDefaultJdk's
-fallback) onto TomlScan-style reads or richer scanner; then assert zero tomlj
-reachability in the native image and drop the ANTLR workaround.
+**Milestone C progress**: TomlScan powers the shell hook, GlobalConfig.nerdfont (the
+client-hot read; repositories() is engine-only), and JkConfigLoader's [config] layer.
+**Remaining — Milestone C**: the rest of the client-reachable family (JkEngineConfig —
+engine spawn opts; TrustedSources — the client trust gate; DenyPolicyParser; JkCache/
+Http/History configs; GlobalDefaultJdk fallback; LibraryCatalog client uses). PLUS the
+key reachability fact: native-image reachability is STATIC — the in-process test seams
+(`engineDisabledForTests() ? JkBuildParser.parse(...)`) keep tomlj reachable even though
+they never execute in the native binary. Those parses must move behind the
+reflectively-loaded InProcessEngine interface (add `parseBuild(Path)` to it) before the
+zero-tomlj assert can pass. Then drop the ANTLR workaround.
 **Companions:** [engine.md](./engine.md) (process model), [build-plugins-plan.md](./build-plugins-plan.md)
 (depends on this landing first — plugin-owned tables make client-side parsing impossible to do
 correctly).
