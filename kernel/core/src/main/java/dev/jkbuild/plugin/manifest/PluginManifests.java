@@ -69,7 +69,12 @@ public final class PluginManifests {
         if (worker == null || worker.isBlank()) {
             throw new JkBuildParseException(displayPath + ".code.worker is required (the worker jar's artifactId)");
         }
-        return new PluginManifest.Code(worker);
+        String prefix = code.getString("protocol-prefix");
+        if (prefix == null || prefix.isBlank()) {
+            throw new JkBuildParseException(
+                    displayPath + ".code.protocol-prefix is required (the worker's protocol line marker)");
+        }
+        return new PluginManifest.Code(worker, prefix);
     }
 
     /** The {@code [packaging]} table — the packager's static artifact descriptor (plan §3.3). */

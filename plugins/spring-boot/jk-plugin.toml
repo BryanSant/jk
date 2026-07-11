@@ -16,7 +16,8 @@ jk-compat = ">=0.10"
 # The code layer (P3): the worker jar carrying the spring-aot step and boot-jar packager
 # bodies — forked by the engine, never classloaded into it.
 [code]
-worker = "jk-spring-boot"
+worker          = "jk-spring-boot"
+protocol-prefix = "##JKSB:"
 
 # The packager's static artifact descriptor (plan §3.3): run/install/image/aot-cache consult
 # these flags instead of framework-presence branches — no plugin code executes to answer them.

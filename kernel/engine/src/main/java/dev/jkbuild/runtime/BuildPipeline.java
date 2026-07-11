@@ -2,7 +2,6 @@
 package dev.jkbuild.runtime;
 
 import dev.jkbuild.cache.Cas;
-import dev.jkbuild.compile.BootJarPackager;
 import dev.jkbuild.compile.ClasspathResolver;
 import dev.jkbuild.compile.CycloneDxSbom;
 import dev.jkbuild.compile.CompileRequest;
@@ -331,8 +330,10 @@ public final class BuildPipeline {
         boolean useJava = true;
         boolean compactLayout = false;
         boolean workspaceNoSources = false;
+        JkBuild parsedBuild = null;
         try {
             var jkBuild = JkBuildParser.parse(in.buildFile());
+            parsedBuild = jkBuild;
             var project = jkBuild.project();
             CompileSupport.Languages langs = CompileSupport.resolveLanguages(project, in.dir());
             useJava = langs.java();
@@ -347,6 +348,31 @@ public final class BuildPipeline {
         } catch (Exception ignored) {
             // Unparseable/missing jk.toml — parse-build will surface the real error.
         }
+
+        // Build-plugin code layer (build-plugins plan §3.2): learn the registered steps/packager
+        // over the file-cached describe protocol. A missing worker jar or a broken registration
+        // must fail the build loudly here, not mid-pipeline.
+        PluginBuild.Active pluginActive = null;
+        PluginBuild.Declarations pluginDecls = null;
+        if (parsedBuild != null) {
+            var activeOpt = PluginBuild.activeCodePlugin(parsedBuild);
+            if (activeOpt.isPresent()) {
+                try {
+                    BuildLayout layout = BuildLayout.of(in.dir(), parsedBuild);
+                    pluginDecls = PluginBuild.declarations(
+                            activeOpt.get(), parsedBuild, in.dir(), in.cache(), layout.moduleTargetDir());
+                    pluginActive = activeOpt.get();
+                } catch (RuntimeException e) {
+                    throw e;
+                } catch (Exception e) {
+                    throw new IllegalStateException(
+                            "plugin " + activeOpt.get().manifest().id() + ": " + e.getMessage(), e);
+                }
+            }
+        }
+        final PluginBuild.Active pluginActiveF = pluginActive;
+        final PluginBuild.Declarations pluginDeclsF = pluginDecls;
+
         // Effectively-final copies for the phase lambdas.
         final boolean mixedWithJava = useJava;
         final boolean compact = compactLayout;
@@ -419,8 +445,16 @@ public final class BuildPipeline {
         // ---- run-tests --------------------------------------------------
         Phase runTests = runTestsPhase(cx);
 
+        // ---- plugin steps (build-plugins plan §3.2) ----------------------
+        List<Phase> pluginSteps = new ArrayList<>();
+        if (pluginDeclsF != null) {
+            for (PluginBuild.StepDecl step : pluginDeclsF.steps()) {
+                pluginSteps.add(pluginStepPhase(cx, pluginActiveF, step));
+            }
+        }
+
         // ---- package-jar ------------------------------------------------
-        Phase packageJar = packageJarPhase(cx);
+        Phase packageJar = packageJarPhase(cx, pluginActiveF, pluginDeclsF);
 
         // ---- write-stamp ------------------------------------------------
         Phase writeStamp = writeStampPhase(cx);
@@ -465,8 +499,10 @@ public final class BuildPipeline {
         if (in.testOnly() || !in.skipTests()) {
             b.addPhase(compileTest).addPhase(runTests);
         }
-        // `jk test` stops at run-tests — it never packages a jar.
+        // `jk test` stops at run-tests — it never packages a jar. Plugin steps run only
+        // when packaging does: they exist to feed the packaged/native artifact.
         if (!in.testOnly()) {
+            for (Phase p : pluginSteps) b.addPhase(p);
             b.addPhase(packageJar);
         }
         // write-stamp is the Java-compile freshness companion; only when Java ran.
@@ -1385,7 +1421,8 @@ public final class BuildPipeline {
         }
     }
 
-    private static Phase packageJarPhase(StepContext cx) {
+    private static Phase packageJarPhase(
+            StepContext cx, PluginBuild.Active pluginActive, PluginBuild.Declarations pluginDecls) {
         Inputs in = cx.in();
         Cas cas = cx.cas();
         ActionCache actionCache = cx.actionCache();
@@ -1401,8 +1438,7 @@ public final class BuildPipeline {
         return Phase.builder("package-jar")
                 .label("Packaging")
                 .kind(PhaseKind.CPU)
-                .requires(
-                        in.skipTests() ? new String[] {"copy-resources"} : new String[] {"copy-resources", "run-tests"})
+                .requires(packageRequires(in, pluginDecls))
                 .weight(() -> plan.get().pkg())
                 .scope(1)
                 .execute(ctx -> {
@@ -1411,8 +1447,8 @@ public final class BuildPipeline {
                     Path classes = ctx.require(MAIN_CLASSES);
                     Path jarPath = layout.mainJar();
                     Files.createDirectories(jarPath.getParent());
-                    if (project.isSpringBoot()) {
-                        packageBootJar(ctx, in, cas, project, classes, jarPath);
+                    if (pluginDecls != null && pluginDecls.packager() != null) {
+                        packagePlugin(ctx, in, cas, project, classes, jarPath, pluginActive, pluginDecls);
                         return;
                     }
                     String mainClass = project.mainClass();
@@ -1457,98 +1493,172 @@ public final class BuildPipeline {
                 .build();
     }
 
-    /**
-     * Boot-layout packaging (spring-boot plan §3.3): {@code [spring-boot]}'s presence switches the
-     * main jar from a plain classes jar to Boot's executable layout — {@code java -jar} works
-     * standalone, and the production classpath is the lockfile's RUNTIME scopes by construction
-     * ({@code dev}/{@code test-dev} never enter it). Nested jars keep their original
-     * {@code artifact-version.jar} names; loader + jarmode-tools come version-matched from the
-     * Boot release the project declared.
-     */
-    private static void packageBootJar(
-            PhaseContext ctx, Inputs in, Cas cas, JkBuild project, Path classes, Path jarPath) throws Exception {
-        dev.jkbuild.model.PluginConfig boot = SpringBootFacts.of(project);
-        Lockfile lock = ctx.require(LOCKFILE);
-        ClasspathResolver resolver = new ClasspathResolver(cas);
-
-        String startClass = project.mainClass();
-        if (startClass == null || startClass.isBlank()) {
-            startClass = dev.jkbuild.layout.MainClassScanner.scanUnique(classes);
-        }
-
-        // Spring AOT (plan §3.4): explicit aot = true, or auto when [native] is declared.
-        // Runs before the packaging cache check so the target/aot dirs always exist for the
-        // native phase, and the packaged jar always embeds the generated classes + hints
-        // (JVM runs opt in with -Dspring.aot.enabled=true; native uses them by construction).
-        BuildLayout layout = ctx.require(LAYOUT);
-        List<Path> aotDirs = List.of();
-        if (SpringBootFacts.aotEnabled(boot, project.nativeConfig().isPresent())) {
-            ctx.label("Spring AOT processing (" + startClass + ")");
-            try {
-                aotDirs = SpringAotRunner.process(
-                                in.dir(),
-                                in.cache(),
-                                in.lockFile(),
-                                ctx.require(JAVA_HOME),
-                                project,
-                                layout,
-                                classes,
-                                startClass,
-                                SpringBootFacts.aotArgs(boot),
-                                project.project().javaRelease())
-                        .dirs();
-            } catch (IOException e) {
-                ctx.error("spring-aot", e.getMessage());
-                throw e;
+    /** package-jar's requires: resources/tests as always, plus every before-PACKAGE plugin step. */
+    private static String[] packageRequires(Inputs in, PluginBuild.Declarations decls) {
+        List<String> requires = new ArrayList<>();
+        requires.add("copy-resources");
+        if (!in.skipTests()) requires.add("run-tests");
+        if (decls != null) {
+            for (PluginBuild.StepDecl step : decls.steps()) {
+                if ("package".equals(step.before())) requires.add("plugin-" + step.name());
             }
         }
+        return requires.toArray(new String[0]);
+    }
 
-        List<BootJarPackager.Lib> libs = new ArrayList<>();
+    /**
+     * One declared build-plugin step as a pipeline phase (build-plugins plan §3.2). The engine
+     * owns the whole caching contract: the declared inputs are fingerprinted into the action key,
+     * a hit restores the step's scratch and skips the worker entirely, a miss forks the plugin's
+     * worker with the resolved inputs. The step body never learns any of this.
+     */
+    private static Phase pluginStepPhase(StepContext cx, PluginBuild.Active active, PluginBuild.StepDecl step) {
+        Inputs in = cx.in();
+        if ("compile".equals(step.before()) || !step.contributesSources().isEmpty()) {
+            // Source-generating steps (Android's R-gen, KSP) need compiler wiring that lands
+            // with the Android spike — refuse loudly rather than run at the wrong time.
+            throw new IllegalStateException("plugin step " + step.name()
+                    + " runs before compile / contributes sources — not supported yet");
+        }
+        List<String> requires = new ArrayList<>();
+        requires.add("copy-resources");
+        if ("test".equals(step.after()) && !in.skipTests()) requires.add("run-tests");
+        return Phase.builder("plugin-" + step.name())
+                .label(step.name())
+                .kind(PhaseKind.CPU)
+                .requires(requires.toArray(new String[0]))
+                .scope(1)
+                .execute(ctx -> {
+                    JkBuild project = ctx.require(PROJECT);
+                    BuildLayout layout = ctx.require(LAYOUT);
+                    Path classes = ctx.require(MAIN_CLASSES);
+                    Path javaHome = ctx.require(JAVA_HOME);
+                    Path scratch = PluginBuild.stepScratch(layout, step.name());
+                    String startClass = resolvedMain(project, classes);
+
+                    List<Path> classpath =
+                            PluginBuild.productionClasspath(in.dir(), in.cache(), in.lockFile(), project);
+
+                    // Action key: exactly the declared inputs, plus the facts the body sees.
+                    List<String> tokens = new ArrayList<>();
+                    for (String input : step.inputs()) {
+                        switch (input) {
+                            case "classes" ->
+                                tokens.add("classes:" + dev.jkbuild.task.ClasspathFingerprint.entry(classes));
+                            case "runtime-classpath", "runtime-entries" ->
+                                tokens.add("cp:" + dev.jkbuild.task.ClasspathFingerprint.of(classpath));
+                            case "config" -> tokens.add("config:" + PluginBuild.configToken(active.config()));
+                            default -> {
+                                if (input.startsWith("step:")) {
+                                    Path other = PluginBuild.stepScratch(layout, input.substring("step:".length()));
+                                    tokens.add(input + ":" + dev.jkbuild.task.ClasspathFingerprint.entry(other));
+                                }
+                            }
+                        }
+                    }
+                    tokens.add("facts:" + project.project().group() + ":" + project.project().name() + ":"
+                            + project.project().version() + ":" + project.project().javaRelease() + ":"
+                            + startClass);
+                    String taskId = ActionKey.qualifiedTaskId("plugin-" + step.name(), scratch);
+                    String actionKey = ActionKey.forArtifact(taskId, dev.jkbuild.util.JkVersion.VERSION, tokens);
+                    dev.jkbuild.task.ActionCache actionCache = cx.actionCache();
+                    var hit = actionCache.lookup(actionKey);
+                    if (hit.isPresent()) {
+                        try {
+                            actionCache.restore(hit.get(), scratch);
+                            ctx.label(step.name() + " up-to-date");
+                            ctx.progress(1);
+                            return;
+                        } catch (IOException e) {
+                            // A missing CAS blob (pruned cache) falls through to a fresh run.
+                        }
+                    }
+
+                    dev.jkbuild.util.PathUtil.deleteRecursively(scratch); // stale outputs never survive
+                    Files.createDirectories(scratch);
+                    ctx.label(step.name());
+                    Path spec = new PluginBuild.SpecWriter()
+                            .op("run-step", step.name(), active.manifest().id())
+                            .config(active.config())
+                            .project(project, startClass)
+                            .layout(classes, in.dir(), scratch)
+                            .javaHome(javaHome)
+                            .classpath(classpath)
+                            .write();
+                    try {
+                        PluginBuild.runWorker(active, in.cache(), spec, ctx::label);
+                    } catch (IOException e) {
+                        ctx.error(step.name(), e.getMessage());
+                        throw e;
+                    } finally {
+                        Files.deleteIfExists(spec);
+                    }
+                    actionCache.store(taskId, actionKey, java.util.Map.of(), scratch);
+                    ctx.progress(1);
+                })
+                .build();
+    }
+
+    /**
+     * Run the plugin's packager in place of plain jar packaging (build-plugins plan §3.3). The
+     * engine keys the artifact cache on the packager's declared inputs (same rebuild triggers the
+     * hand-written boot-jar path had), fetches manifest-declared packager dependencies, prepares
+     * the SBOM, and hands the worker coordinate-named runtime entries — the worker only assembles.
+     */
+    private static void packagePlugin(
+            PhaseContext ctx,
+            Inputs in,
+            Cas cas,
+            JkBuild project,
+            Path classes,
+            Path jarPath,
+            PluginBuild.Active active,
+            PluginBuild.Declarations decls)
+            throws Exception {
+        Lockfile lock = ctx.require(LOCKFILE);
+        BuildLayout layout = ctx.require(LAYOUT);
+        ClasspathResolver resolver = new ClasspathResolver(cas);
+        String startClass = resolvedMain(project, classes);
+
+        // Coordinate-named runtime entries + the SBOM components they imply.
+        record Entry(String fileName, Path jar, boolean snapshot) {}
+        List<Entry> entries = new ArrayList<>();
         List<CycloneDxSbom.Component> sbomComponents = new ArrayList<>();
         for (ClasspathResolver.Entry entry : resolver.entriesFor(lock, ClasspathResolver.RUNTIME)) {
             Lockfile.Artifact a = entry.artifact();
-            libs.add(new BootJarPackager.Lib(
+            entries.add(new Entry(
                     a.moduleArtifact() + "-" + a.version() + ".jar",
                     entry.jar(),
                     a.version().contains("SNAPSHOT")));
             sbomComponents.add(new CycloneDxSbom.Component(
                     a.moduleGroup(), a.moduleArtifact(), a.version(), a.checksumHex()));
         }
+        java.util.Map<String, Path> extras = PluginBuild.fetchPackagerDependencies(project, cas);
 
-        // Loader (exploded at the jar root) and, unless opted out, the jarmode-tools
-        // nested jar — both pinned to the declared Boot version.
-        dev.jkbuild.repo.RepoGroup repos = RepoGroupBuilder.buildFor(project, null, cas);
-        Path loaderJar = fetchBootArtifact(repos, "spring-boot-loader", SpringBootFacts.version(boot));
-        if (SpringBootFacts.includeTools(boot)) {
-            String toolsName = "spring-boot-jarmode-tools-" + SpringBootFacts.version(boot) + ".jar";
-            libs.add(new BootJarPackager.Lib(
-                    toolsName, fetchBootArtifact(repos, "spring-boot-jarmode-tools", SpringBootFacts.version(boot)), false));
+        // Action key from the declared inputs + facts — any config, classes, dependency-set,
+        // step-output, extra-artifact, or manifest change re-packages; nothing else does.
+        List<Path> entryJars = new ArrayList<>(entries.size());
+        for (Entry e : entries) entryJars.add(e.jar());
+        List<String> tokens = new ArrayList<>();
+        for (String input : decls.packager().inputs()) {
+            switch (input) {
+                case "classes" -> tokens.add("classes:" + dev.jkbuild.task.ClasspathFingerprint.entry(classes));
+                case "runtime-classpath", "runtime-entries" ->
+                    tokens.add("libs:" + dev.jkbuild.task.ClasspathFingerprint.of(entryJars));
+                case "config" -> tokens.add("config:" + PluginBuild.configToken(active.config()));
+                default -> {
+                    if (input.startsWith("step:")) {
+                        Path other = PluginBuild.stepScratch(layout, input.substring("step:".length()));
+                        tokens.add(input + ":" + dev.jkbuild.task.ClasspathFingerprint.entry(other));
+                    }
+                }
+            }
         }
-
-        // Build-info (opt-in): the coordinates BuildProperties surfaces via /actuator/info.
-        // No build.time — reproducibility wins; Boot handles its absence.
-        Map<String, String> buildInfo = SpringBootFacts.buildInfo(boot)
-                ? Map.of(
-                        "group", project.project().group(),
-                        "artifact", project.project().name(),
-                        "name", project.project().name(),
-                        "version", project.project().version())
-                : Map.of();
-        // SBOM (always on): free and deterministic straight from the lockfile.
-        byte[] sbom = CycloneDxSbom.write(
-                project.project().group(), project.project().name(), project.project().version(), sbomComponents);
-
-        List<Path> libJars = new ArrayList<>(libs.size());
-        for (BootJarPackager.Lib lib : libs) libJars.add(lib.jar());
-        StringBuilder aotToken = new StringBuilder();
-        for (Path d : aotDirs) aotToken.append(dev.jkbuild.task.ClasspathFingerprint.entry(d)).append(';');
-        List<String> tokens = List.of(
-                "classes:" + dev.jkbuild.task.ClasspathFingerprint.entry(classes),
-                "libs:" + dev.jkbuild.task.ClasspathFingerprint.of(libJars),
-                "start:" + startClass,
-                "boot:" + SpringBootFacts.version(boot) + ":tools=" + SpringBootFacts.includeTools(boot) + ":info=" + SpringBootFacts.buildInfo(boot),
-                "aot:" + aotToken,
-                "manifest:" + project.manifest());
+        List<Path> extraJars = new ArrayList<>(extras.values());
+        tokens.add("extras:" + dev.jkbuild.task.ClasspathFingerprint.of(extraJars));
+        tokens.add("facts:" + project.project().group() + ":" + project.project().name() + ":"
+                + project.project().version() + ":" + startClass);
+        tokens.add("manifest:" + project.manifest());
         String pkgTask = ActionKey.qualifiedTaskId("package-jar", jarPath);
         String pkgKey = ActionKey.forArtifact(pkgTask, dev.jkbuild.util.JkVersion.VERSION, tokens);
         if (restorePackaged(in.cache(), pkgKey, jarPath.getParent())) {
@@ -1557,23 +1667,53 @@ public final class BuildPipeline {
             ctx.progress(1);
             return;
         }
-        ctx.label("package " + jarPath.getFileName() + " (boot)");
-        new BootJarPackager()
-                .packageBootJar(new BootJarPackager.BootJarRequest(
-                        classes,
-                        libs,
-                        loaderJar,
-                        jarPath,
-                        startClass,
-                        SpringBootFacts.version(boot),
-                        project.manifest(),
-                        buildInfo,
-                        sbom,
-                        aotDirs,
-                        0L));
+
+        // SBOM (always on): free and deterministic straight from the lockfile.
+        byte[] sbom = CycloneDxSbom.write(
+                project.project().group(), project.project().name(), project.project().version(), sbomComponents);
+        Path sbomFile = Files.createTempFile("jk-plugin-sbom-", ".cdx.json");
+        Files.write(sbomFile, sbom);
+
+        PluginBuild.SpecWriter spec = new PluginBuild.SpecWriter()
+                .op("package", null, active.manifest().id())
+                .config(active.config())
+                .project(project, startClass)
+                .layout(classes, in.dir(), layout.moduleTargetDir().resolve("plugin"))
+                .artifact(jarPath);
+        for (Entry e : entries) spec.entry(e.fileName(), e.jar(), e.snapshot());
+        for (var e : extras.entrySet()) spec.extra(e.getKey(), e.getValue());
+        spec.extra("sbom", sbomFile);
+        for (PluginBuild.StepDecl step : decls.steps()) {
+            Path scratch = PluginBuild.stepScratch(layout, step.name());
+            if (Files.isDirectory(scratch)) spec.stepOutput(step.name(), scratch);
+        }
+        Path specFile = spec.write();
+        try {
+            PluginBuild.runWorker(active, in.cache(), specFile, ctx::label);
+        } catch (IOException e) {
+            ctx.error("package", e.getMessage());
+            throw e;
+        } finally {
+            Files.deleteIfExists(specFile);
+            Files.deleteIfExists(sbomFile);
+        }
+        if (!Files.isRegularFile(jarPath)) {
+            throw new IOException(
+                    "plugin packager " + decls.packager().name() + " reported success but produced no " + jarPath);
+        }
         storePackaged(in.cache(), pkgTask, pkgKey, tokens, jarPath.getParent(), List.of(jarPath));
         ctx.put(JAR_PATH, jarPath);
         ctx.progress(1);
+    }
+
+    /** The resolved application entry point: declared, else the unique compiled main (when scannable). */
+    private static String resolvedMain(JkBuild project, Path classes) throws IOException {
+        String main = project.mainClass();
+        if ((main == null || main.isBlank())
+                && PluginBuild.shape(project).map(sh -> sh.mainScan()).orElse(false)) {
+            main = dev.jkbuild.layout.MainClassScanner.scanUnique(classes);
+        }
+        return main;
     }
 
     /**
@@ -1594,18 +1734,6 @@ public final class BuildPipeline {
 
     /** SBOM path inside plain/shadow application jars (jar root = classpath root). */
     static final String SBOM_JAR_ENTRY = "META-INF/sbom/application.cdx.json";
-
-    /** Fetch one {@code org.springframework.boot} artifact jar into the CAS and return its path. */
-    private static Path fetchBootArtifact(dev.jkbuild.repo.RepoGroup repos, String artifact, String version)
-            throws IOException, InterruptedException {
-        dev.jkbuild.model.Coordinate coord =
-                dev.jkbuild.model.Coordinate.of("org.springframework.boot", artifact, version);
-        return repos.tryFetchArtifact(coord)
-                .orElseThrow(() -> new IOException(
-                        "cannot fetch " + coord + " — the Boot version in [spring-boot] must exist in a declared repo"))
-                .fetched()
-                .cachePath();
-    }
 
     private static Phase writeStampPhase(StepContext cx) {
         Inputs in = cx.in();
@@ -1945,8 +2073,9 @@ public final class BuildPipeline {
                     String mainClass = (mainOverride != null && !mainOverride.isBlank())
                             ? mainOverride
                             : (nativeCfg.mainClass() != null ? nativeCfg.mainClass() : project.mainClass());
-                    if ((mainClass == null || mainClass.isBlank()) && project.isSpringBoot()) {
-                        // Boot apps carry exactly one main — same scan Start-Class used.
+                    if ((mainClass == null || mainClass.isBlank())
+                            && PluginBuild.shape(project).map(sh -> sh.mainScan()).orElse(false)) {
+                        // main-scan packagers carry exactly one main — same scan packaging used.
                         mainClass = dev.jkbuild.layout.MainClassScanner.scanUnique(layout.classesDir());
                     }
                     boolean shared = (mainClass == null || mainClass.isBlank());
@@ -1969,14 +2098,19 @@ public final class BuildPipeline {
                     Path javaHome = javaHomeEarly; // resolved above in fail-fast check
 
                     List<Path> classpath = new ArrayList<>();
-                    if (project.isSpringBoot()) {
-                        // Boot: the main jar is the executable layout (classes hidden under
-                        // BOOT-INF/) — native-image gets the exploded classes plus the AOT
-                        // output (generated classes + META-INF/native-image hints), which
-                        // package-jar produced just before this phase.
+                    if (PluginBuild.shape(project).map(sh -> sh.classesRun()).orElse(false)) {
+                        // A classes-run packager's jar is not classpath-able (e.g. Boot's
+                        // BOOT-INF nesting) — native-image gets the exploded classes plus
+                        // whatever the plugin's steps contributed (generated classes +
+                        // META-INF/native-image hints), produced just before this phase.
                         classpath.add(layout.classesDir());
-                        for (Path aotDir : SpringAotRunner.outputAt(layout).dirs()) {
-                            if (Files.isDirectory(aotDir)) classpath.add(aotDir);
+                        var activeOpt = PluginBuild.activeCodePlugin(project);
+                        if (activeOpt.isPresent()) {
+                            var decls = PluginBuild.declarations(
+                                    activeOpt.get(), project, dir, cache, layout.moduleTargetDir());
+                            for (Path contributed : PluginBuild.contributedDirs(decls, layout)) {
+                                if (Files.isDirectory(contributed)) classpath.add(contributed);
+                            }
                         }
                     } else {
                         classpath.add(mainJar);

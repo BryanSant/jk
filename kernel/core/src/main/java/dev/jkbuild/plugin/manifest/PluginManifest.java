@@ -53,7 +53,7 @@ public record PluginManifest(
      * (build-plugins plan §3.2/3.3). {@code worker} is the jar's artifactId ({@code
      * dev.jkbuild:<worker>} for first-party plugins).
      */
-    public record Code(String worker) {}
+    public record Code(String worker, String protocolPrefix) {}
 
     /**
      * The {@code [packaging]} table — the packager's static artifact descriptor (plan §3.3):

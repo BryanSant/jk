@@ -92,7 +92,7 @@ public final class ExecPlans {
                     build.nativeMode().name(),
                     orEmpty(build.graal()),
                     build.isSpringBoot(),
-                    boot == null ? "" : SpringBootFacts.version(boot),
+                    boot == null ? "" : boot.stringOpt("version").orElse(""),
                     orEmpty(format.style()),
                     orEmpty(format.java()),
                     orEmpty(format.kotlin()),
@@ -183,10 +183,11 @@ public final class ExecPlans {
             }
         }
 
-        // Classes-dir + RUN classpath: dev-scope deps ride; Boot's boot-layout jar (classes
-        // hidden under BOOT-INF/) never lands on a -cp.
+        // Classes-dir + RUN classpath: dev-scope deps ride; a classes-run packager's jar
+        // (e.g. Boot's BOOT-INF nesting) never lands on a -cp.
         List<Path> classpath = new ArrayList<>();
-        boolean classesEntry = dev || project.isSpringBoot();
+        boolean classesEntry =
+                dev || PluginBuild.shape(project).map(sh -> sh.classesRun()).orElse(false);
         classpath.add(classesEntry ? layout.classesDir() : layout.mainJar());
 
         boolean devtoolsInjected = false;
@@ -203,9 +204,10 @@ public final class ExecPlans {
         WorkspaceClasspath.Result siblings = WorkspaceClasspath.resolve(dir, project, ClasspathResolver.RUN);
         classpath.addAll(siblings.jars());
 
-        if (dev && !hotReload && project.isSpringBoot()) {
+        if (dev && !hotReload && project.pluginConfig("spring-boot").isPresent()) {
             // Tier 2: fetch devtools version-matched to the declared Boot line; offline
-            // degrades silently to process-restart mode.
+            // degrades silently to process-restart mode. DELIBERATE residue: hot-reload
+            // shaping folds into the plugin SPI's RunShape in P7 (build-plugins plan §5).
             Path devtools = fetchDevtools(project, cache);
             if (devtools != null) {
                 classpath.add(devtools);
@@ -288,13 +290,15 @@ public final class ExecPlans {
 
         Path launcherPath = binDir.resolve(AppLauncher.launcherFileName(bin));
 
-        // Shadow / Boot: one self-contained jar in lib.
-        if (project.shadowJar() || project.isSpringBoot()) {
+        // Shadow / self-contained packager output: one jar in lib.
+        var shape = PluginBuild.shape(project);
+        boolean selfContained = shape.map(sh -> sh.selfContained()).orElse(false);
+        if (project.shadowJar() || selfContained) {
             Path src = project.shadowJar() ? layout.shadowJar() : layout.mainJar();
             Path dest = libDir.resolve(src.getFileName().toString());
             linkSrcs.add(src.toAbsolutePath().toString());
             linkDests.add(dest.toString());
-            String script = project.isSpringBoot()
+            String script = selfContained && "jar".equals(shape.map(sh -> sh.execMode()).orElse(""))
                     ? AppLauncher.renderJarScript(javaHome, dest)
                     : AppLauncher.renderScript(javaHome, resolveMain(project, layout, mainOverride), List.of(dest));
             return installAck(linkSrcs, linkDests, launcherPath.toString(), script, launcherPath.toString());
@@ -363,15 +367,20 @@ public final class ExecPlans {
                 libPaths.add(entry.jar().toAbsolutePath().toString());
             }
         }
+        // A self-contained executable jar (Boot-style) trains via -jar; anything else names
+        // its main. The ExecPlan field keeps its wire name (`boot`) — it means exactly this.
+        boolean executableJar = PluginBuild.shape(project)
+                .map(sh -> sh.selfContained() && "jar".equals(sh.execMode()))
+                .orElse(false);
         String mainClass = "";
-        if (!project.isSpringBoot()) {
+        if (!executableJar) {
             mainClass =
                     project.mainClass() != null ? project.mainClass() : MainClassScanner.scanUnique(mainJar);
         }
         Path javaHome = projectJavaHome(dir);
         return new ExecPlan(
                 null, "aot-cache", List.of(), dir.toString(), "", javaHome.toString(), false, false, List.of(),
-                List.of(), List.of(), "", "", "", project.isSpringBoot(), mainJar.toAbsolutePath().toString(), tier,
+                List.of(), List.of(), "", "", "", executableJar, mainJar.toAbsolutePath().toString(), tier,
                 mainClass, libNames, libPaths);
     }
 
@@ -396,11 +405,14 @@ public final class ExecPlans {
 
     private static Path fetchDevtools(JkBuild project, Path cache) {
         try {
-            var boot = SpringBootFacts.of(project);
+            String bootVersion = project.pluginConfig("spring-boot")
+                    .flatMap(c -> c.stringOpt("version"))
+                    .orElse(null);
+            if (bootVersion == null) return null;
             Cas cas = new Cas(cache);
             return RepoGroupBuilder.buildFor(project, null, cas)
                     .tryFetchArtifact(dev.jkbuild.model.Coordinate.of(
-                            "org.springframework.boot", "spring-boot-devtools", SpringBootFacts.version(boot)))
+                            "org.springframework.boot", "spring-boot-devtools", bootVersion))
                     .map(hit -> hit.fetched().cachePath())
                     .orElse(null);
         } catch (IOException e) {

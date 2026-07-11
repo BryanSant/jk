@@ -120,6 +120,32 @@ public final class PluginContributions {
         return out;
     }
 
+    /** One resolved packager-dependency: fetch {@code module:version}, hand it over as {@code artifact}. */
+    public record PackagerDep(String artifact, String module, String version) {}
+
+    /**
+     * The active plugins' {@code [[contribute.packager-dependency]]} entries with conditions
+     * evaluated and coordinates interpolated — the engine fetches these (never into the project's
+     * dependency graph) and hands them to the packager worker by name.
+     */
+    public static java.util.List<PackagerDep> packagerDependencies(JkBuild build) {
+        java.util.List<PackagerDep> out = new java.util.ArrayList<>();
+        for (PluginManifest manifest : PluginTableRegistry.manifests()) {
+            PluginConfig config = build.pluginConfig(manifest.id()).orElse(null);
+            if (config == null) continue;
+            for (PluginManifest.PackagerDependency pd :
+                    manifest.contributions().packagerDependencies()) {
+                if (!holds(pd.when(), config, build.project(), build.nativeConfig().isPresent(), null, manifest.id())) {
+                    continue;
+                }
+                String coordinate = Interpolation.resolve(pd.coordinate(), config, build.project(), null);
+                PlatformDep split = splitCoordinate(coordinate, manifest.id());
+                out.add(new PackagerDep(pd.artifact(), split.module(), split.version()));
+            }
+        }
+        return out;
+    }
+
     /** One predicate, or unconditional when {@code when} is null. */
     private static boolean holds(
             PluginManifest.Condition when,

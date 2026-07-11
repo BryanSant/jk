@@ -60,6 +60,16 @@ tasks.withType<Test>().configureEach {
     doFirst { systemProperty("jk.git-client.worker.jar", testGitWorkerJar.singleFile.absolutePath) }
 }
 
+// Pass the spring-boot worker jar to tests (the plugin build runtime forks it for Boot projects).
+val testSpringBootWorkerJar by configurations.creating {
+    isCanBeConsumed = false; isCanBeResolved = true; isTransitive = false
+}
+dependencies { testSpringBootWorkerJar(project(":spring-boot")) }
+tasks.withType<Test>().configureEach {
+    dependsOn(testSpringBootWorkerJar)
+    doFirst { systemProperty("jk.spring-boot.worker.jar", testSpringBootWorkerJar.singleFile.absolutePath) }
+}
+
 // Pass the auditor jar path to tests (EngineServerTest's hosted jk audit round-trip forks it).
 val testAuditorWorkerJar by configurations.creating {
     isCanBeConsumed = false; isCanBeResolved = true; isTransitive = false

@@ -123,11 +123,11 @@ class BootJarPackagerTest {
     void embeds_build_info_and_sbom_when_supplied(@TempDir Path tmp) throws Exception {
         Path classes = Files.createDirectories(tmp.resolve("classes"));
         Path loader = writeJar(tmp.resolve("loader.jar"), "org/springframework/boot/loader/launch/JarLauncher.class");
-        byte[] sbom = CycloneDxSbom.write(
-                "com.example",
-                "shop",
-                "1.0.0",
-                List.of(new CycloneDxSbom.Component("org.springframework", "spring-core", "7.0.1", "abc123")));
+        // The packager treats the SBOM as opaque bytes (the engine renders CycloneDX upstream).
+        byte[] sbom = ("{\"bomFormat\": \"CycloneDX\", \"components\": [{"
+                + "\"purl\": \"pkg:maven/org.springframework/spring-core@7.0.1\","
+                + " \"hashes\": [{\"alg\": \"SHA-256\", \"content\": \"abc123\"}]}]}")
+                .getBytes(java.nio.charset.StandardCharsets.UTF_8);
 
         Path out = tmp.resolve("app.jar");
         new BootJarPackager()
