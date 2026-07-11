@@ -1,12 +1,17 @@
 # Thin client — the engine owns every byte of TOML reasoning
 
-**Status:** in progress (2026-07-11). **Landed:** the protocol (§2, commits da02cf14+),
-the exec family (run/dev/install/aot-cache — zero client parsing, all verified live), and
-the build/native/clean/format peeks. **Remaining:** Milestone A leftovers — Add/New jk.toml
-edits engine-side, SyncCommand's JdkEnsure pre-flight, PublishCommand's credential match,
-and the workspace-request threading (Build/Native workspace paths still pass a
-client-parsed JkBuild into WorkspaceRequest); then Milestones B (diagnostics/generators)
-and C (ConfigToml scanner + tomlj eviction from the native image).
+**Status:** in progress (2026-07-11). **Milestone A LANDED** (commits da02cf14..5be926f9):
+the protocol (§2), the exec family (run/dev/install/aot-cache — zero client parsing, all
+verified live), the build/native/clean/format/sync peeks, EDIT_REQUEST (add/remove/new
+edits engine-side, verified live), and the new/add/explain parent peeks. Two documented
+deliberate exceptions: PublishCommand (inline credentials must resolve client-side and
+never ride the wire) and JkEnv (the shell hook runs on every prompt — engine round trips
+are wrong there; it gets a line scanner in Milestone C).
+**Remaining:** the workspace-request threading (Build×2 / Native×3 sites pass a
+client-parsed JkBuild into WorkspaceRequest — the one deep refactor); Milestone B
+(Tree/Why/Verify/Export/Ide response vocabularies); Milestone C (ConfigToml scanner for
+the ~11-file config family — no shared choke point, each reader converts individually —
+then assert zero tomlj reachability and drop the ANTLR workaround).
 **Companions:** [engine.md](./engine.md) (process model), [build-plugins-plan.md](./build-plugins-plan.md)
 (depends on this landing first — plugin-owned tables make client-side parsing impossible to do
 correctly).
