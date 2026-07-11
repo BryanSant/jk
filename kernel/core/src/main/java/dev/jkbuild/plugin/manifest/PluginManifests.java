@@ -125,10 +125,11 @@ public final class PluginManifests {
     private static PluginManifest.Code parseCode(TomlParseResult result, String displayPath) {
         TomlTable code = result.getTable("code");
         if (code == null) return null;
+        // `worker` names a registered first-party worker jar; a third-party plugin IS its own
+        // worker (the [plugins]-declared jar), so the key is optional here — the built-in loader
+        // enforces it for manifests shipped inside jk.
         String worker = code.getString("worker");
-        if (worker == null || worker.isBlank()) {
-            throw new JkBuildParseException(displayPath + ".code.worker is required (the worker jar's artifactId)");
-        }
+        if (worker != null && worker.isBlank()) worker = null;
         String prefix = code.getString("protocol-prefix");
         if (prefix == null || prefix.isBlank()) {
             throw new JkBuildParseException(

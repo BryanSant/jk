@@ -183,6 +183,10 @@ public final class PluginTableRegistry {
                 }
                 PluginManifest manifest =
                         PluginManifests.parse(new String(in.readAllBytes(), StandardCharsets.UTF_8), resource);
+                if (manifest.code() != null && manifest.code().worker() == null) {
+                    throw new IllegalStateException("built-in plugin manifest " + resource
+                            + " must name its registered worker jar ([code] worker)");
+                }
                 byTable.put(manifest.table(), manifest);
             } catch (IOException e) {
                 throw new UncheckedIOException("failed to load built-in plugin manifest " + resource, e);

@@ -52,11 +52,7 @@ public final class PluginVerbs {
                     .verbArgs(args)
                     .write();
             try {
-                WorkerJar workerJar = WorkerJar.byArtifactId(
-                                active.manifest().code().worker())
-                        .orElseThrow(() -> new IllegalStateException("plugin " + active.manifest().id()
-                                + " names unregistered worker " + active.manifest().code().worker()));
-                Path jar = workerJar.locate(new Cas(cache));
+                Path jar = PluginBuild.workerJarFor(active, cache);
                 List<String> output = new ArrayList<>();
                 String[] error = new String[1];
                 WorkerClient client = new WorkerClient(active.manifest().code().protocolPrefix())

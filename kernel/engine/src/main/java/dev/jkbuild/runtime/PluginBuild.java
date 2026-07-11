@@ -369,7 +369,7 @@ public final class PluginBuild {
      * from the CAS — and it forks only once its coordinate is trusted (plugin-refactor Posture A:
      * the engine refuses untrusted third-party code with the {@code jk trust plugin} remediation).
      */
-    private static Path workerJarFor(Active active, Path cache) throws IOException {
+    static Path workerJarFor(Active active, Path cache) throws IOException {
         if (PluginTableRegistry.isBuiltIn(active.manifest().id())) {
             WorkerJar workerJar = WorkerJar.byArtifactId(active.manifest().code().worker())
                     .orElseThrow(() -> new IllegalStateException(
@@ -382,9 +382,13 @@ public final class PluginBuild {
             throw new IOException("plugin " + active.manifest().id()
                     + " has no matching [plugins] declaration — declare it (or run `jk sync`)");
         }
+        // The trust file lives in the machine's state dir; the sysprop is the test seam,
+        // exactly like the jk.<worker>.jar properties the worker registry uses.
+        String stateOverride = System.getProperty("jk.trust.state.dir");
+        Path stateDir = stateOverride != null ? Path.of(stateOverride) : dev.jkbuild.util.JkDirs.state();
         dev.jkbuild.tool.TrustedPlugins trust;
         try {
-            trust = dev.jkbuild.tool.TrustedPlugins.load(dev.jkbuild.util.JkDirs.state());
+            trust = dev.jkbuild.tool.TrustedPlugins.load(stateDir);
         } catch (IOException e) {
             trust = null;
         }
