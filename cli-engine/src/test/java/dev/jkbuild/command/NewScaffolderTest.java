@@ -342,6 +342,58 @@ class NewScaffolderTest {
         assertThat(Files.readString(gitignore)).isEqualTo("# pre-existing content\nnode_modules/\n");
     }
 
+    @Test
+    void spring_java_scaffold_comes_from_the_plugin(@TempDir Path tempDir) throws IOException {
+        NewScaffolder.write(spring(tempDir, NewInputs.Language.JAVA));
+
+        // jk.toml = the client-rendered base + the plugin's [scaffold] fragments (engine-side).
+        var toml = Files.readString(tempDir.resolve("jk.toml"));
+        assertThat(toml).contains("[spring-boot]");
+        assertThat(toml).contains("version = \"");
+        assertThat(toml).contains("starter-webmvc = { group = \"org.springframework.boot\"");
+        assertThat(toml).contains("[dev-dependencies]");
+        assertThat(toml).contains("devtools = { group = \"org.springframework.boot\"");
+        assertThat(toml).doesNotContain("kotlin-reflect");
+
+        var app = tempDir.resolve("src/main/java/com/example/Application.java");
+        assertThat(app).exists();
+        assertThat(Files.readString(app)).contains("package com.example;");
+        assertThat(Files.readString(app)).contains("@SpringBootApplication");
+        assertThat(tempDir.resolve("src/test/java/com/example/ApplicationTest.java")).exists();
+        assertThat(tempDir.resolve("src/main/resources/application.properties")).exists();
+    }
+
+    @Test
+    void spring_kotlin_scaffold_adds_reflect_and_kt_sources(@TempDir Path tempDir) throws IOException {
+        NewScaffolder.write(spring(tempDir, NewInputs.Language.KOTLIN));
+
+        var toml = Files.readString(tempDir.resolve("jk.toml"));
+        assertThat(toml).contains("kotlin-reflect = { group = \"org.jetbrains.kotlin\" }");
+        var app = tempDir.resolve("src/main/kotlin/com/example/Application.kt");
+        assertThat(app).exists();
+        assertThat(Files.readString(app)).contains("runApplication<Application>");
+    }
+
+    private static NewInputs spring(Path dir, NewInputs.Language lang) {
+        return new NewInputs(
+                "com.example",
+                "widget",
+                "25",
+                25,
+                25,
+                Optional.empty(),
+                Optional.of("com.example.Application"),
+                false,
+                false,
+                true,
+                lang,
+                "traditional",
+                Optional.empty(),
+                List.of(),
+                true,
+                dir);
+    }
+
     private static NewInputs library(Path dir, NewInputs.Language lang, boolean sample, int major) {
         return new NewInputs(
                 "com.example",

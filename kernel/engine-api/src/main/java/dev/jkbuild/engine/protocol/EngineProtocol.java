@@ -1346,9 +1346,28 @@ public final class EngineProtocol {
     }
 
     public static String generateRequest(String dir, String kind) {
+        return generateRequest(dir, kind, java.util.Map.of());
+    }
+
+    /** As above with generator parameters (scaffold inputs etc.) as parallel key/value lists. */
+    public static String generateRequest(String dir, String kind, java.util.Map<String, String> params) {
+        List<String> keys = new java.util.ArrayList<>(params.keySet());
+        List<String> values = new java.util.ArrayList<>(keys.size());
+        for (String k : keys) values.add(params.get(k));
         return "{\"t\":\"" + GENERATE_REQUEST + "\",\"dir\":" + Ndjson.quote(dir)
                 + ",\"kind\":" + Ndjson.quote(kind)
+                + ",\"paramKeys\":" + quoteArray(keys)
+                + ",\"paramValues\":" + quoteArray(values)
                 + "}";
+    }
+
+    /** Decode side of {@link #generateRequest(String, String, java.util.Map)}. */
+    public static java.util.Map<String, String> generateParams(String requestLine) {
+        List<String> keys = Ndjson.strArray(requestLine, "paramKeys");
+        List<String> values = Ndjson.strArray(requestLine, "paramValues");
+        java.util.Map<String, String> out = new java.util.LinkedHashMap<>();
+        for (int i = 0; i < keys.size() && i < values.size(); i++) out.put(keys.get(i), values.get(i));
+        return out;
     }
 
     public static String denyCheckRequest(String dir) {

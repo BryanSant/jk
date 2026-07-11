@@ -23,4 +23,8 @@ tasks.processResources {
         into("dev/jkbuild/plugin/manifest")
         rename { "spring-boot.jk-plugin.toml" }
     }
+    // Scaffold templates ride next to the manifest (registry resource dir <id>/scaffold/...).
+    from(rootProject.file("plugins/spring-boot/scaffold")) {
+        into("dev/jkbuild/plugin/manifest/spring-boot/scaffold")
+    }
 }

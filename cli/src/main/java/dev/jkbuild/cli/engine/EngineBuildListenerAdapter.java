@@ -492,7 +492,8 @@ final class EngineBuildListenerAdapter {
     }
 
     /** One engine-hosted generator run: file payloads back, guards/writes stay client-side. */
-    static dev.jkbuild.engine.protocol.GeneratedFiles generate(EnginePaths.Paths paths, Path dir, String kind)
+    static dev.jkbuild.engine.protocol.GeneratedFiles generate(
+            EnginePaths.Paths paths, Path dir, String kind, java.util.Map<String, String> params)
             throws IOException {
         EngineClient.ensureRunning(paths, Jk.VERSION);
         try (SocketChannel ch = EngineClient.connect(paths.socket())) {
@@ -500,7 +501,7 @@ final class EngineBuildListenerAdapter {
                     new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
             BufferedReader reader =
                     new BufferedReader(new InputStreamReader(Channels.newInputStream(ch), StandardCharsets.UTF_8));
-            writer.write(EngineProtocol.generateRequest(dir.toString(), kind));
+            writer.write(EngineProtocol.generateRequest(dir.toString(), kind, params));
             writer.write('\n');
             writer.flush();
             String line;

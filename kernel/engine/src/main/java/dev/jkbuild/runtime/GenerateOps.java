@@ -30,10 +30,15 @@ public final class GenerateOps {
     private GenerateOps() {}
 
     public static GeneratedFiles generate(Path dir, String kind) {
+        return generate(dir, kind, Map.of());
+    }
+
+    public static GeneratedFiles generate(Path dir, String kind, Map<String, String> params) {
         try {
             return switch (kind) {
                 case "export-maven" -> exportMaven(dir);
                 case "export-gradle" -> exportGradle(dir);
+                case "scaffold" -> ScaffoldOps.scaffold(dir, params);
                 default -> GeneratedFiles.error("unknown generate kind: " + kind);
             };
         } catch (IOException | RuntimeException e) {

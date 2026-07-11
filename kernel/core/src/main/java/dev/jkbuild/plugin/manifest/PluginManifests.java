@@ -58,7 +58,67 @@ public final class PluginManifests {
         PluginManifest.Contributions contributions = parseContributions(result, schema.keySet(), displayPath);
         PluginManifest.Code code = parseCode(result, displayPath);
         PluginManifest.Packaging packaging = parsePackaging(result, displayPath);
-        return new PluginManifest(id, table, version, jkCompat, schema, contributions, code, packaging);
+        PluginManifest.Scaffold scaffold = parseScaffold(result, displayPath);
+        List<PluginManifest.GradleImport> gradleImports = parseGradleImports(result, displayPath);
+        return new PluginManifest(
+                id, table, version, jkCompat, schema, contributions, code, packaging, scaffold, gradleImports);
+    }
+
+    /** The {@code [scaffold]} section — {@code jk new --<flag>} templates (P4, pure data). */
+    private static PluginManifest.Scaffold parseScaffold(TomlParseResult result, String displayPath) {
+        TomlTable scaffold = result.getTable("scaffold");
+        if (scaffold == null) return null;
+        String flag = scaffold.getString("flag");
+        if (flag == null || flag.isBlank()) {
+            throw new JkBuildParseException(displayPath + ".scaffold.flag is required (the jk new --<flag> name)");
+        }
+        List<PluginManifest.Append> appends = new ArrayList<>();
+        for (TomlTable t : tableArray(scaffold, "append", displayPath)) {
+            appends.add(new PluginManifest.Append(
+                    requireString(t, "template", displayPath + ".scaffold.append"),
+                    scaffoldLang(t, displayPath + ".scaffold.append")));
+        }
+        List<PluginManifest.FileTemplate> files = new ArrayList<>();
+        for (TomlTable t : tableArray(scaffold, "file", displayPath)) {
+            files.add(new PluginManifest.FileTemplate(
+                    requireString(t, "path", displayPath + ".scaffold.file"),
+                    requireString(t, "template", displayPath + ".scaffold.file"),
+                    scaffoldLang(t, displayPath + ".scaffold.file"),
+                    Boolean.TRUE.equals(t.getBoolean("keep-existing"))));
+        }
+        return new PluginManifest.Scaffold(flag, scaffold.getString("description"), appends, files);
+    }
+
+    /**
+     * A scaffold entry's {@code when} — the scaffold-local closed set is {@code lang} only
+     * (java|kotlin); anything richer belongs in a code hook, same anti-DSL-creep rule as the
+     * build conditions.
+     */
+    private static String scaffoldLang(TomlTable entry, String where) {
+        TomlTable when = entry.getTable("when");
+        if (when == null) return null;
+        if (when.keySet().size() != 1 || !when.keySet().contains("lang")) {
+            throw new JkBuildParseException(where + ".when supports exactly one predicate: lang = \"java|kotlin\"");
+        }
+        String lang = when.getString("lang");
+        if (!List.of("java", "kotlin").contains(String.valueOf(lang))) {
+            throw new JkBuildParseException(where + ".when.lang must be java or kotlin — got: " + lang);
+        }
+        return lang;
+    }
+
+    /** The {@code [[import.gradle-plugin]]} rules — jk import's plugin-id mappings (P4). */
+    private static List<PluginManifest.GradleImport> parseGradleImports(TomlParseResult result, String displayPath) {
+        TomlTable importTable = result.getTable("import");
+        if (importTable == null) return List.of();
+        List<PluginManifest.GradleImport> rules = new ArrayList<>();
+        for (TomlTable t : tableArray(importTable, "gradle-plugin", displayPath)) {
+            rules.add(new PluginManifest.GradleImport(
+                    requireString(t, "id", displayPath + ".import.gradle-plugin"),
+                    t.getString("version-to"),
+                    t.getString("missing-version-warning")));
+        }
+        return rules;
     }
 
     /** The {@code [code]} table — the plugin's worker jar carrying step/packager bodies (P3). */

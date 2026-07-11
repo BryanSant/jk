@@ -77,6 +77,10 @@ public interface InProcessEngine {
     /** Thin-client generator twin — the in-process counterpart of GENERATE_REQUEST. */
     dev.jkbuild.engine.protocol.GeneratedFiles generate(java.nio.file.Path dir, String kind);
 
+    /** As above with generator parameters (scaffold inputs etc.). */
+    dev.jkbuild.engine.protocol.GeneratedFiles generate(
+            java.nio.file.Path dir, String kind, java.util.Map<String, String> params);
+
     /** A single hosted goal's outcome: the goal result plus the test counts (null when no tests ran). */
     record GoalOutcome(dev.jkbuild.run.GoalResult result, dev.jkbuild.run.TestSummary testResult) {}
 

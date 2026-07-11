@@ -48,12 +48,6 @@ public final class NewScaffolder {
             "guava", List.of(new CuratedEntry("com.google.guava:guava", "33", "main")),
             "kotest", List.of(new CuratedEntry("io.kotest:kotest-runner-junit6", "6", "test")));
 
-    /**
-     * Spring Boot version {@code jk new --spring} writes into {@code [spring-boot]} — the newest
-     * GA line at release time. Users bump it in jk.toml; walk it forward with jk releases.
-     */
-    public static final String DEFAULT_BOOT_VERSION = "4.1.0";
-
     private NewScaffolder() {}
 
     public static void write(NewInputs inputs) throws IOException {
@@ -67,13 +61,26 @@ public final class NewScaffolder {
      *
      * <p>No {@code jk.lock} is written — it's generated on the first build or run, so a
      * freshly-scaffolded project carries only its manifest + sources.
+     *
+     * <p>A plugin scaffold ({@code --spring}) fetches its payloads BEFORE anything touches disk:
+     * the engine renders the plugin's {@code [scaffold]} data (the jk.toml fragments + sample
+     * templates — content the thin client does not ship), and a failure leaves no half-written
+     * project behind.
      */
     public static void write(NewInputs inputs, boolean standalone) throws IOException {
         var dir = inputs.directory();
-        Files.createDirectories(dir);
+        dev.jkbuild.engine.protocol.GeneratedFiles plugin = inputs.spring() ? pluginScaffold(inputs) : null;
 
-        var buildFile = dir.resolve("jk.toml");
-        Files.writeString(buildFile, NewJkBuildRenderer.render(inputs), StandardCharsets.UTF_8);
+        Files.createDirectories(dir);
+        if (plugin != null) {
+            for (int i = 0; i < plugin.paths().size(); i++) {
+                Path target = Path.of(plugin.paths().get(i));
+                if (target.getParent() != null) Files.createDirectories(target.getParent());
+                Files.writeString(target, plugin.contents().get(i), StandardCharsets.UTF_8);
+            }
+        } else {
+            Files.writeString(dir.resolve("jk.toml"), NewJkBuildRenderer.render(inputs), StandardCharsets.UTF_8);
+        }
 
         if (standalone) {
             writeGitignore(dir); // modules inherit the workspace root's .gitignore
@@ -81,9 +88,27 @@ public final class NewScaffolder {
 
         createSourceTree(inputs);
 
-        if (inputs.sample()) {
+        if (plugin == null && inputs.sample()) {
             writeSample(inputs);
         }
+    }
+
+    /**
+     * The engine-rendered plugin scaffold: base jk.toml + the plugin's fragments, and the sample
+     * files when requested. {@code plugin} is the scaffold flag ({@code spring}); generation is
+     * engine-hosted so the client carries none of the framework content.
+     */
+    private static dev.jkbuild.engine.protocol.GeneratedFiles pluginScaffold(NewInputs inputs) throws IOException {
+        var params = new java.util.LinkedHashMap<String, String>();
+        params.put("plugin", "spring");
+        params.put("lang", inputs.lang() == NewInputs.Language.KOTLIN ? "kotlin" : "java");
+        params.put("package", inputs.group());
+        params.put("simpleLayout", String.valueOf(inputs.isSimpleLayout()));
+        params.put("sample", String.valueOf(inputs.sample()));
+        params.put("baseToml", NewJkBuildRenderer.render(inputs));
+        var files = ExportSupport.generate(inputs.directory(), "scaffold", params, "jk new");
+        if (files == null) throw new IOException("jk new: plugin scaffold failed");
+        return files;
     }
 
     /**
@@ -149,130 +174,10 @@ public final class NewScaffolder {
      * project group; the test relies on the JUnit jk defaults in when no test framework is declared.
      */
     private static void writeSample(NewInputs inputs) throws IOException {
-        if (inputs.spring()) {
-            writeSpringSample(inputs);
-            return;
-        }
         switch (inputs.lang()) {
             case JAVA -> writeJavaSample(inputs);
             case KOTLIN -> writeKotlinSample(inputs);
         }
-    }
-
-    /**
-     * Spring Boot starter app: an {@code Application} class doubling as a REST controller, an
-     * {@code application.properties} seed, and a plain-JUnit test of the handler (no context
-     * bootstrap — the sample tests stay dependency-free beyond jk's JUnit defaults).
-     */
-    private static void writeSpringSample(NewInputs inputs) throws IOException {
-        String pkg = inputs.group();
-        String pkgPath = "/" + pkg.replace('.', '/');
-        boolean kotlin = inputs.lang() == NewInputs.Language.KOTLIN;
-        Path srcDir = inputs.directory().resolve(mainSourceRoot(inputs) + pkgPath);
-        Path testDir = inputs.directory().resolve(testSourceRoot(inputs) + pkgPath);
-        Path resourcesDir = inputs.directory()
-                .resolve(inputs.isSimpleLayout() ? "src" : "src/main/resources");
-        Files.createDirectories(srcDir);
-        Files.createDirectories(testDir);
-        Files.createDirectories(resourcesDir);
-
-        if (kotlin) {
-            Files.writeString(srcDir.resolve("Application.kt"), renderSpringApplicationKt(pkg), StandardCharsets.UTF_8);
-            Files.writeString(
-                    testDir.resolve("ApplicationTest.kt"), renderSpringApplicationTestKt(pkg), StandardCharsets.UTF_8);
-        } else {
-            Files.writeString(
-                    srcDir.resolve("Application.java"), renderSpringApplication(pkg), StandardCharsets.UTF_8);
-            Files.writeString(
-                    testDir.resolve("ApplicationTest.java"), renderSpringApplicationTest(pkg), StandardCharsets.UTF_8);
-        }
-        Path props = resourcesDir.resolve("application.properties");
-        if (!Files.exists(props)) {
-            Files.writeString(props, """
-                    # server.port=8080
-                    """, StandardCharsets.UTF_8);
-        }
-    }
-
-    private static String renderSpringApplicationKt(String pkg) {
-        return """
-                package %s
-
-                import org.springframework.boot.autoconfigure.SpringBootApplication
-                import org.springframework.boot.runApplication
-                import org.springframework.web.bind.annotation.GetMapping
-                import org.springframework.web.bind.annotation.RestController
-
-                @SpringBootApplication
-                @RestController
-                class Application {
-
-                    @GetMapping("/")
-                    fun hello(): String = "Hello from jk + Spring Boot!"
-                }
-
-                fun main(args: Array<String>) {
-                    runApplication<Application>(*args)
-                }
-                """.formatted(pkg);
-    }
-
-    private static String renderSpringApplicationTestKt(String pkg) {
-        return """
-                package %s
-
-                import org.junit.jupiter.api.Assertions.assertEquals
-                import org.junit.jupiter.api.Test
-
-                class ApplicationTest {
-                    @Test
-                    fun helloGreets() {
-                        assertEquals("Hello from jk + Spring Boot!", Application().hello())
-                    }
-                }
-                """.formatted(pkg);
-    }
-
-    private static String renderSpringApplication(String pkg) {
-        return """
-                package %s;
-
-                import org.springframework.boot.SpringApplication;
-                import org.springframework.boot.autoconfigure.SpringBootApplication;
-                import org.springframework.web.bind.annotation.GetMapping;
-                import org.springframework.web.bind.annotation.RestController;
-
-                @SpringBootApplication
-                @RestController
-                public class Application {
-
-                    public static void main(String[] args) {
-                        SpringApplication.run(Application.class, args);
-                    }
-
-                    @GetMapping("/")
-                    public String hello() {
-                        return "Hello from jk + Spring Boot!";
-                    }
-                }
-                """.formatted(pkg);
-    }
-
-    private static String renderSpringApplicationTest(String pkg) {
-        return """
-                package %s;
-
-                import static org.junit.jupiter.api.Assertions.assertEquals;
-
-                import org.junit.jupiter.api.Test;
-
-                public class ApplicationTest {
-                    @Test
-                    void helloGreets() {
-                        assertEquals("Hello from jk + Spring Boot!", new Application().hello());
-                    }
-                }
-                """.formatted(pkg);
     }
 
     private static void writeJavaSample(NewInputs inputs) throws IOException {

@@ -23,11 +23,16 @@ final class ExportSupport {
 
     /** Fetch a generator's payloads; prints and returns {@code null} on error. */
     static GeneratedFiles generate(Path dir, String kind, String cmd) {
+        return generate(dir, kind, java.util.Map.of(), cmd);
+    }
+
+    /** As above with generator parameters (scaffold inputs etc.). */
+    static GeneratedFiles generate(Path dir, String kind, java.util.Map<String, String> params, String cmd) {
         try {
             GeneratedFiles files = engineDisabledForTests()
-                    ? dev.jkbuild.cli.engine.InProcessEngine.require().generate(dir, kind)
+                    ? dev.jkbuild.cli.engine.InProcessEngine.require().generate(dir, kind, params)
                     : dev.jkbuild.cli.engine.EngineClient.generate(
-                            dev.jkbuild.engine.EnginePaths.current(), dir, kind);
+                            dev.jkbuild.engine.EnginePaths.current(), dir, kind, params);
             if (files.error() != null) {
                 CliOutput.err(cmd + ": " + files.error());
                 return null;

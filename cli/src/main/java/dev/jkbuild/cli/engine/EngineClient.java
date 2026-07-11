@@ -315,7 +315,17 @@ public final class EngineClient {
     public static dev.jkbuild.engine.protocol.GeneratedFiles generate(
             dev.jkbuild.engine.EnginePaths.Paths paths, java.nio.file.Path dir, String kind)
             throws java.io.IOException {
-        return EngineBuildListenerAdapter.generate(paths, dir, kind);
+        return EngineBuildListenerAdapter.generate(paths, dir, kind, java.util.Map.of());
+    }
+
+    /** As above with generator parameters (scaffold inputs etc.). */
+    public static dev.jkbuild.engine.protocol.GeneratedFiles generate(
+            dev.jkbuild.engine.EnginePaths.Paths paths,
+            java.nio.file.Path dir,
+            String kind,
+            java.util.Map<String, String> params)
+            throws java.io.IOException {
+        return EngineBuildListenerAdapter.generate(paths, dir, kind, params);
     }
 
         /** Thin-client tree render: engine walks the graph, client substitutes its Theme into the tags. */

@@ -1005,7 +1005,9 @@ public final class EngineServer implements AutoCloseable {
         dev.jkbuild.engine.protocol.GeneratedFiles files;
         try {
             files = dev.jkbuild.runtime.GenerateOps.generate(
-                    Path.of(Ndjson.str(requestLine, "dir")), Ndjson.str(requestLine, "kind"));
+                    Path.of(Ndjson.str(requestLine, "dir")),
+                    Ndjson.str(requestLine, "kind"),
+                    EngineProtocol.generateParams(requestLine));
         } catch (RuntimeException e) {
             files = dev.jkbuild.engine.protocol.GeneratedFiles.error(String.valueOf(e.getMessage()));
         }

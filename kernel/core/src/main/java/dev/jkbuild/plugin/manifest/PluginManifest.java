@@ -26,7 +26,9 @@ public record PluginManifest(
         Map<String, SchemaKey> schema,
         Contributions contributions,
         Code code,
-        Packaging packaging) {
+        Packaging packaging,
+        Scaffold scaffold,
+        List<GradleImport> gradleImports) {
 
     public PluginManifest {
         Objects.requireNonNull(id, "id");
@@ -35,6 +37,7 @@ public record PluginManifest(
                 ? Map.of()
                 : Collections.unmodifiableMap(new LinkedHashMap<>(schema));
         contributions = contributions == null ? Contributions.NONE : contributions;
+        gradleImports = gradleImports == null ? List.of() : List.copyOf(gradleImports);
     }
 
     /** Back-compat: a purely declarative manifest (no code layer, no packaging shape). */
@@ -45,7 +48,56 @@ public record PluginManifest(
             String jkCompat,
             Map<String, SchemaKey> schema,
             Contributions contributions) {
-        this(id, table, version, jkCompat, schema, contributions, null, null);
+        this(id, table, version, jkCompat, schema, contributions, null, null, null, List.of());
+    }
+
+    /** Back-compat: the P3 shape (no scaffold, no import rules). */
+    public PluginManifest(
+            String id,
+            String table,
+            String version,
+            String jkCompat,
+            Map<String, SchemaKey> schema,
+            Contributions contributions,
+            Code code,
+            Packaging packaging) {
+        this(id, table, version, jkCompat, schema, contributions, code, packaging, null, List.of());
+    }
+
+    /**
+     * The {@code [scaffold]} section (plan row 9 — pure data): what {@code jk new --<flag>}
+     * generates. {@code appends} extend the client-rendered base {@code jk.toml}; {@code files}
+     * are the sample sources, written only when the user asked for sample code. Templates are
+     * resources next to the manifest; conditions are the closed {@code lang} predicate only.
+     */
+    public record Scaffold(String flag, String description, List<Append> appends, List<FileTemplate> files) {
+        public Scaffold {
+            Objects.requireNonNull(flag, "flag");
+            appends = appends == null ? List.of() : List.copyOf(appends);
+            files = files == null ? List.of() : List.copyOf(files);
+        }
+    }
+
+    /** One {@code [[scaffold.append]]}: a jk.toml fragment, gated on the project language. */
+    public record Append(String template, String whenLang) {}
+
+    /**
+     * One {@code [[scaffold.file]]}: a sample-source template. {@code keepExisting} skips the
+     * file when the target already exists (seed files like {@code application.properties}).
+     */
+    public record FileTemplate(String path, String template, String whenLang, boolean keepExisting) {}
+
+    /**
+     * One {@code [[import.gradle-plugin]]} rule (plan row 10): a Gradle plugin id this plugin's
+     * table absorbs on {@code jk import}. {@code versionTo} names the config key the Gradle
+     * plugin's declared version becomes (null = the id is recognized and consumed with no
+     * config); {@code missingVersionWarning} is reported when {@code versionTo} is set but the
+     * Gradle build declares the plugin without an inline version.
+     */
+    public record GradleImport(String id, String versionTo, String missingVersionWarning) {
+        public GradleImport {
+            Objects.requireNonNull(id, "id");
+        }
     }
 
     /**

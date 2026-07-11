@@ -89,6 +89,12 @@ public final class InProcessEngineImpl implements InProcessEngine {
     }
 
     @Override
+    public dev.jkbuild.engine.protocol.GeneratedFiles generate(
+            java.nio.file.Path dir, String kind, java.util.Map<String, String> params) {
+        return dev.jkbuild.runtime.GenerateOps.generate(dir, kind, params);
+    }
+
+    @Override
     public java.util.Map<java.nio.file.Path, dev.jkbuild.model.JkBuild> loadWorkspaceModules(
             java.nio.file.Path wsRoot) throws java.io.IOException {
         return dev.jkbuild.config.WorkspaceLoader.loadModules(

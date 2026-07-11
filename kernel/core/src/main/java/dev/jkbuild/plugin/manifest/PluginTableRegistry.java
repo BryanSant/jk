@@ -31,6 +31,25 @@ public final class PluginTableRegistry {
 
     private static final List<String> BUILT_IN = List.of("spring-boot.jk-plugin.toml");
 
+    /**
+     * A plugin's template/data resource, addressed relative to its manifest ({@code
+     * <id>/<relPath>} next to the built-in manifests). P5 extends resolution to third-party
+     * plugin jars; built-in plugins bake their files at build time.
+     */
+    public static String resourceText(PluginManifest manifest, String relPath) {
+        String resource = manifest.id() + "/" + relPath;
+        try (java.io.InputStream in = PluginTableRegistry.class.getResourceAsStream(resource)) {
+            if (in == null) {
+                throw new dev.jkbuild.config.JkBuildParseException(
+                        "plugin " + manifest.id() + " names a missing resource: " + relPath);
+            }
+            return new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+        } catch (java.io.IOException e) {
+            throw new dev.jkbuild.config.JkBuildParseException(
+                    "plugin " + manifest.id() + " resource " + relPath + " is unreadable: " + e.getMessage());
+        }
+    }
+
     private static final Map<String, PluginManifest> BY_TABLE = loadBuiltIns();
 
     private PluginTableRegistry() {}
