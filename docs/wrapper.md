@@ -25,21 +25,35 @@ logic; it only locates or provisions the real `jk` and hands off.
 2. **Otherwise fetch + verify + cache.** Download `jk-<version>-<os>-<arch>.{xz,zip}`, check
    its SHA-256 against the pinned value, unpack into a **version-keyed** cache
    (`$JK_CACHE_DIR/dist/jk-<version>/`), and write a completion marker so subsequent runs
-   skip straight to launch. Optionally `jk jdk ensure` the engine's JDK.
+   skip straight to launch. Optionally `jk jdk ensure` the engine's JDK (`[toolchain].jdk`).
 3. **Launch.** Run the resolved binary with the user's arguments, forwarding to the resident
    engine as usual (see [engine.md](./engine.md); engine version-skew is detected and the
    engine transparently replaced).
 
 ## The version is locked, not floating
 
-The wrapper resolves the jk version from the project's `[project] jk = "…"` field — the same
-place as `jdk`/`java`/`kotlin` — recorded and checksum-pinned in `jk.lock` — the **same discipline as the locked JDK and
-locked dependencies** (tenet #3). `./jk build` today, and on CI a year from now, use the
-identical tool build → bit-identical artifacts by construction.
+The wrapper resolves the jk version from the project's `[toolchain] jk = "…"` field, recorded
+and checksum-pinned in `jk.lock` — the **same discipline as the locked deps** (tenet #3).
+`./jk build` today, and on CI a year from now, use the identical tool build → bit-identical
+artifacts by construction.
 
-This is the cargo/uv model, generalized one level up: those tools stay a single global
-binary and get reproducibility from the *lockfile pinning the inputs*. jk treats **its own
-version as one more locked toolchain input**, alongside the JDK and the dependency graph.
+`[toolchain]` describes **jk's own runtime**, and is deliberately separate from `[project]`,
+which describes what the *project* builds against:
+
+- **`[toolchain].jdk`** — the JVM the **jk-engine** runs on, pinned by *vendor + version*.
+  This pin matters because the engine ships an AOT cache (`.aot`) that is only valid for one
+  exact JVM build; a mismatch silently disables it.
+- **`[toolchain].jk`** — the jk version the wrapper provisions.
+- **`[project].jdk` / `[project].java`** — the JDK the project *compiles and tests* with, in
+  its worker forks. **Independent of the engine's JDK:** the engine may run on Temurin 25
+  while the project builds and tests on Oracle 26.
+
+Kotlin is *not* a toolchain input — the `kotlinc` for `[project].kotlin` is fetched on the
+fly through the CAS, like any other dependency.
+
+This is the cargo/uv model, generalized one level up: those tools stay a single global binary
+and get reproducibility from the *lockfile pinning the inputs*. jk treats **its own version
+and its engine JDK as locked toolchain inputs**, alongside the dependency graph.
 
 ## Evergreen is opt-in and self-pinning
 
@@ -107,9 +121,11 @@ The wrapper is the on-ramp; the lock is the guarantee.
 
 ## Relationship to the rest of jk
 
-- **`jk.lock` / `[project].jk`** — the single source of truth for the pinned version, next to
-  the locked JDK (`[project].jdk`) and deps.
-- **`jk jdk ensure`** — the wrapper optionally provisions the engine JDK, reusing the
-  existing JDK-management subsystem.
+- **`jk.lock` / `[toolchain]`** — the single source of truth for the pinned jk version
+  (`[toolchain].jk`) and the engine's pinned JDK (`[toolchain].jdk`), independent of the
+  project's build JDK (`[project].jdk`).
+- **`jk jdk ensure`** — the wrapper optionally provisions the **engine's** JDK
+  (`[toolchain].jdk`) — the JVM the engine runs on, not necessarily the project's
+  `[project].jdk` — reusing the existing JDK-management subsystem.
 - **The engine** — the wrapper only provisions and launches the client; client/engine
   version skew is handled by the engine itself (see [engine.md](./engine.md)).

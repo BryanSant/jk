@@ -809,9 +809,9 @@ exclude         = ["libs/legacy-shim"]
 default-modules = ["services/api", "services/web"]
 resolver        = 2                              # one resolver only; this field exists for future-proofing
 
-[toolchain]
-jdk    = "temurin-21"
-kotlin = "2.1.0"
+[toolchain]                     # jk's own runtime — independent of the project's build JDK ([project].jdk)
+jdk = "temurin-25"              # the JVM the jk-engine runs on; pinned by vendor+version because the engine's AOT (.aot) cache is tied to it
+jk  = "0.10.0"                  # the jk version the ./jk wrapper provisions (pinned-on-first-use if omitted)
 
 [repositories]
 # shared
