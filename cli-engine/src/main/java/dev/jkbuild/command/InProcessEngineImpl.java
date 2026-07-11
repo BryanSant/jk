@@ -72,6 +72,18 @@ public final class InProcessEngineImpl implements InProcessEngine {
     }
 
     @Override
+    public String treeRender(
+            java.nio.file.Path dir, int maxDepth, boolean flatten, boolean stack, java.util.List<String> scopes)
+            throws java.io.IOException {
+        return dev.jkbuild.runtime.GraphOps.treeRender(dir, maxDepth, flatten, stack, scopes);
+    }
+
+    @Override
+    public dev.jkbuild.engine.protocol.WhyReport why(java.nio.file.Path dir, String query) {
+        return dev.jkbuild.runtime.GraphOps.why(dir, query);
+    }
+
+    @Override
     public dev.jkbuild.engine.protocol.ExecPlan execPlan(
             java.nio.file.Path dir, java.nio.file.Path cache, String kind, String mainOverride, String binName) {
         return dev.jkbuild.runtime.ExecPlans.execPlan(dir, cache, kind, mainOverride, binName);

@@ -89,6 +89,22 @@ public final class DependencyTree {
             this(rail, group, artifact, version, reference, scopeBadge, UnaryOperator.identity());
         }
 
+        /**
+         * The wire form (thin client): each styled piece wraps in {@code ⟦<kind>…⟧} marker tags
+         * instead of ANSI escapes, so the engine can run the full composite-aware render — which
+         * needs the parsed models — while the client, which owns the Theme, substitutes the tags
+         * with its real stylers afterwards ({@link #applyStyling}). Tags never nest: every styler
+         * in this class receives raw text.
+         */
+        public static Styling markers() {
+            return new Styling(
+                    tag('r'), tag('g'), tag('a'), tag('v'), tag('f'), tag('b'), tag('c'));
+        }
+
+        private static UnaryOperator<String> tag(char kind) {
+            return s -> String.valueOf(MARK_OPEN) + kind + s + MARK_CLOSE;
+        }
+
         public static Styling plain() {
             return new Styling(
                     UnaryOperator.identity(),
@@ -98,6 +114,49 @@ public final class DependencyTree {
                     UnaryOperator.identity(),
                     UnaryOperator.identity());
         }
+    }
+
+    /** Marker-tag delimiters for {@link Styling#markers()} — printable, so they survive Ndjson. */
+    static final char MARK_OPEN = '\u27e6'; // ⟦
+    static final char MARK_CLOSE = '\u27e7'; // ⟧
+
+    /**
+     * Substitute {@link Styling#markers()} tags in an engine-rendered tree with this client's real
+     * stylers. Unknown kinds render unstyled; an unterminated tag renders literally (defensive —
+     * the engine only ever emits balanced tags).
+     */
+    public static String applyStyling(String rendered, Styling styling) {
+        StringBuilder out = new StringBuilder(rendered.length());
+        int i = 0;
+        while (i < rendered.length()) {
+            char c = rendered.charAt(i);
+            if (c != MARK_OPEN || i + 1 >= rendered.length()) {
+                out.append(c);
+                i++;
+                continue;
+            }
+            int close = rendered.indexOf(MARK_CLOSE, i + 1);
+            if (close < 0) {
+                out.append(c);
+                i++;
+                continue;
+            }
+            char kind = rendered.charAt(i + 1);
+            String content = rendered.substring(i + 2, close);
+            UnaryOperator<String> styler = switch (kind) {
+                case 'r' -> styling.rail();
+                case 'g' -> styling.group();
+                case 'a' -> styling.artifact();
+                case 'v' -> styling.version();
+                case 'f' -> styling.reference();
+                case 'b' -> styling.scopeBadge();
+                case 'c' -> styling.boldCoord();
+                default -> UnaryOperator.identity();
+            };
+            out.append(styler.apply(content));
+            i = close + 1;
+        }
+        return out.toString();
     }
 
     private DependencyTree() {}

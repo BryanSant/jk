@@ -453,6 +453,8 @@ public final class EngineServer implements AutoCloseable {
                     case EngineProtocol.EXEC_PLAN_REQUEST -> handleExecPlanRequest(line, writer);
                     case EngineProtocol.EDIT_REQUEST -> handleEditRequest(line, writer);
                     case EngineProtocol.DENY_CHECK_REQUEST -> handleDenyCheckRequest(line, writer);
+                    case EngineProtocol.TREE_REQUEST -> handleTreeRequest(line, writer);
+                    case EngineProtocol.WHY_REQUEST -> handleWhyRequest(line, writer);
                     default -> {
                         /* unknown type — forward-compatible no-op */
                     }
@@ -967,6 +969,35 @@ public final class EngineServer implements AutoCloseable {
      * install layout, aot-cache layout) — the engine decides, the client executes. Synchronous,
      * read-only, inline.
      */
+    /** Answer {@link EngineProtocol#TREE_REQUEST}: the marker-tagged dependency tree, engine-side. */
+    private void handleTreeRequest(String requestLine, BufferedWriter writer) {
+        String error = null;
+        String rendered = null;
+        try {
+            rendered = dev.jkbuild.runtime.GraphOps.treeRender(
+                    Path.of(Ndjson.str(requestLine, "dir")),
+                    Ndjson.intValue(requestLine, "maxDepth", Integer.MAX_VALUE),
+                    Ndjson.bool(requestLine, "flatten", false),
+                    Ndjson.bool(requestLine, "stack", false),
+                    Ndjson.strArray(requestLine, "scopes"));
+        } catch (java.io.IOException | RuntimeException e) {
+            error = String.valueOf(e.getMessage());
+        }
+        sendQuiet(writer, EngineProtocol.treeAck(error, rendered));
+    }
+
+    /** Answer {@link EngineProtocol#WHY_REQUEST}: lock matches + provenance paths, engine-side. */
+    private void handleWhyRequest(String requestLine, BufferedWriter writer) {
+        dev.jkbuild.engine.protocol.WhyReport report;
+        try {
+            report = dev.jkbuild.runtime.GraphOps.why(
+                    Path.of(Ndjson.str(requestLine, "dir")), Ndjson.str(requestLine, "query"));
+        } catch (RuntimeException e) {
+            report = dev.jkbuild.engine.protocol.WhyReport.error(String.valueOf(e.getMessage()));
+        }
+        sendQuiet(writer, report.encode());
+    }
+
     /** Answer {@link EngineProtocol#DENY_CHECK_REQUEST}: policy parse + lock read + check, engine-side. */
     private void handleDenyCheckRequest(String requestLine, BufferedWriter writer) {
         dev.jkbuild.engine.protocol.DenyReport report;

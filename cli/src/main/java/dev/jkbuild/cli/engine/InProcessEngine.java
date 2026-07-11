@@ -62,6 +62,14 @@ public interface InProcessEngine {
     /** Thin-client deny-check twin — the in-process counterpart of DENY_CHECK_REQUEST. */
     dev.jkbuild.engine.protocol.DenyReport denyCheck(java.nio.file.Path dir);
 
+    /** Thin-client tree twin: the marker-tagged render (TREE_REQUEST's in-process counterpart). */
+    String treeRender(
+            java.nio.file.Path dir, int maxDepth, boolean flatten, boolean stack, java.util.List<String> scopes)
+            throws java.io.IOException;
+
+    /** Thin-client why twin — the in-process counterpart of WHY_REQUEST. */
+    dev.jkbuild.engine.protocol.WhyReport why(java.nio.file.Path dir, String query);
+
     /** A single hosted goal's outcome: the goal result plus the test counts (null when no tests ran). */
     record GoalOutcome(dev.jkbuild.run.GoalResult result, dev.jkbuild.run.TestSummary testResult) {}
 

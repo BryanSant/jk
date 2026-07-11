@@ -5,16 +5,12 @@ import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.theme.Coords;
 import dev.jkbuild.cli.theme.Theme;
-import dev.jkbuild.config.JkBuildParser;
-import dev.jkbuild.lock.Lockfile;
-import dev.jkbuild.lock.LockfileReader;
-import dev.jkbuild.model.JkBuild;
+import dev.jkbuild.engine.protocol.WhyReport;
 import dev.jkbuild.model.command.Arity;
 import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Exit;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Param;
-import dev.jkbuild.resolver.Provenance;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -50,39 +46,51 @@ public final class WhyCommand implements CliCommand {
         }
 
         String query = moduleOnly(in.positionals().get(0));
-        JkBuild project = JkBuildParser.parse(buildFile);
-        Lockfile lock = LockfileReader.read(lockFile);
-
-        List<Lockfile.Artifact> matches = lock.artifacts().stream()
-                .filter(p -> matchesQuery(p.name(), query))
-                .toList();
-        if (matches.isEmpty()) {
+        // The graph reasoning is engine-side (thin client): matching + provenance ride WHY_ACK.
+        WhyReport report = engineDisabledForTests()
+                ? dev.jkbuild.cli.engine.InProcessEngine.require().why(dir, query)
+                : dev.jkbuild.cli.engine.EngineClient.why(dev.jkbuild.engine.EnginePaths.current(), dir, query);
+        if (report.error() != null) {
+            CliOutput.err("jk why: " + report.error());
+            return Exit.CONFIG;
+        }
+        if (report.matchNames().isEmpty()) {
             CliOutput.err("jk why: " + query + " is not in jk.lock");
             return 1;
         }
 
         CliOutput.out(Theme.active().gradientHeaderAnsi("Jk - Dependency Lookup"));
-        for (Lockfile.Artifact target : matches) {
-            CliOutput.out(Coords.module(target.name(), target.version()) + " is pulled in by:");
-            List<Provenance.Path> paths = Provenance.pathsTo(project, lock, target.name());
-            if (paths.isEmpty()) {
-                CliOutput.out("  (unreachable from declared dependencies — likely a stale lockfile entry)");
-            } else {
-                for (Provenance.Path path : paths) {
-                    CliOutput.out("  " + renderPath(path));
-                }
+        for (int i = 0; i < report.matchNames().size(); i++) {
+            CliOutput.out(Coords.module(report.matchNames().get(i), report.matchVersions().get(i))
+                    + " is pulled in by:");
+            boolean any = false;
+            for (int j = 0; j < report.paths().size(); j++) {
+                if (!report.pathOwners().get(j).equals(Integer.toString(i))) continue;
+                any = true;
+                CliOutput.out("  " + renderPath(report.paths().get(j)));
             }
-            if (matches.size() > 1) CliOutput.out();
+            if (!any) {
+                CliOutput.out("  (unreachable from declared dependencies — likely a stale lockfile entry)");
+            }
+            if (report.matchNames().size() > 1) CliOutput.out();
         }
         return 0;
     }
 
-    /** Format a dependency path with colored coordinates. */
-    private static String renderPath(Provenance.Path path) {
-        return path.steps().stream()
-                .map(s -> Coords.module(s.module(), s.version()))
+    /** Format a wire path ({@code module@version>module@version}) with colored coordinates. */
+    private static String renderPath(String path) {
+        return java.util.Arrays.stream(path.split(">"))
+                .map(step -> {
+                    int at = step.lastIndexOf('@');
+                    return at > 0 ? Coords.module(step.substring(0, at), step.substring(at + 1)) : step;
+                })
                 .collect(
                         Collectors.joining(Theme.colorize(" -> ", Theme.active().darkGray())));
+    }
+
+    private static boolean engineDisabledForTests() {
+        return Boolean.getBoolean("jk.test.noEngine")
+                || "dev.jkbuild.test.runner.JkRunner".equals(System.getProperty("jk.plugin.class"));
     }
 
     /** Strip the version component if present; return arg unchanged when no colon. */
@@ -93,16 +101,4 @@ public final class WhyCommand implements CliCommand {
         return second < 0 ? arg : arg.substring(0, second);
     }
 
-    /**
-     * Match a lockfile {@code group:artifact} name against a user query. Exact match, artifact-only
-     * match (query has no colon), or substring.
-     */
-    private static boolean matchesQuery(String name, String query) {
-        if (name.equals(query)) return true;
-        if (!query.contains(":")) {
-            if (name.endsWith(":" + query)) return true;
-            return name.contains(query);
-        }
-        return false;
-    }
 }

@@ -7,10 +7,6 @@ import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.theme.Coords;
 import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.compile.ClasspathResolver;
-import dev.jkbuild.config.JkBuildParser;
-import dev.jkbuild.lock.Lockfile;
-import dev.jkbuild.lock.LockfileReader;
-import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.Scope;
 import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Exit;
@@ -91,8 +87,6 @@ public final class TreeCommand implements CliCommand {
             return Exit.CONFIG;
         }
 
-        JkBuild project = JkBuildParser.parse(buildFile);
-        Lockfile lock = LockfileReader.read(lockFile);
         int max = depth != null ? depth : Integer.MAX_VALUE;
 
         // Header: a leading blank line, then a left-flush green powerline chip
@@ -115,8 +109,22 @@ public final class TreeCommand implements CliCommand {
             CliOutput.out(" - Dependencies Tree:");
         }
 
-        // Composite-aware: walks path deps' own trees too (anchored at `dir`).
-        String rendered = DependencyTree.render(project, lock, dir, max, styling(nerdfont, ansi), flatten, scopes, stack);
+        // Composite-aware: walks path deps' own trees too (anchored at `dir`). The walk runs
+        // engine-side (thin client) with marker-tag styling; this client substitutes its Theme.
+        List<String> scopeNames = scopes == null
+                ? List.of()
+                : scopes.stream().map(sc -> sc.name().toLowerCase(Locale.ROOT).replace('_', '-')).toList();
+        String tagged;
+        try {
+            tagged = engineDisabledForTests()
+                    ? dev.jkbuild.cli.engine.InProcessEngine.require().treeRender(dir, max, flatten, stack, scopeNames)
+                    : dev.jkbuild.cli.engine.EngineClient.treeRender(
+                            dev.jkbuild.engine.EnginePaths.current(), dir, max, flatten, stack, scopeNames);
+        } catch (IOException | RuntimeException e) {
+            CliOutput.err("jk tree: " + e.getMessage());
+            return Exit.CONFIG;
+        }
+        String rendered = DependencyTree.applyStyling(tagged, styling(nerdfont, ansi));
         // Split root coord from tree body so we can insert a separator between them.
         int nl = rendered.indexOf('\n');
         if (nl >= 0) {
@@ -134,6 +142,11 @@ public final class TreeCommand implements CliCommand {
                     : "Some dependencies are missing from your local cache. Run `jk lock`");
         }
         return 0;
+    }
+
+    private static boolean engineDisabledForTests() {
+        return Boolean.getBoolean("jk.test.noEngine")
+                || "dev.jkbuild.test.runner.JkRunner".equals(System.getProperty("jk.plugin.class"));
     }
 
     /**

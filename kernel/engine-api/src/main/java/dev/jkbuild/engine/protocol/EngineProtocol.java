@@ -221,6 +221,26 @@ public final class EngineProtocol {
     public static final String DENY_CHECK_ACK = "deny-check-ack";
 
     /**
+     * Client → server: render the dependency tree for {@code dir} with marker-tag styling —
+     * the graph walk needs the parsed project + lock (and path-dep composites), so it runs
+     * engine-side; the client substitutes its Theme into the tags. Synchronous inline; answered
+     * with one {@link #TREE_ACK} ({@code error}, {@code rendered}).
+     */
+    public static final String TREE_REQUEST = "tree-request";
+
+    /** Server → client, terminal for {@link #TREE_REQUEST}. */
+    public static final String TREE_ACK = "tree-ack";
+
+    /**
+     * Client → server: explain why a module is in the graph — lock matching + provenance paths,
+     * engine-side. Synchronous inline; answered with one {@link #WHY_ACK} carrying {@link WhyReport}.
+     */
+    public static final String WHY_REQUEST = "why-request";
+
+    /** Server → client, terminal for {@link #WHY_REQUEST}. */
+    public static final String WHY_ACK = "why-ack";
+
+    /**
      * Server → client: the forecast — {@code dirtyDirs} (module dirs predicted to do real work),
      * {@code lockStale} (the merged workspace lock no longer reflects its manifests), {@code empty}
      * (the workspace declares no modules), and {@code errors} (graph resolution; non-empty ⇒ no
@@ -1271,6 +1291,28 @@ public final class EngineProtocol {
                 + force
                 + ",\"rerun\":"
                 + rerun
+                + "}";
+    }
+
+    public static String treeRequest(
+            String dir, int maxDepth, boolean flatten, boolean stack, java.util.List<String> scopes) {
+        return "{\"t\":\"" + TREE_REQUEST + "\",\"dir\":" + Ndjson.quote(dir)
+                + ",\"maxDepth\":" + maxDepth
+                + ",\"flatten\":" + flatten
+                + ",\"stack\":" + stack
+                + ",\"scopes\":" + quoteArray(scopes)
+                + "}";
+    }
+
+    public static String treeAck(String error, String rendered) {
+        return "{\"t\":\"" + TREE_ACK + "\",\"error\":" + (error == null ? "null" : Ndjson.quote(error))
+                + ",\"rendered\":" + Ndjson.quote(rendered == null ? "" : rendered)
+                + "}";
+    }
+
+    public static String whyRequest(String dir, String query) {
+        return "{\"t\":\"" + WHY_REQUEST + "\",\"dir\":" + Ndjson.quote(dir)
+                + ",\"query\":" + Ndjson.quote(query)
                 + "}";
     }
 
