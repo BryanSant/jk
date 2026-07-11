@@ -337,6 +337,74 @@ class EffectivePomBuilderTest {
                 .hasMessageContaining("cycle");
     }
 
+    @Test
+    void test_jar_variant_does_not_shadow_the_real_dependency(@TempDir Path tempDir) throws Exception {
+        // The logback shape: the parent manages logback-core twice (jar + test-jar), and the
+        // child depends on both (plain compile dep + test-scoped test-jar). Maven's dependency
+        // identity is group:artifact:type:classifier — deduping on module alone let the
+        // test-jar rows overwrite the real ones and logback-core vanished from every classpath.
+        registerPom("org.example", "parent", "1.0", """
+                <project>
+                  <groupId>org.example</groupId>
+                  <artifactId>parent</artifactId>
+                  <version>1.0</version>
+                  <packaging>pom</packaging>
+                  <dependencyManagement>
+                    <dependencies>
+                      <dependency>
+                        <groupId>org.example</groupId>
+                        <artifactId>core</artifactId>
+                        <version>${project.version}</version>
+                      </dependency>
+                      <dependency>
+                        <groupId>org.example</groupId>
+                        <artifactId>core</artifactId>
+                        <version>${project.version}</version>
+                        <type>test-jar</type>
+                      </dependency>
+                    </dependencies>
+                  </dependencyManagement>
+                </project>
+                """);
+        registerPom("org.example", "classic", "1.0", """
+                <project>
+                  <parent>
+                    <groupId>org.example</groupId>
+                    <artifactId>parent</artifactId>
+                    <version>1.0</version>
+                  </parent>
+                  <artifactId>classic</artifactId>
+                  <dependencies>
+                    <dependency>
+                      <groupId>org.example</groupId>
+                      <artifactId>core</artifactId>
+                    </dependency>
+                    <dependency>
+                      <groupId>org.example</groupId>
+                      <artifactId>core</artifactId>
+                      <type>test-jar</type>
+                      <scope>test</scope>
+                    </dependency>
+                  </dependencies>
+                </project>
+                """);
+
+        EffectivePom pom = newBuilder(tempDir).build(Coordinate.of("org.example", "classic", "1.0"));
+        // Both variants survive as distinct deps; the plain one keeps its managed jar version
+        // and stays scopeless (compile), untouched by the test-jar row.
+        assertThat(pom.dependencies())
+                .filteredOn(d -> d.module().equals("org.example:core"))
+                .hasSize(2);
+        assertThat(pom.dependencies())
+                .filteredOn(d -> d.module().equals("org.example:core")
+                        && (d.type() == null || d.type().isBlank() || d.type().equals("jar")))
+                .singleElement()
+                .satisfies(d -> {
+                    assertThat(d.version()).isEqualTo("1.0");
+                    assertThat(d.scope()).isNullOrEmpty();
+                });
+    }
+
     // --- helpers -----------------------------------------------------------
 
     private EffectivePomBuilder newBuilder(Path tempDir) {

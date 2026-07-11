@@ -594,7 +594,9 @@ public final class BuildPipeline {
                     ctx.put(
                             JAVAC_ARGS,
                             dev.jkbuild.compile.JavacLint.effectiveArgs(
-                                    project.build().lint(), profile == null ? List.of() : profile.javacArgs()));
+                                    project.build().lint(),
+                                    project.isSpringBoot(),
+                                    profile == null ? List.of() : profile.javacArgs()));
                     ctx.put(CLASSPATH, mainCp);
 
                     // Annotation processors live in their own scope (kept off the
@@ -1945,6 +1947,8 @@ public final class BuildPipeline {
         compileCp.add(kt.stdlib());
         List<String> ktArgs = new ArrayList<>();
         ktArgs.add("-no-stdlib");
+        // Spring Boot reflects on parameter names — mirror the javac -parameters default.
+        if (ctx.require(PROJECT).isSpringBoot()) ktArgs.add("-java-parameters");
         if (javaSourceRoot != null) {
             ktArgs.add("-Xjava-source-roots=" + javaSourceRoot.toAbsolutePath());
         }

@@ -178,7 +178,7 @@ public final class BuildPlanForecast {
             boolean compact = CompileSupport.isSimpleLayout(project.project(), dir);
             BuildLayout layout = BuildLayout.of(dir, project);
             int release = project.project().javaRelease();
-            List<String> javacArgs = JavacLint.effectiveArgs(project.build().lint(), List.of());
+            List<String> javacArgs = JavacLint.effectiveArgs(project.build().lint(), project.isSpringBoot(), List.of());
             List<Path> processorCp = resolver.classpathFor(lock, Set.of(Scope.PROCESSOR));
 
             boolean compileDirty = depDirty || force;

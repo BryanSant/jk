@@ -257,10 +257,11 @@ class JkBuildRendererTest {
         assertThat(reparsed.dependencies().of(Scope.MAIN))
                 .extracting(Dependency::module)
                 .containsExactly("com.example:lib");
-        // KNOWN GAP: JkBuildParser has no [platform-dependencies] (or any PLATFORM-scope) table —
-        // BOM/dependency-management entries render for human visibility but don't survive a
-        // render → reparse round trip today. Only MAIN (and the other declarable scopes) do.
-        assertThat(reparsed.dependencies().of(Scope.PLATFORM)).isEmpty();
+        // [platform-dependencies] is a first-class parser table now (spring-boot plan §3.3) —
+        // rendered BOM entries survive the render → reparse round trip.
+        assertThat(reparsed.dependencies().of(Scope.PLATFORM))
+                .extracting(Dependency::module)
+                .containsExactly("org.springframework.boot:spring-boot-dependencies");
         assertThat(reparsed.repositories()).extracting(RepositorySpec::name).containsExactly("internal");
     }
 }

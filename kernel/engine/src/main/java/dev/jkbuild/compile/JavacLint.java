@@ -25,10 +25,19 @@ public final class JavacLint {
      * user's own {@code javac} args.
      */
     public static List<String> effectiveArgs(boolean lintEnabled, List<String> userArgs) {
+        return effectiveArgs(lintEnabled, false, userArgs);
+    }
+
+    /**
+     * The effective javac args: jk's default lint flags (when {@code lintEnabled}), {@code
+     * -parameters} (when {@code parametersDefault} — Spring Boot projects, where the framework
+     * reflects on constructor/handler parameter names), then the user's own {@code javac} args.
+     */
+    public static List<String> effectiveArgs(boolean lintEnabled, boolean parametersDefault, List<String> userArgs) {
         List<String> user = userArgs == null ? List.of() : userArgs;
-        if (!lintEnabled) return List.copyOf(user);
-        List<String> out = new ArrayList<>(DEFAULT_ARGS.size() + user.size());
-        out.addAll(DEFAULT_ARGS);
+        List<String> out = new ArrayList<>(DEFAULT_ARGS.size() + user.size() + 1);
+        if (lintEnabled) out.addAll(DEFAULT_ARGS);
+        if (parametersDefault && !user.contains("-parameters")) out.add("-parameters");
         out.addAll(user);
         return List.copyOf(out);
     }

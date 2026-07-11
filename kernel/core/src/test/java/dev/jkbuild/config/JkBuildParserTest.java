@@ -1536,4 +1536,78 @@ class JkBuildParserTest {
         assertThat(b.dependencies().of(dev.jkbuild.model.Scope.PLATFORM)).hasSize(1);
         assertThat(b.dependencies().of(dev.jkbuild.model.Scope.RUNTIME)).hasSize(1);
     }
+
+    @Test
+    void spring_boot_table_parses_and_auto_imports_the_bom() {
+        JkBuild b = JkBuildParser.parse("""
+                [project]
+                group = "com.example"
+                name = "shop"
+                version = "1.0"
+
+                [spring-boot]
+                version = "4.0.0"
+
+                [dependencies]
+                starter-webmvc = { group = "org.springframework.boot", name = "spring-boot-starter-webmvc" }
+                """);
+        assertThat(b.isSpringBoot()).isTrue();
+        var sb = b.springBoot().orElseThrow();
+        assertThat(sb.version()).isEqualTo("4.0.0");
+        assertThat(sb.buildInfo()).isFalse();
+        assertThat(sb.includeTools()).isTrue();
+        assertThat(sb.aotEnabled(false)).isFalse(); // unset aot follows [native] presence
+        assertThat(sb.aotEnabled(true)).isTrue();
+        // version = "4.0.0" alone imports the BOM — no [platform-dependencies] boilerplate.
+        var platform = b.dependencies().of(dev.jkbuild.model.Scope.PLATFORM);
+        assertThat(platform).hasSize(1);
+        assertThat(platform.get(0).module()).isEqualTo("org.springframework.boot:spring-boot-dependencies");
+        assertThat(platform.get(0).version().raw()).isEqualTo("=4.0.0");
+        // ...which makes the versionless starter platform-managed.
+        assertThat(b.dependencies().of(dev.jkbuild.model.Scope.MAIN).get(0).isPlatformManaged())
+                .isTrue();
+    }
+
+    @Test
+    void spring_boot_table_requires_a_version() {
+        assertThatThrownBy(() -> JkBuildParser.parse(PROJECT + """
+
+                [spring-boot]
+                build-info = true
+                """))
+                .hasMessageContaining("[spring-boot].version is required");
+    }
+
+    @Test
+    void spring_boot_options_parse() {
+        JkBuild b = JkBuildParser.parse(PROJECT + """
+
+                [spring-boot]
+                version = "4.0.0"
+                aot = true
+                build-info = true
+                include-tools = false
+                """);
+        var sb = b.springBoot().orElseThrow();
+        assertThat(sb.aotEnabled(false)).isTrue(); // explicit aot wins over [native] absence
+        assertThat(sb.buildInfo()).isTrue();
+        assertThat(sb.includeTools()).isFalse();
+    }
+
+    @Test
+    void spring_boot_bom_is_not_duplicated_when_user_declares_it() {
+        // A deliberate [platform-dependencies] spring-boot-dependencies entry wins —
+        // the auto-import must not add a second (conflicting) BOM row.
+        JkBuild b = JkBuildParser.parse(PROJECT + """
+
+                [spring-boot]
+                version = "4.0.0"
+
+                [platform-dependencies]
+                spring-boot = { group = "org.springframework.boot", name = "spring-boot-dependencies", version = "4.0.1" }
+                """);
+        var platform = b.dependencies().of(dev.jkbuild.model.Scope.PLATFORM);
+        assertThat(platform).hasSize(1);
+        assertThat(platform.get(0).version().raw()).isEqualTo("4.0.1");
+    }
 }

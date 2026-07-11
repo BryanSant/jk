@@ -132,10 +132,10 @@ public final class EffectivePomBuilder {
         //    management; backfilling only the version would leak it (and the
         //    guava-android it drags in) onto the compile classpath.
         Map<String, Pom.Dep> managedByModule = new HashMap<>();
-        for (Pom.Dep m : mergedManaged) managedByModule.put(m.module(), m);
+        for (Pom.Dep m : mergedManaged) managedByModule.put(depKey(m), m);
         List<Pom.Dep> finalDeps = new ArrayList<>(mergedDeps.size());
         for (Pom.Dep dep : mergedDeps) {
-            Pom.Dep managed = managedByModule.get(dep.module());
+            Pom.Dep managed = managedByModule.get(depKey(dep));
             if (managed != null) {
                 dep = applyManagedDefaults(dep, managed);
             }
@@ -153,11 +153,24 @@ public final class EffectivePomBuilder {
         return "import".equals(dep.scope()) && "pom".equals(dep.type());
     }
 
-    /** Keeps the last occurrence per groupId:artifactId, preserving insertion order otherwise. */
+    /**
+     * Keeps the last occurrence per dependency key, preserving insertion order otherwise. Maven's
+     * dependency identity is {@code groupId:artifactId:type:classifier}, NOT just the module —
+     * logback-parent manages {@code logback-core} twice (the jar and a {@code test-jar}), and
+     * logback-classic depends on both; collapsing on module alone let the test-jar row overwrite
+     * the real one, silently dropping {@code logback-core} from every Boot classpath.
+     */
     private static List<Pom.Dep> dedupeByModule(List<Pom.Dep> deps) {
         LinkedHashMap<String, Pom.Dep> byModule = new LinkedHashMap<>();
-        for (Pom.Dep dep : deps) byModule.put(dep.module(), dep);
+        for (Pom.Dep dep : deps) byModule.put(depKey(dep), dep);
         return new ArrayList<>(byModule.values());
+    }
+
+    /** Maven dependency identity: {@code groupId:artifactId:type:classifier} (type defaults to jar). */
+    private static String depKey(Pom.Dep dep) {
+        String type = blank(dep.type()) ? "jar" : dep.type();
+        String classifier = blank(dep.classifier()) ? "" : dep.classifier();
+        return dep.module() + ":" + type + ":" + classifier;
     }
 
     private static List<Pom.Dep> substituteAll(List<Pom.Dep> deps, Map<String, String> props) {

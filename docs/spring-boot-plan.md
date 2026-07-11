@@ -200,9 +200,17 @@ latency is bounded by javac on the delta, with no Gradle configuration phase in 
    verification suite against `spring-boot-dependencies:4.x` (managed versionless deps,
    `tools.jackson`, override ergonomics); main-class scan; Spring catalog entries.
    *Exit test: a Boot 4 webmvc app resolves, builds, `jk run`s, `jk test`s.*
+   **DONE (2026-07-09).**
 2. **Packaging** — boot-jar layout + layers + jarmode-tools + build-info + SBOM embed;
    layered jib `[image]`. *Exit: `java -jar` runs it; `-Djarmode=tools list-layers`
    matches Gradle's output byte-for-layer; image layers cache independently.*
+   **IN PROGRESS:** `[spring-boot]` table (§3.1) parses and auto-imports the
+   `spring-boot-dependencies` BOM; `-parameters` / `-java-parameters` default live
+   (§3.8). Verified end-to-end 2026-07-10: a versionless-starter webmvc app locks,
+   builds, and serves with parameter-name binding. (En route, fixed a resolver
+   correctness bug: POM dependency identity is `group:artifact:type:classifier`, so a
+   managed `test-jar` row no longer shadows the real jar — logback-core used to vanish
+   from every Boot classpath.) Next: the boot-jar layout packager itself.
 3. **AOT & native** — spring-aot/compile-aot phases; `jk native` integration +
    reachability-metadata repo; `jk package --aot-cache` ladder. *Exit: native webmvc app
    builds and serves; AOT-cache startup ≈ Boot's documented ~1.5×.*

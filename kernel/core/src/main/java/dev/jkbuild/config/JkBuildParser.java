@@ -130,11 +130,13 @@ public final class JkBuildParser {
         List<PluginDeclaration> plugins = parsePlugins(result);
         Optional<JkBuild.Application> application = parseApplication(result);
         Optional<JkBuild.NativeConfig> nativeConfig = parseNativeConfig(result);
+        Optional<JkBuild.SpringBoot> springBoot = parseSpringBoot(result);
+        if (springBoot.isPresent()) deps = withSpringBootBom(deps, springBoot.get());
         JkBuild.Build build = parseBuild(result);
         JkBuild.FormatConfig format = parseFormat(result);
         return new JkBuild(
                 project, deps, repos, profiles, features, workspace, manifest, plugins, application, nativeConfig,
-                build, format);
+                springBoot, build, format);
     }
 
     /**
@@ -1127,6 +1129,48 @@ public final class JkBuildParser {
         String main = application.getString("main");
         boolean shadowJar = Boolean.TRUE.equals(application.getBoolean("shadow-jar"));
         return Optional.of(new JkBuild.Application(main, shadowJar));
+    }
+
+    /**
+     * The optional {@code [spring-boot]} table (spring-boot plan §3.1). Its mere presence marks
+     * the project as a Spring Boot application ({@link JkBuild#isSpringBoot()}); {@code version}
+     * is the only required key and drives the auto-imported BOM (see
+     * {@link #withSpringBootBom}).
+     */
+    private static Optional<JkBuild.SpringBoot> parseSpringBoot(TomlTable root) {
+        TomlTable springBoot = root.getTable("spring-boot");
+        if (springBoot == null) return Optional.empty();
+        String version = springBoot.getString("version");
+        if (version == null || version.isBlank()) {
+            throw new JkBuildParseException(
+                    "[spring-boot].version is required (e.g. version = \"4.0.0\") — it pins the"
+                            + " spring-boot-dependencies BOM, loader, and AOT tooling");
+        }
+        Boolean aot = springBoot.contains("aot") ? springBoot.getBoolean("aot") : null;
+        boolean buildInfo = Boolean.TRUE.equals(springBoot.getBoolean("build-info"));
+        boolean includeTools = !Boolean.FALSE.equals(springBoot.getBoolean("include-tools"));
+        return Optional.of(new JkBuild.SpringBoot(version, aot, buildInfo, includeTools));
+    }
+
+    /**
+     * Auto-import {@code spring-boot-dependencies:<version>} as a platform BOM so {@code
+     * [spring-boot] version} alone makes every versionless Boot starter resolvable — declaring
+     * the BOM again under {@code [platform-dependencies]} would be redundant. A user-declared
+     * spring-boot-dependencies entry wins (no duplicate is added), letting them override the BOM
+     * coordinate deliberately.
+     */
+    private static JkBuild.Dependencies withSpringBootBom(JkBuild.Dependencies deps, JkBuild.SpringBoot springBoot) {
+        boolean declared = deps.of(Scope.PLATFORM).stream()
+                .anyMatch(d -> JkBuild.SpringBoot.BOM_MODULE.equals(d.module()));
+        if (declared) return deps;
+        Dependency bom = new Dependency(
+                JkBuild.SpringBoot.BOM_MODULE, VersionSelector.parseFloating("=" + springBoot.version()));
+        EnumMap<Scope, List<Dependency>> byScope = new EnumMap<>(Scope.class);
+        deps.byScope().forEach(byScope::put);
+        List<Dependency> platform = new ArrayList<>(deps.of(Scope.PLATFORM));
+        platform.add(bom);
+        byScope.put(Scope.PLATFORM, platform);
+        return new JkBuild.Dependencies(byScope);
     }
 
     /**
