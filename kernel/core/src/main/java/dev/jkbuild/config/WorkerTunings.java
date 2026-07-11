@@ -10,9 +10,10 @@ import org.tomlj.TomlTable;
 
 /**
  * Resolves the effective {@link WorkerTuning} for a request from its config layers — CLI flags,
- * {@code JK_JVM_*} environment, and the project's {@code jk.toml [jvm]} table. Client-visible
- * (the CLI installs the result on the {@link Session}); the engine-side heap planning that
- * consumes it stays in {@code dev.jkbuild.worker.JvmOptions} (slim-client Stage 5 split).
+ * {@code JK_JVM_*} environment, and the project's {@code jk.toml [jvm]} table. The client installs
+ * only its flag/env layers ({@link #resolveClient}) on the {@link Session}; the {@code [jvm]}
+ * table is a jk.toml read and therefore engine-side — {@code dev.jkbuild.worker.JvmOptions}
+ * overlays it at worker-fork time via {@link #overlayProject} (thin-client contract).
  */
 public final class WorkerTunings {
 
@@ -39,12 +40,30 @@ public final class WorkerTunings {
 
     /**
      * Resolve precedence: {@code cli} &gt; env &gt; {@code projectDir/jk.toml [jvm]} &gt; default.
+     * Engine/test-side only — the client resolves {@link #resolveClient(WorkerTuning)} and the
+     * engine overlays the project layer at worker-fork time ({@link #overlayProject}).
      */
     public static WorkerTuning resolve(WorkerTuning cli, Path projectDir) {
-        WorkerTuning eff = cli == null ? WorkerTuning.NONE : cli;
-        eff = overlay(eff, fromEnv());
-        if (projectDir != null) eff = overlay(eff, fromToml(projectDir.resolve("jk.toml")));
-        return eff;
+        return overlayProject(resolveClient(cli), projectDir);
+    }
+
+    /**
+     * The client-side layers only — CLI flags over {@code JK_JVM_*} env. No file I/O and no TOML:
+     * the {@code jk.toml [jvm]} table is interpreted engine-side at worker-fork time (thin-client
+     * contract), so a client of any age gets current-engine semantics and the native image never
+     * reaches {@link #fromToml}.
+     */
+    public static WorkerTuning resolveClient(WorkerTuning cli) {
+        return overlay(cli == null ? WorkerTuning.NONE : cli, fromEnv());
+    }
+
+    /**
+     * Overlay {@code base} (the client's flag/env layers) onto {@code projectDir/jk.toml [jvm]}:
+     * base's scalars win; the table's args run first. Engine-side only (tomlj).
+     */
+    public static WorkerTuning overlayProject(WorkerTuning base, Path projectDir) {
+        WorkerTuning eff = base == null ? WorkerTuning.NONE : base;
+        return projectDir == null ? eff : overlay(eff, fromToml(projectDir.resolve("jk.toml")));
     }
 
     /** The {@code JK_*} environment layer. Coercion via the shared {@link EnvValues}. */

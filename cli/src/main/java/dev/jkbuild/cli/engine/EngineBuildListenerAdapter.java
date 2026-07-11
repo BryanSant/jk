@@ -96,7 +96,7 @@ final class EngineBuildListenerAdapter {
             BufferedReader reader =
                     new BufferedReader(new InputStreamReader(Channels.newInputStream(ch), StandardCharsets.UTF_8));
 
-            writer.write(EngineProtocol.buildRequest(
+            writer.write(EngineProtocol.withJvmTuning(EngineProtocol.buildRequest(
                     req.entryDir().toString(),
                     req.cache().toString(),
                     req.jdksDir() != null ? req.jdksDir().toString() : null,
@@ -113,7 +113,8 @@ final class EngineBuildListenerAdapter {
                     session.config().rerunOr(false),
                     // jk build asks the engine to auto-freshen a stale workspace lock; verify's
                     // scratch rebuild must use the pinned lock verbatim (see WorkspaceRequest).
-                    req.freshenLock()));
+                    req.freshenLock()),
+                    SessionContext.current().jvm()));
             writer.write('\n');
             writer.flush();
 
@@ -146,7 +147,7 @@ final class EngineBuildListenerAdapter {
             BufferedReader reader =
                     new BufferedReader(new InputStreamReader(Channels.newInputStream(ch), StandardCharsets.UTF_8));
 
-            writer.write(EngineProtocol.testRequest(
+            writer.write(EngineProtocol.withJvmTuning(EngineProtocol.testRequest(
                     req.entryDir().toString(),
                     req.cache().toString(),
                     req.jdksDir() != null ? req.jdksDir().toString() : null,
@@ -154,7 +155,8 @@ final class EngineBuildListenerAdapter {
                     req.profile(),
                     req.verbose(),
                     req.offline(),
-                    req.force()));
+                    req.force()),
+                    SessionContext.current().jvm()));
             writer.write('\n');
             writer.flush();
 
@@ -184,7 +186,7 @@ final class EngineBuildListenerAdapter {
             BufferedReader reader =
                     new BufferedReader(new InputStreamReader(Channels.newInputStream(ch), StandardCharsets.UTF_8));
 
-            writer.write(EngineProtocol.singleBuildRequest(
+            writer.write(EngineProtocol.withJvmTuning(EngineProtocol.singleBuildRequest(
                     req.entryDir().toString(),
                     req.cache().toString(),
                     req.jdksDir() != null ? req.jdksDir().toString() : null,
@@ -193,7 +195,8 @@ final class EngineBuildListenerAdapter {
                     req.skipTests(),
                     req.verbose(),
                     req.offline(),
-                    req.force()));
+                    req.force()),
+                    SessionContext.current().jvm()));
             writer.write('\n');
             writer.flush();
 
@@ -225,7 +228,7 @@ final class EngineBuildListenerAdapter {
                 graalDirs.add(e.getKey().toString());
                 graalHomes.add(e.getValue().toString());
             }
-            writer.write(EngineProtocol.nativeRequest(
+            writer.write(EngineProtocol.withJvmTuning(EngineProtocol.nativeRequest(
                     req.entryDir().toString(),
                     req.cache().toString(),
                     req.jdksDir() != null ? req.jdksDir().toString() : null,
@@ -236,7 +239,8 @@ final class EngineBuildListenerAdapter {
                     req.verbose(),
                     req.extraArgs(),
                     graalDirs,
-                    graalHomes));
+                    graalHomes),
+                    SessionContext.current().jvm()));
             writer.write('\n');
             writer.flush();
 
@@ -264,7 +268,7 @@ final class EngineBuildListenerAdapter {
             BufferedReader reader =
                     new BufferedReader(new InputStreamReader(Channels.newInputStream(ch), StandardCharsets.UTF_8));
 
-            writer.write(EngineProtocol.installRequest(
+            writer.write(EngineProtocol.withJvmTuning(EngineProtocol.installRequest(
                     req.entryDir().toString(),
                     req.cache().toString(),
                     req.m2Dir().toString(),
@@ -272,7 +276,8 @@ final class EngineBuildListenerAdapter {
                     req.skipTests(),
                     req.offline(),
                     req.force(),
-                    req.verbose()));
+                    req.verbose()),
+                    SessionContext.current().jvm()));
             writer.write('\n');
             writer.flush();
 

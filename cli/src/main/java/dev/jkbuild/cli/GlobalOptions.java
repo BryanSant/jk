@@ -111,12 +111,16 @@ public final class GlobalOptions {
         g.jvmArgs = in.values("jvm-arg");
         g.jdk = in.value("jdk").orElse(null);
         g.graal = in.value("graal").orElse(null);
-        // Carry the top-tier JDK/GraalVM selection and the resolved JVM tuning on the request-scoped
-        // Session, so the toolchain resolvers (JdkResolution / GraalResolver) and every worker fork
-        // read them from the request instead of process-global system properties / static channels.
+        // Carry the top-tier JDK/GraalVM selection and the client's JVM-tuning layers on the
+        // request-scoped Session, so the toolchain resolvers (JdkResolution / GraalResolver) and
+        // every worker fork read them from the request instead of process-global system properties
+        // / static channels. Only the flag/env layers resolve here — the jk.toml [jvm] table is
+        // engine-read at worker-fork time (thin client; keeps tomlj off the client). The working
+        // dir rides along so the in-process seam overlays the same project's table.
         dev.jkbuild.config.SessionContext.install(dev.jkbuild.config.SessionContext.current()
                 .withToolchainSpecs(g.jdk, g.graal)
-                .withJvm(dev.jkbuild.config.WorkerTunings.resolve(g.jvmCli(), g.workingDir())));
+                .withWorkingDir(g.workingDir())
+                .withJvm(dev.jkbuild.config.WorkerTunings.resolveClient(g.jvmCli())));
         return g;
     }
 

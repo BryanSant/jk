@@ -2089,6 +2089,47 @@ public final class EngineProtocol {
                 + "}";
     }
 
+    /**
+     * Append the client's flag/env JVM-tuning layer to an already-encoded request line (thin-client
+     * contract: the {@code jk.toml [jvm]} table never resolves client-side — the engine overlays it
+     * at worker-fork time; only {@code --max-ram-percent}/{@code --jvm-arg} and {@code JK_JVM_*}
+     * cross the wire). A NONE tuning returns the line unchanged, so absent fields stay absent.
+     */
+    public static String withJvmTuning(String request, dev.jkbuild.config.WorkerTuning t) {
+        if (t == null
+                || (t.maxRamPercent() == null
+                        && t.gc() == null
+                        && t.stringDedup() == null
+                        && t.extraArgs().isEmpty())) {
+            return request;
+        }
+        StringBuilder b = new StringBuilder(request.substring(0, request.length() - 1));
+        if (t.maxRamPercent() != null) b.append(",\"jvmMaxRam\":\"").append(t.maxRamPercent()).append('"');
+        if (t.gc() != null) b.append(",\"jvmGc\":").append(Ndjson.quote(t.gc()));
+        if (t.stringDedup() != null) b.append(",\"jvmStringDedup\":\"").append(t.stringDedup()).append('"');
+        if (!t.extraArgs().isEmpty()) b.append(",\"jvmArgs\":").append(quoteArray(t.extraArgs()));
+        return b.append('}').toString();
+    }
+
+    /** Decode side of {@link #withJvmTuning}; NONE when the request carries no tuning fields. */
+    public static dev.jkbuild.config.WorkerTuning jvmTuning(String request) {
+        String maxRam = Ndjson.str(request, "jvmMaxRam");
+        String gc = Ndjson.str(request, "jvmGc");
+        String dedup = Ndjson.str(request, "jvmStringDedup");
+        List<String> args = Ndjson.strArray(request, "jvmArgs");
+        if (maxRam == null && gc == null && dedup == null && args.isEmpty()) {
+            return dev.jkbuild.config.WorkerTuning.NONE;
+        }
+        Double ram = null;
+        try {
+            if (maxRam != null) ram = Double.valueOf(maxRam);
+        } catch (NumberFormatException ignored) {
+            // a malformed number degrades to absent, like every tolerant config read
+        }
+        return new dev.jkbuild.config.WorkerTuning(
+                ram, gc, dedup == null ? null : Boolean.valueOf(dedup), args);
+    }
+
     /** {@code Ndjson} only reads string arrays; it has no writer half, so this is the encode side. */
     static String quoteArray(List<String> values) {
         StringBuilder b = new StringBuilder("[");

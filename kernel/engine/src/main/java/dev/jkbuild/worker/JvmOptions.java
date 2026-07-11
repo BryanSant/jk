@@ -83,8 +83,14 @@ public final class JvmOptions {
      * default.
      */
     private static WorkerTuning tuning() {
-        WorkerTuning t = SessionContext.current().jvm();
-        return (t == null || t == WorkerTuning.NONE) ? dev.jkbuild.config.WorkerTunings.fromEnv() : t;
+        var session = SessionContext.current();
+        WorkerTuning t = session.jvm();
+        WorkerTuning base =
+                (t == null || t == WorkerTuning.NONE) ? dev.jkbuild.config.WorkerTunings.fromEnv() : t;
+        // The jk.toml [jvm] table overlays here, at fork time, engine-side (thin-client contract):
+        // the session carries only the client's flag/env layers, so a client of any age gets
+        // current-engine [jvm] interpretation.
+        return dev.jkbuild.config.WorkerTunings.overlayProject(base, session.workingDir());
     }
 
     /**

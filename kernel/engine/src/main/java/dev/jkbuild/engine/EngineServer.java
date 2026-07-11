@@ -905,7 +905,8 @@ public final class EngineServer implements AutoCloseable {
                     .withCacheDir(cache)
                     .withJdksDir(jdksDir)
                     .withParallelTests(parallelTests)
-                    .withCancel(cancelToken);
+                    .withCancel(cancelToken)
+                    .withJvm(EngineProtocol.jvmTuning(requestLine));
 
             WorkspaceBuildListener listener = wireListener(writer);
             WorkspaceResult result =
@@ -1156,7 +1157,8 @@ public final class EngineServer implements AutoCloseable {
                     .withWorkingDir(entryDir)
                     .withCacheDir(cache)
                     .withJdksDir(jdksDir)
-                    .withCancel(cancelToken);
+                    .withCancel(cancelToken)
+                    .withJvm(EngineProtocol.jvmTuning(requestLine));
 
             // The session rides Inputs EXPLICITLY (canonical constructor): the delegating
             // constructors capture SessionContext.current() at construction time, which here —
@@ -1248,7 +1250,8 @@ public final class EngineServer implements AutoCloseable {
                     .withWorkingDir(entryDir)
                     .withCacheDir(cache)
                     .withJdksDir(jdksDir)
-                    .withCancel(cancelToken);
+                    .withCancel(cancelToken)
+                    .withJvm(EngineProtocol.jvmTuning(requestLine));
 
             // Session threaded explicitly — see runTest: the delegating Inputs constructors
             // capture the engine's ambient session at construction, dropping --force/--offline.
@@ -1451,7 +1454,8 @@ public final class EngineServer implements AutoCloseable {
             Session session = Session.defaults()
                     .withWorkingDir(entryDir)
                     .withCacheDir(cache)
-                    .withCancel(cancelToken);
+                    .withCancel(cancelToken)
+                    .withJvm(EngineProtocol.jvmTuning(requestLine));
             String dir = EngineProtocol.SINGLE_GOAL_DIR;
             dev.jkbuild.run.Goal goal = dev.jkbuild.runtime.AuditGoals.auditGoal(
                     entryDir.resolve("jk.lock"),
@@ -2224,7 +2228,8 @@ public final class EngineServer implements AutoCloseable {
                 .withConfig(config)
                 .withWorkingDir(entryDir)
                 .withCacheDir(cache)
-                .withCancel(cancelToken);
+                .withCancel(cancelToken)
+                .withJvm(EngineProtocol.jvmTuning(requestLine));
     }
 
     /** The optional {@code repoUrl} request field ({@code --repo-url} overrides), or {@code null}. */
