@@ -284,6 +284,8 @@ A small, stable, Cargo-style verb set. No verbs are pluggable in v1.
 | `jk tool {list,uninstall,run}` | Manage installed tools. |
 | `jk jdk {install,list,use,uninstall,pin,gc}` | JDK management. |
 | `jk activate <shell>` / `jk shell` | Install the directory-aware `JAVA_HOME`/`GRAALVM_HOME` hook (`eval "$(jk activate bash)"`), or spawn a one-off subshell for the project's JDK. (`jk jdk home` prints a single export line.) |
+| `jk wrapper` | Emit `./jk` + `jk.bat` into the project root, pinned to the locked jk version (latest GA, pinned-on-first-use, if none is declared). See [docs/wrapper.md](./wrapper.md). |
+| `jk wrapper update [--target-version <v>]` | Re-resolve the pinned jk version + hash and rewrite it as a reviewed change. |
 | `jk mvn ...` | Passthrough to Maven (jk downloads/manages Maven). |
 | `jk gradle ...` | Passthrough to Gradle (jk downloads/manages Gradle). |
 | `jk import {pom.xml\|build.gradle\|build.gradle.kts}` | Best-effort convert to `jk.toml`. |
@@ -810,6 +812,7 @@ resolver        = 2                              # one resolver only; this field
 [toolchain]
 jdk    = "temurin-21"
 kotlin = "2.1.0"
+jk     = "0.10.0"                               # optional; the `./jk` wrapper pins this (pinned-on-first-use if omitted)
 
 [repositories]
 # shared
