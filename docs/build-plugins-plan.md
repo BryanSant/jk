@@ -1,6 +1,23 @@
 # Build Plugins — custom tables, framework integrations, and the plugin SPI
 
-**Status:** P2 LANDED (2026-07-11) — declarative contributions. The manifest carries
+**Status:** P3 LANDED (2026-07-11, ff5cd9f9..3ed652c4) — the steps/packagers SPI.
+StepSpec/PackagerSpec/BuildPluginContext + the BuildPluginHarness worker driver live in
+plugin-api (depends on :model alone); the engine learns registrations over a file-cached
+`describe` worker fork (key: jk+plugin versions, config, registration-visible facts — a
+fully-cached rebuild forks nothing) and drives `run-step`/`package` executions with action
+keys fingerprinting exactly the DECLARED inputs, restoring scratches/artifacts on hits so
+step bodies never learn the cache exists. `[packaging]` in the manifest is the packager's
+static artifact descriptor (exec-mode/self-contained/classes-run/main-scan/layered-image):
+run/install/image/aot-cache consult it with zero plugin code — every isSpringBoot() decision
+branch in BuildPipeline/ImageGoals/ExecPlans is a descriptor check now. SpringAotRunner +
+BootJarPackager bodies moved into the plugins/spring-boot worker; the engine fetches
+`[[contribute.packager-dependency]]` artifacts (loader, jarmode-tools) and renders the SBOM.
+Deliberate residue: jk dev's DevTools tier-2 injection stays hard-coded until RunShape (P7,
+§5); ProjectInfo's springBoot wire fields still read table presence (client wire compat);
+before-COMPILE / contributesSources steps refuse loudly until P6 wires source contribution.
+Next: P4 (scaffold/import/verbs).
+
+**P2 (5a36d2ca)** — declarative contributions. The manifest carries
 `[[contribute.platform-dependency]]` / `[[contribute.compiler-args]]` / `[[contribute.kotlin-plugin]]`
 with `${config.<key>}`/`${kotlin.version}`/`${project.*}` interpolation (unknown variable =
 manifest-load error) and the closed `when` predicate set (`classpath-has`, `config`/`equals`,
