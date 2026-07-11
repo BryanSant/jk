@@ -1,6 +1,19 @@
 # Build Plugins — custom tables, framework integrations, and the plugin SPI
 
-**Status:** P1 LANDED (2026-07-11, worktree branch `worktree-build-plugins`) — table routing
+**Status:** P2 LANDED (2026-07-11) — declarative contributions. The manifest carries
+`[[contribute.platform-dependency]]` / `[[contribute.compiler-args]]` / `[[contribute.kotlin-plugin]]`
+with `${config.<key>}`/`${kotlin.version}`/`${project.*}` interpolation (unknown variable =
+manifest-load error) and the closed `when` predicate set (`classpath-has`, `config`/`equals`,
+`native-declared`, `kotlin-project`; exactly one per entry; `classpath-has` is rejected on
+platform-dependencies — they inject before resolution). `PluginContributions` evaluates
+engine-side: the parser's BOM injection (`withPlatformContributions`, user-declared module
+wins), JavacLint's contributed-args lane (BuildPipeline + BuildPlanForecast against the same
+lock, so forecast keys match), and the Kotlin block (allopen unconditional, noarg gated on
+jakarta.persistence via classpath-has, `${kotlin.version}` lockstep with the compiler — the
+worker's .jar-suffix link quirk untouched downstream). `plugins/spring-boot/jk-plugin.toml`
+is the single source of truth; kernel/core processResources bakes it in as the registry
+resource. Boot builds green through the full suite.
+P1 LANDED (2026-07-11, worktree branch `worktree-build-plugins`) — table routing
 + schema. The parser carries zero framework-specific tables: plugin-owned tables validate
 against their manifest's `[schema]` (`PluginTableRegistry` + built-in
 `spring-boot.jk-plugin.toml` resource in kernel/core) into generic `PluginConfig` values on

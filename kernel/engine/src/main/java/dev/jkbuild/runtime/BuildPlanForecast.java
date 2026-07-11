@@ -178,7 +178,13 @@ public final class BuildPlanForecast {
             boolean compact = CompileSupport.isSimpleLayout(project.project(), dir);
             BuildLayout layout = BuildLayout.of(dir, project);
             int release = project.project().javaRelease();
-            List<String> javacArgs = JavacLint.effectiveArgs(project.build().lint(), project.isSpringBoot(), List.of());
+            // Same contributed-args evaluation as the real compile phase, against the same
+            // lock — forecast action keys must match the keys the build will actually use.
+            List<String> javacArgs = JavacLint.effectiveArgs(
+                    project.build().lint(),
+                    dev.jkbuild.plugin.manifest.PluginContributions.javacArgs(
+                            project, BuildPipeline.lockModules(lock)),
+                    List.of());
             List<Path> processorCp = resolver.classpathFor(lock, Set.of(Scope.PROCESSOR));
 
             boolean compileDirty = depDirty || force;

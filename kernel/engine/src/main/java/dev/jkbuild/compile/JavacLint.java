@@ -25,19 +25,24 @@ public final class JavacLint {
      * user's own {@code javac} args.
      */
     public static List<String> effectiveArgs(boolean lintEnabled, List<String> userArgs) {
-        return effectiveArgs(lintEnabled, false, userArgs);
+        return effectiveArgs(lintEnabled, List.of(), userArgs);
     }
 
     /**
-     * The effective javac args: jk's default lint flags (when {@code lintEnabled}), {@code
-     * -parameters} (when {@code parametersDefault} — Spring Boot projects, where the framework
-     * reflects on constructor/handler parameter names), then the user's own {@code javac} args.
+     * The effective javac args: jk's default lint flags (when {@code lintEnabled}), the installed
+     * plugins' contributed args (e.g. the spring-boot manifest's {@code -parameters} — the
+     * framework reflects on constructor/handler parameter names), then the user's own {@code
+     * javac} args. A contributed arg the user already passes is not duplicated (user wins on
+     * position).
      */
-    public static List<String> effectiveArgs(boolean lintEnabled, boolean parametersDefault, List<String> userArgs) {
+    public static List<String> effectiveArgs(boolean lintEnabled, List<String> contributedArgs, List<String> userArgs) {
         List<String> user = userArgs == null ? List.of() : userArgs;
-        List<String> out = new ArrayList<>(DEFAULT_ARGS.size() + user.size() + 1);
+        List<String> contributed = contributedArgs == null ? List.of() : contributedArgs;
+        List<String> out = new ArrayList<>(DEFAULT_ARGS.size() + contributed.size() + user.size());
         if (lintEnabled) out.addAll(DEFAULT_ARGS);
-        if (parametersDefault && !user.contains("-parameters")) out.add("-parameters");
+        for (String arg : contributed) {
+            if (!user.contains(arg) && !out.contains(arg)) out.add(arg);
+        }
         out.addAll(user);
         return List.copyOf(out);
     }

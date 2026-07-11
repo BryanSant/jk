@@ -597,7 +597,8 @@ public final class BuildPipeline {
                             JAVAC_ARGS,
                             dev.jkbuild.compile.JavacLint.effectiveArgs(
                                     project.build().lint(),
-                                    project.isSpringBoot(),
+                                    dev.jkbuild.plugin.manifest.PluginContributions.javacArgs(
+                                            project, lockModules(lock)),
                                     profile == null ? List.of() : profile.javacArgs()));
                     ctx.put(CLASSPATH, mainCp);
 
@@ -2166,39 +2167,29 @@ public final class BuildPipeline {
             throws IOException {
         String kotlinVersion = CompileToolchain.kotlinVersionFor(ctx.require(LOCKFILE), ctx.require(PROJECT));
         KotlinWorkerSetup.Prepared kt;
-        Path allopenPlugin = null;
-        Path noargPlugin = null;
-        // JPA entities need a zero-arg constructor Kotlin classes don't have — the no-arg
-        // plugin (jpa preset) synthesizes them for @Entity/@Embeddable/@MappedSuperclass.
-        // Keyed on the persistence API actually being on the resolved classpath.
-        boolean jpaOnClasspath = ctx.require(LOCKFILE).artifacts().stream()
-                .anyMatch(a -> "jakarta.persistence:jakarta.persistence-api".equals(a.name()));
+        // The installed plugins' [[contribute.kotlin-plugin]] entries (e.g. spring-boot's
+        // all-open, and no-arg gated on jakarta.persistence via classpath-has) — evaluated
+        // from the manifest, fetched version-locked to the compiler actually used. The
+        // embeddable variants match the BTA worker's embeddable compiler.
+        java.util.Set<String> lockModules = lockModules(ctx.require(LOCKFILE));
+        List<KotlincRequest.Plugin> ktPlugins = new ArrayList<>();
         try {
             dev.jkbuild.repo.RepoGroup repos = RepoGroupBuilder.buildFor(ctx.require(PROJECT), null, cas);
             kt = KotlinWorkerSetup.prepare(repos, cas, kotlinVersion);
-            if (ctx.require(PROJECT).isSpringBoot()) {
-                // Boot proxies @Configuration/@Component classes — Kotlin classes are final
-                // unless the all-open (kotlin-spring) plugin opens the annotated ones. The
-                // embeddable variant matches the BTA worker's embeddable compiler. Same
-                // null-defaulting as KotlinWorkerSetup.prepare — the plugin must match the
-                // compiler actually used.
-                String pluginVersion = (kotlinVersion == null || kotlinVersion.isBlank())
-                        ? dev.jkbuild.kotlin.KotlinResolver.DEFAULT_VERSION
-                        : kotlinVersion;
-                allopenPlugin = repos.tryFetchArtifact(dev.jkbuild.model.Coordinate.of(
-                                "org.jetbrains.kotlin", "kotlin-allopen-compiler-plugin-embeddable", pluginVersion))
+            // Same null-defaulting as KotlinWorkerSetup.prepare — a contributed plugin must
+            // match the compiler actually used.
+            String pluginVersion = (kotlinVersion == null || kotlinVersion.isBlank())
+                    ? dev.jkbuild.kotlin.KotlinResolver.DEFAULT_VERSION
+                    : kotlinVersion;
+            for (var use : dev.jkbuild.plugin.manifest.PluginContributions.kotlinPlugins(
+                    ctx.require(PROJECT), pluginVersion, lockModules)) {
+                Path jar = repos.tryFetchArtifact(
+                                dev.jkbuild.model.Coordinate.of(use.group(), use.artifact(), use.version()))
                         .map(hit -> hit.fetched().cachePath())
-                        .orElseThrow(() -> new RuntimeException(
-                                "cannot fetch the kotlin-spring (all-open) compiler plugin for Kotlin "
-                                        + pluginVersion + " — required for [spring-boot] Kotlin projects"));
-                if (jpaOnClasspath) {
-                    noargPlugin = repos.tryFetchArtifact(dev.jkbuild.model.Coordinate.of(
-                                    "org.jetbrains.kotlin", "kotlin-noarg-compiler-plugin-embeddable", pluginVersion))
-                            .map(hit -> hit.fetched().cachePath())
-                            .orElseThrow(() -> new RuntimeException(
-                                    "cannot fetch the kotlin-noarg compiler plugin for Kotlin " + pluginVersion
-                                            + " — required for [spring-boot] Kotlin projects using JPA"));
-                }
+                        .orElseThrow(() -> new RuntimeException("cannot fetch the " + use.id()
+                                + " Kotlin compiler plugin (" + use.group() + ":" + use.artifact() + ":"
+                                + use.version() + ") — a plugin contribution requires it"));
+                ktPlugins.add(new KotlincRequest.Plugin(use.id(), jar, use.options()));
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -2210,21 +2201,15 @@ public final class BuildPipeline {
         compileCp.add(kt.stdlib());
         List<String> ktArgs = new ArrayList<>();
         ktArgs.add("-no-stdlib");
-        // Spring Boot reflects on parameter names — mirror the javac -parameters default.
-        if (ctx.require(PROJECT).isSpringBoot()) ktArgs.add("-java-parameters");
+        // Contributed kotlinc args (e.g. spring-boot's -java-parameters, mirroring its javac
+        // -parameters — Boot reflects on parameter names). User-position args still win: these
+        // sit before extraArgs additions exactly where the hard-coded flag used to.
+        for (String arg : dev.jkbuild.plugin.manifest.PluginContributions.kotlinArgs(
+                ctx.require(PROJECT), lockModules)) {
+            if (!ktArgs.contains(arg)) ktArgs.add(arg);
+        }
         // Compiler plugins ride the typed BTA COMPILER_PLUGINS argument — raw -Xplugin/-P
         // strings in extraArgs are silently ignored by the BTA execution path.
-        List<KotlincRequest.Plugin> ktPlugins = new ArrayList<>();
-        if (allopenPlugin != null) {
-            // The "spring" preset opens @Component/@Configuration/@Transactional/etc.
-            ktPlugins.add(new KotlincRequest.Plugin(
-                    "org.jetbrains.kotlin.allopen", allopenPlugin, List.of("preset=spring")));
-        }
-        if (noargPlugin != null) {
-            // The "jpa" preset targets @Entity/@Embeddable/@MappedSuperclass.
-            ktPlugins.add(new KotlincRequest.Plugin(
-                    "org.jetbrains.kotlin.noarg", noargPlugin, List.of("preset=jpa")));
-        }
         if (javaSourceRoot != null) {
             ktArgs.add("-Xjava-source-roots=" + javaSourceRoot.toAbsolutePath());
         }
@@ -2256,6 +2241,13 @@ public final class BuildPipeline {
         }
         return dev.jkbuild.task.KotlinCompile.run(
                 taskId, req, dev.jkbuild.util.JkVersion.VERSION, !rerun, cas, actionCache);
+    }
+
+    /** The resolved lock's {@code group:artifact} names — the classpath-has condition's universe. */
+    static java.util.Set<String> lockModules(Lockfile lock) {
+        java.util.Set<String> out = new java.util.HashSet<>();
+        for (var a : lock.artifacts()) out.add(a.name());
+        return out;
     }
 
     /**

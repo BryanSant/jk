@@ -14,3 +14,13 @@ dependencies {
     // :resolver for the slim client (tree/why/library/jdk-list are offline client verbs).
     implementation(libs.maven.artifact)
 }
+
+// The spring-boot plugin manifest's single source of truth is plugins/spring-boot/jk-plugin.toml
+// (the blueprint file third parties copy). Bake it in as the built-in registry resource so the
+// engine ships it without a second, drift-prone copy in this module's resources.
+tasks.processResources {
+    from(rootProject.file("plugins/spring-boot/jk-plugin.toml")) {
+        into("dev/jkbuild/plugin/manifest")
+        rename { "spring-boot.jk-plugin.toml" }
+    }
+}

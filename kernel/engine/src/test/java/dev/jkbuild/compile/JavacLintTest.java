@@ -26,12 +26,12 @@ class JavacLintTest {
 
     @Test
     void parameters_default_adds_the_flag_before_user_args() {
-        assertThat(JavacLint.effectiveArgs(true, true, List.of("-Werror")))
+        assertThat(JavacLint.effectiveArgs(true, List.of("-parameters"), List.of("-Werror")))
                 .containsExactly("-Xlint:deprecation,unchecked", "-parameters", "-Werror");
     }
 
     @Test
     void parameters_default_is_not_duplicated_when_the_user_passes_it() {
-        assertThat(JavacLint.effectiveArgs(false, true, List.of("-parameters"))).containsExactly("-parameters");
+        assertThat(JavacLint.effectiveArgs(false, List.of("-parameters"), List.of("-parameters"))).containsExactly("-parameters");
     }
 }

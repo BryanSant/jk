@@ -55,7 +55,137 @@ public final class PluginManifests {
                         key, type, required, defaultValue, spec.getString("example"), spec.getString("hint")));
             }
         }
-        return new PluginManifest(id, table, version, jkCompat, schema);
+        PluginManifest.Contributions contributions = parseContributions(result, schema.keySet(), displayPath);
+        return new PluginManifest(id, table, version, jkCompat, schema, contributions);
+    }
+
+    // ---- [[contribute.*]] — the declarative layer (P2) --------------------------------------
+
+    private static PluginManifest.Contributions parseContributions(
+            TomlParseResult result, java.util.Set<String> schemaKeys, String displayPath) {
+        TomlTable contribute = result.getTable("contribute");
+        if (contribute == null) return PluginManifest.Contributions.NONE;
+
+        List<PluginManifest.PlatformDependency> platformDeps = new ArrayList<>();
+        for (TomlTable t : tableArray(contribute, "platform-dependency", displayPath)) {
+            String where = displayPath + ".contribute.platform-dependency";
+            String coordinate = requireString(t, "coordinate", where);
+            Interpolation.validate(coordinate, schemaKeys, where);
+            PluginManifest.Condition when = parseCondition(t, where);
+            if (when instanceof PluginManifest.Condition.ClasspathHas) {
+                // Platform deps inject at parse time, before resolution — there is no
+                // classpath to test yet. Fail at load, not mid-build.
+                throw new JkBuildParseException(
+                        where + ": classpath-has cannot gate a platform-dependency (it is evaluated"
+                                + " before resolution)");
+            }
+            platformDeps.add(new PluginManifest.PlatformDependency(coordinate, when));
+        }
+
+        List<PluginManifest.CompilerArgs> compilerArgs = new ArrayList<>();
+        for (TomlTable t : tableArray(contribute, "compiler-args", displayPath)) {
+            String where = displayPath + ".contribute.compiler-args";
+            List<String> javac = stringList(t, "javac", where);
+            List<String> kotlin = stringList(t, "kotlin", where);
+            for (String arg : javac) Interpolation.validate(arg, schemaKeys, where + ".javac");
+            for (String arg : kotlin) Interpolation.validate(arg, schemaKeys, where + ".kotlin");
+            compilerArgs.add(new PluginManifest.CompilerArgs(javac, kotlin, parseCondition(t, where)));
+        }
+
+        List<PluginManifest.KotlinPlugin> kotlinPlugins = new ArrayList<>();
+        for (TomlTable t : tableArray(contribute, "kotlin-plugin", displayPath)) {
+            String where = displayPath + ".contribute.kotlin-plugin";
+            String id = requireString(t, "id", where);
+            String coordinate = requireString(t, "coordinate", where);
+            Interpolation.validate(coordinate, schemaKeys, where);
+            List<String> options = stringList(t, "options", where);
+            for (String opt : options) Interpolation.validate(opt, schemaKeys, where + ".options");
+            kotlinPlugins.add(new PluginManifest.KotlinPlugin(id, coordinate, options, parseCondition(t, where)));
+        }
+
+        return new PluginManifest.Contributions(platformDeps, compilerArgs, kotlinPlugins);
+    }
+
+    /**
+     * Parse the optional {@code when} inline table into exactly one {@link
+     * PluginManifest.Condition} — the closed predicate set; two predicates in one {@code when}
+     * (or an unknown one) is a load error, never a silently-false condition.
+     */
+    private static PluginManifest.Condition parseCondition(TomlTable entry, String where) {
+        if (!entry.contains("when")) return null;
+        TomlTable when = entry.getTable("when");
+        if (when == null) {
+            throw new JkBuildParseException(where + ".when must be a table of exactly one predicate");
+        }
+        if (when.keySet().size() > (when.contains("config") ? 2 : 1)) {
+            throw new JkBuildParseException(where + ".when carries more than one predicate — the"
+                    + " condition set is closed; anything richer belongs in a code hook");
+        }
+        if (when.contains("classpath-has")) {
+            String module = when.getString("classpath-has");
+            if (module == null || module.isBlank()) {
+                throw new JkBuildParseException(where + ".when.classpath-has must be \"group:artifact\"");
+            }
+            return new PluginManifest.Condition.ClasspathHas(module);
+        }
+        if (when.contains("config")) {
+            String key = when.getString("config");
+            String equals = when.getString("equals");
+            if (key == null || equals == null) {
+                throw new JkBuildParseException(
+                        where + ".when config predicate needs both `config = \"<key>\"` and `equals = \"<value>\"`");
+            }
+            return new PluginManifest.Condition.ConfigEquals(key, equals);
+        }
+        if (when.contains("native-declared")) {
+            requireTrue(when, "native-declared", where);
+            return new PluginManifest.Condition.NativeDeclared();
+        }
+        if (when.contains("kotlin-project")) {
+            requireTrue(when, "kotlin-project", where);
+            return new PluginManifest.Condition.KotlinProject();
+        }
+        throw new JkBuildParseException(where + ".when has no known predicate (classpath-has, config/equals,"
+                + " native-declared, kotlin-project)");
+    }
+
+    private static void requireTrue(TomlTable when, String key, String where) {
+        if (!Boolean.TRUE.equals(when.getBoolean(key))) {
+            throw new JkBuildParseException(where + ".when." + key + " must be `true` (omit the"
+                    + " condition entirely for the false case)");
+        }
+    }
+
+    private static List<TomlTable> tableArray(TomlTable contribute, String key, String displayPath) {
+        if (!contribute.contains(key)) return List.of();
+        TomlArray arr = contribute.getArray(key);
+        if (arr == null) {
+            throw new JkBuildParseException(
+                    displayPath + ".contribute." + key + " must be an array of tables ([[contribute." + key + "]])");
+        }
+        List<TomlTable> out = new ArrayList<>(arr.size());
+        for (int i = 0; i < arr.size(); i++) {
+            if (!(arr.get(i) instanceof TomlTable t)) {
+                throw new JkBuildParseException(displayPath + ".contribute." + key + " entries must be tables");
+            }
+            out.add(t);
+        }
+        return out;
+    }
+
+    private static List<String> stringList(TomlTable table, String key, String where) {
+        if (!table.contains(key)) return List.of();
+        TomlArray arr = table.getArray(key);
+        if (arr == null) throw new JkBuildParseException(where + "." + key + " must be an array of strings");
+        List<String> out = new ArrayList<>(arr.size());
+        for (int i = 0; i < arr.size(); i++) {
+            Object v = arr.get(i);
+            if (!(v instanceof String str)) {
+                throw new JkBuildParseException(where + "." + key + " must be an array of strings");
+            }
+            out.add(str);
+        }
+        return out;
     }
 
     private static Object defaultFor(TomlTable spec, PluginManifest.SchemaKey.Type type, String where) {

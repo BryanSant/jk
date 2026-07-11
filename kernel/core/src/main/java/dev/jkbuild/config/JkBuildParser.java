@@ -13,6 +13,7 @@ import dev.jkbuild.model.ObjectStoreConfig;
 import dev.jkbuild.model.PathSource;
 import dev.jkbuild.model.PluginConfig;
 import dev.jkbuild.model.PluginDeclaration;
+import dev.jkbuild.plugin.manifest.PluginContributions;
 import dev.jkbuild.plugin.manifest.PluginManifest;
 import dev.jkbuild.plugin.manifest.PluginTableRegistry;
 import dev.jkbuild.model.Profile;
@@ -134,8 +135,7 @@ public final class JkBuildParser {
         Optional<JkBuild.Application> application = parseApplication(result);
         Optional<JkBuild.NativeConfig> nativeConfig = parseNativeConfig(result);
         Map<String, PluginConfig> pluginConfigs = parsePluginTables(result);
-        PluginConfig springBoot = pluginConfigs.get(JkBuild.SPRING_BOOT_ID);
-        if (springBoot != null) deps = withSpringBootBom(deps, springBoot);
+        deps = withPlatformContributions(deps, project, nativeConfig.isPresent(), pluginConfigs);
         JkBuild.Build build = parseBuild(result);
         JkBuild.FormatConfig format = parseFormat(result);
         return new JkBuild(
@@ -1142,9 +1142,6 @@ public final class JkBuildParser {
      * the built-in {@code spring-boot.jk-plugin.toml} manifest resource. Unknown tables stay
      * ignored exactly as before (the "unowned table" error arrives with P5's third-party set).
      */
-    /** The BOM [spring-boot] imports — P2 moves this into the manifest's contributions. */
-    private static final String SPRING_BOOT_BOM_MODULE = "org.springframework.boot:spring-boot-dependencies";
-
     private static Map<String, PluginConfig> parsePluginTables(TomlTable root) {
         Map<String, PluginConfig> out = new LinkedHashMap<>();
         for (PluginManifest manifest : PluginTableRegistry.manifests()) {
@@ -1156,22 +1153,30 @@ public final class JkBuildParser {
     }
 
     /**
-     * Auto-import {@code spring-boot-dependencies:<version>} as a platform BOM so {@code
-     * [spring-boot] version} alone makes every versionless Boot starter resolvable — declaring
-     * the BOM again under {@code [platform-dependencies]} would be redundant. A user-declared
-     * spring-boot-dependencies entry wins (no duplicate is added), letting them override the BOM
-     * coordinate deliberately.
+     * Apply the installed plugins' {@code [[contribute.platform-dependency]]} entries (P2): each
+     * becomes an exact-pinned platform BOM — e.g. {@code [spring-boot] version} alone makes every
+     * versionless Boot starter resolvable. A user-declared entry for the same module wins (no
+     * duplicate is added), letting them override the coordinate deliberately.
      */
-    private static JkBuild.Dependencies withSpringBootBom(JkBuild.Dependencies deps, PluginConfig springBoot) {
-        boolean declared = deps.of(Scope.PLATFORM).stream()
-                .anyMatch(d -> SPRING_BOOT_BOM_MODULE.equals(d.module()));
-        if (declared) return deps;
-        Dependency bom = new Dependency(
-                SPRING_BOOT_BOM_MODULE, VersionSelector.parseFloating("=" + springBoot.string("version")));
+    private static JkBuild.Dependencies withPlatformContributions(
+            JkBuild.Dependencies deps,
+            JkBuild.Project project,
+            boolean nativeDeclared,
+            Map<String, PluginConfig> pluginConfigs) {
+        List<PluginContributions.PlatformDep> contributed =
+                PluginContributions.platformDependencies(project, nativeDeclared, pluginConfigs);
+        if (contributed.isEmpty()) return deps;
+        List<Dependency> platform = new ArrayList<>(deps.of(Scope.PLATFORM));
+        boolean changed = false;
+        for (PluginContributions.PlatformDep dep : contributed) {
+            boolean declared = platform.stream().anyMatch(d -> dep.module().equals(d.module()));
+            if (declared) continue;
+            platform.add(new Dependency(dep.module(), VersionSelector.parseFloating("=" + dep.version())));
+            changed = true;
+        }
+        if (!changed) return deps;
         EnumMap<Scope, List<Dependency>> byScope = new EnumMap<>(Scope.class);
         deps.byScope().forEach(byScope::put);
-        List<Dependency> platform = new ArrayList<>(deps.of(Scope.PLATFORM));
-        platform.add(bom);
         byScope.put(Scope.PLATFORM, platform);
         return new JkBuild.Dependencies(byScope);
     }
