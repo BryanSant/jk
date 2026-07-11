@@ -183,7 +183,7 @@ public final class BuildPlanForecast {
             List<String> javacArgs = JavacLint.effectiveArgs(
                     project.build().lint(),
                     dev.jkbuild.plugin.manifest.PluginContributions.javacArgs(
-                            project, BuildPipeline.lockModules(lock)),
+                            project, dir, BuildPipeline.lockModules(lock)),
                     List.of());
             List<Path> processorCp = resolver.classpathFor(lock, Set.of(Scope.PROCESSOR));
 

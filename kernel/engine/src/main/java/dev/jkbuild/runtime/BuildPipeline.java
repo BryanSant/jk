@@ -634,7 +634,7 @@ public final class BuildPipeline {
                             dev.jkbuild.compile.JavacLint.effectiveArgs(
                                     project.build().lint(),
                                     dev.jkbuild.plugin.manifest.PluginContributions.javacArgs(
-                                            project, lockModules(lock)),
+                                            project, in.dir(), lockModules(lock)),
                                     profile == null ? List.of() : profile.javacArgs()));
                     ctx.put(CLASSPATH, mainCp);
 
@@ -1633,7 +1633,7 @@ public final class BuildPipeline {
             sbomComponents.add(new CycloneDxSbom.Component(
                     a.moduleGroup(), a.moduleArtifact(), a.version(), a.checksumHex()));
         }
-        java.util.Map<String, Path> extras = PluginBuild.fetchPackagerDependencies(project, cas);
+        java.util.Map<String, Path> extras = PluginBuild.fetchPackagerDependencies(project, in.dir(), cas);
 
         // Action key from the declared inputs + facts — any config, classes, dependency-set,
         // step-output, extra-artifact, or manifest change re-packages; nothing else does.
@@ -2316,7 +2316,7 @@ public final class BuildPipeline {
                     ? dev.jkbuild.kotlin.KotlinResolver.DEFAULT_VERSION
                     : kotlinVersion;
             for (var use : dev.jkbuild.plugin.manifest.PluginContributions.kotlinPlugins(
-                    ctx.require(PROJECT), pluginVersion, lockModules)) {
+                    ctx.require(PROJECT), workingDir, pluginVersion, lockModules)) {
                 Path jar = repos.tryFetchArtifact(
                                 dev.jkbuild.model.Coordinate.of(use.group(), use.artifact(), use.version()))
                         .map(hit -> hit.fetched().cachePath())
@@ -2339,7 +2339,7 @@ public final class BuildPipeline {
         // -parameters — Boot reflects on parameter names). User-position args still win: these
         // sit before extraArgs additions exactly where the hard-coded flag used to.
         for (String arg : dev.jkbuild.plugin.manifest.PluginContributions.kotlinArgs(
-                ctx.require(PROJECT), lockModules)) {
+                ctx.require(PROJECT), workingDir, lockModules)) {
             if (!ktArgs.contains(arg)) ktArgs.add(arg);
         }
         // Compiler plugins ride the typed BTA COMPILER_PLUGINS argument — raw -Xplugin/-P

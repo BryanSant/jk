@@ -36,8 +36,17 @@ public final class PluginContributions {
      */
     public static List<PlatformDep> platformDependencies(
             JkBuild.Project project, boolean nativeDeclared, java.util.Map<String, PluginConfig> pluginConfigs) {
+        return platformDependencies(project, nativeDeclared, pluginConfigs, PluginTableRegistry.manifests());
+    }
+
+    /** As above against an explicit manifest set (the parser passes built-ins + resolved third-party). */
+    public static List<PlatformDep> platformDependencies(
+            JkBuild.Project project,
+            boolean nativeDeclared,
+            java.util.Map<String, PluginConfig> pluginConfigs,
+            List<PluginManifest> manifests) {
         List<PlatformDep> out = new ArrayList<>();
-        for (PluginManifest manifest : PluginTableRegistry.manifests()) {
+        for (PluginManifest manifest : manifests) {
             PluginConfig config = pluginConfigs.get(manifest.id());
             if (config == null) continue;
             for (PluginManifest.PlatformDependency dep :
@@ -51,22 +60,23 @@ public final class PluginContributions {
     }
 
     /** The javac args every present plugin contributes, conditions evaluated against {@code classpathModules}. */
-    public static List<String> javacArgs(JkBuild build, Set<String> classpathModules) {
-        return compilerArgs(build, classpathModules, PluginManifest.CompilerArgs::javac);
+    public static List<String> javacArgs(JkBuild build, java.nio.file.Path moduleDir, Set<String> classpathModules) {
+        return compilerArgs(build, moduleDir, classpathModules, PluginManifest.CompilerArgs::javac);
     }
 
     /** The kotlinc args every present plugin contributes. */
-    public static List<String> kotlinArgs(JkBuild build, Set<String> classpathModules) {
-        return compilerArgs(build, classpathModules, PluginManifest.CompilerArgs::kotlin);
+    public static List<String> kotlinArgs(JkBuild build, java.nio.file.Path moduleDir, Set<String> classpathModules) {
+        return compilerArgs(build, moduleDir, classpathModules, PluginManifest.CompilerArgs::kotlin);
     }
 
     /**
      * The Kotlin compiler plugins every present plugin contributes. {@code kotlinVersion} feeds
      * {@code ${kotlin.version}} so plugin jars stay lockstep with the compiler actually used.
      */
-    public static List<KotlinPluginUse> kotlinPlugins(JkBuild build, String kotlinVersion, Set<String> classpathModules) {
+    public static List<KotlinPluginUse> kotlinPlugins(
+            JkBuild build, java.nio.file.Path moduleDir, String kotlinVersion, Set<String> classpathModules) {
         List<KotlinPluginUse> out = new ArrayList<>();
-        for (PluginManifest manifest : PluginTableRegistry.manifests()) {
+        for (PluginManifest manifest : PluginTableRegistry.manifestsFor(moduleDir, build.plugins())) {
             PluginConfig config = build.pluginConfigs().get(manifest.id());
             if (config == null) continue;
             for (PluginManifest.KotlinPlugin plugin : manifest.contributions().kotlinPlugins()) {
@@ -96,10 +106,11 @@ public final class PluginContributions {
 
     private static List<String> compilerArgs(
             JkBuild build,
+            java.nio.file.Path moduleDir,
             Set<String> classpathModules,
             java.util.function.Function<PluginManifest.CompilerArgs, List<String>> lane) {
         List<String> out = new ArrayList<>();
-        for (PluginManifest manifest : PluginTableRegistry.manifests()) {
+        for (PluginManifest manifest : PluginTableRegistry.manifestsFor(moduleDir, build.plugins())) {
             PluginConfig config = build.pluginConfigs().get(manifest.id());
             if (config == null) continue;
             for (PluginManifest.CompilerArgs args : manifest.contributions().compilerArgs()) {
@@ -128,9 +139,9 @@ public final class PluginContributions {
      * evaluated and coordinates interpolated — the engine fetches these (never into the project's
      * dependency graph) and hands them to the packager worker by name.
      */
-    public static java.util.List<PackagerDep> packagerDependencies(JkBuild build) {
+    public static java.util.List<PackagerDep> packagerDependencies(JkBuild build, java.nio.file.Path moduleDir) {
         java.util.List<PackagerDep> out = new java.util.ArrayList<>();
-        for (PluginManifest manifest : PluginTableRegistry.manifests()) {
+        for (PluginManifest manifest : PluginTableRegistry.manifestsFor(moduleDir, build.plugins())) {
             PluginConfig config = build.pluginConfig(manifest.id()).orElse(null);
             if (config == null) continue;
             for (PluginManifest.PackagerDependency pd :

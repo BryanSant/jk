@@ -15,6 +15,7 @@ import dev.jkbuild.model.PluginConfig;
 import dev.jkbuild.model.PluginDeclaration;
 import dev.jkbuild.plugin.manifest.PluginContributions;
 import dev.jkbuild.plugin.manifest.PluginManifest;
+import dev.jkbuild.plugin.manifest.PluginManifestStore;
 import dev.jkbuild.plugin.manifest.PluginTableRegistry;
 import dev.jkbuild.model.Profile;
 import dev.jkbuild.model.Profiles;
@@ -101,7 +102,7 @@ public final class JkBuildParser {
         if (cached != null) {
             return cached;
         }
-        JkBuild parsed = parse(Files.readString(file));
+        JkBuild parsed = parse(Files.readString(file), LibraryCatalog.layered(), file.toAbsolutePath().getParent());
         PARSE_CACHE.put(key, parsed);
         return parsed;
     }
@@ -116,6 +117,15 @@ public final class JkBuildParser {
      * LibraryCatalog#withProjectOverrides}.
      */
     public static JkBuild parse(String toml, LibraryCatalog catalog) {
+        return parse(toml, catalog, null);
+    }
+
+    /**
+     * The full parse. {@code moduleDir} (nullable — string parses have no directory) anchors
+     * third-party plugin manifests: declared {@code [plugins]} whose jars are locked + extracted
+     * ({@link PluginManifestStore}) contribute their tables/contributions exactly like built-ins.
+     */
+    private static JkBuild parse(String toml, LibraryCatalog catalog, Path moduleDir) {
         Objects.requireNonNull(toml, "toml");
         Objects.requireNonNull(catalog, "catalog");
         TomlParseResult result = Toml.parse(toml);
@@ -134,8 +144,10 @@ public final class JkBuildParser {
         List<PluginDeclaration> plugins = parsePlugins(result);
         Optional<JkBuild.Application> application = parseApplication(result);
         Optional<JkBuild.NativeConfig> nativeConfig = parseNativeConfig(result);
-        Map<String, PluginConfig> pluginConfigs = parsePluginTables(result);
-        deps = withPlatformContributions(deps, project, nativeConfig.isPresent(), pluginConfigs);
+        List<PluginManifest> installedManifests = PluginTableRegistry.manifestsFor(moduleDir, plugins);
+        Map<String, PluginConfig> pluginConfigs = parsePluginTables(result, installedManifests);
+        checkUnownedTables(result, moduleDir, plugins, installedManifests);
+        deps = withPlatformContributions(deps, project, nativeConfig.isPresent(), pluginConfigs, installedManifests);
         JkBuild.Build build = parseBuild(result);
         JkBuild.FormatConfig format = parseFormat(result);
         return new JkBuild(
@@ -1142,14 +1154,69 @@ public final class JkBuildParser {
      * the built-in {@code spring-boot.jk-plugin.toml} manifest resource. Unknown tables stay
      * ignored exactly as before (the "unowned table" error arrives with P5's third-party set).
      */
-    private static Map<String, PluginConfig> parsePluginTables(TomlTable root) {
+    private static Map<String, PluginConfig> parsePluginTables(TomlTable root, List<PluginManifest> installed) {
         Map<String, PluginConfig> out = new LinkedHashMap<>();
-        for (PluginManifest manifest : PluginTableRegistry.manifests()) {
+        for (PluginManifest manifest : installed) {
             TomlTable table = root.getTable(manifest.table());
             if (table == null) continue;
             out.put(manifest.id(), PluginTableRegistry.validate(manifest, table));
         }
         return out;
+    }
+
+    /**
+     * Every top-level table jk itself reads out of a project {@code jk.toml} — the config-family
+     * readers included ({@code [jvm]} worker tuning, {@code [deny]} policy, {@code [config]} and
+     * {@code [forge]} layers). Anything else must be owned by an installed plugin.
+     */
+    private static final java.util.Set<String> CORE_TABLES = coreTables();
+
+    private static java.util.Set<String> coreTables() {
+        java.util.Set<String> out = new java.util.HashSet<>(java.util.Set.of(
+                "project",
+                "repositories",
+                "profiles",
+                "features",
+                "workspace",
+                "manifest",
+                "plugins",
+                "application",
+                "native",
+                "image",
+                "build",
+                "format",
+                "libraries",
+                "jvm",
+                "deny",
+                "config",
+                "forge"));
+        for (Scope scope : Scope.values()) out.add(scope.tomlSection()); // [dependencies] + scoped spellings
+        return java.util.Set.copyOf(out);
+    }
+
+    /**
+     * The unowned-table gate (build-plugins plan §3.4): a top-level table that is neither a core
+     * table nor owned by an installed plugin is an error naming the remedy — it is almost always a
+     * typo or a plugin that was never declared. Suppressed while any {@code [plugins]} declaration
+     * is still unresolved (pre-lock/pre-sync we cannot know which tables it owns) and for
+     * directory-less string parses carrying declarations.
+     */
+    private static void checkUnownedTables(
+            TomlTable root, Path moduleDir, List<PluginDeclaration> plugins, List<PluginManifest> installed) {
+        if (!plugins.isEmpty() && PluginManifestStore.hasUnresolved(moduleDir, plugins)) return;
+        java.util.Set<String> owned = new java.util.HashSet<>(CORE_TABLES);
+        for (PluginManifest m : installed) owned.add(m.table());
+        for (String key : root.keySet()) {
+            if (owned.contains(key)) continue;
+            if (!(root.get(key) instanceof TomlTable) && !(root.get(key) instanceof org.tomlj.TomlArray)) continue;
+            StringBuilder known = new StringBuilder();
+            for (PluginManifest m : installed) {
+                if (known.length() > 0) known.append(", ");
+                known.append('[').append(m.table()).append(']');
+            }
+            throw new JkBuildParseException("[" + key + "] is not owned by any installed plugin — add it under"
+                    + " [plugins] (plugin tables installed here: " + (known.length() == 0 ? "none" : known) + ")");
+        }
     }
 
     /**
@@ -1162,9 +1229,10 @@ public final class JkBuildParser {
             JkBuild.Dependencies deps,
             JkBuild.Project project,
             boolean nativeDeclared,
-            Map<String, PluginConfig> pluginConfigs) {
+            Map<String, PluginConfig> pluginConfigs,
+            List<PluginManifest> installedManifests) {
         List<PluginContributions.PlatformDep> contributed =
-                PluginContributions.platformDependencies(project, nativeDeclared, pluginConfigs);
+                PluginContributions.platformDependencies(project, nativeDeclared, pluginConfigs, installedManifests);
         if (contributed.isEmpty()) return deps;
         List<Dependency> platform = new ArrayList<>(deps.of(Scope.PLATFORM));
         boolean changed = false;

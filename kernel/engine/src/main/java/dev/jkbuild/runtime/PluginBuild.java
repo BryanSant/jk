@@ -207,10 +207,10 @@ public final class PluginBuild {
     // ---- execution -----------------------------------------------------------------------------
 
     /** The resolved packager-dependency artifacts, fetched into the CAS by coordinate. */
-    public static Map<String, Path> fetchPackagerDependencies(JkBuild project, Cas cas)
+    public static Map<String, Path> fetchPackagerDependencies(JkBuild project, Path moduleDir, Cas cas)
             throws IOException, InterruptedException {
         Map<String, Path> out = new LinkedHashMap<>();
-        List<PluginContributions.PackagerDep> deps = PluginContributions.packagerDependencies(project);
+        List<PluginContributions.PackagerDep> deps = PluginContributions.packagerDependencies(project, moduleDir);
         if (deps.isEmpty()) return out;
         dev.jkbuild.repo.RepoGroup repos = RepoGroupBuilder.buildFor(project, null, cas);
         for (PluginContributions.PackagerDep dep : deps) {

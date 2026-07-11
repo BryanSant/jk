@@ -57,8 +57,8 @@ class PluginContributionsTest {
     @Test
     void boot_contributes_parameters_for_both_compilers() {
         JkBuild build = boot("");
-        assertThat(PluginContributions.javacArgs(build, Set.of())).containsExactly("-parameters");
-        assertThat(PluginContributions.kotlinArgs(build, Set.of())).containsExactly("-java-parameters");
+        assertThat(PluginContributions.javacArgs(build, null, Set.of())).containsExactly("-parameters");
+        assertThat(PluginContributions.kotlinArgs(build, null, Set.of())).containsExactly("-java-parameters");
     }
 
     @Test
@@ -71,8 +71,8 @@ class PluginContributionsTest {
                 version = "1.0.0"
                 jdk = "25"
                 """);
-        assertThat(PluginContributions.javacArgs(build, Set.of())).isEmpty();
-        assertThat(PluginContributions.kotlinPlugins(build, "2.3.0", Set.of())).isEmpty();
+        assertThat(PluginContributions.javacArgs(build, null, Set.of())).isEmpty();
+        assertThat(PluginContributions.kotlinPlugins(build, null, "2.3.0", Set.of())).isEmpty();
         assertThat(build.dependencies().of(Scope.PLATFORM)).isEmpty();
     }
 
@@ -82,13 +82,12 @@ class PluginContributionsTest {
     void allopen_always_contributes_and_noarg_keys_on_jpa_classpath() {
         JkBuild build = boot("");
 
-        var withoutJpa = PluginContributions.kotlinPlugins(build, "2.3.0", Set.of());
+        var withoutJpa = PluginContributions.kotlinPlugins(build, null, "2.3.0", Set.of());
         assertThat(withoutJpa)
                 .extracting(PluginContributions.KotlinPluginUse::id)
                 .containsExactly("org.jetbrains.kotlin.allopen");
 
-        var withJpa = PluginContributions.kotlinPlugins(
-                build, "2.3.0", Set.of("jakarta.persistence:jakarta.persistence-api"));
+        var withJpa = PluginContributions.kotlinPlugins(build, null, "2.3.0", Set.of("jakarta.persistence:jakarta.persistence-api"));
         assertThat(withJpa)
                 .extracting(PluginContributions.KotlinPluginUse::id)
                 .containsExactly("org.jetbrains.kotlin.allopen", "org.jetbrains.kotlin.noarg");
