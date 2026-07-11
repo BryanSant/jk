@@ -61,8 +61,13 @@ final class SpringAotRunner {
 
     /**
      * Run the AOT processor + compile its generated sources. {@code classes} is the compiled app
-     * classes dir; {@code startClass} the resolved application main. Throws with the process
+     * classes dir; {@code startClass} the resolved application main; {@code aotArgs} are
+     * application arguments the context refresh sees (profile baking). Throws with the process
      * output on failure — a broken context refresh must fail the build loudly.
+     *
+     * <p>Action-cached: the output is a pure function of the app classes, the production
+     * classpath, the entry point, and the processor args — a no-change rebuild restores
+     * {@code target/aot} from the CAS instead of re-refreshing the context.
      */
     static AotOutput process(
             Path projectDir,
@@ -73,16 +78,44 @@ final class SpringAotRunner {
             BuildLayout layout,
             Path classes,
             String startClass,
+            List<String> aotArgs,
             int release)
             throws IOException, InterruptedException {
         Path aotRoot = layout.moduleTargetDir().resolve("aot");
-        PathUtil.deleteRecursively(aotRoot); // stale generated code must never survive a re-run
-        Path genSources = Files.createDirectories(aotRoot.resolve("sources"));
         AotOutput out = outputAt(layout);
-        Files.createDirectories(out.classesDir());
-        Files.createDirectories(out.resourcesDir());
 
         List<Path> classpath = productionClasspath(projectDir, cache, lockFile, project, classes);
+
+        dev.jkbuild.task.ActionCache actionCache =
+                new dev.jkbuild.task.ActionCache(new Cas(cache), cache.resolve("actions"));
+        java.util.Map<String, String> inputs = new java.util.TreeMap<>();
+        inputs.put("classes", dev.jkbuild.task.ClasspathFingerprint.entry(classes));
+        inputs.put("cp", dev.jkbuild.task.ClasspathFingerprint.of(classpath));
+        inputs.put("start", startClass);
+        inputs.put("args", String.join("\u0000", aotArgs));
+        inputs.put("release", Integer.toString(release));
+        String taskId = dev.jkbuild.task.ActionKey.qualifiedTaskId("spring-aot", aotRoot);
+        String actionKey =
+                dev.jkbuild.task.ActionKey.forArtifact(taskId, dev.jkbuild.util.JkVersion.VERSION, List.of(
+                        "classes:" + inputs.get("classes"),
+                        "cp:" + inputs.get("cp"),
+                        "start:" + startClass,
+                        "args:" + inputs.get("args"),
+                        "release:" + release));
+        var hit = actionCache.lookup(actionKey);
+        if (hit.isPresent()) {
+            try {
+                actionCache.restore(hit.get(), aotRoot);
+                return out;
+            } catch (IOException e) {
+                // A missing CAS blob (pruned cache) falls through to a fresh run.
+            }
+        }
+
+        PathUtil.deleteRecursively(aotRoot); // stale generated code must never survive a re-run
+        Path genSources = Files.createDirectories(aotRoot.resolve("sources"));
+        Files.createDirectories(out.classesDir());
+        Files.createDirectories(out.resourcesDir());
 
         List<String> command = new ArrayList<>();
         command.add(javaHome.resolve("bin")
@@ -97,6 +130,7 @@ final class SpringAotRunner {
         command.add(out.classesDir().toString());
         command.add(project.project().group());
         command.add(project.project().name());
+        command.addAll(aotArgs);
 
         Process process = new ProcessBuilder(command)
                 .directory(projectDir.toFile())
@@ -131,6 +165,7 @@ final class SpringAotRunner {
                 throw new IOException(diag.toString());
             }
         }
+        actionCache.store(taskId, actionKey, inputs, aotRoot);
         return out;
     }
 

@@ -526,8 +526,10 @@ public record JkBuild(
      * @param buildInfo emit {@code META-INF/build-info.properties} into the boot jar
      * @param includeTools bundle {@code spring-boot-jarmode-tools} in the boot jar (default on;
      *     opt out with {@code include-tools = false})
+     * @param aotArgs application arguments passed to the AOT processor's context refresh —
+     *     profiles get baked at build time (e.g. {@code ["--spring.profiles.active=prod"]})
      */
-    public record SpringBoot(String version, Boolean aot, boolean buildInfo, boolean includeTools) {
+    public record SpringBoot(String version, Boolean aot, boolean buildInfo, boolean includeTools, List<String> aotArgs) {
 
         /** The BOM this table imports — spelled once, here. */
         public static final String BOM_MODULE = "org.springframework.boot:spring-boot-dependencies";
@@ -535,6 +537,12 @@ public record JkBuild(
         public SpringBoot {
             Objects.requireNonNull(version, "version");
             if (version.isBlank()) throw new IllegalArgumentException("[spring-boot].version must not be blank");
+            aotArgs = aotArgs == null ? List.of() : List.copyOf(aotArgs);
+        }
+
+        /** Back-compat constructor: no AOT processor args. */
+        public SpringBoot(String version, Boolean aot, boolean buildInfo, boolean includeTools) {
+            this(version, aot, buildInfo, includeTools, List.of());
         }
 
         /** Explicit {@code aot} wins; unset defaults to whether {@code [native]} is declared. */

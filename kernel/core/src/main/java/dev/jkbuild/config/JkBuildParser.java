@@ -1149,7 +1149,18 @@ public final class JkBuildParser {
         Boolean aot = springBoot.contains("aot") ? springBoot.getBoolean("aot") : null;
         boolean buildInfo = Boolean.TRUE.equals(springBoot.getBoolean("build-info"));
         boolean includeTools = !Boolean.FALSE.equals(springBoot.getBoolean("include-tools"));
-        return Optional.of(new JkBuild.SpringBoot(version, aot, buildInfo, includeTools));
+        List<String> aotArgs = new ArrayList<>();
+        TomlArray aotArgsArr = springBoot.getArray("aot-args");
+        if (aotArgsArr != null) {
+            for (int i = 0; i < aotArgsArr.size(); i++) {
+                Object val = aotArgsArr.get(i);
+                if (!(val instanceof String str)) {
+                    throw new JkBuildParseException("[spring-boot].aot-args must be an array of strings");
+                }
+                aotArgs.add(str);
+            }
+        }
+        return Optional.of(new JkBuild.SpringBoot(version, aot, buildInfo, includeTools, aotArgs));
     }
 
     /**

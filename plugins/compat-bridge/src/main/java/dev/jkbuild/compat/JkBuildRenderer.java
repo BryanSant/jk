@@ -96,6 +96,14 @@ public final class JkBuildRenderer {
         if (boot.aot() != null) sb.append("aot = ").append(boot.aot()).append('\n');
         if (boot.buildInfo()) sb.append("build-info = true\n");
         if (!boot.includeTools()) sb.append("include-tools = false\n");
+        if (!boot.aotArgs().isEmpty()) {
+            sb.append("aot-args = [");
+            for (int i = 0; i < boot.aotArgs().size(); i++) {
+                if (i > 0) sb.append(", ");
+                sb.append(quote(boot.aotArgs().get(i)));
+            }
+            sb.append("]\n");
+        }
     }
 
     /** {@code [application]} table — its presence alone marks the project as an application. */

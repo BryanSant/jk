@@ -1478,6 +1478,7 @@ public final class BuildPipeline {
                                 layout,
                                 classes,
                                 startClass,
+                                boot.aotArgs(),
                                 project.project().javaRelease())
                         .dirs();
             } catch (IOException e) {

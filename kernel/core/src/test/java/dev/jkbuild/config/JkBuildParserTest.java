@@ -1587,11 +1587,13 @@ class JkBuildParserTest {
                 aot = true
                 build-info = true
                 include-tools = false
+                aot-args = ["--spring.profiles.active=prod"]
                 """);
         var sb = b.springBoot().orElseThrow();
         assertThat(sb.aotEnabled(false)).isTrue(); // explicit aot wins over [native] absence
         assertThat(sb.buildInfo()).isTrue();
         assertThat(sb.includeTools()).isFalse();
+        assertThat(sb.aotArgs()).containsExactly("--spring.profiles.active=prod");
     }
 
     @Test
