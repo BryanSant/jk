@@ -1,25 +1,23 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
-import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.cli.GlobalOptions;
-import dev.jkbuild.gradle.GradleExporter;
+import dev.jkbuild.engine.protocol.GeneratedFiles;
 import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Exit;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.List;
-import java.util.Map;
 
 /**
  * {@code jk export gradle} — translate {@code jk.toml} (+ {@code jk.lock}) into a runnable Gradle
  * Kotlin-DSL build ({@code settings.gradle.kts} + {@code build.gradle.kts} per project). Locked
  * versions reproduce what jk builds; {@code project.jdk} maps to a Gradle toolchain + the foojay
  * resolver.
+ *
+ * <p>Content generation runs engine-side (thin client); this command applies the overwrite guard,
+ * writes the payloads, and prints the report.
  */
 public final class ExportGradleCommand implements CliCommand {
 
@@ -42,33 +40,8 @@ public final class ExportGradleCommand implements CliCommand {
     public int run(Invocation in) throws IOException {
         GlobalOptions global = GlobalOptions.from(in);
         boolean force = in.isSet("force");
-        ExportSupport.Loaded loaded = ExportSupport.load(global.workingDir(), "jk export gradle");
-        if (loaded == null) return Exit.NO_INPUT;
-
-        GradleExporter.Result result = GradleExporter.export(
-                loaded.root(), loaded.modulesByRelPath(), loaded.layoutByRelPath(), loaded.locked());
-
-        // Pre-flight overwrite guard across every file we'd write.
-        Path settings = loaded.rootDir().resolve("settings.gradle.kts");
-        if (!ExportSupport.canWrite(settings, force, "jk export gradle")) return Exit.CANT_CREATE;
-        for (String relDir : result.buildFiles().keySet()) {
-            Path build = loaded.rootDir().resolve(relDir).resolve("build.gradle.kts");
-            if (!ExportSupport.canWrite(build, force, "jk export gradle")) return Exit.CANT_CREATE;
-        }
-
-        Files.writeString(settings, result.settings(), StandardCharsets.UTF_8);
-        ExportSupport.wrote(settings);
-        for (Map.Entry<String, String> e : result.buildFiles().entrySet()) {
-            Path build = loaded.rootDir().resolve(e.getKey()).resolve("build.gradle.kts");
-            Files.createDirectories(build.getParent());
-            Files.writeString(build, e.getValue(), StandardCharsets.UTF_8);
-            ExportSupport.wrote(build);
-        }
-
-        int warnings = ExportSupport.printReport(result.report());
-        if (warnings > 0) {
-            CliOutput.out("  (" + warnings + " fidelity note" + (warnings == 1 ? "" : "s") + ")");
-        }
-        return 0;
+        GeneratedFiles files = ExportSupport.generate(global.workingDir(), "export-gradle", "jk export gradle");
+        if (files == null) return Exit.NO_INPUT;
+        return ExportSupport.writeAll(files, force, "jk export gradle");
     }
 }

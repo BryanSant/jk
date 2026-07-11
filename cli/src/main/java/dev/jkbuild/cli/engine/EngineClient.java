@@ -301,7 +301,14 @@ public final class EngineClient {
      * Thin-client deny check: the [deny] policy is user-authored jk.toml and therefore parses
      * engine-side only; one synchronous DENY_CHECK round trip returns the violations.
      */
-    /** Thin-client tree render: engine walks the graph, client substitutes its Theme into the tags. */
+    /** Thin-client generator run: engine renders content, client guards/writes/prints. */
+    public static dev.jkbuild.engine.protocol.GeneratedFiles generate(
+            dev.jkbuild.engine.EnginePaths.Paths paths, java.nio.file.Path dir, String kind)
+            throws java.io.IOException {
+        return EngineBuildListenerAdapter.generate(paths, dir, kind);
+    }
+
+        /** Thin-client tree render: engine walks the graph, client substitutes its Theme into the tags. */
     public static String treeRender(
             dev.jkbuild.engine.EnginePaths.Paths paths,
             java.nio.file.Path dir,

@@ -455,6 +455,7 @@ public final class EngineServer implements AutoCloseable {
                     case EngineProtocol.DENY_CHECK_REQUEST -> handleDenyCheckRequest(line, writer);
                     case EngineProtocol.TREE_REQUEST -> handleTreeRequest(line, writer);
                     case EngineProtocol.WHY_REQUEST -> handleWhyRequest(line, writer);
+                    case EngineProtocol.GENERATE_REQUEST -> handleGenerateRequest(line, writer);
                     default -> {
                         /* unknown type — forward-compatible no-op */
                     }
@@ -996,6 +997,18 @@ public final class EngineServer implements AutoCloseable {
             report = dev.jkbuild.engine.protocol.WhyReport.error(String.valueOf(e.getMessage()));
         }
         sendQuiet(writer, report.encode());
+    }
+
+    /** Answer {@link EngineProtocol#GENERATE_REQUEST}: full-model generator payloads, engine-side. */
+    private void handleGenerateRequest(String requestLine, BufferedWriter writer) {
+        dev.jkbuild.engine.protocol.GeneratedFiles files;
+        try {
+            files = dev.jkbuild.runtime.GenerateOps.generate(
+                    Path.of(Ndjson.str(requestLine, "dir")), Ndjson.str(requestLine, "kind"));
+        } catch (RuntimeException e) {
+            files = dev.jkbuild.engine.protocol.GeneratedFiles.error(String.valueOf(e.getMessage()));
+        }
+        sendQuiet(writer, files.encode());
     }
 
     /** Answer {@link EngineProtocol#DENY_CHECK_REQUEST}: policy parse + lock read + check, engine-side. */

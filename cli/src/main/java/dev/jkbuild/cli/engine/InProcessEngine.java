@@ -70,6 +70,9 @@ public interface InProcessEngine {
     /** Thin-client why twin — the in-process counterpart of WHY_REQUEST. */
     dev.jkbuild.engine.protocol.WhyReport why(java.nio.file.Path dir, String query);
 
+    /** Thin-client generator twin — the in-process counterpart of GENERATE_REQUEST. */
+    dev.jkbuild.engine.protocol.GeneratedFiles generate(java.nio.file.Path dir, String kind);
+
     /** A single hosted goal's outcome: the goal result plus the test counts (null when no tests ran). */
     record GoalOutcome(dev.jkbuild.run.GoalResult result, dev.jkbuild.run.TestSummary testResult) {}
 

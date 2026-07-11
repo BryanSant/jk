@@ -84,6 +84,11 @@ public final class InProcessEngineImpl implements InProcessEngine {
     }
 
     @Override
+    public dev.jkbuild.engine.protocol.GeneratedFiles generate(java.nio.file.Path dir, String kind) {
+        return dev.jkbuild.runtime.GenerateOps.generate(dir, kind);
+    }
+
+    @Override
     public dev.jkbuild.engine.protocol.ExecPlan execPlan(
             java.nio.file.Path dir, java.nio.file.Path cache, String kind, String mainOverride, String binName) {
         return dev.jkbuild.runtime.ExecPlans.execPlan(dir, cache, kind, mainOverride, binName);

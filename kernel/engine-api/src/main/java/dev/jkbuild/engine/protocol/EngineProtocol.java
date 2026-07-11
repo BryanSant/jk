@@ -241,6 +241,17 @@ public final class EngineProtocol {
     public static final String WHY_ACK = "why-ack";
 
     /**
+     * Client → server: run a full-model generator (export-maven, export-gradle, …) for {@code dir}
+     * and return the file payloads — content generation needs the parsed models, the client owns
+     * guards/writes/output. Synchronous inline; answered with one {@link #GENERATE_ACK} carrying
+     * {@link GeneratedFiles}.
+     */
+    public static final String GENERATE_REQUEST = "generate-request";
+
+    /** Server → client, terminal for {@link #GENERATE_REQUEST}. */
+    public static final String GENERATE_ACK = "generate-ack";
+
+    /**
      * Server → client: the forecast — {@code dirtyDirs} (module dirs predicted to do real work),
      * {@code lockStale} (the merged workspace lock no longer reflects its manifests), {@code empty}
      * (the workspace declares no modules), and {@code errors} (graph resolution; non-empty ⇒ no
@@ -1313,6 +1324,12 @@ public final class EngineProtocol {
     public static String whyRequest(String dir, String query) {
         return "{\"t\":\"" + WHY_REQUEST + "\",\"dir\":" + Ndjson.quote(dir)
                 + ",\"query\":" + Ndjson.quote(query)
+                + "}";
+    }
+
+    public static String generateRequest(String dir, String kind) {
+        return "{\"t\":\"" + GENERATE_REQUEST + "\",\"dir\":" + Ndjson.quote(dir)
+                + ",\"kind\":" + Ndjson.quote(kind)
                 + "}";
     }
 

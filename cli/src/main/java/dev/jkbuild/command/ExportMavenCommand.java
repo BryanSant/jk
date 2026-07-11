@@ -3,25 +3,26 @@ package dev.jkbuild.command;
 
 import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.cli.GlobalOptions;
-import dev.jkbuild.compat.ImportReport;
-import dev.jkbuild.model.JkBuild;
+import dev.jkbuild.engine.protocol.GeneratedFiles;
 import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Exit;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
-import dev.jkbuild.mvn.PomExporter;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
-import java.util.Map;
 
 /**
  * {@code jk export maven} — translate {@code jk.toml} (+ {@code jk.lock}) into a runnable Maven
  * build: a {@code pom.xml} for a single project, or a {@code <packaging>pom</packaging>} reactor
  * root plus a child {@code pom.xml} per workspace module. JDK toolchains map to {@code
  * maven.compiler.release} + the foojay-backed {@code toolchains-maven-plugin}.
+ *
+ * <p>Content generation runs engine-side (thin client — it needs the parsed root, every workspace
+ * module, and merged locked versions); this command applies the overwrite guard, writes the
+ * payloads, and prints the report.
  */
 public final class ExportMavenCommand implements CliCommand {
 
@@ -49,47 +50,8 @@ public final class ExportMavenCommand implements CliCommand {
     public int run(Invocation in) throws IOException {
         GlobalOptions global = GlobalOptions.from(in);
         boolean force = in.isSet("force");
-        ExportSupport.Loaded loaded = ExportSupport.load(global.workingDir(), "jk export maven");
-        if (loaded == null) return Exit.NO_INPUT;
-
-        // Pre-flight overwrite guard: root + every module pom.
-        Path rootPom = loaded.rootDir().resolve("pom.xml");
-        if (!ExportSupport.canWrite(rootPom, force, "jk export maven")) return Exit.CANT_CREATE;
-        for (Path moduleDir : loaded.modules().keySet()) {
-            if (!ExportSupport.canWrite(moduleDir.resolve("pom.xml"), force, "jk export maven")) return Exit.CANT_CREATE;
-        }
-
-        ImportReport.Builder combined = ImportReport.builder();
-
-        PomExporter.Result rootResult = PomExporter.export(
-                loaded.root(), ExportSupport.resolveLayout(loaded.rootDir(), loaded.root()), loaded.locked());
-        Files.writeString(rootPom, rootResult.xml(), StandardCharsets.UTF_8);
-        ExportSupport.wrote(rootPom);
-        merge(combined, rootResult.report());
-
-        for (Map.Entry<Path, JkBuild> e : loaded.modules().entrySet()) {
-            Map<String, String> moduleLocked = ExportSupport.lockedVersions(e.getKey());
-            PomExporter.Result r = PomExporter.export(
-                    e.getValue(),
-                    ExportSupport.resolveLayout(e.getKey(), e.getValue()),
-                    moduleLocked.isEmpty() ? loaded.locked() : moduleLocked);
-            Path pom = e.getKey().resolve("pom.xml");
-            Files.writeString(pom, r.xml(), StandardCharsets.UTF_8);
-            ExportSupport.wrote(pom);
-            merge(combined, r.report());
-        }
-
-        int warnings = ExportSupport.printReport(combined.build());
-        if (warnings > 0) {
-            CliOutput.out("  (" + warnings + " fidelity note" + (warnings == 1 ? "" : "s") + ")");
-        }
-        return 0;
-    }
-
-    private static void merge(ImportReport.Builder into, ImportReport from) {
-        for (ImportReport.Issue issue : from.issues()) {
-            if (issue.severity() == ImportReport.Severity.ERROR) into.error(issue.message());
-            else into.warning(issue.message());
-        }
+        GeneratedFiles files = ExportSupport.generate(global.workingDir(), "export-maven", "jk export maven");
+        if (files == null) return Exit.NO_INPUT;
+        return ExportSupport.writeAll(files, force, "jk export maven");
     }
 }
