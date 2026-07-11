@@ -154,10 +154,11 @@ public record PluginManifest(
             List<CompilerArgs> compilerArgs,
             List<KotlinPlugin> kotlinPlugins,
             List<PackagerDependency> packagerDependencies,
-            List<StepDependency> stepDependencies) {
+            List<StepDependency> stepDependencies,
+            List<ProvidedClasspath> providedClasspath) {
 
         public static final Contributions NONE =
-                new Contributions(List.of(), List.of(), List.of(), List.of(), List.of());
+                new Contributions(List.of(), List.of(), List.of(), List.of(), List.of(), List.of());
 
         public Contributions {
             platformDependencies = platformDependencies == null ? List.of() : List.copyOf(platformDependencies);
@@ -165,6 +166,7 @@ public record PluginManifest(
             kotlinPlugins = kotlinPlugins == null ? List.of() : List.copyOf(kotlinPlugins);
             packagerDependencies = packagerDependencies == null ? List.of() : List.copyOf(packagerDependencies);
             stepDependencies = stepDependencies == null ? List.of() : List.copyOf(stepDependencies);
+            providedClasspath = providedClasspath == null ? List.of() : List.copyOf(providedClasspath);
         }
 
         /** Back-compat: the P3 contribution set (no step dependencies). */
@@ -173,7 +175,7 @@ public record PluginManifest(
                 List<CompilerArgs> compilerArgs,
                 List<KotlinPlugin> kotlinPlugins,
                 List<PackagerDependency> packagerDependencies) {
-            this(platformDependencies, compilerArgs, kotlinPlugins, packagerDependencies, List.of());
+            this(platformDependencies, compilerArgs, kotlinPlugins, packagerDependencies, List.of(), List.of());
         }
 
         /** Back-compat: the P2 contribution set (no packager dependencies). */
@@ -181,7 +183,7 @@ public record PluginManifest(
                 List<PlatformDependency> platformDependencies,
                 List<CompilerArgs> compilerArgs,
                 List<KotlinPlugin> kotlinPlugins) {
-            this(platformDependencies, compilerArgs, kotlinPlugins, List.of(), List.of());
+            this(platformDependencies, compilerArgs, kotlinPlugins, List.of(), List.of(), List.of());
         }
 
         public boolean isEmpty() {
@@ -189,7 +191,8 @@ public record PluginManifest(
                     && compilerArgs.isEmpty()
                     && kotlinPlugins.isEmpty()
                     && packagerDependencies.isEmpty()
-                    && stepDependencies.isEmpty();
+                    && stepDependencies.isEmpty()
+                    && providedClasspath.isEmpty();
         }
     }
 
@@ -201,13 +204,40 @@ public record PluginManifest(
     public record PackagerDependency(String artifact, String coordinate, Condition when) {}
 
     /**
-     * {@code [[contribute.step-dependency]]} — a tool artifact a step needs (aapt2's per-OS
-     * binary jar, the r8 jar, a platform android.jar), fetched engine-side into the cache and
-     * handed to the step by {@code artifact} name. The coordinate may carry a classifier
-     * ({@code group:artifact:version:classifier}); {@code ${host.os}} selects per-OS natives.
-     * Fetch-only: never injected into the project's dependency graph.
+     * {@code [[contribute.step-dependency]]} — a tool artifact a step (or verb) needs, fetched /
+     * provisioned engine-side and handed to the worker by {@code artifact} name. Exactly one
+     * source:
+     *
+     * <ul>
+     *   <li>{@code coordinate} — a Maven artifact, optionally with a classifier
+     *       ({@code group:artifact:version:classifier}; {@code ${host.os}} selects per-OS
+     *       natives). {@code transitive = true} resolves the full runtime closure into a lib
+     *       directory instead of one jar (JVM tools with real dependency graphs, e.g.
+     *       manifest-merger).
+     *   <li>{@code sdk-component} — a provisioned SDK component in sdkmanager spelling
+     *       ({@code platforms;android-28}, {@code platform-tools}); {@code sdk-path} names a
+     *       file inside it ({@code android.jar}, {@code adb}) — absent, the component directory
+     *       itself is handed over. The component {@code root} is the SDK root.
+     * </ul>
+     *
+     * <p>Fetch-only: never injected into the project's dependency graph.
      */
-    public record StepDependency(String artifact, String coordinate, Condition when) {}
+    public record StepDependency(
+            String artifact, String coordinate, boolean transitive, String sdkComponent, String sdkPath,
+            Condition when) {
+
+        public StepDependency(String artifact, String coordinate, Condition when) {
+            this(artifact, coordinate, false, null, null, when);
+        }
+    }
+
+    /**
+     * {@code [[contribute.provided-classpath]]} — a declared step-dependency (named by its
+     * {@code artifact}) that also joins the module's COMPILE classpath, PROVIDED-posture:
+     * javac/kotlinc see it, the runtime/packaging never does (an Android platform jar is the
+     * canonical case — steps take it explicitly via {@code --lib}-style flags).
+     */
+    public record ProvidedClasspath(String dependency, Condition when) {}
 
     /**
      * {@code [[contribute.platform-dependency]]}: a BOM-style platform-scope dependency,

@@ -135,10 +135,17 @@ public final class PluginContributions {
     public record PackagerDep(String artifact, String module, String version) {}
 
     /**
-     * One resolved step-dependency: the full coordinate spec ({@code group:artifact:version} with
-     * an optional {@code :classifier}), fetched engine-side, handed to the step as {@code artifact}.
+     * One resolved step-dependency, handed to the step as {@code artifact}: a Maven coordinate
+     * spec ({@code group:artifact:version[:classifier]}, {@code transitive} = the runtime closure)
+     * or a provisioned SDK component ({@code sdkComponent}/{@code sdkPath}).
      */
-    public record StepDep(String artifact, String coordinateSpec) {}
+    public record StepDep(String artifact, String coordinateSpec, boolean transitive, String sdkComponent,
+            String sdkPath) {
+
+        public StepDep(String artifact, String coordinateSpec) {
+            this(artifact, coordinateSpec, false, null, null);
+        }
+    }
 
     /**
      * The active plugins' {@code [[contribute.step-dependency]]} entries with conditions evaluated
@@ -154,13 +161,38 @@ public final class PluginContributions {
                 if (!holds(sd.when(), config, build.project(), build.nativeConfig().isPresent(), null, manifest.id())) {
                     continue;
                 }
+                if (sd.sdkComponent() != null) {
+                    String component = Interpolation.resolve(sd.sdkComponent(), config, build.project(), null);
+                    out.add(new StepDep(sd.artifact(), null, false, component, sd.sdkPath()));
+                    continue;
+                }
                 String coordinate = Interpolation.resolve(sd.coordinate(), config, build.project(), null);
                 String[] parts = coordinate.split(":");
                 if (parts.length < 3 || parts.length > 4) {
                     throw new JkBuildParseException("[" + manifest.id() + "] step-dependency coordinate must be"
                             + " \"group:artifact:version[:classifier]\" — got: " + coordinate);
                 }
-                out.add(new StepDep(sd.artifact(), coordinate));
+                out.add(new StepDep(sd.artifact(), coordinate, sd.transitive(), null, null));
+            }
+        }
+        return out;
+    }
+
+    /**
+     * The active plugins' {@code [[contribute.provided-classpath]]} entries with conditions
+     * evaluated: names of declared step-dependency artifacts whose resolved paths join the
+     * module's COMPILE classpath (PROVIDED posture — compile-only, never runtime/packaging).
+     */
+    public static java.util.List<String> providedClasspath(JkBuild build, java.nio.file.Path moduleDir) {
+        java.util.List<String> out = new java.util.ArrayList<>();
+        for (PluginManifest manifest : PluginTableRegistry.manifestsFor(moduleDir, build.plugins())) {
+            PluginConfig config = build.pluginConfig(manifest.id()).orElse(null);
+            if (config == null) continue;
+            for (PluginManifest.ProvidedClasspath pc : manifest.contributions().providedClasspath()) {
+                if (!holds(pc.when(), config, build.project(), build.nativeConfig().isPresent(), null, manifest.id())) {
+                    continue;
+                }
+                out.add(pc.dependency());
             }
         }
         return out;

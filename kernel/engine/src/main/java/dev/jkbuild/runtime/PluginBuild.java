@@ -242,8 +242,17 @@ public final class PluginBuild {
         Map<String, Path> out = new LinkedHashMap<>();
         List<PluginContributions.StepDep> deps = PluginContributions.stepDependencies(project, moduleDir);
         if (deps.isEmpty()) return out;
-        dev.jkbuild.repo.RepoGroup repos = RepoGroupBuilder.buildFor(project, null, cas);
+        dev.jkbuild.repo.RepoGroup repos = null;
         for (PluginContributions.StepDep dep : deps) {
+            if (dep.sdkComponent() != null) {
+                out.put(dep.artifact(), SdkComponents.resolve(dep.sdkComponent(), dep.sdkPath()));
+                continue;
+            }
+            if (repos == null) repos = RepoGroupBuilder.buildFor(project, null, cas);
+            if (dep.transitive()) {
+                out.put(dep.artifact(), toolClosureDir(dep.coordinateSpec(), repos, cas));
+                continue;
+            }
             dev.jkbuild.model.Coordinate coord = dev.jkbuild.model.Coordinate.parse(dep.coordinateSpec());
             out.put(
                     dep.artifact(),
@@ -255,6 +264,54 @@ public final class PluginBuild {
                             .cachePath());
         }
         return out;
+    }
+
+    /**
+     * A {@code transitive = true} step-dependency: the coordinate's full runtime closure,
+     * materialized as a directory of hard-linked jars under the cache — JVM tools with real
+     * dependency graphs (manifest-merger) fork with {@code -cp <dir>/*}. Keyed by the exact
+     * (version-pinned) coordinate, so an existing non-empty dir is authoritative.
+     */
+    private static Path toolClosureDir(String coordinateSpec, dev.jkbuild.repo.RepoGroup repos, Cas cas)
+            throws IOException, InterruptedException {
+        Path dir = cas.root().resolve("plugin-tools").resolve(coordinateSpec.replace(':', '_'));
+        if (Files.isDirectory(dir)) {
+            try (var listing = Files.list(dir)) {
+                if (listing.findFirst().isPresent()) return dir;
+            }
+        }
+        dev.jkbuild.model.Coordinate root = dev.jkbuild.model.Coordinate.parse(coordinateSpec);
+        var declared = List.of(new dev.jkbuild.model.Dependency(
+                root.group() + ":" + root.artifact(),
+                dev.jkbuild.model.VersionSelector.parse("=" + root.version())));
+        var resolution = new dev.jkbuild.resolver.NaiveResolver(new dev.jkbuild.repo.EffectivePomBuilder(repos))
+                .resolve(declared);
+        java.util.LinkedHashSet<String> modules = new java.util.LinkedHashSet<>();
+        modules.add(root.group() + ":" + root.artifact());
+        modules.addAll(resolution.modules().keySet());
+
+        Path staging = Files.createTempDirectory(Files.createDirectories(dir.getParent()), ".closure-");
+        for (String module : modules) {
+            var resolved = resolution.modules().get(module);
+            dev.jkbuild.model.Coordinate coord = resolved != null ? resolved.coordinate() : root;
+            Path jar = repos.tryFetchArtifact(coord)
+                    .orElseThrow(() -> new IOException("cannot fetch " + coord
+                            + " — a transitive step-dependency's closure must exist in a declared repo"))
+                    .fetched()
+                    .cachePath();
+            Path alias = staging.resolve(coord.artifact() + "-" + coord.version() + ".jar");
+            try {
+                Files.createLink(alias, jar);
+            } catch (IOException | UnsupportedOperationException e) {
+                Files.copy(jar, alias);
+            }
+        }
+        try {
+            Files.move(staging, dir, java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+        } catch (IOException e) {
+            if (!Files.isDirectory(dir)) throw e; // lost a race → the winner's dir serves
+        }
+        return dir;
     }
 
     /** Fetch one {@code module:version} jar into the CAS and return its path. */

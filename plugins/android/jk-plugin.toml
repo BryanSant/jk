@@ -4,11 +4,9 @@
 # the APK packager. Everything framework-shaped rides the SAME public SPI the
 # spring-boot blueprint uses — the engine has zero Android-specific code.
 #
-# Phase-1 platform stand-in: the compile/link/dex platform jar is the Maven-published
-# android-all build (Robolectric's AOSP artifact) rather than an SDK-provisioned
-# platforms;android-<N> — SDK provisioning (repository2 feed + licenses, android-plan
-# §3.2) is its own later phase. The stand-in is a real framework jar with resources,
-# which is exactly what aapt2 -I and d8 --lib need.
+# The platform jar comes from the provisioned SDK (platforms;android-<compile-sdk>) —
+# the repository2 feed + license machinery of android-plan §3.2; an existing Studio SDK
+# is reused via the symlinked managed root.
 
 [plugin]
 id        = "android"
@@ -46,8 +44,15 @@ coordinate = "com.android.tools.build:aapt2:8.7.3-12006047:${host.os}"
 artifact   = "r8"
 coordinate = "com.android.tools:r8:8.5.35"
 
-# The platform jar: aapt2 -I (framework resources), javac -classpath (via the project's
-# provided scope), d8 --lib. See the Phase-1 stand-in note above.
+# The platform jar: aapt2 -I (framework resources), javac (via provided-classpath below),
+# d8 --lib. Provisioned from Google's repository2 feed into the managed SDK root — reusing
+# an existing $ANDROID_HOME/Studio SDK when one is discovered (android-plan §3.2).
 [[contribute.step-dependency]]
-artifact   = "android-jar"
-coordinate = "org.robolectric:android-all:9-robolectric-4913185-2"
+artifact      = "android-jar"
+sdk-component = "platforms;android-${config.compile-sdk}"
+sdk-path      = "android.jar"
+
+# javac/kotlinc compile against the platform (PROVIDED posture: the runtime, dex inputs,
+# and packaging never see it — dex takes it explicitly via --lib from the extra above).
+[[contribute.provided-classpath]]
+dependency = "android-jar"

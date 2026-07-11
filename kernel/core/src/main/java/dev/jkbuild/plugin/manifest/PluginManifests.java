@@ -229,18 +229,47 @@ public final class PluginManifests {
         for (TomlTable t : tableArray(contribute, "step-dependency", displayPath)) {
             String where = displayPath + ".contribute.step-dependency";
             String artifact = requireString(t, "artifact", where);
-            String coordinate = requireString(t, "coordinate", where);
-            Interpolation.validate(coordinate, schemaKeys, where);
+            String coordinate = t.getString("coordinate");
+            String sdkComponent = t.getString("sdk-component");
+            String sdkPath = t.getString("sdk-path");
+            if ((coordinate == null) == (sdkComponent == null)) {
+                throw new JkBuildParseException(
+                        where + " needs exactly one of `coordinate` (a Maven artifact) or"
+                                + " `sdk-component` (a provisioned SDK component)");
+            }
+            if (coordinate != null) Interpolation.validate(coordinate, schemaKeys, where);
+            if (sdkComponent != null) Interpolation.validate(sdkComponent, schemaKeys, where);
+            if (sdkPath != null && sdkComponent == null) {
+                throw new JkBuildParseException(where + ": sdk-path only applies to an sdk-component entry");
+            }
+            boolean transitive = Boolean.TRUE.equals(t.getBoolean("transitive"));
+            if (transitive && coordinate == null) {
+                throw new JkBuildParseException(where + ": transitive only applies to a coordinate entry");
+            }
             PluginManifest.Condition when = parseCondition(t, where);
             if (when instanceof PluginManifest.Condition.ClasspathHas) {
                 throw new JkBuildParseException(
                         where + ": classpath-has cannot gate a step-dependency (tool fetches are"
                                 + " decided from config/facts, not the resolved classpath)");
             }
-            stepDeps.add(new PluginManifest.StepDependency(artifact, coordinate, when));
+            stepDeps.add(new PluginManifest.StepDependency(artifact, coordinate, transitive, sdkComponent, sdkPath,
+                    when));
         }
 
-        return new PluginManifest.Contributions(platformDeps, compilerArgs, kotlinPlugins, packagerDeps, stepDeps);
+        List<PluginManifest.ProvidedClasspath> provided = new ArrayList<>();
+        for (TomlTable t : tableArray(contribute, "provided-classpath", displayPath)) {
+            String where = displayPath + ".contribute.provided-classpath";
+            String dependency = requireString(t, "dependency", where);
+            boolean declared = stepDeps.stream().anyMatch(sd -> sd.artifact().equals(dependency));
+            if (!declared) {
+                throw new JkBuildParseException(where + ": `" + dependency
+                        + "` does not name a declared [[contribute.step-dependency]] artifact");
+            }
+            provided.add(new PluginManifest.ProvidedClasspath(dependency, parseCondition(t, where)));
+        }
+
+        return new PluginManifest.Contributions(
+                platformDeps, compilerArgs, kotlinPlugins, packagerDeps, stepDeps, provided);
     }
 
     /**

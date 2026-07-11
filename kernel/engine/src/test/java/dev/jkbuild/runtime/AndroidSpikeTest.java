@@ -4,13 +4,9 @@ package dev.jkbuild.runtime;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import dev.jkbuild.cache.Cas;
-import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.lock.LockfileWriter;
-import dev.jkbuild.model.Coordinate;
-import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.Scope;
-import dev.jkbuild.repo.RepoGroup;
 import dev.jkbuild.run.Goal;
 import dev.jkbuild.run.GoalResult;
 import java.nio.file.Files;
@@ -35,41 +31,35 @@ import org.junit.jupiter.api.io.TempDir;
  */
 class AndroidSpikeTest {
 
-    private static final String PLATFORM_GROUP = "org.robolectric";
-    private static final String PLATFORM_ARTIFACT = "android-all";
-    private static final String PLATFORM_VERSION = "9-robolectric-4913185-2";
 
     @Test
     void hello_world_apk_via_the_android_plugin(@TempDir Path tmp) throws Exception {
         Path project = Files.createDirectories(tmp.resolve("hello"));
-        // A persistent CAS across runs — the platform jar is a one-time fetch.
+        // A persistent CAS + SDK root across runs — the platform is a one-time download.
         Path cache = Path.of(System.getProperty("user.dir"), "build", "android-spike-cache");
+        Path sdkRoot = Path.of(System.getProperty("user.dir"), "build", "android-spike-sdk");
+        System.setProperty(dev.jkbuild.androidsdk.AndroidSdk.ROOT_PROPERTY, sdkRoot.toString());
 
         writeProject(project);
 
-        // The compile classpath rides the lock (PROVIDED scope: javac sees the platform, the
-        // dex/runtime never does) — fetched into the CAS exactly as lock-plugins would.
-        JkBuild build = JkBuildParser.parse(project.resolve("jk.toml"));
+        // Accept the SDK licenses exactly as `jk android licenses --yes` does — the installer
+        // refuses to download otherwise (the gate the AndroidSdkTest covers in isolation).
+        var sdk = dev.jkbuild.androidsdk.AndroidSdk.resolve();
+        var installer = new dev.jkbuild.androidsdk.AndroidSdkInstaller(sdk);
+        if (!sdk.installed("platforms;android-28")) {
+            for (var license : installer.feed().licenses().entrySet()) {
+                sdk.recordLicense(
+                        license.getKey(), dev.jkbuild.androidsdk.AndroidRepoFeed.licenseHash(license.getValue()));
+            }
+        }
+
         Cas cas = new Cas(cache);
-        RepoGroup repos = RepoGroupBuilder.buildFor(build, null, cas);
-        var fetched = repos.tryFetchArtifact(Coordinate.of(PLATFORM_GROUP, PLATFORM_ARTIFACT, PLATFORM_VERSION))
-                .orElseThrow()
-                .fetched();
-        var platform = new Lockfile.Artifact(
-                PLATFORM_GROUP + ":" + PLATFORM_ARTIFACT,
-                PLATFORM_VERSION,
-                "central+https://repo.maven.apache.org/maven2/",
-                "sha256:" + fetched.sha256(),
-                null,
-                List.of(Scope.PROVIDED),
-                List.of(),
-                null,
-                null,
-                null);
+        // The platform is PROVIDED via the manifest's [[contribute.provided-classpath]] — the
+        // lock carries no platform artifact at all.
         LockfileWriter.write(
                 new Lockfile(
                         Lockfile.CURRENT_VERSION, "test", Lockfile.RESOLUTION_ALGORITHM, null, null,
-                        List.of(platform), List.of()),
+                        List.of(), List.of()),
                 project.resolve("jk.lock"));
 
         // The real declared pipeline, exactly as jk build assembles it.

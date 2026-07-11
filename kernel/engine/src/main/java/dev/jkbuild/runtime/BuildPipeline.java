@@ -631,6 +631,11 @@ public final class BuildPipeline {
                     // Lockfile + sibling jars + siblings' transitive lockfile deps — the
                     // exact classpath `jk explain` re-derives, so the action keys match.
                     List<Path> mainCp = mainCompileClasspath(lock, resolver, mainSiblings);
+                    // Plugin-contributed PROVIDED classpath (an Android platform jar): javac
+                    // sees it, runtime/packaging never do. Resolved through the same engine
+                    // fetch the steps use, so the compile action key fingerprints it.
+                    List<Path> contributedProvided = contributedProvidedClasspath(project, in, cas);
+                    mainCp.addAll(contributedProvided);
 
                     Profile profile = CompileSupport.resolveProfile(project.profiles(), in.profileName());
                     // Default lint (deprecation/unchecked) unless [build] lint = false;
@@ -672,6 +677,7 @@ public final class BuildPipeline {
                             /* best-effort */
                         }
                     }
+                    compileTestCp.addAll(contributedProvided);
                     ctx.put(COMPILE_TEST_CP, compileTestCp);
                     ctx.put(TEST_RUNTIME_CP, testRuntimeCp);
                     // Reuse source lists that the scope suppliers may have already walked.
@@ -2354,6 +2360,33 @@ public final class BuildPipeline {
      * jk-io). Shared by the {@code compile-main} phase and {@code jk explain} so their javac action
      * keys agree.
      */
+
+    /**
+     * The resolved paths of {@code [[contribute.provided-classpath]]} entries — declared
+     * step-dependency artifacts (an SDK platform jar) that join the COMPILE classpaths only.
+     */
+    private static List<Path> contributedProvidedClasspath(
+            dev.jkbuild.model.JkBuild project, Inputs in, dev.jkbuild.cache.Cas cas) {
+        List<String> names = dev.jkbuild.plugin.manifest.PluginContributions.providedClasspath(project, in.dir());
+        if (names.isEmpty()) return List.of();
+        try {
+            java.util.Map<String, Path> fetched = PluginBuild.fetchStepDependencies(project, in.dir(), cas);
+            List<Path> out = new ArrayList<>();
+            for (String name : names) {
+                Path path = fetched.get(name);
+                if (path == null) {
+                    throw new RuntimeException("[[contribute.provided-classpath]] names `" + name
+                            + "` but no step-dependency resolved under that artifact name");
+                }
+                out.add(path);
+            }
+            return out;
+        } catch (java.io.IOException | InterruptedException e) {
+            throw new RuntimeException("cannot resolve the plugin-contributed compile classpath: " + e.getMessage(),
+                    e);
+        }
+    }
+
     public static List<Path> mainCompileClasspath(
             Lockfile lock, ClasspathResolver resolver, WorkspaceClasspath.Result siblings) throws IOException {
         List<Path> cp = new ArrayList<>(resolver.classpathFor(lock, ClasspathResolver.COMPILE_MAIN));
