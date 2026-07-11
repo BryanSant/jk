@@ -369,6 +369,11 @@ public final class BuildPluginHarness {
         }
 
         @Override
+        public Optional<Path> stepOutput(String step) {
+            return Optional.ofNullable(spec.stepOutputs().get(step));
+        }
+
+        @Override
         public void label(String text) {
             out.emit("{\"t\":\"label\",\"text\":" + Ndjson.quote(text) + "}");
         }

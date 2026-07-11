@@ -1608,6 +1608,12 @@ public final class BuildPipeline {
             requires.add("copy-resources");
             if ("test".equals(step.after()) && !in.skipTests()) requires.add("run-tests");
         }
+        // A step consuming another step's output (In.stepOutput) runs after it — the edge
+        // that lets a chain like merge-manifest → aapt2-link order itself inside one anchor
+        // window (build-plugins SPI: declared inputs ARE the dependency graph).
+        for (String input : step.inputs()) {
+            if (input.startsWith("step:")) requires.add("plugin-" + input.substring("step:".length()));
+        }
         return Phase.builder("plugin-" + step.name())
                 .label(step.name())
                 .kind(PhaseKind.CPU)
@@ -1686,6 +1692,12 @@ public final class BuildPipeline {
                             .classpath(classpath);
                     for (var tool : toolExtras.entrySet()) {
                         specWriter.extra(tool.getKey(), tool.getValue());
+                    }
+                    for (String input : step.inputs()) {
+                        if (input.startsWith("step:")) {
+                            String other = input.substring("step:".length());
+                            specWriter.stepOutput(other, PluginBuild.stepScratch(layout, other));
+                        }
                     }
                     Path spec = specWriter.write();
                     try {

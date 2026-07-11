@@ -4,7 +4,6 @@ package dev.jkbuild.android;
 import dev.jkbuild.plugin.build.StepExec;
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -31,9 +30,10 @@ final class ResourceStep {
         Path aapt2 = extractAapt2(exec);
         Path platformJar = exec.requireExtra("android-jar");
         Path res = exec.moduleDir().resolve("res");
-        Path manifest = exec.moduleDir().resolve("AndroidManifest.xml");
+        // The android-manifest step already merged the app manifest (package + uses-sdk).
+        Path manifest = exec.requireStepOutput("android-manifest").resolve("merged/AndroidManifest.xml");
         if (!Files.isRegularFile(manifest)) {
-            throw new IllegalStateException("an [android] project needs an AndroidManifest.xml at the module root");
+            throw new IllegalStateException("android-manifest produced no merged manifest at " + manifest);
         }
         String namespace = exec.config().string("namespace");
         long compileSdk = exec.config().intValue("compile-sdk", 0);
@@ -42,10 +42,6 @@ final class ResourceStep {
         Path gen = exec.outputDir("gen");
         Path packaged = exec.outputDir("packaged");
         Path work = Files.createDirectories(exec.scratch().resolve("work"));
-
-        // AGP-9 namespace posture: the manifest may omit `package` — the [android] namespace is
-        // the source of truth; inject it for aapt2, which still requires the attribute.
-        Path effectiveManifest = manifestWithPackage(manifest, namespace, work);
 
         // aapt2 compile: res/** -> a container of .flat entries (skipped entirely when the
         // project declares no res dir — a manifest-only app is legal).
@@ -74,7 +70,7 @@ final class ResourceStep {
                 .arg("-I")
                 .arg(platformJar.toAbsolutePath().toString())
                 .arg("--manifest")
-                .arg(effectiveManifest.toAbsolutePath().toString())
+                .arg(manifest.toAbsolutePath().toString())
                 .arg("--java")
                 .arg(gen.toAbsolutePath().toString())
                 .arg("--custom-package")
@@ -118,19 +114,6 @@ final class ResourceStep {
         return out;
     }
 
-    /**
-     * The manifest aapt2 links: the project's, with {@code package="<namespace>"} injected when
-     * absent (string-level, spike-grade — the manifest-merger worker is android-plan Phase 2).
-     */
-    private static Path manifestWithPackage(Path manifest, String namespace, Path work) throws IOException {
-        String xml = Files.readString(manifest, StandardCharsets.UTF_8);
-        if (!xml.contains("package=")) {
-            xml = xml.replaceFirst("<manifest", "<manifest package=\"" + namespace + "\"");
-        }
-        Path effective = work.resolve("AndroidManifest.xml");
-        Files.writeString(effective, xml, StandardCharsets.UTF_8);
-        return effective;
-    }
 
     /** Every file under {@code dir} (sorted), for tools that want explicit file lists. */
     static List<Path> filesUnder(Path dir, String suffix) throws IOException {

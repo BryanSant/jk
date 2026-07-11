@@ -42,6 +42,16 @@ public interface StepExec {
      */
     java.util.Optional<Path> extra(String name);
 
+    /** A chained step's output root ({@link In#stepOutput} input); empty when it did not run. */
+    java.util.Optional<Path> stepOutput(String step);
+
+    /** As {@link #stepOutput} but required — a declared {@code In.stepOutput} is never absent. */
+    default Path requireStepOutput(String step) {
+        return stepOutput(step)
+                .orElseThrow(() -> new IllegalStateException("step output not provided: " + step
+                        + " — declare it with In.stepOutput(...)"));
+    }
+
     /** As {@link #extra}, throwing with the missing artifact id (for required tools). */
     default Path requireExtra(String name) {
         return extra(name)

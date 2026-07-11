@@ -78,11 +78,18 @@ class AndroidSpikeTest {
         Goal goal = BuildPipeline.coreBuilder(in).build();
 
         assertThat(goal.phases().stream().map(p -> p.name()))
-                .contains("plugin-android-res", "plugin-android-dex", "package-jar");
+                .contains("plugin-android-manifest", "plugin-android-res", "plugin-android-dex", "package-jar");
 
         GoalResult result = goal.run();
         assertThat(result.errors()).isEmpty();
         assertThat(result.success()).isTrue();
+
+        // manifest-merger ran: package + <uses-sdk> injected into the merged manifest.
+        Path merged = project.resolve("target/plugin/android-manifest/merged/AndroidManifest.xml");
+        assertThat(merged).exists();
+        assertThat(Files.readString(merged))
+                .contains("package=\"com.example.hello\"")
+                .contains("android:minSdkVersion=\"24\"");
 
         // R.java generated (before compile) and contributed to the source set.
         Path rJava = project.resolve("target/plugin/android-res/gen/com/example/hello/R.java");

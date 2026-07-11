@@ -18,6 +18,8 @@ import java.util.List;
  * android-plan.md Phase 1). Three registrations, all over the public SPI:
  *
  * <ul>
+ *   <li><b>android-manifest</b> step (before COMPILE) — Google's manifest-merger over the app
+ *       manifest: package from the {@code [android]} namespace, {@code <uses-sdk>} injected.
  *   <li><b>android-res</b> step (before COMPILE) — aapt2 compile + link over {@code res/} and
  *       {@code AndroidManifest.xml}: emits the binary resource package ({@code resources.ap_})
  *       and generates {@code R.java}, contributed to the compiler's source set.
@@ -45,10 +47,16 @@ public final class AndroidPlugin implements Plugin, BuildPlugin {
 
     @Override
     public void register(BuildPluginContext ctx) {
+        ctx.step(StepSpec.named("android-manifest")
+                .after(Anchor.RESOLVE)
+                .before(Anchor.COMPILE)
+                .inputs(In.projectFiles("AndroidManifest.xml"), In.config())
+                .outputs("merged")
+                .run(ManifestStep::run));
         ctx.step(StepSpec.named("android-res")
                 .after(Anchor.RESOLVE)
                 .before(Anchor.COMPILE)
-                .inputs(In.projectFiles("res"), In.projectFiles("AndroidManifest.xml"), In.config())
+                .inputs(In.projectFiles("res"), In.stepOutput("android-manifest"), In.config())
                 .outputs("gen", "packaged")
                 .contributesSources("gen")
                 .run(ResourceStep::run));

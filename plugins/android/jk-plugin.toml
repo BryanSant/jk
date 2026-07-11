@@ -44,6 +44,13 @@ coordinate = "com.android.tools.build:aapt2:8.7.3-12006047:${host.os}"
 artifact   = "r8"
 coordinate = "com.android.tools:r8:8.5.35"
 
+# manifest-merger is a JVM library with a real dependency graph — the transitive closure
+# materializes as a lib dir the step forks `java -cp` over. 31.7.3 = the AGP-8.7.x tools line.
+[[contribute.step-dependency]]
+artifact   = "manifest-merger"
+coordinate = "com.android.tools.build:manifest-merger:31.7.3"
+transitive = true
+
 # The platform jar: aapt2 -I (framework resources), javac (via provided-classpath below),
 # d8 --lib. Provisioned from Google's repository2 feed into the managed SDK root — reusing
 # an existing $ANDROID_HOME/Studio SDK when one is discovered (android-plan §3.2).
