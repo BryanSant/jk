@@ -4,7 +4,6 @@ package dev.jkbuild.command;
 import dev.jkbuild.jdk.GlobalDefaultJdk;
 import dev.jkbuild.jdk.JdkRegistry;
 import dev.jkbuild.jdk.JdkVendor;
-import dev.jkbuild.lock.LockfileReader;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -63,21 +62,23 @@ public final class JkEnv {
      */
     public Target resolve(Path cwd) throws IOException {
         var root = findProjectRoot(cwd);
+        // Shell-hook fast path (docs/thin-client-plan.md): this resolve runs on EVERY
+        // prompt — no engine call, no tomlj parse. TomlScan reads exactly the scalars the
+        // JDK resolution chain needs; anything it can't see reads as absent (fail-soft,
+        // same as an unparseable jk.toml before).
         String lockId = lockJdkId(root);
         String projectJdk = null;
         String projectGraal = null;
         int javaRelease = 0;
         if (root.isPresent()) {
-            try {
-                var build = dev.jkbuild.config.JkBuildParser.parse(root.get().resolve("jk.toml"));
-                if (build.project() != null) {
-                    projectJdk = build.project().jdk();
-                    projectGraal = build.graal();
-                    javaRelease = build.project().javaRelease();
-                }
-            } catch (Exception ignored) {
-                // unparseable / unreadable jk.toml — fail soft
-            }
+            var scan = dev.jkbuild.config.TomlScan.scan(
+                    root.get().resolve("jk.toml"), "project.jdk", "project.java", "native.graal");
+            projectJdk = scan.get("project.jdk");
+            javaRelease = scan.getInt("project.java", 0);
+            // [native] present without an explicit graal spec defaults to "graalvm" —
+            // mirror JkBuildParser.parseNativeConfig.
+            projectGraal = scan.get("native.graal");
+            if (projectGraal == null && scan.hasSection("native")) projectGraal = "graalvm";
         }
         var req = new dev.jkbuild.jdk.JdkResolution.Request(
                 root.orElse(cwd), /*switch*/
@@ -99,12 +100,10 @@ public final class JkEnv {
         if (root.isEmpty()) return null;
         var lockPath = root.get().resolve("jk.lock");
         if (!Files.isRegularFile(lockPath)) return null;
-        try {
-            String id = LockfileReader.read(lockPath).jdk();
-            return (id == null || id.isBlank()) ? null : id;
-        } catch (Exception e) {
-            return null; // corrupt/unreadable lockfile — fail soft
-        }
+        // Line scan, not LockfileReader: the lockfile can be large and this runs per prompt;
+        // its top-level `jdk` scalar sits in the machine-written header.
+        String id = dev.jkbuild.config.TomlScan.scan(lockPath, "jdk").get("jdk");
+        return (id == null || id.isBlank()) ? null : id;
     }
 
     /**

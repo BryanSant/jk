@@ -37,6 +37,14 @@ legitimately stays in the client:
   exists; moves off tomlj onto a scanner for our own flat format (Milestone C).
 - The URL trust gate (`trusted-sources.toml`) — deliberately evaluated client-side on the
   exact string the user typed, before anything is asked to fetch.
+- **The `jk activate` shell hook — a hard latency contract.** `jk hook-env` runs on every
+  prompt; engine calls (let alone spawning a not-yet-running engine) are an explicit
+  anti-goal there. The hook resolves JAVA_HOME/PATH via `TomlScan` — an early-stopping
+  line scanner reading only `[project] jdk/java`, `[native] graal`, and the lockfile's
+  header `jdk` — zero engine round trips, zero tomlj parses. Verified: the hook emits
+  correct env with the engine fully stopped, and does not start one. Remaining on this
+  path: `GlobalDefaultJdk`'s config-file fallback (symlink fast path already avoids it
+  per-prompt) converts with the rest of the config family in Milestone C.
 
 ## 2. The two new protocol shapes
 
