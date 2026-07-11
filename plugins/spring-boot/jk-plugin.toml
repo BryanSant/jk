@@ -13,6 +13,21 @@ table     = "spring-boot"
 version   = "1.0.0"
 jk-compat = ">=0.10"
 
+# The code layer (P3): the worker jar carrying the spring-aot step and boot-jar packager
+# bodies — forked by the engine, never classloaded into it.
+[code]
+worker = "jk-spring-boot"
+
+# The packager's static artifact descriptor (plan §3.3): run/install/image/aot-cache consult
+# these flags instead of framework-presence branches — no plugin code executes to answer them.
+[packaging]
+packager       = "boot-jar"    # replaces the main artifact
+exec-mode      = "jar"         # the produced jar is the self-contained executable
+self-contained = true          # install links one artifact, no dependency jars
+classes-run    = true          # run/dev exec from classes (BOOT-INF nesting isn't classpath-able)
+main-scan      = true          # a unique main may be discovered by scanning compiled classes
+layered-image  = true          # images split release/snapshot dep layers + exploded classes
+
 [schema]
 version       = { type = "string", required = true, example = "4.0.0", hint = "it pins the spring-boot-dependencies BOM, loader, and AOT tooling" }
 aot           = { type = "bool" }                          # tri-state: absent = auto (on when [native] is declared)
@@ -48,3 +63,14 @@ id         = "org.jetbrains.kotlin.noarg"
 coordinate = "org.jetbrains.kotlin:kotlin-noarg-compiler-plugin-embeddable:${kotlin.version}"
 options    = ["preset=jpa"]
 when       = { classpath-has = "jakarta.persistence:jakarta.persistence-api" }
+
+# Artifacts the boot-jar packager needs beyond the project's own dependencies — fetched
+# engine-side (version-locked to the declared Boot line), handed to the worker by name.
+[[contribute.packager-dependency]]
+artifact   = "spring-boot-loader"
+coordinate = "org.springframework.boot:spring-boot-loader:${config.version}"
+
+[[contribute.packager-dependency]]
+artifact   = "spring-boot-jarmode-tools"
+coordinate = "org.springframework.boot:spring-boot-jarmode-tools:${config.version}"
+when       = { config = "include-tools", equals = "true" }

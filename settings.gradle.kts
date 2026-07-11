@@ -105,6 +105,7 @@ include(
     ":compat-bridge",  // was :compat-runner
     ":git-client",     // was :git-runner
     ":formatter",      // jk format — Spotless-wrapped Java/Kotlin formatter
+    ":spring-boot",    // spring-boot build plugin (AOT step + boot-jar packager)
     // Host + CLI
     ":engine-api",
     ":engine",
@@ -133,3 +134,4 @@ project(":image-builder").projectDir  = file("plugins/image-builder")
 project(":compat-bridge").projectDir  = file("plugins/compat-bridge")
 project(":git-client").projectDir     = file("plugins/git-client")
 project(":formatter").projectDir      = file("plugins/formatter")
+project(":spring-boot").projectDir    = file("plugins/spring-boot")

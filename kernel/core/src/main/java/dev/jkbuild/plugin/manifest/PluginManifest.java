@@ -24,7 +24,9 @@ public record PluginManifest(
         String version,
         String jkCompat,
         Map<String, SchemaKey> schema,
-        Contributions contributions) {
+        Contributions contributions,
+        Code code,
+        Packaging packaging) {
 
     public PluginManifest {
         Objects.requireNonNull(id, "id");
@@ -35,6 +37,47 @@ public record PluginManifest(
         contributions = contributions == null ? Contributions.NONE : contributions;
     }
 
+    /** Back-compat: a purely declarative manifest (no code layer, no packaging shape). */
+    public PluginManifest(
+            String id,
+            String table,
+            String version,
+            String jkCompat,
+            Map<String, SchemaKey> schema,
+            Contributions contributions) {
+        this(id, table, version, jkCompat, schema, contributions, null, null);
+    }
+
+    /**
+     * The {@code [code]} table: the plugin ships a worker jar carrying step/packager bodies
+     * (build-plugins plan §3.2/3.3). {@code worker} is the jar's artifactId ({@code
+     * dev.jkbuild:<worker>} for first-party plugins).
+     */
+    public record Code(String worker) {}
+
+    /**
+     * The {@code [packaging]} table — the packager's static artifact descriptor (plan §3.3):
+     * what run/install/image/aot-cache consult INSTEAD of framework-presence branches, readable
+     * without executing plugin code.
+     *
+     * @param packager the code packager's name replacing the main artifact (null = none)
+     * @param execMode {@code jar} (self-contained executable jar), {@code classpath}, or {@code binary}
+     * @param selfContained install links one artifact, no dependency jars
+     * @param classesRun run/dev exec from the classes dir (the packaged layout is not
+     *     classpath-able, e.g. Boot's BOOT-INF nesting)
+     * @param mainScan the entry point may be discovered by scanning compiled classes when the
+     *     project declares none
+     * @param layeredImage container images split release/snapshot dependency layers and explode
+     *     app classes
+     */
+    public record Packaging(
+            String packager,
+            String execMode,
+            boolean selfContained,
+            boolean classesRun,
+            boolean mainScan,
+            boolean layeredImage) {}
+
     /**
      * The declarative layer's build contributions (plan §3.1): pure data evaluated engine-side
      * with zero plugin code — BOM auto-import, default compiler args, Kotlin compiler plugins.
@@ -44,20 +87,40 @@ public record PluginManifest(
     public record Contributions(
             List<PlatformDependency> platformDependencies,
             List<CompilerArgs> compilerArgs,
-            List<KotlinPlugin> kotlinPlugins) {
+            List<KotlinPlugin> kotlinPlugins,
+            List<PackagerDependency> packagerDependencies) {
 
-        public static final Contributions NONE = new Contributions(List.of(), List.of(), List.of());
+        public static final Contributions NONE = new Contributions(List.of(), List.of(), List.of(), List.of());
 
         public Contributions {
             platformDependencies = platformDependencies == null ? List.of() : List.copyOf(platformDependencies);
             compilerArgs = compilerArgs == null ? List.of() : List.copyOf(compilerArgs);
             kotlinPlugins = kotlinPlugins == null ? List.of() : List.copyOf(kotlinPlugins);
+            packagerDependencies = packagerDependencies == null ? List.of() : List.copyOf(packagerDependencies);
+        }
+
+        /** Back-compat: the P2 contribution set (no packager dependencies). */
+        public Contributions(
+                List<PlatformDependency> platformDependencies,
+                List<CompilerArgs> compilerArgs,
+                List<KotlinPlugin> kotlinPlugins) {
+            this(platformDependencies, compilerArgs, kotlinPlugins, List.of());
         }
 
         public boolean isEmpty() {
-            return platformDependencies.isEmpty() && compilerArgs.isEmpty() && kotlinPlugins.isEmpty();
+            return platformDependencies.isEmpty()
+                    && compilerArgs.isEmpty()
+                    && kotlinPlugins.isEmpty()
+                    && packagerDependencies.isEmpty();
         }
     }
+
+    /**
+     * {@code [[contribute.packager-dependency]]} — an extra artifact the packager needs (Boot's
+     * loader, jarmode-tools), fetched engine-side and handed to the packager by {@code artifact}
+     * name. Fetch-only: never injected into the project's dependency graph.
+     */
+    public record PackagerDependency(String artifact, String coordinate, Condition when) {}
 
     /**
      * {@code [[contribute.platform-dependency]]}: a BOM-style platform-scope dependency,

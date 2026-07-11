@@ -56,7 +56,39 @@ public final class PluginManifests {
             }
         }
         PluginManifest.Contributions contributions = parseContributions(result, schema.keySet(), displayPath);
-        return new PluginManifest(id, table, version, jkCompat, schema, contributions);
+        PluginManifest.Code code = parseCode(result, displayPath);
+        PluginManifest.Packaging packaging = parsePackaging(result, displayPath);
+        return new PluginManifest(id, table, version, jkCompat, schema, contributions, code, packaging);
+    }
+
+    /** The {@code [code]} table — the plugin's worker jar carrying step/packager bodies (P3). */
+    private static PluginManifest.Code parseCode(TomlParseResult result, String displayPath) {
+        TomlTable code = result.getTable("code");
+        if (code == null) return null;
+        String worker = code.getString("worker");
+        if (worker == null || worker.isBlank()) {
+            throw new JkBuildParseException(displayPath + ".code.worker is required (the worker jar's artifactId)");
+        }
+        return new PluginManifest.Code(worker);
+    }
+
+    /** The {@code [packaging]} table — the packager's static artifact descriptor (plan §3.3). */
+    private static PluginManifest.Packaging parsePackaging(TomlParseResult result, String displayPath) {
+        TomlTable packaging = result.getTable("packaging");
+        if (packaging == null) return null;
+        String execMode = packaging.getString("exec-mode");
+        if (execMode == null) execMode = "classpath";
+        if (!List.of("jar", "classpath", "binary").contains(execMode)) {
+            throw new JkBuildParseException(
+                    displayPath + ".packaging.exec-mode must be jar, classpath, or binary — got: " + execMode);
+        }
+        return new PluginManifest.Packaging(
+                packaging.getString("packager"),
+                execMode,
+                Boolean.TRUE.equals(packaging.getBoolean("self-contained")),
+                Boolean.TRUE.equals(packaging.getBoolean("classes-run")),
+                Boolean.TRUE.equals(packaging.getBoolean("main-scan")),
+                Boolean.TRUE.equals(packaging.getBoolean("layered-image")));
     }
 
     // ---- [[contribute.*]] — the declarative layer (P2) --------------------------------------
@@ -103,7 +135,22 @@ public final class PluginManifests {
             kotlinPlugins.add(new PluginManifest.KotlinPlugin(id, coordinate, options, parseCondition(t, where)));
         }
 
-        return new PluginManifest.Contributions(platformDeps, compilerArgs, kotlinPlugins);
+        List<PluginManifest.PackagerDependency> packagerDeps = new ArrayList<>();
+        for (TomlTable t : tableArray(contribute, "packager-dependency", displayPath)) {
+            String where = displayPath + ".contribute.packager-dependency";
+            String artifact = requireString(t, "artifact", where);
+            String coordinate = requireString(t, "coordinate", where);
+            Interpolation.validate(coordinate, schemaKeys, where);
+            PluginManifest.Condition when = parseCondition(t, where);
+            if (when instanceof PluginManifest.Condition.ClasspathHas) {
+                throw new JkBuildParseException(
+                        where + ": classpath-has cannot gate a packager-dependency (fetch decisions"
+                                + " precede packaging classpath evaluation)");
+            }
+            packagerDeps.add(new PluginManifest.PackagerDependency(artifact, coordinate, when));
+        }
+
+        return new PluginManifest.Contributions(platformDeps, compilerArgs, kotlinPlugins, packagerDeps);
     }
 
     /**

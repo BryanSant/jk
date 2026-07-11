@@ -29,6 +29,9 @@ public interface StepExec {
     /** Read-only project facts (coords, resolved main, capability flags). */
     ProjectFacts project();
 
+    /** The module's project dir — working directory for tool forks that read project files. */
+    Path moduleDir();
+
     /** The scratch root the step's declared output dirs resolve under. */
     Path scratch();
 

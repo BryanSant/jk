@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-package dev.jkbuild.compile;
+package dev.jkbuild.boot;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -43,7 +43,7 @@ import java.util.zip.ZipEntry;
  *                                 snapshot-dependencies / application
  * </pre>
  *
- * <p>Reproducibility mirrors {@link JarPackager}: sorted entries within each section, fixed
+ * <p>Reproducibility mirrors jk's plain JarPackager: sorted entries within each section, fixed
  * timestamps, a manifest containing only what we set.
  */
 public final class BootJarPackager {

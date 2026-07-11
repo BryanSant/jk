@@ -186,6 +186,7 @@ public final class BuildPluginHarness {
             PluginConfig config,
             ProjectFacts project,
             Path classesDir,
+            Path moduleDir,
             Path scratch,
             Path javaHome,
             Path artifactPath,
@@ -208,6 +209,7 @@ public final class BuildPluginHarness {
             boolean kotlin = false;
             Map<String, String> manifest = new LinkedHashMap<>();
             Path classesDir = null;
+            Path moduleDir = null;
             Path scratch = null;
             Path javaHome = null;
             Path artifactPath = null;
@@ -249,6 +251,8 @@ public final class BuildPluginHarness {
                     case "layout" -> {
                         String classes = Ndjson.str(line, "classesDir");
                         if (classes != null) classesDir = Path.of(classes);
+                        String module = Ndjson.str(line, "moduleDir");
+                        if (module != null) moduleDir = Path.of(module);
                         String scratchDir = Ndjson.str(line, "scratch");
                         if (scratchDir != null) scratch = Path.of(scratchDir);
                     }
@@ -277,8 +281,8 @@ public final class BuildPluginHarness {
             ProjectFacts facts =
                     new ProjectFacts(group, name, version, javaRelease, mainClass, nativeDeclared, kotlin, manifest);
             return new Spec(
-                    op, stepName, config, facts, classesDir, scratch, javaHome, artifactPath, classpath, entries,
-                    stepOutputs, extras);
+                    op, stepName, config, facts, classesDir, moduleDir, scratch, javaHome, artifactPath, classpath,
+                    entries, stepOutputs, extras);
         }
     }
 
@@ -303,6 +307,11 @@ public final class BuildPluginHarness {
         @Override
         public ProjectFacts project() {
             return spec.project();
+        }
+
+        @Override
+        public Path moduleDir() {
+            return spec.moduleDir();
         }
 
         @Override
