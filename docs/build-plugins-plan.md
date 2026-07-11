@@ -390,6 +390,28 @@ publishing — a build plugin decorates the pipeline, it does not replace the ke
 - **`[[sdk]]` lock entries** pin provisioned-SDK component revisions (lock-sdk phase);
   step-dependency resolution verifies pins and reports drift.
 
+Android Phase 3 (release) additions — all generic, none Android-special-cased:
+
+- **Sub-schemas + sub-tables** (`[sub-schema.<name>]`, `[sub-tables.<t>]`): typed nested
+  table groups on a plugin's own table, schema-validated into `PluginConfig` nested maps.
+- **Variant axes** (build-plugins §3.1 realized): a sub-table group may declare
+  `variant-axis` (+ `built-in`, `default`, `dimensioned` for flavor dimensions);
+  `Variants.apply` folds the selection into ONE flat effective config at parse time, so
+  describe keys, contribution predicates, step/packager action keys,
+  `[[packaging.variant]]`, and worker specs are all variant-correct with zero variant
+  awareness. The selection rides requests as a compact selector
+  (`EngineProtocol.withVariant` — the jvm-tuning suffix pattern); `jk build --release`.
+- **Secrets side channel**: `secret = true` sub-schema keys + `env:` indirection resolve
+  client-side (`ProjectInfo.envRefs` names them; the shell env rides the request — the
+  publish posture) and travel only into PACKAGE specs (`PackageIo.secret(key)`); action
+  keys carry a digest, never plaintext; describe/step specs and logs never see them.
+- **Packagers receive step-dependency tools** (the same artifacts verbs get) — an AAB
+  packager forks bundletool exactly like a step forks aapt2; packager-dependencies win
+  name collisions.
+- **Packager action keys fingerprint container content and `project:` inputs** — an
+  assets-only AAR bump or a module `assets/` edit re-packages; before this, only entry
+  JARS were keyed.
+
 ## 5. Risks & open questions
 
 - **Manifest DSL creep.** The closed predicate set will attract feature requests

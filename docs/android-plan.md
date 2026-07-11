@@ -1,6 +1,7 @@
 # Android on jk — gap analysis & plan
 
-**Status:** PHASE 1 LANDED (2026-07-11, worktree-android-plugin: 0a0cee71, 823c3bd4,
+**Status:** PHASES 1–3 LANDED (2026-07-11, worktree-android-plugin; Phase-3 status below).
+Phase 1 (0a0cee71, 823c3bd4,
 654c5133 — on top of the P6 spike). `plugins/android` builds and deploys a hello-world
 APK over the public SPI, zero Android-specific engine code:
 - **SDK provisioning (§3.2)**: AndroidSdk root (reuses $ANDROID_HOME/Studio via symlink;
@@ -18,12 +19,67 @@ APK over the public SPI, zero Android-specific engine code:
 - **jk run onto a device**: [packaging] deploy-verb — the exec plan carries it and the
   client dispatches the plugin's deploy verb (adb install -r + am start on the launcher
   activity; adb from provisioned platform-tools; --adb overrides).
-Honest gaps: the exit's "installs and launches" ran against a scripted fake adb (no
-device in this environment — a live `adb devices` run is the outstanding proof);
-SDK component *revisions* are not yet pinned in jk.lock (platforms;android-N is
-name-pinned; platform-tools floats to the feed's stable revision — pin when the lock
-grows an SDK section); `jk dev` redeploy is Phase 2. Companion research:
-[android-gradle.md](./android-gradle.md).
+Phase-1 honest gap (still open): the exit's "installs and launches" ran against a
+scripted fake adb — a live `adb devices` run is the outstanding proof.
+
+**PHASE 2 LANDED** (2026-07-11: 1702e086, 57286fa1, bb8e2ee5, c2549fb8). Real app shape:
+- **AAR consumption, resolver-owned**: effective-POM `packaging` decides the fetch (the
+  lock records the real file name; `Artifact.coordinate()` honors it everywhere);
+  `ExplodedArchives` materializes content-addressed exploded views keyed by archive SHA;
+  `ClasspathResolver.Entry` grew a `container` and substitutes `classes.jar` on
+  classpaths. Workspace `[android] library` AARs ride the same shape (the AAR packager
+  emits the conventional classes jar next to the `.aar`, one action key).
+- **Non-transitive R end to end**: dep res dirs compile individually and link in
+  classpath order under the app's overlay (`-R --auto-add-overlay`, app wins); the app
+  regenerates each dep's `R` from its `R.txt` with the final link ids; libraries link
+  `--non-final-ids`, ship `R.txt`, and exclude `R*.class` from `classes.jar` — AGP's
+  exact contract. Proven against androidx.core from real Google Maven
+  (AndroidRemoteAarTest) and a two-module workspace (AndroidWorkspaceTest).
+- **Compose**: a config-gated `[[contribute.kotlin-plugin]]` (zero new SPI) adds the
+  embeddable Compose compiler at `${kotlin.version}`. **BuildConfig**: explicit
+  `build-config = true` codegen step. **`jk dev` redeploy**: dev plans carry the deploy
+  verb + src/res/manifest watch roots; the client loop rebuilds and re-dispatches.
+- **SDK revisions pinned**: `[[sdk]]` lock entries (lock-sdk phase; drift reported).
+Phase-2 honest gaps: a live `@Composable` e2e compile (constituents proven; lands with
+Phase 4's Kotlin work), app-module R narrowing (dep Rs are correctly scoped; the app's
+own R still carries merged symbols).
+
+**PHASE 3 LANDED** (2026-07-11: 3edaa240, 1a39f733 + acceptance/docs). Release:
+- **Variants as computed parameterizations** (§3.1): generic manifest machinery
+  (sub-schemas, variant axes, dimensioned flavors — build-plugins §3.1) folds the
+  selected overlays into ONE flat effective config at parse time; `jk build --release`
+  (+ `--build-type`/`--flavor`) rides requests as a compact selector. Precedence
+  base < flavors < build-type (AGP's); `build-type`/`flavor` inject for
+  `[[packaging.variant]]` conditions. Variant-separated caching falls out of config
+  keying.
+- **R8 full mode** replaces d8 when minifying (release default ON): whole-program
+  against the platform, keep rules = plugin baseline + aapt2 `--proguard` (the res link
+  always emits them now) + AAR consumer rules + declared `proguard-files` (each a keyed
+  project-file input); `mapping/seeds/usage` → `target/r8/`. Stripping + keeps proven in
+  AndroidReleaseTest (usage lists the dead class; seeds carry the activity + rule-kept).
+- **Signing configs** (§3.1): `[android.signing.<name>]` with `env:` indirection;
+  passwords are `secret = true` sub-schema keys riding the secrets side channel (client
+  shell env resolves them — ProjectInfo.envRefs names what to resolve; never in tokens,
+  describe payloads, or logs; action keys carry a digest). APK: apksig v1+v2+v3
+  release / v1+v2 debug. AAB: jarsigner (apksig schemes are APK-only).
+- **AAB via bundletool** (§3.3): release links twice (binary + `--proto-format`); the
+  aab packager lays out base/ (proto manifest, resources.pb, res, dex, merged assets,
+  AAR jni → lib/) and forks `build-bundle` over the transitive closure;
+  `bundletool validate` + `build-apks --mode=universal` both accept the result
+  (AndroidReleaseTest, real tools). The deploy verb detects `.aab` and installs the
+  universal APK (own aapt2 + debug keystore).
+- **AAR assets/jni fold** into APK and AAB (module assets win; `.so` STORED — apksig
+  page-aligns).
+- **docs/android-studio-plan.md** written (the §5 gate): ASwB-modeled project-system
+  plugin over the engine's HTTP surface, phases S0–S4.
+Phase-3 honest gaps: **optimized resource shrinking is NOT wired** — r8 8.5.35 ships
+only the deprecated programmatic `ResourceShrinker` (no CLI; the real shrinker CLI is
+AGP-internal). Wire it when jk moves to an r8 line with `--android-resources` support,
+or adopt the standalone shrinker artifact. Flavor artifacts share the debug/release
+file naming (same extension → a flavor switch overwrites; per-variant output dirs are
+Phase-4 polish). `jk run`/`jk dev` of a release build deploy via the verb but the
+run/dev EXEC PLAN paths stay debug-shaped. v3 key rotation schema'd, not wired.
+Companion research: [android-gradle.md](./android-gradle.md).
 **Goal:** build, test, and ship a modern Android app (Compose-first, AGP-9-era baselines:
 compileSdk 37, minSdk 24+, Kotlin 2.3+, R8 full mode, AAB) with **no Gradle and no AGP**.
 North star acceptance: **jk builds Now in Android** (`android/nowinandroid`) — Google's
