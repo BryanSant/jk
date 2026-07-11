@@ -101,6 +101,7 @@ public final class Variants {
             Map<String, Map<String, Map<String, Object>>> dims = config.dimensionedGroup(axis.table());
             for (Map.Entry<String, Map<String, Map<String, Object>>> dim : dims.entrySet()) {
                 String chosen = selection.flavors().get(dim.getKey());
+                if (chosen == null) chosen = selection.flavors().get("*"); // bare --flavor <name>
                 if (chosen == null) {
                     throw new JkBuildParseException("[" + manifest.table() + "." + axis.table() + "."
                             + dim.getKey() + "] declares flavors " + dim.getValue().keySet()

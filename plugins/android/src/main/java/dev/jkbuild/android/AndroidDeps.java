@@ -94,6 +94,27 @@ final class AndroidDeps {
         }
     }
 
+    /** Extract the per-OS aapt2 binary from its Maven wrapper jar into {@code destDir}. */
+    static Path extractAapt2(Path aapt2Jar, Path destDir) throws IOException {
+        boolean windows = System.getProperty("os.name", "").toLowerCase(java.util.Locale.ROOT).contains("win");
+        String binaryName = windows ? "aapt2.exe" : "aapt2";
+        Path out = Files.createDirectories(destDir).resolve(binaryName);
+        try (java.util.zip.ZipFile zip = new java.util.zip.ZipFile(aapt2Jar.toFile())) {
+            var entry = zip.getEntry(binaryName);
+            if (entry == null) {
+                throw new IOException("no " + binaryName + " inside " + aapt2Jar.getFileName()
+                        + " — wrong classifier for this OS?");
+            }
+            try (var in = zip.getInputStream(entry)) {
+                Files.copy(in, out, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            }
+        }
+        if (!out.toFile().setExecutable(true) && !Files.isExecutable(out)) {
+            throw new IOException("cannot mark " + out + " executable");
+        }
+        return out;
+    }
+
     /**
      * Copy the R8 retrace artifacts ({@code mapping.txt}, {@code seeds.txt}, {@code usage.txt})
      * from the step's cached scratch to the module's stable {@code target/r8/} — the path release

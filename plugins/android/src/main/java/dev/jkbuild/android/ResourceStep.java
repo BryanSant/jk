@@ -243,25 +243,7 @@ final class ResourceStep {
 
     /** Extract the per-OS aapt2 binary from its Maven wrapper jar into the step scratch. */
     private static Path extractAapt2(StepExec exec) throws IOException {
-        Path jar = exec.requireExtra("aapt2");
-        boolean windows = System.getProperty("os.name", "").toLowerCase(java.util.Locale.ROOT).contains("win");
-        String binaryName = windows ? "aapt2.exe" : "aapt2";
-        Path out = exec.scratch().resolve("tools").resolve(binaryName);
-        Files.createDirectories(out.getParent());
-        try (ZipFile zip = new ZipFile(jar.toFile())) {
-            ZipEntry entry = zip.getEntry(binaryName);
-            if (entry == null) {
-                throw new IOException("no " + binaryName + " inside " + jar.getFileName()
-                        + " — wrong classifier for this OS?");
-            }
-            try (InputStream in = zip.getInputStream(entry)) {
-                Files.copy(in, out, StandardCopyOption.REPLACE_EXISTING);
-            }
-        }
-        if (!out.toFile().setExecutable(true) && !Files.isExecutable(out)) {
-            throw new IOException("cannot mark " + out + " executable");
-        }
-        return out;
+        return AndroidDeps.extractAapt2(exec.requireExtra("aapt2"), exec.scratch().resolve("tools"));
     }
 
     /** Every file under {@code dir} (sorted), for tools that want explicit file lists. */

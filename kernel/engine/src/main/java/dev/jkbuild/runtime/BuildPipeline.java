@@ -1814,7 +1814,12 @@ public final class BuildPipeline {
             sbomComponents.add(new CycloneDxSbom.Component(
                     a.moduleGroup(), a.moduleArtifact(), a.version(), a.checksumHex()));
         }
-        java.util.Map<String, Path> extras = PluginBuild.fetchPackagerDependencies(project, in.dir(), cas);
+        // Packagers get the packager-dependency artifacts AND the step-dependency tools (the
+        // same artifacts verbs receive — an AAB packager forks bundletool exactly like a step
+        // forks aapt2). A packager-dependency wins a name collision.
+        java.util.Map<String, Path> extras = new LinkedHashMap<>(
+                PluginBuild.fetchStepDependencies(project, in.dir(), cas, PluginBuild.sdkPins(in.lockFile())));
+        extras.putAll(PluginBuild.fetchPackagerDependencies(project, in.dir(), cas));
 
         // Action key from the declared inputs + facts — any config, classes, dependency-set,
         // step-output, extra-artifact, or manifest change re-packages; nothing else does.
