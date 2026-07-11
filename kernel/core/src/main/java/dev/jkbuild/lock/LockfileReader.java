@@ -119,8 +119,9 @@ public final class LockfileReader {
         TomlArray scopesArray = table.getArray("scopes");
         if (scopesArray != null) {
             for (int i = 0; i < scopesArray.size(); i++) {
-                String name2 = scopesArray.getString(i);
-                scopes.add(Scope.valueOf(name2.toUpperCase()));
+                // fromCanonical, not valueOf: hyphenated scopes ("test-dev") don't
+                // uppercase into enum constant names.
+                scopes.add(Scope.fromCanonical(scopesArray.getString(i)));
             }
         }
         if (scopes.isEmpty()) {

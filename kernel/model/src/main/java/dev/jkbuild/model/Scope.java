@@ -47,4 +47,16 @@ public enum Scope {
     public String tomlSection() {
         return tomlSection;
     }
+
+    /**
+     * Resolve a scope from its {@link #canonical()} name — the form persisted in {@code jk.lock}.
+     * {@code valueOf(name.toUpperCase())} breaks on hyphenated canonicals ({@code "test-dev"} is
+     * {@code TEST_DEV}); this is the single reverse mapping.
+     */
+    public static Scope fromCanonical(String canonical) {
+        for (Scope s : values()) {
+            if (s.canonical.equals(canonical)) return s;
+        }
+        throw new IllegalArgumentException("unknown scope: " + canonical);
+    }
 }

@@ -163,9 +163,15 @@ public final class TreeCommand implements CliCommand {
      */
     private static Scope coerceScope(String token) {
         try {
-            return Scope.valueOf(token.toUpperCase(Locale.ROOT));
+            // fromCanonical handles hyphenated scopes ("test-dev"); fall back to the
+            // enum-name form ("TEST_DEV") for users typing underscores.
+            return Scope.fromCanonical(token.toLowerCase(Locale.ROOT));
         } catch (IllegalArgumentException e) {
-            return null;
+            try {
+                return Scope.valueOf(token.toUpperCase(Locale.ROOT));
+            } catch (IllegalArgumentException e2) {
+                return null;
+            }
         }
     }
 

@@ -243,6 +243,18 @@ latency is bounded by javac on the delta, with no Gradle configuration phase in 
    `--aot-cache` JEP 514 packaging ladder.
 4. **Dev loop** — `jk dev` tiers 1–2; `jk new --spring`; `jk import` Boot translation;
    migration doc ("Boot on jk" with the parity table).
+   **CORE DONE (2026-07-10).** `jk dev` ships general-purpose: watch → engine
+   incremental recompile → DevTools hot-restart when devtools is on the RUN classpath,
+   plain process restart otherwise (both verified live). `jk new --spring` scaffolds a
+   runnable Boot app (BOM table, versionless starter, devtools, controller + test) —
+   new → build → run → serves. `jk import` translates Boot Gradle builds: plugin
+   version → `[spring-boot]`, versionless coords → platform-managed, developmentOnly /
+   testAndDevelopmentOnly → dev / test-dev scopes; an imported webmvc+data-jdbc build
+   locks, builds, and serves. Deferred: dev-loop tier 2 (auto-injected devtools),
+   Kotlin `--spring` (needs the kotlin-spring compiler plugin), the migration doc.
+   (The import exercise flushed out and fixed: a PubGrub infinite-derive loop on
+   NoVersions conflicts, exact-declaration-beats-BOM semantics, and the jk.lock
+   round-trip of hyphenated scope names.)
 
 ## 5. Risks & open questions
 
