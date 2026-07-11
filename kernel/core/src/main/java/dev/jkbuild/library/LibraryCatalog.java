@@ -16,8 +16,6 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
-import org.tomlj.Toml;
-import org.tomlj.TomlParseResult;
 import org.tomlj.TomlTable;
 
 /**
@@ -269,18 +267,73 @@ public final class LibraryCatalog {
         }
     }
 
-    /** Parse an [libraries] table from TOML source. */
+    /**
+     * Parse a {@code [libraries]} table from catalog TOML source. A line scanner, not tomlj: the
+     * catalog files (bundled resource, {@code ~/.jk/libs.toml}, the downloaded layer) are a
+     * jk-owned flat format — {@code name = "group:artifact"} — and this parse runs client-side
+     * (list/search/suggestions, tool targets, scaffold), where the thin client ships no TOML
+     * parser. Validation is per-entry and as strict as the old parse: a malformed entry throws
+     * with the same messages.
+     */
     static Map<String, Module> parseTable(String toml, String displayPath) {
-        TomlParseResult result = Toml.parse(toml);
-        if (result.hasErrors()) {
-            throw new IllegalStateException(displayPath + " has invalid TOML: "
-                    + result.errors().getFirst().getMessage());
+        Map<String, Module> out = new LinkedHashMap<>();
+        boolean seenTable = false;
+        boolean inTable = false;
+        for (String raw : toml.split("\n", -1)) {
+            String line = raw.strip();
+            if (line.isEmpty() || line.startsWith("#")) continue;
+            if (line.startsWith("[")) {
+                int close = line.indexOf(']');
+                String section = close > 1
+                        ? line.substring(line.startsWith("[[") ? 2 : 1, close).replace("]", "").strip()
+                        : "";
+                inTable = section.equals("libraries");
+                seenTable |= inTable;
+                continue;
+            }
+            if (!inTable) continue;
+            int eq = line.indexOf('=');
+            if (eq <= 0) {
+                throw new IllegalStateException(displayPath + " has invalid TOML: unexpected line `" + line + "`");
+            }
+            String name = unquoteKey(line.substring(0, eq).strip());
+            String rest = line.substring(eq + 1).strip();
+            if (rest.length() < 2 || rest.charAt(0) != '"') {
+                throw new IllegalStateException(
+                        displayPath + ".libraries." + name + " must be a string of the form \"group:artifact\"");
+            }
+            int end = rest.indexOf('"', 1);
+            if (end < 0) {
+                throw new IllegalStateException(displayPath + " has invalid TOML: unterminated string for " + name);
+            }
+            String coord = rest.substring(1, end);
+            int sep = coord.indexOf(':');
+            if (sep <= 0 || sep == coord.length() - 1) {
+                throw new IllegalStateException(
+                        displayPath + ".libraries." + name + " must be \"group:artifact\" — got: " + coord);
+            }
+            if (coord.indexOf(':', sep + 1) >= 0) {
+                throw new IllegalStateException(displayPath
+                        + ".libraries."
+                        + name
+                        + " carries a version — strip it; the catalog is name→coord only: "
+                        + coord);
+            }
+            out.put(name, new Module(coord.substring(0, sep), coord.substring(sep + 1)));
         }
-        TomlTable table = result.getTable("libraries");
-        if (table == null) {
+        if (!seenTable) {
             throw new IllegalStateException(displayPath + " is missing the required [libraries] table");
         }
-        return parseLibrariesTable(table, displayPath);
+        return out;
+    }
+
+    /** Strip optional quotes from a TOML key ({@code "a.b" = …}). */
+    private static String unquoteKey(String key) {
+        if (key.length() >= 2 && (key.charAt(0) == '"' || key.charAt(0) == '\'')) {
+            char q = key.charAt(0);
+            if (key.charAt(key.length() - 1) == q) return key.substring(1, key.length() - 1);
+        }
+        return key;
     }
 
     /**
