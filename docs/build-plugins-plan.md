@@ -25,6 +25,19 @@ GENERICALLY (P6a, b12e609d):
 - Worker-side finding (no SPI change): extension-judging tools (d8 `--lib`) need a
   `.jar`-named alias of the extension-less cached blob — plugin-side link/copy, the same
   quirk the Kotlin worker handles.
+
+Android Phase 1 (worktree-android-plugin) grew the SPI further, still generically:
+- `[[contribute.step-dependency]]` sources: `sdk-component`/`sdk-path` (a provisioned SDK
+  component in sdkmanager spelling; pseudo-component `root` = the SDK root) and
+  `transitive = true` (a JVM tool's runtime closure materialized as a lib dir).
+- `[[contribute.provided-classpath]]` — a declared step-dependency joins the COMPILE
+  classpaths only (platform-jar posture: compiler sees it, runtime/packaging never do).
+- Step chaining: `In.stepOutput` on a StepSpec orders two plugin steps inside one anchor
+  window and hands the chained output to the body (StepExec.stepOutput).
+- Verbs receive the declared step-dependency tool artifacts (VerbExec.extra) and the
+  built main artifact under its packager extension (VerbExec.mainArtifact).
+- `[packaging] deploy-verb` (device exec-mode): `jk run` on a device artifact dispatches
+  the plugin's deploy verb over the plugin-verb protocol — nothing execs on the host.
 Phase-1 platform stand-in: the Maven-published android-all jar (Robolectric's AOSP build)
 serves as android.jar for aapt2 -I / javac (PROVIDED scope) / d8 --lib — real SDK
 provisioning (repository2 feed + licenses) is android-plan §3.2's own later phase. Deploy

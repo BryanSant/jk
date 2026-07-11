@@ -1,12 +1,28 @@
 # Android on jk — gap analysis & plan
 
-**Status:** Phase-1 SPIKE LANDED (2026-07-11, via build-plugins P6): `plugins/android`
-builds a hello-world APK over the public build-plugin SPI — aapt2 compile+link with R
-generation (before-compile contributed sources), javac against a platform jar (PROVIDED
-scope; Phase-1 stand-in: Maven-published android-all — SDK provisioning per §3.2 still
-open), d8 dex, APK assembly + v1/v2 debug signing (bundled apksig), apksig-verified.
-Zero Android-specific engine code. Remaining for a full Phase 1: SDK provisioning +
-licenses, manifest-merger, `jk run` onto a device (deploy verb). Companion research:
+**Status:** PHASE 1 LANDED (2026-07-11, worktree-android-plugin: 0a0cee71, 823c3bd4,
+654c5133 — on top of the P6 spike). `plugins/android` builds and deploys a hello-world
+APK over the public SPI, zero Android-specific engine code:
+- **SDK provisioning (§3.2)**: AndroidSdk root (reuses $ANDROID_HOME/Studio via symlink;
+  else ~/.jk/android-sdk), AndroidRepoFeed (repository2 XML: components, per-OS archives,
+  sha1, license texts; stable channel preferred), AndroidSdkInstaller (installed →
+  short-circuit; else license-gated, checksum-verified download). licenses/ is the exact
+  sdkmanager on-disk format — acceptance interops with Studio both ways. `jk android
+  licenses [--yes]` + `jk android sdk` ship as plugin verbs.
+- **Real platform jar**: compile/link/dex run against the provisioned
+  platforms;android-<compile-sdk>/android.jar (the android-all stand-in is gone); javac
+  sees it PROVIDED via the new [[contribute.provided-classpath]].
+- **manifest-merger**: the android-manifest step (transitive step-dependency closure)
+  merges the app manifest — package from [android] namespace, <uses-sdk> injected — and
+  aapt2 links the merged manifest (the APK's binary manifest now carries uses-sdk).
+- **jk run onto a device**: [packaging] deploy-verb — the exec plan carries it and the
+  client dispatches the plugin's deploy verb (adb install -r + am start on the launcher
+  activity; adb from provisioned platform-tools; --adb overrides).
+Honest gaps: the exit's "installs and launches" ran against a scripted fake adb (no
+device in this environment — a live `adb devices` run is the outstanding proof);
+SDK component *revisions* are not yet pinned in jk.lock (platforms;android-N is
+name-pinned; platform-tools floats to the feed's stable revision — pin when the lock
+grows an SDK section); `jk dev` redeploy is Phase 2. Companion research:
 [android-gradle.md](./android-gradle.md).
 **Goal:** build, test, and ship a modern Android app (Compose-first, AGP-9-era baselines:
 compileSdk 37, minSdk 24+, Kotlin 2.3+, R8 full mode, AAB) with **no Gradle and no AGP**.
