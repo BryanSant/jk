@@ -5,8 +5,6 @@ import dev.jkbuild.util.JkDirs;
 import java.nio.file.Path;
 import java.util.Optional;
 import java.util.function.Function;
-import org.tomlj.TomlParseResult;
-import org.tomlj.TomlTable;
 
 /**
  * User-global policy for the resident build engine, parsed from the {@code [engine]} table of
@@ -79,17 +77,26 @@ public record JkEngineConfig(int idleMinutes, int maxHeapMb) {
      * advisory, never a build-breaking gate.
      */
     public static JkEngineConfig fromToml(Path file) {
-        Optional<TomlParseResult> parsed = TomlValues.parse(file);
-        if (parsed.isEmpty()) return DEFAULTS;
-        TomlTable engine = parsed.get().getTable("engine");
-        if (engine == null) return DEFAULTS;
-        int idleMinutes = TomlValues.optInt(engine, "idle-minutes")
+        // TomlScan, not tomlj: the CLIENT reads this before it can spawn an engine — the
+        // engine-spawn path must not require a TOML parser (thin-client plan Milestone C).
+        TomlScan scan = TomlScan.scan(file, "engine.idle-minutes", "engine.max-heap-mb");
+        int idleMinutes = scanInt(scan, "engine.idle-minutes")
                 .filter(JkEngineConfig::valid)
                 .orElse(DEFAULTS.idleMinutes);
-        int maxHeapMb = TomlValues.optInt(engine, "max-heap-mb")
+        int maxHeapMb = scanInt(scan, "engine.max-heap-mb")
                 .filter(JkEngineConfig::validHeap)
                 .orElse(DEFAULTS.maxHeapMb);
         return new JkEngineConfig(idleMinutes, maxHeapMb);
+    }
+
+    private static Optional<Integer> scanInt(TomlScan scan, String key) {
+        String v = scan.get(key);
+        if (v == null) return Optional.empty();
+        try {
+            return Optional.of(Integer.parseInt(v));
+        } catch (NumberFormatException e) {
+            return Optional.empty(); // malformed value — advisory layer, fall back
+        }
     }
 
     private static boolean valid(int idleMinutes) {
