@@ -134,7 +134,10 @@ public final class Ndjson {
         int start = json.indexOf(needle);
         if (start < 0) return Collections.emptyList();
         start += needle.length();
-        int end = json.indexOf(']', start);
+        // The array's closing ']' is the first one that isn't inside a quoted element — a naive
+        // indexOf(']') truncates any value that itself contains ']' (e.g. TOML tables like
+        // "[project]" carried as a scaffold param or generated-file content).
+        int end = arrayEnd(json, start);
         if (end < 0) return Collections.emptyList();
         String content = json.substring(start, end).trim();
         if (content.isEmpty()) return Collections.emptyList();
@@ -152,6 +155,15 @@ public final class Ndjson {
                             case '"' -> sb.append('"');
                             case '\\' -> sb.append('\\');
                             case 'n' -> sb.append('\n');
+                            case 'r' -> sb.append('\r');
+                            case 't' -> sb.append('\t');
+                            case 'u' -> {
+                                // Unicode escape (4 hex digits) — as emitted by quote() for control chars.
+                                if (i + 4 < content.length()) {
+                                    sb.append((char) Integer.parseInt(content.substring(i + 1, i + 5), 16));
+                                    i += 4;
+                                }
+                            }
                             default -> {
                                 sb.append('\\');
                                 sb.append(n);
@@ -169,6 +181,28 @@ public final class Ndjson {
             }
         }
         return result;
+    }
+
+    /**
+     * Index of the {@code ']'} that closes the array beginning at {@code start} — the first one that
+     * lies outside a quoted element (quotes and their {@code \\}-escapes are skipped), or {@code -1}
+     * if unterminated. A plain {@code indexOf(']')} would stop at a {@code ']'} inside an element's
+     * own text.
+     */
+    private static int arrayEnd(String json, int start) {
+        boolean inString = false;
+        for (int i = start; i < json.length(); i++) {
+            char c = json.charAt(i);
+            if (inString) {
+                if (c == '\\') i++; // skip the escaped char (incl. an escaped quote)
+                else if (c == '"') inString = false;
+            } else if (c == '"') {
+                inString = true;
+            } else if (c == ']') {
+                return i;
+            }
+        }
+        return -1;
     }
 
     /**

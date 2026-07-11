@@ -47,6 +47,24 @@ class NdjsonTest {
     }
 
     @Test
+    void stringArrayElementsMayContainClosingBrackets() {
+        // Regression: a value that itself contains ']' (a scaffolded jk.toml carries TOML tables
+        // like "[project]") must not truncate the array at that inner bracket.
+        String json = "{\"contents\":[\"[project]\\nname = 1\",\"x\"]}";
+        assertThat(Ndjson.strArray(json, "contents")).containsExactly("[project]\nname = 1", "x");
+    }
+
+    @Test
+    void stringArrayRoundTripsMultilineBracketedValues() {
+        // The exact shape jk new --spring sends: multi-line TOML with [tables], quotes, and tabs,
+        // packed by quote() into an array and read back by strArray().
+        String toml = "[project]\nname = \"demo\"\n\n[spring-boot]\nversion = \"4.1.0\"\n\tindented";
+        String array = "[" + Ndjson.quote(toml) + "," + Ndjson.quote("second") + "]";
+        assertThat(Ndjson.strArray("{\"paramValues\":" + array + "}", "paramValues"))
+                .containsExactly(toml, "second");
+    }
+
+    @Test
     void extractsNestedObjects() {
         String json = "{\"id\":\"1\",\"throwable\":{\"class\":\"E\",\"message\":\"boom {x}\"}}";
         String nested = Ndjson.nested(json, "throwable");
