@@ -1,6 +1,13 @@
 # Android on jk — gap analysis & plan
 
-**Status:** proposed (2026-07-10). Companion research: [android-gradle.md](./android-gradle.md).
+**Status:** Phase-1 SPIKE LANDED (2026-07-11, via build-plugins P6): `plugins/android`
+builds a hello-world APK over the public build-plugin SPI — aapt2 compile+link with R
+generation (before-compile contributed sources), javac against a platform jar (PROVIDED
+scope; Phase-1 stand-in: Maven-published android-all — SDK provisioning per §3.2 still
+open), d8 dex, APK assembly + v1/v2 debug signing (bundled apksig), apksig-verified.
+Zero Android-specific engine code. Remaining for a full Phase 1: SDK provisioning +
+licenses, manifest-merger, `jk run` onto a device (deploy verb). Companion research:
+[android-gradle.md](./android-gradle.md).
 **Goal:** build, test, and ship a modern Android app (Compose-first, AGP-9-era baselines:
 compileSdk 37, minSdk 24+, Kotlin 2.3+, R8 full mode, AAB) with **no Gradle and no AGP**.
 North star acceptance: **jk builds Now in Android** (`android/nowinandroid`) — Google's

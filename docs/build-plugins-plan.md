@@ -1,6 +1,37 @@
 # Build Plugins — custom tables, framework integrations, and the plugin SPI
 
-**Status:** P5 LANDED (2026-07-11, 465c0309..4be7331a) — third-party resolution + trust.
+**Status:** P6 LANDED (2026-07-11) — the Android spike PASSED the gate. `plugins/android`
+builds a hello-world APK (aapt2 R-gen → javac → d8 → assemble + v1/v2 debug-sign, apksig-
+verified) **using only the public SPI** — the engine has zero Android-specific code
+(AndroidSpikeTest drives the real declared pipeline; real tools fetched from Google
+Maven/Central). The spike's primary deliverable, the SPI-gap findings — every one fixed
+GENERICALLY (P6a, b12e609d):
+- Before-COMPILE steps + `contributesSources` (the promised row-5 capability): source-gen
+  steps become compile prerequisites; their contributed `.java` files join the compiler's
+  source list (stamp + action key see them like any source); `In.classes()` on such a
+  step is a declaration error. Kotlin contributed-source union deferred (R is Java; KSP
+  is android-plan Phase 4).
+- `In.projectFiles(rel)`: a codegen step's real inputs (`res/`, `AndroidManifest.xml`,
+  `proto/`) — module-relative, fingerprinted recursively into the action key.
+- `[[contribute.step-dependency]]`: tool artifacts (aapt2's per-OS binary jar, r8, a
+  platform jar) fetched engine-side by coordinate — classifier-aware, `${host.os}` joins
+  the closed interpolation set — keyed as inputs, handed to bodies as `exec.extra(name)`.
+- `StepExec.tool(Path)`: fork a fetched native executable. `PackageIo` gains `javaHome()`
+  + the same tool forks (keytool for the debug keystore); the engine now supplies
+  java-home on package specs.
+- `[packaging] artifact-extension`: a packager replaces the main artifact under its own
+  extension (`target/lib/app-1.0.apk`); `exec-mode = "device"` names a non-host artifact —
+  run/dev answer with the descriptor error pointing at the plugin's deploy verb.
+- Worker-side finding (no SPI change): extension-judging tools (d8 `--lib`) need a
+  `.jar`-named alias of the extension-less cached blob — plugin-side link/copy, the same
+  quirk the Kotlin worker handles.
+Phase-1 platform stand-in: the Maven-published android-all jar (Robolectric's AOSP build)
+serves as android.jar for aapt2 -I / javac (PROVIDED scope) / d8 --lib — real SDK
+provisioning (repository2 feed + licenses) is android-plan §3.2's own later phase. Deploy
+verbs (`jk run` onto a device) and manifest-merger are android-plan Phase 1 leftovers the
+spike deliberately excludes.
+
+**Previous status — P5 LANDED (2026-07-11, 465c0309..4be7331a) — third-party resolution + trust.
 `[plugins]` declarations now complete the loop the earlier lock/sync groundwork started:
 lock-plugins fetches + SHA-pins (existing) AND materializes each jar's `jk-plugin.toml`
 into `<module>/target/plugin-manifests/<sha>.jk-plugin.toml` (PluginManifestOps writes,

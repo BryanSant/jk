@@ -1776,6 +1776,7 @@ public final class BuildPipeline {
                 .config(active.config())
                 .project(project, startClass)
                 .layout(classes, in.dir(), layout.moduleTargetDir().resolve("plugin"))
+                .javaHome(ctx.require(JAVA_HOME))
                 .artifact(jarPath);
         for (Entry e : entries) spec.entry(e.fileName(), e.jar(), e.snapshot());
         for (var e : extras.entrySet()) spec.extra(e.getKey(), e.getValue());

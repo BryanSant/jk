@@ -1,0 +1,53 @@
+# The built-in android build plugin's declarative manifest — the P6 SPI stress test
+# (build-plugins plan §4 P6, android-plan.md Phase 1). Owns [android]; the code layer
+# carries the aapt2 resource step (R generation, before compile), the d8 dex step, and
+# the APK packager. Everything framework-shaped rides the SAME public SPI the
+# spring-boot blueprint uses — the engine has zero Android-specific code.
+#
+# Phase-1 platform stand-in: the compile/link/dex platform jar is the Maven-published
+# android-all build (Robolectric's AOSP artifact) rather than an SDK-provisioned
+# platforms;android-<N> — SDK provisioning (repository2 feed + licenses, android-plan
+# §3.2) is its own later phase. The stand-in is a real framework jar with resources,
+# which is exactly what aapt2 -I and d8 --lib need.
+
+[plugin]
+id        = "android"
+table     = "android"
+version   = "0.1.0"
+jk-compat = ">=0.10"
+
+[code]
+worker          = "jk-android"
+protocol-prefix = "##JKAN:"
+
+# The APK replaces the main artifact under its own extension; it is a device artifact —
+# not host-runnable (run/dev answer with the descriptor error; deploy verbs are Phase 1's
+# `jk run`-onto-device follow-up).
+[packaging]
+packager           = "apk"
+exec-mode          = "device"
+self-contained     = true
+artifact-extension = "apk"
+
+[schema]
+namespace   = { type = "string", required = true, example = "com.example.app", hint = "it names the R class package and the default application id" }
+compile-sdk = { type = "int", required = true, example = "28" }
+min-sdk     = { type = "int", required = true, example = "24" }
+
+# ---- Tool artifacts (fetched engine-side into the cache, handed to steps by name) ----
+
+# aapt2 ships as a per-OS binary wrapped in a Maven jar; ${host.os} picks the classifier.
+[[contribute.step-dependency]]
+artifact   = "aapt2"
+coordinate = "com.android.tools.build:aapt2:8.7.3-12006047:${host.os}"
+
+# d8 lives in the r8 jar (com.android.tools.r8.D8) — a plain JVM tool.
+[[contribute.step-dependency]]
+artifact   = "r8"
+coordinate = "com.android.tools:r8:8.5.35"
+
+# The platform jar: aapt2 -I (framework resources), javac -classpath (via the project's
+# provided scope), d8 --lib. See the Phase-1 stand-in note above.
+[[contribute.step-dependency]]
+artifact   = "android-jar"
+coordinate = "org.robolectric:android-all:9-robolectric-4913185-2"

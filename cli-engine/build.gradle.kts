@@ -71,6 +71,9 @@ val gitClientWorkerJar by configurations.creating {
 val springBootWorkerJar by configurations.creating {
     isCanBeConsumed = false; isCanBeResolved = true; isTransitive = false
 }
+val androidWorkerJar by configurations.creating {
+    isCanBeConsumed = false; isCanBeResolved = true; isTransitive = false
+}
 dependencies {
     kotlinWorkerJar(project(":kotlin-compiler"))
     testRunnerJar(project(":test-runner"))
@@ -80,13 +83,15 @@ dependencies {
     compatBridgeWorkerJar(project(":compat-bridge"))
     gitClientWorkerJar(project(":git-client"))
     springBootWorkerJar(project(":spring-boot"))
+    androidWorkerJar(project(":android"))
 }
 tasks.withType<Test>().configureEach {
     // MemoryProbe's host_statistics64 FFM downcall (macOS memory read), exercised whenever a test
     // drives a real build/check (PosixDetach's setsid(2) is the same story for the engine role).
     jvmArgs("--enable-native-access=ALL-UNNAMED")
     dependsOn(kotlinWorkerJar, testRunnerJar, auditorWorkerJar, publisherWorkerJar,
-              imageBuilderWorkerJar, compatBridgeWorkerJar, gitClientWorkerJar, springBootWorkerJar)
+              imageBuilderWorkerJar, compatBridgeWorkerJar, gitClientWorkerJar, springBootWorkerJar,
+              androidWorkerJar)
     // The TUI/highlighting tests assert ANSI escape sequences, and Theme/GlobalConfig read the
     // ambient environment (TERM=dumb, CI=true/1, NO_COLOR all disable color). Pin the test JVMs'
     // environment so the suite is deterministic on every host — a GitHub runner (TERM=dumb,
@@ -114,6 +119,7 @@ tasks.withType<Test>().configureEach {
         systemProperty("jk.compat-bridge.worker.jar", compatBridgeWorkerJar.singleFile.absolutePath)
         systemProperty("jk.git-client.worker.jar",   gitClientWorkerJar.singleFile.absolutePath)
         systemProperty("jk.spring-boot.worker.jar",  springBootWorkerJar.singleFile.absolutePath)
+        systemProperty("jk.android.worker.jar",      androidWorkerJar.singleFile.absolutePath)
     }
 }
 

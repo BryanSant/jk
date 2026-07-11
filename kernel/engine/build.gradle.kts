@@ -70,6 +70,16 @@ tasks.withType<Test>().configureEach {
     doFirst { systemProperty("jk.spring-boot.worker.jar", testSpringBootWorkerJar.singleFile.absolutePath) }
 }
 
+// Pass the android worker jar to tests (the Android-spike integration test forks it).
+val testAndroidWorkerJar by configurations.creating {
+    isCanBeConsumed = false; isCanBeResolved = true; isTransitive = false
+}
+dependencies { testAndroidWorkerJar(project(":android")) }
+tasks.withType<Test>().configureEach {
+    dependsOn(testAndroidWorkerJar)
+    doFirst { systemProperty("jk.android.worker.jar", testAndroidWorkerJar.singleFile.absolutePath) }
+}
+
 // Pass the auditor jar path to tests (EngineServerTest's hosted jk audit round-trip forks it).
 val testAuditorWorkerJar by configurations.creating {
     isCanBeConsumed = false; isCanBeResolved = true; isTransitive = false

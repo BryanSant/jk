@@ -39,7 +39,8 @@ public enum WorkerJar {
     COMPAT_BRIDGE("jk-compat-bridge", "jk.compat-bridge.worker.jar", ":compat-bridge:installLocal"),
     GIT_CLIENT("jk-git-client", "jk.git-client.worker.jar", ":git-client:installLocal"),
     FORMATTER("jk-formatter", "jk.formatter.worker.jar", ":formatter:installLocal"),
-    SPRING_BOOT("jk-spring-boot", "jk.spring-boot.worker.jar", ":spring-boot:installLocal");
+    SPRING_BOOT("jk-spring-boot", "jk.spring-boot.worker.jar", ":spring-boot:installLocal"),
+    ANDROID("jk-android", "jk.android.worker.jar", ":android:installLocal");
 
     private final String artifactId;
     private final String jarProperty;

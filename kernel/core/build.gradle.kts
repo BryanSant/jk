@@ -27,4 +27,8 @@ tasks.processResources {
     from(rootProject.file("plugins/spring-boot/scaffold")) {
         into("dev/jkbuild/plugin/manifest/spring-boot/scaffold")
     }
+    from(rootProject.file("plugins/android/jk-plugin.toml")) {
+        into("dev/jkbuild/plugin/manifest")
+        rename { "android.jk-plugin.toml" }
+    }
 }
