@@ -105,19 +105,19 @@ public final class SyncCommand implements CliCommand {
         // Pre-flight the JDK ensure client-side: a missing pinned JDK is downloaded HERE, before
         // the request — never silently inside the engine (docs/engine.md keeps installs, and any
         // interactive consent, client-side). The engine's own ensure-jdk phase then only resolves
-        // the already-installed JDK (JdkEnsure with allowInstall=false).
-        Path lockFile = dir.resolve("jk.lock");
-        JkBuild build = parseBuildIfPresent(dir);
-        Lockfile lock = null;
-        if (Files.isRegularFile(lockFile)) {
-            try {
-                lock = LockfileReader.read(lockFile);
-            } catch (Exception ignored) {
-                // unreadable lock — the engine's parse-lock phase surfaces the real error
-            }
-        }
+        // the already-installed JDK (JdkEnsure with allowInstall=false). Thin client: the three
+        // values JdkEnsure needs (project jdk spec, java floor, lock pin) ride the ProjectInfo
+        // summary rather than a client-side parse.
+        var info = BuildCommand.projectInfoOrNull(dir);
         try {
-            JdkEnsure.ensure(dir, jdksDir, build, lock, m -> CliOutput.err("jk sync: " + m));
+            JdkEnsure.ensure(
+                    dir,
+                    jdksDir,
+                    info == null ? null : info.jdk(),
+                    info == null ? 0 : info.javaRelease(),
+                    info == null ? null : info.lockJdk(),
+                    m -> CliOutput.err("jk sync: " + m),
+                    true);
         } catch (Exception e) {
             CliOutput.err("jk sync: " + (e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage()));
             return 1;
@@ -157,15 +157,6 @@ public final class SyncCommand implements CliCommand {
         return result.success() ? 0 : 1;
     }
 
-    /** Soft parse of {@code dir/jk.toml} — {@code null} when absent/unparseable (mirrors the goal's own parse). */
-    private static JkBuild parseBuildIfPresent(Path dir) {
-        try {
-            Path toml = dir.resolve("jk.toml");
-            return Files.isRegularFile(toml) ? JkBuildParser.parse(toml) : null;
-        } catch (RuntimeException | java.io.IOException e) {
-            return null;
-        }
-    }
 
     /** The Sync chip spec; counts are read lazily, at result-line render time. */
     static ConsoleSpec syncSpec(java.util.function.LongSupplier fetched, java.util.function.LongSupplier upToDate) {

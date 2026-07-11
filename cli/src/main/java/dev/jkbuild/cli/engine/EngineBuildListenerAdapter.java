@@ -395,6 +395,29 @@ final class EngineBuildListenerAdapter {
      * request line, one {@code forecast-ack} back. The session's offline/force/rerun flags ride
      * the request so the engine's forecast honors them exactly as the in-process one did.
      */
+    /** One engine-hosted jk.toml edit: returns changed; throws with the engine's message. */
+    static boolean edit(EnginePaths.Paths paths, Path file, String op, java.util.List<String> args)
+            throws IOException {
+        EngineClient.ensureRunning(paths, Jk.VERSION);
+        try (SocketChannel ch = EngineClient.connect(paths.socket())) {
+            BufferedWriter writer =
+                    new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
+            BufferedReader reader =
+                    new BufferedReader(new InputStreamReader(Channels.newInputStream(ch), StandardCharsets.UTF_8));
+            writer.write(EngineProtocol.editRequest(file.toString(), op, args));
+            writer.write('\n');
+            writer.flush();
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (!EngineProtocol.EDIT_ACK.equals(EngineProtocol.typeOf(line))) continue;
+                String error = Ndjson.str(line, "error");
+                if (error != null) throw new IOException(error);
+                return Ndjson.bool(line, "changed", false);
+            }
+            throw new IOException("jk engine: disconnected before answering the edit request");
+        }
+    }
+
     static dev.jkbuild.engine.protocol.ProjectInfo projectInfo(EnginePaths.Paths paths, Path dir)
             throws IOException {
         EngineClient.ensureRunning(paths, Jk.VERSION);

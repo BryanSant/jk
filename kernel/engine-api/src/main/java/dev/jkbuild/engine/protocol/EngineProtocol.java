@@ -200,6 +200,16 @@ public final class EngineProtocol {
     public static final String EXEC_PLAN_ACK = "exec-plan-ack";
 
     /**
+     * Client → server: apply a named {@code jk.toml} edit (add/remove dependency, workspace
+     * registration) — the editor and its TOML stack run engine-side only. Synchronous inline;
+     * answered with one {@link #EDIT_ACK} ({@code changed}, {@code error}).
+     */
+    public static final String EDIT_REQUEST = "edit-request";
+
+    /** Server → client, terminal for {@link #EDIT_REQUEST}. */
+    public static final String EDIT_ACK = "edit-ack";
+
+    /**
      * Server → client: the forecast — {@code dirtyDirs} (module dirs predicted to do real work),
      * {@code lockStale} (the merged workspace lock no longer reflects its manifests), {@code empty}
      * (the workspace declares no modules), and {@code errors} (graph resolution; non-empty ⇒ no
@@ -1251,6 +1261,17 @@ public final class EngineProtocol {
                 + ",\"rerun\":"
                 + rerun
                 + "}";
+    }
+
+    public static String editRequest(String file, String op, java.util.List<String> args) {
+        return "{\"t\":\"" + EDIT_REQUEST + "\",\"file\":" + Ndjson.quote(file)
+                + ",\"op\":" + Ndjson.quote(op)
+                + ",\"args\":" + quoteArray(args) + "}";
+    }
+
+    public static String editAck(boolean changed, String error) {
+        return "{\"t\":\"" + EDIT_ACK + "\",\"changed\":" + changed
+                + ",\"error\":" + (error == null ? "null" : Ndjson.quote(error)) + "}";
     }
 
     public static String projectInfoRequest(String dir, String cache) {

@@ -451,6 +451,7 @@ public final class EngineServer implements AutoCloseable {
                     }
                     case EngineProtocol.PROJECT_INFO_REQUEST -> handleProjectInfoRequest(line, writer);
                     case EngineProtocol.EXEC_PLAN_REQUEST -> handleExecPlanRequest(line, writer);
+                    case EngineProtocol.EDIT_REQUEST -> handleEditRequest(line, writer);
                     default -> {
                         /* unknown type — forward-compatible no-op */
                     }
@@ -964,6 +965,20 @@ public final class EngineServer implements AutoCloseable {
      * install layout, aot-cache layout) — the engine decides, the client executes. Synchronous,
      * read-only, inline.
      */
+    /** Answer {@link EngineProtocol#EDIT_REQUEST}: one named jk.toml edit, engine-side. */
+    private void handleEditRequest(String requestLine, BufferedWriter writer) {
+        dev.jkbuild.runtime.EditOps.Result result;
+        try {
+            result = dev.jkbuild.runtime.EditOps.apply(
+                    Path.of(Ndjson.str(requestLine, "file")),
+                    Ndjson.str(requestLine, "op"),
+                    Ndjson.strArray(requestLine, "args"));
+        } catch (RuntimeException e) {
+            result = new dev.jkbuild.runtime.EditOps.Result(false, String.valueOf(e.getMessage()));
+        }
+        sendQuiet(writer, EngineProtocol.editAck(result.changed(), result.error()));
+    }
+
     private void handleExecPlanRequest(String requestLine, BufferedWriter writer) {
         dev.jkbuild.engine.protocol.ExecPlan plan;
         try {

@@ -127,8 +127,11 @@ public final class PublishCommand implements CliCommand {
         }
         Path cache = JkDirs.cache();
 
-        // Client-side parse: the credential match (declared repositories) and the summary line need
-        // the project; the goal's own parse-build phase re-parses for validation either way.
+        // Client-side parse — DELIBERATE (thin-client exception, docs/thin-client-plan.md):
+        // credential resolution is client-side by design (keychain/env prompts never run in the
+        // engine), and the inline credential can only come from jk.toml; shipping it through a
+        // ProjectInfo ack would put secrets on the wire. The goal's own parse-build phase
+        // re-parses engine-side for validation either way.
         JkBuild project;
         try {
             project = JkBuildParser.parse(jkBuildPath);

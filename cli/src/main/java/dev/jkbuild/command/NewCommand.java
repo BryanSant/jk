@@ -143,22 +143,23 @@ public final class NewCommand implements CliCommand {
     private Optional<String> defaultJdk = Optional.empty();
 
     /** Inherited context from the parent project's {@code [project]} block. */
-    private record ParentInfo(Path root, dev.jkbuild.model.JkBuild.Project project) {
+    private record ParentInfo(Path root, dev.jkbuild.engine.protocol.ProjectInfo info) {
         String displayName() {
-            return project.name();
+            return info.name();
         }
 
         String group() {
-            return project.group();
+            return info.group();
         }
 
         boolean kotlin() {
-            return project.isKotlin();
+            return info.kotlin();
         }
 
         /** The JDK toolchain version (which JDK runs the build). */
         int jdkMajor() {
-            return project.jdkMajor() > 0 ? project.jdkMajor() : project.javaRelease();
+            int major = dev.jkbuild.model.JkBuild.Project.majorOf(info.jdk());
+            return major > 0 ? major : info.javaRelease();
         }
 
         /**
@@ -166,7 +167,7 @@ public final class NewCommand implements CliCommand {
          * #jdkMajor()}.
          */
         int javaRelease() {
-            return project.javaRelease();
+            return info.javaRelease();
         }
     }
 
@@ -208,12 +209,9 @@ public final class NewCommand implements CliCommand {
                 .orElse(null);
         Optional<Path> root = detectParentDir(startDir, home, noModule);
         if (root.isEmpty()) return null;
-        try {
-            var project = JkBuildParser.parse(root.get().resolve("jk.toml")).project();
-            return new ParentInfo(root.get(), project);
-        } catch (IOException | RuntimeException e) {
-            return null; // unreadable/unparseable parent — treat this as a standalone project
-        }
+        var info = BuildCommand.projectInfoOrNull(root.get());
+        if (info == null) return null; // unreadable/unparseable parent — treat as standalone
+        return new ParentInfo(root.get(), info);
     }
 
     @Override
@@ -540,7 +538,7 @@ public final class NewCommand implements CliCommand {
             Path rootToml = root.resolve("jk.toml");
             // Registers the module, promoting a plain project into a workspace
             // root (creating the [workspace] table) when this is its first module.
-            Files.writeString(rootToml, JkBuildEditor.registerWorkspaceModule(Files.readString(rootToml), rel));
+            EngineEdits.apply(rootToml, "register-workspace-module", java.util.List.of(rel));
             registered = new Module(root, rel, parent.displayName());
         }
     }

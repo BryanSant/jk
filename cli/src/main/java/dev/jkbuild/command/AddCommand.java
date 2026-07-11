@@ -157,16 +157,13 @@ public final class AddCommand implements CliCommand {
         }
         Scope scope = resolveScope();
         if (scope == null) return Exit.USAGE;
-        String original = Files.readString(file);
-        String updated;
         try {
-            updated = JkBuildEditor.addDependency(
-                    original, scope, parsed.library(), parsed.group(), parsed.name(), parsed.versionLiteral());
-        } catch (IllegalStateException | IllegalArgumentException e) {
+            EngineEdits.apply(file, "add-dependency", java.util.List.of(
+                    scope.canonical(), parsed.library(), parsed.group(), parsed.name(), parsed.versionLiteral()));
+        } catch (IOException e) {
             CliOutput.err("jk add: " + e.getMessage());
             return 1;
         }
-        Files.writeString(file, updated, StandardCharsets.UTF_8);
         String check = Theme.colorize(Glyphs.CHECK, Theme.active().success());
         CliOutput.out(check
                 + " Added "
@@ -236,29 +233,25 @@ public final class AddCommand implements CliCommand {
             CliOutput.err("jk add: no jk.toml in " + dev.jkbuild.cli.PathDisplay.styledRaw(target));
             return Exit.CONFIG;
         }
-        JkBuild module;
-        try {
-            module = JkBuildParser.parse(targetToml);
-        } catch (RuntimeException e) {
-            CliOutput.err("jk add: " + e.getMessage());
+        var module = BuildCommand.projectInfoOrNull(target);
+        if (module == null) {
+            CliOutput.err("jk add: could not read " + dev.jkbuild.cli.PathDisplay.styledRaw(targetToml));
             return 1;
         }
-        String group = module.project().group();
-        String artifact = module.project().name();
-        String version = module.project().version();
+        String group = module.group();
+        String artifact = module.name();
+        String version = module.version();
         String name = (libraryFlag != null && !libraryFlag.isBlank()) ? libraryFlag : artifact;
 
         // 1. Dependency edge into the current project, pinned to the module's
         //    version — matching how this repo's own modules reference siblings.
-        String original = Files.readString(currentToml);
-        String updated;
         try {
-            updated = JkBuildEditor.addDependency(original, scope, name, group, artifact, "=" + version);
-        } catch (IllegalStateException | IllegalArgumentException e) {
+            EngineEdits.apply(currentToml, "add-dependency", java.util.List.of(
+                    scope.canonical(), name, group, artifact, "=" + version));
+        } catch (IOException e) {
             CliOutput.err("jk add: " + e.getMessage());
             return 1;
         }
-        Files.writeString(currentToml, updated, StandardCharsets.UTF_8);
         CliOutput.out("Added "
                 + Coords.shortName(name)
                 + " ("
@@ -278,12 +271,11 @@ public final class AddCommand implements CliCommand {
                         + " is outside the workspace root "
                         + root
                         + "; added the dependency but not registering it as a module.");
-            } else if (Files.exists(rootToml) && JkBuildParser.parse(rootToml).isWorkspaceRoot()) {
+            } else if (Files.exists(rootToml)
+                    && (BuildCommand.projectInfoOrNull(root) != null
+                            && BuildCommand.projectInfoOrNull(root).workspaceRoot())) {
                 String rel = root.relativize(target).toString().replace('\\', '/');
-                String rootContent = Files.readString(rootToml);
-                String newRoot = JkBuildEditor.addWorkspaceModule(rootContent, rel);
-                if (!newRoot.equals(rootContent)) {
-                    Files.writeString(rootToml, newRoot, StandardCharsets.UTF_8);
+                if (EngineEdits.apply(rootToml, "add-workspace-module", java.util.List.of(rel))) {
                     CliOutput.out("Registered module '"
                             + rel
                             + "' in workspace "
@@ -360,16 +352,14 @@ public final class AddCommand implements CliCommand {
         Cas cas = new Cas(cache);
         cas.putByLink(filePath, sha256);
 
-        // Edit jk.toml.
-        String original = Files.readString(tomlFile);
-        String updated;
+        // Edit jk.toml (engine-side).
         try {
-            updated = JkBuildEditor.addFileDependency(original, scope, library, group, artifact, version, sha256);
-        } catch (IllegalStateException | IllegalArgumentException e) {
+            EngineEdits.apply(tomlFile, "add-file-dependency", java.util.List.of(
+                    scope.canonical(), library, group, artifact, version, sha256));
+        } catch (IOException e) {
             CliOutput.err("jk add: " + e.getMessage());
             return 1;
         }
-        Files.writeString(tomlFile, updated, StandardCharsets.UTF_8);
 
         String check = Theme.colorize(Glyphs.CHECK, Theme.active().success());
         String shortSha = sha256.substring(0, Math.min(12, sha256.length()));

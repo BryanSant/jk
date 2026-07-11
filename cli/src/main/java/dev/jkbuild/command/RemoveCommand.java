@@ -88,15 +88,12 @@ public final class RemoveCommand implements CliCommand {
             return Exit.USAGE;
         }
 
-        String original = Files.readString(file);
-        String updated;
         try {
-            updated = JkBuildEditor.removeDependency(original, scope, name);
-        } catch (IllegalStateException | IllegalArgumentException e) {
+            EngineEdits.apply(file, "remove-dependency", java.util.List.of(scope.canonical(), name));
+        } catch (IOException e) {
             CliOutput.err("jk remove: " + e.getMessage());
             return 1;
         }
-        Files.writeString(file, updated, StandardCharsets.UTF_8);
         CliOutput.out(Theme.colorize(Glyphs.CROSS, Theme.active().darkGray())
                 + " Removed "
                 + Theme.colorize(name, Theme.active().activeStep())

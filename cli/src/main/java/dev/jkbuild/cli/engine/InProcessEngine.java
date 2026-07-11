@@ -48,6 +48,9 @@ public interface InProcessEngine {
             java.nio.file.Path binDir,
             java.nio.file.Path libDir);
 
+    /** Thin-client edit twin: returns {changedAsString, errorOrNull}. */
+    String[] edit(java.nio.file.Path file, String op, java.util.List<String> args);
+
     /** A single hosted goal's outcome: the goal result plus the test counts (null when no tests ran). */
     record GoalOutcome(dev.jkbuild.run.GoalResult result, dev.jkbuild.run.TestSummary testResult) {}
 

@@ -74,6 +74,30 @@ public final class JdkEnsure {
             java.util.function.Consumer<String> warn,
             boolean allowInstall)
             throws IOException, InterruptedException {
+        return ensure(
+                projectDir,
+                jdksDirOverride,
+                (build != null && build.project() != null) ? build.project().jdk() : null,
+                (build != null && build.project() != null) ? build.project().javaRelease() : 0,
+                lock != null ? lock.jdk() : null,
+                warn,
+                allowInstall);
+    }
+
+    /**
+     * Scalar variant for thin-client callers holding an engine {@code ProjectInfo} rather than a
+     * parsed model — {@code JdkEnsure} only ever read three values off the model: the project's
+     * {@code jdk} spec, its {@code java} release floor, and the lock's pinned install id.
+     */
+    public static Outcome ensure(
+            Path projectDir,
+            Path jdksDirOverride,
+            String projectJdkSpec,
+            int javaRelease,
+            String lockJdkId,
+            java.util.function.Consumer<String> warn,
+            boolean allowInstall)
+            throws IOException, InterruptedException {
         JdkRegistry registry = jdksDirOverride != null ? new JdkRegistry(jdksDirOverride) : new JdkRegistry();
         GlobalDefaultJdk defaults = GlobalDefaultJdk.current();
         int latestLts = JdkLts.OFFLINE_LATEST_LTS;
@@ -84,9 +108,9 @@ public final class JdkEnsure {
                 projectDir,
                 dev.jkbuild.config.SessionContext.current().jdkSpec(),
                 System.getenv("JK_JDK"),
-                lock != null ? lock.jdk() : null,
-                (build != null && build.project() != null) ? build.project().jdk() : null,
-                (build != null && build.project() != null) ? build.project().javaRelease() : 0,
+                (lockJdkId == null || lockJdkId.isEmpty()) ? null : lockJdkId,
+                (projectJdkSpec == null || projectJdkSpec.isEmpty()) ? null : projectJdkSpec,
+                javaRelease,
                 System::getenv);
         JdkResolution.Resolved r = JdkResolution.resolve(req, registry, defaults, latestLts);
 

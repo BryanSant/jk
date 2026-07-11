@@ -51,6 +51,12 @@ import java.util.concurrent.atomic.AtomicInteger;
 public final class InProcessEngineImpl implements InProcessEngine {
 
     @Override
+    public String[] edit(java.nio.file.Path file, String op, java.util.List<String> args) {
+        var result = dev.jkbuild.runtime.EditOps.apply(file, op, args);
+        return new String[] {Boolean.toString(result.changed()), result.error()};
+    }
+
+    @Override
     public dev.jkbuild.engine.protocol.ProjectInfo projectInfo(java.nio.file.Path dir) {
         return dev.jkbuild.runtime.ExecPlans.projectInfo(dir);
     }

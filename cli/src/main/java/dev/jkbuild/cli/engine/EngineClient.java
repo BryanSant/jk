@@ -280,6 +280,13 @@ public final class EngineClient {
      * the plan-affecting {@code jk build} options the engine-side ETA estimate feeds through the
      * shared goal assembly (Wave 3 — the estimate used to be computed client-side).
      */
+    /** One engine-hosted jk.toml edit (EDIT_REQUEST): returns changed; throws on error. */
+    public static boolean edit(
+            dev.jkbuild.engine.EnginePaths.Paths paths, java.nio.file.Path file, String op,
+            java.util.List<String> args) throws java.io.IOException {
+        return EngineBuildListenerAdapter.edit(paths, file, op, args);
+    }
+
     /**
      * Thin-client project summary (docs/thin-client-plan.md §2.1) — the replacement for every
      * client-side {@code JkBuildParser.parse} peek. In test/no-engine mode the in-process twin

@@ -85,7 +85,6 @@ public final class ExplainCommand implements CliCommand {
         var proj = ProjectContext.require(startDir, "explain").orElse(null);
         if (proj == null) return Exit.CONFIG;
         Path buildFile = proj.buildFile();
-        JkBuild entry = JkBuildParser.parse(buildFile);
         Path cache = cacheDir != null ? cacheDir : JkDirs.cache();
 
         // The plan-affecting options `jk build` reads, forecast with the same defaults build uses
@@ -110,7 +109,8 @@ public final class ExplainCommand implements CliCommand {
         if (engineDisabledForTests()) {
             long[] etaOut = new long[1];
             plan = dev.jkbuild.cli.engine.InProcessEngine.require()
-                    .explain(startDir, entry, cache, workers, jdksDir, profile, skipTests, global.verbose,
+                    .explain(startDir, JkBuildParser.parse(buildFile), cache, workers, jdksDir, profile,
+                            skipTests, global.verbose,
                             serial, parallelTests, etaOut);
             etaMillis = etaOut[0];
         } else {
@@ -158,7 +158,7 @@ public final class ExplainCommand implements CliCommand {
         CliOutput.out(header + " " + estimate);
         // Root node: ● bullet, then the entry project's group:artifact in bold.
         String rootBullet = ansi ? Theme.colorize("●", t.darkGray()) : "*";
-        String coord = entry.project().group() + ":" + entry.project().name();
+        String coord = BuildCommand.buildTarget(buildFile, startDir);
         CliOutput.out(" "
                 + rootBullet
                 + " "
