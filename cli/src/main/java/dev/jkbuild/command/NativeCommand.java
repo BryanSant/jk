@@ -9,8 +9,6 @@ import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.cli.tui.CommandManager;
 import dev.jkbuild.cli.tui.GoalWedge;
 import dev.jkbuild.config.JkBuildParser;
-import dev.jkbuild.config.WorkspaceLoader;
-import dev.jkbuild.config.WorkspaceLocator;
 import dev.jkbuild.layout.BuildLayout;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.command.CliCommand;
@@ -177,10 +175,9 @@ public final class NativeCommand implements CliCommand {
             // model exactly as before. The native client never reaches this branch.
             Map<Path, JkBuild> modulesByDir;
             try {
-                modulesByDir = WorkspaceLoader.loadModules(
-                        wsRoot,
-                        dev.jkbuild.cli.engine.InProcessEngine.require()
-                                .parseBuild(wsRoot.resolve("jk.toml")));
+                // Behind the reflective seam: a direct WorkspaceLoader call would keep tomlj
+                // statically reachable in the native image even though this branch never runs there.
+                modulesByDir = dev.jkbuild.cli.engine.InProcessEngine.require().loadWorkspaceModules(wsRoot);
             } catch (RuntimeException e) {
                 CliOutput.err("jk native: " + e.getMessage());
                 return Exit.CONFIG;

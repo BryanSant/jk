@@ -2,8 +2,7 @@
 package dev.jkbuild.cli;
 
 import dev.jkbuild.cli.theme.Theme;
-import dev.jkbuild.config.WorkspaceLocator;
-import java.io.IOException;
+import dev.jkbuild.config.WorkspaceScan;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -84,11 +83,7 @@ public final class PathDisplay {
     }
 
     private static Path workspaceRoot(Path abs) {
-        try {
-            return WorkspaceLocator.findEnclosingWorkspace(abs).orElse(null);
-        } catch (IOException e) {
-            return null;
-        }
+        return WorkspaceScan.findEnclosingWorkspace(abs).orElse(null);
     }
 
     private static Path gitRoot(Path abs) {

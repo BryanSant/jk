@@ -94,11 +94,6 @@ graalvmNative {
         // on the binary's classpath, so jline is the only contributor left:
         // its FFM Linker/Arena lookups must run at image-runtime regardless.
         buildArgs.add("--initialize-at-run-time=org.jline")
-        // tomlj 1.1.1 was generated with ANTLR 4.11.1 but 4.13.2 ends up on the
-        // runtime classpath via a transitive dep. ANTLR's static initializer prints
-        // a version-mismatch warning on every startup. Initializing at build time
-        // bakes the check into the image so it never runs at the user's terminal.
-        buildArgs.add("--initialize-at-build-time=org.antlr")
         // jline-native ships a resource-config with a broad "org/jline/nativ/.*"
         // pattern that embeds ALL platform native libs (Windows DLLs, Linux/macOS/
         // FreeBSD .so/.dylib for every arch) as image resources.  jk uses the FFM

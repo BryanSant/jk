@@ -89,6 +89,13 @@ public final class InProcessEngineImpl implements InProcessEngine {
     }
 
     @Override
+    public java.util.Map<java.nio.file.Path, dev.jkbuild.model.JkBuild> loadWorkspaceModules(
+            java.nio.file.Path wsRoot) throws java.io.IOException {
+        return dev.jkbuild.config.WorkspaceLoader.loadModules(
+                wsRoot, dev.jkbuild.config.JkBuildParser.parse(wsRoot.resolve("jk.toml")));
+    }
+
+    @Override
     public dev.jkbuild.engine.protocol.ExecPlan execPlan(
             java.nio.file.Path dir, java.nio.file.Path cache, String kind, String mainOverride, String binName) {
         return dev.jkbuild.runtime.ExecPlans.execPlan(dir, cache, kind, mainOverride, binName);

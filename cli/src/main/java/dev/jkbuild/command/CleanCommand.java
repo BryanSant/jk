@@ -9,7 +9,7 @@ import dev.jkbuild.cli.tui.Glyphs;
 import dev.jkbuild.cli.tui.GoalWedge;
 import dev.jkbuild.cli.tui.Spinner;
 import dev.jkbuild.config.GlobalConfig;
-import dev.jkbuild.config.WorkspaceLocator;
+import dev.jkbuild.config.WorkspaceScan;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Invocation;
@@ -193,12 +193,7 @@ public final class CleanCommand implements CliCommand {
     }
 
     private static Path resolveWorkspaceRoot(Path dir) {
-        try {
-            Optional<Path> root = WorkspaceLocator.findRoot(dir);
-            return root.orElse(dir);
-        } catch (IOException ignored) {
-            return dir;
-        }
+        return WorkspaceScan.findRoot(dir).orElse(dir);
     }
 
     private static void deleteRecursively(Path root, long[] stats) throws IOException {

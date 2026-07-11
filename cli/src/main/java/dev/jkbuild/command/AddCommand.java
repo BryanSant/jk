@@ -10,7 +10,6 @@ import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.cli.tui.Glyphs;
 import dev.jkbuild.config.JkBuildEditor;
 import dev.jkbuild.config.JkBuildParser;
-import dev.jkbuild.config.WorkspaceLocator;
 import dev.jkbuild.http.Http;
 import dev.jkbuild.model.Coordinate;
 import dev.jkbuild.model.JkBuild;
@@ -262,7 +261,7 @@ public final class AddCommand implements CliCommand {
 
         // 2. Register membership in the enclosing workspace root (cwd itself
         //    when cwd is the root).
-        Path root = WorkspaceLocator.findEnclosingWorkspace(cwd).orElse(cwd);
+        Path root = dev.jkbuild.config.WorkspaceScan.findEnclosingWorkspace(cwd).orElse(cwd);
         Path rootToml = root.resolve("jk.toml");
         try {
             if (!target.startsWith(root)) {

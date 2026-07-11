@@ -70,6 +70,10 @@ public interface InProcessEngine {
     /** Thin-client why twin — the in-process counterpart of WHY_REQUEST. */
     dev.jkbuild.engine.protocol.WhyReport why(java.nio.file.Path dir, String query);
 
+    /** Parse a workspace root and load its module models — test-seam-only, like parseBuild. */
+    java.util.Map<java.nio.file.Path, dev.jkbuild.model.JkBuild> loadWorkspaceModules(java.nio.file.Path wsRoot)
+            throws java.io.IOException;
+
     /** Thin-client generator twin — the in-process counterpart of GENERATE_REQUEST. */
     dev.jkbuild.engine.protocol.GeneratedFiles generate(java.nio.file.Path dir, String kind);
 

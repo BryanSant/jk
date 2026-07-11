@@ -1,6 +1,6 @@
 # Thin client — the engine owns every byte of TOML reasoning
 
-**Status:** in progress (2026-07-11). **Milestone A LANDED** (commits da02cf14..5be926f9):
+**Status:** COMPLETE (2026-07-11). **Milestone A LANDED** (commits da02cf14..5be926f9):
 the protocol (§2), the exec family (run/dev/install/aot-cache — zero client parsing, all
 verified live), the build/native/clean/format/sync peeks, EDIT_REQUEST (add/remove/new
 edits engine-side, verified live), and the new/add/explain parent peeks. Two documented
@@ -21,12 +21,13 @@ hosted builds silently dropped all worker tuning. Now the client resolves only i
 flag/env layers (WorkerTunings.resolveClient), they ride build/test/single-build/native/
 install requests (EngineProtocol.withJvmTuning/jvmTuning), and the engine overlays the
 project's `[jvm]` table itself at worker-fork time (JvmOptions.tuning → overlayProject).
-**Remaining — Milestone B**: TreeCommand/WhyCommand read the lock via a graph vocabulary
-(DependencyTree needs an internal node model first — render currently threads
-(JkBuild, Lockfile) through ~15 methods and re-parses module tomls mid-render; rendering
-stays client-side since Styling carries closures); IdeSupport/ExportSupport/
-VerifyBuildCommand are full-model generators → engine-hosted requests returning file
-payloads.
+**Milestone B COMPLETE** (41a480bd..b3a7831b): tree/why run engine-side with marker-tag
+styling (Styling.markers() emits flat ⟦kind…⟧ tags; the client substitutes its Theme via
+DependencyTree.applyStyling — no node-model refactor needed, DependencyTree untouched);
+export maven/gradle via GENERATE_REQUEST → GeneratedFiles payloads (client guards/writes/
+prints); verify via per-module ProjectInfo (grew pathDeps + sourcesJarPath/javadocJarPath);
+ide via IDE_MODEL_REQUEST → IdeWireModel (model math engine-side in IdeOps; generators
+stay client-side consuming IdeModule facts instead of JkBuild).
 **Milestone C progress**: TomlScan powers the shell hook, GlobalConfig.nerdfont,
 JkConfigLoader's [config] layer, JkEngineConfig (engine spawn opts), JkCacheConfig,
 GlobalDefaultJdk's config fallback; TrustedSources and ForgeAuthConfig got dedicated
@@ -34,12 +35,24 @@ line scanners (their shapes have open-ended keys). GraalVM reachability is metho
 so engine-only methods of shared classes may keep tomlj (GlobalConfig.repositories,
 WorkerTunings.fromToml/overlayProject; JkHttp/JkHistory/ImageConfig/RepositoryToml are
 engine-only files).
-**Remaining — Milestone C**: LibraryCatalog client uses (AddCommand suggestions,
-LibraryList/LibrarySearch, NewJkBuildRenderer, ToolTargets — inline-table catalog format,
-NOT line-scannable; needs a LIBRARY_LOOKUP-style request or an engine-side re-home);
-PublishCommand's full JkBuildParser.parse (the credentials exception only needs the
-[publish] keys — either TomlScan those or split the read) — both must resolve before the
-zero-tomlj assert can pass. Then drop the ANTLR workaround.
+**Milestone C COMPLETE**: LibraryCatalog.parseTable is a strict line scanner (the catalog
+files are jk-owned `name = "group:artifact"` flat scalars; parseLibrariesTable(TomlTable)
+stays tomlj for the engine's jk.toml path); PublishCommand reads project facts from
+ProjectInfo (new pathDeps field) and the inline repository credential via RepositoriesScan
+(line scanner, strict ${ENV} interpolation — secrets never ride the wire). Plus jk deny
+engine-side (DENY_CHECK → DenyReport; a fail-soft client scan of user-authored [deny]
+would degrade silently PERMISSIVE) and the worker-JVM tuning split (a real bug fix:
+hosted builds dropped [jvm]/--jvm-arg entirely — now the client ships flag/env layers on
+the request and the engine overlays the project [jvm] at fork time).
+**EXIT ASSERT PASSED (2026-07-11)**: the native image carries ZERO org.tomlj.* and zero
+ANTLR classes (`strings jk` shows only the bundled catalog's `tomlj = "org.tomlj:tomlj"`
+data line); the ANTLR init workaround is deleted; binary shrank 28,511,304 → 27,462,728
+bytes (−1.0 MB). Final leaks fixed on the way: WorkspaceLocator's client callers
+(PathDisplay/Clean/Add) moved to WorkspaceScan (TomlScan grew string-array support);
+NativeCommand's test-seam WorkspaceLoader call routed behind
+InProcessEngine.loadWorkspaceModules (static-reachability trap). Verified on the native
+binary itself: hook-env with the engine stopped, tree/why/deny over the wire.
+**THE THIN CLIENT IS COMPLETE.** Next: [build-plugins-plan.md](./build-plugins-plan.md).
 Key reachability fact (handled): the in-process test seams parse behind the
 reflectively-loaded InProcessEngine interface (`parseBuild(Path)`), keeping tomlj out of
 the native image's static reachable set.
