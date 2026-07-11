@@ -115,25 +115,25 @@ public final class NativeCommand implements CliCommand {
             return Exit.NO_INPUT;
         }
 
-        JkBuild peek = JkBuildParser.parse(buildFile);
+        dev.jkbuild.engine.protocol.ProjectInfo peek = BuildCommand.projectInfoOrNull(startDir);
 
         // Workspace root: cascade to all eligible modules.
-        if (peek.isWorkspaceRoot()) {
-            return runWorkspaceNative(startDir, peek, cache);
+        if (peek != null && peek.workspaceRoot()) {
+            return runWorkspaceNative(startDir, cache);
         }
 
         // Module redirect: if we're inside a workspace, build from the root.
-        var rootOpt = WorkspaceLocator.findRoot(startDir);
-        if (rootOpt.isPresent() && !rootOpt.get().equals(startDir)) {
-            Path wsRoot = rootOpt.get();
-            JkBuild rootBuild = JkBuildParser.parse(wsRoot.resolve("jk.toml"));
-            if (rootBuild.isWorkspaceRoot()) {
+        if (peek != null
+                && !peek.workspaceRootDir().isEmpty()
+                && !peek.workspaceRootDir().equals(startDir.toString())) {
+            Path wsRoot = Path.of(peek.workspaceRootDir());
+            {
                 CliOutput.err("jk native: building from workspace root "
                         + wsRoot.getFileName()
                         + " (module: "
                         + startDir.getFileName()
                         + ")");
-                return runWorkspaceNative(wsRoot, rootBuild, cache);
+                return runWorkspaceNative(wsRoot, cache);
             }
         }
 
@@ -168,49 +168,68 @@ public final class NativeCommand implements CliCommand {
 
     // --- workspace cascade ---------------------------------------------------
 
-    private int runWorkspaceNative(Path wsRoot, JkBuild root, Path cache) throws Exception {
-        Map<Path, JkBuild> modulesByDir;
-        try {
-            modulesByDir = WorkspaceLoader.loadModules(wsRoot, root);
-        } catch (RuntimeException e) {
-            CliOutput.err("jk native: " + e.getMessage());
-            return Exit.CONFIG;
-        }
-        if (modulesByDir.isEmpty()) {
-            CliOutput.out("(workspace declares no modules)");
-            return 0;
-        }
-
-        List<Path> sorted = ModuleOrder.orderModules(modulesByDir);
+    private int runWorkspaceNative(Path wsRoot, Path cache) throws Exception {
         GoalConsole.Mode mode = GoalConsole.modeFor(global);
         long buildStart = System.nanoTime();
 
-        // Resolve the GraalVM for every native-eligible module up front — BEFORE
-        // any progress UI opens (a prompt or install would corrupt the captured
-        // display) and BEFORE the request ships to the engine (the prompt/install
-        // owns this terminal; the engine only ever runs a resolved toolchain).
-        // GraalResolver memoizes by spec, so a shared graal pin fetches/installs
-        // at most once.
-        Map<Path, Path> graalHomes = new java.util.HashMap<>();
-        for (Path moduleDir : sorted) {
-            JkBuild module = modulesByDir.get(moduleDir);
-            if (!nativeEligible(module)) continue;
-            Optional<Path> home = graal.resolve(moduleDir, module.graal());
-            if (home.isEmpty()) return Exit.CONFIG; // GraalResolver already printed why
-            graalHomes.put(moduleDir, home.get());
-        }
-
-        long nativeCount = sorted.stream()
-                .map(modulesByDir::get)
-                .filter(NativeCommand::nativeEligible)
-                .count();
-
         if (engineDisabledForTests()) {
+            // In-process seam: the JVM test dist links the parser; load the full workspace
+            // model exactly as before. The native client never reaches this branch.
+            Map<Path, JkBuild> modulesByDir;
+            try {
+                modulesByDir = WorkspaceLoader.loadModules(wsRoot, JkBuildParser.parse(wsRoot.resolve("jk.toml")));
+            } catch (RuntimeException e) {
+                CliOutput.err("jk native: " + e.getMessage());
+                return Exit.CONFIG;
+            }
+            if (modulesByDir.isEmpty()) {
+                CliOutput.out("(workspace declares no modules)");
+                return 0;
+            }
+            List<Path> sorted = ModuleOrder.orderModules(modulesByDir);
+            Map<Path, Path> graalHomes = new java.util.HashMap<>();
+            for (Path moduleDir : sorted) {
+                JkBuild module = modulesByDir.get(moduleDir);
+                if (!nativeEligible(module)) continue;
+                Optional<Path> home = graal.resolve(moduleDir, module.graal());
+                if (home.isEmpty()) return Exit.CONFIG;
+                graalHomes.put(moduleDir, home.get());
+            }
+            long nativeCount = sorted.stream()
+                    .map(modulesByDir::get)
+                    .filter(NativeCommand::nativeEligible)
+                    .count();
             return dev.jkbuild.cli.engine.InProcessEngine.require()
                     .nativeWorkspaceInProcess(wsRoot, modulesByDir, sorted, cache, graalHomes, mode, buildStart,
                             nativeCount, jdksDir, mainClass, extra, buildOpts.skipTests, global.verbose);
         }
-        return runWorkspaceHosted(wsRoot, cache, graalHomes, mode, buildStart, sorted.size(), nativeCount);
+
+        // Thin client: per-module native-mode + graal spec ride ProjectInfo summaries; the
+        // engine owns ordering/scheduling. The GraalVM pre-resolve stays HERE — a prompt or
+        // install owns this terminal and must never run inside the engine.
+        var rootInfo = BuildCommand.projectInfoOrNull(wsRoot);
+        if (rootInfo == null) {
+            CliOutput.err("jk native: could not read the workspace summary at " + wsRoot);
+            return Exit.CONFIG;
+        }
+        if (rootInfo.moduleDirs().isEmpty()) {
+            CliOutput.out("(workspace declares no modules)");
+            return 0;
+        }
+        Map<Path, Path> graalHomes = new java.util.HashMap<>();
+        long nativeCount = 0;
+        for (String rel : rootInfo.moduleDirs()) {
+            Path moduleDir = wsRoot.resolve(rel);
+            var info = BuildCommand.projectInfoOrNull(moduleDir);
+            if (info == null || !"ALWAYS".equals(info.nativeMode())) continue;
+            nativeCount++;
+            Optional<Path> home =
+                    graal.resolve(moduleDir, info.graal().isEmpty() ? null : info.graal());
+            if (home.isEmpty()) return Exit.CONFIG; // GraalResolver already printed why
+            graalHomes.put(moduleDir, home.get());
+        }
+        return runWorkspaceHosted(
+                wsRoot, cache, graalHomes, mode, buildStart, rootInfo.moduleDirs().size(), nativeCount);
     }
 
     /**

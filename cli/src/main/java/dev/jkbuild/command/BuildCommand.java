@@ -144,7 +144,7 @@ public final class BuildCommand implements CliCommand {
                         + " run it from the module directory.");
                 return Exit.USAGE;
             }
-            return buildWorkspace(startDir, JkBuildParser.parse(buildFile));
+            return buildWorkspace(startDir);
         }
         if (peek != null && !peek.workspaceRootDir().isEmpty()
                 && !peek.workspaceRootDir().equals(startDir.toString())) {
@@ -156,7 +156,7 @@ public final class BuildCommand implements CliCommand {
                         + startDir.getFileName()
                         + ")");
             }
-            return buildWorkspace(root, JkBuildParser.parse(root.resolve("jk.toml")));
+            return buildWorkspace(root);
         }
         int code = runForDir(startDir);
         if (code == 0 && aotCache) {
@@ -168,12 +168,17 @@ public final class BuildCommand implements CliCommand {
     }
 
     /** Default: parallel graph build; {@code --no-parallel}: the serial rich aggregate view. */
-    private int buildWorkspace(Path root, JkBuild rootBuild) throws Exception {
+    private int buildWorkspace(Path root) throws Exception {
         // The whole-workspace lock-staleness guard now runs engine-side, inside
         // BuildService.buildWorkspace (the request carries freshenLock=true) — the CLI only renders
         // the failure via the standard workspace-errors path. Both modes drive the one engine
         // planner; --no-parallel just caps module concurrency to 1 (strict serial) via the request
         // the view layer builds below.
+        //
+        // Thin client: entryBuild never crosses the wire (EngineProtocol.buildRequest serializes
+        // only entryDir + flags; the engine re-parses). The parsed model is needed ONLY by the
+        // in-process test seam, so parse lazily on that branch alone.
+        JkBuild rootBuild = engineDisabledForTests() ? JkBuildParser.parse(root.resolve("jk.toml")) : null;
         return runGraphParallel(root, rootBuild);
     }
 
