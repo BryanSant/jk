@@ -90,6 +90,7 @@ public final class GitPlugin implements Plugin {
         return switch (command) {
             case "fetch" -> doFetch(out, worker, source, noCache);
             case "resolve_ref" -> doResolveRef(out, worker, source);
+            case "list_refs" -> doListRefs(out, worker, source);
             case "verify_locked" -> doVerifyLocked(out, worker, source, expectedSha);
             default -> {
                 System.err.println("jk-git-runner: unknown command: " + command);
@@ -123,6 +124,27 @@ public final class GitPlugin implements Plugin {
                     + r.commitTime().getEpochSecond()
                     + ",\"nearest_tag\":"
                     + (r.nearestTag().isPresent() ? Ndjson.quote(r.nearestTag().get()) : "null")
+                    + "}");
+            return 0;
+        } catch (IOException e) {
+            out.emit("{\"t\":\"result\",\"ok\":false,\"error\":" + Ndjson.quote(e.getMessage()) + "}");
+            return 1;
+        }
+    }
+
+    private static int doListRefs(ProtocolWriter out, GitFetcherWorker w, GitSource source) {
+        try {
+            GitFetcherWorker.RemoteRefs r = w.listRefs(source);
+            StringBuilder tags = new StringBuilder("[");
+            for (int i = 0; i < r.tags().size(); i++) {
+                if (i > 0) tags.append(',');
+                tags.append(Ndjson.quote(r.tags().get(i)));
+            }
+            tags.append(']');
+            out.emit("{\"t\":\"result\",\"ok\":true,\"tags\":"
+                    + tags
+                    + ",\"head\":"
+                    + (r.headSha() == null ? "null" : Ndjson.quote(r.headSha()))
                     + "}");
             return 0;
         } catch (IOException e) {

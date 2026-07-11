@@ -96,6 +96,24 @@ public final class GitFetcher {
         return new RefInfo(r.sha, Instant.ofEpochSecond(r.commitTime), Optional.ofNullable(r.nearestTag));
     }
 
+    /** A remote's advertised refs: tag names + the {@code HEAD} sha (null when the remote has none). */
+    public record RemoteRefs(List<String> tags, String headSha) {
+        public RemoteRefs {
+            tags = List.copyOf(Objects.requireNonNull(tags, "tags"));
+        }
+    }
+
+    /**
+     * Enumerate the remote's tags + HEAD via {@code ls-remote} — no clone. Used by {@code jk
+     * outdated} to find newer tags for a git dependency without materializing the repo.
+     */
+    public RemoteRefs listRefs(GitSource source) throws IOException {
+        Objects.requireNonNull(source, "source");
+        Result r = runWorker("list_refs", source, false, null);
+        if (!r.ok) throw new IOException(r.error);
+        return new RemoteRefs(r.tags != null ? r.tags : List.of(), r.head);
+    }
+
     // --- worker dispatch -----------------------------------------------------
 
     private Result runWorker(String command, GitSource source, boolean noCache, String expectedSha) throws IOException {
@@ -145,6 +163,8 @@ public final class GitFetcher {
                             result.actual = Ndjson.str(json, "actual");
                             result.commitTime = Ndjson.longValue(json, "commit_time", 0);
                             result.nearestTag = Ndjson.str(json, "nearest_tag");
+                            result.tags = Ndjson.strArray(json, "tags");
+                            result.head = Ndjson.str(json, "head");
                         })
                         .passthrough(line -> diag.append(line).append('\n'))
                         .run(cmd);
@@ -190,7 +210,8 @@ public final class GitFetcher {
 
     private static class Result {
         boolean ok = true, tagRewrite;
-        String sha, checkout, error, actual, nearestTag;
+        String sha, checkout, error, actual, nearestTag, head;
+        List<String> tags;
         long commitTime;
     }
 

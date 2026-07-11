@@ -450,6 +450,7 @@ public final class EngineServer implements AutoCloseable {
                         handleForecastRequest(line, writer);
                     }
                     case EngineProtocol.PROJECT_INFO_REQUEST -> handleProjectInfoRequest(line, writer);
+                    case EngineProtocol.OUTDATED_REQUEST -> handleOutdatedRequest(line, writer);
                     case EngineProtocol.EXEC_PLAN_REQUEST -> handleExecPlanRequest(line, writer);
                     case EngineProtocol.EDIT_REQUEST -> handleEditRequest(line, writer);
                     case EngineProtocol.DENY_CHECK_REQUEST -> handleDenyCheckRequest(line, writer);
@@ -964,6 +965,41 @@ public final class EngineServer implements AutoCloseable {
             info = dev.jkbuild.engine.protocol.ProjectInfo.error(String.valueOf(e.getMessage()));
         }
         sendQuiet(writer, info.encode());
+    }
+
+    /**
+     * Answer {@link EngineProtocol#OUTDATED_REQUEST}: the read-only {@code jk outdated} report.
+     * Synchronous, inline — parse + version enumeration only, never writes jk.lock. The session's
+     * offline/force flags ride the request so version enumeration honors them (metadata TTL bypass,
+     * stale-but-usable when offline). Errors ride the ack's {@code error} field.
+     */
+    private void handleOutdatedRequest(String requestLine, BufferedWriter writer) {
+        dev.jkbuild.engine.protocol.OutdatedReport report;
+        try {
+            Path dir = Path.of(Ndjson.str(requestLine, "dir"));
+            Path cache = Path.of(Ndjson.str(requestLine, "cache"));
+            String repoUrl = Ndjson.str(requestLine, "repoUrl");
+            JkConfig config = new JkConfig(
+                    Optional.empty(),
+                    Optional.of(Ndjson.bool(requestLine, "offline", false)),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.of(Ndjson.bool(requestLine, "force", false)),
+                    Optional.empty());
+            Session session = Session.defaults()
+                    .withConfig(config)
+                    .withWorkingDir(dir)
+                    .withCacheDir(cache);
+            report = SessionContext.where(session, () -> dev.jkbuild.runtime.OutdatedGoals.compute(
+                    dir, cache, repoUrl == null ? null : java.net.URI.create(repoUrl)));
+        } catch (Exception e) {
+            report = dev.jkbuild.engine.protocol.OutdatedReport.error(String.valueOf(e.getMessage()));
+        }
+        sendQuiet(writer, report.encode());
     }
 
     /**

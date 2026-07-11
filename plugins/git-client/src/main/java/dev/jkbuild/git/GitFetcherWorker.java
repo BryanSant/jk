@@ -51,6 +51,36 @@ public final class GitFetcherWorker {
 
     public record RefInfo(String sha, Instant commitTime, Optional<String> nearestTag) {}
 
+    /** A remote's advertised refs: tag names (no {@code refs/tags/} prefix) + the {@code HEAD} sha. */
+    public record RemoteRefs(java.util.List<String> tags, String headSha) {}
+
+    /**
+     * Enumerate the remote's tags and HEAD via {@code ls-remote} — no clone, one network round trip.
+     * Peeled tag entries ({@code refs/tags/x^{}}) are dropped so a tag appears once.
+     */
+    public RemoteRefs listRefs(GitSource source) throws IOException {
+        try {
+            // No setHeads/setTags filter: those exclude the symbolic HEAD. We want every ref and
+            // pick out refs/tags/* + HEAD ourselves.
+            var cmd = Git.lsRemoteRepository().setRemote(source.canonicalUrl());
+            if (credentials != null) cmd.setCredentialsProvider(credentials);
+            java.util.List<String> tags = new java.util.ArrayList<>();
+            String head = null;
+            for (Ref r : cmd.call()) {
+                String name = r.getName();
+                if (name.startsWith("refs/tags/")) {
+                    if (name.endsWith("^{}")) continue; // peeled duplicate of an annotated tag
+                    tags.add(name.substring("refs/tags/".length()));
+                } else if ("HEAD".equals(name) && r.getObjectId() != null) {
+                    head = r.getObjectId().getName();
+                }
+            }
+            return new RemoteRefs(java.util.List.copyOf(tags), head);
+        } catch (GitAPIException e) {
+            throw new IOException("git ls-remote failed: " + e.getMessage(), e);
+        }
+    }
+
     public Fetched fetch(GitSource s) throws IOException {
         return fetch(s, false);
     }
