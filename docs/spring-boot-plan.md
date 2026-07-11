@@ -242,8 +242,13 @@ latency is bounded by javac on the delta, with no Gradle configuration phase in 
    0.1s warm restore); `aot-args` bakes profiles at build time; `jk build --aot-cache`
    ships the JEP 514 ladder for any app (jarmode-extract layout + onRefresh training
    for Boot, self-assembled layout for plain apps, AppCDS fallback on JDK < 25 —
-   measured ~1.5×). Still open: reachability-metadata repo consumption (design sketch
-   in [boot-on-jk.md](./boot-on-jk.md) "Known gaps"), test AOT.
+   measured ~1.5×). **2026-07-11 (later):** the reachability-metadata repo is consumed
+   on every `jk native` build (verified: postgresql driver doing real JDBC inside a
+   native image, app start 0.051s); Kotlin Boot projects get the no-arg (jpa) plugin
+   alongside all-open — which exposed and fixed a silent BTA plugin-loading failure
+   (typed COMPILER_PLUGINS + the .jar-extension loader quirk). Test AOT is closed as
+   deliberately-deferred (it exists to feed nativeTest, a standalone future feature —
+   decision + design in boot-on-jk.md).
 4. **Dev loop** — `jk dev` tiers 1–2; `jk new --spring`; `jk import` Boot translation;
    migration doc ("Boot on jk" with the parity table).
    **CORE DONE (2026-07-10).** `jk dev` ships general-purpose: watch → engine

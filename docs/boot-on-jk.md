@@ -72,6 +72,8 @@ BOM's managed version (Maven/Gradle semantics); floating selectors keep the BOM'
 | `processAot` / `compileAot` | `aot = true` | forks `SpringApplicationAotProcessor`, compiles generated sources, embeds classes + hints; action-cached |
 | AOT runtime | `java -Dspring.aot.enabled=true -jar app.jar` | same flag as everywhere |
 | `org.graalvm.buildtools.native` + Boot | `[native]` + `jk native` | AOT auto-enabled; exploded classes + generated hints on the image classpath; Start-Class scan |
+| reachability-metadata repository | automatic on `jk native` | lock artifacts matched against the GraalVM metadata repo; verified: postgresql driver does real JDBC inside a native image |
+| `kotlin("plugin.jpa")` (no-arg) | automatic | wired when `jakarta.persistence-api` is on a Boot Kotlin project's classpath |
 | `bootBuildImage` (buildpacks) | `jk image` | daemonless layered jib: release deps / snapshot deps / exploded classes as separate OCI layers; entrypoint `java -cp /app/classes:/app/libs/*` |
 | CDS/AOT-cache Dockerfile recipe | `jk build --aot-cache` | one flag: jarmode-extract layout + trained JEP 514 cache (`-Dspring.context.exit=onRefresh` training); AppCDS fallback on JDK < 25. Measured ~1.5× startup |
 | `bootWar` | not supported | war deployment is out of scope (plan §risks) |
@@ -97,13 +99,12 @@ BOM's managed version (Maven/Gradle semantics); floating selectors keep the BOM'
 
 ## Known gaps
 
-- **GraalVM reachability-metadata repository** is not consumed yet: Boot's own AOT hints
-  cover the Spring stack (a native webmvc app builds and serves), but third-party
-  libraries that publish reachability metadata only to the repo (e.g. some drivers) may
-  need manual `META-INF/native-image` config. Planned: fetch
-  `org.graalvm.buildtools:graalvm-reachability-metadata` (repository zip), match lock
-  entries against its per-artifact index, and add matched dirs to the native-image
-  config path — benefits all native users, not just Boot.
-- `bootWar`, test AOT: out of scope / deferred (see parity table).
-- Kotlin `--spring` scaffolds build with the all-open plugin; the no-arg plugin (JPA's
-  `plugin.jpa`) is not wired yet — add it when `[spring-boot]` data-jpa usage lands.
+- **`bootWar`**: out of scope (Servlet-container deploys are a shrinking niche; revisit
+  on demand).
+- **Test AOT / `nativeTest`**: deliberately deferred. `processTestAot` exists to feed
+  `nativeTest` — running the test suite as a native image — which needs a JUnit-platform
+  native launcher, a test-classpath image build, and a new jk verb; a standalone feature,
+  not a Boot-support gap. On the JVM, test AOT adds little (Spring's test framework
+  caches contexts), and Gradle's own guidance reserves it for native-specific behavior.
+  When demand appears: mirror `SpringAotRunner` with `SpringBootTestAotProcessor` over
+  the test classes, then build the native test image from test classpath + AOT output.
