@@ -77,15 +77,24 @@ public final class BootJarPackager {
             //    Main-Class before anything else is resolvable.
             explodeLoader(jos, request.loaderJar(), epoch, dirsWritten);
 
-            // 2. Application classes + resources under BOOT-INF/classes/.
-            List<Path> files = collectFiles(request.classesDir());
-            files.sort(Comparator.comparing(p -> normalize(request.classesDir(), p)));
-            for (Path file : files) {
-                String name = normalize(request.classesDir(), file);
-                if (name.equals("META-INF/MANIFEST.MF")) continue;
-                if (isBuildStamp(name)) continue;
-                writeParentDirs(jos, CLASSES_PREFIX + name, epoch, dirsWritten);
-                writeEntryStreaming(jos, CLASSES_PREFIX + name, Files.newInputStream(file), epoch);
+            // 2. Application classes + resources under BOOT-INF/classes/, then any AOT
+            //    output roots (generated classes + GraalVM hint resources) — app files win
+            //    on collision, AOT roots in the given order after that.
+            Set<String> classEntries = new HashSet<>();
+            List<Path> roots = new ArrayList<>();
+            roots.add(request.classesDir());
+            roots.addAll(request.aotDirs());
+            for (Path root : roots) {
+                List<Path> files = collectFiles(root);
+                files.sort(Comparator.comparing(p -> normalize(root, p)));
+                for (Path file : files) {
+                    String name = normalize(root, file);
+                    if (name.equals("META-INF/MANIFEST.MF")) continue;
+                    if (isBuildStamp(name)) continue;
+                    if (!classEntries.add(name)) continue;
+                    writeParentDirs(jos, CLASSES_PREFIX + name, epoch, dirsWritten);
+                    writeEntryStreaming(jos, CLASSES_PREFIX + name, Files.newInputStream(file), epoch);
+                }
             }
 
             // 3. Boot-read metadata under BOOT-INF/classes/META-INF (classpath-visible:
@@ -308,6 +317,8 @@ public final class BootJarPackager {
      * @param buildInfo {@code build-info.properties} keys (without the {@code build.} prefix);
      *     empty map = no entry
      * @param sbom CycloneDX JSON bytes (see {@link CycloneDxSbom}); {@code null} = no SBOM
+     * @param aotDirs Spring AOT output roots (generated classes / hint resources) merged into
+     *     {@code BOOT-INF/classes} after the app's own files
      */
     public record BootJarRequest(
             Path classesDir,
@@ -319,6 +330,7 @@ public final class BootJarPackager {
             Map<String, String> attributes,
             Map<String, String> buildInfo,
             byte[] sbom,
+            List<Path> aotDirs,
             long timestampEpochSeconds) {
 
         public BootJarRequest {
@@ -330,9 +342,10 @@ public final class BootJarPackager {
             libs = libs == null ? List.of() : dedupeFileNames(libs);
             attributes = attributes == null ? Map.of() : Map.copyOf(attributes);
             buildInfo = buildInfo == null ? Map.of() : Map.copyOf(buildInfo);
+            aotDirs = aotDirs == null ? List.of() : List.copyOf(aotDirs);
         }
 
-        /** Back-compat constructor: no build-info, no SBOM. */
+        /** Back-compat constructor: no build-info, no SBOM, no AOT output. */
         public BootJarRequest(
                 Path classesDir,
                 List<Lib> libs,
@@ -344,7 +357,24 @@ public final class BootJarPackager {
                 long timestampEpochSeconds) {
             this(
                     classesDir, libs, loaderJar, outputJar, startClass, bootVersion, attributes, Map.of(), null,
-                    timestampEpochSeconds);
+                    List.of(), timestampEpochSeconds);
+        }
+
+        /** Back-compat constructor: build-info + SBOM, no AOT output. */
+        public BootJarRequest(
+                Path classesDir,
+                List<Lib> libs,
+                Path loaderJar,
+                Path outputJar,
+                String startClass,
+                String bootVersion,
+                Map<String, String> attributes,
+                Map<String, String> buildInfo,
+                byte[] sbom,
+                long timestampEpochSeconds) {
+            this(
+                    classesDir, libs, loaderJar, outputJar, startClass, bootVersion, attributes, buildInfo, sbom,
+                    List.of(), timestampEpochSeconds);
         }
 
         /**

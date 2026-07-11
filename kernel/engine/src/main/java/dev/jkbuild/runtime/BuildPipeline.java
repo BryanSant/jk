@@ -1460,6 +1460,32 @@ public final class BuildPipeline {
             startClass = dev.jkbuild.layout.MainClassScanner.scanUnique(classes);
         }
 
+        // Spring AOT (plan §3.4): explicit aot = true, or auto when [native] is declared.
+        // Runs before the packaging cache check so the target/aot dirs always exist for the
+        // native phase, and the packaged jar always embeds the generated classes + hints
+        // (JVM runs opt in with -Dspring.aot.enabled=true; native uses them by construction).
+        BuildLayout layout = ctx.require(LAYOUT);
+        List<Path> aotDirs = List.of();
+        if (boot.aotEnabled(project.nativeConfig().isPresent())) {
+            ctx.label("Spring AOT processing (" + startClass + ")");
+            try {
+                aotDirs = SpringAotRunner.process(
+                                in.dir(),
+                                in.cache(),
+                                in.lockFile(),
+                                ctx.require(JAVA_HOME),
+                                project,
+                                layout,
+                                classes,
+                                startClass,
+                                project.project().javaRelease())
+                        .dirs();
+            } catch (IOException e) {
+                ctx.error("spring-aot", e.getMessage());
+                throw e;
+            }
+        }
+
         List<BootJarPackager.Lib> libs = new ArrayList<>();
         List<CycloneDxSbom.Component> sbomComponents = new ArrayList<>();
         for (ClasspathResolver.Entry entry : resolver.entriesFor(lock, ClasspathResolver.RUNTIME)) {
@@ -1497,11 +1523,14 @@ public final class BuildPipeline {
 
         List<Path> libJars = new ArrayList<>(libs.size());
         for (BootJarPackager.Lib lib : libs) libJars.add(lib.jar());
+        StringBuilder aotToken = new StringBuilder();
+        for (Path d : aotDirs) aotToken.append(dev.jkbuild.task.ClasspathFingerprint.entry(d)).append(';');
         List<String> tokens = List.of(
                 "classes:" + dev.jkbuild.task.ClasspathFingerprint.entry(classes),
                 "libs:" + dev.jkbuild.task.ClasspathFingerprint.of(libJars),
                 "start:" + startClass,
                 "boot:" + boot.version() + ":tools=" + boot.includeTools() + ":info=" + boot.buildInfo(),
+                "aot:" + aotToken,
                 "manifest:" + project.manifest());
         String pkgTask = ActionKey.qualifiedTaskId("package-jar", jarPath);
         String pkgKey = ActionKey.forArtifact(pkgTask, dev.jkbuild.util.JkVersion.VERSION, tokens);
@@ -1523,6 +1552,7 @@ public final class BuildPipeline {
                         project.manifest(),
                         buildInfo,
                         sbom,
+                        aotDirs,
                         0L));
         storePackaged(in.cache(), pkgTask, pkgKey, tokens, jarPath.getParent(), List.of(jarPath));
         ctx.put(JAR_PATH, jarPath);
@@ -1866,6 +1896,10 @@ public final class BuildPipeline {
                     String mainClass = (mainOverride != null && !mainOverride.isBlank())
                             ? mainOverride
                             : (nativeCfg.mainClass() != null ? nativeCfg.mainClass() : project.mainClass());
+                    if ((mainClass == null || mainClass.isBlank()) && project.isSpringBoot()) {
+                        // Boot apps carry exactly one main — same scan Start-Class used.
+                        mainClass = dev.jkbuild.layout.MainClassScanner.scanUnique(layout.classesDir());
+                    }
                     boolean shared = (mainClass == null || mainClass.isBlank());
                     if (shared) mainClass = null;
                     // Output path: [native].name overrides the artifact-derived name.
@@ -1886,7 +1920,18 @@ public final class BuildPipeline {
                     Path javaHome = javaHomeEarly; // resolved above in fail-fast check
 
                     List<Path> classpath = new ArrayList<>();
-                    classpath.add(mainJar);
+                    if (project.isSpringBoot()) {
+                        // Boot: the main jar is the executable layout (classes hidden under
+                        // BOOT-INF/) — native-image gets the exploded classes plus the AOT
+                        // output (generated classes + META-INF/native-image hints), which
+                        // package-jar produced just before this phase.
+                        classpath.add(layout.classesDir());
+                        for (Path aotDir : SpringAotRunner.outputAt(layout).dirs()) {
+                            if (Files.isDirectory(aotDir)) classpath.add(aotDir);
+                        }
+                    } else {
+                        classpath.add(mainJar);
+                    }
                     ClasspathResolver cpResolver = new ClasspathResolver(new Cas(cache));
                     if (Files.exists(lockFile)) {
                         Lockfile lock = LockfileReader.read(lockFile);

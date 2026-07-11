@@ -231,6 +231,16 @@ latency is bounded by javac on the delta, with no Gradle configuration phase in 
 3. **AOT & native** — spring-aot/compile-aot phases; `jk native` integration +
    reachability-metadata repo; `jk package --aot-cache` ladder. *Exit: native webmvc app
    builds and serves; AOT-cache startup ≈ Boot's documented ~1.5×.*
+   **CORE DONE (2026-07-10).** `aot = true` (auto with `[native]`) forks
+   `SpringApplicationAotProcessor` against the production classpath during boot
+   packaging, compiles the generated sources, and embeds classes + GraalVM hints in the
+   jar (JVM runs opt in with `-Dspring.aot.enabled=true` — verified "Starting
+   AOT-processed", 0.64s). `jk native` on Boot uses exploded classes + AOT output on the
+   image classpath with the Start-Class scan; verified: native webmvc binary builds
+   (1m03s) and serves, startup **0.022s**. Deferred from this phase: AOT action-key
+   caching (reruns each packaging), `aot-args` profile baking, reachability-metadata
+   repo consumption (Boot's own hints sufficed for webmvc), test AOT, and the
+   `--aot-cache` JEP 514 packaging ladder.
 4. **Dev loop** — `jk dev` tiers 1–2; `jk new --spring`; `jk import` Boot translation;
    migration doc ("Boot on jk" with the parity table).
 
