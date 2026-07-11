@@ -371,6 +371,25 @@ publishing — a build plugin decorates the pipeline, it does not replace the ke
    *Exit: `jk build` on a minimal Android app produces an installable APK via
    `plugins/android`, and the SPI needed zero engine changes to get there.*
 
+### Android Phase-2 SPI findings (all generic, none Android-specific)
+
+- **Container artifacts are resolver-owned** (android-plan §2): the lock records a
+  non-jar packaging's file name (`path`); `ExplodedArchives` materializes
+  content-addressed exploded views; `ClasspathResolver` entries carry a `container` dir
+  and substitute `classes.jar`. Plugins receive containers as runtime entries —
+  `PackageIo.RuntimeEntry.container` / `StepExec.runtimeEntries()` — never CAS paths.
+- **`[[packaging.variant]]`** with `when = { config, equals }`: one manifest, per-config
+  artifact descriptors (an app's APK vs a library's AAR); `exec-mode = "none"` names a
+  non-executable artifact. Config predicates only — packaging resolves before any
+  classpath exists.
+- **A container packager may emit the conventional classes jar** next to its main
+  artifact; both cache under the packager's one action key — workspace consumers keep the
+  plain-jar contract with zero engine special-casing.
+- **`ExecPlan.deployVerb` extends to `jk dev`**: device artifacts get a rebuild → redeploy
+  loop (the client re-dispatches the plugin verb per change; watch roots ride the plan).
+- **`[[sdk]]` lock entries** pin provisioned-SDK component revisions (lock-sdk phase);
+  step-dependency resolution verifies pins and reports drift.
+
 ## 5. Risks & open questions
 
 - **Manifest DSL creep.** The closed predicate set will attract feature requests
