@@ -5,8 +5,6 @@ import dev.jkbuild.util.JkDirs;
 import java.nio.file.Path;
 import java.util.Optional;
 import java.util.function.Function;
-import org.tomlj.TomlParseResult;
-import org.tomlj.TomlTable;
 
 /**
  * User-global preferences for cache maintenance, parsed from the {@code [cache]} table of {@code
@@ -73,18 +71,32 @@ public record JkCacheConfig(boolean autoPrune, Optional<Integer> maxSizeGb, int 
      * negative budget/interval is meaningless) and fall back to the default.
      */
     public static JkCacheConfig fromToml(Path file) {
-        Optional<TomlParseResult> parsed = TomlValues.parse(file);
-        if (parsed.isEmpty()) return DEFAULTS;
-        TomlTable cache = parsed.get().getTable("cache");
-        if (cache == null) return DEFAULTS;
-
-        boolean autoPrune = TomlValues.optBoolean(cache, "auto-prune").orElse(DEFAULTS.autoPrune);
-        Optional<Integer> maxSize = nonNegative(TomlValues.optInt(cache, "max-size-gb"));
-        int interval =
-                nonNegative(TomlValues.optInt(cache, "prune-interval-days")).orElse(DEFAULTS.pruneIntervalDays);
-        int ttl = nonNegative(TomlValues.optInt(cache, "record-ttl-days")).orElse(DEFAULTS.recordTtlDays);
+        // TomlScan, not tomlj: this resolves client-side (CacheCommand, the auto-prune scheduler
+        // in the build tail) and the [cache] table of ~/.jk/config.toml is a jk-documented flat
+        // schema (thin-client C — the native client ships no TOML parser).
+        TomlScan scan = TomlScan.scan(
+                file, "cache.auto-prune", "cache.max-size-gb", "cache.prune-interval-days", "cache.record-ttl-days");
+        boolean autoPrune = switch (String.valueOf(scan.get("cache.auto-prune"))) {
+            case "true" -> true;
+            case "false" -> false;
+            default -> DEFAULTS.autoPrune;
+        };
+        Optional<Integer> maxSize = nonNegative(scanInt(scan, "cache.max-size-gb"));
+        int interval = nonNegative(scanInt(scan, "cache.prune-interval-days")).orElse(DEFAULTS.pruneIntervalDays);
+        int ttl = nonNegative(scanInt(scan, "cache.record-ttl-days")).orElse(DEFAULTS.recordTtlDays);
 
         return new JkCacheConfig(autoPrune, maxSize, interval, ttl);
+    }
+
+    /** A scanned integer scalar; absent or malformed → empty (the lenient-read contract). */
+    private static Optional<Integer> scanInt(TomlScan scan, String key) {
+        String v = scan.get(key);
+        if (v == null) return Optional.empty();
+        try {
+            return Optional.of(Integer.valueOf(v));
+        } catch (NumberFormatException e) {
+            return Optional.empty();
+        }
     }
 
     private static Optional<Integer> nonNegative(Optional<Integer> value) {

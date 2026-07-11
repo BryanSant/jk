@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.config;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
-import org.tomlj.TomlArray;
-import org.tomlj.TomlParseResult;
-import org.tomlj.TomlTable;
 
 /**
  * Forge OAuth-app client IDs sourced from {@code jk.toml} config files. This lets a self-hosted
@@ -102,37 +103,59 @@ public final class ForgeAuthConfig {
 
     /** Parse the {@code [forge]} table from a single TOML file; missing/invalid → empty. */
     public static ForgeAuthConfig loadFrom(Path path) {
-        // Degrade gracefully on missing/foreign/malformed files, like JkConfigLoader.
-        Optional<TomlParseResult> parsed = TomlValues.parse(path);
-        if (parsed.isEmpty()) return empty();
-        TomlTable forge = parsed.get().getTable("forge");
-        if (forge == null) return empty();
+        // A line scanner in the TomlScan family, not tomlj: this resolves client-side (the OAuth
+        // login flow) and the documented shape is section-scoped flat scalars — [forge.<provider>]
+        // client-id, and repeated [[forge.host]] name/client-id entries. Exotic TOML (inline
+        // tables, dotted keys) reads as absent, never a wrong value; missing/malformed → empty.
+        if (!Files.isRegularFile(path)) return empty();
+        List<String> lines;
+        try {
+            lines = Files.readAllLines(path, StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            return empty();
+        }
 
         Map<String, String> byProvider = new HashMap<>();
-        for (String key : forge.keySet()) {
-            if (key.equals("host")) continue; // reserved for the per-host array
-            Object v = forge.get(key);
-            if (v instanceof TomlTable provider) {
-                String cid = provider.getString("client-id");
-                if (cid != null && !cid.isBlank()) {
-                    byProvider.put(key.toLowerCase(Locale.ROOT), cid.strip());
-                }
-            }
-        }
-
         Map<String, String> byHost = new HashMap<>();
-        TomlArray hosts = forge.getArray("host");
-        if (hosts != null) {
-            for (int i = 0; i < hosts.size(); i++) {
-                if (!(hosts.get(i) instanceof TomlTable h)) continue;
-                String name = h.getString("name");
-                String cid = h.getString("client-id");
-                if (name != null && !name.isBlank() && cid != null && !cid.isBlank()) {
-                    byHost.put(name.toLowerCase(Locale.ROOT).strip(), cid.strip());
-                }
+        String section = "";
+        boolean inHostEntry = false;
+        String hostName = null;
+        String hostCid = null;
+        for (String raw : lines) {
+            String line = raw.strip();
+            if (line.isEmpty() || line.startsWith("#")) continue;
+            if (line.startsWith("[")) {
+                commitHost(byHost, inHostEntry, hostName, hostCid);
+                int close = line.indexOf(']');
+                if (close <= 1) continue;
+                section = line.substring(line.startsWith("[[") ? 2 : 1, close)
+                        .replace("]", "")
+                        .strip();
+                inHostEntry = section.equals("forge.host") && line.startsWith("[[");
+                hostName = null;
+                hostCid = null;
+                continue;
+            }
+            int eq = line.indexOf('=');
+            if (eq <= 0) continue;
+            String key = line.substring(0, eq).strip();
+            String value = TomlScan.scalar(line.substring(eq + 1).strip());
+            if (value.isBlank()) continue;
+            if (inHostEntry) {
+                if (key.equals("name")) hostName = value;
+                if (key.equals("client-id")) hostCid = value;
+            } else if (section.startsWith("forge.") && key.equals("client-id")) {
+                byProvider.put(section.substring("forge.".length()).toLowerCase(Locale.ROOT), value.strip());
             }
         }
+        commitHost(byHost, inHostEntry, hostName, hostCid);
 
         return new ForgeAuthConfig(byProvider, byHost);
+    }
+
+    private static void commitHost(Map<String, String> byHost, boolean inHostEntry, String name, String cid) {
+        if (inHostEntry && name != null && !name.isBlank() && cid != null && !cid.isBlank()) {
+            byHost.put(name.toLowerCase(Locale.ROOT).strip(), cid.strip());
+        }
     }
 }

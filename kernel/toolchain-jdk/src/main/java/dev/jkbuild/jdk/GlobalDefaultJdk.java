@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.jdk;
 
-import dev.jkbuild.config.TomlValues;
+import dev.jkbuild.config.TomlScan;
 import dev.jkbuild.util.JkDirs;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -211,11 +211,12 @@ public final class GlobalDefaultJdk {
     /**
      * Read a top-level string config key, or empty when absent/blank. Degrades to empty on a missing
      * or malformed config (consistent with every other jk config reader — a stray syntax error must
-     * not break {@code jk jdk}); the symlink channel remains as a fallback signal. Reads through the
-     * shared {@link TomlValues} coercion.
+     * not break {@code jk jdk}); the symlink channel remains as a fallback signal. Reads via
+     * {@link TomlScan} — this key sits on the shell hook's fallback path (thin-client C: no TOML
+     * parser client-side).
      */
     private Optional<String> readKey(String key) {
-        return TomlValues.parse(configFile).flatMap(toml -> TomlValues.optString(toml, key));
+        return Optional.ofNullable(TomlScan.scan(configFile, key).get(key)).filter(v -> !v.isBlank());
     }
 
     private void writeSymlink(Path symlink, Path target) throws IOException {

@@ -98,7 +98,7 @@ public final class TomlScan {
     }
 
     /** Strip quotes from a scalar; drop a trailing same-line comment on unquoted values. */
-    private static String scalar(String v) {
+    static String scalar(String v) {
         if (v.length() >= 2 && (v.charAt(0) == '"' || v.charAt(0) == '\'')) {
             char quote = v.charAt(0);
             int end = v.indexOf(quote, 1);
