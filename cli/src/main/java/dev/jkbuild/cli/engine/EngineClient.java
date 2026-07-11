@@ -44,6 +44,15 @@ public final class EngineClient {
     /** How long to wait for a freshly spawned engine to come up before giving up. */
     private static final Duration DEFAULT_START_TIMEOUT = Duration.ofSeconds(5);
 
+    /**
+     * The wait when the spawn is an AOT-cache <em>training</em> run (first start after the engine
+     * jar changed, {@code -XX:AOTCacheOutput}): recording makes that one boot much slower than a
+     * mapped-cache start, and timing out mid-training reports a healthy engine as failed. The
+     * liveness check in {@link #awaitStartup} keeps this long budget safe — a crashed engine still
+     * fails in well under a second.
+     */
+    private static final Duration TRAINING_START_TIMEOUT = Duration.ofSeconds(60);
+
     private EngineClient() {}
 
     /** What a connection's {@code hello}/{@code hello-ack} handshake reveals about the engine. */
@@ -1026,11 +1035,21 @@ public final class EngineClient {
             if (clientVersion.equals(existing.get().version())) return existing.get();
             killStale(existing.get().pid(), startTimeout);
         }
-        spawn(paths, clientVersion);
-        return awaitStartup(paths, clientVersion, startTimeout)
+        Spawned spawned = spawn(paths, clientVersion);
+        Duration wait = startTimeout;
+        if (spawned.trainingAotCache()) {
+            if (TRAINING_START_TIMEOUT.compareTo(wait) > 0) wait = TRAINING_START_TIMEOUT;
+            // Say why this start is slower — a silent long wait reads as a hang.
+            System.err.println(
+                    "jk: first start with this engine build — training the AOT cache (one-time; later starts are instant) ...");
+        }
+        return awaitStartup(paths, clientVersion, wait, spawned.process())
                 .orElseThrow(() -> new IOException(
                         "could not start the build engine — see " + paths.log() + " for details"));
     }
+
+    /** What {@link #spawn} launched: the child (same pid — it setsid()s, never forks) + AOT mode. */
+    private record Spawned(Process process, boolean trainingAotCache) {}
 
     private static void killStale(long pid, Duration timeout) {
         ProcessHandle.of(pid).ifPresent(h -> {
@@ -1168,7 +1187,8 @@ public final class EngineClient {
     }
 
     /** Spawn a fresh engine, detached — mirrors {@link CachePruneScheduler}'s spawn-and-forget pattern. */
-    private static void spawn(EnginePaths.Paths paths, String clientVersion) throws IOException {
+    private static Spawned spawn(EnginePaths.Paths paths, String clientVersion) throws IOException {
+        boolean trainingAotCache = false;
         String jkExe = CachePruneScheduler.resolveJkExe()
                 .orElseThrow(() -> new IOException("could not resolve the running jk binary's path"));
         Path libDir = dev.jkbuild.util.JkDirs.lib();
@@ -1224,7 +1244,8 @@ public final class EngineClient {
                 // assembled on clean exit — idle recycling makes that routine); every later cold
                 // start maps the cache.
                 Path aotCache = aotCachePath(paths, Path.of(engine.path()));
-                command.add((Files.exists(aotCache) ? "-XX:AOTCache=" : "-XX:AOTCacheOutput=") + aotCache);
+                trainingAotCache = !Files.exists(aotCache);
+                command.add((trainingAotCache ? "-XX:AOTCacheOutput=" : "-XX:AOTCache=") + aotCache);
                 if (config.heapCapped()) {
                     command.add("-Xms" + config.minHeapMb() + "m");
                     command.add("-Xmx" + config.maxHeapMb() + "m");
@@ -1286,6 +1307,7 @@ public final class EngineClient {
         pb.redirectInput(ProcessBuilder.Redirect.PIPE);
         Process p = pb.start();
         p.getOutputStream().close(); // EOF immediately; the engine doesn't read stdin
+        return new Spawned(p, trainingAotCache);
     }
 
     /**
@@ -1331,11 +1353,18 @@ public final class EngineClient {
         }
     }
 
-    private static Optional<Handshake> awaitStartup(EnginePaths.Paths paths, String clientVersion, Duration timeout) {
+    private static Optional<Handshake> awaitStartup(
+            EnginePaths.Paths paths, String clientVersion, Duration timeout, Process spawned) {
         long deadline = System.nanoTime() + timeout.toNanos();
         while (System.nanoTime() < deadline) {
             Optional<Handshake> h = handshake(paths.socket(), clientVersion);
             if (h.isPresent()) return h;
+            if (spawned != null && !spawned.isAlive()) {
+                // The child died (setsid keeps the pid, so liveness is authoritative). One last
+                // handshake: a concurrent spawn may have won the election and be serving already —
+                // our child exiting is then the healthy loser, not a failure.
+                return handshake(paths.socket(), clientVersion);
+            }
             sleepQuietly(50);
         }
         return Optional.empty();
