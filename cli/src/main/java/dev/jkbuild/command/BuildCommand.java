@@ -75,6 +75,7 @@ public final class BuildCommand implements CliCommand {
                 Opt.value("<dir>", "Override the JDK install root.", "--jdks-dir")
                         .hide(),
                 Opt.flag("Skip compiling and running tests.", "--skip-tests"),
+                Opt.flag("Package an extracted layout + trained JVM startup cache.", "--aot-cache"),
                 Opt.flag("Build modules one at a time (rich serial view).", "--no-parallel"),
                 Opt.flag("", "--parallel").hide(),
                 Opt.flag("Run modules' tests concurrently too. Default: off.", "--parallel-tests"));
@@ -88,6 +89,7 @@ public final class BuildCommand implements CliCommand {
     GlobalOptions global;
     boolean noParallel;
     boolean parallelTests;
+    boolean aotCache;
     // ---- GoalKeys -------------------------------------------------------
     //
     // BuildPipeline owns the phase DAG and all of its keys; BuildCommand only
@@ -110,6 +112,7 @@ public final class BuildCommand implements CliCommand {
         this.jdksDir = in.value("jdks-dir").map(Path::of).orElse(null);
         this.buildOpts = new dev.jkbuild.cli.BuildOptions();
         this.buildOpts.skipTests = in.isSet("skip-tests");
+        this.aotCache = in.isSet("aot-cache");
         this.noParallel = in.isSet("no-parallel") && !in.isSet("parallel") && !in.isSet("parallel-tests");
         this.global = GlobalOptions.from(in);
         // Opt-in: run modules' tests concurrently. Default serializes them
@@ -135,6 +138,11 @@ public final class BuildCommand implements CliCommand {
             return Exit.CONFIG;
         }
         if (peek.isWorkspaceRoot()) {
+            if (aotCache) {
+                CliOutput.err("jk build: --aot-cache packages a single application project;"
+                        + " run it from the module directory.");
+                return Exit.USAGE;
+            }
             return buildWorkspace(startDir, peek);
         }
         // Module redirect: discover the enclosing workspace and build from there.
@@ -154,7 +162,18 @@ public final class BuildCommand implements CliCommand {
         } catch (java.io.IOException e) {
             // Workspace discovery failed — fall through to single-project build.
         }
-        return runForDir(startDir);
+        int code = runForDir(startDir);
+        if (code == 0 && aotCache) {
+            // Post-build tail (like run's exec): extract layout + training run, client-side —
+            // it's process orchestration on already-built artifacts, not build work.
+            JkBuild project = JkBuildParser.parse(buildFile);
+            code = AotCachePackage.run(
+                    startDir,
+                    project,
+                    dev.jkbuild.layout.BuildLayout.of(startDir, project),
+                    cacheDir != null ? cacheDir : JkDirs.cache());
+        }
+        return code;
     }
 
     /** Default: parallel graph build; {@code --no-parallel}: the serial rich aggregate view. */
