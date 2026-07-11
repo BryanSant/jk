@@ -1,6 +1,26 @@
 # Build Plugins — custom tables, framework integrations, and the plugin SPI
 
-**Status:** P4 LANDED (2026-07-11, f1479623..) — scaffold + import + verbs from plugins.
+**Status:** P5 LANDED (2026-07-11, 465c0309..4be7331a) — third-party resolution + trust.
+`[plugins]` declarations now complete the loop the earlier lock/sync groundwork started:
+lock-plugins fetches + SHA-pins (existing) AND materializes each jar's `jk-plugin.toml`
+into `<module>/target/plugin-manifests/<sha>.jk-plugin.toml` (PluginManifestOps writes,
+PluginManifestStore is the parser-readable file side — the parser never touches the CAS).
+`PluginTableRegistry.manifestsFor(dir, decls)` layers materialized third-party manifests
+onto the built-ins (id/table collisions error); BuildPipeline + PluginVerbs run a CAS-only
+pre-flight + `JkBuildParser.reparse` so a plugin's table validates and its contributions
+apply on the very first build after `jk sync`. The §3.4 unowned-table gate is live
+(suppressed only while a declaration is unresolved). Third-party code hooks fork the
+lock-pinned CAS jar itself (`[code] worker` is first-party-only now) behind the consent
+gate: `TrustedPlugins` (`~/.jk/state/trusted-plugins.toml`, exact coordinate or `group:`
+prefix; `jk trust plugin` manages it) — the refusal names the remedy; first-party plugins
+are implicitly trusted (Posture A). Acceptance: ThirdPartyPluginTest publishes a
+hello-world plugin to a file:// repo and drives publish→declare→lock→extract→validate→
+contribute→refuse-untrusted→trust→verb end to end. `docs/authoring-plugins.md` is the
+blueprint walkthrough. P5 residue: the P4 `--spring` static-flag listing still stands
+(dynamic listing of installed plugins' scaffold flags is now unblocked but not wired);
+capability declaration/audit (Posture B) stays deferred per plugin-refactor.md.
+
+**Previous status — P4 LANDED** (2026-07-11, f1479623..) — scaffold + import + verbs from plugins.
 The manifest grows `[scaffold]` (flag, jk.toml fragment appends, sample templates — pure
 data with the closed `lang` predicate; templates bake in next to the manifest and render
 engine-side via GENERATE params, so `jk new --spring` ships ZERO framework content in the
