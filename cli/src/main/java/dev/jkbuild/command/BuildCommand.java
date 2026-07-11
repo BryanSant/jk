@@ -178,7 +178,9 @@ public final class BuildCommand implements CliCommand {
         // Thin client: entryBuild never crosses the wire (EngineProtocol.buildRequest serializes
         // only entryDir + flags; the engine re-parses). The parsed model is needed ONLY by the
         // in-process test seam, so parse lazily on that branch alone.
-        JkBuild rootBuild = engineDisabledForTests() ? JkBuildParser.parse(root.resolve("jk.toml")) : null;
+        JkBuild rootBuild = engineDisabledForTests()
+                ? dev.jkbuild.cli.engine.InProcessEngine.require().parseBuild(root.resolve("jk.toml"))
+                : null;
         return runGraphParallel(root, rootBuild);
     }
 

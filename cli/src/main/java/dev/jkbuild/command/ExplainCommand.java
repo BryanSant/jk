@@ -109,7 +109,9 @@ public final class ExplainCommand implements CliCommand {
         if (engineDisabledForTests()) {
             long[] etaOut = new long[1];
             plan = dev.jkbuild.cli.engine.InProcessEngine.require()
-                    .explain(startDir, JkBuildParser.parse(buildFile), cache, workers, jdksDir, profile,
+                    .explain(startDir,
+                            dev.jkbuild.cli.engine.InProcessEngine.require().parseBuild(buildFile),
+                            cache, workers, jdksDir, profile,
                             skipTests, global.verbose,
                             serial, parallelTests, etaOut);
             etaMillis = etaOut[0];

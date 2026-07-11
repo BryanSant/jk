@@ -177,7 +177,10 @@ public final class NativeCommand implements CliCommand {
             // model exactly as before. The native client never reaches this branch.
             Map<Path, JkBuild> modulesByDir;
             try {
-                modulesByDir = WorkspaceLoader.loadModules(wsRoot, JkBuildParser.parse(wsRoot.resolve("jk.toml")));
+                modulesByDir = WorkspaceLoader.loadModules(
+                        wsRoot,
+                        dev.jkbuild.cli.engine.InProcessEngine.require()
+                                .parseBuild(wsRoot.resolve("jk.toml")));
             } catch (RuntimeException e) {
                 CliOutput.err("jk native: " + e.getMessage());
                 return Exit.CONFIG;
@@ -372,9 +375,9 @@ public final class NativeCommand implements CliCommand {
         if (engineDisabledForTests()) {
             // The in-process seam still takes the parsed model — acceptable in the JVM test
             // dist, which links the parser anyway; the native client never reaches this.
-            return dev.jkbuild.cli.engine.InProcessEngine.require()
-                    .nativeSingleInProcess(projectDir, JkBuildParser.parse(buildFile), cache, graalHome.get(),
-                            coord, mode, jdksDir, mainClass, extra, buildOpts.skipTests, global.verbose);
+            var inProc = dev.jkbuild.cli.engine.InProcessEngine.require();
+            return inProc.nativeSingleInProcess(projectDir, inProc.parseBuild(buildFile), cache, graalHome.get(),
+                    coord, mode, jdksDir, mainClass, extra, buildOpts.skipTests, global.verbose);
         }
 
         // Engine-hosted (a cascade of one): the success tail names the built artifact from

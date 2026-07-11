@@ -48,6 +48,14 @@ public interface InProcessEngine {
             java.nio.file.Path binDir,
             java.nio.file.Path libDir);
 
+    /**
+     * Parse a project's jk.toml — used ONLY by the in-process test seams. Living behind this
+     * reflectively-loaded interface keeps JkBuildParser (and tomlj) out of the native image's
+     * STATIC reachable set: a seam branch that called the parser directly would drag the whole
+     * TOML stack into the binary even though the branch never executes there.
+     */
+    dev.jkbuild.model.JkBuild parseBuild(java.nio.file.Path buildFile) throws java.io.IOException;
+
     /** Thin-client edit twin: returns {changedAsString, errorOrNull}. */
     String[] edit(java.nio.file.Path file, String op, java.util.List<String> args);
 
