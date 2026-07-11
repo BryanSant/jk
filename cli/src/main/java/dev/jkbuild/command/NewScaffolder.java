@@ -167,6 +167,7 @@ public final class NewScaffolder {
     private static void writeSpringSample(NewInputs inputs) throws IOException {
         String pkg = inputs.group();
         String pkgPath = "/" + pkg.replace('.', '/');
+        boolean kotlin = inputs.lang() == NewInputs.Language.KOTLIN;
         Path srcDir = inputs.directory().resolve(mainSourceRoot(inputs) + pkgPath);
         Path testDir = inputs.directory().resolve(testSourceRoot(inputs) + pkgPath);
         Path resourcesDir = inputs.directory()
@@ -175,15 +176,61 @@ public final class NewScaffolder {
         Files.createDirectories(testDir);
         Files.createDirectories(resourcesDir);
 
-        Files.writeString(srcDir.resolve("Application.java"), renderSpringApplication(pkg), StandardCharsets.UTF_8);
-        Files.writeString(
-                testDir.resolve("ApplicationTest.java"), renderSpringApplicationTest(pkg), StandardCharsets.UTF_8);
+        if (kotlin) {
+            Files.writeString(srcDir.resolve("Application.kt"), renderSpringApplicationKt(pkg), StandardCharsets.UTF_8);
+            Files.writeString(
+                    testDir.resolve("ApplicationTest.kt"), renderSpringApplicationTestKt(pkg), StandardCharsets.UTF_8);
+        } else {
+            Files.writeString(
+                    srcDir.resolve("Application.java"), renderSpringApplication(pkg), StandardCharsets.UTF_8);
+            Files.writeString(
+                    testDir.resolve("ApplicationTest.java"), renderSpringApplicationTest(pkg), StandardCharsets.UTF_8);
+        }
         Path props = resourcesDir.resolve("application.properties");
         if (!Files.exists(props)) {
             Files.writeString(props, """
                     # server.port=8080
                     """, StandardCharsets.UTF_8);
         }
+    }
+
+    private static String renderSpringApplicationKt(String pkg) {
+        return """
+                package %s
+
+                import org.springframework.boot.autoconfigure.SpringBootApplication
+                import org.springframework.boot.runApplication
+                import org.springframework.web.bind.annotation.GetMapping
+                import org.springframework.web.bind.annotation.RestController
+
+                @SpringBootApplication
+                @RestController
+                class Application {
+
+                    @GetMapping("/")
+                    fun hello(): String = "Hello from jk + Spring Boot!"
+                }
+
+                fun main(args: Array<String>) {
+                    runApplication<Application>(*args)
+                }
+                """.formatted(pkg);
+    }
+
+    private static String renderSpringApplicationTestKt(String pkg) {
+        return """
+                package %s
+
+                import org.junit.jupiter.api.Assertions.assertEquals
+                import org.junit.jupiter.api.Test
+
+                class ApplicationTest {
+                    @Test
+                    fun helloGreets() {
+                        assertEquals("Hello from jk + Spring Boot!", Application().hello())
+                    }
+                }
+                """.formatted(pkg);
     }
 
     private static String renderSpringApplication(String pkg) {

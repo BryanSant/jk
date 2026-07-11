@@ -85,6 +85,13 @@ public final class NewJkBuildRenderer {
             sb.append("\n[dependencies]\n");
             sb.append("starter-webmvc = { group = \"org.springframework.boot\","
                     + " name = \"spring-boot-starter-webmvc\" }\n");
+            if (inputs.lang() == NewInputs.Language.KOTLIN) {
+                // Spring's Kotlin support reflects via kotlin-reflect. Versionless: the Boot
+                // BOM (which imports kotlin-bom) picks the version it was tested against —
+                // reflect only needs a stdlib >= its own line, which the newer compiler's
+                // stdlib satisfies.
+                sb.append("kotlin-reflect = { group = \"org.jetbrains.kotlin\" }\n");
+            }
             sb.append("\n[dev-dependencies]\n");
             sb.append("devtools = { group = \"org.springframework.boot\","
                     + " name = \"spring-boot-devtools\" }\n");

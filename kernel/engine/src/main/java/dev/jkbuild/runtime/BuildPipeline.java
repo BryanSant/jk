@@ -2086,9 +2086,26 @@ public final class BuildPipeline {
             throws IOException {
         String kotlinVersion = CompileToolchain.kotlinVersionFor(ctx.require(LOCKFILE), ctx.require(PROJECT));
         KotlinWorkerSetup.Prepared kt;
+        Path allopenPlugin = null;
         try {
             dev.jkbuild.repo.RepoGroup repos = RepoGroupBuilder.buildFor(ctx.require(PROJECT), null, cas);
             kt = KotlinWorkerSetup.prepare(repos, cas, kotlinVersion);
+            if (ctx.require(PROJECT).isSpringBoot()) {
+                // Boot proxies @Configuration/@Component classes — Kotlin classes are final
+                // unless the all-open (kotlin-spring) plugin opens the annotated ones. The
+                // embeddable variant matches the BTA worker's embeddable compiler. Same
+                // null-defaulting as KotlinWorkerSetup.prepare — the plugin must match the
+                // compiler actually used.
+                String pluginVersion = (kotlinVersion == null || kotlinVersion.isBlank())
+                        ? dev.jkbuild.kotlin.KotlinResolver.DEFAULT_VERSION
+                        : kotlinVersion;
+                allopenPlugin = repos.tryFetchArtifact(dev.jkbuild.model.Coordinate.of(
+                                "org.jetbrains.kotlin", "kotlin-allopen-compiler-plugin-embeddable", pluginVersion))
+                        .map(hit -> hit.fetched().cachePath())
+                        .orElseThrow(() -> new RuntimeException(
+                                "cannot fetch the kotlin-spring (all-open) compiler plugin for Kotlin "
+                                        + pluginVersion + " — required for [spring-boot] Kotlin projects"));
+            }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new RuntimeException("interrupted resolving the Kotlin compiler", e);
@@ -2101,6 +2118,12 @@ public final class BuildPipeline {
         ktArgs.add("-no-stdlib");
         // Spring Boot reflects on parameter names — mirror the javac -parameters default.
         if (ctx.require(PROJECT).isSpringBoot()) ktArgs.add("-java-parameters");
+        if (allopenPlugin != null) {
+            ktArgs.add("-Xplugin=" + allopenPlugin.toAbsolutePath());
+            // The "spring" preset opens @Component/@Configuration/@Transactional/etc.
+            ktArgs.add("-P");
+            ktArgs.add("plugin:org.jetbrains.kotlin.allopen:preset=spring");
+        }
         if (javaSourceRoot != null) {
             ktArgs.add("-Xjava-source-roots=" + javaSourceRoot.toAbsolutePath());
         }

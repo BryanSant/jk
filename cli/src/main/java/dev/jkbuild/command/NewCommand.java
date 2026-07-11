@@ -595,12 +595,6 @@ public final class NewCommand implements CliCommand {
         var resolvedLang = (lang != null && !lang.isBlank())
                 ? parseLanguage(lang)
                 : (parent != null && parent.kotlin()) ? NewInputs.Language.KOTLIN : NewInputs.Language.JAVA;
-        if (spring && resolvedLang == NewInputs.Language.KOTLIN) {
-            // Kotlin + Boot needs the all-open (kotlin-spring) compiler plugin, which jk
-            // doesn't wire yet — fail up front rather than scaffold a broken project.
-            throw new IllegalArgumentException("--spring supports Java only for now (Kotlin needs the "
-                    + "kotlin-spring compiler plugin, which jk doesn't wire yet)");
-        }
         var isExecutable = Boolean.TRUE.equals(executable) || shadow || nativeImage || spring;
         // Boot users expect the Maven layout (resources under src/main/resources); an
         // explicit --layout still wins.
@@ -608,7 +602,8 @@ public final class NewCommand implements CliCommand {
                 ? layoutFlag.toLowerCase()
                 : spring ? "traditional" : "simple";
         var resolvedMain = spring
-                ? Optional.of(resolvedGroup + ".Application")
+                // Kotlin's top-level main lives on the ApplicationKt facade class.
+                ? Optional.of(resolvedGroup + (resolvedLang == NewInputs.Language.KOTLIN ? ".ApplicationKt" : ".Application"))
                 : isExecutable
                         ? Optional.of(
                                 deriveMainFqcn(resolvedGroup, resolvedLang, "simple".equalsIgnoreCase(resolvedLayout)))
