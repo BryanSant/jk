@@ -1,56 +1,50 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.engine.http;
 
-import dev.jkbuild.plugin.protocol.Ndjson;
+import dev.jkbuild.util.MiniJson;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
- * A tiny writer for the flat JSON objects the REST surface emits — the same deliberate
- * flat-scalar-fields discipline as the engine wire protocol ({@code EngineProtocol}/{@link
- * Ndjson}), and the same dependency-free reasoning: no nesting means no JSON library on either
- * side. Escaping is {@link Ndjson#quote} so a string means the same thing on every jk wire.
- * Public (not package-private) because {@code EngineServer} builds {@link HttpEvents} payloads.
+ * Fluent sugar for the flat JSON objects the REST surface emits — the same deliberate
+ * flat-scalar-fields discipline as the engine wire protocol ({@code EngineProtocol}). Rendering
+ * (and therefore escaping) is {@link MiniJson}, the engine's single JSON home; this class only
+ * contributes the builder ergonomics the HTTP handlers use in ~40 places. Public (not
+ * package-private) because {@code EngineServer} builds {@link HttpEvents} payloads.
  */
 public final class JsonOut {
 
-    private final StringBuilder sb = new StringBuilder("{");
-    private boolean first = true;
+    private final Map<String, Object> fields = new LinkedHashMap<>();
 
     public static JsonOut object() {
         return new JsonOut();
     }
 
     public JsonOut put(String key, String value) {
-        return raw(key, value != null ? Ndjson.quote(value) : "null");
-    }
-
-    public JsonOut put(String key, long value) {
-        return raw(key, Long.toString(value));
-    }
-
-    public JsonOut put(String key, boolean value) {
-        return raw(key, Boolean.toString(value));
-    }
-
-    /** A flat array of strings — the one non-scalar shape the jk wire discipline allows. */
-    public JsonOut putStrings(String key, java.util.List<String> values) {
-        StringBuilder arr = new StringBuilder("[");
-        for (int i = 0; i < values.size(); i++) {
-            if (i > 0) arr.append(',');
-            arr.append(Ndjson.quote(values.get(i)));
-        }
-        return raw(key, arr.append(']').toString());
-    }
-
-    private JsonOut raw(String key, String rendered) {
-        if (!first) sb.append(',');
-        first = false;
-        sb.append(Ndjson.quote(key)).append(':').append(rendered);
+        fields.put(key, value);
         return this;
     }
 
-    /** Render the object. The builder is single-use; don't append after this. */
+    public JsonOut put(String key, long value) {
+        fields.put(key, value);
+        return this;
+    }
+
+    public JsonOut put(String key, boolean value) {
+        fields.put(key, value);
+        return this;
+    }
+
+    /** A flat array of strings — the one non-scalar shape the jk wire discipline allows. */
+    public JsonOut putStrings(String key, List<String> values) {
+        fields.put(key, List.copyOf(values));
+        return this;
+    }
+
+    /** Render the object (compact). */
     @Override
     public String toString() {
-        return sb.toString() + "}";
+        return MiniJson.write(fields);
     }
 }

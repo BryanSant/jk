@@ -7,12 +7,105 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Minimal recursive-descent JSON parser — the engine deliberately ships no JSON library, and the
- * few structured files it reads (the GraalVM reachability-metadata indexes) are small and simple.
- * Parses the full JSON grammar into {@code Map<String,Object> / List<Object> / String / Double /
- * Boolean / null}. Not streaming, not tuned — do not use for large documents.
+ * The engine's single JSON home — the engine deliberately ships no JSON library, and its JSON
+ * needs are small config-shaped documents (reachability-metadata indexes, the build journal,
+ * HTTP responses). Two halves:
+ *
+ * <ul>
+ *   <li>{@link #parse}: full-grammar recursive descent into {@code Map<String,Object> /
+ *       List<Object> / String / Double / Boolean / null}.
+ *   <li>{@link #write}: the inverse for the same object model (plus integral {@link Number}s
+ *       written without a decimal point), compact or pretty. String escaping delegates to {@link
+ *       dev.jkbuild.plugin.protocol.Ndjson#quote} — the wire contract in {@code plugin-api} owns
+ *       the one escaping implementation, so a string means the same thing on every jk surface.
+ * </ul>
+ *
+ * <p>Not streaming, not tuned — do not use for large documents. If jk ever needs streaming or
+ * data-binding, that is the moment to adopt a real library (engine-side only), not to grow this.
  */
 public final class MiniJson {
+
+    /** Serialize {@code value} (Map/List/String/Number/Boolean/null) as compact JSON. */
+    public static String write(Object value) {
+        StringBuilder sb = new StringBuilder();
+        writeValue(sb, value, -1);
+        return sb.toString();
+    }
+
+    /** As {@link #write(Object)}, pretty-printed with 2-space indentation. */
+    public static String writePretty(Object value) {
+        StringBuilder sb = new StringBuilder();
+        writeValue(sb, value, 0);
+        sb.append('\n');
+        return sb.toString();
+    }
+
+    /** {@code indent < 0} = compact; otherwise the current pretty-print depth. */
+    private static void writeValue(StringBuilder sb, Object value, int indent) {
+        switch (value) {
+            case null -> sb.append("null");
+            case String s -> sb.append(dev.jkbuild.plugin.protocol.Ndjson.quote(s));
+            case Boolean b -> sb.append(b);
+            case Double d -> {
+                // Integral doubles (the parser's number type) print without the ".0" so
+                // parse→write round-trips don't reformat whole numbers.
+                if (d == Math.floor(d) && !d.isInfinite() && Math.abs(d) < 9.007199254740992E15) {
+                    sb.append((long) (double) d);
+                } else {
+                    sb.append(d);
+                }
+            }
+            case Float f -> writeValue(sb, f.doubleValue(), indent);
+            case Number n -> sb.append(n); // integral types print naturally
+            case Map<?, ?> map -> writeObject(sb, map, indent);
+            case List<?> list -> writeArray(sb, list, indent);
+            default -> throw new IllegalArgumentException(
+                    "not JSON-representable: " + value.getClass().getName());
+        }
+    }
+
+    private static void writeObject(StringBuilder sb, Map<?, ?> map, int indent) {
+        if (map.isEmpty()) {
+            sb.append("{}");
+            return;
+        }
+        sb.append('{');
+        boolean first = true;
+        for (Map.Entry<?, ?> e : map.entrySet()) {
+            if (!first) sb.append(',');
+            first = false;
+            newlineIndent(sb, indent < 0 ? -1 : indent + 1);
+            sb.append(dev.jkbuild.plugin.protocol.Ndjson.quote(String.valueOf(e.getKey())))
+                    .append(':');
+            if (indent >= 0) sb.append(' ');
+            writeValue(sb, e.getValue(), indent < 0 ? -1 : indent + 1);
+        }
+        newlineIndent(sb, indent);
+        sb.append('}');
+    }
+
+    private static void writeArray(StringBuilder sb, List<?> list, int indent) {
+        if (list.isEmpty()) {
+            sb.append("[]");
+            return;
+        }
+        sb.append('[');
+        boolean first = true;
+        for (Object item : list) {
+            if (!first) sb.append(',');
+            first = false;
+            newlineIndent(sb, indent < 0 ? -1 : indent + 1);
+            writeValue(sb, item, indent < 0 ? -1 : indent + 1);
+        }
+        newlineIndent(sb, indent);
+        sb.append(']');
+    }
+
+    private static void newlineIndent(StringBuilder sb, int indent) {
+        if (indent < 0) return;
+        sb.append('\n');
+        sb.append("  ".repeat(indent));
+    }
 
     private final String src;
     private int pos;

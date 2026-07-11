@@ -1,20 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.engine.journal;
 
-import dev.jkbuild.plugin.protocol.Ndjson;
+import dev.jkbuild.util.MiniJson;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 /**
- * Reads and writes {@link BuildRecord} as JSON for the journal's {@code record.json}. The engine's
- * {@link dev.jkbuild.engine.http.JsonOut} is deliberately flat (scalars + one string array) and
- * cannot express the record's {@code modules}/{@code phases}/{@code diagnostics} arrays-of-objects,
- * so this class carries a small nested writer; reading goes through the engine's general
- * {@link dev.jkbuild.util.MiniJson} parser (one JSON reader engine-wide — the CLI stays on its
- * size-constrained shape-specific scanners). String escaping reuses {@link Ndjson#quote} so a
- * string means the same thing on every jk wire.
+ * Reads and writes {@link BuildRecord} as JSON for the journal's {@code record.json}. Pure
+ * shape-mapping: this class converts {@code BuildRecord} to/from the {@link MiniJson} object
+ * model (Map/List/scalars) — serialization, parsing, and escaping all live in {@link MiniJson},
+ * the engine's single JSON home.
  */
 final class Json {
 
@@ -23,105 +20,80 @@ final class Json {
     // ---------------------------------------------------------------- write
 
     static String write(BuildRecord r) {
-        StringBuilder b = new StringBuilder(512);
-        b.append("{\n");
-        scalar(b, "id", r.id()).append(",\n");
-        b.append("  \"schema\": ").append(r.schema()).append(",\n");
-        scalar(b, "kind", r.kind()).append(",\n");
-        scalar(b, "dir", r.dir()).append(",\n");
-        scalar(b, "coord", r.coord()).append(",\n");
-        num(b, "startedAt", r.startedAt()).append(",\n");
-        num(b, "finishedAt", r.finishedAt()).append(",\n");
-        num(b, "millis", r.millis()).append(",\n");
-        bool(b, "success", r.success()).append(",\n");
-        bool(b, "cancelled", r.cancelled()).append(",\n");
-        num(b, "exitCode", r.exitCode()).append(",\n");
-        scalar(b, "jkVersion", r.jkVersion()).append(",\n");
+        Map<String, Object> o = new LinkedHashMap<>();
+        o.put("id", r.id());
+        o.put("schema", r.schema());
+        o.put("kind", r.kind());
+        o.put("dir", r.dir());
+        o.put("coord", r.coord());
+        o.put("startedAt", r.startedAt());
+        o.put("finishedAt", r.finishedAt());
+        o.put("millis", r.millis());
+        o.put("success", r.success());
+        o.put("cancelled", r.cancelled());
+        o.put("exitCode", r.exitCode());
+        o.put("jkVersion", r.jkVersion());
 
-        b.append("  \"tests\": ");
         if (r.tests() == null) {
-            b.append("null");
+            o.put("tests", null);
         } else {
-            BuildRecord.Tests t = r.tests();
-            b.append("{\"total\":").append(t.total())
-                    .append(",\"succeeded\":").append(t.succeeded())
-                    .append(",\"failed\":").append(t.failed())
-                    .append(",\"skipped\":").append(t.skipped()).append('}');
+            Map<String, Object> t = new LinkedHashMap<>();
+            t.put("total", r.tests().total());
+            t.put("succeeded", r.tests().succeeded());
+            t.put("failed", r.tests().failed());
+            t.put("skipped", r.tests().skipped());
+            o.put("tests", t);
         }
-        b.append(",\n");
 
-        b.append("  \"modules\": [");
-        for (int i = 0; i < r.modules().size(); i++) {
-            BuildRecord.Module m = r.modules().get(i);
-            if (i > 0) b.append(',');
-            b.append("\n    {\"coord\":").append(q(m.coord()))
-                    .append(",\"dir\":").append(q(m.dir()))
-                    .append(",\"success\":").append(m.success())
-                    .append(",\"exitCode\":").append(m.exitCode())
-                    .append(",\"millis\":").append(m.millis())
-                    .append(",\"phases\":");
-            appendPhases(b, m.phases());
-            b.append('}');
+        List<Object> modules = new ArrayList<>();
+        for (BuildRecord.Module m : r.modules()) {
+            Map<String, Object> mm = new LinkedHashMap<>();
+            mm.put("coord", m.coord());
+            mm.put("dir", m.dir());
+            mm.put("success", m.success());
+            mm.put("exitCode", m.exitCode());
+            mm.put("millis", m.millis());
+            mm.put("phases", phaseList(m.phases()));
+            modules.add(mm);
         }
-        b.append(r.modules().isEmpty() ? "],\n" : "\n  ],\n");
+        o.put("modules", modules);
 
-        b.append("  \"phases\": ");
-        appendPhases(b, r.phases());
-        b.append(",\n");
+        o.put("phases", phaseList(r.phases()));
 
-        b.append("  \"diagnostics\": [");
-        for (int i = 0; i < r.diagnostics().size(); i++) {
-            BuildRecord.Diag d = r.diagnostics().get(i);
-            if (i > 0) b.append(',');
-            b.append("\n    {\"severity\":").append(q(d.severity()))
-                    .append(",\"dir\":").append(q(d.dir()))
-                    .append(",\"phase\":").append(q(d.phase()))
-                    .append(",\"code\":").append(q(d.code()))
-                    .append(",\"message\":").append(q(d.message()))
-                    .append(",\"test\":").append(q(d.test()))
-                    .append(",\"exceptionClass\":").append(q(d.exceptionClass())).append('}');
+        List<Object> diagnostics = new ArrayList<>();
+        for (BuildRecord.Diag d : r.diagnostics()) {
+            Map<String, Object> dm = new LinkedHashMap<>();
+            dm.put("severity", d.severity());
+            dm.put("dir", d.dir());
+            dm.put("phase", d.phase());
+            dm.put("code", d.code());
+            dm.put("message", d.message());
+            dm.put("test", d.test());
+            dm.put("exceptionClass", d.exceptionClass());
+            diagnostics.add(dm);
         }
-        b.append(r.diagnostics().isEmpty() ? "]\n" : "\n  ]\n");
+        o.put("diagnostics", diagnostics);
 
-        b.append("}\n");
-        return b.toString();
+        return MiniJson.writePretty(o);
     }
 
-    private static StringBuilder scalar(StringBuilder b, String key, String value) {
-        return b.append("  ").append(Ndjson.quote(key)).append(": ").append(q(value));
-    }
-
-    private static StringBuilder num(StringBuilder b, String key, long value) {
-        return b.append("  ").append(Ndjson.quote(key)).append(": ").append(value);
-    }
-
-    private static StringBuilder bool(StringBuilder b, String key, boolean value) {
-        return b.append("  ").append(Ndjson.quote(key)).append(": ").append(value);
-    }
-
-    /** A string value or the JSON literal {@code null}. */
-    private static String q(String s) {
-        return s == null ? "null" : Ndjson.quote(s);
-    }
-
-    /** A compact JSON array of phase objects — reused for a module's chain and the top-level list. */
-    private static void appendPhases(StringBuilder b, List<BuildRecord.Phase> phases) {
-        b.append('[');
-        for (int i = 0; i < phases.size(); i++) {
-            BuildRecord.Phase p = phases.get(i);
-            if (i > 0) b.append(',');
-            b.append("{\"name\":").append(q(p.name()))
-                    .append(",\"status\":").append(q(p.status()))
-                    .append(",\"millis\":").append(p.millis()).append('}');
+    private static List<Object> phaseList(List<BuildRecord.Phase> phases) {
+        List<Object> out = new ArrayList<>(phases.size());
+        for (BuildRecord.Phase p : phases) {
+            Map<String, Object> pm = new LinkedHashMap<>();
+            pm.put("name", p.name());
+            pm.put("status", p.status());
+            pm.put("millis", p.millis());
+            out.add(pm);
         }
-        b.append(']');
+        return out;
     }
 
     // ---------------------------------------------------------------- read
 
     @SuppressWarnings("unchecked")
     static BuildRecord read(String json) {
-        Object root = dev.jkbuild.util.MiniJson.parse(json);
+        Object root = MiniJson.parse(json);
         if (!(root instanceof Map<?, ?> m)) {
             throw new IllegalArgumentException("record.json is not a JSON object");
         }

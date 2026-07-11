@@ -42,6 +42,22 @@ class MiniJsonTest {
     }
 
     @Test
+    void write_round_trips_through_parse() {
+        Map<String, Object> obj = new java.util.LinkedHashMap<>();
+        obj.put("name", "quote \" slash \\ nl \n");
+        obj.put("count", 42L);
+        obj.put("ratio", 2.5);
+        obj.put("on", true);
+        obj.put("none", null);
+        obj.put("items", List.of("a", "b"));
+        String compact = MiniJson.write(obj);
+        assertThat(compact).doesNotContain("\n");
+        assertThat(MiniJson.parse(compact)).isEqualTo(MiniJson.parse(MiniJson.writePretty(obj)));
+        // integral numbers survive a parse→write cycle without growing a ".0"
+        assertThat(MiniJson.write(MiniJson.parse("{\"n\":42}"))).isEqualTo("{\"n\":42}");
+    }
+
+    @Test
     void rejects_trailing_garbage_and_truncation() {
         assertThatThrownBy(() -> MiniJson.parse("{} extra")).hasMessageContaining("trailing");
         assertThatThrownBy(() -> MiniJson.parse("[1,")).hasMessageContaining("unexpected end");
