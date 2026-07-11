@@ -11,10 +11,10 @@ import java.util.Map;
  * Reads and writes {@link BuildRecord} as JSON for the journal's {@code record.json}. The engine's
  * {@link dev.jkbuild.engine.http.JsonOut} is deliberately flat (scalars + one string array) and
  * cannot express the record's {@code modules}/{@code phases}/{@code diagnostics} arrays-of-objects,
- * so this class carries a small nested writer and a minimal recursive-descent reader. Both are
- * engine-side only; the reader exists so {@code jk history show} and the socket protocol can
- * reconstruct a full record from disk. String escaping reuses {@link Ndjson#quote} so a string
- * means the same thing on every jk wire.
+ * so this class carries a small nested writer; reading goes through the engine's general
+ * {@link dev.jkbuild.util.MiniJson} parser (one JSON reader engine-wide — the CLI stays on its
+ * size-constrained shape-specific scanners). String escaping reuses {@link Ndjson#quote} so a
+ * string means the same thing on every jk wire.
  */
 final class Json {
 
@@ -121,7 +121,7 @@ final class Json {
 
     @SuppressWarnings("unchecked")
     static BuildRecord read(String json) {
-        Object root = new Parser(json).parseTop();
+        Object root = dev.jkbuild.util.MiniJson.parse(json);
         if (!(root instanceof Map<?, ?> m)) {
             throw new IllegalArgumentException("record.json is not a JSON object");
         }
@@ -184,147 +184,5 @@ final class Json {
             phases.add(new BuildRecord.Phase(str(pm, "name"), str(pm, "status"), lng(pm, "millis")));
         }
         return phases;
-    }
-
-    /** A tiny, tolerant recursive-descent JSON reader for the exact shapes {@link #write} emits. */
-    private static final class Parser {
-        private final String s;
-        private int i;
-
-        Parser(String s) {
-            this.s = s;
-        }
-
-        Object parseTop() {
-            Object v = value();
-            ws();
-            return v;
-        }
-
-        private Object value() {
-            ws();
-            char c = peek();
-            return switch (c) {
-                case '{' -> object();
-                case '[' -> array();
-                case '"' -> string();
-                case 't' -> literal("true", Boolean.TRUE);
-                case 'f' -> literal("false", Boolean.FALSE);
-                case 'n' -> literal("null", null);
-                default -> number();
-            };
-        }
-
-        private Map<String, Object> object() {
-            expect('{');
-            Map<String, Object> out = new LinkedHashMap<>();
-            ws();
-            if (peek() == '}') {
-                i++;
-                return out;
-            }
-            while (true) {
-                ws();
-                String key = string();
-                ws();
-                expect(':');
-                out.put(key, value());
-                ws();
-                char c = next();
-                if (c == ',') continue;
-                if (c == '}') return out;
-                throw err("expected ',' or '}'");
-            }
-        }
-
-        private List<Object> array() {
-            expect('[');
-            List<Object> out = new ArrayList<>();
-            ws();
-            if (peek() == ']') {
-                i++;
-                return out;
-            }
-            while (true) {
-                out.add(value());
-                ws();
-                char c = next();
-                if (c == ',') continue;
-                if (c == ']') return out;
-                throw err("expected ',' or ']'");
-            }
-        }
-
-        private String string() {
-            expect('"');
-            StringBuilder b = new StringBuilder();
-            while (true) {
-                char c = next();
-                if (c == '"') return b.toString();
-                if (c == '\\') {
-                    char e = next();
-                    switch (e) {
-                        case '"' -> b.append('"');
-                        case '\\' -> b.append('\\');
-                        case '/' -> b.append('/');
-                        case 'b' -> b.append('\b');
-                        case 'f' -> b.append('\f');
-                        case 'n' -> b.append('\n');
-                        case 'r' -> b.append('\r');
-                        case 't' -> b.append('\t');
-                        case 'u' -> {
-                            b.append((char) Integer.parseInt(s.substring(i, i + 4), 16));
-                            i += 4;
-                        }
-                        default -> throw err("bad escape \\" + e);
-                    }
-                } else {
-                    b.append(c);
-                }
-            }
-        }
-
-        private Object number() {
-            int start = i;
-            while (i < s.length() && "+-0123456789.eE".indexOf(s.charAt(i)) >= 0) i++;
-            String tok = s.substring(start, i);
-            if (tok.isEmpty()) throw err("unexpected character");
-            if (tok.indexOf('.') < 0 && tok.indexOf('e') < 0 && tok.indexOf('E') < 0) {
-                try {
-                    return Long.parseLong(tok);
-                } catch (NumberFormatException ignored) {
-                    // fall through to double
-                }
-            }
-            return Double.parseDouble(tok);
-        }
-
-        private Object literal(String word, Object value) {
-            if (!s.startsWith(word, i)) throw err("expected " + word);
-            i += word.length();
-            return value;
-        }
-
-        private void ws() {
-            while (i < s.length() && Character.isWhitespace(s.charAt(i))) i++;
-        }
-
-        private char peek() {
-            if (i >= s.length()) throw err("unexpected end of input");
-            return s.charAt(i);
-        }
-
-        private char next() {
-            if (i >= s.length()) throw err("unexpected end of input");
-            return s.charAt(i++);
-        }
-
-        private void expect(char c) {
-            if (next() != c) throw err("expected '" + c + "'");
-        }
-
-        private IllegalArgumentException err(String msg) {
-            return new IllegalArgumentException("JSON parse error at " + i + ": " + msg);
-        }
     }
 }
