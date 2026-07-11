@@ -11,21 +11,38 @@ are wrong there; it gets a line scanner in Milestone C).
 re-parses — so the client parse now happens only on the in-process test seam; Native's
 workspace cascade reads per-module ProjectInfo summaries (GraalVM pre-resolve stays
 client-side). Verified live: workspace scaffold + build + module redirect.
-**Remaining — Milestone B** (6 files): TreeCommand/WhyCommand/DenyCommand read the lock
-via a graph vocabulary OR engine-side rendering (DependencyTree.render already returns a
-string; relocate it engine-side and pass client-detected ansi/nerdfont capability flags —
-the engine reads the same theme config); IdeSupport/ExportSupport/VerifyBuildCommand are
-full-model generators → engine-hosted requests returning file payloads.
-**Milestone C progress**: TomlScan powers the shell hook, GlobalConfig.nerdfont (the
-client-hot read; repositories() is engine-only), and JkConfigLoader's [config] layer.
-**Remaining — Milestone C**: the rest of the client-reachable family (JkEngineConfig —
-engine spawn opts; TrustedSources — the client trust gate; DenyPolicyParser; JkCache/
-Http/History configs; GlobalDefaultJdk fallback; LibraryCatalog client uses). PLUS the
-key reachability fact: native-image reachability is STATIC — the in-process test seams
-(`engineDisabledForTests() ? JkBuildParser.parse(...)`) keep tomlj reachable even though
-they never execute in the native binary. Those parses must move behind the
-reflectively-loaded InProcessEngine interface (add `parseBuild(Path)` to it) before the
+**Deny LANDED** (23ecf7e1): `jk deny` checks engine-side (DENY_CHECK_REQUEST/ACK →
+DenyReport) — the one config read where a fail-soft client scan would be dangerous
+(misread exotic TOML = silently permissive policy); DenyPolicyParser + LockfileReader
+drop off the client path. Verified live: clean / parse-error / violations.
+**Worker-JVM tuning LANDED** (0181bdda) — and fixed a real bug: the client resolved
+cli > env > `[jvm]` and installed it on its OWN session; it never crossed the wire, so
+hosted builds silently dropped all worker tuning. Now the client resolves only its
+flag/env layers (WorkerTunings.resolveClient), they ride build/test/single-build/native/
+install requests (EngineProtocol.withJvmTuning/jvmTuning), and the engine overlays the
+project's `[jvm]` table itself at worker-fork time (JvmOptions.tuning → overlayProject).
+**Remaining — Milestone B**: TreeCommand/WhyCommand read the lock via a graph vocabulary
+(DependencyTree needs an internal node model first — render currently threads
+(JkBuild, Lockfile) through ~15 methods and re-parses module tomls mid-render; rendering
+stays client-side since Styling carries closures); IdeSupport/ExportSupport/
+VerifyBuildCommand are full-model generators → engine-hosted requests returning file
+payloads.
+**Milestone C progress**: TomlScan powers the shell hook, GlobalConfig.nerdfont,
+JkConfigLoader's [config] layer, JkEngineConfig (engine spawn opts), JkCacheConfig,
+GlobalDefaultJdk's config fallback; TrustedSources and ForgeAuthConfig got dedicated
+line scanners (their shapes have open-ended keys). GraalVM reachability is method-level,
+so engine-only methods of shared classes may keep tomlj (GlobalConfig.repositories,
+WorkerTunings.fromToml/overlayProject; JkHttp/JkHistory/ImageConfig/RepositoryToml are
+engine-only files).
+**Remaining — Milestone C**: LibraryCatalog client uses (AddCommand suggestions,
+LibraryList/LibrarySearch, NewJkBuildRenderer, ToolTargets — inline-table catalog format,
+NOT line-scannable; needs a LIBRARY_LOOKUP-style request or an engine-side re-home);
+PublishCommand's full JkBuildParser.parse (the credentials exception only needs the
+[publish] keys — either TomlScan those or split the read) — both must resolve before the
 zero-tomlj assert can pass. Then drop the ANTLR workaround.
+Key reachability fact (handled): the in-process test seams parse behind the
+reflectively-loaded InProcessEngine interface (`parseBuild(Path)`), keeping tomlj out of
+the native image's static reachable set.
 **Companions:** [engine.md](./engine.md) (process model), [build-plugins-plan.md](./build-plugins-plan.md)
 (depends on this landing first — plugin-owned tables make client-side parsing impossible to do
 correctly).

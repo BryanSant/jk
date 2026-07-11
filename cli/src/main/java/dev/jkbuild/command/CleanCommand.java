@@ -9,7 +9,6 @@ import dev.jkbuild.cli.tui.Glyphs;
 import dev.jkbuild.cli.tui.GoalWedge;
 import dev.jkbuild.cli.tui.Spinner;
 import dev.jkbuild.config.GlobalConfig;
-import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.config.WorkspaceLocator;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.command.CliCommand;
