@@ -228,7 +228,11 @@ public final class RunCommand implements CliCommand {
             command.add(shadow.toAbsolutePath().toString());
         } else {
             command.add("-cp");
-            command.add(joinClasspath(assembleRuntimeClasspath(projectDir, project, layout.mainJar())));
+            // Boot projects package the main jar in Boot's executable layout (classes live
+            // under BOOT-INF/classes/, invisible to -cp) — local runs use the classes dir,
+            // which also lets dev-scope deps (DevTools & co.) ride the RUN classpath.
+            Path projectEntry = project.isSpringBoot() ? layout.classesDir() : layout.mainJar();
+            command.add(joinClasspath(assembleRuntimeClasspath(projectDir, project, projectEntry)));
             command.add(mainClassFor(project, layout));
         }
         return command;
@@ -277,11 +281,17 @@ public final class RunCommand implements CliCommand {
             // Shadow jar bundles all deps — runnable with -jar alone.
             javaCmd = "java -jar " + PathDisplay.of(Path.of(command.get(2)), projectDir);
         } else {
-            // Plain jar: show -jar <jar>; prefix with -cp … only when deps are present.
             String cp = command.size() >= 3 ? command.get(2) : "";
             boolean hasDeps = cp.contains(System.getProperty("path.separator"));
-            String jarDisplay = PathDisplay.of(firstClasspathEntry(command), projectDir);
-            javaCmd = (hasDeps ? "java -cp … -jar " : "java -jar ") + jarDisplay;
+            Path firstEntry = firstClasspathEntry(command);
+            if (firstEntry != null && firstEntry.toString().endsWith(".jar")) {
+                // Plain jar: show -jar <jar>; prefix with -cp … only when deps are present.
+                javaCmd = (hasDeps ? "java -cp … -jar " : "java -jar ") + PathDisplay.of(firstEntry, projectDir);
+            } else {
+                // Classes-dir run (Boot projects): the main class is the honest label.
+                String main = command.size() >= 4 ? command.get(3) : "";
+                javaCmd = (hasDeps ? "java -cp … " : "java ") + main;
+            }
         }
         return Theme.colorize(jdkLeaf, t.cyan()) + ": "
                 + Theme.colorize(javaCmd, t.shell());

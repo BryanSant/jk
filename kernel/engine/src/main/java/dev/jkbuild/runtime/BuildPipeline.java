@@ -2,6 +2,7 @@
 package dev.jkbuild.runtime;
 
 import dev.jkbuild.cache.Cas;
+import dev.jkbuild.compile.BootJarPackager;
 import dev.jkbuild.compile.ClasspathResolver;
 import dev.jkbuild.compile.CompileRequest;
 import dev.jkbuild.compile.CompileResult;
@@ -1408,6 +1409,10 @@ public final class BuildPipeline {
                     Path classes = ctx.require(MAIN_CLASSES);
                     Path jarPath = layout.mainJar();
                     Files.createDirectories(jarPath.getParent());
+                    if (project.isSpringBoot()) {
+                        packageBootJar(ctx, in, cas, project, classes, jarPath);
+                        return;
+                    }
                     String mainClass = project.mainClass();
                     // Packaging cache: the jar is a pure function of the main classes
                     // (resources already copied in), the main-class, and the manifest.
@@ -1433,6 +1438,81 @@ public final class BuildPipeline {
                     ctx.progress(1);
                 })
                 .build();
+    }
+
+    /**
+     * Boot-layout packaging (spring-boot plan §3.3): {@code [spring-boot]}'s presence switches the
+     * main jar from a plain classes jar to Boot's executable layout — {@code java -jar} works
+     * standalone, and the production classpath is the lockfile's RUNTIME scopes by construction
+     * ({@code dev}/{@code test-dev} never enter it). Nested jars keep their original
+     * {@code artifact-version.jar} names; loader + jarmode-tools come version-matched from the
+     * Boot release the project declared.
+     */
+    private static void packageBootJar(
+            PhaseContext ctx, Inputs in, Cas cas, JkBuild project, Path classes, Path jarPath) throws Exception {
+        JkBuild.SpringBoot boot = project.springBoot().orElseThrow();
+        Lockfile lock = ctx.require(LOCKFILE);
+        ClasspathResolver resolver = new ClasspathResolver(cas);
+
+        String startClass = project.mainClass();
+        if (startClass == null || startClass.isBlank()) {
+            startClass = dev.jkbuild.layout.MainClassScanner.scanUnique(classes);
+        }
+
+        List<BootJarPackager.Lib> libs = new ArrayList<>();
+        for (ClasspathResolver.Entry entry : resolver.entriesFor(lock, ClasspathResolver.RUNTIME)) {
+            Lockfile.Artifact a = entry.artifact();
+            libs.add(new BootJarPackager.Lib(
+                    a.moduleArtifact() + "-" + a.version() + ".jar",
+                    entry.jar(),
+                    a.version().contains("SNAPSHOT")));
+        }
+
+        // Loader (exploded at the jar root) and, unless opted out, the jarmode-tools
+        // nested jar — both pinned to the declared Boot version.
+        dev.jkbuild.repo.RepoGroup repos = RepoGroupBuilder.buildFor(project, null, cas);
+        Path loaderJar = fetchBootArtifact(repos, "spring-boot-loader", boot.version());
+        if (boot.includeTools()) {
+            String toolsName = "spring-boot-jarmode-tools-" + boot.version() + ".jar";
+            libs.add(new BootJarPackager.Lib(
+                    toolsName, fetchBootArtifact(repos, "spring-boot-jarmode-tools", boot.version()), false));
+        }
+
+        List<Path> libJars = new ArrayList<>(libs.size());
+        for (BootJarPackager.Lib lib : libs) libJars.add(lib.jar());
+        List<String> tokens = List.of(
+                "classes:" + dev.jkbuild.task.ClasspathFingerprint.entry(classes),
+                "libs:" + dev.jkbuild.task.ClasspathFingerprint.of(libJars),
+                "start:" + startClass,
+                "boot:" + boot.version() + ":tools=" + boot.includeTools(),
+                "manifest:" + project.manifest());
+        String pkgTask = ActionKey.qualifiedTaskId("package-jar", jarPath);
+        String pkgKey = ActionKey.forArtifact(pkgTask, dev.jkbuild.util.JkVersion.VERSION, tokens);
+        if (restorePackaged(in.cache(), pkgKey, jarPath.getParent())) {
+            ctx.put(JAR_PATH, jarPath);
+            ctx.label(jarPath.getFileName() + " up-to-date");
+            ctx.progress(1);
+            return;
+        }
+        ctx.label("package " + jarPath.getFileName() + " (boot)");
+        new BootJarPackager()
+                .packageBootJar(new BootJarPackager.BootJarRequest(
+                        classes, libs, loaderJar, jarPath, startClass, boot.version(), project.manifest(), 0L));
+        storePackaged(in.cache(), pkgTask, pkgKey, tokens, jarPath.getParent(), List.of(jarPath));
+        ctx.put(JAR_PATH, jarPath);
+        ctx.progress(1);
+    }
+
+    /** Fetch one {@code org.springframework.boot} artifact jar into the CAS and return its path. */
+    private static Path fetchBootArtifact(dev.jkbuild.repo.RepoGroup repos, String artifact, String version)
+            throws IOException, InterruptedException {
+        dev.jkbuild.model.Coordinate coord =
+                dev.jkbuild.model.Coordinate.of("org.springframework.boot", artifact, version);
+        return repos.tryFetchArtifact(coord)
+                .orElseThrow(() -> new IOException(
+                        "cannot fetch " + coord + " — the Boot version in [spring-boot] must exist in a declared repo"))
+                .fetched()
+                .cachePath();
     }
 
     private static Phase writeStampPhase(StepContext cx) {

@@ -210,7 +210,16 @@ latency is bounded by javac on the delta, with no Gradle configuration phase in 
    builds, and serves with parameter-name binding. (En route, fixed a resolver
    correctness bug: POM dependency identity is `group:artifact:type:classifier`, so a
    managed `test-jar` row no longer shadows the real jar — logback-core used to vanish
-   from every Boot classpath.) Next: the boot-jar layout packager itself.
+   from every Boot classpath.) Boot-layout packaging ships (2026-07-10):
+   `[spring-boot]` switches the main jar to the executable layout — loader exploded at
+   the root, STORED nested libs with original `artifact-version.jar` names,
+   `classpath.idx` + `layers.idx`, jarmode-tools bundled unless
+   `include-tools = false`. `jk run` uses the classes dir + RUN classpath so dev-scope
+   deps (DevTools) ride locally while staying out of the jar. Verified: `java -jar`
+   boots and serves; `-Djarmode=tools list-layers` prints the four default layers;
+   devtools absent from `BOOT-INF/lib`. Remaining in this phase: build-info emission,
+   SBOM embed, layered jib `[image]` mapping, `jk install` launcher for Boot apps
+   (`-jar`, not `-cp`).
 3. **AOT & native** — spring-aot/compile-aot phases; `jk native` integration +
    reachability-metadata repo; `jk package --aot-cache` ladder. *Exit: native webmvc app
    builds and serves; AOT-cache startup ≈ Boot's documented ~1.5×.*

@@ -58,6 +58,20 @@ public final class ClasspathResolver {
     /** Filtered: only packages tagged with one of {@code scopes}. */
     public List<Path> classpathFor(Lockfile lock, Set<Scope> scopes) {
         List<Path> result = new ArrayList<>(lock.artifacts().size());
+        for (Entry entry : entriesFor(lock, scopes)) result.add(entry.jar());
+        return result;
+    }
+
+    /** A resolved classpath element with the lockfile artifact it came from. */
+    public record Entry(Lockfile.Artifact artifact, Path jar) {}
+
+    /**
+     * As {@link #classpathFor(Lockfile, Set)}, but keeping each path paired with its lockfile
+     * artifact — packagers that need original coordinates (Boot's {@code BOOT-INF/lib} uses
+     * {@code artifact-version.jar} names, never CAS hashes) read these.
+     */
+    public List<Entry> entriesFor(Lockfile lock, Set<Scope> scopes) {
+        List<Entry> result = new ArrayList<>(lock.artifacts().size());
         dev.jkbuild.task.AccessLedger ledger = dev.jkbuild.task.AccessLedger.atDefaultPath();
         for (Lockfile.Artifact pkg : lock.artifacts()) {
             if (!pkg.inAnyScope(scopes)) continue;
@@ -69,7 +83,7 @@ public final class ClasspathResolver {
             // the rare case repos/<name>/ itself no longer matches the locked hash — the CAS blob
             // is the only path guaranteed to hold the pinned bytes.
             Path repoPath = resolveFromRepos(pkg, hex);
-            result.add(repoPath != null ? repoPath : cas.pathFor(hex));
+            result.add(new Entry(pkg, repoPath != null ? repoPath : cas.pathFor(hex)));
             ledger.touch(hex);
         }
         return result;
