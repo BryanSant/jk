@@ -7,11 +7,18 @@ edits engine-side, verified live), and the new/add/explain parent peeks. Two doc
 deliberate exceptions: PublishCommand (inline credentials must resolve client-side and
 never ride the wire) and JkEnv (the shell hook runs on every prompt — engine round trips
 are wrong there; it gets a line scanner in Milestone C).
-**Remaining:** the workspace-request threading (Build×2 / Native×3 sites pass a
-client-parsed JkBuild into WorkspaceRequest — the one deep refactor); Milestone B
-(Tree/Why/Verify/Export/Ide response vocabularies); Milestone C (ConfigToml scanner for
-the ~11-file config family — no shared choke point, each reader converts individually —
-then assert zero tomlj reachability and drop the ANTLR workaround).
+**Workspace threading LANDED** (fb8fc976): entryBuild never crossed the wire — the engine
+re-parses — so the client parse now happens only on the in-process test seam; Native's
+workspace cascade reads per-module ProjectInfo summaries (GraalVM pre-resolve stays
+client-side). Verified live: workspace scaffold + build + module redirect.
+**Remaining — Milestone B** (6 files): TreeCommand/WhyCommand/DenyCommand read the lock
+via a graph vocabulary OR engine-side rendering (DependencyTree.render already returns a
+string; relocate it engine-side and pass client-detected ansi/nerdfont capability flags —
+the engine reads the same theme config); IdeSupport/ExportSupport/VerifyBuildCommand are
+full-model generators → engine-hosted requests returning file payloads.
+**Remaining — Milestone C**: config family (~11 readers, incl. GlobalDefaultJdk's
+fallback) onto TomlScan-style reads or richer scanner; then assert zero tomlj
+reachability in the native image and drop the ANTLR workaround.
 **Companions:** [engine.md](./engine.md) (process model), [build-plugins-plan.md](./build-plugins-plan.md)
 (depends on this landing first — plugin-owned tables make client-side parsing impossible to do
 correctly).
