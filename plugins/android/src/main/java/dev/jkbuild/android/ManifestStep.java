@@ -35,12 +35,25 @@ final class ManifestStep {
 
         Path merged = exec.outputDir("merged").resolve("AndroidManifest.xml");
 
+        // Library (AAR) manifests join the merge in classpath order — app first (--main wins),
+        // exactly AGP's precedence.
+        StringBuilder libs = new StringBuilder();
+        for (AndroidDeps.Aar aar : AndroidDeps.aars(exec.runtimeEntries())) {
+            if (!java.nio.file.Files.isRegularFile(aar.manifest())) continue;
+            if (libs.length() > 0) libs.append(java.io.File.pathSeparatorChar);
+            libs.append(aar.manifest().toAbsolutePath());
+        }
+
         exec.label("merge manifest");
-        StepExec.ToolRun.Result result = exec.java()
+        StepExec.ToolRun merger = exec.java()
                 .classpath(jarsIn(mergerLib))
                 .mainClass("com.android.manifmerger.Merger")
                 .arg("--main")
-                .arg(manifest.toAbsolutePath().toString())
+                .arg(manifest.toAbsolutePath().toString());
+        if (libs.length() > 0) {
+            merger.arg("--libs").arg(libs.toString());
+        }
+        StepExec.ToolRun.Result result = merger
                 .arg("--property")
                 .arg("PACKAGE=" + namespace)
                 .arg("--property")

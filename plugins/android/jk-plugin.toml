@@ -20,7 +20,8 @@ protocol-prefix = "##JKAN:"
 
 # The APK replaces the main artifact under its own extension; it is a device artifact —
 # not host-runnable. `jk run` dispatches the declared deploy verb (adb install + am start);
-# `jk dev` still answers with the descriptor error (the redeploy loop is Phase 2).
+# `jk dev` rebuilds and re-dispatches the same verb (restart-based redeploy). A library
+# module ([android] library = true) packages an AAR instead — not executable at all.
 [packaging]
 packager           = "apk"
 exec-mode          = "device"
@@ -28,10 +29,26 @@ self-contained     = true
 artifact-extension = "apk"
 deploy-verb        = "deploy"
 
+[[packaging.variant]]
+when               = { config = "library", equals = "true" }
+packager           = "aar"
+exec-mode          = "none"
+artifact-extension = "aar"
+
 [schema]
-namespace   = { type = "string", required = true, example = "com.example.app", hint = "it names the R class package and the default application id" }
-compile-sdk = { type = "int", required = true, example = "28" }
-min-sdk     = { type = "int", required = true, example = "24" }
+namespace    = { type = "string", required = true, example = "com.example.app", hint = "it names the R class package and the default application id" }
+compile-sdk  = { type = "int", required = true, example = "28" }
+min-sdk      = { type = "int", required = true, example = "24" }
+library      = { type = "bool", default = false }   # a library module: packages an AAR, not an APK
+compose      = { type = "bool", default = false }   # adds the Compose compiler plugin (version == Kotlin)
+build-config = { type = "bool", default = false }   # generates BuildConfig.java (explicit toggle, not a grab-bag)
+
+# Compose (android-plan §3.5): the embeddable Compose compiler plugin, version-locked to
+# the Kotlin compiler actually used — the version-matching dance is gone by construction.
+[[contribute.kotlin-plugin]]
+id         = "androidx.compose.compiler"
+coordinate = "org.jetbrains.kotlin:kotlin-compose-compiler-plugin-embeddable:${kotlin.version}"
+when       = { config = "compose", equals = "true" }
 
 # ---- Tool artifacts (fetched engine-side into the cache, handed to steps by name) ----
 

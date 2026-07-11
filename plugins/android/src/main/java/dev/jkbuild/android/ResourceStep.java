@@ -8,19 +8,30 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
 /**
- * The {@code android-res} step: aapt2 compile over {@code res/}, then aapt2 link against the
- * platform jar — producing the binary resource package ({@code packaged/resources.ap_}, with the
- * compiled manifest and {@code resources.arsc} inside) and the generated {@code R.java} under
- * {@code gen/} (contributed to the compiler's source set).
+ * The {@code android-res} step: aapt2 compile over the module's {@code res/} and every AAR
+ * dependency's {@code res/} (workspace {@code [android] library} siblings included), then one
+ * aapt2 link against the platform — producing the binary resource package
+ * ({@code packaged/resources.ap_}), the merged symbol table ({@code packaged/R.txt}), the module's
+ * generated {@code R.java} under {@code gen/} (contributed to the compiler's source set), and a
+ * {@code raw-res/} copy for the AAR packager.
  *
- * <p>aapt2 ships as a per-OS native binary wrapped in a Maven jar; the step extracts it into its
- * scratch and forks it — the engine fetched the jar (a declared {@code step-dependency}), the
- * step never learns from where.
+ * <p>Precedence matches AGP: dependency resources link as plain inputs in classpath order; the
+ * module's own resources ride as the overlay ({@code -R} + {@code --auto-add-overlay}), so the
+ * app always wins a conflict with a library.
+ *
+ * <p><b>Non-transitive R</b> (jk's only mode): an app module additionally regenerates each AAR
+ * dependency's {@code R} class — its own namespace, only the symbols its {@code R.txt} declares,
+ * with the FINAL ids this link assigned — so library bytecode referencing {@code lib.R.string.x}
+ * resolves at dex time without any transitive god-R. A library module generates its own
+ * {@code R.java} with {@code --non-final-ids} (ids are placeholders until an app links it) and
+ * ships {@code R.txt} in its AAR; its {@code R} classes never enter {@code classes.jar}.
  */
 final class ResourceStep {
 
@@ -30,39 +41,41 @@ final class ResourceStep {
         Path aapt2 = extractAapt2(exec);
         Path platformJar = exec.requireExtra("android-jar");
         Path res = exec.moduleDir().resolve("res");
-        // The android-manifest step already merged the app manifest (package + uses-sdk).
         Path manifest = exec.requireStepOutput("android-manifest").resolve("merged/AndroidManifest.xml");
         if (!Files.isRegularFile(manifest)) {
             throw new IllegalStateException("android-manifest produced no merged manifest at " + manifest);
         }
         String namespace = exec.config().string("namespace");
+        boolean library = exec.config().bool("library", false);
         long compileSdk = exec.config().intValue("compile-sdk", 0);
         long minSdk = exec.config().intValue("min-sdk", 0);
+        List<AndroidDeps.Aar> aars = AndroidDeps.aars(exec.runtimeEntries());
 
         Path gen = exec.outputDir("gen");
         Path packaged = exec.outputDir("packaged");
+        Path rawRes = exec.outputDir("raw-res");
         Path work = Files.createDirectories(exec.scratch().resolve("work"));
 
-        // aapt2 compile: res/** -> a container of .flat entries (skipped entirely when the
-        // project declares no res dir — a manifest-only app is legal).
-        Path flats = work.resolve("res-compiled.zip");
-        boolean hasRes = Files.isDirectory(res);
-        if (hasRes) {
+        // aapt2 compile: each res root (dependency AARs first, module last) into its own
+        // container of .flat entries. A module with no res dir is legal (manifest-only app).
+        List<Path> depFlats = new ArrayList<>();
+        int i = 0;
+        for (AndroidDeps.Aar aar : aars) {
+            if (!aar.hasRes()) continue;
+            exec.label("aapt2 compile " + aar.fileName());
+            depFlats.add(compileRes(exec, aapt2, aar.res(), work.resolve("dep-" + i++ + ".zip")));
+        }
+        Path ownFlats = null;
+        if (Files.isDirectory(res)) {
             exec.label("aapt2 compile");
-            StepExec.ToolRun.Result compile = exec.tool(aapt2)
-                    .arg("compile")
-                    .arg("--dir")
-                    .arg(res.toAbsolutePath().toString())
-                    .arg("-o")
-                    .arg(flats.toAbsolutePath().toString())
-                    .run();
-            if (compile.exit() != 0) {
-                throw new IllegalStateException("aapt2 compile failed:\n" + compile.output());
-            }
+            ownFlats = compileRes(exec, aapt2, res, work.resolve("res-compiled.zip"));
+            copyTree(res, rawRes);
         }
 
-        // aapt2 link: manifest + compiled resources against the platform -> resources.ap_ + R.java.
+        // aapt2 link: deps as plain inputs (classpath order), the module's own resources as the
+        // overlay — one binary package, one merged symbol table, the module's R.java.
         exec.label("aapt2 link");
+        Path rTxt = packaged.resolve("R.txt");
         StepExec.ToolRun link = exec.tool(aapt2)
                 .arg("link")
                 .arg("-o")
@@ -75,6 +88,8 @@ final class ResourceStep {
                 .arg(gen.toAbsolutePath().toString())
                 .arg("--custom-package")
                 .arg(namespace)
+                .arg("--output-text-symbols")
+                .arg(rTxt.toAbsolutePath().toString())
                 .arg("--min-sdk-version")
                 .arg(Long.toString(minSdk))
                 .arg("--target-sdk-version")
@@ -84,10 +99,106 @@ final class ResourceStep {
                 .arg("--version-name")
                 .arg(exec.project().version())
                 .arg("--auto-add-overlay");
-        if (hasRes) link.arg(flats.toAbsolutePath().toString());
+        if (library) link.arg("--non-final-ids");
+        for (Path dep : depFlats) link.arg(dep.toAbsolutePath().toString());
+        if (ownFlats != null) {
+            link.arg("-R").arg(ownFlats.toAbsolutePath().toString());
+        }
         StepExec.ToolRun.Result linked = link.run();
         if (linked.exit() != 0) {
             throw new IllegalStateException("aapt2 link failed:\n" + linked.output());
+        }
+
+        // Non-transitive R: the app regenerates each dependency's R class from ITS R.txt with
+        // the final ids this link assigned. Libraries don't — an app link finalizes their ids.
+        if (!library && Files.isRegularFile(rTxt)) {
+            Map<String, String> finalSymbols = readSymbols(rTxt);
+            for (AndroidDeps.Aar aar : aars) {
+                if (!Files.isRegularFile(aar.rTxt())) continue;
+                String depNamespace = aar.namespace();
+                if (depNamespace == null || depNamespace.equals(namespace)) continue;
+                writeDepR(gen, depNamespace, readSymbols(aar.rTxt()), finalSymbols);
+            }
+        }
+    }
+
+    private static Path compileRes(StepExec exec, Path aapt2, Path resDir, Path out) throws Exception {
+        StepExec.ToolRun.Result compile = exec.tool(aapt2)
+                .arg("compile")
+                .arg("--dir")
+                .arg(resDir.toAbsolutePath().toString())
+                .arg("-o")
+                .arg(out.toAbsolutePath().toString())
+                .run();
+        if (compile.exit() != 0) {
+            throw new IllegalStateException("aapt2 compile failed for " + resDir + ":\n" + compile.output());
+        }
+        return out;
+    }
+
+    /** {@code "<type> <name>" → "<java-type> <value>"} from an aapt2/AGP {@code R.txt}. */
+    private static Map<String, String> readSymbols(Path rTxt) throws IOException {
+        Map<String, String> out = new LinkedHashMap<>();
+        for (String line : Files.readAllLines(rTxt)) {
+            // Lines: `int <type> <name> <value>` or `int[] styleable <name> { v1, v2 }`.
+            String[] parts = line.strip().split("\\s+", 4);
+            if (parts.length < 4) continue;
+            out.put(parts[1] + " " + parts[2], parts[0] + " " + parts[3]);
+        }
+        return out;
+    }
+
+    /** One dependency's {@code R} class: its own symbols, the app link's final values. */
+    private static void writeDepR(
+            Path gen, String namespace, Map<String, String> depSymbols, Map<String, String> finalSymbols)
+            throws IOException {
+        Map<String, Map<String, String>> byType = new LinkedHashMap<>();
+        for (var symbol : depSymbols.entrySet()) {
+            String resolved = finalSymbols.getOrDefault(symbol.getKey(), symbol.getValue());
+            int space = symbol.getKey().indexOf(' ');
+            String type = symbol.getKey().substring(0, space);
+            String name = symbol.getKey().substring(space + 1);
+            byType.computeIfAbsent(type, k -> new LinkedHashMap<>()).put(name, resolved);
+        }
+        StringBuilder java = new StringBuilder();
+        java.append("/* Generated by jk (non-transitive R) — do not edit. */\n");
+        java.append("package ").append(namespace).append(";\n\n");
+        java.append("public final class R {\n");
+        java.append("    private R() {}\n");
+        for (var type : byType.entrySet()) {
+            java.append("    public static final class ").append(type.getKey()).append(" {\n");
+            java.append("        private ").append(type.getKey()).append("() {}\n");
+            for (var field : type.getValue().entrySet()) {
+                int space = field.getValue().indexOf(' ');
+                String javaType = field.getValue().substring(0, space);
+                String value = field.getValue().substring(space + 1);
+                java.append("        public static final ")
+                        .append(javaType)
+                        .append(' ')
+                        .append(field.getKey())
+                        .append(" = ")
+                        .append(value)
+                        .append(";\n");
+            }
+            java.append("    }\n");
+        }
+        java.append("}\n");
+        Path file = gen.resolve(namespace.replace('.', '/')).resolve("R.java");
+        Files.createDirectories(file.getParent());
+        Files.writeString(file, java.toString());
+    }
+
+    private static void copyTree(Path from, Path to) throws IOException {
+        try (var walk = Files.walk(from)) {
+            for (Path source : (Iterable<Path>) walk::iterator) {
+                Path target = to.resolve(from.relativize(source).toString());
+                if (Files.isDirectory(source)) {
+                    Files.createDirectories(target);
+                } else {
+                    Files.createDirectories(target.getParent());
+                    Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING);
+                }
+            }
         }
     }
 
@@ -113,7 +224,6 @@ final class ResourceStep {
         }
         return out;
     }
-
 
     /** Every file under {@code dir} (sorted), for tools that want explicit file lists. */
     static List<Path> filesUnder(Path dir, String suffix) throws IOException {

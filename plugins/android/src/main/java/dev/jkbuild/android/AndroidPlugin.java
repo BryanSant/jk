@@ -48,31 +48,50 @@ public final class AndroidPlugin implements Plugin, BuildPlugin {
 
     @Override
     public void register(BuildPluginContext ctx) {
+        boolean library = ctx.config().bool("library", false);
         ctx.step(StepSpec.named("android-manifest")
                 .after(Anchor.RESOLVE)
                 .before(Anchor.COMPILE)
-                .inputs(In.projectFiles("AndroidManifest.xml"), In.config())
+                .inputs(In.projectFiles("AndroidManifest.xml"), In.runtimeEntries(), In.config())
                 .outputs("merged")
                 .run(ManifestStep::run));
         ctx.step(StepSpec.named("android-res")
                 .after(Anchor.RESOLVE)
                 .before(Anchor.COMPILE)
-                .inputs(In.projectFiles("res"), In.stepOutput("android-manifest"), In.config())
-                .outputs("gen", "packaged")
+                .inputs(In.projectFiles("res"), In.stepOutput("android-manifest"), In.runtimeEntries(), In.config())
+                .outputs("gen", "packaged", "raw-res")
                 .contributesSources("gen")
                 .run(ResourceStep::run));
-        ctx.step(StepSpec.named("android-dex")
-                .after(Anchor.COMPILE)
-                .before(Anchor.PACKAGE)
-                .inputs(In.classes(), In.config())
-                .outputs("dex")
-                .run(DexStep::run));
-        ctx.packaging(PackagerSpec.replacingMainArtifact("apk")
-                .inputs(In.stepOutput("android-res"), In.stepOutput("android-dex"), In.config())
-                .produce(ApkPackager::produce));
-        ctx.verb(VerbSpec.named("deploy")
-                .description("Install the built APK on a device and launch it")
-                .run(DeployVerb::run));
+        if (ctx.config().bool("build-config", false)) {
+            ctx.step(StepSpec.named("android-buildconfig")
+                    .after(Anchor.RESOLVE)
+                    .before(Anchor.COMPILE)
+                    .inputs(In.config())
+                    .outputs("gen")
+                    .contributesSources("gen")
+                    .run(BuildConfigStep::run));
+        }
+        if (library) {
+            // A library packages an AAR (classes.jar without R classes + raw res + merged
+            // manifest + R.txt) and is never dexed or deployed — consumers dex it.
+            ctx.packaging(PackagerSpec.replacingMainArtifact("aar")
+                    .inputs(In.classes(), In.stepOutput("android-res"), In.stepOutput("android-manifest"),
+                            In.config())
+                    .produce(AarPackager::produce));
+        } else {
+            ctx.step(StepSpec.named("android-dex")
+                    .after(Anchor.COMPILE)
+                    .before(Anchor.PACKAGE)
+                    .inputs(In.classes(), In.runtimeEntries(), In.config())
+                    .outputs("dex")
+                    .run(DexStep::run));
+            ctx.packaging(PackagerSpec.replacingMainArtifact("apk")
+                    .inputs(In.stepOutput("android-res"), In.stepOutput("android-dex"), In.config())
+                    .produce(ApkPackager::produce));
+            ctx.verb(VerbSpec.named("deploy")
+                    .description("Install the built APK on a device and launch it")
+                    .run(DeployVerb::run));
+        }
         ctx.verb(VerbSpec.named("android")
                 .description("Android SDK provisioning: licenses, component status")
                 .run(AndroidVerb::run));

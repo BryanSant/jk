@@ -3,6 +3,7 @@ package dev.jkbuild.android;
 
 import dev.jkbuild.plugin.build.StepExec;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -25,7 +26,15 @@ final class DexStep {
         }
         long minSdk = exec.config().intValue("min-sdk", 0);
 
-        exec.label("d8 (" + classFiles.size() + " classes)");
+        // The whole production runtime dexes into the app: the module's classes plus every
+        // runtime entry's code — plain jars, AAR classes.jars, workspace library siblings.
+        // (The platform never does: it is --lib, the compile/desugar boundary.)
+        List<Path> runtimeJars = new ArrayList<>();
+        for (var entry : exec.runtimeEntries()) {
+            if (entry.jar() != null) runtimeJars.add(entry.jar());
+        }
+
+        exec.label("d8 (" + classFiles.size() + " classes + " + runtimeJars.size() + " jars)");
         StepExec.ToolRun d8 = exec.java()
                 .classpath(List.of(r8))
                 .mainClass("com.android.tools.r8.D8")
@@ -36,6 +45,7 @@ final class DexStep {
                 .arg("--output")
                 .arg(dexOut.toAbsolutePath().toString());
         for (Path f : classFiles) d8.arg(f.toAbsolutePath().toString());
+        for (Path jar : runtimeJars) d8.arg(jar.toAbsolutePath().toString());
         StepExec.ToolRun.Result result = d8.run();
         if (result.exit() != 0) {
             throw new IllegalStateException("d8 failed:\n" + result.output());
