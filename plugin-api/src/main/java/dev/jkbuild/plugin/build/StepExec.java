@@ -35,6 +35,20 @@ public interface StepExec {
     /** The scratch root the step's declared output dirs resolve under. */
     Path scratch();
 
+    /**
+     * An engine-supplied extra: a manifest-contributed {@code step-dependency} artifact, by its
+     * artifact id — the fetched jar/binary's path. The author declares the coordinate in the
+     * manifest and never learns where jk caches it.
+     */
+    java.util.Optional<Path> extra(String name);
+
+    /** As {@link #extra}, throwing with the missing artifact id (for required tools). */
+    default Path requireExtra(String name) {
+        return extra(name)
+                .orElseThrow(() -> new IllegalStateException("step-dependency `" + name
+                        + "` was not supplied — declare it under [[contribute.step-dependency]]"));
+    }
+
     /** Resolve (and create) a declared output dir under {@link #scratch()}. */
     default Path outputDir(String rel) throws IOException {
         return Files.createDirectories(scratch().resolve(rel));
@@ -51,6 +65,11 @@ public interface StepExec {
         return new ToolRun(javaHome(), bin);
     }
 
+    /** A fork of an arbitrary executable (a fetched native tool: aapt2, protoc, …). */
+    default ToolRun tool(Path executable) {
+        return new ToolRun(executable);
+    }
+
     /** Convenience for the common case. */
     default ToolRun java() {
         return tool("java");
@@ -60,12 +79,20 @@ public interface StepExec {
     final class ToolRun {
         private final Path javaHome;
         private final String bin;
+        private final Path executable;
         private final List<String> args = new ArrayList<>();
         private Path cwd;
 
-        private ToolRun(Path javaHome, String bin) {
+        ToolRun(Path javaHome, String bin) {
             this.javaHome = javaHome;
             this.bin = bin;
+            this.executable = null;
+        }
+
+        ToolRun(Path executable) {
+            this.javaHome = null;
+            this.bin = null;
+            this.executable = executable;
         }
 
         public ToolRun classpath(List<Path> entries) {
@@ -103,7 +130,12 @@ public interface StepExec {
         public Result run() throws IOException, InterruptedException {
             boolean windows = System.getProperty("os.name", "").toLowerCase(java.util.Locale.ROOT).contains("win");
             List<String> command = new ArrayList<>();
-            command.add(javaHome.resolve("bin").resolve(windows ? bin + ".exe" : bin).toString());
+            command.add(
+                    executable != null
+                            ? executable.toAbsolutePath().toString()
+                            : javaHome.resolve("bin")
+                                    .resolve(windows ? bin + ".exe" : bin)
+                                    .toString());
             command.addAll(args);
             ProcessBuilder pb = new ProcessBuilder(command).redirectErrorStream(true);
             if (cwd != null) pb.directory(cwd.toFile());

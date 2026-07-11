@@ -37,6 +37,24 @@ public interface PackageIo {
     /** Where the produced artifact must land (the module's main-artifact path). */
     Path artifactPath();
 
+    /** The JDK this build runs on — for {@link #tool} forks (signing, keytool, …). */
+    Path javaHome();
+
+    /** A {@code bin/<name>} fork off {@link #javaHome()}. */
+    default StepExec.ToolRun tool(String bin) {
+        return new StepExec.ToolRun(javaHome(), bin);
+    }
+
+    /** A fork of an arbitrary executable (a fetched native tool). */
+    default StepExec.ToolRun tool(Path executable) {
+        return new StepExec.ToolRun(executable);
+    }
+
+    /** Convenience for the common case. */
+    default StepExec.ToolRun java() {
+        return tool("java");
+    }
+
     /** Progress label surfaced in the build UI. */
     void label(String text);
 }

@@ -232,6 +232,31 @@ public final class PluginBuild {
         return out;
     }
 
+    /**
+     * The resolved step-dependency artifacts ({@code [[contribute.step-dependency]]}): tool jars
+     * a step body needs (aapt2, r8, a platform jar), fetched into the CAS by coordinate —
+     * classifier-aware ({@code group:artifact:version:classifier}), never on the project graph.
+     */
+    public static Map<String, Path> fetchStepDependencies(JkBuild project, Path moduleDir, Cas cas)
+            throws IOException, InterruptedException {
+        Map<String, Path> out = new LinkedHashMap<>();
+        List<PluginContributions.StepDep> deps = PluginContributions.stepDependencies(project, moduleDir);
+        if (deps.isEmpty()) return out;
+        dev.jkbuild.repo.RepoGroup repos = RepoGroupBuilder.buildFor(project, null, cas);
+        for (PluginContributions.StepDep dep : deps) {
+            dev.jkbuild.model.Coordinate coord = dev.jkbuild.model.Coordinate.parse(dep.coordinateSpec());
+            out.put(
+                    dep.artifact(),
+                    repos.tryFetchArtifact(coord)
+                            .orElseThrow(() -> new IOException("cannot fetch " + coord
+                                    + " — the coordinate a plugin's step-dependency names must exist in a"
+                                    + " declared repo"))
+                            .fetched()
+                            .cachePath());
+        }
+        return out;
+    }
+
     /** Fetch one {@code module:version} jar into the CAS and return its path. */
     private static Path fetchArtifact(dev.jkbuild.repo.RepoGroup repos, String module, String version)
             throws IOException, InterruptedException {

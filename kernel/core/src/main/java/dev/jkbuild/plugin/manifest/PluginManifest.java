@@ -128,7 +128,20 @@ public record PluginManifest(
             boolean selfContained,
             boolean classesRun,
             boolean mainScan,
-            boolean layeredImage) {}
+            boolean layeredImage,
+            String artifactExtension) {
+
+        /** Back-compat: the P3 descriptor shape (jar-extension artifact). */
+        public Packaging(
+                String packager,
+                String execMode,
+                boolean selfContained,
+                boolean classesRun,
+                boolean mainScan,
+                boolean layeredImage) {
+            this(packager, execMode, selfContained, classesRun, mainScan, layeredImage, "jar");
+        }
+    }
 
     /**
      * The declarative layer's build contributions (plan §3.1): pure data evaluated engine-side
@@ -140,15 +153,27 @@ public record PluginManifest(
             List<PlatformDependency> platformDependencies,
             List<CompilerArgs> compilerArgs,
             List<KotlinPlugin> kotlinPlugins,
-            List<PackagerDependency> packagerDependencies) {
+            List<PackagerDependency> packagerDependencies,
+            List<StepDependency> stepDependencies) {
 
-        public static final Contributions NONE = new Contributions(List.of(), List.of(), List.of(), List.of());
+        public static final Contributions NONE =
+                new Contributions(List.of(), List.of(), List.of(), List.of(), List.of());
 
         public Contributions {
             platformDependencies = platformDependencies == null ? List.of() : List.copyOf(platformDependencies);
             compilerArgs = compilerArgs == null ? List.of() : List.copyOf(compilerArgs);
             kotlinPlugins = kotlinPlugins == null ? List.of() : List.copyOf(kotlinPlugins);
             packagerDependencies = packagerDependencies == null ? List.of() : List.copyOf(packagerDependencies);
+            stepDependencies = stepDependencies == null ? List.of() : List.copyOf(stepDependencies);
+        }
+
+        /** Back-compat: the P3 contribution set (no step dependencies). */
+        public Contributions(
+                List<PlatformDependency> platformDependencies,
+                List<CompilerArgs> compilerArgs,
+                List<KotlinPlugin> kotlinPlugins,
+                List<PackagerDependency> packagerDependencies) {
+            this(platformDependencies, compilerArgs, kotlinPlugins, packagerDependencies, List.of());
         }
 
         /** Back-compat: the P2 contribution set (no packager dependencies). */
@@ -156,14 +181,15 @@ public record PluginManifest(
                 List<PlatformDependency> platformDependencies,
                 List<CompilerArgs> compilerArgs,
                 List<KotlinPlugin> kotlinPlugins) {
-            this(platformDependencies, compilerArgs, kotlinPlugins, List.of());
+            this(platformDependencies, compilerArgs, kotlinPlugins, List.of(), List.of());
         }
 
         public boolean isEmpty() {
             return platformDependencies.isEmpty()
                     && compilerArgs.isEmpty()
                     && kotlinPlugins.isEmpty()
-                    && packagerDependencies.isEmpty();
+                    && packagerDependencies.isEmpty()
+                    && stepDependencies.isEmpty();
         }
     }
 
@@ -173,6 +199,15 @@ public record PluginManifest(
      * name. Fetch-only: never injected into the project's dependency graph.
      */
     public record PackagerDependency(String artifact, String coordinate, Condition when) {}
+
+    /**
+     * {@code [[contribute.step-dependency]]} — a tool artifact a step needs (aapt2's per-OS
+     * binary jar, the r8 jar, a platform android.jar), fetched engine-side into the cache and
+     * handed to the step by {@code artifact} name. The coordinate may carry a classifier
+     * ({@code group:artifact:version:classifier}); {@code ${host.os}} selects per-OS natives.
+     * Fetch-only: never injected into the project's dependency graph.
+     */
+    public record StepDependency(String artifact, String coordinate, Condition when) {}
 
     /**
      * {@code [[contribute.platform-dependency]]}: a BOM-style platform-scope dependency,

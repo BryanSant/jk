@@ -10,7 +10,8 @@ import java.util.regex.Pattern;
 /**
  * {@code ${…}} interpolation for manifest contributions (plan §3.1): {@code ${config.<key>}}
  * plus a handful of well-known values — {@code ${kotlin.version}}, {@code ${project.group}},
- * {@code ${project.name}}, {@code ${project.version}}. Deliberately closed: an unknown variable
+ * {@code ${project.name}}, {@code ${project.version}}, {@code ${host.os}} (per-OS native-tool
+ * classifiers: linux/osx/windows). Deliberately closed: an unknown variable
  * is a manifest-load error (checked once via {@link #validate}, so a typo fails when the plugin
  * is installed, not mid-build), and there is no nesting or defaulting syntax.
  */
@@ -34,11 +35,11 @@ final class Interpolation {
                 continue;
             }
             switch (var) {
-                case "kotlin.version", "project.group", "project.name", "project.version" -> {}
+                case "kotlin.version", "project.group", "project.name", "project.version", "host.os" -> {}
                 default ->
                     throw new JkBuildParseException(where + " references unknown variable ${" + var
                             + "} (known: config.<schema-key>, kotlin.version, project.group, project.name,"
-                            + " project.version)");
+                            + " project.version, host.os)");
             }
         }
     }
@@ -48,6 +49,17 @@ final class Interpolation {
      * no Kotlin toolchain exists — referencing {@code ${kotlin.version}} there is an evaluation
      * error (the manifest asked for a value this project cannot supply).
      */
+    /**
+     * The host OS in the classifier vocabulary per-OS native tools publish under ({@code linux} /
+     * {@code osx} / {@code windows} — aapt2's exact set).
+     */
+    static String hostOs() {
+        String os = System.getProperty("os.name", "").toLowerCase(java.util.Locale.ROOT);
+        if (os.contains("mac") || os.contains("darwin")) return "osx";
+        if (os.contains("win")) return "windows";
+        return "linux";
+    }
+
     static String resolve(String template, PluginConfig config, JkBuild.Project project, String kotlinVersion) {
         Matcher m = VAR.matcher(template);
         StringBuilder out = new StringBuilder();
@@ -68,6 +80,7 @@ final class Interpolation {
                     case "project.group" -> project.group();
                     case "project.name" -> project.name();
                     case "project.version" -> project.version();
+                    case "host.os" -> hostOs();
                     default -> null; // unreachable: validate() ran at manifest load
                 };
                 if (value == null) {

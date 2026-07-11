@@ -144,9 +144,17 @@ public final class PluginManifests {
         if (packaging == null) return null;
         String execMode = packaging.getString("exec-mode");
         if (execMode == null) execMode = "classpath";
-        if (!List.of("jar", "classpath", "binary").contains(execMode)) {
+        if (!List.of("jar", "classpath", "binary", "device").contains(execMode)) {
             throw new JkBuildParseException(
-                    displayPath + ".packaging.exec-mode must be jar, classpath, or binary — got: " + execMode);
+                    displayPath + ".packaging.exec-mode must be jar, classpath, binary, or device — got: "
+                            + execMode);
+        }
+        String extension = packaging.getString("artifact-extension");
+        if (extension == null) extension = "jar";
+        if (!extension.matches("[a-z0-9]{1,8}")) {
+            throw new JkBuildParseException(
+                    displayPath + ".packaging.artifact-extension must be a short lowercase extension — got: "
+                            + extension);
         }
         return new PluginManifest.Packaging(
                 packaging.getString("packager"),
@@ -154,7 +162,8 @@ public final class PluginManifests {
                 Boolean.TRUE.equals(packaging.getBoolean("self-contained")),
                 Boolean.TRUE.equals(packaging.getBoolean("classes-run")),
                 Boolean.TRUE.equals(packaging.getBoolean("main-scan")),
-                Boolean.TRUE.equals(packaging.getBoolean("layered-image")));
+                Boolean.TRUE.equals(packaging.getBoolean("layered-image")),
+                extension);
     }
 
     // ---- [[contribute.*]] — the declarative layer (P2) --------------------------------------
@@ -216,7 +225,22 @@ public final class PluginManifests {
             packagerDeps.add(new PluginManifest.PackagerDependency(artifact, coordinate, when));
         }
 
-        return new PluginManifest.Contributions(platformDeps, compilerArgs, kotlinPlugins, packagerDeps);
+        List<PluginManifest.StepDependency> stepDeps = new ArrayList<>();
+        for (TomlTable t : tableArray(contribute, "step-dependency", displayPath)) {
+            String where = displayPath + ".contribute.step-dependency";
+            String artifact = requireString(t, "artifact", where);
+            String coordinate = requireString(t, "coordinate", where);
+            Interpolation.validate(coordinate, schemaKeys, where);
+            PluginManifest.Condition when = parseCondition(t, where);
+            if (when instanceof PluginManifest.Condition.ClasspathHas) {
+                throw new JkBuildParseException(
+                        where + ": classpath-has cannot gate a step-dependency (tool fetches are"
+                                + " decided from config/facts, not the resolved classpath)");
+            }
+            stepDeps.add(new PluginManifest.StepDependency(artifact, coordinate, when));
+        }
+
+        return new PluginManifest.Contributions(platformDeps, compilerArgs, kotlinPlugins, packagerDeps, stepDeps);
     }
 
     /**

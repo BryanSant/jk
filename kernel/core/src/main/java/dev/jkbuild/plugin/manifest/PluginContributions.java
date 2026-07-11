@@ -135,6 +135,38 @@ public final class PluginContributions {
     public record PackagerDep(String artifact, String module, String version) {}
 
     /**
+     * One resolved step-dependency: the full coordinate spec ({@code group:artifact:version} with
+     * an optional {@code :classifier}), fetched engine-side, handed to the step as {@code artifact}.
+     */
+    public record StepDep(String artifact, String coordinateSpec) {}
+
+    /**
+     * The active plugins' {@code [[contribute.step-dependency]]} entries with conditions evaluated
+     * and coordinates interpolated — the engine fetches these into the cache (never into the
+     * project's dependency graph) and hands them to the step worker by name.
+     */
+    public static java.util.List<StepDep> stepDependencies(JkBuild build, java.nio.file.Path moduleDir) {
+        java.util.List<StepDep> out = new java.util.ArrayList<>();
+        for (PluginManifest manifest : PluginTableRegistry.manifestsFor(moduleDir, build.plugins())) {
+            PluginConfig config = build.pluginConfig(manifest.id()).orElse(null);
+            if (config == null) continue;
+            for (PluginManifest.StepDependency sd : manifest.contributions().stepDependencies()) {
+                if (!holds(sd.when(), config, build.project(), build.nativeConfig().isPresent(), null, manifest.id())) {
+                    continue;
+                }
+                String coordinate = Interpolation.resolve(sd.coordinate(), config, build.project(), null);
+                String[] parts = coordinate.split(":");
+                if (parts.length < 3 || parts.length > 4) {
+                    throw new JkBuildParseException("[" + manifest.id() + "] step-dependency coordinate must be"
+                            + " \"group:artifact:version[:classifier]\" — got: " + coordinate);
+                }
+                out.add(new StepDep(sd.artifact(), coordinate));
+            }
+        }
+        return out;
+    }
+
+    /**
      * The active plugins' {@code [[contribute.packager-dependency]]} entries with conditions
      * evaluated and coordinates interpolated — the engine fetches these (never into the project's
      * dependency graph) and hands them to the packager worker by name.

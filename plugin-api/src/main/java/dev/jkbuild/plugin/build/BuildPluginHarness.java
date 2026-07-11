@@ -364,6 +364,11 @@ public final class BuildPluginHarness {
         }
 
         @Override
+        public Optional<Path> extra(String name) {
+            return Optional.ofNullable(spec.extras().get(name));
+        }
+
+        @Override
         public void label(String text) {
             out.emit("{\"t\":\"label\",\"text\":" + Ndjson.quote(text) + "}");
         }
@@ -435,6 +440,11 @@ public final class BuildPluginHarness {
         @Override
         public Path artifactPath() {
             return spec.artifactPath();
+        }
+
+        @Override
+        public Path javaHome() {
+            return spec.javaHome();
         }
 
         @Override

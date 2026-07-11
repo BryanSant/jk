@@ -438,10 +438,10 @@ public final class BuildPipeline {
         Phase ensureJdk = ensureJdkPhase(cx);
 
         // ---- compile-java -----------------------------------------------
-        Phase compileJava = compileJavaPhase(cx);
+        Phase compileJava = compileJavaPhase(cx, pluginDeclsF);
 
         // ---- compile-kotlin ---------------------------------------------
-        Phase compileKotlin = compileKotlinPhase(cx);
+        Phase compileKotlin = compileKotlinPhase(cx, pluginDeclsF);
 
         // ---- copy-resources ---------------------------------------------
         Phase copyResources = copyResourcesPhase(cx);
@@ -794,7 +794,41 @@ public final class BuildPipeline {
                 .build();
     }
 
-    private static Phase compileJavaPhase(StepContext cx) {
+    /** The phase names of every source-generating plugin step the compilers must wait for. */
+    private static List<String> sourceGenStepPhases(PluginBuild.Declarations decls) {
+        List<String> out = new ArrayList<>();
+        if (decls != null) {
+            for (PluginBuild.StepDecl step : decls.steps()) {
+                if (beforeCompile(step)) out.add("plugin-" + step.name());
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Plugin-contributed generated sources ({@code contributesSources} of before-compile steps):
+     * files with {@code suffix} under each contributed scratch dir. They join the compiler's
+     * source list, so the freshness stamp and the javac action key see them like any source.
+     */
+    private static List<Path> pluginContributedSources(
+            BuildLayout layout, PluginBuild.Declarations decls, String suffix) throws IOException {
+        List<Path> out = new ArrayList<>();
+        if (decls == null) return out;
+        for (PluginBuild.StepDecl step : decls.steps()) {
+            for (String rel : step.contributesSources()) {
+                Path dir = PluginBuild.stepScratch(layout, step.name()).resolve(rel);
+                if (!Files.isDirectory(dir)) continue;
+                try (var walk = Files.walk(dir)) {
+                    walk.filter(f -> f.toString().endsWith(suffix) && Files.isRegularFile(f))
+                            .sorted()
+                            .forEach(out::add);
+                }
+            }
+        }
+        return out;
+    }
+
+    private static Phase compileJavaPhase(StepContext cx, PluginBuild.Declarations pluginDecls) {
         Inputs in = cx.in();
         Cas cas = cx.cas();
         ActionCache actionCache = cx.actionCache();
@@ -810,10 +844,7 @@ public final class BuildPipeline {
         return Phase.builder("compile-java")
                 .label("Compiling")
                 .kind(PhaseKind.CPU)
-                .requires(
-                        mixed
-                                ? new String[] {"parse-build", "sync-deps", "ensure-jdk", "compile-kotlin"}
-                                : new String[] {"parse-build", "sync-deps", "ensure-jdk"})
+                .requires(javaCompileRequires(mixed, pluginDecls))
                 // Scope counts sources (granularity); weight is the bar share. javac
                 // is opaque — one progress(sources.size()) on completion — so ease the
                 // slice forward over time while it runs instead of sitting flat.
@@ -841,6 +872,11 @@ public final class BuildPipeline {
                     // so it cannot prune Java's output; the assembler merges both.
                     Path javaOut = classes;
                     List<Path> sources = javaSources(ctx);
+                    List<Path> generated = pluginContributedSources(ctx.require(LAYOUT), pluginDecls, ".java");
+                    if (!generated.isEmpty()) {
+                        sources = new ArrayList<>(sources);
+                        sources.addAll(generated);
+                    }
                     if (sources.isEmpty()) {
                         ctx.label("no Java sources");
                         Files.createDirectories(javaOut);
@@ -977,7 +1013,20 @@ public final class BuildPipeline {
                 .build();
     }
 
-    private static Phase compileKotlinPhase(StepContext cx) {
+    private static String[] kotlinCompileRequires(PluginBuild.Declarations decls) {
+        List<String> requires = new ArrayList<>(List.of("parse-build", "sync-deps", "ensure-jdk"));
+        requires.addAll(sourceGenStepPhases(decls));
+        return requires.toArray(new String[0]);
+    }
+
+    private static String[] javaCompileRequires(boolean mixed, PluginBuild.Declarations decls) {
+        List<String> requires = new ArrayList<>(List.of("parse-build", "sync-deps", "ensure-jdk"));
+        if (mixed) requires.add("compile-kotlin");
+        requires.addAll(sourceGenStepPhases(decls));
+        return requires.toArray(new String[0]);
+    }
+
+    private static Phase compileKotlinPhase(StepContext cx, PluginBuild.Declarations pluginDecls) {
         Inputs in = cx.in();
         Cas cas = cx.cas();
         ActionCache actionCache = cx.actionCache();
@@ -994,8 +1043,9 @@ public final class BuildPipeline {
                 .label("Kotlin")
                 .kind(PhaseKind.CPU)
                 // Kotlin compiles first (reads Java declarations from source), so it
-                // only needs the base phases — javac runs after it in a mixed module.
-                .requires("parse-build", "sync-deps", "ensure-jdk")
+                // only needs the base phases — javac runs after it in a mixed module —
+                // plus any source-generating plugin steps.
+                .requires(kotlinCompileRequires(pluginDecls))
                 // Scope counts Kotlin sources (granularity); weight is the bar share
                 // (see compile-java). kotlinc is opaque too, so ease it over time.
                 .weight(() -> plan.get().compileKotlin())
@@ -1453,11 +1503,21 @@ public final class BuildPipeline {
                     BuildLayout layout = ctx.require(LAYOUT);
                     Path classes = ctx.require(MAIN_CLASSES);
                     Path jarPath = layout.mainJar();
-                    Files.createDirectories(jarPath.getParent());
                     if (pluginDecls != null && pluginDecls.packager() != null) {
+                        // The packager's declared artifact extension replaces .jar (an APK, …).
+                        String ext = pluginActive.manifest().packaging() == null
+                                ? "jar"
+                                : pluginActive.manifest().packaging().artifactExtension();
+                        if (!"jar".equals(ext)) {
+                            String fileName = jarPath.getFileName().toString();
+                            jarPath = jarPath.resolveSibling(
+                                    fileName.substring(0, fileName.length() - ".jar".length()) + "." + ext);
+                        }
+                        Files.createDirectories(jarPath.getParent());
                         packagePlugin(ctx, in, cas, project, classes, jarPath, pluginActive, pluginDecls);
                         return;
                     }
+                    Files.createDirectories(jarPath.getParent());
                     String mainClass = project.mainClass();
                     // Application jars embed the lockfile-derived SBOM (libraries don't:
                     // their consumers' lockfiles are the truth for the final classpath).
@@ -1519,17 +1579,29 @@ public final class BuildPipeline {
      * a hit restores the step's scratch and skips the worker entirely, a miss forks the plugin's
      * worker with the resolved inputs. The step body never learns any of this.
      */
+    /** True when a declared step must run before the compilers (source generation). */
+    static boolean beforeCompile(PluginBuild.StepDecl step) {
+        return "compile".equals(step.before()) || !step.contributesSources().isEmpty();
+    }
+
     private static Phase pluginStepPhase(StepContext cx, PluginBuild.Active active, PluginBuild.StepDecl step) {
         Inputs in = cx.in();
-        if ("compile".equals(step.before()) || !step.contributesSources().isEmpty()) {
-            // Source-generating steps (Android's R-gen, KSP) need compiler wiring that lands
-            // with the Android spike — refuse loudly rather than run at the wrong time.
+        boolean beforeCompile = beforeCompile(step);
+        if (beforeCompile && step.inputs().contains("classes")) {
+            // Declared-input validation: a source-generating step runs before any classes exist.
             throw new IllegalStateException("plugin step " + step.name()
-                    + " runs before compile / contributes sources — not supported yet");
+                    + " runs before compile but declares In.classes() — generated-source steps"
+                    + " consume project files (In.projectFiles), config, or other step outputs");
         }
         List<String> requires = new ArrayList<>();
-        requires.add("copy-resources");
-        if ("test".equals(step.after()) && !in.skipTests()) requires.add("run-tests");
+        if (beforeCompile) {
+            requires.add("parse-build");
+            requires.add("sync-deps");
+            requires.add("ensure-jdk");
+        } else {
+            requires.add("copy-resources");
+            if ("test".equals(step.after()) && !in.skipTests()) requires.add("run-tests");
+        }
         return Phase.builder("plugin-" + step.name())
                 .label(step.name())
                 .kind(PhaseKind.CPU)
@@ -1541,10 +1613,18 @@ public final class BuildPipeline {
                     Path classes = ctx.require(MAIN_CLASSES);
                     Path javaHome = ctx.require(JAVA_HOME);
                     Path scratch = PluginBuild.stepScratch(layout, step.name());
-                    String startClass = resolvedMain(project, in.dir(), classes);
+                    // Before compile no classes exist to scan — the declared main (or null) rides.
+                    String startClass = beforeCompile(step)
+                            ? project.mainClass()
+                            : resolvedMain(project, in.dir(), classes);
 
                     List<Path> classpath =
                             PluginBuild.productionClasspath(in.dir(), in.cache(), in.lockFile(), project);
+
+                    // Manifest-contributed tool artifacts (aapt2, r8, a platform jar) — fetched
+                    // into the cache, handed to the body by artifact name, keyed like any input.
+                    java.util.Map<String, Path> toolExtras =
+                            PluginBuild.fetchStepDependencies(project, in.dir(), cx.cas());
 
                     // Action key: exactly the declared inputs, plus the facts the body sees.
                     List<String> tokens = new ArrayList<>();
@@ -1559,9 +1639,16 @@ public final class BuildPipeline {
                                 if (input.startsWith("step:")) {
                                     Path other = PluginBuild.stepScratch(layout, input.substring("step:".length()));
                                     tokens.add(input + ":" + dev.jkbuild.task.ClasspathFingerprint.entry(other));
+                                } else if (input.startsWith("project:")) {
+                                    Path files = in.dir().resolve(input.substring("project:".length()));
+                                    tokens.add(input + ":" + dev.jkbuild.task.ClasspathFingerprint.entry(files));
                                 }
                             }
                         }
+                    }
+                    for (var tool : toolExtras.entrySet()) {
+                        tokens.add("tool:" + tool.getKey() + ":"
+                                + dev.jkbuild.task.ClasspathFingerprint.entry(tool.getValue()));
                     }
                     tokens.add("facts:" + project.project().group() + ":" + project.project().name() + ":"
                             + project.project().version() + ":" + project.project().javaRelease() + ":"
@@ -1584,14 +1671,17 @@ public final class BuildPipeline {
                     dev.jkbuild.util.PathUtil.deleteRecursively(scratch); // stale outputs never survive
                     Files.createDirectories(scratch);
                     ctx.label(step.name());
-                    Path spec = new PluginBuild.SpecWriter()
+                    PluginBuild.SpecWriter specWriter = new PluginBuild.SpecWriter()
                             .op("run-step", step.name(), active.manifest().id())
                             .config(active.config())
                             .project(project, startClass)
                             .layout(classes, in.dir(), scratch)
                             .javaHome(javaHome)
-                            .classpath(classpath)
-                            .write();
+                            .classpath(classpath);
+                    for (var tool : toolExtras.entrySet()) {
+                        specWriter.extra(tool.getKey(), tool.getValue());
+                    }
+                    Path spec = specWriter.write();
                     try {
                         PluginBuild.runWorker(active, in.cache(), spec, ctx::label);
                     } catch (IOException e) {

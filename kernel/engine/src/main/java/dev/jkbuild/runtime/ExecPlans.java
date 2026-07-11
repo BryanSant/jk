@@ -166,6 +166,15 @@ public final class ExecPlans {
      */
     private static ExecPlan runPlan(Path dir, Path cache, JkBuild project, BuildLayout layout, boolean dev)
             throws IOException, InterruptedException {
+        // A device-mode artifact (an APK) is not host-runnable — the plugin's deploy verb is
+        // the run story; a generic java exec would be nonsense.
+        var deviceShape = PluginBuild.shape(project, dir).filter(sh -> "device".equals(sh.execMode()));
+        if (deviceShape.isPresent()) {
+            return ExecPlan.error(
+                    dev ? "dev" : "run",
+                    "this project packages a device artifact (exec-mode=device) — it cannot run on the"
+                            + " host JVM; deploy it with the owning plugin's verb instead");
+        }
         Path javaHome = projectJavaHome(dir);
         String java = javaBin(javaHome);
 

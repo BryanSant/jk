@@ -9,7 +9,8 @@ import java.util.Objects;
  * sees action keys, freshness stamps, or CAS paths — and gets correct incrementality for free.
  *
  * @param kind what the input is
- * @param step the producing step's name — {@link Kind#STEP_OUTPUT} only, null otherwise
+ * @param step the producing step's name ({@link Kind#STEP_OUTPUT}) or the module-relative path
+ *     ({@link Kind#PROJECT_FILES}) — null for every other kind
  */
 public record In(Kind kind, String step) {
 
@@ -23,13 +24,21 @@ public record In(Kind kind, String step) {
         /** The plugin's own validated config table — any config change re-runs. */
         CONFIG,
         /** Another step's declared outputs (chaining, e.g. packaging over an AOT step). */
-        STEP_OUTPUT
+        STEP_OUTPUT,
+        /**
+         * A module-relative file or directory the step consumes (a codegen step's real inputs:
+         * {@code res}, {@code proto}, {@code AndroidManifest.xml}, …). The engine fingerprints
+         * its content recursively; the body reads it via {@code exec.moduleDir()}.
+         */
+        PROJECT_FILES
     }
 
     public In {
         Objects.requireNonNull(kind, "kind");
-        if ((kind == Kind.STEP_OUTPUT) == (step == null)) {
-            throw new IllegalArgumentException("step name is required for STEP_OUTPUT and only for STEP_OUTPUT");
+        boolean carriesValue = kind == Kind.STEP_OUTPUT || kind == Kind.PROJECT_FILES;
+        if (carriesValue == (step == null)) {
+            throw new IllegalArgumentException(
+                    "a value is required for STEP_OUTPUT/PROJECT_FILES and only for those kinds");
         }
     }
 
@@ -53,15 +62,24 @@ public record In(Kind kind, String step) {
         return new In(Kind.STEP_OUTPUT, step);
     }
 
-    /** The wire spelling: {@code classes}, {@code runtime-classpath}, …, {@code step:<name>}. */
+    /** A module-relative file or dir this step consumes (fingerprinted recursively). */
+    public static In projectFiles(String relPath) {
+        return new In(Kind.PROJECT_FILES, relPath);
+    }
+
+    /**
+     * The wire spelling: {@code classes}, {@code runtime-classpath}, …, {@code step:<name>},
+     * {@code project:<rel>}.
+     */
     public String wireName() {
-        return kind == Kind.STEP_OUTPUT
-                ? "step:" + step
-                : kind.name().toLowerCase(java.util.Locale.ROOT).replace('_', '-');
+        if (kind == Kind.STEP_OUTPUT) return "step:" + step;
+        if (kind == Kind.PROJECT_FILES) return "project:" + step;
+        return kind.name().toLowerCase(java.util.Locale.ROOT).replace('_', '-');
     }
 
     public static In fromWire(String name) {
         if (name.startsWith("step:")) return stepOutput(name.substring("step:".length()));
+        if (name.startsWith("project:")) return projectFiles(name.substring("project:".length()));
         return new In(Kind.valueOf(name.toUpperCase(java.util.Locale.ROOT).replace('-', '_')), null);
     }
 }
