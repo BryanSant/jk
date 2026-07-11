@@ -62,9 +62,50 @@ public final class GradleImporter {
     private static final Pattern KOTLIN_ID = Pattern.compile("id\\s*\\(?\\s*[\"']org\\.jetbrains\\.kotlin[^\"']*[\"']");
     private static final Pattern KOTLIN_ID_VERSION =
             Pattern.compile("id\\s*\\(\\s*[\"']org\\.jetbrains\\.kotlin[^\"']*[\"']\\s*\\)\\s*version\\s*" + STR);
-    // id("org.springframework.boot") version "4.0.0" — the plugin version IS the Boot version.
-    private static final Pattern BOOT_PLUGIN_VERSION = Pattern.compile(
-            "id\\s*\\(?\\s*[\"']org\\.springframework\\.boot[\"']\\s*\\)?\\s*version\\s*" + STR);
+
+    /** One installed plugin's Gradle-import mapping: which table + config key a plugin id feeds. */
+    private record PluginImportRule(String manifestId, String versionTo, String missingVersionWarning) {}
+
+    /** Gradle plugin id → import rule, from every installed manifest's [[import.gradle-plugin]]. */
+    private static Map<String, PluginImportRule> pluginImportRules() {
+        Map<String, PluginImportRule> rules = new java.util.LinkedHashMap<>();
+        for (var manifest : dev.jkbuild.plugin.manifest.PluginTableRegistry.manifests()) {
+            for (var rule : manifest.gradleImports()) {
+                rules.put(
+                        rule.id(),
+                        new PluginImportRule(manifest.id(), rule.versionTo(), rule.missingVersionWarning()));
+            }
+        }
+        return rules;
+    }
+
+    /**
+     * Evaluate the import rules against the plugins block: a rule with {@code version-to} maps
+     * the Gradle plugin's inline version into the owned table's config (only that key — schema
+     * defaults are exactly what the renderer omits, so the round trip stays minimal); declared
+     * without a version, the rule's warning is reported instead. Version-less rules are
+     * recognition-only (their construct is absorbed by another contribution, e.g. Boot's BOM
+     * auto-import covering dependency-management).
+     */
+    private static List<dev.jkbuild.model.PluginConfig> mapPluginTables(
+            String pluginsBody, Map<String, PluginImportRule> rules, ImportReport.Builder report) {
+        List<dev.jkbuild.model.PluginConfig> out = new ArrayList<>();
+        for (Map.Entry<String, PluginImportRule> e : rules.entrySet()) {
+            if (!pluginsBody.contains(e.getKey())) continue;
+            PluginImportRule rule = e.getValue();
+            if (rule.versionTo() == null) continue; // recognition-only
+            Pattern versionPattern = Pattern.compile(
+                    "id\\s*\\(?\\s*[\"']" + Pattern.quote(e.getKey()) + "[\"']\\s*\\)?\\s*version\\s*" + STR);
+            Matcher m = versionPattern.matcher(pluginsBody);
+            if (m.find()) {
+                out.add(new dev.jkbuild.model.PluginConfig(
+                        rule.manifestId(), java.util.Map.of(rule.versionTo(), firstNonNull(m.group(1), m.group(2)))));
+            } else if (rule.missingVersionWarning() != null) {
+                report.warning(rule.missingVersionWarning());
+            }
+        }
+        return out;
+    }
 
     // application { mainClass.set("X") } / mainClass = "X" — groups 1/2 (set) or 3/4 (=).
     private static final Pattern APPLICATION_MAIN_CLASS =
@@ -127,9 +168,11 @@ public final class GradleImporter {
         int jdk = detectJdk(stripped).flatMap(GradleImporter::parseInt).orElse(25);
 
         // plugins block — the Kotlin plugin marks a Kotlin project (and carries
-        // its compiler version); other ids are diagnostics only.
+        // its compiler version); ids claimed by an installed jk plugin's [[import.gradle-plugin]]
+        // rules map to that plugin's table below; the rest are diagnostics only.
         String pluginsBody = extractBlock(stripped, "plugins").orElse("");
         VersionSelector kotlin = detectKotlinVersion(pluginsBody, report);
+        Map<String, PluginImportRule> importRules = pluginImportRules();
         for (Matcher m = PLUGIN_ID.matcher(pluginsBody); m.find(); ) {
             String pluginId = firstNonNull(m.group(1), m.group(2));
             if (pluginId == null || pluginId.isBlank()) continue;
@@ -138,15 +181,14 @@ public final class GradleImporter {
                 case "java", "java-library", "application" -> {
                     // implicit in jk — nothing to say.
                 }
-                case "org.springframework.boot", "io.spring.dependency-management" -> {
-                    // Mapped below to [spring-boot] (the BOM auto-import covers
-                    // dependency-management) — nothing to warn about.
+                default -> {
+                    if (!importRules.containsKey(pluginId)) {
+                        report.warning("Gradle plugin `"
+                                + pluginId
+                                + "` not yet mapped."
+                                + " Plugin-aware mappings (Spring Boot, Quarkus, Spotless, ...) arrive in a later slice.");
+                    }
                 }
-                default ->
-                    report.warning("Gradle plugin `"
-                            + pluginId
-                            + "` not yet mapped."
-                            + " Plugin-aware mappings (Spring Boot, Quarkus, Spotless, ...) arrive in a later slice.");
             }
         }
 
@@ -157,25 +199,13 @@ public final class GradleImporter {
         String manifestMain = manifest.remove("Main-Class");
         if (mainClass == null) mainClass = manifestMain;
 
-        // Spring Boot: the plugin's version is the Boot version -> [spring-boot] version,
-        // which auto-imports the spring-boot-dependencies BOM (so versionless starters stay
-        // versionless). Applied-without-version (settings pluginManagement) can't be resolved
-        // from this file alone -- ask the user to fill it in.
-        dev.jkbuild.model.PluginConfig springBoot = null;
-        if (pluginsBody.contains("org.springframework.boot")) {
-            Matcher bootVersion = BOOT_PLUGIN_VERSION.matcher(pluginsBody);
-            if (bootVersion.find()) {
-                // Only version is declared — the schema's defaults (build-info/include-tools/
-                // aot-args) are exactly what the renderer omits, so the round trip stays minimal.
-                springBoot = new dev.jkbuild.model.PluginConfig(
-                        JkBuild.SPRING_BOOT_ID,
-                        java.util.Map.of("version", firstNonNull(bootVersion.group(1), bootVersion.group(2))));
-            } else {
-                report.warning("the Spring Boot plugin is applied without an inline version"
-                        + " (settings pluginManagement?) -- add `[spring-boot] version = \"...\"`"
-                        + " to jk.toml yourself.");
-            }
-        }
+        // Plugin-owned tables: each installed jk plugin's [[import.gradle-plugin]] rules map a
+        // Gradle plugin id to its table (Boot: the Gradle plugin's version IS the Boot version ->
+        // `version`, which auto-imports the BOM so versionless starters stay versionless).
+        // Applied-without-version (settings pluginManagement) can't be resolved from this file
+        // alone -- the rule's warning asks the user to fill it in.
+        List<dev.jkbuild.model.PluginConfig> pluginConfigs =
+                mapPluginTables(pluginsBody, importRules, report);
 
         Map<Scope, List<Dependency>> deps = parseDependencies(stripped, catalog, report);
         List<RepositorySpec> repos = parseRepositories(stripped, report);
@@ -191,12 +221,14 @@ public final class GradleImporter {
                 .description(description)
                 .build();
         JkBuild.Application application = mainClass != null ? new JkBuild.Application(mainClass, false) : null;
-        JkBuild jkBuild = JkBuild.builder(project)
+        JkBuild.Builder builder = JkBuild.builder(project)
                 .dependencies(new JkBuild.Dependencies(deps))
                 .repositories(repos)
-                .application(application)
-                .pluginConfig(springBoot)
-                .build();
+                .application(application);
+        for (dev.jkbuild.model.PluginConfig config : pluginConfigs) {
+            builder.pluginConfig(config);
+        }
+        JkBuild jkBuild = builder.build();
         if (!manifest.isEmpty()) jkBuild = jkBuild.withManifest(manifest);
         return new Result(jkBuild, report.build());
     }

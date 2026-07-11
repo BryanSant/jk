@@ -46,7 +46,7 @@ public final class JkBuildRenderer {
         Objects.requireNonNull(jkBuild, "jkBuild");
         StringBuilder sb = new StringBuilder();
         renderProject(sb, jkBuild.project());
-        renderSpringBoot(sb, jkBuild.pluginConfig(JkBuild.SPRING_BOOT_ID).orElse(null));
+        renderPluginTables(sb, jkBuild);
         renderApplication(sb, jkBuild.application().orElse(null));
         renderNative(sb, jkBuild.nativeConfig().orElse(null));
         renderManifest(sb, jkBuild.manifest());
@@ -88,22 +88,36 @@ public final class JkBuildRenderer {
         if (p.m2install()) sb.append("m2install = true\n");
     }
 
-    /** {@code [spring-boot]} table — its presence switches packaging to the Boot layout. */
-    private static void renderSpringBoot(StringBuilder sb, dev.jkbuild.model.PluginConfig boot) {
-        if (boot == null) return;
-        sb.append("\n[spring-boot]\n");
-        sb.append("version = ").append(quote(boot.string("version"))).append('\n');
-        boot.bool("aot").ifPresent(aot -> sb.append("aot = ").append(aot).append('\n'));
-        if (boot.bool("build-info", false)) sb.append("build-info = true\n");
-        if (!boot.bool("include-tools", true)) sb.append("include-tools = false\n");
-        var aotArgs = boot.stringList("aot-args");
-        if (!aotArgs.isEmpty()) {
-            sb.append("aot-args = [");
-            for (int i = 0; i < aotArgs.size(); i++) {
-                if (i > 0) sb.append(", ");
-                sb.append(quote(aotArgs.get(i)));
+    /**
+     * Every plugin-owned table ({@code [spring-boot]}, …), rendered from its manifest schema:
+     * keys in schema order, values formatted by type, entries equal to their schema default
+     * omitted (and absent tri-state keys stay absent) — so the round trip through {@code jk
+     * import} stays as minimal as the hand-written Boot renderer was. Zero framework knowledge
+     * lives here.
+     */
+    private static void renderPluginTables(StringBuilder sb, JkBuild jkBuild) {
+        for (var manifest : dev.jkbuild.plugin.manifest.PluginTableRegistry.manifests()) {
+            var config = jkBuild.pluginConfig(manifest.id()).orElse(null);
+            if (config == null) continue;
+            sb.append("\n[").append(manifest.table()).append("]\n");
+            for (var schemaKey : manifest.schema().values()) {
+                Object value = config.values().get(schemaKey.name());
+                if (value == null || value.equals(schemaKey.normalizedDefault())) continue;
+                sb.append(schemaKey.name()).append(" = ");
+                if (value instanceof String str) {
+                    sb.append(quote(str));
+                } else if (value instanceof java.util.List<?> list) {
+                    sb.append('[');
+                    for (int i = 0; i < list.size(); i++) {
+                        if (i > 0) sb.append(", ");
+                        sb.append(quote(String.valueOf(list.get(i))));
+                    }
+                    sb.append(']');
+                } else {
+                    sb.append(value); // bool / int render bare
+                }
+                sb.append('\n');
             }
-            sb.append("]\n");
         }
     }
 
