@@ -252,6 +252,17 @@ public final class EngineProtocol {
     public static final String GENERATE_ACK = "generate-ack";
 
     /**
+     * Client → server: compute the IDE-agnostic workspace model for {@code dir} — parsed modules,
+     * external libraries, cross-module edges, per-module JDK/SDK handles ({@link IdeWireModel}).
+     * The IDE file generators stay client-side. Synchronous inline; answered with one {@link
+     * #IDE_MODEL_ACK}.
+     */
+    public static final String IDE_MODEL_REQUEST = "ide-model-request";
+
+    /** Server → client, terminal for {@link #IDE_MODEL_REQUEST}. */
+    public static final String IDE_MODEL_ACK = "ide-model-ack";
+
+    /**
      * Server → client: the forecast — {@code dirtyDirs} (module dirs predicted to do real work),
      * {@code lockStale} (the merged workspace lock no longer reflects its manifests), {@code empty}
      * (the workspace declares no modules), and {@code errors} (graph resolution; non-empty ⇒ no
@@ -1324,6 +1335,13 @@ public final class EngineProtocol {
     public static String whyRequest(String dir, String query) {
         return "{\"t\":\"" + WHY_REQUEST + "\",\"dir\":" + Ndjson.quote(dir)
                 + ",\"query\":" + Ndjson.quote(query)
+                + "}";
+    }
+
+    public static String ideModelRequest(String dir, String cache, String jdksDir) {
+        return "{\"t\":\"" + IDE_MODEL_REQUEST + "\",\"dir\":" + Ndjson.quote(dir)
+                + ",\"cache\":" + Ndjson.quote(cache)
+                + ",\"jdksDir\":" + (jdksDir == null ? "null" : Ndjson.quote(jdksDir))
                 + "}";
     }
 

@@ -301,7 +301,17 @@ public final class EngineClient {
      * Thin-client deny check: the [deny] policy is user-authored jk.toml and therefore parses
      * engine-side only; one synchronous DENY_CHECK round trip returns the violations.
      */
-    /** Thin-client generator run: engine renders content, client guards/writes/prints. */
+    /** Thin-client IDE model: engine computes the workspace model, client generates the files. */
+    public static dev.jkbuild.engine.protocol.IdeWireModel ideModel(
+            dev.jkbuild.engine.EnginePaths.Paths paths,
+            java.nio.file.Path dir,
+            java.nio.file.Path cache,
+            java.nio.file.Path jdksDir)
+            throws java.io.IOException {
+        return EngineBuildListenerAdapter.ideModel(paths, dir, cache, jdksDir);
+    }
+
+        /** Thin-client generator run: engine renders content, client guards/writes/prints. */
     public static dev.jkbuild.engine.protocol.GeneratedFiles generate(
             dev.jkbuild.engine.EnginePaths.Paths paths, java.nio.file.Path dir, String kind)
             throws java.io.IOException {

@@ -6,8 +6,6 @@ import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.cli.tui.Glyphs;
 import dev.jkbuild.cli.tui.GoalWedge;
 import dev.jkbuild.config.GlobalConfig;
-import dev.jkbuild.layout.BuildLayout;
-import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.Scope;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -57,7 +55,7 @@ public final class VscodeIdeGenerator implements IdeGenerator {
         assertUniqueNames(model);
 
         int files = 0;
-        for (Map.Entry<Path, JkBuild> me : model.allModules().entrySet()) {
+        for (Map.Entry<Path, IdeModule> me : model.allModules().entrySet()) {
             files += writeModule(model, me.getKey(), me.getValue());
         }
 
@@ -80,7 +78,7 @@ public final class VscodeIdeGenerator implements IdeGenerator {
                 Glyphs.CHECK,
                 "Code",
                 GlobalConfig.nerdfont(),
-                "The " + Theme.colorize(model.rootBuild().project().name(), t.focused()) + " project is ready"));
+                "The " + Theme.colorize(model.rootName(), t.focused()) + " project is ready"));
 
         List<String> items = new ArrayList<>();
         items.add(check + " Generated " + files + " project file" + (files == 1 ? "" : "s") + " for "
@@ -104,10 +102,10 @@ public final class VscodeIdeGenerator implements IdeGenerator {
     // Per-module Eclipse metadata
     // =========================================================================
 
-    private static int writeModule(IdeModel model, Path moduleDir, JkBuild module) throws IOException {
-        String name = IdeSupport.moduleName(module);
+    private static int writeModule(IdeModel model, Path moduleDir, IdeModule module) throws IOException {
+        String name = module.name();
         SdkRef sdk = model.sdkRefs().get(moduleDir);
-        int level = sdk != null ? sdk.languageLevel() : module.project().javaRelease();
+        int level = sdk != null ? sdk.languageLevel() : module.javaRelease();
         if (level <= 0) level = MAX_KNOWN_EE;
 
         write(moduleDir.resolve(".project"), dotProject(name));
@@ -137,10 +135,9 @@ public final class VscodeIdeGenerator implements IdeGenerator {
         return sb.toString();
     }
 
-    private static String dotClasspath(IdeModel model, Path moduleDir, JkBuild module, int level) {
-        BuildLayout layout = BuildLayout.of(moduleDir, module);
-        String outMain = rel(moduleDir, layout.jdtClassesDir());
-        String outTest = rel(moduleDir, layout.jdtTestClassesDir());
+    private static String dotClasspath(IdeModel model, Path moduleDir, IdeModule module, int level) {
+        String outMain = rel(moduleDir, module.jdtClassesDir());
+        String outTest = rel(moduleDir, module.jdtTestClassesDir());
 
         StringBuilder sb = xmlHeader();
         sb.append("<classpath>\n");
@@ -168,8 +165,8 @@ public final class VscodeIdeGenerator implements IdeGenerator {
         // Annotation-processor output roots (created so JDT's classpath stays valid), emitted when
         // this module declares processors or the dir already exists — mirrors the IntelliJ generator.
         List<Path> procs = model.processorJars().getOrDefault(moduleDir, List.of());
-        Path gen = layout.generatedSourcesDir("annotations");
-        Path genTest = layout.generatedSourcesDir("annotations", "test");
+        Path gen = module.generatedSourcesDir();
+        Path genTest = module.generatedTestSourcesDir();
         if (!procs.isEmpty() || Files.isDirectory(gen)) {
             try {
                 Files.createDirectories(gen);
@@ -306,12 +303,12 @@ public final class VscodeIdeGenerator implements IdeGenerator {
 
     private static String launchJson(IdeModel model) {
         List<String> configs = new ArrayList<>();
-        Map<Path, JkBuild> targets =
+        Map<Path, IdeModule> targets =
                 model.modules().isEmpty() ? model.allModules() : model.modules();
-        for (JkBuild module : targets.values()) {
+        for (IdeModule module : targets.values()) {
             String main = module.mainClass();
             if (main == null) continue;
-            String name = IdeSupport.moduleName(module);
+            String name = module.name();
             configs.add("    {\n"
                     + "      \"type\": \"java\",\n"
                     + "      \"name\": \"" + jsonEsc(name) + "\",\n"
@@ -338,8 +335,8 @@ public final class VscodeIdeGenerator implements IdeGenerator {
 
     private static void assertUniqueNames(IdeModel model) {
         Set<String> seen = new LinkedHashSet<>();
-        for (JkBuild module : model.allModules().values()) {
-            String name = IdeSupport.moduleName(module);
+        for (IdeModule module : model.allModules().values()) {
+            String name = module.name();
             if (!seen.add(name)) {
                 throw new IdeSupport.IdeException(
                         2, "duplicate module name '" + name + "' — Eclipse project names must be unique");

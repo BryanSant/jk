@@ -469,6 +469,28 @@ final class EngineBuildListenerAdapter {
         }
     }
 
+    /** One engine-hosted IDE model computation: the wire model back, generation stays client-side. */
+    static dev.jkbuild.engine.protocol.IdeWireModel ideModel(
+            EnginePaths.Paths paths, Path dir, Path cache, Path jdksDir) throws IOException {
+        EngineClient.ensureRunning(paths, Jk.VERSION);
+        try (SocketChannel ch = EngineClient.connect(paths.socket())) {
+            BufferedWriter writer =
+                    new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
+            BufferedReader reader =
+                    new BufferedReader(new InputStreamReader(Channels.newInputStream(ch), StandardCharsets.UTF_8));
+            writer.write(EngineProtocol.ideModelRequest(
+                    dir.toString(), cache.toString(), jdksDir == null ? null : jdksDir.toString()));
+            writer.write('\n');
+            writer.flush();
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (!EngineProtocol.IDE_MODEL_ACK.equals(EngineProtocol.typeOf(line))) continue;
+                return dev.jkbuild.engine.protocol.IdeWireModel.decode(line);
+            }
+            throw new IOException("jk engine: disconnected before answering the ide-model request");
+        }
+    }
+
     /** One engine-hosted generator run: file payloads back, guards/writes stay client-side. */
     static dev.jkbuild.engine.protocol.GeneratedFiles generate(EnginePaths.Paths paths, Path dir, String kind)
             throws IOException {

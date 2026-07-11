@@ -683,15 +683,9 @@ public final class InProcessEngineImpl implements InProcessEngine {
     }
 
     @Override
-    public void ideFetchMissing(dev.jkbuild.cache.Cas cas, dev.jkbuild.lock.Lockfile lock) {
-        try {
-            new dev.jkbuild.resolver.CacheSync(cas, new dev.jkbuild.http.Http())
-                    .sync(lock, dev.jkbuild.resolver.CacheSync.ProgressObserver.NOOP);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        } catch (Exception ignored) {
-            /* best-effort; missing JARs are skipped by the caller */
-        }
+    public dev.jkbuild.engine.protocol.IdeWireModel ideModel(
+            java.nio.file.Path dir, java.nio.file.Path cache, java.nio.file.Path jdksDir) {
+        return dev.jkbuild.runtime.IdeOps.ideModel(dir, cache, jdksDir, true);
     }
 
     @Override

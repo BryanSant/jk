@@ -456,6 +456,7 @@ public final class EngineServer implements AutoCloseable {
                     case EngineProtocol.TREE_REQUEST -> handleTreeRequest(line, writer);
                     case EngineProtocol.WHY_REQUEST -> handleWhyRequest(line, writer);
                     case EngineProtocol.GENERATE_REQUEST -> handleGenerateRequest(line, writer);
+                    case EngineProtocol.IDE_MODEL_REQUEST -> handleIdeModelRequest(line, writer);
                     default -> {
                         /* unknown type — forward-compatible no-op */
                     }
@@ -1009,6 +1010,22 @@ public final class EngineServer implements AutoCloseable {
             files = dev.jkbuild.engine.protocol.GeneratedFiles.error(String.valueOf(e.getMessage()));
         }
         sendQuiet(writer, files.encode());
+    }
+
+    /** Answer {@link EngineProtocol#IDE_MODEL_REQUEST}: the IDE-agnostic workspace model, engine-side. */
+    private void handleIdeModelRequest(String requestLine, BufferedWriter writer) {
+        dev.jkbuild.engine.protocol.IdeWireModel model;
+        try {
+            String jdksDir = Ndjson.str(requestLine, "jdksDir");
+            model = dev.jkbuild.runtime.IdeOps.ideModel(
+                    Path.of(Ndjson.str(requestLine, "dir")),
+                    Path.of(Ndjson.str(requestLine, "cache")),
+                    jdksDir == null ? null : Path.of(jdksDir),
+                    false);
+        } catch (RuntimeException e) {
+            model = dev.jkbuild.engine.protocol.IdeWireModel.error(String.valueOf(e.getMessage()));
+        }
+        sendQuiet(writer, model.encode());
     }
 
     /** Answer {@link EngineProtocol#DENY_CHECK_REQUEST}: policy parse + lock read + check, engine-side. */

@@ -250,10 +250,12 @@ public interface InProcessEngine {
             String targetLabel);
 
     /**
-     * {@code jk ide}'s test-only in-line fetch of missing locked JARs (the pre-Wave-4 behavior;
-     * a real invocation runs the hosted workspace sync instead). Best-effort — never throws.
+     * {@code jk ide}'s in-process model twin (IDE_MODEL_REQUEST's counterpart) — keeps the
+     * pre-Wave-4 in-line fetch of missing locked JARs, so the test path builds the same model
+     * with no engine.
      */
-    void ideFetchMissing(dev.jkbuild.cache.Cas cas, dev.jkbuild.lock.Lockfile lock);
+    dev.jkbuild.engine.protocol.IdeWireModel ideModel(
+            java.nio.file.Path dir, java.nio.file.Path cache, java.nio.file.Path jdksDir);
 
     /** {@code jk run}'s in-process build half (test-only): the full declared pipeline, exec stays client-side. */
     GoalOutcome runBuildGoal(

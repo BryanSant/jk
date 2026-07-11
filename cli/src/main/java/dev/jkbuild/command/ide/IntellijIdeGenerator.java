@@ -6,8 +6,6 @@ import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.cli.tui.Glyphs;
 import dev.jkbuild.cli.tui.GoalWedge;
 import dev.jkbuild.config.GlobalConfig;
-import dev.jkbuild.layout.BuildLayout;
-import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.Scope;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -48,9 +46,8 @@ public final class IntellijIdeGenerator implements IdeGenerator {
     @Override
     public List<String> generate(IdeModel model) throws IOException {
         Path wsRoot = model.wsRoot();
-        JkBuild rootBuild = model.rootBuild();
-        Map<Path, JkBuild> modules = model.modules();
-        Map<Path, JkBuild> allModules = model.allModules();
+        Map<Path, IdeModule> modules = model.modules();
+        Map<Path, IdeModule> allModules = model.allModules();
         Map<String, LibDef> allLibs = model.allLibs();
         SdkRef defaultSdk = model.defaultSdk();
         Map<Path, SdkRef> sdkRefs = model.sdkRefs();
@@ -81,31 +78,24 @@ public final class IntellijIdeGenerator implements IdeGenerator {
         }
 
         Path runDir = ideaDir.resolve("runConfigurations");
-        for (Map.Entry<Path, JkBuild> me : modules.entrySet()) {
+        for (Map.Entry<Path, IdeModule> me : allModules.entrySet()) {
             String main = me.getValue().mainClass();
             if (main != null) {
                 Files.createDirectories(runDir);
-                String modName = IdeSupport.moduleName(me.getValue());
+                String modName = me.getValue().name();
                 write(runDir.resolve(IdeSupport.sanitize(modName) + ".xml"), runConfigXml(modName, main));
                 files++;
             }
         }
-        // Single-project run config
-        if (modules.isEmpty() && rootBuild.mainClass() != null) {
-            Files.createDirectories(runDir);
-            String modName = IdeSupport.moduleName(rootBuild);
-            write(runDir.resolve(IdeSupport.sanitize(modName) + ".xml"), runConfigXml(modName, rootBuild.mainClass()));
-            files++;
-        }
 
         // ---- generate *.iml for each module --------------------------------
-        for (Map.Entry<Path, JkBuild> me : allModules.entrySet()) {
+        for (Map.Entry<Path, IdeModule> me : allModules.entrySet()) {
             Path moduleDir = me.getKey();
-            JkBuild module = me.getValue();
+            IdeModule module = me.getValue();
             List<ModuleRef> modRefs = model.siblingRefs().getOrDefault(moduleDir, List.of());
             List<LibRef> libRefs = libRefs(model, moduleDir);
             write(
-                    moduleDir.resolve(IdeSupport.moduleName(module) + ".iml"),
+                    moduleDir.resolve(module.name() + ".iml"),
                     imlXml(
                             moduleDir,
                             module,
@@ -125,7 +115,7 @@ public final class IntellijIdeGenerator implements IdeGenerator {
                 Glyphs.CHECK,
                 "IDEA",
                 GlobalConfig.nerdfont(),
-                "The " + Theme.colorize(rootBuild.project().name(), t.focused()) + " project is ready"));
+                "The " + Theme.colorize(model.rootName(), t.focused()) + " project is ready"));
 
         List<String> items = new ArrayList<>();
         if (!touchedTables.isEmpty()) {
@@ -172,14 +162,14 @@ public final class IntellijIdeGenerator implements IdeGenerator {
     // XML generators
     // =========================================================================
 
-    private static int writeModulesXml(Path ideaDir, Path wsRoot, Map<Path, JkBuild> modules) throws IOException {
+    private static int writeModulesXml(Path ideaDir, Path wsRoot, Map<Path, IdeModule> modules) throws IOException {
         StringBuilder sb = xmlHeader();
         sb.append("<project version=\"4\">\n");
         sb.append("  <component name=\"ProjectModuleManager\">\n");
         sb.append("    <modules>\n");
 
-        for (Map.Entry<Path, JkBuild> me : modules.entrySet()) {
-            Path iml = me.getKey().resolve(IdeSupport.moduleName(me.getValue()) + ".iml");
+        for (Map.Entry<Path, IdeModule> me : modules.entrySet()) {
+            Path iml = me.getKey().resolve(me.getValue().name() + ".iml");
             String rel = "$PROJECT_DIR$/" + wsRoot.relativize(iml).toString().replace('\\', '/');
             sb.append("      <module fileurl=\"file://")
                     .append(rel)
@@ -209,20 +199,20 @@ public final class IntellijIdeGenerator implements IdeGenerator {
         return 1;
     }
 
-    private static int writeCompilerXml(Path ideaDir, Map<Path, JkBuild> modules, Map<Path, List<Path>> processorJars)
-            throws IOException {
+    private static int writeCompilerXml(
+            Path ideaDir, Map<Path, IdeModule> modules, Map<Path, List<Path>> processorJars) throws IOException {
         StringBuilder sb = xmlHeader();
         sb.append("<project version=\"4\">\n");
         sb.append("  <component name=\"CompilerConfiguration\">\n");
         sb.append("    <bytecodeTargetLevel>\n");
 
-        Iterable<Map.Entry<Path, JkBuild>> targets = modules.entrySet();
+        Iterable<Map.Entry<Path, IdeModule>> targets = modules.entrySet();
 
-        for (Map.Entry<Path, JkBuild> me : targets) {
-            int release = me.getValue().project().javaRelease();
+        for (Map.Entry<Path, IdeModule> me : targets) {
+            int release = me.getValue().javaRelease();
             if (release > 0) {
                 sb.append("      <module name=\"")
-                        .append(esc(IdeSupport.moduleName(me.getValue())))
+                        .append(esc(me.getValue().name()))
                         .append("\" targetLevel=\"")
                         .append(release)
                         .append("\" />\n");
@@ -233,17 +223,16 @@ public final class IntellijIdeGenerator implements IdeGenerator {
         boolean anyProcessors = processorJars.values().stream().anyMatch(l -> !l.isEmpty());
         if (anyProcessors) {
             sb.append("    <annotationProcessing>\n");
-            for (Map.Entry<Path, JkBuild> me : targets) {
+            for (Map.Entry<Path, IdeModule> me : targets) {
                 List<Path> procs = processorJars.getOrDefault(me.getKey(), List.of());
                 if (procs.isEmpty()) continue;
-                String mod = IdeSupport.moduleName(me.getValue());
-                BuildLayout layout = BuildLayout.of(me.getKey(), me.getValue());
+                String mod = me.getValue().name();
                 String genRel = me.getKey()
-                        .relativize(layout.generatedSourcesDir("annotations"))
+                        .relativize(me.getValue().generatedSourcesDir())
                         .toString()
                         .replace('\\', '/');
                 String genTestRel = me.getKey()
-                        .relativize(layout.generatedSourcesDir("annotations", "test"))
+                        .relativize(me.getValue().generatedTestSourcesDir())
                         .toString()
                         .replace('\\', '/');
                 sb.append("      <profile name=\"jk-").append(esc(mod)).append("\" enabled=\"true\">\n");
@@ -285,7 +274,7 @@ public final class IntellijIdeGenerator implements IdeGenerator {
 
     private static String imlXml(
             Path moduleDir,
-            JkBuild module,
+            IdeModule module,
             List<ModuleRef> modRefs,
             List<LibRef> libRefs,
             SdkRef moduleSdk,
@@ -303,12 +292,11 @@ public final class IntellijIdeGenerator implements IdeGenerator {
         }
         sb.append(">\n");
 
-        BuildLayout layout = BuildLayout.of(moduleDir, module);
         sb.append("    <output url=\"file://$MODULE_DIR$/")
-                .append(moduleDir.relativize(layout.classesDir()).toString().replace('\\', '/'))
+                .append(moduleDir.relativize(module.classesDir()).toString().replace('\\', '/'))
                 .append("\" />\n");
         sb.append("    <output-test url=\"file://$MODULE_DIR$/")
-                .append(moduleDir.relativize(layout.testClassesDir()).toString().replace('\\', '/'))
+                .append(moduleDir.relativize(module.testClassesDir()).toString().replace('\\', '/'))
                 .append("\" />\n");
         sb.append("    <exclude-output />\n");
 
@@ -331,13 +319,13 @@ public final class IntellijIdeGenerator implements IdeGenerator {
             addResourceFolder(sb, moduleDir, "test-resources", true);
         }
 
-        Path gen = layout.generatedSourcesDir("annotations");
+        Path gen = module.generatedSourcesDir();
         if (!processorFiles.isEmpty() || Files.isDirectory(gen)) {
             String genRel = moduleDir.relativize(gen).toString().replace('\\', '/');
             sb.append("      <sourceFolder url=\"file://$MODULE_DIR$/")
                     .append(genRel)
                     .append("\" isTestSource=\"false\" generated=\"true\" />\n");
-            Path genTest = layout.generatedSourcesDir("annotations", "test");
+            Path genTest = module.generatedTestSourcesDir();
             String genTestRel = moduleDir.relativize(genTest).toString().replace('\\', '/');
             sb.append("      <sourceFolder url=\"file://$MODULE_DIR$/")
                     .append(genTestRel)
