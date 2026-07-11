@@ -31,6 +31,13 @@ public interface InProcessEngine {
      */
     int engineServerMain();
 
+    /** Thin-client project summary — the in-process twin of PROJECT_INFO_REQUEST. */
+    dev.jkbuild.engine.protocol.ProjectInfo projectInfo(java.nio.file.Path dir);
+
+    /** Thin-client execution plan — the in-process twin of EXEC_PLAN_REQUEST. */
+    dev.jkbuild.engine.protocol.ExecPlan execPlan(
+            java.nio.file.Path dir, java.nio.file.Path cache, String kind, String mainOverride, String binName);
+
     /** A single hosted goal's outcome: the goal result plus the test counts (null when no tests ran). */
     record GoalOutcome(dev.jkbuild.run.GoalResult result, dev.jkbuild.run.TestSummary testResult) {}
 

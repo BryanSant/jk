@@ -395,6 +395,48 @@ final class EngineBuildListenerAdapter {
      * request line, one {@code forecast-ack} back. The session's offline/force/rerun flags ride
      * the request so the engine's forecast honors them exactly as the in-process one did.
      */
+    static dev.jkbuild.engine.protocol.ProjectInfo projectInfo(EnginePaths.Paths paths, Path dir)
+            throws IOException {
+        EngineClient.ensureRunning(paths, Jk.VERSION);
+        try (SocketChannel ch = EngineClient.connect(paths.socket())) {
+            BufferedWriter writer =
+                    new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
+            BufferedReader reader =
+                    new BufferedReader(new InputStreamReader(Channels.newInputStream(ch), StandardCharsets.UTF_8));
+            writer.write(EngineProtocol.projectInfoRequest(dir.toString(), ""));
+            writer.write('\n');
+            writer.flush();
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (!EngineProtocol.PROJECT_INFO_ACK.equals(EngineProtocol.typeOf(line))) continue;
+                return dev.jkbuild.engine.protocol.ProjectInfo.decode(line);
+            }
+            throw new IOException("jk engine: disconnected before answering the project-info request");
+        }
+    }
+
+    static dev.jkbuild.engine.protocol.ExecPlan execPlan(
+            EnginePaths.Paths paths, Path dir, Path cache, String kind, String mainOverride, String binName)
+            throws IOException {
+        EngineClient.ensureRunning(paths, Jk.VERSION);
+        try (SocketChannel ch = EngineClient.connect(paths.socket())) {
+            BufferedWriter writer =
+                    new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
+            BufferedReader reader =
+                    new BufferedReader(new InputStreamReader(Channels.newInputStream(ch), StandardCharsets.UTF_8));
+            writer.write(EngineProtocol.execPlanRequest(
+                    dir.toString(), cache.toString(), kind, mainOverride, binName));
+            writer.write('\n');
+            writer.flush();
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (!EngineProtocol.EXEC_PLAN_ACK.equals(EngineProtocol.typeOf(line))) continue;
+                return dev.jkbuild.engine.protocol.ExecPlan.decode(line);
+            }
+            throw new IOException("jk engine: disconnected before answering the exec-plan request");
+        }
+    }
+
     static dev.jkbuild.runtime.BuildForecast forecast(
             EnginePaths.Paths paths, Path entryDir, Path cache, boolean skipTests) throws IOException {
         EngineClient.ensureRunning(paths, Jk.VERSION);

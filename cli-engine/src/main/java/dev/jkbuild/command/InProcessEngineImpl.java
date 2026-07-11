@@ -50,6 +50,18 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public final class InProcessEngineImpl implements InProcessEngine {
 
+    @Override
+    public dev.jkbuild.engine.protocol.ProjectInfo projectInfo(java.nio.file.Path dir) {
+        return dev.jkbuild.runtime.ExecPlans.projectInfo(dir);
+    }
+
+    @Override
+    public dev.jkbuild.engine.protocol.ExecPlan execPlan(
+            java.nio.file.Path dir, java.nio.file.Path cache, String kind, String mainOverride, String binName) {
+        return dev.jkbuild.runtime.ExecPlans.execPlan(dir, cache, kind, mainOverride, binName);
+    }
+
+
     /** Public no-arg constructor for {@link java.util.ServiceLoader}. */
     public InProcessEngineImpl() {}
 

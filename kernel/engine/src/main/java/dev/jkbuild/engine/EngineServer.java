@@ -449,6 +449,8 @@ public final class EngineServer implements AutoCloseable {
                         // handled inline, connection continues.
                         handleForecastRequest(line, writer);
                     }
+                    case EngineProtocol.PROJECT_INFO_REQUEST -> handleProjectInfoRequest(line, writer);
+                    case EngineProtocol.EXEC_PLAN_REQUEST -> handleExecPlanRequest(line, writer);
                     default -> {
                         /* unknown type — forward-compatible no-op */
                     }
@@ -943,6 +945,40 @@ public final class EngineServer implements AutoCloseable {
      * in-process before the slim-client Stage 5 cut); honors the request's force/rerun flags via a
      * request-scoped session, exactly as the in-process path honored the CLI's.
      */
+    /**
+     * Answer {@link EngineProtocol#PROJECT_INFO_REQUEST}: the thin client's parsed-project
+     * summary. Synchronous, read-only, inline — errors ride the ack's {@code error} field.
+     */
+    private void handleProjectInfoRequest(String requestLine, BufferedWriter writer) {
+        dev.jkbuild.engine.protocol.ProjectInfo info;
+        try {
+            info = dev.jkbuild.runtime.ExecPlans.projectInfo(Path.of(Ndjson.str(requestLine, "dir")));
+        } catch (RuntimeException e) {
+            info = dev.jkbuild.engine.protocol.ProjectInfo.error(String.valueOf(e.getMessage()));
+        }
+        sendQuiet(writer, info.encode());
+    }
+
+    /**
+     * Answer {@link EngineProtocol#EXEC_PLAN_REQUEST}: a complete execution plan (run/dev argv,
+     * install layout, aot-cache layout) — the engine decides, the client executes. Synchronous,
+     * read-only, inline.
+     */
+    private void handleExecPlanRequest(String requestLine, BufferedWriter writer) {
+        dev.jkbuild.engine.protocol.ExecPlan plan;
+        try {
+            plan = dev.jkbuild.runtime.ExecPlans.execPlan(
+                    Path.of(Ndjson.str(requestLine, "dir")),
+                    Path.of(Ndjson.str(requestLine, "cache")),
+                    Ndjson.str(requestLine, "kind"),
+                    Ndjson.str(requestLine, "mainOverride"),
+                    Ndjson.str(requestLine, "binName"));
+        } catch (RuntimeException e) {
+            plan = dev.jkbuild.engine.protocol.ExecPlan.error("unknown", String.valueOf(e.getMessage()));
+        }
+        sendQuiet(writer, plan.encode());
+    }
+
     private void handleForecastRequest(String requestLine, BufferedWriter writer) {
         try {
             Path entryDir = Path.of(Ndjson.str(requestLine, "entryDir"));

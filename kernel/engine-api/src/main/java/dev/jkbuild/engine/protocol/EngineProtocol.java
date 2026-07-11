@@ -179,6 +179,27 @@ public final class EngineProtocol {
     public static final String FORECAST_REQUEST = "forecast-request";
 
     /**
+     * Client → server: summarize the parsed project at {@code dir} — the thin client's
+     * replacement for every client-side jk.toml peek (docs/thin-client-plan.md). Synchronous
+     * inline; answered with one {@link #PROJECT_INFO_ACK} carrying {@link ProjectInfo}.
+     */
+    public static final String PROJECT_INFO_REQUEST = "project-info-request";
+
+    /** Server → client, terminal for {@link #PROJECT_INFO_REQUEST}. */
+    public static final String PROJECT_INFO_ACK = "project-info-ack";
+
+    /**
+     * Client → server: compute a complete execution plan ({@link ExecPlan}) for {@code dir} —
+     * run/dev argv, install layout, aot-cache layout. The engine decides (classpaths, artifact
+     * preference, gates); the client executes. Synchronous inline; answered with one {@link
+     * #EXEC_PLAN_ACK}.
+     */
+    public static final String EXEC_PLAN_REQUEST = "exec-plan-request";
+
+    /** Server → client, terminal for {@link #EXEC_PLAN_REQUEST}. */
+    public static final String EXEC_PLAN_ACK = "exec-plan-ack";
+
+    /**
      * Server → client: the forecast — {@code dirtyDirs} (module dirs predicted to do real work),
      * {@code lockStale} (the merged workspace lock no longer reflects its manifests), {@code empty}
      * (the workspace declares no modules), and {@code errors} (graph resolution; non-empty ⇒ no
@@ -1232,6 +1253,21 @@ public final class EngineProtocol {
                 + "}";
     }
 
+    public static String projectInfoRequest(String dir, String cache) {
+        return "{\"t\":\"" + PROJECT_INFO_REQUEST + "\",\"dir\":" + Ndjson.quote(dir)
+                + ",\"cache\":" + Ndjson.quote(cache) + "}";
+    }
+
+    public static String execPlanRequest(
+            String dir, String cache, String kind, String mainOverride, String binName) {
+        return "{\"t\":\"" + EXEC_PLAN_REQUEST + "\",\"dir\":" + Ndjson.quote(dir)
+                + ",\"cache\":" + Ndjson.quote(cache)
+                + ",\"kind\":" + Ndjson.quote(kind)
+                + ",\"mainOverride\":" + (mainOverride == null ? "null" : Ndjson.quote(mainOverride))
+                + ",\"binName\":" + (binName == null ? "null" : Ndjson.quote(binName))
+                + "}";
+    }
+
     public static String forecastAck(
             java.util.List<String> dirtyDirs, boolean lockStale, boolean empty, java.util.List<String> errors) {
         return "{\"t\":\""
@@ -2030,7 +2066,7 @@ public final class EngineProtocol {
     }
 
     /** {@code Ndjson} only reads string arrays; it has no writer half, so this is the encode side. */
-    private static String quoteArray(List<String> values) {
+    static String quoteArray(List<String> values) {
         StringBuilder b = new StringBuilder("[");
         for (int i = 0; i < values.size(); i++) {
             if (i > 0) b.append(',');

@@ -280,6 +280,31 @@ public final class EngineClient {
      * the plan-affecting {@code jk build} options the engine-side ETA estimate feeds through the
      * shared goal assembly (Wave 3 — the estimate used to be computed client-side).
      */
+    /**
+     * Thin-client project summary (docs/thin-client-plan.md §2.1) — the replacement for every
+     * client-side {@code JkBuildParser.parse} peek. In test/no-engine mode the in-process twin
+     * answers; otherwise one synchronous PROJECT_INFO round trip.
+     */
+    public static dev.jkbuild.engine.protocol.ProjectInfo projectInfo(
+            dev.jkbuild.engine.EnginePaths.Paths paths, java.nio.file.Path dir) throws java.io.IOException {
+        return EngineBuildListenerAdapter.projectInfo(paths, dir);
+    }
+
+    /**
+     * Thin-client execution plan (docs/thin-client-plan.md §2.2): the engine decides run/dev
+     * argv, install layout, or aot-cache layout; the caller executes.
+     */
+    public static dev.jkbuild.engine.protocol.ExecPlan execPlan(
+            dev.jkbuild.engine.EnginePaths.Paths paths,
+            java.nio.file.Path dir,
+            java.nio.file.Path cache,
+            String kind,
+            String mainOverride,
+            String binName)
+            throws java.io.IOException {
+        return EngineBuildListenerAdapter.execPlan(paths, dir, cache, kind, mainOverride, binName);
+    }
+
     public record ExplainRequest(
             Path entryDir,
             Path cache,
