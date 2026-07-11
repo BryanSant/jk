@@ -32,8 +32,8 @@ logic; it only locates or provisions the real `jk` and hands off.
 
 ## The version is locked, not floating
 
-The wrapper resolves the jk version from the project's `[toolchain] jk = "…"` entry,
-recorded and checksum-pinned in `jk.lock` — the **same discipline as the locked JDK and
+The wrapper resolves the jk version from the project's `[project] jk = "…"` field — the same
+place as `jdk`/`java`/`kotlin` — recorded and checksum-pinned in `jk.lock` — the **same discipline as the locked JDK and
 locked dependencies** (tenet #3). `./jk build` today, and on CI a year from now, use the
 identical tool build → bit-identical artifacts by construction.
 
@@ -107,8 +107,8 @@ The wrapper is the on-ramp; the lock is the guarantee.
 
 ## Relationship to the rest of jk
 
-- **`jk.lock` / `[toolchain]`** — the single source of truth for the pinned version, next to
-  the locked JDK and deps.
+- **`jk.lock` / `[project].jk`** — the single source of truth for the pinned version, next to
+  the locked JDK (`[project].jdk`) and deps.
 - **`jk jdk ensure`** — the wrapper optionally provisions the engine JDK, reusing the
   existing JDK-management subsystem.
 - **The engine** — the wrapper only provisions and launches the client; client/engine

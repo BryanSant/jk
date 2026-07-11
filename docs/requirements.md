@@ -812,7 +812,6 @@ resolver        = 2                              # one resolver only; this field
 [toolchain]
 jdk    = "temurin-21"
 kotlin = "2.1.0"
-jk     = "0.10.0"                               # optional; the `./jk` wrapper pins this (pinned-on-first-use if omitted)
 
 [repositories]
 # shared

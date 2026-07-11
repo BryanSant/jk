@@ -72,6 +72,7 @@ description = "..."              # optional
 jdk         = 25                 # optional, ≥17
 java        = 25                 # optional, mutually exclusive with `kotlin`
 kotlin      = 21                 # optional, mutually exclusive with `java`
+jk          = "0.10.0"           # optional; the ./jk wrapper pins this (pinned-on-first-use if omitted)
 
 # [application] and [native] are separate top-level tables, not [project] keys.
 # Their mere presence is the enable switch — a library declares neither.
