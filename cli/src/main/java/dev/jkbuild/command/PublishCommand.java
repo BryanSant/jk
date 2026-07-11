@@ -137,6 +137,21 @@ public final class PublishCommand implements CliCommand {
             return Exit.CONFIG;
         }
 
+        // Path deps are consume-only (docs/path-source-deps.md): a published POM would
+        // reference a coordinate no consumer can resolve. Refuse before any upload —
+        // `jk export` warn-and-skips for the same reason.
+        for (var byScope : project.dependencies().byScope().entrySet()) {
+            for (var dep : byScope.getValue()) {
+                if (dep.isPath()) {
+                    CliOutput.err("jk publish: `" + dep.library()
+                            + "` is a path dependency — path deps are consume-only and cannot be"
+                            + " published. Promote it to a [workspace] module or a published"
+                            + " coordinate first.");
+                    return Exit.CONFIG;
+                }
+            }
+        }
+
         // Resolve everything env/keychain-shaped here — never inside the engine.
         RepoCredential cred = resolvePublishCredential(project);
         String gpgPass =
