@@ -2261,6 +2261,48 @@ public final class EngineProtocol {
         return b.append('}').toString();
     }
 
+    /**
+     * Append a variant selection + client-resolved env values to an encoded build request (thin
+     * client: the engine folds the selection into plugin configs at parse time; env values are the
+     * user's shell environment, resolved client-side for env:-indirected plugin config — signing
+     * credentials — because the engine's own environment belongs to whichever invocation spawned
+     * it). Nothing selected and no env → the line rides unchanged.
+     */
+    public static String withVariant(String request, String variant, java.util.Map<String, String> clientEnv) {
+        boolean hasVariant = variant != null && !variant.isBlank();
+        boolean hasEnv = clientEnv != null && !clientEnv.isEmpty();
+        if (!hasVariant && !hasEnv) return request;
+        StringBuilder b = new StringBuilder(request.substring(0, request.length() - 1));
+        if (hasVariant) b.append(",\"variant\":").append(Ndjson.quote(variant));
+        if (hasEnv) {
+            java.util.List<String> names = new java.util.ArrayList<>(clientEnv.size());
+            java.util.List<String> values = new java.util.ArrayList<>(clientEnv.size());
+            for (var e : clientEnv.entrySet()) {
+                names.add(e.getKey());
+                values.add(e.getValue());
+            }
+            b.append(",\"envNames\":").append(quoteArray(names));
+            b.append(",\"envValues\":").append(quoteArray(values));
+        }
+        return b.append('}').toString();
+    }
+
+    /** Decode side of {@link #withVariant}: the selection, or {@code ""}. */
+    public static String variantOf(String request) {
+        String v = Ndjson.str(request, "variant");
+        return v == null ? "" : v;
+    }
+
+    /** Decode side of {@link #withVariant}: the client-resolved env values, or empty. */
+    public static java.util.Map<String, String> clientEnvOf(String request) {
+        java.util.List<String> names = Ndjson.strArray(request, "envNames");
+        java.util.List<String> values = Ndjson.strArray(request, "envValues");
+        if (names.isEmpty() || names.size() != values.size()) return java.util.Map.of();
+        java.util.Map<String, String> out = new java.util.LinkedHashMap<>();
+        for (int i = 0; i < names.size(); i++) out.put(names.get(i), values.get(i));
+        return out;
+    }
+
     /** Decode side of {@link #withJvmTuning}; NONE when the request carries no tuning fields. */
     public static dev.jkbuild.config.WorkerTuning jvmTuning(String request) {
         String maxRam = Ndjson.str(request, "jvmMaxRam");

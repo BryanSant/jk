@@ -96,7 +96,7 @@ final class EngineBuildListenerAdapter {
             BufferedReader reader =
                     new BufferedReader(new InputStreamReader(Channels.newInputStream(ch), StandardCharsets.UTF_8));
 
-            writer.write(EngineProtocol.withJvmTuning(EngineProtocol.buildRequest(
+            writer.write(EngineProtocol.withVariant(EngineProtocol.withJvmTuning(EngineProtocol.buildRequest(
                     req.entryDir().toString(),
                     req.cache().toString(),
                     req.jdksDir() != null ? req.jdksDir().toString() : null,
@@ -114,7 +114,7 @@ final class EngineBuildListenerAdapter {
                     // jk build asks the engine to auto-freshen a stale workspace lock; verify's
                     // scratch rebuild must use the pinned lock verbatim (see WorkspaceRequest).
                     req.freshenLock()),
-                    SessionContext.current().jvm()));
+                    SessionContext.current().jvm()), req.variant(), req.clientEnv()));
             writer.write('\n');
             writer.flush();
 
@@ -186,17 +186,20 @@ final class EngineBuildListenerAdapter {
             BufferedReader reader =
                     new BufferedReader(new InputStreamReader(Channels.newInputStream(ch), StandardCharsets.UTF_8));
 
-            writer.write(EngineProtocol.withJvmTuning(EngineProtocol.singleBuildRequest(
-                    req.entryDir().toString(),
-                    req.cache().toString(),
-                    req.jdksDir() != null ? req.jdksDir().toString() : null,
-                    req.workers(),
-                    req.profile(),
-                    req.skipTests(),
-                    req.verbose(),
-                    req.offline(),
-                    req.force()),
-                    SessionContext.current().jvm()));
+            writer.write(EngineProtocol.withVariant(
+                    EngineProtocol.withJvmTuning(EngineProtocol.singleBuildRequest(
+                            req.entryDir().toString(),
+                            req.cache().toString(),
+                            req.jdksDir() != null ? req.jdksDir().toString() : null,
+                            req.workers(),
+                            req.profile(),
+                            req.skipTests(),
+                            req.verbose(),
+                            req.offline(),
+                            req.force()),
+                            SessionContext.current().jvm()),
+                    req.variant(),
+                    req.clientEnv()));
             writer.write('\n');
             writer.flush();
 

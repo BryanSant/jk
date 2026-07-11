@@ -77,7 +77,10 @@ public final class BuildCommand implements CliCommand {
                 Opt.flag("Package an extracted layout + trained JVM startup cache.", "--aot-cache"),
                 Opt.flag("Build modules one at a time (rich serial view).", "--no-parallel"),
                 Opt.flag("", "--parallel").hide(),
-                Opt.flag("Run modules' tests concurrently too. Default: off.", "--parallel-tests"));
+                Opt.flag("Run modules' tests concurrently too. Default: off.", "--parallel-tests"),
+                Opt.flag("Build the release variant (plugin build types — e.g. Android R8 + AAB).", "--release"),
+                Opt.value("<name>", "Select a build type by name.", "--build-type").hide(),
+                Opt.value("<name>", "Select a flavor (or <dim>=<name>).", "--flavor").hide());
     }
 
     String profileName;
@@ -89,6 +92,8 @@ public final class BuildCommand implements CliCommand {
     boolean noParallel;
     boolean parallelTests;
     boolean aotCache;
+    String variant;
+    java.util.Map<String, String> clientEnv = java.util.Map.of();
     // ---- GoalKeys -------------------------------------------------------
     //
     // BuildPipeline owns the phase DAG and all of its keys; BuildCommand only
@@ -119,12 +124,35 @@ public final class BuildCommand implements CliCommand {
         this.parallelTests = in.isSet("parallel-tests");
         dev.jkbuild.config.SessionContext.install(
                 dev.jkbuild.config.SessionContext.current().withParallelTests(parallelTests));
+        // Variant selection (--release / --build-type / --flavor): rides the request as a compact
+        // selector; the engine folds the chosen overlays into plugin configs at parse time.
+        StringBuilder variantSel = new StringBuilder();
+        String buildType = in.isSet("release") ? "release" : in.value("build-type").orElse(null);
+        if (buildType != null) variantSel.append(buildType);
+        in.value("flavor").ifPresent(f -> {
+            if (variantSel.length() > 0) variantSel.append('|');
+            variantSel.append(f.contains("=") ? f : "*=" + f);
+        });
+        this.variant = variantSel.toString();
         Path startDir = global.workingDir();
         Path buildFile = startDir.resolve("jk.toml");
         if (!Files.exists(buildFile)) {
             CliOutput.err("jk build: no jk.toml in " + dev.jkbuild.cli.PathDisplay.styledRaw(startDir));
             return Exit.CONFIG;
         }
+        // env:-indirected plugin config (signing credentials) resolves CLIENT-side — the engine's
+        // environment belongs to whichever invocation spawned it (the publish posture). The engine
+        // names the vars (ProjectInfo.envRefs); only those that exist here ride the request.
+        var envInfo = projectInfoOrNull(startDir);
+        if (envInfo != null && !envInfo.envRefs().isEmpty()) {
+            java.util.Map<String, String> resolved = new java.util.LinkedHashMap<>();
+            for (String name : envInfo.envRefs()) {
+                String v = System.getenv(name);
+                if (v != null) resolved.put(name, v);
+            }
+            this.clientEnv = resolved;
+        }
+
         // Peek at the engine's project summary before committing to a per-dir build. A
         // workspace root dispatches to buildWorkspace. A workspace module also redirects —
         // jk build from any module builds the whole workspace in topological order.
@@ -309,9 +337,10 @@ public final class BuildCommand implements CliCommand {
                 buildOpts.skipTests,
                 global.verbose,
                 noParallel ? 1 : 0, // --no-parallel → strict serial; else auto/unbounded
-                null, // headless: let the engine forecast dirty modules
-                true, // single-process CLI: plan our own worker-JVM memory budget
-                true); // jk build: auto-freshen a stale workspace lock engine-side
+                        null, // headless: let the engine forecast dirty modules
+                        true, // single-process CLI: plan our own worker-JVM memory budget
+                        true) // jk build: auto-freshen a stale workspace lock engine-side
+                .withVariant(variant, clientEnv);
         Map<Path, List<String>> buffers = new java.util.concurrent.ConcurrentHashMap<>();
         int[] total = {0};
         java.util.concurrent.atomic.AtomicInteger done = new java.util.concurrent.atomic.AtomicInteger();
@@ -428,9 +457,10 @@ public final class BuildCommand implements CliCommand {
                 noParallel ? 1 : 0, // --no-parallel → strict serial; else auto/unbounded
                 // Reuse the forecast the fully-cached shortcut computed — unless the workspace lock
                 // was stale, in which case the engine re-locks first and must re-forecast itself.
-                lockStale ? null : dirtyDirs,
-                true, // single-process CLI: plan our own worker-JVM memory budget
-                true); // jk build: auto-freshen a stale workspace lock engine-side
+                        lockStale ? null : dirtyDirs,
+                        true, // single-process CLI: plan our own worker-JVM memory budget
+                        true) // jk build: auto-freshen a stale workspace lock engine-side
+                .withVariant(variant, clientEnv);
         dev.jkbuild.runtime.WorkspaceResult result;
         try {
             dev.jkbuild.runtime.WorkspaceBuildListener liveListener = new dev.jkbuild.runtime.WorkspaceBuildListener() {
@@ -638,7 +668,9 @@ public final class BuildCommand implements CliCommand {
                             buildOpts.skipTests,
                             global.verbose,
                             dev.jkbuild.config.SessionContext.current().offline(),
-                            dev.jkbuild.config.SessionContext.current().force()),
+                            dev.jkbuild.config.SessionContext.current().force(),
+                            variant,
+                            clientEnv),
                     phases -> GoalConsole.chooseConsoleListener(phases, mode, spec, target),
                     testResultHolder,
                     buildOutcomeHolder);

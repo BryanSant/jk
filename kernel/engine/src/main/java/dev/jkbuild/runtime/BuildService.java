@@ -543,7 +543,7 @@ public final class BuildService {
                 req.profile(),
                 req.skipTests(),
                 req.verbose(),
-                moduleDirs);
+                moduleDirs).withVariant(req.variant(), req.clientEnv());
         boolean fullyCached = false;
         if (!forceRebuild) {
             try {

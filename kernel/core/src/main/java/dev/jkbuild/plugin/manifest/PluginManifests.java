@@ -35,33 +35,81 @@ public final class PluginManifests {
         String version = plugin.getString("version");
         String jkCompat = plugin.getString("jk-compat");
 
-        Map<String, PluginManifest.SchemaKey> schema = new LinkedHashMap<>();
-        TomlTable schemaTable = result.getTable("schema");
-        if (schemaTable != null) {
-            for (String key : schemaTable.keySet()) {
-                Object raw = schemaTable.get(key);
+        Map<String, PluginManifest.SchemaKey> schema =
+                parseSchemaKeys(result.getTable("schema"), displayPath + ".schema");
+
+        // [sub-schema.<name>]: named key sets for nested-table groups (build types, signing).
+        Map<String, Map<String, PluginManifest.SchemaKey>> subSchemas = new LinkedHashMap<>();
+        TomlTable subSchemaRoot = result.getTable("sub-schema");
+        if (subSchemaRoot != null) {
+            for (String name : subSchemaRoot.keySet()) {
+                Object raw = subSchemaRoot.get(name);
                 if (!(raw instanceof TomlTable spec)) {
-                    throw new JkBuildParseException(
-                            displayPath + ".schema." + key + " must be a table (type = \"…\", …)");
+                    throw new JkBuildParseException(displayPath + ".sub-schema." + name + " must be a table");
                 }
-                String typeRaw = spec.getString("type");
-                if (typeRaw == null) {
-                    throw new JkBuildParseException(displayPath + ".schema." + key + " requires `type`");
-                }
-                var type = PluginManifest.SchemaKey.Type.parse(typeRaw, displayPath + ".schema." + key);
-                boolean required = Boolean.TRUE.equals(spec.getBoolean("required"));
-                Object defaultValue = defaultFor(spec, type, displayPath + ".schema." + key);
-                schema.put(key, new PluginManifest.SchemaKey(
-                        key, type, required, defaultValue, spec.getString("example"), spec.getString("hint")));
+                subSchemas.put(name, parseSchemaKeys(spec, displayPath + ".sub-schema." + name));
             }
         }
+
+        // [sub-tables.<table>]: nested-table groups on the owned table; optionally variant axes.
+        Map<String, PluginManifest.SubTable> subTables = new LinkedHashMap<>();
+        TomlTable subTableRoot = result.getTable("sub-tables");
+        if (subTableRoot != null) {
+            for (String name : subTableRoot.keySet()) {
+                Object raw = subTableRoot.get(name);
+                if (!(raw instanceof TomlTable spec)) {
+                    throw new JkBuildParseException(displayPath + ".sub-tables." + name + " must be a table");
+                }
+                String where = displayPath + ".sub-tables." + name;
+                String schemaRef = spec.getString("schema");
+                if (schemaRef == null || !subSchemas.containsKey(schemaRef)) {
+                    throw new JkBuildParseException(
+                            where + " requires schema = \"<name>\" naming a declared [sub-schema.<name>]");
+                }
+                if (schema.containsKey(name)) {
+                    throw new JkBuildParseException(where + " collides with a [schema] key of the same name");
+                }
+                subTables.put(name, new PluginManifest.SubTable(
+                        name,
+                        schemaRef,
+                        spec.getString("variant-axis"),
+                        Boolean.TRUE.equals(spec.getBoolean("dimensioned")),
+                        stringList(spec, "built-in", where),
+                        spec.getString("default")));
+            }
+        }
+
         PluginManifest.Contributions contributions = parseContributions(result, schema.keySet(), displayPath);
         PluginManifest.Code code = parseCode(result, displayPath);
         PluginManifest.Packaging packaging = parsePackaging(result, displayPath);
         PluginManifest.Scaffold scaffold = parseScaffold(result, displayPath);
         List<PluginManifest.GradleImport> gradleImports = parseGradleImports(result, displayPath);
         return new PluginManifest(
-                id, table, version, jkCompat, schema, contributions, code, packaging, scaffold, gradleImports);
+                id, table, version, jkCompat, schema, contributions, code, packaging, scaffold, gradleImports,
+                subSchemas, subTables);
+    }
+
+    /** Typed schema keys from one table of {@code key = { type = "…", … }} specs. */
+    private static Map<String, PluginManifest.SchemaKey> parseSchemaKeys(TomlTable schemaTable, String where) {
+        Map<String, PluginManifest.SchemaKey> schema = new LinkedHashMap<>();
+        if (schemaTable == null) return schema;
+        for (String key : schemaTable.keySet()) {
+            Object raw = schemaTable.get(key);
+            if (!(raw instanceof TomlTable spec)) {
+                throw new JkBuildParseException(where + "." + key + " must be a table (type = \"…\", …)");
+            }
+            String typeRaw = spec.getString("type");
+            if (typeRaw == null) {
+                throw new JkBuildParseException(where + "." + key + " requires `type`");
+            }
+            var type = PluginManifest.SchemaKey.Type.parse(typeRaw, where + "." + key);
+            boolean required = Boolean.TRUE.equals(spec.getBoolean("required"));
+            Object defaultValue = defaultFor(spec, type, where + "." + key);
+            schema.put(key, new PluginManifest.SchemaKey(
+                    key, type, required, defaultValue, spec.getString("example"), spec.getString("hint"),
+                    Boolean.TRUE.equals(spec.getBoolean("secret"))));
+        }
+        return schema;
     }
 
     /** The {@code [scaffold]} section — {@code jk new --<flag>} templates (P4, pure data). */

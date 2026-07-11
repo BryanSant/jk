@@ -31,4 +31,38 @@ public record WorkspaceRequest(
         // ensureWorkspaceLockFresh — the guard BuildCommand used to run client-side, now applied
         // here so an engine-hosted build request freshens the lock engine-side. False for callers
         // that must use the pinned lock verbatim (jk verify's scratch rebuild).
-        boolean freshenLock) {}
+        boolean freshenLock,
+        // The variant selection ("", "release", "release|tier=free") — folded into each module's
+        // plugin configs at parse time (Variants.apply); goals are parameterized, not configured.
+        String variant,
+        // Client-resolved env values for env:-indirected plugin config (signing secrets): the
+        // user's shell env rides the request; the engine env is only the fallback.
+        java.util.Map<String, String> clientEnv) {
+
+    /** Back-compat: the pre-variant shape (default build type, no client env). */
+    public WorkspaceRequest(
+            Path entryDir,
+            JkBuild entryBuild,
+            Path cache,
+            Path jdksDir,
+            int workers,
+            String profile,
+            boolean skipTests,
+            boolean verbose,
+            int maxModuleConcurrency,
+            Set<Path> dirtyHint,
+            boolean applyMemoryPlan,
+            boolean freshenLock) {
+        this(
+                entryDir, entryBuild, cache, jdksDir, workers, profile, skipTests, verbose, maxModuleConcurrency,
+                dirtyHint, applyMemoryPlan, freshenLock, "", java.util.Map.of());
+    }
+
+    /** This request with a variant selection + client-resolved env attached. */
+    public WorkspaceRequest withVariant(String variant, java.util.Map<String, String> clientEnv) {
+        return new WorkspaceRequest(
+                entryDir, entryBuild, cache, jdksDir, workers, profile, skipTests, verbose, maxModuleConcurrency,
+                dirtyHint, applyMemoryPlan, freshenLock, variant == null ? "" : variant,
+                clientEnv == null ? java.util.Map.of() : clientEnv);
+    }
+}

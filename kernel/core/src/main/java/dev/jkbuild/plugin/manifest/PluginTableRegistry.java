@@ -118,7 +118,71 @@ public final class PluginTableRegistry {
             }
             values.put(key.name(), value);
         }
+        // Declared nested-table groups ([sub-tables.<name>]): each entry validates against its
+        // sub-schema and rides the config as a nested map — the engine flattens variant axes into
+        // the effective config at build time (Variants); other groups (signing) resolve by name.
+        for (PluginManifest.SubTable group : manifest.subTables().values()) {
+            TomlTable groupTable = readTable(table, group.table());
+            if (groupTable == null) continue;
+            Map<String, PluginManifest.SchemaKey> subSchema = manifest.subSchemas().get(group.schema());
+            String whereBase = manifest.table() + "." + group.table();
+            if (group.dimensioned()) {
+                Map<String, Map<String, Map<String, Object>>> dims = new LinkedHashMap<>();
+                for (String dim : groupTable.keySet()) {
+                    TomlTable dimTable = readTable(groupTable, dim);
+                    if (dimTable == null) {
+                        throw new JkBuildParseException(
+                                "[" + whereBase + "]." + dim + " must be a table of named entries");
+                    }
+                    Map<String, Map<String, Object>> entries = new LinkedHashMap<>();
+                    for (String entry : dimTable.keySet()) {
+                        TomlTable entryTable = readTable(dimTable, entry);
+                        if (entryTable == null) {
+                            throw new JkBuildParseException(
+                                    "[" + whereBase + "." + dim + "]." + entry + " must be a table");
+                        }
+                        entries.put(entry, validateSub(whereBase + "." + dim + "." + entry, subSchema, entryTable));
+                    }
+                    dims.put(dim, entries);
+                }
+                values.put(group.table(), dims);
+            } else {
+                Map<String, Map<String, Object>> entries = new LinkedHashMap<>();
+                for (String entry : groupTable.keySet()) {
+                    TomlTable entryTable = readTable(groupTable, entry);
+                    if (entryTable == null) {
+                        throw new JkBuildParseException("[" + whereBase + "]." + entry + " must be a table");
+                    }
+                    entries.put(entry, validateSub(whereBase + "." + entry, subSchema, entryTable));
+                }
+                values.put(group.table(), entries);
+            }
+        }
         return new PluginConfig(manifest.id(), values);
+    }
+
+    private static TomlTable readTable(TomlTable parent, String key) {
+        Object raw = parent.contains(key) ? parent.get(key) : null;
+        return raw instanceof TomlTable t ? t : null;
+    }
+
+    /** One nested entry against its sub-schema — same coercion + required semantics as the table. */
+    private static Map<String, Object> validateSub(
+            String where, Map<String, PluginManifest.SchemaKey> subSchema, TomlTable entryTable) {
+        Map<String, Object> out = new LinkedHashMap<>();
+        for (PluginManifest.SchemaKey key : subSchema.values()) {
+            Object value = read(where, key, entryTable);
+            if (value == null) value = key.normalizedDefault();
+            if (value == null) {
+                if (key.required()) {
+                    throw new JkBuildParseException("[" + where + "] requires `" + key.name() + "`"
+                            + (key.example() != null ? " (e.g. " + key.name() + " = \"" + key.example() + "\")" : ""));
+                }
+                continue;
+            }
+            out.put(key.name(), value);
+        }
+        return out;
     }
 
     private static Object read(String tableName, PluginManifest.SchemaKey key, TomlTable table) {

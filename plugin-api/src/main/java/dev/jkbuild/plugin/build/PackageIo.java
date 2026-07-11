@@ -49,6 +49,15 @@ public interface PackageIo {
     /** Where the produced artifact must land (the module's main-artifact path). */
     Path artifactPath();
 
+    /**
+     * A resolved secret value (signing credentials — {@code env:}-indirected config the engine
+     * resolved and diverted off the flat config so it never reaches describe payloads, tokens, or
+     * logs). Package specs only. NEVER echo a secret into labels or errors.
+     */
+    default Optional<String> secret(String key) {
+        return Optional.empty();
+    }
+
     /** The JDK this build runs on — for {@link #tool} forks (signing, keytool, …). */
     Path javaHome();
 

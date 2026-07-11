@@ -230,7 +230,8 @@ public final class BuildPluginHarness {
             List<PackageIo.RuntimeEntry> entries,
             Map<String, Path> stepOutputs,
             Map<String, Path> extras,
-            List<String> verbArgs) {
+            List<String> verbArgs,
+            Map<String, String> secrets) {
 
         static Spec read(Path file) throws IOException {
             String op = "";
@@ -255,6 +256,7 @@ public final class BuildPluginHarness {
             Map<String, Path> stepOutputs = new LinkedHashMap<>();
             Map<String, Path> extras = new LinkedHashMap<>();
             List<String> verbArgs = new ArrayList<>();
+            Map<String, String> secrets = new LinkedHashMap<>();
 
             for (String line : Files.readAllLines(file, StandardCharsets.UTF_8)) {
                 if (line.isBlank()) continue;
@@ -315,6 +317,10 @@ public final class BuildPluginHarness {
                         extras.put(
                                 String.valueOf(Ndjson.str(line, "name")),
                                 Path.of(String.valueOf(Ndjson.str(line, "path"))));
+                    case "secret" ->
+                        secrets.put(
+                                String.valueOf(Ndjson.str(line, "key")),
+                                String.valueOf(Ndjson.str(line, "value")));
                     default -> {
                         // unknown line — forward compatibility
                     }
@@ -325,7 +331,7 @@ public final class BuildPluginHarness {
                     new ProjectFacts(group, name, version, javaRelease, mainClass, nativeDeclared, kotlin, manifest);
             return new Spec(
                     op, stepName, config, facts, classesDir, moduleDir, scratch, javaHome, artifactPath, classpath,
-                    entries, stepOutputs, extras, verbArgs);
+                    entries, stepOutputs, extras, verbArgs, secrets);
         }
     }
 
@@ -465,6 +471,11 @@ public final class BuildPluginHarness {
         @Override
         public Path artifactPath() {
             return spec.artifactPath();
+        }
+
+        @Override
+        public Optional<String> secret(String key) {
+            return Optional.ofNullable(spec.secrets().get(key));
         }
 
         @Override

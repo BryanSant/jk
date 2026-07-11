@@ -28,7 +28,9 @@ public record PluginManifest(
         Code code,
         Packaging packaging,
         Scaffold scaffold,
-        List<GradleImport> gradleImports) {
+        List<GradleImport> gradleImports,
+        Map<String, Map<String, SchemaKey>> subSchemas,
+        Map<String, SubTable> subTables) {
 
     public PluginManifest {
         Objects.requireNonNull(id, "id");
@@ -38,6 +40,60 @@ public record PluginManifest(
                 : Collections.unmodifiableMap(new LinkedHashMap<>(schema));
         contributions = contributions == null ? Contributions.NONE : contributions;
         gradleImports = gradleImports == null ? List.of() : List.copyOf(gradleImports);
+        subSchemas = subSchemas == null || subSchemas.isEmpty()
+                ? Map.of()
+                : Collections.unmodifiableMap(new LinkedHashMap<>(subSchemas));
+        subTables = subTables == null || subTables.isEmpty()
+                ? Map.of()
+                : Collections.unmodifiableMap(new LinkedHashMap<>(subTables));
+    }
+
+    /** Back-compat: the P4/P5 shape (no sub-schemas / sub-tables). */
+    public PluginManifest(
+            String id,
+            String table,
+            String version,
+            String jkCompat,
+            Map<String, SchemaKey> schema,
+            Contributions contributions,
+            Code code,
+            Packaging packaging,
+            Scaffold scaffold,
+            List<GradleImport> gradleImports) {
+        this(id, table, version, jkCompat, schema, contributions, code, packaging, scaffold, gradleImports,
+                Map.of(), Map.of());
+    }
+
+    /**
+     * One {@code [sub-tables.<name>]} declaration: a named nested-table group on the plugin's own
+     * table ({@code [android.build-types.<entry>]}), each entry validated against the referenced
+     * {@code [sub-schema.<schema>]}. A group may additionally be a <b>variant axis</b>
+     * (build-plugins §3.1 / android-plan §3.1): its entries are config overlays a build selects
+     * one of ({@code jk build --release}); {@code builtIn} names exist even when undeclared and
+     * {@code defaultName} is the unselected default. {@code dimensioned} adds one nesting level
+     * ({@code [android.flavors.<dim>.<entry>]}) — flavor dimensions.
+     */
+    public record SubTable(
+            String table,
+            String schema,
+            String variantAxis,
+            boolean dimensioned,
+            List<String> builtIn,
+            String defaultName) {
+        public SubTable {
+            Objects.requireNonNull(table, "table");
+            Objects.requireNonNull(schema, "schema");
+            builtIn = builtIn == null ? List.of() : List.copyOf(builtIn);
+        }
+    }
+
+    /** The variant-axis sub-tables in declaration order ({@code build-type} before flavors). */
+    public List<SubTable> variantAxes() {
+        List<SubTable> out = new java.util.ArrayList<>();
+        for (SubTable t : subTables.values()) {
+            if (t.variantAxis() != null) out.add(t);
+        }
+        return out;
     }
 
     /** Back-compat: a purely declarative manifest (no code layer, no packaging shape). */
@@ -342,7 +398,14 @@ public record PluginManifest(
      * tri-state pattern). {@code example} and {@code hint} feed the required-key error message
      * so schema-driven validation keeps the hand-written diagnostics' quality.
      */
-    public record SchemaKey(String name, Type type, boolean required, Object defaultValue, String example, String hint) {
+    public record SchemaKey(
+            String name, Type type, boolean required, Object defaultValue, String example, String hint,
+            boolean secret) {
+
+        /** Back-compat: a non-secret key. */
+        public SchemaKey(String name, Type type, boolean required, Object defaultValue, String example, String hint) {
+            this(name, type, required, defaultValue, example, hint, false);
+        }
 
         public enum Type {
             STRING,

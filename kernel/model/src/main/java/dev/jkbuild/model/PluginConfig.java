@@ -60,6 +60,26 @@ public record PluginConfig(String id, Map<String, Object> values) {
     }
 
     /** An int with a call-site fallback. */
+    /**
+     * A nested-table group ({@code [android.build-types.<name>]} entries): entry name → its
+     * validated key/value map. Empty when the group is absent. Values inside follow the same
+     * vocabulary as top-level config values.
+     */
+    @SuppressWarnings("unchecked")
+    public Map<String, Map<String, Object>> group(String key) {
+        Object v = values.get(key);
+        if (!(v instanceof Map<?, ?> m)) return Map.of();
+        return (Map<String, Map<String, Object>>) m;
+    }
+
+    /** A dimensioned group ({@code [android.flavors.<dim>.<name>]}): dimension → entry → values. */
+    @SuppressWarnings("unchecked")
+    public Map<String, Map<String, Map<String, Object>>> dimensionedGroup(String key) {
+        Object v = values.get(key);
+        if (!(v instanceof Map<?, ?> m)) return Map.of();
+        return (Map<String, Map<String, Map<String, Object>>>) m;
+    }
+
     public long intValue(String key, long fallback) {
         return values.get(key) instanceof Long l ? l : fallback;
     }

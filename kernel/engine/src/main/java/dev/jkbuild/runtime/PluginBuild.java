@@ -216,10 +216,21 @@ public final class PluginBuild {
     /** A stable render of the validated config — the token action keys carry for In.config(). */
     public static String configToken(PluginConfig config) {
         StringBuilder b = new StringBuilder(config.id());
-        for (Map.Entry<String, Object> e : new java.util.TreeMap<>(config.values()).entrySet()) {
-            b.append('|').append(e.getKey()).append('=').append(e.getValue());
-        }
+        appendToken(b, config.values());
         return Hashing.sha256Hex(b.toString().getBytes(StandardCharsets.UTF_8)).substring(0, 16);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static void appendToken(StringBuilder b, Map<String, Object> values) {
+        for (Map.Entry<String, Object> e : new java.util.TreeMap<>(values).entrySet()) {
+            if (e.getValue() instanceof Map<?, ?> m) {
+                b.append('|').append(e.getKey()).append("={");
+                appendToken(b, (Map<String, Object>) m);
+                b.append('}');
+            } else {
+                b.append('|').append(e.getKey()).append('=').append(e.getValue());
+            }
+        }
     }
 
     // ---- execution -----------------------------------------------------------------------------
@@ -531,6 +542,16 @@ public final class PluginBuild {
             }
             arr.append(']');
             lines.add("{\"t\":\"verb-args\",\"values\":" + arr + "}");
+            return this;
+        }
+
+        /**
+         * A resolved secret (signing credentials): package specs only — never describe or step
+         * specs, never action-key plaintext (the key carries a digest), never echoed by workers.
+         */
+        public SpecWriter secret(String key, String value) {
+            lines.add("{\"t\":\"secret\",\"key\":" + Ndjson.quote(key) + ",\"value\":"
+                    + Ndjson.quote(value) + "}");
             return this;
         }
 

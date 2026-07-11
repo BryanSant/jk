@@ -105,7 +105,8 @@ public final class ExecPlans {
                     layoutOf(build, dir, BuildLayout::nativeLibrary),
                     pathDeps(build),
                     layoutOf(build, dir, BuildLayout::sourcesJar),
-                    layoutOf(build, dir, BuildLayout::javadocJar));
+                    layoutOf(build, dir, BuildLayout::javadocJar),
+                    dev.jkbuild.plugin.manifest.Variants.envRefs(build));
         } catch (RuntimeException | IOException e) {
             return ProjectInfo.error(String.valueOf(e.getMessage()));
         }

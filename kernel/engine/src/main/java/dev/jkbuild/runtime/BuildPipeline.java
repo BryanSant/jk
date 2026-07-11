@@ -153,7 +153,44 @@ public final class BuildPipeline {
             // The request-scoped session (config incl. --force/--refresh, working dir, cache/JDK
             // roots). Threaded so the engine reads request state explicitly instead of the ambient
             // global. Delegating ctors default it from SessionContext.current() at construction.
-            dev.jkbuild.config.Session session) {
+            dev.jkbuild.config.Session session,
+            // The variant selection ("", "release", "release|tier=free") — folded into plugin
+            // configs at parse time (Variants.apply), so goals are parameterized, never configured.
+            String variant,
+            // Client-resolved env values (env: indirection in plugin configs — signing secrets):
+            // the user's shell env rides the request; the engine env is only the fallback.
+            Map<String, String> clientEnv) {
+
+        /** Back-compat: the pre-variant canonical shape. */
+        public Inputs(
+                Path dir,
+                Path cache,
+                Path buildFile,
+                Path lockFile,
+                Path lockDir,
+                int workerCount,
+                int estimatedTestCount,
+                String profileName,
+                Path jdksDir,
+                boolean skipTests,
+                boolean verbose,
+                boolean testOnly,
+                boolean compileOnly,
+                Set<Path> projectModules,
+                dev.jkbuild.config.Session session) {
+            this(
+                    dir, cache, buildFile, lockFile, lockDir, workerCount, estimatedTestCount, profileName,
+                    jdksDir, skipTests, verbose, testOnly, compileOnly, projectModules, session, "",
+                    Map.of());
+        }
+
+        /** This request with a variant selection + client-resolved env attached. */
+        public Inputs withVariant(String variant, Map<String, String> clientEnv) {
+            return new Inputs(
+                    dir, cache, buildFile, lockFile, lockDir, workerCount, estimatedTestCount, profileName,
+                    jdksDir, skipTests, verbose, testOnly, compileOnly, projectModules, session,
+                    variant == null ? "" : variant, clientEnv == null ? Map.of() : clientEnv);
+        }
 
         /** Back-compat: a full build (not test-only, not compile-only), no project context. */
         public Inputs(
@@ -331,6 +368,7 @@ public final class BuildPipeline {
         boolean compactLayout = false;
         boolean workspaceNoSources = false;
         JkBuild parsedBuild = null;
+        Map<String, String> variantSecrets = Map.of();
         try {
             var jkBuild = JkBuildParser.parse(in.buildFile());
             // Third-party plugin pre-flight: extract any locked-but-unmaterialized manifests
@@ -340,6 +378,14 @@ public final class BuildPipeline {
                     && PluginManifestOps.ensureMaterialized(in.dir(), in.cache())) {
                 jkBuild = JkBuildParser.reparse(in.buildFile());
             }
+            // Variant overlays fold into plugin configs HERE, so describe keys, contribution
+            // predicates, step/packager action keys, and worker specs all see one flat effective
+            // config (build-plugins §3.1: parameterized goals, not configured objects).
+            var applied = dev.jkbuild.plugin.manifest.Variants.apply(
+                    jkBuild, in.dir(), dev.jkbuild.plugin.manifest.Variants.Selection.parse(in.variant()),
+                    in.clientEnv());
+            jkBuild = applied.build();
+            variantSecrets = applied.secrets();
             parsedBuild = jkBuild;
             var project = jkBuild.project();
             CompileSupport.Languages langs = CompileSupport.resolveLanguages(project, in.dir());
@@ -379,6 +425,7 @@ public final class BuildPipeline {
         }
         final PluginBuild.Active pluginActiveF = pluginActive;
         final PluginBuild.Declarations pluginDeclsF = pluginDecls;
+        final Map<String, String> variantSecretsF = variantSecrets;
 
         // Effectively-final copies for the phase lambdas.
         final boolean mixedWithJava = useJava;
@@ -461,7 +508,7 @@ public final class BuildPipeline {
         }
 
         // ---- package-jar ------------------------------------------------
-        Phase packageJar = packageJarPhase(cx, pluginActiveF, pluginDeclsF);
+        Phase packageJar = packageJarPhase(cx, pluginActiveF, pluginDeclsF, variantSecretsF);
 
         // ---- write-stamp ------------------------------------------------
         Phase writeStamp = writeStampPhase(cx);
@@ -573,7 +620,12 @@ public final class BuildPipeline {
                     ctx.label("parse jk.toml");
                     JkBuild project;
                     try {
-                        project = JkBuildParser.parse(in.buildFile());
+                        project = dev.jkbuild.plugin.manifest.Variants.apply(
+                                        JkBuildParser.parse(in.buildFile()),
+                                        in.dir(),
+                                        dev.jkbuild.plugin.manifest.Variants.Selection.parse(in.variant()),
+                                        in.clientEnv())
+                                .build();
                     } catch (RuntimeException e) {
                         ctx.error("toml", e.getMessage());
                         throw e;
@@ -1485,7 +1537,10 @@ public final class BuildPipeline {
     }
 
     private static Phase packageJarPhase(
-            StepContext cx, PluginBuild.Active pluginActive, PluginBuild.Declarations pluginDecls) {
+            StepContext cx,
+            PluginBuild.Active pluginActive,
+            PluginBuild.Declarations pluginDecls,
+            Map<String, String> variantSecrets) {
         Inputs in = cx.in();
         Cas cas = cx.cas();
         ActionCache actionCache = cx.actionCache();
@@ -1513,7 +1568,8 @@ public final class BuildPipeline {
                         // The packager's declared artifact extension replaces .jar (an APK, …).
                         jarPath = PluginBuild.mainArtifactPath(layout, pluginActive);
                         Files.createDirectories(jarPath.getParent());
-                        packagePlugin(ctx, in, cas, project, classes, jarPath, pluginActive, pluginDecls);
+                        packagePlugin(
+                                ctx, in, cas, project, classes, jarPath, pluginActive, pluginDecls, variantSecrets);
                         return;
                     }
                     Files.createDirectories(jarPath.getParent());
@@ -1736,7 +1792,8 @@ public final class BuildPipeline {
             Path classes,
             Path jarPath,
             PluginBuild.Active active,
-            PluginBuild.Declarations decls)
+            PluginBuild.Declarations decls,
+            Map<String, String> secrets)
             throws Exception {
         Lockfile lock = ctx.require(LOCKFILE);
         BuildLayout layout = ctx.require(LAYOUT);
@@ -1782,6 +1839,16 @@ public final class BuildPipeline {
         }
         List<Path> extraJars = new ArrayList<>(extras.values());
         tokens.add("extras:" + dev.jkbuild.task.ClasspathFingerprint.of(extraJars));
+        if (!secrets.isEmpty()) {
+            // A changed signing credential re-signs (the signature is part of the artifact);
+            // the key carries only a digest — a secret value never appears anywhere readable.
+            StringBuilder sb = new StringBuilder();
+            for (var e : new java.util.TreeMap<>(secrets).entrySet()) {
+                sb.append(e.getKey()).append('=').append(e.getValue()).append('\n');
+            }
+            tokens.add("secrets:" + dev.jkbuild.util.Hashing.sha256Hex(
+                    sb.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        }
         tokens.add("facts:" + project.project().group() + ":" + project.project().name() + ":"
                 + project.project().version() + ":" + startClass);
         tokens.add("manifest:" + project.manifest());
@@ -1809,6 +1876,7 @@ public final class BuildPipeline {
                 .artifact(jarPath);
         for (Entry e : entries) spec.entry(e.fileName(), e.jar(), e.snapshot(), e.container());
         for (var e : extras.entrySet()) spec.extra(e.getKey(), e.getValue());
+        for (var e : secrets.entrySet()) spec.secret(e.getKey(), e.getValue());
         spec.extra("sbom", sbomFile);
         for (PluginBuild.StepDecl step : decls.steps()) {
             Path scratch = PluginBuild.stepScratch(layout, step.name());

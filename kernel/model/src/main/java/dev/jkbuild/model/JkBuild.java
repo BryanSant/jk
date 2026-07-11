@@ -99,6 +99,15 @@ public record JkBuild(
         return Optional.ofNullable(pluginConfigs.get(id));
     }
 
+    /** This build with one plugin's config replaced — the variant-overlay substitution point. */
+    public JkBuild withPluginConfig(PluginConfig config) {
+        Map<String, PluginConfig> next = new LinkedHashMap<>(pluginConfigs);
+        next.put(config.id(), config);
+        return new JkBuild(
+                project, dependencies, repositories, profiles, features, workspace, manifest, plugins,
+                application, nativeConfig, next, build, format);
+    }
+
     /**
      * True when {@code [spring-boot]} is declared — Boot packaging, BOM import, and
      * {@code -parameters} compilation apply. Driven purely by the table's presence. A convenience

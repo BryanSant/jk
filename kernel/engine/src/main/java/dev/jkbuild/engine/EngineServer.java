@@ -893,7 +893,8 @@ public final class EngineServer implements AutoCloseable {
                     maxModuleConcurrency,
                     null, // let the engine forecast dirty modules itself — see docs/engine.md
                     false, // this engine plans memory once at startup, not per request
-                    freshenLock);
+                    freshenLock)
+                    .withVariant(EngineProtocol.variantOf(requestLine), EngineProtocol.clientEnvOf(requestLine));
 
             JkConfig config = new JkConfig(
                     Optional.empty(),
@@ -1307,7 +1308,8 @@ public final class EngineServer implements AutoCloseable {
                     /* testOnly */ true,
                     /* compileOnly */ false,
                     java.util.Set.of(),
-                    session);
+                    session)
+                    .withVariant(EngineProtocol.variantOf(requestLine), EngineProtocol.clientEnvOf(requestLine));
             dev.jkbuild.run.Goal goal =
                     dev.jkbuild.runtime.BuildPipeline.coreBuilder(inputs).build();
 
@@ -1397,7 +1399,8 @@ public final class EngineServer implements AutoCloseable {
                     /* testOnly */ false,
                     /* compileOnly */ false,
                     java.util.Set.of(),
-                    session);
+                    session)
+                    .withVariant(EngineProtocol.variantOf(requestLine), EngineProtocol.clientEnvOf(requestLine));
             dev.jkbuild.run.Goal.Builder builder = dev.jkbuild.runtime.BuildPipeline.coreBuilder(inputs, false);
             dev.jkbuild.runtime.BuildPipeline.appendDeclaredTails(builder, inputs);
             dev.jkbuild.run.Goal goal = builder.build();

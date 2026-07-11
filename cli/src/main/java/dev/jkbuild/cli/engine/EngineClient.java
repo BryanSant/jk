@@ -258,7 +258,25 @@ public final class EngineClient {
             boolean skipTests,
             boolean verbose,
             boolean offline,
-            boolean force) {}
+            boolean force,
+            String variant,
+            java.util.Map<String, String> clientEnv) {
+
+        /** Back-compat: default variant, no client env. */
+        public SingleBuildRequest(
+                Path entryDir,
+                Path cache,
+                Path jdksDir,
+                int workers,
+                String profile,
+                boolean skipTests,
+                boolean verbose,
+                boolean offline,
+                boolean force) {
+            this(entryDir, cache, jdksDir, workers, profile, skipTests, verbose, offline, force, "",
+                    java.util.Map.of());
+        }
+    }
 
     /**
      * Run a single (non-workspace) project's build against the engine — the engine equivalent of
