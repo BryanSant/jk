@@ -62,4 +62,35 @@ class PluginTableRegistryTest {
                         "[plugin]\nid = \"x\"\ntable = \"x\"\n[schema]\nk = { type = \"nope\" }", "p.toml"))
                 .hasMessageContaining("unknown schema type");
     }
+
+    @org.junit.jupiter.api.Test
+    void shipped_manifest_declares_scaffold_and_import_rules() {
+        var boot = PluginTableRegistry.manifests().stream()
+                .filter(m -> m.id().equals("spring-boot"))
+                .findFirst()
+                .orElseThrow();
+
+        var scaffold = boot.scaffold();
+        org.assertj.core.api.Assertions.assertThat(scaffold.flag()).isEqualTo("spring");
+        org.assertj.core.api.Assertions.assertThat(scaffold.appends()).hasSize(2);
+        org.assertj.core.api.Assertions.assertThat(scaffold.files())
+                .anyMatch(f -> f.path().contains("Application.java") && "java".equals(f.whenLang()))
+                .anyMatch(f -> f.path().contains("Application.kt") && "kotlin".equals(f.whenLang()))
+                .anyMatch(f -> f.path().endsWith("application.properties") && f.keepExisting());
+        // every referenced template resource resolves
+        for (var a : scaffold.appends()) {
+            org.assertj.core.api.Assertions.assertThat(PluginTableRegistry.resourceText(boot, a.template()))
+                    .contains("[spring-boot]");
+        }
+        for (var f : scaffold.files()) {
+            org.assertj.core.api.Assertions.assertThat(PluginTableRegistry.resourceText(boot, f.template()))
+                    .isNotBlank();
+        }
+
+        org.assertj.core.api.Assertions.assertThat(boot.gradleImports())
+                .anyMatch(r -> r.id().equals("org.springframework.boot")
+                        && "version".equals(r.versionTo())
+                        && r.missingVersionWarning() != null)
+                .anyMatch(r -> r.id().equals("io.spring.dependency-management") && r.versionTo() == null);
+    }
 }

@@ -81,6 +81,10 @@ public interface InProcessEngine {
     dev.jkbuild.engine.protocol.GeneratedFiles generate(
             java.nio.file.Path dir, String kind, java.util.Map<String, String> params);
 
+    /** Plugin-verb twin — the in-process counterpart of PLUGIN_VERB_REQUEST. */
+    dev.jkbuild.engine.protocol.PluginVerbReport pluginVerb(
+            java.nio.file.Path dir, java.nio.file.Path cache, String verb, java.util.List<String> args);
+
     /** A single hosted goal's outcome: the goal result plus the test counts (null when no tests ran). */
     record GoalOutcome(dev.jkbuild.run.GoalResult result, dev.jkbuild.run.TestSummary testResult) {}
 

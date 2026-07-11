@@ -66,6 +66,23 @@ public final class BuildPluginHarness {
                     return 1;
                 }
             }
+            case "verb" -> {
+                VerbSpec verb = recorder.verb(spec.stepName());
+                if (verb == null || verb.body() == null) {
+                    out.emit("{\"t\":\"error\",\"code\":\"unknown-verb\",\"message\":"
+                            + Ndjson.quote("no registered verb named " + spec.stepName()) + "}");
+                    return 65;
+                }
+                try {
+                    int exit = verb.body().run(new SpecVerbExec(spec, out));
+                    out.emit("{\"t\":\"done\"}");
+                    return exit;
+                } catch (Exception e) {
+                    out.emit("{\"t\":\"error\",\"code\":\"verb-failed\",\"message\":"
+                            + Ndjson.quote(String.valueOf(e.getMessage())) + "}");
+                    return 1;
+                }
+            }
             case "package" -> {
                 PackagerSpec packager = recorder.packager();
                 if (packager == null || packager.body() == null) {
@@ -116,6 +133,10 @@ public final class BuildPluginHarness {
             out.emit("{\"t\":\"packager\",\"name\":" + Ndjson.quote(packager.name()) + ",\"inputs\":"
                     + quoteArray(packager.declaredInputs().stream().map(In::wireName).toList()) + "}");
         }
+        for (VerbSpec verb : recorder.verbs()) {
+            out.emit("{\"t\":\"verb\",\"name\":" + Ndjson.quote(verb.name()) + ",\"description\":"
+                    + Ndjson.quote(verb.description()) + "}");
+        }
     }
 
     private static String quoteArray(List<String> values) {
@@ -133,6 +154,7 @@ public final class BuildPluginHarness {
         private final PluginConfig config;
         private final ProjectFacts project;
         private final List<StepSpec> steps = new ArrayList<>();
+        private final List<VerbSpec> verbs = new ArrayList<>();
         private PackagerSpec packager;
 
         Recorder(PluginConfig config, ProjectFacts project) {
@@ -176,6 +198,20 @@ public final class BuildPluginHarness {
         PackagerSpec packager() {
             return packager;
         }
+
+        @Override
+        public void verb(VerbSpec spec) {
+            verbs.add(spec);
+        }
+
+        List<VerbSpec> verbs() {
+            return verbs;
+        }
+
+        VerbSpec verb(String name) {
+            for (VerbSpec v : verbs) if (v.name().equals(name)) return v;
+            return null;
+        }
     }
 
     // ---- the engine's spec, decoded --------------------------------------------------------
@@ -193,7 +229,8 @@ public final class BuildPluginHarness {
             List<Path> classpath,
             List<PackageIo.RuntimeEntry> entries,
             Map<String, Path> stepOutputs,
-            Map<String, Path> extras) {
+            Map<String, Path> extras,
+            List<String> verbArgs) {
 
         static Spec read(Path file) throws IOException {
             String op = "";
@@ -217,6 +254,7 @@ public final class BuildPluginHarness {
             List<PackageIo.RuntimeEntry> entries = new ArrayList<>();
             Map<String, Path> stepOutputs = new LinkedHashMap<>();
             Map<String, Path> extras = new LinkedHashMap<>();
+            List<String> verbArgs = new ArrayList<>();
 
             for (String line : Files.readAllLines(file, StandardCharsets.UTF_8)) {
                 if (line.isBlank()) continue;
@@ -268,6 +306,7 @@ public final class BuildPluginHarness {
                         stepOutputs.put(
                                 String.valueOf(Ndjson.str(line, "name")),
                                 Path.of(String.valueOf(Ndjson.str(line, "dir"))));
+                    case "verb-args" -> verbArgs.addAll(Ndjson.strArray(line, "values"));
                     case "extra" ->
                         extras.put(
                                 String.valueOf(Ndjson.str(line, "name")),
@@ -282,7 +321,7 @@ public final class BuildPluginHarness {
                     new ProjectFacts(group, name, version, javaRelease, mainClass, nativeDeclared, kotlin, manifest);
             return new Spec(
                     op, stepName, config, facts, classesDir, moduleDir, scratch, javaHome, artifactPath, classpath,
-                    entries, stepOutputs, extras);
+                    entries, stepOutputs, extras, verbArgs);
         }
     }
 
@@ -322,6 +361,38 @@ public final class BuildPluginHarness {
         @Override
         public Path javaHome() {
             return spec.javaHome();
+        }
+
+        @Override
+        public void label(String text) {
+            out.emit("{\"t\":\"label\",\"text\":" + Ndjson.quote(text) + "}");
+        }
+    }
+
+    private record SpecVerbExec(Spec spec, ProtocolWriter out) implements VerbExec {
+        @Override
+        public List<String> args() {
+            return spec.verbArgs();
+        }
+
+        @Override
+        public dev.jkbuild.model.PluginConfig config() {
+            return spec.config();
+        }
+
+        @Override
+        public ProjectFacts project() {
+            return spec.project();
+        }
+
+        @Override
+        public Path moduleDir() {
+            return spec.moduleDir();
+        }
+
+        @Override
+        public void out(String line) {
+            out.emit("{\"t\":\"verb-out\",\"line\":" + Ndjson.quote(line) + "}");
         }
 
         @Override

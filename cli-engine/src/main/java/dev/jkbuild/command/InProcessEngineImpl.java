@@ -95,6 +95,12 @@ public final class InProcessEngineImpl implements InProcessEngine {
     }
 
     @Override
+    public dev.jkbuild.engine.protocol.PluginVerbReport pluginVerb(
+            java.nio.file.Path dir, java.nio.file.Path cache, String verb, java.util.List<String> args) {
+        return dev.jkbuild.runtime.PluginVerbs.run(dir, cache, verb, args);
+    }
+
+    @Override
     public java.util.Map<java.nio.file.Path, dev.jkbuild.model.JkBuild> loadWorkspaceModules(
             java.nio.file.Path wsRoot) throws java.io.IOException {
         return dev.jkbuild.config.WorkspaceLoader.loadModules(

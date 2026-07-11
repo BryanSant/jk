@@ -162,8 +162,47 @@ public final class CommandDispatch {
             return 2;
         }
         CliCommand cmd = r.value();
-        if (cmd == null) return null; // unknown verb: let the caller show top-level help
+        if (cmd == null) {
+            // Not a jk verb — a build plugin may declare it (build-plugins plan row 11).
+            // Only when a project manifest is present, and never by SPAWNING an engine for a
+            // typo: the hosted attempt requires a live socket; the test seam runs in-process.
+            Integer pluginExit = tryPluginVerb(verb, all.subList(verbAt + 1, all.size()));
+            if (pluginExit != null) return pluginExit;
+            return null; // let the caller show top-level help
+        }
         return dispatch(cmd, "jk " + cmd.name(), all.subList(verbAt + 1, all.size()), ansiEnabled());
+    }
+
+    /**
+     * Attempt {@code verb} as a plugin-declared command. Returns the exit code when a plugin
+     * owned and ran it, else {@code null} (no jk.toml, no reachable engine, no owning plugin —
+     * the normal unknown-verb help follows).
+     */
+    private static Integer tryPluginVerb(String verb, List<String> args) {
+        java.nio.file.Path dir = java.nio.file.Path.of("").toAbsolutePath().normalize();
+        if (!java.nio.file.Files.isRegularFile(dir.resolve("jk.toml"))) return null;
+        try {
+            dev.jkbuild.engine.protocol.PluginVerbReport report;
+            if (Boolean.getBoolean("jk.test.noEngine")
+                    || "dev.jkbuild.test.runner.JkRunner".equals(System.getProperty("jk.plugin.class"))) {
+                report = dev.jkbuild.cli.engine.InProcessEngine.require()
+                        .pluginVerb(dir, dev.jkbuild.util.JkDirs.cache(), verb, args);
+            } else {
+                var paths = dev.jkbuild.engine.EnginePaths.current();
+                if (!dev.jkbuild.cli.engine.EngineClient.ping(paths.socket())) return null;
+                report = dev.jkbuild.cli.engine.EngineClient.pluginVerb(
+                        paths, dir, dev.jkbuild.util.JkDirs.cache(), verb, args);
+            }
+            if (!report.found()) return null;
+            if (report.error() != null) {
+                CliOutput.err("jk " + verb + ": " + report.error());
+                return 1;
+            }
+            for (String line : report.output()) CliOutput.out(line);
+            return report.exit();
+        } catch (Exception e) {
+            return null; // best-effort — fall back to the normal help
+        }
     }
 
     /** Dispatch {@code cmd} against {@code rest} (its arguments), descending into subcommands. */

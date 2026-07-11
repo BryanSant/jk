@@ -73,10 +73,23 @@ public final class PluginBuild {
     /** The registered packager, as declared. */
     public record PackagerDecl(String name, List<String> inputs) {}
 
-    public record Declarations(List<StepDecl> steps, PackagerDecl packager) {
+    /** One registered plugin verb, as declared. */
+    public record VerbDecl(String name, String description) {}
+
+    public record Declarations(List<StepDecl> steps, PackagerDecl packager, List<VerbDecl> verbs) {
+
+        /** Back-compat: no verbs. */
+        public Declarations(List<StepDecl> steps, PackagerDecl packager) {
+            this(steps, packager, List.of());
+        }
 
         public StepDecl step(String name) {
             for (StepDecl s : steps) if (s.name().equals(name)) return s;
+            return null;
+        }
+
+        public VerbDecl verb(String name) {
+            for (VerbDecl v : verbs) if (v.name().equals(name)) return v;
             return null;
         }
     }
@@ -126,8 +139,14 @@ public final class PluginBuild {
             Files.write(cacheFile, lines, StandardCharsets.UTF_8);
         }
 
+        return decode(lines);
+    }
+
+    /** Decode a describe reply's declaration lines (the cached file's exact content). */
+    static Declarations decode(List<String> lines) {
         List<StepDecl> steps = new ArrayList<>();
         PackagerDecl packager = null;
+        List<VerbDecl> verbs = new ArrayList<>();
         for (String line : lines) {
             switch (String.valueOf(Ndjson.str(line, "t"))) {
                 case "step" ->
@@ -142,12 +161,14 @@ public final class PluginBuild {
                             Ndjson.strArray(line, "contributesSources")));
                 case "packager" ->
                     packager = new PackagerDecl(Ndjson.str(line, "name"), Ndjson.strArray(line, "inputs"));
+                case "verb" ->
+                    verbs.add(new VerbDecl(Ndjson.str(line, "name"), Ndjson.str(line, "description")));
                 default -> {
                     // labels etc. — irrelevant to declarations
                 }
             }
         }
-        return new Declarations(steps, packager);
+        return new Declarations(steps, packager, verbs);
     }
 
     private static String describeKey(Active active, JkBuild project) {
@@ -302,6 +323,17 @@ public final class PluginBuild {
         public SpecWriter stepOutput(String name, Path dir) {
             lines.add("{\"t\":\"step-output\",\"name\":" + Ndjson.quote(name) + ",\"dir\":"
                     + Ndjson.quote(dir.toAbsolutePath().toString()) + "}");
+            return this;
+        }
+
+        public SpecWriter verbArgs(List<String> args) {
+            StringBuilder arr = new StringBuilder("[");
+            for (int i = 0; i < args.size(); i++) {
+                if (i > 0) arr.append(',');
+                arr.append(Ndjson.quote(args.get(i)));
+            }
+            arr.append(']');
+            lines.add("{\"t\":\"verb-args\",\"values\":" + arr + "}");
             return this;
         }
 

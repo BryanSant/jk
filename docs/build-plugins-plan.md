@@ -1,6 +1,21 @@
 # Build Plugins — custom tables, framework integrations, and the plugin SPI
 
-**Status:** P3 LANDED (2026-07-11, ff5cd9f9..3ed652c4) — the steps/packagers SPI.
+**Status:** P4 LANDED (2026-07-11, f1479623..) — scaffold + import + verbs from plugins.
+The manifest grows `[scaffold]` (flag, jk.toml fragment appends, sample templates — pure
+data with the closed `lang` predicate; templates bake in next to the manifest and render
+engine-side via GENERATE params, so `jk new --spring` ships ZERO framework content in the
+client) and `[[import.gradle-plugin]]` rules (GradleImporter maps plugin ids → owned-table
+config generically; compat-bridge's renderer emits every plugin table from its schema with
+default-omission — renderSpringBoot deleted). VerbSpec lands in the SPI + harness
+(`op=verb`, `verb-out` streaming, body exit code), the engine routes PLUGIN_VERB_REQUEST
+through the describe declarations, and the CLI falls back to plugin verbs on unknown
+commands (never spawning an engine for a typo: live socket or test seam only). Boot
+declares no verbs — the machinery is fixture-tested (harness + declarations decode).
+Deliberate P4 residue: the `--spring` flag itself and its input derivations (executable/
+traditional-layout/Application main) stay client-side until P5's dynamic plugin listing;
+scaffold/import stayed manifest data — no ScaffoldSpec/ImportRule code hooks were needed.
+
+**Previous — P3** (ff5cd9f9..3ed652c4) — the steps/packagers SPI.
 StepSpec/PackagerSpec/BuildPluginContext + the BuildPluginHarness worker driver live in
 plugin-api (depends on :model alone); the engine learns registrations over a file-cached
 `describe` worker fork (key: jk+plugin versions, config, registration-visible facts — a

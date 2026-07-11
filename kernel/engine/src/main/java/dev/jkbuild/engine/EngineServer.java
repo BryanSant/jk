@@ -456,6 +456,7 @@ public final class EngineServer implements AutoCloseable {
                     case EngineProtocol.TREE_REQUEST -> handleTreeRequest(line, writer);
                     case EngineProtocol.WHY_REQUEST -> handleWhyRequest(line, writer);
                     case EngineProtocol.GENERATE_REQUEST -> handleGenerateRequest(line, writer);
+                    case EngineProtocol.PLUGIN_VERB_REQUEST -> handlePluginVerbRequest(line, writer);
                     case EngineProtocol.IDE_MODEL_REQUEST -> handleIdeModelRequest(line, writer);
                     default -> {
                         /* unknown type — forward-compatible no-op */
@@ -996,6 +997,21 @@ public final class EngineServer implements AutoCloseable {
                     Path.of(Ndjson.str(requestLine, "dir")), Ndjson.str(requestLine, "query"));
         } catch (RuntimeException e) {
             report = dev.jkbuild.engine.protocol.WhyReport.error(String.valueOf(e.getMessage()));
+        }
+        sendQuiet(writer, report.encode());
+    }
+
+    /** Answer {@link EngineProtocol#PLUGIN_VERB_REQUEST}: a plugin-declared verb, worker-executed. */
+    private void handlePluginVerbRequest(String requestLine, BufferedWriter writer) {
+        dev.jkbuild.engine.protocol.PluginVerbReport report;
+        try {
+            report = dev.jkbuild.runtime.PluginVerbs.run(
+                    Path.of(Ndjson.str(requestLine, "dir")),
+                    Path.of(Ndjson.str(requestLine, "cache")),
+                    Ndjson.str(requestLine, "verb"),
+                    Ndjson.strArray(requestLine, "args"));
+        } catch (RuntimeException e) {
+            report = dev.jkbuild.engine.protocol.PluginVerbReport.error(String.valueOf(e.getMessage()));
         }
         sendQuiet(writer, report.encode());
     }

@@ -513,6 +513,28 @@ final class EngineBuildListenerAdapter {
         }
     }
 
+    /** One engine-hosted plugin verb run. */
+    static dev.jkbuild.engine.protocol.PluginVerbReport pluginVerb(
+            EnginePaths.Paths paths, Path dir, Path cache, String verb, java.util.List<String> args)
+            throws IOException {
+        EngineClient.ensureRunning(paths, Jk.VERSION);
+        try (SocketChannel ch = EngineClient.connect(paths.socket())) {
+            BufferedWriter writer =
+                    new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
+            BufferedReader reader =
+                    new BufferedReader(new InputStreamReader(Channels.newInputStream(ch), StandardCharsets.UTF_8));
+            writer.write(EngineProtocol.pluginVerbRequest(dir.toString(), cache.toString(), verb, args));
+            writer.write('\n');
+            writer.flush();
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (!EngineProtocol.PLUGIN_VERB_ACK.equals(EngineProtocol.typeOf(line))) continue;
+                return dev.jkbuild.engine.protocol.PluginVerbReport.decode(line);
+            }
+            throw new IOException("jk engine: disconnected before answering the plugin verb");
+        }
+    }
+
     /** One engine-hosted deny check: policy parse + lock read + violations, engine-side. */
     static dev.jkbuild.engine.protocol.DenyReport denyCheck(EnginePaths.Paths paths, Path dir) throws IOException {
         EngineClient.ensureRunning(paths, Jk.VERSION);

@@ -22,10 +22,14 @@ public interface BuildPluginContext {
     /** Register the main-artifact packager (plan §3.3) — at most one per project. */
     void packaging(PackagerSpec spec);
 
+    /** Register a plugin command ({@code jk <name>}, plan row 11) — worker-executed. */
+    void verb(VerbSpec spec);
+
     // ---- reserved hooks -----------------------------------------------------------------
-    // run()/nativeImage() shaping is P7 (jk dev's hot-reload hooks); scaffold()/importer()/
-    // verb() are P4. Declared now so the blueprint shows the full surface; registering one
-    // today is a loud error rather than a silent no-op.
+    // run()/nativeImage() shaping is P7 (jk dev's hot-reload hooks). Scaffold and import are
+    // manifest data (plan rows 9-10 — pure data, no code hook needed; see [scaffold] and
+    // [[import.gradle-plugin]]). Declared now so the blueprint shows the full surface;
+    // registering one today is a loud error rather than a silent no-op.
 
     /** Reserved (P7): run/dev classpath + hot-reload shaping. */
     default void run(RunShape shape) {

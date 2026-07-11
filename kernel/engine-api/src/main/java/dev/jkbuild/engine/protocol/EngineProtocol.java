@@ -252,6 +252,17 @@ public final class EngineProtocol {
     public static final String GENERATE_ACK = "generate-ack";
 
     /**
+     * Client → server: run a plugin-declared verb (build-plugins plan row 11) for {@code dir} —
+     * the CLI saw a verb it doesn't own; the project's active plugin may. Synchronous inline;
+     * answered with one {@link #PLUGIN_VERB_ACK} carrying {@link PluginVerbReport}
+     * ({@code found=false} → the client falls back to its normal unknown-command help).
+     */
+    public static final String PLUGIN_VERB_REQUEST = "plugin-verb-request";
+
+    /** Server → client, terminal for {@link #PLUGIN_VERB_REQUEST}. */
+    public static final String PLUGIN_VERB_ACK = "plugin-verb-ack";
+
+    /**
      * Client → server: compute the IDE-agnostic workspace model for {@code dir} — parsed modules,
      * external libraries, cross-module edges, per-module JDK/SDK handles ({@link IdeWireModel}).
      * The IDE file generators stay client-side. Synchronous inline; answered with one {@link
@@ -1368,6 +1379,14 @@ public final class EngineProtocol {
         java.util.Map<String, String> out = new java.util.LinkedHashMap<>();
         for (int i = 0; i < keys.size() && i < values.size(); i++) out.put(keys.get(i), values.get(i));
         return out;
+    }
+
+    public static String pluginVerbRequest(String dir, String cache, String verb, java.util.List<String> args) {
+        return "{\"t\":\"" + PLUGIN_VERB_REQUEST + "\",\"dir\":" + Ndjson.quote(dir)
+                + ",\"cache\":" + Ndjson.quote(cache)
+                + ",\"verb\":" + Ndjson.quote(verb)
+                + ",\"args\":" + quoteArray(args)
+                + "}";
     }
 
     public static String denyCheckRequest(String dir) {

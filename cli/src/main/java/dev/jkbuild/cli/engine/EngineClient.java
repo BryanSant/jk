@@ -311,6 +311,17 @@ public final class EngineClient {
         return EngineBuildListenerAdapter.ideModel(paths, dir, cache, jdksDir);
     }
 
+        /** A plugin-declared verb, worker-executed engine-side (found=false → normal help). */
+    public static dev.jkbuild.engine.protocol.PluginVerbReport pluginVerb(
+            dev.jkbuild.engine.EnginePaths.Paths paths,
+            java.nio.file.Path dir,
+            java.nio.file.Path cache,
+            String verb,
+            java.util.List<String> args)
+            throws java.io.IOException {
+        return EngineBuildListenerAdapter.pluginVerb(paths, dir, cache, verb, args);
+    }
+
         /** Thin-client generator run: engine renders content, client guards/writes/prints. */
     public static dev.jkbuild.engine.protocol.GeneratedFiles generate(
             dev.jkbuild.engine.EnginePaths.Paths paths, java.nio.file.Path dir, String kind)
