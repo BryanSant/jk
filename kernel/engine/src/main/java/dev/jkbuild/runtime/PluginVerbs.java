@@ -52,7 +52,9 @@ public final class PluginVerbs {
                     .artifact(PluginBuild.mainArtifactPath(layout, active))
                     .verbArgs(args);
             // Verbs get the same declared tool artifacts steps do (adb from an SDK component).
-            for (var tool : PluginBuild.fetchStepDependencies(project, dir, new dev.jkbuild.cache.Cas(cache))
+            for (var tool : PluginBuild.fetchStepDependencies(
+                    project, dir, new dev.jkbuild.cache.Cas(cache),
+                    PluginBuild.sdkPins(dir.resolve("jk.lock")))
                     .entrySet()) {
                 specWriter.extra(tool.getKey(), tool.getValue());
             }

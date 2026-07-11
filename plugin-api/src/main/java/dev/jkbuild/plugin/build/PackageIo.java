@@ -13,8 +13,20 @@ import java.util.Optional;
  */
 public interface PackageIo {
 
-    /** One runtime classpath entry with its real coordinate-derived jar name. */
-    record RuntimeEntry(String fileName, Path jar, boolean snapshot) {}
+    /**
+     * One runtime classpath entry with its real coordinate-derived file name. {@code container}
+     * is the exploded archive dir when the artifact's packaging is a container (an Android AAR:
+     * {@code classes.jar}, {@code res/}, {@code AndroidManifest.xml}, {@code R.txt} inside) —
+     * null for a plain jar. {@code jar} is the host-classpath entry (a container's
+     * {@code classes.jar}); null when the container carries no classes.
+     */
+    record RuntimeEntry(String fileName, Path jar, boolean snapshot, Path container) {
+
+        /** Back-compat: a plain-jar entry. */
+        public RuntimeEntry(String fileName, Path jar, boolean snapshot) {
+            this(fileName, jar, snapshot, null);
+        }
+    }
 
     Path classesDir();
 

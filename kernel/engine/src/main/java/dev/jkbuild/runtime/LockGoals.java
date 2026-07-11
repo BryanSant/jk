@@ -234,8 +234,53 @@ public final class LockGoals {
                 })
                 .build();
 
-        Phase write = Phase.builder("write-lockfile")
+        Phase lockSdk = Phase.builder("lock-sdk")
+                .kind(PhaseKind.IO)
                 .requires("lock-plugins")
+                .scope(1)
+                .execute(ctx -> {
+                    // Provisioned-SDK revision pins (android-plan §3.2 — hermetic, lockfile-pinned
+                    // components): recorded for every sdk-component a plugin manifest contributes.
+                    // Installed components pin what is actually on disk; uninstalled ones pin the
+                    // feed's stable revision when reachable, else stay unpinned until the first
+                    // build installs them and the next lock records it. Provider-neutral shape.
+                    java.util.LinkedHashSet<String> components = new java.util.LinkedHashSet<>();
+                    try {
+                        for (var sd : dev.jkbuild.plugin.manifest.PluginContributions.stepDependencies(
+                                effective, dir)) {
+                            if (sd.sdkComponent() != null && !"root".equals(sd.sdkComponent())) {
+                                components.add(sd.sdkComponent());
+                            }
+                        }
+                    } catch (RuntimeException ignored) {
+                        // no plugin tables / no contributions — nothing to pin
+                    }
+                    if (components.isEmpty()) return;
+                    ctx.label("pin sdk components");
+                    var entries = new ArrayList<dev.jkbuild.lock.Lockfile.SdkEntry>();
+                    for (String component : components) {
+                        String revision = SdkComponents.installedRevision(component);
+                        if (revision == null) {
+                            try {
+                                var sdk = dev.jkbuild.androidsdk.AndroidSdk.resolve();
+                                var feedComponent = new dev.jkbuild.androidsdk.AndroidSdkInstaller(sdk)
+                                        .feed()
+                                        .find(component);
+                                if (feedComponent != null) revision = feedComponent.revision();
+                            } catch (Exception ignored) {
+                                // offline / feed unreachable — leave unpinned rather than guess
+                            }
+                        }
+                        if (revision != null) {
+                            entries.add(new dev.jkbuild.lock.Lockfile.SdkEntry(component, revision));
+                        }
+                    }
+                    ctx.put(LOCKFILE, ctx.require(LOCKFILE).withSdk(entries));
+                })
+                .build();
+
+        Phase write = Phase.builder("write-lockfile")
+                .requires("lock-sdk")
                 .scope(1)
                 .execute(ctx -> {
                     ctx.label("write " + lockFile.getFileName());
@@ -248,6 +293,7 @@ public final class LockGoals {
                 .addPhase(parseBuild)
                 .addPhase(resolve)
                 .addPhase(lockPlugins)
+                .addPhase(lockSdk)
                 .addPhase(write)
                 .build();
     }

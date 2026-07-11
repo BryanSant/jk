@@ -100,6 +100,15 @@ public final class LockfileWriter {
             out.append("checksum   = ").append(quote(p.checksum())).append('\n');
         }
 
+        List<Lockfile.SdkEntry> sortedSdk = new ArrayList<>(lockfile.sdk());
+        sortedSdk.sort(Comparator.comparing(Lockfile.SdkEntry::component));
+        for (Lockfile.SdkEntry e : sortedSdk) {
+            out.append('\n');
+            out.append("[[sdk]]\n");
+            out.append("component = ").append(quote(e.component())).append('\n');
+            out.append("revision  = ").append(quote(e.revision())).append('\n');
+        }
+
         return out.toString();
     }
 

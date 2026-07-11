@@ -21,13 +21,28 @@ final class SdkComponents {
 
     private SdkComponents() {}
 
+    /** The installed revision of {@code component}, or null (root pseudo-component, not installed). */
+    static String installedRevision(String component) {
+        if ("root".equals(component)) return null;
+        try {
+            return AndroidSdk.resolve().installedRevision(component);
+        } catch (IOException e) {
+            return null;
+        }
+    }
+
     static Path resolve(String component, String pathInside) throws IOException, InterruptedException {
+        return resolve(component, pathInside, null);
+    }
+
+    static Path resolve(String component, String pathInside, String pinnedRevision)
+            throws IOException, InterruptedException {
         AndroidSdk sdk = AndroidSdk.resolve();
         Path base;
         if ("root".equals(component)) {
             base = sdk.root();
         } else {
-            base = new AndroidSdkInstaller(sdk).ensure(component);
+            base = new AndroidSdkInstaller(sdk).ensure(component, pinnedRevision);
         }
         if (pathInside == null || pathInside.isBlank()) return base;
         Path inside = base.resolve(pathInside).normalize();

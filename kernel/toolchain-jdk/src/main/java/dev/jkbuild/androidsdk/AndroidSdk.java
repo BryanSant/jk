@@ -90,6 +90,23 @@ public final class AndroidSdk {
     }
 
     /** {@code platforms;android-28} → {@code <root>/platforms/android-28} — sdkmanager's layout. */
+    /**
+     * The installed component's dotted revision, read from its {@code source.properties}
+     * ({@code Pkg.Revision} — the sdkmanager on-disk contract), or null when absent/unreadable.
+     */
+    public String installedRevision(String componentPath) {
+        java.nio.file.Path props = componentDir(componentPath).resolve("source.properties");
+        if (!java.nio.file.Files.isRegularFile(props)) return null;
+        try {
+            for (String line : java.nio.file.Files.readAllLines(props)) {
+                if (line.startsWith("Pkg.Revision=")) return line.substring("Pkg.Revision=".length()).strip();
+            }
+        } catch (java.io.IOException ignored) {
+            // unreadable — treated as unknown
+        }
+        return null;
+    }
+
     public Path componentDir(String componentPath) {
         Path dir = root;
         for (String part : componentPath.split(";")) {

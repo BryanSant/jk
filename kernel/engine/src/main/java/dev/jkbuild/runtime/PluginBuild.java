@@ -65,7 +65,12 @@ public final class PluginBuild {
     public static Optional<PluginManifest.Packaging> shape(JkBuild project, Path moduleDir) {
         for (PluginManifest m : PluginTableRegistry.manifestsFor(moduleDir, project.plugins())) {
             if (m.packaging() == null) continue;
-            if (project.pluginConfig(m.id()).isPresent()) return Optional.of(m.packaging());
+            Optional<PluginConfig> config = project.pluginConfig(m.id());
+            if (config.isPresent()) {
+                // Config-conditional variants ([[packaging.variant]]): an [android] library
+                // packages an AAR while an app packages an APK — same plugin, one manifest.
+                return Optional.of(m.packaging().resolve(config.get()));
+            }
         }
         return Optional.empty();
     }
@@ -239,13 +244,25 @@ public final class PluginBuild {
      */
     public static Map<String, Path> fetchStepDependencies(JkBuild project, Path moduleDir, Cas cas)
             throws IOException, InterruptedException {
+        return fetchStepDependencies(project, moduleDir, cas, Map.of());
+    }
+
+    /**
+     * As above with {@code jk.lock}'s provisioned-SDK revision pins ({@code [[sdk]]}) — drift
+     * between the pin and the installed component is reported, never silently built over.
+     */
+    public static Map<String, Path> fetchStepDependencies(
+            JkBuild project, Path moduleDir, Cas cas, Map<String, String> sdkPins)
+            throws IOException, InterruptedException {
         Map<String, Path> out = new LinkedHashMap<>();
         List<PluginContributions.StepDep> deps = PluginContributions.stepDependencies(project, moduleDir);
         if (deps.isEmpty()) return out;
         dev.jkbuild.repo.RepoGroup repos = null;
         for (PluginContributions.StepDep dep : deps) {
             if (dep.sdkComponent() != null) {
-                out.put(dep.artifact(), SdkComponents.resolve(dep.sdkComponent(), dep.sdkPath()));
+                out.put(
+                        dep.artifact(),
+                        SdkComponents.resolve(dep.sdkComponent(), dep.sdkPath(), sdkPins.get(dep.sdkComponent())));
                 continue;
             }
             if (repos == null) repos = RepoGroupBuilder.buildFor(project, null, cas);
@@ -314,6 +331,20 @@ public final class PluginBuild {
         return dir;
     }
 
+    /** The {@code [[sdk]]} revision pins of {@code lockFile}, or empty (no lock / none recorded). */
+    public static Map<String, String> sdkPins(Path lockFile) {
+        if (lockFile == null || !Files.isRegularFile(lockFile)) return Map.of();
+        try {
+            Map<String, String> pins = new LinkedHashMap<>();
+            for (var e : dev.jkbuild.lock.LockfileReader.read(lockFile).sdk()) {
+                pins.put(e.component(), e.revision());
+            }
+            return pins;
+        } catch (Exception e) {
+            return Map.of();
+        }
+    }
+
     /** Fetch one {@code module:version} jar into the CAS and return its path. */
     private static Path fetchArtifact(dev.jkbuild.repo.RepoGroup repos, String module, String version)
             throws IOException, InterruptedException {
@@ -363,6 +394,51 @@ public final class PluginBuild {
         return classpath;
     }
 
+    /** One production runtime entry the engine hands a step/packager (container-aware). */
+    public record ProdEntry(String fileName, Path jar, boolean snapshot, Path container) {}
+
+    /**
+     * The production RUNTIME entries a step sees ({@code In.runtimeEntries()}): lock-ordered
+     * artifacts (an AAR rides as its exploded container + classes.jar) followed by workspace
+     * sibling artifacts (a sibling that also produced a container artifact — e.g. an [android]
+     * library's AAR next to its conventional classes jar — rides with that container attached).
+     */
+    public static List<ProdEntry> productionEntries(Path projectDir, Path cache, Path lockFile, JkBuild project)
+            throws IOException {
+        List<ProdEntry> out = new ArrayList<>();
+        Cas cas = new Cas(cache);
+        if (Files.exists(lockFile)) {
+            var resolver = new dev.jkbuild.compile.ClasspathResolver(cas);
+            for (var entry : resolver.entriesFor(
+                    dev.jkbuild.lock.LockfileReader.read(lockFile), dev.jkbuild.compile.ClasspathResolver.RUNTIME)) {
+                var a = entry.artifact();
+                String ext = entry.container() != null ? ".aar" : ".jar";
+                out.add(new ProdEntry(
+                        a.moduleArtifact() + "-" + a.version() + ext,
+                        entry.jar(),
+                        a.version().contains("SNAPSHOT"),
+                        entry.container()));
+            }
+        }
+        try {
+            var siblings = dev.jkbuild.config.WorkspaceClasspath.resolve(
+                    projectDir, project, java.util.Set.of(dev.jkbuild.model.Scope.EXPORT, dev.jkbuild.model.Scope.MAIN));
+            for (Path jar : siblings.jars()) {
+                Path container = null;
+                String name = jar.getFileName().toString();
+                Path aar = jar.resolveSibling(name.substring(0, name.length() - ".jar".length()) + ".aar");
+                if (Files.isRegularFile(aar)) {
+                    container = dev.jkbuild.cache.ExplodedArchives.explodeFile(cas, aar);
+                    name = aar.getFileName().toString();
+                }
+                out.add(new ProdEntry(name, Files.isRegularFile(jar) ? jar : null, true, container));
+            }
+        } catch (Exception ignored) {
+            /* no workspace — fine */
+        }
+        return out;
+    }
+
     /**
      * The main artifact's path under the packager's declared extension ({@code
      * target/lib/<name>-<version>.apk}) — the one place the extension swap lives.
@@ -370,6 +446,7 @@ public final class PluginBuild {
     public static Path mainArtifactPath(dev.jkbuild.layout.BuildLayout layout, Active active) {
         Path jarPath = layout.mainJar();
         var packaging = active.manifest().packaging();
+        if (packaging != null) packaging = packaging.resolve(active.config());
         String ext = packaging == null ? "jar" : packaging.artifactExtension();
         if (!"jar".equals(ext)) {
             String fileName = jarPath.getFileName().toString();
@@ -425,8 +502,18 @@ public final class PluginBuild {
         }
 
         public SpecWriter entry(String fileName, Path jar, boolean snapshot) {
-            lines.add("{\"t\":\"entry\",\"file\":" + Ndjson.quote(fileName) + ",\"path\":"
-                    + Ndjson.quote(jar.toAbsolutePath().toString()) + ",\"snapshot\":" + snapshot + "}");
+            return entry(fileName, jar, snapshot, null);
+        }
+
+        public SpecWriter entry(String fileName, Path jar, boolean snapshot, Path container) {
+            StringBuilder b = new StringBuilder("{\"t\":\"entry\",\"file\":").append(Ndjson.quote(fileName));
+            if (jar != null) b.append(",\"path\":").append(Ndjson.quote(jar.toAbsolutePath().toString()));
+            b.append(",\"snapshot\":").append(snapshot);
+            if (container != null) {
+                b.append(",\"container\":").append(Ndjson.quote(container.toAbsolutePath().toString()));
+            }
+            b.append('}');
+            lines.add(b.toString());
             return this;
         }
 

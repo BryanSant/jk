@@ -52,8 +52,22 @@ public final class AndroidSdkInstaller {
      * component (Studio's copies count — the root may be a symlink into a Studio SDK).
      */
     public Path ensure(String componentPath) throws IOException, InterruptedException {
+        return ensure(componentPath, null);
+    }
+
+    /**
+     * As {@link #ensure(String)}, verifying the installed/downloaded revision against a
+     * {@code jk.lock} pin when one exists. The feed only ever offers each channel's current
+     * revision, so a drifted component cannot be re-materialized at the pinned revision — jk
+     * reports the drift (stderr) instead of silently building against different tool bytes;
+     * {@code jk lock} refreshes the pin.
+     */
+    public Path ensure(String componentPath, String pinnedRevision) throws IOException, InterruptedException {
         Path dir = sdk.componentDir(componentPath);
-        if (sdk.installed(componentPath)) return dir;
+        if (sdk.installed(componentPath)) {
+            warnOnDrift(componentPath, pinnedRevision);
+            return dir;
+        }
 
         AndroidRepoFeed.Component component = feed().find(componentPath);
         if (component == null) {
@@ -72,6 +86,12 @@ public final class AndroidSdkInstaller {
                     + licenseId + "' license — run `jk android licenses --yes` first");
         }
 
+        if (pinnedRevision != null && !pinnedRevision.equals(component.revision())) {
+            System.err.println("jk: Android SDK component " + componentPath + " is pinned to revision "
+                    + pinnedRevision + " in jk.lock but Google's feed now offers " + component.revision()
+                    + " — installing the offered revision; run `jk lock` to refresh the pin");
+        }
+
         Path archiveFile = download(archive);
         try {
             extractZip(archiveFile, dir);
@@ -79,6 +99,16 @@ public final class AndroidSdkInstaller {
             Files.deleteIfExists(archiveFile);
         }
         return dir;
+    }
+
+    private void warnOnDrift(String componentPath, String pinnedRevision) {
+        if (pinnedRevision == null) return;
+        String installed = sdk.installedRevision(componentPath);
+        if (installed != null && !installed.equals(pinnedRevision)) {
+            System.err.println("jk: Android SDK component " + componentPath + " is installed at revision "
+                    + installed + " but jk.lock pins " + pinnedRevision
+                    + " — building with the installed one; run `jk lock` to refresh the pin");
+        }
     }
 
     /** The parsed feed (fetched once; {@code file:} fixture override for tests). */

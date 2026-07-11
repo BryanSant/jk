@@ -352,6 +352,19 @@ public final class LockOrchestrator {
 
             observer.onPackage(mod.module(), mod.version());
 
+            // The POM's packaging decides the artifact's real extension: androidx libraries
+            // publish AARs, not jars. The lock records the file name in `path` so every later
+            // fetch/locate (sync, repo store) and the classpath explode key off it.
+            String artifactFile = null;
+            try {
+                if ("aar".equals(pomBuilder.build(coord).packaging())) {
+                    coord = new Coordinate(coord.group(), coord.artifact(), coord.version(), null, "aar");
+                    artifactFile = coord.artifact() + "-" + coord.version() + ".aar";
+                }
+            } catch (Exception ignored) {
+                // no POM / unparseable — the plain-jar fetch below decides what exists
+            }
+
             String source = fallbackSource;
             String checksum = null;
             RepoGroup.RepoFetched hit = repos.tryFetchArtifact(coord).orElse(null);
@@ -375,7 +388,14 @@ public final class LockOrchestrator {
             }
 
             packages.add(new Lockfile.Artifact(
-                    mod.module(), mod.version(), source, checksum, null, new ArrayList<>(tags), mod.deps(), pinnedBy));
+                    mod.module(),
+                    mod.version(),
+                    source,
+                    checksum,
+                    artifactFile,
+                    new ArrayList<>(tags),
+                    mod.deps(),
+                    pinnedBy));
         }
 
         // File deps: emit a lockfile entry directly — no solver, no network.

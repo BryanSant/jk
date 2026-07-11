@@ -95,6 +95,11 @@ public final class DevCommand implements CliCommand {
             CliOutput.err("jk dev: " + plan.error());
             return Exit.SOFTWARE;
         }
+        // A device artifact (an APK): the loop is rebuild → redeploy via the plugin's declared
+        // deploy verb — restart-based, per android-plan §3.4 (Apply-Changes parity is out of scope).
+        if (!plan.deployVerb().isEmpty()) {
+            return deviceLoop(projectDir, cache, plan, appArgs);
+        }
         boolean devtools = plan.hotReload();
         if (plan.devtoolsInjected()) {
             CliOutput.err("jk dev: spring-boot-devtools auto-injected for this session"
@@ -166,6 +171,69 @@ public final class DevCommand implements CliCommand {
                 if (!app.waitFor(5, TimeUnit.SECONDS)) app.destroyForcibly();
             }
         }
+    }
+
+    /**
+     * The device dev loop: watch the plan's roots, rebuild on change, and re-dispatch the plugin's
+     * deploy verb (install + relaunch happen in the plugin's worker — nothing runs on the host).
+     */
+    private int deviceLoop(
+            Path projectDir, Path cache, dev.jkbuild.engine.protocol.ExecPlan plan, List<String> appArgs)
+            throws IOException, InterruptedException {
+        List<Path> watchRoots = new ArrayList<>();
+        for (String root : plan.watchRoots()) watchRoots.add(Path.of(root));
+        CliOutput.err("jk dev: watching "
+                + watchRoots.stream()
+                        .map(r -> projectDir.relativize(r).toString())
+                        .reduce((a, b) -> a + ", " + b)
+                        .orElse("src")
+                + " — redeploy to device on change. Ctrl-C stops.");
+        int deployed = deploy(projectDir, cache, plan.deployVerb(), appArgs);
+        if (deployed != 0) return deployed;
+
+        try (WatchService watcher = FileSystems.getDefault().newWatchService()) {
+            Map<WatchKey, Path> keys = new HashMap<>();
+            for (Path root : watchRoots) registerTree(watcher, keys, root);
+            registerDir(watcher, keys, projectDir); // jk.toml lives here
+            while (true) {
+                WatchKey key = watcher.poll(500, TimeUnit.MILLISECONDS);
+                if (key == null) continue;
+                Changes changes = drainEvents(watcher, keys, key, projectDir);
+                if (!changes.any()) continue;
+                if (changes.manifest) CliOutput.err("jk dev: jk.toml changed — full rebuild + redeploy");
+                if (!build(projectDir, cache, false)) {
+                    CliOutput.err("jk dev: build failed — the device keeps the last good install.");
+                    continue;
+                }
+                int exit = deploy(projectDir, cache, plan.deployVerb(), appArgs);
+                if (exit != 0) CliOutput.err("jk dev: deploy failed (exit " + exit + ") — will retry on change.");
+            }
+        }
+    }
+
+    /** Dispatch the deploy verb over the plugin-verb protocol; returns its exit code. */
+    private int deploy(Path projectDir, Path cache, String verb, List<String> appArgs) {
+        dev.jkbuild.engine.protocol.PluginVerbReport report;
+        try {
+            report = engineDisabledForTests()
+                    ? dev.jkbuild.cli.engine.InProcessEngine.require().pluginVerb(projectDir, cache, verb, appArgs)
+                    : dev.jkbuild.cli.engine.EngineClient.pluginVerb(
+                            dev.jkbuild.engine.EnginePaths.current(), projectDir, cache, verb, appArgs);
+        } catch (Exception e) {
+            CliOutput.err("jk dev: " + e.getMessage());
+            return Exit.SOFTWARE;
+        }
+        if (!report.found()) {
+            CliOutput.err("jk dev: the packaging plugin declares deploy verb `" + verb + "` but does not"
+                    + " register it");
+            return Exit.SOFTWARE;
+        }
+        if (report.error() != null) {
+            CliOutput.err("jk dev: " + report.error());
+            return 1;
+        }
+        for (String line : report.output()) CliOutput.out(line);
+        return report.exit();
     }
 
     // --- build/compile through the engine ----------------------------------

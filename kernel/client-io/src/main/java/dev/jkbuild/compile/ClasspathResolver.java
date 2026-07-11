@@ -4,6 +4,7 @@ package dev.jkbuild.compile;
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.model.Scope;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.EnumSet;
@@ -58,12 +59,25 @@ public final class ClasspathResolver {
     /** Filtered: only packages tagged with one of {@code scopes}. */
     public List<Path> classpathFor(Lockfile lock, Set<Scope> scopes) {
         List<Path> result = new ArrayList<>(lock.artifacts().size());
-        for (Entry entry : entriesFor(lock, scopes)) result.add(entry.jar());
+        for (Entry entry : entriesFor(lock, scopes)) {
+            if (entry.jar() != null) result.add(entry.jar());
+        }
         return result;
     }
 
-    /** A resolved classpath element with the lockfile artifact it came from. */
-    public record Entry(Lockfile.Artifact artifact, Path jar) {}
+    /**
+     * A resolved classpath element with the lockfile artifact it came from. {@code container} is
+     * the exploded archive dir for artifacts whose packaging is a container (an AAR: res/,
+     * AndroidManifest.xml, R.txt live there; {@code jar} is its {@code classes.jar}) — null for
+     * plain jars. An AAR with no classes.jar yields a null {@code jar} (resources-only library).
+     */
+    public record Entry(Lockfile.Artifact artifact, Path jar, Path container) {
+
+        /** Back-compat: a plain-jar entry. */
+        public Entry(Lockfile.Artifact artifact, Path jar) {
+            this(artifact, jar, null);
+        }
+    }
 
     /**
      * As {@link #classpathFor(Lockfile, Set)}, but keeping each path paired with its lockfile
@@ -82,6 +96,20 @@ public final class ClasspathResolver {
             // hash path for artifacts fetched before the named-repo store was introduced, or in
             // the rare case repos/<name>/ itself no longer matches the locked hash — the CAS blob
             // is the only path guaranteed to hold the pinned bytes.
+            if (pkg.isAar()) {
+                // Container packaging: the classpath entry is the exploded AAR's classes.jar;
+                // the container dir itself rides along for resource/manifest consumers.
+                try {
+                    Path container = dev.jkbuild.cache.ExplodedArchives.explode(cas, hex);
+                    Path classesJar = container.resolve("classes.jar");
+                    result.add(new Entry(pkg, Files.isRegularFile(classesJar) ? classesJar : null, container));
+                } catch (java.io.IOException e) {
+                    throw new java.io.UncheckedIOException(
+                            pkg.name() + " v" + pkg.version() + ": " + e.getMessage(), e);
+                }
+                ledger.touch(hex);
+                continue;
+            }
             Path repoPath = resolveFromRepos(pkg, hex);
             result.add(new Entry(pkg, repoPath != null ? repoPath : cas.pathFor(hex)));
             ledger.touch(hex);

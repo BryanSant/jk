@@ -297,11 +297,15 @@ public final class BuildPluginHarness {
                     case "java-home" -> javaHome = Path.of(String.valueOf(Ndjson.str(line, "path")));
                     case "artifact" -> artifactPath = Path.of(String.valueOf(Ndjson.str(line, "path")));
                     case "cp" -> classpath.add(Path.of(String.valueOf(Ndjson.str(line, "path"))));
-                    case "entry" ->
+                    case "entry" -> {
+                        String jarPath = Ndjson.str(line, "path");
+                        String container = Ndjson.str(line, "container");
                         entries.add(new PackageIo.RuntimeEntry(
                                 String.valueOf(Ndjson.str(line, "file")),
-                                Path.of(String.valueOf(Ndjson.str(line, "path"))),
-                                Ndjson.bool(line, "snapshot", false)));
+                                jarPath == null ? null : Path.of(jarPath),
+                                Ndjson.bool(line, "snapshot", false),
+                                container == null ? null : Path.of(container)));
+                    }
                     case "step-output" ->
                         stepOutputs.put(
                                 String.valueOf(Ndjson.str(line, "name")),
@@ -336,6 +340,11 @@ public final class BuildPluginHarness {
         @Override
         public List<Path> runtimeClasspath() {
             return spec.classpath();
+        }
+
+        @Override
+        public List<PackageIo.RuntimeEntry> runtimeEntries() {
+            return spec.entries();
         }
 
         @Override

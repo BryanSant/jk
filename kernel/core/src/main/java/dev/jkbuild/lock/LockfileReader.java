@@ -104,7 +104,19 @@ public final class LockfileReader {
             }
         }
 
-        return new Lockfile(lockVersion, generatedBy, resolutionAlgorithm, jdk, kotlin, artifacts, plugins);
+        List<Lockfile.SdkEntry> sdk = new ArrayList<>();
+        TomlArray sdkArray = result.getArray("sdk");
+        if (sdkArray != null) {
+            for (int i = 0; i < sdkArray.size(); i++) {
+                TomlTable t = sdkArray.getTable(i);
+                if (t == null) continue;
+                String component = t.getString("component");
+                String revision = t.getString("revision");
+                if (component == null || revision == null) continue;
+                sdk.add(new Lockfile.SdkEntry(component, revision));
+            }
+        }
+        return new Lockfile(lockVersion, generatedBy, resolutionAlgorithm, jdk, kotlin, artifacts, plugins, sdk);
     }
 
     private static Lockfile.Artifact toArtifact(TomlTable table) {

@@ -1625,11 +1625,14 @@ public final class BuildPipeline {
 
                     List<Path> classpath =
                             PluginBuild.productionClasspath(in.dir(), in.cache(), in.lockFile(), project);
+                    List<PluginBuild.ProdEntry> prodEntries = step.inputs().contains("runtime-entries")
+                            ? PluginBuild.productionEntries(in.dir(), in.cache(), in.lockFile(), project)
+                            : List.of();
 
                     // Manifest-contributed tool artifacts (aapt2, r8, a platform jar) — fetched
                     // into the cache, handed to the body by artifact name, keyed like any input.
                     java.util.Map<String, Path> toolExtras =
-                            PluginBuild.fetchStepDependencies(project, in.dir(), cx.cas());
+                            PluginBuild.fetchStepDependencies(project, in.dir(), cx.cas(), PluginBuild.sdkPins(in.lockFile()));
 
                     // Action key: exactly the declared inputs, plus the facts the body sees.
                     List<String> tokens = new ArrayList<>();
@@ -1637,8 +1640,17 @@ public final class BuildPipeline {
                         switch (input) {
                             case "classes" ->
                                 tokens.add("classes:" + dev.jkbuild.task.ClasspathFingerprint.entry(classes));
-                            case "runtime-classpath", "runtime-entries" ->
+                            case "runtime-classpath" ->
                                 tokens.add("cp:" + dev.jkbuild.task.ClasspathFingerprint.of(classpath));
+                            case "runtime-entries" -> {
+                                tokens.add("cp:" + dev.jkbuild.task.ClasspathFingerprint.of(classpath));
+                                for (var pe : prodEntries) {
+                                    if (pe.container() != null) {
+                                        tokens.add("container:" + pe.fileName() + ":"
+                                                + dev.jkbuild.task.ClasspathFingerprint.entry(pe.container()));
+                                    }
+                                }
+                            }
                             case "config" -> tokens.add("config:" + PluginBuild.configToken(active.config()));
                             default -> {
                                 if (input.startsWith("step:")) {
@@ -1683,6 +1695,9 @@ public final class BuildPipeline {
                             .layout(classes, in.dir(), scratch)
                             .javaHome(javaHome)
                             .classpath(classpath);
+                    for (var pe : prodEntries) {
+                        specWriter.entry(pe.fileName(), pe.jar(), pe.snapshot(), pe.container());
+                    }
                     for (var tool : toolExtras.entrySet()) {
                         specWriter.extra(tool.getKey(), tool.getValue());
                     }
@@ -1729,15 +1744,16 @@ public final class BuildPipeline {
         String startClass = resolvedMain(project, in.dir(), classes);
 
         // Coordinate-named runtime entries + the SBOM components they imply.
-        record Entry(String fileName, Path jar, boolean snapshot) {}
+        record Entry(String fileName, Path jar, boolean snapshot, Path container) {}
         List<Entry> entries = new ArrayList<>();
         List<CycloneDxSbom.Component> sbomComponents = new ArrayList<>();
         for (ClasspathResolver.Entry entry : resolver.entriesFor(lock, ClasspathResolver.RUNTIME)) {
             Lockfile.Artifact a = entry.artifact();
             entries.add(new Entry(
-                    a.moduleArtifact() + "-" + a.version() + ".jar",
+                    a.moduleArtifact() + "-" + a.version() + (entry.container() != null ? ".aar" : ".jar"),
                     entry.jar(),
-                    a.version().contains("SNAPSHOT")));
+                    a.version().contains("SNAPSHOT"),
+                    entry.container()));
             sbomComponents.add(new CycloneDxSbom.Component(
                     a.moduleGroup(), a.moduleArtifact(), a.version(), a.checksumHex()));
         }
@@ -1746,7 +1762,9 @@ public final class BuildPipeline {
         // Action key from the declared inputs + facts — any config, classes, dependency-set,
         // step-output, extra-artifact, or manifest change re-packages; nothing else does.
         List<Path> entryJars = new ArrayList<>(entries.size());
-        for (Entry e : entries) entryJars.add(e.jar());
+        for (Entry e : entries) {
+            if (e.jar() != null) entryJars.add(e.jar());
+        }
         List<String> tokens = new ArrayList<>();
         for (String input : decls.packager().inputs()) {
             switch (input) {
@@ -1789,7 +1807,7 @@ public final class BuildPipeline {
                 .layout(classes, in.dir(), layout.moduleTargetDir().resolve("plugin"))
                 .javaHome(ctx.require(JAVA_HOME))
                 .artifact(jarPath);
-        for (Entry e : entries) spec.entry(e.fileName(), e.jar(), e.snapshot());
+        for (Entry e : entries) spec.entry(e.fileName(), e.jar(), e.snapshot(), e.container());
         for (var e : extras.entrySet()) spec.extra(e.getKey(), e.getValue());
         spec.extra("sbom", sbomFile);
         for (PluginBuild.StepDecl step : decls.steps()) {
@@ -1797,6 +1815,12 @@ public final class BuildPipeline {
             if (Files.isDirectory(scratch)) spec.stepOutput(step.name(), scratch);
         }
         Path specFile = spec.write();
+        // A stale conventional sibling from an earlier run must never survive a re-package.
+        String staleName = jarPath.getFileName().toString();
+        int staleDot = staleName.lastIndexOf('.');
+        if (staleDot > 0 && !staleName.endsWith(".jar")) {
+            Files.deleteIfExists(jarPath.resolveSibling(staleName.substring(0, staleDot) + ".jar"));
+        }
         try {
             PluginBuild.runWorker(active, in.cache(), specFile, ctx::label);
         } catch (IOException e) {
@@ -1810,7 +1834,18 @@ public final class BuildPipeline {
             throw new IOException(
                     "plugin packager " + decls.packager().name() + " reported success but produced no " + jarPath);
         }
-        storePackaged(in.cache(), pkgTask, pkgKey, tokens, jarPath.getParent(), List.of(jarPath));
+        // A container packager (an AAR) may also emit the conventional classes jar next to the
+        // main artifact — the host-classpath view workspace siblings compile against. Both cache
+        // under the same key so a hit restores the pair.
+        List<Path> produced = new ArrayList<>();
+        produced.add(jarPath);
+        String artifactName = jarPath.getFileName().toString();
+        int dot = artifactName.lastIndexOf('.');
+        if (dot > 0 && !artifactName.endsWith(".jar")) {
+            Path conventional = jarPath.resolveSibling(artifactName.substring(0, dot) + ".jar");
+            if (Files.isRegularFile(conventional)) produced.add(conventional);
+        }
+        storePackaged(in.cache(), pkgTask, pkgKey, tokens, jarPath.getParent(), produced);
         ctx.put(JAR_PATH, jarPath);
         ctx.progress(1);
     }
@@ -2375,7 +2410,8 @@ public final class BuildPipeline {
         List<String> names = dev.jkbuild.plugin.manifest.PluginContributions.providedClasspath(project, in.dir());
         if (names.isEmpty()) return List.of();
         try {
-            java.util.Map<String, Path> fetched = PluginBuild.fetchStepDependencies(project, in.dir(), cas);
+            java.util.Map<String, Path> fetched = PluginBuild.fetchStepDependencies(
+                    project, in.dir(), cas, PluginBuild.sdkPins(in.lockFile()));
             List<Path> out = new ArrayList<>();
             for (String name : names) {
                 Path path = fetched.get(name);

@@ -142,11 +142,34 @@ public final class PluginManifests {
     private static PluginManifest.Packaging parsePackaging(TomlParseResult result, String displayPath) {
         TomlTable packaging = result.getTable("packaging");
         if (packaging == null) return null;
+        List<PluginManifest.Packaging.Variant> variants = new ArrayList<>();
+        var variantArray = packaging.getArray("variant");
+        if (variantArray != null) {
+            for (int i = 0; i < variantArray.size(); i++) {
+                TomlTable v = variantArray.getTable(i);
+                if (v == null) continue;
+                TomlTable when = v.getTable("when");
+                if (when == null || when.getString("config") == null || when.getString("equals") == null) {
+                    throw new JkBuildParseException(displayPath
+                            + ".packaging.variant requires when = { config = ..., equals = ... } — packaging"
+                            + " resolves before any classpath exists, so only config predicates apply");
+                }
+                variants.add(new PluginManifest.Packaging.Variant(
+                        new PluginManifest.Condition.ConfigEquals(
+                                when.getString("config"), when.getString("equals")),
+                        parsePackagingTable(v, displayPath, List.of())));
+            }
+        }
+        return parsePackagingTable(packaging, displayPath, variants);
+    }
+
+    private static PluginManifest.Packaging parsePackagingTable(
+            TomlTable packaging, String displayPath, List<PluginManifest.Packaging.Variant> variants) {
         String execMode = packaging.getString("exec-mode");
         if (execMode == null) execMode = "classpath";
-        if (!List.of("jar", "classpath", "binary", "device").contains(execMode)) {
+        if (!List.of("jar", "classpath", "binary", "device", "none").contains(execMode)) {
             throw new JkBuildParseException(
-                    displayPath + ".packaging.exec-mode must be jar, classpath, binary, or device — got: "
+                    displayPath + ".packaging.exec-mode must be jar, classpath, binary, device, or none — got: "
                             + execMode);
         }
         String deployVerb = packaging.getString("deploy-verb");
@@ -169,7 +192,8 @@ public final class PluginManifests {
                 Boolean.TRUE.equals(packaging.getBoolean("main-scan")),
                 Boolean.TRUE.equals(packaging.getBoolean("layered-image")),
                 extension,
-                deployVerb == null ? "" : deployVerb);
+                deployVerb == null ? "" : deployVerb,
+                variants);
     }
 
     // ---- [[contribute.*]] — the declarative layer (P2) --------------------------------------

@@ -31,7 +31,8 @@ public record Lockfile(
         String jdk,
         String kotlin,
         List<Artifact> artifacts,
-        List<PluginEntry> plugins) {
+        List<PluginEntry> plugins,
+        List<SdkEntry> sdk) {
 
     public static final int CURRENT_VERSION = 1;
     public static final int MIN_SUPPORTED_VERSION = 1;
@@ -43,6 +44,19 @@ public record Lockfile(
         Objects.requireNonNull(artifacts, "artifacts");
         artifacts = List.copyOf(artifacts);
         plugins = plugins == null ? List.of() : List.copyOf(plugins);
+        sdk = sdk == null ? List.of() : List.copyOf(sdk);
+    }
+
+    /** Back-compat constructor without SDK entries. */
+    public Lockfile(
+            int version,
+            String generatedBy,
+            String resolutionAlgorithm,
+            String jdk,
+            String kotlin,
+            List<Artifact> artifacts,
+            List<PluginEntry> plugins) {
+        this(version, generatedBy, resolutionAlgorithm, jdk, kotlin, artifacts, plugins, List.of());
     }
 
     /** Back-compat constructor without plugin entries. */
@@ -68,12 +82,17 @@ public record Lockfile(
 
     /** Return a copy with the resolved Kotlin compiler version stamped in. */
     public Lockfile withKotlin(String kotlinVersion) {
-        return new Lockfile(version, generatedBy, resolutionAlgorithm, jdk, kotlinVersion, artifacts, plugins);
+        return new Lockfile(version, generatedBy, resolutionAlgorithm, jdk, kotlinVersion, artifacts, plugins, sdk);
     }
 
     /** Return a copy with the given plugin entries (replaces any existing). */
     public Lockfile withPlugins(List<PluginEntry> newPlugins) {
-        return new Lockfile(version, generatedBy, resolutionAlgorithm, jdk, kotlin, artifacts, newPlugins);
+        return new Lockfile(version, generatedBy, resolutionAlgorithm, jdk, kotlin, artifacts, newPlugins, sdk);
+    }
+
+    /** Return a copy with the given provisioned-SDK component pins (replaces any existing). */
+    public Lockfile withSdk(List<SdkEntry> newSdk) {
+        return new Lockfile(version, generatedBy, resolutionAlgorithm, jdk, kotlin, artifacts, plugins, newSdk);
     }
 
     public static Lockfile empty(String jkVersion) {
@@ -82,7 +101,8 @@ public record Lockfile(
 
     /** Empty artifact set with a resolved JDK pinned for the project. */
     public static Lockfile empty(String jkVersion, String jdk) {
-        return new Lockfile(CURRENT_VERSION, "jk " + jkVersion, RESOLUTION_ALGORITHM, jdk, null, List.of(), List.of());
+        return new Lockfile(
+                CURRENT_VERSION, "jk " + jkVersion, RESOLUTION_ALGORITHM, jdk, null, List.of(), List.of(), List.of());
     }
 
     /**
@@ -92,6 +112,19 @@ public record Lockfile(
      * @param version exact version (e.g. {@code "1.2.0"})
      * @param checksum {@code sha256:<hex>} content hash of the plugin JAR
      */
+    /**
+     * A provisioned-SDK component pinned in {@code jk.lock} (android-plan §3.2 — hermetic,
+     * lockfile-pinned SDK components): the sdkmanager-style path and the dotted revision the
+     * build provisioned/observed. Written only for projects whose plugins contribute
+     * {@code sdk-component} step-dependencies.
+     */
+    public record SdkEntry(String component, String revision) {
+        public SdkEntry {
+            Objects.requireNonNull(component, "component");
+            Objects.requireNonNull(revision, "revision");
+        }
+    }
+
     public record PluginEntry(String coordinate, String version, String checksum) {
         public PluginEntry {
             Objects.requireNonNull(coordinate, "coordinate");
@@ -197,7 +230,18 @@ public record Lockfile(
 
         /** This artifact as a jar {@link Coordinate} at its {@link #version} — the single currency. */
         public Coordinate coordinate() {
+            // The optional `path` field carries the artifact's real file name when the packaging
+            // is not a plain jar (an androidx AAR) — the coordinate's type follows it, so every
+            // fetch/locate path (sync, repo store, IDE fetch) asks for the right extension.
+            if (isAar()) {
+                return new Coordinate(moduleGroup(), moduleArtifact(), version, null, "aar");
+            }
             return Coordinate.of(moduleGroup(), moduleArtifact(), version);
+        }
+
+        /** True when the locked artifact is an Android AAR (its {@code path} names one). */
+        public boolean isAar() {
+            return path != null && path.endsWith(".aar");
         }
 
         /** Raw hex SHA-256 of the jar (strips a {@code "sha256:"} prefix), or {@code null}. */

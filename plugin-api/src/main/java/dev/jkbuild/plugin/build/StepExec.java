@@ -23,6 +23,12 @@ public interface StepExec {
     /** The resolved production RUNTIME classpath — {@link In#runtimeClasspath()}. */
     List<Path> runtimeClasspath();
 
+    /**
+     * Lock-ordered production RUNTIME entries with real file names and container dirs —
+     * {@link In#runtimeEntries()}. Empty unless declared.
+     */
+    List<PackageIo.RuntimeEntry> runtimeEntries();
+
     /** The plugin's validated config table. */
     dev.jkbuild.model.PluginConfig config();
 

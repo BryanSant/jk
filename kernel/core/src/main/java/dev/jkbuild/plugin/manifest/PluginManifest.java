@@ -130,7 +130,43 @@ public record PluginManifest(
             boolean mainScan,
             boolean layeredImage,
             String artifactExtension,
-            String deployVerb) {
+            String deployVerb,
+            List<Variant> variants) {
+
+        /** Back-compat: no variants. */
+        public Packaging(
+                String packager,
+                String execMode,
+                boolean selfContained,
+                boolean classesRun,
+                boolean mainScan,
+                boolean layeredImage,
+                String artifactExtension,
+                String deployVerb) {
+            this(
+                    packager, execMode, selfContained, classesRun, mainScan, layeredImage, artifactExtension,
+                    deployVerb, List.of());
+        }
+
+        /**
+         * A config-conditional descriptor override ({@code [[packaging.variant]]} — an [android]
+         * library packages an AAR while an app packages an APK): the first variant whose
+         * {@code when} holds replaces the base descriptor wholesale. Conditions are the same
+         * closed predicate set contributions use (config-shaped only — packaging resolves before
+         * any classpath exists).
+         */
+        public record Variant(Condition when, Packaging packaging) {}
+
+        /** The effective descriptor for {@code config}: the first matching variant, else this. */
+        public Packaging resolve(dev.jkbuild.model.PluginConfig config) {
+            for (Variant v : variants) {
+                if (v.when() instanceof Condition.ConfigEquals c
+                        && c.equals().equals(String.valueOf(config.values().get(c.key())))) {
+                    return v.packaging();
+                }
+            }
+            return this;
+        }
 
         /** Back-compat: the pre-deploy-verb descriptor shape. */
         public Packaging(

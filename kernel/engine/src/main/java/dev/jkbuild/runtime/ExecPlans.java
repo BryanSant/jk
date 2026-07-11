@@ -168,21 +168,36 @@ public final class ExecPlans {
             throws IOException, InterruptedException {
         // A device-mode artifact (an APK) is not host-runnable — the plugin's deploy verb is
         // the run story; a generic java exec would be nonsense.
-        var deviceShape = PluginBuild.shape(project, dir).filter(sh -> "device".equals(sh.execMode()));
+        var hostShape = PluginBuild.shape(project, dir);
+        if (hostShape.map(sh -> "none".equals(sh.execMode())).orElse(false)) {
+            return ExecPlan.error(
+                    dev ? "dev" : "run",
+                    "this project packages a non-executable artifact (exec-mode=none, e.g. a library)"
+                            + " — there is nothing to run");
+        }
+        var deviceShape = hostShape.filter(sh -> "device".equals(sh.execMode()));
         if (deviceShape.isPresent()) {
             String deployVerb = deviceShape.get().deployVerb();
-            if (dev || deployVerb.isEmpty()) {
+            if (deployVerb.isEmpty()) {
                 return ExecPlan.error(
                         dev ? "dev" : "run",
                         "this project packages a device artifact (exec-mode=device) — it cannot run on the"
                                 + " host JVM; deploy it with the owning plugin's verb instead");
             }
-            // jk run on a device artifact = the plugin's declared deploy verb; the client
-            // dispatches it over the plugin-verb protocol (argv stays empty — nothing forks
-            // on the host JVM).
+            // jk run on a device artifact = the plugin's declared deploy verb; jk dev = the same
+            // verb re-dispatched by the client's watch loop after each rebuild (restart-based
+            // redeploy — android-plan §3.4). The client dispatches over the plugin-verb protocol;
+            // argv stays empty (nothing forks on the host JVM).
+            List<String> deviceWatch = new ArrayList<>();
+            if (dev) {
+                if (Files.isDirectory(dir.resolve("src"))) deviceWatch.add(dir.resolve("src").toString());
+                if (Files.isDirectory(dir.resolve("res"))) deviceWatch.add(dir.resolve("res").toString());
+                Path deviceManifest = dir.resolve("AndroidManifest.xml");
+                if (Files.isRegularFile(deviceManifest)) deviceWatch.add(deviceManifest.toString());
+            }
             return new ExecPlan(
-                    null, "run", java.util.List.of(), dir.toString(),
-                    "deploy → device (" + deployVerb + ")", "", false, false, java.util.List.of(),
+                    null, dev ? "dev" : "run", java.util.List.of(), dir.toString(),
+                    "deploy → device (" + deployVerb + ")", "", false, false, deviceWatch,
                     java.util.List.of(), java.util.List.of(), "", "", "", false, "", "", "",
                     java.util.List.of(), java.util.List.of(), deployVerb);
         }
