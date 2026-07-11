@@ -4,11 +4,10 @@ package dev.jkbuild.command;
 import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.run.GoalConsole;
-import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.config.JkConfig;
 import dev.jkbuild.config.Session;
 import dev.jkbuild.config.SessionContext;
-import dev.jkbuild.layout.BuildLayout;
+import dev.jkbuild.engine.protocol.ProjectInfo;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Exit;
@@ -113,14 +112,14 @@ public final class VerifyBuildCommand implements CliCommand {
                 .scope(1)
                 .execute(ctx -> {
                     ctx.label("parse jk.toml + jk.lock");
-                    JkBuild project = JkBuildParser.parse(buildFile);
-                    List<Path> moduleDirs = moduleDirs(dir, project);
+                    ProjectInfo root = projectInfo(dir);
+                    List<Path> moduleDirs = moduleDirs(dir, root);
                     // Every module the user built must have its jar in place before we rebuild —
                     // same "run `jk build` first" gate the single-jar verify always had. The
                     // workspace root itself is exempt (a pure aggregator produces no jar).
                     for (Path moduleDir : moduleDirs) {
-                        if (project.isWorkspaceRoot() && moduleDir.equals(dir)) continue;
-                        Path jar = layoutFor(dir, moduleDir).mainJar();
+                        if (root.workspaceRoot() && moduleDir.equals(dir)) continue;
+                        Path jar = Path.of(projectInfo(moduleDir).mainJarPath());
                         if (!Files.exists(jar)) {
                             ctx.error("missing-jar", "no existing jar at " + jar + " — run `jk build` first.");
                             throw new RuntimeException("missing existing jar");
@@ -225,7 +224,11 @@ public final class VerifyBuildCommand implements CliCommand {
      * docs/engine.md}).
      */
     private static void buildScratch(Path scratch, Path cache, ErrorSink errors) throws Exception {
-        JkBuild scratchBuild = JkBuildParser.parse(scratch.resolve("jk.toml"));
+        // The parse feeds only the in-process test path; the hosted engine re-parses entryDir
+        // itself (the build request serializes entryDir, not the model — thin client).
+        JkBuild scratchBuild = engineDisabledForTests()
+                ? dev.jkbuild.cli.engine.InProcessEngine.require().parseBuild(scratch.resolve("jk.toml"))
+                : null;
         var request = new WorkspaceRequest(
                 scratch,
                 scratchBuild,
@@ -308,19 +311,40 @@ public final class VerifyBuildCommand implements CliCommand {
      * The directories whose artifacts get compared: the project itself for a plain project; for a
      * workspace root, the root (in case it carries its own sources) plus every declared module.
      */
-    private static List<Path> moduleDirs(Path dir, JkBuild project) {
-        if (!project.isWorkspaceRoot()) return List.of(dir);
+    private static List<Path> moduleDirs(Path dir, ProjectInfo root) {
+        if (!root.workspaceRoot()) return List.of(dir);
         List<Path> dirs = new ArrayList<>();
         dirs.add(dir);
-        for (String module : project.workspace().modules()) {
+        for (String module : root.moduleDirs()) {
             dirs.add(dir.resolve(module).normalize());
         }
         return dirs;
     }
 
-    /** The layout for one module, single-project and workspace-module alike. */
-    private static BuildLayout layoutFor(Path root, Path moduleDir) throws IOException {
-        return BuildLayout.of(root, moduleDir, JkBuildParser.parse(moduleDir.resolve("jk.toml")));
+    /** One module's jar-family artifact paths (main/shadow/sources/javadoc), engine-computed. */
+    private static Path[] artifactPaths(Path moduleDir) throws IOException {
+        ProjectInfo info = projectInfo(moduleDir);
+        return new Path[] {
+            Path.of(info.mainJarPath()),
+            Path.of(info.shadowJarPath()),
+            Path.of(info.sourcesJarPath()),
+            Path.of(info.javadocJarPath()),
+        };
+    }
+
+    /** The engine's project summary for {@code dir}; throws with the engine's message on error. */
+    private static ProjectInfo projectInfo(Path dir) throws IOException {
+        try {
+            ProjectInfo info = engineDisabledForTests()
+                    ? dev.jkbuild.cli.engine.InProcessEngine.require().projectInfo(dir)
+                    : dev.jkbuild.cli.engine.EngineClient.projectInfo(dev.jkbuild.engine.EnginePaths.current(), dir);
+            if (info.error() != null) throw new IOException(info.error());
+            return info;
+        } catch (IOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IOException(String.valueOf(e.getMessage()));
+        }
     }
 
     /**
@@ -331,23 +355,23 @@ public final class VerifyBuildCommand implements CliCommand {
     private static List<Comparison> compareArtifacts(Path dir, Path scratch, VerifyPlan plan) throws IOException {
         List<Comparison> comparisons = new ArrayList<>();
         for (Path moduleDir : plan.moduleDirs()) {
-            BuildLayout existing = layoutFor(dir, moduleDir);
+            Path[] existing = artifactPaths(moduleDir);
             Path scratchModule = scratch.resolve(dir.relativize(moduleDir));
-            BuildLayout rebuilt = layoutFor(scratch, scratchModule);
+            Path[] rebuilt = artifactPaths(scratchModule);
             comparisons.addAll(compareModule(dir, existing, rebuilt));
         }
         return comparisons;
     }
 
     /** Pair up one module's artifacts by kind; include a pair when either side produced the file. */
-    private static List<Comparison> compareModule(Path displayRoot, BuildLayout existing, BuildLayout rebuilt)
+    private static List<Comparison> compareModule(Path displayRoot, Path[] existing, Path[] rebuilt)
             throws IOException {
         List<Comparison> out = new ArrayList<>();
         Path[][] pairs = {
-            {existing.mainJar(), rebuilt.mainJar()},
-            {existing.shadowJar(), rebuilt.shadowJar()},
-            {existing.sourcesJar(), rebuilt.sourcesJar()},
-            {existing.javadocJar(), rebuilt.javadocJar()},
+            {existing[0], rebuilt[0]},
+            {existing[1], rebuilt[1]},
+            {existing[2], rebuilt[2]},
+            {existing[3], rebuilt[3]},
         };
         for (Path[] pair : pairs) {
             String existingHash = hashIfPresent(pair[0]);
