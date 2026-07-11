@@ -48,7 +48,9 @@ public final class ImageBuilder {
             String version,
             String mainClass,
             Path mainJar,
-            List<Path> dependencyJars) {
+            List<Path> dependencyJars,
+            List<Path> snapshotJars,
+            Path classesDir) {
 
         public Plan {
             Objects.requireNonNull(config, "config");
@@ -57,6 +59,20 @@ public final class ImageBuilder {
             Objects.requireNonNull(mainClass, "mainClass");
             Objects.requireNonNull(mainJar, "mainJar");
             dependencyJars = List.copyOf(dependencyJars);
+            snapshotJars = snapshotJars == null ? List.of() : List.copyOf(snapshotJars);
+            // classesDir nullable: set = classes-dir layout (Spring Boot layer mapping),
+            // null = classic jar-on-classpath layout.
+        }
+
+        /** Back-compat constructor: classic layout (main jar + one dependency layer). */
+        public Plan(
+                ImageConfig config,
+                String artifact,
+                String version,
+                String mainClass,
+                Path mainJar,
+                List<Path> dependencyJars) {
+            this(config, artifact, version, mainClass, mainJar, dependencyJars, List.of(), null);
         }
     }
 
@@ -119,14 +135,27 @@ public final class ImageBuilder {
             throw new IOException("invalid base image: " + cfg.base(), e);
         }
 
-        // Layer 1 — dependency jars (rarely change).
+        // Layer 1 — release dependency jars (change least often).
         if (!plan.dependencyJars().isEmpty()) {
             builder = builder.addLayer(plan.dependencyJars(), AbsoluteUnixPath.get("/app/libs"));
         }
-        // Layer 2 — main jar.
-        builder = builder.addLayer(List.of(plan.mainJar()), AbsoluteUnixPath.get("/app/classpath"));
+        // Layer 2 — SNAPSHOT dependency jars (their own layer: they churn while releases don't,
+        // so a snapshot bump never invalidates the big release-deps layer). Boot layer mapping.
+        if (!plan.snapshotJars().isEmpty()) {
+            builder = builder.addLayer(plan.snapshotJars(), AbsoluteUnixPath.get("/app/libs"));
+        }
+        // Layer 3 — the application: either exploded classes (Boot layer mapping — the
+        // most-frequently-changing bytes ride the smallest layer) or the classic main jar.
+        String appClasspath;
+        if (plan.classesDir() != null) {
+            builder = builder.addFileEntriesLayer(classesLayer(plan.classesDir()));
+            appClasspath = "/app/classes:/app/libs/*";
+        } else {
+            builder = builder.addLayer(List.of(plan.mainJar()), AbsoluteUnixPath.get("/app/classpath"));
+            appClasspath = "/app/classpath/*:/app/libs/*";
+        }
 
-        // Entrypoint: java -cp /app/classpath/*:/app/libs/* <main>
+        // Entrypoint: java -cp <app classpath> <main>
         List<String> entrypoint = new ArrayList<>();
         entrypoint.add("java");
         if (!cfg.env().isEmpty()) {
@@ -137,7 +166,7 @@ public final class ImageBuilder {
             }
         }
         entrypoint.add("-cp");
-        entrypoint.add("/app/classpath/*:/app/libs/*");
+        entrypoint.add(appClasspath);
         entrypoint.add(plan.mainClass());
         builder = builder.setEntrypoint(entrypoint);
 
@@ -183,6 +212,28 @@ public final class ImageBuilder {
         } catch (RegistryException | ExecutionException | CacheDirectoryCreationException e) {
             throw new IOException("image build failed: " + e.getMessage(), e);
         }
+    }
+
+    /**
+     * The exploded app-classes layer at {@code /app/classes}, with jk's freshness stamps
+     * ({@code .jstamp}/{@code .kstamp}/{@code .test-stamp}) filtered out — build-host metadata,
+     * never image content. Files sorted for deterministic layer bytes.
+     */
+    private static com.google.cloud.tools.jib.api.buildplan.FileEntriesLayer classesLayer(Path classesDir)
+            throws IOException {
+        var layer = com.google.cloud.tools.jib.api.buildplan.FileEntriesLayer.builder().setName("classes");
+        AbsoluteUnixPath target = AbsoluteUnixPath.get("/app/classes");
+        List<Path> files = new ArrayList<>();
+        try (var stream = java.nio.file.Files.walk(classesDir)) {
+            stream.filter(java.nio.file.Files::isRegularFile).forEach(files::add);
+        }
+        files.sort(java.util.Comparator.comparing(p -> classesDir.relativize(p).toString()));
+        for (Path file : files) {
+            String rel = classesDir.relativize(file).toString().replace(java.io.File.separatorChar, '/');
+            if (rel.endsWith(".jstamp") || rel.endsWith(".kstamp") || rel.endsWith(".test-stamp")) continue;
+            layer.addEntry(file, target.resolve(rel));
+        }
+        return layer.build();
     }
 
     private static RegistryImage registryTarget(Plan plan) throws InvalidImageReferenceException {

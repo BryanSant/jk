@@ -217,9 +217,17 @@ latency is bounded by javac on the delta, with no Gradle configuration phase in 
    `include-tools = false`. `jk run` uses the classes dir + RUN classpath so dev-scope
    deps (DevTools) ride locally while staying out of the jar. Verified: `java -jar`
    boots and serves; `-Djarmode=tools list-layers` prints the four default layers;
-   devtools absent from `BOOT-INF/lib`. Remaining in this phase: build-info emission,
-   SBOM embed, layered jib `[image]` mapping, `jk install` launcher for Boot apps
-   (`-jar`, not `-cp`).
+   devtools absent from `BOOT-INF/lib`.
+   **DONE (2026-07-10).** Completed: `build-info = true` emits
+   `BOOT-INF/classes/META-INF/build-info.properties` (no `build.time` —
+   reproducibility); a CycloneDX SBOM generated from the lockfile is always embedded at
+   `BOOT-INF/classes/META-INF/sbom/application.cdx.json` (+ `Sbom-*` manifest headers);
+   `jk install` links the self-contained boot jar and launches with `-jar`; `jk image`
+   maps Boot layers to OCI layers (release deps / snapshot deps / exploded classes,
+   entrypoint `java -cp /app/classes:/app/libs/*`) — a code change churns a KB-scale
+   layer instead of the whole fat jar. Verified in podman. Also verified against Boot
+   **4.1.0** (spring-core 7.0.8 line): lock, build, `java -jar`, jarmode list-layers +
+   extract.
 3. **AOT & native** — spring-aot/compile-aot phases; `jk native` integration +
    reachability-metadata repo; `jk package --aot-cache` ladder. *Exit: native webmvc app
    builds and serves; AOT-cache startup ≈ Boot's documented ~1.5×.*

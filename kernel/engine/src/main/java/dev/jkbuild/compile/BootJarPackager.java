@@ -57,6 +57,11 @@ public final class BootJarPackager {
     private static final String LAYERS_IDX = "BOOT-INF/layers.idx";
     private static final String LOADER_PREFIX = "org/";
 
+    /** Classpath locations Boot's own readers use ({@code BuildProperties}, the sbom actuator). */
+    static final String BUILD_INFO_ENTRY = CLASSES_PREFIX + "META-INF/build-info.properties";
+
+    static final String SBOM_ENTRY = CLASSES_PREFIX + "META-INF/sbom/application.cdx.json";
+
     public Path packageBootJar(BootJarRequest request) throws IOException {
         Files.createDirectories(request.outputJar().getParent());
         Manifest manifest = buildManifest(request);
@@ -83,17 +88,43 @@ public final class BootJarPackager {
                 writeEntryStreaming(jos, CLASSES_PREFIX + name, Files.newInputStream(file), epoch);
             }
 
-            // 3. Nested dependency jars — STORED with a precomputed CRC.
+            // 3. Boot-read metadata under BOOT-INF/classes/META-INF (classpath-visible:
+            //    BuildProperties and the sbom actuator resolve these as resources).
+            if (!request.buildInfo().isEmpty()) {
+                writeParentDirs(jos, BUILD_INFO_ENTRY, epoch, dirsWritten);
+                writeEntry(jos, BUILD_INFO_ENTRY, buildInfoProperties(request.buildInfo()), epoch);
+            }
+            if (request.sbom() != null) {
+                writeParentDirs(jos, SBOM_ENTRY, epoch, dirsWritten);
+                writeEntry(jos, SBOM_ENTRY, request.sbom(), epoch);
+            }
+
+            // 4. Nested dependency jars — STORED with a precomputed CRC.
             writeDir(jos, LIB_PREFIX, epoch, dirsWritten);
             for (Lib lib : request.libs()) {
                 writeStored(jos, LIB_PREFIX + lib.fileName(), lib.jar(), epoch);
             }
 
-            // 4. The two index files the manifest points at.
+            // 5. The two index files the manifest points at.
             writeEntry(jos, CLASSPATH_IDX, classpathIndex(request.libs()), epoch);
             writeEntry(jos, LAYERS_IDX, layersIndex(request.libs()), epoch);
         }
         return request.outputJar();
+    }
+
+    /**
+     * {@code build-info.properties} the way Boot's {@code BuildProperties} reads it: {@code build.}
+     * prefixed keys, sorted for reproducibility. {@code build.time} is deliberately absent unless
+     * the caller supplies one — a wall-clock stamp would churn an otherwise-identical jar.
+     */
+    private static byte[] buildInfoProperties(Map<String, String> info) {
+        StringBuilder sb = new StringBuilder();
+        info.keySet().stream().sorted().forEach(k -> sb.append("build.")
+                .append(k)
+                .append('=')
+                .append(info.get(k))
+                .append('\n'));
+        return sb.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8);
     }
 
     /** {@code classpath.idx}: one {@code - "BOOT-INF/lib/…jar"} line per nested jar, in order. */
@@ -229,6 +260,10 @@ public final class BootJarPackager {
         attrs.put(new Attributes.Name("Spring-Boot-Lib"), LIB_PREFIX);
         attrs.put(new Attributes.Name("Spring-Boot-Classpath-Index"), CLASSPATH_IDX);
         attrs.put(new Attributes.Name("Spring-Boot-Layers-Index"), LAYERS_IDX);
+        if (request.sbom() != null) {
+            attrs.put(new Attributes.Name("Sbom-Format"), "CycloneDX");
+            attrs.put(new Attributes.Name("Sbom-Location"), SBOM_ENTRY);
+        }
         for (Map.Entry<String, String> e : request.attributes().entrySet()) {
             if (e.getKey() == null || e.getKey().isBlank() || e.getValue() == null) continue;
             attrs.put(new Attributes.Name(e.getKey()), e.getValue());
@@ -267,7 +302,13 @@ public final class BootJarPackager {
         }
     }
 
-    /** Inputs for {@link #packageBootJar(BootJarRequest)}. */
+    /**
+     * Inputs for {@link #packageBootJar(BootJarRequest)}.
+     *
+     * @param buildInfo {@code build-info.properties} keys (without the {@code build.} prefix);
+     *     empty map = no entry
+     * @param sbom CycloneDX JSON bytes (see {@link CycloneDxSbom}); {@code null} = no SBOM
+     */
     public record BootJarRequest(
             Path classesDir,
             List<Lib> libs,
@@ -276,6 +317,8 @@ public final class BootJarPackager {
             String startClass,
             String bootVersion,
             Map<String, String> attributes,
+            Map<String, String> buildInfo,
+            byte[] sbom,
             long timestampEpochSeconds) {
 
         public BootJarRequest {
@@ -286,6 +329,22 @@ public final class BootJarPackager {
             Objects.requireNonNull(bootVersion, "bootVersion");
             libs = libs == null ? List.of() : dedupeFileNames(libs);
             attributes = attributes == null ? Map.of() : Map.copyOf(attributes);
+            buildInfo = buildInfo == null ? Map.of() : Map.copyOf(buildInfo);
+        }
+
+        /** Back-compat constructor: no build-info, no SBOM. */
+        public BootJarRequest(
+                Path classesDir,
+                List<Lib> libs,
+                Path loaderJar,
+                Path outputJar,
+                String startClass,
+                String bootVersion,
+                Map<String, String> attributes,
+                long timestampEpochSeconds) {
+            this(
+                    classesDir, libs, loaderJar, outputJar, startClass, bootVersion, attributes, Map.of(), null,
+                    timestampEpochSeconds);
         }
 
         /**

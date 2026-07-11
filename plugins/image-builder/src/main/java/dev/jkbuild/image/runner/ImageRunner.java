@@ -67,11 +67,12 @@ public final class ImageRunner implements Plugin {
             return 2;
         }
 
-        Path mainJar = null, tarball = null;
+        Path mainJar = null, tarball = null, classesDir = null;
         String artifact = null, version = null, mainClass = null;
         String base = null, user = null, registry = null, tag = null;
         String mode = null, dockerExecutable = null;
         List<Path> depJars = new ArrayList<>();
+        List<Path> snapshotJars = new ArrayList<>();
         List<Integer> ports = new ArrayList<>();
         Map<String, String> env = new HashMap<>();
         Map<String, String> labels = new HashMap<>();
@@ -98,6 +99,8 @@ public final class ImageRunner implements Plugin {
                     case "MODE" -> mode = val;
                     case "DOCKER_EXECUTABLE" -> dockerExecutable = val;
                     case "DEP_JAR" -> depJars.add(Path.of(val));
+                    case "SNAPSHOT_DEP_JAR" -> snapshotJars.add(Path.of(val));
+                    case "CLASSES_DIR" -> classesDir = Path.of(val);
                     case "PLATFORM" -> platforms.add(val);
                     case "PORT" -> {
                         try {
@@ -128,7 +131,8 @@ public final class ImageRunner implements Plugin {
         ImageConfig config = new ImageConfig(
                 base, user, ports, env, labels, registry, tag,
                 platforms.isEmpty() ? null : platforms, mainClass, dockerExecutable, null);
-        ImageBuilder.Plan plan = new ImageBuilder.Plan(config, artifact, version, mainClass, mainJar, depJars);
+        ImageBuilder.Plan plan =
+                new ImageBuilder.Plan(config, artifact, version, mainClass, mainJar, depJars, snapshotJars, classesDir);
         Path dockerExePath = dockerExecutable != null ? Path.of(dockerExecutable) : null;
 
         try {

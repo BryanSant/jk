@@ -4,6 +4,7 @@ package dev.jkbuild.runtime;
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.compile.BootJarPackager;
 import dev.jkbuild.compile.ClasspathResolver;
+import dev.jkbuild.compile.CycloneDxSbom;
 import dev.jkbuild.compile.CompileRequest;
 import dev.jkbuild.compile.CompileResult;
 import dev.jkbuild.compile.JarPackager;
@@ -1460,12 +1461,15 @@ public final class BuildPipeline {
         }
 
         List<BootJarPackager.Lib> libs = new ArrayList<>();
+        List<CycloneDxSbom.Component> sbomComponents = new ArrayList<>();
         for (ClasspathResolver.Entry entry : resolver.entriesFor(lock, ClasspathResolver.RUNTIME)) {
             Lockfile.Artifact a = entry.artifact();
             libs.add(new BootJarPackager.Lib(
                     a.moduleArtifact() + "-" + a.version() + ".jar",
                     entry.jar(),
                     a.version().contains("SNAPSHOT")));
+            sbomComponents.add(new CycloneDxSbom.Component(
+                    a.moduleGroup(), a.moduleArtifact(), a.version(), a.checksumHex()));
         }
 
         // Loader (exploded at the jar root) and, unless opted out, the jarmode-tools
@@ -1478,13 +1482,26 @@ public final class BuildPipeline {
                     toolsName, fetchBootArtifact(repos, "spring-boot-jarmode-tools", boot.version()), false));
         }
 
+        // Build-info (opt-in): the coordinates BuildProperties surfaces via /actuator/info.
+        // No build.time — reproducibility wins; Boot handles its absence.
+        Map<String, String> buildInfo = boot.buildInfo()
+                ? Map.of(
+                        "group", project.project().group(),
+                        "artifact", project.project().name(),
+                        "name", project.project().name(),
+                        "version", project.project().version())
+                : Map.of();
+        // SBOM (always on): free and deterministic straight from the lockfile.
+        byte[] sbom = CycloneDxSbom.write(
+                project.project().group(), project.project().name(), project.project().version(), sbomComponents);
+
         List<Path> libJars = new ArrayList<>(libs.size());
         for (BootJarPackager.Lib lib : libs) libJars.add(lib.jar());
         List<String> tokens = List.of(
                 "classes:" + dev.jkbuild.task.ClasspathFingerprint.entry(classes),
                 "libs:" + dev.jkbuild.task.ClasspathFingerprint.of(libJars),
                 "start:" + startClass,
-                "boot:" + boot.version() + ":tools=" + boot.includeTools(),
+                "boot:" + boot.version() + ":tools=" + boot.includeTools() + ":info=" + boot.buildInfo(),
                 "manifest:" + project.manifest());
         String pkgTask = ActionKey.qualifiedTaskId("package-jar", jarPath);
         String pkgKey = ActionKey.forArtifact(pkgTask, dev.jkbuild.util.JkVersion.VERSION, tokens);
@@ -1497,7 +1514,16 @@ public final class BuildPipeline {
         ctx.label("package " + jarPath.getFileName() + " (boot)");
         new BootJarPackager()
                 .packageBootJar(new BootJarPackager.BootJarRequest(
-                        classes, libs, loaderJar, jarPath, startClass, boot.version(), project.manifest(), 0L));
+                        classes,
+                        libs,
+                        loaderJar,
+                        jarPath,
+                        startClass,
+                        boot.version(),
+                        project.manifest(),
+                        buildInfo,
+                        sbom,
+                        0L));
         storePackaged(in.cache(), pkgTask, pkgKey, tokens, jarPath.getParent(), List.of(jarPath));
         ctx.put(JAR_PATH, jarPath);
         ctx.progress(1);

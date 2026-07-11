@@ -2,6 +2,7 @@
 package dev.jkbuild.runtime;
 
 import dev.jkbuild.cache.Cas;
+import dev.jkbuild.compile.ClasspathResolver;
 import dev.jkbuild.config.ImageConfigParser;
 import dev.jkbuild.config.SessionContext;
 import dev.jkbuild.config.WorkspaceLoader;
@@ -53,6 +54,9 @@ public final class ImageGoals {
 
     @SuppressWarnings("rawtypes")
     private static final GoalKey<List> DEP_JARS = GoalKey.of("dep-jars", List.class);
+
+    @SuppressWarnings("rawtypes")
+    private static final GoalKey<List> SNAPSHOT_JARS = GoalKey.of("snapshot-jars", List.class);
 
     public static final GoalKey<String> IMAGE_REF = GoalKey.of("image-ref", String.class);
 
@@ -115,7 +119,19 @@ public final class ImageGoals {
                             ctx.error("no-main", "no main class — pass --main, set image.main, or set project.main.");
                             throw new RuntimeException("missing main class");
                         }
-                        ctx.put(DEP_JARS, loadDependencyJars(projectDir, cache));
+                        if (project.isSpringBoot()) {
+                            // Boot layer mapping (spring-boot plan §3.6): production RUNTIME
+                            // deps only, snapshots split into their own layer, app classes
+                            // exploded — the layer cadence matches how the bytes actually change.
+                            List<Path> releases = new ArrayList<>();
+                            List<Path> snapshots = new ArrayList<>();
+                            splitBootDependencyJars(projectDir, cache, releases, snapshots);
+                            ctx.put(DEP_JARS, releases);
+                            ctx.put(SNAPSHOT_JARS, snapshots);
+                        } else {
+                            ctx.put(DEP_JARS, loadDependencyJars(projectDir, cache));
+                            ctx.put(SNAPSHOT_JARS, List.of());
+                        }
                     }
                     ctx.progress(1);
                 })
@@ -152,6 +168,10 @@ public final class ImageGoals {
 
                     @SuppressWarnings("unchecked")
                     List<Path> depJars = (List<Path>) ctx.require(DEP_JARS);
+                    @SuppressWarnings("unchecked")
+                    List<Path> snapshotJars =
+                            (List<Path>) ctx.get(SNAPSHOT_JARS).orElse(List.of());
+                    Path classesDir = project.isSpringBoot() ? layout.classesDir() : null;
 
                     String chosen = resolveMainClass(mainClass, config, project, projectDir);
 
@@ -167,6 +187,8 @@ public final class ImageGoals {
                         List<String> tokens = List.of(
                                 "mainjar:" + ClasspathFingerprint.entry(layout.mainJar()),
                                 "deps:" + ClasspathFingerprint.of(depJars),
+                                "snapshots:" + ClasspathFingerprint.of(snapshotJars),
+                                "classes:" + (classesDir == null ? "" : ClasspathFingerprint.entry(classesDir)),
                                 "main:" + chosen,
                                 "cfg:" + imageConfigToken(config),
                                 "worker:" + WorkerJar.IMAGE_BUILDER.artifactId() + ":" + JkVersion.VERSION);
@@ -195,7 +217,9 @@ public final class ImageGoals {
                                 project.project().name(), project.project().version()));
                     }
                     try {
-                        String ref = runImageWorker(cache, project, layout, config, chosen, depJars, tarballPath);
+                        String ref = runImageWorker(
+                                cache, project, layout, config, chosen, depJars, snapshotJars, classesDir,
+                                tarballPath);
                         ctx.put(IMAGE_REF, ref);
                     } catch (RuntimeException e) {
                         ctx.error("image", e.getMessage());
@@ -281,6 +305,8 @@ public final class ImageGoals {
             ImageConfig config,
             String chosen,
             List<Path> depJars,
+            List<Path> snapshotJars,
+            Path classesDir,
             Path tarballPath) {
         try {
             Path workerJar = WorkerJar.IMAGE_BUILDER.locate(new Cas(cache));
@@ -303,6 +329,8 @@ public final class ImageGoals {
             for (var e : config.labels().entrySet()) lines.add("LABEL " + e.getKey() + "=" + e.getValue());
             for (String plat : config.platforms()) lines.add("PLATFORM " + plat);
             for (Path dep : depJars) lines.add("DEP_JAR " + dep.toAbsolutePath());
+            for (Path dep : snapshotJars) lines.add("SNAPSHOT_DEP_JAR " + dep.toAbsolutePath());
+            if (classesDir != null) lines.add("CLASSES_DIR " + classesDir.toAbsolutePath());
 
             Path spec = Files.createTempFile("jk-image-", ".spec");
             try {
@@ -450,6 +478,16 @@ public final class ImageGoals {
         if (project.mainClass() != null) {
             return project.mainClass();
         }
+        // Boot fallback: the compiled classes carry exactly one main (same scan the boot-jar
+        // packager uses for Start-Class) — [application].main stays optional.
+        if (project.isSpringBoot()) {
+            try {
+                return dev.jkbuild.layout.MainClassScanner.scanUnique(
+                        BuildLayout.of(projectDir, project).classesDir());
+            } catch (IOException ignored) {
+                // fall through to the workspace scan / null
+            }
+        }
         // Workspace fallback: scan modules for an [application].main.
         if (!project.isWorkspaceRoot()) return null;
         try {
@@ -468,6 +506,23 @@ public final class ImageGoals {
         } catch (Exception ignored) {
         }
         return null;
+    }
+
+    /**
+     * Boot layer mapping: production RUNTIME deps only (dev/test-dev never enter the image),
+     * SNAPSHOT versions split into their own layer, paths from the named-repo store when
+     * available so entries keep readable names.
+     */
+    private static void splitBootDependencyJars(Path projectDir, Path cache, List<Path> releases, List<Path> snapshots)
+            throws IOException {
+        Path lockPath = projectDir.resolve("jk.lock");
+        if (!Files.exists(lockPath)) return;
+        Lockfile lock = LockfileReader.read(lockPath);
+        ClasspathResolver resolver = new ClasspathResolver(new Cas(cache));
+        for (ClasspathResolver.Entry entry : resolver.entriesFor(lock, ClasspathResolver.RUNTIME)) {
+            if (!Files.exists(entry.jar())) continue;
+            (entry.artifact().version().contains("SNAPSHOT") ? snapshots : releases).add(entry.jar());
+        }
     }
 
     private static List<Path> loadDependencyJars(Path projectDir, Path cache) throws IOException {

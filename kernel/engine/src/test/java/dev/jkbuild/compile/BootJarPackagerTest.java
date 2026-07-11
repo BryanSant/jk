@@ -119,6 +119,56 @@ class BootJarPackagerTest {
         }
     }
 
+    @Test
+    void embeds_build_info_and_sbom_when_supplied(@TempDir Path tmp) throws Exception {
+        Path classes = Files.createDirectories(tmp.resolve("classes"));
+        Path loader = writeJar(tmp.resolve("loader.jar"), "org/springframework/boot/loader/launch/JarLauncher.class");
+        byte[] sbom = CycloneDxSbom.write(
+                "com.example",
+                "shop",
+                "1.0.0",
+                List.of(new CycloneDxSbom.Component("org.springframework", "spring-core", "7.0.1", "abc123")));
+
+        Path out = tmp.resolve("app.jar");
+        new BootJarPackager()
+                .packageBootJar(new BootJarPackager.BootJarRequest(
+                        classes,
+                        List.of(),
+                        loader,
+                        out,
+                        "com.example.App",
+                        "4.0.0",
+                        Map.of(),
+                        Map.of("group", "com.example", "artifact", "shop", "name", "shop", "version", "1.0.0"),
+                        sbom,
+                        0L));
+
+        try (JarFile jar = new JarFile(out.toFile())) {
+            String buildInfo = new String(
+                    jar.getInputStream(jar.getEntry("BOOT-INF/classes/META-INF/build-info.properties"))
+                            .readAllBytes(),
+                    StandardCharsets.UTF_8);
+            assertThat(buildInfo)
+                    .isEqualTo("build.artifact=shop\n"
+                            + "build.group=com.example\n"
+                            + "build.name=shop\n"
+                            + "build.version=1.0.0\n");
+
+            String sbomJson = new String(
+                    jar.getInputStream(jar.getEntry("BOOT-INF/classes/META-INF/sbom/application.cdx.json"))
+                            .readAllBytes(),
+                    StandardCharsets.UTF_8);
+            assertThat(sbomJson).contains("\"bomFormat\": \"CycloneDX\"");
+            assertThat(sbomJson).contains("\"purl\": \"pkg:maven/org.springframework/spring-core@7.0.1\"");
+            assertThat(sbomJson).contains("\"content\": \"abc123\"");
+
+            Attributes attrs = jar.getManifest().getMainAttributes();
+            assertThat(attrs.getValue("Sbom-Format")).isEqualTo("CycloneDX");
+            assertThat(attrs.getValue("Sbom-Location"))
+                    .isEqualTo("BOOT-INF/classes/META-INF/sbom/application.cdx.json");
+        }
+    }
+
     /** A minimal jar containing one empty entry (+ nothing else). */
     private static Path writeJar(Path path, String entryName) throws IOException {
         try (JarOutputStream jos = new JarOutputStream(Files.newOutputStream(path))) {

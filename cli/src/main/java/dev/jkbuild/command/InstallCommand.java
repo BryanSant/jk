@@ -367,10 +367,15 @@ public final class InstallCommand implements CliCommand {
         Path libDir = libDir();
 
         // Validate up front: a non-native application needs a main class for its
-        // launcher. (Done here, not in a phase, so we fail before building.)
+        // launcher. (Done here, not in a phase, so we fail before building.) Spring Boot
+        // projects are exempt — the boot jar carries Start-Class in its manifest (resolved
+        // by scan at package time) and the launcher runs it with -jar.
         JkBuild proj = JkBuildParser.parse(projectDir.resolve("jk.toml"));
         var pj = proj.project();
-        if (proj.isApplication() && proj.nativeMode() == JkBuild.NativeMode.DISABLED && proj.mainClass() == null) {
+        if (proj.isApplication()
+                && proj.nativeMode() == JkBuild.NativeMode.DISABLED
+                && proj.mainClass() == null
+                && !proj.isSpringBoot()) {
             CliOutput.err("jk install: application project at "
                     + dev.jkbuild.cli.PathDisplay.styledRaw(projectDir)
                     + " has no `main` class set in [application]");
@@ -480,6 +485,14 @@ public final class InstallCommand implements CliCommand {
             Path dest = libDir.resolve(layout.shadowJar().getFileName().toString());
             Linking.linkOrCopy(layout.shadowJar(), dest);
             return AppLauncher.install(binDir, javaHome, bin, mainCls, List.of(dest));
+        }
+
+        // Spring Boot jar → self-contained executable layout (deps nested under
+        // BOOT-INF/lib, entry point in the manifest) — one jar, launched with -jar.
+        if (project.isSpringBoot()) {
+            Path dest = libDir.resolve(layout.mainJar().getFileName().toString());
+            Linking.linkOrCopy(layout.mainJar(), dest);
+            return AppLauncher.installJar(binDir, javaHome, bin, dest);
         }
 
         // Normal jar → app jar + hard-linked runtime dependency jars in lib.
