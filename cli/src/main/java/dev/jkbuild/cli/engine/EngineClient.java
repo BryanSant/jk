@@ -531,6 +531,19 @@ public final class EngineClient {
         return EngineResolveAdapter.runSync(paths, req, listenerFactory, fetchedOut, upToDateOut);
     }
 
+    /** Everything an engine-hosted {@code jk outdated} needs — mirrors {@code OutdatedCommand}'s local fields. */
+    public record OutdatedRequest(Path entryDir, Path cache, java.net.URI repoUrl, boolean offline, boolean force) {}
+
+    /**
+     * Report declared dependencies with newer versions available against the engine ({@code jk
+     * outdated}) — one synchronous request, one {@link dev.jkbuild.engine.protocol.OutdatedReport}
+     * back. Read-only: the engine enumerates versions and writes nothing.
+     */
+    public static dev.jkbuild.engine.protocol.OutdatedReport runOutdated(
+            EnginePaths.Paths paths, OutdatedRequest req) throws IOException {
+        return EngineResolveAdapter.runOutdated(paths, req);
+    }
+
     // ---- hosted worker verbs (Wave 2 of the slim client) ---------------------------------------
 
     /** Everything an engine-hosted {@code jk audit} needs — mirrors {@code AuditCommand}'s local fields. */

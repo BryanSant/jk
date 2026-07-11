@@ -189,6 +189,17 @@ public final class EngineProtocol {
     public static final String PROJECT_INFO_ACK = "project-info-ack";
 
     /**
+     * Client → server: report declared dependencies whose repos offer a newer version than {@code
+     * jk.lock} pins ({@code jk outdated}). Read-only — enumerates versions only, never writes the
+     * lockfile. Synchronous inline; answered with one {@link #OUTDATED_ACK} carrying {@link
+     * OutdatedReport}.
+     */
+    public static final String OUTDATED_REQUEST = "outdated-request";
+
+    /** Server → client, terminal for {@link #OUTDATED_REQUEST}. */
+    public static final String OUTDATED_ACK = "outdated-ack";
+
+    /**
      * Client → server: compute a complete execution plan ({@link ExecPlan}) for {@code dir} —
      * run/dev argv, install layout, aot-cache layout. The engine decides (classpaths, artifact
      * preference, gates); the client executes. Synchronous inline; answered with one {@link
@@ -1407,6 +1418,15 @@ public final class EngineProtocol {
     public static String projectInfoRequest(String dir, String cache) {
         return "{\"t\":\"" + PROJECT_INFO_REQUEST + "\",\"dir\":" + Ndjson.quote(dir)
                 + ",\"cache\":" + Ndjson.quote(cache) + "}";
+    }
+
+    public static String outdatedRequest(String dir, String cache, String repoUrl, boolean offline, boolean force) {
+        return "{\"t\":\"" + OUTDATED_REQUEST + "\",\"dir\":" + Ndjson.quote(dir)
+                + ",\"cache\":" + Ndjson.quote(cache)
+                + ",\"repoUrl\":" + (repoUrl == null ? "null" : Ndjson.quote(repoUrl))
+                + ",\"offline\":" + offline
+                + ",\"force\":" + force
+                + "}";
     }
 
     public static String execPlanRequest(

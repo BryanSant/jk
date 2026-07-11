@@ -37,6 +37,7 @@ import dev.jkbuild.command.LockCommand;
 import dev.jkbuild.command.MvnCommand;
 import dev.jkbuild.command.NativeCommand;
 import dev.jkbuild.command.NewCommand;
+import dev.jkbuild.command.OutdatedCommand;
 import dev.jkbuild.command.PublishCommand;
 import dev.jkbuild.command.RemoveCommand;
 import dev.jkbuild.command.RepoCommand;
@@ -95,6 +96,7 @@ public final class CommandDispatch {
             new AddCommand(),
             new RemoveCommand(),
             new UpdateCommand(),
+            new OutdatedCommand(),
             new DoctorCommand(),
             new DenyCommand(),
             new VerifyBuildCommand(),

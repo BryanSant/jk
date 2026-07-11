@@ -580,6 +580,14 @@ public final class InProcessEngineImpl implements InProcessEngine {
     }
 
 
+    // ---- jk outdated's test-only in-process path (identical computation via OutdatedGoals) -----
+
+    @Override
+    public dev.jkbuild.engine.protocol.OutdatedReport outdatedInProcess(
+            Path dir, Path cache, java.net.URI repoUrl) {
+        return dev.jkbuild.runtime.OutdatedGoals.compute(dir, cache, repoUrl);
+    }
+
     // ---- jk update's test-only in-process path (identical pipeline via LockGoals) --------------
 
     @Override

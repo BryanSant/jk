@@ -251,6 +251,10 @@ public interface InProcessEngine {
             dev.jkbuild.cli.GlobalOptions global)
             throws Exception;
 
+    /** {@code jk outdated}'s in-process report (test-only; mirrors the hosted OUTDATED_REQUEST). */
+    dev.jkbuild.engine.protocol.OutdatedReport outdatedInProcess(
+            java.nio.file.Path dir, java.nio.file.Path cache, java.net.URI repoUrl);
+
     /** {@code jk sync}'s in-process goal (test-only; mirrors the hosted request, prune spawn included). */
     int syncInProcess(
             java.nio.file.Path dir,

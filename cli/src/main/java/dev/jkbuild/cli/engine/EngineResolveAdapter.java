@@ -42,6 +42,36 @@ final class EngineResolveAdapter {
 
     private EngineResolveAdapter() {}
 
+    /**
+     * Run {@code jk outdated} against the engine: one synchronous request, one {@code outdated-ack}
+     * carrying the {@link dev.jkbuild.engine.protocol.OutdatedReport} back. Read-only — no cascade,
+     * no goal stream.
+     */
+    static dev.jkbuild.engine.protocol.OutdatedReport runOutdated(
+            EnginePaths.Paths paths, EngineClient.OutdatedRequest req) throws IOException {
+        EngineClient.ensureRunning(paths, Jk.VERSION);
+        try (SocketChannel ch = EngineClient.connect(paths.socket())) {
+            BufferedWriter writer =
+                    new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
+            BufferedReader reader =
+                    new BufferedReader(new InputStreamReader(Channels.newInputStream(ch), StandardCharsets.UTF_8));
+            writer.write(EngineProtocol.outdatedRequest(
+                    req.entryDir().toString(),
+                    req.cache().toString(),
+                    req.repoUrl() != null ? req.repoUrl().toString() : null,
+                    req.offline(),
+                    req.force()));
+            writer.write('\n');
+            writer.flush();
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (!EngineProtocol.OUTDATED_ACK.equals(EngineProtocol.typeOf(line))) continue;
+                return dev.jkbuild.engine.protocol.OutdatedReport.decode(line);
+            }
+            throw new IOException("jk engine: disconnected before answering the outdated request");
+        }
+    }
+
     /** Run {@code jk lock}'s cascade against the engine, driving {@code handler}. */
     static EngineClient.LockOutcome runLock(
             EnginePaths.Paths paths, EngineClient.LockRequest req, EngineClient.LockHandler handler)
