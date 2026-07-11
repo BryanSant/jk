@@ -65,4 +65,15 @@ class TrustedSourcesTest {
                 """);
         assertThat(TrustedSources.load(state).isTrusted("https://acme.dev/tool.jar")).isTrue();
     }
+
+    @Test
+    void single_line_array_and_ipv6_brackets_load(@TempDir Path state) throws Exception {
+        Files.writeString(state.resolve("trusted-sources.toml"), """
+                sources = ["https://[::1]:8443/tools/", "https://acme.dev/"]
+                """);
+        var trusted = TrustedSources.load(state);
+        assertThat(trusted.list())
+                .containsExactly("https://[::1]:8443/tools/", "https://acme.dev/");
+        assertThat(trusted.isTrusted("https://acme.dev/x.jar")).isTrue();
+    }
 }

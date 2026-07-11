@@ -40,10 +40,31 @@ public final class TrustedSources {
         Path file = stateDir.resolve(FILE_NAME);
         List<String> prefixes = new ArrayList<>();
         if (Files.isRegularFile(file)) {
-            var result = org.tomlj.Toml.parse(Files.readString(file, StandardCharsets.UTF_8));
-            var array = result.getArrayOrEmpty("sources");
-            for (int i = 0; i < array.size(); i++) {
-                prefixes.add(array.getString(i));
+            // Line reader, not tomlj: this gate runs client-side before every tool fetch
+            // (thin-client plan — the trust decision must not require a TOML parser), and
+            // the file is jk-managed: `sources = [` … one quoted prefix per line … `]`,
+            // with the single-line array form tolerated for hand edits.
+            boolean inSources = false;
+            for (String raw : Files.readAllLines(file, StandardCharsets.UTF_8)) {
+                String line = raw.strip();
+                if (line.isEmpty() || line.startsWith("#")) continue;
+                if (!inSources) {
+                    if (!line.startsWith("sources")) continue;
+                    int eq = line.indexOf('=');
+                    if (eq < 0) continue;
+                    line = line.substring(eq + 1).strip();
+                    if (line.startsWith("[")) line = line.substring(1);
+                    inSources = true;
+                }
+                // The array closes at a `]` outside quotes (IPv6 prefixes carry `]` inside).
+                int close = line.indexOf(']', line.lastIndexOf('"') + 1);
+                boolean closes = close >= 0;
+                if (closes) line = line.substring(0, close);
+                var m = QUOTED.matcher(line);
+                while (m.find()) {
+                    prefixes.add(m.group(1).replace("\\\"", "\"").replace("\\\\", "\\"));
+                }
+                if (closes) break;
             }
         }
         return new TrustedSources(file, prefixes);
