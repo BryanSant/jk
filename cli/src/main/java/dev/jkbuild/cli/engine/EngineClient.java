@@ -298,6 +298,15 @@ public final class EngineClient {
     }
 
     /**
+     * Thin-client deny check: the [deny] policy is user-authored jk.toml and therefore parses
+     * engine-side only; one synchronous DENY_CHECK round trip returns the violations.
+     */
+    public static dev.jkbuild.engine.protocol.DenyReport denyCheck(
+            dev.jkbuild.engine.EnginePaths.Paths paths, java.nio.file.Path dir) throws java.io.IOException {
+        return EngineBuildListenerAdapter.denyCheck(paths, dir);
+    }
+
+    /**
      * Thin-client execution plan (docs/thin-client-plan.md §2.2): the engine decides run/dev
      * argv, install layout, or aot-cache layout; the caller executes.
      */

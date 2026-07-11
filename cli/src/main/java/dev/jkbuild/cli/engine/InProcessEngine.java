@@ -59,6 +59,9 @@ public interface InProcessEngine {
     /** Thin-client edit twin: returns {changedAsString, errorOrNull}. */
     String[] edit(java.nio.file.Path file, String op, java.util.List<String> args);
 
+    /** Thin-client deny-check twin — the in-process counterpart of DENY_CHECK_REQUEST. */
+    dev.jkbuild.engine.protocol.DenyReport denyCheck(java.nio.file.Path dir);
+
     /** A single hosted goal's outcome: the goal result plus the test counts (null when no tests ran). */
     record GoalOutcome(dev.jkbuild.run.GoalResult result, dev.jkbuild.run.TestSummary testResult) {}
 

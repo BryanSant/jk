@@ -452,6 +452,7 @@ public final class EngineServer implements AutoCloseable {
                     case EngineProtocol.PROJECT_INFO_REQUEST -> handleProjectInfoRequest(line, writer);
                     case EngineProtocol.EXEC_PLAN_REQUEST -> handleExecPlanRequest(line, writer);
                     case EngineProtocol.EDIT_REQUEST -> handleEditRequest(line, writer);
+                    case EngineProtocol.DENY_CHECK_REQUEST -> handleDenyCheckRequest(line, writer);
                     default -> {
                         /* unknown type — forward-compatible no-op */
                     }
@@ -966,6 +967,17 @@ public final class EngineServer implements AutoCloseable {
      * install layout, aot-cache layout) — the engine decides, the client executes. Synchronous,
      * read-only, inline.
      */
+    /** Answer {@link EngineProtocol#DENY_CHECK_REQUEST}: policy parse + lock read + check, engine-side. */
+    private void handleDenyCheckRequest(String requestLine, BufferedWriter writer) {
+        dev.jkbuild.engine.protocol.DenyReport report;
+        try {
+            report = dev.jkbuild.runtime.PolicyOps.denyCheck(Path.of(Ndjson.str(requestLine, "dir")));
+        } catch (RuntimeException e) {
+            report = dev.jkbuild.engine.protocol.DenyReport.error(String.valueOf(e.getMessage()));
+        }
+        sendQuiet(writer, report.encode());
+    }
+
     /** Answer {@link EngineProtocol#EDIT_REQUEST}: one named jk.toml edit, engine-side. */
     private void handleEditRequest(String requestLine, BufferedWriter writer) {
         dev.jkbuild.runtime.EditOps.Result result;

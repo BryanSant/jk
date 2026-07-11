@@ -210,6 +210,17 @@ public final class EngineProtocol {
     public static final String EDIT_ACK = "edit-ack";
 
     /**
+     * Client → server: parse the {@code [deny]} policy from {@code dir}'s jk.toml, read its lock,
+     * and check it — the {@code jk deny} verb, engine-hosted so a user-authored policy block is
+     * never interpreted by a client-side scanner (a fail-soft misread would silently permit).
+     * Synchronous inline; answered with one {@link #DENY_CHECK_ACK} carrying {@link DenyReport}.
+     */
+    public static final String DENY_CHECK_REQUEST = "deny-check-request";
+
+    /** Server → client, terminal for {@link #DENY_CHECK_REQUEST}. */
+    public static final String DENY_CHECK_ACK = "deny-check-ack";
+
+    /**
      * Server → client: the forecast — {@code dirtyDirs} (module dirs predicted to do real work),
      * {@code lockStale} (the merged workspace lock no longer reflects its manifests), {@code empty}
      * (the workspace declares no modules), and {@code errors} (graph resolution; non-empty ⇒ no
@@ -1261,6 +1272,10 @@ public final class EngineProtocol {
                 + ",\"rerun\":"
                 + rerun
                 + "}";
+    }
+
+    public static String denyCheckRequest(String dir) {
+        return "{\"t\":\"" + DENY_CHECK_REQUEST + "\",\"dir\":" + Ndjson.quote(dir) + "}";
     }
 
     public static String editRequest(String file, String op, java.util.List<String> args) {
