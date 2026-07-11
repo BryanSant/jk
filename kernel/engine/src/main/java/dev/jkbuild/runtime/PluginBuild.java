@@ -36,21 +36,34 @@ public final class PluginBuild {
 
     private PluginBuild() {}
 
-    /** An installed plugin with a code layer, active on this project (owns a declared table). */
-    public record Active(PluginManifest manifest, PluginConfig config) {}
+    /**
+     * An installed plugin with a code layer, active on this project (owns a declared table).
+     * {@code declaration} is the matching {@code [plugins]} entry for third-party plugins and
+     * null for built-ins — it carries the coordinate the trust gate and jar lookup key on.
+     */
+    public record Active(
+            PluginManifest manifest,
+            PluginConfig config,
+            Path moduleDir,
+            dev.jkbuild.model.PluginDeclaration declaration) {}
 
-    public static Optional<Active> activeCodePlugin(JkBuild project) {
-        for (PluginManifest m : PluginTableRegistry.manifests()) {
+    public static Optional<Active> activeCodePlugin(JkBuild project, Path moduleDir) {
+        for (PluginManifest m : PluginTableRegistry.manifestsFor(moduleDir, project.plugins())) {
             if (m.code() == null) continue;
             Optional<PluginConfig> config = project.pluginConfig(m.id());
-            if (config.isPresent()) return Optional.of(new Active(m, config.get()));
+            if (config.isPresent()) {
+                dev.jkbuild.model.PluginDeclaration declaration = PluginTableRegistry.isBuiltIn(m.id())
+                        ? null
+                        : PluginManifestOps.declarationOf(moduleDir, project, m.id()).orElse(null);
+                return Optional.of(new Active(m, config.get(), moduleDir, declaration));
+            }
         }
         return Optional.empty();
     }
 
     /** The active packager's static artifact descriptor, or empty — manifest data, no fork. */
-    public static Optional<PluginManifest.Packaging> shape(JkBuild project) {
-        for (PluginManifest m : PluginTableRegistry.manifests()) {
+    public static Optional<PluginManifest.Packaging> shape(JkBuild project, Path moduleDir) {
+        for (PluginManifest m : PluginTableRegistry.manifestsFor(moduleDir, project.plugins())) {
             if (m.packaging() == null) continue;
             if (project.pluginConfig(m.id()).isPresent()) return Optional.of(m.packaging());
         }
@@ -350,6 +363,41 @@ public final class PluginBuild {
         }
     }
 
+    /**
+     * The jar a plugin's code hooks fork: first-party plugins name a registered {@link WorkerJar};
+     * a third-party plugin IS its worker — the [plugins]-declared, lock-pinned, SHA-verified jar
+     * from the CAS — and it forks only once its coordinate is trusted (plugin-refactor Posture A:
+     * the engine refuses untrusted third-party code with the {@code jk trust plugin} remediation).
+     */
+    private static Path workerJarFor(Active active, Path cache) throws IOException {
+        if (PluginTableRegistry.isBuiltIn(active.manifest().id())) {
+            WorkerJar workerJar = WorkerJar.byArtifactId(active.manifest().code().worker())
+                    .orElseThrow(() -> new IllegalStateException(
+                            "plugin " + active.manifest().id() + " names unregistered worker "
+                                    + active.manifest().code().worker()));
+            return workerJar.locate(new Cas(cache));
+        }
+        dev.jkbuild.model.PluginDeclaration declaration = active.declaration();
+        if (declaration == null) {
+            throw new IOException("plugin " + active.manifest().id()
+                    + " has no matching [plugins] declaration — declare it (or run `jk sync`)");
+        }
+        dev.jkbuild.tool.TrustedPlugins trust;
+        try {
+            trust = dev.jkbuild.tool.TrustedPlugins.load(dev.jkbuild.util.JkDirs.state());
+        } catch (IOException e) {
+            trust = null;
+        }
+        if (trust == null || !trust.isTrusted(declaration.coordinate())) {
+            throw new IOException("plugin " + declaration.coordinateWithVersion()
+                    + " is not trusted to run build code on this machine.\n"
+                    + "Trust it first: jk trust plugin " + declaration.coordinate());
+        }
+        return PluginManifestOps.jarFor(active.moduleDir(), declaration, cache)
+                .orElseThrow(() -> new IOException("plugin " + declaration.coordinateWithVersion()
+                        + " is not in the local cache — run `jk sync` first"));
+    }
+
     private static void appendConfig(List<String> lines, PluginConfig config) {
         for (Map.Entry<String, Object> e : config.values().entrySet()) {
             Object v = e.getValue();
@@ -403,11 +451,7 @@ public final class PluginBuild {
      */
     public static List<String> runWorker(Active active, Path cache, Path spec, java.util.function.Consumer<String> onLabel)
             throws IOException, InterruptedException {
-        WorkerJar workerJar = WorkerJar.byArtifactId(active.manifest().code().worker())
-                .orElseThrow(() -> new IllegalStateException(
-                        "plugin " + active.manifest().id() + " names unregistered worker "
-                                + active.manifest().code().worker()));
-        Path jar = workerJar.locate(new Cas(cache));
+        Path jar = workerJarFor(active, cache);
         List<String> collected = new ArrayList<>();
         String[] error = new String[1];
         WorkerClient client = new WorkerClient(active.manifest().code().protocolPrefix())

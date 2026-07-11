@@ -217,6 +217,13 @@ public final class LockGoals {
                                             pd.coordinateWithVersion() + " not found in any repo"));
                             entries.add(new Lockfile.PluginEntry(
                                     pd.coordinate(), pd.version(), "sha256:" + fetched.fetched().sha256()));
+                            try {
+                                PluginManifestOps.materialize(
+                                        dir, fetched.fetched().sha256(), fetched.fetched().cachePath());
+                            } catch (java.io.IOException e) {
+                                ctx.output("note: " + pd.coordinate() + " has no jk-plugin.toml — locked, but"
+                                        + " it will not own a jk.toml table");
+                            }
                         } catch (Exception e) {
                             ctx.error("plugin", pd.coordinate() + " — " + e.getMessage());
                             throw new RuntimeException(e);

@@ -187,7 +187,7 @@ public final class ExecPlans {
         // (e.g. Boot's BOOT-INF nesting) never lands on a -cp.
         List<Path> classpath = new ArrayList<>();
         boolean classesEntry =
-                dev || PluginBuild.shape(project).map(sh -> sh.classesRun()).orElse(false);
+                dev || PluginBuild.shape(project, dir).map(sh -> sh.classesRun()).orElse(false);
         classpath.add(classesEntry ? layout.classesDir() : layout.mainJar());
 
         boolean devtoolsInjected = false;
@@ -291,7 +291,7 @@ public final class ExecPlans {
         Path launcherPath = binDir.resolve(AppLauncher.launcherFileName(bin));
 
         // Shadow / self-contained packager output: one jar in lib.
-        var shape = PluginBuild.shape(project);
+        var shape = PluginBuild.shape(project, dir);
         boolean selfContained = shape.map(sh -> sh.selfContained()).orElse(false);
         if (project.shadowJar() || selfContained) {
             Path src = project.shadowJar() ? layout.shadowJar() : layout.mainJar();
@@ -369,7 +369,7 @@ public final class ExecPlans {
         }
         // A self-contained executable jar (Boot-style) trains via -jar; anything else names
         // its main. The ExecPlan field keeps its wire name (`boot`) — it means exactly this.
-        boolean executableJar = PluginBuild.shape(project)
+        boolean executableJar = PluginBuild.shape(project, dir)
                 .map(sh -> sh.selfContained() && "jar".equals(sh.execMode()))
                 .orElse(false);
         String mainClass = "";

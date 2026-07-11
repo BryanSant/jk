@@ -333,6 +333,13 @@ public final class BuildPipeline {
         JkBuild parsedBuild = null;
         try {
             var jkBuild = JkBuildParser.parse(in.buildFile());
+            // Third-party plugin pre-flight: extract any locked-but-unmaterialized manifests
+            // from the CAS and re-parse, so a declared plugin's table validates (and its
+            // contributions apply) on the very first build after `jk sync`.
+            if (!jkBuild.plugins().isEmpty()
+                    && PluginManifestOps.ensureMaterialized(in.dir(), in.cache())) {
+                jkBuild = JkBuildParser.reparse(in.buildFile());
+            }
             parsedBuild = jkBuild;
             var project = jkBuild.project();
             CompileSupport.Languages langs = CompileSupport.resolveLanguages(project, in.dir());
@@ -355,7 +362,7 @@ public final class BuildPipeline {
         PluginBuild.Active pluginActive = null;
         PluginBuild.Declarations pluginDecls = null;
         if (parsedBuild != null) {
-            var activeOpt = PluginBuild.activeCodePlugin(parsedBuild);
+            var activeOpt = PluginBuild.activeCodePlugin(parsedBuild, in.dir());
             if (activeOpt.isPresent()) {
                 try {
                     BuildLayout layout = BuildLayout.of(in.dir(), parsedBuild);
@@ -1534,7 +1541,7 @@ public final class BuildPipeline {
                     Path classes = ctx.require(MAIN_CLASSES);
                     Path javaHome = ctx.require(JAVA_HOME);
                     Path scratch = PluginBuild.stepScratch(layout, step.name());
-                    String startClass = resolvedMain(project, classes);
+                    String startClass = resolvedMain(project, in.dir(), classes);
 
                     List<Path> classpath =
                             PluginBuild.productionClasspath(in.dir(), in.cache(), in.lockFile(), project);
@@ -1618,7 +1625,7 @@ public final class BuildPipeline {
         Lockfile lock = ctx.require(LOCKFILE);
         BuildLayout layout = ctx.require(LAYOUT);
         ClasspathResolver resolver = new ClasspathResolver(cas);
-        String startClass = resolvedMain(project, classes);
+        String startClass = resolvedMain(project, in.dir(), classes);
 
         // Coordinate-named runtime entries + the SBOM components they imply.
         record Entry(String fileName, Path jar, boolean snapshot) {}
@@ -1707,10 +1714,10 @@ public final class BuildPipeline {
     }
 
     /** The resolved application entry point: declared, else the unique compiled main (when scannable). */
-    private static String resolvedMain(JkBuild project, Path classes) throws IOException {
+    private static String resolvedMain(JkBuild project, Path moduleDir, Path classes) throws IOException {
         String main = project.mainClass();
         if ((main == null || main.isBlank())
-                && PluginBuild.shape(project).map(sh -> sh.mainScan()).orElse(false)) {
+                && PluginBuild.shape(project, moduleDir).map(sh -> sh.mainScan()).orElse(false)) {
             main = dev.jkbuild.layout.MainClassScanner.scanUnique(classes);
         }
         return main;
@@ -2074,7 +2081,7 @@ public final class BuildPipeline {
                             ? mainOverride
                             : (nativeCfg.mainClass() != null ? nativeCfg.mainClass() : project.mainClass());
                     if ((mainClass == null || mainClass.isBlank())
-                            && PluginBuild.shape(project).map(sh -> sh.mainScan()).orElse(false)) {
+                            && PluginBuild.shape(project, dir).map(sh -> sh.mainScan()).orElse(false)) {
                         // main-scan packagers carry exactly one main — same scan packaging used.
                         mainClass = dev.jkbuild.layout.MainClassScanner.scanUnique(layout.classesDir());
                     }
@@ -2098,13 +2105,13 @@ public final class BuildPipeline {
                     Path javaHome = javaHomeEarly; // resolved above in fail-fast check
 
                     List<Path> classpath = new ArrayList<>();
-                    if (PluginBuild.shape(project).map(sh -> sh.classesRun()).orElse(false)) {
+                    if (PluginBuild.shape(project, dir).map(sh -> sh.classesRun()).orElse(false)) {
                         // A classes-run packager's jar is not classpath-able (e.g. Boot's
                         // BOOT-INF nesting) — native-image gets the exploded classes plus
                         // whatever the plugin's steps contributed (generated classes +
                         // META-INF/native-image hints), produced just before this phase.
                         classpath.add(layout.classesDir());
-                        var activeOpt = PluginBuild.activeCodePlugin(project);
+                        var activeOpt = PluginBuild.activeCodePlugin(project, dir);
                         if (activeOpt.isPresent()) {
                             var decls = PluginBuild.declarations(
                                     activeOpt.get(), project, dir, cache, layout.moduleTargetDir());

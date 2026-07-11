@@ -31,7 +31,10 @@ public final class PluginVerbs {
             Path buildFile = dir.resolve("jk.toml");
             if (!Files.isRegularFile(buildFile)) return PluginVerbReport.notFound();
             JkBuild project = JkBuildParser.parse(buildFile);
-            var active = PluginBuild.activeCodePlugin(project).orElse(null);
+            if (!project.plugins().isEmpty() && PluginManifestOps.ensureMaterialized(dir, cache)) {
+                project = JkBuildParser.reparse(buildFile);
+            }
+            var active = PluginBuild.activeCodePlugin(project, dir).orElse(null);
             if (active == null) return PluginVerbReport.notFound();
 
             BuildLayout layout = BuildLayout.of(dir, project);

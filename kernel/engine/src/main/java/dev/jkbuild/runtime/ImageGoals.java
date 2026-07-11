@@ -119,7 +119,7 @@ public final class ImageGoals {
                             ctx.error("no-main", "no main class — pass --main, set image.main, or set project.main.");
                             throw new RuntimeException("missing main class");
                         }
-                        if (PluginBuild.shape(project).map(sh -> sh.layeredImage()).orElse(false)) {
+                        if (PluginBuild.shape(project, projectDir).map(sh -> sh.layeredImage()).orElse(false)) {
                             // Layered-image packagers (spring-boot plan §3.6): production RUNTIME
                             // deps only, snapshots split into their own layer, app classes
                             // exploded — the layer cadence matches how the bytes actually change.
@@ -171,7 +171,7 @@ public final class ImageGoals {
                     @SuppressWarnings("unchecked")
                     List<Path> snapshotJars =
                             (List<Path>) ctx.get(SNAPSHOT_JARS).orElse(List.of());
-                    Path classesDir = PluginBuild.shape(project).map(sh -> sh.layeredImage()).orElse(false)
+                    Path classesDir = PluginBuild.shape(project, projectDir).map(sh -> sh.layeredImage()).orElse(false)
                             ? layout.classesDir()
                             : null;
 
@@ -482,7 +482,7 @@ public final class ImageGoals {
         }
         // main-scan fallback: the compiled classes carry exactly one main (same scan the
         // packager uses for its entry attribute) — [application].main stays optional.
-        if (PluginBuild.shape(project).map(sh -> sh.mainScan()).orElse(false)) {
+        if (PluginBuild.shape(project, projectDir).map(sh -> sh.mainScan()).orElse(false)) {
             try {
                 return dev.jkbuild.layout.MainClassScanner.scanUnique(
                         BuildLayout.of(projectDir, project).classesDir());

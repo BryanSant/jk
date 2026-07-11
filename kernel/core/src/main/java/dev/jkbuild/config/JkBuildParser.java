@@ -107,6 +107,17 @@ public final class JkBuildParser {
         return parsed;
     }
 
+    /**
+     * Drop the memoized parse for {@code file} and parse fresh. Needed when the same bytes now
+     * mean more — plugin-manifest materialization changes which tables validate without touching
+     * jk.toml itself, and the (path, size, mtime) cache key cannot see that.
+     */
+    public static JkBuild reparse(Path file) throws IOException {
+        Path key = file.toAbsolutePath().normalize();
+        PARSE_CACHE.keySet().removeIf(k -> k.path().equals(key));
+        return parse(file);
+    }
+
     public static JkBuild parse(String toml) {
         return parse(toml, LibraryCatalog.layered());
     }

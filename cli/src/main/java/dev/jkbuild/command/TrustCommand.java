@@ -10,6 +10,7 @@ import dev.jkbuild.model.command.GroupCommand;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.model.command.Param;
+import dev.jkbuild.tool.TrustedPlugins;
 import dev.jkbuild.tool.TrustedSources;
 import dev.jkbuild.util.JkDirs;
 import java.io.IOException;
@@ -37,7 +38,7 @@ public final class TrustCommand extends GroupCommand {
 
     @Override
     public List<CliCommand> subcommands() {
-        return List.of(new AddCmd(), new ListCmd(), new RemoveCmd(), new ImportCmd());
+        return List.of(new AddCmd(), new PluginCmd(), new ListCmd(), new RemoveCmd(), new ImportCmd());
     }
 
     private static Path stateDir(Invocation in) {
@@ -84,6 +85,44 @@ public final class TrustCommand extends GroupCommand {
         }
     }
 
+    static final class PluginCmd implements CliCommand {
+        @Override
+        public String name() {
+            return "plugin";
+        }
+
+        @Override
+        public String description() {
+            return "Trust a build plugin's coordinate (group:artifact, or group: for the whole group)";
+        }
+
+        @Override
+        public List<Opt> options() {
+            return List.of(stateDirOpt());
+        }
+
+        @Override
+        public List<Param> parameters() {
+            return List.of(Param.of("coordinate", Arity.ONE, "Plugin coordinate to trust."));
+        }
+
+        @Override
+        public int run(Invocation in) throws IOException {
+            String coordinate = in.positionals().get(0);
+            if (coordinate.contains("://") || !coordinate.contains(":")) {
+                CliOutput.err("jk trust plugin: expected group:artifact (or a group: prefix), got: " + coordinate);
+                return Exit.USAGE;
+            }
+            boolean added = TrustedPlugins.load(stateDir(in)).add(coordinate);
+            if (!GlobalOptions.from(in).outputIsJson()) {
+                CliOutput.out(added
+                        ? "Trusted plugin " + coordinate + " — its build code may now run in worker JVMs"
+                        : coordinate + " is already trusted");
+            }
+            return 0;
+        }
+    }
+
     static final class ListCmd implements CliCommand {
         @Override
         public String name() {
@@ -103,10 +142,13 @@ public final class TrustCommand extends GroupCommand {
         @Override
         public int run(Invocation in) throws IOException {
             List<String> prefixes = TrustedSources.load(stateDir(in)).list();
-            if (prefixes.isEmpty()) {
-                CliOutput.out("No trusted sources. Add one with `jk trust add <url-prefix>`.");
+            List<String> plugins = TrustedPlugins.load(stateDir(in)).list();
+            if (prefixes.isEmpty() && plugins.isEmpty()) {
+                CliOutput.out("No trusted sources. Add one with `jk trust add <url-prefix>`"
+                        + " or `jk trust plugin <coordinate>`.");
             } else {
                 for (String p : prefixes) CliOutput.out(p);
+                for (String p : plugins) CliOutput.out("plugin " + p);
             }
             return 0;
         }
@@ -136,7 +178,8 @@ public final class TrustCommand extends GroupCommand {
         @Override
         public int run(Invocation in) throws IOException {
             String prefix = in.positionals().get(0);
-            boolean removed = TrustedSources.load(stateDir(in)).remove(prefix);
+            boolean removed = TrustedSources.load(stateDir(in)).remove(prefix)
+                    || TrustedPlugins.load(stateDir(in)).remove(prefix);
             if (!removed) {
                 CliOutput.err("jk trust remove: not in the trusted list: " + prefix);
                 return Exit.USAGE;

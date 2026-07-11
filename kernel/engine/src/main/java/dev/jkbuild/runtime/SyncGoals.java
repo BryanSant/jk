@@ -317,6 +317,9 @@ public final class SyncGoals {
                         }
                         ctx.progress(1);
                     }
+                    // Extract the fetched jars' manifests so the very next parse validates
+                    // the plugins' tables (and applies their contributions).
+                    PluginManifestOps.ensureMaterialized(dir, cache);
                 })
                 .build();
 
