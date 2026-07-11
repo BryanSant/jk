@@ -102,10 +102,22 @@ public final class ExecPlans {
                     layoutOf(build, dir, BuildLayout::mainJar),
                     layoutOf(build, dir, BuildLayout::shadowJar),
                     layoutOf(build, dir, BuildLayout::nativeBinary),
-                    layoutOf(build, dir, BuildLayout::nativeLibrary));
+                    layoutOf(build, dir, BuildLayout::nativeLibrary),
+                    pathDeps(build));
         } catch (RuntimeException | IOException e) {
             return ProjectInfo.error(String.valueOf(e.getMessage()));
         }
+    }
+
+    /** Libraries declared as path dependencies — publish/export refuse them (consume-only). */
+    private static List<String> pathDeps(JkBuild build) {
+        List<String> out = new ArrayList<>();
+        for (var byScope : build.dependencies().byScope().entrySet()) {
+            for (var dep : byScope.getValue()) {
+                if (dep.isPath()) out.add(dep.library());
+            }
+        }
+        return out;
     }
 
     private static String layoutOf(

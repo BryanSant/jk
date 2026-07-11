@@ -5,10 +5,9 @@ import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.cli.theme.Coords;
-import dev.jkbuild.config.JkBuildParser;
+import dev.jkbuild.config.RepositoriesScan;
 import dev.jkbuild.credential.RepoCredential;
-import dev.jkbuild.model.JkBuild;
-import dev.jkbuild.model.RepositorySpec;
+import dev.jkbuild.engine.protocol.ProjectInfo;
 import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Exit;
 import dev.jkbuild.model.command.Invocation;
@@ -127,36 +126,36 @@ public final class PublishCommand implements CliCommand {
         }
         Path cache = JkDirs.cache();
 
-        // Client-side parse — DELIBERATE (thin-client exception, docs/thin-client-plan.md):
-        // credential resolution is client-side by design (keychain/env prompts never run in the
-        // engine), and the inline credential can only come from jk.toml; shipping it through a
-        // ProjectInfo ack would put secrets on the wire. The goal's own parse-build phase
+        // Project facts ride PROJECT_INFO (thin client); the inline repository credential is
+        // the DELIBERATE client-side read (docs/thin-client-plan.md): keychain/env prompts never
+        // run in the engine, and secrets never ride the wire — RepositoriesScan reads that one
+        // jk.toml slice with a line scanner, no TOML parser. The goal's own parse-build phase
         // re-parses engine-side for validation either way.
-        JkBuild project;
-        try {
-            project = JkBuildParser.parse(jkBuildPath);
-        } catch (RuntimeException e) {
-            CliOutput.err("jk publish: " + e.getMessage());
+        ProjectInfo info = projectInfo(projectDir);
+        if (info.error() != null) {
+            CliOutput.err("jk publish: " + info.error());
             return Exit.CONFIG;
         }
 
         // Path deps are consume-only (docs/path-source-deps.md): a published POM would
         // reference a coordinate no consumer can resolve. Refuse before any upload —
         // `jk export` warn-and-skips for the same reason.
-        for (var byScope : project.dependencies().byScope().entrySet()) {
-            for (var dep : byScope.getValue()) {
-                if (dep.isPath()) {
-                    CliOutput.err("jk publish: `" + dep.library()
-                            + "` is a path dependency — path deps are consume-only and cannot be"
-                            + " published. Promote it to a [workspace] module or a published"
-                            + " coordinate first.");
-                    return Exit.CONFIG;
-                }
-            }
+        for (String pathDep : info.pathDeps()) {
+            CliOutput.err("jk publish: `" + pathDep
+                    + "` is a path dependency — path deps are consume-only and cannot be"
+                    + " published. Promote it to a [workspace] module or a published"
+                    + " coordinate first.");
+            return Exit.CONFIG;
         }
 
         // Resolve everything env/keychain-shaped here — never inside the engine.
-        RepoCredential cred = resolvePublishCredential(project);
+        RepoCredential cred;
+        try {
+            cred = resolvePublishCredential(jkBuildPath);
+        } catch (RuntimeException e) {
+            CliOutput.err("jk publish: " + e.getMessage());
+            return Exit.CONFIG;
+        }
         String gpgPass =
                 sign ? (keyPassphrase != null ? keyPassphrase : System.getenv("JK_GPG_PASSPHRASE")) : null;
 
@@ -210,16 +209,13 @@ public final class PublishCommand implements CliCommand {
         if (!global.outputIsJson()) {
             String summary = dryRun ? "(dry-run)" : "(" + files + " files)";
             CliOutput.out("Published "
-                    + Coords.gav(
-                            project.project().group(),
-                            project.project().name(),
-                            project.project().version())
+                    + Coords.gav(info.group(), info.name(), info.version())
                     + " " + summary);
         }
         return 0;
     }
 
-    private RepoCredential resolvePublishCredential(JkBuild project) {
+    private RepoCredential resolvePublishCredential(Path jkBuildPath) {
         String user = username != null ? username : System.getenv("PUBLISH_USER");
         if (user != null && !user.isBlank()) {
             String pass = password != null ? password : System.getenv("PUBLISH_PASSWORD");
@@ -228,15 +224,25 @@ public final class PublishCommand implements CliCommand {
         String matchedName = null;
         Optional<RepoCredential> inline = Optional.empty();
         String target = repoUrl.toString();
-        for (RepositorySpec spec : project.repositories()) {
-            String base = spec.url().toString();
+        for (RepositoriesScan.Repo repo : RepositoriesScan.scan(jkBuildPath)) {
+            String base = repo.url();
             String basePrefix = base.endsWith("/") ? base : base + "/";
             if (target.equals(base) || target.startsWith(basePrefix)) {
-                matchedName = spec.name();
-                inline = spec.credential();
+                matchedName = repo.name();
+                inline = repo.credential();
                 break;
             }
         }
         return new RepoCredentialResolver().resolve(matchedName, repoUrl, inline);
+    }
+
+    private static ProjectInfo projectInfo(Path dir) {
+        try {
+            return engineDisabledForTests()
+                    ? dev.jkbuild.cli.engine.InProcessEngine.require().projectInfo(dir)
+                    : dev.jkbuild.cli.engine.EngineClient.projectInfo(dev.jkbuild.engine.EnginePaths.current(), dir);
+        } catch (Exception e) {
+            return ProjectInfo.error(String.valueOf(e.getMessage()));
+        }
     }
 }

@@ -41,7 +41,8 @@ public record ProjectInfo(
         String mainJarPath,
         String shadowJarPath,
         String nativeBinPath,
-        String nativeLibPath) {
+        String nativeLibPath,
+        List<String> pathDeps) {
 
     /** The {@code group:name} display coordinate. */
     public String coord() {
@@ -51,7 +52,7 @@ public record ProjectInfo(
     public static ProjectInfo error(String message) {
         return new ProjectInfo(
                 message, "", "", "", "", 0, false, "", true, false, "", List.of(), false, "", false, "DISABLED",
-                "", false, "", "", "", "", false, false, "", "", "", "", "");
+                "", false, "", "", "", "", false, false, "", "", "", "", "", List.of());
     }
 
     public String encode() {
@@ -85,6 +86,7 @@ public record ProjectInfo(
                 + ",\"shadowJarPath\":" + Ndjson.quote(shadowJarPath)
                 + ",\"nativeBinPath\":" + Ndjson.quote(nativeBinPath)
                 + ",\"nativeLibPath\":" + Ndjson.quote(nativeLibPath)
+                + ",\"pathDeps\":" + EngineProtocol.quoteArray(pathDeps)
                 + "}";
     }
 
@@ -119,7 +121,8 @@ public record ProjectInfo(
                 orEmpty(Ndjson.str(line, "mainJarPath")),
                 orEmpty(Ndjson.str(line, "shadowJarPath")),
                 orEmpty(Ndjson.str(line, "nativeBinPath")),
-                orEmpty(Ndjson.str(line, "nativeLibPath")));
+                orEmpty(Ndjson.str(line, "nativeLibPath")),
+                Ndjson.strArray(line, "pathDeps"));
     }
 
     private static String quoteOrNull(String s) {
