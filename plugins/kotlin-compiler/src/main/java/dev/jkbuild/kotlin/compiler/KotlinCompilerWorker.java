@@ -76,6 +76,27 @@ public final class KotlinCompilerWorker implements Plugin {
             // Destination is a first-class builder param above; everything else jk
             // controls as raw kotlinc arguments parsed into the typed argument model.
             op.getCompilerArguments().applyArgumentStrings(buildArgs(spec));
+            if (!spec.plugins.isEmpty()) {
+                // Compiler plugins must go through the typed COMPILER_PLUGINS argument —
+                // raw -Xplugin/-P strings are silently ignored by the BTA execution path.
+                List<org.jetbrains.kotlin.buildtools.api.arguments.CompilerPlugin> plugins = new ArrayList<>();
+                for (CompileSpec.Plugin plugin : spec.plugins) {
+                    List<org.jetbrains.kotlin.buildtools.api.arguments.CompilerPluginOption> options =
+                            new ArrayList<>();
+                    for (String opt : plugin.options()) {
+                        int eq = opt.indexOf('=');
+                        options.add(new org.jetbrains.kotlin.buildtools.api.arguments.CompilerPluginOption(
+                                eq < 0 ? opt : opt.substring(0, eq), eq < 0 ? "" : opt.substring(eq + 1)));
+                    }
+                    plugins.add(new org.jetbrains.kotlin.buildtools.api.arguments.CompilerPlugin(
+                            plugin.id(), List.of(jarSuffixed(plugin.jar().toPath())), options, java.util.Set.of()));
+                }
+                op.getCompilerArguments()
+                        .set(
+                                org.jetbrains.kotlin.buildtools.api.arguments.CommonCompilerArguments
+                                        .COMPILER_PLUGINS,
+                                plugins);
+            }
 
             if (spec.incremental()) {
                 spec.workingDir.mkdirs();
@@ -181,6 +202,26 @@ public final class KotlinCompilerWorker implements Plugin {
         }
         args.addAll(spec.extraArgs);
         return args;
+    }
+
+    /**
+     * The compiler's plugin loader silently ignores classpath entries that don't end in
+     * {@code .jar} — jk's CAS blob paths carry no extension, so hard-link (or copy) the jar to a
+     * {@code .jar}-suffixed temp file. Silent is the operative word: nothing fails, the plugin
+     * just never runs.
+     */
+    private static java.nio.file.Path jarSuffixed(java.nio.file.Path jar) throws java.io.IOException {
+        if (jar.getFileName().toString().endsWith(".jar")) return jar;
+        java.nio.file.Path suffixed =
+                java.nio.file.Files.createTempFile("jk-kotlin-plugin-", ".jar");
+        java.nio.file.Files.delete(suffixed); // createLink needs the target absent
+        try {
+            java.nio.file.Files.createLink(suffixed, jar);
+        } catch (java.io.IOException | UnsupportedOperationException e) {
+            java.nio.file.Files.copy(jar, suffixed); // cross-device: copy instead
+        }
+        suffixed.toFile().deleteOnExit();
+        return suffixed;
     }
 
     private static String join(List<File> files, String sep) {

@@ -87,6 +87,18 @@ public final class ActionKey {
         args.sort(Comparator.naturalOrder());
         sb.append(String.join(",", args)).append('\n');
 
+        // Compiler plugins reshape the output (all-open/no-arg synthesize members) —
+        // key on id + jar CONTENT + options so a plugin change re-compiles.
+        for (var plugin : request.plugins()) {
+            sb.append("plugin:")
+                    .append(plugin.id())
+                    .append(':')
+                    .append(Hashing.sha256Hex(plugin.jar()))
+                    .append(':')
+                    .append(String.join(",", plugin.options()))
+                    .append('\n');
+        }
+
         List<Path> sortedSources = new ArrayList<>(request.sources());
         sortedSources.sort(Comparator.comparing(Path::toString));
         for (Path src : sortedSources) {

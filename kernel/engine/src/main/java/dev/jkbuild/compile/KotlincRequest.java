@@ -20,6 +20,9 @@ import java.util.Objects;
  *   <li>{@code workingDir} — incremental state dir; {@code null} ⇒ a full (non-incremental)
  *       compile.
  *   <li>{@code extraArgs} — free compiler arguments appended verbatim.
+ *   <li>{@code plugins} — compiler plugins (all-open, no-arg, ...) passed through the Build Tools
+ *       API's typed {@code COMPILER_PLUGINS} argument: raw {@code -Xplugin}/{@code -P} strings in
+ *       {@code extraArgs} are silently ignored by the BTA execution path.
  * </ul>
  */
 public record KotlincRequest(
@@ -31,7 +34,18 @@ public record KotlincRequest(
         Path javaHome,
         Path workingDir,
         Path snapshotDir,
-        List<String> extraArgs) {
+        List<String> extraArgs,
+        List<Plugin> plugins) {
+
+    /** One compiler plugin: its id, jar, and {@code key=value} options. */
+    public record Plugin(String id, Path jar, List<String> options) {
+
+        public Plugin {
+            Objects.requireNonNull(id, "id");
+            Objects.requireNonNull(jar, "jar");
+            options = options == null ? List.of() : List.copyOf(options);
+        }
+    }
 
     public KotlincRequest {
         Objects.requireNonNull(sources, "sources");
@@ -43,12 +57,28 @@ public record KotlincRequest(
         classpath = List.copyOf(classpath);
         workerClasspath = List.copyOf(workerClasspath);
         extraArgs = extraArgs == null ? List.of() : List.copyOf(extraArgs);
+        plugins = plugins == null ? List.of() : List.copyOf(plugins);
         if (jvmTarget < 8) {
             throw new IllegalArgumentException("jvmTarget must be >= 8, got: " + jvmTarget);
         }
         if (workerClasspath.isEmpty()) {
             throw new IllegalArgumentException("workerClasspath must include the worker jar + BTA closure");
         }
+    }
+
+    /** Back-compat constructor: no compiler plugins. */
+    public KotlincRequest(
+            List<Path> sources,
+            List<Path> classpath,
+            Path outputDir,
+            int jvmTarget,
+            List<Path> workerClasspath,
+            Path javaHome,
+            Path workingDir,
+            Path snapshotDir,
+            List<String> extraArgs) {
+        this(sources, classpath, outputDir, jvmTarget, workerClasspath, javaHome, workingDir, snapshotDir, extraArgs,
+                List.of());
     }
 
     public boolean incremental() {
@@ -69,6 +99,7 @@ public record KotlincRequest(
         private Path workingDir;
         private Path snapshotDir;
         private List<String> extraArgs = List.of();
+        private List<Plugin> plugins = List.of();
 
         public Builder sources(List<Path> v) {
             this.sources = v;
@@ -115,6 +146,11 @@ public record KotlincRequest(
             return this;
         }
 
+        public Builder plugins(List<Plugin> v) {
+            this.plugins = v;
+            return this;
+        }
+
         public KotlincRequest build() {
             return new KotlincRequest(
                     sources,
@@ -125,7 +161,8 @@ public record KotlincRequest(
                     javaHome,
                     workingDir,
                     snapshotDir,
-                    extraArgs);
+                    extraArgs,
+                    plugins);
         }
     }
 }

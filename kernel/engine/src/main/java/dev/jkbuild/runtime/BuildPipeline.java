@@ -2006,6 +2006,39 @@ public final class BuildPipeline {
                     } catch (Exception ignored) {
                     }
 
+                    // Reachability metadata (general, not Boot-specific): third-party libs
+                    // publish native-image config to the GraalVM metadata repository rather
+                    // than their own jars. Matched dirs ride -H:ConfigurationFileDirectories;
+                    // unavailable (offline) degrades to building without it.
+                    List<Path> metadataDirs = List.of();
+                    if (Files.exists(lockFile)) {
+                        Lockfile metaLock = LockfileReader.read(lockFile);
+                        List<Lockfile.Artifact> runtimeArtifacts = new ArrayList<>();
+                        for (Lockfile.Artifact a : metaLock.artifacts()) {
+                            if (a.inAnyScope(ClasspathResolver.RUNTIME) && a.checksum() != null) {
+                                runtimeArtifacts.add(a);
+                            }
+                        }
+                        dev.jkbuild.repo.RepoGroup metaRepos = RepoGroupBuilder.buildFor(project, null, new Cas(cache));
+                        metadataDirs = ReachabilityMetadata.configDirs(
+                                cache, metaRepos, runtimeArtifacts, msg -> ctx.label(msg));
+                    }
+                    if (!metadataDirs.isEmpty()) {
+                        StringBuilder dirsArg = new StringBuilder();
+                        for (Path d : metadataDirs) {
+                            if (dirsArg.length() > 0) dirsArg.append(',');
+                            dirsArg.append(d.toAbsolutePath());
+                        }
+                        // Prepended (before [native].args + CLI extras) so user flags win;
+                        // the unlock pair scopes the experimental option to just this flag.
+                        List<String> withMeta = new ArrayList<>();
+                        withMeta.add("-H:+UnlockExperimentalVMOptions");
+                        withMeta.add("-H:ConfigurationFileDirectories=" + dirsArg);
+                        withMeta.add("-H:-UnlockExperimentalVMOptions");
+                        withMeta.addAll(allArgs);
+                        allArgs = withMeta;
+                    }
+
                     // Packaging cache (executable only): the binary is a pure function of
                     // the runtime classpath, the build args, the main class, and the GraalVM
                     // toolchain. Shared libraries (+ generated C headers) aren't cached yet.
@@ -2134,6 +2167,12 @@ public final class BuildPipeline {
         String kotlinVersion = CompileToolchain.kotlinVersionFor(ctx.require(LOCKFILE), ctx.require(PROJECT));
         KotlinWorkerSetup.Prepared kt;
         Path allopenPlugin = null;
+        Path noargPlugin = null;
+        // JPA entities need a zero-arg constructor Kotlin classes don't have — the no-arg
+        // plugin (jpa preset) synthesizes them for @Entity/@Embeddable/@MappedSuperclass.
+        // Keyed on the persistence API actually being on the resolved classpath.
+        boolean jpaOnClasspath = ctx.require(LOCKFILE).artifacts().stream()
+                .anyMatch(a -> "jakarta.persistence:jakarta.persistence-api".equals(a.name()));
         try {
             dev.jkbuild.repo.RepoGroup repos = RepoGroupBuilder.buildFor(ctx.require(PROJECT), null, cas);
             kt = KotlinWorkerSetup.prepare(repos, cas, kotlinVersion);
@@ -2152,6 +2191,14 @@ public final class BuildPipeline {
                         .orElseThrow(() -> new RuntimeException(
                                 "cannot fetch the kotlin-spring (all-open) compiler plugin for Kotlin "
                                         + pluginVersion + " — required for [spring-boot] Kotlin projects"));
+                if (jpaOnClasspath) {
+                    noargPlugin = repos.tryFetchArtifact(dev.jkbuild.model.Coordinate.of(
+                                    "org.jetbrains.kotlin", "kotlin-noarg-compiler-plugin-embeddable", pluginVersion))
+                            .map(hit -> hit.fetched().cachePath())
+                            .orElseThrow(() -> new RuntimeException(
+                                    "cannot fetch the kotlin-noarg compiler plugin for Kotlin " + pluginVersion
+                                            + " — required for [spring-boot] Kotlin projects using JPA"));
+                }
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -2165,11 +2212,18 @@ public final class BuildPipeline {
         ktArgs.add("-no-stdlib");
         // Spring Boot reflects on parameter names — mirror the javac -parameters default.
         if (ctx.require(PROJECT).isSpringBoot()) ktArgs.add("-java-parameters");
+        // Compiler plugins ride the typed BTA COMPILER_PLUGINS argument — raw -Xplugin/-P
+        // strings in extraArgs are silently ignored by the BTA execution path.
+        List<KotlincRequest.Plugin> ktPlugins = new ArrayList<>();
         if (allopenPlugin != null) {
-            ktArgs.add("-Xplugin=" + allopenPlugin.toAbsolutePath());
             // The "spring" preset opens @Component/@Configuration/@Transactional/etc.
-            ktArgs.add("-P");
-            ktArgs.add("plugin:org.jetbrains.kotlin.allopen:preset=spring");
+            ktPlugins.add(new KotlincRequest.Plugin(
+                    "org.jetbrains.kotlin.allopen", allopenPlugin, List.of("preset=spring")));
+        }
+        if (noargPlugin != null) {
+            // The "jpa" preset targets @Entity/@Embeddable/@MappedSuperclass.
+            ktPlugins.add(new KotlincRequest.Plugin(
+                    "org.jetbrains.kotlin.noarg", noargPlugin, List.of("preset=jpa")));
         }
         if (javaSourceRoot != null) {
             ktArgs.add("-Xjava-source-roots=" + javaSourceRoot.toAbsolutePath());
@@ -2185,6 +2239,7 @@ public final class BuildPipeline {
                 .workingDir(workingDir)
                 .snapshotDir(in.cache().resolve("kotlin-cp-snapshots"))
                 .extraArgs(ktArgs)
+                .plugins(ktPlugins)
                 .build();
         boolean rerun = in.session().config().rerunOr(false);
         // Reweight from the real request: a CAS hit is a cheap restore (3), else a

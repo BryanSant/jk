@@ -46,6 +46,11 @@ final class CompileSpec {
     final List<File> friendPaths = new ArrayList<>();
     final List<String> extraArgs = new ArrayList<>();
 
+    /** Parsed {@code PLUGIN id\tjar\topt=val...} lines — typed compiler plugins. */
+    record Plugin(String id, File jar, List<String> options) {}
+
+    final List<Plugin> plugins = new ArrayList<>();
+
     boolean incremental() {
         return workingDir != null;
     }
@@ -70,6 +75,12 @@ final class CompileSpec {
                 case "CLASSPATH" -> s.classpath.add(new File(val));
                 case "FRIEND" -> s.friendPaths.add(new File(val));
                 case "ARG" -> s.extraArgs.add(val);
+                case "PLUGIN" -> {
+                    String[] parts = val.split("\t");
+                    List<String> options = new ArrayList<>();
+                    for (int i = 2; i < parts.length; i++) options.add(parts[i]);
+                    s.plugins.add(new Plugin(parts[0], new File(parts[1]), options));
+                }
                 default -> throw new IllegalArgumentException("unknown spec key: " + key);
             }
         }

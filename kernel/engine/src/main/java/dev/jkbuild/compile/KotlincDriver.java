@@ -89,6 +89,14 @@ public final class KotlincDriver {
         for (String arg : request.extraArgs()) {
             lines.add("ARG " + arg);
         }
+        for (KotlincRequest.Plugin plugin : request.plugins()) {
+            // Tab-separated: id, jar path, then key=value options (tabs are not
+            // meaningful in any of these values).
+            StringBuilder line = new StringBuilder("PLUGIN ");
+            line.append(plugin.id()).append('\t').append(plugin.jar().toAbsolutePath());
+            for (String opt : plugin.options()) line.append('\t').append(opt);
+            lines.add(line.toString());
+        }
         Path spec = Files.createTempFile("jk-kotlinc-", ".spec");
         Files.write(spec, lines, StandardCharsets.UTF_8);
         return spec;
