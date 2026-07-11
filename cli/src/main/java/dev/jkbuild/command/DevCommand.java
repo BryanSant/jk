@@ -66,6 +66,9 @@ public final class DevCommand implements CliCommand {
     private Path cacheDirOverride;
     private Path jdksDir;
 
+    /** Tier 2: devtools jar fetched for this session when the project didn't declare it. */
+    private Path injectedDevtools;
+
     @Override
     public String name() {
         return "dev";
@@ -103,6 +106,17 @@ public final class DevCommand implements CliCommand {
         if (!build(projectDir, cache, false)) return 1;
 
         boolean devtools = devtoolsOnClasspath(projectDir);
+        if (!devtools && project.isSpringBoot()) {
+            // Tier 2 (spring-boot plan §3.7): a Boot project gets the in-place restart
+            // experience even without declaring devtools — fetch it (version-matched to
+            // the declared Boot line) and ride it on this session's classpath only.
+            injectedDevtools = fetchDevtools(project.springBoot().orElseThrow().version());
+            if (injectedDevtools != null) {
+                devtools = true;
+                CliOutput.err("jk dev: spring-boot-devtools auto-injected for this session"
+                        + " — add it to [dev-dependencies] to make it permanent.");
+            }
+        }
         List<Path> watchRoots = watchRoots(projectDir);
         CliOutput.err("jk dev: watching "
                 + watchRoots.stream()
@@ -249,10 +263,39 @@ public final class DevCommand implements CliCommand {
         return startApp(projectDir, project, layout, appArgs);
     }
 
+    /**
+     * Fetch spring-boot-devtools at the project's Boot version into the CAS. A direct Central
+     * URL fetch (the EngineJarFetcher pattern) — the slim client deliberately carries no
+     * repo-group machinery, and the coordinate is fully determined by the Boot version.
+     * Devtools' own dependencies are already on any Boot app's classpath — the single jar
+     * suffices. Returns null (silently degrading to process-restart mode) when offline.
+     */
+    private Path fetchDevtools(String bootVersion) {
+        String path = "org/springframework/boot/spring-boot-devtools/" + bootVersion
+                + "/spring-boot-devtools-" + bootVersion + ".jar";
+        try {
+            Cas cas = new Cas(cacheDirOverride != null ? cacheDirOverride : JkDirs.cache());
+            // Named-repo store first: jk dev may have fetched it in an earlier session.
+            var store = new dev.jkbuild.repo.RepoArtifactStore(cas.root(), "central");
+            var cached = store.locate(path);
+            if (cached.isPresent()) return cached.get();
+            var response = new dev.jkbuild.http.Http()
+                    .get(java.net.URI.create("https://repo.maven.apache.org/maven2/" + path));
+            if (response.statusCode() != 200) return null;
+            return cas.put(response.body());
+        } catch (IOException e) {
+            return null;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return null;
+        }
+    }
+
     /** Classes dir + lockfile RUN classpath (dev-scope deps ride) + workspace siblings. */
     private List<Path> devClasspath(Path projectDir, JkBuild project, BuildLayout layout) throws IOException {
         List<Path> classpath = new ArrayList<>();
         classpath.add(layout.classesDir());
+        if (injectedDevtools != null) classpath.add(injectedDevtools);
         Path lockFile = projectDir.resolve("jk.lock");
         if (Files.exists(lockFile)) {
             Cas cas = new Cas(cacheDirOverride != null ? cacheDirOverride : JkDirs.cache());
