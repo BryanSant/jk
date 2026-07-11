@@ -1,6 +1,12 @@
 # Thin client — the engine owns every byte of TOML reasoning
 
-**Status:** in progress (2026-07-11).
+**Status:** in progress (2026-07-11). **Landed:** the protocol (§2, commits da02cf14+),
+the exec family (run/dev/install/aot-cache — zero client parsing, all verified live), and
+the build/native/clean/format peeks. **Remaining:** Milestone A leftovers — Add/New jk.toml
+edits engine-side, SyncCommand's JdkEnsure pre-flight, PublishCommand's credential match,
+and the workspace-request threading (Build/Native workspace paths still pass a
+client-parsed JkBuild into WorkspaceRequest); then Milestones B (diagnostics/generators)
+and C (ConfigToml scanner + tomlj eviction from the native image).
 **Companions:** [engine.md](./engine.md) (process model), [build-plugins-plan.md](./build-plugins-plan.md)
 (depends on this landing first — plugin-owned tables make client-side parsing impossible to do
 correctly).
