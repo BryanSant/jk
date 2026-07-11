@@ -6,8 +6,6 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Optional;
 import java.util.function.Function;
-import org.tomlj.TomlParseResult;
-import org.tomlj.TomlTable;
 
 /**
  * Discovers and merges configuration into a single {@link JkConfig} per the precedence documented
@@ -78,21 +76,38 @@ public final class JkConfigLoader {
     static JkConfig loadTomlOrEmpty(Path path) throws IOException {
         // Degrade gracefully on missing or syntactically-broken files — system/user
         // configs may be experimental; problems fall back rather than fail the build.
-        Optional<TomlParseResult> parsed = TomlValues.parse(path);
-        if (parsed.isEmpty()) return JkConfig.empty();
-        TomlTable config = parsed.get().getTable("config");
-        if (config == null) return JkConfig.empty();
+        // TomlScan, not tomlj: this runs at the top of EVERY client invocation and reads
+        // nine flat [config] scalars from files jk owns (thin-client plan Milestone C).
+        TomlScan scan = TomlScan.scan(
+                path,
+                "config.color",
+                "config.offline",
+                "config.rerun",
+                "config.refresh",
+                "config.no-progress",
+                "config.quiet",
+                "config.verbose",
+                "config.directory",
+                "config.force");
         return new JkConfig(
-                TomlValues.optString(config, "color").flatMap(JkConfig.ColorChoice::parse),
-                TomlValues.optBoolean(config, "offline"),
-                TomlValues.optBoolean(config, "rerun"),   // legacy alias
-                TomlValues.optBoolean(config, "refresh"), // legacy alias
-                TomlValues.optBoolean(config, "no-progress"),
-                TomlValues.optBoolean(config, "quiet"),
-                TomlValues.optBoolean(config, "verbose"),
-                TomlValues.optString(config, "directory").map(Paths::get),
-                TomlValues.optBoolean(config, "force"),
+                Optional.ofNullable(scan.get("config.color")).flatMap(JkConfig.ColorChoice::parse),
+                scanBool(scan, "config.offline"),
+                scanBool(scan, "config.rerun"),   // legacy alias
+                scanBool(scan, "config.refresh"), // legacy alias
+                scanBool(scan, "config.no-progress"),
+                scanBool(scan, "config.quiet"),
+                scanBool(scan, "config.verbose"),
+                Optional.ofNullable(scan.get("config.directory")).map(Paths::get),
+                scanBool(scan, "config.force"),
                 Optional.empty()); // no-ansi is CLI-only, not config-file settable
+    }
+
+    /** A scanned TOML boolean: strictly {@code true}/{@code false}, anything else = absent. */
+    private static Optional<Boolean> scanBool(TomlScan scan, String key) {
+        String v = scan.get(key);
+        if ("true".equalsIgnoreCase(v)) return Optional.of(true);
+        if ("false".equalsIgnoreCase(v)) return Optional.of(false);
+        return Optional.empty();
     }
 
     /** Build a config layer from environment variables. */
