@@ -51,14 +51,27 @@ public final class JarPackager {
             // Sort by relative path for deterministic entry order.
             files.sort(Comparator.comparing(p -> normalize(request.inputDir(), p)));
 
+            java.util.Set<String> written = new java.util.HashSet<>();
             for (Path file : files) {
                 String name = normalize(request.inputDir(), file);
                 if (name.equals("META-INF/MANIFEST.MF")) continue; // already written
                 if (isBuildStamp(name)) continue; // build-host artefact, not jar content
+                written.add(name);
                 JarEntry entry = new JarEntry(name);
                 entry.setTimeLocal(LocalDateTime.ofEpochSecond(epoch, 0, ZoneOffset.UTC));
                 jos.putNextEntry(entry);
                 Files.copy(file, jos);
+                jos.closeEntry();
+            }
+
+            // Generated entries (e.g. the CycloneDX SBOM) — sorted for reproducibility;
+            // filesystem content wins on a path collision.
+            for (Map.Entry<String, byte[]> e : new java.util.TreeMap<>(request.extraEntries()).entrySet()) {
+                if (written.contains(e.getKey())) continue;
+                JarEntry entry = new JarEntry(e.getKey());
+                entry.setTimeLocal(LocalDateTime.ofEpochSecond(epoch, 0, ZoneOffset.UTC));
+                jos.putNextEntry(entry);
+                jos.write(e.getValue());
                 jos.closeEntry();
             }
         }
@@ -115,30 +128,47 @@ public final class JarPackager {
             Path outputJar,
             String mainClass,
             long timestampEpochSeconds,
-            Map<String, String> attributes) {
+            Map<String, String> attributes,
+            Map<String, byte[]> extraEntries) {
 
         public JarRequest {
             Objects.requireNonNull(inputDir, "inputDir");
             Objects.requireNonNull(outputJar, "outputJar");
             attributes = attributes == null ? Map.of() : Map.copyOf(attributes);
+            extraEntries = extraEntries == null ? Map.of() : Map.copyOf(extraEntries);
+        }
+
+        /** Back-compat constructor: no generated (non-filesystem) entries. */
+        public JarRequest(
+                Path inputDir,
+                Path outputJar,
+                String mainClass,
+                long timestampEpochSeconds,
+                Map<String, String> attributes) {
+            this(inputDir, outputJar, mainClass, timestampEpochSeconds, attributes, Map.of());
         }
 
         /** Back-compat constructor without custom manifest attributes. */
         public JarRequest(Path inputDir, Path outputJar, String mainClass, long timestampEpochSeconds) {
-            this(inputDir, outputJar, mainClass, timestampEpochSeconds, Map.of());
+            this(inputDir, outputJar, mainClass, timestampEpochSeconds, Map.of(), Map.of());
         }
 
         public static JarRequest of(Path inputDir, Path outputJar) {
-            return new JarRequest(inputDir, outputJar, null, 0L, Map.of());
+            return new JarRequest(inputDir, outputJar, null, 0L, Map.of(), Map.of());
         }
 
         public JarRequest withMainClass(String mainClass) {
-            return new JarRequest(inputDir, outputJar, mainClass, timestampEpochSeconds, attributes);
+            return new JarRequest(inputDir, outputJar, mainClass, timestampEpochSeconds, attributes, extraEntries);
         }
 
         /** Custom jar-manifest attributes from the project's {@code [manifest]} table. */
         public JarRequest withAttributes(Map<String, String> attributes) {
-            return new JarRequest(inputDir, outputJar, mainClass, timestampEpochSeconds, attributes);
+            return new JarRequest(inputDir, outputJar, mainClass, timestampEpochSeconds, attributes, extraEntries);
+        }
+
+        /** Generated entries (path → bytes) written after the filesystem walk, e.g. the SBOM. */
+        public JarRequest withExtraEntries(Map<String, byte[]> extraEntries) {
+            return new JarRequest(inputDir, outputJar, mainClass, timestampEpochSeconds, attributes, extraEntries);
         }
     }
 }

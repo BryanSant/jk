@@ -1415,11 +1415,20 @@ public final class BuildPipeline {
                         return;
                     }
                     String mainClass = project.mainClass();
+                    // Application jars embed the lockfile-derived SBOM (libraries don't:
+                    // their consumers' lockfiles are the truth for the final classpath).
+                    byte[] sbom = null;
+                    if (project.isApplication()) {
+                        Lockfile sbomLock = ctx.get(LOCKFILE).orElse(null);
+                        if (sbomLock != null) sbom = applicationSbom(project, sbomLock, cas);
+                    }
                     // Packaging cache: the jar is a pure function of the main classes
-                    // (resources already copied in), the main-class, and the manifest.
+                    // (resources already copied in), the main-class, the manifest, and
+                    // the SBOM content (a lock change re-embeds).
                     List<String> tokens = List.of(
                             "classes:" + dev.jkbuild.task.ClasspathFingerprint.entry(classes),
                             "main:" + (mainClass == null ? "" : mainClass),
+                            "sbom:" + (sbom == null ? "" : dev.jkbuild.util.Hashing.sha256Hex(sbom)),
                             "manifest:" + project.manifest());
                     String pkgTask = ActionKey.qualifiedTaskId("package-jar", jarPath);
                     String pkgKey = ActionKey.forArtifact(pkgTask, dev.jkbuild.util.JkVersion.VERSION, tokens);
@@ -1432,7 +1441,13 @@ public final class BuildPipeline {
                     ctx.label("package " + jarPath.getFileName());
                     JarPackager.JarRequest jarRequest = JarPackager.JarRequest.of(classes, jarPath);
                     if (mainClass != null && !mainClass.isBlank()) jarRequest = jarRequest.withMainClass(mainClass);
-                    if (!project.manifest().isEmpty()) jarRequest = jarRequest.withAttributes(project.manifest());
+                    Map<String, String> jarAttrs = new LinkedHashMap<>(project.manifest());
+                    if (sbom != null) {
+                        jarAttrs.put("Sbom-Format", "CycloneDX");
+                        jarAttrs.put("Sbom-Location", SBOM_JAR_ENTRY);
+                        jarRequest = jarRequest.withExtraEntries(Map.of(SBOM_JAR_ENTRY, sbom));
+                    }
+                    if (!jarAttrs.isEmpty()) jarRequest = jarRequest.withAttributes(jarAttrs);
                     new JarPackager().packageJar(jarRequest);
                     storePackaged(in.cache(), pkgTask, pkgKey, tokens, jarPath.getParent(), List.of(jarPath));
                     ctx.put(JAR_PATH, jarPath);
@@ -1559,6 +1574,25 @@ public final class BuildPipeline {
         ctx.put(JAR_PATH, jarPath);
         ctx.progress(1);
     }
+
+    /**
+     * The application SBOM entry + manifest headers shared by every packager: the lockfile's
+     * production RUNTIME components as CycloneDX (see {@link CycloneDxSbom}). Returns null when
+     * there is no lockfile to speak from.
+     */
+    static byte[] applicationSbom(JkBuild project, Lockfile lock, Cas cas) {
+        List<CycloneDxSbom.Component> components = new ArrayList<>();
+        for (ClasspathResolver.Entry entry : new ClasspathResolver(cas).entriesFor(lock, ClasspathResolver.RUNTIME)) {
+            Lockfile.Artifact a = entry.artifact();
+            components.add(new CycloneDxSbom.Component(
+                    a.moduleGroup(), a.moduleArtifact(), a.version(), a.checksumHex()));
+        }
+        return CycloneDxSbom.write(
+                project.project().group(), project.project().name(), project.project().version(), components);
+    }
+
+    /** SBOM path inside plain/shadow application jars (jar root = classpath root). */
+    static final String SBOM_JAR_ENTRY = "META-INF/sbom/application.cdx.json";
 
     /** Fetch one {@code org.springframework.boot} artifact jar into the CAS and return its path. */
     private static Path fetchBootArtifact(dev.jkbuild.repo.RepoGroup repos, String artifact, String version)
@@ -1781,9 +1815,22 @@ public final class BuildPipeline {
                         return;
                     }
                     ctx.label("package " + shadowJar.getFileName());
+                    byte[] shadowSbom = null;
+                    Map<String, String> shadowAttrs = new LinkedHashMap<>(project.manifest());
+                    if (Files.exists(lockFile)) {
+                        shadowSbom = applicationSbom(project, LockfileReader.read(lockFile), new Cas(cache));
+                        shadowAttrs.put("Sbom-Format", "CycloneDX");
+                        shadowAttrs.put("Sbom-Location", SBOM_JAR_ENTRY);
+                    }
                     new ShadowPackager()
                             .packageShadow(new ShadowPackager.ShadowRequest(
-                                    classes, depJars, shadowJar, project.mainClass(), project.manifest(), 0L));
+                                    classes,
+                                    depJars,
+                                    shadowJar,
+                                    project.mainClass(),
+                                    shadowAttrs,
+                                    shadowSbom == null ? Map.of() : Map.of(SBOM_JAR_ENTRY, shadowSbom),
+                                    0L));
                     storePackaged(cache, shTask, shKey, tokens, shadowJar.getParent(), List.of(shadowJar));
                     ctx.progress(1);
                 })

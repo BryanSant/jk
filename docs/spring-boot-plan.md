@@ -237,10 +237,13 @@ latency is bounded by javac on the delta, with no Gradle configuration phase in 
    jar (JVM runs opt in with `-Dspring.aot.enabled=true` — verified "Starting
    AOT-processed", 0.64s). `jk native` on Boot uses exploded classes + AOT output on the
    image classpath with the Start-Class scan; verified: native webmvc binary builds
-   (1m03s) and serves, startup **0.022s**. Deferred from this phase: AOT action-key
-   caching (reruns each packaging), `aot-args` profile baking, reachability-metadata
-   repo consumption (Boot's own hints sufficed for webmvc), test AOT, and the
-   `--aot-cache` JEP 514 packaging ladder.
+   (1m03s) and serves, startup **0.022s**.
+   **Deferred items completed 2026-07-11:** AOT output is action-cached (2.5s cold →
+   0.1s warm restore); `aot-args` bakes profiles at build time; `jk build --aot-cache`
+   ships the JEP 514 ladder for any app (jarmode-extract layout + onRefresh training
+   for Boot, self-assembled layout for plain apps, AppCDS fallback on JDK < 25 —
+   measured ~1.5×). Still open: reachability-metadata repo consumption (design sketch
+   in [boot-on-jk.md](./boot-on-jk.md) "Known gaps"), test AOT.
 4. **Dev loop** — `jk dev` tiers 1–2; `jk new --spring`; `jk import` Boot translation;
    migration doc ("Boot on jk" with the parity table).
    **CORE DONE (2026-07-10).** `jk dev` ships general-purpose: watch → engine
@@ -250,8 +253,13 @@ latency is bounded by javac on the delta, with no Gradle configuration phase in 
    new → build → run → serves. `jk import` translates Boot Gradle builds: plugin
    version → `[spring-boot]`, versionless coords → platform-managed, developmentOnly /
    testAndDevelopmentOnly → dev / test-dev scopes; an imported webmvc+data-jdbc build
-   locks, builds, and serves. Deferred: dev-loop tier 2 (auto-injected devtools),
-   Kotlin `--spring` (needs the kotlin-spring compiler plugin), the migration doc.
+   locks, builds, and serves.
+   **Deferred items completed 2026-07-11:** `jk dev` tier 2 auto-injects devtools
+   (Central fetch into the CAS, session-only, offline degrades to process restart);
+   Kotlin `[spring-boot]` projects compile with the all-open (kotlin-spring) plugin and
+   `jk new --spring --lang kotlin` scaffolds a runnable app; every application jar
+   (plain/shadow/boot) embeds the lockfile CycloneDX SBOM; the migration guide +
+   parity table live at [boot-on-jk.md](./boot-on-jk.md).
    (The import exercise flushed out and fixed: a PubGrub infinite-derive loop on
    NoVersions conflicts, exact-declaration-beats-BOM semantics, and the jk.lock
    round-trip of hyphenated scope names.)

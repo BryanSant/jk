@@ -108,6 +108,13 @@ public final class ShadowPackager {
             // 3. Merged service-provider files.
             for (Map.Entry<String, ByteArrayOutputStream> e : services.entrySet()) {
                 writeEntry(jos, e.getKey(), e.getValue().toByteArray(), request.timestampEpochSeconds());
+                written.add(e.getKey());
+            }
+
+            // 4. Generated entries (e.g. the CycloneDX SBOM); real content wins on collision.
+            for (Map.Entry<String, byte[]> e : new TreeMap<>(request.extraEntries()).entrySet()) {
+                if (!written.add(e.getKey())) continue;
+                writeEntry(jos, e.getKey(), e.getValue(), request.timestampEpochSeconds());
             }
         }
         return request.outputJar();
@@ -201,6 +208,7 @@ public final class ShadowPackager {
             Path outputJar,
             String mainClass,
             Map<String, String> attributes,
+            Map<String, byte[]> extraEntries,
             long timestampEpochSeconds) {
 
         public ShadowRequest {
@@ -208,6 +216,18 @@ public final class ShadowPackager {
             Objects.requireNonNull(outputJar, "outputJar");
             dependencyJars = dependencyJars == null ? List.of() : List.copyOf(dependencyJars);
             attributes = attributes == null ? Map.of() : Map.copyOf(attributes);
+            extraEntries = extraEntries == null ? Map.of() : Map.copyOf(extraEntries);
+        }
+
+        /** Back-compat constructor: no generated (non-filesystem) entries. */
+        public ShadowRequest(
+                Path classesDir,
+                List<Path> dependencyJars,
+                Path outputJar,
+                String mainClass,
+                Map<String, String> attributes,
+                long timestampEpochSeconds) {
+            this(classesDir, dependencyJars, outputJar, mainClass, attributes, Map.of(), timestampEpochSeconds);
         }
     }
 }
