@@ -14,6 +14,7 @@ import dev.jkbuild.command.BuildCommand;
 import dev.jkbuild.command.CacheCommand;
 import dev.jkbuild.command.CleanCommand;
 import dev.jkbuild.command.CompileCommand;
+import dev.jkbuild.command.DevCommand;
 import dev.jkbuild.command.EngineCommand;
 import dev.jkbuild.command.HistoryCommand;
 import dev.jkbuild.command.DeactivateCommand;
@@ -117,6 +118,7 @@ public final class CommandDispatch {
             new ToolRunCommand(),
             new ToolInstallCommand(),
             new CompileCommand(),
+            new DevCommand(),
             new BuildCommand(),
             new TestCommand(),
             new FormatCommand(),
