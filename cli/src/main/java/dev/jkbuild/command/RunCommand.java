@@ -2,7 +2,6 @@
 package dev.jkbuild.command;
 
 import dev.jkbuild.cli.CliOutput;
-import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cli.Ansi;
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.PathDisplay;
@@ -10,16 +9,6 @@ import dev.jkbuild.cli.run.ConsoleSpec;
 import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.cli.tui.GoalWedge;
-import dev.jkbuild.compile.ClasspathResolver;
-import dev.jkbuild.config.JkBuildParser;
-import dev.jkbuild.config.WorkspaceClasspath;
-import dev.jkbuild.config.WorkspaceLocator;
-import dev.jkbuild.jdk.HostPlatform;
-import dev.jkbuild.jdk.JavaHomes;
-import dev.jkbuild.layout.BuildLayout;
-import dev.jkbuild.lock.Lockfile;
-import dev.jkbuild.lock.LockfileReader;
-import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.command.Exit;
 import dev.jkbuild.model.command.Arity;
 import dev.jkbuild.model.command.CliCommand;
@@ -116,11 +105,8 @@ public final class RunCommand implements CliCommand {
 
     /** Package-private: {@code jk tool run <dir>} delegates a jk-project directory here. */
     int runProject(Path projectDir, List<String> appArgs) throws IOException, InterruptedException {
-        JkBuild project = JkBuildParser.parse(projectDir.resolve("jk.toml"));
-        // No [application] main is no longer an up-front error: after the build we scan the
-        // compiled output for the single `public static void main` (Boot's resolveMainClass
-        // posture, spring-boot plan §3.8). Explicit main always wins.
-        BuildLayout layout = BuildLayout.of(projectDir, project);
+        // No client-side jk.toml parse: the engine computes the exec plan (artifact
+        // preference, classpath, main-class scan) after the build — thin-client contract.
         Path cache = cacheDir();
 
         String coord = BuildCommand.buildTarget(projectDir.resolve("jk.toml"), projectDir);
@@ -132,7 +118,7 @@ public final class RunCommand implements CliCommand {
                 "Exec",
                 r -> {
                     try {
-                        return execTail(projectDir, execCommand(projectDir, project, layout));
+                        return execTail(projectDir, execPlan(projectDir));
                     } catch (IOException e) {
                         return "Executing";
                     }
@@ -181,10 +167,11 @@ public final class RunCommand implements CliCommand {
             return 1;
         }
 
-        // Exec the most self-contained artifact: native > shadow > plain jar.
+        // Exec the engine's plan: the most self-contained artifact (native > shadow > jar),
+        // computed engine-side against the just-built outputs.
         List<String> command;
         try {
-            command = execCommand(projectDir, project, layout);
+            command = new ArrayList<>(execPlan(projectDir).argv());
         } catch (IOException e) {
             // Typically the main-class scan: none/several found — message is ready to print.
             CliOutput.err("jk run: " + e.getMessage());
@@ -192,7 +179,7 @@ public final class RunCommand implements CliCommand {
         }
         if (mode == GoalConsole.Mode.VERBOSE || mode == GoalConsole.Mode.JSON) {
             // No chip was printed in these modes — show the banner line as before.
-            printExecBanner(projectDir, command);
+            printExecBanner(projectDir, execPlan(projectDir));
         } else {
             // Chip already settled with exec info; emit the blank separator + color reset.
             CliOutput.err();
@@ -205,106 +192,58 @@ public final class RunCommand implements CliCommand {
         return new ProcessBuilder(command).inheritIO().start().waitFor();
     }
 
-    /** The command line for the best available artifact (native &gt; shadow &gt; jar). */
-    private List<String> execCommand(Path projectDir, JkBuild project, BuildLayout layout) throws IOException {
-        List<String> command = new ArrayList<>();
-
-        Path nativeBin = layout.nativeBinary();
-        if (Files.isRegularFile(nativeBin) && Files.isExecutable(nativeBin)) {
-            command.add(nativeBin.toAbsolutePath().toString());
-            return command;
-        }
-
-        String javaExe = JavaHomes.runningJavaHome()
-                .resolve("bin")
-                .resolve(HostPlatform.isWindows() ? "java.exe" : "java")
-                .toString();
-        command.add(javaExe);
-
-        Path shadow = layout.shadowJar();
-        if (Files.isRegularFile(shadow)) {
-            // Shadow jar bundles deps + Main-Class manifest — runnable with -jar.
-            command.add("-jar");
-            command.add(shadow.toAbsolutePath().toString());
-        } else {
-            command.add("-cp");
-            // Boot projects package the main jar in Boot's executable layout (classes live
-            // under BOOT-INF/classes/, invisible to -cp) — local runs use the classes dir,
-            // which also lets dev-scope deps (DevTools & co.) ride the RUN classpath.
-            Path projectEntry = project.isSpringBoot() ? layout.classesDir() : layout.mainJar();
-            command.add(joinClasspath(assembleRuntimeClasspath(projectDir, project, projectEntry)));
-            command.add(mainClassFor(project, layout));
-        }
-        return command;
-    }
-
     /**
-     * The class to exec: explicit {@code [application] main} wins; otherwise scan the built
-     * classes once (memoized — the console's exec-tail closure and the real exec must agree).
-     * Errors from the scan carry a ready-to-print message (none found / several found).
+     * The engine-computed execution plan (docs/thin-client-plan.md): artifact preference, RUN
+     * classpath, and main-class scan all happen engine-side — the client only forks the argv.
+     * Memoized so the console's exec-tail closure and the real exec agree.
      */
-    private String mainClassFor(JkBuild project, BuildLayout layout) throws IOException {
-        if (project.mainClass() != null) return project.mainClass();
-        if (scannedMainClass == null) {
-            scannedMainClass = dev.jkbuild.layout.MainClassScanner.scanUnique(layout.classesDir());
+    private dev.jkbuild.engine.protocol.ExecPlan execPlan(Path projectDir) throws IOException {
+        if (cachedPlan == null) {
+            cachedPlan = engineDisabledForTests()
+                    ? dev.jkbuild.cli.engine.InProcessEngine.require()
+                            .execPlan(projectDir, cacheDir(), "run", null, null)
+                    : dev.jkbuild.cli.engine.EngineClient.execPlan(
+                            dev.jkbuild.engine.EnginePaths.current(), projectDir, cacheDir(), "run", null, null);
         }
-        return scannedMainClass;
+        // Checked on every access: the memoized plan may be an error plan (the console's
+        // tail closure swallows the first throw; the exec path must still see it).
+        if (cachedPlan.error() != null) {
+            throw new IOException(cachedPlan.error());
+        }
+        return cachedPlan;
     }
 
-    private String scannedMainClass;
+    private dev.jkbuild.engine.protocol.ExecPlan cachedPlan;
 
     /**
      * The styled tail shown in the exec chip line or banner: {@code "[cyan]{jdk}[/]: [yellow]java
-     * …[/]"} for JVM, {@code "Executing the native binary: [yellow]target/app[/]"} for native. Shared
-     * between the chip-mode tail (returned to the {@link ConsoleSpec} lambda) and the banner printed
-     * in verbose/JSON modes.
+     * …[/]"} for JVM, {@code "native binary: [yellow]target/app[/]"} for native. The plan carries
+     * the display command; the JDK leaf derives from the plan's javaHome.
      */
-    private static String execTail(Path projectDir, List<String> command) {
+    private static String execTail(Path projectDir, dev.jkbuild.engine.protocol.ExecPlan plan) {
         Theme t = Theme.active();
-        if (command.size() == 1) {
+        if (plan.argv().size() == 1) {
             // Native binary — exec'd directly, no JVM.
-            Path bin = Path.of(command.get(0));
+            Path bin = Path.of(plan.argv().get(0));
             return "native binary: " + Theme.colorize(PathDisplay.of(bin, projectDir), t.highlight());
         }
-        // JVM — derive the jdk leaf, resolving symlinks so "current" shows the real spec.
-        Path javaExe = Path.of(command.get(0));
+        Path jdkHome = Path.of(plan.javaHome());
         try {
-            javaExe = javaExe.toRealPath();
+            jdkHome = jdkHome.toRealPath();
         } catch (IOException ignored) {
         }
-        Path jdkHome = javaExe.getParent() != null ? javaExe.getParent().getParent() : null;
-        String jdkLeaf = jdkHome != null && jdkHome.getFileName() != null
-                ? jdkHome.getFileName().toString()
-                : "java";
-        String javaCmd;
-        if ("-jar".equals(command.get(1))) {
-            // Shadow jar bundles all deps — runnable with -jar alone.
-            javaCmd = "java -jar " + PathDisplay.of(Path.of(command.get(2)), projectDir);
-        } else {
-            String cp = command.size() >= 3 ? command.get(2) : "";
-            boolean hasDeps = cp.contains(System.getProperty("path.separator"));
-            Path firstEntry = firstClasspathEntry(command);
-            if (firstEntry != null && firstEntry.toString().endsWith(".jar")) {
-                // Plain jar: show -jar <jar>; prefix with -cp … only when deps are present.
-                javaCmd = (hasDeps ? "java -cp … -jar " : "java -jar ") + PathDisplay.of(firstEntry, projectDir);
-            } else {
-                // Classes-dir run (Boot projects): the main class is the honest label.
-                String main = command.size() >= 4 ? command.get(3) : "";
-                javaCmd = (hasDeps ? "java -cp … " : "java ") + main;
-            }
-        }
-        return Theme.colorize(jdkLeaf, t.cyan()) + ": "
-                + Theme.colorize(javaCmd, t.shell());
+        String jdkLeaf = jdkHome.getFileName() != null ? jdkHome.getFileName().toString() : "java";
+        return Theme.colorize(jdkLeaf, t.cyan()) + ": " + Theme.colorize(plan.display(), t.shell());
     }
 
     /**
      * Prints the {@code ▶ Executing …} line to stderr (verbose/JSON modes, where no chip is
      * rendered). Delegates styling to {@link #execTail}.
      */
-    private static void printExecBanner(Path projectDir, List<String> command) {
+    private static void printExecBanner(Path projectDir, dev.jkbuild.engine.protocol.ExecPlan plan) {
         Theme t = Theme.active();
         CliOutput.err(
-                Theme.colorize(dev.jkbuild.cli.tui.Glyphs.PLAY, t.brightGreen()) + " " + execTail(projectDir, command));
+                Theme.colorize(dev.jkbuild.cli.tui.Glyphs.PLAY, t.brightGreen()) + " " + execTail(projectDir, plan));
         CliOutput.err();
         // Reset any lingering SGR state so the program's own output starts from
         // the terminal's default colors (only when we're emitting color at all).
@@ -313,39 +252,6 @@ public final class RunCommand implements CliCommand {
             CliOutput.stderr().flush();
         }
     }
-
-    /** The project's main jar — first entry in the {@code -cp} classpath string. */
-    private static Path firstClasspathEntry(List<String> command) {
-        String cp = command.size() >= 3 ? command.get(2) : "";
-        String sep = System.getProperty("path.separator");
-        return Path.of(cp.contains(sep) ? cp.substring(0, cp.indexOf(sep)) : cp);
-    }
-
-    private List<Path> assembleRuntimeClasspath(Path projectDir, JkBuild project, Path projectJar) throws IOException {
-        List<Path> classpath = new ArrayList<>();
-        classpath.add(projectJar);
-
-        Path lockFile = projectDir.resolve("jk.lock");
-        if (!Files.exists(lockFile)) {
-            var rootOpt = WorkspaceLocator.findRoot(projectDir);
-            if (rootOpt.isPresent()) {
-                Path candidate = rootOpt.get().resolve("jk.lock");
-                if (Files.exists(candidate)) lockFile = candidate;
-            }
-        }
-        Cas cas = new Cas(cacheDir());
-        if (Files.exists(lockFile)) {
-            Lockfile lock = LockfileReader.read(lockFile);
-            // RUN, not RUNTIME: dev-loop deps (DevTools, Docker Compose support) ride local
-            // runs; packagers keep consuming the production RUNTIME set.
-            classpath.addAll(new ClasspathResolver(cas).classpathFor(lock, ClasspathResolver.RUN));
-        }
-        WorkspaceClasspath.Result siblings = WorkspaceClasspath.resolve(projectDir, project, ClasspathResolver.RUN);
-        classpath.addAll(siblings.jars());
-        return classpath;
-    }
-
-    // --- shared helpers --------------------------------------------------
 
     private Path cacheDir() {
         return cacheDirOverride != null ? cacheDirOverride : JkDirs.cache();

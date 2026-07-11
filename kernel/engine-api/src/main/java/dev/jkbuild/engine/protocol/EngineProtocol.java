@@ -1259,12 +1259,15 @@ public final class EngineProtocol {
     }
 
     public static String execPlanRequest(
-            String dir, String cache, String kind, String mainOverride, String binName) {
+            String dir, String cache, String kind, String mainOverride, String binName, String binDir,
+            String libDir) {
         return "{\"t\":\"" + EXEC_PLAN_REQUEST + "\",\"dir\":" + Ndjson.quote(dir)
                 + ",\"cache\":" + Ndjson.quote(cache)
                 + ",\"kind\":" + Ndjson.quote(kind)
                 + ",\"mainOverride\":" + (mainOverride == null ? "null" : Ndjson.quote(mainOverride))
                 + ",\"binName\":" + (binName == null ? "null" : Ndjson.quote(binName))
+                + ",\"binDir\":" + (binDir == null ? "null" : Ndjson.quote(binDir))
+                + ",\"libDir\":" + (libDir == null ? "null" : Ndjson.quote(libDir))
                 + "}";
     }
 

@@ -302,7 +302,21 @@ public final class EngineClient {
             String mainOverride,
             String binName)
             throws java.io.IOException {
-        return EngineBuildListenerAdapter.execPlan(paths, dir, cache, kind, mainOverride, binName);
+        return EngineBuildListenerAdapter.execPlan(paths, dir, cache, kind, mainOverride, binName, null, null);
+    }
+
+    /** As above with install-destination overrides ({@code --bin-dir}/{@code --lib-dir}). */
+    public static dev.jkbuild.engine.protocol.ExecPlan execPlan(
+            dev.jkbuild.engine.EnginePaths.Paths paths,
+            java.nio.file.Path dir,
+            java.nio.file.Path cache,
+            String kind,
+            String mainOverride,
+            String binName,
+            java.nio.file.Path binDir,
+            java.nio.file.Path libDir)
+            throws java.io.IOException {
+        return EngineBuildListenerAdapter.execPlan(paths, dir, cache, kind, mainOverride, binName, binDir, libDir);
     }
 
     public record ExplainRequest(

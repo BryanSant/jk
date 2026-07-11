@@ -967,12 +967,16 @@ public final class EngineServer implements AutoCloseable {
     private void handleExecPlanRequest(String requestLine, BufferedWriter writer) {
         dev.jkbuild.engine.protocol.ExecPlan plan;
         try {
+            String binDir = Ndjson.str(requestLine, "binDir");
+            String libDir = Ndjson.str(requestLine, "libDir");
             plan = dev.jkbuild.runtime.ExecPlans.execPlan(
                     Path.of(Ndjson.str(requestLine, "dir")),
                     Path.of(Ndjson.str(requestLine, "cache")),
                     Ndjson.str(requestLine, "kind"),
                     Ndjson.str(requestLine, "mainOverride"),
-                    Ndjson.str(requestLine, "binName"));
+                    Ndjson.str(requestLine, "binName"),
+                    binDir == null ? null : Path.of(binDir),
+                    libDir == null ? null : Path.of(libDir));
         } catch (RuntimeException e) {
             plan = dev.jkbuild.engine.protocol.ExecPlan.error("unknown", String.valueOf(e.getMessage()));
         }

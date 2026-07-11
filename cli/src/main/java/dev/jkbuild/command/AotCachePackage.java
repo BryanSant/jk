@@ -1,15 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
-import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cli.CliOutput;
-import dev.jkbuild.compile.ClasspathResolver;
 import dev.jkbuild.jdk.HostPlatform;
-import dev.jkbuild.jdk.JavaHomes;
-import dev.jkbuild.layout.BuildLayout;
-import dev.jkbuild.lock.Lockfile;
-import dev.jkbuild.lock.LockfileReader;
-import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.util.PathUtil;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -49,9 +42,9 @@ final class AotCachePackage {
     private AotCachePackage() {}
 
     /** Package + train. Returns the process exit code contract (0 = success). */
-    static int run(Path projectDir, JkBuild project, BuildLayout layout, Path cacheDir) {
+    static int run(Path projectDir, Path cacheDir) {
         try {
-            return runInner(projectDir, project, layout, cacheDir);
+            return runInner(projectDir, cacheDir);
         } catch (IOException e) {
             CliOutput.err("jk build --aot-cache: " + e.getMessage());
             return dev.jkbuild.model.command.Exit.SOFTWARE;
@@ -62,28 +55,44 @@ final class AotCachePackage {
         }
     }
 
-    private static int runInner(Path projectDir, JkBuild project, BuildLayout layout, Path cacheDir)
+    private static int runInner(Path projectDir, Path cacheDir)
             throws IOException, InterruptedException {
-        Path outDir = layout.moduleTargetDir().resolve("aot-cache");
+        // Thin client: the engine computes the layout inputs (boot-ness, tier, main jar,
+        // coordinate-named libs, main class); this process does the file assembly + the
+        // training fork it owns.
+        dev.jkbuild.engine.protocol.ExecPlan plan = Boolean.getBoolean("jk.test.noEngine")
+                ? dev.jkbuild.cli.engine.InProcessEngine.require()
+                        .execPlan(projectDir, cacheDir, "aot-cache", null, null)
+                : dev.jkbuild.cli.engine.EngineClient.execPlan(
+                        dev.jkbuild.engine.EnginePaths.current(), projectDir, cacheDir, "aot-cache", null, null);
+        if (plan.error() != null) {
+            CliOutput.err("jk build --aot-cache: " + plan.error());
+            return dev.jkbuild.model.command.Exit.SOFTWARE;
+        }
+
+        // target/aot-cache next to the built artifact (mainJar sits in target/ or target/lib/).
+        Path targetDir = Path.of(plan.mainJar()).getParent();
+        if ("lib".equals(String.valueOf(targetDir.getFileName()))) targetDir = targetDir.getParent();
+        Path outDir = targetDir.resolve("aot-cache");
         PathUtil.deleteRecursively(outDir);
         Files.createDirectories(outDir);
 
-        Path javaHome = JavaHomes.runningJavaHome();
+        Path javaHome = Path.of(plan.javaHome());
         String java = javaHome.resolve("bin")
                 .resolve(HostPlatform.isWindows() ? "java.exe" : "java")
                 .toString();
-        int major = JkBuild.Project.majorOf(project.project().jdk());
-        boolean aotTier = major >= 25;
+        boolean aotTier = "aot".equals(plan.tier());
         String cacheFile = aotTier ? "app.aot" : "app.jsa";
+        boolean springBoot = plan.boot();
 
         // 1. The extracted layout: thin app jar + lib/ with original names.
         String appJarName;
-        if (project.isSpringBoot()) {
+        if (springBoot) {
             // Boot's own tooling produces the CDS/AOT-friendly layout (thin launcher jar
             // whose manifest Class-Path points at lib/) — use it rather than re-implement.
-            appJarName = extractBootLayout(java, layout.mainJar(), outDir, projectDir);
+            appJarName = extractBootLayout(java, Path.of(plan.mainJar()), outDir, projectDir);
         } else {
-            appJarName = assemblePlainLayout(projectDir, project, layout, cacheDir, outDir);
+            appJarName = assemblePlainLayout(plan, outDir);
         }
 
         // 2. Training run: one full startup that exits, recorded into the cache.
@@ -94,7 +103,7 @@ final class AotCachePackage {
         } else {
             training.add("-XX:ArchiveClassesAtExit=" + cacheFile);
         }
-        if (project.isSpringBoot()) {
+        if (springBoot) {
             // Refresh the full context, then exit — the exact startup path worth caching.
             training.add("-Dspring.context.exit=onRefresh");
         }
@@ -102,7 +111,7 @@ final class AotCachePackage {
         training.add(appJarName);
 
         CliOutput.err("jk: training the " + (aotTier ? "AOT cache (JEP 514)" : "AppCDS archive") + " — one "
-                + (project.isSpringBoot() ? "context refresh" : "run of the app") + " ...");
+                + (springBoot ? "context refresh" : "run of the app") + " ...");
         Process process = new ProcessBuilder(training)
                 .directory(outDir.toFile())
                 .redirectErrorStream(true)
@@ -185,29 +194,19 @@ final class AotCachePackage {
 
     /**
      * Non-Boot layout: the app jar with a {@code Class-Path} pointing at {@code lib/}, deps copied
-     * under their original {@code artifact-version.jar} names. The Class-Path manifest entry lets
-     * training and runtime both use plain {@code -jar}.
+     * under their original {@code artifact-version.jar} names (both straight from the engine's
+     * plan). The Class-Path manifest entry lets training and runtime both use plain {@code -jar}.
      */
-    private static String assemblePlainLayout(
-            Path projectDir, JkBuild project, BuildLayout layout, Path cacheDir, Path outDir)
+    private static String assemblePlainLayout(dev.jkbuild.engine.protocol.ExecPlan plan, Path outDir)
             throws IOException {
-        Path mainJar = layout.mainJar();
-        if (!Files.isRegularFile(mainJar)) {
-            throw new IOException("jar not found at " + mainJar + " — build before --aot-cache");
-        }
+        Path mainJar = Path.of(plan.mainJar());
         Path libDir = Files.createDirectories(outDir.resolve("lib"));
-        List<String> libNames = new ArrayList<>();
-        Path lockFile = projectDir.resolve("jk.lock");
-        if (Files.exists(lockFile)) {
-            Lockfile lock = LockfileReader.read(lockFile);
-            ClasspathResolver resolver = new ClasspathResolver(new Cas(cacheDir));
-            for (ClasspathResolver.Entry entry : resolver.entriesFor(lock, ClasspathResolver.RUNTIME)) {
-                if (!Files.isRegularFile(entry.jar())) continue;
-                String name = entry.artifact().moduleArtifact() + "-"
-                        + entry.artifact().version() + ".jar";
-                Files.copy(entry.jar(), libDir.resolve(name), StandardCopyOption.REPLACE_EXISTING);
-                libNames.add(name);
-            }
+        List<String> libNames = new ArrayList<>(plan.libNames());
+        for (int i = 0; i < plan.libNames().size(); i++) {
+            Files.copy(
+                    Path.of(plan.libPaths().get(i)),
+                    libDir.resolve(plan.libNames().get(i)),
+                    StandardCopyOption.REPLACE_EXISTING);
         }
 
         // Rewrite the app jar with a Class-Path manifest entry (relative lib/ refs). A jar's
@@ -219,11 +218,9 @@ final class AotCachePackage {
             if (manifest == null) manifest = new java.util.jar.Manifest();
             manifest.getMainAttributes()
                     .putIfAbsent(java.util.jar.Attributes.Name.MANIFEST_VERSION, "1.0");
-            if (manifest.getMainAttributes().getValue(java.util.jar.Attributes.Name.MAIN_CLASS) == null) {
-                String main = project.mainClass() != null
-                        ? project.mainClass()
-                        : dev.jkbuild.layout.MainClassScanner.scanUnique(mainJar);
-                manifest.getMainAttributes().put(java.util.jar.Attributes.Name.MAIN_CLASS, main);
+            if (manifest.getMainAttributes().getValue(java.util.jar.Attributes.Name.MAIN_CLASS) == null
+                    && !plan.mainClass().isEmpty()) {
+                manifest.getMainAttributes().put(java.util.jar.Attributes.Name.MAIN_CLASS, plan.mainClass());
             }
             if (!libNames.isEmpty()) {
                 StringBuilder cp = new StringBuilder();

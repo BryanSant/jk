@@ -29,6 +29,7 @@ public record ProjectInfo(
         String mainClass,
         boolean shadowJar,
         String nativeMode,
+        String graal,
         boolean springBoot,
         String springBootVersion,
         String formatStyle,
@@ -46,7 +47,7 @@ public record ProjectInfo(
     public static ProjectInfo error(String message) {
         return new ProjectInfo(
                 message, "", "", "", "", 0, false, "", true, false, "", List.of(), false, "", false, "DISABLED",
-                false, "", "", "", "", false, false, "");
+                "", false, "", "", "", "", false, false, "");
     }
 
     public String encode() {
@@ -67,6 +68,7 @@ public record ProjectInfo(
                 + ",\"mainClass\":" + Ndjson.quote(mainClass)
                 + ",\"shadowJar\":" + shadowJar
                 + ",\"nativeMode\":" + Ndjson.quote(nativeMode)
+                + ",\"graal\":" + Ndjson.quote(graal)
                 + ",\"springBoot\":" + springBoot
                 + ",\"springBootVersion\":" + Ndjson.quote(springBootVersion)
                 + ",\"formatStyle\":" + Ndjson.quote(formatStyle)
@@ -97,6 +99,7 @@ public record ProjectInfo(
                 orEmpty(Ndjson.str(line, "mainClass")),
                 Ndjson.bool(line, "shadowJar", false),
                 orEmpty(Ndjson.str(line, "nativeMode")),
+                orEmpty(Ndjson.str(line, "graal")),
                 Ndjson.bool(line, "springBoot", false),
                 orEmpty(Ndjson.str(line, "springBootVersion")),
                 orEmpty(Ndjson.str(line, "formatStyle")),

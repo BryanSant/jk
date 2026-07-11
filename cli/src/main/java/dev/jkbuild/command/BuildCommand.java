@@ -165,13 +165,8 @@ public final class BuildCommand implements CliCommand {
         int code = runForDir(startDir);
         if (code == 0 && aotCache) {
             // Post-build tail (like run's exec): extract layout + training run, client-side —
-            // it's process orchestration on already-built artifacts, not build work.
-            JkBuild project = JkBuildParser.parse(buildFile);
-            code = AotCachePackage.run(
-                    startDir,
-                    project,
-                    dev.jkbuild.layout.BuildLayout.of(startDir, project),
-                    cacheDir != null ? cacheDir : JkDirs.cache());
+            // the layout inputs come from the engine's exec plan (thin client).
+            code = AotCachePackage.run(startDir, cacheDir != null ? cacheDir : JkDirs.cache());
         }
         return code;
     }

@@ -61,6 +61,18 @@ public final class InProcessEngineImpl implements InProcessEngine {
         return dev.jkbuild.runtime.ExecPlans.execPlan(dir, cache, kind, mainOverride, binName);
     }
 
+    @Override
+    public dev.jkbuild.engine.protocol.ExecPlan execPlan(
+            java.nio.file.Path dir,
+            java.nio.file.Path cache,
+            String kind,
+            String mainOverride,
+            String binName,
+            java.nio.file.Path binDir,
+            java.nio.file.Path libDir) {
+        return dev.jkbuild.runtime.ExecPlans.execPlan(dir, cache, kind, mainOverride, binName, binDir, libDir);
+    }
+
 
     /** Public no-arg constructor for {@link java.util.ServiceLoader}. */
     public InProcessEngineImpl() {}

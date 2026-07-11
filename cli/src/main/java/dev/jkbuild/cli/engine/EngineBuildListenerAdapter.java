@@ -416,7 +416,14 @@ final class EngineBuildListenerAdapter {
     }
 
     static dev.jkbuild.engine.protocol.ExecPlan execPlan(
-            EnginePaths.Paths paths, Path dir, Path cache, String kind, String mainOverride, String binName)
+            EnginePaths.Paths paths,
+            Path dir,
+            Path cache,
+            String kind,
+            String mainOverride,
+            String binName,
+            Path binDir,
+            Path libDir)
             throws IOException {
         EngineClient.ensureRunning(paths, Jk.VERSION);
         try (SocketChannel ch = EngineClient.connect(paths.socket())) {
@@ -425,7 +432,13 @@ final class EngineBuildListenerAdapter {
             BufferedReader reader =
                     new BufferedReader(new InputStreamReader(Channels.newInputStream(ch), StandardCharsets.UTF_8));
             writer.write(EngineProtocol.execPlanRequest(
-                    dir.toString(), cache.toString(), kind, mainOverride, binName));
+                    dir.toString(),
+                    cache.toString(),
+                    kind,
+                    mainOverride,
+                    binName,
+                    binDir == null ? null : binDir.toString(),
+                    libDir == null ? null : libDir.toString()));
             writer.write('\n');
             writer.flush();
             String line;

@@ -8,14 +8,7 @@ import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.PathDisplay;
 import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.cli.theme.Coords;
-import dev.jkbuild.compile.ClasspathResolver;
-import dev.jkbuild.config.JkBuildParser;
-import dev.jkbuild.config.WorkspaceClasspath;
-import dev.jkbuild.config.WorkspaceLocator;
 import dev.jkbuild.jdk.JavaHomes;
-import dev.jkbuild.layout.BuildLayout;
-import dev.jkbuild.lock.Lockfile;
-import dev.jkbuild.lock.LockfileReader;
 import dev.jkbuild.model.Coordinate;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.command.Arity;
@@ -369,13 +362,17 @@ public final class InstallCommand implements CliCommand {
         // Validate up front: a non-native application needs a main class for its
         // launcher. (Done here, not in a phase, so we fail before building.) Spring Boot
         // projects are exempt — the boot jar carries Start-Class in its manifest (resolved
-        // by scan at package time) and the launcher runs it with -jar.
-        JkBuild proj = JkBuildParser.parse(projectDir.resolve("jk.toml"));
-        var pj = proj.project();
-        if (proj.isApplication()
-                && proj.nativeMode() == JkBuild.NativeMode.DISABLED
-                && proj.mainClass() == null
-                && !proj.isSpringBoot()) {
+        // by scan at package time) and the launcher runs it with -jar. Thin client: the
+        // parsed summary comes from the engine, never a client-side parse.
+        dev.jkbuild.engine.protocol.ProjectInfo proj = projectInfo(projectDir);
+        if (proj.error() != null) {
+            CliOutput.err("jk install: " + proj.error());
+            return Exit.CONFIG;
+        }
+        if (proj.application()
+                && "DISABLED".equals(proj.nativeMode())
+                && proj.mainClass().isEmpty()
+                && !proj.springBoot()) {
             CliOutput.err("jk install: application project at "
                     + dev.jkbuild.cli.PathDisplay.styledRaw(projectDir)
                     + " has no `main` class set in [application]");
@@ -383,7 +380,7 @@ public final class InstallCommand implements CliCommand {
         }
         // ALWAYS: native is part of the standard build and install produces a native binary.
         // SUPPORTED: user runs `jk native` explicitly; install deploys the jar.
-        boolean isNative = proj.isApplication() && proj.nativeMode() == JkBuild.NativeMode.ALWAYS;
+        boolean isNative = proj.application() && "ALWAYS".equals(proj.nativeMode());
 
         // `jk build` no longer auto-builds native (that's `jk native`), so an installed native
         // application builds its binary here. Resolve the GraalVM up front — before any progress
@@ -439,12 +436,13 @@ public final class InstallCommand implements CliCommand {
         }
 
         // Only for applications: place a runnable artifact under ~/.jk (the "make install").
-        Coordinate coord = Coordinate.of(pj.group(), pj.name(), pj.version());
+        // The engine computes the plan (gates, link set, launcher script); this process — which
+        // owns the user's home — applies it.
+        Coordinate coord = Coordinate.of(proj.group(), proj.name(), proj.version());
         Path launcher = null;
-        if (proj.isApplication()) {
+        if (proj.application()) {
             try {
-                launcher = makeInstallApp(projectDir, proj, BuildLayout.of(projectDir, proj), cacheDir, binDir,
-                        libDir);
+                launcher = applyInstallPlan(projectDir, cacheDir);
             } catch (IOException e) {
                 CliOutput.err("jk install: make install failed: " + e.getMessage());
                 return 1;
@@ -454,91 +452,47 @@ public final class InstallCommand implements CliCommand {
         return 0;
     }
 
-    /**
-     * The {@code make install} step for applications. Dispatches by artifact type: a native binary
-     * goes straight into {@code ~/.jk/bin}; a shadow jar goes into {@code ~/.jk/lib} with a
-     * launcher; a normal jar goes into {@code ~/.jk/lib} alongside its hard-linked runtime
-     * dependency jars, with a launcher whose classpath lists exactly those jars. Returns the
-     * launcher (or the binary) path.
-     */
-    private Path makeInstallApp(
-            Path projectDir, JkBuild project, BuildLayout layout, Path cacheDir, Path binDir, Path libDir)
-            throws IOException {
-        var p = project.project();
-        String bin = binName != null && !binName.isBlank() ? binName : p.name();
-        String mainCls = mainClass != null && !mainClass.isBlank() ? mainClass : project.mainClass();
-        Path javaHome = JavaHomes.runningJavaHome();
-
-        // Native binary → ~/.jk/bin/<bin>. Only for ALWAYS (auto-build) mode.
-        if (project.nativeMode() == JkBuild.NativeMode.ALWAYS) {
-            Files.createDirectories(binDir);
-            Path dest = binDir.resolve(bin);
-            Linking.linkOrCopy(layout.nativeBinary(), dest);
-            markExecutable(dest);
-            return dest;
-        }
-
-        Files.createDirectories(libDir);
-
-        // Shadow/fat jar → a single self-contained jar in lib.
-        if (project.shadowJar()) {
-            Path dest = libDir.resolve(layout.shadowJar().getFileName().toString());
-            Linking.linkOrCopy(layout.shadowJar(), dest);
-            return AppLauncher.install(binDir, javaHome, bin, mainCls, List.of(dest));
-        }
-
-        // Spring Boot jar → self-contained executable layout (deps nested under
-        // BOOT-INF/lib, entry point in the manifest) — one jar, launched with -jar.
-        if (project.isSpringBoot()) {
-            Path dest = libDir.resolve(layout.mainJar().getFileName().toString());
-            Linking.linkOrCopy(layout.mainJar(), dest);
-            return AppLauncher.installJar(binDir, javaHome, bin, dest);
-        }
-
-        // Normal jar → app jar + hard-linked runtime dependency jars in lib.
-        List<Path> classpath = new ArrayList<>();
-        Path appDest = libDir.resolve(layout.mainJar().getFileName().toString());
-        Linking.linkOrCopy(layout.mainJar(), appDest);
-        classpath.add(appDest);
-
-        Path lockFile = resolveLockFile(projectDir);
-        if (Files.exists(lockFile)) {
-            Cas cas = new Cas(cacheDir);
-            Lockfile lock = LockfileReader.read(lockFile);
-            for (Lockfile.Artifact pkg : lock.artifacts()) {
-                if (pkg.checksum() == null) continue;
-                if (!pkg.inAnyScope(ClasspathResolver.RUNTIME)) continue; // EXPORT + MAIN + RUNTIME
-                String hex = pkg.checksum().startsWith("sha256:")
-                        ? pkg.checksum().substring("sha256:".length())
-                        : pkg.checksum();
-                Path blob = cas.pathFor(hex);
-                if (!Files.exists(blob)) continue;
-                String artifactId = pkg.moduleArtifact();
-                Path dest = libDir.resolve(artifactId + "-" + pkg.version() + ".jar");
-                Linking.linkOrCopy(blob, dest);
-                classpath.add(dest);
-            }
-        }
-        // Workspace sibling jars (built locally) also belong on the classpath.
-        WorkspaceClasspath.Result siblings = WorkspaceClasspath.resolve(projectDir, project, ClasspathResolver.RUNTIME);
-        for (Path sib : siblings.jars()) {
-            Path dest = libDir.resolve(sib.getFileName().toString());
-            Linking.linkOrCopy(sib, dest);
-            classpath.add(dest);
-        }
-        return AppLauncher.install(binDir, javaHome, bin, mainCls, classpath);
+    /** The engine's parsed-project summary (in-process twin under jk.test.noEngine). */
+    private dev.jkbuild.engine.protocol.ProjectInfo projectInfo(Path projectDir) throws IOException {
+        return engineDisabledForTests()
+                ? dev.jkbuild.cli.engine.InProcessEngine.require().projectInfo(projectDir)
+                : dev.jkbuild.cli.engine.EngineClient.projectInfo(
+                        dev.jkbuild.engine.EnginePaths.current(), projectDir);
     }
 
-    private static Path resolveLockFile(Path projectDir) throws IOException {
-        Path lockFile = projectDir.resolve("jk.lock");
-        if (!Files.exists(lockFile)) {
-            var rootOpt = WorkspaceLocator.findRoot(projectDir);
-            if (rootOpt.isPresent()) {
-                Path candidate = rootOpt.get().resolve("jk.lock");
-                if (Files.exists(candidate)) return candidate;
-            }
+    /**
+     * The {@code make install} step for applications, thin-client style: the engine computes the
+     * plan (link set + launcher script or a direct native-binary link); this process applies it —
+     * hard-link/copy each pair, write the launcher, mark executables. Returns the launcher path.
+     */
+    private Path applyInstallPlan(Path projectDir, Path cacheDir) throws IOException {
+        dev.jkbuild.engine.protocol.ExecPlan plan = engineDisabledForTests()
+                ? dev.jkbuild.cli.engine.InProcessEngine.require()
+                        .execPlan(projectDir, cacheDir, "install", mainClass, binName, binDirOverride,
+                                libDirOverride)
+                : dev.jkbuild.cli.engine.EngineClient.execPlan(
+                        dev.jkbuild.engine.EnginePaths.current(), projectDir, cacheDir, "install", mainClass,
+                        binName, binDirOverride, libDirOverride);
+        if (plan.error() != null) {
+            throw new IOException(plan.error());
         }
-        return lockFile;
+        for (int i = 0; i < plan.linkSrcs().size(); i++) {
+            Path src = Path.of(plan.linkSrcs().get(i));
+            Path dest = Path.of(plan.linkDests().get(i));
+            Files.createDirectories(dest.getParent());
+            Linking.linkOrCopy(src, dest);
+        }
+        if (!plan.launcherScript().isEmpty()) {
+            Path launcher = Path.of(plan.launcherPath());
+            Files.createDirectories(launcher.getParent());
+            Files.writeString(launcher, plan.launcherScript());
+            markExecutable(launcher);
+            return launcher;
+        }
+        // Native binary linked directly into bin — no script, just the exec bit.
+        Path bin = Path.of(plan.binPath());
+        markExecutable(bin);
+        return bin;
     }
 
     private static void markExecutable(Path file) {

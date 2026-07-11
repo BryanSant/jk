@@ -90,6 +90,7 @@ public final class ExecPlans {
                     build.mainClass() == null ? "" : build.mainClass(),
                     build.shadowJar(),
                     build.nativeMode().name(),
+                    orEmpty(build.graal()),
                     build.isSpringBoot(),
                     boot == null ? "" : boot.version(),
                     orEmpty(format.style()),
@@ -107,13 +108,19 @@ public final class ExecPlans {
 
     /** Compute the plan for {@code kind} — never throws; failures ride {@code error}. */
     public static ExecPlan execPlan(Path dir, Path cache, String kind, String mainOverride, String binName) {
+        return execPlan(dir, cache, kind, mainOverride, binName, null, null);
+    }
+
+    /** As above with install-destination overrides ({@code --bin-dir}/{@code --lib-dir}). */
+    public static ExecPlan execPlan(
+            Path dir, Path cache, String kind, String mainOverride, String binName, Path binDir, Path libDir) {
         try {
             JkBuild project = JkBuildParser.parse(dir.resolve("jk.toml"));
             BuildLayout layout = BuildLayout.of(dir, project);
             return switch (kind) {
                 case "run" -> runPlan(dir, cache, project, layout, false);
                 case "dev" -> runPlan(dir, cache, project, layout, true);
-                case "install" -> installPlan(dir, cache, project, layout, mainOverride, binName);
+                case "install" -> installPlan(dir, cache, project, layout, mainOverride, binName, binDir, libDir);
                 case "aot-cache" -> aotCachePlan(dir, cache, project, layout);
                 default -> ExecPlan.error(kind, "unknown exec-plan kind: " + kind);
             };
@@ -221,13 +228,20 @@ public final class ExecPlans {
      * launcher script — the client applies links, writes the script, and marks it executable.
      */
     private static ExecPlan installPlan(
-            Path dir, Path cache, JkBuild project, BuildLayout layout, String mainOverride, String binName)
+            Path dir,
+            Path cache,
+            JkBuild project,
+            BuildLayout layout,
+            String mainOverride,
+            String binName,
+            Path binDirOverride,
+            Path libDirOverride)
             throws IOException {
         var p = project.project();
         String bin = binName != null && !binName.isBlank() ? binName : p.name();
         Path javaHome = projectJavaHome(dir);
-        Path binDir = JkDirs.home().resolve("bin");
-        Path libDir = JkDirs.home().resolve("lib");
+        Path binDir = binDirOverride != null ? binDirOverride : JkDirs.home().resolve("bin");
+        Path libDir = libDirOverride != null ? libDirOverride : JkDirs.home().resolve("lib");
 
         if (!project.isApplication()) {
             return ExecPlan.error(

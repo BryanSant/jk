@@ -38,6 +38,16 @@ public interface InProcessEngine {
     dev.jkbuild.engine.protocol.ExecPlan execPlan(
             java.nio.file.Path dir, java.nio.file.Path cache, String kind, String mainOverride, String binName);
 
+    /** As above with install-destination overrides ({@code --bin-dir}/{@code --lib-dir}). */
+    dev.jkbuild.engine.protocol.ExecPlan execPlan(
+            java.nio.file.Path dir,
+            java.nio.file.Path cache,
+            String kind,
+            String mainOverride,
+            String binName,
+            java.nio.file.Path binDir,
+            java.nio.file.Path libDir);
+
     /** A single hosted goal's outcome: the goal result plus the test counts (null when no tests ran). */
     record GoalOutcome(dev.jkbuild.run.GoalResult result, dev.jkbuild.run.TestSummary testResult) {}
 

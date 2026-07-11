@@ -1,22 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
-import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.ProjectContext;
 import dev.jkbuild.cli.run.ConsoleSpec;
 import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.cli.theme.Theme;
-import dev.jkbuild.compile.ClasspathResolver;
-import dev.jkbuild.config.JkBuildParser;
-import dev.jkbuild.config.WorkspaceClasspath;
-import dev.jkbuild.jdk.HostPlatform;
-import dev.jkbuild.jdk.JavaHomes;
-import dev.jkbuild.layout.BuildLayout;
-import dev.jkbuild.lock.Lockfile;
-import dev.jkbuild.lock.LockfileReader;
-import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Exit;
 import dev.jkbuild.model.command.Invocation;
@@ -57,17 +47,12 @@ import java.util.concurrent.TimeUnit;
  */
 public final class DevCommand implements CliCommand {
 
-    private static final String DEVTOOLS_MODULE = "org.springframework.boot:spring-boot-devtools";
-
     /** Coalesce editor save bursts (rename+write+chmod) into one rebuild. */
     private static final long DEBOUNCE_MILLIS = 150;
 
     private GlobalOptions global;
     private Path cacheDirOverride;
     private Path jdksDir;
-
-    /** Tier 2: devtools jar fetched for this session when the project didn't declare it. */
-    private Path injectedDevtools;
 
     @Override
     public String name() {
@@ -98,26 +83,25 @@ public final class DevCommand implements CliCommand {
         var proj = ProjectContext.require(projectDir, "dev").orElse(null);
         if (proj == null) return Exit.CONFIG;
 
-        JkBuild project = JkBuildParser.parse(proj.buildFile());
-        BuildLayout layout = BuildLayout.of(projectDir, project);
         Path cache = cacheDirOverride != null ? cacheDirOverride : JkDirs.cache();
 
         // 1. Initial full build (skip tests — the dev loop optimizes for latency).
         if (!build(projectDir, cache, false)) return 1;
 
-        boolean devtools = devtoolsOnClasspath(projectDir);
-        if (!devtools && project.isSpringBoot()) {
-            // Tier 2 (spring-boot plan §3.7): a Boot project gets the in-place restart
-            // experience even without declaring devtools — fetch it (version-matched to
-            // the declared Boot line) and ride it on this session's classpath only.
-            injectedDevtools = fetchDevtools(project.springBoot().orElseThrow().version());
-            if (injectedDevtools != null) {
-                devtools = true;
-                CliOutput.err("jk dev: spring-boot-devtools auto-injected for this session"
-                        + " — add it to [dev-dependencies] to make it permanent.");
-            }
+        // 2. The engine computes the dev plan: classes-dir + RUN classpath argv, DevTools
+        //    detection/injection, watch roots — no jk.toml/jk.lock reasoning client-side.
+        dev.jkbuild.engine.protocol.ExecPlan plan = devPlan(projectDir, cache);
+        if (plan.error() != null) {
+            CliOutput.err("jk dev: " + plan.error());
+            return Exit.SOFTWARE;
         }
-        List<Path> watchRoots = watchRoots(projectDir);
+        boolean devtools = plan.hotReload();
+        if (plan.devtoolsInjected()) {
+            CliOutput.err("jk dev: spring-boot-devtools auto-injected for this session"
+                    + " — add it to [dev-dependencies] to make it permanent.");
+        }
+        List<Path> watchRoots = new ArrayList<>();
+        for (String root : plan.watchRoots()) watchRoots.add(Path.of(root));
         CliOutput.err("jk dev: watching "
                 + watchRoots.stream()
                         .map(r -> projectDir.relativize(r).toString())
@@ -126,9 +110,9 @@ public final class DevCommand implements CliCommand {
                 + (devtools ? " — DevTools hot-restart" : " — process restart on change")
                 + ". Ctrl-C stops.");
 
-        // 2. Run the app from the classes dir (never a packaged jar: the loop recompiles
+        // 3. Run the app from the classes dir (never a packaged jar: the loop recompiles
         //    into this dir, and DevTools watches it).
-        Process app = startApp(projectDir, project, layout, appArgs);
+        Process app = startApp(plan, appArgs);
 
         // 3. Watch → rebuild → (maybe) restart, until interrupted or the app exits.
         try (WatchService watcher = FileSystems.getDefault().newWatchService()) {
@@ -153,8 +137,13 @@ public final class DevCommand implements CliCommand {
                 if (changes.manifest) {
                     CliOutput.err("jk dev: jk.toml changed — full rebuild + restart");
                     if (build(projectDir, cache, false)) {
-                        project = JkBuildParser.parse(proj.buildFile());
-                        app = restartApp(app, projectDir, project, layout, appArgs);
+                        plan = devPlan(projectDir, cache); // classpath shape may have changed
+                        if (plan.error() != null) {
+                            CliOutput.err("jk dev: " + plan.error());
+                            return Exit.SOFTWARE;
+                        }
+                        devtools = plan.hotReload();
+                        app = restartApp(app, plan, appArgs);
                     }
                     continue;
                 }
@@ -168,7 +157,7 @@ public final class DevCommand implements CliCommand {
                 if (devtools) {
                     CliOutput.err("jk dev: recompiled — DevTools restarts the context.");
                 } else {
-                    app = restartApp(app, projectDir, project, layout, appArgs);
+                    app = restartApp(app, plan, appArgs);
                 }
             }
         } finally {
@@ -239,109 +228,34 @@ public final class DevCommand implements CliCommand {
 
     // --- app process --------------------------------------------------------
 
-    private Process startApp(Path projectDir, JkBuild project, BuildLayout layout, List<String> appArgs)
-            throws IOException {
-        List<String> command = new ArrayList<>();
-        command.add(JavaHomes.runningJavaHome()
-                .resolve("bin")
-                .resolve(HostPlatform.isWindows() ? "java.exe" : "java")
-                .toString());
-        command.add("-cp");
-        command.add(joinClasspath(devClasspath(projectDir, project, layout)));
-        command.add(mainClass(project, layout));
-        command.addAll(appArgs);
-        return new ProcessBuilder(command).inheritIO().start();
+    /** Fetch the dev exec plan (engine-hosted; in-process twin under jk.test.noEngine). */
+    private dev.jkbuild.engine.protocol.ExecPlan devPlan(Path projectDir, Path cache) throws IOException {
+        return engineDisabledForTests()
+                ? dev.jkbuild.cli.engine.InProcessEngine.require().execPlan(projectDir, cache, "dev", null, null)
+                : dev.jkbuild.cli.engine.EngineClient.execPlan(
+                        dev.jkbuild.engine.EnginePaths.current(), projectDir, cache, "dev", null, null);
     }
 
-    private Process restartApp(Process app, Path projectDir, JkBuild project, BuildLayout layout, List<String> appArgs)
+    private Process startApp(dev.jkbuild.engine.protocol.ExecPlan plan, List<String> appArgs) throws IOException {
+        List<String> command = new ArrayList<>(plan.argv());
+        command.addAll(appArgs);
+        return new ProcessBuilder(command)
+                .directory(Path.of(plan.workingDir()).toFile())
+                .inheritIO()
+                .start();
+    }
+
+    private Process restartApp(Process app, dev.jkbuild.engine.protocol.ExecPlan plan, List<String> appArgs)
             throws IOException, InterruptedException {
         if (app.isAlive()) {
             app.destroy();
             if (!app.waitFor(5, TimeUnit.SECONDS)) app.destroyForcibly();
         }
         CliOutput.err("jk dev: restarting app");
-        return startApp(projectDir, project, layout, appArgs);
-    }
-
-    /**
-     * Fetch spring-boot-devtools at the project's Boot version into the CAS. A direct Central
-     * URL fetch (the EngineJarFetcher pattern) — the slim client deliberately carries no
-     * repo-group machinery, and the coordinate is fully determined by the Boot version.
-     * Devtools' own dependencies are already on any Boot app's classpath — the single jar
-     * suffices. Returns null (silently degrading to process-restart mode) when offline.
-     */
-    private Path fetchDevtools(String bootVersion) {
-        String path = "org/springframework/boot/spring-boot-devtools/" + bootVersion
-                + "/spring-boot-devtools-" + bootVersion + ".jar";
-        try {
-            Cas cas = new Cas(cacheDirOverride != null ? cacheDirOverride : JkDirs.cache());
-            // Named-repo store first: jk dev may have fetched it in an earlier session.
-            var store = new dev.jkbuild.repo.RepoArtifactStore(cas.root(), "central");
-            var cached = store.locate(path);
-            if (cached.isPresent()) return cached.get();
-            var response = new dev.jkbuild.http.Http()
-                    .get(java.net.URI.create("https://repo.maven.apache.org/maven2/" + path));
-            if (response.statusCode() != 200) return null;
-            return cas.put(response.body());
-        } catch (IOException e) {
-            return null;
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            return null;
-        }
-    }
-
-    /** Classes dir + lockfile RUN classpath (dev-scope deps ride) + workspace siblings. */
-    private List<Path> devClasspath(Path projectDir, JkBuild project, BuildLayout layout) throws IOException {
-        List<Path> classpath = new ArrayList<>();
-        classpath.add(layout.classesDir());
-        if (injectedDevtools != null) classpath.add(injectedDevtools);
-        Path lockFile = projectDir.resolve("jk.lock");
-        if (Files.exists(lockFile)) {
-            Cas cas = new Cas(cacheDirOverride != null ? cacheDirOverride : JkDirs.cache());
-            classpath.addAll(new ClasspathResolver(cas).classpathFor(LockfileReader.read(lockFile), ClasspathResolver.RUN));
-        }
-        WorkspaceClasspath.Result siblings = WorkspaceClasspath.resolve(projectDir, project, ClasspathResolver.RUN);
-        classpath.addAll(siblings.jars());
-        return classpath;
-    }
-
-    private static String mainClass(JkBuild project, BuildLayout layout) throws IOException {
-        if (project.mainClass() != null) return project.mainClass();
-        return dev.jkbuild.layout.MainClassScanner.scanUnique(layout.classesDir());
-    }
-
-    private static String joinClasspath(List<Path> paths) {
-        String sep = System.getProperty("path.separator");
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < paths.size(); i++) {
-            if (i > 0) sb.append(sep);
-            sb.append(paths.get(i).toAbsolutePath());
-        }
-        return sb.toString();
-    }
-
-    private static boolean devtoolsOnClasspath(Path projectDir) {
-        Path lockFile = projectDir.resolve("jk.lock");
-        if (!Files.exists(lockFile)) return false;
-        try {
-            Lockfile lock = LockfileReader.read(lockFile);
-            for (Lockfile.Artifact a : lock.artifacts()) {
-                if (DEVTOOLS_MODULE.equals(a.name())) return true;
-            }
-        } catch (IOException ignored) {
-            /* no lock, no devtools */
-        }
-        return false;
+        return startApp(plan, appArgs);
     }
 
     // --- filesystem watching --------------------------------------------------
-
-    /** {@code src/} (compact or traditional — both live under it). */
-    private static List<Path> watchRoots(Path projectDir) {
-        Path src = projectDir.resolve("src");
-        return Files.isDirectory(src) ? List.of(src) : List.of();
-    }
 
     private static void registerTree(WatchService watcher, Map<WatchKey, Path> keys, Path root) throws IOException {
         try (var stream = Files.walk(root)) {
