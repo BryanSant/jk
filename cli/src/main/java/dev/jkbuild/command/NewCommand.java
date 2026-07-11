@@ -83,6 +83,7 @@ public final class NewCommand implements CliCommand {
                         .negate(),
                 Opt.flag("Shadow (fat) jar. Implies --executable.", "--shadow"),
                 Opt.flag("Wire a GraalVM native-image build.", "--native"),
+                Opt.flag("Spring Boot application (implies --executable).", "--spring"),
                 Opt.value("<deps>", "Curated deps, comma-separated.", "--deps"),
                 Opt.value("<layout>", "Layout: simple | traditional.", "--layout"),
                 Opt.value("<module>", "Kotlin module name (-> project.module).", "--kotlin-module"),
@@ -103,6 +104,7 @@ public final class NewCommand implements CliCommand {
     Boolean executable;
     boolean shadow;
     boolean nativeImage;
+    boolean spring;
     String depsCsv;
     String layoutFlag;
     String kotlinModule;
@@ -223,6 +225,7 @@ public final class NewCommand implements CliCommand {
         this.executable = in.flag("executable").orElse(null);
         this.shadow = in.isSet("shadow");
         this.nativeImage = in.isSet("native");
+        this.spring = in.isSet("spring");
         this.depsCsv = in.value("deps").orElse(null);
         this.layoutFlag = in.value("layout").orElse(null);
         this.kotlinModule = in.value("kotlin-module").orElse(null);
@@ -592,11 +595,24 @@ public final class NewCommand implements CliCommand {
         var resolvedLang = (lang != null && !lang.isBlank())
                 ? parseLanguage(lang)
                 : (parent != null && parent.kotlin()) ? NewInputs.Language.KOTLIN : NewInputs.Language.JAVA;
-        var isExecutable = Boolean.TRUE.equals(executable) || shadow || nativeImage;
-        var resolvedLayout = (layoutFlag != null && !layoutFlag.isBlank()) ? layoutFlag.toLowerCase() : "simple";
-        var resolvedMain = isExecutable
-                ? Optional.of(deriveMainFqcn(resolvedGroup, resolvedLang, "simple".equalsIgnoreCase(resolvedLayout)))
-                : Optional.<String>empty();
+        if (spring && resolvedLang == NewInputs.Language.KOTLIN) {
+            // Kotlin + Boot needs the all-open (kotlin-spring) compiler plugin, which jk
+            // doesn't wire yet — fail up front rather than scaffold a broken project.
+            throw new IllegalArgumentException("--spring supports Java only for now (Kotlin needs the "
+                    + "kotlin-spring compiler plugin, which jk doesn't wire yet)");
+        }
+        var isExecutable = Boolean.TRUE.equals(executable) || shadow || nativeImage || spring;
+        // Boot users expect the Maven layout (resources under src/main/resources); an
+        // explicit --layout still wins.
+        var resolvedLayout = (layoutFlag != null && !layoutFlag.isBlank())
+                ? layoutFlag.toLowerCase()
+                : spring ? "traditional" : "simple";
+        var resolvedMain = spring
+                ? Optional.of(resolvedGroup + ".Application")
+                : isExecutable
+                        ? Optional.of(
+                                deriveMainFqcn(resolvedGroup, resolvedLang, "simple".equalsIgnoreCase(resolvedLayout)))
+                        : Optional.<String>empty();
         var resolvedDeps = parseDeps(depsCsv);
         var resolvedKotlinModule = (kotlinModule != null && !kotlinModule.isBlank())
                 ? Optional.of(kotlinModule)
@@ -611,6 +627,7 @@ public final class NewCommand implements CliCommand {
                 resolvedMain,
                 shadow,
                 nativeImage,
+                spring,
                 resolvedLang,
                 resolvedLayout,
                 resolvedKotlinModule,

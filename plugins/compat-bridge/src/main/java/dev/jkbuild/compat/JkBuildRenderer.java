@@ -46,6 +46,7 @@ public final class JkBuildRenderer {
         Objects.requireNonNull(jkBuild, "jkBuild");
         StringBuilder sb = new StringBuilder();
         renderProject(sb, jkBuild.project());
+        renderSpringBoot(sb, jkBuild.springBoot().orElse(null));
         renderApplication(sb, jkBuild.application().orElse(null));
         renderNative(sb, jkBuild.nativeConfig().orElse(null));
         renderManifest(sb, jkBuild.manifest());
@@ -85,6 +86,16 @@ public final class JkBuildRenderer {
             sb.append("java     = ").append(p.java()).append('\n');
         }
         if (p.m2install()) sb.append("m2install = true\n");
+    }
+
+    /** {@code [spring-boot]} table — its presence switches packaging to the Boot layout. */
+    private static void renderSpringBoot(StringBuilder sb, JkBuild.SpringBoot boot) {
+        if (boot == null) return;
+        sb.append("\n[spring-boot]\n");
+        sb.append("version = ").append(quote(boot.version())).append('\n');
+        if (boot.aot() != null) sb.append("aot = ").append(boot.aot()).append('\n');
+        if (boot.buildInfo()) sb.append("build-info = true\n");
+        if (!boot.includeTools()) sb.append("include-tools = false\n");
     }
 
     /** {@code [application]} table — its presence alone marks the project as an application. */
@@ -145,8 +156,10 @@ public final class JkBuildRenderer {
     private static void renderDependencies(StringBuilder sb, JkBuild jkBuild) {
         Map<Scope, List<Dependency>> byScope = jkBuild.dependencies().byScope();
         if (byScope.isEmpty()) return;
-        for (Scope scope :
-                new Scope[] {Scope.PLATFORM, Scope.MAIN, Scope.RUNTIME, Scope.PROVIDED, Scope.TEST, Scope.PROCESSOR}) {
+        for (Scope scope : new Scope[] {
+            Scope.PLATFORM, Scope.MAIN, Scope.RUNTIME, Scope.DEV, Scope.TEST_DEV, Scope.PROVIDED, Scope.TEST,
+            Scope.PROCESSOR
+        }) {
             List<Dependency> deps = byScope.get(scope);
             if (deps == null || deps.isEmpty()) continue;
             // Sort by short name for determinism. The dep `name` is the
@@ -198,7 +211,11 @@ public final class JkBuildRenderer {
             if (!d.name().equals(d.library())) {
                 sb.append(", name = ").append(quote(d.name()));
             }
-            sb.append(", version = ").append(quote(versionLiteral(d.version())));
+            // Platform-managed (versionless — a BOM pins it): no version clause; the
+            // parser re-derives the platform-managed marker from its absence.
+            if (!d.isPlatformManaged()) {
+                sb.append(", version = ").append(quote(versionLiteral(d.version())));
+            }
         }
         sb.append(" }");
         return sb.toString();

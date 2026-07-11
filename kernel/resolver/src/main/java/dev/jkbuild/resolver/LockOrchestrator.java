@@ -274,6 +274,19 @@ public final class LockOrchestrator {
             }
         }
 
+        // A direct dependency with an EXACT (=) version beats the BOM's managed pin for that
+        // coordinate — Maven/Gradle semantics (management supplies defaults, never overrides an
+        // explicit declaration). Floating selectors (^ / ~ / ranges / latest) keep the BOM pin:
+        // they express "any compatible", and the BOM's curated version is the compatible choice.
+        for (Dependency d : declared) {
+            if (d.isPlatformManaged()) continue;
+            if (!(d.version() instanceof dev.jkbuild.model.VersionSelector.Exact)) continue;
+            if (bomConstraints.containsKey(d.module())) {
+                bomConstraints.remove(d.module());
+                constraintProvenance.remove(d.module());
+            }
+        }
+
         // Platform-managed root deps (declared with no version) pin from the BOM constraints
         // gathered above — the Maven "managed dependency" semantics Boot starters rely on.
         List<Dependency> roots = new ArrayList<>(declared.size());

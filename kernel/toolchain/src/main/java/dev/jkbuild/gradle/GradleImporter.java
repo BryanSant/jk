@@ -62,6 +62,9 @@ public final class GradleImporter {
     private static final Pattern KOTLIN_ID = Pattern.compile("id\\s*\\(?\\s*[\"']org\\.jetbrains\\.kotlin[^\"']*[\"']");
     private static final Pattern KOTLIN_ID_VERSION =
             Pattern.compile("id\\s*\\(\\s*[\"']org\\.jetbrains\\.kotlin[^\"']*[\"']\\s*\\)\\s*version\\s*" + STR);
+    // id("org.springframework.boot") version "4.0.0" — the plugin version IS the Boot version.
+    private static final Pattern BOOT_PLUGIN_VERSION = Pattern.compile(
+            "id\\s*\\(?\\s*[\"']org\\.springframework\\.boot[\"']\\s*\\)?\\s*version\\s*" + STR);
 
     // application { mainClass.set("X") } / mainClass = "X" — groups 1/2 (set) or 3/4 (=).
     private static final Pattern APPLICATION_MAIN_CLASS =
@@ -135,6 +138,10 @@ public final class GradleImporter {
                 case "java", "java-library", "application" -> {
                     // implicit in jk — nothing to say.
                 }
+                case "org.springframework.boot", "io.spring.dependency-management" -> {
+                    // Mapped below to [spring-boot] (the BOM auto-import covers
+                    // dependency-management) — nothing to warn about.
+                }
                 default ->
                     report.warning("Gradle plugin `"
                             + pluginId
@@ -149,6 +156,23 @@ public final class GradleImporter {
         String mainClass = detectMainClass(stripped);
         String manifestMain = manifest.remove("Main-Class");
         if (mainClass == null) mainClass = manifestMain;
+
+        // Spring Boot: the plugin's version is the Boot version -> [spring-boot] version,
+        // which auto-imports the spring-boot-dependencies BOM (so versionless starters stay
+        // versionless). Applied-without-version (settings pluginManagement) can't be resolved
+        // from this file alone -- ask the user to fill it in.
+        JkBuild.SpringBoot springBoot = null;
+        if (pluginsBody.contains("org.springframework.boot")) {
+            Matcher bootVersion = BOOT_PLUGIN_VERSION.matcher(pluginsBody);
+            if (bootVersion.find()) {
+                springBoot = new JkBuild.SpringBoot(
+                        firstNonNull(bootVersion.group(1), bootVersion.group(2)), null, false, true);
+            } else {
+                report.warning("the Spring Boot plugin is applied without an inline version"
+                        + " (settings pluginManagement?) -- add `[spring-boot] version = \"...\"`"
+                        + " to jk.toml yourself.");
+            }
+        }
 
         Map<Scope, List<Dependency>> deps = parseDependencies(stripped, catalog, report);
         List<RepositorySpec> repos = parseRepositories(stripped, report);
@@ -168,6 +192,7 @@ public final class GradleImporter {
                 .dependencies(new JkBuild.Dependencies(deps))
                 .repositories(repos)
                 .application(application)
+                .springBoot(springBoot)
                 .build();
         if (!manifest.isEmpty()) jkBuild = jkBuild.withManifest(manifest);
         return new Result(jkBuild, report.build());
@@ -395,6 +420,14 @@ public final class GradleImporter {
         if (coord == null || coord.isBlank()) return;
         // Expect g:a:v with optional :classifier@type — strip extras with a warning.
         String[] parts = coord.split(":");
+        if (parts.length == 2 && !parts[0].isBlank() && !parts[1].isBlank()) {
+            // Versionless `g:a` -- normal in Boot builds, where the plugin's BOM manages the
+            // version. jk models it as platform-managed; [spring-boot] (or an explicit
+            // [platform-dependencies] BOM) supplies the pin at resolve time.
+            byScope.computeIfAbsent(scope, s -> new ArrayList<>())
+                    .add(Dependency.platformManaged(parts[1], coord));
+            return;
+        }
         if (parts.length < 3) {
             report.error("dependency coord `" + coord + "` is not `group:artifact:version`; dropped.");
             return;
@@ -480,6 +513,9 @@ public final class GradleImporter {
         return switch (configuration) {
             case "implementation", "api", "compile" -> Scope.MAIN;
             case "runtimeOnly", "runtime" -> Scope.RUNTIME;
+            // Boot's dev-loop configurations (spring-boot plan §3.2) map 1:1 to jk's dev scopes.
+            case "developmentOnly" -> Scope.DEV;
+            case "testAndDevelopmentOnly" -> Scope.TEST_DEV;
             case "compileOnly", "compileOnlyApi", "providedRuntime", "providedCompile" -> Scope.PROVIDED;
             case "testImplementation", "testApi", "testCompile", "testRuntimeOnly", "testRuntime", "testCompileOnly" ->
                 Scope.TEST;

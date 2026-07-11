@@ -58,6 +58,13 @@ public final class NewJkBuildRenderer {
         inputs.kotlinModuleName()
                 .ifPresent(m -> sb.append("module   = \"").append(m).append("\"\n"));
 
+        if (inputs.spring()) {
+            // The BOM version [spring-boot] pins — the parser auto-imports
+            // spring-boot-dependencies, so the starters below stay versionless.
+            sb.append("\n[spring-boot]\n");
+            sb.append("version = \"").append(NewScaffolder.DEFAULT_BOOT_VERSION).append("\"\n");
+        }
+
         if (inputs.main().isPresent() || inputs.shadow()) {
             sb.append("\n[application]\n");
             if (inputs.main().isPresent()) {
@@ -70,6 +77,17 @@ public final class NewJkBuildRenderer {
         if (inputs.nativeImage()) {
             sb.append("\n[native]\n");
             sb.append("always     = true\n");
+        }
+
+        if (inputs.spring()) {
+            // Versionless starters — the auto-imported BOM pins them; devtools rides the
+            // dev scope (jk run / jk dev only, never packaged).
+            sb.append("\n[dependencies]\n");
+            sb.append("starter-webmvc = { group = \"org.springframework.boot\","
+                    + " name = \"spring-boot-starter-webmvc\" }\n");
+            sb.append("\n[dev-dependencies]\n");
+            sb.append("devtools = { group = \"org.springframework.boot\","
+                    + " name = \"spring-boot-devtools\" }\n");
         }
 
         var picks = resolvePicks(inputs.deps());

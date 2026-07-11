@@ -48,6 +48,12 @@ public final class NewScaffolder {
             "guava", List.of(new CuratedEntry("com.google.guava:guava", "33", "main")),
             "kotest", List.of(new CuratedEntry("io.kotest:kotest-runner-junit6", "6", "test")));
 
+    /**
+     * Spring Boot version {@code jk new --spring} writes into {@code [spring-boot]} — the newest
+     * GA line at release time. Users bump it in jk.toml; walk it forward with jk releases.
+     */
+    public static final String DEFAULT_BOOT_VERSION = "4.1.0";
+
     private NewScaffolder() {}
 
     public static void write(NewInputs inputs) throws IOException {
@@ -143,10 +149,83 @@ public final class NewScaffolder {
      * project group; the test relies on the JUnit jk defaults in when no test framework is declared.
      */
     private static void writeSample(NewInputs inputs) throws IOException {
+        if (inputs.spring()) {
+            writeSpringSample(inputs);
+            return;
+        }
         switch (inputs.lang()) {
             case JAVA -> writeJavaSample(inputs);
             case KOTLIN -> writeKotlinSample(inputs);
         }
+    }
+
+    /**
+     * Spring Boot starter app: an {@code Application} class doubling as a REST controller, an
+     * {@code application.properties} seed, and a plain-JUnit test of the handler (no context
+     * bootstrap — the sample tests stay dependency-free beyond jk's JUnit defaults).
+     */
+    private static void writeSpringSample(NewInputs inputs) throws IOException {
+        String pkg = inputs.group();
+        String pkgPath = "/" + pkg.replace('.', '/');
+        Path srcDir = inputs.directory().resolve(mainSourceRoot(inputs) + pkgPath);
+        Path testDir = inputs.directory().resolve(testSourceRoot(inputs) + pkgPath);
+        Path resourcesDir = inputs.directory()
+                .resolve(inputs.isSimpleLayout() ? "src" : "src/main/resources");
+        Files.createDirectories(srcDir);
+        Files.createDirectories(testDir);
+        Files.createDirectories(resourcesDir);
+
+        Files.writeString(srcDir.resolve("Application.java"), renderSpringApplication(pkg), StandardCharsets.UTF_8);
+        Files.writeString(
+                testDir.resolve("ApplicationTest.java"), renderSpringApplicationTest(pkg), StandardCharsets.UTF_8);
+        Path props = resourcesDir.resolve("application.properties");
+        if (!Files.exists(props)) {
+            Files.writeString(props, """
+                    # server.port=8080
+                    """, StandardCharsets.UTF_8);
+        }
+    }
+
+    private static String renderSpringApplication(String pkg) {
+        return """
+                package %s;
+
+                import org.springframework.boot.SpringApplication;
+                import org.springframework.boot.autoconfigure.SpringBootApplication;
+                import org.springframework.web.bind.annotation.GetMapping;
+                import org.springframework.web.bind.annotation.RestController;
+
+                @SpringBootApplication
+                @RestController
+                public class Application {
+
+                    public static void main(String[] args) {
+                        SpringApplication.run(Application.class, args);
+                    }
+
+                    @GetMapping("/")
+                    public String hello() {
+                        return "Hello from jk + Spring Boot!";
+                    }
+                }
+                """.formatted(pkg);
+    }
+
+    private static String renderSpringApplicationTest(String pkg) {
+        return """
+                package %s;
+
+                import static org.junit.jupiter.api.Assertions.assertEquals;
+
+                import org.junit.jupiter.api.Test;
+
+                public class ApplicationTest {
+                    @Test
+                    void helloGreets() {
+                        assertEquals("Hello from jk + Spring Boot!", new Application().hello());
+                    }
+                }
+                """.formatted(pkg);
     }
 
     private static void writeJavaSample(NewInputs inputs) throws IOException {

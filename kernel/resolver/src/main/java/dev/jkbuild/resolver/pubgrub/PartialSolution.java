@@ -31,6 +31,16 @@ public final class PartialSolution {
      */
     private final Set<String> packagesWithPositiveTerm = new HashSet<>();
 
+    /**
+     * Packages mentioned by ANY assignment, positive or negative. {@link #contradicts} must apply
+     * real set logic as soon as a package is constrained at all — a package narrowed only by
+     * negative derivations (e.g. {@code ¬engine [6.1.1,+∞)} from a NoVersions conflict) is
+     * genuinely contradicted for that range, and treating it as "unconstrained" made the same
+     * single-term incompatibility ALMOST_SATISFIED forever (an infinite derive loop that OOMed
+     * the resolver on real Boot graphs).
+     */
+    private final Set<String> mentionedPackages = new HashSet<>();
+
     private final Map<String, String> decisionByPackage = new TreeMap<>();
     private int decisionLevel = 0;
 
@@ -61,6 +71,7 @@ public final class PartialSolution {
 
     private void register(Term t) {
         positiveByPackage.merge(t.pkg(), t.effectiveVersions(), VersionSet::intersect);
+        mentionedPackages.add(t.pkg());
         if (t.positive()) {
             packagesWithPositiveTerm.add(t.pkg());
         }
@@ -92,16 +103,18 @@ public final class PartialSolution {
     /**
      * True iff every allowed version of {@code term.pkg()} contradicts {@code term}.
      *
-     * <p>If the partial solution has no positive constraint about {@code term.pkg()} at all, the
-     * package is unconstrained — nothing the solution holds can contradict a term about it. Without
-     * this guard, a negative term whose {@code effectiveVersions} is {@link VersionSet#EMPTY} (the
-     * negation of a positive root term with {@code versionSet = ALL}, i.e. an unbounded
-     * {@code @latest} selector) would spuriously appear contradicted — and the inco carrying it would
-     * stay INCONCLUSIVE forever, so no positive term for the package ever gets derived and the dep is
-     * silently dropped from the resolution.
+     * <p>If no assignment mentions {@code term.pkg()} at all, the package is unconstrained —
+     * nothing the solution holds can contradict a term about it. Without this guard, a negative
+     * term whose {@code effectiveVersions} is {@link VersionSet#EMPTY} (the negation of a positive
+     * root term with {@code versionSet = ALL}, i.e. an unbounded {@code @latest} selector) would
+     * spuriously appear contradicted — and the inco carrying it would stay INCONCLUSIVE forever,
+     * so no positive term for the package ever gets derived and the dep is silently dropped from
+     * the resolution. The guard is {@link #mentionedPackages}, NOT {@link
+     * #packagesWithPositiveTerm}: once even a negative derivation narrows the package, real set
+     * logic must apply (see the field docs for the infinite-derive failure otherwise).
      */
     public boolean contradicts(Term term) {
-        if (!packagesWithPositiveTerm.contains(term.pkg())) return false;
+        if (!mentionedPackages.contains(term.pkg())) return false;
         return positiveSet(term.pkg()).intersect(term.effectiveVersions()).isEmpty();
     }
 
@@ -127,6 +140,7 @@ public final class PartialSolution {
         decisionByPackage.clear();
         positiveByPackage.clear();
         packagesWithPositiveTerm.clear();
+        mentionedPackages.clear();
         for (Assignment a : assignments) {
             register(a.term());
             if (a instanceof Assignment.Decision d

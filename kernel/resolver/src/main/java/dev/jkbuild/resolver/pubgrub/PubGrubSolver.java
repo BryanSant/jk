@@ -78,6 +78,15 @@ public class PubGrubSolver {
                     case SATISFIED -> handleConflict(inco);
                     case ALMOST_SATISFIED -> {
                         Term derived = rel.unsatisfied().invert();
+                        // A derivation the solution already implies adds no information —
+                        // recording it anyway can cycle (derive → requeue → re-derive) if a
+                        // relation is ever misjudged. Guard hard: unit propagation must
+                        // strictly narrow the solution or do nothing. Exception: a positive
+                        // term for a package with no positive sighting yet DOES add
+                        // information even when set-satisfied (an @latest/ALL selector) —
+                        // it marks the package as required, which makeDecision keys on.
+                        boolean marksPresence = derived.positive() && !solution.hasPositiveTerm(derived.pkg());
+                        if (solution.satisfies(derived) && !marksPresence) continue;
                         solution.derive(derived, inco);
                         changed.add(derived.pkg());
                     }

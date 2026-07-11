@@ -40,6 +40,7 @@ public record NewInputs(
         Optional<String> main,
         boolean shadow,
         boolean nativeImage,
+        boolean spring,
         Language lang,
         String layout,
         Optional<String> kotlinModuleName,
@@ -57,6 +58,42 @@ public record NewInputs(
         Objects.requireNonNull(kotlinModuleName, "kotlinModuleName");
         Objects.requireNonNull(directory, "directory");
         deps = List.copyOf(deps);
+    }
+
+    /** Back-compat constructor: no Spring Boot. */
+    public NewInputs(
+            String group,
+            String name,
+            String jdk,
+            int jdkMajor,
+            int javaRelease,
+            Optional<String> jdkIdentifier,
+            Optional<String> main,
+            boolean shadow,
+            boolean nativeImage,
+            Language lang,
+            String layout,
+            Optional<String> kotlinModuleName,
+            List<String> deps,
+            boolean sample,
+            Path directory) {
+        this(
+                group,
+                name,
+                jdk,
+                jdkMajor,
+                javaRelease,
+                jdkIdentifier,
+                main,
+                shadow,
+                nativeImage,
+                false,
+                lang,
+                layout,
+                kotlinModuleName,
+                deps,
+                sample,
+                directory);
     }
 
     /** Back-compat constructor: {@code javaRelease} defaults to {@code jdkMajor}. */
@@ -85,6 +122,7 @@ public record NewInputs(
                 main,
                 shadow,
                 nativeImage,
+                false,
                 lang,
                 layout,
                 kotlinModuleName,
