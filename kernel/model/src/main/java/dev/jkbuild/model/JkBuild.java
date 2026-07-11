@@ -26,7 +26,7 @@ public record JkBuild(
         List<PluginDeclaration> plugins,
         Optional<Application> application,
         Optional<NativeConfig> nativeConfig,
-        Optional<SpringBoot> springBoot,
+        Map<String, PluginConfig> pluginConfigs,
         Build build,
         FormatConfig format) {
 
@@ -46,7 +46,11 @@ public record JkBuild(
         plugins = plugins == null ? List.of() : List.copyOf(plugins);
         application = application == null ? Optional.empty() : application;
         nativeConfig = nativeConfig == null ? Optional.empty() : nativeConfig;
-        springBoot = springBoot == null ? Optional.empty() : springBoot;
+        // Plugin-owned tables ([spring-boot], …), keyed by plugin id — schema-validated by the
+        // parser against each installed plugin's jk-plugin.toml (build-plugins plan P1).
+        pluginConfigs = pluginConfigs == null || pluginConfigs.isEmpty()
+                ? Map.of()
+                : Collections.unmodifiableMap(new LinkedHashMap<>(pluginConfigs));
         build = build == null ? Build.EMPTY : build;
         format = format == null ? FormatConfig.EMPTY : format;
     }
@@ -90,13 +94,23 @@ public record JkBuild(
         return application.isPresent();
     }
 
+    /** The schema-validated config for the plugin-owned table {@code id}, when declared. */
+    public Optional<PluginConfig> pluginConfig(String id) {
+        return Optional.ofNullable(pluginConfigs.get(id));
+    }
+
     /**
      * True when {@code [spring-boot]} is declared — Boot packaging, BOM import, and
-     * {@code -parameters} compilation apply. Driven purely by the table's presence.
+     * {@code -parameters} compilation apply. Driven purely by the table's presence. A convenience
+     * over {@link #pluginConfig}; P3 replaces call sites with capability checks fed by plugin
+     * contributions.
      */
     public boolean isSpringBoot() {
-        return springBoot.isPresent();
+        return pluginConfigs.containsKey(SPRING_BOOT_ID);
     }
+
+    /** The built-in spring-boot plugin's id / table name. */
+    public static final String SPRING_BOOT_ID = "spring-boot";
 
     /** {@code [application].shadow-jar} — bundle an all-in-one (shadow / fat) jar. */
     public boolean shadowJar() {
@@ -151,7 +165,7 @@ public record JkBuild(
         private List<PluginDeclaration> plugins = List.of();
         private Optional<Application> application = Optional.empty();
         private Optional<NativeConfig> nativeConfig = Optional.empty();
-        private Optional<SpringBoot> springBoot = Optional.empty();
+        private final Map<String, PluginConfig> pluginConfigs = new LinkedHashMap<>();
         private Build build;
         private FormatConfig format;
 
@@ -177,7 +191,10 @@ public record JkBuild(
 
         public Builder nativeConfig(NativeConfig nativeConfig) { this.nativeConfig = Optional.ofNullable(nativeConfig); return this; }
 
-        public Builder springBoot(SpringBoot springBoot) { this.springBoot = Optional.ofNullable(springBoot); return this; }
+        public Builder pluginConfig(PluginConfig config) {
+            if (config != null) this.pluginConfigs.put(config.id(), config);
+            return this;
+        }
 
         public Builder build(Build build) { this.build = build; return this; }
 
@@ -186,7 +203,7 @@ public record JkBuild(
         public JkBuild build() {
             return new JkBuild(
                     project, dependencies, repositories, profiles, features, workspace,
-                    manifest, plugins, application, nativeConfig, springBoot, build, format);
+                    manifest, plugins, application, nativeConfig, pluginConfigs, build, format);
         }
     }
 
@@ -203,7 +220,7 @@ public record JkBuild(
                 plugins,
                 application,
                 nativeConfig,
-                springBoot,
+                pluginConfigs,
                 build,
                 format);
     }
@@ -508,46 +525,6 @@ public record JkBuild(
 
         public Application {
             if (main != null && main.isBlank()) main = null;
-        }
-    }
-
-    /**
-     * The {@code [spring-boot]} block of {@code jk.toml} (spring-boot plan §3.1). Its mere
-     * presence marks the project as a Spring Boot application: the parser auto-imports
-     * {@code org.springframework.boot:spring-boot-dependencies:<version>} as a platform BOM,
-     * packaging switches to the Boot executable-jar layout, and compilation defaults to
-     * {@code -parameters}. Mirrors the Gradle plugin's reactive nature — no new verbs, the
-     * standard ones change behavior.
-     *
-     * @param version the Spring Boot version; pins the BOM, loader, AOT processor, and
-     *     jarmode-tools coordinates
-     * @param aot explicit AOT-processing switch, or {@code null} for auto (on when {@code
-     *     [native]} is declared) — see {@link #aotEnabled(boolean)}
-     * @param buildInfo emit {@code META-INF/build-info.properties} into the boot jar
-     * @param includeTools bundle {@code spring-boot-jarmode-tools} in the boot jar (default on;
-     *     opt out with {@code include-tools = false})
-     * @param aotArgs application arguments passed to the AOT processor's context refresh —
-     *     profiles get baked at build time (e.g. {@code ["--spring.profiles.active=prod"]})
-     */
-    public record SpringBoot(String version, Boolean aot, boolean buildInfo, boolean includeTools, List<String> aotArgs) {
-
-        /** The BOM this table imports — spelled once, here. */
-        public static final String BOM_MODULE = "org.springframework.boot:spring-boot-dependencies";
-
-        public SpringBoot {
-            Objects.requireNonNull(version, "version");
-            if (version.isBlank()) throw new IllegalArgumentException("[spring-boot].version must not be blank");
-            aotArgs = aotArgs == null ? List.of() : List.copyOf(aotArgs);
-        }
-
-        /** Back-compat constructor: no AOT processor args. */
-        public SpringBoot(String version, Boolean aot, boolean buildInfo, boolean includeTools) {
-            this(version, aot, buildInfo, includeTools, List.of());
-        }
-
-        /** Explicit {@code aot} wins; unset defaults to whether {@code [native]} is declared. */
-        public boolean aotEnabled(boolean nativeDeclared) {
-            return aot != null ? aot : nativeDeclared;
         }
     }
 

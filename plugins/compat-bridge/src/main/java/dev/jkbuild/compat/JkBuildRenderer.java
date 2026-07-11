@@ -46,7 +46,7 @@ public final class JkBuildRenderer {
         Objects.requireNonNull(jkBuild, "jkBuild");
         StringBuilder sb = new StringBuilder();
         renderProject(sb, jkBuild.project());
-        renderSpringBoot(sb, jkBuild.springBoot().orElse(null));
+        renderSpringBoot(sb, jkBuild.pluginConfig(JkBuild.SPRING_BOOT_ID).orElse(null));
         renderApplication(sb, jkBuild.application().orElse(null));
         renderNative(sb, jkBuild.nativeConfig().orElse(null));
         renderManifest(sb, jkBuild.manifest());
@@ -89,18 +89,19 @@ public final class JkBuildRenderer {
     }
 
     /** {@code [spring-boot]} table — its presence switches packaging to the Boot layout. */
-    private static void renderSpringBoot(StringBuilder sb, JkBuild.SpringBoot boot) {
+    private static void renderSpringBoot(StringBuilder sb, dev.jkbuild.model.PluginConfig boot) {
         if (boot == null) return;
         sb.append("\n[spring-boot]\n");
-        sb.append("version = ").append(quote(boot.version())).append('\n');
-        if (boot.aot() != null) sb.append("aot = ").append(boot.aot()).append('\n');
-        if (boot.buildInfo()) sb.append("build-info = true\n");
-        if (!boot.includeTools()) sb.append("include-tools = false\n");
-        if (!boot.aotArgs().isEmpty()) {
+        sb.append("version = ").append(quote(boot.string("version"))).append('\n');
+        boot.bool("aot").ifPresent(aot -> sb.append("aot = ").append(aot).append('\n'));
+        if (boot.bool("build-info", false)) sb.append("build-info = true\n");
+        if (!boot.bool("include-tools", true)) sb.append("include-tools = false\n");
+        var aotArgs = boot.stringList("aot-args");
+        if (!aotArgs.isEmpty()) {
             sb.append("aot-args = [");
-            for (int i = 0; i < boot.aotArgs().size(); i++) {
+            for (int i = 0; i < aotArgs.size(); i++) {
                 if (i > 0) sb.append(", ");
-                sb.append(quote(boot.aotArgs().get(i)));
+                sb.append(quote(aotArgs.get(i)));
             }
             sb.append("]\n");
         }

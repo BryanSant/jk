@@ -161,12 +161,15 @@ public final class GradleImporter {
         // which auto-imports the spring-boot-dependencies BOM (so versionless starters stay
         // versionless). Applied-without-version (settings pluginManagement) can't be resolved
         // from this file alone -- ask the user to fill it in.
-        JkBuild.SpringBoot springBoot = null;
+        dev.jkbuild.model.PluginConfig springBoot = null;
         if (pluginsBody.contains("org.springframework.boot")) {
             Matcher bootVersion = BOOT_PLUGIN_VERSION.matcher(pluginsBody);
             if (bootVersion.find()) {
-                springBoot = new JkBuild.SpringBoot(
-                        firstNonNull(bootVersion.group(1), bootVersion.group(2)), null, false, true);
+                // Only version is declared — the schema's defaults (build-info/include-tools/
+                // aot-args) are exactly what the renderer omits, so the round trip stays minimal.
+                springBoot = new dev.jkbuild.model.PluginConfig(
+                        JkBuild.SPRING_BOOT_ID,
+                        java.util.Map.of("version", firstNonNull(bootVersion.group(1), bootVersion.group(2))));
             } else {
                 report.warning("the Spring Boot plugin is applied without an inline version"
                         + " (settings pluginManagement?) -- add `[spring-boot] version = \"...\"`"
@@ -192,7 +195,7 @@ public final class GradleImporter {
                 .dependencies(new JkBuild.Dependencies(deps))
                 .repositories(repos)
                 .application(application)
-                .springBoot(springBoot)
+                .pluginConfig(springBoot)
                 .build();
         if (!manifest.isEmpty()) jkBuild = jkBuild.withManifest(manifest);
         return new Result(jkBuild, report.build());

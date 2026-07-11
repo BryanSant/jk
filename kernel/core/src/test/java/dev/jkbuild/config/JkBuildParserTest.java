@@ -1552,12 +1552,11 @@ class JkBuildParserTest {
                 starter-webmvc = { group = "org.springframework.boot", name = "spring-boot-starter-webmvc" }
                 """);
         assertThat(b.isSpringBoot()).isTrue();
-        var sb = b.springBoot().orElseThrow();
-        assertThat(sb.version()).isEqualTo("4.0.0");
-        assertThat(sb.buildInfo()).isFalse();
-        assertThat(sb.includeTools()).isTrue();
-        assertThat(sb.aotEnabled(false)).isFalse(); // unset aot follows [native] presence
-        assertThat(sb.aotEnabled(true)).isTrue();
+        var sb = b.pluginConfig(JkBuild.SPRING_BOOT_ID).orElseThrow();
+        assertThat(sb.string("version")).isEqualTo("4.0.0");
+        assertThat(sb.bool("build-info", false)).isFalse();
+        assertThat(sb.bool("include-tools", true)).isTrue();
+        assertThat(sb.bool("aot")).isEmpty(); // unset aot = tri-state auto (follows [native] presence)
         // version = "4.0.0" alone imports the BOM — no [platform-dependencies] boilerplate.
         var platform = b.dependencies().of(dev.jkbuild.model.Scope.PLATFORM);
         assertThat(platform).hasSize(1);
@@ -1589,11 +1588,11 @@ class JkBuildParserTest {
                 include-tools = false
                 aot-args = ["--spring.profiles.active=prod"]
                 """);
-        var sb = b.springBoot().orElseThrow();
-        assertThat(sb.aotEnabled(false)).isTrue(); // explicit aot wins over [native] absence
-        assertThat(sb.buildInfo()).isTrue();
-        assertThat(sb.includeTools()).isFalse();
-        assertThat(sb.aotArgs()).containsExactly("--spring.profiles.active=prod");
+        var sb = b.pluginConfig(JkBuild.SPRING_BOOT_ID).orElseThrow();
+        assertThat(sb.bool("aot")).contains(true); // explicit aot wins over [native] absence
+        assertThat(sb.bool("build-info", false)).isTrue();
+        assertThat(sb.bool("include-tools", true)).isFalse();
+        assertThat(sb.stringList("aot-args")).containsExactly("--spring.profiles.active=prod");
     }
 
     @Test

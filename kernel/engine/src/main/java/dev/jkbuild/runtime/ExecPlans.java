@@ -70,7 +70,7 @@ public final class ExecPlans {
             }
 
             var format = build.format();
-            var boot = build.springBoot().orElse(null);
+            var boot = build.pluginConfig(dev.jkbuild.model.JkBuild.SPRING_BOOT_ID).orElse(null);
             return new ProjectInfo(
                     null,
                     build.project().group(),
@@ -92,7 +92,7 @@ public final class ExecPlans {
                     build.nativeMode().name(),
                     orEmpty(build.graal()),
                     build.isSpringBoot(),
-                    boot == null ? "" : boot.version(),
+                    boot == null ? "" : SpringBootFacts.version(boot),
                     orEmpty(format.style()),
                     orEmpty(format.java()),
                     orEmpty(format.kotlin()),
@@ -396,11 +396,11 @@ public final class ExecPlans {
 
     private static Path fetchDevtools(JkBuild project, Path cache) {
         try {
-            var boot = project.springBoot().orElseThrow();
+            var boot = SpringBootFacts.of(project);
             Cas cas = new Cas(cache);
             return RepoGroupBuilder.buildFor(project, null, cas)
                     .tryFetchArtifact(dev.jkbuild.model.Coordinate.of(
-                            "org.springframework.boot", "spring-boot-devtools", boot.version()))
+                            "org.springframework.boot", "spring-boot-devtools", SpringBootFacts.version(boot)))
                     .map(hit -> hit.fetched().cachePath())
                     .orElse(null);
         } catch (IOException e) {

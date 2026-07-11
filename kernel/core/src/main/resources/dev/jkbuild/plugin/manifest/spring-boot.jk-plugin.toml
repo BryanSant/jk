@@ -1,0 +1,20 @@
+# The built-in spring-boot build plugin's declarative manifest (build-plugins plan §3.1).
+# P1 ships the [plugin] identity + [schema] for the [spring-boot] table; the declarative
+# contributions ([[contribute.*]]) arrive in P2, and the worker code hooks in P3.
+#
+# This file is the blueprint third-party plugins copy: one table owned, typed schema,
+# error-message metadata (example/hint) so schema-driven validation diagnoses as well as
+# hand-written parsing did.
+
+[plugin]
+id        = "spring-boot"
+table     = "spring-boot"
+version   = "1.0.0"
+jk-compat = ">=0.10"
+
+[schema]
+version       = { type = "string", required = true, example = "4.0.0", hint = "it pins the spring-boot-dependencies BOM, loader, and AOT tooling" }
+aot           = { type = "bool" }                          # tri-state: absent = auto (on when [native] is declared)
+build-info    = { type = "bool", default = false }
+include-tools = { type = "bool", default = true }
+aot-args      = { type = "string-list", default = [] }

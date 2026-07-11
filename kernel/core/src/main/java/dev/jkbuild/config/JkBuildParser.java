@@ -11,7 +11,10 @@ import dev.jkbuild.model.GitSource;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.ObjectStoreConfig;
 import dev.jkbuild.model.PathSource;
+import dev.jkbuild.model.PluginConfig;
 import dev.jkbuild.model.PluginDeclaration;
+import dev.jkbuild.plugin.manifest.PluginManifest;
+import dev.jkbuild.plugin.manifest.PluginTableRegistry;
 import dev.jkbuild.model.Profile;
 import dev.jkbuild.model.Profiles;
 import dev.jkbuild.model.RepositorySpec;
@@ -130,13 +133,14 @@ public final class JkBuildParser {
         List<PluginDeclaration> plugins = parsePlugins(result);
         Optional<JkBuild.Application> application = parseApplication(result);
         Optional<JkBuild.NativeConfig> nativeConfig = parseNativeConfig(result);
-        Optional<JkBuild.SpringBoot> springBoot = parseSpringBoot(result);
-        if (springBoot.isPresent()) deps = withSpringBootBom(deps, springBoot.get());
+        Map<String, PluginConfig> pluginConfigs = parsePluginTables(result);
+        PluginConfig springBoot = pluginConfigs.get(JkBuild.SPRING_BOOT_ID);
+        if (springBoot != null) deps = withSpringBootBom(deps, springBoot);
         JkBuild.Build build = parseBuild(result);
         JkBuild.FormatConfig format = parseFormat(result);
         return new JkBuild(
                 project, deps, repos, profiles, features, workspace, manifest, plugins, application, nativeConfig,
-                springBoot, build, format);
+                pluginConfigs, build, format);
     }
 
     /**
@@ -1132,35 +1136,23 @@ public final class JkBuildParser {
     }
 
     /**
-     * The optional {@code [spring-boot]} table (spring-boot plan §3.1). Its mere presence marks
-     * the project as a Spring Boot application ({@link JkBuild#isSpringBoot()}); {@code version}
-     * is the only required key and drives the auto-imported BOM (see
-     * {@link #withSpringBootBom}).
+     * Plugin-owned tables (build-plugins plan P1): for every installed plugin manifest whose
+     * table appears in this file, schema-validate it into a {@link PluginConfig}. The parser
+     * itself carries zero framework-specific tables — {@code [spring-boot]}'s schema lives in
+     * the built-in {@code spring-boot.jk-plugin.toml} manifest resource. Unknown tables stay
+     * ignored exactly as before (the "unowned table" error arrives with P5's third-party set).
      */
-    private static Optional<JkBuild.SpringBoot> parseSpringBoot(TomlTable root) {
-        TomlTable springBoot = root.getTable("spring-boot");
-        if (springBoot == null) return Optional.empty();
-        String version = springBoot.getString("version");
-        if (version == null || version.isBlank()) {
-            throw new JkBuildParseException(
-                    "[spring-boot].version is required (e.g. version = \"4.0.0\") — it pins the"
-                            + " spring-boot-dependencies BOM, loader, and AOT tooling");
+    /** The BOM [spring-boot] imports — P2 moves this into the manifest's contributions. */
+    private static final String SPRING_BOOT_BOM_MODULE = "org.springframework.boot:spring-boot-dependencies";
+
+    private static Map<String, PluginConfig> parsePluginTables(TomlTable root) {
+        Map<String, PluginConfig> out = new LinkedHashMap<>();
+        for (PluginManifest manifest : PluginTableRegistry.manifests()) {
+            TomlTable table = root.getTable(manifest.table());
+            if (table == null) continue;
+            out.put(manifest.id(), PluginTableRegistry.validate(manifest, table));
         }
-        Boolean aot = springBoot.contains("aot") ? springBoot.getBoolean("aot") : null;
-        boolean buildInfo = Boolean.TRUE.equals(springBoot.getBoolean("build-info"));
-        boolean includeTools = !Boolean.FALSE.equals(springBoot.getBoolean("include-tools"));
-        List<String> aotArgs = new ArrayList<>();
-        TomlArray aotArgsArr = springBoot.getArray("aot-args");
-        if (aotArgsArr != null) {
-            for (int i = 0; i < aotArgsArr.size(); i++) {
-                Object val = aotArgsArr.get(i);
-                if (!(val instanceof String str)) {
-                    throw new JkBuildParseException("[spring-boot].aot-args must be an array of strings");
-                }
-                aotArgs.add(str);
-            }
-        }
-        return Optional.of(new JkBuild.SpringBoot(version, aot, buildInfo, includeTools, aotArgs));
+        return out;
     }
 
     /**
@@ -1170,12 +1162,12 @@ public final class JkBuildParser {
      * spring-boot-dependencies entry wins (no duplicate is added), letting them override the BOM
      * coordinate deliberately.
      */
-    private static JkBuild.Dependencies withSpringBootBom(JkBuild.Dependencies deps, JkBuild.SpringBoot springBoot) {
+    private static JkBuild.Dependencies withSpringBootBom(JkBuild.Dependencies deps, PluginConfig springBoot) {
         boolean declared = deps.of(Scope.PLATFORM).stream()
-                .anyMatch(d -> JkBuild.SpringBoot.BOM_MODULE.equals(d.module()));
+                .anyMatch(d -> SPRING_BOOT_BOM_MODULE.equals(d.module()));
         if (declared) return deps;
         Dependency bom = new Dependency(
-                JkBuild.SpringBoot.BOM_MODULE, VersionSelector.parseFloating("=" + springBoot.version()));
+                SPRING_BOOT_BOM_MODULE, VersionSelector.parseFloating("=" + springBoot.string("version")));
         EnumMap<Scope, List<Dependency>> byScope = new EnumMap<>(Scope.class);
         deps.byScope().forEach(byScope::put);
         List<Dependency> platform = new ArrayList<>(deps.of(Scope.PLATFORM));

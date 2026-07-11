@@ -1466,7 +1466,7 @@ public final class BuildPipeline {
      */
     private static void packageBootJar(
             PhaseContext ctx, Inputs in, Cas cas, JkBuild project, Path classes, Path jarPath) throws Exception {
-        JkBuild.SpringBoot boot = project.springBoot().orElseThrow();
+        dev.jkbuild.model.PluginConfig boot = SpringBootFacts.of(project);
         Lockfile lock = ctx.require(LOCKFILE);
         ClasspathResolver resolver = new ClasspathResolver(cas);
 
@@ -1481,7 +1481,7 @@ public final class BuildPipeline {
         // (JVM runs opt in with -Dspring.aot.enabled=true; native uses them by construction).
         BuildLayout layout = ctx.require(LAYOUT);
         List<Path> aotDirs = List.of();
-        if (boot.aotEnabled(project.nativeConfig().isPresent())) {
+        if (SpringBootFacts.aotEnabled(boot, project.nativeConfig().isPresent())) {
             ctx.label("Spring AOT processing (" + startClass + ")");
             try {
                 aotDirs = SpringAotRunner.process(
@@ -1493,7 +1493,7 @@ public final class BuildPipeline {
                                 layout,
                                 classes,
                                 startClass,
-                                boot.aotArgs(),
+                                SpringBootFacts.aotArgs(boot),
                                 project.project().javaRelease())
                         .dirs();
             } catch (IOException e) {
@@ -1517,16 +1517,16 @@ public final class BuildPipeline {
         // Loader (exploded at the jar root) and, unless opted out, the jarmode-tools
         // nested jar — both pinned to the declared Boot version.
         dev.jkbuild.repo.RepoGroup repos = RepoGroupBuilder.buildFor(project, null, cas);
-        Path loaderJar = fetchBootArtifact(repos, "spring-boot-loader", boot.version());
-        if (boot.includeTools()) {
-            String toolsName = "spring-boot-jarmode-tools-" + boot.version() + ".jar";
+        Path loaderJar = fetchBootArtifact(repos, "spring-boot-loader", SpringBootFacts.version(boot));
+        if (SpringBootFacts.includeTools(boot)) {
+            String toolsName = "spring-boot-jarmode-tools-" + SpringBootFacts.version(boot) + ".jar";
             libs.add(new BootJarPackager.Lib(
-                    toolsName, fetchBootArtifact(repos, "spring-boot-jarmode-tools", boot.version()), false));
+                    toolsName, fetchBootArtifact(repos, "spring-boot-jarmode-tools", SpringBootFacts.version(boot)), false));
         }
 
         // Build-info (opt-in): the coordinates BuildProperties surfaces via /actuator/info.
         // No build.time — reproducibility wins; Boot handles its absence.
-        Map<String, String> buildInfo = boot.buildInfo()
+        Map<String, String> buildInfo = SpringBootFacts.buildInfo(boot)
                 ? Map.of(
                         "group", project.project().group(),
                         "artifact", project.project().name(),
@@ -1545,7 +1545,7 @@ public final class BuildPipeline {
                 "classes:" + dev.jkbuild.task.ClasspathFingerprint.entry(classes),
                 "libs:" + dev.jkbuild.task.ClasspathFingerprint.of(libJars),
                 "start:" + startClass,
-                "boot:" + boot.version() + ":tools=" + boot.includeTools() + ":info=" + boot.buildInfo(),
+                "boot:" + SpringBootFacts.version(boot) + ":tools=" + SpringBootFacts.includeTools(boot) + ":info=" + SpringBootFacts.buildInfo(boot),
                 "aot:" + aotToken,
                 "manifest:" + project.manifest());
         String pkgTask = ActionKey.qualifiedTaskId("package-jar", jarPath);
@@ -1564,7 +1564,7 @@ public final class BuildPipeline {
                         loaderJar,
                         jarPath,
                         startClass,
-                        boot.version(),
+                        SpringBootFacts.version(boot),
                         project.manifest(),
                         buildInfo,
                         sbom,

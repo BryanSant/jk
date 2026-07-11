@@ -1,6 +1,15 @@
 # Build Plugins — custom tables, framework integrations, and the plugin SPI
 
-**Status:** proposed (2026-07-11).
+**Status:** P1 LANDED (2026-07-11, worktree branch `worktree-build-plugins`) — table routing
++ schema. The parser carries zero framework-specific tables: plugin-owned tables validate
+against their manifest's `[schema]` (`PluginTableRegistry` + built-in
+`spring-boot.jk-plugin.toml` resource in kernel/core) into generic `PluginConfig` values on
+`JkBuild.pluginConfigs` (`JkBuild.SpringBoot` deleted; typed reads via `SpringBootFacts`
+engine-side, which P3 dissolves into the plugin worker). `isSpringBoot()` remains as a
+presence convenience until P3's capability checks. Unknown tables stay ignored in P1 — the
+"unowned table is an error" UX arrives with P5, when the installed set becomes user-visible.
+Required-key diagnostics keep hand-written quality via schema `example`/`hint` metadata.
+P2–P6 below remain.
 **Companions:** [plugin-refactor.md](./plugin-refactor.md) (the worker/process SPI — phases 0–6
 done), [spring-boot-plan.md](./spring-boot-plan.md) (the capability inventory this SPI must
 carry), [android-plan.md](./android-plan.md) (the stress-test consumer).
