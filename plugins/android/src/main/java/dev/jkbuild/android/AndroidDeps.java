@@ -59,4 +59,56 @@ final class AndroidDeps {
         }
         return out;
     }
+
+    /**
+     * The merged {@code assets/} view: AAR dependencies in classpath order, the module's own
+     * {@code assets/} written last so the app wins a path conflict (AGP's precedence). Keys are
+     * asset-relative paths ({@code /}-separated).
+     */
+    static java.util.Map<String, Path> mergedAssets(PackageIo io) throws IOException {
+        java.util.Map<String, Path> out = new java.util.LinkedHashMap<>();
+        for (Aar aar : aars(io.runtimeEntries())) {
+            collectTree(aar.container().resolve("assets"), out);
+        }
+        // PackageIo has no moduleDir; the artifact lives at <module>/target/lib/<name>.<ext>.
+        Path moduleDir = io.artifactPath().getParent().getParent().getParent();
+        collectTree(moduleDir.resolve("assets"), out);
+        return out;
+    }
+
+    /** AAR native libs: {@code jni/<abi>/*.so} → APK {@code lib/<abi>/*.so} keys. */
+    static java.util.Map<String, Path> nativeLibs(PackageIo io) throws IOException {
+        java.util.Map<String, Path> out = new java.util.LinkedHashMap<>();
+        for (Aar aar : aars(io.runtimeEntries())) {
+            collectTree(aar.container().resolve("jni"), out);
+        }
+        return out;
+    }
+
+    private static void collectTree(Path root, java.util.Map<String, Path> out) throws IOException {
+        if (!Files.isDirectory(root)) return;
+        try (var walk = Files.walk(root)) {
+            walk.filter(Files::isRegularFile).sorted().forEach(f -> {
+                out.put(root.relativize(f).toString().replace('\\', '/'), f);
+            });
+        }
+    }
+
+    /**
+     * Copy the R8 retrace artifacts ({@code mapping.txt}, {@code seeds.txt}, {@code usage.txt})
+     * from the step's cached scratch to the module's stable {@code target/r8/} — the path release
+     * tooling (Play upload, crash retrace) reads.
+     */
+    static void copyRetraceArtifacts(PackageIo io) throws IOException {
+        Path mapping = io.stepOutput("android-r8").map(dir -> dir.resolve("mapping")).orElse(null);
+        if (mapping == null || !Files.isDirectory(mapping)) return;
+        Path targetR8 = io.artifactPath().getParent().getParent().resolve("r8");
+        Files.createDirectories(targetR8);
+        try (var listing = Files.list(mapping)) {
+            for (Path file : (Iterable<Path>) listing.sorted()::iterator) {
+                Files.copy(file, targetR8.resolve(file.getFileName().toString()),
+                        java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            }
+        }
+    }
 }

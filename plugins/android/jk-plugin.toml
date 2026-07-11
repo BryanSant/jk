@@ -35,6 +35,16 @@ packager           = "aar"
 exec-mode          = "none"
 artifact-extension = "aar"
 
+# A release app packages an AAB (the Play-uploadable default — android-plan §3.3); `jk run`
+# still deploys it locally: the deploy verb builds a universal APK via bundletool first.
+# Order matters: the library variant above wins for a release library build.
+[[packaging.variant]]
+when               = { config = "build-type", equals = "release" }
+packager           = "aab"
+exec-mode          = "device"
+artifact-extension = "aab"
+deploy-verb        = "deploy"
+
 [schema]
 namespace    = { type = "string", required = true, example = "com.example.app", hint = "it names the R class package and the default application id" }
 compile-sdk  = { type = "int", required = true, example = "28" }
@@ -42,6 +52,45 @@ min-sdk      = { type = "int", required = true, example = "24" }
 library      = { type = "bool", default = false }   # a library module: packages an AAR, not an APK
 compose      = { type = "bool", default = false }   # adds the Compose compiler plugin (version == Kotlin)
 build-config = { type = "bool", default = false }   # generates BuildConfig.java (explicit toggle, not a grab-bag)
+
+# ---- Variants (android-plan §3.1): build types × one flavor dimension --------------------------
+#
+# [android.build-types.<name>] / [android.flavors.<dim>.<name>] entries are config OVERLAYS —
+# `jk build --release` selects one per axis; the engine folds it into the effective config
+# (Variants.apply) and injects `build-type` / `flavor`, which [[packaging.variant]] conditions on.
+# debug/release are built in; `minify` left absent defaults ON for release (AGP-9 posture).
+
+[sub-schema.variant]
+application-id-suffix = { type = "string" }
+minify                = { type = "bool" }                     # tri-state: absent = on for release
+proguard-files        = { type = "string-list", default = [] }
+signing               = { type = "string" }                   # names an [android.signing.<name>]
+debuggable            = { type = "bool" }
+
+# Signing configs (android-plan §3.1): env: indirection only — never literal secrets in TOML.
+# `secret = true` keys resolve client-side (the user's shell env rides the request) and travel
+# a side channel the engine never renders into tokens, describe payloads, or logs.
+[sub-schema.signing]
+store-file      = { type = "string", required = true, example = "env:KEYSTORE_FILE" }
+store-password  = { type = "string", secret = true }
+key-alias       = { type = "string", required = true }
+key-password    = { type = "string", secret = true }
+# v3 key rotation: schema'd for forward-compat, not yet wired (android-plan Phase 3 records it).
+next-store-file = { type = "string" }
+
+[sub-tables.build-types]
+schema       = "variant"
+variant-axis = "build-type"
+built-in     = ["debug", "release"]
+default      = "debug"
+
+[sub-tables.flavors]
+schema       = "variant"
+variant-axis = "flavor"
+dimensioned  = true
+
+[sub-tables.signing]
+schema = "signing"
 
 # Compose (android-plan §3.5): the embeddable Compose compiler plugin, version-locked to
 # the Kotlin compiler actually used — the version-matching dance is gone by construction.
@@ -81,6 +130,13 @@ sdk-path      = "android.jar"
 # and packaging never see it — dex takes it explicitly via --lib from the extra above).
 [[contribute.provided-classpath]]
 dependency = "android-jar"
+
+# bundletool, for the AAB packager and the deploy verb's universal-APK path — a JVM library
+# with a real dependency graph, forked over its transitive closure like manifest-merger.
+[[contribute.step-dependency]]
+artifact   = "bundletool"
+coordinate = "com.android.tools.build:bundletool:1.17.2"
+transitive = true
 
 # adb, for the deploy verb (`jk run` onto a device) — provisioned platform-tools.
 [[contribute.step-dependency]]

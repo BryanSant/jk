@@ -1,17 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.android;
 
-import com.android.apksig.ApkSigner;
 import dev.jkbuild.plugin.build.PackageIo;
-import dev.jkbuild.plugin.build.StepExec;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.security.KeyStore;
-import java.security.PrivateKey;
-import java.security.cert.X509Certificate;
-import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.List;
 import java.util.zip.CRC32;
@@ -39,27 +33,41 @@ final class ApkPackager {
                 .map(dir -> dir.resolve("packaged").resolve("resources.ap_"))
                 .filter(Files::isRegularFile)
                 .orElseThrow(() -> new IllegalStateException("android-res produced no resources.ap_"));
-        Path dexDir = io.stepOutput("android-dex")
-                .map(dir -> dir.resolve("dex"))
-                .filter(Files::isDirectory)
-                .orElseThrow(() -> new IllegalStateException("android-dex produced no dex output"));
+        Path dexDir = dexOutput(io);
 
         Path out = io.artifactPath();
         Path work = Files.createTempDirectory("jk-apk-");
         Path unsigned = work.resolve("unsigned.apk");
 
         io.label("assemble " + out.getFileName());
-        assemble(resPackage, dexDir, unsigned);
+        assemble(io, resPackage, dexDir, unsigned);
 
-        io.label("sign (debug)");
-        sign(io, work, unsigned, out);
+        if (Signing.hasReleaseConfig(io)) {
+            io.label("sign (release)");
+            Signing.sign(Signing.release(io), unsigned, out);
+        } else {
+            io.label("sign (debug)");
+            Signing.sign(Signing.debug(io, work), unsigned, out);
+        }
+        AndroidDeps.copyRetraceArtifacts(io);
+    }
+
+    /** The dex step's output — {@code android-r8} on a minified build, else {@code android-dex}. */
+    static Path dexOutput(PackageIo io) {
+        return io.stepOutput("android-r8")
+                .or(() -> io.stepOutput("android-dex"))
+                .map(dir -> dir.resolve("dex"))
+                .filter(Files::isDirectory)
+                .orElseThrow(() -> new IllegalStateException("no dex output — did the dex/r8 step run?"));
     }
 
     /**
      * The unsigned APK: every entry of the aapt2-linked package copied with its compression
-     * preserved ({@code resources.arsc} must stay STORED), plus each {@code classes*.dex}.
+     * preserved ({@code resources.arsc} must stay STORED), each {@code classes*.dex}, the merged
+     * {@code assets/} (module wins over AAR deps), and AAR native libs under {@code lib/<abi>/}
+     * (STORED — apksig's output engine page-aligns uncompressed {@code .so} entries).
      */
-    private static void assemble(Path resPackage, Path dexDir, Path unsigned) throws IOException {
+    private static void assemble(PackageIo io, Path resPackage, Path dexDir, Path unsigned) throws IOException {
         try (ZipOutputStream zip = new ZipOutputStream(Files.newOutputStream(unsigned));
                 ZipFile in = new ZipFile(resPackage.toFile())) {
             Enumeration<? extends ZipEntry> entries = in.entries();
@@ -78,6 +86,12 @@ final class ApkPackager {
             for (Path dex : dexFiles) {
                 write(zip, dex.getFileName().toString(), Files.readAllBytes(dex), ZipEntry.DEFLATED);
             }
+            for (var asset : AndroidDeps.mergedAssets(io).entrySet()) {
+                write(zip, "assets/" + asset.getKey(), Files.readAllBytes(asset.getValue()), ZipEntry.DEFLATED);
+            }
+            for (var lib : AndroidDeps.nativeLibs(io).entrySet()) {
+                write(zip, "lib/" + lib.getKey(), Files.readAllBytes(lib.getValue()), ZipEntry.STORED);
+            }
         }
     }
 
@@ -95,49 +109,4 @@ final class ApkPackager {
         zip.closeEntry();
     }
 
-    /** Generate the debug keystore with keytool, then apksig v1+v2 sign to the artifact path. */
-    private static void sign(PackageIo io, Path work, Path unsigned, Path out) throws Exception {
-        Path keystore = work.resolve("debug.keystore");
-        StepExec.ToolRun.Result keygen = io.tool("keytool")
-                .arg("-genkeypair")
-                .arg("-keystore")
-                .arg(keystore.toAbsolutePath().toString())
-                .arg("-storepass")
-                .arg("android")
-                .arg("-keypass")
-                .arg("android")
-                .arg("-alias")
-                .arg("androiddebugkey")
-                .arg("-keyalg")
-                .arg("RSA")
-                .arg("-keysize")
-                .arg("2048")
-                .arg("-validity")
-                .arg("10000")
-                .arg("-dname")
-                .arg("CN=Android Debug,O=Android,C=US")
-                .run();
-        if (keygen.exit() != 0) {
-            throw new IllegalStateException("keytool failed:\n" + keygen.output());
-        }
-
-        KeyStore ks = KeyStore.getInstance("PKCS12");
-        try (InputStream in = Files.newInputStream(keystore)) {
-            ks.load(in, "android".toCharArray());
-        }
-        PrivateKey key = (PrivateKey) ks.getKey("androiddebugkey", "android".toCharArray());
-        List<X509Certificate> certs = new ArrayList<>();
-        for (var cert : ks.getCertificateChain("androiddebugkey")) {
-            certs.add((X509Certificate) cert);
-        }
-        ApkSigner.SignerConfig signer =
-                new ApkSigner.SignerConfig.Builder("androiddebugkey", key, certs).build();
-        new ApkSigner.Builder(List.of(signer))
-                .setInputApk(unsigned.toFile())
-                .setOutputApk(out.toFile())
-                .setV1SigningEnabled(true)
-                .setV2SigningEnabled(true)
-                .build()
-                .sign();
-    }
 }

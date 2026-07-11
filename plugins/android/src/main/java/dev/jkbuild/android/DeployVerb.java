@@ -28,11 +28,16 @@ final class DeployVerb {
     private DeployVerb() {}
 
     static int run(VerbExec exec) throws Exception {
-        Path apk = exec.mainArtifact().orElse(null);
-        if (apk == null || !apk.toString().endsWith(".apk")) {
-            exec.out("jk run: no APK built yet — run `jk build` first");
+        Path artifact = exec.mainArtifact().orElse(null);
+        if (artifact == null
+                || !(artifact.toString().endsWith(".apk") || artifact.toString().endsWith(".aab"))) {
+            exec.out("jk run: no APK/AAB built yet — run `jk build` first");
             return 1;
         }
+        // A release AAB deploys locally through bundletool: build-apks --mode universal against
+        // the debug identity (local testing — Play signs the real install artifacts), then the
+        // extracted universal.apk installs like any APK.
+        Path apk = artifact.toString().endsWith(".aab") ? universalApk(exec, artifact) : artifact;
         Path adb = adbPath(exec);
         String namespace = exec.config().string("namespace");
         String activity = launcherActivity(exec.moduleDir().resolve("AndroidManifest.xml"), namespace);
@@ -45,6 +50,45 @@ final class DeployVerb {
         exec.label("am start");
         exec.out("Launching " + namespace + "/" + activity + " …");
         return adb(exec, adb, "shell", "am", "start", "-n", namespace + "/" + activity);
+    }
+
+    /** bundletool build-apks --mode universal over the AAB; the extracted universal.apk. */
+    private static Path universalApk(VerbExec exec, Path aab) throws Exception {
+        Path bundletool = exec.requireExtra("bundletool");
+        Path work = Files.createTempDirectory("jk-deploy-");
+        Path apks = work.resolve("universal.apks");
+        exec.label("bundletool build-apks");
+        List<String> command = new ArrayList<>();
+        command.add(Path.of(System.getProperty("java.home"), "bin", "java").toString());
+        command.add("-cp");
+        StringBuilder cp = new StringBuilder();
+        for (Path jar : ManifestStep.jarsIn(bundletool)) {
+            if (cp.length() > 0) cp.append(java.io.File.pathSeparatorChar);
+            cp.append(jar.toAbsolutePath());
+        }
+        command.add(cp.toString());
+        command.add("com.android.tools.build.bundletool.BundleToolMain");
+        command.add("build-apks");
+        command.add("--bundle=" + aab.toAbsolutePath());
+        command.add("--output=" + apks.toAbsolutePath());
+        command.add("--mode=universal");
+        Process process = new ProcessBuilder(command).redirectErrorStream(true).start();
+        String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+        if (process.waitFor() != 0) {
+            throw new IllegalStateException("bundletool build-apks failed:\n" + output);
+        }
+        // universal.apks is a zip: universal.apk + toc.pb.
+        Path universal = work.resolve("universal.apk");
+        try (java.util.zip.ZipFile zip = new java.util.zip.ZipFile(apks.toFile())) {
+            var entry = zip.getEntry("universal.apk");
+            if (entry == null) {
+                throw new IllegalStateException("bundletool build-apks produced no universal.apk");
+            }
+            try (var in = zip.getInputStream(entry)) {
+                Files.copy(in, universal, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            }
+        }
+        return universal;
     }
 
     /** {@code --adb <path>} override, else the provisioned platform-tools binary. */

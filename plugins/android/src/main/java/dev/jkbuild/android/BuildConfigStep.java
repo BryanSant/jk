@@ -8,8 +8,9 @@ import java.nio.file.Path;
 /**
  * The {@code android-buildconfig} step ({@code [android] build-config = true} — an explicit
  * toggle, deliberately not AGP's default-on grab-bag): a generated {@code BuildConfig.java}
- * under the module's namespace, contributed to the compiler's source set. {@code DEBUG} is true
- * until release variants land (android-plan Phase 3 wires build types through here).
+ * under the module's namespace, contributed to the compiler's source set. {@code DEBUG} reflects
+ * the selected build type ({@code jk build --release} → false); {@code APPLICATION_ID} carries
+ * the variant's {@code application-id-suffix} when one applies.
  */
 final class BuildConfigStep {
 
@@ -17,6 +18,9 @@ final class BuildConfigStep {
 
     static void run(StepExec exec) throws Exception {
         String namespace = exec.config().string("namespace");
+        boolean debug = !"release".equals(exec.config().stringOpt("build-type").orElse("debug"));
+        String applicationId =
+                namespace + exec.config().stringOpt("application-id-suffix").orElse("");
         Path gen = exec.outputDir("gen");
         Path file = gen.resolve(namespace.replace('.', '/')).resolve("BuildConfig.java");
         Files.createDirectories(file.getParent());
@@ -27,8 +31,8 @@ final class BuildConfigStep {
                         + "package " + namespace + ";\n\n"
                         + "public final class BuildConfig {\n"
                         + "    private BuildConfig() {}\n\n"
-                        + "    public static final boolean DEBUG = true;\n"
-                        + "    public static final String APPLICATION_ID = \"" + namespace + "\";\n"
+                        + "    public static final boolean DEBUG = " + debug + ";\n"
+                        + "    public static final String APPLICATION_ID = \"" + applicationId + "\";\n"
                         + "    public static final String VERSION_NAME = \"" + exec.project().version() + "\";\n"
                         + "    public static final int VERSION_CODE = 1;\n"
                         + "}\n");

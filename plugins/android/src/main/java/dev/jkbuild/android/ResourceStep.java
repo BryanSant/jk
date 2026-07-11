@@ -73,40 +73,31 @@ final class ResourceStep {
         }
 
         // aapt2 link: deps as plain inputs (classpath order), the module's own resources as the
-        // overlay — one binary package, one merged symbol table, the module's R.java.
+        // overlay — one binary package, one merged symbol table, the module's R.java, and the
+        // generated keep rules (manifest components) R8 consumes on release.
         exec.label("aapt2 link");
         Path rTxt = packaged.resolve("R.txt");
-        StepExec.ToolRun link = exec.tool(aapt2)
-                .arg("link")
-                .arg("-o")
-                .arg(packaged.resolve("resources.ap_").toAbsolutePath().toString())
-                .arg("-I")
-                .arg(platformJar.toAbsolutePath().toString())
-                .arg("--manifest")
-                .arg(manifest.toAbsolutePath().toString())
-                .arg("--java")
-                .arg(gen.toAbsolutePath().toString())
-                .arg("--custom-package")
-                .arg(namespace)
-                .arg("--output-text-symbols")
-                .arg(rTxt.toAbsolutePath().toString())
-                .arg("--min-sdk-version")
-                .arg(Long.toString(minSdk))
-                .arg("--target-sdk-version")
-                .arg(Long.toString(compileSdk))
-                .arg("--version-code")
-                .arg("1")
-                .arg("--version-name")
-                .arg(exec.project().version())
-                .arg("--auto-add-overlay");
-        if (library) link.arg("--non-final-ids");
-        for (Path dep : depFlats) link.arg(dep.toAbsolutePath().toString());
-        if (ownFlats != null) {
-            link.arg("-R").arg(ownFlats.toAbsolutePath().toString());
-        }
-        StepExec.ToolRun.Result linked = link.run();
+        StepExec.ToolRun.Result linked = link(
+                        exec, aapt2, platformJar, manifest, namespace, compileSdk, minSdk, library, depFlats,
+                        ownFlats, packaged.resolve("resources.ap_"), gen, rTxt,
+                        packaged.resolve("keep-rules.pro"), false)
+                .run();
         if (linked.exit() != 0) {
             throw new IllegalStateException("aapt2 link failed:\n" + linked.output());
+        }
+
+        // Release app: a second link in proto format — the AAB's resource table (bundletool
+        // consumes protobuf resources, never the binary arsc).
+        boolean release = "release".equals(exec.config().stringOpt("build-type").orElse("debug"));
+        if (release && !library) {
+            exec.label("aapt2 link (proto)");
+            StepExec.ToolRun.Result proto = link(
+                            exec, aapt2, platformJar, manifest, namespace, compileSdk, minSdk, false, depFlats,
+                            ownFlats, packaged.resolve("resources-proto.ap_"), null, null, null, true)
+                    .run();
+            if (proto.exit() != 0) {
+                throw new IllegalStateException("aapt2 link --proto-format failed:\n" + proto.output());
+            }
         }
 
         // Non-transitive R: the app regenerates each dependency's R class from ITS R.txt with
@@ -120,6 +111,54 @@ final class ResourceStep {
                 writeDepR(gen, depNamespace, readSymbols(aar.rTxt()), finalSymbols);
             }
         }
+    }
+
+    /** One aapt2 link invocation — binary (R.java + symbols + keep rules) or proto (AAB). */
+    private static StepExec.ToolRun link(
+            StepExec exec,
+            Path aapt2,
+            Path platformJar,
+            Path manifest,
+            String namespace,
+            long compileSdk,
+            long minSdk,
+            boolean library,
+            List<Path> depFlats,
+            Path ownFlats,
+            Path out,
+            Path gen,
+            Path rTxt,
+            Path keepRules,
+            boolean proto) {
+        StepExec.ToolRun link = exec.tool(aapt2)
+                .arg("link")
+                .arg("-o")
+                .arg(out.toAbsolutePath().toString())
+                .arg("-I")
+                .arg(platformJar.toAbsolutePath().toString())
+                .arg("--manifest")
+                .arg(manifest.toAbsolutePath().toString())
+                .arg("--custom-package")
+                .arg(namespace)
+                .arg("--min-sdk-version")
+                .arg(Long.toString(minSdk))
+                .arg("--target-sdk-version")
+                .arg(Long.toString(compileSdk))
+                .arg("--version-code")
+                .arg("1")
+                .arg("--version-name")
+                .arg(exec.project().version())
+                .arg("--auto-add-overlay");
+        if (gen != null) link.arg("--java").arg(gen.toAbsolutePath().toString());
+        if (rTxt != null) link.arg("--output-text-symbols").arg(rTxt.toAbsolutePath().toString());
+        if (keepRules != null) link.arg("--proguard").arg(keepRules.toAbsolutePath().toString());
+        if (proto) link.arg("--proto-format");
+        if (library) link.arg("--non-final-ids");
+        for (Path dep : depFlats) link.arg(dep.toAbsolutePath().toString());
+        if (ownFlats != null) {
+            link.arg("-R").arg(ownFlats.toAbsolutePath().toString());
+        }
+        return link;
     }
 
     private static Path compileRes(StepExec exec, Path aapt2, Path resDir, Path out) throws Exception {

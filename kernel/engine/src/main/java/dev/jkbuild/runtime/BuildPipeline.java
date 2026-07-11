@@ -1826,13 +1826,25 @@ public final class BuildPipeline {
         for (String input : decls.packager().inputs()) {
             switch (input) {
                 case "classes" -> tokens.add("classes:" + dev.jkbuild.task.ClasspathFingerprint.entry(classes));
-                case "runtime-classpath", "runtime-entries" ->
+                case "runtime-classpath", "runtime-entries" -> {
                     tokens.add("libs:" + dev.jkbuild.task.ClasspathFingerprint.of(entryJars));
+                    // Container content (an AAR's res/assets/jni) is packaged input too — an
+                    // assets-only AAR bump must re-package even though no classes jar changed.
+                    for (Entry e : entries) {
+                        if (e.container() != null) {
+                            tokens.add("container:" + e.fileName() + ":"
+                                    + dev.jkbuild.task.ClasspathFingerprint.entry(e.container()));
+                        }
+                    }
+                }
                 case "config" -> tokens.add("config:" + PluginBuild.configToken(active.config()));
                 default -> {
                     if (input.startsWith("step:")) {
                         Path other = PluginBuild.stepScratch(layout, input.substring("step:".length()));
                         tokens.add(input + ":" + dev.jkbuild.task.ClasspathFingerprint.entry(other));
+                    } else if (input.startsWith("project:")) {
+                        Path files = in.dir().resolve(input.substring("project:".length()));
+                        tokens.add(input + ":" + dev.jkbuild.task.ClasspathFingerprint.entry(files));
                     }
                 }
             }

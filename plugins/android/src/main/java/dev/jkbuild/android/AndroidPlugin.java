@@ -49,6 +49,10 @@ public final class AndroidPlugin implements Plugin, BuildPlugin {
     @Override
     public void register(BuildPluginContext ctx) {
         boolean library = ctx.config().bool("library", false);
+        // The effective config carries the selected build type (Variants.apply injected it);
+        // release defaults minify ON (AGP-9 posture) — the overlay's tri-state `minify` overrides.
+        boolean release = "release".equals(ctx.config().stringOpt("build-type").orElse("debug"));
+        boolean minify = ctx.config().bool("minify").orElse(release && !library);
         ctx.step(StepSpec.named("android-manifest")
                 .after(Anchor.RESOLVE)
                 .before(Anchor.COMPILE)
@@ -79,21 +83,52 @@ public final class AndroidPlugin implements Plugin, BuildPlugin {
                             In.config())
                     .produce(AarPackager::produce));
         } else {
-            ctx.step(StepSpec.named("android-dex")
-                    .after(Anchor.COMPILE)
-                    .before(Anchor.PACKAGE)
-                    .inputs(In.classes(), In.runtimeEntries(), In.config())
-                    .outputs("dex")
-                    .run(DexStep::run));
-            ctx.packaging(PackagerSpec.replacingMainArtifact("apk")
-                    .inputs(In.stepOutput("android-res"), In.stepOutput("android-dex"), In.config())
-                    .produce(ApkPackager::produce));
+            String dexStep;
+            if (minify) {
+                // Release: R8 full mode, whole-program — keep rules from the plugin baseline,
+                // aapt2's generated rules, AAR consumer rules, and the app's proguard-files
+                // (declared inputs, so a rules edit re-shrinks).
+                dexStep = "android-r8";
+                List<In> r8Inputs = new java.util.ArrayList<>(List.of(
+                        In.classes(), In.runtimeEntries(), In.stepOutput("android-res"), In.config()));
+                for (String rel : ctx.config().stringList("proguard-files")) {
+                    r8Inputs.add(In.projectFiles(rel));
+                }
+                ctx.step(StepSpec.named("android-r8")
+                        .after(Anchor.COMPILE)
+                        .before(Anchor.PACKAGE)
+                        .inputs(r8Inputs.toArray(new In[0]))
+                        .outputs("dex", "mapping")
+                        .run(R8Step::run));
+            } else {
+                dexStep = "android-dex";
+                ctx.step(StepSpec.named("android-dex")
+                        .after(Anchor.COMPILE)
+                        .before(Anchor.PACKAGE)
+                        .inputs(In.classes(), In.runtimeEntries(), In.config())
+                        .outputs("dex")
+                        .run(DexStep::run));
+            }
+            if (release) {
+                // The release artifact is the Play-uploadable AAB ([[packaging.variant]] picks
+                // the extension); bundletool assembles from the proto-format link.
+                ctx.packaging(PackagerSpec.replacingMainArtifact("aab")
+                        .inputs(In.stepOutput("android-res"), In.stepOutput(dexStep), In.runtimeEntries(),
+                                In.projectFiles("assets"), In.config())
+                        .produce(AabPackager::produce));
+            } else {
+                ctx.packaging(PackagerSpec.replacingMainArtifact("apk")
+                        .inputs(In.stepOutput("android-res"), In.stepOutput(dexStep), In.runtimeEntries(),
+                                In.projectFiles("assets"), In.config())
+                        .produce(ApkPackager::produce));
+            }
             ctx.verb(VerbSpec.named("deploy")
-                    .description("Install the built APK on a device and launch it")
+                    .description("Install the built APK/AAB on a device and launch it")
                     .run(DeployVerb::run));
         }
         ctx.verb(VerbSpec.named("android")
                 .description("Android SDK provisioning: licenses, component status")
                 .run(AndroidVerb::run));
     }
+
 }
