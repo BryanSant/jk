@@ -17,6 +17,24 @@ public interface VerbExec {
     /** The project directory the verb runs against. */
     Path moduleDir();
 
+    /**
+     * A declared {@code [[contribute.step-dependency]]} artifact, resolved engine-side — verbs
+     * get the same tool artifacts steps do (adb from an SDK component, a bundled tool jar).
+     */
+    java.util.Optional<Path> extra(String name);
+
+    /** As {@link #extra} but required. */
+    default Path requireExtra(String name) {
+        return extra(name).orElseThrow(() -> new IllegalStateException("tool artifact not provided: " + name
+                + " — declare it as a [[contribute.step-dependency]]"));
+    }
+
+    /**
+     * The built main artifact (the packager's, under its declared extension — an APK), or empty
+     * when not built yet. Deploy-style verbs consume this instead of learning jk's layout.
+     */
+    java.util.Optional<Path> mainArtifact();
+
     /** Emit one user-facing output line (the client prints these in order). */
     void out(String line);
 

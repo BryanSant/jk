@@ -119,6 +119,29 @@ class AndroidSpikeTest {
                 .contains("META-INF/MANIFEST.MF");
         // v2 signing leaves no entry — verify with the same apksig the plugin signs with.
         assertThat(verifiedByApksig(apk)).isTrue();
+
+        // ---- jk run onto a device: the declared deploy verb, against a scripted fake adb ----
+        // (a live `adb devices` run is the honest remaining gap — no device in CI).
+        Path adbLog = tmp.resolve("adb.log");
+        Path fakeAdb = tmp.resolve("fake-adb");
+        Files.writeString(fakeAdb, "#!/bin/sh\necho \"$@\" >> " + adbLog.toAbsolutePath() + "\necho Success\n");
+        fakeAdb.toFile().setExecutable(true);
+
+        var deploy = PluginVerbs.run(project, cache, "deploy", List.of("--adb", fakeAdb.toAbsolutePath().toString()));
+        assertThat(deploy.error()).isNull();
+        assertThat(deploy.found()).isTrue();
+        assertThat(deploy.exit()).isZero();
+        String adbCalls = Files.readString(adbLog);
+        assertThat(adbCalls)
+                .contains("install -r " + apk.toAbsolutePath())
+                .contains("shell am start -n com.example.hello/com.example.hello.MainActivity");
+
+        // ---- the provisioning surface: component status over the same verb machinery ----
+        var status = PluginVerbs.run(project, cache, "android", List.of("sdk"));
+        assertThat(status.error()).isNull();
+        assertThat(status.exit()).isZero();
+        assertThat(String.join("\n", status.output()))
+                .contains("platforms;android-28: installed");
     }
 
     /** apksig's verifier from the fetched CAS jar — proves v1+v2 without an emulator. */

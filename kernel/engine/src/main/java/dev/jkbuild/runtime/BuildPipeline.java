@@ -1511,14 +1511,7 @@ public final class BuildPipeline {
                     Path jarPath = layout.mainJar();
                     if (pluginDecls != null && pluginDecls.packager() != null) {
                         // The packager's declared artifact extension replaces .jar (an APK, …).
-                        String ext = pluginActive.manifest().packaging() == null
-                                ? "jar"
-                                : pluginActive.manifest().packaging().artifactExtension();
-                        if (!"jar".equals(ext)) {
-                            String fileName = jarPath.getFileName().toString();
-                            jarPath = jarPath.resolveSibling(
-                                    fileName.substring(0, fileName.length() - ".jar".length()) + "." + ext);
-                        }
+                        jarPath = PluginBuild.mainArtifactPath(layout, pluginActive);
                         Files.createDirectories(jarPath.getParent());
                         packagePlugin(ctx, in, cas, project, classes, jarPath, pluginActive, pluginDecls);
                         return;

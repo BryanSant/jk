@@ -401,6 +401,17 @@ public final class BuildPluginHarness {
         }
 
         @Override
+        public java.util.Optional<Path> extra(String name) {
+            return java.util.Optional.ofNullable(spec.extras().get(name));
+        }
+
+        @Override
+        public java.util.Optional<Path> mainArtifact() {
+            return java.util.Optional.ofNullable(spec.artifactPath())
+                    .filter(java.nio.file.Files::isRegularFile);
+        }
+
+        @Override
         public void out(String line) {
             out.emit("{\"t\":\"verb-out\",\"line\":" + Ndjson.quote(line) + "}");
         }

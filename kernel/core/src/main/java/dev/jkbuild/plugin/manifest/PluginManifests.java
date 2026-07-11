@@ -149,6 +149,11 @@ public final class PluginManifests {
                     displayPath + ".packaging.exec-mode must be jar, classpath, binary, or device — got: "
                             + execMode);
         }
+        String deployVerb = packaging.getString("deploy-verb");
+        if (deployVerb != null && !"device".equals(execMode)) {
+            throw new JkBuildParseException(
+                    displayPath + ".packaging.deploy-verb only applies to exec-mode = \"device\"");
+        }
         String extension = packaging.getString("artifact-extension");
         if (extension == null) extension = "jar";
         if (!extension.matches("[a-z0-9]{1,8}")) {
@@ -163,7 +168,8 @@ public final class PluginManifests {
                 Boolean.TRUE.equals(packaging.getBoolean("classes-run")),
                 Boolean.TRUE.equals(packaging.getBoolean("main-scan")),
                 Boolean.TRUE.equals(packaging.getBoolean("layered-image")),
-                extension);
+                extension,
+                deployVerb == null ? "" : deployVerb);
     }
 
     // ---- [[contribute.*]] — the declarative layer (P2) --------------------------------------

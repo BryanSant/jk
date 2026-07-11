@@ -44,13 +44,19 @@ public final class PluginVerbs {
 
             Path scratch = layout.moduleTargetDir().resolve("plugin").resolve("verb-" + verb);
             Files.createDirectories(scratch);
-            Path spec = new PluginBuild.SpecWriter()
+            PluginBuild.SpecWriter specWriter = new PluginBuild.SpecWriter()
                     .op("verb", verb, active.manifest().id())
                     .config(active.config())
                     .project(project, project.mainClass())
                     .layout(layout.classesDir(), dir, scratch)
-                    .verbArgs(args)
-                    .write();
+                    .artifact(PluginBuild.mainArtifactPath(layout, active))
+                    .verbArgs(args);
+            // Verbs get the same declared tool artifacts steps do (adb from an SDK component).
+            for (var tool : PluginBuild.fetchStepDependencies(project, dir, new dev.jkbuild.cache.Cas(cache))
+                    .entrySet()) {
+                specWriter.extra(tool.getKey(), tool.getValue());
+            }
+            Path spec = specWriter.write();
             try {
                 Path jar = PluginBuild.workerJarFor(active, cache);
                 List<String> output = new ArrayList<>();

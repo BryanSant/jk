@@ -168,10 +168,15 @@ public final class RunCommand implements CliCommand {
         }
 
         // Exec the engine's plan: the most self-contained artifact (native > shadow > jar),
-        // computed engine-side against the just-built outputs.
+        // computed engine-side against the just-built outputs. A device artifact (an APK)
+        // never forks on the host — the plan names the plugin's deploy verb instead.
         List<String> command;
         try {
-            command = new ArrayList<>(execPlan(projectDir).argv());
+            dev.jkbuild.engine.protocol.ExecPlan plan = execPlan(projectDir);
+            if (!plan.deployVerb().isEmpty()) {
+                return dispatchDeployVerb(projectDir, cache, plan.deployVerb(), appArgs, mode);
+            }
+            command = new ArrayList<>(plan.argv());
         } catch (IOException e) {
             // Typically the main-class scan: none/several found — message is ready to print.
             CliOutput.err("jk run: " + e.getMessage());
@@ -190,6 +195,40 @@ public final class RunCommand implements CliCommand {
         }
         command.addAll(appArgs);
         return new ProcessBuilder(command).inheritIO().start().waitFor();
+    }
+
+    /**
+     * {@code jk run} on a device artifact: dispatch the plugin's declared deploy verb over the
+     * plugin-verb protocol (install + launch happen in the plugin's worker; nothing execs on
+     * the host JVM). Output lines stream back as the command's output.
+     */
+    private int dispatchDeployVerb(
+            Path projectDir, Path cache, String verb, List<String> appArgs, GoalConsole.Mode mode)
+            throws IOException {
+        if (mode != GoalConsole.Mode.VERBOSE && mode != GoalConsole.Mode.JSON) {
+            CliOutput.err();
+        }
+        dev.jkbuild.engine.protocol.PluginVerbReport report;
+        try {
+            report = engineDisabledForTests()
+                    ? dev.jkbuild.cli.engine.InProcessEngine.require().pluginVerb(projectDir, cache, verb, appArgs)
+                    : dev.jkbuild.cli.engine.EngineClient.pluginVerb(
+                            dev.jkbuild.engine.EnginePaths.current(), projectDir, cache, verb, appArgs);
+        } catch (Exception e) {
+            CliOutput.err("jk run: " + e.getMessage());
+            return Exit.SOFTWARE;
+        }
+        if (!report.found()) {
+            CliOutput.err("jk run: the packaging plugin declares deploy verb `" + verb + "` but does not"
+                    + " register it");
+            return Exit.SOFTWARE;
+        }
+        if (report.error() != null) {
+            CliOutput.err("jk run: " + report.error());
+            return 1;
+        }
+        for (String line : report.output()) CliOutput.out(line);
+        return report.exit();
     }
 
     /**

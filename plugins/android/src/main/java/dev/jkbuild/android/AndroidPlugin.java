@@ -10,6 +10,7 @@ import dev.jkbuild.plugin.build.BuildPluginHarness;
 import dev.jkbuild.plugin.build.In;
 import dev.jkbuild.plugin.build.PackagerSpec;
 import dev.jkbuild.plugin.build.StepSpec;
+import dev.jkbuild.plugin.build.VerbSpec;
 import dev.jkbuild.plugin.protocol.ProtocolWriter;
 import java.util.List;
 
@@ -69,5 +70,11 @@ public final class AndroidPlugin implements Plugin, BuildPlugin {
         ctx.packaging(PackagerSpec.replacingMainArtifact("apk")
                 .inputs(In.stepOutput("android-res"), In.stepOutput("android-dex"), In.config())
                 .produce(ApkPackager::produce));
+        ctx.verb(VerbSpec.named("deploy")
+                .description("Install the built APK on a device and launch it")
+                .run(DeployVerb::run));
+        ctx.verb(VerbSpec.named("android")
+                .description("Android SDK provisioning: licenses, component status")
+                .run(AndroidVerb::run));
     }
 }

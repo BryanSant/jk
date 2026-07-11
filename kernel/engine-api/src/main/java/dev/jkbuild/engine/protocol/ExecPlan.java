@@ -45,12 +45,13 @@ public record ExecPlan(
         String tier,
         String mainClass,
         List<String> libNames,
-        List<String> libPaths) {
+        List<String> libPaths,
+        String deployVerb) {
 
     public static ExecPlan error(String kind, String message) {
         return new ExecPlan(
                 message, kind, List.of(), "", "", "", false, false, List.of(), List.of(), List.of(), "", "", "",
-                false, "", "", "", List.of(), List.of());
+                false, "", "", "", List.of(), List.of(), "");
     }
 
     public String encode() {
@@ -75,6 +76,7 @@ public record ExecPlan(
                 + ",\"mainClass\":" + Ndjson.quote(mainClass)
                 + ",\"libNames\":" + EngineProtocol.quoteArray(libNames)
                 + ",\"libPaths\":" + EngineProtocol.quoteArray(libPaths)
+                + ",\"deployVerb\":" + Ndjson.quote(deployVerb)
                 + "}";
     }
 
@@ -99,7 +101,12 @@ public record ExecPlan(
                 orEmpty(Ndjson.str(line, "tier")),
                 orEmpty(Ndjson.str(line, "mainClass")),
                 Ndjson.strArray(line, "libNames"),
-                Ndjson.strArray(line, "libPaths"));
+                Ndjson.strArray(line, "libPaths"),
+                orEmptyDeploy(Ndjson.str(line, "deployVerb")));
+    }
+
+    private static String orEmptyDeploy(String s) {
+        return s == null ? "" : s;
     }
 
     private static String orEmpty(String s) {

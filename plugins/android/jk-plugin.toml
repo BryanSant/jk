@@ -19,13 +19,14 @@ worker          = "jk-android"
 protocol-prefix = "##JKAN:"
 
 # The APK replaces the main artifact under its own extension; it is a device artifact —
-# not host-runnable (run/dev answer with the descriptor error; deploy verbs are Phase 1's
-# `jk run`-onto-device follow-up).
+# not host-runnable. `jk run` dispatches the declared deploy verb (adb install + am start);
+# `jk dev` still answers with the descriptor error (the redeploy loop is Phase 2).
 [packaging]
 packager           = "apk"
 exec-mode          = "device"
 self-contained     = true
 artifact-extension = "apk"
+deploy-verb        = "deploy"
 
 [schema]
 namespace   = { type = "string", required = true, example = "com.example.app", hint = "it names the R class package and the default application id" }
@@ -63,3 +64,14 @@ sdk-path      = "android.jar"
 # and packaging never see it — dex takes it explicitly via --lib from the extra above).
 [[contribute.provided-classpath]]
 dependency = "android-jar"
+
+# adb, for the deploy verb (`jk run` onto a device) — provisioned platform-tools.
+[[contribute.step-dependency]]
+artifact      = "adb"
+sdk-component = "platform-tools"
+sdk-path      = "adb"
+
+# The SDK root itself, for the provisioning verbs (`jk android licenses|sdk`).
+[[contribute.step-dependency]]
+artifact      = "sdk-root"
+sdk-component = "root"

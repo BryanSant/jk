@@ -129,7 +129,20 @@ public record PluginManifest(
             boolean classesRun,
             boolean mainScan,
             boolean layeredImage,
-            String artifactExtension) {
+            String artifactExtension,
+            String deployVerb) {
+
+        /** Back-compat: the pre-deploy-verb descriptor shape. */
+        public Packaging(
+                String packager,
+                String execMode,
+                boolean selfContained,
+                boolean classesRun,
+                boolean mainScan,
+                boolean layeredImage,
+                String artifactExtension) {
+            this(packager, execMode, selfContained, classesRun, mainScan, layeredImage, artifactExtension, "");
+        }
 
         /** Back-compat: the P3 descriptor shape (jar-extension artifact). */
         public Packaging(
@@ -139,7 +152,7 @@ public record PluginManifest(
                 boolean classesRun,
                 boolean mainScan,
                 boolean layeredImage) {
-            this(packager, execMode, selfContained, classesRun, mainScan, layeredImage, "jar");
+            this(packager, execMode, selfContained, classesRun, mainScan, layeredImage, "jar", "");
         }
     }
 

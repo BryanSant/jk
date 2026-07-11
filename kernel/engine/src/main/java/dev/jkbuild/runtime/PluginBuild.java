@@ -363,6 +363,21 @@ public final class PluginBuild {
         return classpath;
     }
 
+    /**
+     * The main artifact's path under the packager's declared extension ({@code
+     * target/lib/<name>-<version>.apk}) — the one place the extension swap lives.
+     */
+    public static Path mainArtifactPath(dev.jkbuild.layout.BuildLayout layout, Active active) {
+        Path jarPath = layout.mainJar();
+        var packaging = active.manifest().packaging();
+        String ext = packaging == null ? "jar" : packaging.artifactExtension();
+        if (!"jar".equals(ext)) {
+            String fileName = jarPath.getFileName().toString();
+            jarPath = jarPath.resolveSibling(fileName.substring(0, fileName.length() - ".jar".length()) + "." + ext);
+        }
+        return jarPath;
+    }
+
     /** The spec for one step/package execution — mirror of {@code BuildPluginHarness.Spec}. */
     public static final class SpecWriter {
         private final List<String> lines = new ArrayList<>();

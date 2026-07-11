@@ -170,10 +170,21 @@ public final class ExecPlans {
         // the run story; a generic java exec would be nonsense.
         var deviceShape = PluginBuild.shape(project, dir).filter(sh -> "device".equals(sh.execMode()));
         if (deviceShape.isPresent()) {
-            return ExecPlan.error(
-                    dev ? "dev" : "run",
-                    "this project packages a device artifact (exec-mode=device) — it cannot run on the"
-                            + " host JVM; deploy it with the owning plugin's verb instead");
+            String deployVerb = deviceShape.get().deployVerb();
+            if (dev || deployVerb.isEmpty()) {
+                return ExecPlan.error(
+                        dev ? "dev" : "run",
+                        "this project packages a device artifact (exec-mode=device) — it cannot run on the"
+                                + " host JVM; deploy it with the owning plugin's verb instead");
+            }
+            // jk run on a device artifact = the plugin's declared deploy verb; the client
+            // dispatches it over the plugin-verb protocol (argv stays empty — nothing forks
+            // on the host JVM).
+            return new ExecPlan(
+                    null, "run", java.util.List.of(), dir.toString(),
+                    "deploy → device (" + deployVerb + ")", "", false, false, java.util.List.of(),
+                    java.util.List.of(), java.util.List.of(), "", "", "", false, "", "", "",
+                    java.util.List.of(), java.util.List.of(), deployVerb);
         }
         Path javaHome = projectJavaHome(dir);
         String java = javaBin(javaHome);
@@ -258,7 +269,8 @@ public final class ExecPlans {
         return new ExecPlan(
                 null, kind, argv, dir.toString(),
                 display, javaHome.toString(), hotReload, devtoolsInjected, watchRoots, List.of(), List.of(), "", "",
-                "", false, "", "", "", List.of(), List.of());
+                "", false, "", "", "", List.of(), List.of(),
+                "");
     }
 
     /**
@@ -350,7 +362,8 @@ public final class ExecPlans {
             List<String> linkSrcs, List<String> linkDests, String launcherPath, String script, String binPath) {
         return new ExecPlan(
                 null, "install", List.of(), "", "", "", false, false, List.of(), linkSrcs, linkDests, launcherPath,
-                script, binPath, false, "", "", "", List.of(), List.of());
+                script, binPath, false, "", "", "", List.of(), List.of(),
+                "");
     }
 
     /** {@code jk build --aot-cache}: everything the client's layout/training step needs. */
@@ -390,7 +403,8 @@ public final class ExecPlans {
         return new ExecPlan(
                 null, "aot-cache", List.of(), dir.toString(), "", javaHome.toString(), false, false, List.of(),
                 List.of(), List.of(), "", "", "", executableJar, mainJar.toAbsolutePath().toString(), tier,
-                mainClass, libNames, libPaths);
+                mainClass, libNames, libPaths,
+                "");
     }
 
     // ------------------------------------------------------------- helpers
