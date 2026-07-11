@@ -109,12 +109,32 @@ public final class GlobalConfig {
         return EnvValues.parseBool(envValue).orElseGet(() -> booleanFromGlobal(configFile, "nerdfont", true));
     }
 
-    /** Read a boolean from the {@code [global]} table, falling back leniently. */
+    /**
+     * Read a boolean from the {@code [global]} table, falling back leniently. Uses {@link
+     * TomlScan}, not tomlj: this is the CLIENT-reachable half of GlobalConfig (nerdfont fires
+     * 20+ times per command; {@code repositories()} below is engine-only via RepoGroupBuilder),
+     * and the thin client must not reach a TOML parser for a one-key read of a file we own.
+     * Memoized per (path, size, mtime) like the full parse used to be.
+     */
     private static boolean booleanFromGlobal(Path file, String key, boolean fallback) {
-        return parseConfig(file)
-                .flatMap(toml -> TomlValues.optBoolean(toml.getTable("global"), key))
-                .orElse(fallback);
+        if (file == null) return fallback;
+        String cacheKey;
+        try {
+            if (!java.nio.file.Files.exists(file)) return fallback;
+            var attrs = java.nio.file.Files.readAttributes(
+                    file, java.nio.file.attribute.BasicFileAttributes.class);
+            cacheKey = file + "|" + key + "|" + attrs.size() + "|" + attrs.lastModifiedTime().toMillis();
+        } catch (java.io.IOException e) {
+            return fallback;
+        }
+        String value = SCAN_CACHE.computeIfAbsent(
+                cacheKey, k -> Optional.ofNullable(TomlScan.scan(file, "global." + key).get("global." + key)))
+                .orElse(null);
+        if (value == null) return fallback;
+        return "true".equalsIgnoreCase(value) ? true : "false".equalsIgnoreCase(value) ? false : fallback;
     }
+
+    private static final ConcurrentHashMap<String, Optional<String>> SCAN_CACHE = new ConcurrentHashMap<>();
 
     // ~/.jk/config.toml is process-stable but was re-parsed on every nerdfont()/repositories() call
     // (nerdfont alone fires 20+ times per invocation, several within one command). Memoize the parse
