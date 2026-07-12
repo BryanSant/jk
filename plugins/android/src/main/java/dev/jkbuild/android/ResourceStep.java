@@ -22,9 +22,10 @@ import java.util.zip.ZipFile;
  * generated {@code R.java} under {@code gen/} (contributed to the compiler's source set), and a
  * {@code raw-res/} copy for the AAR packager.
  *
- * <p>Precedence matches AGP: dependency resources link as plain inputs in classpath order; the
- * module's own resources ride as the overlay ({@code -R} + {@code --auto-add-overlay}), so the
- * app always wins a conflict with a library.
+ * <p>Precedence matches AGP: dependency resources merge into one tree first ({@link
+ * ResourceMerger} — resource-granular, earlier classpath entry wins) and link as one plain
+ * input; the module's own resources ride as the overlay ({@code -R} + {@code
+ * --auto-add-overlay}), so the app always wins a conflict with a library.
  *
  * <p><b>Non-transitive R</b> (jk's only mode): an app module additionally regenerates each AAR
  * dependency's {@code R} class — its own namespace, only the symbols its {@code R.txt} declares,
@@ -56,14 +57,20 @@ final class ResourceStep {
         Path rawRes = exec.outputDir("raw-res");
         Path work = Files.createDirectories(exec.scratch().resolve("work"));
 
-        // aapt2 compile: each res root (dependency AARs first, module last) into its own
-        // container of .flat entries. A module with no res dir is legal (manifest-only app).
+        // Dependency resources merge into ONE tree first (AGP semantics — finding 9: two
+        // androidx AARs can define the same value resource, and aapt2 hard-errors on value
+        // conflicts across separate link inputs; the merger resolves them at resource
+        // granularity, earlier classpath entry wins), then compile once. The module's own
+        // resources stay the -R overlay below, so the app still beats every library.
         List<Path> depFlats = new ArrayList<>();
-        int i = 0;
-        for (AndroidDeps.Aar aar : aars) {
-            if (!aar.hasRes()) continue;
-            exec.label("aapt2 compile " + aar.fileName());
-            depFlats.add(compileRes(exec, aapt2, aar.res(), work.resolve("dep-" + i++ + ".zip")));
+        Path mergedDepRes = ResourceMerger.mergeDepRes(aars, work.resolve("merged-dep-res"));
+        if (mergedDepRes != null && Files.isDirectory(mergedDepRes)) {
+            try (var listing = Files.list(mergedDepRes)) {
+                if (listing.findFirst().isPresent()) {
+                    exec.label("aapt2 compile (deps)");
+                    depFlats.add(compileRes(exec, aapt2, mergedDepRes, work.resolve("deps-compiled.zip")));
+                }
+            }
         }
         Path ownFlats = null;
         if (Files.isDirectory(res)) {
@@ -100,9 +107,12 @@ final class ResourceStep {
             }
         }
 
-        // Non-transitive R: the app regenerates each dependency's R class from ITS R.txt with
-        // the final ids this link assigned. Libraries don't — an app link finalizes their ids.
-        if (!library && Files.isRegularFile(rTxt)) {
+        // Non-transitive R: regenerate each dependency's R class from ITS R.txt with the ids
+        // this link assigned — final ids in an app link, placeholders in a library link
+        // (--non-final-ids; the consuming app re-finalizes, and the AAR packager excludes all
+        // R classes from classes.jar). Libraries need them too: library code referencing a
+        // sibling AAR's R (ui → designsystem.R.drawable) must compile (AGP does the same).
+        if (Files.isRegularFile(rTxt)) {
             Map<String, String> finalSymbols = readSymbols(rTxt);
             for (AndroidDeps.Aar aar : aars) {
                 if (!Files.isRegularFile(aar.rTxt())) continue;

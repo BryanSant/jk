@@ -58,6 +58,13 @@ public final class KotlinCompile {
         // Stream the worker's output dir into the CAS as it's produced, then
         // snapshot the whole dir for the record.
         Files.createDirectories(request.outputDir());
+        // Incremental state is only valid alongside the outputs it produced: if the output
+        // dir is (now) empty of classes while IC state survives (a cleaned target/, a fresh
+        // checkout with a warm cache), BTA would compile "only what changed" into the void
+        // and report success with a near-empty dir. Start the IC state over instead.
+        if (request.incremental() && Files.isDirectory(request.workingDir()) && !hasClasses(request.outputDir())) {
+            dev.jkbuild.util.PathUtil.deleteRecursively(request.workingDir());
+        }
         CasPrewriter prewriter = CasPrewriter.watching(cas, request.outputDir());
         KotlincResult kr;
         Map<String, String> outputs;
@@ -77,5 +84,13 @@ public final class KotlinCompile {
         }
         actionCache.storeWithOutputs(taskId, key, Map.of(), outputs);
         return new Result(true, "compiled", key, kr.output());
+    }
+
+    /** Any {@code .class} anywhere under {@code dir}? */
+    private static boolean hasClasses(java.nio.file.Path dir) throws IOException {
+        if (!Files.isDirectory(dir)) return false;
+        try (var walk = Files.walk(dir)) {
+            return walk.anyMatch(f -> f.toString().endsWith(".class"));
+        }
     }
 }
