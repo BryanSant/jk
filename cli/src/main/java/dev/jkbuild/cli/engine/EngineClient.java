@@ -70,7 +70,7 @@ public final class EngineClient {
     private EngineClient() {}
 
     /** What a connection's {@code hello}/{@code hello-ack} handshake reveals about the engine. */
-    public record Handshake(String version, long pid, long startedAtMillis) {}
+    public record Handshake(String version, long pid, long startedAtMillis, boolean draining) {}
 
     /**
      * The {@code jk engine status} snapshot. Memory fields are best-effort: {@code -1} means the
@@ -85,6 +85,8 @@ public final class EngineClient {
             long startedAtMillis,
             int idleMinutes,
             int activeRequests,
+            int activePipelines,
+            boolean draining,
             long heapUsedBytes,
             long heapCommittedBytes,
             long heapMaxBytes,
@@ -120,7 +122,8 @@ public final class EngineClient {
             return Optional.of(new Handshake(
                     Ndjson.str(ack, "version"),
                     Ndjson.longValue(ack, "pid", -1),
-                    Ndjson.longValue(ack, "startedAt", -1)));
+                    Ndjson.longValue(ack, "startedAt", -1),
+                    Ndjson.bool(ack, "draining", false)));
         } catch (IOException e) {
             return Optional.empty();
         }
@@ -138,6 +141,8 @@ public final class EngineClient {
                     Ndjson.longValue(ack, "startedAt", -1),
                     Ndjson.intValue(ack, "idleMinutes", -1),
                     Ndjson.intValue(ack, "activeRequests", -1),
+                    Ndjson.intValue(ack, "activePipelines", 0),
+                    Ndjson.bool(ack, "draining", false),
                     Ndjson.longValue(ack, "heapUsedBytes", -1),
                     Ndjson.longValue(ack, "heapCommittedBytes", -1),
                     Ndjson.longValue(ack, "heapMaxBytes", -1),
@@ -167,6 +172,46 @@ public final class EngineClient {
         } catch (IOException e) {
             return false; // reachable but didn't behave — a real problem, not "already stopped"
         }
+    }
+
+    /**
+     * Schedule a graceful drain: the engine refuses new jobs and exits cleanly once in-flight jobs
+     * finish. Returns the in-flight job count at the moment of the request (0 → the engine is exiting
+     * now), or {@code -1} when nothing was reachable (a no-op stop).
+     */
+    public static int drain(Path socket) {
+        try (SocketChannel ch = connect(socket)) {
+            String bye = exchange(ch, EngineProtocol.shutdown(false));
+            if (!EngineProtocol.BYE.equals(EngineProtocol.typeOf(bye))) return -1;
+            return Ndjson.intValue(bye, "pipelines", 0);
+        } catch (IOException e) {
+            return -1;
+        }
+    }
+
+    /**
+     * Force an immediate shutdown: the engine exits now via its clean-exit path (abandoning in-flight
+     * job connections but still assembling the AOT cache). {@code true} if acknowledged or nothing was
+     * running; {@code false} if reachable but unresponsive (caller may {@link #killStale} as fallback).
+     */
+    public static boolean forceStop(Path socket) {
+        SocketChannel ch;
+        try {
+            ch = connect(socket);
+        } catch (IOException e) {
+            return true; // nothing reachable — already stopped
+        }
+        try (ch) {
+            String bye = exchange(ch, EngineProtocol.shutdown(true));
+            return EngineProtocol.BYE.equals(EngineProtocol.typeOf(bye));
+        } catch (IOException e) {
+            return false;
+        }
+    }
+
+    /** Last-resort SIGTERM→SIGKILL when a clean {@link #forceStop} can't reach a wedged engine. */
+    public static void hardKill(long pid) {
+        killStale(pid, COLD_START_CEILING);
     }
 
     // ---- build history ({@code jk history}) — thin RPC over the engine's journal ----------------
@@ -1187,8 +1232,15 @@ public final class EngineClient {
             throws IOException {
         Optional<Handshake> existing = handshake(paths.socket(), clientVersion);
         if (existing.isPresent()) {
-            if (clientVersion.equals(existing.get().version())) return new EngineReady(existing.get(), false);
-            killStale(existing.get().pid(), COLD_START_CEILING);
+            Handshake hs = existing.get();
+            // A draining engine still owns the socket + file lock and is finishing in-flight jobs.
+            // Fail fast — do NOT fall through to spawn a competing engine, and don't killStale it.
+            if (hs.draining()) {
+                throw new IOException(
+                        "the build engine is shutting down — wait for it to stop, or run `jk engine stop --force`");
+            }
+            if (clientVersion.equals(hs.version())) return new EngineReady(hs, false);
+            killStale(hs.pid(), COLD_START_CEILING);
         }
         return startWithSelfHeal(paths, clientVersion, renderWedge);
     }

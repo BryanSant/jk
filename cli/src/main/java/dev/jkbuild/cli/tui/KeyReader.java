@@ -18,6 +18,7 @@ public final class KeyReader {
 
     public sealed interface Key
             permits Key.CtrlC,
+                    Key.CtrlX,
                     Key.Enter,
                     Key.Space,
                     Key.Tab,
@@ -32,6 +33,10 @@ public final class KeyReader {
 
         record CtrlC() implements Key {
             public static final CtrlC INSTANCE = new CtrlC();
+        }
+
+        record CtrlX() implements Key {
+            public static final CtrlX INSTANCE = new CtrlX();
         }
 
         record Enter() implements Key {
@@ -103,6 +108,7 @@ public final class KeyReader {
     private static Key dispatch(NonBlockingReader reader, int c) throws IOException {
         return switch (c) {
             case 0x03 -> Key.CtrlC.INSTANCE;
+            case 0x18 -> Key.CtrlX.INSTANCE;
             case 0x0A, 0x0D -> Key.Enter.INSTANCE;
             case 0x09 -> Key.Tab.INSTANCE;
             case 0x20 -> Key.Space.INSTANCE;

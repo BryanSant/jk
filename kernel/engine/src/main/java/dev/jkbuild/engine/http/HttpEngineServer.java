@@ -417,6 +417,11 @@ public final class HttpEngineServer implements AutoCloseable {
         long requestId;
         try {
             requestId = buildTrigger.trigger(dir);
+        } catch (IllegalStateException e) {
+            // Engine is draining (graceful shutdown in progress) — refuse new builds.
+            exchange.getResponseHeaders().set("Retry-After", "1");
+            sendJson(exchange, 503, JsonOut.object().put("error", e.getMessage()).toString());
+            return;
         } catch (IllegalArgumentException e) {
             sendJson(exchange, 400, JsonOut.object().put("error", e.getMessage()).toString());
             return;

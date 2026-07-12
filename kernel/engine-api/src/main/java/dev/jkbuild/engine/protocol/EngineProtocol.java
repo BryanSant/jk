@@ -63,6 +63,12 @@ public final class EngineProtocol {
     /** Server → client: acknowledges {@link #SHUTDOWN} just before closing the connection. */
     public static final String BYE = "bye";
 
+    /**
+     * Server → client: refuses a job because the engine is draining (a graceful {@link #SHUTDOWN}
+     * is in progress). The client surfaces this as a clear "engine is shutting down" failure.
+     */
+    public static final String SHUTDOWN_PENDING = "shutdown-pending";
+
     /** Client → server: start a workspace build (see {@link #buildRequest}). Owns the rest of the connection. */
     public static final String BUILD_REQUEST = "build-request";
 
@@ -556,7 +562,7 @@ public final class EngineProtocol {
         return "{\"t\":\"" + HELLO + "\",\"version\":" + Ndjson.quote(version) + "}";
     }
 
-    public static String helloAck(String version, long pid, long startedAtMillis) {
+    public static String helloAck(String version, long pid, long startedAtMillis, boolean draining) {
         return "{\"t\":\""
                 + HELLO_ACK
                 + "\",\"version\":"
@@ -565,6 +571,8 @@ public final class EngineProtocol {
                 + pid
                 + ",\"startedAt\":"
                 + startedAtMillis
+                + ",\"draining\":"
+                + draining
                 + "}";
     }
 
@@ -593,6 +601,8 @@ public final class EngineProtocol {
             long startedAtMillis,
             int idleMinutes,
             int activeRequests,
+            int activePipelines,
+            boolean draining,
             long heapUsedBytes,
             long heapCommittedBytes,
             long heapMaxBytes,
@@ -611,6 +621,10 @@ public final class EngineProtocol {
                 + idleMinutes
                 + ",\"activeRequests\":"
                 + activeRequests
+                + ",\"activePipelines\":"
+                + activePipelines
+                + ",\"draining\":"
+                + draining
                 + ",\"heapUsedBytes\":"
                 + heapUsedBytes
                 + ",\"heapCommittedBytes\":"
@@ -625,11 +639,26 @@ public final class EngineProtocol {
     }
 
     public static String shutdown() {
-        return "{\"t\":\"" + SHUTDOWN + "\"}";
+        return shutdown(false);
+    }
+
+    /** {@code force=true} exits the engine now (abandoning in-flight jobs); false drains gracefully. */
+    public static String shutdown(boolean force) {
+        return "{\"t\":\"" + SHUTDOWN + "\",\"force\":" + force + "}";
     }
 
     public static String bye() {
-        return "{\"t\":\"" + BYE + "\"}";
+        return bye(0, false);
+    }
+
+    /** Ack for {@link #SHUTDOWN}: reports the in-flight job count and whether a drain is now underway. */
+    public static String bye(int pipelines, boolean draining) {
+        return "{\"t\":\"" + BYE + "\",\"pipelines\":" + pipelines + ",\"draining\":" + draining + "}";
+    }
+
+    /** Refusal sent to a job request while the engine is draining. */
+    public static String shutdownPending() {
+        return "{\"t\":\"" + SHUTDOWN_PENDING + "\"}";
     }
 
     // ---- build-request (client → server) -------------------------------------------------------

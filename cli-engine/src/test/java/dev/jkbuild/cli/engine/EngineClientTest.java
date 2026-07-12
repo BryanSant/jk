@@ -126,6 +126,51 @@ class EngineClientTest {
         assertThat(EngineClient.stop(p.socket())).isTrue();
     }
 
+    @Test
+    void a_normal_engine_reports_not_draining_and_zero_pipelines() throws Exception {
+        EnginePaths.Paths p = EnginePaths.resolve(shortTempDir());
+        EngineServer server = new EngineServer(p, JkEngineConfig.DEFAULTS, "1.0", null);
+        startInBackground(server);
+        waitUntil(Duration.ofSeconds(5), () -> Files.exists(p.socket()));
+
+        assertThat(EngineClient.handshake(p.socket(), "1.0").orElseThrow().draining()).isFalse();
+        var s = EngineClient.status(p.socket()).orElseThrow();
+        assertThat(s.draining()).isFalse();
+        assertThat(s.activePipelines()).isZero();
+
+        server.close();
+    }
+
+    @Test
+    void drain_of_an_idle_engine_reports_zero_jobs_and_shuts_it_down() throws Exception {
+        EnginePaths.Paths p = EnginePaths.resolve(shortTempDir());
+        EngineServer server = new EngineServer(p, JkEngineConfig.DEFAULTS, "1.0", null);
+        Thread serverThread = startInBackground(server);
+        waitUntil(Duration.ofSeconds(5), () -> Files.exists(p.socket()));
+
+        assertThat(EngineClient.drain(p.socket())).isZero(); // no in-flight jobs → immediate exit
+        serverThread.join(5_000);
+        assertThat(serverThread.isAlive()).isFalse();
+    }
+
+    @Test
+    void force_stop_shuts_a_running_engine_down() throws Exception {
+        EnginePaths.Paths p = EnginePaths.resolve(shortTempDir());
+        EngineServer server = new EngineServer(p, JkEngineConfig.DEFAULTS, "1.0", null);
+        Thread serverThread = startInBackground(server);
+        waitUntil(Duration.ofSeconds(5), () -> Files.exists(p.socket()));
+
+        assertThat(EngineClient.forceStop(p.socket())).isTrue();
+        serverThread.join(5_000);
+        assertThat(serverThread.isAlive()).isFalse();
+    }
+
+    @Test
+    void drain_on_a_non_running_engine_is_minus_one() throws IOException {
+        EnginePaths.Paths p = EnginePaths.resolve(shortTempDir());
+        assertThat(EngineClient.drain(p.socket())).isEqualTo(-1);
+    }
+
     /**
      * No real Windows box in this test run, but {@code EngineTransport.useLoopbackTcp()} only ever
      * reads {@code os.name} — overriding it exercises {@link EngineClient#connect}'s TCP+token

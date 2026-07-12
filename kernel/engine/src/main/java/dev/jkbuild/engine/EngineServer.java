@@ -150,6 +150,9 @@ public final class EngineServer implements AutoCloseable {
     private final java.util.concurrent.atomic.AtomicReference<Path> pendingPruneCache =
             new java.util.concurrent.atomic.AtomicReference<>();
     private volatile boolean shuttingDown;
+    // Graceful-drain pre-state: the listener stays open and quick verbs (hello/ping/status) keep
+    // answering, but new jobs are refused and the engine exits cleanly once in-flight jobs finish.
+    private volatile boolean draining;
     private volatile boolean hadActivity;
     private volatile long lastActivityAtMillis;
 
@@ -317,7 +320,8 @@ public final class EngineServer implements AutoCloseable {
                 String type = EngineProtocol.typeOf(line);
                 if (type == null) continue; // ignore malformed/blank lines
                 switch (type) {
-                    case EngineProtocol.HELLO -> send(writer, EngineProtocol.helloAck(version, pid, startedAtMillis));
+                    case EngineProtocol.HELLO -> send(
+                            writer, EngineProtocol.helloAck(version, pid, startedAtMillis, draining));
                     case EngineProtocol.PING -> send(writer, EngineProtocol.pong());
                     case EngineProtocol.STATUS -> {
                         dev.jkbuild.engine.http.StatusSnapshot s = statusSnapshot();
@@ -329,6 +333,8 @@ public final class EngineServer implements AutoCloseable {
                                         s.startedAtMillis(),
                                         s.idleMinutes(),
                                         s.activeRequests(),
+                                        s.activePipelines(),
+                                        draining,
                                         s.heapUsedBytes(),
                                         s.heapCommittedBytes(),
                                         s.heapMaxBytes(),
@@ -337,10 +343,22 @@ public final class EngineServer implements AutoCloseable {
                                         httpError));
                     }
                     case EngineProtocol.SHUTDOWN -> {
-                        send(writer, EngineProtocol.bye());
+                        boolean force = dev.jkbuild.plugin.protocol.Ndjson.bool(line, "force", false);
                         synchronized (lifecycleLock) {
-                            shuttingDown = true;
-                            closeServerChannelQuietly();
+                            int jobs = activePipelines.get();
+                            if (force || jobs == 0) {
+                                // Immediate: no in-flight jobs, or an explicit force — close the listener
+                                // now so run() returns and the JVM exits cleanly (AOT still assembles).
+                                send(writer, EngineProtocol.bye(jobs, false));
+                                shuttingDown = true;
+                                closeServerChannelQuietly();
+                            } else {
+                                // Graceful drain: keep the listener open (so new commands get a clear
+                                // "shutting down" handshake and in-flight jobs finish); the last job to
+                                // complete triggers the clean exit (see maybeIdleBoundaryGc).
+                                draining = true;
+                                send(writer, EngineProtocol.bye(jobs, true));
+                            }
                         }
                         return;
                     }
@@ -511,6 +529,17 @@ public final class EngineServer implements AutoCloseable {
             String threadPrefix,
             GoalRunner runner,
             boolean pipeline) {
+        // Refuse new jobs while draining (a graceful shutdown is finishing in-flight work). The client
+        // normally can't even get here — its handshake sees `draining` and fails first — but guard the
+        // server too so a raced/last-moment request is rejected instead of prolonging the drain.
+        if (draining) {
+            try {
+                send(writer, EngineProtocol.shutdownPending());
+            } catch (IOException ignored) {
+                // Client vanished mid-refusal — nothing to do; the connection is closing anyway.
+            }
+            return;
+        }
         Session.CancelToken cancelToken = Session.CancelToken.live();
         CountDownLatch done = new CountDownLatch(1);
         long eventRequestId = requestIds.incrementAndGet();
@@ -765,6 +794,14 @@ public final class EngineServer implements AutoCloseable {
             System.gc();
             drainPendingPrune();
             pruneJournal();
+            // The last in-flight job of a graceful drain just finished — close the listener so run()
+            // returns and the JVM exits cleanly (assembling the AOT cache), same as a normal stop.
+            if (draining) {
+                synchronized (lifecycleLock) {
+                    shuttingDown = true;
+                    closeServerChannelQuietly();
+                }
+            }
         }
     }
 
@@ -2885,6 +2922,9 @@ public final class EngineServer implements AutoCloseable {
      * success} (the socket-request variant can't; its outcome is encoded in wire messages).
      */
     private long triggerHttpBuild(String dirStr) {
+        if (draining) {
+            throw new IllegalStateException("engine is shutting down");
+        }
         Path entryDir = Path.of(dirStr);
         if (!entryDir.isAbsolute()) {
             throw new IllegalArgumentException("dir must be an absolute path");
@@ -3048,7 +3088,8 @@ public final class EngineServer implements AutoCloseable {
 
     private void checkIdleTimeout(long idleMillis) {
         synchronized (lifecycleLock) {
-            if (shuttingDown || activeConnections.get() != 0) return;
+            // `draining` already owns the exit (fires when the last job finishes) — don't double-close.
+            if (shuttingDown || draining || activeConnections.get() != 0) return;
             if (clockMillis.getAsLong() - lastActivityAtMillis >= idleMillis) {
                 shuttingDown = true;
                 closeServerChannelQuietly();
