@@ -108,6 +108,7 @@ include(
     ":formatter",      // jk format — Spotless-wrapped Java/Kotlin formatter
     ":spring-boot",    // spring-boot build plugin (AOT step + boot-jar packager)
     ":android",        // android build plugin (aapt2/R-gen, d8 dex, APK packager — the SPI stress test)
+    ":protobuf",       // protobuf build plugin (protoc codegen before compile)
     // Host + CLI
     ":engine-api",
     ":engine",
@@ -138,3 +139,4 @@ project(":git-client").projectDir     = file("plugins/git-client")
 project(":formatter").projectDir      = file("plugins/formatter")
 project(":spring-boot").projectDir    = file("plugins/spring-boot")
 project(":android").projectDir        = file("plugins/android")
+project(":protobuf").projectDir       = file("plugins/protobuf")

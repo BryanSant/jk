@@ -34,4 +34,8 @@ tasks.processResources {
         into("dev/jkbuild/plugin/manifest")
         rename { "android.jk-plugin.toml" }
     }
+    from(rootProject.file("plugins/protobuf/jk-plugin.toml")) {
+        into("dev/jkbuild/plugin/manifest")
+        rename { "protobuf.jk-plugin.toml" }
+    }
 }

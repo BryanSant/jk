@@ -80,6 +80,16 @@ tasks.withType<Test>().configureEach {
     doFirst { systemProperty("jk.android.worker.jar", testAndroidWorkerJar.singleFile.absolutePath) }
 }
 
+// Pass the protobuf worker jar to tests (the protoc codegen integration test forks it).
+val testProtobufWorkerJar by configurations.creating {
+    isCanBeConsumed = false; isCanBeResolved = true; isTransitive = false
+}
+dependencies { testProtobufWorkerJar(project(":protobuf")) }
+tasks.withType<Test>().configureEach {
+    dependsOn(testProtobufWorkerJar)
+    doFirst { systemProperty("jk.protobuf.worker.jar", testProtobufWorkerJar.singleFile.absolutePath) }
+}
+
 // Pass the kotlin-compiler worker jar to tests (the KSP/Room/Hilt gate compiles Kotlin).
 val testKotlinWorkerJar by configurations.creating {
     isCanBeConsumed = false; isCanBeResolved = true; isTransitive = false

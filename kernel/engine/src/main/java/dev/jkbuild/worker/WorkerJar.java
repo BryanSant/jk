@@ -40,7 +40,8 @@ public enum WorkerJar {
     GIT_CLIENT("jk-git-client", "jk.git-client.worker.jar", ":git-client:installLocal"),
     FORMATTER("jk-formatter", "jk.formatter.worker.jar", ":formatter:installLocal"),
     SPRING_BOOT("jk-spring-boot", "jk.spring-boot.worker.jar", ":spring-boot:installLocal"),
-    ANDROID("jk-android", "jk.android.worker.jar", ":android:installLocal");
+    ANDROID("jk-android", "jk.android.worker.jar", ":android:installLocal"),
+    PROTOBUF("jk-protobuf", "jk.protobuf.worker.jar", ":protobuf:installLocal");
 
     private final String artifactId;
     private final String jarProperty;

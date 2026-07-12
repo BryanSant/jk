@@ -1,0 +1,26 @@
+# The built-in protobuf build plugin's declarative manifest (android-plan Phase 5,
+# NiA blocker 3 — but deliberately ecosystem-neutral: any gRPC/protobuf JVM service is
+# the audience). Owns [protobuf]; the code layer runs the provisioned protoc binary over
+# the module's proto sources and contributes the generated Java to the compiler's source
+# set — the same before-compile source-generation lane the android res step uses.
+
+[plugin]
+id        = "protobuf"
+table     = "protobuf"
+version   = "0.1.0"
+jk-compat = ">=0.10"
+
+[code]
+worker          = "jk-protobuf"
+protocol-prefix = "##JKPB:"
+
+[schema]
+version = { type = "string", required = true, example = "4.33.1", hint = "the protoc release to run (pins com.google.protobuf:protoc in jk.lock)" }
+src     = { type = "string", default = "proto" }   # proto source dir, module-relative
+lite    = { type = "bool", default = false }       # java_out lite runtime (Android/datastore posture)
+
+# protoc ships as a per-OS/arch native binary published straight to Maven (no jar
+# wrapper) — ${host.os-arch} picks the classifier, @exe the packaging.
+[[contribute.step-dependency]]
+artifact   = "protoc"
+coordinate = "com.google.protobuf:protoc:${config.version}:${host.os-arch}@exe"
