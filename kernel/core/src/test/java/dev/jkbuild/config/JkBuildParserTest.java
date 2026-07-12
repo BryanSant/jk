@@ -54,9 +54,9 @@ class JkBuildParserTest {
         JkBuild parsed = JkBuildParser.parse(PROJECT + """
 
                 [build]
-                order-after = ["kotlin-compiler", "dev.jkbuild:git-client"]
+                order-after = ["kotlin-compiler", "dev.jkbuild:auditor"]
                 """);
-        assertThat(parsed.build().orderAfter()).containsExactly("kotlin-compiler", "dev.jkbuild:git-client");
+        assertThat(parsed.build().orderAfter()).containsExactly("kotlin-compiler", "dev.jkbuild:auditor");
     }
 
     @Test

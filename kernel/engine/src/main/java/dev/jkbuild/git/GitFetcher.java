@@ -2,33 +2,35 @@
 package dev.jkbuild.git;
 
 import dev.jkbuild.forge.ForgeGitCredentials;
-import dev.jkbuild.model.GitRefSpec;
 import dev.jkbuild.model.GitSource;
-import dev.jkbuild.plugin.protocol.Ndjson;
-import dev.jkbuild.worker.WorkerClient;
-import dev.jkbuild.worker.WorkerJar;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.attribute.PosixFilePermissions;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Git resolver (PRD §11). Thin driver: writes a spec file and forks the {@code jk-git-runner}
- * worker subprocess so JGit never loads in the main jk process. Public API is identical to the
- * former JGit-direct implementation; callers need no changes.
+ * Git resolver (PRD §11). Public facade over the {@link GitBackend} SPI: git work runs in-process
+ * in the engine JVM, preferring a locally installed {@code git} command and falling back to bundled
+ * JGit when none is found.
+ *
+ * <p>Backend selection honours the {@code JK_GIT_BACKEND} environment variable:
+ *
+ * <ul>
+ *   <li>{@code auto} (default) — {@link GitCliBackend} if a usable {@code git} is on {@code PATH},
+ *       else {@link JGitBackend}.
+ *   <li>{@code cli} — force {@link GitCliBackend}; fail loudly if {@code git} is absent.
+ *   <li>{@code jgit} — force {@link JGitBackend}.
+ * </ul>
  *
  * <p>Every ref type (tag, branch, rev) is fetched and pinned in {@code jk.lock} like any other
  * coordinate — there is no local freshness-window cache standing in for that pin. An ordinary
  * build never calls {@link #fetch} for a git dep that's already resolved in the lockfile; only
  * {@code jk update --git} / {@code jk fetch} force a fresh resolve.
  *
- * <p>Cache layout (same as before, worker uses the same directories):
+ * <p>Cache layout (shared by both backends):
  *
  * <pre>
  *   &lt;root&gt;/db/&lt;sha256(canonical-url)&gt;/             # bare clone per URL
@@ -37,17 +39,38 @@ import java.util.Optional;
  */
 public final class GitFetcher {
 
-    private final Path gitRoot;
-    private final ForgeGitCredentials credentials;
+    /** Environment variable that overrides backend selection. */
+    public static final String BACKEND_ENV = "JK_GIT_BACKEND";
+
+    private final GitBackend backend;
 
     public GitFetcher(Path gitRoot) {
         this(gitRoot, new ForgeGitCredentials());
     }
 
-    /** Test seam: inject custom credentials resolver. */
+    /** Test seam: inject a custom credentials resolver. */
     public GitFetcher(Path gitRoot, ForgeGitCredentials credentials) {
-        this.gitRoot = Objects.requireNonNull(gitRoot, "gitRoot");
-        this.credentials = Objects.requireNonNull(credentials, "credentials");
+        Objects.requireNonNull(gitRoot, "gitRoot");
+        Objects.requireNonNull(credentials, "credentials");
+        this.backend = select(System.getenv(BACKEND_ENV), gitRoot, credentials);
+    }
+
+    static GitBackend select(String mode, Path gitRoot, ForgeGitCredentials credentials) {
+        String m = (mode == null || mode.isBlank()) ? "auto" : mode.trim().toLowerCase(Locale.ROOT);
+        return switch (m) {
+            case "jgit" -> new JGitBackend(gitRoot, credentials);
+            case "cli" -> new GitCliBackend(
+                    gitRoot,
+                    credentials,
+                    GitCliBackend.detect()
+                            .orElseThrow(() -> new IllegalStateException(
+                                    BACKEND_ENV + "=cli but no usable git command was found on PATH")));
+            case "auto" -> GitCliBackend.detect()
+                    .<GitBackend>map(git -> new GitCliBackend(gitRoot, credentials, git))
+                    .orElseGet(() -> new JGitBackend(gitRoot, credentials));
+            default -> throw new IllegalArgumentException(
+                    "invalid " + BACKEND_ENV + "=" + mode + " (expected auto|cli|jgit)");
+        };
     }
 
     public record Fetched(String sha, Path checkoutPath) {
@@ -65,6 +88,13 @@ public final class GitFetcher {
         }
     }
 
+    /** A remote's advertised refs: tag names + the {@code HEAD} sha (null when the remote has none). */
+    public record RemoteRefs(List<String> tags, String headSha) {
+        public RemoteRefs {
+            tags = List.copyOf(Objects.requireNonNull(tags, "tags"));
+        }
+    }
+
     /** Resolve and checkout, using the cache. */
     public Fetched fetch(GitSource source) throws IOException {
         return fetch(source, false);
@@ -73,34 +103,19 @@ public final class GitFetcher {
     /** Resolve and checkout, optionally bypassing the checkout cache. */
     public Fetched fetch(GitSource source, boolean noCache) throws IOException {
         Objects.requireNonNull(source, "source");
-        Result r = runWorker("fetch", source, noCache, null);
-        if (!r.ok) throw new IOException(r.error);
-        return new Fetched(r.sha, Path.of(r.checkout));
+        return backend.fetch(source, noCache);
     }
 
     /** Tag-rewrite check: re-resolve and fail if the SHA changed. */
     public void verifyLocked(GitSource source, String expectedSha) throws IOException {
         Objects.requireNonNull(source, "source");
-        Result r = runWorker("verify_locked", source, false, expectedSha);
-        if (!r.ok) {
-            if (r.tagRewrite) throw new TagRewriteException(source, expectedSha, r.actual);
-            throw new IOException(r.error);
-        }
+        backend.verifyLocked(source, expectedSha);
     }
 
     /** Resolve ref to SHA + commit metadata for git-source versioning. */
     public RefInfo resolveRef(GitSource source) throws IOException {
         Objects.requireNonNull(source, "source");
-        Result r = runWorker("resolve_ref", source, false, null);
-        if (!r.ok) throw new IOException(r.error);
-        return new RefInfo(r.sha, Instant.ofEpochSecond(r.commitTime), Optional.ofNullable(r.nearestTag));
-    }
-
-    /** A remote's advertised refs: tag names + the {@code HEAD} sha (null when the remote has none). */
-    public record RemoteRefs(List<String> tags, String headSha) {
-        public RemoteRefs {
-            tags = List.copyOf(Objects.requireNonNull(tags, "tags"));
-        }
+        return backend.resolveRef(source);
     }
 
     /**
@@ -109,110 +124,7 @@ public final class GitFetcher {
      */
     public RemoteRefs listRefs(GitSource source) throws IOException {
         Objects.requireNonNull(source, "source");
-        Result r = runWorker("list_refs", source, false, null);
-        if (!r.ok) throw new IOException(r.error);
-        return new RemoteRefs(r.tags != null ? r.tags : List.of(), r.head);
-    }
-
-    // --- worker dispatch -----------------------------------------------------
-
-    private Result runWorker(String command, GitSource source, boolean noCache, String expectedSha) throws IOException {
-        // Resolve credentials in the parent — has access to ForgeAuth/keychain.
-        String[] cred = credentials.resolveCredentials(source.canonicalUrl());
-
-        List<String> lines = new ArrayList<>();
-        lines.add("COMMAND " + command);
-        lines.add("URL " + source.canonicalUrl());
-        lines.add("REF_TYPE " + refTypeName(source.ref()));
-        lines.add("REF " + refValue(source.ref()));
-        lines.add("NO_CACHE " + noCache);
-        lines.add("SHALLOW " + source.shallow());
-        lines.add("GIT_ROOT " + gitRoot.toAbsolutePath());
-        if (cred != null) {
-            lines.add("CRED_USER " + cred[0]);
-            lines.add("CRED_PASS " + cred[1]);
-        }
-        if (expectedSha != null) lines.add("EXPECTED_SHA " + expectedSha);
-
-        Path spec = Files.createTempFile("jk-git-", ".spec");
-        try {
-            // 0600 so credentials are not world-readable.
-            try {
-                Files.setPosixFilePermissions(spec, PosixFilePermissions.fromString("rw-------"));
-            } catch (UnsupportedOperationException ignored) {
-            }
-            Files.write(spec, lines, StandardCharsets.UTF_8);
-
-            Path workerJar = WorkerJar.GIT_CLIENT.locate();
-            List<String> cmd = dev.jkbuild.worker.JvmOptions.javaCommand(
-                    javaExe().toString(),
-                    1,
-                    List.of("-jar", workerJar.toString(), spec.toAbsolutePath().toString()));
-
-            Result result = new Result();
-            StringBuilder diag = new StringBuilder();
-            int exit;
-            try {
-                exit = new WorkerClient("##JKGIT:")
-                        .on("result", json -> {
-                            result.ok = Ndjson.bool(json, "ok", true);
-                            result.sha = Ndjson.str(json, "sha");
-                            result.checkout = Ndjson.str(json, "checkout");
-                            result.error = Ndjson.str(json, "error");
-                            result.tagRewrite = Ndjson.bool(json, "tag_rewrite", false);
-                            result.actual = Ndjson.str(json, "actual");
-                            result.commitTime = Ndjson.longValue(json, "commit_time", 0);
-                            result.nearestTag = Ndjson.str(json, "nearest_tag");
-                            result.tags = Ndjson.strArray(json, "tags");
-                            result.head = Ndjson.str(json, "head");
-                        })
-                        .passthrough(line -> diag.append(line).append('\n'))
-                        .run(cmd);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                throw new IOException("git operation interrupted", e);
-            }
-            if (exit != 0 && result.error == null) {
-                result.ok = false;
-                result.error = "git-runner exited " + exit
-                        + (diag.length() > 0 ? ": " + diag.toString().trim() : "");
-            }
-            return result;
-        } finally {
-            Files.deleteIfExists(spec);
-        }
-    }
-
-    // --- helpers -------------------------------------------------------------
-
-    private static String refTypeName(GitRefSpec ref) {
-        return switch (ref) {
-            case GitRefSpec.Tag ignored -> "Tag";
-            case GitRefSpec.Branch ignored -> "Branch";
-            case GitRefSpec.Rev ignored -> "Rev";
-        };
-    }
-
-    private static String refValue(GitRefSpec ref) {
-        return switch (ref) {
-            case GitRefSpec.Tag t -> t.name();
-            case GitRefSpec.Branch b -> b.name();
-            case GitRefSpec.Rev r -> r.sha();
-        };
-    }
-
-    private static Path javaExe() {
-        String home = System.getProperty("java.home");
-        Path java = Path.of(
-                home, "bin", System.getProperty("os.name", "").toLowerCase().contains("win") ? "java.exe" : "java");
-        return java;
-    }
-
-    private static class Result {
-        boolean ok = true, tagRewrite;
-        String sha, checkout, error, actual, nearestTag, head;
-        List<String> tags;
-        long commitTime;
+        return backend.listRefs(source);
     }
 
     /**

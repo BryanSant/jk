@@ -16,9 +16,9 @@ jk-toolchain  = { group = "dev.jkbuild", name = "jk-toolchain",  version = "0.10
 asm           = { group = "org.ow2.asm", name = "asm",            version = "9.10.1" }
 asm-tree      = { group = "org.ow2.asm", name = "asm-tree",       version = "9.10.1" }
 asm-commons   = { group = "org.ow2.asm", name = "asm-commons",    version = "9.10.1" }
+jgit          = { group = "org.eclipse.jgit", name = "org.eclipse.jgit", version = "7.6.0.202603022253-r" }
 
 [test-dependencies]
-jgit                    = { group = "org.eclipse.jgit",   name = "org.eclipse.jgit",       version = "7.6.0.202603022253-r" }
 assertj-core            = { group = "org.assertj",        name = "assertj-core",            version = "3.27.7" }
 junit-jupiter           = { group = "org.junit.jupiter",  name = "junit-jupiter",           version = "6.1.0" }
 junit-platform-launcher = { group = "org.junit.platform", name = "junit-platform-launcher", version = "6.1.0" }
@@ -26,10 +26,9 @@ junit-platform-launcher = { group = "org.junit.platform", name = "junit-platform
 # Self-host: engine's tests fork jk's own worker jars. These workers are
 # Gradle-only (no jk.toml), so jk build can't build them as modules — it reuses
 # the running jk's worker identity instead.
-#  - test-worker-jars: GitSource{Resolution,Materializer}Test fork the git-client
-#    worker, injected as -Djk.git-client.worker.jar (located from the running jk's
-#    repos/local/ store; requires `./gradlew :git-client:installLocal`); the
-#    EngineServerTest hosted-audit round-trip forks the auditor the same way
-#    (-Djk.auditor.worker.jar; `./gradlew :auditor:installLocal`).
+#  - test-worker-jars: the EngineServerTest hosted-audit round-trip forks the
+#    auditor, injected as -Djk.auditor.worker.jar (located from the running jk's
+#    repos/local/ store; requires `./gradlew :auditor:installLocal`). Git work now
+#    runs in-process (git CLI or bundled JGit), so no git worker jar is needed.
 [build]
-test-worker-jars = ["git-client", "auditor"]
+test-worker-jars = ["auditor"]

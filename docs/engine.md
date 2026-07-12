@@ -279,8 +279,9 @@ half (it rides the existing single-project build request; only the exec of the u
 client-side — it owns your terminal, same reasoning as `jk mvn`/`gradle`'s exec), `jk native` (the
 full pipeline plus the native-image tail, the `native-image` child process forked engine-side like
 a worker; the cascade speaks `jk build`'s workspace event vocabulary with engine-computed exit
-codes), and `jk install`'s heavy halves — the git clone of a `jk install <git-url>` (the git-client
-worker forks engine-side) and the build + cache-install of the project (jar/pom into `~/.m2` and
+codes), and `jk install`'s heavy halves — the git clone of a `jk install <git-url>` (git runs
+in-process in the engine: `GitFetcher` prefers a local `git` command, else bundled
+JGit) and the build + cache-install of the project (jar/pom into `~/.m2` and
 the local repo index). Pre-flight stays client-side, same rule as always: GraalVM resolution — and,
 with consent, its install — happens in the client before the `native`/`install` request is sent
 (the prompt owns the terminal; the engine only ever runs an already-resolved toolchain), and `jk

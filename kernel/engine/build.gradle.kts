@@ -22,7 +22,10 @@ dependencies {
     implementation(libs.asm.tree)
     implementation(libs.asm.commons)
 
-    testImplementation(libs.jgit)   // git test fixtures
+    // JGit is the in-process fallback git backend (used when no `git` command is found) and also
+    // builds the git fixtures in tests. The native CLI (:cli) does not depend on :engine, so this
+    // never enters a native image — only the :cli-engine JVM daemon jar.
+    implementation(libs.jgit)
 }
 
 // ---------------------------------------------------------------------------
@@ -48,16 +51,6 @@ tasks.withType<Test>().configureEach {
         systemProperty("jk.java.worker.jar", javaCompilerWorkerJar.singleFile.absolutePath)
         systemProperty("jk.test.runner.jar", testRunnerJarCfg.singleFile.absolutePath)
     }
-}
-
-// Pass the git-client jar path to tests (GitFetcher forks it).
-val testGitWorkerJar by configurations.creating {
-    isCanBeConsumed = false; isCanBeResolved = true; isTransitive = false
-}
-dependencies { testGitWorkerJar(project(":git-client")) }
-tasks.withType<Test>().configureEach {
-    dependsOn(testGitWorkerJar)
-    doFirst { systemProperty("jk.git-client.worker.jar", testGitWorkerJar.singleFile.absolutePath) }
 }
 
 // Pass the spring-boot worker jar to tests (the plugin build runtime forks it for Boot projects).

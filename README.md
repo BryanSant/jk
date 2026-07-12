@@ -297,6 +297,7 @@ We know you can't migrate overnight. `jk` meets you where you are.
 | Reproducibility | `verify` |
 | Formatting | `format` |
 | Cache & maintenance | `cache dir/info/search/prune/purge`, `doctor` |
+| Wrapper | `wrapper`, `wrapper update` (emit `./jk` + `jk.bat`; pin-on-first-use) |
 | Scripting | `run script.java` (JBang-compatible) |
 
 `jk --help` lists every canonical verb. Hidden migration aliases
@@ -402,6 +403,7 @@ distribution is produced by `./gradlew :cli-engine:installDist` under
 - [Implementation plan](docs/implementation-plan.md) — module map, library picks, milestone roadmap
 - [Comparison with uv / Cargo / Gradle / Maven](docs/comparison.md)
 - [The jk engine](docs/engine.md) — the resident engine service: lifecycle, transport, memory plan
+- [The jk wrapper](docs/wrapper.md) — `./jk` bootstrap: delegate-or-fetch, locked version, pin-on-first-use
 - [Tool discovery](docs/tool-discovery-plan.md) — good-neighbor probing for Maven/Gradle/Kotlin
 - [Verb aliases](docs/aliases.md) — migration shortcuts from Maven/Gradle/npm
 - [Forge authentication](docs/forge-auth.md) — `jk auth` across GitHub/GitLab/Gitea/Bitbucket
