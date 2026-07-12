@@ -426,3 +426,12 @@ Android Phase 3 (release) additions — all generic, none Android-special-cased:
 - **`jk dev` hooks** (DevTools detection is currently hard-coded): fold into `RunShape`
   (`devClasspathExtra`, `hotReloadCapable`) in P3, or defer to a P7 if it drags.
 - **Schema evolution:** `jk-compat` ranges + manifest-format version field from day one.
+
+**Android Phase-4 SPI findings (2026-07-11):** `contributesTestClasspath` on StepSpec — a
+step output dir joining the module's test runtime classpath (Robolectric's
+test_config.properties; any test-harness classpath wiring). Engine-side (not SPI, but
+generic): the ksp phase + processor-service detection live in the Kotlin pipeline, not
+the android plugin — KSP serves any Kotlin module; provided-classpath jars now ride the
+test runtime classpath last (stub posture). Candidate future capability: a post-compile
+classes-transform step (Hilt unmodified-source parity; bytecode rewriting as a declared
+inputs→outputs step).

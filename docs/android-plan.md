@@ -79,6 +79,54 @@ or adopt the standalone shrinker artifact. Flavor artifacts share the debug/rele
 file naming (same extension → a flavor switch overwrites; per-variant output dirs are
 Phase-4 polish). `jk run`/`jk dev` of a release build deploy via the verb but the
 run/dev EXEC PLAN paths stay debug-shaped. v3 key rotation schema'd, not wired.
+**PHASE 4 LANDED (with two recorded gaps)** (2026-07-11, worktree-android-plugin):
+- **KSP2 (§3.5)**: an engine `ksp` phase forks `KSPJvmMain` (KSP2's own CLI) — processors
+  detected by their registered `SymbolProcessorProvider` service (KSP wins dual-service
+  jars; javac keeps the rest on -processorpath); KspResolver picks the newest stable
+  STANDALONE KSP2 release (it embeds its own analysis compiler; serves a Kotlin range) and
+  CAS-caches the closure. Generated .kt/.java are ordinary sources: unioned into both
+  compilers, re-published to the goal keys so freshness stamps match, kotlinc's
+  -Xjava-source-roots carries the generated-Java dir, and a Kotlin module with processor
+  deps routes through the mixed pipeline (Hilt components are Java).
+- **The Room + Hilt gate PASSES** (KspRoomHiltTest, real tools): Room's database impl and
+  Hilt's components generate via KSP2, compile, dex, and package. Hilt runs its documented
+  plugin-less mode (@AndroidEntryPoint(Base::class) + extends Hilt_*) — the Gradle
+  plugin's bytecode transform is NOT required for correctness; an automatic-superclass
+  transform step is a candidate generic SPI capability if unmodified-source parity is ever
+  wanted.
+- **JUnit 4 (§3.6)**: proven — junit:junit + junit-vintage-engine in [test-dependencies]
+  run @org.junit.Test through jk's runner unchanged (engines load from the test
+  classpath). The provided platform jar rides the test runtime classpath LAST (AGP's
+  throw-on-call stub posture).
+- **Robolectric (§3.6) — 90%, gap recorded**: new generic `contributesTestClasspath` SPI;
+  the android plugin's test-config step writes AGP-shaped test_config.properties (merged
+  manifest, raw res, linked ap_, custom package). Proven: vintage runs the Robolectric
+  runner, the config is discovered, android-all self-provisions. OPEN: resource lookup
+  throws NotFoundException for a correctly-linked id — Robolectric's binary-resources
+  mode appears to need AGP's exact unit-test resource apk (a dedicated link of the merged
+  table) rather than the plain app ap_; @Disabled repro in RobolectricUnitTest.
+- **Instrumented tests (§3.6)**: the `instrument` verb installs app+test APKs and parses
+  `am instrument -r -w` raw protocol into per-test results (streamed, failure stacks,
+  exit-code contract) — scripted-fake tested; Test Orchestrator (per-test instrumentation,
+  clearPackageData) and androidTest-APK assembly are recorded follow-ups.
+- **jk avd (§3.6)**: create/list/boot — the AVD definition is avdmanager's on-disk format
+  written directly under the managed SDK root (ANDROID_AVD_HOME); boot forks a headless
+  emulator, KVM-gated, refusing gracefully without the emulator component. Live
+  system-image provisioning + a real boot remain environment-gated (heavy downloads).
+
+**Now-in-Android :core:* inventory (Phase-4 exit attempted honestly — blockers → Phase 5):**
+cloned android/nowinandroid; its ~20 modules reduce to convention plugins jk already
+covers ([android] library ✓, Hilt ✓ via KSP, flavors ✓ demo/prod, workspace graph ✓) plus
+these BLOCKERS, in dependency order: (1) **androidx KMP dual-artifact resolution** — the
+Maven POM view of androidx's KMP splits (compose runtime-annotation root AAR + -jvm
+variant both resolve; navigationevent drags it via androidx.activity ≥1.10) double-defines
+classes at dex; Gradle avoids it via module metadata — jk's resolver needs GMM awareness
+or a KMP-redirect rule; (2) **kotlinx-serialization**: a user-declared kotlin compiler
+plugin surface in jk.toml (plugins can contribute them; projects can't yet); (3)
+**protobuf/datastore-proto**: a protoc codegen step (generic source-gen machinery exists —
+needs a protoc tool step, natural as a jk plugin); (4) **Hilt unmodified-source parity**
+(the transform, above); (5) Robolectric completion (Roborazzi rides it); (6) lint v1 +
+baseline profiles (already Phase 5). None of these is architectural — the SPI held.
 Companion research: [android-gradle.md](./android-gradle.md).
 **Goal:** build, test, and ship a modern Android app (Compose-first, AGP-9-era baselines:
 compileSdk 37, minSdk 24+, Kotlin 2.3+, R8 full mode, AAB) with **no Gradle and no AGP**.
