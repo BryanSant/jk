@@ -40,7 +40,8 @@ final class DeployVerb {
         Path apk = artifact.toString().endsWith(".aab") ? universalApk(exec, artifact) : artifact;
         Path adb = adbPath(exec);
         String namespace = exec.config().string("namespace");
-        String activity = launcherActivity(exec.moduleDir().resolve("AndroidManifest.xml"), namespace);
+        String activity =
+                launcherActivity(AndroidDeps.androidFile(exec.moduleDir(), "AndroidManifest.xml"), namespace);
 
         exec.label("adb install");
         exec.out("Installing " + apk.getFileName() + " …");

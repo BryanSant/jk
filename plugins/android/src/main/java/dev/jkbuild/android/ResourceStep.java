@@ -40,7 +40,7 @@ final class ResourceStep {
     static void run(StepExec exec) throws Exception {
         Path aapt2 = extractAapt2(exec);
         Path platformJar = exec.requireExtra("android-jar");
-        Path res = exec.moduleDir().resolve("res");
+        Path res = AndroidDeps.androidFile(exec.moduleDir(), "res");
         Path manifest = exec.requireStepOutput("android-manifest").resolve("merged/AndroidManifest.xml");
         if (!Files.isRegularFile(manifest)) {
             throw new IllegalStateException("android-manifest produced no merged manifest at " + manifest);

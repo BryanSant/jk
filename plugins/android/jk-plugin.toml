@@ -52,6 +52,9 @@ min-sdk      = { type = "int", required = true, example = "24" }
 library      = { type = "bool", default = false }   # a library module: packages an AAR, not an APK
 compose      = { type = "bool", default = false }   # adds the Compose compiler plugin (version == Kotlin)
 build-config = { type = "bool", default = false }   # generates BuildConfig.java (explicit toggle, not a grab-bag)
+# Extra BuildConfig constants, each a verbatim `TYPE NAME = VALUE` Java declaration
+# (AGP's buildConfigField, declarative): ['String BACKEND_URL = "http://example.com"']
+build-config-fields = { type = "string-list", default = [] }
 hilt         = { type = "bool", default = false }   # Hilt unmodified-source mode: superclass transform + processor toggle
 
 # ---- Variants (android-plan §3.1): build types × one flavor dimension --------------------------
@@ -67,6 +70,7 @@ minify                = { type = "bool" }                     # tri-state: absen
 proguard-files        = { type = "string-list", default = [] }
 signing               = { type = "string" }                   # names an [android.signing.<name>]
 debuggable            = { type = "bool" }
+build-config-fields   = { type = "string-list" }              # per-variant BuildConfig constants (overlay replaces)
 
 # Signing configs (android-plan §3.1): env: indirection only — never literal secrets in TOML.
 # `secret = true` keys resolve client-side (the user's shell env rides the request) and travel

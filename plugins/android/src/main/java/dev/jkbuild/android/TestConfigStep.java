@@ -30,7 +30,7 @@ final class TestConfigStep {
         props.append("android_merged_manifest=").append(manifest.toAbsolutePath()).append('\n');
         props.append("android_merged_resources=").append(rawRes.toAbsolutePath()).append('\n');
         // Assets: the project dir's assets/ when present (merged-assets folding is packaging-time).
-        Path assets = exec.moduleDir().resolve("assets");
+        Path assets = AndroidDeps.androidFile(exec.moduleDir(), "assets");
         if (Files.isDirectory(assets)) {
             props.append("android_merged_assets=").append(assets.toAbsolutePath()).append('\n');
         }

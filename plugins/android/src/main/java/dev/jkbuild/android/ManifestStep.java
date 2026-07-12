@@ -24,9 +24,10 @@ final class ManifestStep {
     private ManifestStep() {}
 
     static void run(StepExec exec) throws Exception {
-        Path manifest = exec.moduleDir().resolve("AndroidManifest.xml");
+        Path manifest = AndroidDeps.androidFile(exec.moduleDir(), "AndroidManifest.xml");
         if (!Files.isRegularFile(manifest)) {
-            throw new IllegalStateException("an [android] project needs an AndroidManifest.xml at the module root");
+            throw new IllegalStateException(
+                    "an [android] project needs an AndroidManifest.xml at the module root or src/main/");
         }
         Path mergerLib = exec.requireExtra("manifest-merger");
         String namespace = exec.config().string("namespace");

@@ -53,16 +53,27 @@ public final class AndroidPlugin implements Plugin, BuildPlugin {
         // release defaults minify ON (AGP-9 posture) — the overlay's tri-state `minify` overrides.
         boolean release = "release".equals(ctx.config().stringOpt("build-type").orElse("debug"));
         boolean minify = ctx.config().bool("minify").orElse(release && !library);
+        // Both manifest/res locations are declared inputs: jk's simple layout at the module
+        // root, and the AGP/traditional src/main/ home — the steps read whichever exists.
         ctx.step(StepSpec.named("android-manifest")
                 .after(Anchor.RESOLVE)
                 .before(Anchor.COMPILE)
-                .inputs(In.projectFiles("AndroidManifest.xml"), In.runtimeEntries(), In.config())
+                .inputs(
+                        In.projectFiles("AndroidManifest.xml"),
+                        In.projectFiles("src/main/AndroidManifest.xml"),
+                        In.runtimeEntries(),
+                        In.config())
                 .outputs("merged")
                 .run(ManifestStep::run));
         ctx.step(StepSpec.named("android-res")
                 .after(Anchor.RESOLVE)
                 .before(Anchor.COMPILE)
-                .inputs(In.projectFiles("res"), In.stepOutput("android-manifest"), In.runtimeEntries(), In.config())
+                .inputs(
+                        In.projectFiles("res"),
+                        In.projectFiles("src/main/res"),
+                        In.stepOutput("android-manifest"),
+                        In.runtimeEntries(),
+                        In.config())
                 .outputs("gen", "packaged", "raw-res")
                 .contributesSources("gen")
                 .run(ResourceStep::run));
@@ -136,12 +147,12 @@ public final class AndroidPlugin implements Plugin, BuildPlugin {
                 // the extension); bundletool assembles from the proto-format link.
                 ctx.packaging(PackagerSpec.replacingMainArtifact("aab")
                         .inputs(In.stepOutput("android-res"), In.stepOutput(dexStep), In.runtimeEntries(),
-                                In.projectFiles("assets"), In.config())
+                                In.projectFiles("assets"), In.projectFiles("src/main/assets"), In.config())
                         .produce(AabPackager::produce));
             } else {
                 ctx.packaging(PackagerSpec.replacingMainArtifact("apk")
                         .inputs(In.stepOutput("android-res"), In.stepOutput(dexStep), In.runtimeEntries(),
-                                In.projectFiles("assets"), In.config())
+                                In.projectFiles("assets"), In.projectFiles("src/main/assets"), In.config())
                         .produce(ApkPackager::produce));
             }
             ctx.verb(VerbSpec.named("deploy")

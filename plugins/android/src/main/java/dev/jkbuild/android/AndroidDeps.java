@@ -70,10 +70,20 @@ final class AndroidDeps {
         for (Aar aar : aars(io.runtimeEntries())) {
             collectTree(aar.container().resolve("assets"), out);
         }
-        // PackageIo has no moduleDir; the artifact lives at <module>/target/lib/<name>.<ext>.
-        Path moduleDir = io.artifactPath().getParent().getParent().getParent();
-        collectTree(moduleDir.resolve("assets"), out);
+        collectTree(androidFile(io.moduleDir(), "assets"), out);
         return out;
+    }
+
+    /**
+     * The module-relative Android file/dir in either layout: {@code <module>/<rel>} (jk's simple
+     * layout) or {@code <module>/src/main/<rel>} (the AGP/traditional location). Returns the
+     * simple-layout path when neither exists, so error messages name the primary convention.
+     */
+    static Path androidFile(Path moduleDir, String rel) {
+        Path simple = moduleDir.resolve(rel);
+        if (Files.exists(simple)) return simple;
+        Path traditional = moduleDir.resolve("src/main").resolve(rel);
+        return Files.exists(traditional) ? traditional : simple;
     }
 
     /** AAR native libs: {@code jni/<abi>/*.so} → APK {@code lib/<abi>/*.so} keys. */
