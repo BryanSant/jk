@@ -184,16 +184,19 @@ list in order:
   [build] ksp-options; kotlinc -module-name + IC-state config keying + the zero-output
   cache guard; library manifests merging only themselves). Recorded deviations: Kotlin
   ^2.4.0 (jk's BTA floor; NiA pins 2.3.0), compile-sdk 34 (warm test SDK; NiA pins 36).
-  **BLOCKER for the last two (designsystem, ui) — finding 9, open: cross-AAR resource
-  VALUE conflicts.** compose-ui and compose-foundation both ship string/autofill
-  translations; AGP resolves them in its dedicated resource merger (resource-level,
-  overlay priority, before one aapt2 link), while jk aapt2-compiles each dep's res
-  individually and links them as -R overlays — aapt2 hard-errors on conflicting values
-  across packages. The fix is a values-aware resource merge (parse values*.xml, merge
-  resource-by-resource in overlay order — app > deps in classpath order) feeding one
-  link; the non-transitive R story is unaffected (dep Rs already regenerate from R.txt
-  against final ids). This is the resource pipeline's largest remaining AGP-fidelity gap
-  and the next A5e work item; feature/* and :app follow it.
+  **COMPLETE (2026-07-12, a0537358): all TWELVE :core modules build green from a full
+  clean** — findings 9-12 closed it: (9) AGP-style dependency resource merging
+  (ResourceMerger — the AAR closure folds into one tree, values merged
+  element-by-element, before a single aapt2 link; compose-ui vs compose-foundation
+  string/autofill was the forcing conflict); (10) libraries regenerate dependency R
+  classes too (non-final ids — ui references designsystem.R); (11) KMP redirect targets
+  pin EXACT (available-at is an exact reference; the lower bound floated
+  kotlinx-datetime's -jvm onto the 0.8.0-0.6.x-compat line); (12) kotlinc IC state
+  resets when the output dir is empty (surviving cache-side IC state + a cleaned
+  target/ produced successful near-empty compiles — including an empty library jar
+  that "passed"). designsystem carries the full Material 3 stack; ui consumes sibling
+  Rs. Next: feature/* (mechanical), then :app — flavors, full manifest merge, release
+  R8/AAB.
 Companion research: [android-gradle.md](./android-gradle.md).
 **Goal:** build, test, and ship a modern Android app (Compose-first, AGP-9-era baselines:
 compileSdk 37, minSdk 24+, Kotlin 2.3+, R8 full mode, AAB) with **no Gradle and no AGP**.
