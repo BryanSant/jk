@@ -1220,6 +1220,7 @@ public final class EngineClient {
                         : null;
         dev.jkbuild.cli.tui.ChipSpinner wedge = dev.jkbuild.cli.tui.ChipSpinner.show(
                 ws, "Engine", dev.jkbuild.config.GlobalConfig.nerdfont(), "Optimizing build engine...");
+        long startNanos = System.nanoTime();
         try {
             if (training) {
                 // Eager optimization: record a startup profile and ASSEMBLE the cache now (train →
@@ -1232,7 +1233,9 @@ public final class EngineClient {
             boolean optimized = false;
             // Truthful "optimized": only when the cache now exists on disk and is being mapped.
             if (target.aotCache() != null && Files.exists(target.aotCache())) {
-                wedge.succeed("Build engine optimized and started (pid " + pidStyled(hs.pid()) + ")");
+                String took = dev.jkbuild.cli.run.ConsoleSpec.took(
+                        java.time.Duration.ofNanos(System.nanoTime() - startNanos));
+                wedge.succeed("Build engine optimized and started (pid " + pidStyled(hs.pid()) + ") " + took);
                 optimized = wedge.active();
             }
             return new EngineReady(hs, optimized);
