@@ -67,7 +67,15 @@ public final class GradleModuleMetadata {
         for (Map<String, Object> variant : variants) {
             if (!(variant.get("attributes") instanceof Map<?, ?> attrs)) continue;
             if (!"java-runtime".equals(attrs.get("org.gradle.usage"))) continue;
-            if (!jvmEnvironment.equals(attrs.get("org.gradle.jvm.environment"))) continue;
+            // Sources/javadoc variants also declare java-runtime usage — category tells them apart.
+            Object category = attrs.get("org.gradle.category");
+            if (category != null && !"library".equals(category)) continue;
+            // Gradle's compatibility rule: an ABSENT org.gradle.jvm.environment is
+            // standard-jvm-compatible. androidx declares the attribute explicitly; kotlinx
+            // (datetime, coroutines, serialization) omits it on the jvm variants.
+            Object env = attrs.get("org.gradle.jvm.environment");
+            boolean matches = env == null ? "standard-jvm".equals(jvmEnvironment) : env.equals(jvmEnvironment);
+            if (!matches) continue;
             Redirect r = availableAt(variant);
             if (r != null) return Optional.of(r);
         }
