@@ -57,6 +57,16 @@ public final class EngineClient {
      */
     private static final Duration TRAINING_START_TIMEOUT = Duration.ofSeconds(90);
 
+    /**
+     * How long the eager training engine records before we clean-stop it to assemble the cache. A
+     * sub-second run yields an empty recording the assembler rejects (see {@code install.sh}); this
+     * matches the warm-up's {@code sleep 3} so the startup path is captured.
+     */
+    private static final long TRAINING_MIN_UPTIME_MS = 3_000;
+
+    /** How long to wait for the {@code .aot} to be assembled by the child JVM after the clean stop. */
+    private static final Duration ASSEMBLY_TIMEOUT = Duration.ofSeconds(30);
+
     private EngineClient() {}
 
     /** What a connection's {@code hello}/{@code hello-ack} handshake reveals about the engine. */
@@ -1196,47 +1206,97 @@ public final class EngineClient {
     private static Handshake startWithSelfHeal(EnginePaths.Paths paths, String clientVersion, boolean renderWedge)
             throws IOException {
         EngineTarget target = resolveEngineTarget(paths, clientVersion);
-        boolean wedgeOnTrain = renderWedge && chooseAotMode(target) == AotMode.TRAIN;
+        boolean training = chooseAotMode(target) == AotMode.TRAIN;
 
-        try (TrainingWedge wedge = TrainingWedge.start(wedgeOnTrain)) {
-            // At most two attempts: the second exists only to ride out a start/stop race where a
-            // just-spawned engine exits as an election loser before anyone is serving. The AOT mode
-            // is (re)chosen each attempt — a training run that assembled its cache and exited leaves
-            // the cache in place, so the retry naturally maps it (USE).
-            for (int attempt = 0; attempt < 2; attempt++) {
-                AotMode mode = chooseAotMode(target);
-                Duration wait = (mode == AotMode.TRAIN) ? TRAINING_START_TIMEOUT : COLD_START_CEILING;
-                StartResult r = awaitStartup(paths, clientVersion, wait, spawn(paths, target, mode).process());
-                switch (r.outcome()) {
-                    case UP -> {
-                        // AOTMode=auto never fails a start on a bad cache — it logs and boots cold.
-                        // So if the log shows the cache was ignored, drop it (retrain next start) and,
-                        // to avoid retrain-storming a host where it can never map, mark the key noaot.
-                        if (mode == AotMode.USE && scanLogForAotError(paths.log())) {
-                            deleteQuietly(target.aotCache());
-                            writeNoAotMarker(target.aotCache());
-                            logReason(paths, "AOT cache was ignored by the engine JVM; skipping it for this key");
-                        }
-                        wedge.succeeded();
-                        return r.handshake();
+        try (TrainingWedge wedge = TrainingWedge.start(renderWedge && training)) {
+            if (training) {
+                // Eager optimization: record a startup profile and ASSEMBLE the cache now (train →
+                // clean-stop → assemble), so the engine we hand back genuinely maps it rather than
+                // merely recording (JEP 514 writes the .aot only at the training JVM's clean exit).
+                // Best-effort: if it produces no cache we fall through and start normally.
+                trainAndAssemble(paths, clientVersion, target);
+            }
+            Handshake hs = startOnce(paths, clientVersion, target);
+            // Truthful "optimized": only when the cache now exists on disk and is being mapped.
+            if (target.aotCache() != null && Files.exists(target.aotCache())) wedge.succeeded();
+            return hs;
+        }
+    }
+
+    /**
+     * Spawn the engine and return once it's serving. The AOT mode is (re)chosen per attempt, so a
+     * freshly assembled cache is mapped (USE). Rides out a single start/stop race: with {@code
+     * AOTMode=auto} a bad cache can never make the JVM exit, so a child that exits before serving is
+     * a crash or an election loss against a just-stopped engine's socket/assembly — back off and
+     * retry once, never touching the cache.
+     */
+    private static Handshake startOnce(EnginePaths.Paths paths, String clientVersion, EngineTarget target)
+            throws IOException {
+        for (int attempt = 0; attempt < 2; attempt++) {
+            AotMode mode = chooseAotMode(target);
+            Duration wait = (mode == AotMode.TRAIN) ? TRAINING_START_TIMEOUT : COLD_START_CEILING;
+            StartResult r = awaitStartup(paths, clientVersion, wait, spawn(paths, target, mode).process());
+            switch (r.outcome()) {
+                case UP -> {
+                    if (mode == AotMode.USE && scanLogForAotError(paths.log())) {
+                        deleteQuietly(target.aotCache());
+                        writeNoAotMarker(target.aotCache());
+                        logReason(paths, "AOT cache was ignored by the engine JVM; skipping it for this key");
                     }
-                    case TIMED_OUT -> throw notStarted(paths); // alive but never served → genuine hang
-                    case CHILD_EXITED -> {
-                        // With AOTMode=auto the cache can't cause an exit, so this is a crash or a
-                        // start/stop race (a just-stopped engine's socket/lock or its AOT-assembly
-                        // child briefly makes a fresh spawn lose the election and exit) — never touch
-                        // the cache. Back off to let that settle, then retry once.
-                        if (attempt == 0) {
-                            logReason(paths, "engine exited before serving; retrying after backoff");
-                            sleepQuietly(1_500);
-                            continue;
-                        }
-                        throw notStarted(paths);
+                    return r.handshake();
+                }
+                case TIMED_OUT -> throw notStarted(paths); // alive but never served → genuine hang
+                case CHILD_EXITED -> {
+                    if (attempt == 0) {
+                        logReason(paths, "engine exited before serving; retrying after backoff");
+                        sleepQuietly(1_500);
+                        continue;
                     }
+                    throw notStarted(paths);
                 }
             }
-            throw notStarted(paths); // unreachable
         }
+        throw notStarted(paths); // unreachable
+    }
+
+    /**
+     * One-time eager AOT training: spawn a training engine ({@code -XX:AOTCacheOutput}), let it run
+     * long enough to record the startup path, then clean-stop it so the JVM assembles the {@code
+     * .aot} at exit, and wait for that assembly to complete. Best-effort — any failure leaves no
+     * cache and the caller starts normally (the cache would then build on a later clean exit).
+     */
+    private static void trainAndAssemble(EnginePaths.Paths paths, String clientVersion, EngineTarget target) {
+        try {
+            StartResult tr = awaitStartup(
+                    paths, clientVersion, TRAINING_START_TIMEOUT, spawn(paths, target, AotMode.TRAIN).process());
+            if (tr.outcome() != StartResult.Outcome.UP) {
+                logReason(paths, "AOT training run did not come up; skipping eager optimization");
+                return;
+            }
+            sleepQuietly(TRAINING_MIN_UPTIME_MS); // avoid the assembler's empty-recording rejection
+            stop(paths.socket()); // clean shutdown → the JVM assembles the cache on exit
+            if (!awaitAssembled(target.aotCache(), ASSEMBLY_TIMEOUT)) {
+                logReason(paths, "AOT cache did not assemble in time; it will build on a later engine exit");
+            }
+        } catch (IOException e) {
+            logReason(paths, "eager AOT training skipped: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Wait until the training child has finished writing the cache: the assembler removes the {@code
+     * .aot.config} recording only once the {@code .aot} is complete, so "{@code .aot} present AND
+     * {@code .aot.config} gone" is the authoritative done signal (avoids mapping a half-written file).
+     */
+    private static boolean awaitAssembled(Path aotCache, Duration timeout) {
+        if (aotCache == null) return false;
+        Path config = aotCache.resolveSibling(aotCache.getFileName() + ".config");
+        long deadline = System.nanoTime() + timeout.toNanos();
+        while (System.nanoTime() < deadline) {
+            if (Files.exists(aotCache) && !Files.exists(config)) return true;
+            sleepQuietly(100);
+        }
+        return Files.exists(aotCache) && !Files.exists(config);
     }
 
     private static IOException notStarted(EnginePaths.Paths paths) {
