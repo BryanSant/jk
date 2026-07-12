@@ -97,6 +97,14 @@ public final class BuildPipeline {
     @SuppressWarnings("rawtypes")
     public static final GoalKey<List> PROCESSOR_CP = GoalKey.of("processor-cp", List.class);
 
+    /** The javac half of the processor split — set by the ksp phase (KSP jars removed). */
+    @SuppressWarnings("rawtypes")
+    public static final GoalKey<List> JAVAC_PROCESSOR_CP = GoalKey.of("javac-processor-cp", List.class);
+
+    /** The [[contribute.provided-classpath]] jars (platform), published for the test phase. */
+    @SuppressWarnings("rawtypes")
+    public static final GoalKey<List> PROVIDED_CP = GoalKey.of("provided-cp", List.class);
+
     @SuppressWarnings("rawtypes")
     public static final GoalKey<List> COMPILE_TEST_CP = GoalKey.of("cp-test", List.class);
 
@@ -391,6 +399,11 @@ public final class BuildPipeline {
             CompileSupport.Languages langs = CompileSupport.resolveLanguages(project, in.dir());
             useJava = langs.java();
             useKotlin = langs.kotlin();
+            // [processor-dependencies] on a Kotlin module can generate Java sources (Hilt's
+            // components are Java) — route through the mixed pipeline so javac compiles them.
+            if (useKotlin && !useJava && hasProcessorDeps(jkBuild)) {
+                useJava = true;
+            }
             compactLayout = CompileSupport.isSimpleLayout(project, in.dir());
             // Workspace root with no source tree: nothing to compile or package.
             if (jkBuild.isWorkspaceRoot() && !CompileSupport.hasSources(in.dir())) {
@@ -472,9 +485,10 @@ public final class BuildPipeline {
         final Path javaMainSrcDir = compact ? in.dir().resolve("src") : in.dir().resolve("src/main/java");
 
         // ---- parse-build ------------------------------------------------
+        final boolean kspEnabled = useKotlin && parsedBuild != null && hasProcessorDeps(parsedBuild);
         StepContext cx = new StepContext(
                 in, cas, actionCache, plan, javaMainSrcRef, kotlinMainSrcRef,
-                javaMainSrcDir, compact, mixed, kotlinModule, mixedWithJava, mainCompile);
+                javaMainSrcDir, compact, mixed, kotlinModule, mixedWithJava, mainCompile, kspEnabled);
 
         Phase parseBuild = parseBuildPhase(cx);
 
@@ -497,7 +511,7 @@ public final class BuildPipeline {
         Phase compileTest = compileTestPhase(cx);
 
         // ---- run-tests --------------------------------------------------
-        Phase runTests = runTestsPhase(cx);
+        Phase runTests = runTestsPhase(cx, pluginDeclsF);
 
         // ---- plugin steps (build-plugins plan §3.2) ----------------------
         List<Phase> pluginSteps = new ArrayList<>();
@@ -529,6 +543,9 @@ public final class BuildPipeline {
                 Goal.builder("build").addPhase(parseBuild).addPhase(syncDeps).addPhase(ensureJdk);
         // Workspace root with no sources: validate jk.toml + sync deps, nothing more.
         if (workspaceNoSources) return b;
+        if (kspEnabled) {
+            b.addPhase(kspPhase(cx));
+        }
         if (useJava) {
             b.addPhase(compileJava);
         }
@@ -586,7 +603,8 @@ public final class BuildPipeline {
             boolean mixed,
             boolean kotlinModule,
             boolean mixedWithJava,
-            String mainCompile) {}
+            String mainCompile,
+            boolean ksp) {}
 
     private static Phase parseBuildPhase(StepContext cx) {
         Inputs in = cx.in();
@@ -730,6 +748,7 @@ public final class BuildPipeline {
                         }
                     }
                     compileTestCp.addAll(contributedProvided);
+                    ctx.put(PROVIDED_CP, contributedProvided);
                     ctx.put(COMPILE_TEST_CP, compileTestCp);
                     ctx.put(TEST_RUNTIME_CP, testRuntimeCp);
                     // Reuse source lists that the scope suppliers may have already walked.
@@ -886,6 +905,235 @@ public final class BuildPipeline {
         return out;
     }
 
+    /** Plugin steps' declared test-classpath contribution dirs (existing ones only). */
+    private static List<Path> pluginTestClasspath(BuildLayout layout, PluginBuild.Declarations decls) {
+        List<Path> out = new ArrayList<>();
+        if (decls == null) return out;
+        for (PluginBuild.StepDecl step : decls.steps()) {
+            for (String rel : step.contributesTestClasspath()) {
+                Path dir = PluginBuild.stepScratch(layout, step.name()).resolve(rel);
+                if (Files.isDirectory(dir)) out.add(dir);
+            }
+        }
+        return out;
+    }
+
+    /** The provided-classpath contribution (platform jars), re-read for the test phase. */
+    @SuppressWarnings("unchecked")
+    private static List<Path> contributedProvidedFor(dev.jkbuild.run.PhaseContext ctx) {
+        return (List<Path>) ctx.get(PROVIDED_CP).orElse(List.of());
+    }
+
+    /** Generated-source dirs the KSP round writes (checked by the compile-phase unions). */
+    static Path kspOutBase(BuildLayout layout) {
+        return layout.moduleTargetDir().resolve("ksp");
+    }
+
+    /** Files with {@code suffix} under the KSP output tree, sorted — empty when no round ran. */
+    private static List<Path> kspGeneratedSources(BuildLayout layout, String suffix) throws IOException {
+        List<Path> out = new ArrayList<>();
+        for (String lang : List.of("kotlin", "java")) {
+            Path dir = kspOutBase(layout).resolve(lang);
+            if (!Files.isDirectory(dir)) continue;
+            try (var walk = Files.walk(dir)) {
+                walk.filter(f -> f.toString().endsWith(suffix) && Files.isRegularFile(f))
+                        .sorted()
+                        .forEach(out::add);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * The KSP2 round (android-plan §3.5): fork {@code KSPJvmMain} over the module's sources with
+     * the KSP half of {@code [processor-dependencies]} (detected by the jar's registered
+     * {@code SymbolProcessorProvider} — see {@link dev.jkbuild.compile.KspProcessors}); generated
+     * Kotlin/Java land under {@code target/ksp/} and join the compilers' source lists. Freshness
+     * mirrors compile-kotlin's stamp discipline (no action cache yet — the direct kotlinc path
+     * has none either); the processors, classpath, and sources are all stamp inputs.
+     */
+    private static Phase kspPhase(StepContext cx) {
+        Inputs in = cx.in();
+        Cas cas = cx.cas();
+        boolean compact = cx.compact();
+        return Phase.builder("ksp")
+                .label("KSP")
+                .kind(PhaseKind.CPU)
+                .requires("parse-build", "sync-deps", "ensure-jdk")
+                .scope(1)
+                .execute(ctx -> {
+                    @SuppressWarnings("unchecked")
+                    List<Path> processorCp = (List<Path>) ctx.require(PROCESSOR_CP);
+                    var split = dev.jkbuild.compile.KspProcessors.split(processorCp);
+                    ctx.put(JAVAC_PROCESSOR_CP, split.javac());
+                    if (split.ksp().isEmpty()) {
+                        ctx.label("no KSP processors");
+                        ctx.progress(1);
+                        return;
+                    }
+                    BuildLayout layout = ctx.require(LAYOUT);
+                    Path outBase = kspOutBase(layout);
+                    @SuppressWarnings("unchecked")
+                    List<Path> classpath = (List<Path>) ctx.require(CLASSPATH);
+                    List<Path> ktSources = kotlinSources(ctx);
+                    List<Path> javaSources = javaSources(ctx);
+
+                    List<Path> stampInputs = new ArrayList<>(ktSources);
+                    stampInputs.addAll(javaSources);
+                    List<Path> stampCp = new ArrayList<>(classpath);
+                    stampCp.addAll(split.ksp());
+                    boolean rerun = in.session().config().rerunOr(false);
+                    if (!rerun
+                            && dev.jkbuild.task.FreshnessStamp.isFresh(
+                                    outBase, KSP_STAMP, stampInputs, stampCp, ctx.require(RELEASE))) {
+                        ctx.reweight(EffortWeights.SKIP);
+                        ctx.label("up to date");
+                        ctx.progress(1);
+                        return;
+                    }
+
+                    ctx.label("KSP: " + split.ksp().size() + " processor jar(s)");
+                    JkBuild project = ctx.require(PROJECT);
+                    String kotlinVersion = CompileToolchain.kotlinVersionFor(ctx.require(LOCKFILE), project);
+                    if (kotlinVersion == null || kotlinVersion.isBlank()) {
+                        kotlinVersion = dev.jkbuild.kotlin.KotlinResolver.DEFAULT_VERSION;
+                    }
+                    List<Path> kspClasspath;
+                    Path stdlib;
+                    try {
+                        dev.jkbuild.repo.RepoGroup repos = RepoGroupBuilder.buildFor(project, null, cas);
+                        String kspVersion = KspResolver.discoverVersion(repos);
+                        kspClasspath = KspResolver.resolveClasspath(repos, cas, kspVersion);
+                        stdlib = KotlinBtaResolver.resolveStdlib(repos, cas, kotlinVersion);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        throw new RuntimeException("interrupted resolving KSP", e);
+                    }
+
+                    // A stale round's outputs must not survive into the source union.
+                    for (String sub : List.of("kotlin", "java", "classes", "resources")) {
+                        dev.jkbuild.util.PathUtil.deleteRecursively(outBase.resolve(sub));
+                    }
+                    Files.createDirectories(outBase.resolve("caches"));
+
+                    List<Path> srcRoots = compact
+                            ? List.of(in.dir().resolve("src"))
+                            : List.of(in.dir().resolve("src/main/kotlin"), in.dir().resolve("src/main/java"));
+                    List<Path> ktRoots = new ArrayList<>();
+                    for (Path root : srcRoots) {
+                        if (Files.isDirectory(root)) ktRoots.add(root);
+                    }
+                    String sep = java.io.File.pathSeparator;
+                    List<Path> libs = new ArrayList<>(classpath);
+                    libs.add(stdlib);
+
+                    String languageVersion = majorMinor(kotlinVersion);
+                    Path javaHome = ctx.require(JAVA_HOME);
+                    List<String> cmd = new ArrayList<>();
+                    cmd.add(javaHome.resolve("bin/java").toString());
+                    cmd.addAll(dev.jkbuild.worker.JvmOptions.workerFlags(1));
+                    cmd.add("-cp");
+                    cmd.add(joinPaths(kspClasspath, sep));
+                    cmd.add(KspResolver.KSP_MAIN);
+                    cmd.add("-module-name=" + project.project().name());
+                    cmd.add("-source-roots=" + joinPaths(ktRoots, sep));
+                    cmd.add("-java-source-roots=" + joinPaths(ktRoots, sep));
+                    cmd.add("-project-base-dir=" + in.dir().toAbsolutePath());
+                    cmd.add("-output-base-dir=" + outBase.toAbsolutePath());
+                    cmd.add("-caches-dir=" + outBase.resolve("caches").toAbsolutePath());
+                    cmd.add("-class-output-dir=" + outBase.resolve("classes").toAbsolutePath());
+                    cmd.add("-kotlin-output-dir=" + outBase.resolve("kotlin").toAbsolutePath());
+                    cmd.add("-java-output-dir=" + outBase.resolve("java").toAbsolutePath());
+                    cmd.add("-resource-output-dir=" + outBase.resolve("resources").toAbsolutePath());
+                    cmd.add("-language-version=" + languageVersion);
+                    cmd.add("-api-version=" + languageVersion);
+                    cmd.add("-jvm-target=" + CompileSupport.kotlinJvmTarget(ctx.require(RELEASE)));
+                    cmd.add("-jdk-home=" + javaHome.toAbsolutePath());
+                    cmd.add("-libraries=" + joinPaths(libs, sep));
+                    // The trailing processor classpath is the WHOLE [processor-dependencies]
+                    // closure — a provider jar (room-compiler) loads its own deps from it.
+                    cmd.add(joinPaths(processorCp, sep));
+
+                    ProcessBuilder pb =
+                            new ProcessBuilder(cmd).directory(in.dir().toFile()).redirectErrorStream(true);
+                    Process proc = pb.start();
+                    // Read on a drainer thread and bound the wait: on an internal error KSP's JVM
+                    // can linger (non-daemon compiler pools survive the main thread's exception),
+                    // which would hang a plain readAllBytes forever.
+                    StringBuilder captured = new StringBuilder();
+                    Thread drainer = new Thread(() -> {
+                        try (var in2 = proc.getInputStream()) {
+                            byte[] buf = new byte[8192];
+                            int n;
+                            while ((n = in2.read(buf)) >= 0) {
+                                captured.append(new String(buf, 0, n, java.nio.charset.StandardCharsets.UTF_8));
+                            }
+                        } catch (IOException ignored) {
+                            // stream closed with the process
+                        }
+                    });
+                    drainer.setDaemon(true);
+                    drainer.start();
+                    int exit;
+                    try {
+                        if (!proc.waitFor(15, java.util.concurrent.TimeUnit.MINUTES)) {
+                            proc.destroyForcibly();
+                            ctx.error("ksp", "KSP timed out after 15 minutes\n" + captured);
+                            throw new RuntimeException("KSP timed out");
+                        }
+                        exit = proc.exitValue();
+                        drainer.join(5_000);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        proc.destroyForcibly();
+                        throw new RuntimeException("interrupted waiting for KSP", e);
+                    }
+                    String output = captured.toString();
+                    if (exit != 0) {
+                        ctx.error("ksp", output.isBlank() ? ("KSP exited " + exit) : output);
+                        throw new RuntimeException("KSP processing failed");
+                    }
+                    dev.jkbuild.task.FreshnessStamp.write(
+                            outBase, KSP_STAMP, "ksp", "", stampInputs, stampCp, ctx.require(RELEASE));
+                    ctx.progress(1);
+                })
+                .build();
+    }
+
+    /**
+     * The Java source roots kotlinc reads declarations from in a mixed module: the hand-written
+     * root plus the KSP round's generated-Java dir (Hilt components are Java — a Kotlin class
+     * extending a generated base must resolve it during Kotlin analysis).
+     */
+    private static List<Path> kotlinJavaSourceRoots(
+            boolean mixedWithJava, boolean compact, Path dir, BuildLayout layout) {
+        if (!mixedWithJava) return null;
+        List<Path> roots = new ArrayList<>();
+        roots.add(compact ? dir.resolve("src") : dir.resolve("src/main/java"));
+        Path kspJava = kspOutBase(layout).resolve("java");
+        if (Files.isDirectory(kspJava)) roots.add(kspJava);
+        return roots;
+    }
+
+    /** The {@code major.minor} language level of a full Kotlin version ({@code 2.4.0} → 2.4). */
+    private static String majorMinor(String version) {
+        int first = version.indexOf('.');
+        int second = version.indexOf('.', first + 1);
+        return second > 0 ? version.substring(0, second) : version;
+    }
+
+    private static String joinPaths(List<Path> paths, String sep) {
+        StringBuilder b = new StringBuilder();
+        for (Path pth : paths) {
+            if (b.length() > 0) b.append(sep);
+            b.append(pth.toAbsolutePath());
+        }
+        return b.toString();
+    }
+
+    /** KSP's freshness companion, mirroring compile-kotlin's stamp discipline. */
+    private static final String KSP_STAMP = ".kspstamp";
+
     private static Phase compileJavaPhase(StepContext cx, PluginBuild.Declarations pluginDecls) {
         Inputs in = cx.in();
         Cas cas = cx.cas();
@@ -902,7 +1150,7 @@ public final class BuildPipeline {
         return Phase.builder("compile-java")
                 .label("Compiling")
                 .kind(PhaseKind.CPU)
-                .requires(javaCompileRequires(mixed, pluginDecls))
+                .requires(javaCompileRequires(mixed, pluginDecls, cx.ksp()))
                 // Scope counts sources (granularity); weight is the bar share. javac
                 // is opaque — one progress(sources.size()) on completion — so ease the
                 // slice forward over time while it runs instead of sitting flat.
@@ -931,9 +1179,14 @@ public final class BuildPipeline {
                     Path javaOut = classes;
                     List<Path> sources = javaSources(ctx);
                     List<Path> generated = pluginContributedSources(ctx.require(LAYOUT), pluginDecls, ".java");
-                    if (!generated.isEmpty()) {
+                    List<Path> kspGenerated = kspGeneratedSources(ctx.require(LAYOUT), ".java");
+                    if (!generated.isEmpty() || !kspGenerated.isEmpty()) {
                         sources = new ArrayList<>(sources);
                         sources.addAll(generated);
+                        sources.addAll(kspGenerated);
+                        // Re-publish the union so write-stamp records the same input set
+                        // this compile checked (else the fast freshness path never holds).
+                        ctx.put(JAVA_SOURCES, sources);
                     }
                     if (sources.isEmpty()) {
                         ctx.label("no Java sources");
@@ -949,7 +1202,8 @@ public final class BuildPipeline {
                         classpath.add(ctx.require(LAYOUT).kotlinClassesDir());
                     }
                     @SuppressWarnings("unchecked")
-                    List<Path> processorCp = (List<Path>) ctx.require(PROCESSOR_CP);
+                    List<Path> processorCp =
+                            (List<Path>) ctx.get(JAVAC_PROCESSOR_CP).orElseGet(() -> ctx.require(PROCESSOR_CP));
                     boolean rerun = in.session().config().rerunOr(false);
                     // Fold the processor path into the freshness inputs so a processor
                     // bump busts the stamp (it isn't on the compile classpath).
@@ -1071,17 +1325,26 @@ public final class BuildPipeline {
                 .build();
     }
 
-    private static String[] kotlinCompileRequires(PluginBuild.Declarations decls) {
+    private static String[] kotlinCompileRequires(PluginBuild.Declarations decls, boolean ksp) {
         List<String> requires = new ArrayList<>(List.of("parse-build", "sync-deps", "ensure-jdk"));
+        if (ksp) requires.add("ksp");
         requires.addAll(sourceGenStepPhases(decls));
         return requires.toArray(new String[0]);
     }
 
-    private static String[] javaCompileRequires(boolean mixed, PluginBuild.Declarations decls) {
+    private static String[] javaCompileRequires(boolean mixed, PluginBuild.Declarations decls, boolean ksp) {
         List<String> requires = new ArrayList<>(List.of("parse-build", "sync-deps", "ensure-jdk"));
         if (mixed) requires.add("compile-kotlin");
+        if (ksp) requires.add("ksp");
         requires.addAll(sourceGenStepPhases(decls));
         return requires.toArray(new String[0]);
+    }
+
+    /** True when the module declares {@code [processor-dependencies]} entries. */
+    private static boolean hasProcessorDeps(JkBuild build) {
+        List<dev.jkbuild.model.Dependency> procs =
+                build.dependencies().byScope().get(dev.jkbuild.model.Scope.PROCESSOR);
+        return procs != null && !procs.isEmpty();
     }
 
     private static Phase compileKotlinPhase(StepContext cx, PluginBuild.Declarations pluginDecls) {
@@ -1103,7 +1366,7 @@ public final class BuildPipeline {
                 // Kotlin compiles first (reads Java declarations from source), so it
                 // only needs the base phases — javac runs after it in a mixed module —
                 // plus any source-generating plugin steps.
-                .requires(kotlinCompileRequires(pluginDecls))
+                .requires(kotlinCompileRequires(pluginDecls, cx.ksp()))
                 // Scope counts Kotlin sources (granularity); weight is the bar share
                 // (see compile-java). kotlinc is opaque too, so ease it over time.
                 .weight(() -> plan.get().compileKotlin())
@@ -1125,6 +1388,18 @@ public final class BuildPipeline {
                     Path classes = ctx.require(MAIN_CLASSES);
                     Files.createDirectories(classes); // compile-java may be skipped
                     List<Path> ktSources = kotlinSources(ctx);
+                    // Plugin-contributed generated Kotlin (a KSP round, a codegen step) joins the
+                    // source list exactly like the Java side — the freshness stamp and the worker
+                    // see generated files as ordinary sources.
+                    List<Path> generatedKt = pluginContributedSources(ctx.require(LAYOUT), pluginDecls, ".kt");
+                    List<Path> kspKt = kspGeneratedSources(ctx.require(LAYOUT), ".kt");
+                    if (!generatedKt.isEmpty() || !kspKt.isEmpty()) {
+                        ktSources = new ArrayList<>(ktSources);
+                        ktSources.addAll(generatedKt);
+                        ktSources.addAll(kspKt);
+                        // Re-publish so write-stamp-kotlin records what this compile checked.
+                        ctx.put(KOTLIN_SOURCES, ktSources);
+                    }
                     if (ktSources.isEmpty()) {
                         ctx.label("no Kotlin sources");
                         ctx.put(KOTLIN_OUTCOME, "no-sources");
@@ -1180,11 +1455,8 @@ public final class BuildPipeline {
                             ktOut,
                             taskId,
                             workingDir,
-                            mixedWithJava
-                                    ? (compact
-                                            ? in.dir().resolve("src")
-                                            : in.dir().resolve("src/main/java"))
-                                    : null);
+                            kotlinJavaSourceRoots(
+                                    mixedWithJava, compact, in.dir(), ctx.require(LAYOUT)));
                     if (!kr.success()) {
                         ctx.error("kotlinc", kr.output());
                         throw new RuntimeException("kotlinc reported errors");
@@ -1297,7 +1569,7 @@ public final class BuildPipeline {
                                 ktTestOut,
                                 ktTaskId,
                                 ktWorkingDir,
-                                mixedTest ? javaTestSrc : null);
+                                mixedTest ? List.of(javaTestSrc) : null);
                         if (!kr.success()) {
                             ctx.error("kotlinc", kr.output());
                             throw new RuntimeException("test kotlinc reported errors");
@@ -1318,7 +1590,8 @@ public final class BuildPipeline {
                         // modern javac only honors processors named by -processorpath, so
                         // without this a Lombok-using test wouldn't see its generated modules.
                         @SuppressWarnings("unchecked")
-                        List<Path> processorCp = (List<Path>) ctx.require(PROCESSOR_CP);
+                        List<Path> processorCp =
+                            (List<Path>) ctx.get(JAVAC_PROCESSOR_CP).orElseGet(() -> ctx.require(PROCESSOR_CP));
                         dev.jkbuild.task.JavaIncrementalCompile.ApSetup ap = null;
                         if (!processorCp.isEmpty()) {
                             Path genDir = ctx.require(LAYOUT).generatedSourcesDir("annotations", "test");
@@ -1366,7 +1639,7 @@ public final class BuildPipeline {
                 .build();
     }
 
-    private static Phase runTestsPhase(StepContext cx) {
+    private static Phase runTestsPhase(StepContext cx, PluginBuild.Declarations pluginDecls) {
         Inputs in = cx.in();
         Cas cas = cx.cas();
         ActionCache actionCache = cx.actionCache();
@@ -1392,6 +1665,14 @@ public final class BuildPipeline {
                     }
                     @SuppressWarnings("unchecked")
                     List<Path> testRtCp = (List<Path>) ctx.require(TEST_RUNTIME_CP);
+                    testRtCp = new ArrayList<>(testRtCp);
+                    // Plugin test-classpath contributions (contributesTestClasspath — e.g. the
+                    // android plugin's Robolectric test_config dir) join the test runtime cp.
+                    testRtCp.addAll(pluginTestClasspath(ctx.require(LAYOUT), pluginDecls));
+                    // The provided platform (android.jar) rides LAST: unit tests calling framework
+                    // stubs get the platform's throw-on-call contract (AGP's default posture), and
+                    // anything real on the classpath shadows it.
+                    testRtCp.addAll(contributedProvidedFor(ctx));
                     Path testClassesForStamp = ctx.require(TEST_CLASSES);
                     @SuppressWarnings("unchecked")
                     List<Path> testSrcs = ctx.get(TEST_SOURCES).orElse(java.util.List.of());
@@ -2541,7 +2822,7 @@ public final class BuildPipeline {
      * Shared by the main {@code compile-kotlin} and {@code compile-test} phases. The caller owns
      * freshness stamps, output assembly, and outcome reporting.
      *
-     * @param javaSourceRoot when non-null, passed as {@code -Xjava-source-roots} so a mixed module's
+     * @param javaSourceRoots when non-empty, passed as {@code -Xjava-source-roots} so a mixed module's
      *     Kotlin can read Java declarations from source
      */
     private static dev.jkbuild.task.KotlinCompile.Result compileKotlinSources(
@@ -2554,7 +2835,7 @@ public final class BuildPipeline {
             Path outputDir,
             String taskId,
             Path workingDir,
-            Path javaSourceRoot)
+            List<Path> javaSourceRoots)
             throws IOException {
         String kotlinVersion = CompileToolchain.kotlinVersionFor(ctx.require(LOCKFILE), ctx.require(PROJECT));
         KotlinWorkerSetup.Prepared kt;
@@ -2601,8 +2882,13 @@ public final class BuildPipeline {
         }
         // Compiler plugins ride the typed BTA COMPILER_PLUGINS argument — raw -Xplugin/-P
         // strings in extraArgs are silently ignored by the BTA execution path.
-        if (javaSourceRoot != null) {
-            ktArgs.add("-Xjava-source-roots=" + javaSourceRoot.toAbsolutePath());
+        if (javaSourceRoots != null && !javaSourceRoots.isEmpty()) {
+            StringBuilder roots = new StringBuilder();
+            for (Path root : javaSourceRoots) {
+                if (roots.length() > 0) roots.append(',');
+                roots.append(root.toAbsolutePath());
+            }
+            ktArgs.add("-Xjava-source-roots=" + roots);
         }
         Files.createDirectories(outputDir);
         KotlincRequest req = KotlincRequest.builder()

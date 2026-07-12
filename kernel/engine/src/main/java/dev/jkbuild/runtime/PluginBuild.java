@@ -86,7 +86,8 @@ public final class PluginBuild {
             List<String> outputs,
             List<String> contributesClasses,
             List<String> contributesResources,
-            List<String> contributesSources) {}
+            List<String> contributesSources,
+            List<String> contributesTestClasspath) {}
 
     /** The registered packager, as declared. */
     public record PackagerDecl(String name, List<String> inputs) {}
@@ -176,7 +177,8 @@ public final class PluginBuild {
                             Ndjson.strArray(line, "outputs"),
                             Ndjson.strArray(line, "contributesClasses"),
                             Ndjson.strArray(line, "contributesResources"),
-                            Ndjson.strArray(line, "contributesSources")));
+                            Ndjson.strArray(line, "contributesSources"),
+                            Ndjson.strArray(line, "contributesTestClasspath")));
                 case "packager" ->
                     packager = new PackagerDecl(Ndjson.str(line, "name"), Ndjson.strArray(line, "inputs"));
                 case "verb" ->

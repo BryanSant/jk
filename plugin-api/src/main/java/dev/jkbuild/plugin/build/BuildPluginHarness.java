@@ -125,6 +125,8 @@ public final class BuildPluginHarness {
                     .append(quoteArray(step.resourcesContributions()))
                     .append(",\"contributesSources\":")
                     .append(quoteArray(step.sourcesContributions()))
+                    .append(",\"contributesTestClasspath\":")
+                    .append(quoteArray(step.testClasspathContributions()))
                     .append('}');
             out.emit(b.toString());
         }

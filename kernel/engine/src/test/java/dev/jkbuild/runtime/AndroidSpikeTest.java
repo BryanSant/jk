@@ -136,6 +136,65 @@ class AndroidSpikeTest {
                 .contains("install -r " + apk.toAbsolutePath())
                 .contains("shell am start -n com.example.hello/com.example.hello.MainActivity");
 
+        // ---- instrumented tests: the instrument verb against a scripted transcript ----
+        // (a live device run remains gated — the parser and adb argv are the testable surface).
+        Path instrLog = tmp.resolve("instr-adb.log");
+        Path instrAdb = tmp.resolve("fake-instr-adb");
+        Files.writeString(instrAdb, "#!/bin/sh\n"
+                + "echo \"$@\" >> " + instrLog.toAbsolutePath() + "\n"
+                + "case \"$*\" in\n"
+                + "  *\"am instrument\"*)\n"
+                + "    printf '%s\\n' \\\n"
+                + "      'INSTRUMENTATION_STATUS: class=com.example.hello.SmokeTest' \\\n"
+                + "      'INSTRUMENTATION_STATUS: test=works' \\\n"
+                + "      'INSTRUMENTATION_STATUS_CODE: 1' \\\n"
+                + "      'INSTRUMENTATION_STATUS: class=com.example.hello.SmokeTest' \\\n"
+                + "      'INSTRUMENTATION_STATUS: test=works' \\\n"
+                + "      'INSTRUMENTATION_STATUS_CODE: 0' \\\n"
+                + "      'INSTRUMENTATION_STATUS: class=com.example.hello.SmokeTest' \\\n"
+                + "      'INSTRUMENTATION_STATUS: test=broken' \\\n"
+                + "      'INSTRUMENTATION_STATUS_CODE: 1' \\\n"
+                + "      'INSTRUMENTATION_STATUS: test=broken' \\\n"
+                + "      'INSTRUMENTATION_STATUS: stack=java.lang.AssertionError: boom' \\\n"
+                + "      'INSTRUMENTATION_STATUS_CODE: -2' \\\n"
+                + "      'INSTRUMENTATION_CODE: -1' ;;\n"
+                + "  *) echo Success ;;\n"
+                + "esac\n");
+        instrAdb.toFile().setExecutable(true);
+        var instrument =
+                PluginVerbs.run(project, cache, "instrument", List.of("--adb", instrAdb.toAbsolutePath().toString()));
+        assertThat(instrument.error()).isNull();
+        assertThat(instrument.found()).isTrue();
+        assertThat(instrument.exit()).isEqualTo(1); // the transcript carries one failure
+        String instrOut = String.join("\n", instrument.output());
+        assertThat(instrOut)
+                .contains("✓ com.example.hello.SmokeTest.works")
+                .contains("✗ com.example.hello.SmokeTest.broken FAILED")
+                .contains("1 passed, 1 failed");
+        assertThat(Files.readString(instrLog))
+                .contains("install -r " + apk.toAbsolutePath())
+                .contains("shell am instrument -r -w com.example.hello/androidx.test.runner.AndroidJUnitRunner");
+
+        // ---- managed devices: jk avd create/list against the managed SDK root ----
+        Path fakeImage = sdkRoot.resolve("system-images/android-28/default/x86_64");
+        Files.createDirectories(fakeImage);
+        var avdCreate = PluginVerbs.run(
+                project, cache, "avd",
+                List.of("create", "spike", "--system-image", "system-images;android-28;default;x86_64"));
+        assertThat(avdCreate.error()).isNull();
+        assertThat(avdCreate.exit()).isZero();
+        Path avdConfig = sdkRoot.resolve("avd/spike.avd/config.ini");
+        assertThat(avdConfig).exists();
+        assertThat(Files.readString(avdConfig))
+                .contains("image.sysdir.1=system-images/android-28/default/x86_64/")
+                .contains("tag.id=default");
+        var avdList = PluginVerbs.run(project, cache, "avd", List.of("list"));
+        assertThat(String.join("\n", avdList.output())).contains("spike");
+        // boot: refuses gracefully without the emulator component (no ~300MB download in CI).
+        var avdBoot = PluginVerbs.run(project, cache, "avd", List.of("boot", "spike"));
+        assertThat(avdBoot.exit()).isEqualTo(1);
+        assertThat(String.join("\n", avdBoot.output())).contains("emulator component is not installed");
+
         // ---- the provisioning surface: component status over the same verb machinery ----
         var status = PluginVerbs.run(project, cache, "android", List.of("sdk"));
         assertThat(status.error()).isNull();

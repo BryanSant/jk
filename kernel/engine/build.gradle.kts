@@ -80,6 +80,16 @@ tasks.withType<Test>().configureEach {
     doFirst { systemProperty("jk.android.worker.jar", testAndroidWorkerJar.singleFile.absolutePath) }
 }
 
+// Pass the kotlin-compiler worker jar to tests (the KSP/Room/Hilt gate compiles Kotlin).
+val testKotlinWorkerJar by configurations.creating {
+    isCanBeConsumed = false; isCanBeResolved = true; isTransitive = false
+}
+dependencies { testKotlinWorkerJar(project(":kotlin-compiler")) }
+tasks.withType<Test>().configureEach {
+    dependsOn(testKotlinWorkerJar)
+    doFirst { systemProperty("jk.kotlin.worker.jar", testKotlinWorkerJar.singleFile.absolutePath) }
+}
+
 // Pass the auditor jar path to tests (EngineServerTest's hosted jk audit round-trip forks it).
 val testAuditorWorkerJar by configurations.creating {
     isCanBeConsumed = false; isCanBeResolved = true; isTransitive = false

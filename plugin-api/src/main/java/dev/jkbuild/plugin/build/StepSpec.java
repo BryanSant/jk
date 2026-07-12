@@ -31,6 +31,7 @@ public final class StepSpec {
     private final List<String> contributesClasses = new ArrayList<>();
     private final List<String> contributesResources = new ArrayList<>();
     private final List<String> contributesSources = new ArrayList<>();
+    private final List<String> contributesTestClasspath = new ArrayList<>();
     private Body body;
 
     private StepSpec(String name) {
@@ -80,6 +81,16 @@ public final class StepSpec {
         return this;
     }
 
+    /**
+     * Append {@code relDir} (a declared output) to the module's <em>test runtime classpath</em> —
+     * for test-harness wiring a framework reads off the classpath (android-plan §3.6: Robolectric's
+     * {@code com/android/tools/test_config.properties} pointing at the merged manifest/resources).
+     */
+    public StepSpec contributesTestClasspath(String relDir) {
+        contributesTestClasspath.add(relDir);
+        return this;
+    }
+
     public StepSpec run(Body body) {
         this.body = body;
         return this;
@@ -115,6 +126,10 @@ public final class StepSpec {
 
     public List<String> sourcesContributions() {
         return List.copyOf(contributesSources);
+    }
+
+    public List<String> testClasspathContributions() {
+        return List.copyOf(contributesTestClasspath);
     }
 
     public Body body() {

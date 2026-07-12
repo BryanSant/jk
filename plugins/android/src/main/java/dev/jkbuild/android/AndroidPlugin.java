@@ -66,6 +66,15 @@ public final class AndroidPlugin implements Plugin, BuildPlugin {
                 .outputs("gen", "packaged", "raw-res")
                 .contributesSources("gen")
                 .run(ResourceStep::run));
+        // Robolectric wiring (android-plan §3.6): a test_config.properties dir on the module's
+        // test runtime classpath, pointing at the merged manifest + linked resources.
+        ctx.step(StepSpec.named("android-test-config")
+                .after(Anchor.RESOLVE)
+                .before(Anchor.TEST)
+                .inputs(In.stepOutput("android-manifest"), In.stepOutput("android-res"), In.config())
+                .outputs("cp")
+                .contributesTestClasspath("cp")
+                .run(TestConfigStep::run));
         if (ctx.config().bool("build-config", false)) {
             ctx.step(StepSpec.named("android-buildconfig")
                     .after(Anchor.RESOLVE)
@@ -125,10 +134,16 @@ public final class AndroidPlugin implements Plugin, BuildPlugin {
             ctx.verb(VerbSpec.named("deploy")
                     .description("Install the built APK/AAB on a device and launch it")
                     .run(DeployVerb::run));
+            ctx.verb(VerbSpec.named("instrument")
+                    .description("Run instrumented tests on a device (am instrument)")
+                    .run(InstrumentVerb::run));
         }
         ctx.verb(VerbSpec.named("android")
                 .description("Android SDK provisioning: licenses, component status")
                 .run(AndroidVerb::run));
+        ctx.verb(VerbSpec.named("avd")
+                .description("Managed virtual devices: create, list, boot headless")
+                .run(AvdVerb::run));
     }
 
 }
