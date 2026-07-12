@@ -578,23 +578,33 @@ public record JkBuild(
      * worker must be built first).
      *
      * <p>{@code kotlinPlugins} ({@code [[kotlin-plugins]]}) are project-declared Kotlin compiler
-     * plugins; see {@link KotlinPluginDecl}.
+     * plugins; see {@link KotlinPluginDecl}. {@code kspOptions} ({@code [build] ksp-options}) are
+     * project-declared KSP processor options as {@code key=value} strings (Room's
+     * {@code room.schemaLocation} is the canonical consumer).
      */
     public record Build(
             List<String> orderAfter, List<String> testWorkerJars, boolean lint,
-            List<KotlinPluginDecl> kotlinPlugins) {
+            List<KotlinPluginDecl> kotlinPlugins, List<String> kspOptions) {
 
-        public static final Build EMPTY = new Build(List.of(), List.of(), true, List.of());
+        public static final Build EMPTY = new Build(List.of(), List.of(), true, List.of(), List.of());
 
         public Build {
             orderAfter = orderAfter == null ? List.of() : List.copyOf(orderAfter);
             testWorkerJars = testWorkerJars == null ? List.of() : List.copyOf(testWorkerJars);
             kotlinPlugins = kotlinPlugins == null ? List.of() : List.copyOf(kotlinPlugins);
+            kspOptions = kspOptions == null ? List.of() : List.copyOf(kspOptions);
+        }
+
+        /** Back-compat (pre-{@code ksp-options}). */
+        public Build(
+                List<String> orderAfter, List<String> testWorkerJars, boolean lint,
+                List<KotlinPluginDecl> kotlinPlugins) {
+            this(orderAfter, testWorkerJars, lint, kotlinPlugins, List.of());
         }
 
         /** Back-compat (pre-{@code [[kotlin-plugins]]}). */
         public Build(List<String> orderAfter, List<String> testWorkerJars, boolean lint) {
-            this(orderAfter, testWorkerJars, lint, List.of());
+            this(orderAfter, testWorkerJars, lint, List.of(), List.of());
         }
 
         /**

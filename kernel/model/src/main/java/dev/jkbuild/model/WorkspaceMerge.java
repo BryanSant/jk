@@ -90,7 +90,7 @@ public final class WorkspaceMerge {
             }
         }
 
-        return JkBuild.builder(module.project())
+        JkBuild.Builder out = JkBuild.builder(module.project())
                 .dependencies(new JkBuild.Dependencies(resolvedByScope))
                 .repositories(module.repositories())
                 .profiles(module.profiles())
@@ -100,7 +100,15 @@ public final class WorkspaceMerge {
                 .plugins(module.plugins())
                 .application(module.application().orElse(null))
                 .nativeConfig(module.nativeConfig().orElse(null))
-                .build();
+                // The module's plugin tables and [build] block ride along: dropping them made an
+                // [android] workspace module lock as standard-jvm (wrong KMP variants — Room 2.8
+                // resolved -jvm) and lose its ksp-options/kotlin-plugins/order-after at lock time.
+                .build(module.build())
+                .format(module.format());
+        for (PluginConfig config : module.pluginConfigs().values()) {
+            out.pluginConfig(config);
+        }
+        return out.build();
     }
 
     public static JkBuild merge(JkBuild root, Collection<JkBuild> modules) {

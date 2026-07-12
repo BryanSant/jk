@@ -162,7 +162,8 @@ public final class JkBuildParser {
         JkBuild.Build build = parseBuild(result);
         List<JkBuild.KotlinPluginDecl> kotlinPlugins = parseKotlinPlugins(result);
         if (!kotlinPlugins.isEmpty()) {
-            build = new JkBuild.Build(build.orderAfter(), build.testWorkerJars(), build.lint(), kotlinPlugins);
+            build = new JkBuild.Build(
+                    build.orderAfter(), build.testWorkerJars(), build.lint(), kotlinPlugins, build.kspOptions());
         }
         JkBuild.FormatConfig format = parseFormat(result);
         return new JkBuild(
@@ -1333,7 +1334,21 @@ public final class JkBuildParser {
         // `lint` defaults on (surface deprecation/unchecked); `lint = false`
         // suppresses jk's default javac lint flags for users who don't want it.
         boolean lint = !Boolean.FALSE.equals(build.getBoolean("lint"));
-        return new JkBuild.Build(orderAfter, testWorkerJars, lint, List.of());
+        // [build] ksp-options — project-declared KSP processor options (`key=value`; Room's
+        // room.schemaLocation is the canonical consumer). Plugin manifests contribute theirs
+        // via [[contribute.compiler-args]] ksp; this is the project-owned lane.
+        List<String> kspOptions = new ArrayList<>();
+        TomlArray kspOpts = build.getArray("ksp-options");
+        if (kspOpts != null) {
+            for (int i = 0; i < kspOpts.size(); i++) {
+                Object val = kspOpts.get(i);
+                if (!(val instanceof String s) || s.isBlank() || !s.contains("=")) {
+                    throw new JkBuildParseException("[build].ksp-options must be an array of key=value strings");
+                }
+                kspOptions.add(s);
+            }
+        }
+        return new JkBuild.Build(orderAfter, testWorkerJars, lint, List.of(), kspOptions);
     }
 
     /**

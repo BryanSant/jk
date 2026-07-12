@@ -1064,11 +1064,16 @@ public final class BuildPipeline {
                     cmd.add("-jvm-target=" + CompileSupport.kotlinJvmTarget(ctx.require(RELEASE)));
                     cmd.add("-jdk-home=" + javaHome.toAbsolutePath());
                     cmd.add("-libraries=" + joinPaths(libs, sep));
-                    // Plugin-contributed processor options ([[contribute.compiler-args]] ksp —
-                    // Hilt's superclass-validation toggle). KSP's map syntax joins entries with
-                    // the platform path separator, same as its list args.
-                    List<String> kspOptions = dev.jkbuild.plugin.manifest.PluginContributions.kspOptions(
-                            project, in.dir(), lockModules(ctx.require(LOCKFILE)));
+                    // Processor options: plugin-contributed ([[contribute.compiler-args]] ksp —
+                    // Hilt's superclass-validation toggle) plus project-declared ([build]
+                    // ksp-options — Room's schemaLocation; last wins, so the project overrides).
+                    // KSP's map syntax joins entries with the platform path separator, same as
+                    // its list args; relative option paths resolve against the module dir (the
+                    // KSP process CWD).
+                    List<String> kspOptions = new ArrayList<>(
+                            dev.jkbuild.plugin.manifest.PluginContributions.kspOptions(
+                                    project, in.dir(), lockModules(ctx.require(LOCKFILE))));
+                    kspOptions.addAll(project.build().kspOptions());
                     if (!kspOptions.isEmpty()) {
                         cmd.add("-processor-options=" + String.join(sep, kspOptions));
                     }
