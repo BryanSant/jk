@@ -70,6 +70,14 @@ public final class PluginContributions {
     }
 
     /**
+     * The KSP processor options ({@code key=value}) every present plugin contributes — handed to
+     * the KSP round as {@code -processor-options} (Hilt's superclass-validation toggle et al.).
+     */
+    public static List<String> kspOptions(JkBuild build, java.nio.file.Path moduleDir, Set<String> classpathModules) {
+        return compilerArgs(build, moduleDir, classpathModules, PluginManifest.CompilerArgs::ksp);
+    }
+
+    /**
      * The Kotlin compiler plugins every present plugin contributes. {@code kotlinVersion} feeds
      * {@code ${kotlin.version}} so plugin jars stay lockstep with the compiler actually used.
      */

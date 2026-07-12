@@ -370,13 +370,21 @@ public record PluginManifest(
     public record PlatformDependency(String coordinate, Condition when) {}
 
     /**
-     * {@code [[contribute.compiler-args]]}: default args for javac / kotlinc. Each arg is added
-     * only when the user's own args don't already carry it (user wins).
+     * {@code [[contribute.compiler-args]]}: default args for javac / kotlinc, plus {@code ksp} —
+     * KSP processor options as {@code key=value} strings (Hilt's superclass-validation toggle,
+     * Room's schema location). Each arg is added only when the user's own args don't already
+     * carry it (user wins).
      */
-    public record CompilerArgs(List<String> javac, List<String> kotlin, Condition when) {
+    public record CompilerArgs(List<String> javac, List<String> kotlin, List<String> ksp, Condition when) {
         public CompilerArgs {
             javac = javac == null ? List.of() : List.copyOf(javac);
             kotlin = kotlin == null ? List.of() : List.copyOf(kotlin);
+            ksp = ksp == null ? List.of() : List.copyOf(ksp);
+        }
+
+        /** Back-compat (pre-{@code ksp}). */
+        public CompilerArgs(List<String> javac, List<String> kotlin, Condition when) {
+            this(javac, kotlin, List.of(), when);
         }
     }
 

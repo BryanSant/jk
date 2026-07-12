@@ -272,9 +272,11 @@ public final class PluginManifests {
             String where = displayPath + ".contribute.compiler-args";
             List<String> javac = stringList(t, "javac", where);
             List<String> kotlin = stringList(t, "kotlin", where);
+            List<String> ksp = stringList(t, "ksp", where);
             for (String arg : javac) Interpolation.validate(arg, schemaKeys, where + ".javac");
             for (String arg : kotlin) Interpolation.validate(arg, schemaKeys, where + ".kotlin");
-            compilerArgs.add(new PluginManifest.CompilerArgs(javac, kotlin, parseCondition(t, where)));
+            for (String arg : ksp) Interpolation.validate(arg, schemaKeys, where + ".ksp");
+            compilerArgs.add(new PluginManifest.CompilerArgs(javac, kotlin, ksp, parseCondition(t, where)));
         }
 
         List<PluginManifest.KotlinPlugin> kotlinPlugins = new ArrayList<>();

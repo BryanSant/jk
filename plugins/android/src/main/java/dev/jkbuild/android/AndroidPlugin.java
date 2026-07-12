@@ -84,6 +84,19 @@ public final class AndroidPlugin implements Plugin, BuildPlugin {
                     .contributesSources("gen")
                     .run(BuildConfigStep::run));
         }
+        if (ctx.config().bool("hilt", false) && !library) {
+            // Hilt unmodified-source parity (android-plan Phase 5, blocker 4): rewrite
+            // @AndroidEntryPoint/@HiltAndroidApp superclasses to the KSP-generated Hilt_*
+            // bases — the transform AGP's Hilt plugin runs, over the generic classes-transform
+            // SPI. Dex consumes the transformed dir (its In.classes() reads the replacement).
+            ctx.step(StepSpec.named("android-hilt-transform")
+                    .after(Anchor.COMPILE)
+                    .before(Anchor.PACKAGE)
+                    .inputs(In.classes(), In.config())
+                    .outputs("classes")
+                    .transformsClasses("classes")
+                    .run(HiltTransformStep::run));
+        }
         if (library) {
             // A library packages an AAR (classes.jar without R classes + raw res + merged
             // manifest + R.txt) and is never dexed or deployed — consumers dex it.

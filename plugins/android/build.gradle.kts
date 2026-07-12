@@ -16,6 +16,8 @@ dependencies {
     // The plugin's own signing library — bundled into the worker fat jar exactly the way
     // a third-party plugin ships its private deps. Never touches the engine classpath.
     implementation("com.android.tools.build:apksig:8.7.3")
+    // ASM, for the Hilt superclass transform (android-hilt-transform) — same bundling story.
+    implementation("org.ow2.asm:asm:9.8")
 }
 
 // Fat JAR: bundle the runtime closure (plugin-api + model + apksig) so the worker runs as `java -jar`.

@@ -87,7 +87,30 @@ public final class PluginBuild {
             List<String> contributesClasses,
             List<String> contributesResources,
             List<String> contributesSources,
-            List<String> contributesTestClasspath) {}
+            List<String> contributesTestClasspath,
+            /** The classes-replacing output dir ({@code StepSpec.transformsClasses}), or null. */
+            String transformsClasses) {
+
+        /** Back-compat (pre-transformsClasses describe lines). */
+        public StepDecl(
+                String name,
+                String after,
+                String before,
+                List<String> inputs,
+                List<String> outputs,
+                List<String> contributesClasses,
+                List<String> contributesResources,
+                List<String> contributesSources,
+                List<String> contributesTestClasspath) {
+            this(name, after, before, inputs, outputs, contributesClasses, contributesResources,
+                    contributesSources, contributesTestClasspath, null);
+        }
+
+        /** True when this step replaces the module's classes dir downstream. */
+        public boolean transforms() {
+            return transformsClasses != null && !transformsClasses.isBlank();
+        }
+    }
 
     /** The registered packager, as declared. */
     public record PackagerDecl(String name, List<String> inputs) {}
@@ -178,7 +201,8 @@ public final class PluginBuild {
                             Ndjson.strArray(line, "contributesClasses"),
                             Ndjson.strArray(line, "contributesResources"),
                             Ndjson.strArray(line, "contributesSources"),
-                            Ndjson.strArray(line, "contributesTestClasspath")));
+                            Ndjson.strArray(line, "contributesTestClasspath"),
+                            Ndjson.str(line, "transformsClasses")));
                 case "packager" ->
                     packager = new PackagerDecl(Ndjson.str(line, "name"), Ndjson.strArray(line, "inputs"));
                 case "verb" ->

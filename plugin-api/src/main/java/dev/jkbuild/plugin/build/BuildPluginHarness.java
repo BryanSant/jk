@@ -127,6 +127,8 @@ public final class BuildPluginHarness {
                     .append(quoteArray(step.sourcesContributions()))
                     .append(",\"contributesTestClasspath\":")
                     .append(quoteArray(step.testClasspathContributions()))
+                    .append(",\"transformsClasses\":")
+                    .append(Ndjson.quote(step.classesTransform() == null ? "" : step.classesTransform()))
                     .append('}');
             out.emit(b.toString());
         }

@@ -515,9 +515,10 @@ public final class BuildPipeline {
 
         // ---- plugin steps (build-plugins plan §3.2) ----------------------
         List<Phase> pluginSteps = new ArrayList<>();
+        PluginBuild.StepDecl transform = transformStep(pluginDeclsF);
         if (pluginDeclsF != null) {
             for (PluginBuild.StepDecl step : pluginDeclsF.steps()) {
-                pluginSteps.add(pluginStepPhase(cx, pluginActiveF, step));
+                pluginSteps.add(pluginStepPhase(cx, pluginActiveF, step, transform));
             }
         }
 
@@ -1050,6 +1051,14 @@ public final class BuildPipeline {
                     cmd.add("-jvm-target=" + CompileSupport.kotlinJvmTarget(ctx.require(RELEASE)));
                     cmd.add("-jdk-home=" + javaHome.toAbsolutePath());
                     cmd.add("-libraries=" + joinPaths(libs, sep));
+                    // Plugin-contributed processor options ([[contribute.compiler-args]] ksp —
+                    // Hilt's superclass-validation toggle). KSP's map syntax joins entries with
+                    // the platform path separator, same as its list args.
+                    List<String> kspOptions = dev.jkbuild.plugin.manifest.PluginContributions.kspOptions(
+                            project, in.dir(), lockModules(ctx.require(LOCKFILE)));
+                    if (!kspOptions.isEmpty()) {
+                        cmd.add("-processor-options=" + String.join(sep, kspOptions));
+                    }
                     // The trailing processor classpath is the WHOLE [processor-dependencies]
                     // closure — a provider jar (room-compiler) loads its own deps from it.
                     cmd.add(joinPaths(processorCp, sep));
@@ -1920,7 +1929,56 @@ public final class BuildPipeline {
         return "compile".equals(step.before()) || !step.contributesSources().isEmpty();
     }
 
-    private static Phase pluginStepPhase(StepContext cx, PluginBuild.Active active, PluginBuild.StepDecl step) {
+    /**
+     * The (at most one) declared step whose output <em>replaces</em> the module's classes dir
+     * ({@code StepSpec.transformsClasses} — bytecode weaving). Validated here so a bad declaration
+     * fails the build's construction, not mid-run: the transform runs in the COMPILE→PACKAGE
+     * window, consumes {@code In.classes()}, replaces rather than merges (no {@code contributes*}),
+     * and its dir is a declared output. Two transforms are an error, not a priority — the plugin
+     * ground rules.
+     */
+    static PluginBuild.StepDecl transformStep(PluginBuild.Declarations decls) {
+        if (decls == null) return null;
+        PluginBuild.StepDecl transform = null;
+        for (PluginBuild.StepDecl s : decls.steps()) {
+            if (!s.transforms()) continue;
+            if (transform != null) {
+                throw new IllegalStateException("plugin steps " + transform.name() + " and " + s.name()
+                        + " both declare transformsClasses — at most one step may replace the classes dir"
+                        + " (conflicts are errors, not priorities)");
+            }
+            if (beforeCompile(s)) {
+                throw new IllegalStateException("plugin step " + s.name()
+                        + " declares transformsClasses but runs before compile — a transform rewrites"
+                        + " compiled classes (after COMPILE, before PACKAGE)");
+            }
+            if (!"package".equals(s.before())) {
+                throw new IllegalStateException("plugin step " + s.name()
+                        + " declares transformsClasses but not before(PACKAGE) — the transform must"
+                        + " finish before anything consumes the replaced classes");
+            }
+            if (!s.inputs().contains("classes")) {
+                throw new IllegalStateException("plugin step " + s.name()
+                        + " declares transformsClasses but not In.classes() — the classes dir is what"
+                        + " it transforms");
+            }
+            if (!s.contributesClasses().isEmpty() || !s.contributesResources().isEmpty()
+                    || !s.contributesSources().isEmpty()) {
+                throw new IllegalStateException("plugin step " + s.name()
+                        + " declares transformsClasses and contributes* — a transform REPLACES the"
+                        + " classes dir; contributions merge, and the two don't compose");
+            }
+            if (!s.outputs().contains(s.transformsClasses())) {
+                throw new IllegalStateException("plugin step " + s.name() + " transformsClasses(\""
+                        + s.transformsClasses() + "\") must name a declared output dir");
+            }
+            transform = s;
+        }
+        return transform;
+    }
+
+    private static Phase pluginStepPhase(
+            StepContext cx, PluginBuild.Active active, PluginBuild.StepDecl step, PluginBuild.StepDecl transform) {
         Inputs in = cx.in();
         boolean beforeCompile = beforeCompile(step);
         if (beforeCompile && step.inputs().contains("classes")) {
@@ -1943,6 +2001,11 @@ public final class BuildPipeline {
         // window (build-plugins SPI: declared inputs ARE the dependency graph).
         for (String input : step.inputs()) {
             if (input.startsWith("step:")) requires.add("plugin-" + input.substring("step:".length()));
+        }
+        // Any other classes-consuming step reads MAIN_CLASSES, which the transform re-points —
+        // it must observe the transformed dir, never race the transform (dex after Hilt's rewrite).
+        if (transform != null && !step.name().equals(transform.name()) && step.inputs().contains("classes")) {
+            requires.add("plugin-" + transform.name());
         }
         return Phase.builder("plugin-" + step.name())
                 .label(step.name())
@@ -2014,6 +2077,9 @@ public final class BuildPipeline {
                     if (hit.isPresent()) {
                         try {
                             actionCache.restore(hit.get(), scratch);
+                            if (step.transforms()) {
+                                ctx.put(MAIN_CLASSES, scratch.resolve(step.transformsClasses()));
+                            }
                             ctx.label(step.name() + " up-to-date");
                             ctx.progress(1);
                             return;
@@ -2054,6 +2120,12 @@ public final class BuildPipeline {
                         Files.deleteIfExists(spec);
                     }
                     actionCache.store(taskId, actionKey, java.util.Map.of(), scratch);
+                    // A transform's output IS the classes dir from here on: re-point MAIN_CLASSES
+                    // so packaging, later steps' In.classes(), and the native tail read it
+                    // (ordering: consumers carry a requires edge on this phase).
+                    if (step.transforms()) {
+                        ctx.put(MAIN_CLASSES, scratch.resolve(step.transformsClasses()));
+                    }
                     ctx.progress(1);
                 })
                 .build();

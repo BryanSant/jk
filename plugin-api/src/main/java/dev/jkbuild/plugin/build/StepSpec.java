@@ -32,6 +32,7 @@ public final class StepSpec {
     private final List<String> contributesResources = new ArrayList<>();
     private final List<String> contributesSources = new ArrayList<>();
     private final List<String> contributesTestClasspath = new ArrayList<>();
+    private String transformsClasses;
     private Body body;
 
     private StepSpec(String name) {
@@ -91,6 +92,22 @@ public final class StepSpec {
         return this;
     }
 
+    /**
+     * Declare {@code relDir} (a declared output) as the module's classes-dir <em>replacement</em>:
+     * everything downstream of this step — packaging, later steps' {@link In#classes()}, the
+     * native-image classpath — sees {@code relDir} instead of the compiler's output. The step must
+     * run in the COMPILE→PACKAGE window, declare {@link In#classes()} (the dir it transforms), and
+     * copy through every class it doesn't rewrite: the output IS the classes dir afterwards. At
+     * most one step per build may transform — a second declaration is an error, not a priority
+     * (bytecode weaving: Hilt's superclass rewrite, OTel agents' build-time weaving, entity
+     * enhancement). Unit tests run against the untransformed classes (they execute before
+     * packaging); a transform is an artifact-shaping step, not a test fixture.
+     */
+    public StepSpec transformsClasses(String relDir) {
+        this.transformsClasses = relDir;
+        return this;
+    }
+
     public StepSpec run(Body body) {
         this.body = body;
         return this;
@@ -130,6 +147,11 @@ public final class StepSpec {
 
     public List<String> testClasspathContributions() {
         return List.copyOf(contributesTestClasspath);
+    }
+
+    /** The classes-replacing output dir ({@link #transformsClasses}), or null. */
+    public String classesTransform() {
+        return transformsClasses;
     }
 
     public Body body() {
