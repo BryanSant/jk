@@ -134,6 +134,44 @@ public final class GlobalConfig {
         return "true".equalsIgnoreCase(value) ? true : "false".equalsIgnoreCase(value) ? false : fallback;
     }
 
+    /**
+     * {@code [toolchain].jdk} — the JDK that hosts the jk build engine, pinned by vendor+major (e.g.
+     * {@code "temurin-25"}). This is deliberately separate from a project's {@code [project].jdk}:
+     * one engine serves many workspaces, and the engine's AOT cache is only valid for one JDK
+     * identity, so the engine JVM is pinned independently. Empty when unset — the caller then
+     * defaults to the LTS Temurin at the engine's floor release.
+     *
+     * <p>Resolution order: {@code JK_ENGINE_JDK} env var → {@code [toolchain].jdk} → empty. Read via
+     * {@link TomlScan} (client-reachable, no tomlj) and memoized like {@link #booleanFromGlobal}.
+     */
+    public static Optional<String> engineJdkPin() {
+        return engineJdkPin(JkDirs.userConfigFile(), System.getenv("JK_ENGINE_JDK"));
+    }
+
+    /** As {@link #engineJdkPin()} but against an explicit config file + env value — for tests. */
+    static Optional<String> engineJdkPin(Path file, String envValue) {
+        if (envValue != null && !envValue.isBlank()) return Optional.of(envValue.trim());
+        return stringFromGlobal(file, "toolchain", "jdk");
+    }
+
+    /** Read a single string value from an arbitrary {@code [table].key}, leniently, via TomlScan. */
+    private static Optional<String> stringFromGlobal(Path file, String table, String key) {
+        if (file == null) return Optional.empty();
+        String dotted = table + "." + key;
+        String cacheKey;
+        try {
+            if (!java.nio.file.Files.exists(file)) return Optional.empty();
+            var attrs = java.nio.file.Files.readAttributes(
+                    file, java.nio.file.attribute.BasicFileAttributes.class);
+            cacheKey = file + "|" + dotted + "|" + attrs.size() + "|" + attrs.lastModifiedTime().toMillis();
+        } catch (java.io.IOException e) {
+            return Optional.empty();
+        }
+        return SCAN_CACHE.computeIfAbsent(cacheKey, k -> Optional.ofNullable(TomlScan.scan(file, dotted).get(dotted)))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty());
+    }
+
     private static final ConcurrentHashMap<String, Optional<String>> SCAN_CACHE = new ConcurrentHashMap<>();
 
     // ~/.jk/config.toml is process-stable but was re-parsed on every nerdfont()/repositories() call

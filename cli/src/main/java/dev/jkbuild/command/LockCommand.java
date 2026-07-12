@@ -139,6 +139,9 @@ public final class LockCommand implements CliCommand {
             return dev.jkbuild.cli.engine.InProcessEngine.require()
                     .lockInProcess(dir, cache, mode, live, features, noDefaultFeatures, sources, repoUrl);
         }
+        // Optimize/start the engine before the Lock goal console so a one-time AOT training shows the
+        // "Engine — optimizing…" wedge first, then the Lock TUI takes over (never interleaved).
+        dev.jkbuild.cli.engine.EnginePrewarm.ensure();
         return live ? runHostedLive(dir, cache, mode) : runHostedPlain(dir, cache, mode);
     }
 

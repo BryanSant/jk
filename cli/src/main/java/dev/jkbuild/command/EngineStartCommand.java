@@ -41,7 +41,7 @@ public final class EngineStartCommand implements CliCommand {
                 .map(h -> Jk.VERSION.equals(h.version()))
                 .orElse(false);
         try {
-            EngineClient.Handshake hs = EngineClient.ensureRunning(paths, Jk.VERSION);
+            EngineClient.Handshake hs = EngineClient.ensureReady(paths, Jk.VERSION);
             CliOutput.out(alreadyUp
                     ? "jk engine: already running (pid " + hs.pid() + ")"
                     : "jk engine: started (pid " + hs.pid() + ")");

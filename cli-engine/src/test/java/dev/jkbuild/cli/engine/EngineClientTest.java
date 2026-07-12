@@ -212,7 +212,7 @@ class EngineClientTest {
         startInBackground(server);
         waitUntil(Duration.ofSeconds(5), () -> Files.exists(p.socket()));
 
-        EngineClient.Handshake hs = EngineClient.ensureRunning(p, "3.3.3", Duration.ofSeconds(2));
+        EngineClient.Handshake hs = EngineClient.ensureRunning(p, "3.3.3");
         assertThat(hs.version()).isEqualTo("3.3.3");
 
         server.close();
