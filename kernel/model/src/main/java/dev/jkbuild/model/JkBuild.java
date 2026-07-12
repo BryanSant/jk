@@ -576,14 +576,25 @@ public record JkBuild(
      * built worker jar must be handed to this module's test JVM (as {@code -Djk.<worker>.worker.jar})
      * so tests that fork that worker locate it by path. Also implicitly {@code orderAfter} (the
      * worker must be built first).
+     *
+     * <p>{@code kotlinPlugins} ({@code [[kotlin-plugins]]}) are project-declared Kotlin compiler
+     * plugins; see {@link KotlinPluginDecl}.
      */
-    public record Build(List<String> orderAfter, List<String> testWorkerJars, boolean lint) {
+    public record Build(
+            List<String> orderAfter, List<String> testWorkerJars, boolean lint,
+            List<KotlinPluginDecl> kotlinPlugins) {
 
-        public static final Build EMPTY = new Build(List.of(), List.of(), true);
+        public static final Build EMPTY = new Build(List.of(), List.of(), true, List.of());
 
         public Build {
             orderAfter = orderAfter == null ? List.of() : List.copyOf(orderAfter);
             testWorkerJars = testWorkerJars == null ? List.of() : List.copyOf(testWorkerJars);
+            kotlinPlugins = kotlinPlugins == null ? List.of() : List.copyOf(kotlinPlugins);
+        }
+
+        /** Back-compat (pre-{@code [[kotlin-plugins]]}). */
+        public Build(List<String> orderAfter, List<String> testWorkerJars, boolean lint) {
+            this(orderAfter, testWorkerJars, lint, List.of());
         }
 
         /**
@@ -605,6 +616,18 @@ public record JkBuild(
             var all = new java.util.LinkedHashSet<>(orderAfter);
             all.addAll(testWorkerJars);
             return List.copyOf(all);
+        }
+    }
+
+    /**
+     * A project-declared Kotlin compiler plugin ({@code [[kotlin-plugins]]}): {@code coordinate}
+     * is {@code group:artifact[:version]} — version omitted means "match the project's Kotlin
+     * version" (the serialization/allopen convention); {@code id} defaults to the artifact name.
+     */
+    public record KotlinPluginDecl(String id, String coordinate, List<String> options) {
+        public KotlinPluginDecl {
+            Objects.requireNonNull(coordinate, "coordinate");
+            options = options == null ? List.of() : List.copyOf(options);
         }
     }
 

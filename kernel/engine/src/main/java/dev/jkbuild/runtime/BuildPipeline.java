@@ -2863,6 +2863,19 @@ public final class BuildPipeline {
                                 + use.version() + ") — a plugin contribution requires it"));
                 ktPlugins.add(new KotlincRequest.Plugin(use.id(), jar, use.options()));
             }
+            // Project-declared [[kotlin-plugins]] (serialization et al.) ride the same lane;
+            // an omitted coordinate version means "match the compiler" — the org.jetbrains.kotlin
+            // plugin convention, and the only version that can load into this kotlinc anyway.
+            for (var decl : ctx.require(PROJECT).build().kotlinPlugins()) {
+                String[] parts = decl.coordinate().split(":");
+                String version = parts.length == 3 ? parts[2] : pluginVersion;
+                Path jar = repos.tryFetchArtifact(dev.jkbuild.model.Coordinate.of(parts[0], parts[1], version))
+                        .map(hit -> hit.fetched().cachePath())
+                        .orElseThrow(() -> new RuntimeException("cannot fetch the " + decl.id()
+                                + " Kotlin compiler plugin (" + parts[0] + ":" + parts[1] + ":" + version
+                                + ") — declared under [[kotlin-plugins]]"));
+                ktPlugins.add(new KotlincRequest.Plugin(decl.id(), jar, decl.options()));
+            }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new RuntimeException("interrupted resolving the Kotlin compiler", e);

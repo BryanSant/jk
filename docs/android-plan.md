@@ -127,6 +127,24 @@ plugin surface in jk.toml (plugins can contribute them; projects can't yet); (3)
 needs a protoc tool step, natural as a jk plugin); (4) **Hilt unmodified-source parity**
 (the transform, above); (5) Robolectric completion (Roborazzi rides it); (6) lint v1 +
 baseline profiles (already Phase 5). None of these is architectural — the SPI held.
+
+**PHASE 5 IN PROGRESS** (2026-07-12, worktree-android-plugin) — burning down the blocker
+list in order:
+- **A5a — KMP/GMM resolution (blocker 1) LANDED** (fc70f871): marker-POM KMP roots
+  resolve Gradle-style — the .module sidecar picks the runtime variant for the build's
+  `org.gradle.jvm.environment` (android | standard-jvm, cross-fallback), dep edges
+  substitute the GMM target, the root locks as a POM-only alias. Plugins declare their
+  environment via `[contribute.resolution] jvm-environment` (android sets it). Fail-soft:
+  no marker / no .module = plain-Maven view. Proven against real Google Maven both ways.
+  Generic resolver win — server-side Kotlin (coroutines/ktor) gets correct variants too.
+- **A5b — project-declared Kotlin compiler plugins (blocker 2) LANDED**: `[[kotlin-plugins]]`
+  in jk.toml (`coordinate = "group:artifact[:version]"`, version defaults to the project's
+  Kotlin version — the org.jetbrains.kotlin plugin convention; optional `id`, `options`)
+  rides the same KotlincRequest.Plugin lane as manifest-contributed plugins, so it action-
+  caches identically. Deliberately core, not Android-specific — kotlinx-serialization is
+  the NiA driver, allopen/noarg/powerassert ride free. Acceptance: KotlinSerializationTest
+  compiles a `@Serializable` class against real Central and asserts the generated
+  `$serializer` class exists (the codegen only happens when the plugin actually loaded).
 Companion research: [android-gradle.md](./android-gradle.md).
 **Goal:** build, test, and ship a modern Android app (Compose-first, AGP-9-era baselines:
 compileSdk 37, minSdk 24+, Kotlin 2.3+, R8 full mode, AAB) with **no Gradle and no AGP**.

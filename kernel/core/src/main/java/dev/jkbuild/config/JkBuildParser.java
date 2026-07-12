@@ -160,6 +160,10 @@ public final class JkBuildParser {
         checkUnownedTables(result, moduleDir, plugins, installedManifests);
         deps = withPlatformContributions(deps, project, nativeConfig.isPresent(), pluginConfigs, installedManifests);
         JkBuild.Build build = parseBuild(result);
+        List<JkBuild.KotlinPluginDecl> kotlinPlugins = parseKotlinPlugins(result);
+        if (!kotlinPlugins.isEmpty()) {
+            build = new JkBuild.Build(build.orderAfter(), build.testWorkerJars(), build.lint(), kotlinPlugins);
+        }
         JkBuild.FormatConfig format = parseFormat(result);
         return new JkBuild(
                 project, deps, repos, profiles, features, workspace, manifest, plugins, application, nativeConfig,
@@ -1200,7 +1204,8 @@ public final class JkBuildParser {
                 "jvm",
                 "deny",
                 "config",
-                "forge"));
+                "forge",
+                "kotlin-plugins"));
         for (Scope scope : Scope.values()) out.add(scope.tomlSection()); // [dependencies] + scoped spellings
         return java.util.Set.copyOf(out);
     }
@@ -1328,7 +1333,48 @@ public final class JkBuildParser {
         // `lint` defaults on (surface deprecation/unchecked); `lint = false`
         // suppresses jk's default javac lint flags for users who don't want it.
         boolean lint = !Boolean.FALSE.equals(build.getBoolean("lint"));
-        return new JkBuild.Build(orderAfter, testWorkerJars, lint);
+        return new JkBuild.Build(orderAfter, testWorkerJars, lint, List.of());
+    }
+
+    /**
+     * {@code [[kotlin-plugins]]} — project-declared Kotlin compiler plugins (android-plan Phase 5:
+     * kotlinx-serialization et al.). {@code coordinate} is {@code group:artifact[:version]}; an
+     * omitted version means "match the project's Kotlin version" (the convention every
+     * org.jetbrains.kotlin plugin follows). {@code id} defaults to the artifact; {@code options}
+     * pass through to the compiler plugin verbatim.
+     */
+    private static List<JkBuild.KotlinPluginDecl> parseKotlinPlugins(TomlTable root) {
+        TomlArray arr = root.getArray("kotlin-plugins");
+        if (arr == null) return List.of();
+        List<JkBuild.KotlinPluginDecl> out = new ArrayList<>();
+        for (int i = 0; i < arr.size(); i++) {
+            if (!(arr.get(i) instanceof TomlTable t)) {
+                throw new JkBuildParseException("[[kotlin-plugins]] entries must be tables");
+            }
+            String coordinate = t.getString("coordinate");
+            if (coordinate == null || coordinate.isBlank()) {
+                throw new JkBuildParseException("[[kotlin-plugins]] requires a `coordinate`"
+                        + " (group:artifact[:version]; version defaults to the project's Kotlin version)");
+            }
+            String[] parts = coordinate.split(":");
+            if (parts.length < 2 || parts.length > 3 || parts[0].isBlank() || parts[1].isBlank()) {
+                throw new JkBuildParseException(
+                        "[[kotlin-plugins]] coordinate must be group:artifact[:version] — got: " + coordinate);
+            }
+            String id = t.getString("id");
+            List<String> options = new ArrayList<>();
+            TomlArray opts = t.getArray("options");
+            if (opts != null) {
+                for (int j = 0; j < opts.size(); j++) {
+                    if (!(opts.get(j) instanceof String o)) {
+                        throw new JkBuildParseException("[[kotlin-plugins]].options must be an array of strings");
+                    }
+                    options.add(o);
+                }
+            }
+            out.add(new JkBuild.KotlinPluginDecl(id == null || id.isBlank() ? parts[1] : id, coordinate, options));
+        }
+        return out;
     }
 
     private static final java.util.Set<String> PLUGIN_RESERVED = java.util.Set.of("group", "name", "version");
