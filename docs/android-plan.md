@@ -170,6 +170,30 @@ list in order:
   Acceptance: ShrinkPluginTest — the shrunk jar RUNS and dead library code is verifiably
   absent. Remaining Phase-5 blockers: (5) Robolectric binary-resources completion,
   (6) lint v1 + baseline profiles — then the full NiA build.
+- **A5e — the live NiA :core:* build attempt (2026-07-12, uncommitted sweep harness;
+  clone + hand-written per-module jk.tomls in the session scratchpad).** TEN of twelve
+  :core modules build green: model, common, datastore-proto, network, database,
+  datastore, notifications, analytics, data (7-sibling AAR aggregator), domain —
+  covering GMM/KMP variant selection, [[kotlin-plugins]] serialization, KSP2 Room
+  (auto-migrations via [build] ksp-options) + Hilt, the protobuf plugin's Kotlin DSL,
+  workspace AAR composition with non-transitive R, the androidx Compose BOM
+  ([platform-dependencies]) and a live @Composable compile (closing the Phase-2 recorded
+  gap), and custom BuildConfig fields. Eight product findings fixed en route (GMM
+  attribute-less variants; protobuf --kotlin_out + contributed-source mixed routing; AGP
+  src/main layout; build-config-fields; WorkspaceMerge dropping pluginConfigs/[build];
+  [build] ksp-options; kotlinc -module-name + IC-state config keying + the zero-output
+  cache guard; library manifests merging only themselves). Recorded deviations: Kotlin
+  ^2.4.0 (jk's BTA floor; NiA pins 2.3.0), compile-sdk 34 (warm test SDK; NiA pins 36).
+  **BLOCKER for the last two (designsystem, ui) — finding 9, open: cross-AAR resource
+  VALUE conflicts.** compose-ui and compose-foundation both ship string/autofill
+  translations; AGP resolves them in its dedicated resource merger (resource-level,
+  overlay priority, before one aapt2 link), while jk aapt2-compiles each dep's res
+  individually and links them as -R overlays — aapt2 hard-errors on conflicting values
+  across packages. The fix is a values-aware resource merge (parse values*.xml, merge
+  resource-by-resource in overlay order — app > deps in classpath order) feeding one
+  link; the non-transitive R story is unaffected (dep Rs already regenerate from R.txt
+  against final ids). This is the resource pipeline's largest remaining AGP-fidelity gap
+  and the next A5e work item; feature/* and :app follow it.
 Companion research: [android-gradle.md](./android-gradle.md).
 **Goal:** build, test, and ship a modern Android app (Compose-first, AGP-9-era baselines:
 compileSdk 37, minSdk 24+, Kotlin 2.3+, R8 full mode, AAB) with **no Gradle and no AGP**.
