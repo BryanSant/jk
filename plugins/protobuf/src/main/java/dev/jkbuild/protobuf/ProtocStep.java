@@ -38,6 +38,11 @@ final class ProtocStep {
                 .arg("-I")
                 .arg(protoDir.toAbsolutePath().toString())
                 .cwd(exec.moduleDir());
+        if (exec.config().bool("kotlin", false)) {
+            // The Kotlin DSL wraps the Java codegen (both land in gen; the engine's suffix
+            // unions route .java to javac and .kt to kotlinc).
+            run.arg("--kotlin_out=" + (lite ? "lite:" : "") + gen.toAbsolutePath());
+        }
         for (Path proto : protos) {
             run.arg(proto.toAbsolutePath().toString());
         }

@@ -440,6 +440,19 @@ public final class BuildPipeline {
         final PluginBuild.Declarations pluginDeclsF = pluginDecls;
         final Map<String, String> variantSecretsF = variantSecrets;
 
+        // Plugin-contributed generated sources can be Java even in a Kotlin-only module
+        // (protoc's --kotlin_out DSL wraps its own --java_out classes) — same mixed-pipeline
+        // routing the KSP/Hilt case above takes, decided here because the declarations only
+        // exist after the describe round.
+        if (useKotlin && !useJava && pluginDecls != null) {
+            for (PluginBuild.StepDecl step : pluginDecls.steps()) {
+                if (!step.contributesSources().isEmpty()) {
+                    useJava = true;
+                    break;
+                }
+            }
+        }
+
         // Effectively-final copies for the phase lambdas.
         final boolean mixedWithJava = useJava;
         final boolean compact = compactLayout;
@@ -1115,12 +1128,22 @@ public final class BuildPipeline {
      * extending a generated base must resolve it during Kotlin analysis).
      */
     private static List<Path> kotlinJavaSourceRoots(
-            boolean mixedWithJava, boolean compact, Path dir, BuildLayout layout) {
+            boolean mixedWithJava, boolean compact, Path dir, BuildLayout layout, PluginBuild.Declarations decls) {
         if (!mixedWithJava) return null;
         List<Path> roots = new ArrayList<>();
         roots.add(compact ? dir.resolve("src") : dir.resolve("src/main/java"));
         Path kspJava = kspOutBase(layout).resolve("java");
         if (Files.isDirectory(kspJava)) roots.add(kspJava);
+        // Plugin-contributed generated dirs can carry Java that Kotlin sources reference
+        // (protoc: the --kotlin_out DSL wraps its own --java_out message classes).
+        if (decls != null) {
+            for (PluginBuild.StepDecl step : decls.steps()) {
+                for (String rel : step.contributesSources()) {
+                    Path contributed = PluginBuild.stepScratch(layout, step.name()).resolve(rel);
+                    if (Files.isDirectory(contributed)) roots.add(contributed);
+                }
+            }
+        }
         return roots;
     }
 
@@ -1465,7 +1488,7 @@ public final class BuildPipeline {
                             taskId,
                             workingDir,
                             kotlinJavaSourceRoots(
-                                    mixedWithJava, compact, in.dir(), ctx.require(LAYOUT)));
+                                    mixedWithJava, compact, in.dir(), ctx.require(LAYOUT), pluginDecls));
                     if (!kr.success()) {
                         ctx.error("kotlinc", kr.output());
                         throw new RuntimeException("kotlinc reported errors");

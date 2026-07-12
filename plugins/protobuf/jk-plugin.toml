@@ -17,7 +17,8 @@ protocol-prefix = "##JKPB:"
 [schema]
 version = { type = "string", required = true, example = "4.33.1", hint = "the protoc release to run (pins com.google.protobuf:protoc in jk.lock)" }
 src     = { type = "string", default = "proto" }   # proto source dir, module-relative
-lite    = { type = "bool", default = false }       # java_out lite runtime (Android/datastore posture)
+lite    = { type = "bool", default = false }       # lite-runtime codegen (Android/datastore posture)
+kotlin  = { type = "bool", default = false }       # also emit Kotlin DSL codegen (--kotlin_out; pairs with protobuf-kotlin[-lite])
 
 # protoc ships as a per-OS/arch native binary published straight to Maven (no jar
 # wrapper) — ${host.os-arch} picks the classifier, @exe the packaging.
