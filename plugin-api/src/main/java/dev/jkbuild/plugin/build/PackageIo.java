@@ -30,6 +30,9 @@ public interface PackageIo {
 
     Path classesDir();
 
+    /** The module's project dir — for packager inputs declared as {@link In#projectFiles}. */
+    Path moduleDir();
+
     /** Lock-ordered production RUNTIME entries — {@link In#runtimeEntries()}. */
     List<RuntimeEntry> runtimeEntries();
 

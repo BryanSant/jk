@@ -87,7 +87,6 @@ final class ShrunkJarPackager {
                     .arg("--pg-conf")
                     .arg(rules.toString());
             // Project rule files ride as further --pg-conf entries (already declared inputs).
-            Path moduleRoot = io.classesDir(); // rule paths are project-relative; see below
             for (String rel : io.config().stringList("keep-files")) {
                 run.arg("--pg-conf").arg(projectFile(io, rel).toString());
             }
@@ -114,11 +113,7 @@ final class ShrunkJarPackager {
 
     /** A project-relative path for a declared keep-file. */
     private static Path projectFile(PackageIo io, String rel) {
-        // classesDir is <module>/target/classes; the module root is two levels up. The SPI has
-        // no moduleDir on PackageIo yet — this derivation is the one piece of layout knowledge
-        // here, worth an SPI addition if a second packager needs project files.
-        Path moduleDir = io.classesDir().getParent().getParent();
-        Path file = moduleDir.resolve(rel);
+        Path file = io.moduleDir().resolve(rel);
         if (!Files.isRegularFile(file)) {
             throw new IllegalStateException("[shrink] keep-files entry not found: " + rel);
         }

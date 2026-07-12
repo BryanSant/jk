@@ -448,6 +448,11 @@ public final class BuildPluginHarness {
         }
 
         @Override
+        public Path moduleDir() {
+            return spec.moduleDir();
+        }
+
+        @Override
         public List<RuntimeEntry> runtimeEntries() {
             return spec.entries();
         }

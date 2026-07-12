@@ -74,6 +74,14 @@ class HiltTransformTest {
         // Untouched classes copied through (the transform output IS the classes dir).
         assertThat(transformed.resolve("com/example/hilttx/GreetingRepo.class")).exists();
 
+        // Receiver-shaped entry point: superclass swapped AND super.onReceive(context, intent)
+        // injected at the start of the override (the generated base's onReceive is the injector).
+        Path receiver = transformed.resolve("com/example/hilttx/PingReceiver.class");
+        assertThat(superOf(receiver)).isEqualTo("com/example/hilttx/Hilt_PingReceiver");
+        assertThat(callsSuperOnReceive(receiver, "com/example/hilttx/Hilt_PingReceiver"))
+                .as("super.onReceive injected into the receiver's override")
+                .isTrue();
+
         // The compiler's own output kept the natural hierarchy — only the replacement rewrote.
         assertThat(superOf(findClass(project.resolve("target"), "classes", "MainActivity.class")))
                 .isNotEqualTo("com/example/hilttx/Hilt_MainActivity");
@@ -84,6 +92,18 @@ class HiltTransformTest {
 
     private static String superOf(Path classFile) throws Exception {
         return ClassFile.of().parse(Files.readAllBytes(classFile)).superclass().orElseThrow().asInternalName();
+    }
+
+    /** Does the class's {@code onReceive} invokespecial {@code owner.onReceive}? */
+    private static boolean callsSuperOnReceive(Path classFile, String owner) throws Exception {
+        return ClassFile.of().parse(Files.readAllBytes(classFile)).methods().stream()
+                .filter(m -> m.methodName().equalsString("onReceive"))
+                .flatMap(m -> m.code().stream())
+                .flatMap(java.lang.classfile.CodeModel::elementStream)
+                .anyMatch(el -> el instanceof java.lang.classfile.instruction.InvokeInstruction inv
+                        && inv.opcode() == java.lang.classfile.Opcode.INVOKESPECIAL
+                        && inv.owner().asInternalName().equals(owner)
+                        && inv.name().equalsString("onReceive"));
     }
 
     /** The first {@code name} match anywhere under {@code root/subdir} (the compiler's own output). */
@@ -180,6 +200,25 @@ class HiltTransformTest {
 
                     override fun onCreate(savedInstanceState: Bundle?) {
                         super.onCreate(savedInstanceState)
+                        repo.describe()
+                    }
+                }
+                """);
+        Files.writeString(src.resolve("PingReceiver.kt"), """
+                package com.example.hilttx
+
+                import android.content.BroadcastReceiver
+                import android.content.Context
+                import android.content.Intent
+                import dagger.hilt.android.AndroidEntryPoint
+                import javax.inject.Inject
+
+                @AndroidEntryPoint
+                class PingReceiver : BroadcastReceiver() {
+
+                    @Inject lateinit var repo: GreetingRepo
+
+                    override fun onReceive(context: Context, intent: Intent) {
                         repo.describe()
                     }
                 }

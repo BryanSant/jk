@@ -25,11 +25,12 @@ import org.objectweb.asm.Opcodes;
  *
  * <p>Every class copies through; only annotated classes whose superclass isn't already a
  * {@code Hilt_*} base rewrite (the plugin-less spelling keeps working unchanged). The rewrite is
- * the superclass reference plus the {@code invokespecial <init>} owner in constructors — method
- * bodies otherwise keep their shape, so no frame recomputation is needed. Recorded gap:
- * {@code @AndroidEntryPoint} BroadcastReceivers additionally need an injected
- * {@code onReceive} super-call (AGP's transform special-cases them); receivers keep the
- * plugin-less spelling until demanded.
+ * the superclass reference plus the {@code invokespecial <init>} owner in constructors; for
+ * BroadcastReceivers — detected by the generated base declaring {@code onReceive(Context,
+ * Intent)}, injection's trigger there — a {@code super.onReceive(context, intent)} call is
+ * additionally injected at the start of the subclass's own {@code onReceive} override (AGP's
+ * transform does the same; the generated base's inject is guarded, so a manual super call stays
+ * harmless).
  */
 final class HiltTransformStep {
 
@@ -74,15 +75,40 @@ final class HiltTransformStep {
             return null; // already extends the generated base (plugin-less mode)
         }
         String newSuper = pkg + "Hilt_" + simple;
-        if (!Files.isRegularFile(classesDir.resolve(newSuper + ".class"))) {
+        Path generatedBase = classesDir.resolve(newSuper + ".class");
+        if (!Files.isRegularFile(generatedBase)) {
             throw new IllegalStateException("Hilt transform: " + name.replace('/', '.')
                     + " is annotated for injection but the generated base " + newSuper.replace('/', '.')
                     + " is missing — did the Hilt KSP processor run? (declare hilt-android-compiler"
                     + " under [processor-dependencies])");
         }
-        ClassWriter writer = new ClassWriter(reader, 0);
-        reader.accept(new SuperclassRewriter(writer, oldSuper, newSuper), 0);
+        // Receiver-shaped when the generated base declares onReceive — that's where Hilt puts
+        // the injection for BroadcastReceivers, and the subclass's override must call up into it.
+        boolean injectOnReceive = declaresOnReceive(Files.readAllBytes(generatedBase));
+        // COMPUTE_MAXS: the injected super-call needs stack for (this, context, intent), which
+        // an override's original frame may not have room for.
+        ClassWriter writer = new ClassWriter(reader, ClassWriter.COMPUTE_MAXS);
+        reader.accept(new SuperclassRewriter(writer, oldSuper, newSuper, injectOnReceive), 0);
         return writer.toByteArray();
+    }
+
+    private static final String ON_RECEIVE_DESC = "(Landroid/content/Context;Landroid/content/Intent;)V";
+
+    /** Does this class declare {@code onReceive(Context, Intent)}? */
+    private static boolean declaresOnReceive(byte[] classBytes) {
+        boolean[] found = {false};
+        new ClassReader(classBytes)
+                .accept(
+                        new ClassVisitor(Opcodes.ASM9) {
+                            @Override
+                            public MethodVisitor visitMethod(
+                                    int access, String name, String desc, String sig, String[] exceptions) {
+                                if ("onReceive".equals(name) && ON_RECEIVE_DESC.equals(desc)) found[0] = true;
+                                return null;
+                            }
+                        },
+                        ClassReader.SKIP_CODE | ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
+        return found[0];
     }
 
     /** Pass 1: does the class carry a Hilt entry-point annotation? (CLASS retention → invisible.) */
@@ -100,15 +126,21 @@ final class HiltTransformStep {
         }
     }
 
-    /** Pass 2: swap the superclass and re-own constructor {@code invokespecial <init>} calls. */
+    /**
+     * Pass 2: swap the superclass, re-own constructor {@code invokespecial <init>} calls, and —
+     * for receiver-shaped entry points — inject {@code super.onReceive(context, intent)} at the
+     * start of the subclass's own {@code onReceive} override.
+     */
     private static final class SuperclassRewriter extends ClassVisitor {
         private final String oldSuper;
         private final String newSuper;
+        private final boolean injectOnReceive;
 
-        SuperclassRewriter(ClassWriter writer, String oldSuper, String newSuper) {
+        SuperclassRewriter(ClassWriter writer, String oldSuper, String newSuper, boolean injectOnReceive) {
             super(Opcodes.ASM9, writer);
             this.oldSuper = oldSuper;
             this.newSuper = newSuper;
+            this.injectOnReceive = injectOnReceive;
         }
 
         @Override
@@ -119,16 +151,32 @@ final class HiltTransformStep {
         @Override
         public MethodVisitor visitMethod(int access, String name, String desc, String sig, String[] exceptions) {
             MethodVisitor mv = super.visitMethod(access, name, desc, sig, exceptions);
-            if (!"<init>".equals(name)) return mv;
-            return new MethodVisitor(Opcodes.ASM9, mv) {
-                @Override
-                public void visitMethodInsn(int opcode, String owner, String mName, String mDesc, boolean itf) {
-                    if (opcode == Opcodes.INVOKESPECIAL && owner.equals(oldSuper) && "<init>".equals(mName)) {
-                        owner = newSuper;
+            if ("<init>".equals(name)) {
+                return new MethodVisitor(Opcodes.ASM9, mv) {
+                    @Override
+                    public void visitMethodInsn(int opcode, String owner, String mName, String mDesc, boolean itf) {
+                        if (opcode == Opcodes.INVOKESPECIAL && owner.equals(oldSuper) && "<init>".equals(mName)) {
+                            owner = newSuper;
+                        }
+                        super.visitMethodInsn(opcode, owner, mName, mDesc, itf);
                     }
-                    super.visitMethodInsn(opcode, owner, mName, mDesc, itf);
-                }
-            };
+                };
+            }
+            if (injectOnReceive && "onReceive".equals(name) && ON_RECEIVE_DESC.equals(desc)) {
+                return new MethodVisitor(Opcodes.ASM9, mv) {
+                    @Override
+                    public void visitCode() {
+                        super.visitCode();
+                        // super.onReceive(context, intent) — runs the generated base's inject;
+                        // its injected-flag guard makes a manual super call harmless.
+                        super.visitVarInsn(Opcodes.ALOAD, 0);
+                        super.visitVarInsn(Opcodes.ALOAD, 1);
+                        super.visitVarInsn(Opcodes.ALOAD, 2);
+                        super.visitMethodInsn(Opcodes.INVOKESPECIAL, newSuper, "onReceive", ON_RECEIVE_DESC, false);
+                    }
+                };
+            }
+            return mv;
         }
     }
 }
