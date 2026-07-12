@@ -915,7 +915,9 @@ class EngineServerTest {
         serverThread.join(5_000);
         assertThat(serverThread.isAlive()).isFalse();
         assertThat(Files.exists(p.http())).isFalse(); // cleaned up with the other engine files
-        assertThat(Files.exists(p.httpToken())).isFalse();
+        // The token deliberately survives shutdown so an open dashboard tab stays valid across a
+        // restart (docs/http.md); only `jk engine rotate-token` removes it.
+        assertThat(Files.exists(p.httpToken())).isTrue();
     }
 
     @Test

@@ -421,6 +421,52 @@ class HttpEngineServerTest {
     }
 
     @Test
+    void adopts_an_existing_token_file_across_restarts() throws Exception {
+        // The token minted by the @BeforeEach engine must survive that engine stopping and a fresh
+        // one starting against the same token file — that's what keeps an open dashboard tab valid.
+        String original = token();
+        assertThat(original).isNotEmpty();
+        server.close();
+
+        HttpEngineServer restarted = new HttpEngineServer(
+                new JkHttpConfig("127.0.0.1", 0, 16, wwwRoot.toString()),
+                wwwRoot, tokenFile, logFile, "9.9.9-test", () -> SNAPSHOT, events, this::stubTrigger,
+                testJournal(), null);
+        try {
+            restarted.start();
+            assertThat(token()).isEqualTo(original); // file unchanged
+            HttpResponse<String> resp = client.send(
+                    HttpRequest.newBuilder(URI.create(restarted.url() + "api/fs?dir=" + stateDir))
+                            .header("Authorization", "Bearer " + original)
+                            .build(),
+                    HttpResponse.BodyHandlers.ofString());
+            assertThat(resp.statusCode()).isEqualTo(200); // the pre-restart token is still accepted
+        } finally {
+            restarted.close();
+        }
+    }
+
+    @Test
+    void mints_a_fresh_token_when_the_file_is_blank() throws Exception {
+        // A truncated/blank token file (e.g. after `jk engine rotate-token` deleted it, or a
+        // half-written file) is not usable — start must mint rather than serve with an empty secret.
+        String original = token();
+        server.close();
+        Files.writeString(tokenFile, "   \n");
+
+        HttpEngineServer restarted = new HttpEngineServer(
+                new JkHttpConfig("127.0.0.1", 0, 16, wwwRoot.toString()),
+                wwwRoot, tokenFile, logFile, "9.9.9-test", () -> SNAPSHOT, events, this::stubTrigger,
+                testJournal(), null);
+        try {
+            restarted.start();
+            assertThat(token()).isNotEmpty().isNotEqualTo(original);
+        } finally {
+            restarted.close();
+        }
+    }
+
+    @Test
     void non_loopback_bind_gates_api_reads_but_not_static() throws Exception {
         JkHttpConfig config = new JkHttpConfig("0.0.0.0", 0, 16, wwwRoot.toString());
         Path lanTokenFile = stateDir.resolve("lan.http-token");

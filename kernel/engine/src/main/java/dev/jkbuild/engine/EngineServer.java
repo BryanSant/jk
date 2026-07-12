@@ -3077,8 +3077,10 @@ public final class EngineServer implements AutoCloseable {
 
     private void cleanup() {
         if (httpServer != null) httpServer.close();
-        deleteQuietly(paths.http());
-        deleteQuietly(paths.httpToken());
+        deleteQuietly(paths.http()); // the live bound-URL file — stale once we stop
+        // The http token is deliberately NOT deleted: it persists across restarts so an open
+        // dashboard tab survives an upgrade/crash respawn (docs/http.md). `jk engine rotate-token`
+        // is the explicit way to invalidate it.
         if (idleTicker != null) idleTicker.shutdownNow();
         if (connectionExecutor != null) connectionExecutor.shutdown();
         try {
