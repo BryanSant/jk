@@ -90,6 +90,16 @@ tasks.withType<Test>().configureEach {
     doFirst { systemProperty("jk.protobuf.worker.jar", testProtobufWorkerJar.singleFile.absolutePath) }
 }
 
+// Pass the shrink worker jar to tests (the R8 shrunk-jar integration test forks it).
+val testShrinkWorkerJar by configurations.creating {
+    isCanBeConsumed = false; isCanBeResolved = true; isTransitive = false
+}
+dependencies { testShrinkWorkerJar(project(":shrink")) }
+tasks.withType<Test>().configureEach {
+    dependsOn(testShrinkWorkerJar)
+    doFirst { systemProperty("jk.shrink.worker.jar", testShrinkWorkerJar.singleFile.absolutePath) }
+}
+
 // Pass the kotlin-compiler worker jar to tests (the KSP/Room/Hilt gate compiles Kotlin).
 val testKotlinWorkerJar by configurations.creating {
     isCanBeConsumed = false; isCanBeResolved = true; isTransitive = false

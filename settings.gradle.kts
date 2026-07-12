@@ -109,6 +109,7 @@ include(
     ":spring-boot",    // spring-boot build plugin (AOT step + boot-jar packager)
     ":android",        // android build plugin (aapt2/R-gen, d8 dex, APK packager — the SPI stress test)
     ":protobuf",       // protobuf build plugin (protoc codegen before compile)
+    ":shrink",         // shrink build plugin (R8 --classfile slims the packaged jar)
     // Host + CLI
     ":engine-api",
     ":engine",
@@ -140,3 +141,4 @@ project(":formatter").projectDir      = file("plugins/formatter")
 project(":spring-boot").projectDir    = file("plugins/spring-boot")
 project(":android").projectDir        = file("plugins/android")
 project(":protobuf").projectDir       = file("plugins/protobuf")
+project(":shrink").projectDir         = file("plugins/shrink")

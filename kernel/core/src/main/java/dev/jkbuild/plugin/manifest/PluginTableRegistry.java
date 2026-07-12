@@ -29,8 +29,11 @@ import org.tomlj.TomlTable;
  */
 public final class PluginTableRegistry {
 
-    private static final List<String> BUILT_IN =
-            List.of("spring-boot.jk-plugin.toml", "android.jk-plugin.toml", "protobuf.jk-plugin.toml");
+    private static final List<String> BUILT_IN = List.of(
+            "spring-boot.jk-plugin.toml",
+            "android.jk-plugin.toml",
+            "protobuf.jk-plugin.toml",
+            "shrink.jk-plugin.toml");
 
     /**
      * A plugin's template/data resource, addressed relative to its manifest ({@code

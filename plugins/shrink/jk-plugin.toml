@@ -1,0 +1,38 @@
+# The built-in shrink build plugin's declarative manifest: R8 in --classfile mode over the
+# application + its runtime closure, packaged as a slim self-contained jar — the fat-jar
+# counterpart of Android's release shrinking, for CLI tools, functions, and services that
+# ship a single artifact. Deliberately opt-in ([shrink] present = on): reflection-heavy
+# frameworks need keep rules the user owns, and jk never guesses.
+
+[plugin]
+id        = "shrink"
+table     = "shrink"
+version   = "0.1.0"
+jk-compat = ">=0.10"
+
+[code]
+worker          = "jk-shrink"
+protocol-prefix = "##JKSH:"
+
+# The shrunk jar replaces the main artifact: one self-contained, host-runnable jar.
+[packaging]
+packager       = "shrunk-jar"
+exec-mode      = "jar"
+self-contained = true
+main-scan      = true
+
+[schema]
+# Newer than the android plugin's pin: --lib reads the running JDK's platform classes,
+# so the shrinker must parse the newest class-file version a jk toolchain provisions.
+r8-version = { type = "string", default = "8.13.19", hint = "the com.android.tools:r8 release to run (a plain JVM tool)" }
+keep       = { type = "string-list", default = [] }   # inline ProGuard keep rules
+keep-files = { type = "string-list", default = [] }   # project-relative rule files (proguard syntax)
+obfuscate  = { type = "bool", default = false }       # shrink-only by default: -dontobfuscate (JVM stack traces stay readable)
+
+# The r8 jar (D8/R8 share it — the exact artifact the android plugin pins), fetched
+# engine-side and handed to the packager by name. r8 publishes to Google Maven — a
+# [shrink] project declares it alongside central:
+#   google = "https://dl.google.com/dl/android/maven2/"
+[[contribute.packager-dependency]]
+artifact   = "r8"
+coordinate = "com.android.tools:r8:${config.r8-version}"

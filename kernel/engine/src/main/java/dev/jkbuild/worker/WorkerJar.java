@@ -41,7 +41,8 @@ public enum WorkerJar {
     FORMATTER("jk-formatter", "jk.formatter.worker.jar", ":formatter:installLocal"),
     SPRING_BOOT("jk-spring-boot", "jk.spring-boot.worker.jar", ":spring-boot:installLocal"),
     ANDROID("jk-android", "jk.android.worker.jar", ":android:installLocal"),
-    PROTOBUF("jk-protobuf", "jk.protobuf.worker.jar", ":protobuf:installLocal");
+    PROTOBUF("jk-protobuf", "jk.protobuf.worker.jar", ":protobuf:installLocal"),
+    SHRINK("jk-shrink", "jk.shrink.worker.jar", ":shrink:installLocal");
 
     private final String artifactId;
     private final String jarProperty;
