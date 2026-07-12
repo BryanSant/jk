@@ -103,13 +103,20 @@ public final class MavenPackageSource implements PackageSource {
 
     @Override
     public List<String> versions(String pkg) throws IOException, InterruptedException {
-        // BOM constraint: a user-declared platform BOM (or one it imports)
-        // pinned this coord to a specific version. Return that single
-        // version as the only candidate so PubGrub's "first satisfying
-        // version wins" loop picks it. If a transitive demands a range
-        // that excludes this version, PubGrub will surface a clean
-        // "constraint cannot hold" diagnostic — the intended behavior
-        // (Gradle-style BOM override of transitive at-least preferences).
+        // BOM constraint: a user-declared platform BOM (or one it imports) pinned this coord.
+        // Return that single version as the only candidate so PubGrub's "first satisfying
+        // version wins" loop picks it; a transitive that demands a range excluding the pin
+        // surfaces a clean "constraint cannot hold" diagnostic.
+        //
+        // KNOWN DIVERGENCE (android-plan A5e finding 13, parked): Gradle's platform() is a
+        // recommendation, not a ceiling — a stricter transitive floor lifts above the pin
+        // (navigation3 1.0.0 requires compose runtime-saveable >= 1.9.5 while the 2025.09
+        // compose BOM recommends 1.9.3; Gradle resolves it, jk currently reports the conflict).
+        // The decided semantics is the lockedVersionPrefs shape (full candidate list, pin
+        // first), but widening dozens of interlocking BOM-pinned packages sends the solver's
+        // unit propagation quadratic (hours on the androidx compose graph) — blocked on
+        // indexing incompatibilities by package in PubGrubSolver.propagate before the wide
+        // lists are viable. Failing fast with the diagnostic beats hanging until then.
         String pinned = bomConstraints.get(pkg);
         if (pinned != null) {
             List<String> singleton = List.of(pinned);

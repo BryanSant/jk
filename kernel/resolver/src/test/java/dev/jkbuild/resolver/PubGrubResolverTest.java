@@ -98,10 +98,16 @@ class PubGrubResolverTest {
 
     @Test
     void bom_pin_below_transitive_at_least_floor_is_unsatisfiable(@TempDir Path tempDir) throws Exception {
-        // root → middle@1.0 → leaf >= 1.5
-        // BOM pins leaf = 1.0 → can't satisfy >= 1.5. PubGrub diagnostic.
+        // root → middle@1.0 → leaf >= 1.5, BOM pins leaf = 1.0 → clean PubGrub diagnostic.
+        // KNOWN GRADLE DIVERGENCE (android-plan A5e finding 13, parked): Gradle's platform()
+        // is a recommendation and would lift leaf above the pin. jk's decided semantics is the
+        // same (pin-first candidate list, highest-wins on a lift), but wide candidate lists
+        // for BOM-pinned packages currently send the solver's unit propagation quadratic on
+        // real compose graphs — hard-pin + fail-fast holds until PubGrubSolver.propagate
+        // indexes incompatibilities by package. Flip this test to assert the lift (leaf 2.0)
+        // when that lands.
         serveMetadata("/com/foo/middle/maven-metadata.xml", "com.foo", "middle", List.of("1.0"));
-        serveMetadata("/com/foo/leaf/maven-metadata.xml", "com.foo", "leaf", List.of("1.0", "1.5"));
+        serveMetadata("/com/foo/leaf/maven-metadata.xml", "com.foo", "leaf", List.of("1.0", "1.5", "2.0"));
         servePom("com.foo", "middle", "1.0", """
                 <project>
                   <groupId>com.foo</groupId>
@@ -116,6 +122,7 @@ class PubGrubResolverTest {
                 """);
         servePom("com.foo", "leaf", "1.0", emptyPom("com.foo", "leaf", "1.0"));
         servePom("com.foo", "leaf", "1.5", emptyPom("com.foo", "leaf", "1.5"));
+        servePom("com.foo", "leaf", "2.0", emptyPom("com.foo", "leaf", "2.0"));
 
         RepoGroup repos = repoGroup(tempDir);
         Map<String, String> bom = Map.of("com.foo:leaf", "1.0");
