@@ -36,13 +36,19 @@ final class ManifestStep {
 
         Path merged = exec.outputDir("merged").resolve("AndroidManifest.xml");
 
-        // Library (AAR) manifests join the merge in classpath order — app first (--main wins),
-        // exactly AGP's precedence.
+        // Dependency (AAR) manifests join the merge in classpath order — app first (--main
+        // wins), exactly AGP's precedence. APP builds only: a library merges its OWN manifest
+        // (AGP semantics — the full closure merges once, at the consuming app; merging dep
+        // manifests into a library trips cross-library conflicts like androidx.startup's
+        // per-package InitializationProvider authorities).
+        boolean library = exec.config().bool("library", false);
         StringBuilder libs = new StringBuilder();
-        for (AndroidDeps.Aar aar : AndroidDeps.aars(exec.runtimeEntries())) {
-            if (!java.nio.file.Files.isRegularFile(aar.manifest())) continue;
-            if (libs.length() > 0) libs.append(java.io.File.pathSeparatorChar);
-            libs.append(aar.manifest().toAbsolutePath());
+        if (!library) {
+            for (AndroidDeps.Aar aar : AndroidDeps.aars(exec.runtimeEntries())) {
+                if (!java.nio.file.Files.isRegularFile(aar.manifest())) continue;
+                if (libs.length() > 0) libs.append(java.io.File.pathSeparatorChar);
+                libs.append(aar.manifest().toAbsolutePath());
+            }
         }
 
         exec.label("merge manifest");
