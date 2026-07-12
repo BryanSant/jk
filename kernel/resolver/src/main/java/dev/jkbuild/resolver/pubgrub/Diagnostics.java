@@ -181,6 +181,13 @@ public final class Diagnostics {
                         .append(" match ")
                         .append(colorVersion(stripBraces(nv.requested().toString()), palette))
                         .append('\n');
+            case Incompatibility.Cause.Unavailable u ->
+                out.append(prefix)
+                        .append(label)
+                        .append(colorPkg(u.pkg(), palette))
+                        .append(' ')
+                        .append(colorVersion(u.version(), palette))
+                        .append(" is advertised but not fetchable (half-published release?) — skipped\n");
             case Incompatibility.Cause.Root r ->
                 out.append(prefix)
                         .append(label)

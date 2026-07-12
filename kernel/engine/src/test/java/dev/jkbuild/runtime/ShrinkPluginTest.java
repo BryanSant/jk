@@ -48,7 +48,8 @@ class ShrinkPluginTest {
                 commons-lang3 = { group = "org.apache.commons", name = "commons-lang3", version = "=3.18.0" }
 
                 # This project runs no tests; owning [test-dependencies] keeps the injected
-                # junit-jupiter "latest" out of the graph (see KotlinSerializationTest).
+                # junit-jupiter "latest" out of the graph and the lock deterministic
+                # (see KotlinSerializationTest).
                 [test-dependencies]
                 junit-platform-launcher = { group = "org.junit.platform", name = "junit-platform-launcher", version = "=6.1.1" }
 

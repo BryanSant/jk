@@ -145,7 +145,16 @@ public final class MavenPackageSource implements PackageSource {
         if (cached != null) return cached;
 
         Coordinate coord = withVersion(pkg, version);
-        EffectivePom pom = pomBuilder.build(coord);
+        EffectivePom pom;
+        try {
+            pom = pomBuilder.build(coord);
+        } catch (MavenRepo.ArtifactNotFoundException e) {
+            // Definitive all-repos 404 for an advertised version (or a parent/BOM in its
+            // chain) — a half-published release mid-propagation. Tell the solver to skip
+            // exactly this version; genuine network failures are NOT this exception and
+            // stay fatal.
+            throw new VersionUnavailableException(e.getMessage());
+        }
         List<Term> out = new ArrayList<>();
         // KMP root module: substitute the GMM-selected platform artifact for the POM's
         // platform fallback (-jvm), and drop every other platform sibling the variants

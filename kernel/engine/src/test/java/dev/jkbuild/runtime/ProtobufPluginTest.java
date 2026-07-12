@@ -45,8 +45,8 @@ class ProtobufPluginTest {
                 protobuf-java = { group = "com.google.protobuf", name = "protobuf-java", version = "=4.33.1" }
 
                 # This project runs no tests; owning [test-dependencies] keeps the injected
-                # junit-jupiter "latest" out of the graph (Central can advertise a
-                # half-published release — see KotlinSerializationTest).
+                # junit-jupiter "latest" out of the graph and the lock deterministic
+                # (see KotlinSerializationTest).
                 [test-dependencies]
                 junit-platform-launcher = { group = "org.junit.platform", name = "junit-platform-launcher", version = "=6.1.1" }
 

@@ -143,4 +143,73 @@ class PubGrubSolverTest {
                         () -> solver.solve("root", "1.0", List.of(Term.positive("widget", VersionSet.exact("9.9.9")))))
                 .isInstanceOf(UnsatisfiableException.class);
     }
+
+    // --- half-published releases (metadata advertises a version whose POM 404s) ---------
+
+    @Test
+    void half_published_version_retreats_to_next_candidate() throws Exception {
+        PackageSource src = withUnavailable(
+                InMemoryPackageSource.builder()
+                        .version("widget", "3.0")
+                        .version("widget", "2.0")
+                        .build(),
+                "widget@3.0");
+
+        PubGrubSolver solver = new PubGrubSolver(src);
+        Map<String, String> solution =
+                solver.solve("root", "1.0", List.of(Term.positive("widget", VersionSet.atLeast("1.0", true))));
+
+        assertThat(solution).containsEntry("widget", "2.0");
+    }
+
+    @Test
+    void half_published_transitive_retreats_too() throws Exception {
+        // The live junit shape: a root dep's floating transitive resolves to the advertised
+        // latest, whose POM is still propagating — the solve must land on the prior release.
+        PackageSource src = withUnavailable(
+                InMemoryPackageSource.builder()
+                        .version("app", "1.0", deps -> deps.require("widget", VersionSet.atLeast("1.0", true)))
+                        .version("widget", "6.1.2")
+                        .version("widget", "6.1.1")
+                        .build(),
+                "widget@6.1.2");
+
+        PubGrubSolver solver = new PubGrubSolver(src);
+        Map<String, String> solution =
+                solver.solve("root", "1.0", List.of(Term.positive("app", VersionSet.exact("1.0"))));
+
+        assertThat(solution).containsEntry("widget", "6.1.1");
+    }
+
+    @Test
+    void every_candidate_unavailable_fails_cleanly() {
+        PackageSource src = withUnavailable(
+                InMemoryPackageSource.builder().version("widget", "3.0").build(), "widget@3.0");
+
+        PubGrubSolver solver = new PubGrubSolver(src);
+        assertThatThrownBy(() ->
+                        solver.solve("root", "1.0", List.of(Term.positive("widget", VersionSet.atLeast("1.0", true)))))
+                .isInstanceOf(UnsatisfiableException.class);
+    }
+
+    /** Wrap a source so the given {@code pkg@version} coords throw the unavailable signal. */
+    private static PackageSource withUnavailable(PackageSource delegate, String... coords) {
+        java.util.Set<String> dead = java.util.Set.of(coords);
+        return new PackageSource() {
+            @Override
+            public List<String> versions(String pkg) throws java.io.IOException, InterruptedException {
+                return delegate.versions(pkg);
+            }
+
+            @Override
+            public List<Term> dependencies(String pkg, String version)
+                    throws java.io.IOException, InterruptedException {
+                if (dead.contains(pkg + "@" + version)) {
+                    throw new VersionUnavailableException(
+                            "POM not found in any declared repo: " + pkg + ":" + version);
+                }
+                return delegate.dependencies(pkg, version);
+            }
+        };
+    }
 }

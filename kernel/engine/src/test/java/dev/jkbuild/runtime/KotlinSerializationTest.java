@@ -45,13 +45,11 @@ class KotlinSerializationTest {
                 [dependencies]
                 serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version = "1.7.3" }
 
-                # This project runs no tests, so keep junit-jupiter out of the graph entirely:
-                # owning [test-dependencies] suppresses the injected jupiter "latest" default,
-                # which breaks while Central's metadata advertises a half-published release
-                # (observed live: <latest>6.1.2</latest> with a 404 jupiter-params POM —
-                # transitive POM versions float, so even an exact jupiter pin drags params to
-                # the advertised latest). The launcher must stay (always injected; platform
-                # artifacts publish atomically), pinned here only for determinism.
+                # This project runs no tests; owning [test-dependencies] keeps the injected
+                # junit-jupiter "latest" out of the graph and the launcher pin keeps the lock
+                # deterministic. (Half-published releases — metadata advertising a version
+                # whose POM still 404s, observed live with junit 6.1.2 — no longer fail the
+                # solve: the resolver retreats to the prior release.)
                 [test-dependencies]
                 junit-platform-launcher = { group = "org.junit.platform", name = "junit-platform-launcher", version = "=6.1.1" }
 

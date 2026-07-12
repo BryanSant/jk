@@ -46,6 +46,13 @@ public record Incompatibility(List<Term> terms, Cause cause) {
         }
 
         /**
+         * The exact version {@code pkg@version} is advertised by metadata but definitively
+         * unavailable (its POM 404s in every declared repo — a half-published release). The solver
+         * excluded it and retreated to the next candidate.
+         */
+        record Unavailable(String pkg, String version, String reason) implements Cause {}
+
+        /**
          * Conflict-resolution derived this from two prior incompatibilities. Used by the diagnostic
          * renderer to reconstruct the explanation tree.
          */

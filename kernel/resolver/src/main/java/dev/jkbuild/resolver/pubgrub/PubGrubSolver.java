@@ -237,11 +237,25 @@ public class PubGrubSolver {
                 return pkg;
             }
 
+            // Fetch the pick's dependencies BEFORE deciding: a half-published release
+            // (metadata advertises a version whose POM 404s everywhere — publisher
+            // mid-propagation) must exclude just that version and retreat to the next
+            // candidate, never fail the whole solve.
+            List<Term> deps;
+            try {
+                deps = source.dependencies(pkg, pick);
+            } catch (PackageSource.VersionUnavailableException e) {
+                addIncompatibility(new Incompatibility(
+                        List.of(Term.positive(pkg, VersionSet.exact(pick))),
+                        new Incompatibility.Cause.Unavailable(pkg, pick, e.getMessage())));
+                // Propagating this inco removes the version; the next loop picks again.
+                return pkg;
+            }
             solution.decide(pkg, pick);
 
             // Ingest this version's dependencies as incompatibilities.
             Term decisionTerm = Term.positive(pkg, VersionSet.exact(pick));
-            for (Term depTerm : source.dependencies(pkg, pick)) {
+            for (Term depTerm : deps) {
                 addIncompatibility(new Incompatibility(
                         List.of(decisionTerm, depTerm.invert()),
                         new Incompatibility.Cause.Dependency(decisionTerm, depTerm)));
