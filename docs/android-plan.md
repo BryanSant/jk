@@ -145,6 +145,31 @@ list in order:
   the NiA driver, allopen/noarg/powerassert ride free. Acceptance: KotlinSerializationTest
   compiles a `@Serializable` class against real Central and asserts the generated
   `$serializer` class exists (the codegen only happens when the plugin actually loaded).
+- **A5c — protobuf plugin (blocker 3) LANDED**: `plugins/protobuf`, deliberately
+  ecosystem-neutral (any gRPC/protobuf JVM service; datastore-proto is just the NiA
+  consumer) and the second real consumer of the before-compile codegen SPI. One generic
+  core addition: `${host.os-arch}` manifest interpolation (protoc's classifier vocabulary
+  — linux-x86_64, osx-aarch_64; the native-Maven-binary convention), and `@exe` packaging
+  flowed through the coordinate machinery untouched. Acceptance: ProtobufPluginTest — a
+  plain Java project's message generates, compiles, and packages against real Central.
+- **A5d — Hilt unmodified-source parity (blocker 4) LANDED**, riding two new generic
+  capabilities: `StepSpec.transformsClasses` (a step's output REPLACES the classes dir
+  downstream — the build-time-weaving primitive; one per build, COMPILE→PACKAGE window,
+  conflicts are errors) and `[[contribute.compiler-args]] ksp` (manifest-contributed KSP
+  processor options). `[android] hilt = true` contributes Hilt's superclass-validation
+  toggle and registers `android-hilt-transform` — an ASM superclass rewrite to the
+  generated `Hilt_*` bases, AGP's exact transform; dex consumes the transformed dir.
+  Plugin-less spelling keeps working. Recorded gap: `@AndroidEntryPoint` BroadcastReceivers
+  (AGP injects an `onReceive` super-call) keep the plugin-less spelling until demanded.
+  Acceptance: HiltTransformTest — unmodified AGP-style sources build to an APK, the
+  rewritten superclass asserted byte-for-byte.
+- **Sibling harvest (same session): `plugins/shrink`** — R8 `--classfile` full mode over a
+  plain JVM app + runtime closure, packaged as one slim executable jar (shrink-only
+  default, `-dontobfuscate`; keep rules from config + entry-point). Not an Android
+  feature — the generic-JVM payoff of the R8 keep-rule plumbing, sharing the r8 artifact.
+  Acceptance: ShrinkPluginTest — the shrunk jar RUNS and dead library code is verifiably
+  absent. Remaining Phase-5 blockers: (5) Robolectric binary-resources completion,
+  (6) lint v1 + baseline profiles — then the full NiA build.
 Companion research: [android-gradle.md](./android-gradle.md).
 **Goal:** build, test, and ship a modern Android app (Compose-first, AGP-9-era baselines:
 compileSdk 37, minSdk 24+, Kotlin 2.3+, R8 full mode, AAB) with **no Gradle and no AGP**.

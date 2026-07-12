@@ -56,6 +56,7 @@ coordinate = "org.springframework.boot:spring-boot-dependencies:${config.version
 [[contribute.compiler-args]]
 javac  = ["-parameters"]
 kotlin = ["-java-parameters"]
+ksp    = ["some.processor.option=true"]   # KSP processor options (key=value)
 
 [[contribute.kotlin-plugin]]
 id         = "org.jetbrains.kotlin.noarg"
@@ -69,9 +70,12 @@ coordinate = "org.springframework.boot:spring-boot-loader:${config.version}"
 ```
 
 Interpolation is closed: `${config.<schema-key>}`, `${kotlin.version}`,
-`${project.group|name|version}`. Conditions are a closed predicate set — `classpath-has`,
-`config`/`equals`, `native-declared`, `kotlin-project` — exactly one per `when`. Anything
-conditional beyond these belongs in code; the manifest stays boring on purpose.
+`${project.group|name|version}`, `${host.os}` (linux/osx/windows — aapt2-style classifiers),
+`${host.os-arch}` (linux-x86_64, osx-aarch_64, … — protoc-style native binaries; pair with
+`@exe` packaging for bare-binary artifacts). Conditions are a closed predicate set —
+`classpath-has`, `config`/`equals`, `native-declared`, `kotlin-project` — exactly one per
+`when`. Anything conditional beyond these belongs in code; the manifest stays boring on
+purpose.
 
 ### `[packaging]` — the artifact descriptor
 
@@ -153,6 +157,15 @@ What you get for free: incrementality (jk fingerprints your declared inputs), ca
 restore/skip, `--rerun` semantics, progress labels, failure surfacing, and your
 `contributes*` dirs folded into packaging/native/run automatically. What you never see:
 action keys, CAS paths, stamps, `target/` conventions.
+
+Beyond `contributes*` (which **merge** into the build), a step may declare
+`.transformsClasses("out")`: its output dir **replaces** the module's classes dir for
+everything downstream — packaging, later steps' `In.classes()`, the native tail (bytecode
+weaving: Hilt's superclass rewrite, entity enhancement, build-time instrumentation). The
+transform runs in the COMPILE→PACKAGE window, must consume `In.classes()`, must copy
+through what it doesn't rewrite, and there can be at most one per build — a second is an
+error, not a priority. Unit tests run against the untransformed classes: a transform
+shapes the artifact, not the test fixture.
 
 Steps and packagers run in **your worker JVM** — one fork per plugin per build, multiplexing
 every step over the protocol. Keep the jar self-contained (shade your dependencies);
