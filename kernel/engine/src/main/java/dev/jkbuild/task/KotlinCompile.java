@@ -69,6 +69,12 @@ public final class KotlinCompile {
         if (!kr.success()) {
             return new Result(false, "errors", key, kr.output());
         }
+        // Never cache a zero-output "success" for a non-empty source set: stale incremental
+        // state can convince the compiler nothing changed while the output dir is empty, and
+        // caching that poisons every later run under the same key.
+        if (outputs.isEmpty() && !request.sources().isEmpty()) {
+            return new Result(true, "compiled-no-outputs", key, kr.output());
+        }
         actionCache.storeWithOutputs(taskId, key, Map.of(), outputs);
         return new Result(true, "compiled", key, kr.output());
     }

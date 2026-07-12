@@ -80,6 +80,9 @@ public final class KotlincDriver {
             lines.add("SNAPSHOT_DIR " + request.snapshotDir().toAbsolutePath());
         }
         lines.add("JVM_TARGET " + request.jvmTarget());
+        if (request.moduleName() != null && !request.moduleName().isBlank()) {
+            lines.add("MODULE_NAME " + request.moduleName());
+        }
         for (Path src : request.sources()) {
             lines.add("SOURCE " + src.toAbsolutePath());
         }

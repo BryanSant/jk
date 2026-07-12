@@ -3004,6 +3004,22 @@ public final class BuildPipeline {
             ktArgs.add("-Xjava-source-roots=" + roots);
         }
         Files.createDirectories(outputDir);
+        String moduleName = ctx.require(PROJECT).project().name();
+        // The incremental state is only valid for the exact compile CONFIG that produced it:
+        // BTA's IC sees "no source changes" after an args/plugins/module-name change and would
+        // emit nothing into a clean output dir. Key the working dir by a config hash so any
+        // config change starts fresh IC state (stale dirs age out with the cache).
+        String configToken = dev.jkbuild.util.Hashing.sha256Hex((CompileSupport.kotlinJvmTarget(
+                                        ctx.require(RELEASE))
+                                + "|" + moduleName + "|" + String.join(",", ktArgs) + "|"
+                                + ktPlugins.stream()
+                                        .map(p -> p.id() + "=" + p.options())
+                                        .collect(java.util.stream.Collectors.joining(",")))
+                        .getBytes(java.nio.charset.StandardCharsets.UTF_8))
+                .substring(0, 12);
+        Path icWorkingDir = workingDir == null
+                ? null
+                : workingDir.resolveSibling(workingDir.getFileName() + "-" + configToken);
         KotlincRequest req = KotlincRequest.builder()
                 .sources(sources)
                 .classpath(compileCp)
@@ -3011,10 +3027,14 @@ public final class BuildPipeline {
                 .jvmTarget(CompileSupport.kotlinJvmTarget(ctx.require(RELEASE)))
                 .workerClasspath(kt.workerClasspath())
                 .javaHome(ctx.require(JAVA_HOME))
-                .workingDir(workingDir)
+                .workingDir(icWorkingDir)
                 .snapshotDir(in.cache().resolve("kotlin-cp-snapshots"))
                 .extraArgs(ktArgs)
                 .plugins(ktPlugins)
+                // Lockstep with the KSP round's -module-name: internal-member mangling
+                // (member$module_name) is baked into call sites KSP-generated Java emits
+                // (Hilt factories calling internal providers).
+                .moduleName(moduleName)
                 .build();
         boolean rerun = in.session().config().rerunOr(false);
         // Reweight from the real request: a CAS hit is a cheap restore (3), else a

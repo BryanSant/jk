@@ -35,7 +35,13 @@ public record KotlincRequest(
         Path workingDir,
         Path snapshotDir,
         List<String> extraArgs,
-        List<Plugin> plugins) {
+        List<Plugin> plugins,
+        /**
+         * {@code -module-name}, or null for kotlinc's default. Must match the KSP round's module
+         * name: internal-member mangling ({@code member$module_name}) bakes it into call sites
+         * that KSP-generated Java emits (Hilt factories calling internal providers).
+         */
+        String moduleName) {
 
     /** One compiler plugin: its id, jar, and {@code key=value} options. */
     public record Plugin(String id, Path jar, List<String> options) {
@@ -66,6 +72,22 @@ public record KotlincRequest(
         }
     }
 
+    /** Back-compat constructor: no module name. */
+    public KotlincRequest(
+            List<Path> sources,
+            List<Path> classpath,
+            Path outputDir,
+            int jvmTarget,
+            List<Path> workerClasspath,
+            Path javaHome,
+            Path workingDir,
+            Path snapshotDir,
+            List<String> extraArgs,
+            List<Plugin> plugins) {
+        this(sources, classpath, outputDir, jvmTarget, workerClasspath, javaHome, workingDir, snapshotDir, extraArgs,
+                plugins, null);
+    }
+
     /** Back-compat constructor: no compiler plugins. */
     public KotlincRequest(
             List<Path> sources,
@@ -78,7 +100,7 @@ public record KotlincRequest(
             Path snapshotDir,
             List<String> extraArgs) {
         this(sources, classpath, outputDir, jvmTarget, workerClasspath, javaHome, workingDir, snapshotDir, extraArgs,
-                List.of());
+                List.of(), null);
     }
 
     public boolean incremental() {
@@ -100,6 +122,7 @@ public record KotlincRequest(
         private Path snapshotDir;
         private List<String> extraArgs = List.of();
         private List<Plugin> plugins = List.of();
+        private String moduleName;
 
         public Builder sources(List<Path> v) {
             this.sources = v;
@@ -151,6 +174,11 @@ public record KotlincRequest(
             return this;
         }
 
+        public Builder moduleName(String v) {
+            this.moduleName = v;
+            return this;
+        }
+
         public KotlincRequest build() {
             return new KotlincRequest(
                     sources,
@@ -162,7 +190,8 @@ public record KotlincRequest(
                     workingDir,
                     snapshotDir,
                     extraArgs,
-                    plugins);
+                    plugins,
+                    moduleName);
         }
     }
 }

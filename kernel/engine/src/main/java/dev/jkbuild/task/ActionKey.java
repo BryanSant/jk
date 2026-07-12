@@ -82,6 +82,10 @@ public final class ActionKey {
         sb.append("task:").append(taskId).append('\n');
         sb.append("jk:").append(jkVersion).append('\n');
         sb.append("jvmTarget:").append(request.jvmTarget()).append('\n');
+        // -module-name reshapes internal-member mangling in the output.
+        if (request.moduleName() != null) {
+            sb.append("moduleName:").append(request.moduleName()).append('\n');
+        }
         sb.append("args:");
         List<String> args = new ArrayList<>(request.extraArgs());
         args.sort(Comparator.naturalOrder());
