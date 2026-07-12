@@ -222,19 +222,23 @@ public final class EngineClient {
      * per {@code docs/engine.md}, the engine is load-bearing and this is not silently swallowed.
      */
     public static Handshake ensureRunning(EnginePaths.Paths paths, String clientVersion) throws IOException {
-        return ensureRunning(paths, clientVersion, false);
+        return doEnsure(paths, clientVersion, false).handshake();
     }
+
+    /** Outcome of {@link #ensureReady}: the live engine, and whether an optimization wedge was shown. */
+    public record EngineReady(Handshake handshake, boolean optimized) {}
 
     /**
      * Engine-readiness prewarm for the top of an engine-backed command, <em>before</em> it builds
      * its own goal console. Identical to {@link #ensureRunning(EnginePaths.Paths, String)} except
-     * that a one-time AOT training start renders the "Engine — optimizing…" wedge, so the user sees
-     * why the very first build after an install/upgrade pauses, and the command's own TUI then takes
-     * over cleanly (sequential, never interleaved). When an engine is already running this is a fast
-     * handshake no-op and shows nothing.
+     * that a one-time AOT optimization renders an animated "Engine — Optimizing build engine…" chip
+     * that settles into "✓ Engine  Build engine optimized and started (pid N)", so the user sees why
+     * the first build after an install/upgrade pauses, and the command's own TUI then takes over
+     * (sequential, never interleaved). {@code optimized} is true when that success chip was printed,
+     * so the caller can suppress its own "started" line. A running engine → fast no-op, nothing shown.
      */
-    public static Handshake ensureReady(EnginePaths.Paths paths, String clientVersion) throws IOException {
-        return ensureRunning(paths, clientVersion, true);
+    public static EngineReady ensureReady(EnginePaths.Paths paths, String clientVersion) throws IOException {
+        return doEnsure(paths, clientVersion, true);
     }
 
     /**
@@ -1179,11 +1183,11 @@ public final class EngineClient {
                 .result();
     }
 
-    static Handshake ensureRunning(EnginePaths.Paths paths, String clientVersion, boolean renderWedge)
+    private static EngineReady doEnsure(EnginePaths.Paths paths, String clientVersion, boolean renderWedge)
             throws IOException {
         Optional<Handshake> existing = handshake(paths.socket(), clientVersion);
         if (existing.isPresent()) {
-            if (clientVersion.equals(existing.get().version())) return existing.get();
+            if (clientVersion.equals(existing.get().version())) return new EngineReady(existing.get(), false);
             killStale(existing.get().pid(), COLD_START_CEILING);
         }
         return startWithSelfHeal(paths, clientVersion, renderWedge);
@@ -1203,12 +1207,20 @@ public final class EngineClient {
      *       is never misreported as "could not start".
      * </ul>
      */
-    private static Handshake startWithSelfHeal(EnginePaths.Paths paths, String clientVersion, boolean renderWedge)
+    private static EngineReady startWithSelfHeal(EnginePaths.Paths paths, String clientVersion, boolean renderWedge)
             throws IOException {
         EngineTarget target = resolveEngineTarget(paths, clientVersion);
         boolean training = chooseAotMode(target) == AotMode.TRAIN;
 
-        try (TrainingWedge wedge = TrainingWedge.start(renderWedge && training)) {
+        // Animated blue "Engine — Optimizing build engine…" chip, only for a real optimization on an
+        // interactive terminal (before any command's own goal console → no interleave).
+        java.io.PrintStream ws =
+                (renderWedge && training && dev.jkbuild.cli.run.GoalConsole.isInteractiveTerminal())
+                        ? dev.jkbuild.cli.CliOutput.stdout()
+                        : null;
+        dev.jkbuild.cli.tui.ChipSpinner wedge = dev.jkbuild.cli.tui.ChipSpinner.show(
+                ws, "Engine", dev.jkbuild.config.GlobalConfig.nerdfont(), "Optimizing build engine...");
+        try {
             if (training) {
                 // Eager optimization: record a startup profile and ASSEMBLE the cache now (train →
                 // clean-stop → assemble), so the engine we hand back genuinely maps it rather than
@@ -1217,10 +1229,24 @@ public final class EngineClient {
                 trainAndAssemble(paths, clientVersion, target);
             }
             Handshake hs = startOnce(paths, clientVersion, target);
+            boolean optimized = false;
             // Truthful "optimized": only when the cache now exists on disk and is being mapped.
-            if (target.aotCache() != null && Files.exists(target.aotCache())) wedge.succeeded();
-            return hs;
+            if (target.aotCache() != null && Files.exists(target.aotCache())) {
+                wedge.succeed("Build engine optimized and started (pid " + pidStyled(hs.pid()) + ")");
+                optimized = wedge.active();
+            }
+            return new EngineReady(hs, optimized);
+        } finally {
+            wedge.close();
         }
+    }
+
+    /** The engine pid, yellow on an ANSI terminal (matches the wedge's success chip), plain otherwise. */
+    private static String pidStyled(long pid) {
+        String s = Long.toString(pid);
+        return dev.jkbuild.cli.theme.Theme.active().isAnsi()
+                ? dev.jkbuild.cli.theme.Theme.colorize(s, dev.jkbuild.cli.theme.Theme.active().warning())
+                : s;
     }
 
     /**
@@ -1780,45 +1806,6 @@ public final class EngineClient {
                     java.nio.file.StandardOpenOption.APPEND);
         } catch (IOException ignored) {
             // best-effort
-        }
-    }
-
-    /**
-     * The one-time "Engine — optimizing…" wedge for a training start, shown only from the {@link
-     * #ensureReady} prewarm (before any command builds its own goal console, so nothing interleaves).
-     * A plain {@link dev.jkbuild.cli.tui.Spinner} while training, settling into the exact {@code ✓
-     * Engine  Build engine has been optimized} chip on success; nothing at all when non-interactive
-     * or when training didn't succeed.
-     */
-    private static final class TrainingWedge implements AutoCloseable {
-        private final dev.jkbuild.cli.tui.Spinner spinner; // null when inactive/non-interactive
-        private boolean optimized;
-
-        private TrainingWedge(dev.jkbuild.cli.tui.Spinner spinner) {
-            this.spinner = spinner;
-        }
-
-        static TrainingWedge start(boolean active) {
-            if (!active || !dev.jkbuild.cli.run.GoalConsole.isInteractiveTerminal()) return new TrainingWedge(null);
-            return new TrainingWedge(
-                    dev.jkbuild.cli.tui.Spinner.show(dev.jkbuild.cli.CliOutput.stdout(), "Optimizing the build engine…"));
-        }
-
-        void succeeded() {
-            this.optimized = true;
-        }
-
-        @Override
-        public void close() {
-            if (spinner == null) return;
-            spinner.close();
-            if (optimized) {
-                dev.jkbuild.cli.CliOutput.out(dev.jkbuild.cli.tui.GoalWedge.chipLine(
-                        dev.jkbuild.cli.tui.Glyphs.CHECK,
-                        "Engine",
-                        dev.jkbuild.config.GlobalConfig.nerdfont(),
-                        "Build engine has been optimized"));
-            }
         }
     }
 

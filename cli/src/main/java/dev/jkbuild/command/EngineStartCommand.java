@@ -41,10 +41,14 @@ public final class EngineStartCommand implements CliCommand {
                 .map(h -> Jk.VERSION.equals(h.version()))
                 .orElse(false);
         try {
-            EngineClient.Handshake hs = EngineClient.ensureReady(paths, Jk.VERSION);
-            CliOutput.out(alreadyUp
-                    ? "jk engine: already running (pid " + hs.pid() + ")"
-                    : "jk engine: started (pid " + hs.pid() + ")");
+            EngineClient.EngineReady ready = EngineClient.ensureReady(paths, Jk.VERSION);
+            // When an optimization wedge ran it already printed "✓ Engine  Build engine optimized and
+            // started (pid N)" — don't also print the plain line.
+            if (!ready.optimized()) {
+                CliOutput.out(alreadyUp
+                        ? "jk engine: already running (pid " + ready.handshake().pid() + ")"
+                        : "jk engine: started (pid " + ready.handshake().pid() + ")");
+            }
             return Exit.SUCCESS;
         } catch (IOException e) {
             CliOutput.err("jk engine: " + e.getMessage());
