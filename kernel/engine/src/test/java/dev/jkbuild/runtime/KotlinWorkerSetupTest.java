@@ -39,13 +39,29 @@ class KotlinWorkerSetupTest {
         Files.writeString(artifact, "stand-in worker jar");
         Files.writeString(Path.of(artifact + ".sha256"), "deadbeef");
 
-        assertThat(WorkerJar.KOTLIN_COMPILER.locate(cas)).isEqualTo(artifact);
+        withoutOverride(() -> assertThat(WorkerJar.KOTLIN_COMPILER.locate(cas)).isEqualTo(artifact));
     }
 
     @Test
     void throws_with_clear_hint_when_absent(@TempDir Path dir) {
         Cas cas = new Cas(dir);
-        assertThatThrownBy(() -> WorkerJar.KOTLIN_COMPILER.locate(cas)).isInstanceOf(WorkerJarNotFoundException.class);
+        withoutOverride(() -> assertThatThrownBy(() -> WorkerJar.KOTLIN_COMPILER.locate(cas))
+                .isInstanceOf(WorkerJarNotFoundException.class));
+    }
+
+    /**
+     * The engine test JVM sets the worker-jar override so the KSP/Room/Hilt gates can fork real
+     * kotlinc (see kernel/engine/build.gradle.kts); these two tests exercise the repos lookup
+     * BELOW the override, so it must be absent for their duration.
+     */
+    private static void withoutOverride(Runnable body) {
+        String prev = System.getProperty(KotlinWorkerSetup.WORKER_JAR_PROPERTY);
+        System.clearProperty(KotlinWorkerSetup.WORKER_JAR_PROPERTY);
+        try {
+            body.run();
+        } finally {
+            if (prev != null) System.setProperty(KotlinWorkerSetup.WORKER_JAR_PROPERTY, prev);
+        }
     }
 
     @Test
