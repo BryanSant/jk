@@ -4,6 +4,7 @@ package dev.jkbuild.git;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import dev.jkbuild.git.GitBackendsTestSupport.BackendFactory;
 import dev.jkbuild.model.GitRefSpec;
 import dev.jkbuild.model.GitSource;
 import java.io.IOException;
@@ -12,83 +13,89 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.revwalk.RevCommit;
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 
-class GitFetcherTest {
+/** fetch/verifyLocked behaviour, run against every available {@link GitBackend}. */
+class GitBackendFetchTest {
 
-    @Test
-    void fetches_a_tag_into_a_checkout(@TempDir Path tempDir) throws Exception {
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("dev.jkbuild.git.GitBackendsTestSupport#backends")
+    void fetches_a_tag_into_a_checkout(String name, BackendFactory factory, @TempDir Path tempDir) throws Exception {
         UpstreamFixture upstream = setupUpstream(tempDir.resolve("upstream"), "v1.0.0");
-        Path gitRoot = tempDir.resolve("jk-git");
+        GitBackend backend = factory.create(tempDir.resolve("jk-git"));
 
         GitSource source = GitSource.of(
                 "file://" + upstream.workTree(), "file://" + upstream.workTree(), new GitRefSpec.Tag("v1.0.0"));
 
-        GitFetcherWorker.Fetched fetched = new GitFetcherWorker(gitRoot).fetch(source);
+        GitFetcher.Fetched fetched = backend.fetch(source, false);
         assertThat(fetched.sha()).isEqualTo(upstream.taggedSha());
         assertThat(fetched.checkoutPath().resolve("README.md")).exists();
-        assertThat(Files.readString(fetched.checkoutPath().resolve("README.md")))
-                .contains("v1.0.0");
+        assertThat(Files.readString(fetched.checkoutPath().resolve("README.md"))).contains("v1.0.0");
     }
 
-    @Test
-    void second_fetch_uses_cache(@TempDir Path tempDir) throws Exception {
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("dev.jkbuild.git.GitBackendsTestSupport#backends")
+    void second_fetch_uses_cache(String name, BackendFactory factory, @TempDir Path tempDir) throws Exception {
         UpstreamFixture upstream = setupUpstream(tempDir.resolve("upstream"), "v1.0.0");
-        Path gitRoot = tempDir.resolve("jk-git");
-        GitFetcherWorker fetcher = new GitFetcherWorker(gitRoot);
+        GitBackend backend = factory.create(tempDir.resolve("jk-git"));
         GitSource source = GitSource.of(
                 "file://" + upstream.workTree(), "file://" + upstream.workTree(), new GitRefSpec.Tag("v1.0.0"));
 
-        GitFetcherWorker.Fetched first = fetcher.fetch(source);
+        GitFetcher.Fetched first = backend.fetch(source, false);
         long firstMtime = Files.getLastModifiedTime(first.checkoutPath()).toMillis();
         Thread.sleep(20);
-        GitFetcherWorker.Fetched second = fetcher.fetch(source);
+        GitFetcher.Fetched second = backend.fetch(source, false);
         assertThat(second.checkoutPath()).isEqualTo(first.checkoutPath());
         assertThat(Files.getLastModifiedTime(second.checkoutPath()).toMillis()).isEqualTo(firstMtime);
     }
 
-    @Test
-    void rev_spec_resolves_to_an_explicit_sha(@TempDir Path tempDir) throws Exception {
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("dev.jkbuild.git.GitBackendsTestSupport#backends")
+    void rev_spec_resolves_to_an_explicit_sha(String name, BackendFactory factory, @TempDir Path tempDir)
+            throws Exception {
         UpstreamFixture upstream = setupUpstream(tempDir.resolve("upstream"), "v1.0.0");
         GitSource source = GitSource.of(
                 "file://" + upstream.workTree(),
                 "file://" + upstream.workTree(),
                 new GitRefSpec.Rev(upstream.taggedSha()));
 
-        GitFetcherWorker.Fetched fetched = new GitFetcherWorker(tempDir.resolve("jk-git")).fetch(source);
+        GitFetcher.Fetched fetched = factory.create(tempDir.resolve("jk-git")).fetch(source, false);
         assertThat(fetched.sha()).isEqualTo(upstream.taggedSha());
     }
 
-    @Test
-    void verify_locked_detects_tag_rewrite(@TempDir Path tempDir) throws Exception {
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("dev.jkbuild.git.GitBackendsTestSupport#backends")
+    void verify_locked_detects_tag_rewrite(String name, BackendFactory factory, @TempDir Path tempDir)
+            throws Exception {
         UpstreamFixture upstream = setupUpstream(tempDir.resolve("upstream"), "v1.0.0");
-        Path gitRoot = tempDir.resolve("jk-git");
-        GitFetcherWorker fetcher = new GitFetcherWorker(gitRoot);
+        GitBackend backend = factory.create(tempDir.resolve("jk-git"));
         GitSource source = GitSource.of(
                 "file://" + upstream.workTree(), "file://" + upstream.workTree(), new GitRefSpec.Tag("v1.0.0"));
 
         // Initial fetch to populate the bare clone.
-        fetcher.fetch(source);
+        backend.fetch(source, false);
         String firstSha = upstream.taggedSha();
 
         // Rewrite the tag upstream to a new commit.
         String secondSha = upstream.commitAndRetag("second commit\n", "v1.0.0", true);
         assertThat(secondSha).isNotEqualTo(firstSha);
 
-        assertThatThrownBy(() -> fetcher.verifyLocked(source, firstSha))
-                .isInstanceOf(GitFetcherWorker.TagRewriteException.class)
+        assertThatThrownBy(() -> backend.verifyLocked(source, firstSha))
+                .isInstanceOf(GitFetcher.TagRewriteException.class)
                 .hasMessageContaining(firstSha)
                 .hasMessageContaining(secondSha);
     }
 
-    @Test
-    void missing_ref_yields_clear_error(@TempDir Path tempDir) throws Exception {
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("dev.jkbuild.git.GitBackendsTestSupport#backends")
+    void missing_ref_yields_clear_error(String name, BackendFactory factory, @TempDir Path tempDir) throws Exception {
         UpstreamFixture upstream = setupUpstream(tempDir.resolve("upstream"), "v1.0.0");
         GitSource source = GitSource.of(
                 "file://" + upstream.workTree(), "file://" + upstream.workTree(), new GitRefSpec.Tag("v99.0.0"));
 
-        assertThatThrownBy(() -> new GitFetcherWorker(tempDir.resolve("jk-git")).fetch(source))
+        assertThatThrownBy(() -> factory.create(tempDir.resolve("jk-git")).fetch(source, false))
                 .isInstanceOf(IOException.class)
                 .hasMessageContaining("v99.0.0");
     }

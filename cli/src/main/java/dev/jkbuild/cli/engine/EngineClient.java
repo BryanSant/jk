@@ -942,8 +942,8 @@ public final class EngineClient {
     public record GitFetchOutcome(dev.jkbuild.run.GoalResult result, Path checkout, String sha) {}
 
     /**
-     * Materialize a git checkout via the engine ({@code jk install <git-url>}'s clone half; the
-     * git-client worker forks engine-side). The checkout path + resolved sha ride the terminal
+     * Materialize a git checkout via the engine ({@code jk install <git-url>}'s clone half; git
+     * runs in-process in the engine). The checkout path + resolved sha ride the terminal
      * goal-finish and feed the follow-up {@link #runInstall}.
      */
     public static GitFetchOutcome runGitFetch(

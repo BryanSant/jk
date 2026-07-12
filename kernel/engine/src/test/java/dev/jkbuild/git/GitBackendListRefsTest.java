@@ -3,6 +3,7 @@ package dev.jkbuild.git;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import dev.jkbuild.git.GitBackendsTestSupport.BackendFactory;
 import dev.jkbuild.model.GitRefSpec;
 import dev.jkbuild.model.GitSource;
 import java.nio.charset.StandardCharsets;
@@ -10,14 +11,17 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.revwalk.RevCommit;
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 
-/** {@code list_refs} (ls-remote) enumerates a remote's tags + HEAD without cloning. */
-class GitFetcherListRefsTest {
+/** {@code listRefs} (ls-remote) enumerates a remote's tags + HEAD without cloning. */
+class GitBackendListRefsTest {
 
-    @Test
-    void lists_all_tags_and_head_without_cloning(@TempDir Path tempDir) throws Exception {
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("dev.jkbuild.git.GitBackendsTestSupport#backends")
+    void lists_all_tags_and_head_without_cloning(String name, BackendFactory factory, @TempDir Path tempDir)
+            throws Exception {
         Path work = tempDir.resolve("upstream");
         Files.createDirectories(work);
         String head;
@@ -34,14 +38,14 @@ class GitFetcherListRefsTest {
             head = c2.name();
         }
 
-        GitSource source = GitSource.of(
-                "file://" + work, "file://" + work, new GitRefSpec.Tag("v1.0.0"));
-        GitFetcherWorker.RemoteRefs refs = new GitFetcherWorker(tempDir.resolve("jk-git")).listRefs(source);
+        GitSource source = GitSource.of("file://" + work, "file://" + work, new GitRefSpec.Tag("v1.0.0"));
+        Path gitRoot = tempDir.resolve("jk-git");
+        GitFetcher.RemoteRefs refs = factory.create(gitRoot).listRefs(source);
 
         assertThat(refs.tags()).containsExactlyInAnyOrder("v1.0.0", "v1.1.0", "v2.0.0-rc1");
         assertThat(refs.headSha()).isEqualTo(head);
         // No bare clone was created — ls-remote does not populate the cache dir.
-        assertThat(Files.exists(tempDir.resolve("jk-git").resolve("db"))).isFalse();
+        assertThat(Files.exists(gitRoot.resolve("db"))).isFalse();
     }
 
     private static RevCommit commit(Git git, String msg) throws Exception {

@@ -421,7 +421,7 @@ public final class EngineServer implements AutoCloseable {
                         return;
                     }
                     case EngineProtocol.GIT_FETCH_REQUEST -> {
-                        // jk install <git-url>'s clone half (the git-client worker forks engine-side).
+                        // jk install <git-url>'s clone half (git runs in-process in the engine).
                         handleAsyncGoalRequest(line, reader, writer, "jk-engine-gitfetch-", this::runGitFetch);
                         return;
                     }
@@ -1892,8 +1892,9 @@ public final class EngineServer implements AutoCloseable {
 
     /**
      * Decode a {@link EngineProtocol#GIT_FETCH_REQUEST} and materialize the checkout in-session
-     * (the git-client worker forks engine-side); the terminal goal-finish carries the checkout
-     * path + sha the client's follow-up {@link EngineProtocol#INSTALL_REQUEST} needs.
+     * (git runs in-process — {@link dev.jkbuild.git.GitFetcher} prefers the git CLI, else JGit);
+     * the terminal goal-finish carries the checkout path + sha the client's follow-up {@link
+     * EngineProtocol#INSTALL_REQUEST} needs.
      */
     private void runGitFetch(String requestLine, Session.CancelToken cancelToken, BufferedWriter writer) {
         try {

@@ -318,7 +318,7 @@ public final class InstallCommand implements CliCommand {
             checkout = o.checkout();
             sha = o.sha();
         } else {
-            // Engine-hosted clone (slim-client Wave 3): the git-client worker forks engine-side;
+            // Engine-hosted clone (slim-client Wave 3): git runs in-process in the engine;
             // the checkout path + sha ride the terminal goal-finish.
             dev.jkbuild.cli.engine.EngineClient.GitFetchOutcome outcome;
             try {

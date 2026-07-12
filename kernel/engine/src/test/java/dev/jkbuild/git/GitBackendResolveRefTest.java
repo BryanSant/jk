@@ -3,6 +3,7 @@ package dev.jkbuild.git;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import dev.jkbuild.git.GitBackendsTestSupport.BackendFactory;
 import dev.jkbuild.model.GitRefSpec;
 import dev.jkbuild.model.GitSource;
 import java.nio.file.Files;
@@ -12,14 +13,16 @@ import java.time.ZoneOffset;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.lib.PersonIdent;
 import org.eclipse.jgit.revwalk.RevCommit;
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 
 /**
- * Exercises {@link GitFetcher#resolveRef} against a real local git repo built with jgit — fully
- * offline (clone over a {@code file://} URL).
+ * Exercises {@code resolveRef} against a real local git repo built with jgit — fully offline (clone
+ * over a {@code file://} URL) — for every available {@link GitBackend}. This is the CLI-vs-JGit
+ * parity check for commit time and nearest-tag describe.
  */
-class GitFetcherResolveRefTest {
+class GitBackendResolveRefTest {
 
     private static final Instant TAG_TIME = Instant.parse("2026-05-01T09:00:00Z");
     private static final Instant HEAD_TIME = Instant.parse("2026-06-01T13:47:52Z");
@@ -54,25 +57,29 @@ class GitFetcherResolveRefTest {
         }
     }
 
-    @Test
-    void resolves_a_tag_to_its_commit_and_describes_it(@TempDir Path tmp) throws Exception {
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("dev.jkbuild.git.GitBackendsTestSupport#backends")
+    void resolves_a_tag_to_its_commit_and_describes_it(String name, BackendFactory factory, @TempDir Path tmp)
+            throws Exception {
         Repo repo = buildRepo(tmp.resolve("src"));
-        GitFetcherWorker fetcher = new GitFetcherWorker(tmp.resolve("gitcache"));
+        GitBackend backend = factory.create(tmp.resolve("gitcache"));
 
-        GitFetcherWorker.RefInfo info = fetcher.resolveRef(repo.source());
+        GitFetcher.RefInfo info = backend.resolveRef(repo.source());
         assertThat(info.sha()).isEqualTo(repo.tagSha());
         assertThat(info.commitTime()).isEqualTo(TAG_TIME);
         assertThat(info.nearestTag()).contains("v1.2.3");
     }
 
-    @Test
-    void untagged_commit_reports_nearest_tag_and_commit_time(@TempDir Path tmp) throws Exception {
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("dev.jkbuild.git.GitBackendsTestSupport#backends")
+    void untagged_commit_reports_nearest_tag_and_commit_time(String name, BackendFactory factory, @TempDir Path tmp)
+            throws Exception {
         Repo repo = buildRepo(tmp.resolve("src"));
-        GitFetcherWorker fetcher = new GitFetcherWorker(tmp.resolve("gitcache"));
+        GitBackend backend = factory.create(tmp.resolve("gitcache"));
 
         String url = repo.source().canonicalUrl();
         GitSource headRev = GitSource.of(url, url, new GitRefSpec.Rev(repo.headSha()));
-        GitFetcherWorker.RefInfo info = fetcher.resolveRef(headRev);
+        GitFetcher.RefInfo info = backend.resolveRef(headRev);
 
         assertThat(info.sha()).isEqualTo(repo.headSha());
         assertThat(info.commitTime()).isEqualTo(HEAD_TIME);

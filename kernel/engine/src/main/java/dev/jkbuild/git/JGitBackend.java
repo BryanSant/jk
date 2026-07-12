@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.git;
 
+import dev.jkbuild.forge.ForgeGitCredentials;
 import dev.jkbuild.model.GitRefSpec;
 import dev.jkbuild.model.GitSource;
 import dev.jkbuild.util.GitUrl;
@@ -9,6 +10,8 @@ import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.regex.Matcher;
@@ -26,45 +29,36 @@ import org.eclipse.jgit.transport.TagOpt;
 import org.eclipse.jgit.transport.URIish;
 import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider;
 
-/** JGit-backed git resolver. Runs inside jk-git-runner; tests call this directly. */
-public final class GitFetcherWorker {
+/**
+ * Pure-Java {@link GitBackend} backed by JGit. Always available; the fallback when no {@code git}
+ * command is found. Runs in-process in the engine JVM.
+ */
+public final class JGitBackend implements GitBackend {
     private final Path gitRoot;
-    private final CredentialsProvider credentials;
-    private static final Pattern DESCRIBE_SUFFIX = Pattern.compile("^(.*)-\\d+-g[0-9a-fA-F]+$");
+    private final ForgeGitCredentials credentials;
+    static final Pattern DESCRIBE_SUFFIX = Pattern.compile("^(.*)-\\d+-g[0-9a-fA-F]+$");
 
-    public GitFetcherWorker(Path gitRoot) {
-        this(gitRoot, (CredentialsProvider) null);
-    }
-
-    public GitFetcherWorker(Path gitRoot, String u, String p) {
-        this(
-                gitRoot,
-                (u != null && !u.isBlank()) ? new UsernamePasswordCredentialsProvider(u, p != null ? p : "") : null);
-    }
-
-    GitFetcherWorker(Path gitRoot, CredentialsProvider credentials) {
+    public JGitBackend(Path gitRoot, ForgeGitCredentials credentials) {
         this.gitRoot = Objects.requireNonNull(gitRoot, "gitRoot");
-        this.credentials = credentials;
+        this.credentials = Objects.requireNonNull(credentials, "credentials");
     }
 
-    public record Fetched(String sha, Path checkoutPath) {}
+    /** Build a per-URL credentials provider from the resolved forge token, or null for anonymous. */
+    private CredentialsProvider providerFor(String url) {
+        String[] c = credentials.resolveCredentials(url);
+        if (c == null || c[0] == null || c[0].isBlank()) return null;
+        return new UsernamePasswordCredentialsProvider(c[0], c[1] != null ? c[1] : "");
+    }
 
-    public record RefInfo(String sha, Instant commitTime, Optional<String> nearestTag) {}
-
-    /** A remote's advertised refs: tag names (no {@code refs/tags/} prefix) + the {@code HEAD} sha. */
-    public record RemoteRefs(java.util.List<String> tags, String headSha) {}
-
-    /**
-     * Enumerate the remote's tags and HEAD via {@code ls-remote} — no clone, one network round trip.
-     * Peeled tag entries ({@code refs/tags/x^{}}) are dropped so a tag appears once.
-     */
-    public RemoteRefs listRefs(GitSource source) throws IOException {
+    @Override
+    public GitFetcher.RemoteRefs listRefs(GitSource source) throws IOException {
+        CredentialsProvider creds = providerFor(source.canonicalUrl());
         try {
             // No setHeads/setTags filter: those exclude the symbolic HEAD. We want every ref and
             // pick out refs/tags/* + HEAD ourselves.
             var cmd = Git.lsRemoteRepository().setRemote(source.canonicalUrl());
-            if (credentials != null) cmd.setCredentialsProvider(credentials);
-            java.util.List<String> tags = new java.util.ArrayList<>();
+            if (creds != null) cmd.setCredentialsProvider(creds);
+            List<String> tags = new ArrayList<>();
             String head = null;
             for (Ref r : cmd.call()) {
                 String name = r.getName();
@@ -75,34 +69,35 @@ public final class GitFetcherWorker {
                     head = r.getObjectId().getName();
                 }
             }
-            return new RemoteRefs(java.util.List.copyOf(tags), head);
+            return new GitFetcher.RemoteRefs(List.copyOf(tags), head);
         } catch (GitAPIException e) {
             throw new IOException("git ls-remote failed: " + e.getMessage(), e);
         }
     }
 
-    public Fetched fetch(GitSource s) throws IOException {
-        return fetch(s, false);
-    }
-
-    public Fetched fetch(GitSource source, boolean noCache) throws IOException {
+    @Override
+    public GitFetcher.Fetched fetch(GitSource source, boolean noCache) throws IOException {
         Path bareDir = ensureBareClone(source);
         String sha = resolveRefSha(source, bareDir);
-        return new Fetched(sha, ensureCheckout(source, bareDir, sha, noCache));
+        return new GitFetcher.Fetched(sha, ensureCheckout(source, bareDir, sha, noCache));
     }
 
+    @Override
     public void verifyLocked(GitSource source, String expected) throws IOException {
         String actual = resolveRefSha(source, ensureBareClone(source));
-        if (!actual.equalsIgnoreCase(expected)) throw new TagRewriteException(source, expected, actual);
+        if (!actual.equalsIgnoreCase(expected)) {
+            throw new GitFetcher.TagRewriteException(source, expected, actual);
+        }
     }
 
-    public RefInfo resolveRef(GitSource source) throws IOException {
+    @Override
+    public GitFetcher.RefInfo resolveRef(GitSource source) throws IOException {
         Path bareDir = ensureBareClone(source);
         String sha = resolveRefSha(source, bareDir);
         try (Git git = Git.open(bareDir.toFile());
                 RevWalk walk = new RevWalk(git.getRepository())) {
             RevCommit c = walk.parseCommit(ObjectId.fromString(sha));
-            return new RefInfo(
+            return new GitFetcher.RefInfo(
                     sha, Instant.ofEpochSecond(c.getCommitTime()), describeNearestTag(git, ObjectId.fromString(sha)));
         } catch (GitAPIException e) {
             throw new IOException(e.getMessage(), e);
@@ -110,6 +105,7 @@ public final class GitFetcherWorker {
     }
 
     Path ensureBareClone(GitSource source) throws IOException {
+        CredentialsProvider creds = providerFor(source.canonicalUrl());
         Path bareDir = gitRoot.resolve("db").resolve(GitUrl.canonicalHash(source.canonicalUrl()));
         if (Files.isDirectory(bareDir.resolve("HEAD")) || Files.exists(bareDir.resolve("HEAD"))) {
             try (Git git = Git.open(bareDir.toFile())) {
@@ -119,7 +115,7 @@ public final class GitFetcherWorker {
                         .setTagOpt(TagOpt.FETCH_TAGS)
                         .setRefSpecs(
                                 new RefSpec("+refs/heads/*:refs/heads/*"), new RefSpec("+refs/tags/*:refs/tags/*"));
-                if (credentials != null) f.setCredentialsProvider(credentials);
+                if (creds != null) f.setCredentialsProvider(creds);
                 f.call();
             } catch (GitAPIException e) {
                 throw new IOException("git fetch failed: " + e.getMessage(), e);
@@ -140,7 +136,7 @@ public final class GitFetcherWorker {
             // Explicit tag entries request a shallow clone (depth 1) to save bandwidth.
             // URL-embedded refs and all other ref types use a full clone.
             if (source.shallow()) clone.setDepth(1);
-            if (credentials != null) clone.setCredentialsProvider(credentials);
+            if (creds != null) clone.setCredentialsProvider(creds);
             clone.call().close();
         } catch (GitAPIException e) {
             deleteRecursively(bareDir);
@@ -207,37 +203,6 @@ public final class GitFetcherWorker {
                 }
             });
         } catch (IOException ignored) {
-        }
-    }
-
-    public static final class TagRewriteException extends IOException {
-        private final GitSource source;
-        private final String expectedSha, actualSha;
-
-        public TagRewriteException(GitSource source, String expected, String actual) {
-            super("git tag/branch rewrite detected for "
-                    + source.canonicalUrl()
-                    + " "
-                    + source.ref().token()
-                    + ": lock says "
-                    + expected
-                    + ", upstream now resolves to "
-                    + actual);
-            this.source = source;
-            this.expectedSha = expected;
-            this.actualSha = actual;
-        }
-
-        public GitSource source() {
-            return source;
-        }
-
-        public String expectedSha() {
-            return expectedSha;
-        }
-
-        public String actualSha() {
-            return actualSha;
         }
     }
 }

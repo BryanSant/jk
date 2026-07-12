@@ -371,7 +371,7 @@ public interface InProcessEngine {
             boolean skipTests,
             boolean verbose);
 
-    /** {@code jk install <git-url>}'s in-process clone (test-only; the git-client worker forks locally). */
+    /** {@code jk install <git-url>}'s in-process clone (test-only; git runs in-process). */
     dev.jkbuild.cli.engine.EngineClient.GitFetchOutcome gitFetchGoal(
             String url,
             String canonicalUrl,

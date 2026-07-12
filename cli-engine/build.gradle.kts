@@ -36,7 +36,8 @@ dependencies {
     // supply-chain-testkit deleted: GpgTestFixture copied to this test suite and publisher's
     testImplementation(libs.bouncycastle.bcpg)
     // JdkCommandTest builds xz-compressed feed fixtures via XZCompressorOutputStream.
-    // GitSourceMaterializerTest uses a local git fixture (built with system git or git-runner)
+    // GitSourceMaterializerTest uses a local git fixture; git resolution runs in-process
+    // (GitFetcher prefers the git CLI, else bundled JGit) — no git worker jar to wire in.
 }
 
 
@@ -65,9 +66,6 @@ val imageBuilderWorkerJar by configurations.creating {
 val compatBridgeWorkerJar by configurations.creating {
     isCanBeConsumed = false; isCanBeResolved = true; isTransitive = false
 }
-val gitClientWorkerJar by configurations.creating {
-    isCanBeConsumed = false; isCanBeResolved = true; isTransitive = false
-}
 val springBootWorkerJar by configurations.creating {
     isCanBeConsumed = false; isCanBeResolved = true; isTransitive = false
 }
@@ -81,7 +79,6 @@ dependencies {
     publisherWorkerJar(project(":publisher"))
     imageBuilderWorkerJar(project(":image-builder"))
     compatBridgeWorkerJar(project(":compat-bridge"))
-    gitClientWorkerJar(project(":git-client"))
     springBootWorkerJar(project(":spring-boot"))
     androidWorkerJar(project(":android"))
 }
@@ -90,7 +87,7 @@ tasks.withType<Test>().configureEach {
     // drives a real build/check (PosixDetach's setsid(2) is the same story for the engine role).
     jvmArgs("--enable-native-access=ALL-UNNAMED")
     dependsOn(kotlinWorkerJar, testRunnerJar, auditorWorkerJar, publisherWorkerJar,
-              imageBuilderWorkerJar, compatBridgeWorkerJar, gitClientWorkerJar, springBootWorkerJar,
+              imageBuilderWorkerJar, compatBridgeWorkerJar, springBootWorkerJar,
               androidWorkerJar)
     // The TUI/highlighting tests assert ANSI escape sequences, and Theme/GlobalConfig read the
     // ambient environment (TERM=dumb, CI=true/1, NO_COLOR all disable color). Pin the test JVMs'
@@ -117,7 +114,6 @@ tasks.withType<Test>().configureEach {
         systemProperty("jk.publisher.worker.jar",    publisherWorkerJar.singleFile.absolutePath)
         systemProperty("jk.image-builder.worker.jar", imageBuilderWorkerJar.singleFile.absolutePath)
         systemProperty("jk.compat-bridge.worker.jar", compatBridgeWorkerJar.singleFile.absolutePath)
-        systemProperty("jk.git-client.worker.jar",   gitClientWorkerJar.singleFile.absolutePath)
         systemProperty("jk.spring-boot.worker.jar",  springBootWorkerJar.singleFile.absolutePath)
         systemProperty("jk.android.worker.jar",      androidWorkerJar.singleFile.absolutePath)
     }

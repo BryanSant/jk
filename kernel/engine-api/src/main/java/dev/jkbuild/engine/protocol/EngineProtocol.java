@@ -451,7 +451,7 @@ public final class EngineProtocol {
 
     /**
      * Client → server: materialize a git checkout ({@code jk install <git-url>}'s fetch half) via
-     * the engine-forked git-client worker. Single goal; the terminal {@code goal-finish} carries
+     * the engine's in-process git backend. Single goal; the terminal {@code goal-finish} carries
      * the checkout path + resolved sha (see {@link #goalFinishGitFetch}), which the client then
      * feeds into a follow-up {@link #INSTALL_REQUEST}.
      */
