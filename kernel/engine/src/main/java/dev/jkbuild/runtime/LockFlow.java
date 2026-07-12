@@ -99,7 +99,9 @@ public final class LockFlow {
         } catch (Exception e) {
             return new Result(6, e.getMessage(), null, effective, moduleCount);
         }
-        LockOrchestrator orchestrator = new LockOrchestrator(pathPrep.repos());
+        LockOrchestrator orchestrator = new LockOrchestrator(pathPrep.repos())
+                .withJvmEnvironment(
+                        dev.jkbuild.plugin.manifest.PluginContributions.jvmEnvironment(effective, dir));
 
         Lockfile lock;
         try {

@@ -34,6 +34,7 @@ public final class PubGrubResolver implements Resolver {
 
     private final PackageSource source;
     private final EffectivePomBuilder pomBuilder;
+    private KmpRedirects kmp = KmpRedirects.NONE;
     /** Optional palette injected by the CLI so diagnostic colors match the live theme. */
     dev.jkbuild.resolver.pubgrub.Diagnostics.Palette palette; // package-private for LockOrchestrator
 
@@ -60,9 +61,19 @@ public final class PubGrubResolver implements Resolver {
      */
     public PubGrubResolver(
             RepoGroup repos, Map<String, String> bomConstraints, Map<String, String> lockedVersionPrefs) {
+        this(repos, bomConstraints, lockedVersionPrefs, KmpRedirects.NONE);
+    }
+
+    /** As above with KMP root-module redirect resolution (see {@link KmpRedirects}). */
+    public PubGrubResolver(
+            RepoGroup repos,
+            Map<String, String> bomConstraints,
+            Map<String, String> lockedVersionPrefs,
+            KmpRedirects kmp) {
         EffectivePomBuilder builder = new EffectivePomBuilder(repos);
         this.pomBuilder = builder;
-        this.source = new MavenPackageSource(repos, builder, bomConstraints, lockedVersionPrefs);
+        this.kmp = kmp;
+        this.source = new MavenPackageSource(repos, builder, bomConstraints, lockedVersionPrefs, kmp);
     }
 
     /** Test seam: lets unit tests inject an in-memory {@link PackageSource}. */
@@ -105,9 +116,22 @@ public final class PubGrubResolver implements Resolver {
         for (Map.Entry<String, String> e : decisions.entrySet()) {
             Set<String> deps = new LinkedHashSet<>();
             if (pomBuilder != null) {
+                // Mirror MavenPackageSource's KMP rewrite: the dep edges must show the
+                // GMM-selected platform artifact, not the POM's platform fallback.
+                var kmpSelection = kmp.selectionFor(e.getKey(), e.getValue());
+                Set<String> kmpDropped = Set.of();
+                if (kmpSelection.isPresent()) {
+                    var target = kmpSelection.get().target();
+                    String targetModule = target.group() + ":" + target.module();
+                    if (decisions.containsKey(targetModule)) {
+                        deps.add(targetModule + "@" + decisions.get(targetModule));
+                    }
+                    kmpDropped = kmpSelection.get().allTargets();
+                }
                 EffectivePom pom = pomBuilder.build(toCoord(e.getKey(), e.getValue()));
                 for (Pom.Dep d : pom.dependencies()) {
                     if (d.optional()) continue;
+                    if (kmpDropped.contains(d.module())) continue;
                     String scope = d.scope();
                     if (scope != null && !scope.isEmpty() && !scope.equals("compile") && !scope.equals("runtime"))
                         continue;

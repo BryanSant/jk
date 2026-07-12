@@ -346,8 +346,23 @@ public final class PluginManifests {
             provided.add(new PluginManifest.ProvidedClasspath(dependency, parseCondition(t, where)));
         }
 
+        // [contribute.resolution] — a single table (not an array): the GMM jvm-environment
+        // this plugin's projects select KMP runtime variants for.
+        String jvmEnvironment = null;
+        TomlTable resolution = contribute.getTable("resolution");
+        if (resolution != null) {
+            jvmEnvironment = resolution.getString("jvm-environment");
+            if (jvmEnvironment != null
+                    && !jvmEnvironment.equals("android")
+                    && !jvmEnvironment.equals("standard-jvm")) {
+                throw new JkBuildParseException(displayPath
+                        + ".contribute.resolution: jvm-environment must be `android` or `standard-jvm`"
+                        + " — got: " + jvmEnvironment);
+            }
+        }
+
         return new PluginManifest.Contributions(
-                platformDeps, compilerArgs, kotlinPlugins, packagerDeps, stepDeps, provided);
+                platformDeps, compilerArgs, kotlinPlugins, packagerDeps, stepDeps, provided, jvmEnvironment);
     }
 
     /**

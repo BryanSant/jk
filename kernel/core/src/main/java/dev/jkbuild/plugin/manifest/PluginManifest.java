@@ -260,10 +260,16 @@ public record PluginManifest(
             List<KotlinPlugin> kotlinPlugins,
             List<PackagerDependency> packagerDependencies,
             List<StepDependency> stepDependencies,
-            List<ProvidedClasspath> providedClasspath) {
+            List<ProvidedClasspath> providedClasspath,
+            /**
+             * {@code [contribute.resolution] jvm-environment} — the Gradle Module Metadata
+             * {@code org.gradle.jvm.environment} this plugin's projects resolve KMP variants
+             * for ({@code "android"}); null when unset (standard-jvm).
+             */
+            String jvmEnvironment) {
 
         public static final Contributions NONE =
-                new Contributions(List.of(), List.of(), List.of(), List.of(), List.of(), List.of());
+                new Contributions(List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), null);
 
         public Contributions {
             platformDependencies = platformDependencies == null ? List.of() : List.copyOf(platformDependencies);
@@ -272,6 +278,18 @@ public record PluginManifest(
             packagerDependencies = packagerDependencies == null ? List.of() : List.copyOf(packagerDependencies);
             stepDependencies = stepDependencies == null ? List.of() : List.copyOf(stepDependencies);
             providedClasspath = providedClasspath == null ? List.of() : List.copyOf(providedClasspath);
+        }
+
+        /** Back-compat: the P6 contribution set (no resolution environment). */
+        public Contributions(
+                List<PlatformDependency> platformDependencies,
+                List<CompilerArgs> compilerArgs,
+                List<KotlinPlugin> kotlinPlugins,
+                List<PackagerDependency> packagerDependencies,
+                List<StepDependency> stepDependencies,
+                List<ProvidedClasspath> providedClasspath) {
+            this(platformDependencies, compilerArgs, kotlinPlugins, packagerDependencies, stepDependencies,
+                    providedClasspath, null);
         }
 
         /** Back-compat: the P3 contribution set (no step dependencies). */

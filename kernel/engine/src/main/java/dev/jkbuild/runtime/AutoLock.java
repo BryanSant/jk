@@ -223,7 +223,9 @@ public final class AutoLock {
 
             Cas cas = new Cas(cache);
             dev.jkbuild.repo.RepoGroup repos = RepoGroupBuilder.buildFor(effective, repoUrl, cas);
-            LockOrchestrator orchestrator = new LockOrchestrator(repos);
+            LockOrchestrator orchestrator = new LockOrchestrator(repos)
+                    .withJvmEnvironment(
+                            dev.jkbuild.plugin.manifest.PluginContributions.jvmEnvironment(effective, dir));
 
             Lockfile updated = orchestrator.lockConservative(
                     effective, existing, jkVersion, features == null ? List.of() : features, withDefaults, observer);

@@ -52,6 +52,7 @@ public final class MavenPackageSource implements PackageSource {
     private final RepoGroup repos;
     private final EffectivePomBuilder pomBuilder;
     private final Map<String, String> bomConstraints;
+    private final KmpRedirects kmp;
 
     /** Locked versions from a prior lock file — preferred but NOT hard-pinned. */
     private final Map<String, String> lockedVersionPrefs;
@@ -83,10 +84,21 @@ public final class MavenPackageSource implements PackageSource {
             EffectivePomBuilder pomBuilder,
             Map<String, String> bomConstraints,
             Map<String, String> lockedVersionPrefs) {
+        this(repos, pomBuilder, bomConstraints, lockedVersionPrefs, KmpRedirects.NONE);
+    }
+
+    /** As above with KMP root-module redirect resolution (see {@link KmpRedirects}). */
+    public MavenPackageSource(
+            RepoGroup repos,
+            EffectivePomBuilder pomBuilder,
+            Map<String, String> bomConstraints,
+            Map<String, String> lockedVersionPrefs,
+            KmpRedirects kmp) {
         this.repos = Objects.requireNonNull(repos, "repos");
         this.pomBuilder = Objects.requireNonNull(pomBuilder, "pomBuilder");
         this.bomConstraints = Map.copyOf(Objects.requireNonNull(bomConstraints, "bomConstraints"));
         this.lockedVersionPrefs = Map.copyOf(Objects.requireNonNull(lockedVersionPrefs, "lockedVersionPrefs"));
+        this.kmp = Objects.requireNonNull(kmp, "kmp");
     }
 
     @Override
@@ -135,8 +147,20 @@ public final class MavenPackageSource implements PackageSource {
         Coordinate coord = withVersion(pkg, version);
         EffectivePom pom = pomBuilder.build(coord);
         List<Term> out = new ArrayList<>();
+        // KMP root module: substitute the GMM-selected platform artifact for the POM's
+        // platform fallback (-jvm), and drop every other platform sibling the variants
+        // point at — keeping both would double-define each class at dex/classpath time.
+        var kmpSelection = kmp.selectionFor(pkg, version);
+        Set<String> kmpDropped = Set.of();
+        if (kmpSelection.isPresent()) {
+            var target = kmpSelection.get().target();
+            out.add(Term.positive(
+                    target.group() + ":" + target.module(), VersionSet.atLeast(target.version(), true)));
+            kmpDropped = kmpSelection.get().allTargets();
+        }
         for (Pom.Dep dep : pom.dependencies()) {
             if (dep.optional()) continue;
+            if (kmpDropped.contains(dep.module())) continue;
             String scope = dep.scope();
             if (scope != null && !scope.isEmpty() && !FOLLOWED_SCOPES.contains(scope)) continue;
             if (dep.version() == null || dep.version().isBlank()) continue;

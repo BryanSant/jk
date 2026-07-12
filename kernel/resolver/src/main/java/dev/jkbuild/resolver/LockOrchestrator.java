@@ -75,6 +75,12 @@ public final class LockOrchestrator {
 
     private final RepoGroup repos;
     private final Resolver resolverOverride;
+
+    /**
+     * {@code org.gradle.jvm.environment} for KMP variant selection ({@code "android"} for Android
+     * projects, else standard-jvm). Set via {@link #withJvmEnvironment}.
+     */
+    private String jvmEnvironment = "standard-jvm";
     private dev.jkbuild.resolver.pubgrub.Diagnostics.Palette diagnosticPalette;
 
     public LockOrchestrator(MavenRepo repo) {
@@ -97,6 +103,12 @@ public final class LockOrchestrator {
      * so version colors in conflict messages match the live {@code coordVersion()} color. Returns
      * {@code this} for chaining.
      */
+    /** Select KMP platform variants for {@code env} ({@code "android"} / {@code "standard-jvm"}). */
+    public LockOrchestrator withJvmEnvironment(String env) {
+        if (env != null && !env.isBlank()) this.jvmEnvironment = env;
+        return this;
+    }
+
     public LockOrchestrator withDiagnosticPalette(dev.jkbuild.resolver.pubgrub.Diagnostics.Palette palette) {
         this.diagnosticPalette = palette;
         return this;
@@ -105,8 +117,9 @@ public final class LockOrchestrator {
     private PubGrubResolver buildResolver(
             dev.jkbuild.repo.RepoGroup repos,
             java.util.Map<String, String> bomConstraints,
-            java.util.Map<String, String> lockedVersionPrefs) {
-        PubGrubResolver r = new PubGrubResolver(repos, bomConstraints, lockedVersionPrefs);
+            java.util.Map<String, String> lockedVersionPrefs,
+            KmpRedirects kmp) {
+        PubGrubResolver r = new PubGrubResolver(repos, bomConstraints, lockedVersionPrefs, kmp);
         if (diagnosticPalette != null) r.palette = diagnosticPalette;
         return r;
     }
@@ -311,9 +324,10 @@ public final class LockOrchestrator {
             }
         }
 
+        KmpRedirects kmp = new KmpRedirects(repos, jvmEnvironment);
         Resolver resolver = resolverOverride != null
                 ? resolverOverride
-                : buildResolver(repos, bomConstraints, lockedVersionPrefs);
+                : buildResolver(repos, bomConstraints, lockedVersionPrefs, kmp);
         Resolution resolution = resolver.resolve(roots);
         observer.onTotal(resolution.modules().size() + fileDeps.size());
 
@@ -352,12 +366,18 @@ public final class LockOrchestrator {
 
             observer.onPackage(mod.module(), mod.version());
 
+            // A KMP root whose GMM redirects this build's runtime variant is a POM-only alias:
+            // its classes live in the redirect target (already a first-class resolved module via
+            // the dependency rewrite), so the root locks with no artifact — checksum-null rows
+            // are already classpath-inert and skipped by sync, the established POM-only shape.
+            boolean kmpAlias = kmp.selectionFor(mod.module(), mod.version()).isPresent();
+
             // The POM's packaging decides the artifact's real extension: androidx libraries
             // publish AARs, not jars. The lock records the file name in `path` so every later
             // fetch/locate (sync, repo store) and the classpath explode key off it.
             String artifactFile = null;
             try {
-                if ("aar".equals(pomBuilder.build(coord).packaging())) {
+                if (!kmpAlias && "aar".equals(pomBuilder.build(coord).packaging())) {
                     coord = new Coordinate(coord.group(), coord.artifact(), coord.version(), null, "aar");
                     artifactFile = coord.artifact() + "-" + coord.version() + ".aar";
                 }
@@ -367,7 +387,7 @@ public final class LockOrchestrator {
 
             String source = fallbackSource;
             String checksum = null;
-            RepoGroup.RepoFetched hit = repos.tryFetchArtifact(coord).orElse(null);
+            RepoGroup.RepoFetched hit = kmpAlias ? null : repos.tryFetchArtifact(coord).orElse(null);
             if (hit != null) {
                 source = hit.repo().name() + "+" + hit.repo().baseUrl();
                 checksum = "sha256:" + hit.fetched().sha256();

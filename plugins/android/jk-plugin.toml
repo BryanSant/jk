@@ -128,6 +128,11 @@ sdk-path      = "android.jar"
 
 # javac/kotlinc compile against the platform (PROVIDED posture: the runtime, dex inputs,
 # and packaging never see it — dex takes it explicitly via --lib from the extra above).
+# KMP variant selection: androidx/kotlinx KMP roots redirect their runtime to the
+# platform artifact GMM names for this environment (-android over the POM's -jvm fallback).
+[contribute.resolution]
+jvm-environment = "android"
+
 [[contribute.provided-classpath]]
 dependency = "android-jar"
 

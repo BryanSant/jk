@@ -199,6 +199,28 @@ public final class PluginContributions {
     }
 
     /**
+     * The {@code [contribute.resolution] jvm-environment} of the active plugin that declares one
+     * ({@code "android"}), or {@code "standard-jvm"} — the GMM environment KMP runtime variants
+     * resolve for. Two active plugins declaring conflicting environments is a config error.
+     */
+    public static String jvmEnvironment(JkBuild build, java.nio.file.Path moduleDir) {
+        String selected = null;
+        String selectedBy = null;
+        for (PluginManifest manifest : PluginTableRegistry.manifestsFor(moduleDir, build.plugins())) {
+            if (build.pluginConfig(manifest.id()).isEmpty()) continue;
+            String env = manifest.contributions().jvmEnvironment();
+            if (env == null) continue;
+            if (selected != null && !selected.equals(env)) {
+                throw new IllegalStateException("[" + selectedBy + "] and [" + manifest.id()
+                        + "] declare conflicting resolution jvm-environments (" + selected + " vs " + env + ")");
+            }
+            selected = env;
+            selectedBy = manifest.id();
+        }
+        return selected == null ? "standard-jvm" : selected;
+    }
+
+    /**
      * The active plugins' {@code [[contribute.packager-dependency]]} entries with conditions
      * evaluated and coordinates interpolated — the engine fetches these (never into the project's
      * dependency graph) and hands them to the packager worker by name.

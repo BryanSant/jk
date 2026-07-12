@@ -154,7 +154,9 @@ public final class LockGoals {
                     }
                     RepoGroup repos = pathPrep.repos();
                     // Deliberately no Diagnostics.Palette here — see the class javadoc.
-                    LockOrchestrator orchestrator = new LockOrchestrator(repos);
+                    LockOrchestrator orchestrator = new LockOrchestrator(repos)
+                            .withJvmEnvironment(dev.jkbuild.plugin.manifest.PluginContributions.jvmEnvironment(
+                                    pathPrep.project(), dir));
                     // Wrap the caller's observer so it also drives ctx.label/progress
                     // (the bar under a console listener; wire progress events when hosted).
                     ResolveObserver wrappedObserver = new ResolveObserver() {
@@ -334,6 +336,8 @@ public final class LockGoals {
                         PathSourceResolution.Prepared pathPrep = PathSourceResolution.prepare(
                                 prep.project(), prep.repos(), cas, dir, javaHome, JkVersion.VERSION);
                         Lockfile lock = new LockOrchestrator(pathPrep.repos())
+                                .withJvmEnvironment(dev.jkbuild.plugin.manifest.PluginContributions
+                                        .jvmEnvironment(pathPrep.project(), dir))
                                 .lock(pathPrep.project(), JkVersion.VERSION, features, withDefaultFeatures);
                         lock = GitSourceResolution.stamp(lock, prep.gitInfoByKey());
                         ctx.put(LOCKFILE, lock);
@@ -450,6 +454,8 @@ public final class LockGoals {
         PathSourceResolution.Prepared pathPrep = PathSourceResolution.prepare(
                 prep.project(), prep.repos(), cas, dir, javaHome, JkVersion.VERSION);
         Lockfile newLock = new LockOrchestrator(pathPrep.repos())
+                .withJvmEnvironment(
+                        dev.jkbuild.plugin.manifest.PluginContributions.jvmEnvironment(pathPrep.project(), dir))
                 .lock(pathPrep.project(), JkVersion.VERSION, features, withDefaultFeatures);
         newLock = GitSourceResolution.stamp(newLock, prep.gitInfoByKey());
 
