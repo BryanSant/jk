@@ -68,6 +68,14 @@ final class ManifestStep {
         if (libs.length() > 0) {
             merger.arg("--libs").arg(libs.toString());
         }
+        // A LIBRARY merge runs in the merger's LIBRARY mode (AGP semantics): placeholders like
+        // ${applicationId} stay literal — androidx.startup's per-package provider authorities
+        // must all become the APP's id at the one real merge, not each library's namespace, or
+        // the app merge sees N conflicting values. An app merge substitutes for real (the
+        // merger derives the applicationId placeholder from PACKAGE).
+        if (library) {
+            merger.arg("--merge-type").arg("LIBRARY");
+        }
         StepExec.ToolRun.Result result = merger
                 .arg("--property")
                 .arg("PACKAGE=" + namespace)

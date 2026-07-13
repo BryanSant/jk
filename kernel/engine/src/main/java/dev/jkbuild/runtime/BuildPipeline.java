@@ -2098,6 +2098,12 @@ public final class BuildPipeline {
                     tokens.add("facts:" + project.project().group() + ":" + project.project().name() + ":"
                             + project.project().version() + ":" + project.project().javaRelease() + ":"
                             + startClass);
+                    // The step's CODE is an input: a changed plugin worker jar must re-run the
+                    // step, or a plugin upgrade (or first-party dev iteration) silently restores
+                    // outputs produced by the old code.
+                    tokens.add("worker:"
+                            + dev.jkbuild.task.ClasspathFingerprint.entry(
+                                    PluginBuild.workerJarFor(active, in.cache())));
                     String taskId = ActionKey.qualifiedTaskId("plugin-" + step.name(), scratch);
                     String actionKey = ActionKey.forArtifact(taskId, dev.jkbuild.util.JkVersion.VERSION, tokens);
                     dev.jkbuild.task.ActionCache actionCache = cx.actionCache();
@@ -2250,6 +2256,9 @@ public final class BuildPipeline {
         tokens.add("facts:" + project.project().group() + ":" + project.project().name() + ":"
                 + project.project().version() + ":" + startClass);
         tokens.add("manifest:" + project.manifest());
+        // The packager's CODE is an input, same as plugin steps (see pluginStepPhase).
+        tokens.add("worker:"
+                + dev.jkbuild.task.ClasspathFingerprint.entry(PluginBuild.workerJarFor(active, in.cache())));
         String pkgTask = ActionKey.qualifiedTaskId("package-jar", jarPath);
         String pkgKey = ActionKey.forArtifact(pkgTask, dev.jkbuild.util.JkVersion.VERSION, tokens);
         if (restorePackaged(in.cache(), pkgKey, jarPath.getParent())) {
