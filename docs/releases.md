@@ -13,7 +13,8 @@ https://jkbuild.dev/releases/
     ├── jk-macos-aarch64.zip
     ├── jk-windows-x86_64.exe.zip  # future PowerShell install script's artifact
     ├── jk-engine-0.10.0.jar       # platform-neutral; same filename it keeps in ~/.jk/lib/
-    └── SHA256SUMS                 # coreutils format, covers every artifact above
+    ├── SHA256SUMS                 # coreutils format, covers every artifact above
+    └── SHA256SUMS.sig             # base64 Ed25519 signature over the exact SHA256SUMS bytes
 ```
 
 Rules the layout encodes:
@@ -39,3 +40,16 @@ Rules the layout encodes:
 Consumers, for cross-checking any layout change: `install.sh` (target detection, `latest/VERSION`
 resolution, binary URL), `EngineJarFetcher` in `:cli` (jar + checksum URLs; `JK_RELEASES_URL`
 overrides the root — mirrors and tests), and the future Windows install script.
+
+## Signing (engine-versioning-plan §4)
+
+The pipeline signs `SHA256SUMS` with the Ed25519 release key; `SHA256SUMS.sig` is the
+base64 of the raw signature over the file's exact bytes — verifiable with the JDK's
+`Signature("Ed25519")` or `openssl pkeyutl -verify -pubin`. Verifiers check
+signature-then-hash before materializing anything (`ReleaseVerifier`); a client with no
+trusted keys (dev builds, pre-signing releases) proceeds on checksums alone. The current
+public key ships baked into the client (`ReleaseVerifier.BUILT_IN_KEY`); a release may
+announce a successor key, and `[release] trusted-keys` in config.toml overrides/extends
+the set for enterprise mirrors and air-gapped hosts. Once a version is pinned in a
+`jk.lock` (version + sha256), every later fetch verifies against the pin — the signature
+gates first acquisition only.

@@ -72,7 +72,18 @@ final class EngineJarFetcher {
         URI versionDir = URI.create(releasesBase.toString() + "/" + version + "/");
         Http http = new Http();
 
-        String expectedSha = shaFor(get(http, versionDir.resolve("SHA256SUMS"), "release checksums"), jarName);
+        byte[] sumsBytes = get(http, versionDir.resolve("SHA256SUMS"), "release checksums");
+        // Authenticity gate (engine-versioning-plan §4): when this host trusts any release key,
+        // the sums MUST carry a valid signature — signature-then-hash, before any byte is used.
+        // A host with no keys at all (dev builds, pre-signing releases) proceeds on checksums
+        // alone, exactly the pre-P4 posture.
+        var verifier = dev.jkbuild.repo.ReleaseVerifier.current(
+                dev.jkbuild.config.GlobalConfig.releaseTrustedKeys());
+        if (verifier.available()) {
+            byte[] sig = get(http, versionDir.resolve("SHA256SUMS.sig"), "release signature");
+            verifier.verify(sumsBytes, new String(sig, java.nio.charset.StandardCharsets.UTF_8));
+        }
+        String expectedSha = shaFor(sumsBytes, jarName);
         byte[] jar = get(http, versionDir.resolve(jarName), "engine jar");
         String actualSha = Hashing.sha256Hex(jar);
         if (!actualSha.equalsIgnoreCase(expectedSha)) {

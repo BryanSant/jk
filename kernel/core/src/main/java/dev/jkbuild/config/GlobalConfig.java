@@ -154,6 +154,20 @@ public final class GlobalConfig {
         return stringFromGlobal(file, "toolchain", "jdk");
     }
 
+    /**
+     * {@code [release] trusted-keys} — base64 Ed25519 SPKI keys trusted to sign releases
+     * (engine-versioning-plan §4). Overrides/extends the client's baked-in key: enterprise
+     * mirrors and air-gapped hosts pin their own.
+     */
+    public static java.util.List<String> releaseTrustedKeys() {
+        return stringFromGlobal(JkDirs.userConfigFile(), "release", "trusted-keys")
+                .map(v -> java.util.Arrays.stream(v.split(","))
+                        .map(String::trim)
+                        .filter(k -> !k.isEmpty())
+                        .toList())
+                .orElse(java.util.List.of());
+    }
+
     /** Read a single string value from an arbitrary {@code [table].key}, leniently, via TomlScan. */
     private static Optional<String> stringFromGlobal(Path file, String table, String key) {
         if (file == null) return Optional.empty();
