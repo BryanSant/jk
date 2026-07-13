@@ -20,7 +20,7 @@ class JkHttpConfigTest {
     @Test
     void table_absent_means_disabled(@TempDir Path tempDir) throws IOException {
         Path toml = tempDir.resolve("config.toml");
-        Files.writeString(toml, "[engine]\nidle-minutes = 30\n");
+        Files.writeString(toml, "[engine]\nmax-heap-mb = 256\n");
         assertThat(JkHttpConfig.fromToml(toml)).isEmpty();
     }
 
@@ -134,7 +134,7 @@ class JkHttpConfigTest {
     void env_alone_never_enables() throws IOException {
         Path toml = Files.createTempFile("jk-http-", ".toml");
         try {
-            Files.writeString(toml, "[engine]\nidle-minutes = 30\n");
+            Files.writeString(toml, "[engine]\nmax-heap-mb = 256\n");
             assertThat(JkHttpConfig.resolve(toml, Map.of("JK_HTTP_PORT", "9000")::get)).isEmpty();
         } finally {
             Files.deleteIfExists(toml);

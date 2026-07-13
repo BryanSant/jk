@@ -272,8 +272,6 @@ public final class HttpEngineServer implements AutoCloseable {
                 .put("pid", s.pid())
                 .put("startedAt", s.startedAtMillis())
                 .put("uptimeSeconds", Math.max(0, (System.currentTimeMillis() - s.startedAtMillis()) / 1000))
-                .put("idleMinutes", s.idleMinutes())
-                .put("neverIdles", true) // [http] enabled forces never-self-terminate (docs/http.md)
                 .put("activeRequests", s.activeRequests())
                 .put("activePipelines", s.activePipelines())
                 .put("heapUsedBytes", s.heapUsedBytes())

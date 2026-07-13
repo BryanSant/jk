@@ -14,9 +14,7 @@ import org.tomlj.TomlTable;
  *
  * <p><strong>The presence of the table is the enable switch</strong>: a missing table (or missing
  * file) means the feature is off and the engine performs no HTTP initialization at all — hence the
- * {@code Optional} shape, unlike {@link JkEngineConfig}'s always-present defaults. An enabled table
- * also means the engine never self-terminates (see {@code docs/http.md}); the dashboard it serves
- * must not vanish out from under an open browser tab.
+ * {@code Optional} shape, unlike {@link JkEngineConfig}'s always-present defaults.
  *
  * <p>Deliberately <strong>not project-overridable</strong>, same reasoning as {@link
  * JkEngineConfig}: which port this machine's engine listens on is machine/user policy.

@@ -65,7 +65,6 @@ public final class EngineStatusCommand implements CliCommand {
                     + ",\"version\":" + Ndjson.quote(s.version())
                     + ",\"startedAt\":" + s.startedAtMillis()
                     + ",\"uptimeSeconds\":" + uptimeSeconds
-                    + ",\"idleMinutes\":" + s.idleMinutes()
                     + ",\"activeRequests\":" + s.activeRequests()
                     + ",\"heapUsedBytes\":" + s.heapUsedBytes()
                     + ",\"heapCommittedBytes\":" + s.heapCommittedBytes()

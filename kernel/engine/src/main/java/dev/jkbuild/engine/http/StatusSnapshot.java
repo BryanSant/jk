@@ -10,7 +10,6 @@ public record StatusSnapshot(
         String version,
         long pid,
         long startedAtMillis,
-        int idleMinutes,
         int activeRequests,
         int activePipelines,
         long heapUsedBytes,

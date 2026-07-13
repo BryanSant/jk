@@ -599,7 +599,6 @@ public final class EngineProtocol {
             String version,
             long pid,
             long startedAtMillis,
-            int idleMinutes,
             int activeRequests,
             int activePipelines,
             boolean draining,
@@ -617,8 +616,6 @@ public final class EngineProtocol {
                 + pid
                 + ",\"startedAt\":"
                 + startedAtMillis
-                + ",\"idleMinutes\":"
-                + idleMinutes
                 + ",\"activeRequests\":"
                 + activeRequests
                 + ",\"activePipelines\":"

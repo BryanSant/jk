@@ -204,7 +204,7 @@ defaults.
 
 - **A resident engine hosts the build.** Reversed from the original "no daemon" design: per-process
   memory planning can't stop two concurrent `jk` invocations from independently overcommitting the
-  same machine's RAM, so one long-lived engine (started lazily, self-terminating when idle) now owns
+  same machine's RAM, so one long-lived engine (started lazily, resident until an explicit stop) now owns
   dependency resolution, the build pipeline, and worker-JVM/memory accounting across every concurrent
   request. The `jk` binary itself plays both roles (client and engine) — see [`engine.md`](./engine.md)
   for the full design, lifecycle, and wire protocol.
@@ -907,7 +907,7 @@ tui         = false                 # plain text output
 engine      = false                 # default for ephemeral, one-shot CI containers
 ```
 
-`ci` is auto-selected when the standard CI env vars are present (`CI`, `GITHUB_ACTIONS`, `GITLAB_CI`, etc.). Explicit `--profile=...` overrides. `engine = false` here is a sane default for a fresh, single-build container — spawning a background process that outlives one job is pure overhead — not a statement that jk has no resident engine (see [`engine.md`](./engine.md)). A persistent self-hosted CI runner that executes many jobs should instead set `[engine] idle-minutes = -1` in `~/.jk/config.toml` to keep one engine warm across jobs.
+`ci` is auto-selected when the standard CI env vars are present (`CI`, `GITHUB_ACTIONS`, `GITLAB_CI`, etc.). Explicit `--profile=...` overrides. `engine = false` here is a sane default for a fresh, single-build container — spawning a background process that outlives one job is pure overhead — not a statement that jk has no resident engine (see [`engine.md`](./engine.md)). A persistent self-hosted CI runner that executes many jobs should instead enable the engine (it's resident and stays warm across jobs until an explicit `jk engine stop`).
 
 ---
 

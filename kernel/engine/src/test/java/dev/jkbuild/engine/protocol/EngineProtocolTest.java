@@ -34,12 +34,11 @@ class EngineProtocolTest {
     @Test
     void status_ack_round_trips_all_fields() {
         String json = EngineProtocol.statusAck(
-                "1.2.3", 42, 1_000, 120, 3, 7, true, 18_000_000, 42_000_000, 268_435_456, -1, null, null);
+                "1.2.3", 42, 1_000, 3, 7, true, 18_000_000, 42_000_000, 268_435_456, -1, null, null);
         assertThat(EngineProtocol.typeOf(json)).isEqualTo(EngineProtocol.STATUS_ACK);
         assertThat(Ndjson.str(json, "version")).isEqualTo("1.2.3");
         assertThat(Ndjson.longValue(json, "pid", -1)).isEqualTo(42);
         assertThat(Ndjson.longValue(json, "startedAt", -1)).isEqualTo(1_000);
-        assertThat(Ndjson.intValue(json, "idleMinutes", -99)).isEqualTo(120);
         assertThat(Ndjson.intValue(json, "activeRequests", -99)).isEqualTo(3);
         assertThat(Ndjson.intValue(json, "activePipelines", -99)).isEqualTo(7);
         assertThat(Ndjson.bool(json, "draining", false)).isTrue();
@@ -54,7 +53,7 @@ class EngineProtocolTest {
     @Test
     void status_ack_carries_http_url_when_serving() {
         String json = EngineProtocol.statusAck(
-                "1.2.3", 42, 1_000, 120, 3, 0, false, 1, 2, 3, -1, "http://127.0.0.1:8910/", null);
+                "1.2.3", 42, 1_000, 3, 0, false, 1, 2, 3, -1, "http://127.0.0.1:8910/", null);
         assertThat(Ndjson.str(json, "httpUrl")).isEqualTo("http://127.0.0.1:8910/");
         assertThat(Ndjson.str(json, "httpError")).isNull();
     }
@@ -62,7 +61,7 @@ class EngineProtocolTest {
     @Test
     void status_ack_carries_http_error_when_bind_failed() {
         String json = EngineProtocol.statusAck(
-                "1.2.3", 42, 1_000, 120, 3, 0, false, 1, 2, 3, -1, null, "Address already in use");
+                "1.2.3", 42, 1_000, 3, 0, false, 1, 2, 3, -1, null, "Address already in use");
         assertThat(Ndjson.str(json, "httpUrl")).isNull();
         assertThat(Ndjson.str(json, "httpError")).isEqualTo("Address already in use");
     }

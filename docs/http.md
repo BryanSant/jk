@@ -77,7 +77,7 @@ core count" semantic.
 
 ## Lifecycle
 
-Owned entirely by `EngineServer`, in the same places the accept loop and idle ticker already live:
+Owned entirely by `EngineServer`, in the same places the accept loop already lives:
 
 1. **Start** — in `EngineServer.run()`, after the lock election and socket bind succeed (the
    engine must be *the* engine before it claims a TCP port). If `JkHttpConfig.resolve()` is empty,
@@ -89,19 +89,12 @@ Owned entirely by `EngineServer`, in the same places the accept loop and idle ti
 3. **Stop** — in `EngineServer.cleanup()`: `HttpServer.stop(1)` (one second of grace for in-flight
    responses; SSE streams are closed immediately — clients reconnect to the next engine), delete
    `<key>.http`.
-4. **Status** — `jk engine status` gains an `http` line: the URL when serving, `disabled` when no
+4. **Status** — `jk engine status` gains a `Web UI` line: the URL when serving, `disabled` when no
    table, or the bind error when it failed. `--output json` carries `httpUrl` (null when off).
 
-### Idle-timeout interaction
-
-**An enabled `[http]` table means the engine never self-terminates.** The dashboard is served by
-the engine process itself, and only a `jk` CLI invocation can respawn one — so a web client that
-works until the engine idles out, then errors, would be an astonishing experience. Enabling HTTP
-is an explicit statement that this machine wants a resident engine; it forces the effective idle
-policy to "never" (the existing `idle-minutes = -1` semantic), overriding any configured
-`idle-minutes` — including `0`. Concretely, `EngineServer` simply never starts the idle ticker
-when HTTP is enabled, and `jk engine status` reports the policy as `never (http enabled)` so the
-override is visible rather than mysterious.
+The engine is resident regardless of HTTP — it never self-terminates and runs until an explicit
+`jk engine stop` — so the dashboard is always served by a live process and never vanishes out from
+under an open browser tab.
 
 The engine still stops for every explicit reason: `jk engine stop`, a version-skew kill+respawn
 after a `jk` upgrade, `SIGTERM`, or a crash. The SPA therefore still needs its
@@ -279,16 +272,15 @@ Same style as the engine's existing suite (test seams, no real minutes of sleepi
   mixed-case), MIME table, 304 behavior, growing-file snapshot reads, Host-header rejection,
   token accept/reject (including timing-safe path), admission 503, SSE event delivery + heartbeat
   + drop-oldest, bind-failure survival (engine keeps serving the socket).
-- Idle interaction: an HTTP-enabled engine never starts the idle ticker and never self-terminates
-  (short-tick test seam already exists); `jk engine status` reports `never (http enabled)`;
-  explicit `SHUTDOWN` still stops it cleanly, HTTP server included.
+- Lifecycle: the engine is resident and never self-terminates; an explicit `SHUTDOWN` stops it
+  cleanly, HTTP server included.
 
 ## Implementation phases
 
 1. **`JkHttpConfig`** (`:core`) + tests. No behavior change anywhere.
 2. **Server skeleton** — `HttpEngineServer` lifecycle inside `EngineServer.run()`/`cleanup()`,
-   the never-self-terminate idle override, `<key>.http` URL file, `jk engine status` line, Host
-   validation, admission semaphore, static serving from both sources. This phase is independently shippable and useful (serve generated
+   `<key>.http` URL file, `jk engine status` line, Host validation, admission semaphore, static
+   serving from both sources. This phase is independently shippable and useful (serve generated
    reports from `state/www`).
 3. **REST core** — router, `JsonOut`, `/api/status`, token minting/validation +
    `<key>.http-token`.
