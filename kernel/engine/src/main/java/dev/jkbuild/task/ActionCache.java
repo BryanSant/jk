@@ -170,7 +170,9 @@ public final class ActionCache {
             Path target = baseDir.resolve(e.getKey());
             Files.createDirectories(target.getParent());
             Files.deleteIfExists(target);
-            Linking.linkOrCopy(cas.pathFor(e.getValue()), target);
+            // COPY, never link: a packager may later rewrite the target in place, and a link
+            // would let that rewrite mutate the blob (see Cas.putByCopy).
+            Files.copy(cas.pathFor(e.getValue()), target);
             ledger.touch(e.getValue());
         }
         return true;
@@ -189,7 +191,8 @@ public final class ActionCache {
         for (Path a : artifacts) {
             if (!Files.isRegularFile(a)) continue;
             String hex = Hashing.sha256Hex(a);
-            cas.putByLink(a, hex);
+            cas.putByCopy(a, hex); // never link a mutable target/ artifact into the CAS
+
             outputs.put(baseDir.relativize(a).toString().replace(File.separatorChar, '/'), hex);
         }
         return storeWithOutputs(taskId, actionKey, inputs, outputs);

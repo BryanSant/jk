@@ -71,7 +71,7 @@ public final class ToolRunCommand implements CliCommand {
 
     @Override
     public List<Opt> options() {
-        return List.of(
+        List<Opt> opts = List.of(
                 Opt.value("<class>", "Override the Main-Class to exec (coordinate targets only).", "--main"),
                 Opt.value("<coord>", "Add an extra dependency to the tool's classpath (repeatable).", "--with"),
                 Opt.value("<dir>", "Override the jk cache directory.", "--cache-dir")
@@ -84,6 +84,9 @@ public final class ToolRunCommand implements CliCommand {
                         .hide(),
                 Opt.flag("Ignore cached classes and recompile (file targets only).", "--force-recompile")
                         .hide()); // --force-recompile hidden; global --force covers this
+        var all = new ArrayList<>(opts);
+        all.addAll(VariantSelection.options()); // project targets only; tool/script targets ignore them
+        return all;
     }
 
     @Override
@@ -283,6 +286,9 @@ public final class ToolRunCommand implements CliCommand {
         // --force (global) and legacy --force-recompile both force recompilation.
         this.forceRecompile = in.isSet("force") || in.isSet("force-recompile");
         this.global = GlobalOptions.from(in);
+        // --release / --variant parameterize project targets (current dir or a directory target):
+        // the selection rides the ambient session into the delegate's build + deploy verb.
+        VariantSelection.install(in, global.workingDir());
         // A local file target (by extension) is compiled/run by ScriptRunner; the
         // extension is the signal even when the file is missing, so the user gets
         // a proper "not found" error from the matching mode handler. Routing goes

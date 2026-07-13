@@ -167,6 +167,31 @@ public final class Cas {
     }
 
     /**
+     * As {@link #putByLink} but always COPIES — for sources a build may later rewrite in place
+     * (target/ artifacts): a hard link would let that rewrite silently mutate the "immutable"
+     * blob, poisoning every record that references it (the variant-alternation shadow-jar bug).
+     */
+    public Path putByCopy(Path source, String hex) throws IOException {
+        Path target = pathFor(hex);
+        if (Files.exists(target)) {
+            return target;
+        }
+        Files.createDirectories(target.getParent());
+        Path tmp = Files.createTempFile(target.getParent(), ".put-", ".tmp");
+        try {
+            Files.copy(source, tmp, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            try {
+                Files.move(tmp, target, java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+            } catch (java.nio.file.AtomicMoveNotSupportedException e) {
+                Files.move(tmp, target, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            }
+        } finally {
+            Files.deleteIfExists(tmp);
+        }
+        return target;
+    }
+
+    /**
      * Read bytes for a hash. Verifies the content actually hashes to the expected value; throws if
      * the on-disk blob is corrupted.
      */
