@@ -605,7 +605,7 @@ public final class JavaIncrementalCompile {
                 if (FreshnessStamp.isStampFile(file.getFileName().toString())) continue;
                 // Streamed hash + hard-link (same pattern as ActionCache.store).
                 String hex = Hashing.sha256Hex(file);
-                cas.putByLink(file, hex);
+                cas.putFile(file, hex);
                 outputs.put(out.relativize(file).toString().replace(File.separatorChar, '/'), hex);
             }
         }

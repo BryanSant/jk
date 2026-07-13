@@ -116,16 +116,18 @@ rather than errors; builds alone enforce the mandatory check.
 `jk lock` resolves the **union** of every value's dependency overlays — one lockfile covers
 every variant, and a concrete build uses the subgraph its selection activates (cargo's
 model). The trade-off: mutually exclusive values can over-constrain each other (demo's dep
-pinning a transitive prod needs elsewhere). If that bites, align the versions across values;
-per-value lock partitions are the designed escape hatch if real projects ever need it.
+pinning a transitive prod needs elsewhere). When a resolve fails with variant overlays in
+play, the error names each value's contributed deps so you can align versions across
+values; per-value lock partitions are the designed escape hatch if real projects ever
+need it.
 
 ## Switching variants in place
 
-Variant builds share the module's `target/`. Recompiling after a switch is automatic (the
-selection is in every action key), but a class that only the *previous* selection's
-`extra-src` compiled currently survives in `target/` until `jk clean` — run one between
-selections when a removed-source class would matter (recorded gap; orphan pruning on
-variant switch is the fix).
+Variant builds share the module's `target/` and switching is safe: the selection is in
+every action key, the Java compiler starts full compiles clean and prunes removed
+sources' outputs incrementally, and when the Kotlin source set shrinks (an `extra-src`
+root leaving the selection) the merged classes tree is restarted clean before the
+compile — a dropped value's classes never survive into the packaged artifact.
 
 ## Worked example
 

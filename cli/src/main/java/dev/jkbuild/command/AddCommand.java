@@ -349,7 +349,7 @@ public final class AddCommand implements CliCommand {
         // Streamed hash + hard-link — the jar never has to fit in the CLI's small heap.
         String sha256 = Hashing.sha256Hex(filePath);
         Cas cas = new Cas(cache);
-        cas.putByLink(filePath, sha256);
+        cas.putFile(filePath, sha256);
 
         // Edit jk.toml (engine-side).
         try {

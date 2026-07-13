@@ -110,11 +110,44 @@ public final class LockFlow {
         try {
             lock = orchestrator.lock(pathPrep.project(), dev.jkbuild.util.JkVersion.VERSION, features, !noDefaultFeatures);
         } catch (IOException e) {
-            return new Result(6, e.getMessage(), null, effective, moduleCount);
+            return new Result(6, e.getMessage() + variantUnionHint(dir, parsed), null, effective, moduleCount);
         }
         lock = GitSourceResolution.stamp(lock, prep.gitInfoByKey());
         LockfileWriter.write(lock, lockFile);
         dev.jkbuild.task.AccessLedger.atDefaultPath().touchLock(lock);
         return new Result(0, null, lock, effective, moduleCount);
+    }
+
+    /**
+     * When a resolve fails and {@code [variants]} dependency overlays are in play, say so: the
+     * lock resolves the UNION of every value's deps (docs/variants.md → Locking), so the conflict
+     * may be between values that never build together — name each value's contributions so the
+     * user can align versions across them.
+     */
+    private static String variantUnionHint(Path dir, JkBuild parsed) {
+        java.util.List<String> lines = new java.util.ArrayList<>();
+        try {
+            collectOverlayLines(parsed, null, lines);
+            if (parsed.isWorkspaceRoot()) {
+                for (var e : WorkspaceLoader.loadModules(dir, parsed).entrySet()) {
+                    collectOverlayLines(e.getValue(), e.getValue().project().name(), lines);
+                }
+            }
+        } catch (Exception ignored) {
+            // hint construction must never mask the real resolve error
+        }
+        if (lines.isEmpty()) return "";
+        StringBuilder b = new StringBuilder(
+                "\nnote: jk.lock resolves the UNION of every variant value's dependencies,"
+                        + "\nso this conflict may be between values that never build together — align their"
+                        + "\nversions across values (docs/variants.md → Locking). Overlays in play:");
+        for (String line : lines) b.append("\n  ").append(line);
+        return b.toString();
+    }
+
+    private static void collectOverlayLines(JkBuild build, String module, java.util.List<String> lines) {
+        for (String line : dev.jkbuild.model.Variants.describeDependencyOverlays(build)) {
+            lines.add(module == null ? line : module + ": " + line);
+        }
     }
 }

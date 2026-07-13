@@ -16,6 +16,29 @@ class FreshnessStampTest {
     private static final int RELEASE = 21;
 
     @Test
+    void removed_sources_are_detected_and_absent_stamp_is_not(@TempDir Path tempDir) throws IOException {
+        Path classes = tempDir.resolve("classes");
+        Files.createDirectories(classes);
+        Path kept = writeFile(tempDir.resolve("Kept.java"), "class Kept {}");
+        Path dropped = writeFile(tempDir.resolve("Dropped.java"), "class Dropped {}");
+        // No stamp yet: nothing recorded, nothing removed.
+        assertThat(FreshnessStamp.hasRemovedSources(classes, FreshnessStamp.JAVA_STAMP, List.of(kept)))
+                .isFalse();
+        FreshnessStamp.write(
+                classes, FreshnessStamp.JAVA_STAMP, "compile-main", "key123",
+                List.of(kept, dropped), List.of(), RELEASE);
+        // Same set: no removals. Grown set: no removals. Shrunk set: removal detected —
+        // the variant-switch case (an extra-src root left the selection).
+        assertThat(FreshnessStamp.hasRemovedSources(classes, FreshnessStamp.JAVA_STAMP, List.of(kept, dropped)))
+                .isFalse();
+        assertThat(FreshnessStamp.hasRemovedSources(
+                        classes, FreshnessStamp.JAVA_STAMP, List.of(kept, dropped, tempDir.resolve("New.java"))))
+                .isFalse();
+        assertThat(FreshnessStamp.hasRemovedSources(classes, FreshnessStamp.JAVA_STAMP, List.of(kept)))
+                .isTrue();
+    }
+
+    @Test
     void absent_stamp_is_not_fresh(@TempDir Path tempDir) throws IOException {
         Path classes = tempDir.resolve("classes");
         Files.createDirectories(classes);

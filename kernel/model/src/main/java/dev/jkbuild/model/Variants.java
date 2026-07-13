@@ -133,6 +133,25 @@ public record Variants(List<Dimension> dimensions) {
     }
 
     /**
+     * Human lines describing {@code build}'s per-value dependency overlays —
+     * {@code "contentType=demo → ads, analytics"} — for the union-lock conflict hint. Empty
+     * when no value overlays dependencies.
+     */
+    public static List<String> describeDependencyOverlays(JkBuild build) {
+        List<String> out = new java.util.ArrayList<>();
+        for (Dimension dimension : build.variants().dimensions()) {
+            for (Map.Entry<String, Value> e : dimension.values().entrySet()) {
+                List<String> names = new java.util.ArrayList<>();
+                e.getValue().dependencies().values().forEach(deps -> deps.forEach(d -> names.add(d.name())));
+                if (!names.isEmpty()) {
+                    out.add(dimension.name() + "=" + e.getKey() + " → " + String.join(", ", names));
+                }
+            }
+        }
+        return out;
+    }
+
+    /**
      * One axis: its values (name → overlay) and the optional default value name. The built-in
      * {@code build-type} dimension defaults to {@code debug} whether or not it is declared; a
      * custom dimension without a default makes selection mandatory.

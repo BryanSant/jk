@@ -80,9 +80,9 @@ public final class ActionCache {
                     // the output file in target/ and the CAS object share an
                     // inode from this point on; the storage cost of caching
                     // is zero. Cross-fs falls back to a byte copy via
-                    // Cas.putByLink → Linking.linkOrCopy.
+                    // Cas.putFile → Linking.linkOrCopy.
                     String hex = Hashing.sha256Hex(file);
-                    cas.putByLink(file, hex);
+                    cas.putFile(file, hex);
                     String relPath = outputDir.relativize(file).toString().replace(File.separatorChar, '/');
                     outputs.put(relPath, hex);
                 }
@@ -144,10 +144,11 @@ public final class ActionCache {
         AccessLedger ledger = AccessLedger.atDefaultPath();
         for (Map.Entry<String, String> entry : record.outputs().entrySet()) {
             Path target = outputDir.resolve(entry.getKey());
-            // Hard-link from the CAS object on POSIX same-fs; cross-fs and
-            // Windows fall back to a copy automatically. Cuts restore cost
-            // for large classes/ trees from O(bytes) to O(entries).
-            Linking.linkOrCopy(cas.pathFor(entry.getValue()), target);
+            // COPY, never link: compilers rewrite restored class files IN PLACE on the next
+            // build, and a hard link would let that rewrite mutate the CAS blob (see
+            // Cas.putFile). Costs O(bytes) instead of O(entries) — correctness wins.
+            Files.createDirectories(target.getParent());
+            Files.copy(cas.pathFor(entry.getValue()), target);
             // Best-effort access journal — feeds the LRU evictor when the
             // user configures a cache size budget.
             ledger.touch(entry.getValue());
@@ -171,7 +172,7 @@ public final class ActionCache {
             Files.createDirectories(target.getParent());
             Files.deleteIfExists(target);
             // COPY, never link: a packager may later rewrite the target in place, and a link
-            // would let that rewrite mutate the blob (see Cas.putByCopy).
+            // would let that rewrite mutate the blob (see Cas.putFile).
             Files.copy(cas.pathFor(e.getValue()), target);
             ledger.touch(e.getValue());
         }
@@ -191,7 +192,7 @@ public final class ActionCache {
         for (Path a : artifacts) {
             if (!Files.isRegularFile(a)) continue;
             String hex = Hashing.sha256Hex(a);
-            cas.putByCopy(a, hex); // never link a mutable target/ artifact into the CAS
+            cas.putFile(a, hex); // never link a mutable target/ artifact into the CAS
 
             outputs.put(baseDir.relativize(a).toString().replace(File.separatorChar, '/'), hex);
         }

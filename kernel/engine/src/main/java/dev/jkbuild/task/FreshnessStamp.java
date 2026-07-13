@@ -100,6 +100,27 @@ public final class FreshnessStamp {
     }
 
     /**
+     * True when the stamp recorded a source that is NOT in the current set — the source set
+     * shrank (a variant switch dropping an extra-src root, a deleted file). The caller must
+     * start the output tree clean: kotlinc's incremental engine prunes its own dir, but the
+     * assemble merge into the shared classes tree is additive, so a dropped source's classes
+     * would otherwise survive into the packaged artifact.
+     */
+    public static boolean hasRemovedSources(Path outputDir, String stampName, List<Path> currentSources) {
+        try {
+            Optional<Stamp> read = read(outputDir, stampName);
+            if (read.isEmpty()) return false;
+            Set<Path> current = normalise(currentSources);
+            for (Path recorded : normalise(read.get().sources())) {
+                if (!current.contains(recorded)) return true;
+            }
+            return false;
+        } catch (IOException e) {
+            return false;
+        }
+    }
+
+    /**
      * Cheap, classpath-free freshness probe for progress-weight prediction: {@code true} when a stamp
      * exists and no source has been touched since it was written. Unlike {@link #isFresh} it doesn't
      * compare the source/classpath <em>sets</em> (the predictor has no resolved classpath), so a

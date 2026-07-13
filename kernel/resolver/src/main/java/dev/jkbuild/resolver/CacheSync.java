@@ -339,7 +339,7 @@ public final class CacheSync {
                 local.locate(dev.jkbuild.repo.MavenLayout.artifactPath(toCoord(pkg)));
         if (jar.isEmpty()) return false;
         try {
-            cas.putByLink(jar.get(), hex);
+            cas.putFile(jar.get(), hex);
             return true;
         } catch (java.io.IOException e) {
             return false;

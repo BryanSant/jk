@@ -152,26 +152,16 @@ public final class Cas {
      *
      * <p>Idempotent. If a CAS entry for {@code hex} already exists the source is left untouched.
      */
-    public Path putByLink(Path source, String hex) throws IOException {
-        Path target = pathFor(hex);
-        if (Files.exists(target)) {
-            return target;
-        }
-        Files.createDirectories(target.getParent());
-        // Linking.linkOrCopy handles cross-filesystem fallback and parent
-        // creation. Race with a concurrent putByLink: linkOrCopy deletes
-        // any existing entry first, so the second writer overwrites the
-        // first — same content, indistinguishable outcome.
-        Linking.linkOrCopy(source, target);
-        return target;
-    }
-
     /**
-     * As {@link #putByLink} but always COPIES — for sources a build may later rewrite in place
-     * (target/ artifacts): a hard link would let that rewrite silently mutate the "immutable"
-     * blob, poisoning every record that references it (the variant-alternation shadow-jar bug).
+     * Store {@code source}'s bytes under {@code hex} by COPY (temp file + atomic move). The CAS
+     * never shares an inode with a file outside it: hard-linking was "free" caching, but any
+     * in-place rewrite of the other name (a compiler truncating a class file, a packager
+     * rewriting a jar, gradle overwriting a SNAPSHOT) silently mutated the "immutable" blob and
+     * poisoned every record referencing it — a verification sweep found 76 such blobs from
+     * ordinary edit-and-rebuild cycles. Read-side consumers may still hand out CAS paths
+     * directly (classpaths): reads don't mutate.
      */
-    public Path putByCopy(Path source, String hex) throws IOException {
+    public Path putFile(Path source, String hex) throws IOException {
         Path target = pathFor(hex);
         if (Files.exists(target)) {
             return target;

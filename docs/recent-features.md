@@ -201,3 +201,18 @@ attaches once in `EngineWorkerAdapter.stream` (plus the test/single-build/exec-p
 writers). Exec plans and plugin verbs apply the selection LENIENTLY
 (`VariantApply.applyLenient`): unselected mandatory dimensions are skipped, so
 `jk android licenses` still answers pre-selection while `jk run --release` deploys the AAB.
+
+### Gap closures + CAS aliasing sweep (same day)
+
+- The CAS never shares inodes with anything, both directions: Cas.putFile (copy,
+  temp+atomic) replaced putByLink everywhere (compile-output stores, the CAS prewriter,
+  worker-jar sync, repo materialize, file-dep adds), ActionCache.restore copies class
+  trees, and jk install copies artifacts instead of linking the build tree. Root cause:
+  compilers/packagers rewrite outputs IN PLACE, so any shared inode silently mutated
+  "immutable" blobs (76 poisoned blobs found and purged).
+- Variant switches are fully safe in place: FreshnessStamp.hasRemovedSources detects a
+  shrunken source set and compile-kotlin restarts the merged classes tree clean (javac
+  already pruned via JavaIncrementalCompile). The documented stale-class gap is closed —
+  its main symptom was actually the CAS aliasing bug.
+- Union-lock resolve failures now name each variant value's contributed deps
+  (LockFlow.variantUnionHint) with a pointer to docs/variants.md → Locking.

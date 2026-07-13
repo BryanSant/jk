@@ -1497,6 +1497,16 @@ public final class BuildPipeline {
                     // rewrites, and copy-resources churns it).
                     List<Path> freshInputs = new ArrayList<>(ktSources);
                     if (mixedWithJava) freshInputs.addAll(javaSources(ctx));
+                    // A shrunken Kotlin source set (a variant switch dropping an extra-src root)
+                    // must not leave the dropped classes in the merged output: kotlinc's IC
+                    // prunes its own dir, but the assemble merge into classes/ is additive.
+                    // Start the merged tree clean — both stamps die with it, so javac re-runs
+                    // too (rare: only on source removals).
+                    if (dev.jkbuild.task.FreshnessStamp.hasRemovedSources(
+                            classes, dev.jkbuild.task.FreshnessStamp.KOTLIN_STAMP, freshInputs)) {
+                        dev.jkbuild.util.PathUtil.deleteRecursively(classes);
+                        Files.createDirectories(classes);
+                    }
                     boolean rerun = in.session().config().rerunOr(false);
                     if (!rerun
                             && dev.jkbuild.task.FreshnessStamp.isFresh(

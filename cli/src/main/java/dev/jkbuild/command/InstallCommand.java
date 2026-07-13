@@ -484,7 +484,9 @@ public final class InstallCommand implements CliCommand {
             Path src = Path.of(plan.linkSrcs().get(i));
             Path dest = Path.of(plan.linkDests().get(i));
             Files.createDirectories(dest.getParent());
-            Linking.linkOrCopy(src, dest);
+            // COPY, never link: src is a target/ artifact the next build rewrites in place —
+            // an installed tool must be a stable snapshot, not an alias of the build tree.
+            Files.copy(src, dest, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
         }
         if (!plan.launcherScript().isEmpty()) {
             Path launcher = Path.of(plan.launcherPath());

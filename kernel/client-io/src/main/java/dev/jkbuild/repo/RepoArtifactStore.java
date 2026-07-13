@@ -144,7 +144,10 @@ public final class RepoArtifactStore {
             Path sidecar = sidecarPath(relativePath);
             if (Files.exists(sidecar)) return;
             Path artifact = root.resolve(relativePath);
-            Linking.linkOrCopy(casBlob, artifact);
+            // COPY, never link: installLocal/maven overwrite repo files in place; a link
+            // would let that overwrite mutate the CAS blob (see Cas.putFile).
+            Files.createDirectories(artifact.getParent());
+            Files.copy(casBlob, artifact, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
             Files.createDirectories(sidecar.getParent());
             Files.writeString(sidecar, sha256);
         } catch (IOException | RuntimeException ignored) {
