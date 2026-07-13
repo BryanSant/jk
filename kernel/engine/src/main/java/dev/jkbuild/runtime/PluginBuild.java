@@ -291,31 +291,50 @@ public final class PluginBuild {
     public static Map<String, Path> fetchStepDependencies(
             JkBuild project, Path moduleDir, Cas cas, Map<String, String> sdkPins)
             throws IOException, InterruptedException {
+        return fetchStepDependencies(project, moduleDir, cas, sdkPins, false);
+    }
+
+    /**
+     * As above; {@code lenient} makes each fetch best-effort — a tool that cannot provision
+     * (a license-gated SDK component, an unreachable repo) is simply absent from the map, and a
+     * consumer that needs it fails with its own message ({@code requireExtra}). Verb dispatch
+     * uses this: {@code jk android licenses} must be reachable BEFORE any license is accepted,
+     * and it only needs the license-free SDK root.
+     */
+    public static Map<String, Path> fetchStepDependencies(
+            JkBuild project, Path moduleDir, Cas cas, Map<String, String> sdkPins, boolean lenient)
+            throws IOException, InterruptedException {
         Map<String, Path> out = new LinkedHashMap<>();
         List<PluginContributions.StepDep> deps = PluginContributions.stepDependencies(project, moduleDir);
         if (deps.isEmpty()) return out;
         dev.jkbuild.repo.RepoGroup repos = null;
         for (PluginContributions.StepDep dep : deps) {
-            if (dep.sdkComponent() != null) {
+            try {
+                if (dep.sdkComponent() != null) {
+                    out.put(
+                            dep.artifact(),
+                            SdkComponents.resolve(
+                                    dep.sdkComponent(), dep.sdkPath(), sdkPins.get(dep.sdkComponent())));
+                    continue;
+                }
+                if (repos == null) repos = RepoGroupBuilder.buildFor(project, null, cas);
+                if (dep.transitive()) {
+                    out.put(dep.artifact(), toolClosureDir(dep.coordinateSpec(), repos, cas));
+                    continue;
+                }
+                dev.jkbuild.model.Coordinate coord = dev.jkbuild.model.Coordinate.parse(dep.coordinateSpec());
                 out.put(
                         dep.artifact(),
-                        SdkComponents.resolve(dep.sdkComponent(), dep.sdkPath(), sdkPins.get(dep.sdkComponent())));
-                continue;
+                        repos.tryFetchArtifact(coord)
+                                .orElseThrow(() -> new IOException("cannot fetch " + coord
+                                        + " — the coordinate a plugin's step-dependency names must exist in a"
+                                        + " declared repo"))
+                                .fetched()
+                                .cachePath());
+            } catch (IOException | RuntimeException e) {
+                if (!lenient) throw e;
+                // Best-effort: the verb that needs this tool reports the miss itself.
             }
-            if (repos == null) repos = RepoGroupBuilder.buildFor(project, null, cas);
-            if (dep.transitive()) {
-                out.put(dep.artifact(), toolClosureDir(dep.coordinateSpec(), repos, cas));
-                continue;
-            }
-            dev.jkbuild.model.Coordinate coord = dev.jkbuild.model.Coordinate.parse(dep.coordinateSpec());
-            out.put(
-                    dep.artifact(),
-                    repos.tryFetchArtifact(coord)
-                            .orElseThrow(() -> new IOException("cannot fetch " + coord
-                                    + " — the coordinate a plugin's step-dependency names must exist in a"
-                                    + " declared repo"))
-                            .fetched()
-                            .cachePath());
         }
         return out;
     }

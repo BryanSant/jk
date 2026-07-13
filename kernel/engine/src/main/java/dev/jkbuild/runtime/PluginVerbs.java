@@ -51,10 +51,12 @@ public final class PluginVerbs {
                     .layout(layout.classesDir(), dir, scratch)
                     .artifact(PluginBuild.mainArtifactPath(layout, active))
                     .verbArgs(args);
-            // Verbs get the same declared tool artifacts steps do (adb from an SDK component).
+            // Verbs get the same declared tool artifacts steps do (adb from an SDK component) —
+            // best-effort: `jk android licenses` must run BEFORE licenses gate provisioning, so
+            // an unprovisionable tool is absent and only a verb that needs it complains.
             for (var tool : PluginBuild.fetchStepDependencies(
                     project, dir, new dev.jkbuild.cache.Cas(cache),
-                    PluginBuild.sdkPins(dir.resolve("jk.lock")))
+                    PluginBuild.sdkPins(dir.resolve("jk.lock")), true)
                     .entrySet()) {
                 specWriter.extra(tool.getKey(), tool.getValue());
             }
