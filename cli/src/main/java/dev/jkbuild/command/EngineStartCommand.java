@@ -41,17 +41,21 @@ public final class EngineStartCommand implements CliCommand {
     @Override
     public int run(Invocation in) {
         EnginePaths.Paths paths = EnginePaths.current();
+        // Was a matching engine already up before we touched it? Distinguishes "already running"
+        // from a fresh start in the settled wedge below.
+        boolean alreadyUp = EngineClient.handshake(paths.socket(), Jk.VERSION)
+                .map(h -> Jk.VERSION.equals(h.version()))
+                .orElse(false);
         try {
             EngineClient.EngineReady ready = EngineClient.ensureReady(paths, Jk.VERSION);
             // The optimize path already printed its own wedge ("✓ Engine  Build engine optimized and
-            // started (pid N) took Xs"). Otherwise — a fast cache-mapped start, or an engine that was
-            // already running — print the matching green wedge rather than a plain line.
+            // started (pid N) took Xs"). Otherwise print the matching green wedge — "already running"
+            // when it was up before, else "started".
             if (!ready.optimized()) {
-                CliOutput.out(GoalWedge.chipLine(
-                        Glyphs.CHECK,
-                        "Engine",
-                        GlobalConfig.nerdfont(),
-                        "Build engine started (pid " + pidStyled(ready.handshake().pid()) + ")"));
+                String pid = pidStyled(ready.handshake().pid());
+                String message =
+                        alreadyUp ? "Engine already running (pid " + pid + ")" : "Build engine started (pid " + pid + ")";
+                CliOutput.out(GoalWedge.chipLine(Glyphs.CHECK, "Engine", GlobalConfig.nerdfont(), message));
             }
             return Exit.SUCCESS;
         } catch (IOException e) {
