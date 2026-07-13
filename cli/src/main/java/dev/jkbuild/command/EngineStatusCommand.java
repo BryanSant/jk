@@ -83,7 +83,12 @@ public final class EngineStatusCommand implements CliCommand {
         String memory = formatMemory(s);
         if (memory != null) detail("Memory", memory);
         String http = describeHttp(s, paths);
-        detail("Web UI", s.httpUrl() != null ? Ansi.hyperlink(http, http) : http);
+        // OSC-8 hyperlink with the URL colored (bright cyan + underline) so it reads AND behaves as a
+        // clickable link — same convention as `jk add`'s repo links.
+        String webUi = s.httpUrl() != null
+                ? Ansi.hyperlink(http, Theme.colorize(http, Theme.active().activeStep().underline()))
+                : http;
+        detail("Web UI", webUi);
         return Exit.SUCCESS;
     }
 
