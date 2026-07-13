@@ -2,7 +2,7 @@
 
 **Status:** v0.9 shipped (self-hosting). Plan is now a living document — milestones in §5 reflect what's landed.
 **Owner:** bryan.sant@proton.me
-**Last updated:** 2026-05-22
+**Last updated:** 2026-07-13
 **Companion to:** [requirements.md](./requirements.md)
 
 ---
@@ -107,7 +107,15 @@ Logical sequencing, dependency-driven, no calendar estimates. Each milestone is 
 - **v0.7 — Git deps.** ✅ Shipped. JGit resolver, TOML git-source syntax, GitFetcher + GitSource + GitUrl.
 - **v0.8 — Container & supply chain.** ✅ Shipped. `jk image` (Jib-core), `jk audit` (OSV), `jk deny`, CycloneDX + SPDX, `jk native` (GraalVM native-image driver).
 - **v0.9 — Self-hosting.** ✅ Shipped. `jk verify` (reproducibility check), candidate self-hosting `jk.tomls`, jk builds itself end-to-end. Subprocess compile strategies behind a pluggable SPI (kotlin-compiler-embeddable removed). Native-image config consolidated; binary trimmed 187 MB → 138 MB. Good-neighbor tool discovery layered on after the milestone.
-- **v1.0 — GA.** Next. IntelliJ plugin (synthetic-POM bridge mode), VS Code extension shell, docs site, benchmark dashboard, `setup-jk` GitHub Action, signed v1.0.0 release.
+- **v0.11 — Engine versioning & self-management.** Planned; full plan in
+  [engine-versioning-plan.md](./engine-versioning-plan.md). One daemon at the newest
+  version, CAS-unified storage (`~/.jk/versions/<v>/`, `lib/` retired), frozen
+  protocol-zero + endpoint-file takeover upgrades (no killed jobs, Windows included),
+  downward delegation for lock-pinned older toolchains, signed releases
+  (minisign + sigstore transparency), `jk self update`, `jk wrapper`, ledger-driven GC.
+  P1 (storage) + P2 (protocol-zero/takeover) must ship together — they are the
+  compatibility floor for every later upgrade.
+- **v1.0 — GA.** Next. IntelliJ plugin (synthetic-POM bridge mode), VS Code extension shell, docs site, benchmark dashboard, `setup-jk` GitHub Action, signed v1.0.0 release (the v0.11 signing pipeline).
 
 ---
 

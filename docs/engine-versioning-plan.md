@@ -149,21 +149,89 @@ every launch/delegation. Prune keeps (a) current, (b) anything touched inside th
 retention window, (c) nothing else — a stale pin re-materializes from the CAS or the
 release site on demand, because R1 made materialization cheap and reproducible.
 
-## 6. Phases
+## 6. Implementation plan
 
-- **P1 — storage unification** (foundation, no behavior change): engine jar + client
-  binary flow through the CAS; `versions/<v>/` materialization; `bin/jk` symlink flip;
-  `lib/` retired; AOT confirmed local-only in `state/engine/<v>/`. install.sh writes the
-  same layout.
-- **P2 — protocol-zero + takeover**: the frozen hello/yield handshake; socket-rename
-  handoff; lame-duck drain; kill-on-skew replaced. (Ship P2 in the same release as P1 —
-  the first version that speaks protocol-zero is the floor every later upgrade stands on.)
-- **P3 — downward delegation**: pinned-older builds exec child engines over stdio via the
-  worker pattern; `jk-compat` checked at parse.
-- **P4 — signing + `jk self update`**: minisign key in CI + client; update/takeover verbs;
-  lock pins record hashes.
-- **P5 — GC + polish**: ledger-driven pruning; `jk engine status` shows daemon version,
-  lame ducks, and materialized set; sigstore transparency layer.
+Ordering rule: **P1+P2 ship in one release** — the first version that writes the
+`versions/` layout and speaks protocol-zero is the floor every later upgrade stands on.
+P3–P6 are independent after that.
+
+### P1 — storage unification (foundation; no behavior change) — M
+
+| Work item | Where |
+|---|---|
+| `VersionStore`: materialize `versions/<v>/` (bin/jk, lib/jk-engine.jar, manifest.toml) by COPY from the CAS; idempotent; verify-before-activate; `current()` scans for max | new, `kernel/client-io` (beside `Cas`/`RepoArtifactStore`) |
+| Engine jar + client binary ingest via `Cas.putFile` on download/install | `EngineJarFetcher` (fetch → CAS → materialize, drop the direct `~/.jk/lib` write), `install.sh` (same layout in shell) |
+| `bin/jk` becomes a symlink into `versions/<current>/bin/` (Windows: a tiny shim exe or copy — decide with the endpoint work) | `install.sh`, `InstallCommand` self-install path |
+| Spawn from the version dir, not `~/.jk/lib` | `EngineClient` spawn path + `EnginePaths` (add `versionsDir()`, `versionRoot(v)`) |
+| AOT + `.noaot` move to `state/engine/<v>/`; toolchain path confirmed to TRAIN locally, never ship `.aot` payloads | `EnginePaths` (aot naming), `EngineClient` AOT train/verify block (~L1277-1350) |
+| `manifest.toml` written at materialization: artifact shas, worker-jar pins, protocol int | `VersionStore` |
+
+Acceptance: fresh install produces the new layout; `jk build` works with `~/.jk/lib`
+absent; re-install of the same version is a no-op; existing machines migrate lazily
+(first run materializes the running version, leaves `lib/` for the old binary, prune
+removes it later). Tests: `VersionStoreTest` (materialize/idempotence/verify-fail),
+install.sh smoke in CI.
+
+### P2 — protocol-zero + endpoint takeover — M/L (the careful one)
+
+| Work item | Where |
+|---|---|
+| Protocol-zero: `hello {jk, proto}` exchanged first on every connection; unknown-proto answer shape; `yield`, `busy-upgrading` verbs. FROZEN — document in its own short spec section of docs/engine.md | `EngineProtocol` (new tiny message family), `EngineServer.handleConnection` (answer before dispatch), `EngineClient.connect` (send + read before first request) |
+| Endpoint indirection: daemon binds `state/engine/gen-<n>.sock` (pipe on Windows), writes `state/engine/endpoint` via atomic replace; clients resolve endpoint → connect | `EnginePaths` (endpoint/generation naming; keep the hash-scoped state dir), `EngineServer` startup, `EngineClient.connect` |
+| Takeover: `spawnAndTakeOver(v)` — start new engine, wait healthy (hello), atomic endpoint replace, send `yield` to the old generation | `EngineClient` (replaces `killStale` version-skew path), `EngineServer` (lame-duck mode: stop accepting, finish jobs, write AOT, exit) |
+| Old-engine displacement watchdog: on accept-idle, re-stat `endpoint`; if it names another generation, enter lame-duck (covers a crashed taker-over) | `EngineServer` |
+| Newest-locally-materialized wins on cold spawn | `EngineClient` spawn (consult `VersionStore.current()`), keeps working for -SNAPSHOT dev flow (running version self-materializes) |
+
+Acceptance: two-version handoff under load — start a long build, `spawnAndTakeOver` a
+newer engine, build finishes on the old engine while new requests land on the new one;
+old engine exits at idle. Tests: protocol-zero unit tests (hello/yield encode/decode,
+unknown proto), an `EngineServer` integration test driving a real takeover on localhost,
+Windows named-pipe equivalent gated to a Windows CI lane. Kill-on-skew code deleted.
+
+### P3 — downward delegation (pinned older toolchains) — M
+
+| Work item | Where |
+|---|---|
+| Lock toolchain line: `jk = "<version>" sha256 = "<hex>"` written at lock time (grep-able, the wrapper's contract) | `LockfileWriter`/`LockfileReader`, `LockFlow` |
+| Pin comparison at request intake: pin == daemon → run; pin < daemon → delegate; pin > daemon → materialize + takeover (§3) | `EngineServer` request pre-flight |
+| Child-engine exec over stdio: `jk-engine … --job` one-shot mode (no socket, no daemonize, NDJSON on stdout — the `WorkerClient`/`PluginWorkerMain` pattern verbatim); daemon streams child events to the client unchanged | `EngineMain` (job mode flag), new `EngineDelegate` in `kernel/engine` (drives the child via `WorkerClient`) |
+| Child resolves ITS OWN worker set from its `manifest.toml` (never the daemon's) | `EngineDelegate` env/args |
+
+Acceptance: a project locked to an older materialized version builds through the newer
+daemon with byte-identical outputs to running that version directly; `jk-compat` mismatch
+fails at parse with the pin named. Tests: two-version delegation integration test
+(requires a second materialized version — use the -SNAPSHOT self-materialization for CI).
+
+### P4 — signing + `jk self update` — M
+
+| Work item | Where |
+|---|---|
+| Release pipeline signs `SHA256SUMS` (minisign/ed25519); `NEXT_RELEASE_KEY` rotation slot | release workflow (v1.0 roadmap item), docs/releases.md layout addendum (`SHA256SUMS.minisig`) |
+| Client verification: signature → sums → per-artifact sha, before ANY materialization; baked-in pubkey + `[release] trusted-keys` override | `EngineJarFetcher` → generalize into `ReleaseFetcher` beside `VersionStore`; `install.sh` verifies with the published pubkey |
+| `jk self update [--force]`: resolve latest, fetch+verify+materialize pair, flip `bin/jk`, takeover (`--force` = kill instead of yield) | new `SelfCommand` in `:cli`, reusing P2's takeover |
+| Pin-hash enforcement: toolchain fetches for a locked version verify against the LOCK's sha, not just the sums | `ReleaseFetcher` lock-pin path |
+| sigstore transparency layer (publisher plugin already ships the machinery) — optional verification when reachable | release workflow + `ReleaseFetcher`, LAST |
+
+Acceptance: tampered artifact/sums rejected before materialization (unit tests with a test
+key); `jk self update` on a busy daemon completes with zero killed jobs.
+
+### P5 — `jk wrapper` — S/M
+
+| Work item | Where |
+|---|---|
+| `jk wrapper [--version <v|latest>] [--emit]`: bare = regenerate at current pin; `--version` = springboard (materialize target, exec ITS `jk wrapper --emit`) | new `WrapperCommand` in `:cli` |
+| Script templates (`./jk`, `jk.bat`): read lock line → have-or-fetch `versions/<v>/bin/jk` (sha-verified against the lock) → exec; `latest` bootstrap when no lock | templates as classpath resources beside the command; contract test that templates only depend on the frozen release layout + lock line |
+| Docs: wrapper how-to + the cmd.exe shadowing note | docs/variants.md-style user doc or README section |
+
+Acceptance: wrapper-only checkout (no `~/.jk`) bootstraps, builds, and `jk wrapper
+--version latest` upgrades itself through the springboard on Linux and Windows lanes.
+
+### P6 — GC + status — S
+
+| Work item | Where |
+|---|---|
+| `versions/<v>/` + `state/engine/<v>/` in the AccessLedger (touch on launch/delegation); prune keeps current + retention window | `VersionStore`, `AccessLedger`, cache-prune goal |
+| `jk engine status`: daemon version/generation, lame ducks, materialized versions, endpoint | `EngineServer` status handler + `jk status` surface (503fb0d2's panel) |
 
 ## 7. The project wrapper (`jk wrapper`)
 
