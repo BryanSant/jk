@@ -4,6 +4,9 @@ package dev.jkbuild.command;
 import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.engine.EngineClient;
+import dev.jkbuild.cli.tui.Glyphs;
+import dev.jkbuild.cli.tui.GoalWedge;
+import dev.jkbuild.config.GlobalConfig;
 import dev.jkbuild.engine.EnginePaths;
 import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Exit;
@@ -47,7 +50,8 @@ public final class EngineStatusCommand implements CliCommand {
             if (global.outputIsJson()) {
                 CliOutput.out("{\"running\":false}");
             } else {
-                CliOutput.out("jk engine: not running");
+                CliOutput.out(GoalWedge.chipLine(
+                        Glyphs.STOP, "Engine", GlobalConfig.nerdfont(), "Engine is not running"));
             }
             return Exit.FAILURE;
         }
