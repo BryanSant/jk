@@ -87,9 +87,9 @@ public final class GradleImporter {
      * recognition-only (their construct is absorbed by another contribution, e.g. Boot's BOM
      * auto-import covering dependency-management).
      */
-    private static List<dev.jkbuild.model.PluginConfig> mapPluginTables(
+    private static List<dev.jkbuild.plugin.PluginConfig> mapPluginTables(
             String pluginsBody, Map<String, PluginImportRule> rules, ImportReport.Builder report) {
-        List<dev.jkbuild.model.PluginConfig> out = new ArrayList<>();
+        List<dev.jkbuild.plugin.PluginConfig> out = new ArrayList<>();
         for (Map.Entry<String, PluginImportRule> e : rules.entrySet()) {
             if (!pluginsBody.contains(e.getKey())) continue;
             PluginImportRule rule = e.getValue();
@@ -98,7 +98,7 @@ public final class GradleImporter {
                     "id\\s*\\(?\\s*[\"']" + Pattern.quote(e.getKey()) + "[\"']\\s*\\)?\\s*version\\s*" + STR);
             Matcher m = versionPattern.matcher(pluginsBody);
             if (m.find()) {
-                out.add(new dev.jkbuild.model.PluginConfig(
+                out.add(new dev.jkbuild.plugin.PluginConfig(
                         rule.manifestId(), java.util.Map.of(rule.versionTo(), firstNonNull(m.group(1), m.group(2)))));
             } else if (rule.missingVersionWarning() != null) {
                 report.warning(rule.missingVersionWarning());
@@ -204,7 +204,7 @@ public final class GradleImporter {
         // `version`, which auto-imports the BOM so versionless starters stay versionless).
         // Applied-without-version (settings pluginManagement) can't be resolved from this file
         // alone -- the rule's warning asks the user to fill it in.
-        List<dev.jkbuild.model.PluginConfig> pluginConfigs =
+        List<dev.jkbuild.plugin.PluginConfig> pluginConfigs =
                 mapPluginTables(pluginsBody, importRules, report);
 
         Map<Scope, List<Dependency>> deps = parseDependencies(stripped, catalog, report);
@@ -225,7 +225,7 @@ public final class GradleImporter {
                 .dependencies(new JkBuild.Dependencies(deps))
                 .repositories(repos)
                 .application(application);
-        for (dev.jkbuild.model.PluginConfig config : pluginConfigs) {
+        for (dev.jkbuild.plugin.PluginConfig config : pluginConfigs) {
             builder.pluginConfig(config);
         }
         JkBuild jkBuild = builder.build();

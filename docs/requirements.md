@@ -33,7 +33,11 @@ It exists because Maven is too verbose and non-reproducible, Gradle is too progr
 ### Supported JDK range
 
 jk targets the forward-facing Java/Kotlin developer. The supported set
-is **JDK 17 and above** — every LTS at or after 17 (17, 21, 25, 29, …)
+is **JDK 17 and above** — every LTS at or after 17 (17, 21, 25, 29, …). The floor is
+held by a hard rule: a worker's host JVM is jk's own runtime, and the project JDK is an
+input (`-jdk-home` / `--release`) — **unless the process is the user's program** (the
+forked test JVM, `jk run` exec), in which case every jk class that rides it (the
+test-runner and the plugin-api SPI/codec it vendors) is compiled at `--release 17`
 plus the single most recent release on the JetBrains feed. JDK 8 and
 JDK 11 are explicitly out of scope; jk's catalog, registry, and
 `jk.toml` parser all reject anything below 17. This is enforced

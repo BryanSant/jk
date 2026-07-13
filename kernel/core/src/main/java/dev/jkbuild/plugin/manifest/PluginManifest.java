@@ -196,7 +196,7 @@ public record PluginManifest(
         public record Variant(Condition when, Packaging packaging) {}
 
         /** The effective descriptor for {@code config}: the first matching variant, else this. */
-        public Packaging resolve(dev.jkbuild.model.PluginConfig config) {
+        public Packaging resolve(dev.jkbuild.plugin.PluginConfig config) {
             for (Variant v : variants) {
                 if (v.when() instanceof Condition.ConfigEquals c
                         && c.equals().equals(String.valueOf(config.values().get(c.key())))) {

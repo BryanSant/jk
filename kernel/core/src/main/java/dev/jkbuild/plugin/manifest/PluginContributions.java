@@ -3,7 +3,7 @@ package dev.jkbuild.plugin.manifest;
 
 import dev.jkbuild.config.JkBuildParseException;
 import dev.jkbuild.model.JkBuild;
-import dev.jkbuild.model.PluginConfig;
+import dev.jkbuild.plugin.PluginConfig;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;

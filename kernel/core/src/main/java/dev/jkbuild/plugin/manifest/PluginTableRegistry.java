@@ -2,7 +2,7 @@
 package dev.jkbuild.plugin.manifest;
 
 import dev.jkbuild.config.JkBuildParseException;
-import dev.jkbuild.model.PluginConfig;
+import dev.jkbuild.plugin.PluginConfig;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;

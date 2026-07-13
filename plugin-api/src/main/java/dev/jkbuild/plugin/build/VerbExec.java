@@ -10,7 +10,7 @@ public interface VerbExec {
     /** The args after the verb on the jk command line, verbatim. */
     List<String> args();
 
-    dev.jkbuild.model.PluginConfig config();
+    dev.jkbuild.plugin.PluginConfig config();
 
     ProjectFacts project();
 

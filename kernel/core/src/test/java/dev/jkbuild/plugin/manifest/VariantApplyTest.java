@@ -7,7 +7,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import dev.jkbuild.config.JkBuildParseException;
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.model.JkBuild;
-import dev.jkbuild.model.PluginConfig;
+import dev.jkbuild.plugin.PluginConfig;
 import dev.jkbuild.model.Scope;
 import dev.jkbuild.model.Variants;
 import java.nio.file.Files;

@@ -14,7 +14,7 @@ import java.util.stream.Collectors;
 
 /**
  * Drives Kotlin compilation by forking the {@code jk-kotlin-compiler} worker, which runs the Kotlin
- * Build Tools API in-process under the project's JDK.
+ * Build Tools API in-process on jk's own runtime (the project JDK rides as -jdk-home).
  *
  * <p>The worker is launched as {@code <javaHome>/bin/java -cp <workerClasspath>
  * dev.jkbuild.kotlin.compiler.KotlinCompilerWorker @<spec>}. It streams NDJSON back on stdout (each
@@ -42,8 +42,16 @@ public final class KotlincDriver {
     private KotlincResult run(KotlincRequest request) throws IOException, InterruptedException {
         Path spec = writeSpec(request);
         try {
+            // The worker is jk's OWN process: it runs on jk's runtime (workers are built at
+            // jk's language level — class-file 69 — and must not be hostage to the project's
+            // pinned JDK; requirements.md promises a 17+ project floor). The project JDK is an
+            // INPUT: writeSpec passes it as kotlinc's -jdk-home so cross-compilation still
+            // resolves the pinned JDK's platform classes.
             List<String> cmd = dev.jkbuild.worker.JvmOptions.javaCommand(
-                    request.javaHome().resolve("bin").resolve("java").toString(),
+                    dev.jkbuild.jdk.JavaHomes.runningJavaHome()
+                            .resolve("bin")
+                            .resolve("java")
+                            .toString(),
                     1,
                     List.of(
                             // Silence the JDK's native-access / Unsafe warnings the compiler triggers.
@@ -92,6 +100,11 @@ public final class KotlincDriver {
             lines.add("SNAPSHOT_DIR " + request.snapshotDir().toAbsolutePath());
         }
         lines.add("JVM_TARGET " + request.jvmTarget());
+        // Cross-compile against the project's pinned JDK: the worker HOST is jk's runtime, so
+        // without -jdk-home kotlinc would resolve platform classes from jk's newer JDK and let
+        // a 17-pinned project reference APIs it can't run against.
+        lines.add("ARG -jdk-home");
+        lines.add("ARG " + request.javaHome().toAbsolutePath());
         if (request.moduleName() != null && !request.moduleName().isBlank()) {
             lines.add("MODULE_NAME " + request.moduleName());
         }

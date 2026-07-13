@@ -4,7 +4,7 @@ package dev.jkbuild.plugin.manifest;
 import dev.jkbuild.config.JkBuildParseException;
 import dev.jkbuild.model.Dependency;
 import dev.jkbuild.model.JkBuild;
-import dev.jkbuild.model.PluginConfig;
+import dev.jkbuild.plugin.PluginConfig;
 import dev.jkbuild.model.Scope;
 import dev.jkbuild.model.Variants;
 import dev.jkbuild.model.Variants.Selection;

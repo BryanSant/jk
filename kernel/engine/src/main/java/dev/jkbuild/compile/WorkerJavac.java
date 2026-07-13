@@ -69,11 +69,16 @@ public final class WorkerJavac {
             Map<Path, Set<Path>> generated = new TreeMap<>();
             String[] status = {null};
 
-            // Fork the java-compiler worker under the project JDK. It's a thin,
-            // JDK-only plugin (the compile classpath travels in the spec, not on the
-            // worker JVM classpath), so its own jar is the whole classpath.
+            // Fork the java-compiler worker on jk's OWN runtime — the same rule as every
+            // worker (requirements.md "worker host"), and the same javac the non-AP path
+            // already uses in-process (ToolProvider on the engine JDK): --release supplies
+            // the project's target semantics. It's a thin, JDK-only plugin (the compile
+            // classpath travels in the spec, not on the worker JVM classpath), so its own
+            // jar is the whole classpath.
             boolean win = HostPlatform.isWindows();
-            Path javaExe = req.javaHome().resolve("bin").resolve(win ? "java.exe" : "java");
+            Path javaExe = dev.jkbuild.jdk.JavaHomes.runningJavaHome()
+                    .resolve("bin")
+                    .resolve(win ? "java.exe" : "java");
             List<String> command = dev.jkbuild.worker.PluginLoader.command(
                     javaExe,
                     req.workerJar().toString(),

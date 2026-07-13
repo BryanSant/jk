@@ -4,7 +4,7 @@ package dev.jkbuild.runtime;
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.layout.BuildLayout;
 import dev.jkbuild.model.JkBuild;
-import dev.jkbuild.model.PluginConfig;
+import dev.jkbuild.plugin.PluginConfig;
 import dev.jkbuild.plugin.manifest.PluginContributions;
 import dev.jkbuild.plugin.manifest.PluginManifest;
 import dev.jkbuild.plugin.manifest.PluginTableRegistry;

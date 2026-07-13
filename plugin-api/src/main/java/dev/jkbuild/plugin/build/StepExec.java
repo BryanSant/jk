@@ -30,7 +30,7 @@ public interface StepExec {
     List<PackageIo.RuntimeEntry> runtimeEntries();
 
     /** The plugin's validated config table. */
-    dev.jkbuild.model.PluginConfig config();
+    dev.jkbuild.plugin.PluginConfig config();
 
     /** Read-only project facts (coords, resolved main, capability flags). */
     ProjectFacts project();

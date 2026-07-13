@@ -36,7 +36,7 @@ public interface PackageIo {
     /** Lock-ordered production RUNTIME entries — {@link In#runtimeEntries()}. */
     List<RuntimeEntry> runtimeEntries();
 
-    dev.jkbuild.model.PluginConfig config();
+    dev.jkbuild.plugin.PluginConfig config();
 
     ProjectFacts project();
 

@@ -27,3 +27,11 @@ tasks.jar {
     dependsOn(bundledCodec)
     from(bundledCodec.map { zipTree(it) })
 }
+
+// This jar RIDES THE USER'S TEST JVM (the forked test process runs on the project's pinned
+// JDK — that's the point of pinning). jk promises a JDK 17+ project floor (requirements.md),
+// so this module and its vendored plugin-api codec compile at 17 while the rest of jk stays
+// at the engine's language level. JUnit Platform 6's own baseline is 17, matching.
+tasks.compileJava {
+    options.release.set(17)
+}

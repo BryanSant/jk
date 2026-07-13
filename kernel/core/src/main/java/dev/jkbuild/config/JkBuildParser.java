@@ -11,7 +11,7 @@ import dev.jkbuild.model.GitSource;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.ObjectStoreConfig;
 import dev.jkbuild.model.PathSource;
-import dev.jkbuild.model.PluginConfig;
+import dev.jkbuild.plugin.PluginConfig;
 import dev.jkbuild.model.PluginDeclaration;
 import dev.jkbuild.plugin.manifest.PluginContributions;
 import dev.jkbuild.plugin.manifest.PluginManifest;

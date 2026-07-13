@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.plugin.build;
 
-import dev.jkbuild.model.PluginConfig;
+import dev.jkbuild.plugin.PluginConfig;
 import dev.jkbuild.plugin.protocol.Ndjson;
 import dev.jkbuild.plugin.protocol.ProtocolWriter;
 import java.io.IOException;
@@ -405,7 +405,7 @@ public final class BuildPluginHarness {
         }
 
         @Override
-        public dev.jkbuild.model.PluginConfig config() {
+        public dev.jkbuild.plugin.PluginConfig config() {
             return spec.config();
         }
 

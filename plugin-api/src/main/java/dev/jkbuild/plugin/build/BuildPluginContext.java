@@ -11,7 +11,7 @@ package dev.jkbuild.plugin.build;
 public interface BuildPluginContext {
 
     /** The parsed, schema-validated table this plugin owns. */
-    dev.jkbuild.model.PluginConfig config();
+    dev.jkbuild.plugin.PluginConfig config();
 
     /** Read-only project facts (coords, resolved main, capability flags). */
     ProjectFacts project();

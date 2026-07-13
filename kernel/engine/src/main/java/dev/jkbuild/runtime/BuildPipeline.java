@@ -1084,9 +1084,13 @@ public final class BuildPipeline {
                     libs.add(stdlib);
 
                     String languageVersion = majorMinor(kotlinVersion);
+                    // KSP is jk's tool: it runs on jk's own runtime, not the project's pinned
+                    // JDK (same rule as every worker — requirements.md "worker host"). AGP runs
+                    // KSP in the Gradle daemon's JVM the same way; the project JDK stays the
+                    // -jdk-home cross-compile input below.
                     Path javaHome = ctx.require(JAVA_HOME);
                     List<String> cmd = new ArrayList<>();
-                    cmd.add(javaHome.resolve("bin/java").toString());
+                    cmd.add(dev.jkbuild.jdk.JavaHomes.runningJavaHome().resolve("bin/java").toString());
                     cmd.addAll(dev.jkbuild.worker.JvmOptions.workerFlags(1));
                     cmd.add("-cp");
                     cmd.add(joinPaths(kspClasspath, sep));

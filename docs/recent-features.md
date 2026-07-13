@@ -216,3 +216,21 @@ writers). Exec plans and plugin verbs apply the selection LENIENTLY
   its main symptom was actually the CAS aliasing bug.
 - Union-lock resolve failures now name each variant value's contributed deps
   (LockFlow.variantUnionHint) with a pointer to docs/variants.md → Locking.
+
+### JDK 17 project floor restored (same day)
+
+requirements.md promises a JDK 17+ project floor; a `jdk = 21`-pinned Kotlin project
+couldn't build because workers (class-file 69) forked on the PROJECT's JDK. The rule is
+now explicit and enforced: a worker's host JVM is jk's own runtime, the project JDK is an
+input — kotlinc worker gets `-jdk-home` (KotlincDriver), KSP keeps `-jdk-home=` but hosts
+on jk's runtime, the java-compiler AP worker matches the in-process javac posture — unless
+the process IS the user's program (the forked test JVM), where everything that rides it is
+compiled at `--release 17`: plugin-api is now the dependency-free bottom of the contract
+leaf (it owns PluginConfig; model api-depends on IT, staying at the engine's language
+level) and jk-test-runner pins 17 with it. JdkFloorTest is the regression: a jdk=17-pinned
+Kotlin project builds and its JUnit test asserts java.specification.version == "17".
+
+Recorded follow-up: parse-build snapshots JAVA_HOME before ensure-jdk installs a
+never-before-seen pin, so the FIRST build with an uninstalled pinned JDK compiles/tests on
+the running JVM (self-heals on the next build). The phase DAG should re-resolve JAVA_HOME
+after ensure-jdk.

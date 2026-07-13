@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-package dev.jkbuild.model;
+package dev.jkbuild.plugin;
 
 import java.util.Collections;
 import java.util.LinkedHashMap;
