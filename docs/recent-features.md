@@ -4,7 +4,7 @@ Everything that landed in the last two days, culminating in the Android north st
 **jk builds Now in Android** — all 27 modules of Google's reference app, a demo-debug
 APK and a signed R8-full-mode release AAB, with no Gradle and no AGP. Twenty product
 findings from that conformance run are folded in below. Live scenarios validating all
-of this live in the companion repo `~/src/oss/jk-harness`.
+of this live in the companion repo `~/src/oss/jk-examples`.
 
 ## Core (jk.toml + build model)
 
