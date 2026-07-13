@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.cli.Ansi;
 import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.engine.EngineClient;
+import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.cli.tui.Glyphs;
 import dev.jkbuild.cli.tui.GoalWedge;
 import dev.jkbuild.config.GlobalConfig;
@@ -74,14 +76,28 @@ public final class EngineStatusCommand implements CliCommand {
                     + "}");
             return Exit.SUCCESS;
         }
-        CliOutput.out("jk engine: running (pid " + s.pid() + ", version " + s.version() + ")");
-        CliOutput.out("  uptime:          " + formatUptime(uptimeSeconds));
-        CliOutput.out("  idle-minutes:    " + describeIdleMinutes(s));
-        CliOutput.out("  active requests: " + s.activeRequests());
+        CliOutput.out(GoalWedge.chipLine(
+                Glyphs.PLAY, "Engine", GlobalConfig.nerdfont(), "Engine is running (pid " + pidStyled(s.pid()) + ")"));
+        detail("Version", s.version());
+        detail("Uptime", formatUptime(uptimeSeconds));
+        detail("Jobs", String.valueOf(s.activePipelines()));
         String memory = formatMemory(s);
-        if (memory != null) CliOutput.out("  memory:          " + memory);
-        CliOutput.out("  http:            " + describeHttp(s, paths));
+        if (memory != null) detail("Memory", memory);
+        String http = describeHttp(s, paths);
+        detail("Web UI", s.httpUrl() != null ? Ansi.hyperlink(http, http) : http);
         return Exit.SUCCESS;
+    }
+
+    /** One detail line under the header: {@code   • Label: value}, labels right-aligned. */
+    private static void detail(String label, String value) {
+        CliOutput.out("   " + Theme.colorize(Glyphs.BULLET, Theme.active().dim()) + " "
+                + String.format("%7s", label) + ": " + value);
+    }
+
+    /** The engine pid in yellow on an ANSI terminal (matching the start/stop wedges). */
+    private static String pidStyled(long pid) {
+        String s = Long.toString(pid);
+        return Theme.active().isAnsi() ? Theme.colorize(s, Theme.active().warning()) : s;
     }
 
     /**
@@ -112,7 +128,7 @@ public final class EngineStatusCommand implements CliCommand {
     private static String formatMemory(EngineClient.Status s) {
         StringBuilder out = new StringBuilder();
         if (s.heapUsedBytes() >= 0 && s.heapCommittedBytes() >= 0) {
-            out.append("heap ")
+            out.append("Heap ")
                     .append(mib(s.heapUsedBytes()))
                     .append(" used / ")
                     .append(mib(s.heapCommittedBytes()))
@@ -123,23 +139,13 @@ public final class EngineStatusCommand implements CliCommand {
         }
         if (s.rssBytes() >= 0) {
             if (out.length() > 0) out.append("; ");
-            out.append("rss ").append(mib(s.rssBytes()));
+            out.append("RSS ").append(mib(s.rssBytes()));
         }
         return out.length() > 0 ? out.toString() : null;
     }
 
     private static String mib(long bytes) {
         return (bytes + (1 << 19)) / (1 << 20) + " MiB"; // round to nearest MiB
-    }
-
-    private static String describeIdleMinutes(EngineClient.Status s) {
-        // [http] forces never-self-terminate regardless of the configured value (docs/http.md) —
-        // report the effective policy, not a number the engine isn't actually honoring.
-        if (s.httpEnabled()) return "never ([http] enabled)";
-        int idleMinutes = s.idleMinutes();
-        if (idleMinutes == 0) return "0 (exits as soon as idle)";
-        if (idleMinutes == -1) return "-1 (never expires)";
-        return String.valueOf(idleMinutes);
     }
 
     private static String formatUptime(long totalSeconds) {
