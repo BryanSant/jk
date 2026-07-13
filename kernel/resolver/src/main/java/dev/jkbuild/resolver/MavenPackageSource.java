@@ -109,14 +109,14 @@ public final class MavenPackageSource implements PackageSource {
         // surfaces a clean "constraint cannot hold" diagnostic.
         //
         // KNOWN DIVERGENCE (android-plan A5e finding 13, parked): Gradle's platform() is a
-        // recommendation, not a ceiling — a stricter transitive floor lifts above the pin
-        // (navigation3 1.0.0 requires compose runtime-saveable >= 1.9.5 while the 2025.09
-        // compose BOM recommends 1.9.3; Gradle resolves it, jk currently reports the conflict).
-        // The decided semantics is the lockedVersionPrefs shape (full candidate list, pin
-        // first), but widening dozens of interlocking BOM-pinned packages sends the solver's
-        // unit propagation quadratic (hours on the androidx compose graph) — blocked on
-        // indexing incompatibilities by package in PubGrubSolver.propagate before the wide
-        // lists are viable. Failing fast with the diagnostic beats hanging until then.
+        // recommendation — a stricter transitive floor lifts above the pin (navigation3 1.0.0
+        // vs the 2025.09 compose BOM; Gradle resolves it, jk reports the conflict). Decided
+        // semantics: the lockedVersionPrefs shape (full candidate list, pin first,
+        // highest-wins on a lift). Blocked on solver scaling — even with the propagation
+        // watch index, wide candidate lists across dozens of interlocking compose pins drown
+        // in VersionSet.Union intersections (one interval per excluded version; every
+        // relationTo intersects them). Needs per-package version interning (integer indices /
+        // interval trees) before the wide lists are viable. Failing fast beats hanging.
         String pinned = bomConstraints.get(pkg);
         if (pinned != null) {
             List<String> singleton = List.of(pinned);

@@ -27,6 +27,15 @@ public class PubGrubSolver {
     protected final PackageSource source;
     protected final PartialSolution solution = new PartialSolution();
     protected final List<Incompatibility> incompatibilities = new ArrayList<>();
+
+    /**
+     * The propagation watch index: every incompatibility, keyed by each package its terms
+     * mention. {@link #propagate} visits only the incompatibilities that watch the changed
+     * package — without this, each propagation round rescans the full list, and the solve goes
+     * quadratic once wide candidate lists (large BOM graphs) pile up conflict-derived
+     * incompatibilities (android-plan A5e finding 13's perf wall).
+     */
+    private final Map<String, List<Incompatibility>> incompatibilitiesByPackage = new LinkedHashMap<>();
     protected String rootPkg;
 
     public PubGrubSolver(PackageSource source) {
@@ -71,8 +80,9 @@ public class PubGrubSolver {
 
         while (!changed.isEmpty()) {
             String pkg = removeFirst(changed);
-            for (Incompatibility inco : new ArrayList<>(incompatibilities)) {
-                if (inco.terms().stream().noneMatch(t -> t.pkg().equals(pkg))) continue;
+            // Copy: handleConflict/derivations may append to the index mid-iteration.
+            for (Incompatibility inco :
+                    new ArrayList<>(incompatibilitiesByPackage.getOrDefault(pkg, List.of()))) {
                 PartialSolution.Relation rel = solution.relationTo(inco);
                 switch (rel.kind()) {
                     case SATISFIED -> handleConflict(inco);
@@ -285,6 +295,11 @@ public class PubGrubSolver {
 
     protected void addIncompatibility(Incompatibility inco) {
         incompatibilities.add(inco);
+        Set<String> pkgs = new LinkedHashSet<>();
+        for (Term term : inco.terms()) pkgs.add(term.pkg());
+        for (String pkg : pkgs) {
+            incompatibilitiesByPackage.computeIfAbsent(pkg, k -> new ArrayList<>()).add(inco);
+        }
     }
 
     private static String removeFirst(Set<String> set) {
