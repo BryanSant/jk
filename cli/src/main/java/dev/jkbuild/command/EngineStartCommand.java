@@ -4,6 +4,10 @@ package dev.jkbuild.command;
 import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.cli.Jk;
 import dev.jkbuild.cli.engine.EngineClient;
+import dev.jkbuild.cli.theme.Theme;
+import dev.jkbuild.cli.tui.Glyphs;
+import dev.jkbuild.cli.tui.GoalWedge;
+import dev.jkbuild.config.GlobalConfig;
 import dev.jkbuild.engine.EnginePaths;
 import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Exit;
@@ -37,18 +41,32 @@ public final class EngineStartCommand implements CliCommand {
     @Override
     public int run(Invocation in) {
         EnginePaths.Paths paths = EnginePaths.current();
+        // Was a matching engine already up before we touched it? Distinguishes "already running"
+        // from a fresh start in the settled wedge below.
         boolean alreadyUp = EngineClient.handshake(paths.socket(), Jk.VERSION)
                 .map(h -> Jk.VERSION.equals(h.version()))
                 .orElse(false);
         try {
-            EngineClient.Handshake hs = EngineClient.ensureRunning(paths, Jk.VERSION);
-            CliOutput.out(alreadyUp
-                    ? "jk engine: already running (pid " + hs.pid() + ")"
-                    : "jk engine: started (pid " + hs.pid() + ")");
+            EngineClient.EngineReady ready = EngineClient.ensureReady(paths, Jk.VERSION);
+            // The optimize path already printed its own wedge ("✓ Engine  Build engine optimized and
+            // started (pid N) took Xs"). Otherwise print the matching green wedge — "already running"
+            // when it was up before, else "started".
+            if (!ready.optimized()) {
+                String pid = pidStyled(ready.handshake().pid());
+                String message =
+                        alreadyUp ? "Engine already running (pid " + pid + ")" : "Build engine started (pid " + pid + ")";
+                CliOutput.out(GoalWedge.chipLine(Glyphs.CHECK, "Engine", GlobalConfig.nerdfont(), message));
+            }
             return Exit.SUCCESS;
         } catch (IOException e) {
             CliOutput.err("jk engine: " + e.getMessage());
             return Exit.SOFTWARE;
         }
+    }
+
+    /** The engine pid in yellow on an ANSI terminal (matching the optimize wedge), plain otherwise. */
+    private static String pidStyled(long pid) {
+        String s = Long.toString(pid);
+        return Theme.active().isAnsi() ? Theme.colorize(s, Theme.active().warning()) : s;
     }
 }

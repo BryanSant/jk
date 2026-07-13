@@ -52,9 +52,11 @@ public final class GoalWedge {
             String prefix = Glyphs.CHECK.equals(glyph) ? "+" : Glyphs.CROSS.equals(glyph) ? "!" : "*";
             return prefix + " " + verb + ": " + message;
         }
-        boolean isCheck = Glyphs.CHECK.equals(glyph);
-        var chipStyle = isCheck ? t.goalSuccessChip() : t.goalChip();
-        var capColor  = isCheck ? t.goalChipColor()  : t.planBadgeColor();
+        // ✓ (done) and ▶ (running) read as positive → green chip; everything else (■ stop, spinner
+        // frames, …) uses the neutral blue chip.
+        boolean green = Glyphs.CHECK.equals(glyph) || Glyphs.PLAY.equals(glyph);
+        var chipStyle = green ? t.goalSuccessChip() : t.goalChip();
+        var capColor  = green ? t.goalChipColor()  : t.planBadgeColor();
         // Background is always applied; the powerline cap glyph is the only nerd-font difference.
         return chip(glyph, verb, chipStyle) + cap(capColor, nerdfont) + " " + message;
     }

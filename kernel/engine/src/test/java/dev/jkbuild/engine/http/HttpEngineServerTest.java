@@ -26,7 +26,7 @@ import org.junit.jupiter.api.io.TempDir;
 class HttpEngineServerTest {
 
     private static final StatusSnapshot SNAPSHOT =
-            new StatusSnapshot("9.9.9-test", 42, 1_000, 120, 1, 0, 1_000, 2_000, 3_000, -1);
+            new StatusSnapshot("9.9.9-test", 42, 1_000, 1, 0, 1_000, 2_000, 3_000, -1);
 
     @TempDir
     Path wwwRoot;
@@ -297,8 +297,6 @@ class HttpEngineServerTest {
         assertThat(resp.body())
                 .contains("\"version\":\"9.9.9-test\"")
                 .contains("\"pid\":42")
-                .contains("\"idleMinutes\":120")
-                .contains("\"neverIdles\":true")
                 .contains("\"heapMaxBytes\":3000")
                 .contains("\"rssBytes\":-1")
                 .contains("\"httpUrl\":\"" + baseUrl + "\"");
@@ -418,6 +416,52 @@ class HttpEngineServerTest {
                 .containsExactlyInAnyOrder(
                         java.nio.file.attribute.PosixFilePermission.OWNER_READ,
                         java.nio.file.attribute.PosixFilePermission.OWNER_WRITE);
+    }
+
+    @Test
+    void adopts_an_existing_token_file_across_restarts() throws Exception {
+        // The token minted by the @BeforeEach engine must survive that engine stopping and a fresh
+        // one starting against the same token file — that's what keeps an open dashboard tab valid.
+        String original = token();
+        assertThat(original).isNotEmpty();
+        server.close();
+
+        HttpEngineServer restarted = new HttpEngineServer(
+                new JkHttpConfig("127.0.0.1", 0, 16, wwwRoot.toString()),
+                wwwRoot, tokenFile, logFile, "9.9.9-test", () -> SNAPSHOT, events, this::stubTrigger,
+                testJournal(), null);
+        try {
+            restarted.start();
+            assertThat(token()).isEqualTo(original); // file unchanged
+            HttpResponse<String> resp = client.send(
+                    HttpRequest.newBuilder(URI.create(restarted.url() + "api/fs?dir=" + stateDir))
+                            .header("Authorization", "Bearer " + original)
+                            .build(),
+                    HttpResponse.BodyHandlers.ofString());
+            assertThat(resp.statusCode()).isEqualTo(200); // the pre-restart token is still accepted
+        } finally {
+            restarted.close();
+        }
+    }
+
+    @Test
+    void mints_a_fresh_token_when_the_file_is_blank() throws Exception {
+        // A truncated/blank token file (e.g. after `jk engine rotate-token` deleted it, or a
+        // half-written file) is not usable — start must mint rather than serve with an empty secret.
+        String original = token();
+        server.close();
+        Files.writeString(tokenFile, "   \n");
+
+        HttpEngineServer restarted = new HttpEngineServer(
+                new JkHttpConfig("127.0.0.1", 0, 16, wwwRoot.toString()),
+                wwwRoot, tokenFile, logFile, "9.9.9-test", () -> SNAPSHOT, events, this::stubTrigger,
+                testJournal(), null);
+        try {
+            restarted.start();
+            assertThat(token()).isNotEmpty().isNotEqualTo(original);
+        } finally {
+            restarted.close();
+        }
     }
 
     @Test

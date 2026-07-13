@@ -270,6 +270,11 @@ public final class BuildCommand implements CliCommand {
         boolean animate = mode == GoalConsole.Mode.AUTO && GoalConsole.isInteractiveTerminal();
         boolean nerdfont = dev.jkbuild.config.GlobalConfig.nerdfont();
 
+        // Optimize/start the engine before the first engine touch (the forecast) and before the Build
+        // goal console, so a one-time AOT training shows the "Engine — optimizing…" wedge first and the
+        // Build TUI then takes over (never interleaved). A running engine makes this a fast no-op.
+        if (!engineDisabledForTests()) dev.jkbuild.cli.engine.EnginePrewarm.ensure();
+
         long buildStart = System.nanoTime();
         // Pre-flight forecast — engine-hosted since the Stage 5 dependency cut (the client no
         // longer links the forecaster; the resident engine answers one synchronous round-trip,

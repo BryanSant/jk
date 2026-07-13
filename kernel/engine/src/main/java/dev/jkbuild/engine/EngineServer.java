@@ -55,16 +55,16 @@ import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.function.LongSupplier;
 
 /**
- * The engine's server loop: single-instance election, socket bind, an accept loop that serves the
- * handshake/liveness/status/shutdown protocol on a virtual thread per connection, and the
- * idle-timeout policy. See {@code docs/engine.md}.
+ * The engine's server loop: single-instance election, socket bind, and an accept loop that serves
+ * the handshake/liveness/status/shutdown protocol on a virtual thread per connection. The engine is
+ * resident — it runs until an explicit stop (or drain), never self-terminating. See {@code
+ * docs/engine.md}.
  *
  * <p>Hosts the real engine operations: workspace builds ({@code buildWorkspace} dispatch), single
  * project builds and tests, and explain forecasts — each request served on its own connection in
@@ -72,23 +72,17 @@ import java.util.function.LongSupplier;
  */
 public final class EngineServer implements AutoCloseable {
 
-    /** How often the idle-timeout check runs, in real (non-test) operation. */
-    private static final long DEFAULT_TICK_MILLIS = 30_000;
-
     private final EnginePaths.Paths paths;
     private final JkEngineConfig config;
 
     /**
      * The {@code [http]} table when present, else {@code null} — the embedded HTTP server's enable
-     * switch. Enabled also means this engine never self-terminates (see {@code docs/http.md} and
-     * {@link #startIdleTickerIfNeeded}): the dashboard it serves must not vanish out from under an
-     * open browser tab.
+     * switch. The dashboard it serves is why the engine stays resident until an explicit stop.
      */
     private final JkHttpConfig httpConfig;
 
     private final String version;
     private final Consumer<String> log;
-    private final long tickMillis;
     private final LongSupplier clockMillis;
     private final long pid;
     private final long startedAtMillis;
@@ -150,14 +144,14 @@ public final class EngineServer implements AutoCloseable {
     private final java.util.concurrent.atomic.AtomicReference<Path> pendingPruneCache =
             new java.util.concurrent.atomic.AtomicReference<>();
     private volatile boolean shuttingDown;
-    private volatile boolean hadActivity;
-    private volatile long lastActivityAtMillis;
+    // Graceful-drain pre-state: the listener stays open and quick verbs (hello/ping/status) keep
+    // answering, but new jobs are refused and the engine exits cleanly once in-flight jobs finish.
+    private volatile boolean draining;
 
     private FileChannel lockChannel;
     private FileLock lock;
     private ServerSocketChannel serverChannel;
     private ExecutorService connectionExecutor;
-    private ScheduledExecutorService idleTicker;
 
     /** Non-null once the embedded HTTP server is up; stays null when disabled or bind failed. */
     private HttpEngineServer httpServer;
@@ -169,7 +163,7 @@ public final class EngineServer implements AutoCloseable {
     private String expectedToken;
 
     public EngineServer(EnginePaths.Paths paths, JkEngineConfig config, String version, Consumer<String> log) {
-        this(paths, config, null, version, log, DEFAULT_TICK_MILLIS, System::currentTimeMillis);
+        this(paths, config, null, version, log);
     }
 
     /** As above plus the optional {@code [http]} table ({@code null} = feature off). */
@@ -179,37 +173,13 @@ public final class EngineServer implements AutoCloseable {
             JkHttpConfig httpConfig,
             String version,
             Consumer<String> log) {
-        this(paths, config, httpConfig, version, log, DEFAULT_TICK_MILLIS, System::currentTimeMillis);
-    }
-
-    /** Test seam: a short tick interval and an injectable clock, so idle-timeout tests don't sleep for real minutes. */
-    EngineServer(
-            EnginePaths.Paths paths,
-            JkEngineConfig config,
-            String version,
-            Consumer<String> log,
-            long tickMillis,
-            LongSupplier clockMillis) {
-        this(paths, config, null, version, log, tickMillis, clockMillis);
-    }
-
-    /** The full test seam, plus the optional {@code [http]} table ({@code null} = feature off). */
-    EngineServer(
-            EnginePaths.Paths paths,
-            JkEngineConfig config,
-            JkHttpConfig httpConfig,
-            String version,
-            Consumer<String> log,
-            long tickMillis,
-            LongSupplier clockMillis) {
         this.paths = paths;
         this.config = config;
         this.httpConfig = httpConfig;
         this.httpEvents = httpConfig != null ? new dev.jkbuild.engine.http.HttpEvents() : null;
         this.version = version;
         this.log = log != null ? log : s -> {};
-        this.tickMillis = tickMillis;
-        this.clockMillis = clockMillis;
+        this.clockMillis = System::currentTimeMillis;
         this.pid = ProcessHandle.current().pid();
         this.startedAtMillis = clockMillis.getAsLong();
     }
@@ -259,8 +229,6 @@ public final class EngineServer implements AutoCloseable {
 
         connectionExecutor = Executors.newThreadPerTaskExecutor(
                 Thread.ofVirtual().name("jk-engine-conn-", 0).factory());
-        lastActivityAtMillis = clockMillis.getAsLong();
-        startIdleTickerIfNeeded();
         startHttpIfEnabled();
         planSharedWorkerMemoryOnce();
 
@@ -277,7 +245,7 @@ public final class EngineServer implements AutoCloseable {
             try {
                 ch = serverChannel.accept();
             } catch (ClosedChannelException e) {
-                break; // close() / idle-timeout / shutdown message closed the listener
+                break; // close() / drain-complete / shutdown message closed the listener
             } catch (IOException e) {
                 if (shuttingDown) break;
                 log.accept("jk engine: accept failed: " + e.getMessage());
@@ -289,7 +257,6 @@ public final class EngineServer implements AutoCloseable {
                     continue;
                 }
                 activeConnections.incrementAndGet();
-                hadActivity = true;
             }
             connectionExecutor.execute(() -> handleConnection(ch));
         }
@@ -317,7 +284,8 @@ public final class EngineServer implements AutoCloseable {
                 String type = EngineProtocol.typeOf(line);
                 if (type == null) continue; // ignore malformed/blank lines
                 switch (type) {
-                    case EngineProtocol.HELLO -> send(writer, EngineProtocol.helloAck(version, pid, startedAtMillis));
+                    case EngineProtocol.HELLO -> send(
+                            writer, EngineProtocol.helloAck(version, pid, startedAtMillis, draining));
                     case EngineProtocol.PING -> send(writer, EngineProtocol.pong());
                     case EngineProtocol.STATUS -> {
                         dev.jkbuild.engine.http.StatusSnapshot s = statusSnapshot();
@@ -327,8 +295,9 @@ public final class EngineServer implements AutoCloseable {
                                         s.version(),
                                         s.pid(),
                                         s.startedAtMillis(),
-                                        s.idleMinutes(),
                                         s.activeRequests(),
+                                        s.activePipelines(),
+                                        draining,
                                         s.heapUsedBytes(),
                                         s.heapCommittedBytes(),
                                         s.heapMaxBytes(),
@@ -337,10 +306,22 @@ public final class EngineServer implements AutoCloseable {
                                         httpError));
                     }
                     case EngineProtocol.SHUTDOWN -> {
-                        send(writer, EngineProtocol.bye());
+                        boolean force = dev.jkbuild.plugin.protocol.Ndjson.bool(line, "force", false);
                         synchronized (lifecycleLock) {
-                            shuttingDown = true;
-                            closeServerChannelQuietly();
+                            int jobs = activePipelines.get();
+                            if (force || jobs == 0) {
+                                // Immediate: no in-flight jobs, or an explicit force — close the listener
+                                // now so run() returns and the JVM exits cleanly (AOT still assembles).
+                                send(writer, EngineProtocol.bye(jobs, false));
+                                shuttingDown = true;
+                                closeServerChannelQuietly();
+                            } else {
+                                // Graceful drain: keep the listener open (so new commands get a clear
+                                // "shutting down" handshake and in-flight jobs finish); the last job to
+                                // complete triggers the clean exit (see maybeIdleBoundaryGc).
+                                draining = true;
+                                send(writer, EngineProtocol.bye(jobs, true));
+                            }
                         }
                         return;
                     }
@@ -511,6 +492,17 @@ public final class EngineServer implements AutoCloseable {
             String threadPrefix,
             GoalRunner runner,
             boolean pipeline) {
+        // Refuse new jobs while draining (a graceful shutdown is finishing in-flight work). The client
+        // normally can't even get here — its handshake sees `draining` and fails first — but guard the
+        // server too so a raced/last-moment request is rejected instead of prolonging the drain.
+        if (draining) {
+            try {
+                send(writer, EngineProtocol.shutdownPending());
+            } catch (IOException ignored) {
+                // Client vanished mid-refusal — nothing to do; the connection is closing anyway.
+            }
+            return;
+        }
         Session.CancelToken cancelToken = Session.CancelToken.live();
         CountDownLatch done = new CountDownLatch(1);
         long eventRequestId = requestIds.incrementAndGet();
@@ -765,6 +757,14 @@ public final class EngineServer implements AutoCloseable {
             System.gc();
             drainPendingPrune();
             pruneJournal();
+            // The last in-flight job of a graceful drain just finished — close the listener so run()
+            // returns and the JVM exits cleanly (assembling the AOT cache), same as a normal stop.
+            if (draining) {
+                synchronized (lifecycleLock) {
+                    shuttingDown = true;
+                    closeServerChannelQuietly();
+                }
+            }
         }
     }
 
@@ -2812,41 +2812,7 @@ public final class EngineServer implements AutoCloseable {
     }
 
     private void onConnectionFinished() {
-        synchronized (lifecycleLock) {
-            int remaining = activeConnections.decrementAndGet();
-            lastActivityAtMillis = clockMillis.getAsLong();
-            // httpConfig == null: [http] overrides idle-minutes = 0 too — never self-terminate.
-            if (remaining == 0 && hadActivity && httpConfig == null && config.exitAsSoonAsIdle() && !shuttingDown) {
-                shuttingDown = true;
-                closeServerChannelQuietly();
-            }
-        }
-    }
-
-    private void startIdleTickerIfNeeded() {
-        // [http] enabled: never self-terminate, overriding any idle-minutes (docs/http.md) — the
-        // dashboard is served by this process and only a CLI invocation can respawn one, so a web
-        // client that works until the engine idles out would be an astonishing experience.
-        if (httpConfig != null) return;
-        if (config.neverExpires()) return; // idle-minutes = -1: only an explicit stop/kill ends this engine
-        if (config.exitAsSoonAsIdle()) return; // idle-minutes = 0: handled inline in onConnectionFinished
-        long idleMillis = config.idleMinutes() * 60_000L;
-        idleTicker = Executors.newSingleThreadScheduledExecutor(r -> {
-            Thread t = new Thread(r, "jk-engine-idle-ticker");
-            t.setDaemon(true);
-            return t;
-        });
-        idleTicker.scheduleAtFixedRate(
-                () -> {
-                    try {
-                        checkIdleTimeout(idleMillis);
-                    } catch (RuntimeException ignored) {
-                        // never let a tick failure kill the ticker
-                    }
-                },
-                tickMillis,
-                tickMillis,
-                TimeUnit.MILLISECONDS);
+        activeConnections.decrementAndGet();
     }
 
     /**
@@ -2888,6 +2854,9 @@ public final class EngineServer implements AutoCloseable {
      * success} (the socket-request variant can't; its outcome is encoded in wire messages).
      */
     private long triggerHttpBuild(String dirStr) {
+        if (draining) {
+            throw new IllegalStateException("engine is shutting down");
+        }
         Path entryDir = Path.of(dirStr);
         if (!entryDir.isAbsolute()) {
             throw new IllegalArgumentException("dir must be an absolute path");
@@ -3040,23 +3009,12 @@ public final class EngineServer implements AutoCloseable {
                 version,
                 pid,
                 startedAtMillis,
-                config.idleMinutes(),
                 activeConnections.get(),
                 activePipelines.get(),
                 heapCommitted - rt.freeMemory(),
                 heapCommitted,
                 rt.maxMemory(),
                 MemoryProbe.ownRssBytes());
-    }
-
-    private void checkIdleTimeout(long idleMillis) {
-        synchronized (lifecycleLock) {
-            if (shuttingDown || activeConnections.get() != 0) return;
-            if (clockMillis.getAsLong() - lastActivityAtMillis >= idleMillis) {
-                shuttingDown = true;
-                closeServerChannelQuietly();
-            }
-        }
     }
 
     /** Caller-facing graceful stop — same effect as receiving a {@link EngineProtocol#SHUTDOWN} message. */
@@ -3080,9 +3038,10 @@ public final class EngineServer implements AutoCloseable {
 
     private void cleanup() {
         if (httpServer != null) httpServer.close();
-        deleteQuietly(paths.http());
-        deleteQuietly(paths.httpToken());
-        if (idleTicker != null) idleTicker.shutdownNow();
+        deleteQuietly(paths.http()); // the live bound-URL file — stale once we stop
+        // The http token is deliberately NOT deleted: it persists across restarts so an open
+        // dashboard tab survives an upgrade/crash respawn (docs/http.md). `jk engine rotate-token`
+        // is the explicit way to invalidate it.
         if (connectionExecutor != null) connectionExecutor.shutdown();
         try {
             if (connectionExecutor != null) connectionExecutor.awaitTermination(5, TimeUnit.SECONDS);

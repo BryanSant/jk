@@ -68,6 +68,27 @@ class GlobalConfigTest {
         assertThat(GlobalConfig.nerdfont(write(dir, "[global]\nnerdfont = false\n"), null, true)).isFalse();
     }
 
+    @Test
+    void reads_toolchain_engine_jdk_pin(@TempDir Path dir) throws IOException {
+        Path cfg = write(dir, "[toolchain]\njdk = \"temurin-25\"\n");
+        assertThat(GlobalConfig.engineJdkPin(cfg, null)).contains("temurin-25");
+    }
+
+    @Test
+    void engine_jdk_pin_empty_when_unset_or_missing(@TempDir Path dir) throws IOException {
+        assertThat(GlobalConfig.engineJdkPin(dir.resolve("nope.toml"), null)).isEmpty(); // no file
+        assertThat(GlobalConfig.engineJdkPin(write(dir, "[toolchain]\n"), null)).isEmpty(); // table, no key
+        assertThat(GlobalConfig.engineJdkPin(write(dir, "[global]\nnerdfont = true\n"), null))
+                .isEmpty(); // no [toolchain]
+    }
+
+    @Test
+    void engine_jdk_pin_env_overrides_config(@TempDir Path dir) throws IOException {
+        Path cfg = write(dir, "[toolchain]\njdk = \"temurin-25\"\n");
+        assertThat(GlobalConfig.engineJdkPin(cfg, "graalvm-25")).contains("graalvm-25");
+        assertThat(GlobalConfig.engineJdkPin(cfg, "  ")).contains("temurin-25"); // blank env ignored
+    }
+
     private static Path write(Path dir, String content) throws IOException {
         Path f = Files.createTempFile(dir, "config", ".toml");
         Files.writeString(f, content);

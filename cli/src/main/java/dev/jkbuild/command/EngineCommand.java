@@ -20,6 +20,10 @@ public final class EngineCommand extends GroupCommand {
 
     @Override
     public List<CliCommand> subcommands() {
-        return List.of(new EngineStartCommand(), new EngineStopCommand(), new EngineStatusCommand());
+        return List.of(
+                new EngineStartCommand(),
+                new EngineStopCommand(),
+                new EngineStatusCommand(),
+                new EngineRotateTokenCommand());
     }
 }

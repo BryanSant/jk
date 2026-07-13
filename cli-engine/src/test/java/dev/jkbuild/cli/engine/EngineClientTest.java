@@ -101,7 +101,6 @@ class EngineClientTest {
         var status = EngineClient.status(p.socket());
         assertThat(status).isPresent();
         assertThat(status.get().version()).isEqualTo("7.7.7");
-        assertThat(status.get().idleMinutes()).isEqualTo(JkEngineConfig.DEFAULTS.idleMinutes());
         assertThat(status.get().heapUsedBytes()).isPositive(); // best-effort memory made it across the wire
         assertThat(status.get().heapCommittedBytes()).isGreaterThanOrEqualTo(status.get().heapUsedBytes());
 
@@ -124,6 +123,51 @@ class EngineClientTest {
     void stop_on_a_non_running_engine_is_a_no_op_success() throws IOException {
         EnginePaths.Paths p = EnginePaths.resolve(shortTempDir());
         assertThat(EngineClient.stop(p.socket())).isTrue();
+    }
+
+    @Test
+    void a_normal_engine_reports_not_draining_and_zero_pipelines() throws Exception {
+        EnginePaths.Paths p = EnginePaths.resolve(shortTempDir());
+        EngineServer server = new EngineServer(p, JkEngineConfig.DEFAULTS, "1.0", null);
+        startInBackground(server);
+        waitUntil(Duration.ofSeconds(5), () -> Files.exists(p.socket()));
+
+        assertThat(EngineClient.handshake(p.socket(), "1.0").orElseThrow().draining()).isFalse();
+        var s = EngineClient.status(p.socket()).orElseThrow();
+        assertThat(s.draining()).isFalse();
+        assertThat(s.activePipelines()).isZero();
+
+        server.close();
+    }
+
+    @Test
+    void drain_of_an_idle_engine_reports_zero_jobs_and_shuts_it_down() throws Exception {
+        EnginePaths.Paths p = EnginePaths.resolve(shortTempDir());
+        EngineServer server = new EngineServer(p, JkEngineConfig.DEFAULTS, "1.0", null);
+        Thread serverThread = startInBackground(server);
+        waitUntil(Duration.ofSeconds(5), () -> Files.exists(p.socket()));
+
+        assertThat(EngineClient.drain(p.socket())).isZero(); // no in-flight jobs → immediate exit
+        serverThread.join(5_000);
+        assertThat(serverThread.isAlive()).isFalse();
+    }
+
+    @Test
+    void force_stop_shuts_a_running_engine_down() throws Exception {
+        EnginePaths.Paths p = EnginePaths.resolve(shortTempDir());
+        EngineServer server = new EngineServer(p, JkEngineConfig.DEFAULTS, "1.0", null);
+        Thread serverThread = startInBackground(server);
+        waitUntil(Duration.ofSeconds(5), () -> Files.exists(p.socket()));
+
+        assertThat(EngineClient.forceStop(p.socket())).isTrue();
+        serverThread.join(5_000);
+        assertThat(serverThread.isAlive()).isFalse();
+    }
+
+    @Test
+    void drain_on_a_non_running_engine_is_minus_one() throws IOException {
+        EnginePaths.Paths p = EnginePaths.resolve(shortTempDir());
+        assertThat(EngineClient.drain(p.socket())).isEqualTo(-1);
     }
 
     /**
@@ -212,7 +256,7 @@ class EngineClientTest {
         startInBackground(server);
         waitUntil(Duration.ofSeconds(5), () -> Files.exists(p.socket()));
 
-        EngineClient.Handshake hs = EngineClient.ensureRunning(p, "3.3.3", Duration.ofSeconds(2));
+        EngineClient.Handshake hs = EngineClient.ensureRunning(p, "3.3.3");
         assertThat(hs.version()).isEqualTo("3.3.3");
 
         server.close();

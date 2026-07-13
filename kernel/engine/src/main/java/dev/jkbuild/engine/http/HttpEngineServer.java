@@ -111,7 +111,7 @@ public final class HttpEngineServer implements AutoCloseable {
      * caller treats that as "continue without HTTP", never as engine failure.
      */
     public void start() throws IOException {
-        mintToken();
+        loadOrMintToken();
         InetSocketAddress bind = new InetSocketAddress(InetAddress.getByName(config.host()), config.port());
         readsRequireToken = !bind.getAddress().isLoopbackAddress();
         server = HttpServer.create(bind, 0);
@@ -123,11 +123,24 @@ public final class HttpEngineServer implements AutoCloseable {
 
     /**
      * The bearer token is an opaque random capability — no JWT, nothing to decode ({@code
-     * docs/http.md}): minted per engine start exactly like the Windows transport's connection
-     * secret, held in memory for constant-time comparison, and persisted owner-only so the CLI
-     * (running as the same user) can print a tokenized URL.
+     * docs/http.md}): 24 random bytes, held in memory for constant-time comparison, and persisted
+     * owner-only so the CLI (running as the same user) can print a tokenized URL.
+     *
+     * <p><b>Persisted, not rotated per start.</b> The token file is keyed by state dir, so it is
+     * stable across engine restarts. Adopting an existing token — rather than minting a fresh one
+     * every start — is what keeps an open dashboard tab valid across the restarts jk does on its own
+     * (a version-skew respawn after a {@code jk} upgrade, a crash, {@code SIGTERM}): the tab's stored
+     * token still matches. Per-start rotation was never a real defense here — the {@code 0600} file
+     * <i>is</i> the secret, and anyone who can read it already owns the account — so it only cost us
+     * every open tab. Rotation is now an explicit action ({@code jk engine rotate-token}), not an
+     * accident of restart. Mint (and persist owner-only) only when no usable token file exists.
      */
-    private void mintToken() throws IOException {
+    private void loadOrMintToken() throws IOException {
+        String existing = readPersistedToken();
+        if (existing != null) {
+            token = existing.getBytes(StandardCharsets.UTF_8);
+            return;
+        }
         String minted = EngineTransport.newToken();
         token = minted.getBytes(StandardCharsets.UTF_8);
         Files.deleteIfExists(tokenFile);
@@ -139,6 +152,17 @@ public final class HttpEngineServer implements AutoCloseable {
             Files.createFile(tokenFile); // non-POSIX filesystem (Windows): default ACLs are per-user
         }
         Files.writeString(tokenFile, minted);
+    }
+
+    /** The persisted token if the file exists and holds a non-blank value, else {@code null}. */
+    private String readPersistedToken() {
+        try {
+            if (!Files.isRegularFile(tokenFile)) return null;
+            String value = Files.readString(tokenFile, StandardCharsets.UTF_8).trim();
+            return value.isEmpty() ? null : value;
+        } catch (IOException e) {
+            return null; // unreadable — mint a fresh one rather than fail to serve
+        }
     }
 
     /** The served base URL, e.g. {@code http://127.0.0.1:8910/} — actual bound port, so 0 works. */
@@ -248,8 +272,6 @@ public final class HttpEngineServer implements AutoCloseable {
                 .put("pid", s.pid())
                 .put("startedAt", s.startedAtMillis())
                 .put("uptimeSeconds", Math.max(0, (System.currentTimeMillis() - s.startedAtMillis()) / 1000))
-                .put("idleMinutes", s.idleMinutes())
-                .put("neverIdles", true) // [http] enabled forces never-self-terminate (docs/http.md)
                 .put("activeRequests", s.activeRequests())
                 .put("activePipelines", s.activePipelines())
                 .put("heapUsedBytes", s.heapUsedBytes())
@@ -393,6 +415,11 @@ public final class HttpEngineServer implements AutoCloseable {
         long requestId;
         try {
             requestId = buildTrigger.trigger(dir);
+        } catch (IllegalStateException e) {
+            // Engine is draining (graceful shutdown in progress) — refuse new builds.
+            exchange.getResponseHeaders().set("Retry-After", "1");
+            sendJson(exchange, 503, JsonOut.object().put("error", e.getMessage()).toString());
+            return;
         } catch (IllegalArgumentException e) {
             sendJson(exchange, 400, JsonOut.object().put("error", e.getMessage()).toString());
             return;

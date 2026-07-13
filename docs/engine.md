@@ -108,17 +108,12 @@ and sizing are machine/user policy, not something one project should be able to 
 
 ```toml
 [engine]
-idle-minutes = 120   # default; env override JK_ENGINE_IDLE_MINUTES
-max-heap-mb  = 256   # default; env override JK_ENGINE_MAX_HEAP_MB
+max-heap-mb = 256   # default; env override JK_ENGINE_MAX_HEAP_MB
 ```
 
-`idle-minutes`:
-
-- **A positive number** — minutes of no in-flight requests before the engine exits. Default `120`.
-- **`0`** — exit as soon as the current workload finishes; don't linger even briefly.
-- **`-1`** — never self-terminate. Useful on a CI runner or a workstation where you'd rather keep the
-  engine (and whatever it's warmed — the resolved dependency graph, worker-slot accounting) resident
-  indefinitely and manage its lifetime yourself.
+The engine is **resident**: once started it stays running until an explicit `jk engine stop` (or a
+version-skew replacement). It does not self-terminate when idle — it's lightweight (see
+`max-heap-mb` below), and it also serves the HTTP dashboard, so keeping it warm is the whole point.
 
 `max-heap-mb` — the heap ceiling for the engine *process itself*, applied by the spawning client
 (`-Xmx`, alongside `-Xms32m` pre-sizing and SerialGC; a process can't shrink its own ceiling, so
@@ -128,8 +123,8 @@ compiles and tests run in separately-sized worker JVMs. Raise it on a CI box hos
 concurrent builds; **`0`** = uncapped. Verify with the `heapMaxBytes` field of
 `jk engine status --output json`.
 
-Changing these values takes effect for the *next* engine — `jk engine stop` then let the next
-command spin up a fresh one, or just wait for the current one to naturally recycle.
+Changing this value takes effect for the *next* engine — `jk engine stop`, then let the next
+command spin up a fresh one.
 
 ## Two artifacts
 
@@ -171,7 +166,7 @@ Alongside the automatic lifecycle, three explicit commands:
 |---|---|
 | `jk engine start` | Eagerly start the engine and wait until it's confirmed live (or fail with a clear error). A no-op if one's already running. Useful for pre-warming a CI container. |
 | `jk engine stop` | Gracefully shut the engine down (waits briefly for in-flight work, then stops). Reports "not running" (not an error) if there isn't one. |
-| `jk engine status` | Reports whether an engine is running and, if so, its PID, `jk` version, uptime, the `idle-minutes` it's operating under, best-effort memory usage (heap used/committed/max from the runtime, plus process RSS where the OS exposes it — Linux `/proc`), and how many requests are in flight. `--output json` carries the same numbers as `heapUsedBytes`/`heapCommittedBytes`/`heapMaxBytes`/`rssBytes` (`-1` = unobservable). |
+| `jk engine status` | Reports whether an engine is running and, if so, its PID, `jk` version, uptime, best-effort memory usage (heap used/committed/max from the runtime, plus process RSS where the OS exposes it — Linux `/proc`), and how many jobs are in flight. `--output json` carries the same numbers as `heapUsedBytes`/`heapCommittedBytes`/`heapMaxBytes`/`rssBytes` (`-1` = unobservable). |
 
 ## On-disk layout
 
@@ -374,9 +369,9 @@ real native-image binary:
    `WorkspaceRequest.applyMemoryPlan` flag lets a host serving concurrent requests (the engine) plan
    once for its own concurrency instead of letting each call overwrite the shared budget.
 2. **Engine skeleton (done).** Process lifecycle, single-instance election (`.lock` `tryLock()`), the
-   Unix-domain-socket handshake/liveness/status/shutdown protocol, the idle-timeout policy (0/-1/N),
-   and `jk engine start/stop/status`. Verified end-to-end: start/status/stop, `kill -9` recovery
-   (stale socket/lock cleanup), and `idle-minutes` semantics against the real binary.
+   Unix-domain-socket handshake/liveness/status/shutdown protocol, and `jk engine start/stop/status`.
+   Verified end-to-end: start/status/stop, `kill -9` recovery (stale socket/lock cleanup) against the
+   real binary. The engine is resident — it never self-terminates; `jk engine stop` drains it.
 3. **`jk build` (done).** Every `WorkspaceBuildListener`/`GoalListener` callback streams over the
    wire as its own message type (`EngineServer`'s `wireListener`/`wireGoalListener`,
    `EngineBuildListenerAdapter` client-side); the CLI's existing renderers (`AggregateModuleListener`,

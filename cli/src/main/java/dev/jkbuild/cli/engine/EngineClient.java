@@ -41,22 +41,36 @@ public final class EngineClient {
     /** Per-read/connect socket timeout — a live engine replies in well under this. */
     private static final int SOCKET_TIMEOUT_MILLIS = 2_000;
 
-    /** How long to wait for a freshly spawned engine to come up before giving up. */
-    private static final Duration DEFAULT_START_TIMEOUT = Duration.ofSeconds(5);
+    /**
+     * Ceiling for a normal (mapped-cache or no-cache) spawn to come up. A mapped-cache start is
+     * sub-second; the pathological case is a <em>cold</em> boot (AOT ignored/disabled), which we
+     * must tolerate rather than report as failure. Safe because {@link #awaitStartup} short-circuits
+     * the instant the child process exits — a crashed engine still fails in well under a second, so
+     * this ceiling is only ever approached by an engine that is genuinely still booting.
+     */
+    private static final Duration COLD_START_CEILING = Duration.ofSeconds(30);
 
     /**
      * The wait when the spawn is an AOT-cache <em>training</em> run (first start after the engine
-     * jar changed, {@code -XX:AOTCacheOutput}): recording makes that one boot much slower than a
-     * mapped-cache start, and timing out mid-training reports a healthy engine as failed. The
-     * liveness check in {@link #awaitStartup} keeps this long budget safe — a crashed engine still
-     * fails in well under a second.
+     * jar / host JDK changed, {@code -XX:AOTCacheOutput}): recording makes that one boot much slower
+     * than a mapped-cache start, and timing out mid-training reports a healthy engine as failed.
      */
-    private static final Duration TRAINING_START_TIMEOUT = Duration.ofSeconds(60);
+    private static final Duration TRAINING_START_TIMEOUT = Duration.ofSeconds(90);
+
+    /**
+     * How long the eager training engine records before we clean-stop it to assemble the cache. A
+     * sub-second run yields an empty recording the assembler rejects (see {@code install.sh}); this
+     * matches the warm-up's {@code sleep 3} so the startup path is captured.
+     */
+    private static final long TRAINING_MIN_UPTIME_MS = 3_000;
+
+    /** How long to wait for the {@code .aot} to be assembled by the child JVM after the clean stop. */
+    private static final Duration ASSEMBLY_TIMEOUT = Duration.ofSeconds(30);
 
     private EngineClient() {}
 
     /** What a connection's {@code hello}/{@code hello-ack} handshake reveals about the engine. */
-    public record Handshake(String version, long pid, long startedAtMillis) {}
+    public record Handshake(String version, long pid, long startedAtMillis, boolean draining) {}
 
     /**
      * The {@code jk engine status} snapshot. Memory fields are best-effort: {@code -1} means the
@@ -69,8 +83,9 @@ public final class EngineClient {
             String version,
             long pid,
             long startedAtMillis,
-            int idleMinutes,
             int activeRequests,
+            int activePipelines,
+            boolean draining,
             long heapUsedBytes,
             long heapCommittedBytes,
             long heapMaxBytes,
@@ -106,7 +121,8 @@ public final class EngineClient {
             return Optional.of(new Handshake(
                     Ndjson.str(ack, "version"),
                     Ndjson.longValue(ack, "pid", -1),
-                    Ndjson.longValue(ack, "startedAt", -1)));
+                    Ndjson.longValue(ack, "startedAt", -1),
+                    Ndjson.bool(ack, "draining", false)));
         } catch (IOException e) {
             return Optional.empty();
         }
@@ -122,8 +138,9 @@ public final class EngineClient {
                     Ndjson.str(ack, "version"),
                     Ndjson.longValue(ack, "pid", -1),
                     Ndjson.longValue(ack, "startedAt", -1),
-                    Ndjson.intValue(ack, "idleMinutes", -1),
                     Ndjson.intValue(ack, "activeRequests", -1),
+                    Ndjson.intValue(ack, "activePipelines", 0),
+                    Ndjson.bool(ack, "draining", false),
                     Ndjson.longValue(ack, "heapUsedBytes", -1),
                     Ndjson.longValue(ack, "heapCommittedBytes", -1),
                     Ndjson.longValue(ack, "heapMaxBytes", -1),
@@ -153,6 +170,46 @@ public final class EngineClient {
         } catch (IOException e) {
             return false; // reachable but didn't behave — a real problem, not "already stopped"
         }
+    }
+
+    /**
+     * Schedule a graceful drain: the engine refuses new jobs and exits cleanly once in-flight jobs
+     * finish. Returns the in-flight job count at the moment of the request (0 → the engine is exiting
+     * now), or {@code -1} when nothing was reachable (a no-op stop).
+     */
+    public static int drain(Path socket) {
+        try (SocketChannel ch = connect(socket)) {
+            String bye = exchange(ch, EngineProtocol.shutdown(false));
+            if (!EngineProtocol.BYE.equals(EngineProtocol.typeOf(bye))) return -1;
+            return Ndjson.intValue(bye, "pipelines", 0);
+        } catch (IOException e) {
+            return -1;
+        }
+    }
+
+    /**
+     * Force an immediate shutdown: the engine exits now via its clean-exit path (abandoning in-flight
+     * job connections but still assembling the AOT cache). {@code true} if acknowledged or nothing was
+     * running; {@code false} if reachable but unresponsive (caller may {@link #killStale} as fallback).
+     */
+    public static boolean forceStop(Path socket) {
+        SocketChannel ch;
+        try {
+            ch = connect(socket);
+        } catch (IOException e) {
+            return true; // nothing reachable — already stopped
+        }
+        try (ch) {
+            String bye = exchange(ch, EngineProtocol.shutdown(true));
+            return EngineProtocol.BYE.equals(EngineProtocol.typeOf(bye));
+        } catch (IOException e) {
+            return false;
+        }
+    }
+
+    /** Last-resort SIGTERM→SIGKILL when a clean {@link #forceStop} can't reach a wedged engine. */
+    public static void hardKill(long pid) {
+        killStale(pid, COLD_START_CEILING);
     }
 
     // ---- build history ({@code jk history}) — thin RPC over the engine's journal ----------------
@@ -208,7 +265,23 @@ public final class EngineClient {
      * per {@code docs/engine.md}, the engine is load-bearing and this is not silently swallowed.
      */
     public static Handshake ensureRunning(EnginePaths.Paths paths, String clientVersion) throws IOException {
-        return ensureRunning(paths, clientVersion, DEFAULT_START_TIMEOUT);
+        return doEnsure(paths, clientVersion, false).handshake();
+    }
+
+    /** Outcome of {@link #ensureReady}: the live engine, and whether an optimization wedge was shown. */
+    public record EngineReady(Handshake handshake, boolean optimized) {}
+
+    /**
+     * Engine-readiness prewarm for the top of an engine-backed command, <em>before</em> it builds
+     * its own goal console. Identical to {@link #ensureRunning(EnginePaths.Paths, String)} except
+     * that a one-time AOT optimization renders an animated "Engine — Optimizing build engine…" chip
+     * that settles into "✓ Engine  Build engine optimized and started (pid N)", so the user sees why
+     * the first build after an install/upgrade pauses, and the command's own TUI then takes over
+     * (sequential, never interleaved). {@code optimized} is true when that success chip was printed,
+     * so the caller can suppress its own "started" line. A running engine → fast no-op, nothing shown.
+     */
+    public static EngineReady ensureReady(EnginePaths.Paths paths, String clientVersion) throws IOException {
+        return doEnsure(paths, clientVersion, true);
     }
 
     /**
@@ -1171,28 +1244,311 @@ public final class EngineClient {
                 .result();
     }
 
-    static Handshake ensureRunning(EnginePaths.Paths paths, String clientVersion, Duration startTimeout)
+    private static EngineReady doEnsure(EnginePaths.Paths paths, String clientVersion, boolean renderWedge)
             throws IOException {
         Optional<Handshake> existing = handshake(paths.socket(), clientVersion);
         if (existing.isPresent()) {
-            if (clientVersion.equals(existing.get().version())) return existing.get();
-            killStale(existing.get().pid(), startTimeout);
+            Handshake hs = existing.get();
+            // A draining engine still owns the socket + file lock and is finishing in-flight jobs.
+            // Fail fast — do NOT fall through to spawn a competing engine, and don't killStale it.
+            if (hs.draining()) {
+                throw new IOException(
+                        "the build engine is shutting down — wait for it to stop, or run `jk engine stop --force`");
+            }
+            if (clientVersion.equals(hs.version())) return new EngineReady(hs, false);
+            killStale(hs.pid(), COLD_START_CEILING);
         }
-        Spawned spawned = spawn(paths, clientVersion);
-        Duration wait = startTimeout;
-        if (spawned.trainingAotCache()) {
-            if (TRAINING_START_TIMEOUT.compareTo(wait) > 0) wait = TRAINING_START_TIMEOUT;
-            // Say why this start is slower — a silent long wait reads as a hang.
-            System.err.println(
-                    "jk: first start with this engine build — training the AOT cache (one-time; later starts are instant) ...");
-        }
-        return awaitStartup(paths, clientVersion, wait, spawned.process())
-                .orElseThrow(() -> new IOException(
-                        "could not start the build engine — see " + paths.log() + " for details"));
+        return startWithSelfHeal(paths, clientVersion, renderWedge);
     }
 
-    /** What {@link #spawn} launched: the child (same pid — it setsid()s, never forks) + AOT mode. */
-    private record Spawned(Process process, boolean trainingAotCache) {}
+    /**
+     * Bring up a fresh engine, self-healing the AOT cache and never bricking:
+     *
+     * <ul>
+     *   <li>pick an AOT mode — TRAIN a new cache, USE an existing one, or NONE when AOT can't apply
+     *       (non-JAR engine, a GraalVM host JDK, or a sticky {@code .noaot} marker);
+     *   <li>a spawn that EXITS before serving means the cache is unusable on this JVM → drop it, mark
+     *       the key, and retry once with NONE (a cache-free start always boots);
+     *   <li>a USE start that comes up but whose log shows the JVM ignored the cache → delete the
+     *       cache so the next start retrains, without disturbing the now-working engine;
+     *   <li>a still-booting (alive) child is waited on up to a generous ceiling, so a slow cold start
+     *       is never misreported as "could not start".
+     * </ul>
+     */
+    private static EngineReady startWithSelfHeal(EnginePaths.Paths paths, String clientVersion, boolean renderWedge)
+            throws IOException {
+        EngineTarget target = resolveEngineTarget(paths, clientVersion);
+        boolean training = chooseAotMode(target) == AotMode.TRAIN;
+
+        // Animated blue "Engine — Optimizing build engine…" chip, only for a real optimization on an
+        // interactive terminal (before any command's own goal console → no interleave).
+        java.io.PrintStream ws =
+                (renderWedge && training && dev.jkbuild.cli.run.GoalConsole.isInteractiveTerminal())
+                        ? dev.jkbuild.cli.CliOutput.stdout()
+                        : null;
+        dev.jkbuild.cli.tui.ChipSpinner wedge = dev.jkbuild.cli.tui.ChipSpinner.show(
+                ws, "Engine", dev.jkbuild.config.GlobalConfig.nerdfont(), "Optimizing build engine...");
+        long startNanos = System.nanoTime();
+        try {
+            if (training) {
+                // Eager optimization: record a startup profile and ASSEMBLE the cache now (train →
+                // clean-stop → assemble), so the engine we hand back genuinely maps it rather than
+                // merely recording (JEP 514 writes the .aot only at the training JVM's clean exit).
+                // Best-effort: if it produces no cache we fall through and start normally.
+                trainAndAssemble(paths, clientVersion, target);
+            }
+            Handshake hs = startOnce(paths, clientVersion, target);
+            boolean optimized = false;
+            // Truthful "optimized": only when the cache now exists on disk and is being mapped.
+            if (target.aotCache() != null && Files.exists(target.aotCache())) {
+                String took = dev.jkbuild.cli.run.ConsoleSpec.took(
+                        java.time.Duration.ofNanos(System.nanoTime() - startNanos));
+                wedge.succeed("Build engine optimized and started (pid " + pidStyled(hs.pid()) + ") " + took);
+                optimized = wedge.active();
+            }
+            return new EngineReady(hs, optimized);
+        } finally {
+            wedge.close();
+        }
+    }
+
+    /** The engine pid, yellow on an ANSI terminal (matches the wedge's success chip), plain otherwise. */
+    private static String pidStyled(long pid) {
+        String s = Long.toString(pid);
+        return dev.jkbuild.cli.theme.Theme.active().isAnsi()
+                ? dev.jkbuild.cli.theme.Theme.colorize(s, dev.jkbuild.cli.theme.Theme.active().warning())
+                : s;
+    }
+
+    /**
+     * Spawn the engine and return once it's serving. The AOT mode is (re)chosen per attempt, so a
+     * freshly assembled cache is mapped (USE). Rides out a single start/stop race: with {@code
+     * AOTMode=auto} a bad cache can never make the JVM exit, so a child that exits before serving is
+     * a crash or an election loss against a just-stopped engine's socket/assembly — back off and
+     * retry once, never touching the cache.
+     */
+    private static Handshake startOnce(EnginePaths.Paths paths, String clientVersion, EngineTarget target)
+            throws IOException {
+        for (int attempt = 0; attempt < 2; attempt++) {
+            AotMode mode = chooseAotMode(target);
+            Duration wait = (mode == AotMode.TRAIN) ? TRAINING_START_TIMEOUT : COLD_START_CEILING;
+            StartResult r = awaitStartup(paths, clientVersion, wait, spawn(paths, target, mode).process());
+            switch (r.outcome()) {
+                case UP -> {
+                    if (mode == AotMode.USE && scanLogForAotError(paths.log())) {
+                        deleteQuietly(target.aotCache());
+                        writeNoAotMarker(target.aotCache());
+                        logReason(paths, "AOT cache was ignored by the engine JVM; skipping it for this key");
+                    }
+                    return r.handshake();
+                }
+                case TIMED_OUT -> throw notStarted(paths); // alive but never served → genuine hang
+                case CHILD_EXITED -> {
+                    if (attempt == 0) {
+                        logReason(paths, "engine exited before serving; retrying after backoff");
+                        sleepQuietly(1_500);
+                        continue;
+                    }
+                    throw notStarted(paths);
+                }
+            }
+        }
+        throw notStarted(paths); // unreachable
+    }
+
+    /**
+     * One-time eager AOT training: spawn a training engine ({@code -XX:AOTCacheOutput}), let it run
+     * long enough to record the startup path, then clean-stop it so the JVM assembles the {@code
+     * .aot} at exit, and wait for that assembly to complete. Best-effort — any failure leaves no
+     * cache and the caller starts normally (the cache would then build on a later clean exit).
+     */
+    private static void trainAndAssemble(EnginePaths.Paths paths, String clientVersion, EngineTarget target) {
+        try {
+            StartResult tr = awaitStartup(
+                    paths, clientVersion, TRAINING_START_TIMEOUT, spawn(paths, target, AotMode.TRAIN).process());
+            if (tr.outcome() != StartResult.Outcome.UP) {
+                logReason(paths, "AOT training run did not come up; skipping eager optimization");
+                return;
+            }
+            sleepQuietly(TRAINING_MIN_UPTIME_MS); // avoid the assembler's empty-recording rejection
+            stop(paths.socket()); // clean shutdown → the JVM assembles the cache on exit
+            if (!awaitAssembled(target.aotCache(), ASSEMBLY_TIMEOUT)) {
+                logReason(paths, "AOT cache did not assemble in time; it will build on a later engine exit");
+            }
+        } catch (IOException e) {
+            logReason(paths, "eager AOT training skipped: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Wait until the training child has finished writing the cache: the assembler removes the {@code
+     * .aot.config} recording only once the {@code .aot} is complete, so "{@code .aot} present AND
+     * {@code .aot.config} gone" is the authoritative done signal (avoids mapping a half-written file).
+     */
+    private static boolean awaitAssembled(Path aotCache, Duration timeout) {
+        if (aotCache == null) return false;
+        Path config = aotCache.resolveSibling(aotCache.getFileName() + ".config");
+        long deadline = System.nanoTime() + timeout.toNanos();
+        while (System.nanoTime() < deadline) {
+            if (Files.exists(aotCache) && !Files.exists(config)) return true;
+            sleepQuietly(100);
+        }
+        return Files.exists(aotCache) && !Files.exists(config);
+    }
+
+    private static IOException notStarted(EnginePaths.Paths paths) {
+        return new IOException("could not start the build engine — see " + paths.log() + " for details");
+    }
+
+    /** How a spawn should treat the AOT cache. */
+    enum AotMode {
+        TRAIN,
+        USE,
+        NONE
+    }
+
+    /** What {@link #spawn} launched: the child (same pid — it setsid()s, never forks). */
+    private record Spawned(Process process) {}
+
+    /**
+     * The resolved engine to spawn: which artifact, the host JDK (JAR only), whether that JDK is a
+     * HotSpot/C2 JVM (AOT is only stable there), the AOT cache path, and whether a {@code .noaot}
+     * marker already says AOT can't apply for this key.
+     */
+    record EngineTarget(
+            EngineArtifact engine, Path javaHome, boolean hotspot, Path aotCache, boolean noAotMarker) {}
+
+    /** A host JDK for the engine: home, vendor, and version (from its {@code release} file). */
+    record EngineJdk(Path home, dev.jkbuild.jdk.JdkVendor vendor, String version) {}
+
+    /** Resolve everything the spawn/mode decision needs, self-healing a missing/skewed engine jar. */
+    private static EngineTarget resolveEngineTarget(EnginePaths.Paths paths, String clientVersion) throws IOException {
+        String jkExe = CachePruneScheduler.resolveJkExe()
+                .orElseThrow(() -> new IOException("could not resolve the running jk binary's path"));
+        Path libDir = dev.jkbuild.util.JkDirs.lib();
+        EngineArtifact engine = resolveEngineArtifact(System.getenv("JK_ENGINE_EXE"), jkExe, clientVersion, libDir);
+        // Self-heal a missing/version-skewed engine jar before falling back: the released native
+        // client can't host the engine itself, but it can download the matching jar.
+        if (engine.kind() == EngineArtifact.Kind.FALLBACK
+                && EngineJarFetcher.applicable(
+                        clientVersion, isNativeImage(), dev.jkbuild.config.SessionContext.current().offline())) {
+            System.err.println("jk: downloading the build engine (jk-engine-" + clientVersion + ".jar) ...");
+            EngineJarFetcher.fetch(EngineJarFetcher.releasesBase(), clientVersion, libDir);
+            engine = resolveEngineArtifact(System.getenv("JK_ENGINE_EXE"), jkExe, clientVersion, libDir);
+        }
+        if (engine.kind() != EngineArtifact.Kind.JAR) {
+            return new EngineTarget(engine, null, false, null, false);
+        }
+        EngineJdk jdk = resolveEngineJdk();
+        Path aot = aotCachePath(paths, Path.of(engine.path()), jdk);
+        boolean marker = Files.exists(noAotMarkerPath(aot));
+        return new EngineTarget(engine, jdk.home(), isHotSpot(jdk.vendor()), aot, marker);
+    }
+
+    /** AOT mode for a target: only a JAR engine on a HotSpot JDK with no {@code .noaot} marker uses AOT. */
+    static AotMode chooseAotMode(EngineTarget t) {
+        if (t.engine().kind() != EngineArtifact.Kind.JAR) return AotMode.NONE;
+        if (!t.hotspot()) return AotMode.NONE; // GraalVM host: its Graal JIT breaks the cache — skip cleanly
+        if (t.noAotMarker()) return AotMode.NONE;
+        if (t.aotCache() == null || !Files.exists(t.aotCache())) return AotMode.TRAIN;
+        return AotMode.USE;
+    }
+
+    /**
+     * The JDK that hosts the engine JVM, pinned by vendor+major so the AOT cache is stable. Honours
+     * {@code [toolchain].jdk} (or {@code JK_ENGINE_JDK}); defaults to the LTS Temurin at the engine's
+     * floor release. Prefers an already-installed match (no network), else installs exactly the pin.
+     * A HotSpot JDK is what {@code docs/engine.md} wants (HotSpot's JIT + SHA-256 intrinsics) and is
+     * required for a mappable AOT cache; a Graal pin is honoured but disables AOT (see {@link
+     * #chooseAotMode}).
+     */
+    private static EngineJdk resolveEngineJdk() throws IOException {
+        int floor = Runtime.version().feature();
+        String pin = dev.jkbuild.config.GlobalConfig.engineJdkPin().orElse("temurin-" + floor);
+        Optional<EngineJdk> installed = findInstalledEngineJdk(pin);
+        if (installed.isPresent()) return installed.get();
+        System.err.println("jk: installing the build engine's JDK (" + pin + ") ...");
+        try {
+            Path home = JdkEnsure.install(pin, System.err::println).home();
+            return probeEngineJdk(home)
+                    .orElseThrow(() -> new IOException("engine JDK installed at " + home + " is unreadable"));
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IOException("interrupted installing the engine JDK " + pin, e);
+        }
+    }
+
+    /** First already-installed JDK matching the pin's vendor+major, checked without any network. */
+    private static Optional<EngineJdk> findInstalledEngineJdk(String pin) {
+        Optional<Pin> want = parsePin(pin);
+        if (want.isEmpty()) return Optional.empty(); // unparseable pin → force the install path
+        List<Path> homes = new ArrayList<>();
+        GlobalDefaultJdk defaults = GlobalDefaultJdk.current();
+        defaults.currentHome().ifPresent(homes::add);
+        defaults.defaultHome().ifPresent(homes::add);
+        try {
+            homes.add(JavaHomes.runningJavaHome());
+        } catch (RuntimeException ignored) {
+            // No running JVM home (native client) — the registry scan below still covers installs.
+        }
+        try {
+            for (dev.jkbuild.jdk.JdkHit hit : new dev.jkbuild.jdk.JdkRegistry().listHits()) homes.add(hit.home());
+        } catch (RuntimeException ignored) {
+            // Registry probe failure is non-fatal — fall through to install.
+        }
+        for (Path home : homes) {
+            Optional<EngineJdk> ej = probeEngineJdk(home);
+            if (ej.isPresent()
+                    && ej.get().vendor() == want.get().vendor()
+                    && majorOf(ej.get().version()) == want.get().major()) {
+                return ej;
+            }
+        }
+        return Optional.empty();
+    }
+
+    private static Optional<EngineJdk> probeEngineJdk(Path home) {
+        return dev.jkbuild.discovery.ProbeSupport.discoverJdk(home, "engine-host")
+                .map(h -> new EngineJdk(h.home(), h.vendor(), h.version()));
+    }
+
+    /** A parsed engine-JDK pin, e.g. {@code "temurin-25"} → (TEMURIN, 25). */
+    private record Pin(dev.jkbuild.jdk.JdkVendor vendor, int major) {}
+
+    private static Optional<Pin> parsePin(String spec) {
+        int dash = spec.lastIndexOf('-');
+        if (dash <= 0 || dash == spec.length() - 1) return Optional.empty();
+        int major;
+        try {
+            major = Integer.parseInt(spec.substring(dash + 1).split("\\.")[0]);
+        } catch (NumberFormatException e) {
+            return Optional.empty();
+        }
+        dev.jkbuild.jdk.JdkVendor vendor = vendorFromToken(spec.substring(0, dash));
+        return vendor == dev.jkbuild.jdk.JdkVendor.UNKNOWN ? Optional.empty() : Optional.of(new Pin(vendor, major));
+    }
+
+    /** Map a spec vendor token (a {@code jbPrefix} like {@code "temurin"}/{@code "graalvm"}) to a vendor. */
+    private static dev.jkbuild.jdk.JdkVendor vendorFromToken(String token) {
+        for (dev.jkbuild.jdk.JdkVendor v : dev.jkbuild.jdk.JdkVendor.values()) {
+            if (v.jbPrefix().map(p -> p.equalsIgnoreCase(token)).orElse(false)) return v;
+        }
+        return dev.jkbuild.jdk.JdkVendor.UNKNOWN;
+    }
+
+    private static int majorOf(String version) {
+        int dot = version.indexOf('.');
+        try {
+            return Integer.parseInt(dot < 0 ? version : version.substring(0, dot));
+        } catch (NumberFormatException e) {
+            return -1;
+        }
+    }
+
+    /** HotSpot/C2 JVMs (everything except GraalVM) produce a stable, mappable AOT cache. */
+    private static boolean isHotSpot(dev.jkbuild.jdk.JdkVendor vendor) {
+        return vendor != dev.jkbuild.jdk.JdkVendor.ORACLE_GRAALVM && vendor != dev.jkbuild.jdk.JdkVendor.GRAALVM_CE;
+    }
 
     private static void killStale(long pid, Duration timeout) {
         ProcessHandle.of(pid).ifPresent(h -> {
@@ -1242,50 +1598,13 @@ public final class EngineClient {
     }
 
     /**
-     * The JDK that hosts the engine JVM — the jk-managed default ({@code current}, then {@code
-     * default}: the same global tiers {@code JdkResolution} walks), then the JVM running jk /
-     * {@code $JAVA_HOME} — but only a candidate that meets the engine's runtime floor: the engine
-     * jars are compiled by the same JDK release that built this client, and a user whose projects
-     * pin an older JDK can easily have that older release as their global default (it governs
-     * worker JVMs, not the engine host). When nothing installed qualifies, install exactly the
-     * floor release via {@link JdkEnsure#install(String, java.util.function.Consumer)} — no
-     * resolution walk, no global-default side effects. The engine is deliberately NOT keyed to any
-     * project's JDK pin: one engine serves many workspaces.
+     * The engine's AOT cache path, keyed to the engine jar (name:size:mtime) <em>and</em> the host
+     * JDK identity (version + vendor). A mismatched cache is silently ignored by {@code
+     * AOTMode=auto} and never retrained, so folding the JDK into the key means a jar upgrade, a JDK
+     * build bump (Temurin 25.0.3→25.0.4), or a vendor swap all yield a fresh key that trains cleanly.
+     * Stale {@code .aot}/{@code .noaot} files from previous keys are deleted best-effort here.
      */
-    private static Path engineJavaHome() throws IOException {
-        int floor = Runtime.version().feature(); // the release that compiled this client AND the engine jar
-        GlobalDefaultJdk defaults = GlobalDefaultJdk.current();
-        for (Optional<Path> candidate : List.of(defaults.currentHome(), defaults.defaultHome())) {
-            if (candidate.isPresent() && meetsFloor(candidate.get(), floor)) return candidate.get();
-        }
-        try {
-            Path running = JavaHomes.runningJavaHome();
-            if (meetsFloor(running, floor)) return running;
-        } catch (IllegalStateException noRunningJvm) {
-            // Native client with no JAVA_HOME — fall through to the bootstrap install.
-        }
-        System.err.println("jk: installing a JDK " + floor + " to host the build engine ...");
-        try {
-            Path home = JdkEnsure.install(String.valueOf(floor), System.err::println).home();
-            if (meetsFloor(home, floor)) return home;
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        } catch (IOException e) {
-            throw new IOException("no JDK " + floor + "+ can host the jk engine (" + e.getMessage()
-                    + ") — run `jk jdk install " + floor + "` or point JAVA_HOME at one");
-        }
-        throw new IOException(
-                "no JDK " + floor + "+ can host the jk engine — run `jk jdk install " + floor
-                        + "` or point JAVA_HOME at one");
-    }
-
-    /**
-     * The engine's AOT cache path, keyed to the engine jar (name:size:mtime, hashed) so a changed
-     * {@code jk-engine-<version>.jar} yields a fresh key — the previous key's cache would be
-     * silently ignored by {@code AOTMode=auto} forever, never retrained. Caches for previous jars
-     * are deleted best-effort while resolving the current one.
-     */
-    private static Path aotCachePath(EnginePaths.Paths paths, Path engineJar) {
+    static Path aotCachePath(EnginePaths.Paths paths, Path engineJar, EngineJdk jdk) {
         StringBuilder signature = new StringBuilder();
         try {
             signature
@@ -1295,14 +1614,19 @@ public final class EngineClient {
                     .append(':')
                     .append(Files.getLastModifiedTime(engineJar).toMillis());
         } catch (IOException e) {
-            signature.append("unreadable");
+            signature.append("unreadable-jar");
         }
-        Path cache = paths.dir()
-                .resolve("engine-" + dev.jkbuild.util.Hashing.sha256Hex(signature.toString()).substring(0, 16)
-                        + ".aot");
-        try (var stale = Files.newDirectoryStream(paths.dir(), "engine-*.aot")) {
-            for (Path p : stale) {
-                if (!p.equals(cache)) Files.deleteIfExists(p);
+        signature.append(':').append(jdk == null ? "no-jdk" : jdk.version() + "|" + jdk.vendor().name());
+        String hash = dev.jkbuild.util.Hashing.sha256Hex(signature.toString()).substring(0, 16);
+        Path cache = paths.dir().resolve("engine-" + hash + ".aot");
+        // Sweep every other key's artifacts — the cache, the JEP 514 ".aot.config" recording
+        // intermediate (left behind whenever a training run is interrupted before assembly), and any
+        // ".noaot" marker — keeping only the current key's files (name prefix "engine-<hash>"). The
+        // socket/lock/pid/log live under a different, non-"engine-" prefix, so this never touches them.
+        String stem = "engine-" + hash;
+        try (var entries = Files.newDirectoryStream(paths.dir(), "engine-*")) {
+            for (Path p : entries) {
+                if (!p.getFileName().toString().startsWith(stem)) Files.deleteIfExists(p);
             }
         } catch (IOException ignored) {
             // Cleanup is opportunistic; a leftover cache costs disk, not correctness.
@@ -1310,46 +1634,15 @@ public final class EngineClient {
         return cache;
     }
 
-    /**
-     * True when the JDK at {@code home} is release {@code floor} or newer — one {@code release}-file
-     * read via the discovery probes' shared helper. Unreadable/none → false (never spawn an engine
-     * that dies on {@code UnsupportedClassVersionError} when a better tier is available).
-     */
-    private static boolean meetsFloor(Path home, int floor) {
-        return dev.jkbuild.discovery.ProbeSupport.discoverJdk(home, "engine-host")
-                .map(hit -> {
-                    int dot = hit.version().indexOf('.');
-                    String feature = dot < 0 ? hit.version() : hit.version().substring(0, dot);
-                    try {
-                        return Integer.parseInt(feature) >= floor;
-                    } catch (NumberFormatException e) {
-                        return false;
-                    }
-                })
-                .orElse(false);
+    /** The sibling "this key can't AOT here" marker for an {@code engine-<key>.aot} path. */
+    private static Path noAotMarkerPath(Path aotCache) {
+        String name = aotCache.getFileName().toString();
+        return aotCache.resolveSibling(name.substring(0, name.length() - ".aot".length()) + ".noaot");
     }
 
     /** Spawn a fresh engine, detached — mirrors {@link CachePruneScheduler}'s spawn-and-forget pattern. */
-    private static Spawned spawn(EnginePaths.Paths paths, String clientVersion) throws IOException {
-        boolean trainingAotCache = false;
-        String jkExe = CachePruneScheduler.resolveJkExe()
-                .orElseThrow(() -> new IOException("could not resolve the running jk binary's path"));
-        Path libDir = dev.jkbuild.util.JkDirs.lib();
-        EngineArtifact engine =
-                resolveEngineArtifact(System.getenv("JK_ENGINE_EXE"), jkExe, clientVersion, libDir);
-        // Self-heal a missing/version-skewed engine jar before falling back: the released native
-        // client can't host the engine itself, but it can download the matching jar — the same
-        // move as installing a JDK to host it (and the reason there's no `jk engine fetch` verb).
-        // JVM dist, offline, and -SNAPSHOT builds skip this — see EngineJarFetcher.applicable.
-        if (engine.kind() == EngineArtifact.Kind.FALLBACK
-                && EngineJarFetcher.applicable(
-                        clientVersion,
-                        isNativeImage(),
-                        dev.jkbuild.config.SessionContext.current().offline())) {
-            System.err.println("jk: downloading the build engine (jk-engine-" + clientVersion + ".jar) ...");
-            EngineJarFetcher.fetch(EngineJarFetcher.releasesBase(), clientVersion, libDir);
-            engine = resolveEngineArtifact(System.getenv("JK_ENGINE_EXE"), jkExe, clientVersion, libDir);
-        }
+    private static Spawned spawn(EnginePaths.Paths paths, EngineTarget target, AotMode mode) throws IOException {
+        EngineArtifact engine = target.engine();
         JkEngineConfig config = JkEngineConfig.resolve();
         Files.createDirectories(paths.dir());
         rotateLog(paths.log());
@@ -1373,22 +1666,24 @@ public final class EngineClient {
                 // intrinsics want; there is no native engine image. --enable-native-access:
                 // PosixDetach's setsid(2) FFM downcall without the JDK's restricted-method
                 // warning.
-                command.add(engineJavaHome()
+                command.add(target.javaHome()
                         .resolve("bin")
                         .resolve(HostPlatform.isWindows() ? "java.exe" : "java")
                         .toString());
                 command.add("-XX:+UseSerialGC");
                 // AOT cache (JEP 514, JDK 25+): pre-parsed class metadata AND AOT-compiled code,
-                // taming the cold engine's JIT-warmup tail. Engine cold start is user-visible
-                // latency — the first command after an idle timeout waits for this spawn. The
-                // cache file is keyed to the exact jar because AOTMode=auto silently ignores
-                // a mismatched cache: an unkeyed name would stop helping at the first upgrade and
-                // never retrain. First spawn after a jar change trains (-XX:AOTCacheOutput,
-                // assembled on clean exit — idle recycling makes that routine); every later cold
-                // start maps the cache.
-                Path aotCache = aotCachePath(paths, Path.of(engine.path()));
-                trainingAotCache = !Files.exists(aotCache);
-                command.add((trainingAotCache ? "-XX:AOTCacheOutput=" : "-XX:AOTCache=") + aotCache);
+                // taming the cold engine's JIT-warmup tail. The mode is chosen by the self-heal
+                // ladder (see startWithSelfHeal): TRAIN records a fresh cache (-XX:AOTCacheOutput,
+                // assembled on the engine's clean exit), USE maps an existing one, and NONE omits
+                // the cache entirely (non-HotSpot host JDK, or a key that already proved unmappable).
+                // The cache is keyed to jar + host-JDK identity so an upgrade/JDK-swap retrains.
+                switch (mode) {
+                    case TRAIN -> command.add("-XX:AOTCacheOutput=" + target.aotCache());
+                    case USE -> command.add("-XX:AOTCache=" + target.aotCache());
+                    case NONE -> {
+                        /* no AOT flag — a guaranteed cold-but-correct boot */
+                    }
+                }
                 if (config.heapCapped()) {
                     command.add("-Xms" + config.minHeapMb() + "m");
                     command.add("-Xmx" + config.maxHeapMb() + "m");
@@ -1450,7 +1745,7 @@ public final class EngineClient {
         pb.redirectInput(ProcessBuilder.Redirect.PIPE);
         Process p = pb.start();
         p.getOutputStream().close(); // EOF immediately; the engine doesn't read stdin
-        return new Spawned(p, trainingAotCache);
+        return new Spawned(p);
     }
 
     /**
@@ -1496,21 +1791,93 @@ public final class EngineClient {
         }
     }
 
-    private static Optional<Handshake> awaitStartup(
+    /** Outcome of waiting for a freshly spawned engine — lets the ladder tell a crash from a slow boot. */
+    private record StartResult(Outcome outcome, Handshake handshake) {
+        enum Outcome {
+            UP,
+            CHILD_EXITED,
+            TIMED_OUT
+        }
+
+        static StartResult up(Handshake h) {
+            return new StartResult(Outcome.UP, h);
+        }
+
+        static StartResult exited() {
+            return new StartResult(Outcome.CHILD_EXITED, null);
+        }
+
+        static StartResult timedOut() {
+            return new StartResult(Outcome.TIMED_OUT, null);
+        }
+    }
+
+    private static StartResult awaitStartup(
             EnginePaths.Paths paths, String clientVersion, Duration timeout, Process spawned) {
         long deadline = System.nanoTime() + timeout.toNanos();
         while (System.nanoTime() < deadline) {
             Optional<Handshake> h = handshake(paths.socket(), clientVersion);
-            if (h.isPresent()) return h;
+            if (h.isPresent()) return StartResult.up(h.get());
             if (spawned != null && !spawned.isAlive()) {
                 // The child died (setsid keeps the pid, so liveness is authoritative). One last
                 // handshake: a concurrent spawn may have won the election and be serving already —
                 // our child exiting is then the healthy loser, not a failure.
-                return handshake(paths.socket(), clientVersion);
+                return handshake(paths.socket(), clientVersion).map(StartResult::up).orElseGet(StartResult::exited);
             }
             sleepQuietly(50);
         }
-        return Optional.empty();
+        return StartResult.timedOut();
+    }
+
+    /**
+     * Did the JVM ignore the AOT cache on this start? {@code AOTMode=auto} logs and boots cold on a
+     * mismatch instead of failing — scan the fresh per-start log for those markers so the caller can
+     * drop the cache and retrain next time. Best-effort and bounded (AOT diagnostics appear at boot).
+     */
+    static boolean scanLogForAotError(Path log) {
+        if (log == null) return false;
+        try {
+            if (!Files.exists(log)) return false;
+            String head = Files.readString(log);
+            if (head.length() > 8192) head = head.substring(0, 8192);
+            return head.contains("[error][aot]")
+                    || head.contains("Mismatched values for property")
+                    || head.contains("Disabling optimized module handling");
+        } catch (IOException e) {
+            return false;
+        }
+    }
+
+    private static void deleteQuietly(Path p) {
+        if (p == null) return;
+        try {
+            Files.deleteIfExists(p);
+        } catch (IOException ignored) {
+            // best-effort
+        }
+    }
+
+    /** Remember that AOT can't apply for this cache's key, so later starts skip straight to NONE. */
+    private static void writeNoAotMarker(Path aotCache) {
+        if (aotCache == null) return;
+        try {
+            Files.writeString(noAotMarkerPath(aotCache), "");
+        } catch (IOException ignored) {
+            // best-effort — worst case we retry AOT more often, never a failure
+        }
+    }
+
+    /** Append a diagnostic to the engine log only — never the user's terminal. */
+    private static void logReason(EnginePaths.Paths paths, String message) {
+        try {
+            Files.writeString(
+                    paths.log(),
+                    "jk engine: " + message + System.lineSeparator(),
+                    java.nio.file.StandardOpenOption.CREATE,
+                    java.nio.file.StandardOpenOption.APPEND);
+        } catch (IOException ignored) {
+            // best-effort
+        }
     }
 
     private static void sleepQuietly(long millis) {

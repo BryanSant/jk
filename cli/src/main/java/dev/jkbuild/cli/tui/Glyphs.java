@@ -26,6 +26,12 @@ public final class Glyphs {
     /** Run/exec marker — right-pointing triangle. Paint with {@code Theme.brightGreen()}. */
     public static final String PLAY = "▶";
 
+    /** Stop marker — black square (the counterpart to {@link #PLAY}). */
+    public static final String STOP = "■";
+
+    /** List-item bullet — for detail lines under a wedge. Paint dim. */
+    public static final String BULLET = "•";
+
     // Nerd Font powerline pill caps for badges (gated on [global].nerdfont).
     // Paint the cap in the badge's *background* color (as foreground) so it reads
     // as the chip's rounded edge. Without a Nerd Font there's no good half-circle,

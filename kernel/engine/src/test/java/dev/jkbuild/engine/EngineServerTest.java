@@ -196,69 +196,6 @@ class EngineServerTest {
         assertThat(Files.exists(p.lock())).isFalse();
     }
 
-    @Test
-    void idle_minutes_zero_exits_as_soon_as_the_workload_drains() throws Exception {
-        EnginePaths.Paths p = paths(shortTempDir());
-        EngineServer server = new EngineServer(p, new JkEngineConfig(0), "1.0", null, 10, System::currentTimeMillis);
-        Thread serverThread = runInBackground(server);
-        waitUntil(Duration.ofSeconds(5), () -> Files.exists(p.socket()));
-
-        try (Client c = new Client(p.socket())) {
-            c.send(EngineProtocol.ping());
-        } // connection closes here — with idle-minutes=0 the engine should exit right after
-
-        serverThread.join(5_000);
-        assertThat(serverThread.isAlive()).isFalse();
-    }
-
-    @Test
-    void idle_minutes_negative_one_never_expires_on_its_own() throws Exception {
-        EnginePaths.Paths p = paths(shortTempDir());
-        // Tiny tick interval: if the (absent) idle timer were wrongly active, it would have fired
-        // well within this window against an artificially advanced clock.
-        AtomicLong clock = new AtomicLong(0);
-        EngineServer server = new EngineServer(p, new JkEngineConfig(-1), "1.0", null, 10, clock::get);
-        Thread serverThread = runInBackground(server);
-        waitUntil(Duration.ofSeconds(5), () -> Files.exists(p.socket()));
-
-        try (Client c = new Client(p.socket())) {
-            c.send(EngineProtocol.ping());
-        }
-        clock.addAndGet(Duration.ofDays(365).toMillis()); // "a very long time" of simulated idleness
-        Thread.sleep(200); // let a few ticks pass, if any were scheduled
-
-        assertThat(serverThread.isAlive()).isTrue(); // still up — idle-minutes=-1 never self-terminates
-        server.close();
-        serverThread.join(5_000);
-    }
-
-    @Test
-    void idle_minutes_n_expires_after_the_configured_window() throws Exception {
-        EnginePaths.Paths p = paths(shortTempDir());
-        AtomicLong clock = new AtomicLong(0);
-        // idle-minutes=1 with a 10ms tick: the ticker fires fast, but only trips once the injected
-        // clock shows >= 60_000ms since the last activity.
-        EngineServer server = new EngineServer(p, new JkEngineConfig(1), "1.0", null, 10, clock::get);
-        Thread serverThread = runInBackground(server);
-        waitUntil(Duration.ofSeconds(5), () -> Files.exists(p.socket()));
-
-        try (Client c = new Client(p.socket())) {
-            c.send(EngineProtocol.ping());
-        }
-        // The server detects the closed connection (and stamps lastActivityAtMillis) asynchronously;
-        // give it a moment before advancing the synthetic clock, so the idle window starts from a
-        // known point rather than racing the EOF detection.
-        Thread.sleep(100);
-        // Not idle long enough yet.
-        clock.addAndGet(30_000);
-        Thread.sleep(100);
-        assertThat(serverThread.isAlive()).isTrue();
-
-        // Now past the 1-minute idle window.
-        clock.addAndGet(31_000);
-        waitUntil(Duration.ofSeconds(5), () -> !serverThread.isAlive());
-    }
-
     /**
      * There's no real Windows box in this test run, but {@link EngineTransport#useLoopbackTcp()}
      * only ever reads {@code os.name} — overriding that system property exercises the exact same
@@ -915,7 +852,9 @@ class EngineServerTest {
         serverThread.join(5_000);
         assertThat(serverThread.isAlive()).isFalse();
         assertThat(Files.exists(p.http())).isFalse(); // cleaned up with the other engine files
-        assertThat(Files.exists(p.httpToken())).isFalse();
+        // The token deliberately survives shutdown so an open dashboard tab stays valid across a
+        // restart (docs/http.md); only `jk engine rotate-token` removes it.
+        assertThat(Files.exists(p.httpToken())).isTrue();
     }
 
     @Test
@@ -941,32 +880,6 @@ class EngineServerTest {
             server.close();
             serverThread.join(5_000);
         }
-    }
-
-    @Test
-    void http_enabled_overrides_exit_as_soon_as_idle() throws Exception {
-        Path stateDir = shortTempDir();
-        EnginePaths.Paths p = paths(stateDir);
-        // idle-minutes=0 exits the moment the workload drains — [http] must override that.
-        EngineServer server = new EngineServer(
-                p,
-                new JkEngineConfig(0),
-                httpOnEphemeralPort(stateDir.resolve("www")),
-                "1.0",
-                null,
-                10,
-                System::currentTimeMillis);
-        Thread serverThread = runInBackground(server);
-        waitUntil(Duration.ofSeconds(5), () -> Files.exists(p.socket()));
-
-        try (Client c = new Client(p.socket())) {
-            c.send(EngineProtocol.ping());
-        } // with idle-minutes=0 and no [http] the engine would exit right after this close
-
-        Thread.sleep(200); // generous vs. the 10ms tick — an idle exit would have happened by now
-        assertThat(serverThread.isAlive()).isTrue();
-        server.close();
-        serverThread.join(5_000);
     }
 
     @Test
@@ -1033,28 +946,5 @@ class EngineServerTest {
                     throw new AssertionError("stream ended without an 'event: " + type + "' frame");
                 })
                 .get(10, java.util.concurrent.TimeUnit.SECONDS);
-    }
-
-    @Test
-    void http_enabled_overrides_positive_idle_minutes() throws Exception {
-        Path stateDir = shortTempDir();
-        EnginePaths.Paths p = paths(stateDir);
-        AtomicLong clock = new AtomicLong(0);
-        // idle-minutes=1 with the clock jumped a year past the window: an (incorrectly) running
-        // idle ticker at a 10ms tick would fire almost immediately.
-        EngineServer server = new EngineServer(
-                p, new JkEngineConfig(1), httpOnEphemeralPort(stateDir.resolve("www")), "1.0", null, 10, clock::get);
-        Thread serverThread = runInBackground(server);
-        waitUntil(Duration.ofSeconds(5), () -> Files.exists(p.socket()));
-
-        try (Client c = new Client(p.socket())) {
-            c.send(EngineProtocol.ping());
-        }
-        clock.addAndGet(Duration.ofDays(365).toMillis());
-        Thread.sleep(200);
-
-        assertThat(serverThread.isAlive()).isTrue(); // never self-terminates while [http] is enabled
-        server.close();
-        serverThread.join(5_000);
     }
 }
