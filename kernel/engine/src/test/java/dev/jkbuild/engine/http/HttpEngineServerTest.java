@@ -38,6 +38,14 @@ class HttpEngineServerTest {
     private Path logFile;
     private HttpEvents events;
     private final java.util.List<String> triggeredDirs = new java.util.ArrayList<>();
+
+    /** Rows served by {@code GET /api/metrics} — tests seed this list directly. */
+    private final java.util.List<dev.jkbuild.runtime.BuildMetrics.Entry> metricsRows = new java.util.ArrayList<>();
+
+    /** The snapshot served by {@code GET /api/cache} — tests reassign the field directly. */
+    private static final CacheSnapshot EMPTY_CACHE = new CacheSnapshot(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+
+    private CacheSnapshot cacheSnapshot = EMPTY_CACHE;
     private HttpEngineServer server;
     private HttpClient client;
     private String baseUrl;
@@ -68,7 +76,7 @@ class HttpEngineServerTest {
         JkHttpConfig config = new JkHttpConfig("127.0.0.1", 0, 16, wwwRoot.toString());
         server = new HttpEngineServer(
                 config, wwwRoot, tokenFile, logFile, "9.9.9-test", () -> SNAPSHOT, events, this::stubTrigger,
-                testJournal(), null);
+                testJournal(), () -> metricsRows, () -> cacheSnapshot, null);
         server.start();
         baseUrl = server.url();
         port = Integer.parseInt(baseUrl.replaceAll(".*:(\\d+)/$", "$1"));
@@ -182,6 +190,8 @@ class HttpEngineServerTest {
                 new HttpEvents(),
                 this::stubTrigger,
                 testJournal(),
+                java.util.List::of,
+                () -> EMPTY_CACHE,
                 null);
         try {
             snapshot.start();
@@ -312,6 +322,55 @@ class HttpEngineServerTest {
     }
 
     @Test
+    void api_metrics_reports_aggregate_rows_without_a_token_on_loopback() throws Exception {
+        var ok = new dev.jkbuild.runtime.BuildMetrics.Stats(3, 6000, 1000, 3000);
+        var empty = dev.jkbuild.runtime.BuildMetrics.Stats.EMPTY;
+        metricsRows.add(new dev.jkbuild.runtime.BuildMetrics.Entry("build", "", null, null, ok, empty, empty, 5L));
+        metricsRows.add(new dev.jkbuild.runtime.BuildMetrics.Entry("build", "/p", "g:n", null, ok, empty, empty, 5L));
+        metricsRows.add(new dev.jkbuild.runtime.BuildMetrics.Entry(
+                null, "/other", null, "compile-java", ok, empty, empty, 5L));
+
+        HttpResponse<String> resp = get("/api/metrics");
+        assertThat(resp.statusCode()).isEqualTo(200);
+        assertThat(resp.headers().firstValue("Content-Type")).contains("application/json; charset=utf-8");
+        assertThat(resp.body())
+                .contains("\"scope\":\"global\"")
+                .contains("\"scope\":\"project\"")
+                .contains("\"scope\":\"project-phase\"")
+                .contains("\"okCount\":3")
+                .contains("\"okAvgMillis\":2000")
+                .contains("\"coord\":\"g:n\"");
+
+        // ?dir= keeps the global tiers but drops other projects' rows.
+        String filtered = get("/api/metrics?dir=/p").body();
+        assertThat(filtered).contains("\"scope\":\"global\"").contains("\"dir\":\"/p\"");
+        assertThat(filtered).doesNotContain("/other");
+    }
+
+    @Test
+    void api_metrics_is_an_empty_array_when_nothing_has_been_recorded() throws Exception {
+        assertThat(get("/api/metrics").body()).isEqualTo("[]");
+    }
+
+    @Test
+    void api_cache_reports_the_cache_breakdown_without_a_token_on_loopback() throws Exception {
+        cacheSnapshot = new CacheSnapshot(
+                100, 5_000_000, 40, 200_000, 3, 30_000_000, 7, 9_000, 2, 100, 21_474_836_480L, 1_700_000_000_000L);
+        HttpResponse<String> resp = get("/api/cache");
+        assertThat(resp.statusCode()).isEqualTo(200);
+        assertThat(resp.headers().firstValue("Content-Type")).contains("application/json; charset=utf-8");
+        assertThat(resp.body())
+                .contains("\"casCount\":100")
+                .contains("\"casBytes\":5000000")
+                .contains("\"actionsCount\":40")
+                .contains("\"workerJarsBytes\":30000000")
+                .contains("\"totalCount\":152")
+                .contains("\"totalBytes\":35209100")
+                .contains("\"maxBytes\":21474836480")
+                .contains("\"lastPrunedMillis\":1700000000000");
+    }
+
+    @Test
     void api_log_tails_the_engine_log() throws Exception {
         HttpResponse<String> resp = get("/api/log");
         assertThat(resp.statusCode()).isEqualTo(200);
@@ -429,7 +488,7 @@ class HttpEngineServerTest {
         HttpEngineServer restarted = new HttpEngineServer(
                 new JkHttpConfig("127.0.0.1", 0, 16, wwwRoot.toString()),
                 wwwRoot, tokenFile, logFile, "9.9.9-test", () -> SNAPSHOT, events, this::stubTrigger,
-                testJournal(), null);
+                testJournal(), java.util.List::of, () -> EMPTY_CACHE, null);
         try {
             restarted.start();
             assertThat(token()).isEqualTo(original); // file unchanged
@@ -455,7 +514,7 @@ class HttpEngineServerTest {
         HttpEngineServer restarted = new HttpEngineServer(
                 new JkHttpConfig("127.0.0.1", 0, 16, wwwRoot.toString()),
                 wwwRoot, tokenFile, logFile, "9.9.9-test", () -> SNAPSHOT, events, this::stubTrigger,
-                testJournal(), null);
+                testJournal(), java.util.List::of, () -> EMPTY_CACHE, null);
         try {
             restarted.start();
             assertThat(token()).isNotEmpty().isNotEqualTo(original);
@@ -469,7 +528,7 @@ class HttpEngineServerTest {
         JkHttpConfig config = new JkHttpConfig("0.0.0.0", 0, 16, wwwRoot.toString());
         Path lanTokenFile = stateDir.resolve("lan.http-token");
         HttpEngineServer lan = new HttpEngineServer(
-                config, wwwRoot, lanTokenFile, stateDir.resolve("lan.log"), "9.9.9-test", () -> SNAPSHOT, new HttpEvents(), this::stubTrigger, testJournal(), null);
+                config, wwwRoot, lanTokenFile, stateDir.resolve("lan.log"), "9.9.9-test", () -> SNAPSHOT, new HttpEvents(), this::stubTrigger, testJournal(), java.util.List::of, () -> EMPTY_CACHE, null);
         try {
             lan.start();
             String lanUrl = lan.url(); // advertises the always-valid loopback form for a wildcard bind
@@ -560,6 +619,8 @@ class HttpEngineServerTest {
                 new HttpEvents(),
                 this::stubTrigger,
                 testJournal(),
+                java.util.List::of,
+                () -> EMPTY_CACHE,
                 null);
         try {
             lan.start();

@@ -774,7 +774,7 @@ public final class InProcessEngineImpl implements InProcessEngine {
         etaOut[0] = plan.hasErrors()
                 ? 0
                 : dev.jkbuild.runtime.BuildService.estimateEtaMillis(
-                        plan, cache, workers, jdksDir, profile, skipTests, verbose, serial, parallelTests);
+                        plan, startDir, cache, workers, jdksDir, profile, skipTests, verbose, serial, parallelTests);
         return plan;
     }
 

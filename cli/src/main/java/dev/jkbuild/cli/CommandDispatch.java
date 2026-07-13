@@ -43,6 +43,7 @@ import dev.jkbuild.command.RemoveCommand;
 import dev.jkbuild.command.RepoCommand;
 import dev.jkbuild.command.RunCommand;
 import dev.jkbuild.command.ShellCommand;
+import dev.jkbuild.command.StatusCommand;
 import dev.jkbuild.command.SyncCommand;
 import dev.jkbuild.command.TestCommand;
 import dev.jkbuild.command.ToolCommand;
@@ -85,6 +86,7 @@ public final class CommandDispatch {
             new CleanCommand(),
             new EngineCommand(),
             new HistoryCommand(),
+            new StatusCommand(),
             new TreeCommand(),
             new WhyCommand(),
             new ExplainCommand(),

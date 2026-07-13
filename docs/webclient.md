@@ -75,7 +75,8 @@ Three small layers, one file each:
     one-line instruction to run `jk engine status` and click the printed URL.
   - `events(onEvent)`: an `EventSource` on `/api/events` (appending `?access_token=` only when the
     page origin is non-loopback — `EventSource` cannot send headers). Reconnects with capped
-    exponential backoff. An HTTP-enabled engine never idles out (see `http.md`), so a disconnect
+    exponential backoff. The engine never idles out — it is resident until `jk engine stop` (see
+    `http.md`) — so a disconnect
     only ever means an explicit `jk engine stop`, a version-skew respawn after a `jk` upgrade, or
     a crash — the offline banner says so ("engine stopped — run any jk command to restart it"),
     and the first successful reconnect refetches `/api/status` to resync.
@@ -121,8 +122,18 @@ Three small layers, one file each:
   left. There is no scrollbar — when phases are hidden, a `◂` / `▸` button appears at that edge to
   page the view (the track is moved via `scrollLeft`, `overflow:hidden`).
 - **Status** — the `jk engine status` numbers, rendered: version, pid, uptime, heap used/committed
-  /max and RSS (with a small inline bar, no chart library), active connections/pipelines, idle
-  policy, the resolved `www-root`.
+  /max and RSS (with a small inline bar, no chart library), active connections/pipelines, the
+  resolved `www-root`, plus a **Cache panel** (the `jk cache info` sections — CAS blobs, action
+  cache, worker JARs, run logs, format stamps — with a utilization meter against the configured
+  ceiling and the last-pruned age, fed by `GET /api/cache` and polled only while the Status view
+  is open) and the **engine log** on its own full-width row so lines don't wrap.
+  Below the vitals sits the **build-stats section** (implemented),
+  fed by `GET /api/metrics` (the engine's running aggregates — see [`metrics.md`](metrics.md)):
+  KPI tiles for total builds recorded, success rate, per-kind average duration and total time
+  building, plus a per-phase table (runs / avg / min / max / total / failed, top 10 by total time).
+  A plugin verb runs as its own phase, so the phase table is also the per-worker/per-plugin view.
+  Refreshed with the same 30 s fallback poll as the vitals; an empty store shows a quiet
+  placeholder line.
 
 Build **history now persists** (implemented): every engine build — whether or not a dashboard is
 watching — is journaled to `~/.jk/state/builds/journal/<id>/` (`record.json` plus snapshot copies

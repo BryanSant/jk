@@ -549,6 +549,20 @@ public final class EngineProtocol {
     /** Server → client: a history request failed (e.g. the id was not found). */
     public static final String HISTORY_ERROR = "history-error";
 
+    // ---- running build metrics ({@code jk status}) ----------------------------------
+    // Aggregates (count/total/min/max/avg per outcome) the engine folds at every build/test finish:
+    // global, per project, per phase, and per project per phase — same flat-NDJSON discipline as
+    // the history RPCs.
+
+    /** Client → server: stream aggregate rows; optional {@code dir} filters project-tier rows. */
+    public static final String METRICS_REQUEST = "metrics-request";
+
+    /** Server → client, repeated: one aggregate row ({@code scope} names its tier). */
+    public static final String METRICS_ENTRY = "metrics-entry";
+
+    /** Server → client: terminal for a metrics stream ({@code count} rows emitted). */
+    public static final String METRICS_DONE = "metrics-done";
+
     /** The {@code "t"} discriminator of a decoded message, or {@code null} if absent/malformed. */
     public static String typeOf(String json) {
         return Ndjson.str(json, TYPE_FIELD);
@@ -2370,5 +2384,12 @@ public final class EngineProtocol {
 
     public static String historyDeleteRequest(String id) {
         return "{\"t\":\"" + HISTORY_DELETE_REQUEST + "\",\"id\":" + Ndjson.quote(id) + "}";
+    }
+
+    /** A metrics stream request; null/blank {@code dir} asks for every row. */
+    public static String metricsRequest(String dir) {
+        return dir == null || dir.isBlank()
+                ? "{\"t\":\"" + METRICS_REQUEST + "\"}"
+                : "{\"t\":\"" + METRICS_REQUEST + "\",\"dir\":" + Ndjson.quote(dir) + "}";
     }
 }

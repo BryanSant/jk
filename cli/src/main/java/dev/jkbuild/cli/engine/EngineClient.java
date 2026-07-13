@@ -234,7 +234,15 @@ public final class EngineClient {
         return false;
     }
 
-    /** Send a history request, collect the flat reply lines up to (not including) {@code history-done}. */
+    /**
+     * Running aggregate rows ({@code metrics-entry} flat NDJSON) for {@code dir}'s project tiers
+     * plus the global tiers; {@code null} dir asks for every row. Spawns the engine if needed.
+     */
+    public static List<String> metrics(EnginePaths.Paths paths, String dir) throws IOException {
+        return streamHistory(paths, EngineProtocol.metricsRequest(dir));
+    }
+
+    /** Send a history/metrics request, collect the flat reply lines up to (not including) the terminal. */
     private static List<String> streamHistory(EnginePaths.Paths paths, String request) throws IOException {
         ensureRunning(paths, dev.jkbuild.cli.Jk.VERSION);
         List<String> out = new java.util.ArrayList<>();
@@ -249,7 +257,7 @@ public final class EngineClient {
             String line;
             while ((line = reader.readLine()) != null) {
                 String type = EngineProtocol.typeOf(line);
-                if (EngineProtocol.HISTORY_DONE.equals(type)) break;
+                if (EngineProtocol.HISTORY_DONE.equals(type) || EngineProtocol.METRICS_DONE.equals(type)) break;
                 out.add(line);
                 if (EngineProtocol.HISTORY_DELETED.equals(type) || EngineProtocol.HISTORY_ERROR.equals(type)) break;
             }

@@ -90,9 +90,10 @@ This is not the Gradle daemon experience, and the differences are deliberate:
 - **It's memory-disciplined.** The engine targets a small fixed footprint and
   sizes compiler/test workers against physical RAM — not multiple idle
   gigabytes per project.
-- **It manages itself.** Lazily spawned, idle-exits on its own (configurable),
-  and never needs a ritual restart to un-corrupt a configuration cache.
-  `jk engine status` / `jk engine stop` are there when you want them.
+- **It manages itself.** Lazily spawned, resident from then on (it serves the
+  web dashboard and answers in milliseconds), and never needs a ritual restart
+  to un-corrupt a configuration cache. It runs until you say `jk engine stop`
+  (or kill the process) — no idle countdown, no surprise cold starts.
 
 Presentation stays in the client: ANSI rendering, progress, Ctrl-C, shell
 integration. The engine is a server; the CLI is just its first front-end (see
@@ -284,6 +285,7 @@ We know you can't migrate overnight. `jk` meets you where you are.
 |---|---|
 | Dependencies | `add` `remove` `lock` `sync` `update` `tree` `why` |
 | Build | `compile` `build` `test` `clean` `explain` |
+| Build insights | `status` (running build stats: counts, min/avg/max, per-phase), `history list/show/rm` (persisted run journal) |
 | Engine | `engine start/status/stop` |
 | Toolchain | `jdk install/list/default/graal/pin/ensure/home/uninstall/update`, `activate` `shell` `deactivate` |
 | CLI tools | `tool install/list/uninstall/run/dir` |
@@ -340,8 +342,8 @@ stereotype — the ergonomics you expect, on the platform you need:
 
 - A single `cargo`/`uv`-style native binary; no runtime managers to install.
 - Workspaces that behave like Cargo workspaces, with one lockfile at the root.
-- No multi-gigabyte daemon to babysit — a slim, self-managing engine process
-  that idle-exits when the work is done.
+- No multi-gigabyte daemon to babysit — a slim, memory-capped engine process
+  you can always inspect (`jk engine status`) and stop (`jk engine stop`).
 - `jk jdk install` and directory-aware shell activation mean the right JDK is
   simply *there*, like `rustup` or `uv python`.
 
@@ -406,6 +408,7 @@ distribution is produced by `./gradlew :cli-engine:installDist` under
 - [The jk wrapper](docs/wrapper.md) — `./jk` bootstrap: delegate-or-fetch, locked version, pin-on-first-use
 - [Tool discovery](docs/tool-discovery-plan.md) — good-neighbor probing for Maven/Gradle/Kotlin
 - [Verb aliases](docs/aliases.md) — migration shortcuts from Maven/Gradle/npm
+- [Build metrics](docs/metrics.md) — `jk status`: running aggregates per project/phase, feeding the build-time estimator
 - [Forge authentication](docs/forge-auth.md) — `jk auth` across GitHub/GitLab/Gitea/Bitbucket
 - [Artifact repository backends](docs/artifact-repos.md) — unified credentials + transports
 

@@ -20,6 +20,7 @@ import dev.jkbuild.run.GoalResult;
 import dev.jkbuild.run.GoalView;
 import dev.jkbuild.run.Phase;
 import dev.jkbuild.run.TestSummary;
+import dev.jkbuild.runtime.BuildMetrics;
 import dev.jkbuild.runtime.BuildPlan;
 import dev.jkbuild.runtime.BuildService;
 import dev.jkbuild.runtime.ExplainPlan;
@@ -114,6 +115,14 @@ public final class EngineServer implements AutoCloseable {
 
     private final BuildJournal journal = BuildJournal.current();
 
+    /** The running invocation/phase aggregates every finished build/test folds into. */
+    private Path metricsFile = BuildMetrics.defaultFile();
+
+    /** Test seam: point the metrics store at a sandbox file instead of the user's real state dir. */
+    void metricsFileForTests(Path file) {
+        this.metricsFile = file;
+    }
+
     /**
      * The event-request id of the hosted operation this thread is running, set around {@code
      * runner.run} by {@link #handleAsyncGoalRequest} — how {@link #wireListener}/{@link
@@ -188,8 +197,9 @@ public final class EngineServer implements AutoCloseable {
      * Try to become the engine and serve until shutdown. Returns {@code false} immediately, having
      * touched nothing but the lock file, if another engine already holds {@link
      * EnginePaths.Paths#lock()} — the caller (a losing spawn-race participant) should treat that as
-     * success-by-proxy, not an error. Blocks until the server stops (idle timeout, an explicit {@link
-     * EngineProtocol#SHUTDOWN}, or {@link #close()}), then returns {@code true}.
+     * success-by-proxy, not an error. Blocks until the server stops (an explicit {@link
+     * EngineProtocol#SHUTDOWN} — {@code jk engine stop} — or {@link #close()}), then returns
+     * {@code true}; there is no idle countdown — the engine stays resident until told to stop.
      */
     public boolean run() throws IOException {
         Files.createDirectories(paths.dir());
@@ -328,6 +338,7 @@ public final class EngineServer implements AutoCloseable {
                     case EngineProtocol.HISTORY_LIST_REQUEST -> handleHistoryList(line, writer);
                     case EngineProtocol.HISTORY_SHOW_REQUEST -> handleHistoryShow(line, writer);
                     case EngineProtocol.HISTORY_DELETE_REQUEST -> handleHistoryDelete(line, writer);
+                    case EngineProtocol.METRICS_REQUEST -> handleMetrics(line, writer);
                     case EngineProtocol.BUILD_REQUEST -> {
                         // Owns the rest of this connection's lifecycle: forks the build onto its own
                         // thread and keeps reading this loop for a build-cancel/EOF while it runs.
@@ -757,6 +768,7 @@ public final class EngineServer implements AutoCloseable {
             System.gc();
             drainPendingPrune();
             pruneJournal();
+            pruneMetrics();
             // The last in-flight job of a graceful drain just finished — close the listener so run()
             // returns and the JVM exits cleanly (assembling the AOT cache), same as a normal stop.
             if (draining) {
@@ -788,6 +800,24 @@ public final class EngineServer implements AutoCloseable {
     }
 
     /**
+     * Enforce metrics retention at the idle boundary: age out rows for projects no longer built
+     * here, then oldest-first past the byte cap. Best-effort; a failure is logged.
+     */
+    private void pruneMetrics() {
+        try {
+            BuildMetrics.Limits limits =
+                    BuildMetrics.Limits.resolve(dev.jkbuild.util.JkDirs.userConfigFile(), System::getenv);
+            BuildMetrics.PruneReport r = BuildMetrics.prune(metricsFile, limits, clockMillis.getAsLong(), false);
+            if (r.evictedByAge() + r.evictedBySize() > 0) {
+                log.accept("jk engine: build metrics prune removed " + (r.evictedByAge() + r.evictedBySize())
+                        + " rows (" + r.kept() + " kept, " + r.finalBytes() + " bytes)");
+            }
+        } catch (RuntimeException e) {
+            log.accept("jk engine: build metrics prune failed: " + e.getMessage());
+        }
+    }
+
+    /**
      * Queue an opportunistic prune of {@code cache} for the next idle boundary if the auto-prune
      * cadence is due — the engine-internal replacement for the detached {@code jk cache prune
      * --background} self-spawn (the engine is the process that did the work, and the idle boundary
@@ -806,9 +836,8 @@ public final class EngineServer implements AutoCloseable {
 
     /**
      * Run the queued opportunistic prune, if any, now that no pipeline is in flight. Runs on the
-     * finishing request's connection thread (keeping the engine visibly busy, so idle-exit can't
-     * race it); a pipeline that starts concurrently wins the {@link #cacheGate} race and the prune
-     * stays queued for the next boundary. Mirrors the legacy {@code --background} flags: sweep on,
+     * finishing request's connection thread; a pipeline that starts concurrently wins the
+     * {@link #cacheGate} race and the prune stays queued for the next boundary. Mirrors the legacy {@code --background} flags: sweep on,
      * TTL/budget from {@code [cache]} config, {@code .prune.lock} held, {@code .last-pruned} stamped.
      */
     private void drainPendingPrune() {
@@ -1226,6 +1255,7 @@ public final class EngineServer implements AutoCloseable {
             String etaJdksDirStr = Ndjson.str(requestLine, "jdksDir");
             long etaMillis = BuildService.estimateEtaMillis(
                     plan,
+                    entryDir,
                     cache,
                     Ndjson.intValue(requestLine, "workers", 1),
                     etaJdksDirStr != null ? Path.of(etaJdksDirStr) : null,
@@ -2478,9 +2508,13 @@ public final class EngineServer implements AutoCloseable {
     /** Request kinds we journal — the actual "build" verbs; lock/sync/tool/etc. are not history. */
     private static final java.util.Set<String> JOURNALED_KINDS = java.util.Set.of("build", "test");
 
-    /** Open an accumulator for a journaled build kind (no-op when history is off or kind is other). */
+    /**
+     * Open an accumulator for a journaled build kind (no-op for other kinds). Always on — even with
+     * history disabled the accumulator feeds the running {@link BuildMetrics}; only the journal
+     * append itself is gated on {@code historyConfig.enabled()}.
+     */
     private void registerAccumulator(long requestId, String kind, String dir) {
-        if (!historyConfig.enabled() || !JOURNALED_KINDS.contains(kind)) return;
+        if (!JOURNALED_KINDS.contains(kind)) return;
         accumulators.put(requestId, new BuildAccumulator(kind, dir, coordOf(dir)));
     }
 
@@ -2536,6 +2570,8 @@ public final class EngineServer implements AutoCloseable {
         try {
             long finishedAt = clockMillis.getAsLong();
             BuildRecord record = a.toRecord(finishedAt, cancelled, millis, version);
+            BuildMetrics.record(metricsFile, toOutcome(record), finishedAt);
+            if (!historyConfig.enabled()) return;
             Path dir = Path.of(a.dir());
             // Snapshot paths mirror BuildLayout.markdownTestResults() and the project's jk.lock; each
             // is copied only if it exists at finish, so a skip-tests or lock-less build just omits it.
@@ -2547,6 +2583,66 @@ public final class EngineServer implements AutoCloseable {
         } catch (RuntimeException e) {
             log.accept("jk engine: build journal append failed: " + e);
         }
+    }
+
+    /**
+     * Map a finished run's record into the running-metrics input shape: the invocation outcome plus
+     * every per-module phase (workspace) and top-level phase (single-goal, whose phases carry the
+     * record's own dir). Keeps journal types out of {@code dev.jkbuild.runtime}.
+     */
+    private static BuildMetrics.Outcome toOutcome(BuildRecord r) {
+        java.util.ArrayList<BuildMetrics.PhaseSample> phases = new java.util.ArrayList<>();
+        for (BuildRecord.Phase p : r.phases()) {
+            phases.add(new BuildMetrics.PhaseSample(r.dir(), p.name(), p.status(), p.millis()));
+        }
+        for (BuildRecord.Module m : r.modules()) {
+            for (BuildRecord.Phase p : m.phases()) {
+                phases.add(new BuildMetrics.PhaseSample(m.dir(), p.name(), p.status(), p.millis()));
+            }
+        }
+        return new BuildMetrics.Outcome(
+                r.kind(), r.dir(), r.coord(), r.success(), r.cancelled(), r.millis(), phases);
+    }
+
+    /**
+     * {@code metrics-request} → one flat {@code metrics-entry} per aggregate row, then
+     * {@code metrics-done}. An optional {@code dir} keeps only that project's rows (the global
+     * tiers are always included so the client can render its summary alongside).
+     */
+    private void handleMetrics(String requestLine, BufferedWriter writer) throws IOException {
+        String dirFilter = Ndjson.str(requestLine, "dir");
+        int n = 0;
+        for (BuildMetrics.Entry e : BuildMetrics.load(metricsFile).entries()) {
+            if (dirFilter != null && !e.dir().isEmpty() && !e.dir().equals(dirFilter)) continue;
+            send(writer, metricsEntryJson(e));
+            n++;
+        }
+        send(writer, JsonOut.object().put("t", EngineProtocol.METRICS_DONE).put("count", n).toString());
+    }
+
+    /** One aggregate row as a flat wire object; avg is pre-computed so clients stay arithmetic-free. */
+    private static String metricsEntryJson(BuildMetrics.Entry e) {
+        boolean global = e.dir().isEmpty();
+        String scope = e.phase() == null ? (global ? "global" : "project") : (global ? "phase" : "project-phase");
+        return JsonOut.object()
+                .put("t", EngineProtocol.METRICS_ENTRY)
+                .put("scope", scope)
+                .put("kind", e.kind())
+                .put("dir", e.dir())
+                .put("coord", e.coord())
+                .put("phase", e.phase())
+                .put("okCount", e.ok().count())
+                .put("okTotalMillis", e.ok().totalMillis())
+                .put("okMinMillis", e.ok().minMillis())
+                .put("okMaxMillis", e.ok().maxMillis())
+                .put("okAvgMillis", e.ok().avgMillis())
+                .put("failCount", e.failed().count())
+                .put("failTotalMillis", e.failed().totalMillis())
+                .put("failMinMillis", e.failed().minMillis())
+                .put("failMaxMillis", e.failed().maxMillis())
+                .put("cancelledCount", e.cancelled().count())
+                .put("updated", e.updatedMillis())
+                .toString();
     }
 
     /** {@code history-list-request} → one flat {@code history-entry} per entry, then {@code history-done}. */
@@ -2840,6 +2936,8 @@ public final class EngineServer implements AutoCloseable {
                 httpEvents,
                 this::triggerHttpBuild,
                 journal,
+                () -> BuildMetrics.load(metricsFile).entries(),
+                () -> dev.jkbuild.engine.http.CacheSnapshot.capture(dev.jkbuild.util.JkDirs.cache()),
                 log);
         try {
             candidate.start();

@@ -167,6 +167,82 @@ class EngineServerTest {
     }
 
     @Test
+    void metrics_request_streams_aggregate_rows_and_a_terminal() throws Exception {
+        Path stateDir = shortTempDir();
+        Path metricsFile = stateDir.resolve("metrics.json");
+        // Seed the store the same way a finished build/test does at request-finish.
+        dev.jkbuild.runtime.BuildMetrics.record(
+                metricsFile,
+                new dev.jkbuild.runtime.BuildMetrics.Outcome(
+                        "build",
+                        "/proj/a",
+                        "g:a",
+                        true,
+                        false,
+                        1200,
+                        List.of(new dev.jkbuild.runtime.BuildMetrics.PhaseSample(
+                                "/proj/a", "compile-java", "SUCCESS", 700))),
+                1_700_000_000_000L);
+        dev.jkbuild.runtime.BuildMetrics.record(
+                metricsFile,
+                new dev.jkbuild.runtime.BuildMetrics.Outcome("build", "/proj/b", "g:b", false, false, 400, List.of()),
+                1_700_000_000_001L);
+
+        EnginePaths.Paths p = paths(stateDir);
+        EngineServer server = new EngineServer(p, JkEngineConfig.DEFAULTS, "1.0", null);
+        server.metricsFileForTests(metricsFile);
+        runInBackground(server);
+        waitUntil(Duration.ofSeconds(5), () -> Files.exists(p.socket()));
+
+        try (Client c = new Client(p.socket())) {
+            // Unfiltered: global build row + both project rows + global/project phase rows.
+            c.sendLine(EngineProtocol.metricsRequest(null));
+            List<String> rows = new ArrayList<>();
+            String line;
+            while ((line = c.readLine()) != null
+                    && EngineProtocol.METRICS_ENTRY.equals(EngineProtocol.typeOf(line))) {
+                rows.add(line);
+            }
+            assertThat(EngineProtocol.typeOf(line)).isEqualTo(EngineProtocol.METRICS_DONE);
+            assertThat(Ndjson.intValue(line, "count", -1)).isEqualTo(rows.size());
+            assertThat(rows).hasSize(5);
+
+            String global = rows.stream()
+                    .filter(r -> "global".equals(Ndjson.str(r, "scope")))
+                    .findFirst()
+                    .orElseThrow();
+            assertThat(Ndjson.longValue(global, "okCount", -1)).isEqualTo(1);
+            assertThat(Ndjson.longValue(global, "failCount", -1)).isEqualTo(1); // the /proj/b failure
+            assertThat(Ndjson.longValue(global, "okAvgMillis", -1)).isEqualTo(1200);
+
+            String failedProject = rows.stream()
+                    .filter(r -> "/proj/b".equals(Ndjson.str(r, "dir")))
+                    .findFirst()
+                    .orElseThrow();
+            assertThat(Ndjson.longValue(failedProject, "okCount", -1)).isZero();
+            assertThat(Ndjson.longValue(failedProject, "failTotalMillis", -1)).isEqualTo(400);
+
+            // Filtered: /proj/a's rows plus the always-included global tiers; /proj/b drops out.
+            c.sendLine(EngineProtocol.metricsRequest("/proj/a"));
+            List<String> filtered = new ArrayList<>();
+            while ((line = c.readLine()) != null
+                    && EngineProtocol.METRICS_ENTRY.equals(EngineProtocol.typeOf(line))) {
+                filtered.add(line);
+            }
+            assertThat(EngineProtocol.typeOf(line)).isEqualTo(EngineProtocol.METRICS_DONE);
+            assertThat(filtered).hasSize(4);
+            assertThat(filtered).noneMatch(r -> "/proj/b".equals(Ndjson.str(r, "dir")));
+            String phaseRow = filtered.stream()
+                    .filter(r -> "project-phase".equals(Ndjson.str(r, "scope")))
+                    .findFirst()
+                    .orElseThrow();
+            assertThat(Ndjson.str(phaseRow, "phase")).isEqualTo("compile-java");
+            assertThat(Ndjson.longValue(phaseRow, "okTotalMillis", -1)).isEqualTo(700);
+        }
+        server.close();
+    }
+
+    @Test
     void a_second_instance_loses_the_election_and_returns_false() throws Exception {
         EnginePaths.Paths p = paths(shortTempDir());
         EngineServer first = new EngineServer(p, JkEngineConfig.DEFAULTS, "1.0", null);

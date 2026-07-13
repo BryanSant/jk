@@ -156,6 +156,72 @@ class EffortWeightsTest {
         assertThat(own).isEqualTo((int) Math.round(EffortWeights.TEST_STARTUP_FLOOR + 3.0 * 10)); // 32
     }
 
+    // ---- the metrics-learned flat weights (BuildMetrics tiers) ----------------------------------
+
+    /** A store with {@code n} successful runs of {@code phase} under {@code dir}, avg {@code avgMs}. */
+    private static BuildMetrics metricsWith(Path file, String dir, String phase, int n, long avgMs) {
+        for (int i = 0; i < n; i++) {
+            BuildMetrics.record(
+                    file,
+                    new BuildMetrics.Outcome(
+                            "build",
+                            dir,
+                            null,
+                            true,
+                            false,
+                            avgMs,
+                            List.of(new BuildMetrics.PhaseSample(dir, phase, "SUCCESS", avgMs))),
+                    i);
+        }
+        BuildMetrics.clearMemo();
+        return BuildMetrics.load(file);
+    }
+
+    @Test
+    void learned_fixed_weight_prefers_own_project_then_host_then_static(@TempDir Path dir) {
+        // (3) Empty store → the static constant, bit-for-bit.
+        BuildMetrics.clearMemo();
+        BuildMetrics empty = BuildMetrics.load(dir.resolve("empty.json"));
+        assertThat(EffortWeights.learnedFixedWeight(empty, "/m/a", "package-jar", EffortWeights.PACKAGE_JAR))
+                .isEqualTo(EffortWeights.PACKAGE_JAR);
+
+        // (2) Another project's history feeds the host tier: 1500 ms avg → 10 units.
+        BuildMetrics host = metricsWith(dir.resolve("host.json"), "/m/other", "package-jar", 3, 1500);
+        assertThat(EffortWeights.learnedFixedWeight(host, "/m/a", "package-jar", EffortWeights.PACKAGE_JAR))
+                .isEqualTo(10);
+
+        // (1) The module's own history wins over the host tier: 300 ms avg → 2 units.
+        BuildMetrics own = metricsWith(dir.resolve("own.json"), "/m/a", "package-jar", 3, 300);
+        assertThat(EffortWeights.learnedFixedWeight(own, "/m/a", "package-jar", EffortWeights.PACKAGE_JAR))
+                .isEqualTo(2);
+    }
+
+    @Test
+    void learned_fixed_weight_needs_enough_samples_before_it_outranks_the_static(@TempDir Path dir) {
+        BuildMetrics thin = metricsWith(dir.resolve("thin.json"), "/m/a", "package-jar", 2, 6000);
+        assertThat(EffortWeights.learnedFixedWeight(thin, "/m/a", "package-jar", EffortWeights.PACKAGE_JAR))
+                .isEqualTo(EffortWeights.PACKAGE_JAR); // 2 < MIN_METRICS_SAMPLES — not trusted yet
+    }
+
+    @Test
+    void learned_falls_back_to_metrics_history_only_when_the_ledger_is_cold(@TempDir Path dir) {
+        int staticWeight = EffortWeights.runTestsWeight(10);
+        BuildMetrics metrics = metricsWith(dir.resolve("m.json"), "/m/a", "run-tests", 3, 3000); // → 20 units
+        PhaseTimings.clearMemo();
+
+        // Cold ledger (e.g. right after `jk clean`) → the surviving metrics average, not the static.
+        PhaseTimings cold = PhaseTimings.load(dir.resolve("no-cache"));
+        assertThat(EffortWeights.learned(cold, metrics, "/m/a", "run-tests", 10, staticWeight, List.of()))
+                .isEqualTo(20);
+
+        // A warm ledger still wins: rates are tighter than whole-phase averages.
+        PhaseTimings.record(dir, List.of(new PhaseTimings.Sample("/m/a", "run-tests", 1.0)), 0.4, 1L);
+        PhaseTimings.clearMemo();
+        assertThat(EffortWeights.learned(
+                        PhaseTimings.load(dir), metrics, "/m/a", "run-tests", 10, staticWeight, List.of()))
+                .isEqualTo((int) Math.round(EffortWeights.TEST_STARTUP_FLOOR + 1.0 * 10));
+    }
+
     @Test
     void run_tests_is_learnable_below_the_old_startup_floor() {
         // A fast suite (450 ms ≈ 3 units for 1 test) now teaches a real rate: residual against the
