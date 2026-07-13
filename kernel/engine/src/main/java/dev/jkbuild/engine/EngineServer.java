@@ -159,6 +159,10 @@ public final class EngineServer implements AutoCloseable {
 
     private FileChannel lockChannel;
     private FileLock lock;
+    /** The generation this engine bound (socket/lock/pid/token) — see EnginePaths.generation. */
+    private EnginePaths.Paths active;
+    private FileLock genLock;
+    private FileChannel genLockChannel;
     private ServerSocketChannel serverChannel;
     private ExecutorService connectionExecutor;
 
@@ -203,6 +207,8 @@ public final class EngineServer implements AutoCloseable {
      */
     public boolean run() throws IOException {
         Files.createDirectories(paths.dir());
+        // Startup mutex only (engine-versioning-plan §2): serializes concurrent spawns/takeovers
+        // through bind + endpoint write; ownership of a RUNNING engine is the generation lock.
         lockChannel = FileChannel.open(paths.lock(), StandardOpenOption.CREATE, StandardOpenOption.WRITE);
         try {
             lock = lockChannel.tryLock();
@@ -212,14 +218,48 @@ public final class EngineServer implements AutoCloseable {
         if (lock == null) {
             lockChannel.close();
             lockChannel = null;
-            return false; // another engine already won the election
+            return false; // another engine is mid-startup — it wins this race
         }
 
-        // A stale socket file (left by a killed process) makes bind() fail with "address already in
-        // use" even though nothing is listening — safe to remove now: winning the lock proves no live
-        // engine owns it.
-        Files.deleteIfExists(paths.socket());
-        Files.deleteIfExists(paths.token());
+        // Where clients currently connect — the engine this one displaces (drained below).
+        Path previousActive = EnginePaths.activeSocket(paths);
+
+        // Same-version election: if a live engine of THIS version already serves, this instance
+        // is a redundant spawn-race participant — lose quietly (the pre-generation contract).
+        // A DIFFERENT version (or nothing live) proceeds to takeover.
+        String incumbent = helloProbe(previousActive);
+        if (version.equals(incumbent)) {
+            releaseStartupLock();
+            return false;
+        }
+
+        // Claim the first free generation. The winner's gen lock is held for the engine's whole
+        // life; a crashed engine's stale gen files are reclaimed here by winning its lock.
+        for (int n = 1; n < 10_000 && active == null; n++) {
+            EnginePaths.Paths cand = EnginePaths.generation(paths, n);
+            FileChannel gc = FileChannel.open(cand.lock(), StandardOpenOption.CREATE, StandardOpenOption.WRITE);
+            FileLock gl;
+            try {
+                gl = gc.tryLock();
+            } catch (OverlappingFileLockException e) {
+                gl = null;
+            }
+            if (gl != null) {
+                active = cand;
+                genLock = gl;
+                genLockChannel = gc;
+            } else {
+                gc.close();
+            }
+        }
+        if (active == null) {
+            releaseStartupLock();
+            return false;
+        }
+
+        // Stale files from a crashed prior owner of this generation.
+        Files.deleteIfExists(active.socket());
+        Files.deleteIfExists(active.token());
 
         if (EngineTransport.useLoopbackTcp()) {
             // Windows: no dependable Unix-domain-socket support — bind an ephemeral loopback TCP
@@ -229,24 +269,162 @@ public final class EngineServer implements AutoCloseable {
             serverChannel.bind(new java.net.InetSocketAddress(java.net.InetAddress.getLoopbackAddress(), 0));
             int port = ((java.net.InetSocketAddress) serverChannel.getLocalAddress()).getPort();
             expectedToken = EngineTransport.newToken();
-            Files.writeString(paths.token(), expectedToken);
-            Files.writeString(paths.socket(), Integer.toString(port));
+            Files.writeString(active.token(), expectedToken);
+            Files.writeString(active.socket(), Integer.toString(port));
         } else {
             serverChannel = ServerSocketChannel.open(StandardProtocolFamily.UNIX);
-            serverChannel.bind(UnixDomainSocketAddress.of(paths.socket()));
+            serverChannel.bind(UnixDomainSocketAddress.of(active.socket()));
         }
         writePidFile();
+
+        // TAKEOVER: from this write on, every new connection resolves to this generation.
+        EnginePaths.writeEndpoint(paths, active.socket());
+        legacyCompatPointer();
+        releaseStartupLock();
 
         connectionExecutor = Executors.newThreadPerTaskExecutor(
                 Thread.ofVirtual().name("jk-engine-conn-", 0).factory());
         startHttpIfEnabled();
         planSharedWorkerMemoryOnce();
 
-        log.accept("jk engine: listening on " + paths.socket() + " (pid " + pid + ")");
+        log.accept("jk engine: listening on " + active.socket() + " (pid " + pid + ")");
+        drainDisplaced(previousActive);
+        startDisplacementWatchdog();
         acceptLoop();
         cleanup();
         log.accept("jk engine: stopped");
         return true;
+    }
+
+    private void releaseStartupLock() {
+        try {
+            if (lock != null) lock.release();
+            if (lockChannel != null) lockChannel.close();
+        } catch (IOException ignored) {
+            // best-effort; process exit releases it regardless
+        }
+        lock = null;
+        lockChannel = null;
+    }
+
+    /**
+     * Legacy client compatibility: pre-generation clients connect at the flat {@code <key>.sock}.
+     * POSIX: leave a symlink to the live generation socket. Windows: copy the port + token to the
+     * flat files. Best-effort — skipped when a live pre-generation engine still owns the path
+     * (it is being drained; its exit frees the name for the next takeover).
+     */
+    private void legacyCompatPointer() {
+        try {
+            if (EngineTransport.useLoopbackTcp()) {
+                Files.copy(active.socket(), paths.socket(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                Files.copy(active.token(), paths.token(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            } else {
+                // Holding the startup mutex proves no PRE-generation engine is alive (they held
+                // this same lock for their whole life), so whatever sits at the flat path — a
+                // stale socket from a killed engine, or a previous generation's symlink — is
+                // safe to replace. A still-draining previous GENERATION keeps its own gen
+                // socket; redirecting the legacy name to us is exactly the takeover.
+                Files.deleteIfExists(paths.socket());
+                Files.createSymbolicLink(paths.socket(), active.socket().getFileName());
+            }
+        } catch (IOException | UnsupportedOperationException ignored) {
+            // Legacy pointer is convenience for OLD clients only; new clients use the endpoint.
+        }
+    }
+
+    /**
+     * Graceful drain of the engine this one displaced (engine-versioning-plan §2 step 3): a plain
+     * {@code shutdown force=false} — it finishes in-flight jobs as a lame duck and exits at idle.
+     */
+    private void drainDisplaced(Path previousActive) {
+        if (previousActive == null || previousActive.equals(active.socket())) return;
+        if (!Files.exists(previousActive)) return;
+        try (SocketChannel ch = openClient(previousActive)) {
+            java.io.BufferedWriter w = new java.io.BufferedWriter(
+                    new java.io.OutputStreamWriter(
+                            java.nio.channels.Channels.newOutputStream(ch), StandardCharsets.UTF_8));
+            w.write(EngineProtocol.shutdown(false));
+            w.write('\n');
+            w.flush();
+            log.accept("jk engine: drained displaced engine at " + previousActive.getFileName());
+        } catch (IOException e) {
+            // Nothing live there (stale file) — fine; the watchdog on the other side also covers us.
+        }
+    }
+
+    /** The version a live engine at {@code socket} answers with, or {@code null}. */
+    private static String helloProbe(Path socket) {
+        if (socket == null || !Files.exists(socket)) return null;
+        try (SocketChannel ch = openClient(socket)) {
+            java.io.BufferedWriter w = new java.io.BufferedWriter(
+                    new java.io.OutputStreamWriter(
+                            java.nio.channels.Channels.newOutputStream(ch), StandardCharsets.UTF_8));
+            java.io.BufferedReader r = new java.io.BufferedReader(
+                    new java.io.InputStreamReader(
+                            java.nio.channels.Channels.newInputStream(ch), StandardCharsets.UTF_8));
+            w.write(EngineProtocol.hello("takeover-probe"));
+            w.write('\n');
+            w.flush();
+            String ack = r.readLine();
+            if (ack == null || !EngineProtocol.HELLO_ACK.equals(EngineProtocol.typeOf(ack))) return null;
+            return dev.jkbuild.plugin.protocol.Ndjson.str(ack, "version");
+        } catch (IOException | RuntimeException e) {
+            return null;
+        }
+    }
+
+    /** Minimal client connect for engine→engine signalling (token-gated on the TCP transport). */
+    private static SocketChannel openClient(Path socket) throws IOException {
+        if (EngineTransport.useLoopbackTcp()) {
+            int port = Integer.parseInt(Files.readString(socket).trim());
+            SocketChannel ch = SocketChannel.open(
+                    new java.net.InetSocketAddress(java.net.InetAddress.getLoopbackAddress(), port));
+            Path token = EnginePaths.tokenFor(socket);
+            java.io.BufferedWriter w = new java.io.BufferedWriter(
+                    new java.io.OutputStreamWriter(
+                            java.nio.channels.Channels.newOutputStream(ch), StandardCharsets.UTF_8));
+            w.write(Files.readString(token).trim());
+            w.write('\n');
+            w.flush();
+            return ch;
+        }
+        return SocketChannel.open(UnixDomainSocketAddress.of(socket));
+    }
+
+    /**
+     * Displacement watchdog: when the endpoint stops naming this generation (a newer engine took
+     * over and its drain signal was lost), self-drain — belt and suspenders for §2 step 3.
+     */
+    private void startDisplacementWatchdog() {
+        Thread t = new Thread(() -> {
+            String mine = active.socket().getFileName().toString();
+            while (!shuttingDown) {
+                try {
+                    Thread.sleep(5_000);
+                } catch (InterruptedException e) {
+                    return;
+                }
+                try {
+                    Path ep = EnginePaths.endpoint(paths);
+                    if (Files.isRegularFile(ep) && !mine.equals(Files.readString(ep).trim())) {
+                        log.accept("jk engine: displaced by a newer generation — draining");
+                        synchronized (lifecycleLock) {
+                            if (activePipelines.get() == 0) {
+                                shuttingDown = true;
+                                closeServerChannelQuietly();
+                            } else {
+                                draining = true;
+                            }
+                        }
+                        return;
+                    }
+                } catch (IOException ignored) {
+                    // transient read failure — check again next tick
+                }
+            }
+        }, "jk-engine-displacement-watchdog");
+        t.setDaemon(true);
+        t.start();
     }
 
     private void acceptLoop() {
@@ -3154,16 +3332,36 @@ public final class EngineServer implements AutoCloseable {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
-        deleteQuietly(paths.socket());
-        deleteQuietly(paths.token());
-        deleteQuietly(paths.pid());
-        try {
-            if (lock != null) lock.release();
-            if (lockChannel != null) lockChannel.close();
-        } catch (IOException ignored) {
-            // process exit releases it regardless
+        if (active != null) {
+            deleteQuietly(active.socket());
+            deleteQuietly(active.token());
+            deleteQuietly(active.pid());
+            // Retire the endpoint + legacy pointer only if they still name US — a takeover
+            // successor owns them now and must not be un-pointed by the lame duck's exit.
+            try {
+                Path ep = EnginePaths.endpoint(paths);
+                String mine = active.socket().getFileName().toString();
+                if (Files.isRegularFile(ep) && mine.equals(Files.readString(ep).trim())) {
+                    // We are the current generation at exit — retire the pointer AND the legacy
+                    // flat compatibility files (symlink on POSIX, port+token copies on TCP). A
+                    // takeover successor owns these by now and is never un-pointed here.
+                    deleteQuietly(ep);
+                    deleteQuietly(paths.socket());
+                    deleteQuietly(paths.token());
+                }
+            } catch (IOException ignored) {
+                // best-effort
+            }
+            try {
+                if (genLock != null) genLock.release();
+                if (genLockChannel != null) genLockChannel.close();
+            } catch (IOException ignored) {
+                // process exit releases it regardless
+            }
+            deleteQuietly(active.lock());
         }
-        deleteQuietly(paths.lock());
+        releaseStartupLock();
+        deleteQuietly(paths.lock()); // the transient startup mutex file
     }
 
     private static void deleteQuietly(Path p) {
@@ -3175,7 +3373,7 @@ public final class EngineServer implements AutoCloseable {
     }
 
     private void writePidFile() throws IOException {
-        Files.writeString(paths.pid(), pid + "\n" + startedAtMillis + "\n", StandardCharsets.UTF_8);
+        Files.writeString(active.pid(), pid + "\n" + startedAtMillis + "\n", StandardCharsets.UTF_8);
     }
 
     /**

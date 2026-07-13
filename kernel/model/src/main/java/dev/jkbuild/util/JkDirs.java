@@ -104,6 +104,11 @@ public final class JkDirs {
         return current().libDir();
     }
 
+    /** {@code ~/.jk/versions} — side-by-side materialized jk versions (engine-versioning-plan R2). */
+    public static Path versions() {
+        return home().resolve("versions");
+    }
+
     public static Path jdks() {
         return current().jdksDir();
     }

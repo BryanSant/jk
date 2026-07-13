@@ -246,7 +246,7 @@ public final class EngineClient {
     private static List<String> streamHistory(EnginePaths.Paths paths, String request) throws IOException {
         ensureRunning(paths, dev.jkbuild.cli.Jk.VERSION);
         List<String> out = new java.util.ArrayList<>();
-        try (SocketChannel ch = connect(paths.socket())) {
+        try (SocketChannel ch = connect(EnginePaths.activeSocket(paths))) {
             BufferedWriter writer =
                     new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
             writer.write(request);
@@ -1254,7 +1254,7 @@ public final class EngineClient {
 
     private static EngineReady doEnsure(EnginePaths.Paths paths, String clientVersion, boolean renderWedge)
             throws IOException {
-        Optional<Handshake> existing = handshake(paths.socket(), clientVersion);
+        Optional<Handshake> existing = handshake(EnginePaths.activeSocket(paths), clientVersion);
         if (existing.isPresent()) {
             Handshake hs = existing.get();
             // A draining engine still owns the socket + file lock and is finishing in-flight jobs.
@@ -1264,7 +1264,9 @@ public final class EngineClient {
                         "the build engine is shutting down — wait for it to stop, or run `jk engine stop --force`");
             }
             if (clientVersion.equals(hs.version())) return new EngineReady(hs, false);
-            killStale(hs.pid(), COLD_START_CEILING);
+            // Version skew → TAKEOVER, not a kill (engine-versioning-plan §2/§3): spawn this
+            // client's engine; ITS startup atomically repoints the endpoint and gracefully
+            // drains the displaced engine — in-flight jobs on the old one finish untouched.
         }
         return startWithSelfHeal(paths, clientVersion, renderWedge);
     }
@@ -1379,7 +1381,7 @@ public final class EngineClient {
                 return;
             }
             sleepQuietly(TRAINING_MIN_UPTIME_MS); // avoid the assembler's empty-recording rejection
-            stop(paths.socket()); // clean shutdown → the JVM assembles the cache on exit
+            stop(EnginePaths.activeSocket(paths)); // clean shutdown → the JVM assembles the cache on exit
             if (!awaitAssembled(target.aotCache(), ASSEMBLY_TIMEOUT)) {
                 logReason(paths, "AOT cache did not assemble in time; it will build on a later engine exit");
             }
@@ -1595,9 +1597,22 @@ public final class EngineClient {
      * dev workflows.
      */
     static EngineArtifact resolveEngineArtifact(String envOverride, String jkExe, String version, Path libDir) {
+        return resolveEngineArtifact(envOverride, jkExe, version, libDir, dev.jkbuild.cache.VersionStore.current());
+    }
+
+    /** Root-injected variant — the testable seam. */
+    static EngineArtifact resolveEngineArtifact(
+            String envOverride, String jkExe, String version, Path libDir, dev.jkbuild.cache.VersionStore store) {
         if (envOverride != null && !envOverride.isBlank()) {
             return new EngineArtifact(EngineArtifact.Kind.EXE, envOverride, "JK_ENGINE_EXE");
         }
+        // The side-by-side layout is authoritative (engine-versioning-plan R2)…
+        var materialized = store.resolve(version);
+        if (materialized.isPresent()) {
+            return new EngineArtifact(
+                    EngineArtifact.Kind.JAR, materialized.get().engineJar().toString(), "versions");
+        }
+        // …with the legacy ~/.jk/lib slot honored transitionally (pre-versioning installs).
         Path engineJar = libDir.resolve("jk-engine-" + version + ".jar");
         if (Files.isRegularFile(engineJar)) {
             return new EngineArtifact(EngineArtifact.Kind.JAR, engineJar.toString(), "lib");
@@ -1613,6 +1628,14 @@ public final class EngineClient {
      * Stale {@code .aot}/{@code .noaot} files from previous keys are deleted best-effort here.
      */
     static Path aotCachePath(EnginePaths.Paths paths, Path engineJar, EngineJdk jdk) {
+        return aotCachePath(paths, engineJar, jdk, dev.jkbuild.cli.Jk.VERSION);
+    }
+
+    /**
+     * As above, version-scoped: derived AOT state lives under {@code state/engine/<v>/}
+     * (engine-versioning-plan R3) so side-by-side engines never sweep each other's caches.
+     */
+    static Path aotCachePath(EnginePaths.Paths paths, Path engineJar, EngineJdk jdk, String version) {
         StringBuilder signature = new StringBuilder();
         try {
             signature
@@ -1626,13 +1649,19 @@ public final class EngineClient {
         }
         signature.append(':').append(jdk == null ? "no-jdk" : jdk.version() + "|" + jdk.vendor().name());
         String hash = dev.jkbuild.util.Hashing.sha256Hex(signature.toString()).substring(0, 16);
-        Path cache = paths.dir().resolve("engine-" + hash + ".aot");
+        Path versionDir = paths.dir().resolve(version);
+        try {
+            Files.createDirectories(versionDir);
+        } catch (IOException ignored) {
+            // Falls through — a failed mkdir surfaces on the training write, with a real error.
+        }
+        Path cache = versionDir.resolve("engine-" + hash + ".aot");
         // Sweep every other key's artifacts — the cache, the JEP 514 ".aot.config" recording
         // intermediate (left behind whenever a training run is interrupted before assembly), and any
         // ".noaot" marker — keeping only the current key's files (name prefix "engine-<hash>"). The
         // socket/lock/pid/log live under a different, non-"engine-" prefix, so this never touches them.
         String stem = "engine-" + hash;
-        try (var entries = Files.newDirectoryStream(paths.dir(), "engine-*")) {
+        try (var entries = Files.newDirectoryStream(versionDir, "engine-*")) {
             for (Path p : entries) {
                 if (!p.getFileName().toString().startsWith(stem)) Files.deleteIfExists(p);
             }
@@ -1824,13 +1853,13 @@ public final class EngineClient {
             EnginePaths.Paths paths, String clientVersion, Duration timeout, Process spawned) {
         long deadline = System.nanoTime() + timeout.toNanos();
         while (System.nanoTime() < deadline) {
-            Optional<Handshake> h = handshake(paths.socket(), clientVersion);
+            Optional<Handshake> h = handshake(EnginePaths.activeSocket(paths), clientVersion);
             if (h.isPresent()) return StartResult.up(h.get());
             if (spawned != null && !spawned.isAlive()) {
                 // The child died (setsid keeps the pid, so liveness is authoritative). One last
                 // handshake: a concurrent spawn may have won the election and be serving already —
                 // our child exiting is then the healthy loser, not a failure.
-                return handshake(paths.socket(), clientVersion).map(StartResult::up).orElseGet(StartResult::exited);
+                return handshake(EnginePaths.activeSocket(paths), clientVersion).map(StartResult::up).orElseGet(StartResult::exited);
             }
             sleepQuietly(50);
         }

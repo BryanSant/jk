@@ -52,6 +52,71 @@ public final class EnginePaths {
                 dir.resolve(key + ".http-token"));
     }
 
+    // ---- generations + the endpoint pointer (engine-versioning-plan §2) --------------------
+
+    /**
+     * The endpoint pointer: a one-line file naming the CURRENT generation's socket file. Every
+     * client resolves it before connecting; a new engine takes over by atomically replacing it.
+     * Atomic single-file replace exists on every supported platform, unlike bound-socket rename
+     * semantics — which is why the pointer exists at all.
+     */
+    public static Path endpoint(Paths paths) {
+        return paths.dir().resolve(paths.key() + ".endpoint");
+    }
+
+    /** Generation {@code n}'s socket/lock/pid files ({@code <key>.gen<n>.sock} …). */
+    public static Paths generation(Paths paths, int n) {
+        String stem = paths.key() + ".gen" + n;
+        Path dir = paths.dir();
+        return new Paths(
+                paths.key(),
+                dir,
+                dir.resolve(stem + ".sock"),
+                dir.resolve(stem + ".lock"),
+                dir.resolve(stem + ".pid"),
+                paths.log(),
+                // Token is generation-scoped so overlapping engines never clobber each other's
+                // secret; clients find it by tokenFor(socket) naming convention either way.
+                dir.resolve(stem + ".token"),
+                paths.http(),
+                paths.httpToken());
+    }
+
+    /**
+     * The socket clients should connect to: the endpoint pointer's target when present, else the
+     * legacy flat socket (pre-generation engines, and the symlink a generational engine leaves
+     * there for older clients).
+     */
+    public static Path activeSocket(Paths paths) {
+        Path ep = endpoint(paths);
+        try {
+            String name = java.nio.file.Files.readString(ep).trim();
+            if (!name.isEmpty() && !name.contains("/") && !name.contains("\\")) {
+                return paths.dir().resolve(name);
+            }
+        } catch (java.io.IOException ignored) {
+            // No pointer → legacy path below.
+        }
+        return paths.socket();
+    }
+
+    /** Atomically point the endpoint at {@code socket} (a sibling of the engine dir). */
+    public static void writeEndpoint(Paths paths, Path socket) throws java.io.IOException {
+        Path ep = endpoint(paths);
+        java.nio.file.Files.createDirectories(ep.getParent());
+        Path tmp = java.nio.file.Files.createTempFile(ep.getParent(), ".endpoint-", ".tmp");
+        try {
+            java.nio.file.Files.writeString(tmp, socket.getFileName().toString());
+            try {
+                java.nio.file.Files.move(tmp, ep, java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+            } catch (java.nio.file.AtomicMoveNotSupportedException e) {
+                java.nio.file.Files.move(tmp, ep, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            }
+        } finally {
+            java.nio.file.Files.deleteIfExists(tmp);
+        }
+    }
+
     /**
      * The token-file sibling of a {@code .sock} path, derived by naming convention alone — so the
      * CLI-side client's {@code connect(Path)} (which only ever receives {@code paths.socket()}, not

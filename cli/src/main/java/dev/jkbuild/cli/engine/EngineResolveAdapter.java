@@ -50,7 +50,7 @@ final class EngineResolveAdapter {
     static dev.jkbuild.engine.protocol.OutdatedReport runOutdated(
             EnginePaths.Paths paths, EngineClient.OutdatedRequest req) throws IOException {
         EngineClient.ensureRunning(paths, Jk.VERSION);
-        try (SocketChannel ch = EngineClient.connect(paths.socket())) {
+        try (SocketChannel ch = EngineClient.connect(dev.jkbuild.engine.EnginePaths.activeSocket(paths))) {
             BufferedWriter writer =
                     new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
             BufferedReader reader =
@@ -139,7 +139,7 @@ final class EngineResolveAdapter {
             throws IOException {
         EngineClient.ensureRunning(paths, Jk.VERSION);
 
-        try (SocketChannel ch = EngineClient.connect(paths.socket())) {
+        try (SocketChannel ch = EngineClient.connect(dev.jkbuild.engine.EnginePaths.activeSocket(paths))) {
             BufferedWriter writer =
                     new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
             BufferedReader reader =
@@ -201,7 +201,7 @@ final class EngineResolveAdapter {
             throws IOException {
         EngineClient.ensureRunning(paths, Jk.VERSION);
 
-        try (SocketChannel ch = EngineClient.connect(paths.socket())) {
+        try (SocketChannel ch = EngineClient.connect(dev.jkbuild.engine.EnginePaths.activeSocket(paths))) {
             BufferedWriter writer =
                     new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
             BufferedReader reader =

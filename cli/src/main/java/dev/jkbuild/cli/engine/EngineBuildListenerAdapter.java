@@ -90,7 +90,7 @@ final class EngineBuildListenerAdapter {
         EngineClient.ensureRunning(paths, Jk.VERSION);
         Session session = SessionContext.current();
 
-        try (SocketChannel ch = EngineClient.connect(paths.socket())) {
+        try (SocketChannel ch = EngineClient.connect(dev.jkbuild.engine.EnginePaths.activeSocket(paths))) {
             BufferedWriter writer =
                     new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
             BufferedReader reader =
@@ -141,7 +141,7 @@ final class EngineBuildListenerAdapter {
             throws IOException {
         EngineClient.ensureRunning(paths, Jk.VERSION);
 
-        try (SocketChannel ch = EngineClient.connect(paths.socket())) {
+        try (SocketChannel ch = EngineClient.connect(dev.jkbuild.engine.EnginePaths.activeSocket(paths))) {
             BufferedWriter writer =
                     new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
             BufferedReader reader =
@@ -183,7 +183,7 @@ final class EngineBuildListenerAdapter {
             throws IOException {
         EngineClient.ensureRunning(paths, Jk.VERSION);
 
-        try (SocketChannel ch = EngineClient.connect(paths.socket())) {
+        try (SocketChannel ch = EngineClient.connect(dev.jkbuild.engine.EnginePaths.activeSocket(paths))) {
             BufferedWriter writer =
                     new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
             BufferedReader reader =
@@ -222,7 +222,7 @@ final class EngineBuildListenerAdapter {
             throws IOException {
         EngineClient.ensureRunning(paths, Jk.VERSION);
 
-        try (SocketChannel ch = EngineClient.connect(paths.socket())) {
+        try (SocketChannel ch = EngineClient.connect(dev.jkbuild.engine.EnginePaths.activeSocket(paths))) {
             BufferedWriter writer =
                     new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
             BufferedReader reader =
@@ -268,7 +268,7 @@ final class EngineBuildListenerAdapter {
             throws IOException {
         EngineClient.ensureRunning(paths, Jk.VERSION);
 
-        try (SocketChannel ch = EngineClient.connect(paths.socket())) {
+        try (SocketChannel ch = EngineClient.connect(dev.jkbuild.engine.EnginePaths.activeSocket(paths))) {
             BufferedWriter writer =
                     new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
             BufferedReader reader =
@@ -309,7 +309,7 @@ final class EngineBuildListenerAdapter {
             EnginePaths.Paths paths, EngineClient.ExplainRequest req, long[] etaOut) throws IOException {
         EngineClient.ensureRunning(paths, Jk.VERSION);
 
-        try (SocketChannel ch = EngineClient.connect(paths.socket())) {
+        try (SocketChannel ch = EngineClient.connect(dev.jkbuild.engine.EnginePaths.activeSocket(paths))) {
             BufferedWriter writer =
                     new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
             BufferedReader reader =
@@ -410,7 +410,7 @@ final class EngineBuildListenerAdapter {
     static boolean edit(EnginePaths.Paths paths, Path file, String op, java.util.List<String> args)
             throws IOException {
         EngineClient.ensureRunning(paths, Jk.VERSION);
-        try (SocketChannel ch = EngineClient.connect(paths.socket())) {
+        try (SocketChannel ch = EngineClient.connect(dev.jkbuild.engine.EnginePaths.activeSocket(paths))) {
             BufferedWriter writer =
                     new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
             BufferedReader reader =
@@ -435,7 +435,7 @@ final class EngineBuildListenerAdapter {
             java.util.List<String> scopes)
             throws IOException {
         EngineClient.ensureRunning(paths, Jk.VERSION);
-        try (SocketChannel ch = EngineClient.connect(paths.socket())) {
+        try (SocketChannel ch = EngineClient.connect(dev.jkbuild.engine.EnginePaths.activeSocket(paths))) {
             BufferedWriter writer =
                     new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
             BufferedReader reader =
@@ -458,7 +458,7 @@ final class EngineBuildListenerAdapter {
     static dev.jkbuild.engine.protocol.WhyReport why(EnginePaths.Paths paths, Path dir, String query)
             throws IOException {
         EngineClient.ensureRunning(paths, Jk.VERSION);
-        try (SocketChannel ch = EngineClient.connect(paths.socket())) {
+        try (SocketChannel ch = EngineClient.connect(dev.jkbuild.engine.EnginePaths.activeSocket(paths))) {
             BufferedWriter writer =
                     new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
             BufferedReader reader =
@@ -479,7 +479,7 @@ final class EngineBuildListenerAdapter {
     static dev.jkbuild.engine.protocol.IdeWireModel ideModel(
             EnginePaths.Paths paths, Path dir, Path cache, Path jdksDir) throws IOException {
         EngineClient.ensureRunning(paths, Jk.VERSION);
-        try (SocketChannel ch = EngineClient.connect(paths.socket())) {
+        try (SocketChannel ch = EngineClient.connect(dev.jkbuild.engine.EnginePaths.activeSocket(paths))) {
             BufferedWriter writer =
                     new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
             BufferedReader reader =
@@ -502,7 +502,7 @@ final class EngineBuildListenerAdapter {
             EnginePaths.Paths paths, Path dir, String kind, java.util.Map<String, String> params)
             throws IOException {
         EngineClient.ensureRunning(paths, Jk.VERSION);
-        try (SocketChannel ch = EngineClient.connect(paths.socket())) {
+        try (SocketChannel ch = EngineClient.connect(dev.jkbuild.engine.EnginePaths.activeSocket(paths))) {
             BufferedWriter writer =
                     new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
             BufferedReader reader =
@@ -524,7 +524,7 @@ final class EngineBuildListenerAdapter {
             EnginePaths.Paths paths, Path dir, Path cache, String verb, java.util.List<String> args)
             throws IOException {
         EngineClient.ensureRunning(paths, Jk.VERSION);
-        try (SocketChannel ch = EngineClient.connect(paths.socket())) {
+        try (SocketChannel ch = EngineClient.connect(dev.jkbuild.engine.EnginePaths.activeSocket(paths))) {
             BufferedWriter writer =
                     new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
             BufferedReader reader =
@@ -547,7 +547,7 @@ final class EngineBuildListenerAdapter {
     /** One engine-hosted deny check: policy parse + lock read + violations, engine-side. */
     static dev.jkbuild.engine.protocol.DenyReport denyCheck(EnginePaths.Paths paths, Path dir) throws IOException {
         EngineClient.ensureRunning(paths, Jk.VERSION);
-        try (SocketChannel ch = EngineClient.connect(paths.socket())) {
+        try (SocketChannel ch = EngineClient.connect(dev.jkbuild.engine.EnginePaths.activeSocket(paths))) {
             BufferedWriter writer =
                     new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
             BufferedReader reader =
@@ -567,7 +567,7 @@ final class EngineBuildListenerAdapter {
     static dev.jkbuild.engine.protocol.ProjectInfo projectInfo(EnginePaths.Paths paths, Path dir)
             throws IOException {
         EngineClient.ensureRunning(paths, Jk.VERSION);
-        try (SocketChannel ch = EngineClient.connect(paths.socket())) {
+        try (SocketChannel ch = EngineClient.connect(dev.jkbuild.engine.EnginePaths.activeSocket(paths))) {
             BufferedWriter writer =
                     new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
             BufferedReader reader =
@@ -595,7 +595,7 @@ final class EngineBuildListenerAdapter {
             Path libDir)
             throws IOException {
         EngineClient.ensureRunning(paths, Jk.VERSION);
-        try (SocketChannel ch = EngineClient.connect(paths.socket())) {
+        try (SocketChannel ch = EngineClient.connect(dev.jkbuild.engine.EnginePaths.activeSocket(paths))) {
             BufferedWriter writer =
                     new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
             BufferedReader reader =
@@ -626,7 +626,7 @@ final class EngineBuildListenerAdapter {
             EnginePaths.Paths paths, Path entryDir, Path cache, boolean skipTests) throws IOException {
         EngineClient.ensureRunning(paths, Jk.VERSION);
         Session session = SessionContext.current();
-        try (SocketChannel ch = EngineClient.connect(paths.socket())) {
+        try (SocketChannel ch = EngineClient.connect(dev.jkbuild.engine.EnginePaths.activeSocket(paths))) {
             BufferedWriter writer =
                     new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
             BufferedReader reader =

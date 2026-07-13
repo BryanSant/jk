@@ -55,6 +55,19 @@ final class EngineJarFetcher {
      * or unverified jar is never left at the final name.
      */
     static Path fetch(URI releasesBase, String version, Path libDir) throws IOException {
+        return fetch(
+                releasesBase,
+                version,
+                libDir,
+                new dev.jkbuild.cache.Cas(dev.jkbuild.util.JkDirs.cache()),
+                dev.jkbuild.cache.VersionStore.current(),
+                dev.jkbuild.task.CachePruneScheduler.resolveJkExe().map(Path::of).orElse(null));
+    }
+
+    /** Root-injected variant — the testable seam; production uses the live {@code ~/.jk} roots. */
+    static Path fetch(URI releasesBase, String version, Path libDir,
+            dev.jkbuild.cache.Cas cas, dev.jkbuild.cache.VersionStore store, Path clientBin)
+            throws IOException {
         String jarName = "jk-engine-" + version + ".jar";
         URI versionDir = URI.create(releasesBase.toString() + "/" + version + "/");
         Http http = new Http();
@@ -68,6 +81,18 @@ final class EngineJarFetcher {
                     + " (a mirror or proxy may have served a stale/corrupt file)");
         }
 
+        // Verified bytes flow CAS-first into the side-by-side version layout
+        // (engine-versioning-plan R1/R2). The running client IS this version's client — hand
+        // its own binary over so the materialization is complete (wrapper/self-update parity).
+        cas.put(jar); // put(byte[]) stores under the content sha it computes
+        String clientSha = null;
+        if (clientBin != null && Files.isRegularFile(clientBin)) {
+            clientSha = Hashing.sha256Hex(clientBin);
+            cas.putFile(clientBin, clientSha);
+        }
+        store.materialize(version, cas, actualSha, clientSha);
+        // Transitional: keep the legacy libDir copy so an older client on this machine still
+        // finds its jar; the prune phase retires libDir entirely (engine-versioning-plan P6).
         Files.createDirectories(libDir);
         Path dest = libDir.resolve(jarName);
         Path part = libDir.resolve(jarName + ".part");

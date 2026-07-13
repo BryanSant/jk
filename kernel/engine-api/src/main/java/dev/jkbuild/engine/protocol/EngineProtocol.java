@@ -572,8 +572,18 @@ public final class EngineProtocol {
         return "{\"t\":\"" + AUTH + "\",\"token\":" + Ndjson.quote(token) + "}";
     }
 
+    /**
+     * PROTOCOL-ZERO — FROZEN FOREVER (engine-versioning-plan R7). {@code hello}/{@code hello-ack}
+     * (with {@code version} + {@code proto}) and graceful {@code shutdown force=false} form the
+     * tiny handshake every jk version past and future speaks; takeover upgrades, delegation, and
+     * mixed-version fleets all stand on it. Add fields freely (readers ignore unknowns); never
+     * rename, retype, or remove one.
+     */
+    public static final int PROTOCOL = 1;
+
     public static String hello(String version) {
-        return "{\"t\":\"" + HELLO + "\",\"version\":" + Ndjson.quote(version) + "}";
+        return "{\"t\":\"" + HELLO + "\",\"version\":" + Ndjson.quote(version)
+                + ",\"proto\":" + PROTOCOL + "}";
     }
 
     public static String helloAck(String version, long pid, long startedAtMillis, boolean draining) {
@@ -585,6 +595,8 @@ public final class EngineProtocol {
                 + pid
                 + ",\"startedAt\":"
                 + startedAtMillis
+                + ",\"proto\":"
+                + PROTOCOL
                 + ",\"draining\":"
                 + draining
                 + "}";
@@ -630,6 +642,8 @@ public final class EngineProtocol {
                 + pid
                 + ",\"startedAt\":"
                 + startedAtMillis
+                + ",\"proto\":"
+                + PROTOCOL
                 + ",\"activeRequests\":"
                 + activeRequests
                 + ",\"activePipelines\":"

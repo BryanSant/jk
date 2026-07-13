@@ -61,9 +61,12 @@ class EngineAotCacheTest {
     @Test
     void stale_caches_and_markers_for_other_keys_are_swept(@TempDir Path dir) throws IOException {
         EnginePaths.Paths paths = EnginePaths.resolve(dir);
-        Files.createDirectories(paths.dir());
-        Path staleAot = paths.dir().resolve("engine-deadbeefdeadbeef.aot");
-        Path staleMarker = paths.dir().resolve("engine-deadbeefdeadbeef.noaot");
+        // Derived AOT state is version-scoped (engine-versioning-plan R3): the sweep covers THIS
+        // version's dir only — other versions' caches are the GC's business, not ours.
+        Path versionDir = paths.dir().resolve(dev.jkbuild.cli.Jk.VERSION);
+        Files.createDirectories(versionDir);
+        Path staleAot = versionDir.resolve("engine-deadbeefdeadbeef.aot");
+        Path staleMarker = versionDir.resolve("engine-deadbeefdeadbeef.noaot");
         Files.writeString(staleAot, "old");
         Files.writeString(staleMarker, "");
         Path jar = jar(dir, "jk-engine-1.jar", "aaa");

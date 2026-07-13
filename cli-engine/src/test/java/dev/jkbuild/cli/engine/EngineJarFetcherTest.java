@@ -65,12 +65,17 @@ class EngineJarFetcherTest {
         Files.createDirectories(libDir);
         Files.writeString(stale, "old");
 
-        Path installed = EngineJarFetcher.fetch(base, VERSION, libDir);
+        dev.jkbuild.cache.Cas cas = new dev.jkbuild.cache.Cas(libDir.resolve("cache"));
+        dev.jkbuild.cache.VersionStore store = new dev.jkbuild.cache.VersionStore(libDir.resolve("versions"));
+        Path installed = EngineJarFetcher.fetch(base, VERSION, libDir, cas, store, null);
 
         assertThat(installed).isEqualTo(libDir.resolve("jk-engine-1.2.3.jar"));
         assertThat(installed).hasBinaryContent(JAR);
         assertThat(stale).doesNotExist();
         assertThat(libDir.resolve("jk-engine-1.2.3.jar.part")).doesNotExist();
+        // …and the same verified bytes were materialized into the side-by-side layout via the CAS.
+        var m = store.resolve(VERSION).orElseThrow();
+        assertThat(m.engineJar()).hasBinaryContent(JAR);
     }
 
     @Test
