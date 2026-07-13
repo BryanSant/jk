@@ -81,21 +81,28 @@ public final class EngineStatusCommand implements CliCommand {
         detail("Uptime", formatUptime(uptimeSeconds));
         detail("Jobs", String.valueOf(s.activePipelines()));
         String memory = formatMemory(s);
-        if (memory != null) detail("Memory", memory);
+        if (memory != null) {
+            detail("Memory", memory);
+            String bar = memoryBar(s);
+            if (bar != null) CliOutput.out(" ".repeat(VALUE_COL) + bar);
+        }
         String http = describeHttp(s, paths);
-        // OSC-8 hyperlink with the URL colored (bright cyan + underline) so it reads AND behaves as a
-        // clickable link — same convention as `jk add`'s repo links.
-        String webUi = s.httpUrl() != null
-                ? Ansi.hyperlink(http, Theme.colorize(http, Theme.active().activeStep().underline()))
-                : http;
+        // OSC-8 hyperlink with the URL in the theme's path color so it reads AND behaves as a link.
+        String webUi = s.httpUrl() != null ? Ansi.hyperlink(http, Theme.colorize(http, Theme.active().path())) : http;
         detail("Web UI", webUi);
         return Exit.SUCCESS;
     }
 
-    /** One detail line under the header: {@code   • Label: value}, labels right-aligned. */
+    /** Widest {@code "label:"} ({@code "Version:"}); values line up one space past it. */
+    private static final int LABEL_FIELD = 8;
+
+    /** Column where values (and the memory bar) begin: {@code " • "} + label field + one space. */
+    private static final int VALUE_COL = 3 + LABEL_FIELD + 1;
+
+    /** One detail line under the header: {@code  • Label:  value} (label left-aligned, values aligned). */
     private static void detail(String label, String value) {
-        CliOutput.out("   " + Theme.colorize(Glyphs.BULLET, Theme.active().dim()) + " "
-                + String.format("%7s", label) + ": " + value);
+        CliOutput.out(" " + Theme.colorize(Glyphs.BULLET, Theme.active().dim()) + " "
+                + String.format("%-" + LABEL_FIELD + "s", label + ":") + " " + value);
     }
 
     /** The engine pid in yellow on an ANSI terminal (matching the start/stop wedges). */
@@ -149,7 +156,28 @@ public final class EngineStatusCommand implements CliCommand {
     }
 
     private static String mib(long bytes) {
-        return (bytes + (1 << 19)) / (1 << 20) + " MiB"; // round to nearest MiB
+        return (bytes + (1 << 19)) / (1 << 20) + "M"; // round to nearest MiB
+    }
+
+    /**
+     * A stacked heap bar aligned under the memory value: {@code used} in bright-cyan, {@code
+     * committed}-beyond-used in cyan, and the rest (up to {@code max}) in bright-black. {@code null}
+     * when the heap max isn't observable (nothing to scale against).
+     */
+    private static String memoryBar(EngineClient.Status s) {
+        long max = s.heapMaxBytes();
+        if (max <= 0 || s.heapUsedBytes() < 0 || s.heapCommittedBytes() < 0) return null;
+        int width = 48;
+        int used = clamp((int) Math.round((double) s.heapUsedBytes() / max * width), 0, width);
+        int committed = clamp((int) Math.round((double) s.heapCommittedBytes() / max * width), used, width);
+        Theme t = Theme.active();
+        return Theme.colorize("▰".repeat(used), t.brightCyan())
+                + Theme.colorize("▰".repeat(committed - used), t.cyan())
+                + Theme.colorize("▱".repeat(width - committed), t.darkGray());
+    }
+
+    private static int clamp(int v, int lo, int hi) {
+        return Math.max(lo, Math.min(hi, v));
     }
 
     private static String formatUptime(long totalSeconds) {
