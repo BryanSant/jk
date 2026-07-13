@@ -37,6 +37,24 @@ public final class KmpRedirects {
     private final String jvmEnvironment;
     private final Map<String, Optional<Selection>> cache = new ConcurrentHashMap<>();
 
+    /**
+     * Every non-selected platform sibling of every redirected root seen this resolve (A5f
+     * finding 20). A platform artifact's own POM can name a SIBLING concretely
+     * (datastore-core-okio-jvm → datastore-core-jvm) — an edge that is variant-aware in GMM
+     * space but bypasses the root's selection in POM space and double-defines every class at
+     * dex. The lock excludes these globally; the selected sibling supplies the classes.
+     */
+    private final Map<String, String> droppedSiblings = new ConcurrentHashMap<>();
+
+    /**
+     * Non-selected platform sibling → the selected sibling that replaces it (grows as
+     * selections happen). Exclusion applies only when the selected side is actually in the
+     * resolution — a graph reaching a platform artifact with no redirected root keeps it.
+     */
+    public Map<String, String> droppedSiblings() {
+        return java.util.Collections.unmodifiableMap(droppedSiblings);
+    }
+
     public KmpRedirects(RepoGroup repos, String jvmEnvironment) {
         this.repos = repos;
         this.jvmEnvironment = jvmEnvironment == null || jvmEnvironment.isBlank() ? "standard-jvm" : jvmEnvironment;
@@ -65,8 +83,13 @@ public final class KmpRedirects {
 
             GradleModuleMetadata gmm = GradleModuleMetadata.parse(
                     moduleHit.get().fetched().cachePath());
-            return gmm.runtimeRedirect(jvmEnvironment)
-                    .map(target -> new Selection(target, gmm.redirectTargetModules()));
+            return gmm.runtimeRedirect(jvmEnvironment).map(target -> {
+                String selected = target.group() + ":" + target.module();
+                for (String sibling : gmm.redirectTargetModules()) {
+                    if (!sibling.equals(selected)) droppedSiblings.put(sibling, selected);
+                }
+                return new Selection(target, gmm.redirectTargetModules());
+            });
         } catch (IOException | InterruptedException | RuntimeException e) {
             if (e instanceof InterruptedException) Thread.currentThread().interrupt();
             return Optional.empty(); // fail-soft: plain-Maven view

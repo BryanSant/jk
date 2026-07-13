@@ -558,7 +558,7 @@ public final class BuildPipeline {
         // Workspace root with no sources: validate jk.toml + sync deps, nothing more.
         if (workspaceNoSources) return b;
         if (kspEnabled) {
-            b.addPhase(kspPhase(cx));
+            b.addPhase(kspPhase(cx, pluginDeclsF));
         }
         if (useJava) {
             b.addPhase(compileJava);
@@ -919,6 +919,19 @@ public final class BuildPipeline {
         return out;
     }
 
+    /** Plugin steps' declared source-contribution dirs (existing ones only). */
+    private static List<Path> pluginContributedSourceDirs(BuildLayout layout, PluginBuild.Declarations decls) {
+        List<Path> out = new ArrayList<>();
+        if (decls == null) return out;
+        for (PluginBuild.StepDecl step : decls.steps()) {
+            for (String rel : step.contributesSources()) {
+                Path dir = PluginBuild.stepScratch(layout, step.name()).resolve(rel);
+                if (Files.isDirectory(dir)) out.add(dir);
+            }
+        }
+        return out;
+    }
+
     /** Plugin steps' declared test-classpath contribution dirs (existing ones only). */
     private static List<Path> pluginTestClasspath(BuildLayout layout, PluginBuild.Declarations decls) {
         List<Path> out = new ArrayList<>();
@@ -966,14 +979,19 @@ public final class BuildPipeline {
      * mirrors compile-kotlin's stamp discipline (no action cache yet — the direct kotlinc path
      * has none either); the processors, classpath, and sources are all stamp inputs.
      */
-    private static Phase kspPhase(StepContext cx) {
+    private static Phase kspPhase(StepContext cx, PluginBuild.Declarations pluginDecls) {
         Inputs in = cx.in();
         Cas cas = cx.cas();
         boolean compact = cx.compact();
+        // Plugin-contributed sources (protoc output, variant extra-src) must exist before the
+        // round and join its source roots — a contributed @Module/@Entity is processor input
+        // like any hand-written one.
+        List<String> requires = new ArrayList<>(List.of("parse-build", "sync-deps", "ensure-jdk"));
+        requires.addAll(sourceGenStepPhases(pluginDecls));
         return Phase.builder("ksp")
                 .label("KSP")
                 .kind(PhaseKind.CPU)
-                .requires("parse-build", "sync-deps", "ensure-jdk")
+                .requires(requires.toArray(new String[0]))
                 .scope(1)
                 .execute(ctx -> {
                     @SuppressWarnings("unchecked")
@@ -994,6 +1012,9 @@ public final class BuildPipeline {
 
                     List<Path> stampInputs = new ArrayList<>(ktSources);
                     stampInputs.addAll(javaSources);
+                    // Contributed sources are round input too — an extra-src/protoc edit re-runs.
+                    stampInputs.addAll(pluginContributedSources(ctx.require(LAYOUT), pluginDecls, ".kt"));
+                    stampInputs.addAll(pluginContributedSources(ctx.require(LAYOUT), pluginDecls, ".java"));
                     List<Path> stampCp = new ArrayList<>(classpath);
                     stampCp.addAll(split.ksp());
                     boolean rerun = in.session().config().rerunOr(false);
@@ -1030,9 +1051,15 @@ public final class BuildPipeline {
                     }
                     Files.createDirectories(outBase.resolve("caches"));
 
-                    List<Path> srcRoots = compact
-                            ? List.of(in.dir().resolve("src"))
-                            : List.of(in.dir().resolve("src/main/kotlin"), in.dir().resolve("src/main/java"));
+                    List<Path> srcRoots = new ArrayList<>(
+                            compact
+                                    ? List.of(in.dir().resolve("src"))
+                                    : List.of(
+                                            in.dir().resolve("src/main/kotlin"),
+                                            in.dir().resolve("src/main/java")));
+                    // Plugin-contributed source dirs (variant extra-src, protoc output) are
+                    // processor input like any hand-written source.
+                    srcRoots.addAll(pluginContributedSourceDirs(ctx.require(LAYOUT), pluginDecls));
                     List<Path> ktRoots = new ArrayList<>();
                     for (Path root : srcRoots) {
                         if (Files.isDirectory(root)) ktRoots.add(root);

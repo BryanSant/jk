@@ -75,6 +75,10 @@ final class ManifestStep {
         // merger derives the applicationId placeholder from PACKAGE).
         if (library) {
             merger.arg("--merge-type").arg("LIBRARY");
+        } else {
+            // The app merge consumes tools: directives (tools:node="remove" etc.) — they must
+            // not reach aapt2, which rejects e.g. a <property> left carrying only tools attrs.
+            merger.arg("--remove-tools-declarations");
         }
         StepExec.ToolRun.Result result = merger
                 .arg("--property")

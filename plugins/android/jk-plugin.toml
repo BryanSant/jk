@@ -71,6 +71,10 @@ proguard-files        = { type = "string-list", default = [] }
 signing               = { type = "string" }                   # names an [android.signing.<name>]
 debuggable            = { type = "bool" }
 build-config-fields   = { type = "string-list" }              # per-variant BuildConfig constants (overlay replaces)
+# Per-variant source dirs (module-relative; AGP's src/<flavor>/kotlin), joined to the
+# compiler + KSP source set when the variant is selected. The explicit opt-in that keeps
+# variants config overlays — the dirs are data, not a source-set object model.
+extra-src             = { type = "string-list" }
 
 # Signing configs (android-plan §3.1): env: indirection only — never literal secrets in TOML.
 # `secret = true` keys resolve client-side (the user's shell env rides the request) and travel

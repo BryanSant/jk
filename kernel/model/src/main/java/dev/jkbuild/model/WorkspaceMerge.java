@@ -75,17 +75,29 @@ public final class WorkspaceMerge {
             if (!resolved.isEmpty()) resolvedByScope.put(scope, resolved);
         }
 
-        // Second pass: pull each direct sibling's export deps into this module's
-        // main scope so they land in this module's lockfile and compile classpath.
-        for (String siblingName : dependedSiblingNames) {
-            JkBuild sibling = siblingByArtifact.get(siblingName);
+        // Second pass: walk the sibling graph TRANSITIVELY and pull every reachable sibling's
+        // externals (MAIN + EXPORT) into this module's main scope, so they land in the lockfile
+        // and the runtime closure. Maven's compile scope is transitive — and a self-contained
+        // artifact (an APK dexes and links its whole graph) hard-requires it: NiA's app was
+        // missing appcompat's THEME resources because only direct siblings' EXPORT deps used to
+        // propagate (A5f finding 19).
+        Set<String> visited = new LinkedHashSet<>(dependedSiblingNames);
+        java.util.ArrayDeque<String> queue = new java.util.ArrayDeque<>(dependedSiblingNames);
+        while (!queue.isEmpty()) {
+            JkBuild sibling = siblingByArtifact.get(queue.poll());
             if (sibling == null) continue;
-            for (Dependency d : sibling.dependencies().of(Scope.EXPORT)) {
-                Dependency r = resolve(d, siblingByArtifact, wsDeps);
-                if (internal.contains(r.module())) continue;
-                List<Dependency> mainList = resolvedByScope.computeIfAbsent(Scope.MAIN, k -> new ArrayList<>());
-                if (mainList.stream().noneMatch(e -> e.module().equals(r.module()))) {
-                    mainList.add(r);
+            for (Scope scope : List.of(Scope.MAIN, Scope.EXPORT)) {
+                for (Dependency d : sibling.dependencies().of(scope)) {
+                    Dependency r = resolve(d, siblingByArtifact, wsDeps);
+                    if (internal.contains(r.module())) {
+                        if (visited.add(r.name())) queue.add(r.name());
+                        continue;
+                    }
+                    List<Dependency> mainList =
+                            resolvedByScope.computeIfAbsent(Scope.MAIN, k -> new ArrayList<>());
+                    if (mainList.stream().noneMatch(e -> e.module().equals(r.module()))) {
+                        mainList.add(r);
+                    }
                 }
             }
         }

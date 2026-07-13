@@ -112,6 +112,17 @@ public final class PubGrubResolver implements Resolver {
         decisions = new TreeMap<>(decisions);
         decisions.remove(ROOT_PKG);
 
+        // KMP global variant exclusion (A5f finding 20): a platform artifact's own POM can name
+        // a non-selected SIBLING concretely (datastore-core-okio-jvm → datastore-core-jvm) —
+        // variant-aware in GMM space, a double-define at dex in POM space. When the selected
+        // sibling made it into the resolution, the non-selected one leaves it; its dep edges
+        // (built below) drop with it, and the selected artifact supplies the classes.
+        for (var drop : kmp.droppedSiblings().entrySet()) {
+            if (decisions.containsKey(drop.getValue())) {
+                decisions.remove(drop.getKey());
+            }
+        }
+
         Map<String, Set<String>> dependsOn = new HashMap<>();
         for (Map.Entry<String, String> e : decisions.entrySet()) {
             Set<String> deps = new LinkedHashSet<>();

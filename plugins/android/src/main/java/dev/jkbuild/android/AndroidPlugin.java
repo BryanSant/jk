@@ -86,6 +86,21 @@ public final class AndroidPlugin implements Plugin, BuildPlugin {
                 .outputs("cp")
                 .contributesTestClasspath("cp")
                 .run(TestConfigStep::run));
+        // Per-variant source dirs ([android.flavors.<f>] extra-src — finding 18): the selected
+        // variant's dirs join the source set as contributed sources; KSP sees them too.
+        java.util.List<String> extraSrc = ctx.config().stringList("extra-src");
+        if (!extraSrc.isEmpty()) {
+            List<In> srcInputs = new java.util.ArrayList<>();
+            for (String rel : extraSrc) srcInputs.add(In.projectFiles(rel));
+            srcInputs.add(In.config());
+            ctx.step(StepSpec.named("android-variant-sources")
+                    .after(Anchor.RESOLVE)
+                    .before(Anchor.COMPILE)
+                    .inputs(srcInputs.toArray(new In[0]))
+                    .outputs("src")
+                    .contributesSources("src")
+                    .run(VariantSourcesStep::run));
+        }
         if (ctx.config().bool("build-config", false)) {
             ctx.step(StepSpec.named("android-buildconfig")
                     .after(Anchor.RESOLVE)
