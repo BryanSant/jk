@@ -159,7 +159,7 @@ public final class VersionStore {
      * lexicographically among themselves. Intentionally small — release trains are simple
      * (releases.md), and this must never depend on the resolver.
      */
-    static int compare(String a, String b) {
+    public static int compare(String a, String b) {
         String[] an = a.split("-", 2);
         String[] bn = b.split("-", 2);
         String[] as = an[0].split("\\.");

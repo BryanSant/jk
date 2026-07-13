@@ -32,7 +32,17 @@ public record Lockfile(
         String kotlin,
         List<Artifact> artifacts,
         List<PluginEntry> plugins,
-        List<SdkEntry> sdk) {
+        List<SdkEntry> sdk,
+        JkToolchain jk) {
+
+    /**
+     * The jk toolchain that resolved this lock (engine-versioning-plan §3): the exact version a
+     * checkout builds with (the project wrapper's contract — one grep-able line) and, for
+     * release versions, the engine jar's sha256 so every later fetch on any machine verifies
+     * against the pin, not just the release site's checksums. {@code sha256} is empty for
+     * -SNAPSHOT dev builds (never published).
+     */
+    public record JkToolchain(String version, String sha256) {}
 
     public static final int CURRENT_VERSION = 1;
     public static final int MIN_SUPPORTED_VERSION = 1;
@@ -45,6 +55,25 @@ public record Lockfile(
         artifacts = List.copyOf(artifacts);
         plugins = plugins == null ? List.of() : List.copyOf(plugins);
         sdk = sdk == null ? List.of() : List.copyOf(sdk);
+    }
+
+    /** Back-compat constructor without the jk toolchain pin. */
+    public Lockfile(
+            int version,
+            String generatedBy,
+            String resolutionAlgorithm,
+            String jdk,
+            String kotlin,
+            List<Artifact> artifacts,
+            List<PluginEntry> plugins,
+            List<SdkEntry> sdk) {
+        this(version, generatedBy, resolutionAlgorithm, jdk, kotlin, artifacts, plugins, sdk, null);
+    }
+
+    /** This lock with the jk toolchain pin set. */
+    public Lockfile withJk(JkToolchain toolchain) {
+        return new Lockfile(
+                version, generatedBy, resolutionAlgorithm, jdk, kotlin, artifacts, plugins, sdk, toolchain);
     }
 
     /** Back-compat constructor without SDK entries. */

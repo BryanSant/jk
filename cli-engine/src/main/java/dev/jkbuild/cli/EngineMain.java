@@ -27,7 +27,32 @@ public final class EngineMain {
      * inert here — better an unsized engine than a dead one.
      */
     public static void main(String[] args) {
+        // --job: one-shot child mode (engine-versioning-plan §3) — serve exactly one request
+        // over stdio for a parent daemon delegating a pinned-version build, then exit. Every
+        // other arg stays deliberately ignored (see below).
+        if (args.length > 0 && "--job".equals(args[0])) {
+            System.exit(runJob());
+        }
         System.exit(run());
+    }
+
+    /** One request over stdin/stdout; engine-lifecycle logging stays on stderr. */
+    static int runJob() {
+        try {
+            dev.jkbuild.engine.EngineServer server = new dev.jkbuild.engine.EngineServer(
+                    dev.jkbuild.engine.EnginePaths.current(),
+                    dev.jkbuild.config.JkEngineConfig.resolve(),
+                    null,
+                    Jk.VERSION,
+                    System.err::println);
+            server.serveJob(
+                    new java.io.BufferedReader(new java.io.InputStreamReader(System.in, java.nio.charset.StandardCharsets.UTF_8)),
+                    new java.io.BufferedWriter(new java.io.OutputStreamWriter(System.out, java.nio.charset.StandardCharsets.UTF_8)));
+            return 0;
+        } catch (RuntimeException e) {
+            System.err.println("jk engine (job): " + e.getMessage());
+            return 1;
+        }
     }
 
     /**

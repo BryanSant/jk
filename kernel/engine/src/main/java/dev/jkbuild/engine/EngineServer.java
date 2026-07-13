@@ -157,6 +157,9 @@ public final class EngineServer implements AutoCloseable {
     // answering, but new jobs are refused and the engine exits cleanly once in-flight jobs finish.
     private volatile boolean draining;
 
+    /** One-shot child mode ({@code --job}): no election, no endpoint, no re-delegation. */
+    private volatile boolean jobMode;
+
     private FileChannel lockChannel;
     private FileLock lock;
     /** The generation this engine bound (socket/lock/pid/token) — see EnginePaths.generation. */
@@ -467,10 +470,46 @@ public final class EngineServer implements AutoCloseable {
             if (expectedToken != null && !authenticate(reader)) {
                 return; // loopback-TCP transport only: wrong/missing token — close without a reply
             }
+            serveConnection(reader, writer);
+        } catch (IOException ignored) {
+            // client disconnected / socket error mid-exchange — nothing to do
+        } finally {
+            onConnectionFinished();
+        }
+    }
+
+    /**
+     * One-shot job mode (engine-versioning-plan §3 / P3): serve one connection's worth of
+     * requests over the given streams and return — {@code jk-engine --job}. This is how a NEWER
+     * daemon runs a build pinned to THIS (older) version: it execs this engine as a child over
+     * stdio, forwards the original request line, and relays the event stream verbatim. No socket,
+     * no daemonization, no election — the worker pattern.
+     */
+    public void serveJob(BufferedReader reader, BufferedWriter writer) {
+        jobMode = true;
+        connectionExecutor = Executors.newThreadPerTaskExecutor(
+                Thread.ofVirtual().name("jk-engine-job-", 0).factory());
+        planSharedWorkerMemoryOnce();
+        activeConnections.incrementAndGet();
+        try {
+            serveConnection(reader, writer);
+        } catch (IOException ignored) {
+            // parent disconnected mid-exchange — nothing to do
+        } finally {
+            onConnectionFinished();
+        }
+    }
+
+    private void serveConnection(BufferedReader reader, BufferedWriter writer) throws IOException {
+        {
             String line;
             while ((line = reader.readLine()) != null) {
                 String type = EngineProtocol.typeOf(line);
                 if (type == null) continue; // ignore malformed/blank lines
+                // Downward-delegation gate for artifact-producing requests (engine-versioning §3).
+                if (DELEGATABLE.contains(type) && maybeDelegate(line, reader, writer)) {
+                    return; // served by the pinned version's child engine (see EngineDelegate)
+                }
                 switch (type) {
                     case EngineProtocol.HELLO -> send(
                             writer, EngineProtocol.helloAck(version, pid, startedAtMillis, draining));
@@ -634,10 +673,6 @@ public final class EngineServer implements AutoCloseable {
                     }
                 }
             }
-        } catch (IOException ignored) {
-            // client disconnected / socket error mid-exchange — nothing to do
-        } finally {
-            onConnectionFinished();
         }
     }
 
@@ -1243,6 +1278,46 @@ public final class EngineServer implements AutoCloseable {
             report = dev.jkbuild.engine.protocol.WhyReport.error(String.valueOf(e.getMessage()));
         }
         sendQuiet(writer, report.encode());
+    }
+
+    private static final java.util.Set<String> DELEGATABLE = java.util.Set.of(
+            EngineProtocol.BUILD_REQUEST,
+            EngineProtocol.TEST_REQUEST,
+            EngineProtocol.SINGLE_BUILD_REQUEST,
+            EngineProtocol.COMPILE_REQUEST,
+            EngineProtocol.NATIVE_REQUEST,
+            EngineProtocol.IMAGE_REQUEST,
+            EngineProtocol.INSTALL_REQUEST,
+            EngineProtocol.PUBLISH_REQUEST);
+
+    /**
+     * Downward delegation gate (engine-versioning-plan §3): a request whose project pins an
+     * OLDER jk runs on that version's engine as a one-shot child; a NEWER pin is refused with
+     * an upgrade-shaped error (the client materializes + takes over — never the reverse). Same
+     * version / no pin → false, serve locally. Job children never re-delegate: their version IS
+     * the pin.
+     */
+    private boolean maybeDelegate(String requestLine, BufferedReader reader, BufferedWriter writer) {
+        if (jobMode) return false; // a job child serves what it was handed — never re-routes
+        String entryDir = dev.jkbuild.plugin.protocol.Ndjson.str(requestLine, "entryDir");
+        if (entryDir == null) return false;
+        String pin = EngineDelegate.pinnedVersionDiffering(Path.of(entryDir), version);
+        if (pin == null) return false;
+        if (EngineDelegate.pinIsNewer(pin, version)) {
+            sendQuiet(writer, EngineProtocol.buildError("this build pins jk " + pin + " but the engine is "
+                    + version + " — run that project's wrapper (./jk) or `jk self update` to upgrade;"
+                    + " the newer engine takes over without interrupting running builds"));
+            return true;
+        }
+        try {
+            EngineDelegate.runAsChild(pin, requestLine, reader, writer, log);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            sendQuiet(writer, EngineProtocol.buildError("interrupted delegating to jk " + pin));
+        } catch (IOException e) {
+            sendQuiet(writer, EngineProtocol.buildError(String.valueOf(e.getMessage())));
+        }
+        return true;
     }
 
     /** Answer {@link EngineProtocol#PLUGIN_VERB_REQUEST}: a plugin-declared verb, worker-executed. */

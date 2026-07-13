@@ -82,6 +82,13 @@ public final class LockfileReader {
         String generatedBy = requireString(result, "generated-by");
         String resolutionAlgorithm = requireString(result, "resolution-algorithm");
         String jdk = result.getString("jdk"); // optional
+        Lockfile.JkToolchain jkPin = null;
+        org.tomlj.TomlTable jkTable = result.getTable("jk");
+        if (jkTable != null && jkTable.getString("version") != null) {
+            String sha = jkTable.getString("sha256");
+            jkPin = new Lockfile.JkToolchain(
+                    jkTable.getString("version"), sha == null || sha.isBlank() ? "" : sha);
+        }
         String kotlin = result.getString("kotlin"); // optional, resolved Kotlin compiler version
 
         List<Lockfile.Artifact> artifacts = new ArrayList<>();
@@ -116,7 +123,7 @@ public final class LockfileReader {
                 sdk.add(new Lockfile.SdkEntry(component, revision));
             }
         }
-        return new Lockfile(lockVersion, generatedBy, resolutionAlgorithm, jdk, kotlin, artifacts, plugins, sdk);
+        return new Lockfile(lockVersion, generatedBy, resolutionAlgorithm, jdk, kotlin, artifacts, plugins, sdk, jkPin);
     }
 
     private static Lockfile.Artifact toArtifact(TomlTable table) {

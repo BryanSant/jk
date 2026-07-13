@@ -25,6 +25,30 @@ public final class LockfileWriter {
         Files.writeString(file, render(lockfile), StandardCharsets.UTF_8);
     }
 
+    /**
+     * The running version's engine-jar sha from its {@code versions/<v>/manifest.toml}, or
+     * {@code ""} (a -SNAPSHOT / pre-versioning install). Read directly — one line of TOML —
+     * so :core needs no dependency on the version store.
+     */
+    private static String runningEngineSha(String version) {
+        try {
+            java.nio.file.Path manifest = dev.jkbuild.util.JkDirs.versions()
+                    .resolve(version)
+                    .resolve("manifest.toml");
+            for (String line : Files.readAllLines(manifest, StandardCharsets.UTF_8)) {
+                line = line.trim();
+                if (line.startsWith("engine-sha256")) {
+                    int q = line.indexOf('"');
+                    int e = line.lastIndexOf('"');
+                    if (q >= 0 && e > q) return line.substring(q + 1, e);
+                }
+            }
+        } catch (java.io.IOException ignored) {
+            // no materialized manifest — dev builds
+        }
+        return "";
+    }
+
     public static String render(Lockfile lockfile) {
         StringBuilder out = new StringBuilder(256);
         out.append("version = ").append(lockfile.version()).append('\n');
@@ -38,6 +62,16 @@ public final class LockfileWriter {
         if (lockfile.kotlin() != null) {
             out.append("kotlin = ").append(quote(lockfile.kotlin())).append('\n');
         }
+        // The jk toolchain pin — ONE line, the project wrapper's frozen contract
+        // (engine-versioning-plan §3/§7). Stamped from the running jk when the lock doesn't
+        // carry one already (a delegated child preserves the pin it was invoked for).
+        Lockfile.JkToolchain jk = lockfile.jk() != null
+                ? lockfile.jk()
+                : new Lockfile.JkToolchain(
+                        dev.jkbuild.util.JkVersion.VERSION, runningEngineSha(dev.jkbuild.util.JkVersion.VERSION));
+        out.append("jk = { version = ").append(quote(jk.version()))
+                .append(", sha256 = ").append(quote(jk.sha256() == null ? "" : jk.sha256()))
+                .append(" }\n");
 
         List<Lockfile.Artifact> sorted = new ArrayList<>(lockfile.artifacts());
         sorted.sort(Comparator.comparing(Lockfile.Artifact::name).thenComparing(Lockfile.Artifact::version));

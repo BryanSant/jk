@@ -13,11 +13,16 @@ class LockfileRoundTripTest {
         Lockfile lock = Lockfile.empty("0.1.0-SNAPSHOT");
         String rendered = LockfileWriter.render(lock);
 
-        assertThat(rendered).isEqualTo("""
+        // The header is deterministic; the jk toolchain line carries the RUNNING version and,
+        // when this machine has it materialized, its engine sha (dev builds stamp "").
+        assertThat(rendered).startsWith("""
                 version = 1
                 generated-by = "jk 0.1.0-SNAPSHOT"
                 resolution-algorithm = "pubgrub-v1"
                 """);
+        assertThat(rendered).matches(
+                "(?s).*\\njk = \\{ version = \"" + java.util.regex.Pattern.quote(dev.jkbuild.util.JkVersion.VERSION)
+                        + "\", sha256 = \"[0-9a-f]*\" \\}\\n.*");
     }
 
     @Test
