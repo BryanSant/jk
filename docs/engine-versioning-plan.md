@@ -1,6 +1,11 @@
 # One daemon, many versions: engine lifecycle, storage unification, signed releases
 
-Status: PROPOSED (2026-07-13). Ground rules for multi-version jk coexistence — storage
+Status: IMPLEMENTED P1-P6 (2026-07-13) — VersionStore + CAS-unified storage, frozen
+protocol-zero + endpoint takeover, lock toolchain pin + --job downward delegation,
+Ed25519-signed releases + `jk self update`, `jk wrapper` with the springboard, and
+ledger-driven version GC. Outstanding: the release pipeline itself (signs SHA256SUMS,
+bakes ReleaseVerifier.BUILT_IN_KEY — a v1.0 roadmap item), sigstore transparency, and
+`jk engine status` surfacing generations. Ground rules for multi-version jk coexistence — storage
 layout, upgrade choreography, delegation, signing, `jk self update`.
 
 ## 0. What exists today (the deviation is real)

@@ -53,6 +53,40 @@ public final class VersionStore {
         return read(versionsDir().resolve(v), v);
     }
 
+    /** Ledger key for a version's last use — feeds {@link #prune} exactly like CAS blobs. */
+    public static String ledgerKey(String version) {
+        return "jk-version:" + version;
+    }
+
+    /**
+     * Remove materialized versions that are neither {@code keep} (the running/current version)
+     * nor used within {@code retention} per the ledger (engine-versioning-plan §5/P6). Their
+     * version-scoped derived state ({@code state/engine/<v>/} — AOT caches) goes with them.
+     * A pruned pin re-materializes on demand: R1 made that cheap and verified.
+     */
+    public List<String> prune(String keep, java.time.Duration retention,
+            java.util.function.ToLongFunction<String> lastUsedMillis, Path engineStateDir) {
+        List<String> pruned = new ArrayList<>();
+        Path dir = versionsDir();
+        if (!Files.isDirectory(dir)) return pruned;
+        long cutoff = System.currentTimeMillis() - retention.toMillis();
+        try (var entries = Files.newDirectoryStream(dir)) {
+            for (Path p : entries) {
+                if (!Files.isDirectory(p)) continue;
+                String v = p.getFileName().toString();
+                if (v.equals(keep)) continue;
+                long lastUsed = lastUsedMillis.applyAsLong(ledgerKey(v));
+                if (lastUsed >= cutoff) continue;
+                deleteRecursively(p);
+                if (engineStateDir != null) deleteRecursively(engineStateDir.resolve(v));
+                pruned.add(v);
+            }
+        } catch (IOException ignored) {
+            // best-effort maintenance
+        }
+        return pruned;
+    }
+
     /**
      * The newest complete version on disk — the daemon the cold spawn should launch
      * (engine-versioning-plan R4). Ordering is dotted-numeric with {@code -SNAPSHOT} (or any

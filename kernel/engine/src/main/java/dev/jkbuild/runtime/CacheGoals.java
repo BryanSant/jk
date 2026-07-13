@@ -57,6 +57,22 @@ public final class CacheGoals {
         Phase prunePhase = Phase.builder("prune")
                 .scope(1)
                 .execute(ctx -> {
+                    // Materialized jk versions join the LRU sweep (engine-versioning-plan P6):
+                    // keep the running version + anything used inside the retention window;
+                    // a pruned pin re-materializes verified on demand.
+                    try {
+                        var ledger = dev.jkbuild.task.AccessLedger.atDefaultPath();
+                        java.util.Map<String, Long> latest = ledger.latestByHash();
+                        var prunedVersions = dev.jkbuild.cache.VersionStore.current().prune(
+                                dev.jkbuild.util.JkVersion.VERSION,
+                                java.time.Duration.ofDays(30),
+                                key -> latest.getOrDefault(key, 0L),
+                                dev.jkbuild.util.JkDirs.state().resolve("engine"));
+                        for (String v : prunedVersions) ctx.warn("prune", "retired unused jk " + v);
+                    } catch (java.io.IOException | RuntimeException ignored) {
+                        // version sweep is best-effort maintenance
+                    }
+
                     ctx.label("Pruning cache…");
                     long cutoffMillis = System.currentTimeMillis() - (long) olderThanDays * 24L * 60L * 60L * 1000L;
                     long totalFiles = 0;

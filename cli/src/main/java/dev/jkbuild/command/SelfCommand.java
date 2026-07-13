@@ -116,7 +116,7 @@ public final class SelfCommand extends GroupCommand {
             return 0;
         }
 
-        private static VersionStore.Materialized fetchAndMaterialize(
+        static VersionStore.Materialized fetchAndMaterialize(
                 dev.jkbuild.http.Http http, URI base, String version, VersionStore store, Cas cas)
                 throws IOException, InterruptedException {
             URI dir = URI.create(base + "/" + version + "/");
@@ -213,7 +213,7 @@ public final class SelfCommand extends GroupCommand {
             return response.body();
         }
 
-        private static URI releasesBase() {
+        static URI releasesBase() {
             String override = System.getenv("JK_RELEASES_URL");
             return URI.create(override == null || override.isBlank()
                     ? "https://jkbuild.dev/releases"

@@ -1609,6 +1609,8 @@ public final class EngineClient {
         // The side-by-side layout is authoritative (engine-versioning-plan R2)…
         var materialized = store.resolve(version);
         if (materialized.isPresent()) {
+            dev.jkbuild.task.AccessLedger.atDefaultPath()
+                    .touch(dev.jkbuild.cache.VersionStore.ledgerKey(version)); // GC input (P6)
             return new EngineArtifact(
                     EngineArtifact.Kind.JAR, materialized.get().engineJar().toString(), "versions");
         }

@@ -64,6 +64,7 @@ public final class EngineDelegate {
                 .orElseThrow(() -> new IOException("this build pins jk " + version
                         + ", which is not materialized on this machine — run its wrapper (./jk) once, or"
                         + " `jk self update`, to fetch it"));
+        dev.jkbuild.task.AccessLedger.atDefaultPath().touch(VersionStore.ledgerKey(version)); // GC input
         Path java = dev.jkbuild.jdk.JavaHomes.runningJavaHome().resolve("bin").resolve("java");
         List<String> cmd = List.of(
                 java.toString(),

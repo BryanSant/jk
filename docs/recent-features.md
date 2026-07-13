@@ -234,3 +234,17 @@ Follow-up FIXED: JAVA_HOME is published by ensure-jdk from its own install outco
 (parse-build no longer snapshots it before the install exists), so the FIRST build against
 a never-installed pinned JDK already compiles and tests on that JDK. FirstBuildJdkTest
 reproduces the first-run shape with an empty jdksDir override.
+
+## Engine versioning v0.11 (2026-07-13, P1-P6)
+
+docs/engine-versioning-plan.md implemented end to end: side-by-side versions in
+~/.jk/versions/<v>/ materialized by copy from the CAS (VersionStore; install.sh +
+self-fetch + self-update + wrapper are four writers of one layout); frozen protocol-zero
+(hello/hello-ack + proto int + graceful shutdown) with generational sockets and an
+atomically-replaced endpoint pointer — upgrades TAKE OVER instead of killing (lame-duck
+drain, displacement watchdog, same-version election); jk.lock carries the toolchain pin
+(one grep-able line) and older pins delegate downward as one-shot --job stdio children;
+releases are Ed25519-signed (signature-then-hash before materialization, trusted-keys
+rotation) with `jk self update [--force]` riding the takeover; `jk wrapper` writes frozen
+./jk + jk.bat scripts whose updates springboard through the pinned client; unused
+versions are LRU-pruned via the AccessLedger with their per-version AOT state.

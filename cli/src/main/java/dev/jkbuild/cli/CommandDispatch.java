@@ -17,6 +17,7 @@ import dev.jkbuild.command.CompileCommand;
 import dev.jkbuild.command.DevCommand;
 import dev.jkbuild.command.EngineCommand;
 import dev.jkbuild.command.SelfCommand;
+import dev.jkbuild.command.WrapperCommand;
 import dev.jkbuild.command.HistoryCommand;
 import dev.jkbuild.command.DeactivateCommand;
 import dev.jkbuild.command.DenyCommand;
@@ -87,6 +88,7 @@ public final class CommandDispatch {
             new CleanCommand(),
             new EngineCommand(),
             new SelfCommand(),
+            new WrapperCommand(),
             new HistoryCommand(),
             new StatusCommand(),
             new TreeCommand(),
