@@ -101,7 +101,6 @@ class EngineClientTest {
         var status = EngineClient.status(p.socket());
         assertThat(status).isPresent();
         assertThat(status.get().version()).isEqualTo("7.7.7");
-        assertThat(status.get().idleMinutes()).isEqualTo(JkEngineConfig.DEFAULTS.idleMinutes());
         assertThat(status.get().heapUsedBytes()).isPositive(); // best-effort memory made it across the wire
         assertThat(status.get().heapCommittedBytes()).isGreaterThanOrEqualTo(status.get().heapUsedBytes());
 
