@@ -111,6 +111,14 @@ model). The trade-off: mutually exclusive values can over-constrain each other (
 pinning a transitive prod needs elsewhere). If that bites, align the versions across values;
 per-value lock partitions are the designed escape hatch if real projects ever need it.
 
+## Switching variants in place
+
+Variant builds share the module's `target/`. Recompiling after a switch is automatic (the
+selection is in every action key), but a class that only the *previous* selection's
+`extra-src` compiled currently survives in `target/` until `jk clean` — run one between
+selections when a removed-source class would matter (recorded gap; orphan pruning on
+variant switch is the fix).
+
 ## Worked example
 
 `jk-examples/jvm/profiles-vs-variants` shows a profile, a feature, and a variant side by side
