@@ -191,6 +191,16 @@ builds with its pinned jk on a machine with no — or the wrong — jk installed
   and share the CAS, config, JDKs, and the daemon. The exec'd client then speaks
   protocol-zero like any client: older daemon → yield/takeover; older pin → the daemon
   delegates downward. The wrapper needs no engine awareness at all.
+- **Updating the wrapper springboards through the pinned client.** cmd.exe resolves a
+  bare `jk` to the project's `jk.bat` (current-dir shadowing), so `jk wrapper` in a
+  project dir always runs the PINNED — possibly old — client. That is fine, because the
+  `wrapper` subcommand is a springboard, not a generator: `jk wrapper --version <x.y.z|latest>`
+  resolves the requested version, materializes it into `versions/<v>/`, and **execs that
+  version's own `jk wrapper --emit`** — the new client writes its own scripts and the new
+  pin. The old client never needs to know newer script content; it only needs the
+  springboard, which ships with the wrapper feature from day one. Bare `jk wrapper`
+  (no --version) regenerates at the current pin — the self-repair case. The shell script
+  itself stays 100% dumb: no flag interception, nothing to special-case in .bat.
 
 ## 8. Open questions
 
@@ -200,5 +210,7 @@ builds with its pinned jk on a machine with no — or the wrong — jk installed
    contract to state explicitly when P2 lands.
 2. Worker/plugin jars are already version-pinned per engine (manifest.toml in
    versions/<v>/); confirm the delegation child resolves ITS worker set, not the daemon's.
-3. Wrapper script naming: `./jk` + `jk.bat` as specified; note `jk.bat` shadows a PATH
-   `jk` inside cmd.exe sessions in that directory — intended, but document it.
+3. Wrapper script naming: `./jk` + `jk.bat` as specified. `jk.bat` shadows a PATH `jk`
+   inside cmd.exe sessions in that directory (cmd searches the current dir first;
+   PowerShell requires `.\` and does not shadow) — intended for builds, and harmless for
+   wrapper updates because `jk wrapper --version` springboards (see §7).
