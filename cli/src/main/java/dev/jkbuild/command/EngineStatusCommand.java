@@ -164,15 +164,19 @@ public final class EngineStatusCommand implements CliCommand {
      * committed}-beyond-used in cyan, and the rest (up to {@code max}) in bright-black. {@code null}
      * when the heap max isn't observable (nothing to scale against).
      */
+    /** The committed-heap portion of the memory bar — a dim navy that recedes behind bright-cyan used. */
+    private static final org.jline.utils.AttributedStyle COMMITTED_STYLE =
+            org.jline.utils.AttributedStyle.DEFAULT.foreground(0x18, 0x3d, 0x64);
+
     private static String memoryBar(EngineClient.Status s) {
         long max = s.heapMaxBytes();
         if (max <= 0 || s.heapUsedBytes() < 0 || s.heapCommittedBytes() < 0) return null;
-        int width = 48;
+        int width = 50;
         int used = clamp((int) Math.round((double) s.heapUsedBytes() / max * width), 0, width);
         int committed = clamp((int) Math.round((double) s.heapCommittedBytes() / max * width), used, width);
         Theme t = Theme.active();
         return Theme.colorize("▰".repeat(used), t.brightCyan())
-                + Theme.colorize("▰".repeat(committed - used), t.cyan())
+                + Theme.colorize("▰".repeat(committed - used), COMMITTED_STYLE)
                 + Theme.colorize("▱".repeat(width - committed), t.darkGray());
     }
 
