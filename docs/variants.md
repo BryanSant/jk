@@ -115,11 +115,16 @@ rather than errors; builds alone enforce the mandatory check.
 
 `jk lock` resolves the **union** of every value's dependency overlays — one lockfile covers
 every variant, and a concrete build uses the subgraph its selection activates (cargo's
-model). The trade-off: mutually exclusive values can over-constrain each other (demo's dep
-pinning a transitive prod needs elsewhere). When a resolve fails with variant overlays in
-play, the error names each value's contributed deps so you can align versions across
-values; per-value lock partitions are the designed escape hatch if real projects ever
-need it.
+model). Two guardrails keep that honest:
+
+- Declaring the **same module at different versions** across values (or vs the base
+  section) fails the lock immediately, naming both declarations — the resolver settles
+  duplicate roots by highest-wins, so the "losing" value would otherwise silently build
+  against the other value's version. Align the version across declarations.
+- A **transitive** conflict (demo's dep pinning something a prod dep needs elsewhere)
+  surfaces as a resolve failure annotated with each value's contributed deps.
+
+Per-value lock partitions are the designed escape hatch if real projects ever need it.
 
 ## Switching variants in place
 
