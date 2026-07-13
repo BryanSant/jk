@@ -78,15 +78,24 @@ The sketch's drain mode (keep accepting requests, swap when jobs hit zero) has a
 hole: a busy CI box never reaches an organic lull, so it never upgrades — and "accept new
 work while hoping for quiet" makes the lull *less* likely. Invert it, nginx-style:
 
-1. New engine starts, binds `state/engine/next.sock`, warms up (AOT training can come
-   later; first run may be un-AOT'd).
-2. New engine atomically renames `next.sock` over the canonical socket path. From this
-   instant every NEW connection lands on the new engine. (POSIX rename is atomic; the old
-   engine's bound socket keeps serving its already-accepted connections.)
-3. New engine notifies the old one (`yield` on protocol-zero) — or the old engine notices
-   its socket path no longer resolves to its inode (belt and suspenders via the .lock file).
+1. New engine starts, binds a fresh generation-numbered endpoint
+   (`state/engine/gen-<n>.sock` — or a named pipe on Windows), warms up (AOT training can
+   come later; first run may be un-AOT'd).
+2. New engine atomically replaces the **endpoint file** — `state/engine/endpoint`, a
+   one-line pointer (`uds:gen-42.sock` / `pipe:jk-engine-42`) every client reads before
+   connecting. Atomic file replace exists on BOTH platforms (POSIX rename;
+   `MoveFileEx(MOVEFILE_REPLACE_EXISTING)` on NTFS), so one code path serves Linux, macOS,
+   and Windows — no socket-file rename semantics needed anywhere. From this instant every
+   NEW connection lands on the new engine.
+3. New engine notifies the old one (`yield` on protocol-zero) — belt and suspenders: the
+   old engine also detects that `endpoint` no longer names its generation.
 4. Old engine stops accepting, finishes in-flight jobs (nothing is killed), writes its AOT
    if it was recording, exits. New engine adopts the .pid/.log naming.
+
+Degraded fallback (kept in the design, expected unused): if endpoint indirection proves
+unreliable on some host, the old engine can soft-drain instead — refuse new connections
+with a protocol-zero `busy-upgrading` answer (clients retry against the endpoint file),
+finish in-flight work, exit. Never a hard kill except `jk self update --force`.
 
 No lull needed. No job killed. The fleet converges immediately. In-flight jobs finish
 under the version that started them — correct, since their goals/action keys were
@@ -156,13 +165,40 @@ release site on demand, because R1 made materialization cheap and reproducible.
 - **P5 — GC + polish**: ledger-driven pruning; `jk engine status` shows daemon version,
   lame ducks, and materialized set; sigstore transparency layer.
 
-## 7. Open questions
+## 7. The project wrapper (`jk wrapper`)
 
-1. Windows: no unix-socket rename semantics — named-pipe generation counter or a
-   port-file swap; decide in P2 design.
-2. Should the *client* also delegate (old client, newer daemon)? Protocol-zero says the
+`jk wrapper` writes `./jk` + `jk.bat` (committed, gradle-wrapper style) so a checkout
+builds with its pinned jk on a machine with no — or the wrong — jk installed. Rules:
+
+- **The wrapper is dumb and frozen.** ~50 lines of sh/bat that (1) read the exact pin,
+  (2) materialize that client if missing, (3) exec it. It never resolves version
+  selectors, never self-updates its own logic (regenerate via `jk wrapper`), and depends
+  only on the two surfaces this plan freezes: the release layout (releases.md) and the
+  lock's toolchain line.
+- **The pin comes from `jk.lock`** — a grep-able single line recording
+  `jk = "<version>" sha256 = "<hex>"`. jk.toml holds the *selector*; the lock holds the
+  resolution, which is the only thing a shell script should touch. No lock yet → the
+  wrapper bootstraps `latest/VERSION` and the real client takes over resolution
+  (and locks) from there.
+- **Materialize into the SAME `versions/<v>/` tree** — the wrapper is just a third writer
+  of the layout self-update and the daemon's toolchain fetches already use. Download the
+  platform artifact, verify `sha256` against the LOCK'S pinned hash (this makes wrapper
+  verification strong with nothing but `sha256sum`/`CertUtil` — no minisign needed in
+  shell for pinned versions; the unpinned-latest bootstrap verifies SHA256SUMS and prints
+  the fingerprint it trusted), unpack to `~/.jk/versions/<v>/bin/jk`, exec.
+- **The wrapper never touches `~/.jk/bin/jk`** — that symlink is the user's machine-global
+  install. Wrapper-materialized versions and the global install coexist in `versions/`
+  and share the CAS, config, JDKs, and the daemon. The exec'd client then speaks
+  protocol-zero like any client: older daemon → yield/takeover; older pin → the daemon
+  delegates downward. The wrapper needs no engine awareness at all.
+
+## 8. Open questions
+
+1. Should the *client* also delegate (old client, newer daemon)? Protocol-zero says the
    daemon answers with its version; older clients keep working against a newer daemon only
    if the wire stays backward-compatible per protocol int — that's the compatibility
    contract to state explicitly when P2 lands.
-3. Worker/plugin jars are already version-pinned per engine (manifest.toml in
+2. Worker/plugin jars are already version-pinned per engine (manifest.toml in
    versions/<v>/); confirm the delegation child resolves ITS worker set, not the daemon's.
+3. Wrapper script naming: `./jk` + `jk.bat` as specified; note `jk.bat` shadows a PATH
+   `jk` inside cmd.exe sessions in that directory — intended, but document it.
