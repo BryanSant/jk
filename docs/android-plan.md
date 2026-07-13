@@ -1,6 +1,17 @@
 # Android on jk — gap analysis & plan
 
-**Status:** PHASES 1–3 LANDED (2026-07-11, worktree-android-plugin; Phase-3 status below).
+**Status: NORTH STAR ACHIEVED (2026-07-13, c495b7ca) — jk builds Now in Android.** All 27
+modules of android/nowinandroid build under jk: every :core:*, every feature/*/api+impl,
+sync/work, and :app, producing a 21.8 MB demo-debug APK (multidex, 445 entries) with no
+Gradle and no AGP — Compose, Hilt (unmodified sources), Room auto-migrations,
+protobuf/datastore, kotlinx-serialization, navigation3, demo/prod flavors via
+[android.flavors] extra-src, non-transitive R across ~25 workspace AARs. Twenty product
+findings were fixed en route (the A5e/A5f sections below). Remaining to full parity:
+`jk build --release` (R8/AAB) of NiA, on-device launch, the test suites (Robolectric —
+blocker 5), lint v1 + baseline profiles (blocker 6), workspace variant propagation, and
+finding 13 (BOM-as-recommendation, parked on solver version-interning).
+
+PHASES 1–3 LANDED (2026-07-11, worktree-android-plugin; Phase-3 status below).
 Phase 1 (0a0cee71, 823c3bd4,
 654c5133 — on top of the P6 spike). `plugins/android` builds and deploys a hello-world
 APK over the public SPI, zero Android-specific engine code:
