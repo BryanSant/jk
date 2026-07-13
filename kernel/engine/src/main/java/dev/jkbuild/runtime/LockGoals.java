@@ -529,14 +529,14 @@ public final class LockGoals {
         if (project.isWorkspaceRoot()) return project;
         try {
             var rootOpt = WorkspaceLocator.findRoot(dir);
-            if (rootOpt.isEmpty()) return project;
+            if (rootOpt.isEmpty()) return dev.jkbuild.model.Variants.unionDependencies(project);
             Path wsRoot = rootOpt.get();
             JkBuild wsRootBuild = JkBuildParser.parse(wsRoot.resolve("jk.toml"));
-            if (!wsRootBuild.isWorkspaceRoot()) return project;
+            if (!wsRootBuild.isWorkspaceRoot()) return dev.jkbuild.model.Variants.unionDependencies(project);
             var siblings = WorkspaceLoader.loadModules(wsRoot, wsRootBuild);
             return WorkspaceMerge.applyToModule(wsRootBuild, project, siblings.values());
         } catch (Exception ignored) {
-            return project;
+            return dev.jkbuild.model.Variants.unionDependencies(project);
         }
     }
 

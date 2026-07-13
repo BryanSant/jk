@@ -66,16 +66,17 @@ public final class PluginManifests {
                     throw new JkBuildParseException(
                             where + " requires schema = \"<name>\" naming a declared [sub-schema.<name>]");
                 }
-                if (schema.containsKey(name)) {
-                    throw new JkBuildParseException(where + " collides with a [schema] key of the same name");
+                // A same-named [schema] key is the REFERENCE spelling (signing = "release") — legal,
+                // because TOML itself forbids one key being both a string and a table: a module
+                // either declares [<table>.<group>.<name>] definitions or sets the string.
+                if (schema.containsKey(name) && schema.get(name).type() != PluginManifest.SchemaKey.Type.STRING) {
+                    throw new JkBuildParseException(where + " collides with a non-string [schema] key");
                 }
-                subTables.put(name, new PluginManifest.SubTable(
-                        name,
-                        schemaRef,
-                        spec.getString("variant-axis"),
-                        Boolean.TRUE.equals(spec.getBoolean("dimensioned")),
-                        stringList(spec, "built-in", where),
-                        spec.getString("default")));
+                if (spec.contains("variant-axis") || spec.contains("dimensioned")) {
+                    throw new JkBuildParseException(where + ": variant axes are core's [variants]"
+                            + " section now — sub-tables are named definition groups only");
+                }
+                subTables.put(name, new PluginManifest.SubTable(name, schemaRef));
             }
         }
 

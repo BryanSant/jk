@@ -82,6 +82,9 @@ public final class LockFlow {
         } catch (RuntimeException e) {
             return new Result(2, e.getMessage(), null, null, 0);
         }
+        // Standalone projects union variant dep overlays here; workspace scopes were unioned
+        // inside WorkspaceMerge (idempotent either way).
+        effective = dev.jkbuild.model.Variants.unionDependencies(effective);
 
         Cas cas = new Cas(cache);
         RepoGroup baseRepos = RepoGroupBuilder.buildFor(effective, repoUrl, cas);

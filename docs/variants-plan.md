@@ -1,6 +1,11 @@
 # Variants in core: build-type axis, core-section overlays, docs & examples
 
-Status: PROPOSED (2026-07-13). Follows the profiles-vs-flavors analysis: jk keeps three
+Status: IMPLEMENTED (2026-07-13) — see docs/variants.md for the user-facing reference; this
+doc records the design rationale. Deviations from the plan as written: `javac`/`jvm-args`
+stayed profile-only (variants change *what*, profiles change *how*), `extra-src` landed as a
+general `[build]` key that variant overlays append to, and the rip-out went further than the
+plan's compatibility posture — `--flavor`, `[android.build-types]`, `[android.flavors]`, and
+the plugin-manifest variant-axis machinery were removed outright (pre-1.0, no deprecation). Follows the profiles-vs-flavors analysis: jk keeps three
 orthogonal concepts — **profiles** (how to build: toolchain knobs), **features** (what
 capabilities: optional deps, additive), **variants** (which product: mandatory-exclusive
 axes) — and promotes the variant *mechanism* (already core, `Variants.java`) to a core

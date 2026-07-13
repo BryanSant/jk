@@ -49,7 +49,7 @@ public final class AndroidPlugin implements Plugin, BuildPlugin {
     @Override
     public void register(BuildPluginContext ctx) {
         boolean library = ctx.config().bool("library", false);
-        // The effective config carries the selected build type (Variants.apply injected it);
+        // The effective config carries the selected build type (VariantApply injected it);
         // release defaults minify ON (AGP-9 posture) — the overlay's tri-state `minify` overrides.
         boolean release = "release".equals(ctx.config().stringOpt("build-type").orElse("debug"));
         boolean minify = ctx.config().bool("minify").orElse(release && !library);
@@ -86,21 +86,6 @@ public final class AndroidPlugin implements Plugin, BuildPlugin {
                 .outputs("cp")
                 .contributesTestClasspath("cp")
                 .run(TestConfigStep::run));
-        // Per-variant source dirs ([android.flavors.<f>] extra-src — finding 18): the selected
-        // variant's dirs join the source set as contributed sources; KSP sees them too.
-        java.util.List<String> extraSrc = ctx.config().stringList("extra-src");
-        if (!extraSrc.isEmpty()) {
-            List<In> srcInputs = new java.util.ArrayList<>();
-            for (String rel : extraSrc) srcInputs.add(In.projectFiles(rel));
-            srcInputs.add(In.config());
-            ctx.step(StepSpec.named("android-variant-sources")
-                    .after(Anchor.RESOLVE)
-                    .before(Anchor.COMPILE)
-                    .inputs(srcInputs.toArray(new In[0]))
-                    .outputs("src")
-                    .contributesSources("src")
-                    .run(VariantSourcesStep::run));
-        }
         if (ctx.config().bool("build-config", false)) {
             ctx.step(StepSpec.named("android-buildconfig")
                     .after(Anchor.RESOLVE)

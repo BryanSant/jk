@@ -106,7 +106,7 @@ public final class ExecPlans {
                     pathDeps(build),
                     layoutOf(build, dir, BuildLayout::sourcesJar),
                     layoutOf(build, dir, BuildLayout::javadocJar),
-                    dev.jkbuild.plugin.manifest.Variants.envRefs(build));
+                    dev.jkbuild.plugin.manifest.VariantApply.envRefs(build));
         } catch (RuntimeException | IOException e) {
             return ProjectInfo.error(String.valueOf(e.getMessage()));
         }

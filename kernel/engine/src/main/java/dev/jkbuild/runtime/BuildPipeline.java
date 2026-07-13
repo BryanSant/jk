@@ -163,7 +163,7 @@ public final class BuildPipeline {
             // global. Delegating ctors default it from SessionContext.current() at construction.
             dev.jkbuild.config.Session session,
             // The variant selection ("", "release", "release|tier=free") — folded into plugin
-            // configs at parse time (Variants.apply), so goals are parameterized, never configured.
+            // configs at parse time (VariantApply.apply), so goals are parameterized, never configured.
             String variant,
             // Client-resolved env values (env: indirection in plugin configs — signing secrets):
             // the user's shell env rides the request; the engine env is only the fallback.
@@ -389,8 +389,8 @@ public final class BuildPipeline {
             // Variant overlays fold into plugin configs HERE, so describe keys, contribution
             // predicates, step/packager action keys, and worker specs all see one flat effective
             // config (build-plugins §3.1: parameterized goals, not configured objects).
-            var applied = dev.jkbuild.plugin.manifest.Variants.apply(
-                    jkBuild, in.dir(), dev.jkbuild.plugin.manifest.Variants.Selection.parse(in.variant()),
+            var applied = dev.jkbuild.plugin.manifest.VariantApply.apply(
+                    jkBuild, in.dir(), dev.jkbuild.model.Variants.Selection.parse(in.variant()),
                     in.clientEnv());
             jkBuild = applied.build();
             variantSecrets = applied.secrets();
@@ -652,10 +652,10 @@ public final class BuildPipeline {
                     ctx.label("parse jk.toml");
                     JkBuild project;
                     try {
-                        project = dev.jkbuild.plugin.manifest.Variants.apply(
+                        project = dev.jkbuild.plugin.manifest.VariantApply.apply(
                                         JkBuildParser.parse(in.buildFile()),
                                         in.dir(),
-                                        dev.jkbuild.plugin.manifest.Variants.Selection.parse(in.variant()),
+                                        dev.jkbuild.model.Variants.Selection.parse(in.variant()),
                                         in.clientEnv())
                                 .build();
                     } catch (RuntimeException e) {
@@ -773,13 +773,22 @@ public final class BuildPipeline {
                         javaMainSrcRef.compareAndSet(null, javaMainSrcs);
                         javaMainSrcs = javaMainSrcRef.get();
                     }
-                    ctx.put(JAVA_SOURCES, javaMainSrcs);
                     List<Path> kotlinMainSrcs = kotlinMainSrcRef.get();
                     if (kotlinMainSrcs == null) {
                         kotlinMainSrcs = CompileSupport.collectKotlinSources(in.dir(), compact);
                         kotlinMainSrcRef.compareAndSet(null, kotlinMainSrcs);
                         kotlinMainSrcs = kotlinMainSrcRef.get();
                     }
+                    // [build] extra-src roots (variant overlays folded in by VariantApply) join
+                    // the source set here — the scope suppliers' pre-walk never saw them.
+                    List<Path> extraSrcDirs = CompileSupport.extraSrcDirs(project, in.dir());
+                    if (!extraSrcDirs.isEmpty()) {
+                        javaMainSrcs = CompileSupport.withExtraSources(javaMainSrcs, extraSrcDirs, ".java");
+                        kotlinMainSrcs = CompileSupport.withExtraSources(kotlinMainSrcs, extraSrcDirs, ".kt");
+                        javaMainSrcRef.set(javaMainSrcs);
+                        kotlinMainSrcRef.set(kotlinMainSrcs);
+                    }
+                    ctx.put(JAVA_SOURCES, javaMainSrcs);
                     ctx.put(KOTLIN_SOURCES, kotlinMainSrcs);
                     ctx.put(RELEASE, project.project().javaRelease());
                     ctx.put(JAVA_HOME, JavaHomes.resolveJavaHome(in.dir()));
@@ -1057,9 +1066,11 @@ public final class BuildPipeline {
                                     : List.of(
                                             in.dir().resolve("src/main/kotlin"),
                                             in.dir().resolve("src/main/java")));
-                    // Plugin-contributed source dirs (variant extra-src, protoc output) are
-                    // processor input like any hand-written source.
+                    // Plugin-contributed source dirs (protoc output, generated code) and
+                    // [build] extra-src roots (variant overlays) are processor input like any
+                    // hand-written source.
                     srcRoots.addAll(pluginContributedSourceDirs(ctx.require(LAYOUT), pluginDecls));
+                    srcRoots.addAll(CompileSupport.extraSrcDirs(project, in.dir()));
                     List<Path> ktRoots = new ArrayList<>();
                     for (Path root : srcRoots) {
                         if (Files.isDirectory(root)) ktRoots.add(root);

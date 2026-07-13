@@ -28,7 +28,8 @@ public record JkBuild(
         Optional<NativeConfig> nativeConfig,
         Map<String, PluginConfig> pluginConfigs,
         Build build,
-        FormatConfig format) {
+        FormatConfig format,
+        Variants variants) {
 
     public JkBuild {
         Objects.requireNonNull(project, "project");
@@ -53,6 +54,7 @@ public record JkBuild(
                 : Collections.unmodifiableMap(new LinkedHashMap<>(pluginConfigs));
         build = build == null ? Build.EMPTY : build;
         format = format == null ? FormatConfig.EMPTY : format;
+        variants = variants == null ? Variants.EMPTY : variants;
     }
 
     /**
@@ -62,7 +64,7 @@ public record JkBuild(
     public JkBuild(Project project, Dependencies dependencies) {
         this(
                 project, dependencies, List.of(), Profiles.empty(), Features.empty(), null, null, List.of(), null,
-                null, null, null, null);
+                null, null, null, null, null);
     }
 
     /**
@@ -72,7 +74,7 @@ public record JkBuild(
     public JkBuild(Project project, Dependencies dependencies, List<RepositorySpec> repositories) {
         this(
                 project, dependencies, repositories, Profiles.empty(), Features.empty(), null, null, List.of(), null,
-                null, null, null, null);
+                null, null, null, null, null);
     }
 
     /** {@code [application].main}, or {@code null} when {@code [application]} is absent or unset. */
@@ -105,7 +107,21 @@ public record JkBuild(
         next.put(config.id(), config);
         return new JkBuild(
                 project, dependencies, repositories, profiles, features, workspace, manifest, plugins,
-                application, nativeConfig, next, build, format);
+                application, nativeConfig, next, build, format, variants);
+    }
+
+    /** This build with its {@code [build]} block replaced — the variant extra-src fold point. */
+    public JkBuild withBuild(Build build) {
+        return new JkBuild(
+                project, dependencies, repositories, profiles, features, workspace, manifest, plugins,
+                application, nativeConfig, pluginConfigs, build, format, variants);
+    }
+
+    /** This build with its dependencies replaced — the variant dependency-overlay fold point. */
+    public JkBuild withDependencies(Dependencies dependencies) {
+        return new JkBuild(
+                project, dependencies, repositories, profiles, features, workspace, manifest, plugins,
+                application, nativeConfig, pluginConfigs, build, format, variants);
     }
 
     /**
@@ -177,6 +193,7 @@ public record JkBuild(
         private final Map<String, PluginConfig> pluginConfigs = new LinkedHashMap<>();
         private Build build;
         private FormatConfig format;
+        private Variants variants;
 
         private Builder(Project project) {
             this.project = project;
@@ -209,10 +226,12 @@ public record JkBuild(
 
         public Builder format(FormatConfig format) { this.format = format; return this; }
 
+        public Builder variants(Variants variants) { this.variants = variants; return this; }
+
         public JkBuild build() {
             return new JkBuild(
                     project, dependencies, repositories, profiles, features, workspace,
-                    manifest, plugins, application, nativeConfig, pluginConfigs, build, format);
+                    manifest, plugins, application, nativeConfig, pluginConfigs, build, format, variants);
         }
     }
 
@@ -231,7 +250,8 @@ public record JkBuild(
                 nativeConfig,
                 pluginConfigs,
                 build,
-                format);
+                format,
+                variants);
     }
 
     /** True iff this is a workspace root (has a non-empty {@code workspace} block). */
@@ -584,22 +604,42 @@ public record JkBuild(
      */
     public record Build(
             List<String> orderAfter, List<String> testWorkerJars, boolean lint,
-            List<KotlinPluginDecl> kotlinPlugins, List<String> kspOptions) {
+            List<KotlinPluginDecl> kotlinPlugins, List<String> kspOptions, List<String> extraSrc) {
 
-        public static final Build EMPTY = new Build(List.of(), List.of(), true, List.of(), List.of());
+        public static final Build EMPTY = new Build(List.of(), List.of(), true, List.of(), List.of(), List.of());
 
         public Build {
             orderAfter = orderAfter == null ? List.of() : List.copyOf(orderAfter);
             testWorkerJars = testWorkerJars == null ? List.of() : List.copyOf(testWorkerJars);
             kotlinPlugins = kotlinPlugins == null ? List.of() : List.copyOf(kotlinPlugins);
             kspOptions = kspOptions == null ? List.of() : List.copyOf(kspOptions);
+            // [build] extra-src — additional module-relative source roots (variant overlays append
+            // here; see Variants). Deduplicated, order preserved.
+            extraSrc = extraSrc == null
+                    ? List.of()
+                    : List.copyOf(new java.util.LinkedHashSet<>(extraSrc));
+        }
+
+        /** Back-compat (pre-{@code extra-src}). */
+        public Build(
+                List<String> orderAfter, List<String> testWorkerJars, boolean lint,
+                List<KotlinPluginDecl> kotlinPlugins, List<String> kspOptions) {
+            this(orderAfter, testWorkerJars, lint, kotlinPlugins, kspOptions, List.of());
+        }
+
+        /** This block with {@code dirs} appended to {@code extra-src} — the variant fold point. */
+        public Build withExtraSrc(List<String> dirs) {
+            if (dirs.isEmpty()) return this;
+            var all = new java.util.ArrayList<>(extraSrc);
+            all.addAll(dirs);
+            return new Build(orderAfter, testWorkerJars, lint, kotlinPlugins, kspOptions, all);
         }
 
         /** Back-compat (pre-{@code ksp-options}). */
         public Build(
                 List<String> orderAfter, List<String> testWorkerJars, boolean lint,
                 List<KotlinPluginDecl> kotlinPlugins) {
-            this(orderAfter, testWorkerJars, lint, kotlinPlugins, List.of());
+            this(orderAfter, testWorkerJars, lint, kotlinPlugins, List.of(), List.of());
         }
 
         /** Back-compat (pre-{@code [[kotlin-plugins]]}). */

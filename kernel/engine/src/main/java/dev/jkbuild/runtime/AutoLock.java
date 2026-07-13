@@ -271,14 +271,14 @@ public final class AutoLock {
         if (build.isWorkspaceRoot()) return build;
         try {
             var rootOpt = dev.jkbuild.config.WorkspaceLocator.findRoot(dir);
-            if (rootOpt.isEmpty()) return build;
+            if (rootOpt.isEmpty()) return dev.jkbuild.model.Variants.unionDependencies(build);
             Path wsRoot = rootOpt.get();
             JkBuild wsRootBuild = JkBuildParser.parse(wsRoot.resolve("jk.toml"));
-            if (!wsRootBuild.isWorkspaceRoot()) return build;
+            if (!wsRootBuild.isWorkspaceRoot()) return dev.jkbuild.model.Variants.unionDependencies(build);
             var siblings = dev.jkbuild.config.WorkspaceLoader.loadModules(wsRoot, wsRootBuild);
             return dev.jkbuild.model.WorkspaceMerge.applyToModule(wsRootBuild, build, siblings.values());
         } catch (Exception e) {
-            return build;
+            return dev.jkbuild.model.Variants.unionDependencies(build);
         }
     }
 }

@@ -88,6 +88,48 @@ class WorkspaceMergeTest {
                 .hasMessageContaining("does-not-exist");
     }
 
+    @Test
+    void variants_survive_apply_to_module_and_union_into_lock_scopes() {
+        // A flavored module: its [variants] block must ride through the merge (the finding-5
+        // class of bug), and lock scopes must see the UNION of every value's dep overlays —
+        // the module's own AND its siblings' (variant-only externals fold transitively).
+        Variants variants = new Variants(List.of(new Variants.Dimension(
+                "contentType",
+                null,
+                Map.of(
+                        "demo", new Variants.Value(
+                                List.of("src/demo/java"),
+                                Map.of(Scope.MAIN, List.of(dep("demo-only", "com.foo:demo-only", "1.0"))),
+                                Map.of()),
+                        "prod", new Variants.Value(
+                                List.of(),
+                                Map.of(Scope.MAIN, List.of(dep("prod-only", "com.foo:prod-only", "1.0"))),
+                                Map.of())))));
+        JkBuild root = workspaceRoot("jk", List.of("app", "network"));
+        JkBuild network = JkBuild.builder(new JkBuild.Project("dev.jkbuild", "network", "0.1.0", 0))
+                .variants(variants)
+                .build();
+        JkBuild app = newProject("app", Map.of(Scope.MAIN, List.of(workspacePlaceholder("network"))));
+
+        JkBuild networkScope = WorkspaceMerge.applyToModule(root, network, List.of(app, network));
+        assertThat(networkScope.variants().dimension("contentType")).isPresent();
+        assertThat(networkScope.dependencies().of(Scope.MAIN))
+                .extracting(Dependency::module)
+                .containsExactlyInAnyOrder("com.foo:demo-only", "com.foo:prod-only");
+
+        // The app's lock scope folds the sibling's variant-only externals transitively.
+        JkBuild appScope = WorkspaceMerge.applyToModule(root, app, List.of(app, network));
+        assertThat(appScope.dependencies().of(Scope.MAIN))
+                .extracting(Dependency::module)
+                .contains("com.foo:demo-only", "com.foo:prod-only");
+
+        // The merged-root lock (PRD §13.2) sees the union too.
+        JkBuild merged = WorkspaceMerge.merge(root, List.of(app, network));
+        assertThat(merged.dependencies().of(Scope.MAIN))
+                .extracting(Dependency::module)
+                .containsExactlyInAnyOrder("com.foo:demo-only", "com.foo:prod-only");
+    }
+
     // --- helpers -----------------------------------------------------------
 
     private static JkBuild newProject(String artifact, Map<Scope, List<Dependency>> depsByScope) {

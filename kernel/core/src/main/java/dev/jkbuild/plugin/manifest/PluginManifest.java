@@ -66,34 +66,16 @@ public record PluginManifest(
 
     /**
      * One {@code [sub-tables.<name>]} declaration: a named nested-table group on the plugin's own
-     * table ({@code [android.build-types.<entry>]}), each entry validated against the referenced
-     * {@code [sub-schema.<schema>]}. A group may additionally be a <b>variant axis</b>
-     * (build-plugins §3.1 / android-plan §3.1): its entries are config overlays a build selects
-     * one of ({@code jk build --release}); {@code builtIn} names exist even when undeclared and
-     * {@code defaultName} is the unselected default. {@code dimensioned} adds one nesting level
-     * ({@code [android.flavors.<dim>.<entry>]}) — flavor dimensions.
+     * table ({@code [android.signing.<entry>]}), each entry validated against the referenced
+     * {@code [sub-schema.<schema>]}. Groups are definition tables referenced by name from a
+     * schema key ({@code signing = "release"} — flattened by {@code VariantApply}); variant
+     * overlays themselves are core's {@code [variants]} section, not a plugin concern.
      */
-    public record SubTable(
-            String table,
-            String schema,
-            String variantAxis,
-            boolean dimensioned,
-            List<String> builtIn,
-            String defaultName) {
+    public record SubTable(String table, String schema) {
         public SubTable {
             Objects.requireNonNull(table, "table");
             Objects.requireNonNull(schema, "schema");
-            builtIn = builtIn == null ? List.of() : List.copyOf(builtIn);
         }
-    }
-
-    /** The variant-axis sub-tables in declaration order ({@code build-type} before flavors). */
-    public List<SubTable> variantAxes() {
-        List<SubTable> out = new java.util.ArrayList<>();
-        for (SubTable t : subTables.values()) {
-            if (t.variantAxis() != null) out.add(t);
-        }
-        return out;
     }
 
     /** Back-compat: a purely declarative manifest (no code layer, no packaging shape). */

@@ -33,7 +33,7 @@ public record WorkspaceRequest(
         // that must use the pinned lock verbatim (jk verify's scratch rebuild).
         boolean freshenLock,
         // The variant selection ("", "release", "release|tier=free") — folded into each module's
-        // plugin configs at parse time (Variants.apply); goals are parameterized, not configured.
+        // plugin configs at parse time (VariantApply.apply); goals are parameterized, not configured.
         String variant,
         // Client-resolved env values for env:-indirected plugin config (signing secrets): the
         // user's shell env rides the request; the engine env is only the fallback.

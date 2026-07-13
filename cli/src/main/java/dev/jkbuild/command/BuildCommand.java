@@ -78,9 +78,11 @@ public final class BuildCommand implements CliCommand {
                 Opt.flag("Build modules one at a time (rich serial view).", "--no-parallel"),
                 Opt.flag("", "--parallel").hide(),
                 Opt.flag("Run modules' tests concurrently too. Default: off.", "--parallel-tests"),
-                Opt.flag("Build the release variant (plugin build types — e.g. Android R8 + AAB).", "--release"),
-                Opt.value("<name>", "Select a build type by name.", "--build-type").hide(),
-                Opt.value("<name>", "Select a flavor (or <dim>=<name>).", "--flavor").hide());
+                Opt.flag("Build the release build type (shorthand for --variant build-type=release).", "--release"),
+                Opt.value(
+                        "<dim>=<value>",
+                        "Select a variant value (repeatable; bare <value> when one dimension).",
+                        "--variant"));
     }
 
     String profileName;
@@ -124,15 +126,28 @@ public final class BuildCommand implements CliCommand {
         this.parallelTests = in.isSet("parallel-tests");
         dev.jkbuild.config.SessionContext.install(
                 dev.jkbuild.config.SessionContext.current().withParallelTests(parallelTests));
-        // Variant selection (--release / --build-type / --flavor): rides the request as a compact
-        // selector; the engine folds the chosen overlays into plugin configs at parse time.
-        StringBuilder variantSel = new StringBuilder();
-        String buildType = in.isSet("release") ? "release" : in.value("build-type").orElse(null);
-        if (buildType != null) variantSel.append(buildType);
-        in.value("flavor").ifPresent(f -> {
+        // Variant selection (--release / --variant <dim>=<value>): rides the request as a compact
+        // selector (`release|contentType=demo`); the engine folds the chosen overlays into the
+        // effective build at parse time. build-type is the built-in dimension, so
+        // `--variant build-type=release` and `--release` spell the same selection.
+        String buildType = null;
+        var dims = new java.util.LinkedHashMap<String, String>();
+        for (String raw : in.values("variant")) {
+            for (String part : raw.split(",")) {
+                if (part.isBlank()) continue;
+                int eq = part.indexOf('=');
+                String dim = eq > 0 ? part.substring(0, eq).trim() : "*";
+                String value = (eq > 0 ? part.substring(eq + 1) : part).trim();
+                if ("build-type".equals(dim)) buildType = value;
+                else dims.put(dim, value);
+            }
+        }
+        if (in.isSet("release")) buildType = "release";
+        StringBuilder variantSel = new StringBuilder(buildType == null ? "" : buildType);
+        for (var e : dims.entrySet()) {
             if (variantSel.length() > 0) variantSel.append('|');
-            variantSel.append(f.contains("=") ? f : "*=" + f);
-        });
+            variantSel.append(e.getKey()).append('=').append(e.getValue());
+        }
         this.variant = variantSel.toString();
         Path startDir = global.workingDir();
         Path buildFile = startDir.resolve("jk.toml");

@@ -144,6 +144,30 @@ public final class CompileSupport {
     }
 
     /**
+     * {@code [build] extra-src} roots resolved against the module dir, extant dirs only — the
+     * core per-variant source-dir mechanism (variant overlays append to {@code extra-src};
+     * {@code VariantApply} folds them before this runs). Missing dirs are fine: a variant that
+     * declares {@code src/demo/kotlin} doesn't force the dir to exist.
+     */
+    public static List<Path> extraSrcDirs(dev.jkbuild.model.JkBuild project, Path projectDir) {
+        List<Path> out = new ArrayList<>();
+        for (String rel : project.build().extraSrc()) {
+            Path dir = projectDir.resolve(rel);
+            if (Files.isDirectory(dir)) out.add(dir);
+        }
+        return out;
+    }
+
+    /** {@code base} plus every {@code extension} file under {@code extraDirs}, deduplicated. */
+    public static List<Path> withExtraSources(List<Path> base, List<Path> extraDirs, String extension)
+            throws IOException {
+        if (extraDirs.isEmpty()) return base;
+        var all = new java.util.LinkedHashSet<>(base);
+        for (Path dir : extraDirs) all.addAll(collectFilesWithExtension(dir, extension));
+        return new ArrayList<>(all);
+    }
+
+    /**
      * The {@code -jvm-target} kotlinc should use for a given Java release. Kotlin tops out at 21
      * today; targeting a newer JDK is fine because Java is bytecode-backward-compatible.
      */

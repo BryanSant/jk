@@ -164,3 +164,28 @@ The north-star run then added (2026-07-12/13):
   automatically (the harness selects per-module today).
 - KSP freshness stamps ignore bare processor-option flips (consistent with existing
   config-stamp posture).
+
+## Core variants (2026-07-13, post-inventory)
+
+The variant mechanism moved from plugin-manifest axes to a core `[variants]` section
+(docs/variants.md is the reference; docs/variants-plan.md the rationale):
+
+- `[variants.<dim>.<value>]` declares dimensions/values in core; overlays carry `extra-src`,
+  dependency-scope tables, and schema-validated plugin-config tables. `build-type` is the
+  built-in dimension (`debug`/`release` built in, default `debug`, `--release` sugar).
+- Selection: `--variant <dim>=<value>` (repeatable / comma-join; bare value with one custom
+  dimension). `--flavor` and `--build-type` are gone. Wire encoding unchanged
+  (`release|contentType=demo`); injected config keys are now `build-type` + `variant.<dim>`.
+- `[build] extra-src` is a general core feature (extra source roots for compiler + KSP);
+  variant overlays append to it. The android plugin's `extra-src` schema key and
+  `VariantSourcesStep` are gone.
+- Lock semantics: lock scopes resolve the UNION of every value's dependency overlays (folded
+  in `WorkspaceMerge.applyToModule`/`merge` and the standalone lock paths) — one lockfile
+  covers every variant; the build folds only the selected value's deps.
+- Plugin manifests: `variant-axis`/`dimensioned`/`built-in`/`default` sub-table attributes
+  removed; sub-tables are named definition groups only (android keeps `[sub-tables.signing]`).
+  A schema key may share a group's name — the TOML value shape (string reference vs table of
+  definitions) disambiguates.
+- `dev.jkbuild.model.Variants` (declaration + `Selection` + `unionDependencies`) and
+  `dev.jkbuild.plugin.manifest.VariantApply` (fold engine) replace the old
+  `plugin.manifest.Variants`.

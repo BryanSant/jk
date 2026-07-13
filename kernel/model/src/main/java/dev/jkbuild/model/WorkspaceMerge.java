@@ -43,7 +43,15 @@ public final class WorkspaceMerge {
      * sees the sibling refs.
      */
     public static JkBuild applyToModule(JkBuild root, JkBuild module, Collection<JkBuild> allModules) {
-        if (allModules.isEmpty()) return module;
+        if (allModules.isEmpty()) return Variants.unionDependencies(module);
+
+        // Lock scopes see the UNION of every variant value's dependency overlays — one lockfile
+        // covers every variant (Variants.unionDependencies; the build folds only the selected
+        // value's deps). Siblings union too: their variant-only externals fold transitively.
+        module = Variants.unionDependencies(module);
+        List<JkBuild> unionModules = new ArrayList<>(allModules.size());
+        for (JkBuild m : allModules) unionModules.add(Variants.unionDependencies(m));
+        allModules = unionModules;
 
         Map<String, JkBuild> siblingByArtifact = new LinkedHashMap<>();
         Set<String> internal = new HashSet<>();
@@ -116,7 +124,8 @@ public final class WorkspaceMerge {
                 // [android] workspace module lock as standard-jvm (wrong KMP variants — Room 2.8
                 // resolved -jvm) and lose its ksp-options/kotlin-plugins/order-after at lock time.
                 .build(module.build())
-                .format(module.format());
+                .format(module.format())
+                .variants(module.variants());
         for (PluginConfig config : module.pluginConfigs().values()) {
             out.pluginConfig(config);
         }
@@ -124,7 +133,13 @@ public final class WorkspaceMerge {
     }
 
     public static JkBuild merge(JkBuild root, Collection<JkBuild> modules) {
-        if (modules.isEmpty()) return root;
+        if (modules.isEmpty()) return Variants.unionDependencies(root);
+
+        // Union variant dep overlays into every manifest before folding (see applyToModule).
+        root = Variants.unionDependencies(root);
+        List<JkBuild> unionModules = new ArrayList<>(modules.size());
+        for (JkBuild m : modules) unionModules.add(Variants.unionDependencies(m));
+        modules = unionModules;
 
         // Build the sibling lookup: artifact → JkBuild (full manifest).
         Map<String, JkBuild> siblingByArtifact = new LinkedHashMap<>();

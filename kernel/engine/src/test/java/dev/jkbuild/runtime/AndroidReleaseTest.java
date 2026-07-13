@@ -215,7 +215,7 @@ class AndroidReleaseTest {
                 compile-sdk = 28
                 min-sdk     = 24
 
-                [android.build-types.release]
+                [variants.build-type.release.android]
                 proguard-files = ["proguard-rules.pro"]
                 signing        = "release"
 

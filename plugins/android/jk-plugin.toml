@@ -57,24 +57,19 @@ build-config = { type = "bool", default = false }   # generates BuildConfig.java
 build-config-fields = { type = "string-list", default = [] }
 hilt         = { type = "bool", default = false }   # Hilt unmodified-source mode: superclass transform + processor toggle
 
-# ---- Variants (android-plan §3.1): build types × one flavor dimension --------------------------
+# ---- Variant-overlayable keys -------------------------------------------------------------------
 #
-# [android.build-types.<name>] / [android.flavors.<dim>.<name>] entries are config OVERLAYS —
-# `jk build --release` selects one per axis; the engine folds it into the effective config
-# (Variants.apply) and injects `build-type` / `flavor`, which [[packaging.variant]] conditions on.
-# debug/release are built in; `minify` left absent defaults ON for release (AGP-9 posture).
-
-[sub-schema.variant]
+# Variants are core's [variants.<dim>.<value>] section; an overlay's [variants...android] table
+# may set any [schema] key above or below. `jk build --release --variant contentType=demo` folds
+# the selected overlays into the effective config and injects `build-type` / `variant.<dim>`,
+# which [[packaging.variant]] conditions on. debug/release build types are built in; `minify`
+# left absent defaults ON for release (AGP-9 posture). Per-variant source dirs are core's
+# `extra-src` overlay key — no android spelling needed.
 application-id-suffix = { type = "string" }
 minify                = { type = "bool" }                     # tri-state: absent = on for release
 proguard-files        = { type = "string-list", default = [] }
 signing               = { type = "string" }                   # names an [android.signing.<name>]
 debuggable            = { type = "bool" }
-build-config-fields   = { type = "string-list" }              # per-variant BuildConfig constants (overlay replaces)
-# Per-variant source dirs (module-relative; AGP's src/<flavor>/kotlin), joined to the
-# compiler + KSP source set when the variant is selected. The explicit opt-in that keeps
-# variants config overlays — the dirs are data, not a source-set object model.
-extra-src             = { type = "string-list" }
 
 # Signing configs (android-plan §3.1): env: indirection only — never literal secrets in TOML.
 # `secret = true` keys resolve client-side (the user's shell env rides the request) and travel
@@ -86,17 +81,6 @@ key-alias       = { type = "string", required = true }
 key-password    = { type = "string", secret = true }
 # v3 key rotation: schema'd for forward-compat, not yet wired (android-plan Phase 3 records it).
 next-store-file = { type = "string" }
-
-[sub-tables.build-types]
-schema       = "variant"
-variant-axis = "build-type"
-built-in     = ["debug", "release"]
-default      = "debug"
-
-[sub-tables.flavors]
-schema       = "variant"
-variant-axis = "flavor"
-dimensioned  = true
 
 [sub-tables.signing]
 schema = "signing"

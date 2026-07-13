@@ -271,6 +271,10 @@ own declarative model rather than reimplements (§3.1, §6).
 
 ### 3.1 The model: `[android]` + variants without the DSL
 
+> **Superseded (2026-07-13):** variants are core's `[variants.<dim>.<value>]` section now —
+> `[android.build-types]` / `[android.flavors]` / `--flavor` no longer exist. See
+> docs/variants.md. `[android.signing.<name>]` groups and everything else below stand.
+
 ```toml
 [project]
 group = "com.example"; name = "app"; version = "1.0"; kotlin = 21   # Kotlin project, JDK 17+ toolchain

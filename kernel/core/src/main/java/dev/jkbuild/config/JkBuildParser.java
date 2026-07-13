@@ -21,6 +21,7 @@ import dev.jkbuild.model.Profile;
 import dev.jkbuild.model.Profiles;
 import dev.jkbuild.model.RepositorySpec;
 import dev.jkbuild.model.Scope;
+import dev.jkbuild.model.Variants;
 import dev.jkbuild.model.VersionSelector;
 import dev.jkbuild.model.Workspace;
 import dev.jkbuild.model.Workspace.WorkspaceDependency;
@@ -166,9 +167,116 @@ public final class JkBuildParser {
                     build.orderAfter(), build.testWorkerJars(), build.lint(), kotlinPlugins, build.kspOptions());
         }
         JkBuild.FormatConfig format = parseFormat(result);
+        Variants variants = parseVariants(result, workspace, effective, installedManifests);
         return new JkBuild(
                 project, deps, repos, profiles, features, workspace, manifest, plugins, application, nativeConfig,
-                pluginConfigs, build, format);
+                pluginConfigs, build, format, variants);
+    }
+
+    /**
+     * The {@code [variants]} block: {@code [variants.<dim>.<value>]} declares one value of one
+     * dimension, whose body is an overlay — {@code extra-src}, dependency-scope sub-tables
+     * (parsed with the standard scope grammar, so shorthands / workspace refs / git deps all
+     * work), and plugin sub-tables validated against the owning plugin's schema (partial: nothing
+     * required, no defaults). {@code [variants.<dim>] default = "<value>"} makes the dimension
+     * optional; without it a declared dimension must be selected ({@code --variant <dim>=<value>}).
+     */
+    private static Variants parseVariants(
+            TomlTable root, Workspace workspace, LibraryCatalog catalog, List<PluginManifest> installed) {
+        TomlTable table = root.getTable("variants");
+        if (table == null) return Variants.EMPTY;
+        Map<String, PluginManifest> byTable = new LinkedHashMap<>();
+        for (PluginManifest m : installed) byTable.put(m.table(), m);
+        List<Variants.Dimension> dimensions = new ArrayList<>();
+        for (String dim : table.keySet()) {
+            TomlTable dimTable = table.getTable(dim);
+            if (dimTable == null) {
+                throw new JkBuildParseException("[variants." + dim + "] must be a table of named values");
+            }
+            String defaultValue = null;
+            Map<String, Variants.Value> values = new LinkedHashMap<>();
+            for (String key : dimTable.keySet()) {
+                if (key.equals("default")) {
+                    defaultValue = dimTable.getString("default");
+                    if (defaultValue == null || defaultValue.isBlank()) {
+                        throw new JkBuildParseException("[variants." + dim + "].default must be a value name");
+                    }
+                    continue;
+                }
+                TomlTable valueTable = dimTable.getTable(key);
+                if (valueTable == null) {
+                    throw new JkBuildParseException("[variants." + dim + "]." + key
+                            + " must be a table (a value's overlay) — or `default = \"<value>\"`");
+                }
+                values.put(key, parseVariantValue("variants." + dim + "." + key, valueTable, workspace, catalog, byTable));
+            }
+            try {
+                dimensions.add(new Variants.Dimension(dim, defaultValue, values));
+            } catch (IllegalArgumentException e) {
+                throw new JkBuildParseException(e.getMessage());
+            }
+        }
+        return new Variants(dimensions);
+    }
+
+    private static Variants.Value parseVariantValue(
+            String where, TomlTable valueTable, Workspace workspace, LibraryCatalog catalog,
+            Map<String, PluginManifest> pluginsByTable) {
+        List<String> extraSrc = List.of();
+        EnumMap<Scope, List<Dependency>> deps = new EnumMap<>(Scope.class);
+        Map<String, Map<String, Object>> pluginOverlays = new LinkedHashMap<>();
+        for (String key : valueTable.keySet()) {
+            if (key.equals("extra-src")) {
+                extraSrc = requireStringList(valueTable, "extra-src", "[" + where + "].extra-src");
+                continue;
+            }
+            Scope scope = scopeForSection(key);
+            if (scope != null) {
+                TomlTable scopeTable = valueTable.getTable(key);
+                if (scopeTable == null) {
+                    throw new JkBuildParseException("[" + where + "." + key + "] must be a dependency table");
+                }
+                List<Dependency> parsed = parseScopeTable(
+                        scopeTable, new ArrayList<>(scopeTable.keySet()), scope, workspace, catalog);
+                if (!parsed.isEmpty()) deps.put(scope, parsed);
+                continue;
+            }
+            PluginManifest plugin = pluginsByTable.get(key);
+            if (plugin != null) {
+                TomlTable overlay = valueTable.getTable(key);
+                if (overlay == null) {
+                    throw new JkBuildParseException("[" + where + "." + key + "] must be a table of ["
+                            + plugin.table() + "] key overlays");
+                }
+                pluginOverlays.put(plugin.table(), PluginTableRegistry.validateOverlay(plugin, where + "." + key, overlay));
+                continue;
+            }
+            throw new JkBuildParseException("[" + where + "]." + key + " is not an overlayable section —"
+                    + " expected extra-src, a dependency scope table (dependencies, test-dependencies, ...),"
+                    + " or an installed plugin's table " + pluginsByTable.keySet());
+        }
+        return new Variants.Value(extraSrc, deps, pluginOverlays);
+    }
+
+    /** The {@link Scope} whose toml section is {@code name}, or null. */
+    private static Scope scopeForSection(String name) {
+        for (Scope scope : Scope.values()) {
+            if (scope.tomlSection().equals(name)) return scope;
+        }
+        return null;
+    }
+
+    private static List<String> requireStringList(TomlTable table, String key, String where) {
+        TomlArray arr = table.getArray(key);
+        if (arr == null) throw new JkBuildParseException(where + " must be an array of directory strings");
+        List<String> out = new ArrayList<>(arr.size());
+        for (int i = 0; i < arr.size(); i++) {
+            if (!(arr.get(i) instanceof String s) || s.isBlank()) {
+                throw new JkBuildParseException(where + " must be an array of directory strings");
+            }
+            out.add(s);
+        }
+        return out;
     }
 
     /**
@@ -1201,6 +1309,7 @@ public final class JkBuildParser {
                 "image",
                 "build",
                 "format",
+                "variants",
                 "libraries",
                 "jvm",
                 "deny",
@@ -1348,7 +1457,18 @@ public final class JkBuildParser {
                 kspOptions.add(s);
             }
         }
-        return new JkBuild.Build(orderAfter, testWorkerJars, lint, List.of(), kspOptions);
+        // [build] extra-src — additional module-relative source roots (variant overlays append).
+        List<String> extraSrc = new ArrayList<>();
+        TomlArray es = build.getArray("extra-src");
+        if (es != null) {
+            for (int i = 0; i < es.size(); i++) {
+                Object val = es.get(i);
+                if (!(val instanceof String s) || s.isBlank())
+                    throw new JkBuildParseException("[build].extra-src must be an array of directory strings");
+                extraSrc.add(s);
+            }
+        }
+        return new JkBuild.Build(orderAfter, testWorkerJars, lint, List.of(), kspOptions, extraSrc);
     }
 
     /**

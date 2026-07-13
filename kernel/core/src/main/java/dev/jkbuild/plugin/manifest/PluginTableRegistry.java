@@ -113,6 +113,10 @@ public final class PluginTableRegistry {
     public static PluginConfig validate(PluginManifest manifest, TomlTable table) {
         Map<String, Object> values = new LinkedHashMap<>();
         for (PluginManifest.SchemaKey key : manifest.schema().values()) {
+            // A schema key sharing its name with a sub-table group: the TOML value decides which
+            // spelling this module used — a nested table is the group (handled below), a string
+            // is the reference read here.
+            if (manifest.subTables().containsKey(key.name()) && readTable(table, key.name()) != null) continue;
             Object value = read(manifest.table(), key, table);
             if (value == null) value = key.normalizedDefault();
             if (value == null) {
@@ -122,46 +126,51 @@ public final class PluginTableRegistry {
             values.put(key.name(), value);
         }
         // Declared nested-table groups ([sub-tables.<name>]): each entry validates against its
-        // sub-schema and rides the config as a nested map — the engine flattens variant axes into
-        // the effective config at build time (Variants); other groups (signing) resolve by name.
+        // sub-schema and rides the config as a nested map, resolved by name from a schema key
+        // (signing = "release") and flattened into the effective config by VariantApply.
         for (PluginManifest.SubTable group : manifest.subTables().values()) {
             TomlTable groupTable = readTable(table, group.table());
             if (groupTable == null) continue;
             Map<String, PluginManifest.SchemaKey> subSchema = manifest.subSchemas().get(group.schema());
             String whereBase = manifest.table() + "." + group.table();
-            if (group.dimensioned()) {
-                Map<String, Map<String, Map<String, Object>>> dims = new LinkedHashMap<>();
-                for (String dim : groupTable.keySet()) {
-                    TomlTable dimTable = readTable(groupTable, dim);
-                    if (dimTable == null) {
-                        throw new JkBuildParseException(
-                                "[" + whereBase + "]." + dim + " must be a table of named entries");
-                    }
-                    Map<String, Map<String, Object>> entries = new LinkedHashMap<>();
-                    for (String entry : dimTable.keySet()) {
-                        TomlTable entryTable = readTable(dimTable, entry);
-                        if (entryTable == null) {
-                            throw new JkBuildParseException(
-                                    "[" + whereBase + "." + dim + "]." + entry + " must be a table");
-                        }
-                        entries.put(entry, validateSub(whereBase + "." + dim + "." + entry, subSchema, entryTable));
-                    }
-                    dims.put(dim, entries);
+            Map<String, Map<String, Object>> entries = new LinkedHashMap<>();
+            for (String entry : groupTable.keySet()) {
+                TomlTable entryTable = readTable(groupTable, entry);
+                if (entryTable == null) {
+                    throw new JkBuildParseException("[" + whereBase + "]." + entry + " must be a table");
                 }
-                values.put(group.table(), dims);
-            } else {
-                Map<String, Map<String, Object>> entries = new LinkedHashMap<>();
-                for (String entry : groupTable.keySet()) {
-                    TomlTable entryTable = readTable(groupTable, entry);
-                    if (entryTable == null) {
-                        throw new JkBuildParseException("[" + whereBase + "]." + entry + " must be a table");
-                    }
-                    entries.put(entry, validateSub(whereBase + "." + entry, subSchema, entryTable));
-                }
-                values.put(group.table(), entries);
+                entries.put(entry, validateSub(whereBase + "." + entry, subSchema, entryTable));
             }
+            values.put(group.table(), entries);
         }
         return new PluginConfig(manifest.id(), values);
+    }
+
+    /**
+     * Schema-validate a variant overlay ({@code [variants.<dim>.<value>.<plugin-table>]}) — the
+     * partial-table cousin of {@link #validate}: keys coerce against the plugin's top-level
+     * schema, but nothing is required and no defaults apply (an overlay only carries what it
+     * sets). Nested groups (signing definitions) don't belong in overlays — reference them by
+     * name via their schema key instead ({@code signing = "release"}).
+     */
+    public static Map<String, Object> validateOverlay(PluginManifest manifest, String where, TomlTable table) {
+        Map<String, Object> values = new LinkedHashMap<>();
+        for (String raw : table.keySet()) {
+            // Group DEFINITIONS don't belong in overlays; the string REFERENCE spelling does.
+            if (manifest.subTables().containsKey(raw) && readTable(table, raw) != null) {
+                throw new JkBuildParseException("[" + where + "." + raw + "] — define ["
+                        + manifest.table() + "." + raw + ".<name>] groups on the plugin table and reference"
+                        + " them from the overlay by name (" + raw + " = \"<name>\")");
+            }
+            PluginManifest.SchemaKey key = manifest.schema().get(raw);
+            if (key == null) {
+                throw new JkBuildParseException("[" + where + "]." + raw + " is not a ["
+                        + manifest.table() + "] key (schema: " + manifest.schema().keySet() + ")");
+            }
+            Object value = read(where, key, table);
+            if (value != null) values.put(key.name(), value);
+        }
+        return values;
     }
 
     private static TomlTable readTable(TomlTable parent, String key) {
