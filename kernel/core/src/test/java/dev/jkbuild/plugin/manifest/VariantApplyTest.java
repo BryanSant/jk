@@ -145,6 +145,24 @@ class VariantApplyTest {
     }
 
     @Test
+    void conflicting_versions_across_values_fail_the_union_loudly(@TempDir Path dir) throws Exception {
+        // The resolver settles duplicate roots by highest-wins, so a silent union would build
+        // the "losing" value against the other value's version — fail at lock time instead.
+        JkBuild build = parse(dir, """
+                [variants.tier.free.dependencies]
+                commons-lang3 = { group = "org.apache.commons", name = "commons-lang3", version = "=3.12.0" }
+                [variants.tier.paid.dependencies]
+                commons-lang3 = { group = "org.apache.commons", name = "commons-lang3", version = "=3.18.0" }
+                """);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> Variants.unionDependencies(build))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("[variants.tier.free]")
+                .hasMessageContaining("[variants.tier.paid]")
+                .hasMessageContaining("=3.12.0")
+                .hasMessageContaining("=3.18.0");
+    }
+
+    @Test
     void selection_naming_an_undeclared_dimension_is_ignored(@TempDir Path dir) throws Exception {
         // Workspace-wide selections: a module without the dimension applies only what it declares.
         JkBuild build = parse(dir, "");

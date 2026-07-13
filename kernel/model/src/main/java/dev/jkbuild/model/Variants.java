@@ -118,18 +118,39 @@ public record Variants(List<Dimension> dimensions) {
      */
     public static JkBuild unionDependencies(JkBuild build) {
         if (build.variants().isEmpty()) return build;
+        // Same-module different-selector across the union is a HARD error, not a solver
+        // problem: the resolver settles duplicate root declarations by §7.4 highest-wins, so
+        // the "losing" value would silently build against the other value's version — worse
+        // than failing. Name both declarations so the user aligns them (docs/variants.md).
+        Map<String, String[]> seen = new java.util.HashMap<>(); // scope|module → {selector, origin}
         Map<Scope, java.util.LinkedHashSet<Dependency>> merged = new java.util.EnumMap<>(Scope.class);
-        build.dependencies().byScope().forEach((scope, deps) ->
-                merged.computeIfAbsent(scope, s -> new java.util.LinkedHashSet<>()).addAll(deps));
+        build.dependencies().byScope().forEach((scope, deps) -> {
+            for (Dependency d : deps) note(seen, scope, d, "[" + scope.tomlSection() + "]");
+            merged.computeIfAbsent(scope, s -> new java.util.LinkedHashSet<>()).addAll(deps);
+        });
         for (Dimension dimension : build.variants().dimensions()) {
-            for (Value value : dimension.values().values()) {
-                value.dependencies().forEach((scope, deps) ->
-                        merged.computeIfAbsent(scope, s -> new java.util.LinkedHashSet<>()).addAll(deps));
+            for (Map.Entry<String, Value> e : dimension.values().entrySet()) {
+                String origin = "[variants." + dimension.name() + "." + e.getKey() + "]";
+                e.getValue().dependencies().forEach((scope, deps) -> {
+                    for (Dependency d : deps) note(seen, scope, d, origin);
+                    merged.computeIfAbsent(scope, s -> new java.util.LinkedHashSet<>()).addAll(deps);
+                });
             }
         }
         Map<Scope, List<Dependency>> out = new java.util.EnumMap<>(Scope.class);
         merged.forEach((scope, deps) -> out.put(scope, List.copyOf(deps)));
         return build.withDependencies(new JkBuild.Dependencies(out));
+    }
+
+    private static void note(Map<String, String[]> seen, Scope scope, Dependency d, String origin) {
+        String selector = d.version() == null ? "" : d.version().raw();
+        String[] prior = seen.putIfAbsent(scope.name() + "|" + d.module(), new String[] {selector, origin});
+        if (prior != null && !prior[0].equals(selector)) {
+            throw new IllegalStateException(d.name() + " (" + d.module() + ") is declared " + prior[0] + " by "
+                    + prior[1] + " but " + selector + " by " + origin
+                    + " — one lockfile resolves the UNION of every variant value's dependencies, so align"
+                    + " the version across declarations (docs/variants.md → Locking)");
+        }
     }
 
     /**

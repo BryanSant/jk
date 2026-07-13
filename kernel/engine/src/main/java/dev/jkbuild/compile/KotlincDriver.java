@@ -57,12 +57,24 @@ public final class KotlincDriver {
 
             List<String> diagnostics = new ArrayList<>();
             String[] status = {null};
-            // Non-protocol lines (JDK/compiler chatter) are dropped, as before.
+            // Non-protocol lines (JDK/compiler chatter) are dropped on success, but a worker
+            // that DIES before speaking protocol (a broken classpath, a JVM crash) leaves its
+            // whole story there — keep a bounded tail and surface it on failure, or the build
+            // fails with an empty diagnostic and no way to see why.
+            java.util.ArrayDeque<String> chatter = new java.util.ArrayDeque<>();
             int exit = new WorkerClient(PROTOCOL_PREFIX)
                     .on("diag", json -> diagnostics.add(Ndjson.str(json, "sev") + ": " + Ndjson.str(json, "msg")))
                     .on("result", json -> status[0] = Ndjson.str(json, "status"))
+                    .passthrough(line -> {
+                        if (chatter.size() >= 40) chatter.removeFirst();
+                        chatter.addLast(line);
+                    })
                     .run(cmd);
             boolean success = exit == 0 && "COMPILATION_SUCCESS".equals(status[0]);
+            if (!success && diagnostics.isEmpty() && !chatter.isEmpty()) {
+                diagnostics.add("kotlinc worker exited " + exit + " without diagnostics; last output:");
+                diagnostics.addAll(chatter);
+            }
             return new KotlincResult(success, String.join("\n", diagnostics));
         } finally {
             Files.deleteIfExists(spec);
