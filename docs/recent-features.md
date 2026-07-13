@@ -230,7 +230,7 @@ leaf (it owns PluginConfig; model api-depends on IT, staying at the engine's lan
 level) and jk-test-runner pins 17 with it. JdkFloorTest is the regression: a jdk=17-pinned
 Kotlin project builds and its JUnit test asserts java.specification.version == "17".
 
-Recorded follow-up: parse-build snapshots JAVA_HOME before ensure-jdk installs a
-never-before-seen pin, so the FIRST build with an uninstalled pinned JDK compiles/tests on
-the running JVM (self-heals on the next build). The phase DAG should re-resolve JAVA_HOME
-after ensure-jdk.
+Follow-up FIXED: JAVA_HOME is published by ensure-jdk from its own install outcome
+(parse-build no longer snapshots it before the install exists), so the FIRST build against
+a never-installed pinned JDK already compiles and tests on that JDK. FirstBuildJdkTest
+reproduces the first-run shape with an empty jdksDir override.

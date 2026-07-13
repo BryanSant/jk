@@ -795,7 +795,6 @@ public final class BuildPipeline {
                     ctx.put(JAVA_SOURCES, javaMainSrcs);
                     ctx.put(KOTLIN_SOURCES, kotlinMainSrcs);
                     ctx.put(RELEASE, project.project().javaRelease());
-                    ctx.put(JAVA_HOME, JavaHomes.resolveJavaHome(in.dir()));
                     ctx.put(MAIN_CLASSES, layout.classesDir());
                     ctx.put(TEST_CLASSES, layout.testClassesDir());
                     ctx.progress(1);
@@ -888,7 +887,16 @@ public final class BuildPipeline {
                     Lockfile lock = ctx.require(LOCKFILE);
                     JkBuild project = ctx.require(PROJECT);
                     try {
-                        JdkEnsure.ensure(in.dir(), in.jdksDir(), project, lock, m -> ctx.warn("jdk", m));
+                        JdkEnsure.Outcome outcome =
+                                JdkEnsure.ensure(in.dir(), in.jdksDir(), project, lock, m -> ctx.warn("jdk", m));
+                        // JAVA_HOME is published HERE, not in parse-build: resolving before the
+                        // ensure meant the FIRST build against a never-installed pin snapshotted
+                        // the running JVM and compiled/tested on the wrong JDK (self-healing on
+                        // the next build — but wrong once is wrong). The ensure's own outcome is
+                        // authoritative; the walk is only the no-pin fallback.
+                        ctx.put(JAVA_HOME, outcome.jdk()
+                                .map(dev.jkbuild.jdk.InstalledJdk::home)
+                                .orElseGet(() -> JavaHomes.resolveJavaHome(in.dir())));
                     } catch (Exception e) {
                         ctx.error("jdk", e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage());
                         throw e;

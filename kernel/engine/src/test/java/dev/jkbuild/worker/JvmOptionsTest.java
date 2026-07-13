@@ -80,6 +80,13 @@ class JvmOptionsTest {
                         "-XX:+CrashOnOutOfMemoryError");
     }
 
+    @org.junit.jupiter.api.BeforeEach
+    void resetSharedPlan() {
+        // Earlier tests in this JVM run real goals whose test phase may size the shared heap
+        // plan (JvmOptions.planAndApply); these assertions compare against unplanned defaults.
+        JvmOptions.resetSharedPlanForTests();
+    }
+
     @Test
     void launcher_flags_prefix_every_worker_flag_with_dash_j() {
         assertThat(JvmOptions.launcherFlags(1))
