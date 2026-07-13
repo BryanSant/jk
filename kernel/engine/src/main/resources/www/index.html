@@ -191,17 +191,71 @@
           </div>
         </div>
 
+        <!-- Running build stats (docs/metrics.md): the engine's persistent aggregates, folded at
+             every build/test finish. Tiles roll up the machine-wide invocation tiers; the table is
+             the per-phase tier (a plugin verb runs as its own phase, so this is also the
+             per-worker/per-plugin view). -->
+        <template v-if="metrics && metrics.length">
+          <div class="tiles">
+            <div class="tile"><span class="lbl">builds recorded</span><span class="kpi">{{ metricsTotals().runs }}</span></div>
+            <div class="tile"><span class="lbl">success rate</span><span class="kpi" :class="{ ok: metricsTotals().bad === 0 }">{{ successRate() }}</span></div>
+            <div v-for="r in metricsGlobal()" :key="r.kind" class="tile">
+              <span class="lbl">avg {{ r.kind }}</span><span class="kpi">{{ duration(r.okAvgMillis) }}</span>
+            </div>
+            <div class="tile"><span class="lbl">time building</span><span class="kpi">{{ duration(metricsTotals().totalMillis) }}</span></div>
+          </div>
+          <div class="panels">
+            <div class="panel wide">
+              <div class="panel-head"><span class="lbl">phases (by total time)</span><span class="spacer"></span><span class="mono dim">state/builds/metrics.json</span></div>
+              <table class="stats">
+                <thead><tr><th>phase</th><th>runs</th><th>avg</th><th>min</th><th>max</th><th>total</th><th>failed</th></tr></thead>
+                <tbody>
+                  <tr v-for="r in metricsPhases()" :key="r.phase">
+                    <td class="mono">{{ r.phase }}</td>
+                    <td>{{ r.okCount }}</td>
+                    <td>{{ duration(r.okAvgMillis) }}</td>
+                    <td>{{ duration(r.okMinMillis) }}</td>
+                    <td>{{ duration(r.okMaxMillis) }}</td>
+                    <td>{{ duration(r.okTotalMillis) }}</td>
+                    <td :class="{ err: r.failCount > 0 }">{{ r.failCount > 0 ? r.failCount : '' }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </template>
+        <p v-else class="dim small">No build metrics yet — run a build and the stats appear here.</p>
+
         <div class="panels">
           <div class="panel">
             <div class="panel-head"><span class="lbl">configuration</span><span class="spacer"></span><span class="mono dim">~/.jk/config.toml</span></div>
             <dl>
-              <dt>idle policy</dt><dd class="warn">never — [http] enabled</dd>
               <dt>max-concurrent-requests</dt><dd>{{ status.maxConcurrentRequests }}</dd>
               <dt>www-root</dt><dd class="mono">{{ status.wwwRoot }}</dd>
               <dt>url</dt><dd class="mono accent">{{ status.httpUrl }}</dd>
             </dl>
           </div>
           <div class="panel">
+            <div class="panel-head"><span class="lbl">cache</span><span class="spacer"></span>
+              <span v-if="cache" class="mono dim">{{ mib(cache.totalBytes) }} of {{ mib(cache.maxBytes) }} · pruned {{ prunedAgo() }}</span></div>
+            <template v-if="cache">
+              <span class="meter">
+                <span class="meter-fill used" :style="{ width: cacheUtilizationPercent() + '%' }"></span>
+              </span>
+              <dl>
+                <dt>CAS blobs</dt><dd>{{ count(cache.casCount) }} · {{ mib(cache.casBytes) }}</dd>
+                <dt>action cache</dt><dd>{{ count(cache.actionsCount) }} · {{ mib(cache.actionsBytes) }}</dd>
+                <dt>worker JARs</dt><dd>{{ count(cache.workerJarsCount) }} · {{ mib(cache.workerJarsBytes) }}</dd>
+                <dt>run logs</dt><dd>{{ count(cache.runLogsCount) }} · {{ mib(cache.runLogsBytes) }}</dd>
+                <dt>format stamps</dt><dd>{{ count(cache.formatStampsCount) }} · {{ mib(cache.formatStampsBytes) }}</dd>
+              </dl>
+            </template>
+            <div v-else class="dim small">cache breakdown loading…</div>
+          </div>
+        </div>
+
+        <div class="panels">
+          <div class="panel wide">
             <div class="panel-head"><span class="lbl">engine log</span><span class="spacer"></span><span class="mono dim">state/engine/&lt;key&gt;.log</span></div>
             <pre class="console log-tail">{{ engineLog || '(log empty)' }}</pre>
           </div>

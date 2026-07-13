@@ -13,15 +13,36 @@ import org.junit.jupiter.api.io.TempDir;
 class JkHttpConfigTest {
 
     @Test
-    void missing_file_means_disabled() {
-        assertThat(JkHttpConfig.fromToml(Path.of("/no/such/file"))).isEmpty();
+    void missing_file_means_enabled_with_defaults() {
+        assertThat(JkHttpConfig.fromToml(Path.of("/no/such/file"))).contains(JkHttpConfig.DEFAULTS);
     }
 
     @Test
-    void table_absent_means_disabled(@TempDir Path tempDir) throws IOException {
+    void table_absent_means_enabled_with_defaults(@TempDir Path tempDir) throws IOException {
         Path toml = tempDir.resolve("config.toml");
         Files.writeString(toml, "[engine]\nmax-heap-mb = 256\n");
+        assertThat(JkHttpConfig.fromToml(toml)).contains(JkHttpConfig.DEFAULTS);
+    }
+
+    @Test
+    void enabled_false_disables(@TempDir Path tempDir) throws IOException {
+        Path toml = tempDir.resolve("config.toml");
+        Files.writeString(toml, "[http]\nenabled = false\nport = 9000\n");
         assertThat(JkHttpConfig.fromToml(toml)).isEmpty();
+    }
+
+    @Test
+    void explicit_enabled_true_keeps_the_tables_values(@TempDir Path tempDir) throws IOException {
+        Path toml = tempDir.resolve("config.toml");
+        Files.writeString(toml, "[http]\nenabled = true\nport = 9000\n");
+        assertThat(JkHttpConfig.fromToml(toml).orElseThrow().port()).isEqualTo(9000);
+    }
+
+    @Test
+    void wrong_typed_enabled_falls_back_to_on(@TempDir Path tempDir) throws IOException {
+        Path toml = tempDir.resolve("config.toml");
+        Files.writeString(toml, "[http]\nenabled = \"nope\"\n");
+        assertThat(JkHttpConfig.fromToml(toml)).contains(JkHttpConfig.DEFAULTS);
     }
 
     @Test
@@ -110,9 +131,40 @@ class JkHttpConfigTest {
 
     @Test
     void malformed_file_means_disabled(@TempDir Path tempDir) throws IOException {
+        // The unreadable file may contain an `enabled = false` we can't see — a disable must fail
+        // closed, so an existing-but-unparseable config never silently serves.
         Path toml = tempDir.resolve("config.toml");
         Files.writeString(toml, "[http\nport = 8911\n");
         assertThat(JkHttpConfig.fromToml(toml)).isEmpty();
+    }
+
+    @Test
+    void env_enabled_false_disables_even_with_a_healthy_table() throws IOException {
+        Path toml = Files.createTempFile("jk-http-", ".toml");
+        try {
+            Files.writeString(toml, "[http]\nport = 8911\n");
+            assertThat(JkHttpConfig.resolve(toml, Map.of("JK_HTTP_ENABLED", "false")::get)).isEmpty();
+        } finally {
+            Files.deleteIfExists(toml);
+        }
+    }
+
+    @Test
+    void env_enabled_true_wins_over_a_file_disable() throws IOException {
+        Path toml = Files.createTempFile("jk-http-", ".toml");
+        try {
+            Files.writeString(toml, "[http]\nenabled = false\nport = 9000\n");
+            // env > user-config; the file's other keys are gone with the disable, so defaults serve.
+            assertThat(JkHttpConfig.resolve(toml, Map.of("JK_HTTP_ENABLED", "true")::get))
+                    .contains(JkHttpConfig.DEFAULTS);
+        } finally {
+            Files.deleteIfExists(toml);
+        }
+    }
+
+    @Test
+    void resolve_defaults_to_enabled_with_no_file_and_no_env() {
+        assertThat(JkHttpConfig.resolve(Path.of("/no/such/file"), k -> null)).contains(JkHttpConfig.DEFAULTS);
     }
 
     @Test
@@ -131,11 +183,16 @@ class JkHttpConfigTest {
     }
 
     @Test
-    void env_alone_never_enables() throws IOException {
+    void env_keys_apply_on_top_of_the_default_on_state() throws IOException {
+        // No [http] table needed anymore: the server is on by default, and JK_HTTP_* env keys
+        // customize that default just as they customize a table's values.
         Path toml = Files.createTempFile("jk-http-", ".toml");
         try {
             Files.writeString(toml, "[engine]\nmax-heap-mb = 256\n");
-            assertThat(JkHttpConfig.resolve(toml, Map.of("JK_HTTP_PORT", "9000")::get)).isEmpty();
+            JkHttpConfig c =
+                    JkHttpConfig.resolve(toml, Map.of("JK_HTTP_PORT", "9000")::get).orElseThrow();
+            assertThat(c.port()).isEqualTo(9000);
+            assertThat(c.host()).isEqualTo(JkHttpConfig.DEFAULT_HOST);
         } finally {
             Files.deleteIfExists(toml);
         }

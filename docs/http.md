@@ -29,24 +29,29 @@ and the NDJSON socket protocol stays untouched and internal.
 
 ## Enabling and configuration
 
-The `[http]` table of `~/.jk/config.toml` — user-global machine policy, deliberately not
-project-overridable, same reasoning as `[engine]`:
+**The server is on by default** — loopback-only, mutations token-gated even there — so a fresh
+install gets the dashboard with zero configuration. Opting out is explicit: `enabled = false` in
+the `[http]` table, or `JK_HTTP_ENABLED=false` in the environment. The table itself remains
+user-global machine policy, deliberately not project-overridable, same reasoning as `[engine]`:
 
 ```toml
-[http]                        # the presence of this table enables the server
+[http]                        # present or absent, the server is on unless disabled
+enabled = true                # false = no HTTP at all (env: JK_HTTP_ENABLED)
 host = "127.0.0.1"            # default; non-loopback binds require token auth on /api (see Security)
 port = 8910                   # default; 0 = OS-assigned, recorded in <key>.http
 max-concurrent-requests = 16  # default; 0 = the container-aware core count
 www-root = "state/www"        # absolute, or relative to the resolved JK_HOME (~/.jk)
 ```
 
-Parsed by a new `JkHttpConfig` record beside `JkEngineConfig` in `dev.jkbuild.config` (`:core`),
-via the same lenient `TomlValues` reader: missing file or missing table → `Optional.empty()` →
-feature off; a present table with malformed keys falls back per-key to defaults (config is
-advisory, never a build-breaking gate). Env overrides `JK_HTTP_HOST` / `JK_HTTP_PORT` /
-`JK_HTTP_MAX_CONCURRENT_REQUESTS` / `JK_HTTP_WWW_ROOT` apply **only when the table is present** —
-an env var alone never enables the feature, so nothing can silently expose a port the config file
-didn't ask for.
+Parsed by the `JkHttpConfig` record beside `JkEngineConfig` in `dev.jkbuild.config` (`:core`),
+via the same lenient `TomlValues` reader: missing file or missing table → the defaults (feature
+on); a present table with malformed keys falls back per-key to defaults (config is advisory, never
+a build-breaking gate). One asymmetry is deliberate: an *existing but unparseable* config file
+disables the server — the file may contain an `enabled = false` the parser can't reach, and an
+explicit disable must fail closed, never be undone by a syntax error. Env overrides
+`JK_HTTP_ENABLED` / `JK_HTTP_HOST` / `JK_HTTP_PORT` / `JK_HTTP_MAX_CONCURRENT_REQUESTS` /
+`JK_HTTP_WWW_ROOT` win over the file (env > user-config > default); the test conventions set
+`JK_HTTP_ENABLED=false` so test-spawned engines never open listening sockets as a side effect.
 
 Like `[engine]`, the table is read once at engine start. Enabling or changing it means
 `jk engine stop` and letting the next command spawn a fresh engine.
@@ -173,16 +178,16 @@ already parses — the same deliberate flat-message discipline as the engine wir
 
 | Endpoint | Method | Auth | Purpose |
 |---|---|---|---|
-| `/api/status` | GET | read-tier | Engine vitals — the same numbers as `jk engine status --output json` (version, pid, uptime, heap/rss, active connections/pipelines, idle policy), plus `httpUrl`. |
+| `/api/status` | GET | read-tier | Engine vitals — the same numbers as `jk engine status --output json` (version, pid, uptime, heap/rss, active connections/pipelines), plus `httpUrl`. |
 | `/api/events` | GET | read-tier | SSE stream of engine lifecycle events (see below). |
 | `/api/build` | POST | **token, always** | `{"dir": "/abs/workspace"}` — triggers a build via the same `BuildService` path the socket protocol uses; responds `202` with a request id. Progress is observed on `/api/events`, not the response. |
 | `/api/history` | GET | read-tier | The persisted build journal. No `?id=` → a JSON array of the newest entries' full records; `?id=<id>` → that one entry's `record.json`. Backfills the Activity feed on load. See [`build-history.md`](build-history.md). |
 | `/api/history/artifact` | GET | read-tier | `?id=<id>&name=<test-results.md\|jk.lock\|diagnostics.txt>` — a snapshot artifact as plain text; `name` is whitelisted so it can't escape the entry dir. |
 | `/api/history` | DELETE | **token, always** | `?id=<id>` — delete one entry (like removing a CI run). `200 {"deleted":true}` or `404`. |
+| `/api/metrics` | GET | read-tier | The running build aggregates (see [`metrics.md`](metrics.md)): a flat JSON array, one object per tier row (`scope`: `global` / `project` / `phase` / `project-phase`) with ok/failed/cancelled counts, total/min/max millis, and a pre-computed `okAvgMillis`. Optional `?dir=` keeps one project's rows (the global tiers are always included). Feeds the Status view's build-stats section and `jk status`. |
+| `/api/cache` | GET | read-tier | The cache-directory breakdown — the same sections `jk cache info` renders (CAS blobs, action cache, worker JARs, run logs, format stamps: count + bytes each), plus `totalCount`/`totalBytes`, the configured `maxBytes` ceiling, and `lastPrunedMillis` (0 = never). IO-shaped (walks the cache), computed per request. Feeds the Status view's Cache panel. |
 
 Anything mutating is POST/DELETE and token-gated everywhere, including on loopback (see Security).
-Build-**trends** endpoints (`/api/stats/…`) come later, aggregating over the same journal — they
-are additive and don't change this design.
 
 ### SSE (`/api/events`)
 

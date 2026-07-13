@@ -423,6 +423,24 @@ main { max-width: 66rem; margin: 0 auto; padding: 18px 20px 3rem; }
 .panel dt { color: var(--mu); }
 .panel dd { margin: 0; overflow-wrap: anywhere; }
 
+/* A panel that spans the whole .panels grid (the build-stats phase table, the engine log). */
+.panel.wide { grid-column: 1 / -1; }
+
+/* The Cache panel's utilization meter sits above its breakdown list. */
+.panel .meter + dl { margin-top: 11px; }
+
+/* ---- the Status view's build-stats table (running aggregates) ---- */
+table.stats { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+table.stats th {
+  text-align: right;
+  font-weight: 500;
+  color: var(--mu);
+  padding: 2px 0 6px 14px;
+}
+table.stats th:first-child, table.stats td:first-child { text-align: left; padding-left: 0; }
+table.stats td { text-align: right; padding: 3px 0 3px 14px; border-top: 1px solid var(--bd2); }
+table.stats td.err { color: var(--err); }
+
 /* ---- per-module roll-ups (multi-module cards) ---- */
 
 /* Successful modules collapse into a "success details" accordion (open while running); failed

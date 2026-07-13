@@ -116,6 +116,38 @@ public final class EffortWeights {
         };
     }
 
+    /** Minimum successful runs before a metrics average outranks a static constant. */
+    static final int MIN_METRICS_SAMPLES = 3;
+
+    /**
+     * The metrics-learned flat weight for a fixed-cost phase (package-jar, package-shadow,
+     * native-image, write-image, plugin verbs — phases {@link PhaseTimings} never learns a rate
+     * for), tiered like {@link #learned}: this module's own running average when it has enough
+     * successful samples, else the host-wide average, else the static constant — so an empty store
+     * reproduces today's numbers exactly. Success-only ({@code ok} stats): a failed run's duration
+     * teaches nothing.
+     */
+    static int learnedFixedWeight(String dir, String phase, int staticWeight) {
+        return learnedFixedWeight(BuildMetrics.load(BuildMetrics.defaultFile()), dir, phase, staticWeight);
+    }
+
+    static int learnedFixedWeight(BuildMetrics metrics, String dir, String phase, int staticWeight) {
+        var own = metrics.phase(dir, phase);
+        if (own.isPresent() && own.get().ok().count() >= MIN_METRICS_SAMPLES) {
+            return flatWeight(own.get().ok().avgMillis());
+        }
+        var host = metrics.phase("", phase);
+        if (host.isPresent() && host.get().ok().count() >= MIN_METRICS_SAMPLES) {
+            return flatWeight(host.get().ok().avgMillis());
+        }
+        return staticWeight;
+    }
+
+    /** A whole-phase historical average (ms) as a flat bar weight. */
+    private static int flatWeight(long avgMillis) {
+        return Math.max(1, (int) Math.round(avgMillis / (double) MS_PER_WEIGHT));
+    }
+
     /** Back-compat overload with no project context — a two-tier fallback (module → host-median). */
     static int learned(PhaseTimings timings, String dir, String phase, int count, int staticWeight) {
         return learned(timings, dir, phase, count, staticWeight, java.util.List.of());
@@ -131,8 +163,12 @@ public final class EffortWeights {
      *       modules of this build) — a closer prior than the whole host for a not-yet-built module,
      *       since siblings share frameworks/fixtures/setup cost;
      *   <li><b>the host median</b> for the phase across <em>any</em> module this machine has built;
+     *   <li><b>the running-metrics average</b> ({@code BuildMetrics}, a <em>flat</em> whole-phase
+     *       weight, not a rate) — the ledger lives in the cache and is wiped by {@code jk clean},
+     *       while the metrics store is state and survives it, so this tier keeps the estimate
+     *       host-real right after a clean instead of reverting to the static guess;
      *   <li><b>the static Phase-1 estimate</b> ({@code staticWeight}) when nothing for the phase has
-     *       ever been recorded — so a fully cold ledger reproduces Phase 1 exactly.
+     *       ever been recorded — so a fully cold machine reproduces Phase 1 exactly.
      * </ol>
      *
      * <p>{@code projectDirs} empty (the back-compat overload) collapses tiers 2+3 to just the host
@@ -140,6 +176,17 @@ public final class EffortWeights {
      */
     static int learned(
             PhaseTimings timings,
+            String dir,
+            String phase,
+            int count,
+            int staticWeight,
+            java.util.Collection<String> projectDirs) {
+        return learned(timings, BuildMetrics.load(BuildMetrics.defaultFile()), dir, phase, count, staticWeight, projectDirs);
+    }
+
+    static int learned(
+            PhaseTimings timings,
+            BuildMetrics metrics,
             String dir,
             String phase,
             int count,
@@ -155,7 +202,11 @@ public final class EffortWeights {
                 rate = project.getAsDouble();
             } else {
                 var host = timings.medianPerUnit(phase);
-                if (host.isEmpty()) return staticWeight; // never seen this phase anywhere → Phase-1 static
+                if (host.isEmpty()) {
+                    // No rate anywhere (cold ledger, e.g. right after `jk clean`) — fall back to the
+                    // surviving metrics history before conceding to the Phase-1 static guess.
+                    return learnedFixedWeight(metrics, dir, phase, staticWeight);
+                }
                 rate = host.getAsDouble();
             }
         }
@@ -263,7 +314,7 @@ public final class EffortWeights {
                     : SKIP;
 
             boolean jarFresh = !rerun && !compileRun && Files.isRegularFile(layout.mainJar());
-            pkg = jarFresh ? SKIP : PACKAGE_JAR;
+            pkg = jarFresh ? SKIP : learnedFixedWeight(mod, "package-jar", PACKAGE_JAR);
         } catch (Exception ignored) {
             // Unparseable project / layout — parse-build will surface the real
             // error; skip-ish weights + auto-fill keep the bar honest meanwhile.
@@ -315,19 +366,23 @@ public final class EffortWeights {
      * Fat/shadow jar present and at least as new as the main jar (and not {@code --force}) → skip.
      */
     public static int shadowWeight(Path dir) {
-        return artifactFresh(dir, BuildLayout::shadowJar) ? SKIP : SHADOW_RUN;
+        return artifactFresh(dir, BuildLayout::shadowJar)
+                ? SKIP
+                : learnedFixedWeight(dir.toString(), "package-shadow", SHADOW_RUN);
     }
 
     /** Native binary/library present and fresh → skip; otherwise a full native-image build. */
     public static int nativeWeight(Path dir) {
         return artifactFresh(dir, BuildLayout::nativeBinary) || artifactFresh(dir, BuildLayout::nativeLibrary)
                 ? SKIP
-                : NATIVE_RUN;
+                : learnedFixedWeight(dir.toString(), "native-image", NATIVE_RUN);
     }
 
     /** OCI image tarball present and fresh → skip (2); otherwise a full image build (40). */
     public static int ociWeight(Path dir) {
-        return artifactFresh(dir, BuildLayout::ociImageTar) ? OCI_SKIP : OCI_RUN;
+        return artifactFresh(dir, BuildLayout::ociImageTar)
+                ? OCI_SKIP
+                : learnedFixedWeight(dir.toString(), "write-image", OCI_RUN);
     }
 
     /**

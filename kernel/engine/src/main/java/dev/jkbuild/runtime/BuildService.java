@@ -224,6 +224,7 @@ public final class BuildService {
      */
     public static long estimateEtaMillis(
             ExplainPlan plan,
+            Path entryDir,
             Path cache,
             int workers,
             Path jdksDir,
@@ -260,12 +261,15 @@ public final class BuildService {
             double coldRate = costs.stream().allMatch(c -> warm.test(c.dir()))
                     ? EffortWeights.MS_PER_WEIGHT
                     : Calibration.ensure(jdksDir).msPerWeight();
-            return EffortWeights.scheduleMillis(
+            long base = EffortWeights.scheduleMillis(
                     costs,
                     concurrency,
                     serial,
                     parallelTests,
                     dir -> warm.test(dir) ? EffortWeights.MS_PER_WEIGHT : coldRate);
+            // The same whole-build history anchor the live seed uses — an explain on a wiped cache
+            // reports something grounded in this project's real past instead of a static guess.
+            return applyHistoryPrior(base, okHistory(entryDir));
         } catch (RuntimeException e) {
             return 0; // never fail explain over the estimate
         }
@@ -441,7 +445,13 @@ public final class BuildService {
         final int concurrency =
                 req.maxModuleConcurrency() > 0 ? Math.min(requestedJvms, req.maxModuleConcurrency()) : requestedJvms;
         listener.onEtaEstimate(seedEta(
-                new ArrayList<>(costByDir.values()), plans.keySet(), concurrency, parallelTests, req.cache(), req.jdksDir()));
+                req.entryDir(),
+                new ArrayList<>(costByDir.values()),
+                plans.keySet(),
+                concurrency,
+                parallelTests,
+                req.cache(),
+                req.jdksDir()));
 
         Map<Path, Path> wsLinks = computeWorkspaceLinks(plans.keySet(), req.entryDir());
         List<ModuleOutcome> outcomes = Collections.synchronizedList(new ArrayList<>());
@@ -501,6 +511,7 @@ public final class BuildService {
      * module exists and the host is uncalibratable (no JDK yet) — then no rate is trustworthy.
      */
     private static long seedEta(
+            Path entryDir,
             List<EffortWeights.ModuleCost> costs,
             Set<Path> dirs,
             int concurrency,
@@ -511,10 +522,46 @@ public final class BuildService {
         java.util.function.Predicate<Path> warm = dir -> timings.hasTimingsFor(List.of(dir.toString()));
         boolean anyCold = dirs.stream().anyMatch(dir -> !warm.test(dir));
         Calibration cal = anyCold ? Calibration.ensure(jdksDir) : null;
-        if (anyCold && (cal == null || !cal.present())) return 0;
-        double coldRate = cal != null ? cal.msPerWeight() : EffortWeights.MS_PER_WEIGHT;
-        return EffortWeights.scheduleMillis(
-                costs, concurrency, false, parallelTests, dir -> warm.test(dir) ? EffortWeights.MS_PER_WEIGHT : coldRate);
+        double coldRate = cal != null && cal.present() ? cal.msPerWeight() : EffortWeights.MS_PER_WEIGHT;
+        long base = anyCold && (cal == null || !cal.present())
+                ? 0 // count up: a cold module exists and no measured rate is trustworthy
+                : EffortWeights.scheduleMillis(
+                        costs,
+                        concurrency,
+                        false,
+                        parallelTests,
+                        dir -> warm.test(dir) ? EffortWeights.MS_PER_WEIGHT : coldRate);
+        return applyHistoryPrior(base, okHistory(entryDir));
+    }
+
+    /**
+     * The whole-build history sanity anchor: never "count up" when this project has real finished
+     * builds to average (a fresh checkout on a wiped cache still gets a countdown), and never a
+     * seed wildly beyond anything this project has ever done (an over-predicted cold estimate is
+     * clamped to 2× the historical max). One-sided on purpose: {@code base} prices only <em>this
+     * run's</em> mostly-cached, incremental work, which legitimately beats the historical average —
+     * clamping up would wreck every incremental estimate. Success-only stats: failed/cancelled runs
+     * have abnormal durations, matching what {@link PhaseTimings}/{@link Calibration} learn from.
+     */
+    static long applyHistoryPrior(long base, BuildMetrics.Stats okHist) {
+        if (okHist == null || okHist.count() == 0) return base;
+        if (base == 0) return okHist.avgMillis();
+        if (okHist.count() >= 3 && base > 2 * okHist.maxMillis()) return 2 * okHist.maxMillis();
+        return base;
+    }
+
+    /**
+     * This project's successful {@code build}-kind invocation stats — kind-precise on purpose.
+     * Every caller of the prior is a build flow ({@code buildWorkspace} serves build requests and
+     * the HTTP trigger; explain models {@code jk build}); {@code jk test} runs a single test goal
+     * on its own path and never consults the seeded ETA, so its history (typically longer, always
+     * test-heavy) must not stretch the build anchor.
+     */
+    private static BuildMetrics.Stats okHistory(Path entryDir) {
+        return BuildMetrics.load(BuildMetrics.defaultFile())
+                .invocation("build", entryDir.toString())
+                .map(BuildMetrics.Entry::ok)
+                .orElse(BuildMetrics.Stats.EMPTY);
     }
 
     /** Median of observed per-module ms/weight rates, or null when none recorded yet. */

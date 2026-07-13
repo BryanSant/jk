@@ -51,6 +51,8 @@ public final class HttpEngineServer implements AutoCloseable {
     private final HttpEvents events;
     private final BuildTrigger buildTrigger;
     private final dev.jkbuild.engine.journal.BuildJournal journal;
+    private final Supplier<java.util.List<dev.jkbuild.runtime.BuildMetrics.Entry>> metrics;
+    private final Supplier<CacheSnapshot> cache;
     private final ApiRouter api = new ApiRouter();
     private final Consumer<String> log;
 
@@ -73,6 +75,10 @@ public final class HttpEngineServer implements AutoCloseable {
      * @param status supplies the vitals {@code GET /api/status} reports, fresh per request
      * @param events the hub {@code GET /api/events} streams from ({@code EngineServer} publishes)
      * @param buildTrigger runs {@code POST /api/build}'s build engine-side
+     * @param metrics supplies the running build aggregates {@code GET /api/metrics} reports, fresh
+     *     per request (the engine's {@code BuildMetrics} store)
+     * @param cache supplies the cache breakdown {@code GET /api/cache} reports, fresh per request
+     *     (an IO-shaped walk of the cache sections — see {@link CacheSnapshot#capture})
      */
     public HttpEngineServer(
             JkHttpConfig config,
@@ -84,6 +90,8 @@ public final class HttpEngineServer implements AutoCloseable {
             HttpEvents events,
             BuildTrigger buildTrigger,
             dev.jkbuild.engine.journal.BuildJournal journal,
+            Supplier<java.util.List<dev.jkbuild.runtime.BuildMetrics.Entry>> metrics,
+            Supplier<CacheSnapshot> cache,
             Consumer<String> log) {
         this.config = config;
         this.staticContent = new StaticContent(wwwRoot, version);
@@ -95,6 +103,8 @@ public final class HttpEngineServer implements AutoCloseable {
         this.events = events;
         this.buildTrigger = buildTrigger;
         this.journal = journal;
+        this.metrics = metrics;
+        this.cache = cache;
         this.log = log != null ? log : s -> {};
         api.register("GET", "/api/status", this::handleStatus);
         api.register("GET", "/api/events", this::handleEvents);
@@ -104,6 +114,8 @@ public final class HttpEngineServer implements AutoCloseable {
         api.register("GET", "/api/history", this::handleHistory);
         api.register("GET", "/api/history/artifact", this::handleHistoryArtifact);
         api.register("DELETE", "/api/history", this::handleHistoryDelete);
+        api.register("GET", "/api/metrics", this::handleMetrics);
+        api.register("GET", "/api/cache", this::handleCache);
     }
 
     /**
@@ -452,6 +464,68 @@ public final class HttpEngineServer implements AutoCloseable {
             return;
         }
         sendJson(exchange, 200, "[" + String.join(",", journal.rawRecords(HISTORY_LIST_LIMIT)) + "]");
+    }
+
+    /**
+     * {@code GET /api/metrics[?dir=…]} — the running build aggregates as a flat JSON array, one
+     * object per tier row ({@code scope}: global / project / phase / project-phase; avg is
+     * pre-computed so the SPA stays arithmetic-free). An optional {@code dir} keeps only that
+     * project's rows; the global tiers are always included. Read-tier auth, like every other GET.
+     */
+    private void handleMetrics(HttpExchange exchange) throws IOException {
+        String dirFilter = decode(queryParam(exchange.getRequestURI().getQuery(), "dir"));
+        StringBuilder body = new StringBuilder("[");
+        for (dev.jkbuild.runtime.BuildMetrics.Entry e : metrics.get()) {
+            if (dirFilter != null && !e.dir().isEmpty() && !e.dir().equals(dirFilter)) continue;
+            if (body.length() > 1) body.append(',');
+            boolean global = e.dir().isEmpty();
+            String scope =
+                    e.phase() == null ? (global ? "global" : "project") : (global ? "phase" : "project-phase");
+            body.append(JsonOut.object()
+                    .put("scope", scope)
+                    .put("kind", e.kind())
+                    .put("dir", e.dir())
+                    .put("coord", e.coord())
+                    .put("phase", e.phase())
+                    .put("okCount", e.ok().count())
+                    .put("okTotalMillis", e.ok().totalMillis())
+                    .put("okMinMillis", e.ok().minMillis())
+                    .put("okMaxMillis", e.ok().maxMillis())
+                    .put("okAvgMillis", e.ok().avgMillis())
+                    .put("failCount", e.failed().count())
+                    .put("failTotalMillis", e.failed().totalMillis())
+                    .put("failMinMillis", e.failed().minMillis())
+                    .put("failMaxMillis", e.failed().maxMillis())
+                    .put("cancelledCount", e.cancelled().count())
+                    .put("updated", e.updatedMillis()));
+        }
+        sendJson(exchange, 200, body.append(']').toString());
+    }
+
+    /**
+     * {@code GET /api/cache} — the cache-directory breakdown (the {@code jk cache info} sections)
+     * as one flat object, for the Status view's Cache panel. Read-tier auth, like every other GET;
+     * IO-shaped (a walk of the cache sections), so it is computed per request, never cached.
+     */
+    private void handleCache(HttpExchange exchange) throws IOException {
+        CacheSnapshot c = cache.get();
+        String body = JsonOut.object()
+                .put("casCount", c.casCount())
+                .put("casBytes", c.casBytes())
+                .put("actionsCount", c.actionsCount())
+                .put("actionsBytes", c.actionsBytes())
+                .put("workerJarsCount", c.workerJarsCount())
+                .put("workerJarsBytes", c.workerJarsBytes())
+                .put("runLogsCount", c.runLogsCount())
+                .put("runLogsBytes", c.runLogsBytes())
+                .put("formatStampsCount", c.formatStampsCount())
+                .put("formatStampsBytes", c.formatStampsBytes())
+                .put("totalCount", c.totalCount())
+                .put("totalBytes", c.totalBytes())
+                .put("maxBytes", c.maxBytes())
+                .put("lastPrunedMillis", c.lastPrunedMillis())
+                .toString();
+        sendJson(exchange, 200, body);
     }
 
     /**

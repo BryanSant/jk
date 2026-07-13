@@ -91,6 +91,8 @@ Vue.createApp({
     view: location.hash === '#status' ? 'status' : 'activity',
     connection: 'connecting', // 'connecting' | 'live' | 'offline' | 'unauthorized'
     status: null, // the /api/status payload
+    metrics: null, // the /api/metrics payload (running build aggregates), shown on the Status view
+    cache: null, // the /api/cache payload (cache breakdown), shown on the Status view
     engineLog: '', // the /api/log tail, shown on the Status view
     cards: [], // folded activity, newest first
     buildDir: '',
@@ -212,6 +214,72 @@ Vue.createApp({
       } catch (e) {
         if (e.status === 401) this.connection = 'unauthorized';
       }
+      // Separate try: a metrics hiccup must not blank the status vitals.
+      try {
+        this.metrics = await get('/api/metrics');
+      } catch (e) {
+        if (e.status === 401) this.connection = 'unauthorized';
+      }
+      // Cache breakdown only while it's visible — the endpoint walks the CAS, so don't poll it
+      // from the Activity view.
+      if (this.view === 'status') {
+        try {
+          this.cache = await get('/api/cache');
+        } catch (e) {
+          if (e.status === 401) this.connection = 'unauthorized';
+        }
+      }
+    },
+
+    // ---- the Status view's Cache panel (/api/cache) ----
+
+    cacheUtilizationPercent() {
+      const c = this.cache;
+      if (!c || c.maxBytes <= 0) return 0;
+      return Math.min(100, Math.round((100 * c.totalBytes) / c.maxBytes));
+    },
+
+    prunedAgo() {
+      const at = this.cache?.lastPrunedMillis;
+      if (!at) return 'never';
+      const days = Math.floor((this.now - at) / 86_400_000);
+      if (days <= 0) return 'today';
+      return days === 1 ? '1 day ago' : days + ' days ago';
+    },
+
+    count(n) {
+      return n == null ? '—' : n.toLocaleString();
+    },
+
+    // ---- the Status view's build-stats section (running aggregates from /api/metrics) ----
+
+    // The machine-wide invocation rows (one per kind: build, test), stable order.
+    metricsGlobal() {
+      return (this.metrics || [])
+        .filter((r) => r.scope === 'global')
+        .sort((a, b) => a.kind.localeCompare(b.kind));
+    },
+
+    // The machine-wide per-phase rows, biggest total first, capped for the panel.
+    metricsPhases() {
+      return (this.metrics || [])
+        .filter((r) => r.scope === 'phase')
+        .sort((a, b) => b.okTotalMillis - a.okTotalMillis)
+        .slice(0, 10);
+    },
+
+    // Sums across kinds for the KPI tiles: total runs, ok, failed+cancelled, total wall-clock.
+    metricsTotals() {
+      const g = this.metricsGlobal();
+      const sum = (f) => g.reduce((acc, r) => acc + f(r), 0);
+      const ok = sum((r) => r.okCount);
+      const bad = sum((r) => r.failCount) + sum((r) => r.cancelledCount);
+      return { runs: ok + bad, ok, bad, totalMillis: sum((r) => r.okTotalMillis + r.failTotalMillis) };
+    },
+
+    successRate() {
+      const t = this.metricsTotals();
+      return t.runs === 0 ? '—' : Math.round((100 * t.ok) / t.runs) + '%';
     },
 
     // Backfill the feed from the persisted journal (/api/history), reconciled with live cards.

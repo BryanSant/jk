@@ -20,7 +20,7 @@ import java.util.Optional;
 
 /**
  * {@code jk engine status} — pings first (the same liveness authority every engine-aware command
- * uses, never a bare pidfile read) and reports pid/version/uptime/idle policy/active requests and
+ * uses, never a bare pidfile read) and reports pid/version/uptime/active requests and
  * best-effort memory usage (heap used/committed/max, plus OS RSS where readable), or "not running"
  * with a non-zero exit so scripts can branch on it. {@code --output json} emits one flat object
  * instead, for scripts/CI that want to parse the result rather than scrape text ({@code -1} =

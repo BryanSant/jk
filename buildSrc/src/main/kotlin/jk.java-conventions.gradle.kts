@@ -47,4 +47,10 @@ tasks.withType<Test>().configureEach {
     // injected junit-jupiter test deps) and corrupting every later build on the
     // machine. The env var also reaches any jk subprocess a test forks.
     environment("JK_M2_LOCAL", layout.buildDirectory.dir("test-m2").get().asFile.absolutePath)
+    // The embedded HTTP server is on by default (docs/http.md). Tests must not open listening
+    // sockets as a side effect: engines spawned by integration tests would race the developer's
+    // real engine (and each other, across parallel checkouts) for port 8910. The env var reaches
+    // any jk subprocess a test forks; suites that exercise HTTP construct HttpEngineServer (or
+    // pass an explicit JkHttpConfig) directly.
+    environment("JK_HTTP_ENABLED", "false")
 }

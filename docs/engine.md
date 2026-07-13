@@ -97,9 +97,9 @@ and the fallback when no engine artifact is installed. Both routes execute the e
    winner's socket is what both original invocations end up talking to.
 4. The engine serves requests — one build, test run, etc. at a time per request, but multiple
    requests concurrently, each isolated in its own build session.
-5. After being idle (no in-flight requests) for a configured period, the engine exits on its own. A
-   future `jk` invocation spins a fresh one back up exactly as in step 2 — this is silent and
-   automatic, never something you need to think about.
+5. The engine then stays resident — there is no idle countdown and it never exits on its own. It
+   runs until `jk engine stop` (or the process is killed, or a version-skew upgrade replaces it),
+   and a later `jk` invocation after a stop spins a fresh one back up exactly as in step 2.
 
 ### Configuring the engine
 
