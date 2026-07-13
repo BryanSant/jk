@@ -76,7 +76,7 @@ public final class InstallCommand implements CliCommand {
 
     @Override
     public List<Opt> options() {
-        return List.of(
+        var opts = new java.util.ArrayList<Opt>(List.of(
                 Opt.value("<group>", "Maven groupId for a local file install.", "--group"),
                 Opt.value("<name>", "Maven artifactId for a local file install.", "--name"),
                 Opt.value("<ver>", "Version for a local file install.", "--ver"),
@@ -92,7 +92,9 @@ public final class InstallCommand implements CliCommand {
                         .hide(),
                 Opt.value("<url>", "Override the Maven repository URL (for tests).", "--repo-url")
                         .hide(),
-                Opt.flag("Skip compiling and running tests.", "--skip-tests"));
+                Opt.flag("Skip compiling and running tests.", "--skip-tests")));
+        opts.addAll(VariantSelection.options());
+        return opts;
     }
 
     @Override
@@ -150,6 +152,8 @@ public final class InstallCommand implements CliCommand {
         this.global = GlobalOptions.from(in);
 
         if (source == null || source.isBlank()) {
+            // --release / --variant parameterize the project build half of the install.
+            VariantSelection.install(in, global.workingDir());
             return installCurrentProject();
         }
         if (looksLikeGitUrl(source)) {

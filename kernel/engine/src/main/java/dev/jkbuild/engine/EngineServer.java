@@ -1046,7 +1046,9 @@ public final class EngineServer implements AutoCloseable {
                     Path.of(Ndjson.str(requestLine, "dir")),
                     Path.of(Ndjson.str(requestLine, "cache")),
                     Ndjson.str(requestLine, "verb"),
-                    Ndjson.strArray(requestLine, "args"));
+                    Ndjson.strArray(requestLine, "args"),
+                    EngineProtocol.variantOf(requestLine),
+                    EngineProtocol.clientEnvOf(requestLine));
         } catch (RuntimeException e) {
             report = dev.jkbuild.engine.protocol.PluginVerbReport.error(String.valueOf(e.getMessage()));
         }
@@ -1120,7 +1122,9 @@ public final class EngineServer implements AutoCloseable {
                     Ndjson.str(requestLine, "mainOverride"),
                     Ndjson.str(requestLine, "binName"),
                     binDir == null ? null : Path.of(binDir),
-                    libDir == null ? null : Path.of(libDir));
+                    libDir == null ? null : Path.of(libDir),
+                    EngineProtocol.variantOf(requestLine),
+                    EngineProtocol.clientEnvOf(requestLine));
         } catch (RuntimeException e) {
             plan = dev.jkbuild.engine.protocol.ExecPlan.error("unknown", String.valueOf(e.getMessage()));
         }
@@ -1717,7 +1721,8 @@ public final class EngineServer implements AutoCloseable {
                     .withWorkingDir(entryDir)
                     .withCacheDir(cache)
                     .withJdksDir(jdksDir)
-                    .withCancel(cancelToken);
+                    .withCancel(cancelToken)
+                    .withVariant(EngineProtocol.variantOf(requestLine), EngineProtocol.clientEnvOf(requestLine));
             String dir = EngineProtocol.SINGLE_GOAL_DIR;
             // Constructed in-session: the goal factory's BuildPipeline.Inputs captures the
             // ambient SessionContext at construction, so building it outside where() would
@@ -2360,7 +2365,10 @@ public final class EngineServer implements AutoCloseable {
                 .withWorkingDir(entryDir)
                 .withCacheDir(cache)
                 .withCancel(cancelToken)
-                .withJvm(EngineProtocol.jvmTuning(requestLine));
+                .withJvm(EngineProtocol.jvmTuning(requestLine))
+                // The variant selection rides the session: every goal factory's Inputs defaults
+                // from it, so compile/install/native/publish/... are parameterized generically.
+                .withVariant(EngineProtocol.variantOf(requestLine), EngineProtocol.clientEnvOf(requestLine));
     }
 
     /** The optional {@code repoUrl} request field ({@code --repo-url} overrides), or {@code null}. */

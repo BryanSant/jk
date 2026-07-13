@@ -44,7 +44,7 @@ public final class ImageCommand implements CliCommand {
 
     @Override
     public List<Opt> options() {
-        return List.of(
+        var opts = new java.util.ArrayList<Opt>(List.of(
                 Opt.value("<class>", "Main class to set as the image entrypoint.", "--main"),
                 Opt.value("<registry>", "Override image.registry from jk.toml.", "--registry"),
                 Opt.value("<tag>", "Override image.tag from jk.toml.", "--tag"),
@@ -55,7 +55,9 @@ public final class ImageCommand implements CliCommand {
                         .hide(),
                 Opt.value("<dir>", "Override the JDK install root.", "--jdks-dir")
                         .hide(),
-                Opt.flag("Skip compiling and running tests.", "--skip-tests"));
+                Opt.flag("Skip compiling and running tests.", "--skip-tests")));
+        opts.addAll(VariantSelection.options());
+        return opts;
     }
 
     String mainClass;
@@ -92,6 +94,7 @@ public final class ImageCommand implements CliCommand {
         this.buildOpts.skipTests = in.isSet("skip-tests");
         this.global = GlobalOptions.from(in);
         Path projectDir = global.workingDir();
+        VariantSelection.install(in, projectDir);
         Path jkBuildPath = projectDir.resolve("jk.toml");
         if (!Files.exists(jkBuildPath)) {
             CliOutput.err("jk image: " + jkBuildPath + " not found.");

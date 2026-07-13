@@ -169,7 +169,11 @@ public final class BuildPipeline {
             // the user's shell env rides the request; the engine env is only the fallback.
             Map<String, String> clientEnv) {
 
-        /** Back-compat: the pre-variant canonical shape. */
+        /**
+         * Back-compat: the pre-variant canonical shape. The variant selection defaults from the
+         * SESSION — a command that installs a selection there (jk run/test/image/native/publish)
+         * parameterizes every goal factory without each one threading it explicitly.
+         */
         public Inputs(
                 Path dir,
                 Path cache,
@@ -188,8 +192,8 @@ public final class BuildPipeline {
                 dev.jkbuild.config.Session session) {
             this(
                     dir, cache, buildFile, lockFile, lockDir, workerCount, estimatedTestCount, profileName,
-                    jdksDir, skipTests, verbose, testOnly, compileOnly, projectModules, session, "",
-                    Map.of());
+                    jdksDir, skipTests, verbose, testOnly, compileOnly, projectModules, session,
+                    session.variant(), session.clientEnv());
         }
 
         /** This request with a variant selection + client-resolved env attached. */

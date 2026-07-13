@@ -58,13 +58,29 @@ public final class VariantApply {
     }
 
     public static Applied apply(JkBuild build, Path moduleDir, Selection selection, Map<String, String> clientEnv) {
+        return apply(build, moduleDir, selection, clientEnv, false);
+    }
+
+    /**
+     * As {@link #apply} but an unselected mandatory dimension is SKIPPED, not an error — for
+     * non-build consumers (exec plans, plugin verbs) that must answer before/without a full
+     * selection ({@code jk android licenses} runs pre-selection by design). Builds never use
+     * this: silently building "no variant" is exactly what the mandatory check prevents.
+     */
+    public static Applied applyLenient(JkBuild build, Path moduleDir, Selection selection, Map<String, String> clientEnv) {
+        return apply(build, moduleDir, selection, clientEnv, true);
+    }
+
+    private static Applied apply(
+            JkBuild build, Path moduleDir, Selection selection, Map<String, String> clientEnv, boolean lenient) {
         Variants decl = build.variants();
 
         // Resolve the selection: (dimension, value name, overlay) per declared dimension — custom
         // dimensions in declaration order, build-type last (AGP's precedence, now core's).
         List<Chosen> chosen = new ArrayList<>();
         for (Variants.Dimension dimension : decl.custom()) {
-            chosen.add(chooseCustom(dimension, selection));
+            Chosen c = chooseCustom(dimension, selection, lenient);
+            if (c != null) chosen.add(c);
         }
         chosen.add(chooseBuildType(decl, selection));
 
@@ -100,11 +116,12 @@ public final class VariantApply {
     /** One resolved dimension: its name, the selected value name, and that value's overlay. */
     private record Chosen(String dimension, String value, Variants.Value overlay) {}
 
-    private static Chosen chooseCustom(Variants.Dimension dimension, Selection selection) {
+    private static Chosen chooseCustom(Variants.Dimension dimension, Selection selection, boolean lenient) {
         String name = selection.values().get(dimension.name());
         if (name == null) name = selection.values().get("*"); // bare --variant <value>
         if (name == null) name = dimension.defaultValue();
         if (name == null) {
+            if (lenient) return null;
             throw new JkBuildParseException("[variants." + dimension.name() + "] declares values "
                     + dimension.values().keySet() + " — select one with --variant "
                     + dimension.name() + "=<value>");

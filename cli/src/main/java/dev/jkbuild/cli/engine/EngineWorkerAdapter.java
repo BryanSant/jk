@@ -80,7 +80,11 @@ final class EngineWorkerAdapter {
                     new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
             BufferedReader reader =
                     new BufferedReader(new InputStreamReader(Channels.newInputStream(ch), StandardCharsets.UTF_8));
-            send(writer, requestLine);
+            // The session's variant selection + client env ride EVERY hosted-goal request line
+            // (compile/image/native/publish/install/...). Empty selection attaches nothing, so
+            // variant-less goals (lock, sync, format, audit) are byte-identical to before.
+            var session = dev.jkbuild.config.SessionContext.current();
+            send(writer, EngineProtocol.withVariant(requestLine, session.variant(), session.clientEnv()));
 
             List<Phase> phases = new ArrayList<>();
             List<GoalResult.Diagnostic> diagnostics = new ArrayList<>();
@@ -137,7 +141,11 @@ final class EngineWorkerAdapter {
                     new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
             BufferedReader reader =
                     new BufferedReader(new InputStreamReader(Channels.newInputStream(ch), StandardCharsets.UTF_8));
-            send(writer, requestLine);
+            // The session's variant selection + client env ride EVERY hosted-goal request line
+            // (compile/image/native/publish/install/...). Empty selection attaches nothing, so
+            // variant-less goals (lock, sync, format, audit) are byte-identical to before.
+            var session = dev.jkbuild.config.SessionContext.current();
+            send(writer, EngineProtocol.withVariant(requestLine, session.variant(), session.clientEnv()));
 
             String line;
             while ((line = reader.readLine()) != null) {

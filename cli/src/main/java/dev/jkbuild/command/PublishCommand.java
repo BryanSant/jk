@@ -51,7 +51,7 @@ public final class PublishCommand implements CliCommand {
 
     @Override
     public List<Opt> options() {
-        return List.of(
+        var opts = new java.util.ArrayList<Opt>(List.of(
                 Opt.value("<url>", "Target Maven repository base URL.", "--repo-url")
                         .require(),
                 Opt.value("<user>", "HTTP Basic username (PUBLISH_USER env).", "--user"),
@@ -66,7 +66,9 @@ public final class PublishCommand implements CliCommand {
                 Opt.value("<pass>", "Key passphrase (JK_GPG_PASSPHRASE env).", "--key-passphrase"),
                 Opt.flag("Sign with Sigstore keyless OIDC (.sigstore).", "--sigstore"),
                 Opt.flag("Emit a SLSA v1 in-toto provenance statement.", "--slsa"),
-                Opt.flag("Emit CycloneDX 1.6 and SPDX 2.3 SBOMs.", "--sbom"));
+                Opt.flag("Emit CycloneDX 1.6 and SPDX 2.3 SBOMs.", "--sbom")));
+        opts.addAll(VariantSelection.options());
+        return opts;
     }
 
     URI repoUrl;
@@ -115,6 +117,7 @@ public final class PublishCommand implements CliCommand {
         this.global = GlobalOptions.from(in);
 
         Path projectDir = global.workingDir();
+        VariantSelection.install(in, projectDir);
         Path jkBuildPath = projectDir.resolve("jk.toml");
         if (!Files.exists(jkBuildPath)) {
             CliOutput.err("jk publish: " + jkBuildPath + " not found.");

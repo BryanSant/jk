@@ -147,16 +147,19 @@ final class EngineBuildListenerAdapter {
             BufferedReader reader =
                     new BufferedReader(new InputStreamReader(Channels.newInputStream(ch), StandardCharsets.UTF_8));
 
-            writer.write(EngineProtocol.withJvmTuning(EngineProtocol.testRequest(
-                    req.entryDir().toString(),
-                    req.cache().toString(),
-                    req.jdksDir() != null ? req.jdksDir().toString() : null,
-                    req.workers(),
-                    req.profile(),
-                    req.verbose(),
-                    req.offline(),
-                    req.force()),
-                    SessionContext.current().jvm()));
+            writer.write(EngineProtocol.withVariant(
+                    EngineProtocol.withJvmTuning(EngineProtocol.testRequest(
+                            req.entryDir().toString(),
+                            req.cache().toString(),
+                            req.jdksDir() != null ? req.jdksDir().toString() : null,
+                            req.workers(),
+                            req.profile(),
+                            req.verbose(),
+                            req.offline(),
+                            req.force()),
+                            SessionContext.current().jvm()),
+                    SessionContext.current().variant(),
+                    SessionContext.current().clientEnv()));
             writer.write('\n');
             writer.flush();
 
@@ -526,7 +529,10 @@ final class EngineBuildListenerAdapter {
                     new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
             BufferedReader reader =
                     new BufferedReader(new InputStreamReader(Channels.newInputStream(ch), StandardCharsets.UTF_8));
-            writer.write(EngineProtocol.pluginVerbRequest(dir.toString(), cache.toString(), verb, args));
+            writer.write(EngineProtocol.withVariant(
+                    EngineProtocol.pluginVerbRequest(dir.toString(), cache.toString(), verb, args),
+                    SessionContext.current().variant(),
+                    SessionContext.current().clientEnv()));
             writer.write('\n');
             writer.flush();
             String line;
@@ -594,14 +600,17 @@ final class EngineBuildListenerAdapter {
                     new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
             BufferedReader reader =
                     new BufferedReader(new InputStreamReader(Channels.newInputStream(ch), StandardCharsets.UTF_8));
-            writer.write(EngineProtocol.execPlanRequest(
-                    dir.toString(),
-                    cache.toString(),
-                    kind,
-                    mainOverride,
-                    binName,
-                    binDir == null ? null : binDir.toString(),
-                    libDir == null ? null : libDir.toString()));
+            writer.write(EngineProtocol.withVariant(
+                    EngineProtocol.execPlanRequest(
+                            dir.toString(),
+                            cache.toString(),
+                            kind,
+                            mainOverride,
+                            binName,
+                            binDir == null ? null : binDir.toString(),
+                            libDir == null ? null : libDir.toString()),
+                    SessionContext.current().variant(),
+                    SessionContext.current().clientEnv()));
             writer.write('\n');
             writer.flush();
             String line;

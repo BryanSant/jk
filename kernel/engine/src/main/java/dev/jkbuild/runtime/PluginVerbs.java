@@ -27,6 +27,16 @@ public final class PluginVerbs {
     private PluginVerbs() {}
 
     public static PluginVerbReport run(Path dir, Path cache, String verb, List<String> args) {
+        return run(dir, cache, verb, args, "", java.util.Map.of());
+    }
+
+    /**
+     * As above with the request's variant selection — a deploy verb after {@code jk run --release}
+     * must resolve the release packaging (the AAB) and its config, not the debug default's.
+     */
+    public static PluginVerbReport run(
+            Path dir, Path cache, String verb, List<String> args,
+            String variant, java.util.Map<String, String> clientEnv) {
         try {
             Path buildFile = dir.resolve("jk.toml");
             if (!Files.isRegularFile(buildFile)) return PluginVerbReport.notFound();
@@ -34,6 +44,9 @@ public final class PluginVerbs {
             if (!project.plugins().isEmpty() && PluginManifestOps.ensureMaterialized(dir, cache)) {
                 project = JkBuildParser.reparse(buildFile);
             }
+            project = dev.jkbuild.plugin.manifest.VariantApply.applyLenient(
+                            project, dir, dev.jkbuild.model.Variants.Selection.parse(variant), clientEnv)
+                    .build();
             var active = PluginBuild.activeCodePlugin(project, dir).orElse(null);
             if (active == null) return PluginVerbReport.notFound();
 

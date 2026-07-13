@@ -54,14 +54,16 @@ public final class NativeCommand implements CliCommand {
 
     @Override
     public List<Opt> options() {
-        return List.of(
+        var opts = new java.util.ArrayList<Opt>(List.of(
                 Opt.value("<class>", "Main class. Default: jk.toml image.main or project.main.", "--main"),
                 Opt.value("<dir>", "Override the jk cache directory.", "--cache-dir")
                         .hide(),
                 Opt.value("<dir>", "Override the JDK install root.", "--jdks-dir")
                         .hide(),
                 Opt.flag("Install Oracle GraalVM if native-image is missing.", "--yes", "-y"),
-                Opt.flag("Skip compiling and running tests.", "--skip-tests"));
+                Opt.flag("Skip compiling and running tests.", "--skip-tests")));
+        opts.addAll(VariantSelection.options());
+        return opts;
     }
 
     @Override
@@ -105,6 +107,7 @@ public final class NativeCommand implements CliCommand {
         this.graal = new dev.jkbuild.cli.GraalResolver(jdksDir, assumeYes);
 
         Path startDir = global.workingDir();
+        VariantSelection.install(in, startDir);
         Path buildFile = startDir.resolve("jk.toml");
         Path cache = cacheDirOverride != null ? cacheDirOverride : JkDirs.cache();
 

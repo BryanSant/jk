@@ -83,6 +83,8 @@ public final class BuildCommand implements CliCommand {
                         "<dim>=<value>",
                         "Select a variant value (repeatable; bare <value> when one dimension).",
                         "--variant"));
+        // NOTE: keep the two variant Opts textually in sync with VariantSelection.options() —
+        // jk build declares them inline only to keep its option ordering stable.
     }
 
     String profileName;
@@ -126,47 +128,17 @@ public final class BuildCommand implements CliCommand {
         this.parallelTests = in.isSet("parallel-tests");
         dev.jkbuild.config.SessionContext.install(
                 dev.jkbuild.config.SessionContext.current().withParallelTests(parallelTests));
-        // Variant selection (--release / --variant <dim>=<value>): rides the request as a compact
-        // selector (`release|contentType=demo`); the engine folds the chosen overlays into the
-        // effective build at parse time. build-type is the built-in dimension, so
-        // `--variant build-type=release` and `--release` spell the same selection.
-        String buildType = null;
-        var dims = new java.util.LinkedHashMap<String, String>();
-        for (String raw : in.values("variant")) {
-            for (String part : raw.split(",")) {
-                if (part.isBlank()) continue;
-                int eq = part.indexOf('=');
-                String dim = eq > 0 ? part.substring(0, eq).trim() : "*";
-                String value = (eq > 0 ? part.substring(eq + 1) : part).trim();
-                if ("build-type".equals(dim)) buildType = value;
-                else dims.put(dim, value);
-            }
-        }
-        if (in.isSet("release")) buildType = "release";
-        StringBuilder variantSel = new StringBuilder(buildType == null ? "" : buildType);
-        for (var e : dims.entrySet()) {
-            if (variantSel.length() > 0) variantSel.append('|');
-            variantSel.append(e.getKey()).append('=').append(e.getValue());
-        }
-        this.variant = variantSel.toString();
         Path startDir = global.workingDir();
         Path buildFile = startDir.resolve("jk.toml");
         if (!Files.exists(buildFile)) {
             CliOutput.err("jk build: no jk.toml in " + dev.jkbuild.cli.PathDisplay.styledRaw(startDir));
             return Exit.CONFIG;
         }
-        // env:-indirected plugin config (signing credentials) resolves CLIENT-side — the engine's
-        // environment belongs to whichever invocation spawned it (the publish posture). The engine
-        // names the vars (ProjectInfo.envRefs); only those that exist here ride the request.
-        var envInfo = projectInfoOrNull(startDir);
-        if (envInfo != null && !envInfo.envRefs().isEmpty()) {
-            java.util.Map<String, String> resolved = new java.util.LinkedHashMap<>();
-            for (String name : envInfo.envRefs()) {
-                String v = System.getenv(name);
-                if (v != null) resolved.put(name, v);
-            }
-            this.clientEnv = resolved;
-        }
+        // Variant selection (--release / --variant <dim>=<value>): rides the request as a compact
+        // selector plus the client-resolved env: values (VariantSelection). Also installed on the
+        // ambient session for the in-process paths.
+        this.variant = VariantSelection.install(in, startDir);
+        this.clientEnv = dev.jkbuild.config.SessionContext.current().clientEnv();
 
         // Peek at the engine's project summary before committing to a per-dir build. A
         // workspace root dispatches to buildWorkspace. A workspace module also redirects —

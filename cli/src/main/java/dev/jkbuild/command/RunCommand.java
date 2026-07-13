@@ -52,11 +52,13 @@ public final class RunCommand implements CliCommand {
 
     @Override
     public List<Opt> options() {
-        return List.of(
+        var opts = new ArrayList<Opt>(List.of(
                 Opt.value("<dir>", "Override the jk cache directory.", "--cache-dir")
                         .hide(),
                 Opt.value("<dir>", "Override the JDK install root.", "--jdks-dir")
-                        .hide());
+                        .hide()));
+        opts.addAll(VariantSelection.options());
+        return opts;
     }
 
     @Override
@@ -93,6 +95,9 @@ public final class RunCommand implements CliCommand {
         this.global = GlobalOptions.from(in);
 
         Path projectDir = global.workingDir();
+        // --release / --variant: the selection rides the ambient session; the build request
+        // threads it explicitly and the run below executes the selected product's artifact.
+        VariantSelection.install(in, projectDir);
         Path manifest = projectDir.resolve("jk.toml");
         if (!Files.exists(manifest)) {
             CliOutput.err("jk run: no jk.toml in "
@@ -152,7 +157,9 @@ public final class RunCommand implements CliCommand {
                                 buildOpts.skipTests,
                                 global.verbose,
                                 session.offline(),
-                                session.force()),
+                                session.force(),
+                                session.variant(),
+                                session.clientEnv()),
                         phases -> GoalConsole.chooseConsoleListener(phases, mode, spec, coord),
                         testResultHolder,
                         new String[1]);

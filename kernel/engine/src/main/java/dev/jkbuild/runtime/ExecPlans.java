@@ -136,14 +136,28 @@ public final class ExecPlans {
 
     /** Compute the plan for {@code kind} — never throws; failures ride {@code error}. */
     public static ExecPlan execPlan(Path dir, Path cache, String kind, String mainOverride, String binName) {
-        return execPlan(dir, cache, kind, mainOverride, binName, null, null);
+        return execPlan(dir, cache, kind, mainOverride, binName, null, null, "", java.util.Map.of());
     }
 
     /** As above with install-destination overrides ({@code --bin-dir}/{@code --lib-dir}). */
     public static ExecPlan execPlan(
             Path dir, Path cache, String kind, String mainOverride, String binName, Path binDir, Path libDir) {
+        return execPlan(dir, cache, kind, mainOverride, binName, binDir, libDir, "", java.util.Map.of());
+    }
+
+    /**
+     * As above with the request's variant selection: the plan must describe the SELECTED product —
+     * {@code jk run --release} on an Android app resolves the AAB packaging (and its deploy verb),
+     * not the debug APK's.
+     */
+    public static ExecPlan execPlan(
+            Path dir, Path cache, String kind, String mainOverride, String binName, Path binDir, Path libDir,
+            String variant, java.util.Map<String, String> clientEnv) {
         try {
             JkBuild project = JkBuildParser.parse(dir.resolve("jk.toml"));
+            project = dev.jkbuild.plugin.manifest.VariantApply.applyLenient(
+                            project, dir, dev.jkbuild.model.Variants.Selection.parse(variant), clientEnv)
+                    .build();
             BuildLayout layout = BuildLayout.of(dir, project);
             return switch (kind) {
                 case "run" -> runPlan(dir, cache, project, layout, false);

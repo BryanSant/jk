@@ -66,10 +66,12 @@ public final class DevCommand implements CliCommand {
 
     @Override
     public List<Opt> options() {
-        return List.of(
+        var opts = new java.util.ArrayList<Opt>(List.of(
                 Opt.value("<dir>", "Override the jk cache directory.", "--cache-dir").hide(),
                 Opt.value("<dir>", "Override the JDK install directory.", "--jdks-dir")
-                        .hide());
+                        .hide()));
+        opts.addAll(VariantSelection.options());
+        return opts;
     }
 
     @Override
@@ -80,6 +82,7 @@ public final class DevCommand implements CliCommand {
         List<String> appArgs = in.positionals();
 
         Path projectDir = global.workingDir();
+        VariantSelection.install(in, projectDir);
         var proj = ProjectContext.require(projectDir, "dev").orElse(null);
         if (proj == null) return Exit.CONFIG;
 
@@ -261,7 +264,9 @@ public final class DevCommand implements CliCommand {
                             true,
                             global.verbose,
                             session.offline(),
-                            session.force()),
+                            session.force(),
+                            session.variant(),
+                            session.clientEnv()),
                     phases -> GoalConsole.chooseConsoleListener(phases, mode, spec, target),
                     new dev.jkbuild.run.TestSummary[1],
                     new String[1]);

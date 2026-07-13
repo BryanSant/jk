@@ -189,3 +189,15 @@ The variant mechanism moved from plugin-manifest axes to a core `[variants]` sec
 - `dev.jkbuild.model.Variants` (declaration + `Selection` + `unionDependencies`) and
   `dev.jkbuild.plugin.manifest.VariantApply` (fold engine) replace the old
   `plugin.manifest.Variants`.
+
+### Variant selection on every command (same day, follow-up)
+
+`--release` / `--variant <dim>=<value>` moved from jk build-only to every artifact-producing
+command: run, dev, test, compile, image, native, publish, install. The selection + client-
+resolved `env:` values ride the `Session` (`Session.withVariant`); `BuildPipeline.Inputs`
+defaults from it, so every goal factory — engine-hosted or in-process — is parameterized
+without per-goal threading. Engine-side it decodes once in `resolveSession`; client-side it
+attaches once in `EngineWorkerAdapter.stream` (plus the test/single-build/exec-plan/verb
+writers). Exec plans and plugin verbs apply the selection LENIENTLY
+(`VariantApply.applyLenient`): unselected mandatory dimensions are skipped, so
+`jk android licenses` still answers pre-selection while `jk run --release` deploys the AAB.

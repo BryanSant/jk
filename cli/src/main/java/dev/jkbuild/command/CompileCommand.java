@@ -40,10 +40,12 @@ public final class CompileCommand implements CliCommand {
 
     @Override
     public List<Opt> options() {
-        return List.of(
+        var opts = new java.util.ArrayList<Opt>(List.of(
                 Opt.value("<name>", "Apply a build profile. Default: auto (ci on CI).", "--profile"),
                 Opt.value("<dir>", "Override the jk cache directory.", "--cache-dir")
-                        .hide());
+                        .hide()));
+        opts.addAll(VariantSelection.options());
+        return opts;
     }
 
     /**
@@ -65,6 +67,7 @@ public final class CompileCommand implements CliCommand {
         Path cacheDir = in.value("cache-dir").map(Path::of).orElse(null);
         GlobalOptions global = GlobalOptions.from(in);
         Path dir = global.workingDir();
+        VariantSelection.install(in, dir);
         var proj = ProjectContext.require(dir, "compile").orElse(null);
         if (proj == null) return Exit.CONFIG;
         Path buildFile = proj.buildFile();

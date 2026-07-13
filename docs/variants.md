@@ -98,10 +98,18 @@ jk build --variant contentType=demo             # one dimension
 jk build --release --variant contentType=demo   # build type + dimension
 jk build --variant demo                         # bare value: OK when only one custom dimension
 jk build --variant contentType=demo,tier=free   # comma-join or repeat the flag
+jk run --release                                # every artifact-producing command takes the flags:
+jk test --variant contentType=demo              # run, dev, test, compile, image, native, publish,
+jk install --variant contentType=prod           # and install (current-project mode)
 ```
 
 Selections are **workspace-wide**: building from any module applies the same selection to
-every workspace sibling, and modules apply only the dimensions they declare.
+every workspace sibling, and modules apply only the dimensions they declare. The selection
+follows the whole invocation: `jk run --release` on an Android app builds the release AAB
+*and* deploys it (the exec plan and the plugin's deploy verb resolve the selected packaging).
+Read-only consumers that must answer before a selection exists (`jk android licenses`, exec
+planning) apply leniently — selected dimensions fold, unselected mandatory ones are skipped
+rather than errors; builds alone enforce the mandatory check.
 
 ## Locking
 
