@@ -22,6 +22,7 @@ final class Json {
     static String write(BuildRecord r) {
         Map<String, Object> o = new LinkedHashMap<>();
         o.put("id", r.id());
+        o.put("buildNumber", r.buildNumber());
         o.put("schema", r.schema());
         o.put("kind", r.kind());
         o.put("dir", r.dir());
@@ -74,6 +75,9 @@ final class Json {
         }
         o.put("diagnostics", diagnostics);
 
+        o.put("trigger", r.trigger());
+        o.put("commit", r.commit());
+
         return MiniJson.writePretty(o);
     }
 
@@ -124,10 +128,11 @@ final class Json {
         }
 
         return new BuildRecord(
-                str(o, "id"), (int) lng(o, "schema"), str(o, "kind"), str(o, "dir"), str(o, "coord"),
+                str(o, "id"), lng(o, "buildNumber"), (int) lng(o, "schema"),
+                str(o, "kind"), str(o, "dir"), str(o, "coord"),
                 lng(o, "startedAt"), lng(o, "finishedAt"), lng(o, "millis"),
                 bool(o, "success"), bool(o, "cancelled"), (int) lng(o, "exitCode"), str(o, "jkVersion"),
-                tests, modules, phases, diagnostics);
+                tests, modules, phases, diagnostics, str(o, "trigger"), str(o, "commit"));
     }
 
     private static String str(Map<String, Object> o, String key) {

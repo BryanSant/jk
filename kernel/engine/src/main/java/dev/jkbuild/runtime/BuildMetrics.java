@@ -157,9 +157,14 @@ public final class BuildMetrics {
      * request-finish, stamping every touched row with {@code nowMillis}. Updates the project tier
      * and the global tier together; phase samples with status {@code SKIPPED} (or any non-terminal
      * status) teach nothing and are ignored. Best-effort: any failure is swallowed.
+     *
+     * @return this run's <strong>build number</strong> — the project's total run count (across all
+     *     kinds) after this fold, a durable monotonic per-project sequence the journal stamps onto
+     *     the record so the dashboard can show {@code #412}. {@code 0} when nothing was recorded (a
+     *     malformed outcome, or a swallowed failure) — callers treat 0 as "unnumbered".
      */
-    public static void record(Path file, Outcome o, long nowMillis) {
-        if (o == null || o.kind() == null || o.dir() == null || o.dir().isEmpty()) return;
+    public static long record(Path file, Outcome o, long nowMillis) {
+        if (o == null || o.kind() == null || o.dir() == null || o.dir().isEmpty()) return 0;
         LOCK.lock();
         try {
             BuildMetrics cur = read(file);
@@ -178,11 +183,26 @@ public final class BuildMetrics {
 
             write(file, inv, ph);
             MEMO.remove(file); // next load() in this process sees the update
+            return projectRunCount(inv, o.dir());
         } catch (IOException | RuntimeException ignored) {
             // advisory state — never fail the build over it
+            return 0;
         } finally {
             LOCK.unlock();
         }
+    }
+
+    /**
+     * The project's build number: total runs recorded for {@code dir} across every kind after the
+     * current fold. Monotonic for a live project — its rows are refreshed on each build, so age
+     * eviction spares them — which is what makes it a stable per-project sequence.
+     */
+    private static long projectRunCount(Map<String, Entry> inv, String dir) {
+        long n = 0;
+        for (Entry e : inv.values()) {
+            if (dir.equals(e.dir())) n += e.ok().count() + e.failed().count() + e.cancelled().count();
+        }
+        return n;
     }
 
     private static void foldInvocation(

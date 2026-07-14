@@ -86,15 +86,139 @@ const PhaseChain = {
   },
 };
 
+// The Projects tab's per-project history spark: one vertical bar per recent build (height = wall
+// clock, colour = outcome), drawn with Apache ECharts (loaded globally from the CDN — see
+// index.html). Kept deliberately chrome-less (no axes, no grid) so it reads as a sparkline inside the
+// row. The x-axis is a fixed 30 slots so every bar is a consistent 1/30 width, packed left-to-right:
+// a project with one build shows one bar occupying 1/30 of the track, not a single fat bar. Re-renders
+// only when its `builds` prop changes (projectsList is a computed, so the 1s tick never thrashes it).
+const BUILD_COLORS = { success: '#4caf50', failed: '#e91e63', cancelled: '#ffc107', running: '#3d8fe0' };
+
+/** Fixed number of build slots the spark reserves — a single build fills 1/30 of the width. */
+const BUILD_SLOTS = 30;
+
+const BuildBars = {
+  props: { builds: { type: Array, required: true } },
+  template: `<div class="build-bars" ref="el"></div>`,
+  mounted() {
+    if (window.echarts) this.chart = echarts.init(this.$refs.el, null, { renderer: 'canvas' });
+    this.render();
+    // The row's centre column is flex-sized; the chart must follow it (and any window resize).
+    this.ro = new ResizeObserver(() => this.chart && this.chart.resize());
+    this.ro.observe(this.$refs.el);
+  },
+  beforeUnmount() {
+    if (this.ro) this.ro.disconnect();
+    if (this.chart) this.chart.dispose();
+  },
+  watch: {
+    builds() {
+      this.render();
+    },
+  },
+  methods: {
+    render() {
+      if (!this.chart) return;
+      const builds = this.builds || [];
+      // A fixed BUILD_SLOTS-long category axis: builds fill the leftmost slots (oldest → newest),
+      // the rest are empty (zero-height) placeholders so every bar keeps the same 1/30 width.
+      const data = [];
+      for (let i = 0; i < BUILD_SLOTS; i++) {
+        const b = builds[i];
+        data.push(
+          b
+            ? { value: Math.max(1, b.millis || 0), itemStyle: { color: BUILD_COLORS[b.outcome] || '#5c6d78', borderRadius: [2, 2, 0, 0] } }
+            : { value: 0, itemStyle: { color: 'transparent' } },
+        );
+      }
+      this.chart.setOption(
+        {
+          animation: false,
+          grid: { left: 1, right: 1, top: 6, bottom: 1, containLabel: false },
+          xAxis: {
+            type: 'category',
+            show: false,
+            data: Array.from({ length: BUILD_SLOTS }, (_, i) => i),
+            boundaryGap: true,
+          },
+          yAxis: { type: 'value', show: false, min: 0 },
+          tooltip: {
+            trigger: 'axis',
+            appendToBody: true,
+            backgroundColor: '#161d25',
+            borderColor: '#2a3742',
+            borderWidth: 1,
+            padding: [4, 8],
+            textStyle: { color: '#cfd8dc', fontSize: 11, fontFamily: 'var(--mono)' },
+            axisPointer: { type: 'none' },
+            formatter: (ps) => {
+              const b = builds[ps[0].dataIndex];
+              if (!b) return '';
+              const n = b.buildNumber ? '#' + b.buildNumber + ' · ' : '';
+              return n + b.outcome + ' · ' + fmtMillis(b.millis);
+            },
+          },
+          series: [{ type: 'bar', data, barWidth: '80%', z: 2 }],
+        },
+        true,
+      );
+    },
+  },
+};
+
+/** A finished record's outcome for the Projects tab: cancelled ▸ success ▸ failed (records are terminal). */
+function recordOutcome(r) {
+  return r.cancelled ? 'cancelled' : r.success ? 'success' : 'failed';
+}
+
+/**
+ * Parse the location hash into a route. Flat top-level views plus one detail route:
+ * `#project/<url-encoded dir>` opens a single project's page (routed by dir — a coord isn't uniquely
+ * reversible to a dir). Anything unrecognised falls back to the activity feed.
+ */
+function routeFromHash() {
+  const h = location.hash || '';
+  if (h.startsWith('#project/')) return { view: 'project', dir: decodeURIComponent(h.slice('#project/'.length)) };
+  if (h === '#projects') return { view: 'projects', dir: null };
+  if (h === '#status') return { view: 'status', dir: null };
+  return { view: 'activity', dir: null };
+}
+
+/** Cached-vs-total phase counts for one record → the build's "N of M phases served from cache". */
+function phaseCacheStats(rec) {
+  const phases = (rec.modules && rec.modules.length)
+    ? rec.modules.flatMap((m) => m.phases || [])
+    : rec.phases || [];
+  let cached = 0;
+  let total = 0;
+  for (const p of phases) {
+    if (p.status === 'CANCELLED') continue; // a cancelled phase never ran — not a cache decision
+    total++;
+    if (p.status === 'SKIPPED') cached++; // ctx.cached() → up-to-date / served from cache
+  }
+  return { cached, total };
+}
+
+/** Compact duration for the chart tooltip (no Vue instance in reach): "820 ms" / "3.4 s" / "1m 05s". */
+function fmtMillis(millis) {
+  if (millis == null) return '';
+  if (millis < 1000) return millis + ' ms';
+  if (millis < 60_000) return (millis / 1000).toFixed(1) + ' s';
+  return Math.floor(millis / 60_000) + 'm ' + String(Math.round((millis % 60_000) / 1000)).padStart(2, '0') + 's';
+}
+
 Vue.createApp({
   data: () => ({
-    view: location.hash === '#status' ? 'status' : 'activity',
+    view: routeFromHash().view, // 'activity' | 'projects' | 'project' | 'status'
+    selectedProjectDir: routeFromHash().dir, // the project whose detail page is open (#project/<dir>)
+    projectMeta: null, // live /api/project payload (coord + description) for the open project
     connection: 'connecting', // 'connecting' | 'live' | 'offline' | 'unauthorized'
     status: null, // the /api/status payload
     metrics: null, // the /api/metrics payload (running build aggregates), shown on the Status view
     cache: null, // the /api/cache payload (cache breakdown), shown on the Status view
     engineLog: '', // the /api/log tail, shown on the Status view
     cards: [], // folded activity, newest first
+    projectHistory: [], // raw /api/history records (up to 200), grouped into the Projects tab
     buildDir: '',
     buildError: null,
     browser: null, // the /api/fs payload while the workspace picker is open, else null
@@ -103,20 +227,200 @@ Vue.createApp({
 
   mounted() {
     events(
-      (event) => foldEvent(this.cards, { ...event, at: Date.now() }),
+      (event) => {
+        foldEvent(this.cards, { ...event, at: Date.now() });
+        // The build number + journal record are written just after request-finish (writeJournal),
+        // so re-pull history a beat later: it reconciles the live card (tagging its #number) and
+        // refreshes the Projects tab. Debounced so a burst of finishes triggers one reload.
+        if (event.type === 'request-finish') {
+          clearTimeout(this._reconcileTimer);
+          this._reconcileTimer = setTimeout(() => {
+            this.loadHistory();
+            this.loadProjectHistory();
+          }, 500);
+        }
+      },
       (state) => {
         const wasOffline = this.connection === 'offline';
         if (this.connection !== 'unauthorized' || state === 'live') this.connection = state;
         if (state === 'live' && wasOffline) {
           this.refresh(); // resync after an engine restart
           this.loadHistory(); // re-seed persisted runs (dedupe keeps this idempotent)
+          this.loadProjectHistory();
         }
       },
     );
     this.refresh();
     this.loadHistory(); // backfill past builds so a reload/restart doesn't start from an empty feed
+    this.loadProjectHistory(); // so the Projects tab is populated the moment it's opened
+    // Back/forward and any hash change re-derive the route (openProject sets the hash, which lands here).
+    window.addEventListener('hashchange', () => this.applyRoute());
+    if (this.view === 'project' && this.selectedProjectDir) this.loadProjectMeta(this.selectedProjectDir);
     setInterval(() => this.refresh(), 30_000); // slow fallback; SSE is the primary signal
     setInterval(() => (this.now = Date.now()), 1_000);
+  },
+
+  computed: {
+    // Group the journal into per-project rows for the Projects tab. A computed (not a method) so it
+    // recomputes only when projectHistory or the live cards change — never on the 1s clock tick, so
+    // the ECharts canvases don't re-render every second. Key = coord when the project has one, else
+    // its dir (two dirs sharing a coord fold together; a coord-less project stands on its dir).
+    projectsList() {
+      const RECENT = 30;
+      const groups = new Map(); // key → { records[] } (records arrive newest-first from /api/history)
+      for (const rec of this.projectHistory || []) {
+        if (!rec || !rec.dir) continue;
+        const key = rec.coord && rec.coord.includes(':') ? rec.coord : rec.dir;
+        let g = groups.get(key);
+        if (!g) {
+          g = { key, records: [] };
+          groups.set(key, g);
+        }
+        g.records.push(rec);
+      }
+
+      // A project with a build in flight right now shows the pulsing 'running' orb, overriding the
+      // last finished outcome. Live running builds live in the SSE cards feed, keyed the same way.
+      const runningKeys = new Set();
+      for (const c of this.cards || []) {
+        if (outcomeOf(c) !== 'running') continue;
+        const key = c.coord && c.coord.includes(':') ? c.coord : c.dir;
+        if (key) runningKeys.add(key);
+      }
+
+      const list = [];
+      for (const g of groups.values()) {
+        const recs = g.records; // newest-first
+        const latest = recs[0];
+        const window = recs.slice(0, RECENT); // newest-first slice for stats
+        const recent = window
+          .slice()
+          .reverse() // oldest → newest, left → right for the chart
+          .map((r) => ({
+            outcome: recordOutcome(r),
+            millis: r.millis || 0,
+            buildNumber: r.buildNumber || 0,
+            finishedAt: r.finishedAt || 0,
+          }));
+
+        // Reliability over the shown window: passes / (passes + fails), cancelled excluded — so the
+        // number and the coloured bars always describe the same set of builds.
+        let passed = 0;
+        let ran = 0;
+        let totalMillis = 0;
+        let timed = 0;
+        for (const r of window) {
+          const o = recordOutcome(r);
+          if (o !== 'cancelled') {
+            ran++;
+            if (o === 'success') passed++;
+          }
+          if (r.millis) {
+            totalMillis += r.millis;
+            timed++;
+          }
+        }
+        const relPct = ran ? Math.round((100 * passed) / ran) : null;
+        const parts = this.coordParts(latest); // reuse the card coord-splitter (coord or dir tail)
+        const running = runningKeys.has(g.key);
+
+        list.push({
+          key: g.key,
+          group: parts.group,
+          name: parts.name,
+          dir: latest.dir,
+          state: running ? 'running' : recordOutcome(latest),
+          buildNumber: latest.buildNumber || 0,
+          // The durable per-project counter (newest build's number) is the true total; fall back to
+          // the count of retained records for pre-numbering (schema-1) history.
+          total: latest.buildNumber || recs.length,
+          avgMillis: timed ? Math.round(totalMillis / timed) : 0,
+          lastFinishedAt: latest.finishedAt || 0,
+          recent,
+          reliability: relPct == null ? '—' : relPct + '%',
+          reliabilityClass: relPct == null ? '' : relPct >= 90 ? 'ok' : relPct >= 70 ? 'warn' : 'err',
+        });
+      }
+      // Running projects float to the top, then most-recently-active first.
+      list.sort((a, b) => (b.state === 'running') - (a.state === 'running') || b.lastFinishedAt - a.lastFinishedAt);
+      return list;
+    },
+
+    // The open project's detail page: identity + aggregate metrics + a build-history table, all
+    // derived from the journal filtered to this project (same coord/dir grouping as projectsList).
+    // Recomputes only when the history, selection, or meta change — not on the 1s clock tick.
+    projectDetail() {
+      const dir = this.selectedProjectDir;
+      if (!dir) return null;
+      const RECENT = 30;
+      const metaCoord = this.projectMeta && this.projectMeta.coord ? this.projectMeta.coord : null;
+      const key = metaCoord || dir; // match how projectsList groups (coord when present, else dir)
+      const records = (this.projectHistory || []).filter((r) => {
+        const rk = r.coord && r.coord.includes(':') ? r.coord : r.dir;
+        return rk === key || r.dir === dir;
+      });
+      const parts = this.coordParts({ coord: metaCoord || (records[0] && records[0].coord), dir });
+      const base = {
+        dir,
+        group: parts.group,
+        name: parts.name,
+        description: (this.projectMeta && this.projectMeta.description) || null,
+      };
+      if (records.length === 0) return { ...base, empty: true, rows: [] };
+
+      const latest = records[0];
+      const window = records.slice(0, RECENT);
+      let passed = 0;
+      let ran = 0;
+      let cachedSum = 0;
+      let totalSum = 0;
+      const durs = [];
+      for (const r of window) {
+        const o = recordOutcome(r);
+        if (o !== 'cancelled') {
+          ran++;
+          if (o === 'success') passed++;
+        }
+        const cs = phaseCacheStats(r);
+        cachedSum += cs.cached;
+        totalSum += cs.total;
+        if (r.millis) durs.push(r.millis);
+      }
+      const relPct = ran ? Math.round((100 * passed) / ran) : null;
+      const cachePct = totalSum ? Math.round((100 * cachedSum) / totalSum) : null;
+      durs.sort((a, b) => a - b);
+      const avg = durs.length ? Math.round(durs.reduce((s, x) => s + x, 0) / durs.length) : null;
+
+      const rows = records.slice(0, 50).map((r) => {
+        const cs = phaseCacheStats(r);
+        return {
+          id: r.id,
+          buildNumber: r.buildNumber || null,
+          outcome: recordOutcome(r),
+          trigger: r.trigger || null,
+          commit: r.commit || null,
+          tests: r.tests || null,
+          cached: cs.cached,
+          cacheTotal: cs.total,
+          millis: r.millis,
+          finishedAt: r.finishedAt || 0,
+        };
+      });
+
+      return {
+        ...base,
+        empty: false,
+        total: latest.buildNumber || records.length,
+        reliability: relPct == null ? '—' : relPct + '%',
+        reliabilityClass: relPct == null ? '' : relPct >= 90 ? 'ok' : relPct >= 70 ? 'warn' : 'err',
+        cachePct: cachePct == null ? '—' : cachePct + '%',
+        minMillis: durs.length ? durs[0] : null,
+        maxMillis: durs.length ? durs[durs.length - 1] : null,
+        avgMillis: avg,
+        lastFinishedAt: latest.finishedAt || 0,
+        rows,
+      };
+    },
   },
 
   methods: {
@@ -124,6 +428,92 @@ Vue.createApp({
       this.view = view;
       history.replaceState(null, '', '#' + view);
       if (view === 'status') this.refresh();
+      if (view === 'projects') this.loadProjectHistory();
+    },
+
+    // ---- the Projects tab (grouped /api/history + live running overlay) ----
+
+    // Pull the raw journal (newest-first, up to 200 records); projectsList groups it per project.
+    async loadProjectHistory() {
+      try {
+        this.projectHistory = await get('/api/history');
+      } catch (e) {
+        if (e.status === 401) this.connection = 'unauthorized';
+      }
+    },
+
+    // The pill/orb glyph for a project's state (Projects tab). Running gets a ▶ play (the Activity
+    // feed shows a spinner instead); 'issue' (‼) is reserved for the audit/CVE signal — nothing
+    // drives it yet, but the state, colour, and chip are wired so a future signal only sets it.
+    projGlyph(state) {
+      return { running: '▶', success: '✓', failed: '✘', cancelled: '⊘', issue: '‼', finished: '·' }[state] || '·';
+    },
+
+    // "just now" / "5m ago" / "3h ago" / "2d ago" from an epoch-millis stamp (drives the 1s clock).
+    agoMillis(ms) {
+      if (!ms) return '';
+      const s = Math.max(0, Math.floor((this.now - ms) / 1000));
+      if (s < 60) return 'just now';
+      if (s < 3600) return Math.floor(s / 60) + 'm ago';
+      if (s < 86_400) return Math.floor(s / 3600) + 'h ago';
+      return Math.floor(s / 86_400) + 'd ago';
+    },
+
+    // Full-breakdown elapsed for the "Last built" line: "1d 2h 3m 4s ago" — the largest non-zero unit
+    // down to seconds (leading zero units dropped). Drives off the 1s clock like agoMillis.
+    agoLong(ms) {
+      if (!ms) return 'never';
+      let s = Math.max(0, Math.floor((this.now - ms) / 1000));
+      const d = Math.floor(s / 86_400); s -= d * 86_400;
+      const h = Math.floor(s / 3600); s -= h * 3600;
+      const m = Math.floor(s / 60); s -= m * 60;
+      const parts = [];
+      if (d) parts.push(d + 'd');
+      if (h || parts.length) parts.push(h + 'h');
+      if (m || parts.length) parts.push(m + 'm');
+      parts.push(s + 's');
+      return parts.join(' ') + ' ago';
+    },
+
+    // ---- the project detail page (#project/<dir>) ----
+
+    // Open a project's page — set the hash (creating a history entry so Back returns to the list);
+    // the hashchange listener drives applyRoute, which flips the view and loads the metadata.
+    openProject(dir) {
+      if (!dir) return;
+      location.hash = '#project/' + encodeURIComponent(dir);
+    },
+
+    // Re-derive view + selected project from the hash, loading whatever that route needs.
+    applyRoute() {
+      const r = routeFromHash();
+      this.view = r.view;
+      this.selectedProjectDir = r.dir;
+      if (r.view === 'project' && r.dir) this.loadProjectMeta(r.dir);
+      if (r.view === 'projects') this.loadProjectHistory();
+      if (r.view === 'status') this.refresh();
+    },
+
+    // Live coord + description for the open project, straight from its jk.toml on disk.
+    async loadProjectMeta(dir) {
+      this.projectMeta = null;
+      try {
+        this.projectMeta = await get('/api/project?dir=' + encodeURIComponent(dir));
+      } catch (e) {
+        if (e.status === 401) this.connection = 'unauthorized';
+      }
+      if (!this.projectHistory.length) this.loadProjectHistory(); // detail rows come from history
+    },
+
+    // The "Build" button: kick off a fresh build of this project and jump to the live Activity feed.
+    buildProject(dir) {
+      this.triggerBuild(dir);
+      this.setView('activity');
+    },
+
+    // Human label for a build's trigger. Older (pre-capture) records have none → em dash.
+    triggerLabel(trigger) {
+      return { web: 'web build', cli: 'cli build' }[trigger] || '—';
     },
 
     // Progress percentage for a running card's bar — the identical weight-based model as the CLI
@@ -429,4 +819,5 @@ Vue.createApp({
   },
 })
   .component('phase-chain', PhaseChain)
+  .component('build-bars', BuildBars)
   .mount('#app');

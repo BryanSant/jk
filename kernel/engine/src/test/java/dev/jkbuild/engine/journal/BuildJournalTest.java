@@ -20,9 +20,9 @@ class BuildJournalTest {
 
     private static BuildRecord record(long finishedAt, boolean success, String coord) {
         return new BuildRecord(
-                null, BuildRecord.SCHEMA, "build", "/proj", coord,
+                null, 0L, BuildRecord.SCHEMA, "build", "/proj", coord,
                 finishedAt - 100, finishedAt, 100, success, false, success ? 0 : 1, "9.9-test",
-                null, List.of(), List.of(), List.of());
+                null, List.of(), List.of(), List.of(), "cli", null);
     }
 
     @Test

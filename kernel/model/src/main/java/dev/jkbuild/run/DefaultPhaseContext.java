@@ -40,6 +40,9 @@ final class DefaultPhaseContext implements PhaseContext {
     /** Wall-clock interpolation: 0 = off; else the phase's expected duration. */
     private volatile long expectedNanos; // scaled with the weight on reweight()
 
+    /** Set by {@link #cached()} when the phase's work was served from cache / already up-to-date. */
+    private volatile boolean cached;
+
     private final long startNanos;
 
     DefaultPhaseContext(
@@ -162,6 +165,16 @@ final class DefaultPhaseContext implements PhaseContext {
         goal.denominatorRef().add(additional);
         GoalView snap = goal.snapshot();
         goal.emit(l -> l.scopeUpdate(phase, additional, snap));
+    }
+
+    @Override
+    public void cached() {
+        this.cached = true;
+    }
+
+    /** Whether the phase marked itself a cache hit / up-to-date via {@link #cached()}. */
+    boolean wasCached() {
+        return cached;
     }
 
     @Override

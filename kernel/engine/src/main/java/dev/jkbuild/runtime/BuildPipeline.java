@@ -1312,6 +1312,7 @@ public final class BuildPipeline {
                                     ctx.require(RELEASE))) {
                         ctx.reweight(EffortWeights.SKIP); // nothing to compile this run
                         ctx.label("up to date");
+                        ctx.cached();
                         ctx.put(BUILD_OUTCOME, "up-to-date");
                         ctx.progress(sources.size());
                         return;
@@ -1409,7 +1410,10 @@ public final class BuildPipeline {
                         }
                         throw new RuntimeException("javac reported errors");
                     }
-                    if (r.cacheHit()) ctx.label("cache hit " + r.actionKey().substring(0, 8));
+                    if (r.cacheHit()) {
+                        ctx.label("cache hit " + r.actionKey().substring(0, 8));
+                        ctx.cached();
+                    }
                     ctx.put(BUILD_OUTCOME, r.outcome());
                     ctx.progress(sources.size());
                 })
@@ -1529,6 +1533,7 @@ public final class BuildPipeline {
                                     ctx.require(RELEASE))) {
                         ctx.reweight(EffortWeights.SKIP); // nothing to compile this run
                         ctx.label("up to date");
+                        ctx.cached();
                         ctx.put(KOTLIN_OUTCOME, "up-to-date");
                         ctx.progress(ktSources.size());
                         return;
@@ -1562,7 +1567,10 @@ public final class BuildPipeline {
                         ctx.error("kotlinc", kr.output());
                         throw new RuntimeException("kotlinc reported errors");
                     }
-                    if (kr.cacheHit()) ctx.label("cache hit " + kr.actionKey().substring(0, 8));
+                    if (kr.cacheHit()) {
+                        ctx.label("cache hit " + kr.actionKey().substring(0, 8));
+                        ctx.cached();
+                    }
                     // Kotlin-only: publish straight into the classes dir. Mixed:
                     // leave it in ktOut for `assemble-classes` to merge after javac.
                     if (!mixedWithJava) copyResources(ktOut, classes);
@@ -1806,6 +1814,7 @@ public final class BuildPipeline {
                         if (greenRecord.isPresent()) {
                             ctx.reweight(EffortWeights.SKIP);
                             ctx.label("tests up-to-date");
+                            ctx.cached();
                             // Replay the green run's counts (stored on the marker) so the summary
                             // line reads "Passed N tests", not "No tests" — without this a
                             // legitimate skip was indistinguishable from a module with no test
@@ -1976,6 +1985,7 @@ public final class BuildPipeline {
                     if (restorePackaged(in.cache(), pkgKey, jarPath.getParent())) {
                         ctx.put(JAR_PATH, jarPath);
                         ctx.label(jarPath.getFileName() + " up-to-date");
+                        ctx.cached();
                         ctx.progress(1);
                         return;
                     }
@@ -2332,6 +2342,7 @@ public final class BuildPipeline {
         if (restorePackaged(in.cache(), pkgKey, jarPath.getParent())) {
             ctx.put(JAR_PATH, jarPath);
             ctx.label(jarPath.getFileName() + " up-to-date");
+            ctx.cached();
             ctx.progress(1);
             return;
         }
@@ -2627,6 +2638,7 @@ public final class BuildPipeline {
                     String shKey = ActionKey.forArtifact(shTask, dev.jkbuild.util.JkVersion.VERSION, tokens);
                     if (restorePackaged(cache, shKey, shadowJar.getParent())) {
                         ctx.label(shadowJar.getFileName() + " up-to-date");
+                        ctx.cached();
                         ctx.progress(1);
                         return;
                     }
@@ -2690,6 +2702,7 @@ public final class BuildPipeline {
                     String key = ActionKey.forArtifact(task, dev.jkbuild.util.JkVersion.VERSION, tokens);
                     if (restorePackaged(cache, key, sourcesJar.getParent())) {
                         ctx.label(sourcesJar.getFileName() + " up-to-date");
+                        ctx.cached();
                         ctx.progress(1);
                         return;
                     }

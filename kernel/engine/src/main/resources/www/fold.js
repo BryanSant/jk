@@ -189,6 +189,7 @@ export function seedFromHistory(cards, records) {
     );
     if (live) {
       live.historyId = rec.id; // reconcile: the live card is this run — make it deletable
+      if (rec.buildNumber) live.buildNumber = rec.buildNumber; // and pick up its assigned #number
       continue;
     }
     if (cards.some((c) => c.id === 'h:' + rec.id)) continue; // already seeded
@@ -204,6 +205,7 @@ function historyCard(rec) {
   return {
     id: 'h:' + rec.id,
     historyId: rec.id,
+    buildNumber: rec.buildNumber || null,
     kind: rec.kind || 'build',
     dir: rec.dir || '',
     coord: rec.coord || null,

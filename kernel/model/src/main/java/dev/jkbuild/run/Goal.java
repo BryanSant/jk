@@ -207,7 +207,7 @@ public final class Goal {
                 remaining.removeAll(ready);
                 boolean levelOk = runLevel(ready, initialScope, weights);
                 for (Phase p : ready) {
-                    if (statuses.get(p.name()) == PhaseStatus.SUCCESS) {
+                    if (isOk(statuses.get(p.name()))) {
                         completedOk.add(p.name());
                     }
                 }
@@ -227,7 +227,7 @@ public final class Goal {
         }
 
         boolean success = !cancelled.get()
-                && phases.stream().map(p -> statuses.get(p.name())).allMatch(s -> s == PhaseStatus.SUCCESS);
+                && phases.stream().map(p -> statuses.get(p.name())).allMatch(Goal::isOk);
 
         // Sort reports back into declaration order so the printed summary
         // matches the user's mental model of the build pipeline.
@@ -305,7 +305,7 @@ public final class Goal {
         for (CompletableFuture<PhaseStatus> f : futures) {
             try {
                 PhaseStatus s = f.get();
-                if (s != PhaseStatus.SUCCESS) ok = false;
+                if (!isOk(s)) ok = false;
             } catch (Exception e) {
                 ok = false;
             }
@@ -324,6 +324,15 @@ public final class Goal {
             }
         }
         return ok;
+    }
+
+    /**
+     * A phase status that counts as "the phase is done and the build may proceed": a real success or
+     * a cache-hit/up-to-date {@link PhaseStatus#SKIPPED}. Used for dependency gating and overall
+     * success so a fully-cached build (every phase SKIPPED) is still a success.
+     */
+    private static boolean isOk(PhaseStatus s) {
+        return s == PhaseStatus.SUCCESS || s == PhaseStatus.SKIPPED;
     }
 
     private PhaseStatus runOnePhase(Phase phase, int initialScope, int weight) {
@@ -350,12 +359,17 @@ public final class Goal {
                 numerator.add(gap);
                 ctx.notifyProgress(gap);
             }
-            statuses.put(phase.name(), PhaseStatus.SUCCESS);
+            // A phase that reported no real work (outputs up-to-date / served from cache via
+            // ctx.cached()) terminates SKIPPED, not SUCCESS. SKIPPED counts as "ok" everywhere the
+            // goal decides success (see isOk), so it never fails a build — it only feeds the
+            // dashboard's per-project cache-hit ("phases skipped") ratio.
+            PhaseStatus terminal = ctx.wasCached() ? PhaseStatus.SKIPPED : PhaseStatus.SUCCESS;
+            statuses.put(phase.name(), terminal);
             Duration dur = Duration.between(start, Instant.now());
-            reports.add(new GoalResult.PhaseReport(phase.name(), PhaseStatus.SUCCESS, dur));
+            reports.add(new GoalResult.PhaseReport(phase.name(), terminal, dur));
             phasesComplete.incrementAndGet();
-            emit(l -> l.phaseFinish(phase.name(), PhaseStatus.SUCCESS, dur));
-            return PhaseStatus.SUCCESS;
+            emit(l -> l.phaseFinish(phase.name(), terminal, dur));
+            return terminal;
         } catch (Throwable t) {
             if (ticked) ticking.remove(ctx);
             // If the phase body already recorded a specific error via

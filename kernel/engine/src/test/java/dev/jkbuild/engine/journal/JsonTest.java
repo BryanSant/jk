@@ -11,7 +11,7 @@ class JsonTest {
     @Test
     void roundtrips_a_fully_populated_record() {
         BuildRecord original = new BuildRecord(
-                "20260710T143022417-3f9a", 1, "build", "/proj \"quoted\"", "com.example:app",
+                "20260710T143022417-3f9a", 412, 2, "build", "/proj \"quoted\"", "com.example:app",
                 1000, 4000, 3000, false, false, 1, "9.9-test",
                 new BuildRecord.Tests(42, 40, 1, 1),
                 List.of(new BuildRecord.Module("com.example:app", "/proj", false, 1, 3000,
@@ -20,11 +20,15 @@ class JsonTest {
                 List.of(new BuildRecord.Phase("compile", "SUCCESS", 800),
                         new BuildRecord.Phase("test", "FAIL", 1200)),
                 List.of(new BuildRecord.Diag("error", "/proj", "test", "JUNIT", "expected 1 but was 2\nline two",
-                        "com.example.AppTest#adds", "org.opentest4j.AssertionFailedError")));
+                        "com.example.AppTest#adds", "org.opentest4j.AssertionFailedError")),
+                "web", "abc1234");
 
         BuildRecord back = Json.read(Json.write(original));
 
         assertThat(back.id()).isEqualTo(original.id());
+        assertThat(back.buildNumber()).isEqualTo(412);
+        assertThat(back.trigger()).isEqualTo("web");
+        assertThat(back.commit()).isEqualTo("abc1234");
         assertThat(back.kind()).isEqualTo("build");
         assertThat(back.dir()).isEqualTo("/proj \"quoted\"");
         assertThat(back.coord()).isEqualTo("com.example:app");
@@ -46,9 +50,9 @@ class JsonTest {
     @Test
     void roundtrips_a_minimal_record_with_null_coord_and_no_tests() {
         BuildRecord original = new BuildRecord(
-                "20260710T143022417-0000", 1, "test", "/p", null,
+                "20260710T143022417-0000", 0, 1, "test", "/p", null,
                 0, 5, 5, true, true, 0, "9.9",
-                null, List.of(), List.of(), List.of());
+                null, List.of(), List.of(), List.of(), null, null);
         BuildRecord back = Json.read(Json.write(original));
         assertThat(back.coord()).isNull();
         assertThat(back.tests()).isNull();

@@ -739,7 +739,7 @@ public final class EngineServer implements AutoCloseable {
         String eventDir = String.valueOf(Ndjson.str(requestLine, "entryDir"));
         long eventStartMillis = clockMillis.getAsLong();
         publishRequestStart(eventRequestId, eventKind, eventDir);
-        registerAccumulator(eventRequestId, eventKind, eventDir);
+        registerAccumulator(eventRequestId, eventKind, eventDir, "cli");
         if (pipeline) activePipelines.incrementAndGet();
         try {
             Thread.ofVirtual().name(threadPrefix, 0).start(() -> {
@@ -2665,6 +2665,10 @@ public final class EngineServer implements AutoCloseable {
         // Created on the runner's thread — capture the request id for the dashboard events now;
         // the callbacks below fire on scheduler/worker threads where the ThreadLocal isn't set.
         long eventRequestId = eventRequestId();
+        // Each module's goal, kept from onModuleStart so onModuleFinish can read its TEST_RESULT and
+        // fold per-module test counts into the run's record — the workspace path has no single test
+        // goal, so tests would otherwise never reach a dashboard-triggered build's history.
+        java.util.Map<String, dev.jkbuild.run.Goal> moduleGoals = new java.util.concurrent.ConcurrentHashMap<>();
         return new WorkspaceBuildListener() {
             @Override
             public void onPlan(java.util.List<ModulePlan> plan) {
@@ -2690,6 +2694,7 @@ public final class EngineServer implements AutoCloseable {
             @Override
             public GoalListener onModuleStart(ModulePlan m) {
                 String dir = m.dir().toString();
+                moduleGoals.put(dir, m.goal()); // read its TEST_RESULT at finish (see onModuleFinish)
                 sendQuiet(writer, EngineProtocol.moduleStart(dir));
                 publishModuleStart(eventRequestId, dir, m.coord());
                 // wireGoalListener captures the dashboard request id from the currentEventRequestId
@@ -2714,6 +2719,10 @@ public final class EngineServer implements AutoCloseable {
                         EngineProtocol.moduleFinish(o.dir().toString(), o.coord(), o.success(), o.exitCode(), o.millis()));
                 publishModuleFinish(eventRequestId, o.dir().toString(), o.coord(), o.success(), o.millis());
                 accModule(eventRequestId, o);
+                dev.jkbuild.run.Goal g = moduleGoals.remove(o.dir().toString());
+                if (g != null) {
+                    accTests(eventRequestId, g.get(dev.jkbuild.runtime.BuildPipeline.TEST_RESULT).orElse(null));
+                }
             }
         };
     }
@@ -2766,9 +2775,9 @@ public final class EngineServer implements AutoCloseable {
      * history disabled the accumulator feeds the running {@link BuildMetrics}; only the journal
      * append itself is gated on {@code historyConfig.enabled()}.
      */
-    private void registerAccumulator(long requestId, String kind, String dir) {
+    private void registerAccumulator(long requestId, String kind, String dir, String trigger) {
         if (!JOURNALED_KINDS.contains(kind)) return;
-        accumulators.put(requestId, new BuildAccumulator(kind, dir, coordOf(dir)));
+        accumulators.put(requestId, new BuildAccumulator(kind, dir, coordOf(dir), trigger));
     }
 
     /** The project's {@code group:name}, or {@code null} when its {@code jk.toml} doesn't parse. */
@@ -2804,7 +2813,7 @@ public final class EngineServer implements AutoCloseable {
 
     private void accTests(long requestId, TestSummary tests) {
         BuildAccumulator a = accumulators.get(requestId);
-        if (a != null && tests != null) a.setTests(tests);
+        if (a != null && tests != null) a.addTests(tests);
     }
 
     private void accOutcome(long requestId, boolean success, int exitCode) {
@@ -2822,8 +2831,13 @@ public final class EngineServer implements AutoCloseable {
         if (a == null) return;
         try {
             long finishedAt = clockMillis.getAsLong();
-            BuildRecord record = a.toRecord(finishedAt, cancelled, millis, version);
-            BuildMetrics.record(metricsFile, toOutcome(record), finishedAt);
+            String commit = gitCommit(a.dir()); // best-effort short SHA of the project's HEAD
+            BuildRecord record = a.toRecord(finishedAt, cancelled, millis, version, commit);
+            // Folding metrics also mints this run's durable per-project build number; stamp it onto
+            // the record so the journal (and the dashboard's #NNN pill) carry it. Metrics is folded
+            // even when history is disabled, so the counter stays consistent regardless.
+            long buildNumber = BuildMetrics.record(metricsFile, toOutcome(record), finishedAt);
+            record = record.withBuildNumber(buildNumber);
             if (!historyConfig.enabled()) return;
             Path dir = Path.of(a.dir());
             // Snapshot paths mirror BuildLayout.markdownTestResults() and the project's jk.lock; each
@@ -2835,6 +2849,32 @@ public final class EngineServer implements AutoCloseable {
             journal.append(record, snapshot);
         } catch (RuntimeException e) {
             log.accept("jk engine: build journal append failed: " + e);
+        }
+    }
+
+    /**
+     * The project's git HEAD as a short SHA, or {@code null} when the dir isn't a git repo, git isn't
+     * on PATH, or the call errors/times out. Best-effort and non-blocking-ish (1s cap): a commit stamp
+     * is a nice-to-have on the history record, never worth failing or stalling journaling.
+     */
+    private static String gitCommit(String dir) {
+        if (dir == null || dir.isEmpty()) return null;
+        try {
+            Process p = new ProcessBuilder("git", "-C", dir, "rev-parse", "--short", "HEAD")
+                    .redirectErrorStream(false)
+                    .start();
+            String out;
+            try (var in = p.getInputStream()) {
+                out = new String(in.readAllBytes(), StandardCharsets.UTF_8).trim();
+            }
+            if (!p.waitFor(1, java.util.concurrent.TimeUnit.SECONDS)) {
+                p.destroyForcibly();
+                return null;
+            }
+            return p.exitValue() == 0 && !out.isEmpty() ? out : null;
+        } catch (IOException | InterruptedException | RuntimeException e) {
+            if (e instanceof InterruptedException) Thread.currentThread().interrupt();
+            return null;
         }
     }
 
@@ -3226,7 +3266,7 @@ public final class EngineServer implements AutoCloseable {
         long eventRequestId = requestIds.incrementAndGet();
         long startMillis = clockMillis.getAsLong();
         publishRequestStart(eventRequestId, "build", entryDir.toString());
-        registerAccumulator(eventRequestId, "build", entryDir.toString());
+        registerAccumulator(eventRequestId, "build", entryDir.toString(), "web");
         activePipelines.incrementAndGet();
         Thread.ofVirtual().name("jk-engine-http-build-", 0).start(() -> {
             cacheGate.readLock().lock();
@@ -3296,6 +3336,10 @@ public final class EngineServer implements AutoCloseable {
     /** Module/goal events to the dashboard hub only — the HTTP trigger's counterpart of {@link #wireListener}. */
     private WorkspaceBuildListener hubListener() {
         long eventRequestId = eventRequestId();
+        // As in wireListener: keep each module's goal so onModuleFinish can fold its TEST_RESULT into
+        // the record — a web-triggered build has no single test goal, so tests would otherwise never
+        // reach the journal for dashboard builds.
+        java.util.Map<String, dev.jkbuild.run.Goal> moduleGoals = new java.util.concurrent.ConcurrentHashMap<>();
         return new WorkspaceBuildListener() {
             @Override
             public void onPlan(java.util.List<ModulePlan> plan) {
@@ -3310,6 +3354,7 @@ public final class EngineServer implements AutoCloseable {
             @Override
             public GoalListener onModuleStart(ModulePlan m) {
                 String dir = m.dir().toString();
+                moduleGoals.put(dir, m.goal());
                 publishModuleStart(eventRequestId, dir, m.coord());
                 return new GoalListener() {
                     @Override
@@ -3356,6 +3401,10 @@ public final class EngineServer implements AutoCloseable {
             public void onModuleFinish(ModuleOutcome o) {
                 publishModuleFinish(eventRequestId, o.dir().toString(), o.coord(), o.success(), o.millis());
                 accModule(eventRequestId, o);
+                dev.jkbuild.run.Goal g = moduleGoals.remove(o.dir().toString());
+                if (g != null) {
+                    accTests(eventRequestId, g.get(dev.jkbuild.runtime.BuildPipeline.TEST_RESULT).orElse(null));
+                }
             }
         };
     }
@@ -3491,6 +3540,7 @@ public final class EngineServer implements AutoCloseable {
         private final String kind;
         private final String dir;
         private final String coord;
+        private final String trigger; // how the build was started: "cli" (socket) or "web" (dashboard)
         private final java.util.List<ModuleOutcome> modules = new java.util.concurrent.CopyOnWriteArrayList<>();
         // Phases per module dir (name → Phase, arrival order, last status wins). The single-goal path
         // uses the "" (SINGLE_GOAL_DIR) bucket; workspace modules use their real dir. Rendered as a
@@ -3504,10 +3554,11 @@ public final class EngineServer implements AutoCloseable {
         private volatile Boolean success;
         private volatile int exitCode;
 
-        BuildAccumulator(String kind, String dir, String coord) {
+        BuildAccumulator(String kind, String dir, String coord, String trigger) {
             this.kind = kind;
             this.dir = dir;
             this.coord = coord;
+            this.trigger = trigger;
         }
 
         String dir() {
@@ -3560,8 +3611,20 @@ public final class EngineServer implements AutoCloseable {
             }
         }
 
-        void setTests(TestSummary t) {
-            tests = new BuildRecord.Tests(t.total(), t.succeeded(), t.failed(), t.skipped());
+        /**
+         * Fold in one goal's test summary. Single-goal {@code jk test}/{@code 1build} call this once;
+         * a workspace build calls it per module (each module's {@code TEST_RESULT}), so the counts
+         * accumulate into the run's total rather than the last module overwriting the rest.
+         */
+        synchronized void addTests(TestSummary t) {
+            if (t == null) return;
+            tests = tests == null
+                    ? new BuildRecord.Tests(t.total(), t.succeeded(), t.failed(), t.skipped())
+                    : new BuildRecord.Tests(
+                            tests.total() + t.total(),
+                            tests.succeeded() + t.succeeded(),
+                            tests.failed() + t.failed(),
+                            tests.skipped() + t.skipped());
         }
 
         void setOutcome(boolean ok, int exit) {
@@ -3583,7 +3646,7 @@ public final class EngineServer implements AutoCloseable {
             return b.toString();
         }
 
-        BuildRecord toRecord(long finishedAt, boolean cancelled, long millis, String jkVersion) {
+        BuildRecord toRecord(long finishedAt, boolean cancelled, long millis, String jkVersion, String commit) {
             boolean ok = success != null ? success : (!anyFailure && !cancelled);
             int exit = success != null ? exitCode : (ok ? 0 : 1);
             // A build that reported success was not cancelled: cancelToken.cancelled() also fires on
@@ -3602,10 +3665,10 @@ public final class EngineServer implements AutoCloseable {
             }
             java.util.List<BuildRecord.Phase> topPhases = moduleList.isEmpty() ? phasesFor("") : java.util.List.of();
             return new BuildRecord(
-                    null, BuildRecord.SCHEMA, kind, dir, coord,
+                    null, 0L, BuildRecord.SCHEMA, kind, dir, coord,
                     finishedAt - millis, finishedAt, millis,
                     ok, cancelledEffective, exit, jkVersion,
-                    tests, moduleList, topPhases, new java.util.ArrayList<>(diagnostics));
+                    tests, moduleList, topPhases, new java.util.ArrayList<>(diagnostics), trigger, commit);
         }
 
         private static boolean notBlank(String s) {

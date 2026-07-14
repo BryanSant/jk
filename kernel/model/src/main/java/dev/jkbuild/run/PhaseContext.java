@@ -63,6 +63,15 @@ public interface PhaseContext {
      */
     void output(String line);
 
+    /**
+     * Signal that this phase did no real work — its outputs were already up-to-date / served from the
+     * cache (CAS or action cache). The scheduler then records the phase as {@link PhaseStatus#SKIPPED}
+     * instead of {@code SUCCESS}, which counts toward the dashboard's per-project cache-hit ratio
+     * ("phases skipped") without affecting the build's overall success. Idempotent — the flag simply
+     * sticks once set, so a phase that discovers late it did do work should just not call this.
+     */
+    default void cached() {}
+
     /** Accumulating warning. Surfaces in the run report. */
     void warn(String code, String message);
 

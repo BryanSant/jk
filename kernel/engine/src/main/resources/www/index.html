@@ -18,6 +18,11 @@
   <script src="https://unpkg.com/vue@3.5.39/dist/vue.global.prod.js"
           integrity="sha384-yrrm1s9PCS0I4n39ldjMqQlTorYls89GAS3wXVJooje/BSWnC2vTgky2LIyzRLEo"
           crossorigin="anonymous" defer></script>
+  <!-- Apache ECharts powers the Projects tab's per-project build-history spark bars + trend line.
+       Version-pinned + SRI, same discipline as Vue above; update the hash whenever the pin moves. -->
+  <script src="https://unpkg.com/echarts@5.5.1/dist/echarts.min.js"
+          integrity="sha384-Mx5lkUEQPM1pOJCwFtUICyX45KNojXbkWdYhkKUKsbv391mavbfoAmONbzkgYPzR"
+          crossorigin="anonymous" defer></script>
   <script src="/app.js" type="module"></script>
 </head>
 <body>
@@ -26,6 +31,7 @@
       <img class="logo" src="/jumpkick-logo.svg" alt="jk">
       <nav>
         <button :class="{ active: view === 'activity' }" @click="setView('activity')">Activity</button>
+        <button :class="{ active: view === 'projects' }" @click="setView('projects')">Projects</button>
         <button :class="{ active: view === 'status' }" @click="setView('status')">Status</button>
       </nav>
       <span class="spacer"></span>
@@ -56,7 +62,7 @@
       <article v-for="card in cards" :key="card.id" class="card" :class="outcome(card)">
         <div class="card-head">
           <span v-if="outcome(card) === 'running'" class="spin"></span>
-          <span v-else class="badge" :class="outcome(card)">{{ glyph(outcome(card)) }} {{ outcome(card) }}</span>
+          <span v-else class="badge" :class="outcome(card)">{{ glyph(outcome(card)) }} <template v-if="card.buildNumber">#{{ card.buildNumber }} </template>{{ outcome(card) }}</span>
           <span class="coord">
             <template v-if="coordParts(card).group"><span class="cg">{{ coordParts(card).group }}</span><span class="csep">:</span></template>
             <span class="cn">{{ coordParts(card).name }}</span>
@@ -169,6 +175,100 @@
           </div>
         </div>
       </div>
+    </main>
+
+    <main v-if="view === 'projects'">
+      <div class="feed-head">
+        <h2>Projects</h2>
+        <span class="retention">every workspace jk has built on this machine</span>
+      </div>
+      <p v-if="projectsList.length === 0" class="empty">
+        No projects yet — run a <code>jk build</code> and every workspace you build shows up here with its history.
+      </p>
+
+      <!-- One row per project: {orb} {coords} left · {30-build spark bars + trend} centre · {status
+           pill #buildNumber} {reliability} right. State (orb + left border + pill) is the latest
+           build's outcome, upgraded to 'running' when a build is in flight right now. -->
+      <article v-for="p in projectsList" :key="p.key" class="project" :class="p.state"
+               @click="openProject(p.dir)" title="Open this project">
+
+        <div class="proj-id">
+          <span class="orb" :class="p.state" :title="p.state"></span>
+          <div class="proj-label">
+            <span class="coord">
+              <template v-if="p.group"><span class="cg">{{ p.group }}</span><span class="csep">:</span></template>
+              <span class="cn">{{ p.name }}</span>
+            </span>
+            <div class="proj-meta">
+              <span class="dir" :title="p.dir">{{ shortDir(p.dir) }}</span>
+              <span class="proj-sep">·</span>
+              <span>{{ p.total }} build{{ p.total === 1 ? '' : 's' }}</span>
+              <template v-if="p.avgMillis"><span class="proj-sep">·</span><span>avg {{ duration(p.avgMillis) }}</span></template>
+              <template v-if="p.lastFinishedAt"><span class="proj-sep">·</span><span>{{ agoMillis(p.lastFinishedAt) }}</span></template>
+            </div>
+          </div>
+        </div>
+
+        <div class="proj-chart">
+          <build-bars :builds="p.recent"></build-bars>
+        </div>
+
+        <div class="proj-stats">
+          <span class="badge" :class="p.state">{{ projGlyph(p.state) }} #{{ p.total }}</span>
+          <span class="reliability" :class="p.reliabilityClass" title="pass rate over the builds shown (cancelled excluded)">
+            {{ p.reliability }}<span class="rel-lbl">reliability</span>
+          </span>
+        </div>
+      </article>
+    </main>
+
+    <main v-if="view === 'project'" class="project-detail">
+      <div class="detail-head">
+        <button class="ghost back" @click="setView('projects')">‹ Projects</button>
+        <span class="coord detail">
+          <template v-if="projectDetail && projectDetail.group"><span class="cg">{{ projectDetail.group }}</span><span class="csep">:</span></template>
+          <span class="cn">{{ projectDetail ? projectDetail.name : '' }}</span>
+        </span>
+        <span class="spacer"></span>
+        <div class="detail-actions">
+          <button class="ghost" title="Coming soon" disabled>Dependencies</button>
+          <button class="ghost" title="Coming soon" disabled>Trends</button>
+          <button v-if="projectDetail" @click="buildProject(projectDetail.dir)" title="Build this project now">Build</button>
+        </div>
+      </div>
+      <p v-if="projectDetail && projectDetail.description" class="proj-desc">{{ projectDetail.description }}</p>
+      <p v-else-if="projectDetail" class="proj-desc dim small">No description — add one under <code>[project]</code> in jk.toml.</p>
+
+      <template v-if="projectDetail && !projectDetail.empty">
+        <div class="tiles">
+          <div class="tile"><span class="lbl">reliability</span><span class="kpi" :class="projectDetail.reliabilityClass">{{ projectDetail.reliability }}</span></div>
+          <div class="tile"><span class="lbl">cache hit</span><span class="kpi">{{ projectDetail.cachePct }}</span></div>
+          <div class="tile"><span class="lbl">avg build</span><span class="kpi">{{ duration(projectDetail.avgMillis) }}</span></div>
+          <div class="tile"><span class="lbl">min / max</span><span class="kpi kpi-sm">{{ duration(projectDetail.minMillis) }} / {{ duration(projectDetail.maxMillis) }}</span></div>
+          <div class="tile"><span class="lbl">last built</span><span class="kpi kpi-sm">{{ agoLong(projectDetail.lastFinishedAt) }}</span></div>
+        </div>
+
+        <div class="panels">
+          <div class="panel wide">
+            <div class="panel-head"><span class="lbl">build history</span><span class="spacer"></span><span class="mono dim">{{ projectDetail.total }} builds total</span></div>
+            <table class="stats history">
+              <thead><tr><th>Build</th><th>Trigger</th><th>Commit</th><th>Tests</th><th>Cache</th><th>Duration</th><th>When</th></tr></thead>
+              <tbody>
+                <tr v-for="r in projectDetail.rows" :key="r.id">
+                  <td><span class="badge" :class="r.outcome">{{ projGlyph(r.outcome) }}<template v-if="r.buildNumber"> #{{ r.buildNumber }}</template></span></td>
+                  <td>{{ triggerLabel(r.trigger) }}</td>
+                  <td class="mono">{{ r.commit || '—' }}</td>
+                  <td><template v-if="r.tests">{{ r.tests.succeeded }} / {{ r.tests.total }}</template><template v-else>—</template></td>
+                  <td :class="{ ok: r.cacheTotal && r.cached === r.cacheTotal }"><template v-if="r.cacheTotal">{{ r.cached }} / {{ r.cacheTotal }}</template><template v-else>—</template></td>
+                  <td>{{ duration(r.millis) }}</td>
+                  <td>{{ agoMillis(r.finishedAt) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </template>
+      <p v-else-if="projectDetail && projectDetail.empty" class="empty">No build history retained for this project yet.</p>
     </main>
 
     <main v-if="view === 'status'">

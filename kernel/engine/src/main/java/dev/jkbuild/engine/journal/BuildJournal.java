@@ -314,9 +314,9 @@ public final class BuildJournal {
 
     private static BuildRecord withId(BuildRecord r, String id) {
         return new BuildRecord(
-                id, r.schema(), r.kind(), r.dir(), r.coord(),
+                id, r.buildNumber(), r.schema(), r.kind(), r.dir(), r.coord(),
                 r.startedAt(), r.finishedAt(), r.millis(),
                 r.success(), r.cancelled(), r.exitCode(), r.jkVersion(),
-                r.tests(), r.modules(), r.phases(), r.diagnostics());
+                r.tests(), r.modules(), r.phases(), r.diagnostics(), r.trigger(), r.commit());
     }
 }

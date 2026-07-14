@@ -116,6 +116,7 @@ public final class HttpEngineServer implements AutoCloseable {
         api.register("DELETE", "/api/history", this::handleHistoryDelete);
         api.register("GET", "/api/metrics", this::handleMetrics);
         api.register("GET", "/api/cache", this::handleCache);
+        api.register("GET", "/api/project", this::handleProject);
     }
 
     /**
@@ -526,6 +527,35 @@ public final class HttpEngineServer implements AutoCloseable {
                 .put("lastPrunedMillis", c.lastPrunedMillis())
                 .toString();
         sendJson(exchange, 200, body);
+    }
+
+    /**
+     * {@code GET /api/project?dir=…} — live workspace metadata for one project: its {@code coord}
+     * ({@code group:name}) and {@code description}, parsed fresh from the dir's {@code jk.toml}. Not
+     * from the journal — these describe the project as it is on disk now, so the detail page shows the
+     * current description even for a project whose last build predates it. Empty object when the dir
+     * has no parseable {@code jk.toml} (e.g. a deleted workspace). Read-tier auth, like every GET.
+     */
+    private void handleProject(HttpExchange exchange) throws IOException {
+        String dir = decode(queryParam(exchange.getRequestURI().getQuery(), "dir"));
+        if (dir == null || dir.isBlank()) {
+            sendJson(exchange, 400, JsonOut.object().put("error", "missing \"dir\"").toString());
+            return;
+        }
+        try {
+            var project = dev.jkbuild.config.JkBuildParser.parse(Path.of(dir).resolve("jk.toml")).project();
+            sendJson(
+                    exchange,
+                    200,
+                    JsonOut.object()
+                            .put("dir", dir)
+                            .put("coord", project.group() + ":" + project.name())
+                            .put("description", project.description())
+                            .toString());
+        } catch (RuntimeException e) {
+            // Unparseable/missing jk.toml (deleted or moved workspace) → empty, never an error.
+            sendJson(exchange, 200, JsonOut.object().put("dir", dir).toString());
+        }
     }
 
     /**

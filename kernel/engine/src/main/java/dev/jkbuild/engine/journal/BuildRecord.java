@@ -15,6 +15,7 @@ import java.util.List;
  */
 public record BuildRecord(
         String id,
+        long buildNumber,
         int schema,
         String kind,
         String dir,
@@ -29,15 +30,30 @@ public record BuildRecord(
         Tests tests,
         List<Module> modules,
         List<Phase> phases,
-        List<Diag> diagnostics) {
+        List<Diag> diagnostics,
+        String trigger,
+        String commit) {
 
-    /** The current on-disk schema version. */
-    public static final int SCHEMA = 1;
+    /**
+     * The current on-disk schema version. Bumped to 2 when {@code buildNumber} — the durable,
+     * monotonic per-project run counter (assigned from {@link dev.jkbuild.runtime.BuildMetrics}) —
+     * was added. {@code trigger} (how the build was started: {@code "cli"}/{@code "web"}) and {@code
+     * commit} (the project's git HEAD at build time) were added without a bump — pre-1.0 additive
+     * fields simply read back as {@code null} on older records.
+     */
+    public static final int SCHEMA = 2;
 
     public BuildRecord {
         modules = modules == null ? List.of() : List.copyOf(modules);
         phases = phases == null ? List.of() : List.copyOf(phases);
         diagnostics = diagnostics == null ? List.of() : List.copyOf(diagnostics);
+    }
+
+    /** This record with its per-project build number set (assigned at journal-append time). */
+    public BuildRecord withBuildNumber(long buildNumber) {
+        return new BuildRecord(
+                id, buildNumber, schema, kind, dir, coord, startedAt, finishedAt, millis,
+                success, cancelled, exitCode, jkVersion, tests, modules, phases, diagnostics, trigger, commit);
     }
 
     /** Aggregate test counts for the run, or {@code null} when no tests ran. */
