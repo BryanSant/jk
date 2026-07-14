@@ -118,6 +118,12 @@ public final class EngineClient {
         try (SocketChannel ch = connect(socket)) {
             String ack = exchange(ch, EngineProtocol.hello(clientVersion));
             if (!EngineProtocol.HELLO_ACK.equals(EngineProtocol.typeOf(ack))) return Optional.empty();
+            // Protocol-zero's teeth: an engine speaking a NEWER protocol than this client is not
+            // usable — treat it as unreachable so the ensure path elects/starts a matching one
+            // (which the newer engine's takeover logic then arbitrates).
+            if (Ndjson.intValue(ack, "proto", EngineProtocol.PROTOCOL) > EngineProtocol.PROTOCOL) {
+                return Optional.empty();
+            }
             return Optional.of(new Handshake(
                     Ndjson.str(ack, "version"),
                     Ndjson.longValue(ack, "pid", -1),
@@ -131,7 +137,7 @@ public final class EngineClient {
     /** Connect and request a status snapshot; empty if no engine is reachable. */
     public static Optional<Status> status(Path socket) {
         try (SocketChannel ch = connect(socket)) {
-            exchange(ch, EngineProtocol.hello("status-probe")); // handshake first, response discarded
+            exchange(ch, EngineProtocol.hello(dev.jkbuild.cli.Jk.VERSION, "probe")); // handshake first, response discarded
             String ack = exchange(ch, EngineProtocol.statusRequest());
             if (!EngineProtocol.STATUS_ACK.equals(EngineProtocol.typeOf(ack))) return Optional.empty();
             return Optional.of(new Status(
@@ -253,13 +259,13 @@ public final class EngineClient {
             writer.write('\n');
             writer.flush();
             BufferedReader reader =
-                    new BufferedReader(new InputStreamReader(Channels.newInputStream(ch), StandardCharsets.UTF_8));
+                    protocolReader(ch);
             String line;
             while ((line = reader.readLine()) != null) {
                 String type = EngineProtocol.typeOf(line);
                 if (EngineProtocol.HISTORY_DONE.equals(type) || EngineProtocol.METRICS_DONE.equals(type)) break;
                 out.add(line);
-                if (EngineProtocol.HISTORY_DELETED.equals(type) || EngineProtocol.HISTORY_ERROR.equals(type)) break;
+                if (EngineProtocol.HISTORY_DELETED.equals(type) || EngineProtocol.ERROR.equals(type)) break;
             }
         }
         return out;
@@ -1926,6 +1932,27 @@ public final class EngineClient {
      * {@link EngineProtocol#AUTH} line before returning, so every caller authenticates transparently
      * without needing its own knowledge of the transport.
      */
+    /**
+     * The client-side protocol reader: line-capped, and idle-timed so a dead engine surfaces as
+     * an error instead of a forever-blocked {@code readLine()}. Default 60 minutes between
+     * events; {@code JK_STREAM_IDLE_MINUTES} tunes it (0 disables).
+     */
+    static BufferedReader protocolReader(SocketChannel ch) {
+        long minutes = 60;
+        String env = System.getenv("JK_STREAM_IDLE_MINUTES");
+        if (env != null && !env.isBlank()) {
+            try {
+                minutes = Long.parseLong(env.trim());
+            } catch (NumberFormatException ignored) {
+                // keep the default
+            }
+        }
+        return new dev.jkbuild.plugin.protocol.BoundedLineReader(
+                new InputStreamReader(Channels.newInputStream(ch), StandardCharsets.UTF_8),
+                ch,
+                minutes * 60_000L);
+    }
+
     static SocketChannel connect(Path socket) throws IOException {
         if (dev.jkbuild.engine.EngineTransport.useLoopbackTcp()) {
             int port = Integer.parseInt(Files.readString(socket).trim());
@@ -1959,7 +1986,7 @@ public final class EngineClient {
         writer.write('\n');
         writer.flush();
         BufferedReader reader =
-                new BufferedReader(new InputStreamReader(Channels.newInputStream(ch), StandardCharsets.UTF_8));
+                protocolReader(ch);
         Thread watchdog = new Thread(
                 () -> {
                     try {

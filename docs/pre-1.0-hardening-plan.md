@@ -569,3 +569,47 @@ resources, lint/baseline profiles, solver version interning (BOM soft pins).
   for kernel modules; `plugins/shrink` keeps a local copy BY DESIGN (workers stay
   dependency-free of kernel modules); `CleanCommand` keeps its stats-counting
   variant.
+
+### H3
+
+- Wire renames landed: `entryDir`→`dir` everywhere, `rerun`→`rebuild` (carrying H2's
+  semantic split), cache-clear's `projectRoot`→`dir`. `goal-finish` carries a
+  mandatory `kind` discriminator (build/lock/sync/format/git-fetch/publish/import/
+  image/tool/script/cache) — the message is self-describing.
+- ONE error envelope: `error{code,message}` with codes request-failed / protocol /
+  version-skew / shutting-down / auth. `build-error`, `explain-error`,
+  `history-error`, AND `shutdown-pending` are gone — the drain refusal rides
+  `code=shutting-down`, which also fixes shutdown-pending being dead on the client
+  (adapters have one error handler that surfaces every code's message). The
+  pre-existing `t="error"` console-line EVENT was renamed `error-line` to free the
+  name.
+- `withVariant`/`withJvmTuning` string surgery replaced by ONE validated
+  `withSession(request, variant, clientEnv, jvm)` attachment used by every hosted
+  request — JVM tuning now applies to every verb that forks workers (it silently
+  dropped on image/compile/sync/lock/publish/audit/format/tool/script before).
+  DIVERGENCE from the plan text: session state attaches at the adapter chokepoints
+  via withSession rather than as parameters on every builder — same self-description
+  and universality, a fraction of the churn, and the splice is now validated.
+- One flat-map encoding (`Ndjson.map`/`strMap`): `env`, `graalHomes`, `params`
+  replaced their parallel-array pairs. One null convention (keys always emitted,
+  null = not applicable); statusAck stopped omitting http keys.
+- Protocol-zero has teeth: server rejects `proto >` its own with
+  `error code=version-skew`; client treats a newer `proto` in hello-ack as
+  unusable-engine (takeover path). hello gained `purpose` (connect|probe) and
+  probes send their REAL version — the takeover-probe/status-probe sentinels are
+  gone.
+- Framing: `BoundedLineReader` (64 MB line cap) on both sides; client streams get a
+  60-minute idle timeout (`JK_STREAM_IDLE_MINUTES`); malformed or unknown REQUESTS
+  are answered `error code=protocol` instead of silently dropped (silent drops
+  wedged streaming clients); unknown EVENTS remain no-ops (the forward-compat
+  seam). TCP auth compares constant-time and refuses with `error code=auth` before
+  closing.
+- `requestKind` is passed explicitly from dispatch sites (the thread-name munge is
+  gone) and the journal/dashboard dir falls back `dir`→`cache` instead of recording
+  the literal string "null".
+- docs/protocol.md snapshots the v1 contract, the evolution rules, and marks
+  `plan-*`/`explain-*` + history/metrics response shapes as NON-CONTRACT
+  vocabularies: their merge/relocation (plan P1.10's last two bullets) is
+  DEFERRED — they are consumed only by jk's own client/dashboard, the doc
+  explicitly exempts them from the freeze, and renderer churn at the tail of this
+  phase was judged worse than carrying two internal event families.

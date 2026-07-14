@@ -17,7 +17,7 @@ import java.util.List;
  *
  * <p>Phase 2 adds {@code buildWorkspace} hosting: a {@link #BUILD_REQUEST}, one event type per {@code
  * WorkspaceBuildListener}/{@code GoalListener} callback, and a terminal {@link #WORKSPACE_FINISH} /
- * {@link #BUILD_ERROR}. This hand-rolled codec (mirroring {@code Ndjson}, which only reads flat
+ * {@link #ERROR_LINE}. This hand-rolled codec (mirroring {@code Ndjson}, which only reads flat
  * scalar fields and string arrays — no nested object arrays) deliberately avoids ever encoding an
  * array of objects: a variable-length collection (the module plan, a goal's accumulated diagnostics)
  * is sent as a burst of individually-typed repeated messages plus a terminal marker, not one message
@@ -67,7 +67,7 @@ public final class EngineProtocol {
      * Server → client: refuses a job because the engine is draining (a graceful {@link #SHUTDOWN}
      * is in progress). The client surfaces this as a clear "engine is shutting down" failure.
      */
-    public static final String SHUTDOWN_PENDING = "shutdown-pending";
+
 
     /** Client → server: start a workspace build (see {@link #buildRequest}). Owns the rest of the connection. */
     public static final String BUILD_REQUEST = "build-request";
@@ -111,8 +111,8 @@ public final class EngineProtocol {
     /** Server → client: {@code GoalListener.warn}. */
     public static final String WARN = "warn";
 
-    /** Server → client: {@code GoalListener.error}. */
-    public static final String ERROR = "error";
+    /** Server → client: {@code GoalListener.error} — one line of error-stream diagnostics. */
+    public static final String ERROR_LINE = "error-line";
 
     /** Server → client, repeated, immediately before {@link #GOAL_FINISH}: one of its result's diagnostics. */
     public static final String GOAL_DIAGNOSTIC = "goal-diagnostic";
@@ -129,8 +129,22 @@ public final class EngineProtocol {
     /** Server → client, terminal: {@code onWorkspaceFinish}. */
     public static final String WORKSPACE_FINISH = "workspace-finish";
 
-    /** Server → client, terminal: the request failed before/outside normal build-failure reporting. */
-    public static final String BUILD_ERROR = "build-error";
+    /**
+     * Server → client, terminal: THE error envelope — every transport/control failure rides this
+     * one type with a {@code code} + human {@code message}. Codes: {@link #ERR_REQUEST_FAILED}
+     * (the verb failed; the message says why), {@link #ERR_PROTOCOL} (malformed request, framing
+     * violation), {@link #ERR_VERSION_SKEW} (pin/proto mismatch — upgrade or delegate),
+     * {@link #ERR_SHUTTING_DOWN} (drain refusal — retry against the successor), {@link #ERR_AUTH}
+     * (TCP token rejected). Result-payload {@code errors[]} arrays on finish messages are NOT
+     * this: those are verb output, not transport errors.
+     */
+    public static final String ERROR = "error";
+
+    public static final String ERR_REQUEST_FAILED = "request-failed";
+    public static final String ERR_PROTOCOL = "protocol";
+    public static final String ERR_VERSION_SKEW = "version-skew";
+    public static final String ERR_SHUTTING_DOWN = "shutting-down";
+    public static final String ERR_AUTH = "auth";
 
     /**
      * Client → server: run a single project's test goal (Phase 3 — {@code jk test}). A single
@@ -156,7 +170,7 @@ public final class EngineProtocol {
     /**
      * Client → server: forecast a build ({@code jk explain}, {@code BuildService.explain}) — a
      * synchronous, non-listener-driven read: no progress events, just a burst of {@link
-     * #EXPLAIN_MODULE}/{@link #EXPLAIN_PHASE}/{@link #EXPLAIN_EDGE}/{@link #EXPLAIN_ERROR} messages
+     * #EXPLAIN_MODULE}/{@link #EXPLAIN_PHASE}/{@link #EXPLAIN_EDGE}/{@link #ERROR} messages
      * followed by a terminal {@link #EXPLAIN_DONE}. Doesn't fork any worker JVM, so unlike {@link
      * #BUILD_REQUEST}/{@link #TEST_REQUEST}/{@link #SINGLE_BUILD_REQUEST} it's handled inline on the
      * connection thread — no cancel/EOF-watching fork needed.
@@ -172,13 +186,10 @@ public final class EngineProtocol {
     /** Server → client, repeated once per dependency edge. */
     public static final String EXPLAIN_EDGE = "explain-edge";
 
-    /** Server → client, repeated once per graph-resolution error (mirrors {@code ExplainPlan.errors()}). */
-    public static final String EXPLAIN_ERROR = "explain-error";
-
     /**
      * Client → server: forecast a build's dirty set without running it — the pre-flight behind
      * {@code jk build}'s fully-cached shortcut / dirty hint (slim-client Stage 5: the client no
-     * longer links the forecaster). Carries {@code entryDir}/{@code cache}/{@code skipTests} plus
+     * longer links the forecaster). Carries {@code dir}/{@code cache}/{@code skipTests} plus
      * the cache-bypass flags ({@code force}/{@code rerun}) the forecast must honor. Synchronous:
      * answered inline with one {@link #FORECAST_ACK}.
      */
@@ -442,7 +453,7 @@ public final class EngineProtocol {
      * events, a test-count-carrying {@link #GOAL_FINISH}, {@link #MODULE_FINISH} with an
      * engine-computed exit code ({@code jk native}'s 64/4/1 mapping) — ending in {@link
      * #WORKSPACE_FINISH}. The GraalVM was resolved client-side (a prompt/install owns the terminal)
-     * and rides the request as parallel {@code graalDirs}/{@code graalHomes} arrays.
+     * and rides the request as the {@code graalHomes} dir-to-home map.
      */
     public static final String NATIVE_REQUEST = "native-request";
 
@@ -546,9 +557,6 @@ public final class EngineProtocol {
     /** Server → client: terminal for a delete ({@code deleted} true/false). */
     public static final String HISTORY_DELETED = "history-deleted";
 
-    /** Server → client: a history request failed (e.g. the id was not found). */
-    public static final String HISTORY_ERROR = "history-error";
-
     // ---- running build metrics ({@code jk status}) ----------------------------------
     // Aggregates (count/total/min/max/avg per outcome) the engine folds at every build/test finish:
     // global, per project, per phase, and per project per phase — same flat-NDJSON discipline as
@@ -582,8 +590,18 @@ public final class EngineProtocol {
     public static final int PROTOCOL = 1;
 
     public static String hello(String version) {
+        return hello(version, "connect");
+    }
+
+    /**
+     * {@code purpose} distinguishes a working connection ({@code connect}) from a liveness/version
+     * probe ({@code probe}) — probes send their REAL version (never a sentinel), so the field is
+     * honest in both directions.
+     */
+    public static String hello(String version, String purpose) {
         return "{\"t\":\"" + HELLO + "\",\"version\":" + Ndjson.quote(version)
-                + ",\"proto\":" + PROTOCOL + "}";
+                + ",\"proto\":" + PROTOCOL
+                + ",\"purpose\":" + Ndjson.quote(purpose) + "}";
     }
 
     public static String helloAck(String version, long pid, long startedAtMillis, boolean draining) {
@@ -617,9 +635,10 @@ public final class EngineProtocol {
     /**
      * The status snapshot. Memory fields are best-effort observations of the engine process itself:
      * heap from the runtime, {@code rssBytes} from the OS ({@code -1} where it exposes none). The
-     * http fields describe the embedded HTTP server ({@code docs/http.md}) and are simply omitted
-     * when they don't apply: {@code httpUrl} is present while it's serving, {@code httpError} when
-     * the {@code [http]} table is enabled but the server failed to start; neither means disabled.
+     * http fields describe the embedded HTTP server ({@code docs/http.md}): {@code httpUrl} is
+     * non-null while it's serving, {@code httpError} when the {@code [http]} table is enabled but
+     * the server failed to start; both null means disabled. (Keys are always emitted — the
+     * protocol has ONE null convention: key present, value null.)
      */
     public static String statusAck(
             String version,
@@ -658,8 +677,10 @@ public final class EngineProtocol {
                 + heapMaxBytes
                 + ",\"rssBytes\":"
                 + rssBytes
-                + (httpUrl != null ? ",\"httpUrl\":" + Ndjson.quote(httpUrl) : "")
-                + (httpError != null ? ",\"httpError\":" + Ndjson.quote(httpError) : "")
+                + ",\"httpUrl\":"
+                + Ndjson.quote(httpUrl)
+                + ",\"httpError\":"
+                + Ndjson.quote(httpError)
                 + "}";
     }
 
@@ -681,11 +702,6 @@ public final class EngineProtocol {
         return "{\"t\":\"" + BYE + "\",\"pipelines\":" + pipelines + ",\"draining\":" + draining + "}";
     }
 
-    /** Refusal sent to a job request while the engine is draining. */
-    public static String shutdownPending() {
-        return "{\"t\":\"" + SHUTDOWN_PENDING + "\"}";
-    }
-
     // ---- build-request (client → server) -------------------------------------------------------
 
     /**
@@ -705,7 +721,7 @@ public final class EngineProtocol {
      * scratch rebuild sends {@code false} — it must build against the pinned lock verbatim.
      */
     public static String buildRequest(
-            String entryDir,
+            String dir,
             String cache,
             String jdksDir,
             int workers,
@@ -720,8 +736,8 @@ public final class EngineProtocol {
             boolean freshenLock) {
         return "{\"t\":\""
                 + BUILD_REQUEST
-                + "\",\"entryDir\":"
-                + Ndjson.quote(entryDir)
+                + "\",\"dir\":"
+                + Ndjson.quote(dir)
                 + ",\"cache\":"
                 + Ndjson.quote(cache)
                 + ",\"jdksDir\":"
@@ -742,7 +758,7 @@ public final class EngineProtocol {
                 + offline
                 + ",\"force\":"
                 + force
-                + ",\"rerun\":"
+                + ",\"rebuild\":"
                 + rerun
                 + ",\"freshenLock\":"
                 + freshenLock
@@ -755,7 +771,7 @@ public final class EngineProtocol {
 
     /** Start a single-project test run (see {@link #TEST_REQUEST}). {@code jdksDir}/{@code profile} may be {@code null}. */
     public static String testRequest(
-            String entryDir,
+            String dir,
             String cache,
             String jdksDir,
             int workers,
@@ -765,8 +781,8 @@ public final class EngineProtocol {
             boolean force) {
         return "{\"t\":\""
                 + TEST_REQUEST
-                + "\",\"entryDir\":"
-                + Ndjson.quote(entryDir)
+                + "\",\"dir\":"
+                + Ndjson.quote(dir)
                 + ",\"cache\":"
                 + Ndjson.quote(cache)
                 + ",\"jdksDir\":"
@@ -786,7 +802,7 @@ public final class EngineProtocol {
 
     /** Start a single-project build (see {@link #SINGLE_BUILD_REQUEST}). {@code jdksDir}/{@code profile} may be {@code null}. */
     public static String singleBuildRequest(
-            String entryDir,
+            String dir,
             String cache,
             String jdksDir,
             int workers,
@@ -797,8 +813,8 @@ public final class EngineProtocol {
             boolean force) {
         return "{\"t\":\""
                 + SINGLE_BUILD_REQUEST
-                + "\",\"entryDir\":"
-                + Ndjson.quote(entryDir)
+                + "\",\"dir\":"
+                + Ndjson.quote(dir)
                 + ",\"cache\":"
                 + Ndjson.quote(cache)
                 + ",\"jdksDir\":"
@@ -824,7 +840,7 @@ public final class EngineProtocol {
      * (the same fields {@link #buildRequest} carries).
      */
     public static String lockRequest(
-            String entryDir,
+            String dir,
             String cache,
             List<String> features,
             boolean noDefaultFeatures,
@@ -835,8 +851,8 @@ public final class EngineProtocol {
             boolean verbose) {
         return "{\"t\":\""
                 + LOCK_REQUEST
-                + "\",\"entryDir\":"
-                + Ndjson.quote(entryDir)
+                + "\",\"dir\":"
+                + Ndjson.quote(dir)
                 + ",\"cache\":"
                 + Ndjson.quote(cache)
                 + ",\"features\":"
@@ -862,7 +878,7 @@ public final class EngineProtocol {
      * {@code gitOnly} is set.
      */
     public static String updateRequest(
-            String entryDir,
+            String dir,
             String cache,
             List<String> features,
             boolean noDefaultFeatures,
@@ -874,8 +890,8 @@ public final class EngineProtocol {
             boolean verbose) {
         return "{\"t\":\""
                 + UPDATE_REQUEST
-                + "\",\"entryDir\":"
-                + Ndjson.quote(entryDir)
+                + "\",\"dir\":"
+                + Ndjson.quote(dir)
                 + ",\"cache\":"
                 + Ndjson.quote(cache)
                 + ",\"features\":"
@@ -904,7 +920,7 @@ public final class EngineProtocol {
      * without implying the rest of {@code force}'s cache bypasses.
      */
     public static String syncRequest(
-            String entryDir,
+            String dir,
             String cache,
             String jdksDir,
             String repoUrl,
@@ -915,8 +931,8 @@ public final class EngineProtocol {
             boolean verbose) {
         return "{\"t\":\""
                 + SYNC_REQUEST
-                + "\",\"entryDir\":"
-                + Ndjson.quote(entryDir)
+                + "\",\"dir\":"
+                + Ndjson.quote(dir)
                 + ",\"cache\":"
                 + Ndjson.quote(cache)
                 + ",\"jdksDir\":"
@@ -943,11 +959,11 @@ public final class EngineProtocol {
      * {@code null}.
      */
     public static String auditRequest(
-            String entryDir, String cache, String severity, String osvBatchUrl, String osvVulnsUrl) {
+            String dir, String cache, String severity, String osvBatchUrl, String osvVulnsUrl) {
         return "{\"t\":\""
                 + AUDIT_REQUEST
-                + "\",\"entryDir\":"
-                + Ndjson.quote(entryDir)
+                + "\",\"dir\":"
+                + Ndjson.quote(dir)
                 + ",\"cache\":"
                 + Ndjson.quote(cache)
                 + ",\"severity\":"
@@ -965,7 +981,7 @@ public final class EngineProtocol {
      * {@code null}.
      */
     public static String formatRequest(
-            String entryDir,
+            String dir,
             String cache,
             boolean check,
             String javaStyle,
@@ -976,8 +992,8 @@ public final class EngineProtocol {
             boolean verbose) {
         return "{\"t\":\""
                 + FORMAT_REQUEST
-                + "\",\"entryDir\":"
-                + Ndjson.quote(entryDir)
+                + "\",\"dir\":"
+                + Ndjson.quote(dir)
                 + ",\"cache\":"
                 + Ndjson.quote(cache)
                 + ",\"check\":"
@@ -1003,7 +1019,7 @@ public final class EngineProtocol {
      * {@code gpgPassphrase} were resolved client-side; nullable string fields may be {@code null}.
      */
     public static String publishRequest(
-            String entryDir,
+            String dir,
             String cache,
             String repoUrl,
             String region,
@@ -1023,8 +1039,8 @@ public final class EngineProtocol {
             boolean verbose) {
         return "{\"t\":\""
                 + PUBLISH_REQUEST
-                + "\",\"entryDir\":"
-                + Ndjson.quote(entryDir)
+                + "\",\"dir\":"
+                + Ndjson.quote(dir)
                 + ",\"cache\":"
                 + Ndjson.quote(cache)
                 + ",\"repoUrl\":"
@@ -1070,7 +1086,7 @@ public final class EngineProtocol {
      * #buildRequest}.
      */
     public static String imageRequest(
-            String entryDir,
+            String dir,
             String cache,
             String jdksDir,
             String mainClass,
@@ -1085,8 +1101,8 @@ public final class EngineProtocol {
             boolean verbose) {
         return "{\"t\":\""
                 + IMAGE_REQUEST
-                + "\",\"entryDir\":"
-                + Ndjson.quote(entryDir)
+                + "\",\"dir\":"
+                + Ndjson.quote(dir)
                 + ",\"cache\":"
                 + Ndjson.quote(cache)
                 + ",\"jdksDir\":"
@@ -1107,7 +1123,7 @@ public final class EngineProtocol {
                 + offline
                 + ",\"force\":"
                 + force
-                + ",\"rerun\":"
+                + ",\"rebuild\":"
                 + rerun
                 + ",\"verbose\":"
                 + verbose
@@ -1163,11 +1179,11 @@ public final class EngineProtocol {
      * {@code offline}/{@code force}/{@code verbose} reconstruct the session config engine-side.
      */
     public static String compileRequest(
-            String entryDir, String cache, String profile, boolean offline, boolean force, boolean verbose) {
+            String dir, String cache, String profile, boolean offline, boolean force, boolean verbose) {
         return "{\"t\":\""
                 + COMPILE_REQUEST
-                + "\",\"entryDir\":"
-                + Ndjson.quote(entryDir)
+                + "\",\"dir\":"
+                + Ndjson.quote(dir)
                 + ",\"cache\":"
                 + Ndjson.quote(cache)
                 + ",\"profile\":"
@@ -1185,12 +1201,11 @@ public final class EngineProtocol {
      * Build native artifacts (see {@link #NATIVE_REQUEST}). {@code mainClass} is the {@code --main}
      * override (may be {@code null} — the engine resolves {@code [native].main-class}/{@code
      * [image].main}/{@code [project].main} itself); {@code extraArgs} are forwarded to {@code
-     * native-image}; {@code graalDirs}/{@code graalHomes} are parallel arrays mapping each
-     * native-eligible module dir to the GraalVM home the client resolved for it (the codec reads no
-     * nested objects, so a map travels as two aligned string arrays).
+     * native-image}; {@code graalHomes} maps each native-eligible module dir to the GraalVM home
+     * the client resolved for it (the one flat-map wire encoding — see {@code Ndjson.map}).
      */
     public static String nativeRequest(
-            String entryDir,
+            String dir,
             String cache,
             String jdksDir,
             String mainClass,
@@ -1199,12 +1214,11 @@ public final class EngineProtocol {
             boolean force,
             boolean verbose,
             List<String> extraArgs,
-            List<String> graalDirs,
-            List<String> graalHomes) {
+            java.util.Map<String, String> graalHomes) {
         return "{\"t\":\""
                 + NATIVE_REQUEST
-                + "\",\"entryDir\":"
-                + Ndjson.quote(entryDir)
+                + "\",\"dir\":"
+                + Ndjson.quote(dir)
                 + ",\"cache\":"
                 + Ndjson.quote(cache)
                 + ",\"jdksDir\":"
@@ -1221,10 +1235,8 @@ public final class EngineProtocol {
                 + verbose
                 + ",\"extraArgs\":"
                 + quoteArray(extraArgs)
-                + ",\"graalDirs\":"
-                + quoteArray(graalDirs)
                 + ",\"graalHomes\":"
-                + quoteArray(graalHomes)
+                + Ndjson.map(graalHomes)
                 + "}";
     }
 
@@ -1234,7 +1246,7 @@ public final class EngineProtocol {
      * non-null only for a native application (resolved client-side).
      */
     public static String installRequest(
-            String entryDir,
+            String dir,
             String cache,
             String m2Dir,
             String graalHome,
@@ -1244,8 +1256,8 @@ public final class EngineProtocol {
             boolean verbose) {
         return "{\"t\":\""
                 + INSTALL_REQUEST
-                + "\",\"entryDir\":"
-                + Ndjson.quote(entryDir)
+                + "\",\"dir\":"
+                + Ndjson.quote(dir)
                 + ",\"cache\":"
                 + Ndjson.quote(cache)
                 + ",\"m2Dir\":"
@@ -1294,7 +1306,7 @@ public final class EngineProtocol {
      * event inside the explain burst.
      */
     public static String explainRequest(
-            String entryDir,
+            String dir,
             String cache,
             int workers,
             boolean skipTests,
@@ -1305,8 +1317,8 @@ public final class EngineProtocol {
             boolean verbose) {
         return "{\"t\":\""
                 + EXPLAIN_REQUEST
-                + "\",\"entryDir\":"
-                + Ndjson.quote(entryDir)
+                + "\",\"dir\":"
+                + Ndjson.quote(dir)
                 + ",\"cache\":"
                 + Ndjson.quote(cache)
                 + ",\"workers\":"
@@ -1374,11 +1386,11 @@ public final class EngineProtocol {
     }
 
     public static String forecastRequest(
-            String entryDir, String cache, boolean skipTests, boolean offline, boolean force, boolean rerun) {
+            String dir, String cache, boolean skipTests, boolean offline, boolean force, boolean rerun) {
         return "{\"t\":\""
                 + FORECAST_REQUEST
-                + "\",\"entryDir\":"
-                + Ndjson.quote(entryDir)
+                + "\",\"dir\":"
+                + Ndjson.quote(dir)
                 + ",\"cache\":"
                 + Ndjson.quote(cache)
                 + ",\"skipTests\":"
@@ -1387,7 +1399,7 @@ public final class EngineProtocol {
                 + offline
                 + ",\"force\":"
                 + force
-                + ",\"rerun\":"
+                + ",\"rebuild\":"
                 + rerun
                 + "}";
     }
@@ -1403,7 +1415,7 @@ public final class EngineProtocol {
     }
 
     public static String treeAck(String error, String rendered) {
-        return "{\"t\":\"" + TREE_ACK + "\",\"error\":" + (error == null ? "null" : Ndjson.quote(error))
+        return "{\"t\":\"" + TREE_ACK + "\",\"error\":" + Ndjson.quote(error)
                 + ",\"rendered\":" + Ndjson.quote(rendered == null ? "" : rendered)
                 + "}";
     }
@@ -1417,7 +1429,7 @@ public final class EngineProtocol {
     public static String ideModelRequest(String dir, String cache, String jdksDir) {
         return "{\"t\":\"" + IDE_MODEL_REQUEST + "\",\"dir\":" + Ndjson.quote(dir)
                 + ",\"cache\":" + Ndjson.quote(cache)
-                + ",\"jdksDir\":" + (jdksDir == null ? "null" : Ndjson.quote(jdksDir))
+                + ",\"jdksDir\":" + Ndjson.quote(jdksDir)
                 + "}";
     }
 
@@ -1425,25 +1437,17 @@ public final class EngineProtocol {
         return generateRequest(dir, kind, java.util.Map.of());
     }
 
-    /** As above with generator parameters (scaffold inputs etc.) as parallel key/value lists. */
+    /** As above with generator parameters (scaffold inputs etc.) as a flat map. */
     public static String generateRequest(String dir, String kind, java.util.Map<String, String> params) {
-        List<String> keys = new java.util.ArrayList<>(params.keySet());
-        List<String> values = new java.util.ArrayList<>(keys.size());
-        for (String k : keys) values.add(params.get(k));
         return "{\"t\":\"" + GENERATE_REQUEST + "\",\"dir\":" + Ndjson.quote(dir)
                 + ",\"kind\":" + Ndjson.quote(kind)
-                + ",\"paramKeys\":" + quoteArray(keys)
-                + ",\"paramValues\":" + quoteArray(values)
+                + ",\"params\":" + Ndjson.map(params)
                 + "}";
     }
 
     /** Decode side of {@link #generateRequest(String, String, java.util.Map)}. */
     public static java.util.Map<String, String> generateParams(String requestLine) {
-        List<String> keys = Ndjson.strArray(requestLine, "paramKeys");
-        List<String> values = Ndjson.strArray(requestLine, "paramValues");
-        java.util.Map<String, String> out = new java.util.LinkedHashMap<>();
-        for (int i = 0; i < keys.size() && i < values.size(); i++) out.put(keys.get(i), values.get(i));
-        return out;
+        return Ndjson.strMap(requestLine, "params");
     }
 
     public static String pluginVerbRequest(String dir, String cache, String verb, java.util.List<String> args) {
@@ -1466,7 +1470,7 @@ public final class EngineProtocol {
 
     public static String editAck(boolean changed, String error) {
         return "{\"t\":\"" + EDIT_ACK + "\",\"changed\":" + changed
-                + ",\"error\":" + (error == null ? "null" : Ndjson.quote(error)) + "}";
+                + ",\"error\":" + Ndjson.quote(error) + "}";
     }
 
     public static String projectInfoRequest(String dir, String cache) {
@@ -1477,7 +1481,7 @@ public final class EngineProtocol {
     public static String outdatedRequest(String dir, String cache, String repoUrl, boolean offline, boolean force) {
         return "{\"t\":\"" + OUTDATED_REQUEST + "\",\"dir\":" + Ndjson.quote(dir)
                 + ",\"cache\":" + Ndjson.quote(cache)
-                + ",\"repoUrl\":" + (repoUrl == null ? "null" : Ndjson.quote(repoUrl))
+                + ",\"repoUrl\":" + Ndjson.quote(repoUrl)
                 + ",\"offline\":" + offline
                 + ",\"force\":" + force
                 + "}";
@@ -1489,10 +1493,10 @@ public final class EngineProtocol {
         return "{\"t\":\"" + EXEC_PLAN_REQUEST + "\",\"dir\":" + Ndjson.quote(dir)
                 + ",\"cache\":" + Ndjson.quote(cache)
                 + ",\"kind\":" + Ndjson.quote(kind)
-                + ",\"mainOverride\":" + (mainOverride == null ? "null" : Ndjson.quote(mainOverride))
-                + ",\"binName\":" + (binName == null ? "null" : Ndjson.quote(binName))
-                + ",\"binDir\":" + (binDir == null ? "null" : Ndjson.quote(binDir))
-                + ",\"libDir\":" + (libDir == null ? "null" : Ndjson.quote(libDir))
+                + ",\"mainOverride\":" + Ndjson.quote(mainOverride)
+                + ",\"binName\":" + Ndjson.quote(binName)
+                + ",\"binDir\":" + Ndjson.quote(binDir)
+                + ",\"libDir\":" + Ndjson.quote(libDir)
                 + "}";
     }
 
@@ -1511,9 +1515,7 @@ public final class EngineProtocol {
                 + "}";
     }
 
-    public static String explainError(String message) {
-        return "{\"t\":\"" + EXPLAIN_ERROR + "\",\"message\":" + Ndjson.quote(message) + "}";
-    }
+
 
     public static String explainDone(int maxReadyWidth, int moduleCount) {
         return "{\"t\":\""
@@ -1709,8 +1711,8 @@ public final class EngineProtocol {
         return diagnosticLike(WARN, dir, phase, code, message, "", "");
     }
 
-    public static String error(String dir, String phase, String code, String message, String test, String exceptionClass) {
-        return diagnosticLike(ERROR, dir, phase, code, message, test, exceptionClass);
+    public static String errorLine(String dir, String phase, String code, String message, String test, String exceptionClass) {
+        return diagnosticLike(ERROR_LINE, dir, phase, code, message, test, exceptionClass);
     }
 
     public static String goalDiagnostic(
@@ -1731,7 +1733,7 @@ public final class EngineProtocol {
     }
 
     public static String goalFinish(String dir, boolean success) {
-        return "{\"t\":\"" + GOAL_FINISH + "\",\"dir\":" + Ndjson.quote(dir) + ",\"success\":" + success + "}";
+        return "{\"t\":\"" + GOAL_FINISH + "\",\"kind\":\"build\",\"dir\":" + Ndjson.quote(dir) + ",\"success\":" + success + "}";
     }
 
     /**
@@ -1757,7 +1759,7 @@ public final class EngineProtocol {
             String dir, boolean success, String buildOutcome, long total, long succeeded, long failed, long skipped) {
         return "{\"t\":\""
                 + GOAL_FINISH
-                + "\",\"dir\":"
+                + "\",\"kind\":\"build\",\"dir\":"
                 + Ndjson.quote(dir)
                 + ",\"success\":"
                 + success
@@ -1783,7 +1785,7 @@ public final class EngineProtocol {
     public static String goalFinishLock(String dir, boolean success, long packages, long sources, long plugins) {
         return "{\"t\":\""
                 + GOAL_FINISH
-                + "\",\"dir\":"
+                + "\",\"kind\":\"lock\",\"dir\":"
                 + Ndjson.quote(dir)
                 + ",\"success\":"
                 + success
@@ -1803,7 +1805,7 @@ public final class EngineProtocol {
     public static String goalFinishSync(String dir, boolean success, long fetched, long upToDate) {
         return "{\"t\":\""
                 + GOAL_FINISH
-                + "\",\"dir\":"
+                + "\",\"kind\":\"sync\",\"dir\":"
                 + Ndjson.quote(dir)
                 + ",\"success\":"
                 + success
@@ -1944,7 +1946,7 @@ public final class EngineProtocol {
             String dir, boolean success, int changed, int clean, int errors, int total, int workerExit) {
         return "{\"t\":\""
                 + GOAL_FINISH
-                + "\",\"dir\":"
+                + "\",\"kind\":\"format\",\"dir\":"
                 + Ndjson.quote(dir)
                 + ",\"success\":"
                 + success
@@ -1968,7 +1970,7 @@ public final class EngineProtocol {
     public static String goalFinishGitFetch(String dir, boolean success, String checkout, String sha) {
         return "{\"t\":\""
                 + GOAL_FINISH
-                + "\",\"dir\":"
+                + "\",\"kind\":\"git-fetch\",\"dir\":"
                 + Ndjson.quote(dir)
                 + ",\"success\":"
                 + success
@@ -1983,7 +1985,7 @@ public final class EngineProtocol {
     public static String goalFinishPublish(String dir, boolean success, int files) {
         return "{\"t\":\""
                 + GOAL_FINISH
-                + "\",\"dir\":"
+                + "\",\"kind\":\"publish\",\"dir\":"
                 + Ndjson.quote(dir)
                 + ",\"success\":"
                 + success
@@ -2001,7 +2003,7 @@ public final class EngineProtocol {
             String dir, boolean success, int exitCode, int warnings, String error, String diag) {
         return "{\"t\":\""
                 + GOAL_FINISH
-                + "\",\"dir\":"
+                + "\",\"kind\":\"import\",\"dir\":"
                 + Ndjson.quote(dir)
                 + ",\"success\":"
                 + success
@@ -2038,7 +2040,7 @@ public final class EngineProtocol {
             String daemonExe) {
         return "{\"t\":\""
                 + GOAL_FINISH
-                + "\",\"dir\":"
+                + "\",\"kind\":\"image\",\"dir\":"
                 + Ndjson.quote(dir)
                 + ",\"success\":"
                 + success
@@ -2091,8 +2093,15 @@ public final class EngineProtocol {
                 + "}";
     }
 
-    public static String buildError(String message) {
-        return "{\"t\":\"" + BUILD_ERROR + "\",\"message\":" + Ndjson.quote(message) + "}";
+    /** The one error envelope; see {@link #ERROR} for the code vocabulary. */
+    public static String error(String code, String message) {
+        return "{\"t\":\"" + ERROR + "\",\"code\":" + Ndjson.quote(code)
+                + ",\"message\":" + Ndjson.quote(message) + "}";
+    }
+
+    /** {@code error} with {@link #ERR_REQUEST_FAILED} — the former build-error catch-all. */
+    public static String requestFailed(String message) {
+        return error(ERR_REQUEST_FAILED, message);
     }
 
     // ---- hosted long-tail verbs (Wave 4) ---------------------------------------------------------
@@ -2135,7 +2144,7 @@ public final class EngineProtocol {
             String dir, boolean success, String coord, String mainClass, List<String> classpath) {
         return "{\"t\":\""
                 + GOAL_FINISH
-                + "\",\"dir\":"
+                + "\",\"kind\":\"tool\",\"dir\":"
                 + Ndjson.quote(dir)
                 + ",\"success\":"
                 + success
@@ -2194,7 +2203,7 @@ public final class EngineProtocol {
             String stdlib) {
         return "{\"t\":\""
                 + GOAL_FINISH
-                + "\",\"dir\":"
+                + "\",\"kind\":\"script\",\"dir\":"
                 + Ndjson.quote(dir)
                 + ",\"success\":"
                 + success
@@ -2242,15 +2251,16 @@ public final class EngineProtocol {
     /**
      * A project-scoped cache-clear request (see {@link #CACHE_PRUNE_REQUEST}, {@code op="clear"}):
      * invalidate the action-cache entries for the project at {@code projectRoot} and its workspace.
-     * Reuses the maintenance channel; {@code projectRoot} is the extra field the server reads for
-     * this op, and {@code dryRun} reports what would be removed without deleting.
+     * Reuses the maintenance channel; {@code dir} is the project root (the one spelling every
+     * request uses for its location), and {@code dryRun} reports what would be removed without
+     * deleting.
      */
     public static String cacheClearRequest(String cache, String projectRoot, boolean dryRun) {
         return "{\"t\":\""
                 + CACHE_PRUNE_REQUEST
                 + "\",\"op\":\"clear\",\"cache\":"
                 + Ndjson.quote(cache)
-                + ",\"projectRoot\":"
+                + ",\"dir\":"
                 + Ndjson.quote(projectRoot)
                 + ",\"dryRun\":"
                 + dryRun
@@ -2278,7 +2288,7 @@ public final class EngineProtocol {
             String dir, boolean success, long files, long bytes, long reachableEvicted, long repoLinks) {
         return "{\"t\":\""
                 + GOAL_FINISH
-                + "\",\"dir\":"
+                + "\",\"kind\":\"cache\",\"dir\":"
                 + Ndjson.quote(dir)
                 + ",\"success\":"
                 + success
@@ -2299,19 +2309,35 @@ public final class EngineProtocol {
      * at worker-fork time; only {@code --max-ram-percent}/{@code --jvm-arg} and {@code JK_JVM_*}
      * cross the wire). A NONE tuning returns the line unchanged, so absent fields stay absent.
      */
-    public static String withJvmTuning(String request, dev.jkbuild.config.WorkerTuning t) {
-        if (t == null
-                || (t.maxRamPercent() == null
-                        && t.gc() == null
-                        && t.stringDedup() == null
-                        && t.extraArgs().isEmpty())) {
-            return request;
+    /**
+     * Attach the session envelope — variant selection, client-resolved env values, and worker-JVM
+     * tuning — to an encoded request line. The ONE attachment point for session state: every
+     * hosted request rides it (so {@code --jvm-arg}/{@code JK_JVM_*} apply to every verb that
+     * forks workers, not an arbitrary subset), and an empty envelope leaves the line byte-
+     * identical. The splice is validated: {@code request} must be a one-line encoded object.
+     */
+    public static String withSession(
+            String request, String variant, java.util.Map<String, String> clientEnv, dev.jkbuild.config.WorkerTuning t) {
+        if (request == null
+                || request.length() < 2
+                || request.charAt(0) != '{'
+                || request.charAt(request.length() - 1) != '}') {
+            throw new IllegalArgumentException("withSession needs an encoded single-line request object");
         }
+        boolean hasVariant = variant != null && !variant.isBlank();
+        boolean hasEnv = clientEnv != null && !clientEnv.isEmpty();
+        boolean hasJvm = t != null
+                && (t.maxRamPercent() != null || t.gc() != null || t.stringDedup() != null || !t.extraArgs().isEmpty());
+        if (!hasVariant && !hasEnv && !hasJvm) return request;
         StringBuilder b = new StringBuilder(request.substring(0, request.length() - 1));
-        if (t.maxRamPercent() != null) b.append(",\"jvmMaxRam\":\"").append(t.maxRamPercent()).append('"');
-        if (t.gc() != null) b.append(",\"jvmGc\":").append(Ndjson.quote(t.gc()));
-        if (t.stringDedup() != null) b.append(",\"jvmStringDedup\":\"").append(t.stringDedup()).append('"');
-        if (!t.extraArgs().isEmpty()) b.append(",\"jvmArgs\":").append(quoteArray(t.extraArgs()));
+        if (hasVariant) b.append(",\"variant\":").append(Ndjson.quote(variant));
+        if (hasEnv) b.append(",\"env\":").append(Ndjson.map(clientEnv));
+        if (hasJvm) {
+            if (t.maxRamPercent() != null) b.append(",\"jvmMaxRam\":\"").append(t.maxRamPercent()).append('\"');
+            if (t.gc() != null) b.append(",\"jvmGc\":").append(Ndjson.quote(t.gc()));
+            if (t.stringDedup() != null) b.append(",\"jvmStringDedup\":\"").append(t.stringDedup()).append('\"');
+            if (!t.extraArgs().isEmpty()) b.append(",\"jvmArgs\":").append(quoteArray(t.extraArgs()));
+        }
         return b.append('}').toString();
     }
 
@@ -2322,42 +2348,19 @@ public final class EngineProtocol {
      * credentials — because the engine's own environment belongs to whichever invocation spawned
      * it). Nothing selected and no env → the line rides unchanged.
      */
-    public static String withVariant(String request, String variant, java.util.Map<String, String> clientEnv) {
-        boolean hasVariant = variant != null && !variant.isBlank();
-        boolean hasEnv = clientEnv != null && !clientEnv.isEmpty();
-        if (!hasVariant && !hasEnv) return request;
-        StringBuilder b = new StringBuilder(request.substring(0, request.length() - 1));
-        if (hasVariant) b.append(",\"variant\":").append(Ndjson.quote(variant));
-        if (hasEnv) {
-            java.util.List<String> names = new java.util.ArrayList<>(clientEnv.size());
-            java.util.List<String> values = new java.util.ArrayList<>(clientEnv.size());
-            for (var e : clientEnv.entrySet()) {
-                names.add(e.getKey());
-                values.add(e.getValue());
-            }
-            b.append(",\"envNames\":").append(quoteArray(names));
-            b.append(",\"envValues\":").append(quoteArray(values));
-        }
-        return b.append('}').toString();
-    }
 
-    /** Decode side of {@link #withVariant}: the selection, or {@code ""}. */
+    /** Decode side of {@link #withSession}: the selection, or {@code ""}. */
     public static String variantOf(String request) {
         String v = Ndjson.str(request, "variant");
         return v == null ? "" : v;
     }
 
-    /** Decode side of {@link #withVariant}: the client-resolved env values, or empty. */
+    /** Decode side of {@link #withSession}: the client-resolved env values, or empty. */
     public static java.util.Map<String, String> clientEnvOf(String request) {
-        java.util.List<String> names = Ndjson.strArray(request, "envNames");
-        java.util.List<String> values = Ndjson.strArray(request, "envValues");
-        if (names.isEmpty() || names.size() != values.size()) return java.util.Map.of();
-        java.util.Map<String, String> out = new java.util.LinkedHashMap<>();
-        for (int i = 0; i < names.size(); i++) out.put(names.get(i), values.get(i));
-        return out;
+        return Ndjson.strMap(request, "env");
     }
 
-    /** Decode side of {@link #withJvmTuning}; NONE when the request carries no tuning fields. */
+    /** Decode side of {@link #withSession}; NONE when the request carries no tuning fields. */
     public static dev.jkbuild.config.WorkerTuning jvmTuning(String request) {
         String maxRam = Ndjson.str(request, "jvmMaxRam");
         String gc = Ndjson.str(request, "jvmGc");

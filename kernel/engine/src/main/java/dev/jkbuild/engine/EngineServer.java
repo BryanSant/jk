@@ -236,7 +236,7 @@ public final class EngineServer implements AutoCloseable {
         // Same-version election: if a live engine of THIS version already serves, this instance
         // is a redundant spawn-race participant — lose quietly (the pre-generation contract).
         // A DIFFERENT version (or nothing live) proceeds to takeover.
-        String incumbent = helloProbe(previousActive);
+        String incumbent = helloProbe(previousActive, version);
         if (version.equals(incumbent)) {
             releaseStartupLock();
             return false;
@@ -355,7 +355,7 @@ public final class EngineServer implements AutoCloseable {
     }
 
     /** The version a live engine at {@code socket} answers with, or {@code null}. */
-    private static String helloProbe(Path socket) {
+    private static String helloProbe(Path socket, String probeVersion) {
         if (socket == null || !Files.exists(socket)) return null;
         try (SocketChannel ch = openClient(socket)) {
             java.io.BufferedWriter w = new java.io.BufferedWriter(
@@ -364,7 +364,7 @@ public final class EngineServer implements AutoCloseable {
             java.io.BufferedReader r = new java.io.BufferedReader(
                     new java.io.InputStreamReader(
                             java.nio.channels.Channels.newInputStream(ch), StandardCharsets.UTF_8));
-            w.write(EngineProtocol.hello("takeover-probe"));
+            w.write(EngineProtocol.hello(probeVersion, "probe"));
             w.write('\n');
             w.flush();
             String ack = r.readLine();
@@ -457,19 +457,23 @@ public final class EngineServer implements AutoCloseable {
     /** Loopback-TCP transport only: the connection's first line must be a matching {@link EngineProtocol#AUTH}. */
     private boolean authenticate(BufferedReader reader) throws IOException {
         String line = reader.readLine();
-        return line != null
-                && EngineProtocol.AUTH.equals(EngineProtocol.typeOf(line))
-                && expectedToken.equals(Ndjson.str(line, "token"));
+        if (line == null || !EngineProtocol.AUTH.equals(EngineProtocol.typeOf(line))) return false;
+        String presented = Ndjson.str(line, "token");
+        if (presented == null) return false;
+        return java.security.MessageDigest.isEqual(
+                expectedToken.getBytes(StandardCharsets.UTF_8), presented.getBytes(StandardCharsets.UTF_8));
     }
 
     private void handleConnection(SocketChannel ch) {
         try (ch;
-                BufferedReader reader =
-                        new BufferedReader(new InputStreamReader(Channels.newInputStream(ch), StandardCharsets.UTF_8));
+                BufferedReader reader = new dev.jkbuild.plugin.protocol.BoundedLineReader(
+                        new InputStreamReader(Channels.newInputStream(ch), StandardCharsets.UTF_8));
                 BufferedWriter writer =
                         new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8))) {
             if (expectedToken != null && !authenticate(reader)) {
-                return; // loopback-TCP transport only: wrong/missing token — close without a reply
+                // Typed refusal (then close): a silent close is indistinguishable from a crash.
+                sendQuiet(writer, EngineProtocol.error(EngineProtocol.ERR_AUTH, "engine token rejected"));
+                return;
             }
             serveConnection(reader, writer);
         } catch (IOException ignored) {
@@ -506,14 +510,30 @@ public final class EngineServer implements AutoCloseable {
             String line;
             while ((line = reader.readLine()) != null) {
                 String type = EngineProtocol.typeOf(line);
-                if (type == null) continue; // ignore malformed/blank lines
+                if (type == null) {
+                    // A garbled REQUEST gets a typed refusal, never silence — a silently-dropped
+                    // request wedges a streaming client that is waiting for a terminal event.
+                    sendQuiet(writer, EngineProtocol.error(EngineProtocol.ERR_PROTOCOL,
+                            "unparseable request line (no \"t\" discriminator)"));
+                    continue;
+                }
                 // Downward-delegation gate for artifact-producing requests (engine-versioning §3).
                 if (DELEGATABLE.contains(type) && maybeDelegate(line, reader, writer)) {
                     return; // served by the pinned version's child engine (see EngineDelegate)
                 }
                 switch (type) {
-                    case EngineProtocol.HELLO -> send(
-                            writer, EngineProtocol.helloAck(version, pid, startedAtMillis, draining));
+                    case EngineProtocol.HELLO -> {
+                        int clientProto = Ndjson.intValue(line, "proto", EngineProtocol.PROTOCOL);
+                        if (clientProto > EngineProtocol.PROTOCOL) {
+                            // A newer-protocol client: this engine must not serve wire semantics
+                            // it postdates — the client reacts by taking over (spawn + drain).
+                            send(writer, EngineProtocol.error(EngineProtocol.ERR_VERSION_SKEW,
+                                    "client speaks protocol " + clientProto + " but this engine speaks "
+                                            + EngineProtocol.PROTOCOL + " — start a matching engine"));
+                            return;
+                        }
+                        send(writer, EngineProtocol.helloAck(version, pid, startedAtMillis, draining));
+                    }
                     case EngineProtocol.PING -> send(writer, EngineProtocol.pong());
                     case EngineProtocol.STATUS -> {
                         dev.jkbuild.engine.http.StatusSnapshot s = statusSnapshot();
@@ -575,79 +595,79 @@ public final class EngineServer implements AutoCloseable {
                     }
                     case EngineProtocol.LOCK_REQUEST -> {
                         // Same fork-and-watch shape as BUILD_REQUEST, hosting jk lock's cascade.
-                        handleAsyncGoalRequest(line, reader, writer, "jk-engine-lock-", this::runLock);
+                        handleAsyncGoalRequest(line, reader, writer, "jk-engine-lock-", "lock", this::runLock);
                         return;
                     }
                     case EngineProtocol.UPDATE_REQUEST -> {
                         // jk update rides jk lock's event vocabulary (plus the --git splice mode).
-                        handleAsyncGoalRequest(line, reader, writer, "jk-engine-update-", this::runUpdate);
+                        handleAsyncGoalRequest(line, reader, writer, "jk-engine-update-", "update", this::runUpdate);
                         return;
                     }
                     case EngineProtocol.SYNC_REQUEST -> {
                         // jk sync is a single goal — TEST_REQUEST's wire shape.
-                        handleAsyncGoalRequest(line, reader, writer, "jk-engine-sync-", this::runSync);
+                        handleAsyncGoalRequest(line, reader, writer, "jk-engine-sync-", "sync", this::runSync);
                         return;
                     }
                     case EngineProtocol.AUDIT_REQUEST -> {
                         // Wave 2 (hosted worker verbs): single goal, worker forked engine-side.
-                        handleAsyncGoalRequest(line, reader, writer, "jk-engine-audit-", this::runAudit);
+                        handleAsyncGoalRequest(line, reader, writer, "jk-engine-audit-", "audit", this::runAudit);
                         return;
                     }
                     case EngineProtocol.FORMAT_REQUEST -> {
-                        handleAsyncGoalRequest(line, reader, writer, "jk-engine-format-", this::runFormat);
+                        handleAsyncGoalRequest(line, reader, writer, "jk-engine-format-", "format", this::runFormat);
                         return;
                     }
                     case EngineProtocol.PUBLISH_REQUEST -> {
-                        handleAsyncGoalRequest(line, reader, writer, "jk-engine-publish-", this::runPublish);
+                        handleAsyncGoalRequest(line, reader, writer, "jk-engine-publish-", "publish", this::runPublish);
                         return;
                     }
                     case EngineProtocol.IMAGE_REQUEST -> {
-                        handleAsyncGoalRequest(line, reader, writer, "jk-engine-image-", this::runImage);
+                        handleAsyncGoalRequest(line, reader, writer, "jk-engine-image-", "image", this::runImage);
                         return;
                     }
                     case EngineProtocol.IMPORT_REQUEST -> {
-                        handleAsyncGoalRequest(line, reader, writer, "jk-engine-import-", this::runImport);
+                        handleAsyncGoalRequest(line, reader, writer, "jk-engine-import-", "import", this::runImport);
                         return;
                     }
                     case EngineProtocol.PROVISION_REQUEST -> {
                         // One-shot (no goal events), but the worker may download a whole Maven/Gradle
                         // distribution — same fork-and-watch shape so an EOF still cancels.
-                        handleAsyncGoalRequest(line, reader, writer, "jk-engine-provision-", this::runProvision);
+                        handleAsyncGoalRequest(line, reader, writer, "jk-engine-provision-", "provision", this::runProvision);
                         return;
                     }
                     case EngineProtocol.COMPILE_REQUEST -> {
                         // Wave 3 (hosted pipeline verbs): jk compile is a single goal — TEST_REQUEST's shape.
-                        handleAsyncGoalRequest(line, reader, writer, "jk-engine-compile-", this::runCompile);
+                        handleAsyncGoalRequest(line, reader, writer, "jk-engine-compile-", "compile", this::runCompile);
                         return;
                     }
                     case EngineProtocol.NATIVE_REQUEST -> {
                         // jk native's serial module cascade, speaking BUILD_REQUEST's workspace vocabulary.
-                        handleAsyncGoalRequest(line, reader, writer, "jk-engine-native-", this::runNative);
+                        handleAsyncGoalRequest(line, reader, writer, "jk-engine-native-", "native", this::runNative);
                         return;
                     }
                     case EngineProtocol.INSTALL_REQUEST -> {
                         // jk install's build + cache-install halves; make-install stays client-side.
-                        handleAsyncGoalRequest(line, reader, writer, "jk-engine-install-", this::runInstall);
+                        handleAsyncGoalRequest(line, reader, writer, "jk-engine-install-", "install", this::runInstall);
                         return;
                     }
                     case EngineProtocol.GIT_FETCH_REQUEST -> {
                         // jk install <git-url>'s clone half (git runs in-process in the engine).
-                        handleAsyncGoalRequest(line, reader, writer, "jk-engine-gitfetch-", this::runGitFetch);
+                        handleAsyncGoalRequest(line, reader, writer, "jk-engine-gitfetch-", "git-fetch", this::runGitFetch);
                         return;
                     }
                     case EngineProtocol.SCRIPT_PREPARE_REQUEST -> {
-                        handleAsyncGoalRequest(line, reader, writer, "jk-engine-script-", this::runScriptPrepare);
+                        handleAsyncGoalRequest(line, reader, writer, "jk-engine-script-", "script", this::runScriptPrepare);
                         return;
                     }
                     case EngineProtocol.TOOL_RESOLVE_REQUEST -> {
                         // Wave 4 (hosted long-tail verbs): jk tool install/run's Maven resolve+fetch.
-                        handleAsyncGoalRequest(line, reader, writer, "jk-engine-tool-", this::runToolResolve);
+                        handleAsyncGoalRequest(line, reader, writer, "jk-engine-tool-", "tool", this::runToolResolve);
                         return;
                     }
                     case EngineProtocol.CACHE_PRUNE_REQUEST -> {
                         // Cache maintenance is an idle-boundary job, not a pipeline: it waits for
                         // activePipelines to drain (and blocks new ones) instead of joining them.
-                        handleAsyncGoalRequest(line, reader, writer, "jk-engine-cache-", this::runCacheMaintenance, false);
+                        handleAsyncGoalRequest(line, reader, writer, "jk-engine-cache-", "cache", this::runCacheMaintenance, false);
                         return;
                     }
                     case EngineProtocol.EXPLAIN_REQUEST -> {
@@ -669,9 +689,8 @@ public final class EngineServer implements AutoCloseable {
                     case EngineProtocol.GENERATE_REQUEST -> handleGenerateRequest(line, writer);
                     case EngineProtocol.PLUGIN_VERB_REQUEST -> handlePluginVerbRequest(line, writer);
                     case EngineProtocol.IDE_MODEL_REQUEST -> handleIdeModelRequest(line, writer);
-                    default -> {
-                        /* unknown type — forward-compatible no-op */
-                    }
+                    default -> sendQuiet(writer, EngineProtocol.error(EngineProtocol.ERR_PROTOCOL,
+                            "unknown request type: " + type));
                 }
             }
         }
@@ -684,7 +703,7 @@ public final class EngineServer implements AutoCloseable {
      * build finishes and its terminal message has been sent, or the connection drops.
      */
     private void handleBuildRequest(String requestLine, BufferedReader reader, BufferedWriter writer) {
-        handleAsyncGoalRequest(requestLine, reader, writer, "jk-engine-build-", this::runBuild);
+        handleAsyncGoalRequest(requestLine, reader, writer, "jk-engine-build-", "build", this::runBuild);
     }
 
     /** An engine-hosted operation's body: decode the request, run it, stream events to {@code writer}. */
@@ -701,8 +720,13 @@ public final class EngineServer implements AutoCloseable {
      * {@code runner} actually builds and runs.
      */
     private void handleAsyncGoalRequest(
-            String requestLine, BufferedReader reader, BufferedWriter writer, String threadPrefix, GoalRunner runner) {
-        handleAsyncGoalRequest(requestLine, reader, writer, threadPrefix, runner, true);
+            String requestLine,
+            BufferedReader reader,
+            BufferedWriter writer,
+            String threadPrefix,
+            String kind,
+            GoalRunner runner) {
+        handleAsyncGoalRequest(requestLine, reader, writer, threadPrefix, kind, runner, true);
     }
 
     /**
@@ -715,6 +739,7 @@ public final class EngineServer implements AutoCloseable {
             BufferedReader reader,
             BufferedWriter writer,
             String threadPrefix,
+            String kind,
             GoalRunner runner,
             boolean pipeline) {
         // Refuse new jobs while draining (a graceful shutdown is finishing in-flight work). The client
@@ -722,7 +747,8 @@ public final class EngineServer implements AutoCloseable {
         // server too so a raced/last-moment request is rejected instead of prolonging the drain.
         if (draining) {
             try {
-                send(writer, EngineProtocol.shutdownPending());
+                send(writer, EngineProtocol.error(EngineProtocol.ERR_SHUTTING_DOWN,
+        "the engine is shutting down (draining) — retry; the successor engine takes over"));
             } catch (IOException ignored) {
                 // Client vanished mid-refusal — nothing to do; the connection is closing anyway.
             }
@@ -731,13 +757,11 @@ public final class EngineServer implements AutoCloseable {
         Session.CancelToken cancelToken = Session.CancelToken.live();
         CountDownLatch done = new CountDownLatch(1);
         long eventRequestId = requestIds.incrementAndGet();
-        // A single-project build ("1build" thread prefix) is still a "build" to the dashboard — the
-        // internal distinction (workspace scheduler vs one goal) is not a user-facing kind. Normalize
-        // once here so the request-start/finish events, the journal, and the rebuild-button gate all
-        // agree on "build".
-        String eventKind = requestKind(threadPrefix);
-        if (eventKind.equals("1build")) eventKind = "build";
-        String eventDir = String.valueOf(Ndjson.str(requestLine, "entryDir"));
+        // The kind rides explicitly from the dispatch site (never parsed back out of a thread
+        // name); the journal dir falls back to a request's specific location field so non-build
+        // requests never record the literal string "null".
+        String eventKind = kind;
+        String eventDir = journalDir(requestLine);
         long eventStartMillis = clockMillis.getAsLong();
         publishRequestStart(eventRequestId, eventKind, eventDir);
         registerAccumulator(eventRequestId, eventKind, eventDir, "cli");
@@ -803,10 +827,13 @@ public final class EngineServer implements AutoCloseable {
         return a != null ? a.wasCancelled() : rawCancelled;
     }
 
-    /** {@code "jk-engine-build-"} → {@code "build"} — the event vocabulary's request kind. */
-    private static String requestKind(String threadPrefix) {
-        String kind = threadPrefix.startsWith("jk-engine-") ? threadPrefix.substring("jk-engine-".length()) : threadPrefix;
-        return kind.endsWith("-") ? kind.substring(0, kind.length() - 1) : kind;
+    /** The request's location for journal/dashboard rows: {@code dir}, else the nearest thing. */
+    private static String journalDir(String requestLine) {
+        String dir = Ndjson.str(requestLine, "dir");
+        if (dir != null) return dir;
+        String cache = Ndjson.str(requestLine, "cache");
+        if (cache != null) return cache;
+        return "";
     }
 
     /** Publish to the dashboard event hub — free (one subscriber check) when no dashboard is open. */
@@ -1101,7 +1128,7 @@ public final class EngineServer implements AutoCloseable {
     /** Decode the request, reconstruct a {@link Session}/{@link WorkspaceRequest}, and run it. */
     private void runBuild(String requestLine, Session.CancelToken cancelToken, BufferedWriter writer) {
         try {
-            String entryDirStr = Ndjson.str(requestLine, "entryDir");
+            String entryDirStr = Ndjson.str(requestLine, "dir");
             String cacheStr = Ndjson.str(requestLine, "cache");
             String jdksDirStr = Ndjson.str(requestLine, "jdksDir");
             int workers = Ndjson.intValue(requestLine, "workers", 1);
@@ -1114,7 +1141,7 @@ public final class EngineServer implements AutoCloseable {
             boolean force = Ndjson.bool(requestLine, "force", false);
             // Distinct from force: rerun bypasses the action cache / freshness stamps without
             // implying refresh, so locked dependencies still come from the local CAS (jk verify).
-            boolean rerun = Ndjson.bool(requestLine, "rerun", false);
+            boolean rerun = Ndjson.bool(requestLine, "rebuild", false);
             // jk build sends true (auto-freshen a stale workspace lock engine-side before building);
             // jk verify's scratch rebuild sends false (pinned lock used verbatim).
             boolean freshenLock = Ndjson.bool(requestLine, "freshenLock", false);
@@ -1169,8 +1196,8 @@ public final class EngineServer implements AutoCloseable {
                 }
             }
         } catch (Exception e) {
-            sendQuiet(writer, EngineProtocol.buildError(String.valueOf(e.getMessage())));
-            publishRequestError(eventRequestId(), Ndjson.str(requestLine, "entryDir"), String.valueOf(e.getMessage()));
+            sendQuiet(writer, EngineProtocol.requestFailed(String.valueOf(e.getMessage())));
+            publishRequestError(eventRequestId(), Ndjson.str(requestLine, "dir"), String.valueOf(e.getMessage()));
         }
     }
 
@@ -1179,7 +1206,7 @@ public final class EngineServer implements AutoCloseable {
      * onto its own thread and keeps reading the connection for a cancel/EOF meanwhile.
      */
     private void handleTestRequest(String requestLine, BufferedReader reader, BufferedWriter writer) {
-        handleAsyncGoalRequest(requestLine, reader, writer, "jk-engine-test-", this::runTest);
+        handleAsyncGoalRequest(requestLine, reader, writer, "jk-engine-test-", "test", this::runTest);
     }
 
     /**
@@ -1187,7 +1214,7 @@ public final class EngineServer implements AutoCloseable {
      * engine-hosted counterpart of {@code BuildCommand.runForDir}.
      */
     private void handleSingleBuildRequest(String requestLine, BufferedReader reader, BufferedWriter writer) {
-        handleAsyncGoalRequest(requestLine, reader, writer, "jk-engine-1build-", this::runSingleBuild);
+        handleAsyncGoalRequest(requestLine, reader, writer, "jk-engine-1build-", "build", this::runSingleBuild);
     }
 
     /**
@@ -1298,12 +1325,12 @@ public final class EngineServer implements AutoCloseable {
      */
     private boolean maybeDelegate(String requestLine, BufferedReader reader, BufferedWriter writer) {
         if (jobMode) return false; // a job child serves what it was handed — never re-routes
-        String entryDir = dev.jkbuild.plugin.protocol.Ndjson.str(requestLine, "entryDir");
+        String entryDir = dev.jkbuild.plugin.protocol.Ndjson.str(requestLine, "dir");
         if (entryDir == null) return false;
         String pin = EngineDelegate.pinnedVersionDiffering(Path.of(entryDir), version);
         if (pin == null) return false;
         if (EngineDelegate.pinIsNewer(pin, version)) {
-            sendQuiet(writer, EngineProtocol.buildError("this build pins jk " + pin + " but the engine is "
+            sendQuiet(writer, EngineProtocol.error(EngineProtocol.ERR_VERSION_SKEW, "this build pins jk " + pin + " but the engine is "
                     + version + " — run that project's wrapper (./jk) or `jk self update` to upgrade;"
                     + " the newer engine takes over without interrupting running builds"));
             return true;
@@ -1312,9 +1339,9 @@ public final class EngineServer implements AutoCloseable {
             EngineDelegate.runAsChild(pin, requestLine, reader, writer, paths.log(), log);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            sendQuiet(writer, EngineProtocol.buildError("interrupted delegating to jk " + pin));
+            sendQuiet(writer, EngineProtocol.requestFailed("interrupted delegating to jk " + pin));
         } catch (IOException e) {
-            sendQuiet(writer, EngineProtocol.buildError(String.valueOf(e.getMessage())));
+            sendQuiet(writer, EngineProtocol.requestFailed(String.valueOf(e.getMessage())));
         }
         return true;
     }
@@ -1414,13 +1441,13 @@ public final class EngineServer implements AutoCloseable {
 
     private void handleForecastRequest(String requestLine, BufferedWriter writer) {
         try {
-            Path entryDir = Path.of(Ndjson.str(requestLine, "entryDir"));
+            Path entryDir = Path.of(Ndjson.str(requestLine, "dir"));
             Path cache = Path.of(Ndjson.str(requestLine, "cache"));
             boolean skipTests = Ndjson.bool(requestLine, "skipTests", false);
             JkConfig config = new JkConfig(
                     Optional.empty(),
                     Optional.of(Ndjson.bool(requestLine, "offline", false)),
-                    Optional.of(Ndjson.bool(requestLine, "rerun", false)),
+                    Optional.of(Ndjson.bool(requestLine, "rebuild", false)),
                     Optional.empty(),
                     Optional.empty(),
                     Optional.empty(),
@@ -1469,7 +1496,7 @@ public final class EngineServer implements AutoCloseable {
      */
     private void handleExplainRequest(String requestLine, BufferedWriter writer) {
         try {
-            String entryDirStr = Ndjson.str(requestLine, "entryDir");
+            String entryDirStr = Ndjson.str(requestLine, "dir");
             String cacheStr = Ndjson.str(requestLine, "cache");
             Path entryDir = Path.of(entryDirStr);
             Path cache = Path.of(cacheStr);
@@ -1477,7 +1504,7 @@ public final class EngineServer implements AutoCloseable {
             ExplainPlan plan = BuildService.explain(entryDir, entryBuild, cache);
             if (plan.hasErrors()) {
                 for (String err : plan.errors()) {
-                    sendQuiet(writer, EngineProtocol.explainError(err));
+                    sendQuiet(writer, EngineProtocol.requestFailed(err));
                 }
                 sendQuiet(writer, EngineProtocol.explainDone(1, 0));
                 return;
@@ -1518,7 +1545,7 @@ public final class EngineServer implements AutoCloseable {
             sendQuiet(writer, EngineProtocol.eta(etaMillis));
             sendQuiet(writer, EngineProtocol.explainDone(plan.maxReadyWidth(), plan.modules().size()));
         } catch (Exception e) {
-            sendQuiet(writer, EngineProtocol.explainError(String.valueOf(e.getMessage())));
+            sendQuiet(writer, EngineProtocol.requestFailed(String.valueOf(e.getMessage())));
             sendQuiet(writer, EngineProtocol.explainDone(0, 0));
         }
     }
@@ -1531,7 +1558,7 @@ public final class EngineServer implements AutoCloseable {
      */
     private void runTest(String requestLine, Session.CancelToken cancelToken, BufferedWriter writer) {
         try {
-            String entryDirStr = Ndjson.str(requestLine, "entryDir");
+            String entryDirStr = Ndjson.str(requestLine, "dir");
             String cacheStr = Ndjson.str(requestLine, "cache");
             String jdksDirStr = Ndjson.str(requestLine, "jdksDir");
             int workers = Ndjson.intValue(requestLine, "workers", 1);
@@ -1610,7 +1637,7 @@ public final class EngineServer implements AutoCloseable {
             // goalFinish (with test counts, if any) was already sent by wireGoalListener's own
             // goalFinish handling — nothing further to send here; the connection close signals "done".
         } catch (Exception e) {
-            sendQuiet(writer, EngineProtocol.buildError(String.valueOf(e.getMessage())));
+            sendQuiet(writer, EngineProtocol.requestFailed(String.valueOf(e.getMessage())));
         }
     }
 
@@ -1625,7 +1652,7 @@ public final class EngineServer implements AutoCloseable {
      */
     private void runSingleBuild(String requestLine, Session.CancelToken cancelToken, BufferedWriter writer) {
         try {
-            String entryDirStr = Ndjson.str(requestLine, "entryDir");
+            String entryDirStr = Ndjson.str(requestLine, "dir");
             String cacheStr = Ndjson.str(requestLine, "cache");
             String jdksDirStr = Ndjson.str(requestLine, "jdksDir");
             int workers = Ndjson.intValue(requestLine, "workers", 1);
@@ -1708,7 +1735,7 @@ public final class EngineServer implements AutoCloseable {
                 maybeEnqueuePrune(cache);
             }
         } catch (Exception e) {
-            sendQuiet(writer, EngineProtocol.buildError(String.valueOf(e.getMessage())));
+            sendQuiet(writer, EngineProtocol.requestFailed(String.valueOf(e.getMessage())));
         }
     }
 
@@ -1734,7 +1761,7 @@ public final class EngineServer implements AutoCloseable {
                 return null;
             });
         } catch (Exception e) {
-            sendQuiet(writer, EngineProtocol.buildError(String.valueOf(e.getMessage())));
+            sendQuiet(writer, EngineProtocol.requestFailed(String.valueOf(e.getMessage())));
         }
     }
 
@@ -1779,7 +1806,7 @@ public final class EngineServer implements AutoCloseable {
                 return null;
             });
         } catch (Exception e) {
-            sendQuiet(writer, EngineProtocol.buildError(String.valueOf(e.getMessage())));
+            sendQuiet(writer, EngineProtocol.requestFailed(String.valueOf(e.getMessage())));
         }
     }
 
@@ -1825,7 +1852,7 @@ public final class EngineServer implements AutoCloseable {
                 return null;
             });
         } catch (Exception e) {
-            sendQuiet(writer, EngineProtocol.buildError(String.valueOf(e.getMessage())));
+            sendQuiet(writer, EngineProtocol.requestFailed(String.valueOf(e.getMessage())));
         }
     }
 
@@ -1859,7 +1886,7 @@ public final class EngineServer implements AutoCloseable {
      */
     private void runAudit(String requestLine, Session.CancelToken cancelToken, BufferedWriter writer) {
         try {
-            Path entryDir = Path.of(Ndjson.str(requestLine, "entryDir"));
+            Path entryDir = Path.of(Ndjson.str(requestLine, "dir"));
             Path cache = Path.of(Ndjson.str(requestLine, "cache"));
             String severity = Ndjson.str(requestLine, "severity");
             String batch = Ndjson.str(requestLine, "osvBatchUrl");
@@ -1880,7 +1907,7 @@ public final class EngineServer implements AutoCloseable {
                             writer, EngineProtocol.auditFinding(dir, module, version, vulnId, sev, summary)));
             streamSingleGoal(goal, session, writer, result -> EngineProtocol.goalFinish(dir, result.success()));
         } catch (Exception e) {
-            sendQuiet(writer, EngineProtocol.buildError(String.valueOf(e.getMessage())));
+            sendQuiet(writer, EngineProtocol.requestFailed(String.valueOf(e.getMessage())));
         }
     }
 
@@ -1918,7 +1945,7 @@ public final class EngineServer implements AutoCloseable {
                     goal.get(dev.jkbuild.runtime.FormatGoals.TOTAL).orElse(-1),
                     goal.get(dev.jkbuild.runtime.FormatGoals.WORKER_EXIT).orElse(-1)));
         } catch (Exception e) {
-            sendQuiet(writer, EngineProtocol.buildError(String.valueOf(e.getMessage())));
+            sendQuiet(writer, EngineProtocol.requestFailed(String.valueOf(e.getMessage())));
         }
     }
 
@@ -1929,7 +1956,7 @@ public final class EngineServer implements AutoCloseable {
      */
     private void runPublish(String requestLine, Session.CancelToken cancelToken, BufferedWriter writer) {
         try {
-            Path entryDir = Path.of(Ndjson.str(requestLine, "entryDir"));
+            Path entryDir = Path.of(Ndjson.str(requestLine, "dir"));
             Path cache = Path.of(Ndjson.str(requestLine, "cache"));
             String jar = Ndjson.str(requestLine, "jar");
             String keyFile = Ndjson.str(requestLine, "keyFile");
@@ -1966,7 +1993,7 @@ public final class EngineServer implements AutoCloseable {
                     result.success(),
                     goal.get(dev.jkbuild.runtime.PublishGoals.FILES).orElse(-1)));
         } catch (Exception e) {
-            sendQuiet(writer, EngineProtocol.buildError(String.valueOf(e.getMessage())));
+            sendQuiet(writer, EngineProtocol.requestFailed(String.valueOf(e.getMessage())));
         }
     }
 
@@ -1978,7 +2005,7 @@ public final class EngineServer implements AutoCloseable {
      */
     private void runImage(String requestLine, Session.CancelToken cancelToken, BufferedWriter writer) {
         try {
-            Path entryDir = Path.of(Ndjson.str(requestLine, "entryDir"));
+            Path entryDir = Path.of(Ndjson.str(requestLine, "dir"));
             Path cache = Path.of(Ndjson.str(requestLine, "cache"));
             String jdksDirStr = Ndjson.str(requestLine, "jdksDir");
             Path jdksDir = jdksDirStr != null ? Path.of(jdksDirStr) : null;
@@ -1987,7 +2014,7 @@ public final class EngineServer implements AutoCloseable {
             JkConfig config = new JkConfig(
                     Optional.empty(),
                     Optional.of(Ndjson.bool(requestLine, "offline", false)),
-                    Optional.of(Ndjson.bool(requestLine, "rerun", false)),
+                    Optional.of(Ndjson.bool(requestLine, "rebuild", false)),
                     Optional.empty(),
                     Optional.empty(),
                     Optional.of(verbose),
@@ -2044,7 +2071,7 @@ public final class EngineServer implements AutoCloseable {
                         daemonExe);
             });
         } catch (Exception e) {
-            sendQuiet(writer, EngineProtocol.buildError(String.valueOf(e.getMessage())));
+            sendQuiet(writer, EngineProtocol.requestFailed(String.valueOf(e.getMessage())));
         }
     }
 
@@ -2081,7 +2108,7 @@ public final class EngineServer implements AutoCloseable {
                     goal.get(dev.jkbuild.runtime.CompatGoals.ERROR).orElse(null),
                     goal.get(dev.jkbuild.runtime.CompatGoals.DIAG).orElse(null)));
         } catch (Exception e) {
-            sendQuiet(writer, EngineProtocol.buildError(String.valueOf(e.getMessage())));
+            sendQuiet(writer, EngineProtocol.requestFailed(String.valueOf(e.getMessage())));
         }
     }
 
@@ -2106,7 +2133,7 @@ public final class EngineServer implements AutoCloseable {
                     outcome.exit(),
                     outcome.diag()));
         } catch (Exception e) {
-            sendQuiet(writer, EngineProtocol.buildError(String.valueOf(e.getMessage())));
+            sendQuiet(writer, EngineProtocol.requestFailed(String.valueOf(e.getMessage())));
         }
     }
 
@@ -2130,7 +2157,7 @@ public final class EngineServer implements AutoCloseable {
                             session.workingDir(), session.cacheDir(), profile, verbose));
             streamSingleGoal(goal, session, writer, result -> EngineProtocol.goalFinish(dir, result.success()));
         } catch (Exception e) {
-            sendQuiet(writer, EngineProtocol.buildError(String.valueOf(e.getMessage())));
+            sendQuiet(writer, EngineProtocol.requestFailed(String.valueOf(e.getMessage())));
         }
     }
 
@@ -2172,7 +2199,7 @@ public final class EngineServer implements AutoCloseable {
                                 testResult.skipped());
             });
         } catch (Exception e) {
-            sendQuiet(writer, EngineProtocol.buildError(String.valueOf(e.getMessage())));
+            sendQuiet(writer, EngineProtocol.requestFailed(String.valueOf(e.getMessage())));
         }
     }
 
@@ -2215,7 +2242,7 @@ public final class EngineServer implements AutoCloseable {
                         dir, result.success(), checkout != null ? checkout.toString() : null, sha);
             });
         } catch (Exception e) {
-            sendQuiet(writer, EngineProtocol.buildError(String.valueOf(e.getMessage())));
+            sendQuiet(writer, EngineProtocol.requestFailed(String.valueOf(e.getMessage())));
         }
     }
 
@@ -2271,7 +2298,7 @@ public final class EngineServer implements AutoCloseable {
                         stdlib != null ? stdlib.toString() : null);
             });
         } catch (Exception e) {
-            sendQuiet(writer, EngineProtocol.buildError(String.valueOf(e.getMessage())));
+            sendQuiet(writer, EngineProtocol.requestFailed(String.valueOf(e.getMessage())));
         }
     }
 
@@ -2311,7 +2338,7 @@ public final class EngineServer implements AutoCloseable {
                                 : java.util.List.of());
             });
         } catch (Exception e) {
-            sendQuiet(writer, EngineProtocol.buildError(String.valueOf(e.getMessage())));
+            sendQuiet(writer, EngineProtocol.requestFailed(String.valueOf(e.getMessage())));
         }
     }
 
@@ -2349,7 +2376,7 @@ public final class EngineServer implements AutoCloseable {
                                     case "purge" -> dev.jkbuild.runtime.CacheGoals.purgeGoal(cache);
                                     case "gc" -> dev.jkbuild.runtime.CacheGoals.gcGoal(cache);
                                     case "clear" -> dev.jkbuild.runtime.CacheGoals.clearGoal(
-                                            cache, Path.of(Ndjson.str(requestLine, "projectRoot")), dryRun);
+                                            cache, Path.of(Ndjson.str(requestLine, "dir")), dryRun);
                                     default -> dev.jkbuild.runtime.CacheGoals.pruneGoal(
                                             cache,
                                             Ndjson.intValue(requestLine, "olderThanDays", 30),
@@ -2377,7 +2404,7 @@ public final class EngineServer implements AutoCloseable {
                 cacheGate.writeLock().unlock();
             }
         } catch (Exception e) {
-            sendQuiet(writer, EngineProtocol.buildError(String.valueOf(e.getMessage())));
+            sendQuiet(writer, EngineProtocol.requestFailed(String.valueOf(e.getMessage())));
         }
     }
 
@@ -2398,12 +2425,9 @@ public final class EngineServer implements AutoCloseable {
             boolean skipTests = Ndjson.bool(requestLine, "skipTests", false);
             boolean verbose = Ndjson.bool(requestLine, "verbose", false);
             java.util.List<String> extraArgs = Ndjson.strArray(requestLine, "extraArgs");
-            java.util.List<String> graalDirs = Ndjson.strArray(requestLine, "graalDirs");
-            java.util.List<String> graalHomes = Ndjson.strArray(requestLine, "graalHomes");
             java.util.Map<Path, Path> graalByDir = new java.util.HashMap<>();
-            for (int i = 0; i < Math.min(graalDirs.size(), graalHomes.size()); i++) {
-                graalByDir.put(Path.of(graalDirs.get(i)), Path.of(graalHomes.get(i)));
-            }
+            Ndjson.strMap(requestLine, "graalHomes")
+                    .forEach((d, h) -> graalByDir.put(Path.of(d), Path.of(h)));
             Session session = resolveSession(requestLine, cancelToken, false).withJdksDir(jdksDir);
             SessionContext.where(session, () -> {
                 nativeCascade(
@@ -2419,7 +2443,7 @@ public final class EngineServer implements AutoCloseable {
                 return null;
             });
         } catch (Exception e) {
-            sendQuiet(writer, EngineProtocol.buildError(String.valueOf(e.getMessage())));
+            sendQuiet(writer, EngineProtocol.requestFailed(String.valueOf(e.getMessage())));
         }
     }
 
@@ -2624,7 +2648,7 @@ public final class EngineServer implements AutoCloseable {
      * — the same fields {@link #runBuild} decodes inline.
      */
     private static Session resolveSession(String requestLine, Session.CancelToken cancelToken, boolean refresh) {
-        Path entryDir = Path.of(Ndjson.str(requestLine, "entryDir"));
+        Path entryDir = Path.of(Ndjson.str(requestLine, "dir"));
         Path cache = Path.of(Ndjson.str(requestLine, "cache"));
         JkConfig config = new JkConfig(
                 Optional.empty(),
@@ -2967,7 +2991,8 @@ public final class EngineServer implements AutoCloseable {
         java.util.Optional<BuildRecord> found = id == null ? java.util.Optional.empty() : journal.get(id);
         if (found.isEmpty()) {
             send(writer, JsonOut.object()
-                    .put("t", EngineProtocol.HISTORY_ERROR)
+                    .put("t", EngineProtocol.ERROR)
+                    .put("code", EngineProtocol.ERR_REQUEST_FAILED)
                     .put("message", "no such build: " + id)
                     .toString());
             return;
@@ -3166,7 +3191,7 @@ public final class EngineServer implements AutoCloseable {
 
             @Override
             public void error(String phase, String code, String message, String test, String exceptionClass) {
-                sendQuiet(writer, EngineProtocol.error(dir, phase, code, message, test, exceptionClass));
+                sendQuiet(writer, EngineProtocol.errorLine(dir, phase, code, message, test, exceptionClass));
             }
 
             @Override

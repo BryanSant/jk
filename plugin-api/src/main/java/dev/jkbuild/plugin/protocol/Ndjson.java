@@ -254,6 +254,80 @@ public final class Ndjson {
      * literal {@code null} (not a quoted string), so {@code "msg":} + {@code quote(maybeNull)} is
      * always valid JSON.
      */
+    /**
+     * Extract a flat string-to-string map field ({@code "key":{"a":"1","b":"2"}}). Returns an
+     * empty (mutable-safe, insertion-ordered) map when absent or malformed. The ONE wire encoding
+     * for maps — parallel name/value arrays are gone.
+     */
+    public static java.util.Map<String, String> strMap(String json, String key) {
+        var out = new java.util.LinkedHashMap<String, String>();
+        String obj = nested(json, key);
+        if (obj == null) return out;
+        // obj is "{...}" — scan "k":"v" pairs at depth 1.
+        int i = 1;
+        while (i < obj.length()) {
+            if (obj.charAt(i) == '"') {
+                int[] pos = {i};
+                String k = readString(obj, pos);
+                i = pos[0];
+                while (i < obj.length() && (obj.charAt(i) == ' ' || obj.charAt(i) == ':')) i++;
+                if (i < obj.length() && obj.charAt(i) == '"') {
+                    pos[0] = i;
+                    String v = readString(obj, pos);
+                    i = pos[0];
+                    out.put(k, v);
+                }
+            } else {
+                i++;
+            }
+        }
+        return out;
+    }
+
+    /** Read a quoted string starting at {@code pos[0]} (on the opening quote); advances past it. */
+    private static String readString(String s, int[] pos) {
+        StringBuilder sb = new StringBuilder();
+        int i = pos[0] + 1;
+        while (i < s.length() && s.charAt(i) != '"') {
+            char c = s.charAt(i);
+            if (c == '\\' && i + 1 < s.length()) {
+                char n = s.charAt(++i);
+                switch (n) {
+                    case '"' -> sb.append('"');
+                    case '\\' -> sb.append('\\');
+                    case 'n' -> sb.append('\n');
+                    case 'r' -> sb.append('\r');
+                    case 't' -> sb.append('\t');
+                    default -> {
+                        sb.append('\\');
+                        sb.append(n);
+                    }
+                }
+            } else {
+                sb.append(c);
+            }
+            i++;
+        }
+        pos[0] = i + 1;
+        return sb.toString();
+    }
+
+    /**
+     * Encode a flat string map as a JSON object ({@code {"a":"1"}}), keys in iteration order —
+     * the writer half of {@link #strMap}. Null maps encode as {@code {}}.
+     */
+    public static String map(java.util.Map<String, String> m) {
+        if (m == null || m.isEmpty()) return "{}";
+        StringBuilder b = new StringBuilder("{");
+        boolean first = true;
+        for (var e : m.entrySet()) {
+            if (!first) b.append(',');
+            first = false;
+            b.append(quote(e.getKey())).append(':').append(quote(e.getValue()));
+        }
+        return b.append('}').toString();
+    }
+
     public static String quote(String s) {
         if (s == null) return "null";
         StringBuilder b = new StringBuilder(s.length() + 2);

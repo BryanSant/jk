@@ -91,8 +91,34 @@ class EngineProtocolTest {
     }
 
     @Test
-    void shutdown_pending_is_its_own_type() {
-        assertThat(EngineProtocol.typeOf(EngineProtocol.shutdownPending())).isEqualTo(EngineProtocol.SHUTDOWN_PENDING);
+    void with_session_attaches_variant_env_and_jvm_in_one_validated_splice() {
+        String base = EngineProtocol.ping();
+        // Empty envelope: byte-identical.
+        assertThat(EngineProtocol.withSession(base, null, java.util.Map.of(), null)).isEqualTo(base);
+        // Variant + env ride every hosted request; env is the one flat-map encoding.
+        String line = EngineProtocol.withSession(
+                base, "release|tier=free", java.util.Map.of("KEY_PASS", "s3cret"), null);
+        assertThat(EngineProtocol.variantOf(line)).isEqualTo("release|tier=free");
+        assertThat(EngineProtocol.clientEnvOf(line)).containsExactly(java.util.Map.entry("KEY_PASS", "s3cret"));
+        // A non-encoded line is rejected, not silently mangled.
+        org.assertj.core.api.Assertions.assertThatThrownBy(
+                        () -> EngineProtocol.withSession("not-json", "release", java.util.Map.of(), null))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void goal_finish_carries_its_kind_discriminator() {
+        assertThat(Ndjson.str(EngineProtocol.goalFinish("/w", true), "kind")).isEqualTo("build");
+        assertThat(Ndjson.str(EngineProtocol.goalFinishSync("/w", true, 3, 4), "kind")).isEqualTo("sync");
+        assertThat(Ndjson.str(EngineProtocol.goalFinishLock("/w", true, 1, 2, 3), "kind")).isEqualTo("lock");
+    }
+
+    @Test
+    void the_error_envelope_carries_a_code_and_message() {
+        String e = EngineProtocol.error(EngineProtocol.ERR_SHUTTING_DOWN, "draining — retry");
+        assertThat(EngineProtocol.typeOf(e)).isEqualTo(EngineProtocol.ERROR);
+        assertThat(Ndjson.str(e, "code")).isEqualTo(EngineProtocol.ERR_SHUTTING_DOWN);
+        assertThat(Ndjson.str(e, "message")).isEqualTo("draining — retry");
     }
 
     @Test
@@ -115,7 +141,7 @@ class EngineProtocolTest {
         String json = EngineProtocol.lockRequest(
                 "/work", "/cache", java.util.List.of("a", "b"), true, true, "http://repo", true, false, true);
         assertThat(EngineProtocol.typeOf(json)).isEqualTo(EngineProtocol.LOCK_REQUEST);
-        assertThat(Ndjson.str(json, "entryDir")).isEqualTo("/work");
+        assertThat(Ndjson.str(json, "dir")).isEqualTo("/work");
         assertThat(Ndjson.str(json, "cache")).isEqualTo("/cache");
         assertThat(Ndjson.strArray(json, "features")).containsExactly("a", "b");
         assertThat(Ndjson.bool(json, "noDefaultFeatures", false)).isTrue();
@@ -203,7 +229,7 @@ class EngineProtocolTest {
     void audit_request_round_trips_all_fields() {
         String json = EngineProtocol.auditRequest("/work", "/cache", "HIGH", "http://osv/batch", "http://osv/vulns/");
         assertThat(EngineProtocol.typeOf(json)).isEqualTo(EngineProtocol.AUDIT_REQUEST);
-        assertThat(Ndjson.str(json, "entryDir")).isEqualTo("/work");
+        assertThat(Ndjson.str(json, "dir")).isEqualTo("/work");
         assertThat(Ndjson.str(json, "cache")).isEqualTo("/cache");
         assertThat(Ndjson.str(json, "severity")).isEqualTo("HIGH");
         assertThat(Ndjson.str(json, "osvBatchUrl")).isEqualTo("http://osv/batch");
@@ -295,7 +321,7 @@ class EngineProtocolTest {
         assertThat(Ndjson.str(explicit, "registry")).isEqualTo("reg.io");
         assertThat(Ndjson.str(explicit, "dockerExecutable")).isEqualTo("podman");
         assertThat(Ndjson.bool(explicit, "skipTests", false)).isTrue();
-        assertThat(Ndjson.bool(explicit, "rerun", false)).isTrue();
+        assertThat(Ndjson.bool(explicit, "rebuild", false)).isTrue();
     }
 
     @Test
@@ -354,7 +380,7 @@ class EngineProtocolTest {
     void compile_request_round_trips_all_fields() {
         String json = EngineProtocol.compileRequest("/work", "/cache", "ci", true, false, true);
         assertThat(EngineProtocol.typeOf(json)).isEqualTo(EngineProtocol.COMPILE_REQUEST);
-        assertThat(Ndjson.str(json, "entryDir")).isEqualTo("/work");
+        assertThat(Ndjson.str(json, "dir")).isEqualTo("/work");
         assertThat(Ndjson.str(json, "cache")).isEqualTo("/cache");
         assertThat(Ndjson.str(json, "profile")).isEqualTo("ci");
         assertThat(Ndjson.bool(json, "offline", false)).isTrue();
@@ -366,7 +392,10 @@ class EngineProtocolTest {
     }
 
     @Test
-    void native_request_round_trips_the_parallel_graal_arrays() {
+    void native_request_round_trips_the_graal_home_map() {
+        var graal = new java.util.LinkedHashMap<String, String>();
+        graal.put("/work/app", "/graal/a");
+        graal.put("/work/tool", "/graal/b");
         String json = EngineProtocol.nativeRequest(
                 "/work",
                 "/cache",
@@ -377,24 +406,23 @@ class EngineProtocolTest {
                 true,
                 false,
                 java.util.List.of("-O2"),
-                java.util.List.of("/work/app", "/work/tool"),
-                java.util.List.of("/graal/a", "/graal/b"));
+                graal);
         assertThat(EngineProtocol.typeOf(json)).isEqualTo(EngineProtocol.NATIVE_REQUEST);
-        assertThat(Ndjson.str(json, "entryDir")).isEqualTo("/work");
+        assertThat(Ndjson.str(json, "dir")).isEqualTo("/work");
         assertThat(Ndjson.str(json, "jdksDir")).isEqualTo("/jdks");
         assertThat(Ndjson.str(json, "mainClass")).isEqualTo("com.example.Main");
         assertThat(Ndjson.bool(json, "skipTests", false)).isTrue();
         assertThat(Ndjson.bool(json, "force", false)).isTrue();
         assertThat(Ndjson.strArray(json, "extraArgs")).containsExactly("-O2");
-        assertThat(Ndjson.strArray(json, "graalDirs")).containsExactly("/work/app", "/work/tool");
-        assertThat(Ndjson.strArray(json, "graalHomes")).containsExactly("/graal/a", "/graal/b");
+        assertThat(Ndjson.strMap(json, "graalHomes")).containsExactly(
+                java.util.Map.entry("/work/app", "/graal/a"), java.util.Map.entry("/work/tool", "/graal/b"));
     }
 
     @Test
     void install_request_round_trips_all_fields() {
         String json = EngineProtocol.installRequest("/work", "/cache", "/home/u/.m2", "/graal", true, false, false, true);
         assertThat(EngineProtocol.typeOf(json)).isEqualTo(EngineProtocol.INSTALL_REQUEST);
-        assertThat(Ndjson.str(json, "entryDir")).isEqualTo("/work");
+        assertThat(Ndjson.str(json, "dir")).isEqualTo("/work");
         assertThat(Ndjson.str(json, "m2Dir")).isEqualTo("/home/u/.m2");
         assertThat(Ndjson.str(json, "graalHome")).isEqualTo("/graal");
         assertThat(Ndjson.bool(json, "skipTests", false)).isTrue();
@@ -430,7 +458,7 @@ class EngineProtocolTest {
     void explain_request_carries_the_eta_inputs() {
         String json = EngineProtocol.explainRequest("/work", "/cache", 4, true, "ci", "/jdks", true, true, false);
         assertThat(EngineProtocol.typeOf(json)).isEqualTo(EngineProtocol.EXPLAIN_REQUEST);
-        assertThat(Ndjson.str(json, "entryDir")).isEqualTo("/work");
+        assertThat(Ndjson.str(json, "dir")).isEqualTo("/work");
         assertThat(Ndjson.intValue(json, "workers", -1)).isEqualTo(4);
         assertThat(Ndjson.bool(json, "skipTests", false)).isTrue();
         assertThat(Ndjson.str(json, "profile")).isEqualTo("ci");

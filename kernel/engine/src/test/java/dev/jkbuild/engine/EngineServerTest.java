@@ -304,7 +304,11 @@ class EngineServerTest {
                 w.write(EngineProtocol.ping());
                 w.write('\n');
                 w.flush();
-                assertThat(r.readLine()).isNull(); // EOF — never authenticated, never dispatched
+                // Typed refusal, then close: distinguishable from a crash.
+                String refusal = r.readLine();
+                assertThat(EngineProtocol.typeOf(refusal)).isEqualTo(EngineProtocol.ERROR);
+                assertThat(Ndjson.str(refusal, "code")).isEqualTo(EngineProtocol.ERR_AUTH);
+                assertThat(r.readLine()).isNull(); // and nothing was dispatched
             }
 
             // Correct token: the connection behaves exactly like the Unix-domain-socket transport.
@@ -414,7 +418,7 @@ class EngineServerTest {
                         // lock-finish that will never come — otherwise the server (reading this
                         // connection for a cancel/EOF) and this loop mutually wait, and the test
                         // hangs to timeout. The real client (EngineResolveAdapter) does the same.
-                        case EngineProtocol.BUILD_ERROR -> buildError = line;
+                        case EngineProtocol.ERROR -> buildError = line;
                         default -> {
                             /* plan/progress events — presence asserted via `types` below */
                         }
@@ -522,7 +526,7 @@ class EngineServerTest {
                         // Terminal too (e.g. the worker jar wasn't locatable): break instead of
                         // waiting for a goal-finish that will never come — the real client
                         // (EngineWorkerAdapter) treats build-error the same way.
-                        case EngineProtocol.BUILD_ERROR -> buildError = line;
+                        case EngineProtocol.ERROR -> buildError = line;
                         default -> {
                             /* plan/progress events — presence asserted via `types` below */
                         }
@@ -609,7 +613,7 @@ class EngineServerTest {
                     case EngineProtocol.GOAL_DIAGNOSTIC -> diagnostics.add(line);
                     // Terminal too — break instead of waiting for a goal-finish that will never
                     // come (the mutual-wait shape the audit test also guards against).
-                    case EngineProtocol.BUILD_ERROR -> buildError = line;
+                    case EngineProtocol.ERROR -> buildError = line;
                     default -> {
                         /* plan/progress events — presence asserted via `types` below */
                     }
@@ -687,7 +691,7 @@ class EngineServerTest {
                     types.add(type);
                     switch (type) {
                         case EngineProtocol.GOAL_FINISH -> goalFinish = line;
-                        case EngineProtocol.BUILD_ERROR -> buildError = line;
+                        case EngineProtocol.ERROR -> buildError = line;
                         default -> {
                             /* plan/progress events — presence asserted via `types` below */
                         }
@@ -754,7 +758,7 @@ class EngineServerTest {
                 types.add(type);
                 switch (type) {
                     case EngineProtocol.GOAL_FINISH -> goalFinish = line;
-                    case EngineProtocol.BUILD_ERROR -> buildError = line;
+                    case EngineProtocol.ERROR -> buildError = line;
                     default -> {
                         /* plan/progress events — presence asserted via `types` below */
                     }
@@ -824,7 +828,7 @@ class EngineServerTest {
                 String type = EngineProtocol.typeOf(line);
                 switch (type) {
                     case EngineProtocol.GOAL_FINISH -> goalFinish = line;
-                    case EngineProtocol.BUILD_ERROR -> buildError = line;
+                    case EngineProtocol.ERROR -> buildError = line;
                     default -> {
                         /* plan/progress events */
                     }

@@ -54,7 +54,7 @@ final class EngineResolveAdapter {
             BufferedWriter writer =
                     new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
             BufferedReader reader =
-                    new BufferedReader(new InputStreamReader(Channels.newInputStream(ch), StandardCharsets.UTF_8));
+                    EngineClient.protocolReader(ch);
             writer.write(EngineProtocol.outdatedRequest(
                     req.entryDir().toString(),
                     req.cache().toString(),
@@ -143,7 +143,7 @@ final class EngineResolveAdapter {
             BufferedWriter writer =
                     new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
             BufferedReader reader =
-                    new BufferedReader(new InputStreamReader(Channels.newInputStream(ch), StandardCharsets.UTF_8));
+                    EngineClient.protocolReader(ch);
 
             send(
                     writer,
@@ -186,7 +186,7 @@ final class EngineResolveAdapter {
                         if (listener != null) listener.goalFinish(result);
                         return result;
                     }
-                    case EngineProtocol.BUILD_ERROR -> throw new IOException(
+                    case EngineProtocol.ERROR -> throw new IOException(
                             "jk engine: run failed: " + Ndjson.str(line, "message"));
                     default -> dispatchGoalEvent(type, line, listener, diagnostics);
                 }
@@ -205,7 +205,7 @@ final class EngineResolveAdapter {
             BufferedWriter writer =
                     new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
             BufferedReader reader =
-                    new BufferedReader(new InputStreamReader(Channels.newInputStream(ch), StandardCharsets.UTF_8));
+                    EngineClient.protocolReader(ch);
             send(writer, requestLine);
 
             // Cascade state: the module currently streaming. Modules are strictly sequential on the
@@ -260,7 +260,7 @@ final class EngineResolveAdapter {
                                 Ndjson.strArray(line, "errors"),
                                 Ndjson.intValue(line, "refreshed", -1));
                     }
-                    case EngineProtocol.BUILD_ERROR -> throw new IOException(
+                    case EngineProtocol.ERROR -> throw new IOException(
                             "jk engine: run failed: " + Ndjson.str(line, "message"));
                     default -> dispatchGoalEvent(type, line, listener, diagnostics);
                 }
@@ -295,7 +295,7 @@ final class EngineResolveAdapter {
             case EngineProtocol.OUTPUT -> listener.output(Ndjson.str(line, "phase"), Ndjson.str(line, "line"));
             case EngineProtocol.WARN -> listener.warn(
                     Ndjson.str(line, "phase"), Ndjson.str(line, "code"), Ndjson.str(line, "message"));
-            case EngineProtocol.ERROR -> listener.error(
+            case EngineProtocol.ERROR_LINE -> listener.error(
                     Ndjson.str(line, "phase"),
                     Ndjson.str(line, "code"),
                     Ndjson.str(line, "message"),

@@ -79,12 +79,13 @@ final class EngineWorkerAdapter {
             BufferedWriter writer =
                     new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
             BufferedReader reader =
-                    new BufferedReader(new InputStreamReader(Channels.newInputStream(ch), StandardCharsets.UTF_8));
-            // The session's variant selection + client env ride EVERY hosted-goal request line
-            // (compile/image/native/publish/install/...). Empty selection attaches nothing, so
-            // variant-less goals (lock, sync, format, audit) are byte-identical to before.
+                    EngineClient.protocolReader(ch);
+            // The session envelope — variant selection, client env, and worker-JVM tuning —
+            // rides EVERY hosted-goal request line (compile/image/native/publish/install/...).
+            // An empty envelope attaches nothing, so unadorned goals are byte-identical.
             var session = dev.jkbuild.config.SessionContext.current();
-            send(writer, EngineProtocol.withVariant(requestLine, session.variant(), session.clientEnv()));
+            send(writer, EngineProtocol.withSession(
+                    requestLine, session.variant(), session.clientEnv(), session.jvm()));
 
             List<Phase> phases = new ArrayList<>();
             List<GoalResult.Diagnostic> diagnostics = new ArrayList<>();
@@ -118,7 +119,7 @@ final class EngineWorkerAdapter {
                         if (listener != null) listener.goalFinish(result);
                         return new HostedFinish(result, line);
                     }
-                    case EngineProtocol.BUILD_ERROR -> throw new IOException(
+                    case EngineProtocol.ERROR -> throw new IOException(
                             "jk engine: run failed: " + Ndjson.str(line, "message"));
                     default -> dispatchGoalEvent(type, line, listener, diagnostics);
                 }
@@ -140,12 +141,13 @@ final class EngineWorkerAdapter {
             BufferedWriter writer =
                     new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
             BufferedReader reader =
-                    new BufferedReader(new InputStreamReader(Channels.newInputStream(ch), StandardCharsets.UTF_8));
-            // The session's variant selection + client env ride EVERY hosted-goal request line
-            // (compile/image/native/publish/install/...). Empty selection attaches nothing, so
-            // variant-less goals (lock, sync, format, audit) are byte-identical to before.
+                    EngineClient.protocolReader(ch);
+            // The session envelope — variant selection, client env, and worker-JVM tuning —
+            // rides EVERY hosted-goal request line (compile/image/native/publish/install/...).
+            // An empty envelope attaches nothing, so unadorned goals are byte-identical.
             var session = dev.jkbuild.config.SessionContext.current();
-            send(writer, EngineProtocol.withVariant(requestLine, session.variant(), session.clientEnv()));
+            send(writer, EngineProtocol.withSession(
+                    requestLine, session.variant(), session.clientEnv(), session.jvm()));
 
             String line;
             while ((line = reader.readLine()) != null) {
@@ -161,7 +163,7 @@ final class EngineWorkerAdapter {
                                 Ndjson.intValue(line, "exit", 1),
                                 Ndjson.str(line, "diag"));
                     }
-                    case EngineProtocol.BUILD_ERROR -> throw new IOException(
+                    case EngineProtocol.ERROR -> throw new IOException(
                             "jk engine: run failed: " + Ndjson.str(line, "message"));
                     default -> {
                         /* forward-compatible no-op */
@@ -198,7 +200,7 @@ final class EngineWorkerAdapter {
             case EngineProtocol.OUTPUT -> listener.output(Ndjson.str(line, "phase"), Ndjson.str(line, "line"));
             case EngineProtocol.WARN -> listener.warn(
                     Ndjson.str(line, "phase"), Ndjson.str(line, "code"), Ndjson.str(line, "message"));
-            case EngineProtocol.ERROR -> listener.error(
+            case EngineProtocol.ERROR_LINE -> listener.error(
                     Ndjson.str(line, "phase"),
                     Ndjson.str(line, "code"),
                     Ndjson.str(line, "message"),
