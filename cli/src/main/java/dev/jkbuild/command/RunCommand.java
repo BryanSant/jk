@@ -82,7 +82,20 @@ public final class RunCommand {
                 },
                 r -> GoalWedge.coord(coord),
                 true,
-                true);
+                true,
+                r -> {
+                    // The build succeeded but there may be nothing runnable — settle as a failure
+                    // (red chip) with a sentence naming the actual problem, not "Failed to exec".
+                    if (!r.success()) return null;
+                    try {
+                        execPlan(projectDir);
+                        return null;
+                    } catch (EntryPointUnresolvedException e) {
+                        return mainIssueSentence(e.issue(), coord);
+                    } catch (IOException e) {
+                        return null;
+                    }
+                });
 
         GoalResult result;
         dev.jkbuild.run.TestSummary testResult;
@@ -136,8 +149,15 @@ public final class RunCommand {
                 return dispatchDeployVerb(projectDir, cache, plan.deployVerb(), appArgs, mode);
             }
             command = new ArrayList<>(plan.argv());
+        } catch (EntryPointUnresolvedException e) {
+            // The chip already settled with this exact failure (spec's softFailure closure ran
+            // first and cached the same plan) — VERBOSE/JSON print no chip, so give them the plain
+            // text version there instead of leaving the command silent.
+            if (mode == GoalConsole.Mode.VERBOSE || mode == GoalConsole.Mode.JSON) {
+                CliOutput.err("jk run: " + e.getMessage());
+            }
+            return Exit.DATA_ERR;
         } catch (IOException e) {
-            // Typically the main-class scan: none/several found — message is ready to print.
             CliOutput.err("jk run: " + e.getMessage());
             return Exit.USAGE;
         }
@@ -206,12 +226,48 @@ public final class RunCommand {
         // Checked on every access: the memoized plan may be an error plan (the console's
         // tail closure swallows the first throw; the exec path must still see it).
         if (cachedPlan.error() != null) {
+            if (!cachedPlan.mainIssue().isEmpty()) {
+                throw new EntryPointUnresolvedException(cachedPlan.error(), cachedPlan.mainIssue());
+            }
             throw new IOException(cachedPlan.error());
         }
         return cachedPlan;
     }
 
     private dev.jkbuild.engine.protocol.ExecPlan cachedPlan;
+
+    /**
+     * The build succeeded but the engine's main-class scan couldn't name an entry point — {@code
+     * issue} is {@code "missing"} (nothing found) or {@code "ambiguous"} (several found), per
+     * {@link dev.jkbuild.engine.protocol.ExecPlan#mainIssue()}.
+     */
+    private static final class EntryPointUnresolvedException extends IOException {
+        private final String issue;
+
+        EntryPointUnresolvedException(String message, String issue) {
+            super(message);
+            this.issue = issue;
+        }
+
+        String issue() {
+            return issue;
+        }
+    }
+
+    /**
+     * {@code Failed to run {coord}. No valid [yellow]main[/] method was specified or detected} (or,
+     * for {@code issue = "ambiguous"}, {@code Multiple [yellow]main[/] methods found.}) — the
+     * sentence {@link dev.jkbuild.cli.tui.GoalWedge#failureLineCustom} renders after the red chip.
+     */
+    private static String mainIssueSentence(String issue, String coord) {
+        Theme t = Theme.active();
+        String main = Theme.colorize("main", t.highlight());
+        String head = Theme.colorize("Failed", t.error()) + " to run " + GoalWedge.coord(coord) + ". ";
+        return head
+                + ("ambiguous".equals(issue)
+                        ? "Multiple " + main + " methods found."
+                        : "No valid " + main + " method was specified or detected");
+    }
 
     /**
      * The styled tail shown in the exec chip line or banner: {@code "[cyan]{jdk}[/]: [yellow]java

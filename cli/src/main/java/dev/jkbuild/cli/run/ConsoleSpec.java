@@ -16,13 +16,22 @@ import java.util.function.Function;
  * close over the command's goal/state to build a rich message (e.g. {@code "Resolved 13
  * dependencies"}). The framework always appends a dim italic {@code "took Xms"} suffix so
  * individual commands do not need to format duration themselves.
+ *
+ * <p>{@code softFailure}, when non-null, is consulted even on a successful {@link GoalResult}: a
+ * non-null return renders the red failure chip with that exact sentence (no "Failed to &lt;verb&gt;"
+ * derivation), overriding the normal success rendering. For a command whose goal genuinely
+ * succeeded but which then discovers it cannot proceed — {@code jk run} building fine but finding
+ * no runnable entry point — this settles as a failure without forcing the underlying build itself
+ * to report one. A null return (or a null {@code softFailure} function) leaves the normal
+ * success/failure decision to {@link GoalResult#success()}.
  */
 public record ConsoleSpec(
         String verb,
         Function<GoalResult, String> onSuccess,
         Function<GoalResult, String> onFailure,
         boolean chip,
-        boolean exec) {
+        boolean exec,
+        Function<GoalResult, String> softFailure) {
 
     /**
      * Default presentation — the generic {@code ✓ <Verb> Successful: <msg>} finish. Set {@code chip =
@@ -39,6 +48,15 @@ public record ConsoleSpec(
     public ConsoleSpec(
             String verb, Function<GoalResult, String> onSuccess, Function<GoalResult, String> onFailure, boolean chip) {
         this(verb, onSuccess, onFailure, chip, false);
+    }
+
+    public ConsoleSpec(
+            String verb,
+            Function<GoalResult, String> onSuccess,
+            Function<GoalResult, String> onFailure,
+            boolean chip,
+            boolean exec) {
+        this(verb, onSuccess, onFailure, chip, exec, null);
     }
 
     /**

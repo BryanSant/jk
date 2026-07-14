@@ -86,12 +86,45 @@ public final class ActivateCommand implements CliCommand {
             return Exit.USAGE;
         }
         if (!isInteractiveTerminal()) {
-            CliOutput.err("jk activate: stdin is not a TTY — pass a shell (e.g. `jk activate "
-                    + shell.get().name()
-                    + "`) to print the integration script instead.");
-            return Exit.USAGE;
+            // Genuinely non-interactive: no controlling terminal (CI, cron, a headless daemon) or
+            // forced off via JK_NONINTERACTIVE. We can't prompt for consent to edit a dotfile, and
+            // launching a shell would hang. Don't touch the rc file — just print the one line to add
+            // (and where), self-heal jkx, and succeed. Idempotent: if the rc file already carries the
+            // line, say so instead. This is not an error.
+            //
+            // Note `curl | bash` does NOT land here: the user's controlling terminal is reachable via
+            // /dev/tty even though stdin is the piped script (install.sh routes it to us), so
+            // canPrompt() is true and the interactive wizard runs below.
+            return printManualInstructions(shell.get());
         }
         return runWizard(shell.get());
+    }
+
+    /**
+     * Non-interactive activation: never edits the rc file (no consent possible without a TTY) and
+     * never launches a shell. Prints the exact line to add and where, ensures {@code jkx}, and
+     * exits 0 — or reports "already configured" when the rc file already carries the line.
+     */
+    private int printManualInstructions(Shell shell) throws IOException {
+        Path rcFile = shell.rcFile(home());
+        String rcDisplay = shell.rcFileDisplay();
+        String activationLine = shell.activationLine(resolveJkExe());
+        boolean nerdfont = GlobalConfig.nerdfont();
+        Theme t = Theme.active();
+
+        if (Files.exists(rcFile)
+                && Files.readString(rcFile, StandardCharsets.UTF_8).contains(activationLine)) {
+            ensureJkxLauncher();
+            CliOutput.out(GoalWedge.chipLine(Glyphs.CHECK, "Activate", nerdfont,
+                    "Shell integration is already configured in " + Theme.colorize(rcDisplay, t.path())));
+            return 0;
+        }
+
+        ensureJkxLauncher();
+        CliOutput.out(GoalWedge.chipLine(Glyphs.BANG, "Activate", nerdfont,
+                "Add this to " + Theme.colorize(rcDisplay, t.path()) + " to finish activation:"));
+        CliOutput.out("  " + Theme.colorize(activationLine, t.shell()));
+        return 0;
     }
 
     private int runWizard(Shell shell) throws IOException {
@@ -181,7 +214,7 @@ public final class ActivateCommand implements CliCommand {
     }
 
     private static boolean isInteractiveTerminal() {
-        return System.console() != null && !"dumb".equals(System.getenv("TERM")) && System.getenv("CI") == null;
+        return dev.jkbuild.cli.tui.Interactivity.canPrompt();
     }
 
     private static String resolveJkExe() {

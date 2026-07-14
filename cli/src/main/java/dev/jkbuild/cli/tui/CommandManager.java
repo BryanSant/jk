@@ -353,6 +353,15 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
         finishGoalFailure(tail, List.of());
     }
 
+    /**
+     * Settle the build goal with the red chip, but a fully caller-composed sentence instead of the
+     * "Failed to &lt;goal&gt;" derivation {@link #finishGoalFailure} applies — see {@link
+     * GoalWedge#failureLineCustom}.
+     */
+    public void finishGoalFailureCustom(String sentence, List<String> above) {
+        settle(GoalWedge.failureLineCustom(goalName(), nerdfont, sentence), above);
+    }
+
     /** Settle with a red cross and a failure message. */
     public void finishFailure(String message) {
         finishFailure(message, List.of());

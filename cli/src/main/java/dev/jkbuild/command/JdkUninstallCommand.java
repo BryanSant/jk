@@ -449,6 +449,6 @@ public final class JdkUninstallCommand implements CliCommand {
     }
 
     private static boolean isInteractiveTerminal() {
-        return System.console() != null && !"dumb".equals(System.getenv("TERM")) && System.getenv("CI") == null;
+        return dev.jkbuild.cli.tui.Interactivity.canPrompt();
     }
 }

@@ -26,20 +26,74 @@ class MainClassScannerTest {
         assertThat(MainClassScanner.scanUnique(dir)).isEqualTo("App");
     }
 
+    // --- JEP 512 forms the launcher accepts (JLS §12.1.4) --------------------------------------
+
     @Test
-    void non_public_or_wrong_signature_mains_are_ignored(@TempDir Path dir) throws Exception {
-        compile(dir, "NotIt", "public class NotIt { static void main(String[] a) {} }"); // not public
-        compile(dir, "AlsoNot", "public class AlsoNot { public void main(String[] a) {} }"); // not static
-        compile(dir, "WrongSig", "public class WrongSig { public static void main(String a) {} }");
+    void accepts_instance_main_with_args(@TempDir Path dir) throws Exception {
+        // Not static — legal since Java 25; the default ctor makes App instantiable.
+        compile(dir, "App", "public class App { public void main(String[] a) {} }");
+        assertThat(MainClassScanner.scanUnique(dir)).isEqualTo("App");
+    }
+
+    @Test
+    void accepts_instance_main_no_args(@TempDir Path dir) throws Exception {
+        compile(dir, "App", "public class App { void main() {} }"); // no args, package access, instance
+        assertThat(MainClassScanner.scanUnique(dir)).isEqualTo("App");
+    }
+
+    @Test
+    void accepts_static_main_no_args(@TempDir Path dir) throws Exception {
+        compile(dir, "App", "public class App { static void main() {} }");
+        assertThat(MainClassScanner.scanUnique(dir)).isEqualTo("App");
+    }
+
+    @Test
+    void accepts_package_private_and_protected_and_varargs_mains(@TempDir Path dir) throws Exception {
+        compile(dir, "Pkg", "public class Pkg { static void main(String[] a) {} }"); // package access
+        compile(dir, "Var", "class Var { public static void main(String... a) {} }"); // varargs == String[]
+        assertThat(MainClassScanner.scan(dir)).containsExactlyInAnyOrder("Pkg", "Var");
+    }
+
+    @Test
+    void accepts_compact_source_file(@TempDir Path dir) throws Exception {
+        // A compact source file: no class header, an instance `void main()`. javac emits an
+        // implicitly-declared class named after the file with a generated no-arg constructor.
+        compile(dir, "Script", "void main() { IO.println(\"hi\"); }");
+        assertThat(MainClassScanner.scanUnique(dir)).isEqualTo("Script");
+    }
+
+    // --- forms that are still NOT launchable ---------------------------------------------------
+
+    @Test
+    void rejects_private_wrong_return_and_wrong_param_mains(@TempDir Path dir) throws Exception {
+        compile(dir, "Priv", "public class Priv { private static void main(String[] a) {} }"); // private
+        compile(dir, "IntRet", "public class IntRet { public static int main(String[] a) { return 0; } }"); // non-void
+        compile(dir, "WrongSig", "public class WrongSig { public static void main(String a) {} }"); // String, not String[]
         assertThat(MainClassScanner.scan(dir)).isEmpty();
         assertThatThrownBy(() -> MainClassScanner.scanUnique(dir))
                 .hasMessageContaining("[application] main");
     }
 
     @Test
+    void rejects_instance_main_when_class_is_not_instantiable(@TempDir Path dir) throws Exception {
+        // Only a private constructor → the launcher cannot `new` it, so an instance main doesn't count.
+        compile(dir, "NoCtor", "public class NoCtor { private NoCtor() {} public void main(String[] a) {} }");
+        // Abstract class → cannot be instantiated for an instance main.
+        compile(dir, "Abstr", "public abstract class Abstr { public void main(String[] a) {} }");
+        assertThat(MainClassScanner.scan(dir)).isEmpty();
+    }
+
+    @Test
+    void static_main_counts_even_when_ctor_is_private(@TempDir Path dir) throws Exception {
+        // A static main needs no instance, so the private ctor is irrelevant.
+        compile(dir, "Util", "public class Util { private Util() {} public static void main(String[] a) {} }");
+        assertThat(MainClassScanner.scanUnique(dir)).isEqualTo("Util");
+    }
+
+    @Test
     void several_mains_error_listing_the_candidates(@TempDir Path dir) throws Exception {
         compile(dir, "A", "public class A { public static void main(String[] a) {} }");
-        compile(dir, "B", "public class B { public static void main(String[] a) {} }");
+        compile(dir, "B", "public class B { void main() {} }"); // different form, still a candidate
         assertThatThrownBy(() -> MainClassScanner.scanUnique(dir))
                 .hasMessageContaining("multiple main classes")
                 .hasMessageContaining("A")

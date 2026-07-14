@@ -252,9 +252,8 @@ public final class DrainView implements LiveRegion, AutoCloseable {
     // --- helpers -------------------------------------------------------------
 
     private static boolean interactive() {
-        return System.console() != null
-                && !"dumb".equals(System.getenv("TERM"))
-                && System.getenv("CI") == null
+        // Output axis (live drain region) — stdout must be a tty; also honor --no-progress.
+        return Interactivity.stdoutIsTty()
                 && !dev.jkbuild.config.SessionContext.current().config().noProgressOr(false);
     }
 

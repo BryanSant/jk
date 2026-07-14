@@ -509,7 +509,8 @@ public final class NewCommand implements CliCommand {
     }
 
     private static boolean isInteractiveTerminal() {
-        return System.console() != null && !"dumb".equals(System.getenv("TERM")) && System.getenv("CI") == null;
+        // Gates the interactive `jk new` wizard — input axis, so key on the controlling terminal.
+        return dev.jkbuild.cli.tui.Interactivity.canPrompt();
     }
 
     private boolean anyFlagSupplied() {

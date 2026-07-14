@@ -4,6 +4,9 @@ package dev.jkbuild.command;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import dev.jkbuild.cli.Jk;
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
@@ -77,15 +80,41 @@ class RunCommandTest {
     }
 
     @Test
-    void project_mode_without_main_returns_usage_error(@TempDir Path tempDir) throws Exception {
+    void project_mode_without_main_returns_data_error(@TempDir Path tempDir) throws Exception {
         Files.writeString(tempDir.resolve("jk.toml"), """
                 [project]
                 group    = "com.example"
                 name     = "lib-only"
                 version  = "0.1.0"
                 """);
-        int exit = run("run", "-C", tempDir.toString());
-        assertThat(exit).isEqualTo(64);
+        String output = stripAnsi(runCapturingOutput(tempDir, exit -> assertThat(exit).isEqualTo(65))); // EX_DATAERR
+        assertThat(output).contains("Failed to run").contains("No valid main method was specified or detected");
+    }
+
+    @Test
+    void project_with_ambiguous_main_returns_data_error(@TempDir Path tempDir) throws Exception {
+        // No [application] main + two scanned candidates: the scan can't pick one either.
+        run("new", "--group", "com.example", "--name", "widget", "--executable", "--layout", "traditional",
+                tempDir.toString());
+        Path toml = tempDir.resolve("jk.toml");
+        Files.writeString(toml, Files.readString(toml).replaceAll("(?m)^main\\s*=.*$", ""));
+        Path srcDir = tempDir.resolve("src/main/java/com/example");
+        Files.createDirectories(srcDir);
+        Files.writeString(srcDir.resolve("Main.java"), """
+                package com.example;
+                public final class Main {
+                    public static void main(String[] args) {}
+                }
+                """);
+        Files.writeString(srcDir.resolve("Other.java"), """
+                package com.example;
+                public final class Other {
+                    public static void main(String[] args) {}
+                }
+                """);
+
+        String output = stripAnsi(runCapturingOutput(tempDir, exit -> assertThat(exit).isEqualTo(65)));
+        assertThat(output).contains("Failed to run").contains("Multiple main methods found");
     }
 
     @Test
@@ -96,5 +125,31 @@ class RunCommandTest {
 
     private static int run(String... args) {
         return Jk.execute(args);
+    }
+
+    /**
+     * Runs {@code jk run -C <tempDir> --cache-dir <shared>}, capturing stdout + stderr for content
+     * assertions. The goal-chip result line (success or failure) settles on stdout — same stream as
+     * the live progress region it replaces — while ad hoc {@code CliOutput.err} messages go to
+     * stderr; capture both since callers don't need to care which one a given message rides.
+     */
+    private static String runCapturingOutput(Path tempDir, java.util.function.IntConsumer assertExit) {
+        var captured = new ByteArrayOutputStream();
+        var prevOut = System.out;
+        var prevErr = System.err;
+        var combined = new PrintStream(captured, true, StandardCharsets.UTF_8);
+        System.setOut(combined);
+        System.setErr(combined);
+        try {
+            assertExit.accept(run("run", "-C", tempDir.toString(), "--cache-dir", SharedTestCache.arg()));
+        } finally {
+            System.setOut(prevOut);
+            System.setErr(prevErr);
+        }
+        return captured.toString(StandardCharsets.UTF_8);
+    }
+
+    private static String stripAnsi(String s) {
+        return s.replaceAll("\033\\[[0-9;?]*[a-zA-Z]", "");
     }
 }

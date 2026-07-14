@@ -251,8 +251,12 @@ public final class GoalConsole {
         return goal.run();
     }
 
-    /** True when stdout is an interactive terminal (not a pipe, dumb, or CI). */
+    /**
+     * True when stdout is an interactive terminal (not a pipe, dumb, or CI) — the output axis that
+     * gates live progress / animation. See {@link dev.jkbuild.cli.tui.Interactivity#stdoutIsTty()};
+     * deliberately stdout-only so {@code jk build | less} draws plain text.
+     */
     public static boolean isInteractiveTerminal() {
-        return System.console() != null && !"dumb".equals(System.getenv("TERM")) && System.getenv("CI") == null;
+        return dev.jkbuild.cli.tui.Interactivity.stdoutIsTty();
     }
 }

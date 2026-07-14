@@ -211,7 +211,7 @@ public final class ExecPlans {
                 if (Files.isRegularFile(deviceManifest)) deviceWatch.add(deviceManifest.toString());
             }
             return new ExecPlan(
-                    null, dev ? "dev" : "run", java.util.List.of(), dir.toString(),
+                    null, "", dev ? "dev" : "run", java.util.List.of(), dir.toString(),
                     "deploy → device (" + deployVerb + ")", "", false, false, deviceWatch,
                     java.util.List.of(), java.util.List.of(), "", "", "", false, "", "", "",
                     java.util.List.of(), java.util.List.of(), deployVerb);
@@ -266,21 +266,41 @@ public final class ExecPlans {
             }
         }
 
-        String mainClass = project.mainClass() != null
-                ? project.mainClass()
-                : MainClassScanner.scanUnique(layout.classesDir());
+        String mainClass;
+        if (project.mainClass() != null) {
+            mainClass = project.mainClass();
+        } else {
+            try {
+                mainClass = MainClassScanner.scanUnique(layout.classesDir());
+            } catch (MainClassScanner.NoMainFoundException e) {
+                return ExecPlan.error(dev ? "dev" : "run", e.getMessage(), "missing");
+            } catch (MainClassScanner.AmbiguousMainException e) {
+                return ExecPlan.error(dev ? "dev" : "run", e.getMessage(), "ambiguous");
+            }
+        }
 
+        // Honor the jar's manifest when we can. A plain jar carries `Main-Class` only for a declared
+        // `[application] main` (a *discovered* main is never written to the manifest), and `java -jar`
+        // ignores `-cp` — so `-jar` is correct exactly when the main is declared AND the jar is the
+        // whole classpath (no runtime deps/siblings/devtools). Otherwise deps must ride a `-cp` and we
+        // name the class explicitly. Dev / classes-run modes launch from the classes dir, never `-jar`.
+        boolean runnableJar = !classesEntry && classpath.size() == 1 && project.mainClass() != null;
         List<String> argv = new ArrayList<>();
         argv.add(java);
-        argv.add("-cp");
-        argv.add(joinPaths(classpath));
-        argv.add(mainClass);
-
-        boolean hasDeps = classpath.size() > 1;
-        Path first = classpath.get(0);
-        String display = first.toString().endsWith(".jar")
-                ? (hasDeps ? "java -cp … -jar " : "java -jar ") + dir.relativize(first)
-                : (hasDeps ? "java -cp … " : "java ") + mainClass;
+        String display;
+        if (runnableJar) {
+            Path jar = classpath.get(0);
+            argv.add("-jar");
+            argv.add(jar.toAbsolutePath().toString());
+            display = "java -jar " + dir.relativize(jar);
+        } else {
+            boolean hasDeps = classpath.size() > 1;
+            Path first = classpath.get(0);
+            argv.add("-cp");
+            argv.add(joinPaths(classpath));
+            argv.add(mainClass);
+            display = (hasDeps ? "java -cp … " : "java -cp " + dir.relativize(first) + " ") + mainClass;
+        }
 
         List<String> watchRoots = new ArrayList<>();
         if (dev && Files.isDirectory(dir.resolve("src"))) watchRoots.add(dir.resolve("src").toString());
@@ -297,7 +317,7 @@ public final class ExecPlans {
             boolean devtoolsInjected,
             List<String> watchRoots) {
         return new ExecPlan(
-                null, kind, argv, dir.toString(),
+                null, "", kind, argv, dir.toString(),
                 display, javaHome.toString(), hotReload, devtoolsInjected, watchRoots, List.of(), List.of(), "", "",
                 "", false, "", "", "", List.of(), List.of(),
                 "");
@@ -391,8 +411,8 @@ public final class ExecPlans {
     private static ExecPlan installAck(
             List<String> linkSrcs, List<String> linkDests, String launcherPath, String script, String binPath) {
         return new ExecPlan(
-                null, "install", List.of(), "", "", "", false, false, List.of(), linkSrcs, linkDests, launcherPath,
-                script, binPath, false, "", "", "", List.of(), List.of(),
+                null, "", "install", List.of(), "", "", "", false, false, List.of(), linkSrcs, linkDests,
+                launcherPath, script, binPath, false, "", "", "", List.of(), List.of(),
                 "");
     }
 
@@ -431,7 +451,7 @@ public final class ExecPlans {
         }
         Path javaHome = projectJavaHome(dir);
         return new ExecPlan(
-                null, "aot-cache", List.of(), dir.toString(), "", javaHome.toString(), false, false, List.of(),
+                null, "", "aot-cache", List.of(), dir.toString(), "", javaHome.toString(), false, false, List.of(),
                 List.of(), List.of(), "", "", "", executableJar, mainJar.toAbsolutePath().toString(), tier,
                 mainClass, libNames, libPaths,
                 "");

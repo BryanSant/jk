@@ -39,9 +39,13 @@ public final class Confirm {
         return new Confirm(question, defaultYes);
     }
 
-    /** True on most terminals; false when stdin is piped/redirected, dumb, or under CI. */
+    /**
+     * Whether we can prompt a human — {@link Interactivity#canPrompt()}. Keyed on the controlling
+     * terminal, not stdin/stdout, so a {@code curl | bash} install (piped stdin) or {@code jk foo |
+     * less} (piped stdout) still prompts when a person is actually there.
+     */
     public static boolean isInteractiveTerminal() {
-        return System.console() != null && !"dumb".equals(System.getenv("TERM")) && System.getenv("CI") == null;
+        return Interactivity.canPrompt();
     }
 
     /**
@@ -69,11 +73,13 @@ public final class Confirm {
      * {@code System.in} reads still work).
      */
     public boolean ask(Terminal terminal) {
-        // Render via System.out (cooked, before raw mode) so any context the
-        // caller already printed via System.out stays correctly ordered; use the
-        // terminal only to capture the single keystroke in raw mode.
-        System.out.print(promptText());
-        System.out.flush();
+        // Render the prompt to stderr, not stdout: a y/n the user can't see (because stdout is piped
+        // to `less` / a file) would be an invisible block. stderr is the terminal's own channel by
+        // convention (git/apt/ssh prompt there too). Use the terminal only to capture the single
+        // keystroke in raw mode.
+        var err = dev.jkbuild.cli.CliOutput.stderr();
+        err.print(promptText());
+        err.flush();
         Attributes saved = terminal.enterRawMode();
         try {
             NonBlockingReader reader = terminal.reader();
@@ -86,8 +92,8 @@ public final class Confirm {
                     String answer = Theme.colorize(
                             result ? "Yes" : "No",
                             result ? Theme.active().success() : Theme.active().error());
-                    System.out.print(Ansi.cursorBack(HINT_WIDTH) + answer + Ansi.ERASE_LINE_TO_END + "\r\n");
-                    System.out.flush();
+                    err.print(Ansi.cursorBack(HINT_WIDTH) + answer + Ansi.ERASE_LINE_TO_END + "\r\n");
+                    err.flush();
                     return result;
                 }
             }
@@ -114,8 +120,10 @@ public final class Confirm {
 
     /** Cooked read for non-TTY stdin — preserves the prior {@code readLine()} semantics. */
     private boolean cookedFallback() {
-        System.out.print(promptText());
-        System.out.flush();
+        // Prompt to stderr (see ask(Terminal)) so it stays visible when stdout is redirected.
+        var err = dev.jkbuild.cli.CliOutput.stderr();
+        err.print(promptText());
+        err.flush();
         try {
             BufferedReader reader = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
             String line = reader.readLine();

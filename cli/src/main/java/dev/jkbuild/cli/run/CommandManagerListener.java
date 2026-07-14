@@ -128,7 +128,14 @@ public final class CommandManagerListener implements GoalListener {
         for (GoalResult.Diagnostic d : result.errors()) {
             above.add(ConsoleSpec.renderError(d));
         }
-        if (result.success()) {
+        // A soft failure overrides an otherwise-successful result: the goal itself is fine, but the
+        // command discovered afterward that it can't proceed (e.g. jk run found no runnable entry
+        // point). Rendered as the red failure chip with the caller's exact sentence — no "Failed to
+        // <verb>" derivation — so a genuine build failure (below) keeps its normal phrasing.
+        String soft = spec.softFailure() != null ? spec.softFailure().apply(result) : null;
+        if (soft != null) {
+            cm.finishGoalFailureCustom(soft + suffix, above);
+        } else if (result.success()) {
             String tail = spec.onSuccess().apply(result) + suffix;
             if (spec.chip() && spec.exec()) cm.finishGoalExec(tail, above);
             else if (spec.chip()) cm.finishGoalSuccess(tail, above);

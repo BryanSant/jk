@@ -95,6 +95,24 @@ public final class GoalWedge {
     }
 
     /**
+     * Settled failure with a caller-composed sentence, skipping the "Failed to &lt;goal&gt;"
+     * derivation {@link #failureLine} does — for a result that settles by chip but whose message
+     * doesn't read as "Failed to {@code <verb>}" (e.g. {@code jk run}: "Failed to run acme:api. No
+     * valid main method was specified or detected"). {@code sentence} is fully pre-styled by the
+     * caller, including its own leading "Failed" if wanted.
+     *
+     * <p>No-ANSI: {@code "! <name>: <sentence>"} — ASCII only, no color; no separate "Failed:" since
+     * the caller-composed sentence already reads as one (unlike {@link #failureLine}'s {@code tail}).
+     */
+    public static String failureLineCustom(String name, boolean nerdfont, String sentence) {
+        Theme t = Theme.active();
+        if (!t.isAnsi()) {
+            return "! " + name + ": " + sentence;
+        }
+        return chip(Glyphs.CROSS, name, t.goalFailureChip()) + cap(t.goalFailColor(), nerdfont) + " " + sentence;
+    }
+
+    /**
      * Settled cancellation: {@code ✘ Build Canceled by user <tail>}. Reuses the failed-build chrome —
      * the same red chip (white on red) and cap as {@link #failureLine} — but reads "Canceled" (in
      * red) "by user"; {@code tail} (the {@code "took Xs"} suffix) is pre-styled by the caller.

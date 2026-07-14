@@ -24,9 +24,15 @@ import java.util.List;
  *
  * <p>{@code error} non-null: the plan could not be computed (gate failed, missing artifact…);
  * the message is ready to print and doubles as the command's failure output.
+ *
+ * <p>{@code mainIssue} non-empty: the {@code error} is specifically an unresolved-entry-point
+ * failure from the main-class scan ({@code dev.jkbuild.layout.MainClassScanner}) — {@code
+ * "missing"} (nothing found) or {@code "ambiguous"} (several found) — so the client can render its
+ * own styled sentence instead of printing {@code error} verbatim. Empty for every other error.
  */
 public record ExecPlan(
         String error,
+        String mainIssue,
         String kind,
         List<String> argv,
         String workingDir,
@@ -49,14 +55,20 @@ public record ExecPlan(
         String deployVerb) {
 
     public static ExecPlan error(String kind, String message) {
+        return error(kind, message, "");
+    }
+
+    /** As {@link #error(String, String)}, tagging the failure as an unresolved main-class scan. */
+    public static ExecPlan error(String kind, String message, String mainIssue) {
         return new ExecPlan(
-                message, kind, List.of(), "", "", "", false, false, List.of(), List.of(), List.of(), "", "", "",
-                false, "", "", "", List.of(), List.of(), "");
+                message, mainIssue, kind, List.of(), "", "", "", false, false, List.of(), List.of(), List.of(), "",
+                "", "", false, "", "", "", List.of(), List.of(), "");
     }
 
     public String encode() {
         return "{\"t\":\"" + EngineProtocol.EXEC_PLAN_ACK + "\""
                 + ",\"error\":" + (error == null ? "null" : Ndjson.quote(error))
+                + ",\"mainIssue\":" + Ndjson.quote(mainIssue)
                 + ",\"kind\":" + Ndjson.quote(kind)
                 + ",\"argv\":" + EngineProtocol.quoteArray(argv)
                 + ",\"workingDir\":" + Ndjson.quote(workingDir)
@@ -83,6 +95,7 @@ public record ExecPlan(
     public static ExecPlan decode(String line) {
         return new ExecPlan(
                 Ndjson.str(line, "error"),
+                orEmpty(Ndjson.str(line, "mainIssue")),
                 orEmpty(Ndjson.str(line, "kind")),
                 Ndjson.strArray(line, "argv"),
                 orEmpty(Ndjson.str(line, "workingDir")),

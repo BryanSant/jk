@@ -42,10 +42,11 @@ public final class ShellCommand implements CliCommand {
     @Override
     public int run(Invocation in) throws IOException, InterruptedException {
         // jk shell hands control to an interactive subshell. Without a terminal
-        // to attach it to (piped, scripted, CI, or running inside a jk worker
-        // whose stdin is a control pipe) the spawned shell would sit at its
-        // prompt forever and waitFor() would block. Fail fast instead.
-        if (System.console() == null) {
+        // to attach it to (scripted, CI, or running inside a jk worker whose stdin
+        // is a control pipe) the spawned shell would sit at its prompt forever and
+        // waitFor() would block. Fail fast instead. Keyed on the controlling
+        // terminal, so `jk shell` under `curl | bash` (piped stdin) still works.
+        if (!dev.jkbuild.cli.tui.Interactivity.canPrompt()) {
             CliOutput.err("jk shell: requires an interactive terminal "
                     + "(run it directly from your shell, not piped or scripted)");
             return Exit.CONFIG;
