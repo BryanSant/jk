@@ -122,6 +122,25 @@ public final class VersionStore {
 
         Path finalRoot = versionsDir().resolve(version);
         Files.createDirectories(versionsDir());
+        // Per-version lock: two racing materializers could otherwise both see "aborted dir"
+        // and delete the one the other just atomically moved into place (self-healing but
+        // nondeterministic). The lock file lives beside the version dirs; content addressing
+        // makes the serialized loser's resolve() below hit the winner's identical tree.
+        Path lockPath = versionsDir().resolve("." + version + ".lock");
+        try (java.nio.channels.FileChannel lockCh = java.nio.channels.FileChannel.open(
+                        lockPath,
+                        java.nio.file.StandardOpenOption.CREATE,
+                        java.nio.file.StandardOpenOption.WRITE);
+                java.nio.channels.FileLock lock = lockCh.lock()) {
+            Optional<Materialized> raced = resolve(version);
+            if (raced.isPresent()) return raced.get();
+            return materializeLocked(version, cas, engineJarSha, clientBinSha, finalRoot);
+        }
+    }
+
+    private Materialized materializeLocked(
+            String version, Cas cas, String engineJarSha, String clientBinSha, Path finalRoot)
+            throws IOException {
         Path tmp = Files.createTempDirectory(versionsDir(), "." + version + "-");
         try {
             Path lib = Files.createDirectories(tmp.resolve("lib"));

@@ -643,3 +643,52 @@ resources, lint/baseline profiles, solver version interning (BOM soft pins).
   build file, parked to protect H5/H6's verification budget tonight; the
   `Lockfile`/`Artifact` builder consolidation (P2.5's "real but bounded" tail) and
   the `versionSelector`/`objectId`/`moduleDir` naming pass (P2.7).
+
+### H5
+
+- The dormant incremental-Java seam turned out to be ALREADY RETIRED in code —
+  `JavaIncrementalCompile.run` (the doc's recommended option (c)) is live in
+  BuildPipeline/TestSupport and the single-pass `IncrementalCompiler` classes no
+  longer exist; docs/incremental-java-compile.md got a STATUS note making it a
+  design record. Azure Blob is marked not-implemented in the transport matrix
+  (the `azblob://` scheme is reserved and errors clearly).
+- **The FULL SessionContext eviction was re-scoped to residue** after inventory:
+  137 call sites, and the holder is ScopedValue-based — the engine binds a
+  per-request scope (`SessionContext.where(session, …)`) so reads are correctly
+  request-isolated; the refactor is architectural purity, not a correctness fix.
+  A 137-site flag-day at the tail of an overnight run was judged the wrong risk;
+  the H4 Inputs change already removed the hidden ambient reads from signatures.
+
+### H6
+
+- CLI: "no jk.toml" is `Exit.CONFIG` everywhere (run/install/tool-install were
+  USAGE); `--precise` deleted until implemented; `--parallel`/`--no-parallel`
+  collapsed to one negatable flag (build, explain); every command's `--help` now
+  shows the Global options section; `GlobalOptions.from` reads `no-ansi` like
+  every other declared global (it was prepass-only). Full prepass/dispatcher
+  parser unification was NOT done: the prepass must tolerate unknown argv by
+  design (it runs before verb resolution); the drift risk is now covered by the
+  H1 collision hard-error + aligned reads.
+- `RunCommand` and `InstallCommand` are plain delegates (no `CliCommand` surface):
+  their dead name/options/parameters/run(Invocation) members — a manual-sync trap
+  with the registered `ToolRunCommand`/`ToolInstallCommand` — are deleted, along
+  with the unused `joinClasspath`.
+- Part-4 remainder: `Cas.put(byte[], knownHex)` (fetch paths hand over the hash
+  they computed for verification — no second full hash); every stale "hard-link
+  into the CAS" comment now says COPY (the post-incident reality); AccessLedger's
+  PIPE_BUF claim corrected (large batches can tear; readers tolerate it);
+  `aotCachePath` keys unreadable jars by path (no shared "unreadable-jar" key);
+  `VersionStore.materialize` is serialized by a per-version file lock; the
+  wrapper template anchors the expected binary name instead of "first file in
+  the zip". REJECTED after inspection: threading `analyzeOutputs`' hashes into
+  `store` (audit item M1's compile half) — the re-hash inside `store` is
+  load-bearing: `putFile(file, hex)` trusts the caller's hash, so hashing in one
+  walk and copying in a later one would poison the CAS if an output mutated
+  between them.
+- Residue inventory (in rough value order): SessionContext threading (137 sites);
+  `:support` module split + `:model`→`:jk-api` rename; Lockfile/Artifact builders;
+  P2.7 naming pass; shared hidden-opt provider (--cache-dir/--jdks-dir ×25 +
+  CompileCommand's missing --jdks-dir); plan-*/explain-* merge + history/metrics
+  builders into EngineProtocol (both explicitly non-contract in docs/protocol.md);
+  EngineDelegate picking the pinned version's floor JDK from its manifest;
+  goal-finish kind assertions in adapter callers.

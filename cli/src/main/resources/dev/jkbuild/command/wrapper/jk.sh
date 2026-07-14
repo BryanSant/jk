@@ -35,7 +35,10 @@ if [ ! -x "$BIN" ]; then
   echo "jk wrapper: fetching jk $VERSION ..." >&2
   curl -fsSL -o "$TMP/jk.zip" "$URL"
   (cd "$TMP" && unzip -q jk.zip)
-  CLIENT="$(find "$TMP" -type f ! -name jk.zip | head -1)"
+  # The release zip carries exactly one file (the client binary); anchor on the expected
+  # names first so an unexpected extra entry can never be executed.
+  CLIENT="$(find "$TMP" -type f \( -name jk -o -name 'jk-*' \) ! -name jk.zip | head -1)"
+  [ -n "$CLIENT" ] || CLIENT="$(find "$TMP" -type f ! -name jk.zip | head -1)"
   if [ -n "$SHA" ]; then
     GOT="$( (sha256sum "$CLIENT" 2>/dev/null || shasum -a 256 "$CLIENT") | awk '{print $1}')"
     if [ "$GOT" != "$SHA" ]; then

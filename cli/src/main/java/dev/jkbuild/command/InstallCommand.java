@@ -62,48 +62,7 @@ import java.util.Set;
  * jk build} happens inside the {@code ensure-built} phase; the nested progress widget overlaps
  * briefly with the outer one, a known UX wrinkle.
  */
-public final class InstallCommand implements CliCommand {
-
-    @Override
-    public String name() {
-        return "install";
-    }
-
-    @Override
-    public String description() {
-        return "Install the current project or a specified target";
-    }
-
-    @Override
-    public List<Opt> options() {
-        var opts = new java.util.ArrayList<Opt>(List.of(
-                Opt.value("<group>", "Maven groupId for a local file install.", "--group"),
-                Opt.value("<name>", "Maven artifactId for a local file install.", "--name"),
-                Opt.value("<ver>", "Version for a local file install.", "--ver"),
-                Opt.value("<name>", "Launcher name in $JK_BIN_DIR. Default: artifact id.", "--bin"),
-                Opt.value("<class>", "Override the Main-Class to exec.", "--main"),
-                Opt.value("<dir>", "Override the jk cache directory.", "--cache-dir")
-                        .hide(),
-                Opt.value("<dir>", "Override the tool state directory.", "--state-dir")
-                        .hide(),
-                Opt.value("<dir>", "Override the bin directory.", "--bin-dir").hide(),
-                Opt.value("<dir>", "Override the lib directory.", "--lib-dir").hide(),
-                Opt.value("<dir>", "Override the local Maven repo root (~/.m2) for m2install.", "--m2-dir")
-                        .hide(),
-                Opt.value("<url>", "Override the Maven repository URL (for tests).", "--repo-url")
-                        .hide(),
-                Opt.flag("Skip compiling and running tests.", "--skip-tests")));
-        opts.addAll(VariantSelection.options());
-        return opts;
-    }
-
-    @Override
-    public List<Param> parameters() {
-        return List.of(Param.of(
-                "source",
-                Arity.ZERO_OR_ONE,
-                "Maven coord, git URL, or local file path. Omit to\ninstall the current jk.toml project."));
-    }
+public final class InstallCommand {
 
     String source;
     String groupFlag;
@@ -133,38 +92,6 @@ public final class InstallCommand implements CliCommand {
                 || "dev.jkbuild.test.runner.JkRunner".equals(System.getProperty("jk.plugin.class"));
     }
 
-    @Override
-    public int run(Invocation in) throws IOException, InterruptedException {
-        this.source = in.positionals().isEmpty() ? null : in.positionals().get(0);
-        this.groupFlag = in.value("group").orElse(null);
-        this.nameFlag = in.value("name").orElse(null);
-        this.verFlag = in.value("ver").orElse(null);
-        this.binName = in.value("bin").orElse(null);
-        this.mainClass = in.value("main").orElse(null);
-        this.cacheDirOverride = in.value("cache-dir").map(Path::of).orElse(null);
-        this.stateDirOverride = in.value("state-dir").map(Path::of).orElse(null);
-        this.binDirOverride = in.value("bin-dir").map(Path::of).orElse(null);
-        this.libDirOverride = in.value("lib-dir").map(Path::of).orElse(null);
-        this.m2DirOverride = in.value("m2-dir").map(Path::of).orElse(null);
-        this.repoUrl = in.value("repo-url").map(URI::create).orElse(null);
-        this.buildOpts = new dev.jkbuild.cli.BuildOptions();
-        this.buildOpts.skipTests = in.isSet("skip-tests");
-        this.global = GlobalOptions.from(in);
-
-        if (source == null || source.isBlank()) {
-            // --release / --variant parameterize the project build half of the install.
-            VariantSelection.install(in, global.workingDir());
-            return installCurrentProject();
-        }
-        if (looksLikeGitUrl(source)) {
-            return installFromGit(source);
-        }
-        if (looksLikeFilePath(source)) {
-            return installFromFile(Path.of(source).toAbsolutePath().normalize());
-        }
-        return installFromMaven(source);
-    }
-
     // --- mode 1: current project -----------------------------------------
 
     private int installCurrentProject() throws IOException {
@@ -172,7 +99,7 @@ public final class InstallCommand implements CliCommand {
         Path manifest = projectDir.resolve("jk.toml");
         if (!Files.exists(manifest)) {
             CliOutput.err("jk install: no jk.toml in " + dev.jkbuild.cli.PathDisplay.styledRaw(projectDir));
-            return Exit.USAGE;
+            return Exit.CONFIG;
         }
         return runProjectInstallGoal(projectDir, "install");
     }

@@ -159,7 +159,7 @@ public final class ToolInstallCommand implements CliCommand {
             if (!Files.isRegularFile(projectDir.resolve("jk.toml"))) {
                 CliOutput.err("jk tool install: no jk.toml in " + projectDir
                         + " — a directory target must be a jk project.");
-                return Exit.USAGE;
+                return Exit.CONFIG;
             }
             return appInstallDelegate().runProjectInstallGoal(projectDir, "install");
         }

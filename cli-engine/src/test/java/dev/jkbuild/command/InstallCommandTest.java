@@ -62,7 +62,7 @@ class InstallCommandTest {
                 tempDir.resolve("state").toString(),
                 "--bin-dir",
                 tempDir.resolve("bin").toString());
-        assertThat(exit).isEqualTo(64);
+        assertThat(exit).isEqualTo(2); // CONFIG: missing jk.toml is a project problem, not usage
     }
 
     @Test

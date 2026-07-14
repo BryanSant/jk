@@ -22,7 +22,7 @@ import java.util.stream.Stream;
  *
  * <p>Polls {@code outputDir} on a background thread. When a file's {@code (size, mtime)} matches
  * across two consecutive polls — i.e. it has been stable for at least one poll interval — hash it,
- * hard-link it into the CAS, and remodule the {@code (relPath → hex)} mapping. By the time the
+ * copy it into the CAS (never link — see Cas.putFile), and record the {@code (relPath → hex)} mapping. By the time the
  * compile finishes, most outputs are already in the CAS and the manifest write just needs to
  * consult the precomputed map.
  *
@@ -32,7 +32,7 @@ import java.util.stream.Stream;
  * action record actually trusts.
  *
  * <p>Magnitude check: for a typical 1000-file Java compile, the CAS write costs about 60ms total (5
- * MB of bytecode, SHA-256 + hard-link). Streaming this in parallel with a 5–30 second compile saves
+ * MB of bytecode, SHA-256 + copy). Streaming this in parallel with a 5–30 second compile saves
  * ~60ms. Not transformative. The architecture matters more than the millis — future post-compile
  * steps (SBOM extraction, ABI hashing for Zinc-style incremental, signature analysis) plug into the
  * same "background work during compile" slot.

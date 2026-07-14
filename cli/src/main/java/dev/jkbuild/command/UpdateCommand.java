@@ -30,7 +30,6 @@ import java.util.Map;
  * <p>For workspace roots, updating cascades to each declared module in declaration order, writing a
  * fresh {@code jk.lock} alongside each module's {@code jk.toml}.
  *
- * <p>{@code --precise &lt;coord&gt;@&lt;ver&gt;} per PRD §6 is accepted but a no-op until selective
  * resolution lands.
  *
  * <p>{@code --git [&lt;name&gt;]} re-resolves git dependencies only (one by name, or every git dep
@@ -46,7 +45,6 @@ import java.util.Map;
  */
 public final class UpdateCommand implements CliCommand {
 
-    private String precise;
     private List<String> features = List.of();
     private boolean noDefaultFeatures;
     private URI repoUrl;
@@ -66,7 +64,6 @@ public final class UpdateCommand implements CliCommand {
     @Override
     public List<Opt> options() {
         return List.of(
-                Opt.value("<coord>@<ver>", "Pin one coord@ver (not yet implemented).", "--precise"),
                 Opt.value("<a,b,...>", "Activate listed features beyond defaults.", "--features")
                         .splitOn(","),
                 Opt.flag("Don't activate the project's defaults.", "--no-default-features"),
@@ -99,7 +96,6 @@ public final class UpdateCommand implements CliCommand {
 
     @Override
     public int run(Invocation in) throws Exception {
-        this.precise = in.value("precise").orElse(null);
         this.features = in.values("features");
         this.noDefaultFeatures = in.isSet("no-default-features");
         this.repoUrl = in.value("repo-url").map(URI::create).orElse(null);
@@ -111,11 +107,6 @@ public final class UpdateCommand implements CliCommand {
             CliOutput.err("jk update: no jk.toml in " + PathDisplay.styledRaw(dir));
             return Exit.CONFIG;
         }
-        if (precise != null && !precise.isBlank()) {
-            CliOutput.err("jk update: --precise is recognized but not yet implemented; "
-                    + "performing a full re-resolve instead.");
-        }
-
         Path cache = cacheDir != null ? cacheDir : JkDirs.cache();
         Files.createDirectories(cache);
 

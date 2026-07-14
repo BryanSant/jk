@@ -59,15 +59,16 @@ public final class AccessLedger {
     }
 
     /**
-     * Record that {@code hex} was just accessed. Single-line append; no exception leaks. {@code
-     * FileChannel.open(APPEND)} on POSIX is atomic for writes shorter than {@code PIPE_BUF}, so
-     * concurrent touches don't interleave bytes within a line.
+     * Record that {@code hex} was just accessed. Single-line append; no exception leaks. Small
+     * appends on POSIX land without interleaving in practice; a LARGE {@link #touchAll} batch can
+     * exceed that and tear against a concurrent writer — tolerable by design: {@code entries()}
+     * skips corrupt lines, so the worst case is a lost LRU signal, never breakage.
      */
     public void touch(String hex) {
         touchAll(java.util.List.of(hex));
     }
 
-    /** Record a batch of accesses in a single append (one line per hex). */
+    /** Record a batch of accesses in a single append (one line per hex; see torn-write note above). */
     public void touchAll(Collection<String> hexes) {
         if (hexes.isEmpty()) return;
         long now = System.currentTimeMillis();

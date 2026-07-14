@@ -1645,7 +1645,8 @@ public final class EngineClient {
                     .append(':')
                     .append(Files.getLastModifiedTime(engineJar).toMillis());
         } catch (IOException e) {
-            signature.append("unreadable-jar");
+            // Key on the PATH too: two different unreadable jars must not share one AOT key.
+            signature.append("unreadable-jar:").append(engineJar.toAbsolutePath());
         }
         signature.append(':').append(jdk == null ? "no-jdk" : jdk.version() + "|" + jdk.vendor().name());
         String hash = dev.jkbuild.util.Hashing.sha256Hex(signature.toString()).substring(0, 16);

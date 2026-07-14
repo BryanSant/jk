@@ -80,7 +80,14 @@ public final class Cas {
      * and matches, the existing path is returned without re-writing.
      */
     public Path put(byte[] data) throws IOException {
-        String hex = Hashing.sha256Hex(data);
+        return put(data, Hashing.sha256Hex(data));
+    }
+
+    /**
+     * As {@link #put(byte[])} with the content hash already computed by the caller (verified
+     * downloads hash the payload anyway) — the CAS trusts it and skips a second full hash.
+     */
+    public Path put(byte[] data, String hex) throws IOException {
         Path target = pathFor(hex);
         if (Files.exists(target)) {
             return target;

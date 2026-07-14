@@ -126,26 +126,6 @@ class UpdateCommandTest {
         assertThat(DefaultTestDepsFixture.projectCoords(updated)).containsExactly("com.foo:leaf");
     }
 
-    @Test
-    void update_accepts_precise_flag_as_noop(@TempDir Path tempDir) throws Exception {
-        registerMetadata("com.foo", "leaf", "1.0");
-        registerPom("com.foo", "leaf", "1.0", pom("com.foo", "leaf", "1.0", ""));
-        registerJar("com.foo", "leaf", "1.0", "leaf".getBytes(StandardCharsets.UTF_8));
-
-        run("new", tempDir.toString());
-        run("add", "com.foo:leaf:1.0", "-C", tempDir.toString());
-        int exit = run(
-                "update",
-                "-C",
-                tempDir.toString(),
-                "--precise",
-                "com.foo:leaf@1.0",
-                "--repo-url",
-                base.toString(),
-                "--cache-dir",
-                tempDir.resolve("cache").toString());
-        assertThat(exit).isEqualTo(0);
-    }
 
     @Test
     void update_without_build_jk_fails(@TempDir Path tempDir) {

@@ -44,8 +44,8 @@ public final class ExplainCommand implements CliCommand {
     public List<Opt> options() {
         return List.of(
                 Opt.flag("Build the plan instead of printing it (`jk build`).", "--run"),
-                Opt.flag("Estimate the ETA for a serial build (one module at a time).", "--no-parallel"),
-                Opt.flag("", "--parallel").hide(),
+                Opt.flag("Estimate a parallel build (default; --no-parallel for serial).", "--parallel")
+                        .negate(),
                 Opt.flag("Estimate the ETA with tests running concurrently across modules.", "--parallel-tests"),
                 // The plan-affecting options `jk build` accepts — forecasting `jk build <flags>`
                 // means feeding the same inputs to the shared estimate (and, with --run, to build).
@@ -90,7 +90,7 @@ public final class ExplainCommand implements CliCommand {
         // (jdksDir=null → full JDK probe chain, workers=1, skipTests=false) so a bare `jk explain`
         // predicts exactly what a bare `jk build` would do. Parsed before the engine round-trip:
         // they ride the explain request so the ETA is computed engine-side (slim-client Wave 3).
-        boolean serial = in.isSet("no-parallel") && !in.isSet("parallel") && !in.isSet("parallel-tests");
+        boolean serial = !in.flag("parallel").orElse(true) && !in.isSet("parallel-tests");
         boolean parallelTests = in.isSet("parallel-tests");
         int workers = in.value("workers").map(Integer::parseInt).orElse(1);
         boolean skipTests = in.isSet("skip-tests");

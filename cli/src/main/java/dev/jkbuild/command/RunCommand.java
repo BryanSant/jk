@@ -27,7 +27,9 @@ import java.util.List;
  * The current-project run pipeline — build through the shared engine pipeline, then exec the best
  * artifact. <b>Not a registered verb since the 2026-07-09 inversion</b>: {@code jk run} (and its
  * {@code jk tool run} mount) is {@link ToolRunCommand}, which delegates project and directory
- * targets here via {@link #runProject}; app args ride {@code jk run . <args>}.
+ * targets here via {@link #runProject}; app args ride {@code jk run . <args>}. Deliberately NOT
+ * a {@code CliCommand}: a second option/parameter surface here would have to be kept in sync
+ * with the registered one by hand.
  *
  * <p>The build runs in a {@link dev.jkbuild.run.Goal} (so progress/warnings/run-log behave like every other verb)
  * and produces whatever {@code jk.toml} declares — a plain jar, a shadow jar, and/or a native
@@ -38,33 +40,7 @@ import java.util.List;
  * jar into this JVM.
  *
  */
-public final class RunCommand implements CliCommand {
-
-    @Override
-    public String name() {
-        return "run";
-    }
-
-    @Override
-    public String description() {
-        return "Run the current project's designated target";
-    }
-
-    @Override
-    public List<Opt> options() {
-        var opts = new ArrayList<Opt>(List.of(
-                Opt.value("<dir>", "Override the jk cache directory.", "--cache-dir")
-                        .hide(),
-                Opt.value("<dir>", "Override the JDK install root.", "--jdks-dir")
-                        .hide()));
-        opts.addAll(VariantSelection.options());
-        return opts;
-    }
-
-    @Override
-    public List<Param> parameters() {
-        return List.of(Param.of("args", Arity.ZERO_OR_MORE, "Arguments forwarded to the project's main method."));
-    }
+public final class RunCommand {
 
     List<String> positional = new ArrayList<>();
     Path cacheDirOverride;
@@ -82,30 +58,6 @@ public final class RunCommand implements CliCommand {
         // Also bypass inside a jk-forked test worker (jk.plugin.class=JkRunner) — see BuildCommand.
         return Boolean.getBoolean("jk.test.noEngine")
                 || "dev.jkbuild.test.runner.JkRunner".equals(System.getProperty("jk.plugin.class"));
-    }
-
-    @Override
-    public int run(Invocation in) throws IOException, InterruptedException {
-        this.positional = in.positionals();
-        this.cacheDirOverride = in.value("cache-dir").map(Path::of).orElse(null);
-        this.jdksDir = in.value("jdks-dir").map(Path::of).orElse(null);
-        this.buildOpts = new dev.jkbuild.cli.BuildOptions();
-        // `jk run` builds and runs the artifact; it never runs the test phase.
-        this.buildOpts.skipTests = true;
-        this.global = GlobalOptions.from(in);
-
-        Path projectDir = global.workingDir();
-        // --release / --variant: the selection rides the ambient session; the build request
-        // threads it explicitly and the run below executes the selected product's artifact.
-        VariantSelection.install(in, projectDir);
-        Path manifest = projectDir.resolve("jk.toml");
-        if (!Files.exists(manifest)) {
-            CliOutput.err("jk run: no jk.toml in "
-                    + dev.jkbuild.cli.PathDisplay.styledRaw(projectDir)
-                    + " — run from a project directory, or use `jk tool run` to run a file or tool.");
-            return Exit.USAGE;
-        }
-        return runProject(projectDir, positional);
     }
 
     /** Package-private: {@code jk tool run <dir>} delegates a jk-project directory here. */
@@ -303,13 +255,4 @@ public final class RunCommand implements CliCommand {
         return cacheDirOverride != null ? cacheDirOverride : JkDirs.cache();
     }
 
-    private static String joinClasspath(List<Path> paths) {
-        String sep = System.getProperty("path.separator");
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < paths.size(); i++) {
-            if (i > 0) sb.append(sep);
-            sb.append(paths.get(i).toAbsolutePath());
-        }
-        return sb.toString();
-    }
 }

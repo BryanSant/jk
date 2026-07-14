@@ -75,8 +75,8 @@ public final class BuildCommand implements CliCommand {
                         .hide(),
                 Opt.flag("Skip compiling and running tests.", "--skip-tests"),
                 Opt.flag("Package an extracted layout + trained JVM startup cache.", "--aot-cache"),
-                Opt.flag("Build modules one at a time (rich serial view).", "--no-parallel"),
-                Opt.flag("", "--parallel").hide(),
+                Opt.flag("Build modules in parallel (default; --no-parallel for the rich serial view).", "--parallel")
+                        .negate(),
                 Opt.flag("Run modules' tests concurrently too. Default: off.", "--parallel-tests")));
         opts.addAll(VariantSelection.options());
         return opts;
@@ -116,7 +116,7 @@ public final class BuildCommand implements CliCommand {
         this.buildOpts = new dev.jkbuild.cli.BuildOptions();
         this.buildOpts.skipTests = in.isSet("skip-tests");
         this.aotCache = in.isSet("aot-cache");
-        this.noParallel = in.isSet("no-parallel") && !in.isSet("parallel") && !in.isSet("parallel-tests");
+        this.noParallel = !in.flag("parallel").orElse(true) && !in.isSet("parallel-tests");
         this.global = GlobalOptions.from(in);
         // Opt-in: run modules' tests concurrently. Default serializes them
         // (shared ports/locks/fixtures) — see BuildPipeline's test gate.

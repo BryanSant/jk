@@ -75,7 +75,7 @@ public final class ActionCache {
                     // don't accidentally cache a stamp from a previous run.
                     if (FreshnessStamp.isStampFile(file.getFileName().toString())) continue;
                     // Hash once (streamed — a large output never has to fit in
-                    // the heap), then hard-link the file into the CAS rather
+                    // the heap), then COPY the file into the CAS (never link — see Cas.putFile) rather
                     // than re-reading + writing the bytes. On POSIX same-fs
                     // the output file in target/ and the CAS object share an
                     // inode from this point on; the storage cost of caching
@@ -93,7 +93,7 @@ public final class ActionCache {
 
     /**
      * Write an action record using a pre-computed {@code outputs} map — used by callers that already
-     * CAS'd the files via {@link CasPrewriter} (or anything else that hashed + hard-linked while the
+     * CAS'd the files via {@link CasPrewriter} (or anything else that hashed + copied while the
      * action was still running). Skips the output-dir walk; just writes the manifest and pointer.
      */
     public ActionRecord storeWithOutputs(
@@ -156,7 +156,7 @@ public final class ActionCache {
     }
 
     /**
-     * Restore recorded outputs by hard-linking them into {@code baseDir} WITHOUT clearing it first —
+     * Restore recorded outputs by copying them into {@code baseDir} WITHOUT clearing it first —
      * for single/few-file artifact tasks (jars, fat-jars, native binaries) whose output dir ({@code
      * target/}) holds unrelated files. Overwrites a stale artifact already at the path. Returns
      * {@code false} (restoring nothing) if any cached blob is missing, so the caller rebuilds.
@@ -180,7 +180,7 @@ public final class ActionCache {
     }
 
     /**
-     * CAS-store already-produced {@code artifacts} (hard-linking each into the CAS) and write an
+     * CAS-store already-produced {@code artifacts} (copying each into the CAS) and write an
      * {@link ActionRecord} keyed by {@code actionKey}, with each artifact's {@code baseDir}-relative
      * path as its output key. The companion of {@link #restoreArtifacts} for single/few-file
      * packaging.

@@ -25,6 +25,9 @@ public final class GlobalOptions {
 
     public boolean noProgress;
 
+    /** {@code --no-ansi} — declared as a global; read here so command code never misses it. */
+    public boolean noAnsi;
+
     /** {@code --jdk <spec>} / {@code --graal <spec>}: the top JDK / GraalVM resolution tier. */
     public String jdk;
 
@@ -95,6 +98,7 @@ public final class GlobalOptions {
         g.offline = in.isSet("offline");
         g.force = in.isSet("force");
         g.noProgress = in.isSet("no-progress");
+        g.noAnsi = in.isSet("no-ansi");
         g.output = in.value("output").orElse(null);
         g.configFile = in.value("config-file").map(Path::of).orElse(null);
         g.noConfig = in.isSet("no-config");

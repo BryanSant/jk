@@ -94,7 +94,7 @@ final class EngineJarFetcher {
         // Verified bytes flow CAS-first into the side-by-side version layout
         // (engine-versioning-plan R1/R2). The running client IS this version's client — hand
         // its own binary over so the materialization is complete (wrapper/self-update parity).
-        cas.put(jar); // put(byte[]) stores under the content sha it computes
+        cas.put(jar, actualSha); // already hashed for verification — no second pass
         String clientSha = null;
         if (clientBin != null && Files.isRegularFile(clientBin)) {
             clientSha = Hashing.sha256Hex(clientBin);

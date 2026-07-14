@@ -316,7 +316,11 @@ public final class CommandDispatch {
     }
 
     private static String renderHelp(CliCommand cmd, String qualified, boolean ansi) {
-        CommandModel model = CommandModels.from(cmd, qualified, List.of());
+        List<dev.jkbuild.cli.OptionModel> globals = new ArrayList<>();
+        for (Opt g : GlobalOptions.globalOpts()) {
+            if (!g.hidden()) globals.add(CommandModels.option(g));
+        }
+        CommandModel model = CommandModels.from(cmd, qualified, globals);
         return HelpRenderer.renderHelp(model, ansi);
     }
 

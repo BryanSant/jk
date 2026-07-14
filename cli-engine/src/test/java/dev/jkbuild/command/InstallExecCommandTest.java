@@ -405,10 +405,10 @@ class InstallExecCommandTest {
     }
 
     @Test
-    void tool_install_of_a_non_project_dir_is_a_usage_error(@TempDir Path tempDir) throws Exception {
+    void tool_install_of_a_non_project_dir_is_a_config_error(@TempDir Path tempDir) throws Exception {
         Path dir = tempDir.resolve("empty");
         Files.createDirectories(dir);
-        assertThat(run("tool", "install", dir.toString())).isEqualTo(64);
+        assertThat(run("tool", "install", dir.toString())).isEqualTo(2); // CONFIG: no jk.toml
     }
 
     @Test

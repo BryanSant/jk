@@ -194,7 +194,7 @@ public final class SelfCommand extends GroupCommand {
             Path client = unzipSingleBinary(clientZip);
 
             String jarSha = Hashing.sha256Hex(jar);
-            cas.put(jar);
+            cas.put(jar, jarSha);
             String clientSha = Hashing.sha256Hex(client);
             cas.putFile(client, clientSha);
             return store.materialize(version, cas, jarSha, clientSha);
