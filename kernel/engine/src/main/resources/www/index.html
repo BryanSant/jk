@@ -77,20 +77,27 @@
           <span class="cardbar-fill" :style="{ width: progress(card) + '%' }"></span>
         </div>
 
-        <!-- Compact (single-module): one phase chain directly under the header, with that module's
-             failure output (if any) shown inline beneath it. -->
+        <!-- Compact (single-module): the phase chain rolls up under a "success details" accordion
+             that is open while the build runs and collapses once it finishes — same treatment as
+             workspace modules. A failed build keeps its chain and failure output visible inline. -->
         <template v-if="compact(card)">
-          <phase-chain v-if="singleChain(card).length" :phases="singleChain(card)"></phase-chain>
-          <div v-if="singleModule(card) && singleModule(card).diagnostics.length" class="diag">
-            <div class="console">
-              <div v-for="(d, i) in singleModule(card).diagnostics" :key="i" class="diag-line">
-                <!-- Separators live INSIDE spans (&nbsp;) — inter-element whitespace is not
-                     preserved reliably through the template pipeline, which squashed segments
-                     together. Shape: ✘ phase › test › ExceptionClass › message -->
-                <span class="console-err">✘&nbsp;</span><span class="console-dir">{{ d.phase }}</span><template v-if="d.test"><span class="console-sep">&nbsp;›&nbsp;</span><span>{{ d.test }}</span></template><template v-if="d.exceptionClass"><span class="console-sep">&nbsp;›&nbsp;</span><span>{{ d.exceptionClass }}</span></template><span class="console-sep">&nbsp;›&nbsp;</span><span>{{ d.message }}</span>
+          <details v-if="okModules(card).length && singleChain(card).length" class="module-group" :open="outcome(card) === 'running'">
+            <summary>success details</summary>
+            <phase-chain :phases="singleChain(card)"></phase-chain>
+          </details>
+          <template v-if="failedModules(card).length">
+            <phase-chain v-if="singleChain(card).length" :phases="singleChain(card)"></phase-chain>
+            <div v-if="singleModule(card) && singleModule(card).diagnostics.length" class="diag">
+              <div class="console">
+                <div v-for="(d, i) in singleModule(card).diagnostics" :key="i" class="diag-line">
+                  <!-- Separators live INSIDE spans (&nbsp;) — inter-element whitespace is not
+                       preserved reliably through the template pipeline, which squashed segments
+                       together. Shape: ✘ phase › test › ExceptionClass › message -->
+                  <span class="console-err">✘&nbsp;</span><span class="console-dir">{{ d.phase }}</span><template v-if="d.test"><span class="console-sep">&nbsp;›&nbsp;</span><span>{{ d.test }}</span></template><template v-if="d.exceptionClass"><span class="console-sep">&nbsp;›&nbsp;</span><span>{{ d.exceptionClass }}</span></template><span class="console-sep">&nbsp;›&nbsp;</span><span>{{ d.message }}</span>
+                </div>
               </div>
             </div>
-          </div>
+          </template>
         </template>
 
         <!-- Multi-module workspace: successful modules roll up under an accordion that is open while
