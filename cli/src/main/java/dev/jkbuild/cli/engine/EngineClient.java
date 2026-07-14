@@ -70,7 +70,7 @@ public final class EngineClient {
     private EngineClient() {}
 
     /** What a connection's {@code hello}/{@code hello-ack} handshake reveals about the engine. */
-    public record Handshake(String version, long pid, long startedAtMillis, boolean draining) {}
+    public record Handshake(String version, long pid, long startedAtMillis, boolean draining, String buildId) {}
 
     /**
      * The {@code jk engine status} snapshot. Memory fields are best-effort: {@code -1} means the
@@ -124,11 +124,13 @@ public final class EngineClient {
             if (Ndjson.intValue(ack, "proto", EngineProtocol.PROTOCOL) > EngineProtocol.PROTOCOL) {
                 return Optional.empty();
             }
+            String ackBuildId = Ndjson.str(ack, "buildId");
             return Optional.of(new Handshake(
                     Ndjson.str(ack, "version"),
                     Ndjson.longValue(ack, "pid", -1),
                     Ndjson.longValue(ack, "startedAt", -1),
-                    Ndjson.bool(ack, "draining", false)));
+                    Ndjson.bool(ack, "draining", false),
+                    ackBuildId == null ? "" : ackBuildId));
         } catch (IOException e) {
             return Optional.empty();
         }
@@ -1257,6 +1259,20 @@ public final class EngineClient {
                 .result();
     }
 
+    /**
+     * True when the running engine's content identity matches what the versions manifest says
+     * this client would spawn. Empty on either side = no opinion (releases, tests, no manifest)
+     * — the version-string rule alone decides, exactly the pre-BuildIdentity behavior.
+     */
+    private static boolean buildIdCurrent(Handshake hs, String clientVersion) {
+        if (hs.buildId().isEmpty()) return true;
+        String expected = dev.jkbuild.cache.VersionStore.current()
+                .engineSha(clientVersion)
+                .orElse("");
+        if (expected.isEmpty()) return true;
+        return expected.startsWith(hs.buildId());
+    }
+
     private static EngineReady doEnsure(EnginePaths.Paths paths, String clientVersion, boolean renderWedge)
             throws IOException {
         Optional<Handshake> existing = handshake(EnginePaths.activeSocket(paths), clientVersion);
@@ -1268,10 +1284,14 @@ public final class EngineClient {
                 throw new IOException(
                         "the build engine is shutting down — wait for it to stop, or run `jk engine stop --force`");
             }
-            if (clientVersion.equals(hs.version())) return new EngineReady(hs, false);
-            // Version skew → TAKEOVER, not a kill (engine-versioning-plan §2/§3): spawn this
-            // client's engine; ITS startup atomically repoints the endpoint and gracefully
-            // drains the displaced engine — in-flight jobs on the old one finish untouched.
+            if (clientVersion.equals(hs.version()) && buildIdCurrent(hs, clientVersion)) {
+                return new EngineReady(hs, false);
+            }
+            // Version skew — including the SAME -SNAPSHOT version reporting a different content
+            // identity than the versions manifest records (a stale dev engine serving old code)
+            // → TAKEOVER, not a kill (engine-versioning-plan §2/§3): spawn this client's engine;
+            // ITS startup atomically repoints the endpoint and gracefully drains the displaced
+            // engine — in-flight jobs on the old one finish untouched.
         }
         return startWithSelfHeal(paths, clientVersion, renderWedge);
     }

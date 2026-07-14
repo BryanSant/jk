@@ -85,6 +85,51 @@ class EngineTakeoverTest {
         }
     }
 
+    /**
+     * A -SNAPSHOT dev rebuild is the SAME version string with DIFFERENT content: the election
+     * must treat a differing buildId as a skew (takeover), never as "already serving" — stale
+     * dev engines once won these elections and kept serving old code. Empty buildIds fall back
+     * to the version-string rule (release behavior, pinned by the same-version election test).
+     */
+    @Test
+    void same_version_different_build_id_takes_over_instead_of_losing() throws Exception {
+        Path state = shortTempDir();
+        EnginePaths.Paths p = EnginePaths.resolve(state);
+
+        EngineServer stale = new EngineServer(p, JkEngineConfig.DEFAULTS, null, "1.0.0-SNAPSHOT", "aaaaaaaaaaaa", null);
+        CountDownLatch staleDone = new CountDownLatch(1);
+        Thread staleT = new Thread(() -> {
+            try {
+                stale.run();
+            } catch (IOException ignored) {
+            } finally {
+                staleDone.countDown();
+            }
+        });
+        staleT.start();
+        waitUntil(Duration.ofSeconds(5), () -> Files.exists(EnginePaths.endpoint(p)));
+        assertThat(helloVersion(EnginePaths.activeSocket(p))).isEqualTo("1.0.0-SNAPSHOT");
+
+        // Rebuilt dev engine: same version, different content identity — must WIN (take over).
+        EngineServer rebuilt = new EngineServer(p, JkEngineConfig.DEFAULTS, null, "1.0.0-SNAPSHOT", "bbbbbbbbbbbb", null);
+        Thread rebuiltT = new Thread(() -> {
+            try {
+                rebuilt.run();
+            } catch (IOException ignored) {
+            }
+        });
+        rebuiltT.start();
+        try {
+            assertThat(staleDone.await(15, java.util.concurrent.TimeUnit.SECONDS))
+                    .as("stale same-version engine is drained by the rebuilt one")
+                    .isTrue();
+            assertThat(helloVersion(EnginePaths.activeSocket(p))).isEqualTo("1.0.0-SNAPSHOT");
+        } finally {
+            rebuilt.close();
+            rebuiltT.join(10_000);
+        }
+    }
+
     @Test
     void newer_engine_takes_over_and_the_displaced_one_drains() throws Exception {
         Path state = shortTempDir();

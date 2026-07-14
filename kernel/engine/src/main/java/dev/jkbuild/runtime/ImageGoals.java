@@ -21,6 +21,7 @@ import dev.jkbuild.task.ActionCache;
 import dev.jkbuild.task.ActionKey;
 import dev.jkbuild.task.ClasspathFingerprint;
 import dev.jkbuild.util.JkDirs;
+import dev.jkbuild.model.BuildIdentity;
 import dev.jkbuild.model.JkVersion;
 import dev.jkbuild.worker.WorkerClient;
 import dev.jkbuild.worker.WorkerJar;
@@ -197,9 +198,9 @@ public final class ImageGoals {
                                 "classes:" + (classesDir == null ? "" : ClasspathFingerprint.entry(classesDir)),
                                 "main:" + chosen,
                                 "cfg:" + imageConfigToken(config),
-                                "worker:" + WorkerJar.IMAGE_BUILDER.artifactId() + ":" + JkVersion.VERSION);
+                                "worker:" + WorkerJar.IMAGE_BUILDER.artifactId() + ":" + BuildIdentity.cacheKeyVersion());
                         imgTask = ActionKey.qualifiedTaskId("write-image", tarballPath);
-                        imgKey = ActionKey.forArtifact(imgTask, JkVersion.VERSION, tokens);
+                        imgKey = ActionKey.forArtifact(imgTask, BuildIdentity.cacheKeyVersion(), tokens);
                         if (useCache) {
                             var hit = ac.lookup(imgKey);
                             if (hit.isPresent() && ac.restoreArtifacts(hit.get(), tarballPath.getParent())) {

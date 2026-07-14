@@ -796,3 +796,31 @@ in-process tests passed because the CLI prepass leaves an unset `force` EMPTY.
 Fixed with explicit truth-or-fallback logic; pinned by a JkConfig unit test
 (wire-shaped config) and the engine-hosted round-trip test. Verified live:
 plain build 139 ms fast path, `--rebuild` 859 ms genuine recompile.
+
+### Residue bite 4 — BuildIdentity: content-based -SNAPSHOT identity
+
+Resolves BOTH parked -SNAPSHOT findings with one mechanism. `BuildIdentity`
+(jk-api leaf, JDK-only) derives a build id — sha256 prefix of the code archive
+this class loaded from — empty ("no opinion") in unit tests, native images,
+and anywhere identity isn't derivable, which preserves release behavior
+exactly. Uses:
+- **Action keys**: every key-feeding `jkVersion` argument (BuildPipeline,
+  BuildPlanForecast, TestSupport, ImageGoals, PluginBuild describeKey) is now
+  `BuildIdentity.cacheKeyVersion()` — `<version>+<id>` for snapshots — so a
+  rebuilt dev engine can never restore an older engine's bytes under the same
+  key. Non-key uses (worker coordinates, lockfile stamps, calibration) stay on
+  the bare version.
+- **Election**: `hello-ack` carries `buildId` (additive field, proto still 1);
+  the same-version election loses only on version AND identity match, so a
+  stale dev engine is taken over exactly like a version bump. The client's
+  `doEnsure` compares the running engine's reported identity against the
+  versions manifest's `engine-sha256` (no client-side hashing).
+Verified live: with an engine serving, installing a rebuilt dist and running a
+plain `jk build` replaced the engine automatically (endpoint re-answered with
+the new jar's id; the displaced engine drained). Two acceptance-run notes:
+a comment-only change produced a BYTE-IDENTICAL jar (reproducible builds made
+the first acceptance a correct no-op), and the transient "second engines"
+observed during takeovers are AOT TRAINING runs, not stale servers. One new
+observation parked: jk's own Gradle rebuilds are not byte-reproducible across
+identical sources (e9ceea… vs efd084… for the same tree) — Gradle/javac
+territory, unrelated to jk-built artifacts' reproducibility.

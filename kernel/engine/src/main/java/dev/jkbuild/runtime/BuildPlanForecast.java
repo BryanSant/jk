@@ -18,6 +18,7 @@ import dev.jkbuild.task.ClasspathFingerprint;
 import dev.jkbuild.task.FreshnessStamp;
 import dev.jkbuild.task.JavaIncrementalCompile;
 import dev.jkbuild.task.TestStamp;
+import dev.jkbuild.model.BuildIdentity;
 import dev.jkbuild.model.JkVersion;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -213,7 +214,7 @@ public final class BuildPlanForecast {
                 Path stateDir =
                         cache.resolve("actions").resolve("incremental-java").resolve(taskId);
                 long tc = Perf.start();
-                var pred = JavaIncrementalCompile.predict(taskId, req, JkVersion.VERSION, actionCache, stateDir);
+                var pred = JavaIncrementalCompile.predict(taskId, req, BuildIdentity.cacheKeyVersion(), actionCache, stateDir);
                 Perf.end("  predict-compile-main", tc);
                 phases.add(compilePhase("compile-main", pred, depDirty || force));
                 if (!phases.get(phases.size() - 1).cached()) compileDirty = true;
@@ -279,7 +280,7 @@ public final class BuildPlanForecast {
                     Path stateDir =
                             cache.resolve("actions").resolve("incremental-java").resolve(taskId);
                     long tt = Perf.start();
-                    var pred = JavaIncrementalCompile.predict(taskId, req, JkVersion.VERSION, actionCache, stateDir);
+                    var pred = JavaIncrementalCompile.predict(taskId, req, BuildIdentity.cacheKeyVersion(), actionCache, stateDir);
                     Perf.end("  predict-compile-test", tt);
                     BuildPlan.Phase p = compilePhase("compile-test", pred, false);
                     phases.add(p);
@@ -332,7 +333,7 @@ public final class BuildPlanForecast {
                         "manifest:" + project.manifest());
                 Perf.end("  package-fingerprint", tp);
                 String pkgKey =
-                        ActionKey.forArtifact(ActionKey.qualifiedTaskId("package-jar", jar), JkVersion.VERSION, tokens);
+                        ActionKey.forArtifact(ActionKey.qualifiedTaskId("package-jar", jar), BuildIdentity.cacheKeyVersion(), tokens);
                 boolean hit = present(actionCache, pkgKey);
                 phases.add(
                         hit

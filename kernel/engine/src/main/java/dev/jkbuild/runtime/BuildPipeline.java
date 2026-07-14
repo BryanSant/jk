@@ -601,7 +601,7 @@ public final class BuildPipeline {
                                 in.lockFile(),
                                 in.cache(),
                                 null,
-                                dev.jkbuild.model.JkVersion.VERSION,
+                                dev.jkbuild.model.BuildIdentity.cacheKeyVersion(),
                                 List.of(),
                                 true,
                                 dev.jkbuild.resolver.ResolveObserver.NOOP,
@@ -1249,7 +1249,7 @@ public final class BuildPipeline {
                     if (!rerun) {
                         try {
                             boolean restores = actionCache
-                                    .lookup(ActionKey.forJavac(taskId, request, dev.jkbuild.model.JkVersion.VERSION))
+                                    .lookup(ActionKey.forJavac(taskId, request, dev.jkbuild.model.BuildIdentity.cacheKeyVersion()))
                                     .isPresent();
                             ctx.reweight(
                                     restores ? EffortWeights.RESTORE : EffortWeights.compileWeight(sources.size()));
@@ -1290,7 +1290,7 @@ public final class BuildPipeline {
                     dev.jkbuild.task.JavaIncrementalCompile.Result r = dev.jkbuild.task.JavaIncrementalCompile.run(
                             taskId,
                             request,
-                            dev.jkbuild.model.JkVersion.VERSION,
+                            dev.jkbuild.model.BuildIdentity.cacheKeyVersion(),
                             !rerun,
                             cas,
                             actionCache,
@@ -1890,7 +1890,7 @@ public final class BuildPipeline {
                             "sbom:" + (sbom == null ? "" : dev.jkbuild.util.Hashing.sha256Hex(sbom)),
                             "manifest:" + project.manifest());
                     String pkgTask = ActionKey.qualifiedTaskId("package-jar", jarPath);
-                    String pkgKey = ActionKey.forArtifact(pkgTask, dev.jkbuild.model.JkVersion.VERSION, tokens);
+                    String pkgKey = ActionKey.forArtifact(pkgTask, dev.jkbuild.model.BuildIdentity.cacheKeyVersion(), tokens);
                     if (restorePackaged(in.cache(), pkgKey, jarPath.getParent())) {
                         ctx.put(JAR_PATH, jarPath);
                         ctx.label(jarPath.getFileName() + " up-to-date");
@@ -2092,7 +2092,7 @@ public final class BuildPipeline {
                             + dev.jkbuild.task.ClasspathFingerprint.entry(
                                     PluginBuild.workerJarFor(active, in.cache())));
                     String taskId = ActionKey.qualifiedTaskId("plugin-" + step.name(), scratch);
-                    String actionKey = ActionKey.forArtifact(taskId, dev.jkbuild.model.JkVersion.VERSION, tokens);
+                    String actionKey = ActionKey.forArtifact(taskId, dev.jkbuild.model.BuildIdentity.cacheKeyVersion(), tokens);
                     dev.jkbuild.task.ActionCache actionCache = cx.actionCache();
                     var hit = actionCache.lookup(actionKey);
                     if (hit.isPresent()) {
@@ -2247,7 +2247,7 @@ public final class BuildPipeline {
         tokens.add("worker:"
                 + dev.jkbuild.task.ClasspathFingerprint.entry(PluginBuild.workerJarFor(active, in.cache())));
         String pkgTask = ActionKey.qualifiedTaskId("package-jar", jarPath);
-        String pkgKey = ActionKey.forArtifact(pkgTask, dev.jkbuild.model.JkVersion.VERSION, tokens);
+        String pkgKey = ActionKey.forArtifact(pkgTask, dev.jkbuild.model.BuildIdentity.cacheKeyVersion(), tokens);
         if (restorePackaged(in.cache(), pkgKey, jarPath.getParent())) {
             ctx.put(JAR_PATH, jarPath);
             ctx.label(jarPath.getFileName() + " up-to-date");
@@ -2544,7 +2544,7 @@ public final class BuildPipeline {
                             "main:" + (project.mainClass() == null ? "" : project.mainClass()),
                             "manifest:" + project.manifest());
                     String shTask = ActionKey.qualifiedTaskId("package-shadow", shadowJar);
-                    String shKey = ActionKey.forArtifact(shTask, dev.jkbuild.model.JkVersion.VERSION, tokens);
+                    String shKey = ActionKey.forArtifact(shTask, dev.jkbuild.model.BuildIdentity.cacheKeyVersion(), tokens);
                     if (restorePackaged(cache, shKey, shadowJar.getParent())) {
                         ctx.label(shadowJar.getFileName() + " up-to-date");
                         ctx.cached();
@@ -2608,7 +2608,7 @@ public final class BuildPipeline {
                                     .toList());
                     List<String> tokens = List.of("sources:" + srcHash);
                     String task = ActionKey.qualifiedTaskId("package-sources", sourcesJar);
-                    String key = ActionKey.forArtifact(task, dev.jkbuild.model.JkVersion.VERSION, tokens);
+                    String key = ActionKey.forArtifact(task, dev.jkbuild.model.BuildIdentity.cacheKeyVersion(), tokens);
                     if (restorePackaged(cache, key, sourcesJar.getParent())) {
                         ctx.label(sourcesJar.getFileName() + " up-to-date");
                         ctx.cached();
@@ -2798,7 +2798,7 @@ public final class BuildPipeline {
                             "out:" + out.getFileName(),
                             "graal:" + graalTok);
                     String nTask = ActionKey.qualifiedTaskId("native-image", out);
-                    String nKey = ActionKey.forArtifact(nTask, dev.jkbuild.model.JkVersion.VERSION, nativeTokens);
+                    String nKey = ActionKey.forArtifact(nTask, dev.jkbuild.model.BuildIdentity.cacheKeyVersion(), nativeTokens);
                     if (!shared && restorePackaged(cache, nKey, out.getParent())) {
                         ctx.label(out.getFileName() + " up-to-date");
                         ctx.progress(1);
@@ -3041,7 +3041,7 @@ public final class BuildPipeline {
         if (!rerun) {
             try {
                 boolean restores = actionCache
-                        .lookup(ActionKey.forKotlinc(taskId, req, dev.jkbuild.model.JkVersion.VERSION))
+                        .lookup(ActionKey.forKotlinc(taskId, req, dev.jkbuild.model.BuildIdentity.cacheKeyVersion()))
                         .isPresent();
                 ctx.reweight(restores ? EffortWeights.RESTORE : EffortWeights.compileWeight(sources.size()));
             } catch (Exception ignored) {
@@ -3049,7 +3049,7 @@ public final class BuildPipeline {
             }
         }
         return dev.jkbuild.task.KotlinCompile.run(
-                taskId, req, dev.jkbuild.model.JkVersion.VERSION, !rerun, cas, actionCache);
+                taskId, req, dev.jkbuild.model.BuildIdentity.cacheKeyVersion(), !rerun, cas, actionCache);
     }
 
     /** The resolved lock's {@code group:artifact} names — the classpath-has condition's universe. */
@@ -3174,7 +3174,7 @@ public final class BuildPipeline {
 
     private static List<String> testStampExtras(Map<String, String> workerJars) {
         List<String> extras = new ArrayList<>();
-        extras.add("jk:" + dev.jkbuild.model.JkVersion.VERSION);
+        extras.add("jk:" + dev.jkbuild.model.BuildIdentity.cacheKeyVersion());
         // Worker jars by content — a worker change retests the module that forks it.
         for (Map.Entry<String, String> e : workerJars.entrySet()) {
             String fp;

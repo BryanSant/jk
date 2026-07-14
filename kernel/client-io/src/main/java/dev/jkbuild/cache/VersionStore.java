@@ -144,6 +144,28 @@ public final class VersionStore {
         }
     }
 
+    /**
+     * The manifest's recorded {@code engine-sha256} for {@code version}, or empty — the client's
+     * EXPECTED engine identity (a running engine reporting a different content identity for the
+     * same -SNAPSHOT version is stale and gets taken over).
+     */
+    public java.util.Optional<String> engineSha(String version) {
+        try {
+            Path manifest = versionsDir().resolve(version).resolve(MANIFEST);
+            for (String line : Files.readAllLines(manifest)) {
+                String trimmed = line.trim();
+                if (trimmed.startsWith("engine-sha256 = \"")) {
+                    String v = trimmed.substring("engine-sha256 = \"".length());
+                    int q = v.indexOf('"');
+                    if (q > 0) return java.util.Optional.of(v.substring(0, q));
+                }
+            }
+        } catch (IOException ignored) {
+            // no manifest — no expectation
+        }
+        return java.util.Optional.empty();
+    }
+
     /** True when the materialized tree's manifest records exactly this engine jar. */
     private static boolean hasContent(Materialized m, String engineJarSha) {
         try {

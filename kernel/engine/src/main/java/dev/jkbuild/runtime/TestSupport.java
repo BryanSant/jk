@@ -10,6 +10,7 @@ import dev.jkbuild.task.ActionCache;
 import dev.jkbuild.task.ActionKey;
 import dev.jkbuild.test.JUnitLauncher;
 import dev.jkbuild.test.TestProgressListener;
+import dev.jkbuild.model.BuildIdentity;
 import dev.jkbuild.model.JkVersion;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -195,7 +196,7 @@ public final class TestSupport {
         if (useCache) {
             try {
                 boolean restores = actionCache
-                        .lookup(ActionKey.forJavac(cacheTaskId, request, JkVersion.VERSION))
+                        .lookup(ActionKey.forJavac(cacheTaskId, request, BuildIdentity.cacheKeyVersion()))
                         .isPresent();
                 ctx.reweight(restores ? EffortWeights.RESTORE : EffortWeights.compileWeight(sources.size()));
             } catch (Exception ignored) {
@@ -204,7 +205,7 @@ public final class TestSupport {
         }
         ctx.label(taskId + ": " + sources.size() + " sources");
         dev.jkbuild.task.JavaIncrementalCompile.Result r = dev.jkbuild.task.JavaIncrementalCompile.run(
-                cacheTaskId, request, JkVersion.VERSION, useCache, cas, actionCache, stateDir, ap);
+                cacheTaskId, request, BuildIdentity.cacheKeyVersion(), useCache, cas, actionCache, stateDir, ap);
         // Surface javac diagnostics by severity — errors fail, warnings (e.g.
         // deprecation/unchecked) are shown but don't. Mirrors the main-compile
         // phase so test sources report warnings the same way.

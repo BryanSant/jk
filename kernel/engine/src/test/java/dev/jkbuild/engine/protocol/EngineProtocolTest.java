@@ -16,13 +16,16 @@ class EngineProtocolTest {
     }
 
     @Test
-    void hello_ack_round_trips_version_pid_and_start_time() {
-        String json = EngineProtocol.helloAck("1.2.3", 4321, 999_000, true);
+    void hello_ack_round_trips_version_pid_start_time_and_build_id() {
+        String json = EngineProtocol.helloAck("1.2.3", 4321, 999_000, true, "abc123def456");
         assertThat(EngineProtocol.typeOf(json)).isEqualTo(EngineProtocol.HELLO_ACK);
         assertThat(Ndjson.str(json, "version")).isEqualTo("1.2.3");
         assertThat(Ndjson.longValue(json, "pid", -1)).isEqualTo(4321);
         assertThat(Ndjson.longValue(json, "startedAt", -1)).isEqualTo(999_000);
         assertThat(Ndjson.bool(json, "draining", false)).isTrue();
+        assertThat(Ndjson.str(json, "buildId")).isEqualTo("abc123def456");
+        // Identity-less contexts answer an EMPTY buildId ("no opinion"), never null.
+        assertThat(Ndjson.str(EngineProtocol.helloAck("1.2.3", 1, 1, false, null), "buildId")).isEmpty();
     }
 
     @Test

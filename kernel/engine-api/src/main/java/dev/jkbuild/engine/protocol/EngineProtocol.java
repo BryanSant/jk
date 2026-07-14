@@ -604,7 +604,13 @@ public final class EngineProtocol {
                 + ",\"purpose\":" + Ndjson.quote(purpose) + "}";
     }
 
-    public static String helloAck(String version, long pid, long startedAtMillis, boolean draining) {
+    /**
+     * {@code buildId} is the engine's content identity ({@code BuildIdentity}): empty for
+     * releases and identity-less contexts; a jar sha prefix for -SNAPSHOT dev builds, so a
+     * REBUILT dev engine is distinguishable from a stale one under the same version string.
+     */
+    public static String helloAck(
+            String version, long pid, long startedAtMillis, boolean draining, String buildId) {
         return "{\"t\":\""
                 + HELLO_ACK
                 + "\",\"version\":"
@@ -617,6 +623,8 @@ public final class EngineProtocol {
                 + PROTOCOL
                 + ",\"draining\":"
                 + draining
+                + ",\"buildId\":"
+                + Ndjson.quote(buildId == null ? "" : buildId)
                 + "}";
     }
 

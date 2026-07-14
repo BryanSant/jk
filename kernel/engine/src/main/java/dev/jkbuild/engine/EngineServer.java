@@ -73,6 +73,7 @@ import java.util.function.LongSupplier;
  */
 public final class EngineServer implements AutoCloseable {
 
+
     private final EnginePaths.Paths paths;
     private final JkEngineConfig config;
 
@@ -83,6 +84,8 @@ public final class EngineServer implements AutoCloseable {
     private final JkHttpConfig httpConfig;
 
     private final String version;
+    /** Content identity for -SNAPSHOT builds (see BuildIdentity); "" = version rule only. */
+    private final String buildId;
     private final Consumer<String> log;
     private final LongSupplier clockMillis;
     private final long pid;
@@ -179,7 +182,7 @@ public final class EngineServer implements AutoCloseable {
     private String expectedToken;
 
     public EngineServer(EnginePaths.Paths paths, JkEngineConfig config, String version, Consumer<String> log) {
-        this(paths, config, null, version, log);
+        this(paths, config, null, version, dev.jkbuild.model.BuildIdentity.buildId(), log);
     }
 
     /** As above plus the optional {@code [http]} table ({@code null} = feature off). */
@@ -189,11 +192,28 @@ public final class EngineServer implements AutoCloseable {
             JkHttpConfig httpConfig,
             String version,
             Consumer<String> log) {
+        this(paths, config, httpConfig, version, dev.jkbuild.model.BuildIdentity.buildId(), log);
+    }
+
+    /**
+     * Canonical: {@code buildId} is the engine's content identity ({@code BuildIdentity} —
+     * derived from its own jar; injectable for election tests). Empty means "no opinion": the
+     * same-version election then falls back to the version-string rule, exactly the release
+     * behavior. For -SNAPSHOT dev builds it distinguishes a REBUILT engine from a stale one.
+     */
+    public EngineServer(
+            EnginePaths.Paths paths,
+            JkEngineConfig config,
+            JkHttpConfig httpConfig,
+            String version,
+            String buildId,
+            Consumer<String> log) {
         this.paths = paths;
         this.config = config;
         this.httpConfig = httpConfig;
         this.httpEvents = httpConfig != null ? new dev.jkbuild.engine.http.HttpEvents() : null;
         this.version = version;
+        this.buildId = buildId == null ? "" : buildId;
         this.log = log != null ? log : s -> {};
         this.clockMillis = System::currentTimeMillis;
         this.pid = ProcessHandle.current().pid();
@@ -233,11 +253,15 @@ public final class EngineServer implements AutoCloseable {
         Path previousActive = EnginePaths.activeSocket(paths);
         if (!Files.exists(previousActive)) previousActive = null;
 
-        // Same-version election: if a live engine of THIS version already serves, this instance
-        // is a redundant spawn-race participant — lose quietly (the pre-generation contract).
-        // A DIFFERENT version (or nothing live) proceeds to takeover.
-        String incumbent = helloProbe(previousActive, version);
-        if (version.equals(incumbent)) {
+        // Same-version election: if a live engine of THIS version AND build identity already
+        // serves, this instance is a redundant spawn-race participant — lose quietly. A different
+        // version — or the same -SNAPSHOT version with a DIFFERENT buildId (a rebuilt dev
+        // engine; stale incumbents once won these elections and served old code) — proceeds to
+        // takeover. An empty buildId on either side means "no opinion": version rule only.
+        Incumbent incumbent = helloProbe(previousActive, version);
+        if (incumbent != null
+                && version.equals(incumbent.version())
+                && (buildId.isEmpty() || incumbent.buildId().isEmpty() || buildId.equals(incumbent.buildId()))) {
             releaseStartupLock();
             return false;
         }
@@ -354,8 +378,11 @@ public final class EngineServer implements AutoCloseable {
         }
     }
 
-    /** The version a live engine at {@code socket} answers with, or {@code null}. */
-    private static String helloProbe(Path socket, String probeVersion) {
+    /** A live engine's identity as answered on the wire. */
+    private record Incumbent(String version, String buildId) {}
+
+    /** The identity a live engine at {@code socket} answers with, or {@code null}. */
+    private static Incumbent helloProbe(Path socket, String probeVersion) {
         if (socket == null || !Files.exists(socket)) return null;
         try (SocketChannel ch = openClient(socket)) {
             java.io.BufferedWriter w = new java.io.BufferedWriter(
@@ -369,7 +396,10 @@ public final class EngineServer implements AutoCloseable {
             w.flush();
             String ack = r.readLine();
             if (ack == null || !EngineProtocol.HELLO_ACK.equals(EngineProtocol.typeOf(ack))) return null;
-            return dev.jkbuild.plugin.protocol.Ndjson.str(ack, "version");
+            String v = dev.jkbuild.plugin.protocol.Ndjson.str(ack, "version");
+            if (v == null) return null;
+            String id = dev.jkbuild.plugin.protocol.Ndjson.str(ack, "buildId");
+            return new Incumbent(v, id == null ? "" : id);
         } catch (IOException | RuntimeException e) {
             return null;
         }
@@ -532,7 +562,7 @@ public final class EngineServer implements AutoCloseable {
                                             + EngineProtocol.PROTOCOL + " — start a matching engine"));
                             return;
                         }
-                        send(writer, EngineProtocol.helloAck(version, pid, startedAtMillis, draining));
+                        send(writer, EngineProtocol.helloAck(version, pid, startedAtMillis, draining, buildId));
                     }
                     case EngineProtocol.PING -> send(writer, EngineProtocol.pong());
                     case EngineProtocol.STATUS -> {
