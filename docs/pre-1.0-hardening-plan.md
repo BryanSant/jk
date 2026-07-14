@@ -747,3 +747,12 @@ path, the run-tests marker) now follow the same convention — a bypassing run
 INCREMENTAL path keeps storing: it is reachable only via a prior cache record,
 i.e. never on a bypassing run. VerifyBuildCommandTest pins "verify leaves the
 action-key set untouched".
+
+**Residue finding (not acted on):** action keys include `jkVersion` so releases
+invalidate cached results, but a `-SNAPSHOT` version is CONSTANT across dev
+rebuilds while the toolchain's behavior changes — a restore can serve bytes an
+older engine produced, which surfaced today as a false "Not reproducible" from
+`jk verify` (target/ restored old bytes; the scratch rebuild produced new ones;
+`--force` build + verify then passed). Candidate fix: for `-SNAPSHOT` versions
+fold the engine jar's sha into the key's version component. Needs a decision on
+the in-process/test path (no engine jar to hash), so parked for review.
