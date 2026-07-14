@@ -39,7 +39,8 @@ public final class KotlinCompile {
     }
 
     /**
-     * @param useCache when false ({@code --force}), skip the lookup and always run the worker; the
+     * @param useCache when false ({@code --force} / {@code jk verify}), skip the lookup AND the
+     *     final store — a bypassing run neither reads nor writes the action cache; the
      *     result is still recorded.
      */
     public static Result run(
@@ -82,7 +83,10 @@ public final class KotlinCompile {
         if (outputs.isEmpty() && !request.sources().isEmpty()) {
             return new Result(true, "compiled-no-outputs", key, kr.output());
         }
-        actionCache.storeWithOutputs(taskId, key, Map.of(), outputs);
+        // Bypassing runs neither read NOR write: --force must not churn entries under keys
+        // the normal path already owns, and jk verify's scratch build (path-salted keys that
+        // can never recur) must not leave orphan records behind.
+        if (useCache) actionCache.storeWithOutputs(taskId, key, Map.of(), outputs);
         return new Result(true, "compiled", key, kr.output());
     }
 

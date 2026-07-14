@@ -190,7 +190,7 @@ public final class JavaIncrementalCompile {
             return incremental(
                     taskId, request, key, cas, actionCache, stateDir, out, prior.get(), abi, compiler, flags);
         }
-        return full(taskId, request, key, cas, actionCache, stateDir, out, compiler, flags);
+        return full(taskId, request, key, cas, actionCache, stateDir, out, compiler, flags, useCache);
     }
 
     /**
@@ -276,7 +276,8 @@ public final class JavaIncrementalCompile {
             Path stateDir,
             Path out,
             Compiler compiler,
-            ApFlags flags)
+            ApFlags flags,
+            boolean storeResult)
             throws IOException {
         deleteClasses(out); // a full compile starts clean so removed classes don't linger
         CompileOut co = compiler.compile(
@@ -286,7 +287,8 @@ public final class JavaIncrementalCompile {
         }
         Analysis a = analyze(out, request.sources(), co.generated(), Set.of());
         Map<String, List<String>> units = unitsOf(a, out);
-        store(taskId, key, request, out, cas, actionCache, units);
+        // Bypassing runs neither read nor write the action cache (see KotlinCompile.run).
+        if (storeResult) store(taskId, key, request, out, cas, actionCache, units);
         // Remodule whether this project source-generates (so the next build routes
         // through the worker) and whether those processors are isolating.
         boolean sgap = flags.sourceGenAps() || a.hasGenerated() || a.orphans();
@@ -392,13 +394,13 @@ public final class JavaIncrementalCompile {
             if (a.orphans) {
                 // AP-generated sources with no provenance surfaced mid-build → fall back
                 // to a clean full compile (which also flips on worker mode for next time).
-                return full(taskId, request, key, cas, actionCache, stateDir, out, compiler, flags);
+                return full(taskId, request, key, cas, actionCache, stateDir, out, compiler, flags, true);
             }
             if (!a.isolatingSafe) {
                 // A generated file maps to >1 originating source → aggregating processor.
                 // This wave compiled a subset, so any aggregate it produced is stale →
                 // recompile the whole source set via the worker (correct aggregate).
-                return full(taskId, request, key, cas, actionCache, stateDir, out, compiler, flags);
+                return full(taskId, request, key, cas, actionCache, stateDir, out, compiler, flags, true);
             }
 
             Set<String> abiChanged = new TreeSet<>();

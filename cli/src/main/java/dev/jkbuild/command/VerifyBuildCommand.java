@@ -49,9 +49,10 @@ import java.util.Optional;
  * uses — so Kotlin, annotation processing, declared tail phases, and the reproducible packaging
  * path are all exercised without the compile/packaging work ever entering the CLI's small heap.
  * The existing {@code jk.lock} is copied along (and kept fresh) so no re-resolve happens, and the
- * session is pinned to {@code rerun} (which crosses the wire as its own request field) so no
- * action-cache restore can masquerade as a rebuild. From a workspace root every module's artifacts
- * are verified.
+ * session is pinned to {@code rebuild} (which crosses the wire as its own request field) so no
+ * action-cache restore can masquerade as a rebuild — and cache-bypassing runs skip the STORE
+ * side too, so the scratch build (whose keys hash never-recurring temp paths) leaves no orphan
+ * action-cache entries behind. From a workspace root every module's artifacts are verified.
  */
 public final class VerifyBuildCommand implements CliCommand {
 

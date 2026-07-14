@@ -1805,8 +1805,9 @@ public final class BuildPipeline {
                     // compile cache restores byte-identical classes, the key recomputes the
                     // same, and the marker is found. The green counts ride the record so the
                     // skip path can replay them in its summary. (Skip if the key failed open —
-                    // nothing to key the marker on.)
-                    if (stampKey != null) {
+                    // nothing to key the marker on, and skip on a cache-bypassing run — verify's
+                    // scratch build must not leave orphan markers under unreachable keys.)
+                    if (!rerun && stampKey != null) {
                         actionCache.storeWithOutputs(
                                 testTaskId,
                                 stampKey,

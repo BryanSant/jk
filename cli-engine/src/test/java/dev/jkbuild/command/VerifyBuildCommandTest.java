@@ -34,8 +34,24 @@ class VerifyBuildCommandTest {
 
         assertThat(run("build", "-C", tempDir.toString(), "--cache-dir", cache.toString()))
                 .isEqualTo(0);
+        // Verify's scratch rebuild bypasses the action cache in BOTH directions: its keys hash
+        // the (random, never-recurring) scratch paths, so any store would be a permanent orphan.
+        java.util.Set<String> keysBefore = actionKeys(cache);
         assertThat(run("verify", "-C", tempDir.toString(), "--cache-dir", cache.toString()))
                 .isEqualTo(0);
+        assertThat(actionKeys(cache))
+                .as("verify leaves no orphan action-cache entries behind")
+                .isEqualTo(keysBefore);
+    }
+
+    /** Filenames under {@code <cache>/actions/keys} — the action-cache entry set. */
+    private static java.util.Set<String> actionKeys(Path cache) throws IOException {
+        Path keys = cache.resolve("actions/keys");
+        if (!Files.isDirectory(keys)) return java.util.Set.of();
+        try (var list = Files.list(keys)) {
+            return new java.util.HashSet<>(
+                    list.map(p -> p.getFileName().toString()).toList());
+        }
     }
 
     @Test
