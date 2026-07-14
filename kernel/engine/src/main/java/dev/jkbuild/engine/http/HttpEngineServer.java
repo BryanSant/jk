@@ -291,6 +291,7 @@ public final class HttpEngineServer implements AutoCloseable {
                 .put("heapCommittedBytes", s.heapCommittedBytes())
                 .put("heapMaxBytes", s.heapMaxBytes())
                 .put("rssBytes", s.rssBytes())
+                .put("aotTrainingPid", s.aotTrainingPid())
                 .put("httpUrl", url())
                 .put("maxConcurrentRequests", config.effectiveMaxConcurrentRequests())
                 .put("wwwRoot", wwwRoot.toString())

@@ -824,3 +824,31 @@ observed during takeovers are AOT TRAINING runs, not stale servers. One new
 observation parked: jk's own Gradle rebuilds are not byte-reproducible across
 identical sources (e9ceea… vs efd084… for the same tree) — Gradle/javac
 territory, unrelated to jk-built artifacts' reproducibility.
+
+### AOT training sidecar (post-tag follow-up, 2026-07-14)
+
+The old first-start flow trained THROUGH the serving path: client spawned a
+TRAIN engine on the real socket, clean-stopped it, waited for assembly, then
+started the engine it actually handed back. Cost: the first build after an
+install/upgrade paused behind a wedge, and the endpoint/pid flap plus an
+anonymous lingering java process repeatedly confused observers (including
+agents) into "stale engine" diagnoses. New shape:
+
+- `EngineMain --aot-training` — the sidecar trainer. A real `EngineServer`
+  run (full startup class-loading fidelity) against a private temp state dir:
+  throwaway socket/lock/generations/endpoint, invisible to elections and
+  clients; idles 3 s, stops itself, JVM assembles the `.aot` at clean exit,
+  temp dir removed. Roughly a 15 s cameo, which is also the doubled-RSS window.
+- The client's TRAIN spawn no longer blocks: it starts the engine cold with
+  `-Djk.aot.train.output=<cache>`. After WINNING its election (a losing
+  redundant spawn never trains) the main engine launches and owns the sidecar
+  end-to-end: spawn, track, reap, plus a 5-minute belt kill. Clients never
+  talk to the trainer.
+- `status-ack`/`GET /api/status` gain additive `aotTrainingPid` (-1 = none);
+  `jk engine status` shows a transient `• AOT: training in progress (pid N)`
+  bullet in the existing detail format, and the JSON output carries the field.
+- Client-side `trainAndAssemble`/`awaitAssembled`, the 90 s training start
+  timeout, and the "Optimizing build engine…" wedge are gone; `ensureReady`/
+  `EngineReady` collapsed into `ensureRunning` (first start = plain fast cold
+  start). Docs: engine.md explains the transient `--aot-training` process so
+  a `ps` sighting self-identifies.

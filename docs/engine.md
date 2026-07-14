@@ -74,10 +74,21 @@ and the fallback when no engine artifact is installed. Both routes execute the e
    client and jar — a global default pinned older for *project* builds is skipped, since it governs
    worker JVMs, not the engine host); when nothing installed qualifies, the client installs
    exactly the floor release, with no global-default side effects. The spawn line also carries
-   an AOT cache (JEP 514, `<engine-state>/engine-<jar-key>.aot`): the first spawn after a jar
-   change trains it (`-XX:AOTCacheOutput`, assembled on clean exit — idle recycling makes that
-   routine), and every later cold start maps pre-parsed class metadata plus AOT-compiled code,
-   taming the fresh JVM's JIT-warmup tail. The key ties the cache to the exact jar because
+   an AOT cache (JEP 514, `<engine-state>/engine-<jar-key>.aot`): every cold start after the
+   first maps pre-parsed class metadata plus AOT-compiled code, taming the fresh JVM's
+   JIT-warmup tail. The cache is *recorded* off to the side. The first spawn after a jar/JDK
+   change boots cold and serves immediately; the client's spawn line adds
+   `-Djk.aot.train.output=<cache>`, and once that engine wins its election it launches a
+   **sidecar trainer** — its own jar re-entered as `java -XX:AOTCacheOutput=<cache> -cp
+   jk-engine.jar dev.jkbuild.cli.EngineMain --aot-training`. The trainer is a real engine run
+   (full startup class-loading fidelity — exactly the profile worth recording) against a private
+   temp state dir, so it binds only throwaway paths, can never touch the real endpoint or
+   elections, and is invisible to clients; it idles ~3 s, stops itself cleanly, and the JVM
+   assembles the `.aot` at its exit — the whole cameo is roughly 15 s. If you see a second
+   short-lived `EngineMain --aot-training` java process right after an install or upgrade,
+   that is this trainer: expected, self-terminating, owned end-to-end by the main engine (which
+   reports it as `AOT: training in progress (pid N)` in `jk engine status` while it lives).
+   The key ties the cache to the exact jar because
    `AOTMode=auto` silently ignores a mismatched cache — an unkeyed file would stop helping at
    the first upgrade and never retrain; **(c)**
    the `jk` binary itself, re-invoked with the internal `--engine-server` flag — the JVM dist and

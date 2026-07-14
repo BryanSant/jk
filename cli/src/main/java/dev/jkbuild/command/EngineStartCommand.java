@@ -47,16 +47,11 @@ public final class EngineStartCommand implements CliCommand {
                 .map(h -> Jk.VERSION.equals(h.version()))
                 .orElse(false);
         try {
-            EngineClient.EngineReady ready = EngineClient.ensureReady(paths, Jk.VERSION);
-            // The optimize path already printed its own wedge ("✓ Engine  Build engine optimized and
-            // started (pid N) took Xs"). Otherwise print the matching green wedge — "already running"
-            // when it was up before, else "started".
-            if (!ready.optimized()) {
-                String pid = pidStyled(ready.handshake().pid());
-                String message =
-                        alreadyUp ? "Engine already running (pid " + pid + ")" : "Build engine started (pid " + pid + ")";
-                CliOutput.out(GoalWedge.chipLine(Glyphs.CHECK, "Engine", GlobalConfig.nerdfont(), message));
-            }
+            EngineClient.Handshake hs = EngineClient.ensureRunning(paths, Jk.VERSION);
+            String pid = pidStyled(hs.pid());
+            String message =
+                    alreadyUp ? "Engine already running (pid " + pid + ")" : "Build engine started (pid " + pid + ")";
+            CliOutput.out(GoalWedge.chipLine(Glyphs.CHECK, "Engine", GlobalConfig.nerdfont(), message));
             return Exit.SUCCESS;
         } catch (IOException e) {
             CliOutput.err("jk engine: " + e.getMessage());
@@ -64,7 +59,7 @@ public final class EngineStartCommand implements CliCommand {
         }
     }
 
-    /** The engine pid in yellow on an ANSI terminal (matching the optimize wedge), plain otherwise. */
+    /** The engine pid in yellow on an ANSI terminal (matching the status wedge), plain otherwise. */
     private static String pidStyled(long pid) {
         String s = Long.toString(pid);
         return Theme.active().isAnsi() ? Theme.colorize(s, Theme.active().warning()) : s;

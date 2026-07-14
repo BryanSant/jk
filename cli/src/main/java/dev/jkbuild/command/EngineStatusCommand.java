@@ -70,6 +70,7 @@ public final class EngineStatusCommand implements CliCommand {
                     + ",\"heapCommittedBytes\":" + s.heapCommittedBytes()
                     + ",\"heapMaxBytes\":" + s.heapMaxBytes()
                     + ",\"rssBytes\":" + s.rssBytes()
+                    + ",\"aotTrainingPid\":" + s.aotTrainingPid()
                     + ",\"httpUrl\":" + (s.httpUrl() != null ? Ndjson.quote(s.httpUrl()) : "null")
                     + ",\"httpError\":" + (s.httpError() != null ? Ndjson.quote(s.httpError()) : "null")
                     + "}");
@@ -80,6 +81,11 @@ public final class EngineStatusCommand implements CliCommand {
         detail("Version", s.version());
         detail("Uptime", formatUptime(uptimeSeconds));
         detail("Jobs", String.valueOf(s.activePipelines()));
+        // Transient by design: the sidecar trainer lives ~15s after a fresh install/upgrade, then
+        // this line disappears — steady state stays exactly four/five bullets.
+        if (s.aotTrainingPid() > 0) {
+            detail("AOT", "training in progress (pid " + pidStyled(s.aotTrainingPid()) + ")");
+        }
         String memory = formatMemory(s);
         if (memory != null) {
             detail("Memory", memory);

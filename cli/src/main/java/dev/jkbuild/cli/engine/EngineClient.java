@@ -50,23 +50,6 @@ public final class EngineClient {
      */
     private static final Duration COLD_START_CEILING = Duration.ofSeconds(30);
 
-    /**
-     * The wait when the spawn is an AOT-cache <em>training</em> run (first start after the engine
-     * jar / host JDK changed, {@code -XX:AOTCacheOutput}): recording makes that one boot much slower
-     * than a mapped-cache start, and timing out mid-training reports a healthy engine as failed.
-     */
-    private static final Duration TRAINING_START_TIMEOUT = Duration.ofSeconds(90);
-
-    /**
-     * How long the eager training engine records before we clean-stop it to assemble the cache. A
-     * sub-second run yields an empty recording the assembler rejects (see {@code install.sh}); this
-     * matches the warm-up's {@code sleep 3} so the startup path is captured.
-     */
-    private static final long TRAINING_MIN_UPTIME_MS = 3_000;
-
-    /** How long to wait for the {@code .aot} to be assembled by the child JVM after the clean stop. */
-    private static final Duration ASSEMBLY_TIMEOUT = Duration.ofSeconds(30);
-
     private EngineClient() {}
 
     /** What a connection's {@code hello}/{@code hello-ack} handshake reveals about the engine. */
@@ -77,7 +60,9 @@ public final class EngineClient {
      * engine couldn't observe that number (no OS RSS source, or an older engine that predates the
      * fields). The http fields mirror the wire ({@code docs/http.md}): {@code httpUrl} non-null
      * while the embedded HTTP server is serving, {@code httpError} non-null when {@code [http]} is
-     * enabled but it failed to start, both null when the feature is disabled.
+     * enabled but it failed to start, both null when the feature is disabled. {@code
+     * aotTrainingPid} is the engine's sidecar AOT trainer while one runs, {@code -1} otherwise
+     * (docs/engine.md) — reported for visibility only; the client never talks to that process.
      */
     public record Status(
             String version,
@@ -90,6 +75,7 @@ public final class EngineClient {
             long heapCommittedBytes,
             long heapMaxBytes,
             long rssBytes,
+            long aotTrainingPid,
             String httpUrl,
             String httpError) {
 
@@ -153,6 +139,7 @@ public final class EngineClient {
                     Ndjson.longValue(ack, "heapCommittedBytes", -1),
                     Ndjson.longValue(ack, "heapMaxBytes", -1),
                     Ndjson.longValue(ack, "rssBytes", -1),
+                    Ndjson.longValue(ack, "aotTrainingPid", -1),
                     Ndjson.str(ack, "httpUrl"),
                     Ndjson.str(ack, "httpError")));
         } catch (IOException e) {
@@ -281,23 +268,7 @@ public final class EngineClient {
      * per {@code docs/engine.md}, the engine is load-bearing and this is not silently swallowed.
      */
     public static Handshake ensureRunning(EnginePaths.Paths paths, String clientVersion) throws IOException {
-        return doEnsure(paths, clientVersion, false).handshake();
-    }
-
-    /** Outcome of {@link #ensureReady}: the live engine, and whether an optimization wedge was shown. */
-    public record EngineReady(Handshake handshake, boolean optimized) {}
-
-    /**
-     * Engine-readiness prewarm for the top of an engine-backed command, <em>before</em> it builds
-     * its own goal console. Identical to {@link #ensureRunning(EnginePaths.Paths, String)} except
-     * that a one-time AOT optimization renders an animated "Engine — Optimizing build engine…" chip
-     * that settles into "✓ Engine  Build engine optimized and started (pid N)", so the user sees why
-     * the first build after an install/upgrade pauses, and the command's own TUI then takes over
-     * (sequential, never interleaved). {@code optimized} is true when that success chip was printed,
-     * so the caller can suppress its own "started" line. A running engine → fast no-op, nothing shown.
-     */
-    public static EngineReady ensureReady(EnginePaths.Paths paths, String clientVersion) throws IOException {
-        return doEnsure(paths, clientVersion, true);
+        return doEnsure(paths, clientVersion);
     }
 
     /**
@@ -1273,8 +1244,7 @@ public final class EngineClient {
         return expected.startsWith(hs.buildId());
     }
 
-    private static EngineReady doEnsure(EnginePaths.Paths paths, String clientVersion, boolean renderWedge)
-            throws IOException {
+    private static Handshake doEnsure(EnginePaths.Paths paths, String clientVersion) throws IOException {
         Optional<Handshake> existing = handshake(EnginePaths.activeSocket(paths), clientVersion);
         if (existing.isPresent()) {
             Handshake hs = existing.get();
@@ -1285,7 +1255,7 @@ public final class EngineClient {
                         "the build engine is shutting down — wait for it to stop, or run `jk engine stop --force`");
             }
             if (clientVersion.equals(hs.version()) && buildIdCurrent(hs, clientVersion)) {
-                return new EngineReady(hs, false);
+                return hs;
             }
             // Version skew — including the SAME -SNAPSHOT version reporting a different content
             // identity than the versions manifest records (a stale dev engine serving old code)
@@ -1293,7 +1263,7 @@ public final class EngineClient {
             // ITS startup atomically repoints the endpoint and gracefully drains the displaced
             // engine — in-flight jobs on the old one finish untouched.
         }
-        return startWithSelfHeal(paths, clientVersion, renderWedge);
+        return startWithSelfHeal(paths, clientVersion);
     }
 
     /**
@@ -1301,7 +1271,9 @@ public final class EngineClient {
      *
      * <ul>
      *   <li>pick an AOT mode — TRAIN a new cache, USE an existing one, or NONE when AOT can't apply
-     *       (non-JAR engine, a GraalVM host JDK, or a sticky {@code .noaot} marker);
+     *       (non-JAR engine, a GraalVM host JDK, or a sticky {@code .noaot} marker). TRAIN never
+     *       blocks this start: the engine boots cold and records the cache off to the side, via a
+     *       self-managed sidecar trainer (see the {@code jk.aot.train.output} note at spawn);
      *   <li>a spawn that EXITS before serving means the cache is unusable on this JVM → drop it, mark
      *       the key, and retry once with NONE (a cache-free start always boots);
      *   <li>a USE start that comes up but whose log shows the JVM ignored the cache → delete the
@@ -1310,49 +1282,8 @@ public final class EngineClient {
      *       is never misreported as "could not start".
      * </ul>
      */
-    private static EngineReady startWithSelfHeal(EnginePaths.Paths paths, String clientVersion, boolean renderWedge)
-            throws IOException {
-        EngineTarget target = resolveEngineTarget(paths, clientVersion);
-        boolean training = chooseAotMode(target) == AotMode.TRAIN;
-
-        // Animated blue "Engine — Optimizing build engine…" chip, only for a real optimization on an
-        // interactive terminal (before any command's own goal console → no interleave).
-        java.io.PrintStream ws =
-                (renderWedge && training && dev.jkbuild.cli.run.GoalConsole.isInteractiveTerminal())
-                        ? dev.jkbuild.cli.CliOutput.stdout()
-                        : null;
-        dev.jkbuild.cli.tui.ChipSpinner wedge = dev.jkbuild.cli.tui.ChipSpinner.show(
-                ws, "Engine", dev.jkbuild.config.GlobalConfig.nerdfont(), "Optimizing build engine...");
-        long startNanos = System.nanoTime();
-        try {
-            if (training) {
-                // Eager optimization: record a startup profile and ASSEMBLE the cache now (train →
-                // clean-stop → assemble), so the engine we hand back genuinely maps it rather than
-                // merely recording (JEP 514 writes the .aot only at the training JVM's clean exit).
-                // Best-effort: if it produces no cache we fall through and start normally.
-                trainAndAssemble(paths, clientVersion, target);
-            }
-            Handshake hs = startOnce(paths, clientVersion, target);
-            boolean optimized = false;
-            // Truthful "optimized": only when the cache now exists on disk and is being mapped.
-            if (target.aotCache() != null && Files.exists(target.aotCache())) {
-                String took = dev.jkbuild.cli.run.ConsoleSpec.took(
-                        java.time.Duration.ofNanos(System.nanoTime() - startNanos));
-                wedge.succeed("Build engine optimized and started (pid " + pidStyled(hs.pid()) + ") " + took);
-                optimized = wedge.active();
-            }
-            return new EngineReady(hs, optimized);
-        } finally {
-            wedge.close();
-        }
-    }
-
-    /** The engine pid, yellow on an ANSI terminal (matches the wedge's success chip), plain otherwise. */
-    private static String pidStyled(long pid) {
-        String s = Long.toString(pid);
-        return dev.jkbuild.cli.theme.Theme.active().isAnsi()
-                ? dev.jkbuild.cli.theme.Theme.colorize(s, dev.jkbuild.cli.theme.Theme.active().warning())
-                : s;
+    private static Handshake startWithSelfHeal(EnginePaths.Paths paths, String clientVersion) throws IOException {
+        return startOnce(paths, clientVersion, resolveEngineTarget(paths, clientVersion));
     }
 
     /**
@@ -1366,8 +1297,8 @@ public final class EngineClient {
             throws IOException {
         for (int attempt = 0; attempt < 2; attempt++) {
             AotMode mode = chooseAotMode(target);
-            Duration wait = (mode == AotMode.TRAIN) ? TRAINING_START_TIMEOUT : COLD_START_CEILING;
-            StartResult r = awaitStartup(paths, clientVersion, wait, spawn(paths, target, mode).process());
+            StartResult r =
+                    awaitStartup(paths, clientVersion, COLD_START_CEILING, spawn(paths, target, mode).process());
             switch (r.outcome()) {
                 case UP -> {
                     if (mode == AotMode.USE && scanLogForAotError(paths.log())) {
@@ -1389,46 +1320,6 @@ public final class EngineClient {
             }
         }
         throw notStarted(paths); // unreachable
-    }
-
-    /**
-     * One-time eager AOT training: spawn a training engine ({@code -XX:AOTCacheOutput}), let it run
-     * long enough to record the startup path, then clean-stop it so the JVM assembles the {@code
-     * .aot} at exit, and wait for that assembly to complete. Best-effort — any failure leaves no
-     * cache and the caller starts normally (the cache would then build on a later clean exit).
-     */
-    private static void trainAndAssemble(EnginePaths.Paths paths, String clientVersion, EngineTarget target) {
-        try {
-            StartResult tr = awaitStartup(
-                    paths, clientVersion, TRAINING_START_TIMEOUT, spawn(paths, target, AotMode.TRAIN).process());
-            if (tr.outcome() != StartResult.Outcome.UP) {
-                logReason(paths, "AOT training run did not come up; skipping eager optimization");
-                return;
-            }
-            sleepQuietly(TRAINING_MIN_UPTIME_MS); // avoid the assembler's empty-recording rejection
-            stop(EnginePaths.activeSocket(paths)); // clean shutdown → the JVM assembles the cache on exit
-            if (!awaitAssembled(target.aotCache(), ASSEMBLY_TIMEOUT)) {
-                logReason(paths, "AOT cache did not assemble in time; it will build on a later engine exit");
-            }
-        } catch (IOException e) {
-            logReason(paths, "eager AOT training skipped: " + e.getMessage());
-        }
-    }
-
-    /**
-     * Wait until the training child has finished writing the cache: the assembler removes the {@code
-     * .aot.config} recording only once the {@code .aot} is complete, so "{@code .aot} present AND
-     * {@code .aot.config} gone" is the authoritative done signal (avoids mapping a half-written file).
-     */
-    private static boolean awaitAssembled(Path aotCache, Duration timeout) {
-        if (aotCache == null) return false;
-        Path config = aotCache.resolveSibling(aotCache.getFileName() + ".config");
-        long deadline = System.nanoTime() + timeout.toNanos();
-        while (System.nanoTime() < deadline) {
-            if (Files.exists(aotCache) && !Files.exists(config)) return true;
-            sleepQuietly(100);
-        }
-        return Files.exists(aotCache) && !Files.exists(config);
     }
 
     private static IOException notStarted(EnginePaths.Paths paths) {
@@ -1729,13 +1620,16 @@ public final class EngineClient {
                         .toString());
                 command.add("-XX:+UseSerialGC");
                 // AOT cache (JEP 514, JDK 25+): pre-parsed class metadata AND AOT-compiled code,
-                // taming the cold engine's JIT-warmup tail. The mode is chosen by the self-heal
-                // ladder (see startWithSelfHeal): TRAIN records a fresh cache (-XX:AOTCacheOutput,
-                // assembled on the engine's clean exit), USE maps an existing one, and NONE omits
-                // the cache entirely (non-HotSpot host JDK, or a key that already proved unmappable).
-                // The cache is keyed to jar + host-JDK identity so an upgrade/JDK-swap retrains.
+                // taming the cold engine's JIT-warmup tail. USE maps an existing cache. TRAIN no
+                // longer records THROUGH the serving engine (the old train→stop→assemble→restart
+                // dance flapped the endpoint and confused anything watching pids): the engine
+                // boots cold and spawns a SIDECAR trainer (`EngineMain --aot-training`, isolated
+                // temp state, throwaway socket) that records and assembles off to the side — the
+                // property tells it where to write. NONE omits the cache entirely (non-HotSpot
+                // host JDK, or a key that already proved unmappable). The cache is keyed to
+                // jar + host-JDK identity so an upgrade/JDK-swap retrains.
                 switch (mode) {
-                    case TRAIN -> command.add("-XX:AOTCacheOutput=" + target.aotCache());
+                    case TRAIN -> command.add("-Djk.aot.train.output=" + target.aotCache());
                     case USE -> command.add("-XX:AOTCache=" + target.aotCache());
                     case NONE -> {
                         /* no AOT flag — a guaranteed cold-but-correct boot */

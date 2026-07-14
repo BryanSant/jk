@@ -20,7 +20,7 @@ public final class EnginePrewarm {
 
     public static void ensure() {
         try {
-            EngineClient.ensureReady(EnginePaths.current(), Jk.VERSION);
+            EngineClient.ensureRunning(EnginePaths.current(), Jk.VERSION);
         } catch (IOException | RuntimeException ignored) {
             // The command's own ensureRunning call will surface any genuine failure.
         }

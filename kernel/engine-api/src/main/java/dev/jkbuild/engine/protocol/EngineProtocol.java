@@ -646,7 +646,9 @@ public final class EngineProtocol {
      * http fields describe the embedded HTTP server ({@code docs/http.md}): {@code httpUrl} is
      * non-null while it's serving, {@code httpError} when the {@code [http]} table is enabled but
      * the server failed to start; both null means disabled. (Keys are always emitted — the
-     * protocol has ONE null convention: key present, value null.)
+     * protocol has ONE null convention: key present, value null.) {@code aotTrainingPid} is the
+     * engine's sidecar AOT trainer while one is running, {@code -1} otherwise — the client never
+     * talks to that process, it only reports it (docs/engine.md).
      */
     public static String statusAck(
             String version,
@@ -659,6 +661,7 @@ public final class EngineProtocol {
             long heapCommittedBytes,
             long heapMaxBytes,
             long rssBytes,
+            long aotTrainingPid,
             String httpUrl,
             String httpError) {
         return "{\"t\":\""
@@ -685,6 +688,8 @@ public final class EngineProtocol {
                 + heapMaxBytes
                 + ",\"rssBytes\":"
                 + rssBytes
+                + ",\"aotTrainingPid\":"
+                + aotTrainingPid
                 + ",\"httpUrl\":"
                 + Ndjson.quote(httpUrl)
                 + ",\"httpError\":"

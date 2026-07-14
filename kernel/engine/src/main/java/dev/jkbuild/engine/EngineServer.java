@@ -93,6 +93,16 @@ public final class EngineServer implements AutoCloseable {
 
     private final Object lifecycleLock = new Object();
     private final AtomicInteger activeConnections = new AtomicInteger();
+
+    /**
+     * Sidecar AOT trainer ({@code docs/engine.md}): a factory the spawner installs before {@code
+     * run()} when a cache should be recorded, and the live child while it runs. THIS engine owns
+     * the trainer's whole life — spawned only after winning the election (a losing redundant spawn
+     * never trains), tracked for {@code status-ack}, reaped on exit. Clients never talk to it.
+     */
+    private volatile java.util.function.Supplier<Process> aotTrainerSpawner;
+
+    private volatile Process aotTrainer;
     private final AtomicInteger activePipelines = new AtomicInteger();
 
     /**
@@ -320,6 +330,7 @@ public final class EngineServer implements AutoCloseable {
         planSharedWorkerMemoryOnce();
 
         log.accept("jk engine: listening on " + active.socket() + " (pid " + pid + ")");
+        startAotTrainerIfConfigured();
         drainDisplaced(previousActive);
         startDisplacementWatchdog();
         acceptLoop();
@@ -580,6 +591,7 @@ public final class EngineServer implements AutoCloseable {
                                         s.heapCommittedBytes(),
                                         s.heapMaxBytes(),
                                         s.rssBytes(),
+                                        s.aotTrainingPid(),
                                         httpServer != null ? httpServer.url() : null,
                                         httpError));
                     }
@@ -3470,7 +3482,53 @@ public final class EngineServer implements AutoCloseable {
                 heapCommitted - rt.freeMemory(),
                 heapCommitted,
                 rt.maxMemory(),
-                MemoryProbe.ownRssBytes());
+                MemoryProbe.ownRssBytes(),
+                aotTrainingPid());
+    }
+
+    /** The sidecar AOT trainer's pid while one is alive, {@code -1} otherwise. */
+    private long aotTrainingPid() {
+        Process p = aotTrainer;
+        return (p != null && p.isAlive()) ? p.pid() : -1;
+    }
+
+    /**
+     * Install the sidecar AOT-trainer factory; must be called before {@link #run()}. The factory
+     * is invoked once, only if this engine wins its election and starts serving; it may return
+     * {@code null} (nothing to train after all — e.g. the cache appeared meanwhile).
+     */
+    public void aotTrainerSpawner(java.util.function.Supplier<Process> spawner) {
+        this.aotTrainerSpawner = spawner;
+    }
+
+    /**
+     * Spawn and adopt the sidecar AOT trainer. Best-effort: a trainer that fails to start (or
+     * never finishes) costs a log line, never the engine. The trainer self-terminates in seconds;
+     * the timeout is a belt against a hung child, generous enough to never fire on a healthy one.
+     */
+    private void startAotTrainerIfConfigured() {
+        java.util.function.Supplier<Process> spawner = aotTrainerSpawner;
+        if (spawner == null) return;
+        try {
+            Process p = spawner.get();
+            if (p == null) return;
+            aotTrainer = p;
+            log.accept("jk engine: AOT training sidecar started (pid " + p.pid() + ")");
+            p.onExit()
+                    .orTimeout(5, java.util.concurrent.TimeUnit.MINUTES)
+                    .whenComplete((proc, err) -> {
+                        if (err != null) {
+                            p.destroyForcibly();
+                            log.accept("jk engine: AOT training sidecar overran; killed (pid " + p.pid() + ")");
+                        } else {
+                            log.accept("jk engine: AOT training sidecar finished (pid " + p.pid()
+                                    + ", exit " + proc.exitValue() + ")");
+                        }
+                        aotTrainer = null;
+                    });
+        } catch (RuntimeException e) {
+            log.accept("jk engine: AOT training sidecar failed to start: " + e.getMessage());
+        }
     }
 
     /** Caller-facing graceful stop — same effect as receiving a {@link EngineProtocol#SHUTDOWN} message. */

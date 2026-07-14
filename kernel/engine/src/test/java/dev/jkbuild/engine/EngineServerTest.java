@@ -167,6 +167,48 @@ class EngineServerTest {
     }
 
     @Test
+    void status_ack_tracks_the_sidecar_aot_trainer_while_it_lives() throws Exception {
+        EnginePaths.Paths p = paths(shortTempDir());
+        EngineServer server = new EngineServer(p, JkEngineConfig.DEFAULTS, "9.9.9-test", null);
+        // A stand-in trainer: any real child process the server can track and reap. The server
+        // must invoke this factory only after winning its election and starting to serve.
+        Process[] trainer = new Process[1];
+        server.aotTrainerSpawner(() -> {
+            try {
+                trainer[0] = new ProcessBuilder("sleep", "30")
+                        .redirectOutput(ProcessBuilder.Redirect.DISCARD)
+                        .redirectError(ProcessBuilder.Redirect.DISCARD)
+                        .start();
+                return trainer[0];
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        });
+        runInBackground(server);
+        waitUntil(Duration.ofSeconds(5), () -> Files.exists(EnginePaths.endpoint(p)));
+        waitUntil(Duration.ofSeconds(5), () -> trainer[0] != null && trainer[0].isAlive());
+
+        try (Client c = new Client(EnginePaths.activeSocket(p))) {
+            c.send(EngineProtocol.hello("9.9.9-test"));
+            String status = c.send(EngineProtocol.statusRequest());
+            assertThat(Ndjson.longValue(status, "aotTrainingPid", -99)).isEqualTo(trainer[0].pid());
+
+            // Trainer exits (self-terminates in real life) → the pid leaves the status snapshot.
+            trainer[0].destroy();
+            waitUntil(Duration.ofSeconds(5), () -> {
+                try {
+                    return Ndjson.longValue(c.send(EngineProtocol.statusRequest()), "aotTrainingPid", -99) == -1;
+                } catch (IOException e) {
+                    return false;
+                }
+            });
+        } finally {
+            if (trainer[0] != null) trainer[0].destroyForcibly();
+            server.close();
+        }
+    }
+
+    @Test
     void metrics_request_streams_aggregate_rows_and_a_terminal() throws Exception {
         Path stateDir = shortTempDir();
         Path metricsFile = stateDir.resolve("metrics.json");
