@@ -4,11 +4,12 @@ plugins {
     id("jk.java-conventions")
 }
 
-description = "jk-api: the stable front-end/plugin contract — Goal/Phase scheduler SPI, " +
+description = "jk-api: the stable front-end/plugin contract (IO/thread machinery lives in :support) — Goal/Phase scheduler SPI, " +
         "Dependency/Coordinate model, GoalListener + command (CliCommand/Invocation) SPI. " +
         "Zero external dependencies — JDK + Lombok + JSpecify only."
 
-// This module IS jk's public API surface ("jk-api"): the impl-free contract that
+// This module IS jk's public API surface (Gradle project ":jk-api"; dir kept at
+// kernel/model): the impl-free contract that
 // plugins, third-party tools, and alternative front-ends (IDE/web/CI) compile
 // against. The contract leaf is the {plugin-api, model} PAIR: plugin-api sits below
 // (it holds jk's promised JDK 17 project floor — its classes ride the user's test

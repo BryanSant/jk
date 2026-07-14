@@ -18,7 +18,7 @@ import dev.jkbuild.task.ClasspathFingerprint;
 import dev.jkbuild.task.FreshnessStamp;
 import dev.jkbuild.task.JavaIncrementalCompile;
 import dev.jkbuild.task.TestStamp;
-import dev.jkbuild.util.JkVersion;
+import dev.jkbuild.model.JkVersion;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;

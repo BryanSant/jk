@@ -4,7 +4,7 @@ package dev.jkbuild.runtime;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.within;
 
-import dev.jkbuild.util.JkVersion;
+import dev.jkbuild.model.JkVersion;
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;

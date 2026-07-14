@@ -4,7 +4,7 @@ package dev.jkbuild.config;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import dev.jkbuild.run.SessionCancel;
-import dev.jkbuild.util.JkThreads;
+import dev.jkbuild.run.JkThreads;
 import java.nio.file.Path;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CyclicBarrier;

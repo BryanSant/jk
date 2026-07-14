@@ -11,6 +11,7 @@ description = "jk-publish-runner: child-JVM worker that assembles, signs, and pu
 dependencies {
     implementation(project(":core"))
     implementation(project(":io"))
+    implementation(project(":support"))  // Hashing for artifact checksums
     implementation(project(":plugin-api"))  // shared NDJSON codec (bundled into the fat jar)
     implementation(libs.bouncycastle.bcpg)
     implementation(libs.sigstore.java)

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.repo;
 
-import dev.jkbuild.credential.MavenSettings;
+import dev.jkbuild.repo.MavenSettings;
 import dev.jkbuild.credential.RepoCredential;
 import dev.jkbuild.forge.ForgeAuth;
 import dev.jkbuild.forge.ForgeIdentity;

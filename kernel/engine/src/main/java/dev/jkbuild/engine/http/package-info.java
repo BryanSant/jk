@@ -8,7 +8,7 @@
  * JVM-global carrier pool (sized to the core count, no time-sliced preemption) with the engine's
  * connection and build threads — a CPU-bound handler pins a carrier until it blocks. Any endpoint
  * that computes (stats aggregation, report rendering) must submit that work to {@link
- * dev.jkbuild.util.JkThreads#cpu()} and await it: the virtual thread unmounts while waiting, and
+ * dev.jkbuild.run.JkThreads#cpu()} and await it: the virtual thread unmounts while waiting, and
  * the CPU work competes inside the same bounded platform pool the engine already budgets for
  * hashing instead of against the carriers. This is the review bar for every new endpoint.
  *

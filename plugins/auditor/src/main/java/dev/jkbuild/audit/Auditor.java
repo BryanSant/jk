@@ -2,7 +2,7 @@
 package dev.jkbuild.audit;
 
 import dev.jkbuild.lock.Lockfile;
-import dev.jkbuild.util.JkThreads;
+import dev.jkbuild.run.JkThreads;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;

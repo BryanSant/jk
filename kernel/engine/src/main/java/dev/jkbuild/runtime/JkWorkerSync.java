@@ -3,7 +3,7 @@ package dev.jkbuild.runtime;
 
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.repo.RepoArtifactStore;
-import dev.jkbuild.util.JkVersion;
+import dev.jkbuild.model.JkVersion;
 import dev.jkbuild.worker.WorkerJar;
 import java.io.IOException;
 import java.nio.file.Files;

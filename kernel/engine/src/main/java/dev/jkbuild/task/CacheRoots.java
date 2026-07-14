@@ -52,6 +52,24 @@ public final class CacheRoots {
         if (Files.isDirectory(toolsDir.resolve("envs"))) {
             scanTextFilesRecursively(toolsDir.resolve("envs"), cas, refs);
         }
+        // repos/local is a PUBLISH DESTINATION (installLocal / jk publish local), not a derived
+        // cache: a freshly published dev artifact is legitimately unreferenced by any action or
+        // sync manifest until the first build consumes it, and the sweep must not eat it in that
+        // window (it once deleted every just-installed worker jar). Its .sha256 sidecars are
+        // therefore roots. Other repos/<name> stores are re-fetchable mirrors and stay sweepable.
+        Path localRepo = cas.root().resolve("repos").resolve("local");
+        if (Files.isDirectory(localRepo)) {
+            try (Stream<Path> stream = Files.walk(localRepo)) {
+                for (Path file : (Iterable<Path>) stream::iterator) {
+                    if (!Files.isRegularFile(file) || !file.toString().endsWith(".sha256")) continue;
+                    try {
+                        addExplicitShaTokens(Files.readString(file, StandardCharsets.UTF_8), refs);
+                    } catch (IOException ignored) {
+                        // unreadable sidecar — its artifact simply isn't protected
+                    }
+                }
+            }
+        }
         return refs;
     }
 

@@ -14,7 +14,7 @@ dependencies {
     // or :toolchain — the compiler now enforces that everything heavy reaches the engine over the
     // wire (EngineClient) or through the ServiceLoader-discovered in-process seam (:cli-engine,
     // test/JVM-dist classpaths only).
-    implementation(project(":model"))
+    implementation(project(":jk-api"))
     implementation(project(":core"))
     implementation(project(":client-io"))
     implementation(project(":toolchain-jdk"))

@@ -3,7 +3,7 @@ package dev.jkbuild.repo;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import dev.jkbuild.credential.MavenSettings;
+import dev.jkbuild.repo.MavenSettings;
 import dev.jkbuild.credential.RepoCredential;
 import dev.jkbuild.forge.ForgeAuth;
 import dev.jkbuild.forge.ForgeIdentity;

@@ -21,7 +21,7 @@ class LockfileRoundTripTest {
                 resolution-algorithm = "pubgrub-v1"
                 """);
         assertThat(rendered).matches(
-                "(?s).*\\njk = \\{ version = \"" + java.util.regex.Pattern.quote(dev.jkbuild.util.JkVersion.VERSION)
+                "(?s).*\\njk = \\{ version = \"" + java.util.regex.Pattern.quote(dev.jkbuild.model.JkVersion.VERSION)
                         + "\", sha256 = \"[0-9a-f]*\" \\}\\n.*");
     }
 

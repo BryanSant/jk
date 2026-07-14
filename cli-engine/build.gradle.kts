@@ -19,7 +19,7 @@ dependencies {
     implementation(project(":cli"))
     implementation(project(":engine"))
     // The in-process command host reaches the same kernel surface the engine's handlers do.
-    implementation(project(":model"))
+    implementation(project(":jk-api"))
     implementation(project(":core"))
     implementation(project(":client-io"))
     implementation(project(":io"))

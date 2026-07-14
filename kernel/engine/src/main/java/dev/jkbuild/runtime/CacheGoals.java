@@ -64,7 +64,7 @@ public final class CacheGoals {
                         var ledger = dev.jkbuild.task.AccessLedger.atDefaultPath();
                         java.util.Map<String, Long> latest = ledger.latestByHash();
                         var prunedVersions = dev.jkbuild.cache.VersionStore.current().prune(
-                                dev.jkbuild.util.JkVersion.VERSION,
+                                dev.jkbuild.model.JkVersion.VERSION,
                                 java.time.Duration.ofDays(30),
                                 key -> latest.getOrDefault(key, 0L),
                                 dev.jkbuild.util.JkDirs.state().resolve("engine"));

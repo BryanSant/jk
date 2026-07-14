@@ -6,7 +6,7 @@ import dev.jkbuild.jdk.JdkLts;
 import dev.jkbuild.jdk.JdkRegistry;
 import dev.jkbuild.jdk.JdkResolution;
 import dev.jkbuild.util.JkDirs;
-import dev.jkbuild.util.JkVersion;
+import dev.jkbuild.model.JkVersion;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;

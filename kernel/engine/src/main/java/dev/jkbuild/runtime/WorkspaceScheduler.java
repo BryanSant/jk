@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.runtime;
 
-import dev.jkbuild.util.JkThreads;
+import dev.jkbuild.run.JkThreads;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;

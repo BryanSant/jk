@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-package dev.jkbuild.credential;
+package dev.jkbuild.repo;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

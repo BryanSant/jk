@@ -5,7 +5,7 @@ import dev.jkbuild.discovery.JkProbe;
 import dev.jkbuild.discovery.LocalToolProbe;
 import dev.jkbuild.discovery.Probes;
 import dev.jkbuild.util.JkDirs;
-import dev.jkbuild.util.JkThreads;
+import dev.jkbuild.run.JkThreads;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;

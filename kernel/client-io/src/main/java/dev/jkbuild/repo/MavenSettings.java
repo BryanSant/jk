@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
-package dev.jkbuild.credential;
+package dev.jkbuild.repo;
 
+import dev.jkbuild.credential.RepoCredential;
 import dev.jkbuild.util.MinimalXml;
 import java.nio.file.Files;
 import java.nio.file.Path;

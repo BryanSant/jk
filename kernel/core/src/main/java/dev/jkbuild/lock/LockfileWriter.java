@@ -68,7 +68,7 @@ public final class LockfileWriter {
         Lockfile.JkToolchain jk = lockfile.jk() != null
                 ? lockfile.jk()
                 : new Lockfile.JkToolchain(
-                        dev.jkbuild.util.JkVersion.VERSION, runningEngineSha(dev.jkbuild.util.JkVersion.VERSION));
+                        dev.jkbuild.model.JkVersion.VERSION, runningEngineSha(dev.jkbuild.model.JkVersion.VERSION));
         out.append("jk = { version = ").append(quote(jk.version()))
                 .append(", sha256 = ").append(quote(jk.sha256() == null ? "" : jk.sha256()))
                 .append(" }\n");

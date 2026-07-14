@@ -6,7 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.repo.RepoArtifactStore;
-import dev.jkbuild.util.JkVersion;
+import dev.jkbuild.model.JkVersion;
 import dev.jkbuild.worker.WorkerJar;
 import dev.jkbuild.worker.WorkerJarNotFoundException;
 import java.io.IOException;

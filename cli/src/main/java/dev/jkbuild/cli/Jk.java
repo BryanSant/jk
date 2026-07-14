@@ -11,8 +11,8 @@ import java.util.Map;
 /** jk CLI entrypoint — routes verbs through {@link CommandDispatch}. */
 public final class Jk {
 
-    /** Alias of {@link dev.jkbuild.util.JkVersion#VERSION} for CLI-side callers. */
-    public static final String VERSION = dev.jkbuild.util.JkVersion.VERSION;
+    /** Alias of {@link dev.jkbuild.model.JkVersion#VERSION} for CLI-side callers. */
+    public static final String VERSION = dev.jkbuild.model.JkVersion.VERSION;
 
     /**
      * Hidden verb aliases for ergonomic migration from other build tools. Documented in {@code

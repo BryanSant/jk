@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-package dev.jkbuild.util;
+package dev.jkbuild.run;
 
 import java.util.ArrayList;
 import java.util.Collection;

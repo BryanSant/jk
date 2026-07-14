@@ -31,7 +31,7 @@ import dev.jkbuild.run.GoalResult;
 import dev.jkbuild.run.Phase;
 import dev.jkbuild.run.PhaseKind;
 import dev.jkbuild.run.PhaseStatus;
-import dev.jkbuild.util.JkVersion;
+import dev.jkbuild.model.JkVersion;
 import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;

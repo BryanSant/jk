@@ -217,7 +217,7 @@ public final class PluginBuild {
 
     private static String describeKey(Active active, JkBuild project) {
         StringBuilder b = new StringBuilder();
-        b.append(dev.jkbuild.util.JkVersion.VERSION)
+        b.append(dev.jkbuild.model.JkVersion.VERSION)
                 .append('|')
                 .append(active.manifest().version())
                 .append('|')

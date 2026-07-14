@@ -21,7 +21,7 @@ import dev.jkbuild.task.ActionCache;
 import dev.jkbuild.task.ActionKey;
 import dev.jkbuild.task.ClasspathFingerprint;
 import dev.jkbuild.util.JkDirs;
-import dev.jkbuild.util.JkVersion;
+import dev.jkbuild.model.JkVersion;
 import dev.jkbuild.worker.WorkerClient;
 import dev.jkbuild.worker.WorkerJar;
 import java.io.IOException;

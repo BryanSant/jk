@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-package dev.jkbuild.util;
+package dev.jkbuild.model;
 
 /** The jk release version, in a non-view module so any layer can read it. */
 public final class JkVersion {

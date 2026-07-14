@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-package dev.jkbuild.util;
+package dev.jkbuild.run;
 
 import java.util.concurrent.Callable;
 
@@ -7,7 +7,7 @@ import java.util.concurrent.Callable;
  * Dependency-inversion seam that lets the dependency-free jk-api ({@code :model}) carry a front-end's
  * ambient request context across the shared {@link JkThreads} pools without an upward compile edge on
  * {@code :core}, where {@code Session}/{@code SessionContext} live. ({@code :core} already declares
- * {@code api(project(":model"))}, so a {@code :model → :core} edge would be a cycle — mirrors the
+ * {@code api(project(":jk-api"))}, so a {@code :jk-api → :core} edge would be a cycle — mirrors the
  * {@code SessionCancel} seam.)
  *
  * <p>The problem it solves: {@code SessionContext} is {@link ScopedValue}-backed, and a

@@ -9,7 +9,7 @@ import dev.jkbuild.lock.RepoSource;
 import dev.jkbuild.model.Coordinate;
 import dev.jkbuild.repo.MavenRepo;
 import dev.jkbuild.repo.RepoArtifactStore;
-import dev.jkbuild.util.JkThreads;
+import dev.jkbuild.run.JkThreads;
 import java.io.IOException;
 import java.net.URI;
 import java.util.ArrayList;
@@ -209,7 +209,7 @@ public final class CacheSync {
         List<java.util.concurrent.CompletableFuture<FetchResult>> futures = new ArrayList<>();
         for (PendingFetch p : pending) {
             futures.add(java.util.concurrent.CompletableFuture.supplyAsync(
-                    () -> fetchSources(p, limiter), dev.jkbuild.util.JkThreads.io()));
+                    () -> fetchSources(p, limiter), dev.jkbuild.run.JkThreads.io()));
         }
         for (int i = 0; i < futures.size(); i++) {
             FetchResult r;

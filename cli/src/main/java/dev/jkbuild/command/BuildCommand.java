@@ -23,7 +23,7 @@ import dev.jkbuild.run.GoalKey;
 import dev.jkbuild.run.GoalResult;
 import dev.jkbuild.run.TestSummary;
 import dev.jkbuild.util.JkDirs;
-import dev.jkbuild.util.JkThreads;
+import dev.jkbuild.run.JkThreads;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;

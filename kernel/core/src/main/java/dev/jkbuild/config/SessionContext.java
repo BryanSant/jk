@@ -55,8 +55,8 @@ public final class SessionContext {
         // loads early (everything reads current()), so the binding is in place before any pool
         // submission. Under a single static session (the CLI) this just rebinds the same session —
         // behavior unchanged.
-        dev.jkbuild.util.ContextPropagator.bind(
-                new dev.jkbuild.util.ContextPropagator.Propagator() {
+        dev.jkbuild.run.ContextPropagator.bind(
+                new dev.jkbuild.run.ContextPropagator.Propagator() {
                     @Override
                     public Runnable wrapRunnable(Runnable r) {
                         Session s = current();

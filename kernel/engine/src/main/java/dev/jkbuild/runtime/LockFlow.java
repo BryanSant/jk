@@ -96,9 +96,9 @@ public final class LockFlow {
         try {
             Path javaHome = JavaHomes.resolveJavaHome(dir);
             prep = GitSourceResolution.prepare(
-                    effective, baseRepos, cas, javaHome, dev.jkbuild.util.JkVersion.VERSION);
+                    effective, baseRepos, cas, javaHome, dev.jkbuild.model.JkVersion.VERSION);
             pathPrep = PathSourceResolution.prepare(
-                    prep.project(), prep.repos(), cas, dir, javaHome, dev.jkbuild.util.JkVersion.VERSION);
+                    prep.project(), prep.repos(), cas, dir, javaHome, dev.jkbuild.model.JkVersion.VERSION);
         } catch (Exception e) {
             return new Result(6, e.getMessage(), null, effective, moduleCount);
         }
@@ -108,7 +108,7 @@ public final class LockFlow {
 
         Lockfile lock;
         try {
-            lock = orchestrator.lock(pathPrep.project(), dev.jkbuild.util.JkVersion.VERSION, features, !noDefaultFeatures);
+            lock = orchestrator.lock(pathPrep.project(), dev.jkbuild.model.JkVersion.VERSION, features, !noDefaultFeatures);
         } catch (IOException e) {
             return new Result(6, e.getMessage() + variantUnionHint(dir, parsed), null, effective, moduleCount);
         }

@@ -3,7 +3,7 @@ package dev.jkbuild.jdk;
 
 import dev.jkbuild.http.Http;
 import dev.jkbuild.util.Hashing;
-import dev.jkbuild.util.JkThreads;
+import dev.jkbuild.run.JkThreads;
 import dev.jkbuild.util.PathUtil;
 import java.io.BufferedInputStream;
 import java.io.IOException;

@@ -144,7 +144,7 @@ public final class SyncGoals {
                                 lockFile,
                                 cache,
                                 repoUrl,
-                                dev.jkbuild.util.JkVersion.VERSION,
+                                dev.jkbuild.model.JkVersion.VERSION,
                                 List.of(),
                                 true,
                                 dev.jkbuild.resolver.ResolveObserver.NOOP,

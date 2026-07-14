@@ -10,7 +10,7 @@ import dev.jkbuild.repo.RepoGroup;
 import dev.jkbuild.resolver.pubgrub.PackageSource;
 import dev.jkbuild.resolver.pubgrub.Term;
 import dev.jkbuild.resolver.pubgrub.VersionSet;
-import dev.jkbuild.util.JkThreads;
+import dev.jkbuild.run.JkThreads;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;

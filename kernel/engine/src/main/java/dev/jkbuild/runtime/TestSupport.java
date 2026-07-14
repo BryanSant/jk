@@ -10,7 +10,7 @@ import dev.jkbuild.task.ActionCache;
 import dev.jkbuild.task.ActionKey;
 import dev.jkbuild.test.JUnitLauncher;
 import dev.jkbuild.test.TestProgressListener;
-import dev.jkbuild.util.JkVersion;
+import dev.jkbuild.model.JkVersion;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;

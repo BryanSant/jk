@@ -707,3 +707,31 @@ resources, lint/baseline profiles, solver version interning (BOM soft pins).
   green. Forced-TCP on the native binary needs the property on both sides of
   the engine spawn (client got it, spawned engine didn't) — the TCP lane stays
   covered by EngineTcpTransportTest/EngineServerTest JVM-side; noted as residue.
+
+### Residue bite 1 — :support split + :jk-api rename (P2.1/P2.2)
+
+- New `:support` module (kernel/support) takes the IO machinery out of the
+  contract leaf: PathUtil, Hashing, TreeFingerprint, JkDirs, GitUrl, MinimalXml,
+  AtomicWrites. The leaf keeps NO `util` junk-drawer at all: JkThreads +
+  ContextPropagator/ContextPropagatingExecutorService moved to
+  `dev.jkbuild.run` (they ARE the Goal scheduler's execution seam — lazily
+  inert, the shutdown hook only installs when a build actually runs) and
+  JkVersion to `dev.jkbuild.model`. MavenSettings (a ~/.m2 reader) moved to
+  its only consumer's module, `dev.jkbuild.repo` in :client-io. No split
+  packages anywhere. `:support` layers ON the leaf (implementation(:jk-api))
+  for the executor seam; the leaf has no edge to support. Wiring mirrors the
+  old visibility: :core api-exposes :support exactly as it api-exposes the
+  leaf.
+- DIVERGENCE from the audit: ImageConfig/PublishablePom STAY in the leaf —
+  they are pure data records consumed by worker plugins across the wire
+  boundary; parking data records in an IO-utility module would misplace them.
+- `:model` is renamed `:jk-api` in Gradle (dir stays kernel/model, matching
+  the repo's name≠path convention); all six build-file references updated.
+- **Smoke-found latent bug (fixed + 2 regression tests): the cache prune's
+  mark-and-sweep ate every freshly-installed worker jar.** `repos/local` is a
+  PUBLISH DESTINATION (installLocal / local publish), but the sweep treated it
+  as derived cache: a just-published jar is legitimately unreferenced by any
+  action/sync manifest, so the first prune after the cadence expired swept its
+  blob and the repo GC removed the jar with it (all 12 workers vanished
+  mid-smoke). Fix: repos/local sidecars are sweep ROOTS in CacheRoots.collect;
+  other repos/<name> stores remain sweepable re-fetchable mirrors.

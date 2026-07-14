@@ -4,7 +4,7 @@ package dev.jkbuild.worker;
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.repo.RepoArtifactStore;
 import dev.jkbuild.util.JkDirs;
-import dev.jkbuild.util.JkVersion;
+import dev.jkbuild.model.JkVersion;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;

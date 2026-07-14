@@ -7,7 +7,8 @@ plugins {
 description = "jk core foundations: TOML config parser, lockfile, layout, library catalog, deny policy"
 
 dependencies {
-    api(project(":model"))
+    api(project(":jk-api"))
+    api(project(":support"))
     // Ndjson is MiniJson's single escaping home (the JSON-consolidation decision);
     // plugin-api itself depends only on :model, so the direction is legal.
     api(project(":plugin-api"))

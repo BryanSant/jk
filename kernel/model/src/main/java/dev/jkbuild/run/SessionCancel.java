@@ -7,7 +7,7 @@ import java.util.function.BooleanSupplier;
  * Dependency-inversion seam that lets the dependency-free jk-api ({@code :model}) observe a
  * front-end's session-level cancellation without an upward compile dependency on {@code :core},
  * where {@code Session}/{@code SessionContext} and the per-session {@code CancelToken} live.
- * ({@code :core} already declares {@code api(project(":model"))}, so a {@code :model → :core} edge
+ * ({@code :core} already declares {@code api(project(":jk-api"))}, so a {@code :jk-api → :core} edge
  * would be a cycle — this seam is how the intent "OR the session cancel into the per-goal poll" is
  * expressed while keeping the module DAG legal.)
  *
