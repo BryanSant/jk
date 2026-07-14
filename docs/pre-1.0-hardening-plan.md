@@ -785,3 +785,14 @@ fast path is now FORK-FREE (builtin parameter expansion instead of
 grep/sed/cd subshells): measured overhead 5.8 ms → 0.77 ms per `./jk` run —
 the bare /bin/sh startup floor. A presence stat beat exec-and-catch-127
 (sh can't recover from a failed exec).
+
+**Bite-3 second follow-up — the `Optional.or` presence bug:** the live smoke
+showed engine-hosted `--rebuild` still hitting the fast path even after the
+envelope fix. In-JVM reproduction (now a permanent EngineServerTest regression)
+found it: `rebuildOr` was `force.or(() -> rebuild)`, and `Optional.or`
+short-circuits on PRESENCE — every wire decode materializes `force` as
+`Optional.of(false)`, silently masking a present-and-true `rebuild`. The
+in-process tests passed because the CLI prepass leaves an unset `force` EMPTY.
+Fixed with explicit truth-or-fallback logic; pinned by a JkConfig unit test
+(wire-shaped config) and the engine-hosted round-trip test. Verified live:
+plain build 139 ms fast path, `--rebuild` 859 ms genuine recompile.

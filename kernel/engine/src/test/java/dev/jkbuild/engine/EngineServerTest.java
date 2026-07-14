@@ -563,6 +563,76 @@ class EngineServerTest {
      * jk.lock}, so no network resolve). Asserts the single-goal wire conversation — plan burst →
      * goal events → terminal {@code goal-finish} — and that the engine actually compiled the class.
      */
+    /**
+     * The session envelope's {@code rebuild} flag must defeat every engine-side freshness fast
+     * path: after a first build populates the stamps and action cache, a second request with
+     * {@code withSession(..., rebuild=true)} must genuinely re-run the compile — never label it
+     * "up to date". (Regression: --rebuild once vanished between the CLI and the stamp checks.)
+     */
+    @Test
+    void rebuild_in_the_session_envelope_defeats_the_freshness_fast_path() throws Exception {
+        Path project = shortTempDir();
+        Files.writeString(project.resolve("jk.toml"), """
+                [project]
+                group   = "com.example"
+                name    = "app"
+                version = "1.0.0"
+                java    = 21
+                """);
+        Path src = project.resolve("src/main/java/example/Hello.java");
+        Files.createDirectories(src.getParent());
+        Files.writeString(src, """
+                package example;
+                public class Hello {
+                    public static void main(String[] args) {
+                        System.out.println("hi");
+                    }
+                }
+                """);
+        Files.writeString(project.resolve("jk.lock"), """
+                version = 1
+                generated-by = "jk test"
+                resolution-algorithm = "pubgrub-v1"
+                """);
+        Path cache = shortTempDir();
+
+        EnginePaths.Paths p = paths(shortTempDir());
+        EngineServer server = new EngineServer(p, JkEngineConfig.DEFAULTS, "1.0", null);
+        Thread serverThread = runInBackground(server);
+        waitUntil(Duration.ofSeconds(5), () -> Files.exists(EnginePaths.endpoint(p)));
+        try {
+            String plain = EngineProtocol.singleBuildRequest(
+                    project.toString(), cache.toString(), null, 1, null, true, false, false, false);
+
+            // First build: real compile, stamps + caches populated.
+            assertThat(runToGoalFinish(p, plain)).doesNotContain("\"buildOutcome\":\"up-to-date\"");
+            // Sanity: a plain second build IS the fast path.
+            assertThat(runToGoalFinish(p, plain)).contains("\"buildOutcome\":\"up-to-date\"");
+            // The envelope's rebuild defeats it.
+            String distrust = EngineProtocol.withSession(plain, null, null, null, true);
+            assertThat(runToGoalFinish(p, distrust))
+                    .as("rebuild must reach the engine's stamp checks")
+                    .doesNotContain("\"buildOutcome\":\"up-to-date\"");
+        } finally {
+            server.close();
+            serverThread.join(10_000);
+        }
+    }
+
+    /** Drive one request to its goal-finish and return that terminal line. */
+    private static String runToGoalFinish(EnginePaths.Paths p, String request) throws IOException {
+        try (Client c = new Client(EnginePaths.activeSocket(p))) {
+            c.sendLine(request);
+            String line;
+            while ((line = c.readLine()) != null) {
+                String type = EngineProtocol.typeOf(line);
+                if (EngineProtocol.GOAL_FINISH.equals(type)) return line;
+                if (EngineProtocol.ERROR.equals(type)) throw new IOException("request failed: " + line);
+            }
+        }
+        throw new IOException("disconnected before goal-finish");
+    }
+
     @Test
     void compile_request_compiles_the_project_over_the_socket() throws Exception {
         Path project = shortTempDir();

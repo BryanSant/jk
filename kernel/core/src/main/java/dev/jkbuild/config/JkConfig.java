@@ -126,9 +126,15 @@ public record JkConfig(
         return force.orElse(fallback);
     }
 
-    /** True when this build must bypass jk's own caches ({@code force} implies it). */
+    /**
+     * True when this build must bypass jk's own caches ({@code force} implies it). NOT
+     * {@code force.or(() -> rebuild)}: {@code Optional.or} short-circuits on PRESENCE, and wire
+     * decodes materialize {@code force} as {@code Optional.of(false)} — which silently masked a
+     * present-and-true {@code rebuild}.
+     */
     public boolean rebuildOr(boolean fallback) {
-        return force.or(() -> rebuild).orElse(fallback);
+        if (force.isEmpty() && rebuild.isEmpty()) return fallback;
+        return force.orElse(false) || rebuild.orElse(false);
     }
 
     /** True when {@code --no-ansi} was set — all ANSI sequences suppressed, ASCII only. */

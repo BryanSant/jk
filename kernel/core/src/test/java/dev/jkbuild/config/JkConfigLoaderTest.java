@@ -112,4 +112,28 @@ class JkConfigLoaderTest {
         // Project config was IGNORED.
         assertThat(loaded.color()).isEmpty();
     }
+    /**
+     * Optional.or short-circuits on PRESENCE: with force present-and-false (every wire decode),
+     * a naive force.or(() -> rebuild) never consults rebuild — this exact bug shipped briefly.
+     */
+    @Test
+    void rebuildOr_sees_rebuild_even_when_force_is_present_and_false() {
+        JkConfig wireShaped = new JkConfig(
+                Optional.empty(),
+                Optional.of(false), // offline
+                Optional.of(true), // rebuild
+                Optional.empty(),
+                Optional.empty(),
+                Optional.of(false), // verbose
+                Optional.empty(),
+                Optional.of(false), // force: present-and-false, as every wire decode materializes it
+                Optional.empty());
+        assertThat(wireShaped.rebuildOr(false)).isTrue();
+        assertThat(wireShaped.forceOr(false)).isFalse();
+
+        JkConfig unset = JkConfig.empty();
+        assertThat(unset.rebuildOr(true)).isTrue(); // both empty -> fallback
+        assertThat(unset.rebuildOr(false)).isFalse();
+    }
+
 }
