@@ -32,8 +32,14 @@ public final class JvmOptions {
     /** Conservative default: a worker plus the resident CLI fit under it. */
     public static final double DEFAULT_MAX_RAM_PERCENT = 50.0;
 
-    /** Default collector: low-pause, uncommits idle heap. */
-    public static final String DEFAULT_GC = "zgc";
+    /**
+     * Default collector: the JVM's own (G1 on server-class machines). ZGC was the old default —
+     * abandoned because short-lived workers pay its startup tax on every fork and it halves the
+     * AOT-cache win (measured: javac 1-file 212→93ms under the default collector vs 328→237ms
+     * under ZGC), while its idle-uncommit niceties barely matter for JVMs that exit in seconds.
+     * {@code [jvm] gc = "zgc"|"g1"} still pins a collector explicitly.
+     */
+    public static final String DEFAULT_GC = "default";
 
     /**
      * Metaspace lives outside the heap budget {@link HeapPlan} sizes, so an unbounded default lets
@@ -65,7 +71,9 @@ public final class JvmOptions {
             case "none", "default", "" -> {
                 /* leave the JVM's own default */
             }
-            default -> out.add("-XX:+UseZGC");
+            default -> {
+                /* unrecognized name: leave the JVM's own default rather than guess */
+            }
         }
         // String deduplication only has an effect on G1/ZGC; skip it otherwise.
         if (dedup && (gc.equals("zgc") || gc.equals("g1"))) {
@@ -182,14 +190,15 @@ public final class JvmOptions {
 
     /**
      * Absolute-heap worker flags from {@code plan}: small {@code -Xms}, a {@code SoftMaxHeapSize}
-     * good-neighbour target, an {@code -Xmx} burst cap, and the collector (default generational ZGC
-     * with {@code ZUncommit} so idle heap is returned to the OS). {@code SoftMaxHeapSize} is only
-     * emitted for collectors that honour it (ZGC / G1).
+     * good-neighbour target, an {@code -Xmx} burst cap, and the collector (default: the JVM's own,
+     * i.e. G1 on server-class machines; an explicit {@code gc = "zgc"} adds {@code ZUncommit} so
+     * idle heap is returned to the OS). {@code SoftMaxHeapSize} is emitted except under an explicit
+     * {@code gc = "none"} — G1 and ZGC honour it, everything else recognizes and ignores it.
      */
     static List<String> absoluteFlags(HeapPlan.Plan plan, WorkerTuning s) {
         String gc = (s.gc() != null ? s.gc() : DEFAULT_GC).toLowerCase(Locale.ROOT);
         boolean dedup = s.stringDedup() == null || s.stringDedup();
-        boolean softMaxAware = gc.equals("zgc") || gc.equals("g1");
+        boolean softMaxAware = !gc.equals("none");
 
         List<String> out = new ArrayList<>();
         out.add("-Xms" + HeapPlan.mib(plan.xmsBytes()) + "m");
@@ -206,9 +215,7 @@ public final class JvmOptions {
                 /* JVM default collector */
             }
             default -> {
-                out.add("-XX:+UseZGC");
-                out.add("-XX:+ZUncommit");
-                out.add("-XX:ZUncommitDelay=" + ZGC_UNCOMMIT_DELAY_SECONDS);
+                /* unrecognized name: leave the JVM's own default rather than guess */
             }
         }
         if (dedup && (gc.equals("zgc") || gc.equals("g1"))) out.add("-XX:+UseStringDeduplication");

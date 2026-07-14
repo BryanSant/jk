@@ -33,9 +33,10 @@ class JvmOptionsTest {
     }
 
     @Test
-    void default_flags_are_50_percent_zgc_string_dedup() {
-        List<String> expected = new java.util.ArrayList<>(
-                List.of("-XX:MaxRAMPercentage=50", "-XX:+UseZGC", "-XX:+UseStringDeduplication"));
+    void default_flags_are_50_percent_and_the_jvms_own_collector() {
+        // No -XX:+Use*GC and no dedup by default: workers ride the JVM's default collector
+        // (G1 on server-class machines) — see the DEFAULT_GC javadoc for why ZGC was abandoned.
+        List<String> expected = new java.util.ArrayList<>(List.of("-XX:MaxRAMPercentage=50"));
         expected.addAll(hardening(1));
         assertThat(JvmOptions.flags(WorkerTuning.NONE, 1)).containsExactlyElementsOf(expected);
     }
@@ -110,8 +111,18 @@ class JvmOptionsTest {
     }
 
     @Test
-    void absolute_flags_emit_xms_softmax_xmx_and_zgc_uncommit() {
+    void absolute_flags_emit_xms_softmax_xmx_and_no_collector_by_default() {
         HeapPlan.Plan plan = new HeapPlan.Plan(4, 64L << 20, 512L << 20, 800L << 20, null);
+        List<String> expected =
+                new java.util.ArrayList<>(List.of("-Xms64m", "-Xmx800m", "-XX:SoftMaxHeapSize=512m"));
+        expected.addAll(hardening(4)); // plan.parallelism() == 4
+        assertThat(JvmOptions.absoluteFlags(plan, WorkerTuning.NONE)).containsExactlyElementsOf(expected);
+    }
+
+    @Test
+    void absolute_flags_pin_zgc_with_uncommit_when_asked() {
+        HeapPlan.Plan plan = new HeapPlan.Plan(4, 64L << 20, 512L << 20, 800L << 20, null);
+        WorkerTuning zgc = new WorkerTuning(null, "zgc", null, List.of());
         List<String> expected = new java.util.ArrayList<>(List.of(
                 "-Xms64m",
                 "-Xmx800m",
@@ -121,7 +132,7 @@ class JvmOptionsTest {
                 "-XX:ZUncommitDelay=10",
                 "-XX:+UseStringDeduplication"));
         expected.addAll(hardening(4)); // plan.parallelism() == 4
-        assertThat(JvmOptions.absoluteFlags(plan, WorkerTuning.NONE)).containsExactlyElementsOf(expected);
+        assertThat(JvmOptions.absoluteFlags(plan, zgc)).containsExactlyElementsOf(expected);
     }
 
     @Test
