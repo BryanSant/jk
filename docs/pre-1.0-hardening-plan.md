@@ -1,6 +1,7 @@
 # Pre-1.0 Hardening Plan
 
-Status: PLANNED (nothing implemented yet)
+Status: IN PROGRESS — H1 landed; see the Execution log at the end for decisions made
+while implementing (several diverge from or extend the original plan text).
 
 This is the last cheap window to break things. Once 1.0 ships, the wire protocol, the
 lockfile format, the `jk-api`/plugin SPI, and the CLI surface all become contracts we
@@ -483,3 +484,46 @@ transport run for P0.2).
 Explicitly out of scope (tracked elsewhere): release-pipeline signing + baked key,
 sigstore layer, `jk engine status` generation surfacing, Robolectric binary
 resources, lint/baseline profiles, solver version interning (BOM soft pins).
+
+---
+
+## Execution log (decisions made while implementing)
+
+### H1
+
+- **P0.1** — `--version` became a **positional** on `jk self update <version>` and
+  `jk wrapper <version|latest>` (not a renamed flag). `CommandDispatch.withGlobals`
+  now throws on any command/global option-name collision, and a
+  `CommandDispatchTest` walks every registered command + subcommand to catch new
+  ones at test time.
+- **The collision hard-error found six more silently-broken declarations** (each was
+  fully shadowed by the global, i.e. already dead code): `explain --verbose/-v`,
+  `gradle -C/--directory`, `mvn -C/--directory`, and `new --jdk` were deleted (the
+  identically-named global provides the same canonical key, so behavior is
+  unchanged); `import/export --force` (overwrite semantics) was renamed
+  `--overwrite` and `engine stop --force` / `self update --force` (stop-now
+  semantics) renamed `--now` — the P5.2 renames pulled forward into H1 because the
+  hard error forced the choice.
+- **P0.2 exposed a latent self-drain bug.** Fixing `openClient` to send the auth
+  envelope made `EngineTcpTransportTest` (new) fail: at startup `drainDisplaced`
+  targets the pre-bind `activeSocket`, which by then is the flat compat pointer
+  naming the engine ITSELF — every engine has been sending itself
+  `shutdown force=false` at startup (visible as "drained displaced engine" in live
+  daemon logs). It survived only by accident: on TCP the raw-token auth failed; on
+  Unix the drain connection is already closed so the `bye()` reply throws EPIPE
+  *before* `shuttingDown = true` executes. Root fix: `previousActive` is captured
+  pre-bind and nulled when nothing was live, plus a `namesSelf()` guard in
+  `drainDisplaced` (Unix: realpath identity; TCP: port-content identity) for the
+  crashed-generation-reclaim case. `EngineTransport` gained a
+  `-Djk.engine.transport=tcp|unix` override so the TCP lane is testable off-Windows.
+- **P0.3** — child stderr goes to the engine **log** (not DISCARD): the version-skew
+  path is the one that most needs diagnostics preserved. The client→child pump is
+  bounded to the relay's lifetime.
+- **P0.4** — `jk self materialize <client-bin> <engine-jar>` (hidden) reuses
+  `VersionStore.materializeFromFiles`; install.sh's hand-rolled shell materializer
+  deleted in favor of calling it through the freshly-installed client.
+- **P0.6** — `materialize` also *repairs* the sidecar-without-artifact state
+  (re-materializes) instead of early-returning on the sidecar alone.
+- **P0.7** — resolution order: `JK_EXE` → `/proc/self/exe` → `ProcessHandle.info()`,
+  rejecting `java`/`java.exe`/`javaw.exe`; any other executable name IS jk (the
+  running binary is by definition the jk executing the code).

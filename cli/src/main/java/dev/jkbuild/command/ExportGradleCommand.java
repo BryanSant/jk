@@ -33,13 +33,13 @@ public final class ExportGradleCommand implements CliCommand {
 
     @Override
     public List<Opt> options() {
-        return List.of(Opt.flag("Overwrite existing Gradle build files.", "--force"));
+        return List.of(Opt.flag("Overwrite existing Gradle build files.", "--overwrite"));
     }
 
     @Override
     public int run(Invocation in) throws IOException {
         GlobalOptions global = GlobalOptions.from(in);
-        boolean force = in.isSet("force");
+        boolean force = in.isSet("overwrite");
         GeneratedFiles files = ExportSupport.generate(global.workingDir(), "export-gradle", "jk export gradle");
         if (files == null) return Exit.NO_INPUT;
         return ExportSupport.writeAll(files, force, "jk export gradle");

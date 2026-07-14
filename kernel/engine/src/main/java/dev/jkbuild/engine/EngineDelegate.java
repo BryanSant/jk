@@ -55,9 +55,19 @@ public final class EngineDelegate {
      * Run {@code requestLine} on the pinned version's engine as a one-shot child, relaying its
      * event stream to {@code clientOut} and pumping {@code clientIn} (cancel messages) to the
      * child. Returns the child's exit code; throws when the version isn't materialized.
+     *
+     * <p>The child's stderr goes to {@code stderrLog} (the daemon's log file): it must not
+     * interleave with the NDJSON event stream on stdout, and it must be DRAINED — an unread
+     * stderr pipe fills at ~64 KB and deadlocks the child, which is exactly the failure mode a
+     * rarely-exercised version-skew path cannot afford.
      */
     public static int runAsChild(
-            String version, String requestLine, BufferedReader clientIn, BufferedWriter clientOut, Consumer<String> log)
+            String version,
+            String requestLine,
+            BufferedReader clientIn,
+            BufferedWriter clientOut,
+            Path stderrLog,
+            Consumer<String> log)
             throws IOException, InterruptedException {
         VersionStore.Materialized m = VersionStore.current()
                 .resolve(version)
@@ -73,7 +83,11 @@ public final class EngineDelegate {
                 "dev.jkbuild.cli.EngineMain",
                 "--job");
         log.accept("jk engine: delegating to pinned jk " + version + " (job child)");
-        Process child = new ProcessBuilder(cmd).redirectErrorStream(false).start();
+        ProcessBuilder pb = new ProcessBuilder(cmd);
+        pb.redirectError(stderrLog != null
+                ? ProcessBuilder.Redirect.appendTo(stderrLog.toFile())
+                : ProcessBuilder.Redirect.DISCARD);
+        Process child = pb.start();
         try (BufferedWriter childIn = new BufferedWriter(
                         new OutputStreamWriter(child.getOutputStream(), StandardCharsets.UTF_8));
                 BufferedReader childOut = new BufferedReader(
@@ -82,11 +96,13 @@ public final class EngineDelegate {
             childIn.write('\n');
             childIn.flush();
 
-            // Client → child pump (build-cancel etc.); daemon thread — dies with the exchange.
+            // Client → child pump (build-cancel etc.); daemon thread, bounded to this exchange —
+            // interrupted once the relay ends so it can never consume a line meant for the
+            // parent connection or write to the closed child stdin.
             Thread pump = new Thread(() -> {
                 try {
                     String line;
-                    while ((line = clientIn.readLine()) != null) {
+                    while (!Thread.currentThread().isInterrupted() && (line = clientIn.readLine()) != null) {
                         childIn.write(line);
                         childIn.write('\n');
                         childIn.flush();
@@ -98,14 +114,18 @@ public final class EngineDelegate {
             pump.setDaemon(true);
             pump.start();
 
-            // Child → client relay, verbatim.
-            String line;
-            while ((line = childOut.readLine()) != null) {
-                clientOut.write(line);
-                clientOut.write('\n');
-                clientOut.flush();
+            try {
+                // Child → client relay, verbatim.
+                String line;
+                while ((line = childOut.readLine()) != null) {
+                    clientOut.write(line);
+                    clientOut.write('\n');
+                    clientOut.flush();
+                }
+                return child.waitFor();
+            } finally {
+                pump.interrupt();
             }
-            return child.waitFor();
         } finally {
             if (child.isAlive()) child.destroy();
         }

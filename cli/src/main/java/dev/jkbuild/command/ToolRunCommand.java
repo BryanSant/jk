@@ -73,7 +73,7 @@ public final class ToolRunCommand implements CliCommand {
     public List<Opt> options() {
         List<Opt> opts = List.of(
                 Opt.value("<class>", "Override the Main-Class to exec (coordinate targets only).", "--main"),
-                Opt.value("<coord>", "Add an extra dependency to the tool's classpath (repeatable).", "--with"),
+                Opt.value("<coord>", "Add an extra dependency to the tool's classpath (repeatable).", "--with").repeat(),
                 Opt.value("<dir>", "Override the jk cache directory.", "--cache-dir")
                         .hide(),
                 Opt.value("<dir>", "Override the jk state directory.", "--state-dir")

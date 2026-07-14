@@ -185,29 +185,24 @@ fi
 # ---- side-by-side version layout (docs/engine-versioning-plan.md R2) --------
 #
 # Local dist installs (binary + engine jar together) also materialize
-# ~/.jk/versions/<v>/ — the layout the client, `jk self update`, and the project
-# wrapper share. Download installs skip this: the client self-fetches its engine
-# jar on first spawn and materializes then. Best-effort by design.
-JK_ACTUAL_VERSION="$("$JK_BIN" --version 2>/dev/null | awk '{print $2}')"
-if [ -n "$JK_ACTUAL_VERSION" ] && compgen -G "$JK_HOME/lib/jk-engine-*.jar" > /dev/null; then
-  VDIR="$JK_HOME/versions/$JK_ACTUAL_VERSION"
-  VTMP="$JK_HOME/versions/.install-$$"
-  sha256() { (sha256sum "$1" 2>/dev/null || shasum -a 256 "$1" 2>/dev/null) | awk '{print $1}'; }
-  if mkdir -p "$VTMP/bin" "$VTMP/lib" 2>/dev/null \
-      && cp "$JK_BIN" "$VTMP/bin/jk" && chmod +x "$VTMP/bin/jk" \
-      && cp "$JK_HOME"/lib/jk-engine-*.jar "$VTMP/lib/jk-engine.jar"; then
-    {
-      echo "version = \"$JK_ACTUAL_VERSION\""
-      echo "engine-sha256 = \"$(sha256 "$VTMP/lib/jk-engine.jar")\""
-      echo "client-sha256 = \"$(sha256 "$VTMP/bin/jk")\""
-      echo "protocol = 1"
-    } > "$VTMP/manifest.toml"
-    rm -rf "$VDIR"
-    if mv "$VTMP" "$VDIR" 2>/dev/null; then
-      note "Materialized $VDIR"
+# ~/.jk/versions/<v>/ — through the client itself (`jk self materialize`), which
+# ingests both artifacts into the CAS first. The CAS stays the single source of
+# truth: a pruned version re-materializes from its blobs, offline. (A hand-rolled
+# shell copy here once skipped the CAS and left pruned local installs
+# unrecoverable.) Download installs skip this: the client self-fetches its
+# engine jar on first spawn and materializes then. Best-effort by design.
+if [ -n "$LOCAL_FILE" ]; then
+  ENGINE_JAR=""
+  for f in "$SRC_LIB"/jk-engine-*.jar; do
+    [ -f "$f" ] && ENGINE_JAR="$f" && break
+  done
+  if [ -n "$ENGINE_JAR" ]; then
+    if "$JK_BIN" self materialize "$JK_BIN" "$ENGINE_JAR" >/dev/null 2>&1; then
+      note "Materialized $JK_HOME/versions/$("$JK_BIN" --version 2>/dev/null | awk '{print $2}')"
+    else
+      note "versions/ materialization skipped (jk self materialize failed; the client re-fetches on demand)"
     fi
   fi
-  rm -rf "$VTMP" 2>/dev/null || true
 fi
 
 # ---- activate --------------------------------------------------------------

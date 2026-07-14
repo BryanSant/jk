@@ -24,7 +24,7 @@ import java.util.List;
  *
  * <p>The scripts are dumb and frozen: read the lock's pin, have-or-fetch
  * {@code ~/.jk/versions/<v>/bin/jk} (sha-verified against the pin), exec. Updating the
- * wrapper SPRINGBOARDS: {@code jk wrapper --version <v|latest>} materializes the target and
+ * wrapper SPRINGBOARDS: {@code jk wrapper <v|latest>} materializes the target and
  * execs the target's own {@code jk wrapper --emit} — so cmd.exe's current-dir shadowing
  * (a bare {@code jk} resolving to the project's {@code jk.bat}, i.e. the pinned old client)
  * can never strand a project on an old wrapper. Bare {@code jk wrapper} regenerates at the
@@ -44,15 +44,23 @@ public final class WrapperCommand implements CliCommand {
 
     @Override
     public List<Opt> options() {
-        return List.of(
-                Opt.value("<x.y.z|latest>", "Springboard: materialize that version and let IT write the wrapper.", "--version"),
-                Opt.flag("Write the scripts and stop (the springboard target's mode).", "--emit").hide());
+        // No --version option: the global -V/--version flag owns that name (the dispatcher
+        // rejects duplicates), so the springboard target rides as a positional.
+        return List.of(Opt.flag("Write the scripts and stop (the springboard target's mode).", "--emit").hide());
+    }
+
+    @Override
+    public List<dev.jkbuild.model.command.Param> parameters() {
+        return List.of(dev.jkbuild.model.command.Param.of(
+                "version",
+                dev.jkbuild.model.command.Arity.ZERO_OR_ONE,
+                "Springboard: materialize <x.y.z|latest> and let IT write the wrapper."));
     }
 
     @Override
     public int run(Invocation in) throws Exception {
         Path projectDir = GlobalOptions.from(in).workingDir();
-        String target = in.value("version").orElse(null);
+        String target = in.positionals().isEmpty() ? null : in.positionals().get(0);
         if (target == null || in.isSet("emit")) {
             emit(projectDir);
             CliOutput.out("wrote " + projectDir.resolve("jk") + " and " + projectDir.resolve("jk.bat")

@@ -80,7 +80,7 @@ class ImportCommandTest {
         Files.writeString(tempDir.resolve("jk.toml"), "[project]\ngroup = \"prior\"\n");
 
         int exit = run(
-                "import", "--force", "--report", tempDir.resolve("report.md").toString(), pom.toString());
+                "import", "--overwrite", "--report", tempDir.resolve("report.md").toString(), pom.toString());
         assertThat(exit).isEqualTo(0);
         assertThat(Files.readString(tempDir.resolve("jk.toml")))
                 .contains("name     = \"widget\"")

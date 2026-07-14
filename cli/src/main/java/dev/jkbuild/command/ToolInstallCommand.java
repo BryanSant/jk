@@ -52,7 +52,7 @@ public final class ToolInstallCommand implements CliCommand {
         return List.of(
                 Opt.value("<name>", "Launcher name under $JK_BIN_DIR. Default: the artifact id.", "--bin"),
                 Opt.value("<class>", "Override the Main-Class (default: read from the jar manifest).", "--main"),
-                Opt.value("<coord>", "Add an extra dependency to the tool's classpath (repeatable).", "--with"),
+                Opt.value("<coord>", "Add an extra dependency to the tool's classpath (repeatable).", "--with").repeat(),
                 Opt.value("<group>", "Maven groupId — switches a file target to a local-cache install.", "--group"),
                 Opt.value("<name>", "Maven artifactId for a local-cache file install.", "--name"),
                 Opt.value("<ver>", "Version for a local-cache file install.", "--ver"),

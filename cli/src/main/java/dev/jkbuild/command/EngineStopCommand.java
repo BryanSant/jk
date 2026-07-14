@@ -31,13 +31,13 @@ public final class EngineStopCommand implements CliCommand {
 
     @Override
     public String description() {
-        return "Stop the build engine (drains running jobs first; --force to stop now)";
+        return "Stop the build engine (drains running jobs first; --now to skip the drain)";
     }
 
     @Override
     public List<Opt> options() {
         return List.of(Opt.flag(
-                "Stop now, abandoning in-flight jobs (still assembles the AOT cache).", "--force"));
+                "Stop now, abandoning in-flight jobs (still assembles the AOT cache).", "--now"));
     }
 
     @Override
@@ -51,7 +51,7 @@ public final class EngineStopCommand implements CliCommand {
         long started = before.get().startedAtMillis();
 
         // Force: stop now via the clean-exit path (SIGKILL fallback if unresponsive).
-        if (in.isSet("force")) {
+        if (in.isSet("now")) {
             if (!EngineClient.forceStop(paths.socket())) EngineClient.hardKill(before.get().pid());
             CliOutput.out(stoppedWedge(elapsed(started)));
             return Exit.SUCCESS;

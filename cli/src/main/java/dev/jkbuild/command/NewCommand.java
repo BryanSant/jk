@@ -77,7 +77,8 @@ public final class NewCommand implements CliCommand {
         return List.of(
                 Opt.value("<name>", "Project name and target directory leaf.", "--name"),
                 Opt.value("<group>", "Maven groupId (default: from git config).", "--group"),
-                Opt.value("<spec>", "JDK: 25, corretto-25, or lts|stable|latest.", "--jdk"),
+                // --jdk rides the GLOBAL option (same canonical key "jdk"); a local
+                // re-declaration would collide with it in the dispatcher.
                 Opt.value("<lang>", "Language: java | kotlin. Default: java.", "--lang"),
                 Opt.flag("Executable project (default is a library).", "--executable")
                         .negate(),

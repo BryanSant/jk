@@ -134,23 +134,38 @@ public final class RepoArtifactStore {
     // See materialize() below.
 
     /**
-     * Materialise a fetched artifact: hard-link {@code casBlob} into {@code repos/<name>/} and
-     * write its {@code .sha256} sidecar. Used for every repo now (not just {@code local}).
-     * Idempotent; best-effort.
+     * Materialise a fetched artifact: copy {@code casBlob} into {@code repos/<name>/} and write
+     * its {@code .sha256} sidecar. Used for every repo now (not just {@code local}). Idempotent;
+     * best-effort (the CAS blob remains the source of truth), but never torn: the artifact lands
+     * via temp + atomic move and the sidecar is written only after the artifact is complete, so
+     * "sidecar present" always implies "whole artifact" — a crash mid-copy leaves at most a
+     * {@code .part} file that the next call replaces.
      */
     public void materialize(String relativePath, Path casBlob, String sha256) {
         if (root == null) return;
+        Path artifact = root.resolve(relativePath);
+        Path tmp = artifact.resolveSibling(artifact.getFileName() + ".part");
         try {
             Path sidecar = sidecarPath(relativePath);
-            if (Files.exists(sidecar)) return;
-            Path artifact = root.resolve(relativePath);
+            // Complete only when both halves exist (a sidecar alone — e.g. after a pre-atomicity
+            // crash — is repaired by re-materializing, not trusted).
+            if (Files.exists(sidecar) && Files.isRegularFile(artifact)) return;
             // COPY, never link: installLocal/maven overwrite repo files in place; a link
             // would let that overwrite mutate the CAS blob (see Cas.putFile).
             Files.createDirectories(artifact.getParent());
-            Files.copy(casBlob, artifact, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            Files.copy(casBlob, tmp, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            Files.move(
+                    tmp,
+                    artifact,
+                    java.nio.file.StandardCopyOption.ATOMIC_MOVE,
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING);
             Files.createDirectories(sidecar.getParent());
             Files.writeString(sidecar, sha256);
-        } catch (IOException | RuntimeException ignored) {
+        } catch (IOException | RuntimeException e) {
+            try {
+                Files.deleteIfExists(tmp);
+            } catch (IOException ignored) {
+            }
         }
     }
 

@@ -225,7 +225,13 @@ public final class EngineServer implements AutoCloseable {
         }
 
         // Where clients currently connect — the engine this one displaces (drained below).
+        // Captured BEFORE we bind, and null when nothing was live: once the compat pointer is
+        // written the flat path names US, and a drain aimed there is a self-shutdown. (That
+        // self-drain shipped for a while, masked only by accidents — on TCP the old raw-token
+        // auth failed, on Unix the closed drain connection made the bye() reply throw before
+        // shuttingDown was set. See EngineTcpTransportTest.)
         Path previousActive = EnginePaths.activeSocket(paths);
+        if (!Files.exists(previousActive)) previousActive = null;
 
         // Same-version election: if a live engine of THIS version already serves, this instance
         // is a redundant spawn-race participant — lose quietly (the pre-generation contract).
@@ -342,6 +348,7 @@ public final class EngineServer implements AutoCloseable {
     private void drainDisplaced(Path previousActive) {
         if (previousActive == null || previousActive.equals(active.socket())) return;
         if (!Files.exists(previousActive)) return;
+        if (namesSelf(previousActive)) return; // a stale flat pointer we just re-claimed — never self-drain
         try (SocketChannel ch = openClient(previousActive)) {
             java.io.BufferedWriter w = new java.io.BufferedWriter(
                     new java.io.OutputStreamWriter(
@@ -352,6 +359,24 @@ public final class EngineServer implements AutoCloseable {
             log.accept("jk engine: drained displaced engine at " + previousActive.getFileName());
         } catch (IOException e) {
             // Nothing live there (stale file) — fine; the watchdog on the other side also covers us.
+        }
+    }
+
+    /**
+     * True when {@code candidate} resolves to THIS engine's own listener — the flat compat
+     * pointer after we've re-claimed a crashed generation's name (Unix symlink → our gen socket;
+     * TCP → a copy of our own port). Drain/probe traffic must never target it.
+     */
+    private boolean namesSelf(Path candidate) {
+        try {
+            if (EngineTransport.useLoopbackTcp()) {
+                return Files.readString(candidate)
+                        .trim()
+                        .equals(Files.readString(active.socket()).trim());
+            }
+            return candidate.toRealPath().equals(active.socket().toRealPath());
+        } catch (IOException e) {
+            return false; // unreadable/vanished — the connect attempt sorts it out
         }
     }
 
@@ -386,7 +411,9 @@ public final class EngineServer implements AutoCloseable {
             java.io.BufferedWriter w = new java.io.BufferedWriter(
                     new java.io.OutputStreamWriter(
                             java.nio.channels.Channels.newOutputStream(ch), StandardCharsets.UTF_8));
-            w.write(Files.readString(token).trim());
+            // The auth envelope, exactly as the CLI client sends it — authenticate() accepts
+            // nothing else (a raw token line here once broke takeover/election on TCP).
+            w.write(EngineProtocol.auth(Files.readString(token).trim()));
             w.write('\n');
             w.flush();
             return ch;
@@ -1310,7 +1337,7 @@ public final class EngineServer implements AutoCloseable {
             return true;
         }
         try {
-            EngineDelegate.runAsChild(pin, requestLine, reader, writer, log);
+            EngineDelegate.runAsChild(pin, requestLine, reader, writer, paths.log(), log);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             sendQuiet(writer, EngineProtocol.buildError("interrupted delegating to jk " + pin));

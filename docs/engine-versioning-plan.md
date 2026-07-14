@@ -100,7 +100,7 @@ work while hoping for quiet" makes the lull *less* likely. Invert it, nginx-styl
 Degraded fallback (kept in the design, expected unused): if endpoint indirection proves
 unreliable on some host, the old engine can soft-drain instead — refuse new connections
 with a protocol-zero `busy-upgrading` answer (clients retry against the endpoint file),
-finish in-flight work, exit. Never a hard kill except `jk self update --force`.
+finish in-flight work, exit. Never a hard kill except `jk self update --now`.
 
 No lull needed. No job killed. The fleet converges immediately. In-flight jobs finish
 under the version that started them — correct, since their goals/action keys were
@@ -224,12 +224,12 @@ key); `jk self update` on a busy daemon completes with zero killed jobs.
 
 | Work item | Where |
 |---|---|
-| `jk wrapper [--version <v|latest>] [--emit]`: bare = regenerate at current pin; `--version` = springboard (materialize target, exec ITS `jk wrapper --emit`) | new `WrapperCommand` in `:cli` |
+| `jk wrapper [<v|latest>] [--emit]`: bare = regenerate at current pin; a version argument = springboard (materialize target, exec ITS `jk wrapper --emit`) | new `WrapperCommand` in `:cli` |
 | Script templates (`./jk`, `jk.bat`): read lock line → have-or-fetch `versions/<v>/bin/jk` (sha-verified against the lock) → exec; `latest` bootstrap when no lock | templates as classpath resources beside the command; contract test that templates only depend on the frozen release layout + lock line |
 | Docs: wrapper how-to + the cmd.exe shadowing note | docs/variants.md-style user doc or README section |
 
 Acceptance: wrapper-only checkout (no `~/.jk`) bootstraps, builds, and `jk wrapper
---version latest` upgrades itself through the springboard on Linux and Windows lanes.
+latest` upgrades itself through the springboard on Linux and Windows lanes.
 
 ### P6 — GC + status — S
 
@@ -267,7 +267,7 @@ builds with its pinned jk on a machine with no — or the wrong — jk installed
 - **Updating the wrapper springboards through the pinned client.** cmd.exe resolves a
   bare `jk` to the project's `jk.bat` (current-dir shadowing), so `jk wrapper` in a
   project dir always runs the PINNED — possibly old — client. That is fine, because the
-  `wrapper` subcommand is a springboard, not a generator: `jk wrapper --version <x.y.z|latest>`
+  `wrapper` subcommand is a springboard, not a generator: `jk wrapper <x.y.z|latest>`
   resolves the requested version, materializes it into `versions/<v>/`, and **execs that
   version's own `jk wrapper --emit`** — the new client writes its own scripts and the new
   pin. The old client never needs to know newer script content; it only needs the
@@ -286,4 +286,4 @@ builds with its pinned jk on a machine with no — or the wrong — jk installed
 3. Wrapper script naming: `./jk` + `jk.bat` as specified. `jk.bat` shadows a PATH `jk`
    inside cmd.exe sessions in that directory (cmd searches the current dir first;
    PowerShell requires `.\` and does not shadow) — intended for builds, and harmless for
-   wrapper updates because `jk wrapper --version` springboards (see §7).
+   wrapper updates because `jk wrapper <version>` springboards (see §7).

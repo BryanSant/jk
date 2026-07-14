@@ -48,7 +48,7 @@ public final class ImportCommand implements CliCommand {
         return List.of(
                 Opt.value("<file>", "Path to write jk.toml.", "--out"),
                 Opt.value("<file>", "Path to write the import report.", "--report"),
-                Opt.flag("Overwrite existing jk.toml.", "--force"));
+                Opt.flag("Overwrite existing jk.toml.", "--overwrite"));
     }
 
     @Override
@@ -72,7 +72,7 @@ public final class ImportCommand implements CliCommand {
                 in.positionals().isEmpty() ? null : Path.of(in.positionals().get(0));
         Path out = in.value("out").map(Path::of).orElse(null);
         Path reportPath = in.value("report").map(Path::of).orElse(null);
-        boolean force = in.isSet("force");
+        boolean force = in.isSet("overwrite");
         GlobalOptions global = GlobalOptions.from(in);
         Path baseDir = global.workingDir();
 

@@ -24,8 +24,15 @@ public final class EngineTransport {
 
     private EngineTransport() {}
 
-    /** True on Windows — the one platform where the Unix-domain-socket path isn't used. */
+    /**
+     * True on Windows — the one platform where the Unix-domain-socket path isn't used. Tests and
+     * release smokes force either transport with {@code -Djk.engine.transport=tcp|unix} so the
+     * TCP lane (auth handshake included) is exercisable off-Windows.
+     */
     public static boolean useLoopbackTcp() {
+        String forced = System.getProperty("jk.engine.transport", "");
+        if ("tcp".equals(forced)) return true;
+        if ("unix".equals(forced)) return false;
         return System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win");
     }
 

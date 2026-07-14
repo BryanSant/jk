@@ -82,7 +82,7 @@ class ExportCommandTest {
         assertThat(Jk.execute(new String[] {"export", "maven", "-C", tmp.toString()}))
                 .isNotEqualTo(0);
         // With --force it overwrites.
-        assertThat(Jk.execute(new String[] {"export", "maven", "--force", "-C", tmp.toString()}))
+        assertThat(Jk.execute(new String[] {"export", "maven", "--overwrite", "-C", tmp.toString()}))
                 .isEqualTo(0);
     }
 

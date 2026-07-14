@@ -43,13 +43,13 @@ public final class ExportMavenCommand implements CliCommand {
 
     @Override
     public List<Opt> options() {
-        return List.of(Opt.flag("Overwrite existing pom.xml files.", "--force"));
+        return List.of(Opt.flag("Overwrite existing pom.xml files.", "--overwrite"));
     }
 
     @Override
     public int run(Invocation in) throws IOException {
         GlobalOptions global = GlobalOptions.from(in);
-        boolean force = in.isSet("force");
+        boolean force = in.isSet("overwrite");
         GeneratedFiles files = ExportSupport.generate(global.workingDir(), "export-maven", "jk export maven");
         if (files == null) return Exit.NO_INPUT;
         return ExportSupport.writeAll(files, force, "jk export maven");

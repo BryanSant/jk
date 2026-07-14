@@ -66,7 +66,7 @@ public final class BuildCommand implements CliCommand {
 
     @Override
     public List<Opt> options() {
-        return List.of(
+        List<Opt> opts = new java.util.ArrayList<>(List.of(
                 Opt.value("<name>", "Apply a build profile. Default: auto (ci on CI).", "--profile"),
                 Opt.value("<N>", "Test-runner JVMs to fork in parallel. Default 1.", "-w", "--workers"),
                 Opt.value("<dir>", "Override the jk cache directory.", "--cache-dir")
@@ -77,14 +77,9 @@ public final class BuildCommand implements CliCommand {
                 Opt.flag("Package an extracted layout + trained JVM startup cache.", "--aot-cache"),
                 Opt.flag("Build modules one at a time (rich serial view).", "--no-parallel"),
                 Opt.flag("", "--parallel").hide(),
-                Opt.flag("Run modules' tests concurrently too. Default: off.", "--parallel-tests"),
-                Opt.flag("Build the release build type (shorthand for --variant build-type=release).", "--release"),
-                Opt.value(
-                        "<dim>=<value>",
-                        "Select a variant value (repeatable; bare <value> when one dimension).",
-                        "--variant"));
-        // NOTE: keep the two variant Opts textually in sync with VariantSelection.options() —
-        // jk build declares them inline only to keep its option ordering stable.
+                Opt.flag("Run modules' tests concurrently too. Default: off.", "--parallel-tests")));
+        opts.addAll(VariantSelection.options());
+        return opts;
     }
 
     String profileName;

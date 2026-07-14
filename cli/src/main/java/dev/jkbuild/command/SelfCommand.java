@@ -23,12 +23,12 @@ import java.util.List;
 /**
  * {@code jk self} — the installation manages itself (engine-versioning-plan §3/§4).
  *
- * <p>{@code jk self update [--version <v>] [--force]}: resolve the target (default
+ * <p>{@code jk self update [<version>] [--now]}: resolve the target (default
  * {@code latest/VERSION}), download the platform client + engine jar from the frozen release
  * layout (releases.md), verify signature-then-hash ({@link dev.jkbuild.repo.ReleaseVerifier}),
  * materialize into {@code ~/.jk/versions/<v>/}, flip the {@code bin/jk} pointer, and start the
  * new engine — whose startup takes over the endpoint and gracefully drains the old daemon.
- * Nothing is killed; {@code --force} stops the old engine (and its jobs) first, for the
+ * Nothing is killed; {@code --now} stops the old engine (and its jobs) first, for the
  * impatient and as the wedged-engine recovery hatch.
  */
 public final class SelfCommand extends GroupCommand {
@@ -45,7 +45,55 @@ public final class SelfCommand extends GroupCommand {
 
     @Override
     public List<CliCommand> subcommands() {
-        return List.of(new UpdateSub());
+        return List.of(new UpdateSub(), new MaterializeSub());
+    }
+
+    /**
+     * {@code jk self materialize <client-bin> <engine-jar>} — hidden install-time seam: ingest a
+     * local dist's artifacts into the CAS and materialize {@code versions/<running>/} through the
+     * ONE Java materializer. install.sh calls this through the freshly-installed client instead
+     * of hand-rolling the layout in shell — a shell copy that skipped the CAS left pruned
+     * versions unrecoverable (VersionStore.prune re-materializes from CAS blobs).
+     */
+    static final class MaterializeSub implements CliCommand {
+
+        @Override
+        public String name() {
+            return "materialize";
+        }
+
+        @Override
+        public String description() {
+            return "Materialize versions/<running> from local artifacts (install-time seam)";
+        }
+
+        @Override
+        public boolean hidden() {
+            return true;
+        }
+
+        @Override
+        public List<dev.jkbuild.model.command.Param> parameters() {
+            return List.of(
+                    dev.jkbuild.model.command.Param.of(
+                            "client-bin", dev.jkbuild.model.command.Arity.ONE, "The jk client binary."),
+                    dev.jkbuild.model.command.Param.of(
+                            "engine-jar", dev.jkbuild.model.command.Arity.ONE, "The matching jk-engine jar."));
+        }
+
+        @Override
+        public int run(Invocation in) throws Exception {
+            Path client = Path.of(in.positionals().get(0));
+            Path engineJar = Path.of(in.positionals().get(1));
+            if (!Files.isRegularFile(engineJar)) {
+                CliOutput.err("jk self materialize: engine jar not found: " + engineJar);
+                return Exit.SOFTWARE;
+            }
+            VersionStore.Materialized m = VersionStore.current()
+                    .materializeFromFiles(dev.jkbuild.cli.Jk.VERSION, new Cas(JkDirs.cache()), engineJar, client);
+            CliOutput.out("materialized " + m.root());
+            return 0;
+        }
     }
 
     static final class UpdateSub implements CliCommand {
@@ -62,15 +110,24 @@ public final class SelfCommand extends GroupCommand {
 
         @Override
         public List<Opt> options() {
+            // No --version option: the global -V/--version flag owns that name (the dispatcher
+            // rejects duplicates), so the target rides as a positional.
             return List.of(
-                    Opt.value("<x.y.z>", "Target version. Default: the latest release.", "--version"),
-                    Opt.flag("Stop the running engine (and its jobs) immediately instead of draining.", "--force"));
+                    Opt.flag("Stop the running engine (and its jobs) immediately instead of draining.", "--now"));
+        }
+
+        @Override
+        public List<dev.jkbuild.model.command.Param> parameters() {
+            return List.of(dev.jkbuild.model.command.Param.of(
+                    "version",
+                    dev.jkbuild.model.command.Arity.ZERO_OR_ONE,
+                    "Target version x.y.z. Default: the latest release."));
         }
 
         @Override
         public int run(Invocation in) throws Exception {
             URI base = releasesBase();
-            String target = in.value("version").orElse(null);
+            String target = in.positionals().isEmpty() ? null : in.positionals().get(0);
             dev.jkbuild.http.Http http = new dev.jkbuild.http.Http();
             if (target == null) {
                 target = new String(get(http, URI.create(base + "/latest/VERSION"), "latest version pointer"),
@@ -97,10 +154,10 @@ public final class SelfCommand extends GroupCommand {
             flipPointer(m);
             CliOutput.out("jk " + target + " installed (" + m.root() + ")");
 
-            // Hand the engine over: --force stops the old daemon (killing its jobs) first;
+            // Hand the engine over: --now stops the old daemon (killing its jobs) first;
             // otherwise the NEW engine's startup drains it gracefully — zero interrupted builds.
             var paths = dev.jkbuild.engine.EnginePaths.current();
-            if (in.isSet("force")) {
+            if (in.isSet("now")) {
                 dev.jkbuild.cli.engine.EngineClient.forceStop(
                         dev.jkbuild.engine.EnginePaths.activeSocket(paths));
             }
@@ -111,7 +168,7 @@ public final class SelfCommand extends GroupCommand {
                         .start()
                         .waitFor();
                 CliOutput.out("engine " + target + " is taking over"
-                        + (in.isSet("force") ? "" : " (running builds finish on the old engine)"));
+                        + (in.isSet("now") ? "" : " (running builds finish on the old engine)"));
             }
             return 0;
         }

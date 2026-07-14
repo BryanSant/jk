@@ -98,26 +98,48 @@ public final class CachePruneScheduler {
     }
 
     /**
-     * Best-effort resolution of the absolute path to the running {@code jk} binary. Mirrors the logic
-     * in {@code ActivateCommand}; lives here so engine doesn't depend on cli.
+     * Best-effort resolution of the absolute path to the running {@code jk} binary. Lives here so
+     * engine doesn't depend on cli.
+     *
+     * <p>The running executable IS jk (whatever it's named) unless the process is a JVM launcher —
+     * a JVM-dist run's command is {@code .../bin/java}, which can't be re-invoked as jk, so it
+     * resolves empty and {@code JK_EXE} is the override. (A filename heuristic like
+     * {@code contains("jk")} is wrong in both directions: it rejects a renamed native binary and
+     * accepts a java launcher installed under a path that happens to contain "jk".)
      */
     public static Optional<String> resolveJkExe() {
         String envOverride = System.getenv("JK_EXE");
         if (envOverride != null && !envOverride.isBlank()) {
             return Optional.of(envOverride);
         }
+        Path candidate = null;
         try {
-            var info = ProcessHandle.current().info();
-            var cmd = info.command();
-            if (cmd.isPresent()) {
-                Path path = Path.of(cmd.get());
-                if (path.getFileName() != null && path.getFileName().toString().contains("jk")) {
-                    return Optional.of(path.toAbsolutePath().toString());
-                }
+            // Authoritative on Linux, for native images and JVMs alike.
+            candidate = Files.readSymbolicLink(Path.of("/proc/self/exe"));
+        } catch (IOException | RuntimeException ignored) {
+            // not Linux (or /proc unavailable) — fall through
+        }
+        if (candidate == null) {
+            try {
+                candidate = ProcessHandle.current()
+                        .info()
+                        .command()
+                        .map(Path::of)
+                        .orElse(null);
+            } catch (RuntimeException ignored) {
+                // fall through
             }
-        } catch (RuntimeException ignored) {
-            // fall through
+        }
+        if (candidate != null && !isJavaLauncher(candidate)) {
+            return Optional.of(candidate.toAbsolutePath().toString());
         }
         return Optional.empty();
+    }
+
+    private static boolean isJavaLauncher(Path p) {
+        String name = p.getFileName() == null
+                ? ""
+                : p.getFileName().toString().toLowerCase(java.util.Locale.ROOT);
+        return name.equals("java") || name.equals("java.exe") || name.equals("javaw.exe");
     }
 }

@@ -40,7 +40,6 @@ public final class GradleCommand implements CliCommand {
     @Override
     public List<Opt> options() {
         return List.of(
-                Opt.value("<dir>", "Project directory.", "-C", "--directory"),
                 Opt.value("<dir>", "Override the tools install root.", "--tools-dir")
                         .hide(),
                 Opt.value("<dir>", "Override the JDK install root.", "--jdks-dir")

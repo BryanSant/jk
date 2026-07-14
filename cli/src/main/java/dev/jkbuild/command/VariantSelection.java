@@ -26,9 +26,10 @@ final class VariantSelection {
         return List.of(
                 Opt.flag("Build the release build type (shorthand for --variant build-type=release).", "--release"),
                 Opt.value(
-                        "<dim>=<value>",
-                        "Select a variant value (repeatable; bare <value> when one dimension).",
-                        "--variant"));
+                                "<dim>=<value>",
+                                "Select a variant value (repeatable; bare <value> when one dimension).",
+                                "--variant")
+                        .repeat());
     }
 
     /** The compact wire selection — {@code ""} (defaults) / {@code "release"} / {@code "release|tier=free"}. */

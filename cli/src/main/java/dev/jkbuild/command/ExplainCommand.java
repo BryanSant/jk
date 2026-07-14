@@ -44,7 +44,6 @@ public final class ExplainCommand implements CliCommand {
     public List<Opt> options() {
         return List.of(
                 Opt.flag("Build the plan instead of printing it (`jk build`).", "--run"),
-                Opt.flag("Expand every module's phases, even cached ones.", "--verbose", "-v"),
                 Opt.flag("Estimate the ETA for a serial build (one module at a time).", "--no-parallel"),
                 Opt.flag("", "--parallel").hide(),
                 Opt.flag("Estimate the ETA with tests running concurrently across modules.", "--parallel-tests"),

@@ -276,9 +276,25 @@ public final class CommandDispatch {
         return Abbreviations.resolve(name, byName);
     }
 
-    /** A parse model = the command's own options plus the shared global options. */
+    /**
+     * A parse model = the command's own options plus the shared global options. A name collision
+     * between the two is a programming error and fails loudly: ArgParser indexes names last-wins,
+     * so a silent merge would let a global quietly replace a command's option (this once broke
+     * `jk self update <version>` — the global -V/--version flag ate the command's value option).
+     */
     private static Command withGlobals(CliCommand cmd) {
         List<Opt> opts = new ArrayList<>(cmd.options());
+        java.util.Set<String> own = new java.util.HashSet<>();
+        for (Opt opt : opts) own.addAll(opt.names());
+        for (Opt global : GlobalOptions.globalOpts()) {
+            for (String n : global.names()) {
+                if (own.contains(n)) {
+                    throw new IllegalStateException("command '" + cmd.name() + "' declares option " + n
+                            + ", which collides with the global option " + n
+                            + " — rename the command's option");
+                }
+            }
+        }
         opts.addAll(GlobalOptions.globalOpts());
         return new Command() {
             @Override
