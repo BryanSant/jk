@@ -74,7 +74,7 @@ and the fallback when no engine artifact is installed. Both routes execute the e
    client and jar — a global default pinned older for *project* builds is skipped, since it governs
    worker JVMs, not the engine host); when nothing installed qualifies, the client installs
    exactly the floor release, with no global-default side effects. The spawn line also carries
-   an AOT cache (JEP 514, `<engine-state>/engine-<jar-key>.aot`): every cold start after the
+   an AOT cache (JEP 514, `~/.jk/state/aot/engine-<version>-<jar-key>.aot`): every cold start after the
    first maps pre-parsed class metadata plus AOT-compiled code, taming the fresh JVM's
    JIT-warmup tail. The cache is *recorded* off to the side. The first spawn after a jar/JDK
    change boots cold and serves immediately; the client's spawn line adds
@@ -91,7 +91,7 @@ and the fallback when no engine artifact is installed. Both routes execute the e
    The key ties the cache to the exact jar because
    `AOTMode=auto` silently ignores a mismatched cache — an unkeyed file would stop helping at
    the first upgrade and never retrain. The same treatment covers jk's short-lived **worker
-   JVMs** (`WorkerAot`, caches under `~/.jk/state/aot/`): javac forks map a cache keyed to the
+   JVMs** (`WorkerAot`): javac forks map a cache keyed to the
    project's toolchain JDK + effective GC (measured ~40-55% off a small compile), and the
    kotlinc worker maps one additionally keyed to its compiler classpath, so a Kotlin-version
    bump retrains. The first fork that finds no cache proceeds untrained and kicks off a
@@ -99,7 +99,13 @@ and the fallback when no engine artifact is installed. Both routes execute the e
    process; the engine log records it); the next fork maps the result. Exact-match keying is
    the rule everywhere — a different JDK build, vendor, or GC mints a new key, the old cache
    is swept, and a mismatched or corrupt cache is a silent no-op, never a failed build.
-   `-Djk.worker.aot=off` (or `JK_WORKER_AOT=off`) disables it. **(c)**
+   `-Djk.worker.aot=off` (or `JK_WORKER_AOT=off`) disables it. Every `.aot` file — engine and
+   workers alike — lives side by side in `~/.jk/state/aot/`, one honest place to audit or wipe.
+   Lifetimes differ by prefix: `engine-<version>-…` files are jk-version-scoped (retired with
+   the version by the cache prune's version sweep), while `javac-`/`kotlinc-` files are
+   toolchain-scoped and retention-swept (the ~4 most-recently-used per tool survive; anything
+   untouched for ~30 days is reclaimed, including failure markers — so a once-failed key
+   eventually gets another training attempt). **(c)**
    the `jk` binary itself, re-invoked with the internal `--engine-server` flag — the JVM dist and
    dev workflows. The choice is recorded as the first line of the engine's log file. Every route
    sizes the heap from `max-heap-mb` (see [Memory target](#memory-target)): real JVM flags on the

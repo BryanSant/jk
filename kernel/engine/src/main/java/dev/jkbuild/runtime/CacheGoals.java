@@ -67,7 +67,7 @@ public final class CacheGoals {
                                 dev.jkbuild.model.JkVersion.VERSION,
                                 java.time.Duration.ofDays(30),
                                 key -> latest.getOrDefault(key, 0L),
-                                dev.jkbuild.util.JkDirs.state().resolve("engine"));
+                                dev.jkbuild.util.JkDirs.state());
                         for (String v : prunedVersions) ctx.warn("prune", "retired unused jk " + v);
                     } catch (java.io.IOException | RuntimeException ignored) {
                         // version sweep is best-effort maintenance

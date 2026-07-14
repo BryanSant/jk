@@ -61,11 +61,12 @@ public final class VersionStore {
     /**
      * Remove materialized versions that are neither {@code keep} (the running/current version)
      * nor used within {@code retention} per the ledger (engine-versioning-plan §5/P6). Their
-     * version-scoped derived state ({@code state/engine/<v>/} — AOT caches) goes with them.
+     * version-scoped derived state goes with them: {@code state/aot/engine-<v>-<key>.*} (the
+     * engine AOT cache and its markers) plus the pre-1.0 legacy {@code state/engine/<v>/} dir.
      * A pruned pin re-materializes on demand: R1 made that cheap and verified.
      */
     public List<String> prune(String keep, java.time.Duration retention,
-            java.util.function.ToLongFunction<String> lastUsedMillis, Path engineStateDir) {
+            java.util.function.ToLongFunction<String> lastUsedMillis, Path stateDir) {
         List<String> pruned = new ArrayList<>();
         Path dir = versionsDir();
         if (!Files.isDirectory(dir)) return pruned;
@@ -78,13 +79,35 @@ public final class VersionStore {
                 long lastUsed = lastUsedMillis.applyAsLong(ledgerKey(v));
                 if (lastUsed >= cutoff) continue;
                 deleteRecursively(p);
-                if (engineStateDir != null) deleteRecursively(engineStateDir.resolve(v));
+                if (stateDir != null) {
+                    deleteRecursively(stateDir.resolve("engine").resolve(v)); // pre-1.0 legacy home
+                    deleteEngineAotFiles(stateDir.resolve("aot"), v);
+                }
                 pruned.add(v);
             }
         } catch (IOException ignored) {
             // best-effort maintenance
         }
         return pruned;
+    }
+
+    /**
+     * Delete version {@code v}'s engine AOT artifacts ({@code engine-<v>-<16-hex-key>.*}) from the
+     * shared {@code state/aot/} dir. The key-shape check keeps a version whose name extends this
+     * one ({@code 0.10.0} vs {@code 0.10.0-SNAPSHOT}) out of the blast radius.
+     */
+    private static void deleteEngineAotFiles(Path aotDir, String v) {
+        String prefix = "engine-" + v + "-";
+        try (var entries = Files.newDirectoryStream(aotDir, "engine-*")) {
+            for (Path p : entries) {
+                String name = p.getFileName().toString();
+                if (name.startsWith(prefix) && name.substring(prefix.length()).matches("[0-9a-f]{16}\\..*")) {
+                    Files.deleteIfExists(p);
+                }
+            }
+        } catch (IOException ignored) {
+            // best-effort maintenance
+        }
     }
 
     /**

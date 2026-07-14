@@ -1560,29 +1560,52 @@ public final class EngineClient {
         }
         signature.append(':').append(jdk == null ? "no-jdk" : jdk.version() + "|" + jdk.vendor().name());
         String hash = dev.jkbuild.util.Hashing.sha256Hex(signature.toString()).substring(0, 16);
-        Path versionDir = paths.dir().resolve(version);
+        // ONE home for every AOT cache — engine and workers alike live in ~/.jk/state/aot/ so a
+        // user (or a future `jk cache info`) finds them all side by side. The engine's file
+        // carries its jk version ("engine-<version>-<key>.aot") because its LIFETIME is
+        // version-scoped: VersionStore.prune retires a version's caches with the version, and
+        // the sweep below stays within one version so side-by-side installs never thrash
+        // each other's caches. Worker caches (javac-/kotlinc-) have no version dimension.
+        Path aotDir = dev.jkbuild.util.JkDirs.state().resolve("aot");
         try {
-            Files.createDirectories(versionDir);
+            Files.createDirectories(aotDir);
         } catch (IOException ignored) {
             // Falls through — a failed mkdir surfaces on the training write, with a real error.
         }
-        Path cache = versionDir.resolve("engine-" + hash + ".aot");
-        // Sweep every other key's artifacts — the cache, the JEP 514 ".aot.config" recording
-        // intermediate (left behind whenever a training run is interrupted before assembly), and any
-        // ".noaot" marker — keeping only the current key's files (name prefix "engine-<hash>"). The
-        // socket/lock/pid/log live under a different, non-"engine-" prefix, so this never touches them.
-        String stem = "engine-" + hash;
-        try (var entries = Files.newDirectoryStream(versionDir, "engine-*")) {
+        String stem = "engine-" + version + "-" + hash;
+        Path cache = aotDir.resolve(stem + ".aot");
+        // Sweep THIS version's other keys — the cache, the JEP 514 ".aot.config" recording
+        // intermediate, and any ".noaot" marker. The "<16-hex>." shape check keeps a version
+        // whose name extends ours ("0.10.0" vs "0.10.0-SNAPSHOT") out of the blast radius.
+        String versionPrefix = "engine-" + version + "-";
+        try (var entries = Files.newDirectoryStream(aotDir, "engine-*")) {
             for (Path p : entries) {
-                if (!p.getFileName().toString().startsWith(stem)) Files.deleteIfExists(p);
+                String name = p.getFileName().toString();
+                if (name.startsWith(versionPrefix)
+                        && !name.startsWith(stem)
+                        && name.substring(versionPrefix.length()).matches("[0-9a-f]{16}\\..*")) {
+                    Files.deleteIfExists(p);
+                }
             }
         } catch (IOException ignored) {
             // Cleanup is opportunistic; a leftover cache costs disk, not correctness.
         }
+        // Pre-1.0 migration: the cache used to live in <engine-state>/<version>/ — retire that
+        // dir so nobody plays hide-and-seek with stale copies. Remove once 1.0 ships.
+        deleteRecursivelyQuietly(paths.dir().resolve(version));
         return cache;
     }
 
-    /** The sibling "this key can't AOT here" marker for an {@code engine-<key>.aot} path. */
+    private static void deleteRecursivelyQuietly(Path root) {
+        if (!Files.isDirectory(root)) return;
+        try (var walk = Files.walk(root)) {
+            walk.sorted(java.util.Comparator.reverseOrder()).forEach(EngineClient::deleteQuietly);
+        } catch (IOException ignored) {
+            // best-effort
+        }
+    }
+
+    /** The sibling "this key can't AOT here" marker for an {@code engine-<version>-<key>.aot} path. */
     private static Path noAotMarkerPath(Path aotCache) {
         String name = aotCache.getFileName().toString();
         return aotCache.resolveSibling(name.substring(0, name.length() - ".aot".length()) + ".noaot");

@@ -49,6 +49,16 @@ public final class WorkerAot {
     /** A claim file older than this is a crashed trainer's leftover — reclaimable. */
     private static final long CLAIM_STALE_MILLIS = 10 * 60 * 1_000;
 
+    /**
+     * Retention per tool: the newest caches by last-use mtime survive a publish sweep. Multiple
+     * keys are legitimately live at once (two projects on different toolchain JDKs, two Kotlin
+     * versions) — a keep-only-current sweep would make alternating builds retrain forever.
+     */
+    private static final int KEEP_PER_TOOL = 4;
+
+    /** Caches (and failure markers) untouched this long are dead keys — reclaim the disk. */
+    private static final long UNUSED_TTL_MILLIS = 30L * 24 * 60 * 60 * 1_000;
+
     /** In-JVM double-spawn guard (the claim file guards across processes). */
     private static final Set<Path> TRAINING = ConcurrentHashMap.newKeySet();
 
@@ -83,6 +93,7 @@ public final class WorkerAot {
             if (id == null) return List.of();
             Path cache = dir().resolve("javac-" + key(id, effectiveGc(workerFlags), "") + ".aot");
             if (Files.exists(cache)) {
+                touch(cache); // retention is by last use; the JVM mapping a cache never updates mtime
                 return List.of("-J-XX:AOTCache=" + cache, "-J-Xlog:aot=off");
             }
             if (eligible(id) && !Files.exists(noaotMarker(cache))) {
@@ -125,6 +136,7 @@ public final class WorkerAot {
             String gc = effectiveGc(JvmOptions.batchFlags(1)); // must match javaCommand, the actual spawn
             Path cache = dir().resolve("kotlinc-" + key(id, gc, workerClasspath) + ".aot");
             if (Files.exists(cache)) {
+                touch(cache); // retention is by last use; the JVM mapping a cache never updates mtime
                 return List.of("-XX:AOTCache=" + cache, "-Xlog:aot=off");
             }
             if (eligible(id) && !Files.exists(noaotMarker(cache))) {
@@ -259,7 +271,7 @@ public final class WorkerAot {
             }
             if (p.exitValue() == 0 && Files.exists(tmp)) {
                 Files.move(tmp, cache, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
-                sweepSiblings(cache);
+                sweepTool(cache);
                 System.err.println("jk engine: AOT cache ready for " + what + " (" + cache.getFileName() + ")");
             } else {
                 markNoAot(cache); // sticky per key — a JDK/Kotlin/GC bump mints a new key and retries
@@ -280,19 +292,59 @@ public final class WorkerAot {
     }
 
     /**
-     * Sweep same-tool caches for retired keys (old toolchain JDK, old Kotlin version, old GC
-     * tuning): keep only the key that just landed. One cache per (tool, current key) is the steady
-     * state; anything else is disk that will never be mapped again.
+     * Retention sweep for one tool's caches, run at publish time. Keeps the {@link #KEEP_PER_TOOL}
+     * most-recently-used caches (use = {@link #touch} at flag hand-out) and drops the rest, plus
+     * anything — cache or orphaned {@code .noaot} failure marker — untouched for
+     * {@link #UNUSED_TTL_MILLIS}. Several keys are legitimately live at once (different toolchain
+     * JDKs, Kotlin versions, GC pins); expiring a stale {@code .noaot} also gives a once-failed key
+     * a fresh training attempt. Engine caches ({@code engine-<version>-…}) share this directory but
+     * are version-lifecycle-owned (EngineClient sweep + VersionStore.prune) — never touched here.
      */
-    private static void sweepSiblings(Path cache) {
-        String name = cache.getFileName().toString(); // <tool>-<key>.aot
-        String tool = name.substring(0, name.indexOf('-') + 1);
+    private static void sweepTool(Path cache) {
+        String tool = cache.getFileName().toString();
+        tool = tool.substring(0, tool.indexOf('-') + 1); // "javac-" / "kotlinc-"
+        long now = System.currentTimeMillis();
+        List<Path> primaries = new ArrayList<>();
+        List<Path> markers = new ArrayList<>();
         try (var entries = Files.newDirectoryStream(cache.getParent(), tool + "*")) {
             for (Path p : entries) {
-                if (!p.getFileName().toString().startsWith(name)) deleteQuietly(p);
+                String n = p.getFileName().toString();
+                if (n.endsWith(".aot")) primaries.add(p);
+                else if (n.endsWith(".aot.noaot")) markers.add(p);
             }
         } catch (IOException ignored) {
-            // Opportunistic: a leftover cache costs disk, not correctness.
+            return; // opportunistic: a leftover cache costs disk, not correctness
+        }
+        primaries.sort(java.util.Comparator.comparingLong(WorkerAot::mtime).reversed());
+        for (int i = 0; i < primaries.size(); i++) {
+            Path p = primaries.get(i);
+            if (p.equals(cache)) continue; // the cache that just landed always survives
+            if (i >= KEEP_PER_TOOL || now - mtime(p) > UNUSED_TTL_MILLIS) {
+                deleteQuietly(p);
+                deleteQuietly(noaotMarker(p));
+                deleteQuietly(p.resolveSibling(p.getFileName() + ".config"));
+            }
+        }
+        for (Path m : markers) {
+            Path primary = m.resolveSibling(
+                    m.getFileName().toString().substring(0, m.getFileName().toString().length() - ".noaot".length()));
+            if (!Files.exists(primary) && now - mtime(m) > UNUSED_TTL_MILLIS) deleteQuietly(m);
+        }
+    }
+
+    private static long mtime(Path p) {
+        try {
+            return Files.getLastModifiedTime(p).toMillis();
+        } catch (IOException e) {
+            return 0; // unreadable sorts oldest — first in line to be reclaimed
+        }
+    }
+
+    private static void touch(Path p) {
+        try {
+            Files.setLastModifiedTime(p, java.nio.file.attribute.FileTime.fromMillis(System.currentTimeMillis()));
+        } catch (IOException ignored) {
+            // best-effort; worst case the cache looks colder than it is
         }
     }
 

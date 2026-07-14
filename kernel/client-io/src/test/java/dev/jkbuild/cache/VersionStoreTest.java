@@ -77,4 +77,35 @@ class VersionStoreTest {
         assertThat(third.root()).isEqualTo(second.root());
     }
 
+
+    @Test
+    void prune_retires_a_stale_version_with_its_engine_aot_caches(@TempDir Path home) throws Exception {
+        VersionStore store = new VersionStore(home.resolve("versions"));
+        java.nio.file.Path stale = java.nio.file.Files.createDirectories(
+                home.resolve("versions").resolve("0.9.0"));
+        java.nio.file.Files.writeString(stale.resolve("manifest.toml"), "");
+        java.nio.file.Path state = java.nio.file.Files.createDirectories(home.resolve("state"));
+        java.nio.file.Path legacy = java.nio.file.Files.createDirectories(
+                state.resolve("engine").resolve("0.9.0"));
+        java.nio.file.Path aot = java.nio.file.Files.createDirectories(state.resolve("aot"));
+        java.nio.file.Path staleCache =
+                java.nio.file.Files.writeString(aot.resolve("engine-0.9.0-aaaaaaaaaaaaaaaa.aot"), "x");
+        java.nio.file.Path staleMarker =
+                java.nio.file.Files.writeString(aot.resolve("engine-0.9.0-aaaaaaaaaaaaaaaa.aot.noaot"), "");
+        // A version whose name merely EXTENDS the pruned one must survive its sweep.
+        java.nio.file.Path lookalike =
+                java.nio.file.Files.writeString(aot.resolve("engine-0.9.0-SNAPSHOT-bbbbbbbbbbbbbbbb.aot"), "y");
+        java.nio.file.Path workerCache = java.nio.file.Files.writeString(aot.resolve("javac-cccccccccccccccc.aot"), "z");
+
+        java.util.List<String> pruned =
+                store.prune("1.0.0", java.time.Duration.ofDays(30), key -> 0L, state);
+
+        org.assertj.core.api.Assertions.assertThat(pruned).containsExactly("0.9.0");
+        org.assertj.core.api.Assertions.assertThat(stale).doesNotExist();
+        org.assertj.core.api.Assertions.assertThat(legacy).doesNotExist();
+        org.assertj.core.api.Assertions.assertThat(staleCache).doesNotExist();
+        org.assertj.core.api.Assertions.assertThat(staleMarker).doesNotExist();
+        org.assertj.core.api.Assertions.assertThat(lookalike).exists();
+        org.assertj.core.api.Assertions.assertThat(workerCache).exists();
+    }
 }

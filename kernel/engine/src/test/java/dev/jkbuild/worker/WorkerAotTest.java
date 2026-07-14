@@ -72,18 +72,45 @@ class WorkerAotTest {
     }
 
     @Test
-    void successful_training_publishes_the_cache_atomically_and_sweeps_stale_keys() throws Exception {
+    void publish_keeps_the_n_most_recently_used_caches_and_expires_dead_keys() throws Exception {
         Path dir = Files.createDirectories(tmp.resolve("aot"));
-        Path stale = Files.writeString(dir.resolve("javac-oldkey0000000000.aot"), "old");
-        Path staleMarker = Files.writeString(dir.resolve("javac-oldkey0000000000.aot.noaot"), "");
-        Path cache = dir.resolve("javac-newkey0000000000.aot");
+        long day = 24L * 60 * 60 * 1_000;
+        // Five live-ish keys with staggered last-use ages (1..5 days) — several keys are
+        // legitimately live at once (different toolchain JDKs / Kotlin versions / GC pins).
+        Path[] stale = new Path[5];
+        for (int i = 0; i < 5; i++) {
+            stale[i] = Files.writeString(dir.resolve("javac-stalekey000000" + i + "00.aot"), "old" + i);
+            Files.setLastModifiedTime(
+                    stale[i], java.nio.file.attribute.FileTime.fromMillis(System.currentTimeMillis() - (i + 1) * day));
+        }
+        // A key untouched for 40 days is dead regardless of count; an orphaned failure marker
+        // that old gets a fresh training chance; a young orphan marker stays sticky.
+        Path dead = Files.writeString(dir.resolve("javac-deadkey000000000a.aot"), "dead");
+        Files.setLastModifiedTime(dead, java.nio.file.attribute.FileTime.fromMillis(System.currentTimeMillis() - 40 * day));
+        Path deadMarker = Files.writeString(dir.resolve("javac-failkey000000000b.aot.noaot"), "");
+        Files.setLastModifiedTime(
+                deadMarker, java.nio.file.attribute.FileTime.fromMillis(System.currentTimeMillis() - 40 * day));
+        Path freshMarker = Files.writeString(dir.resolve("javac-failkey000000000c.aot.noaot"), "");
+        // Engine caches share the directory but are version-lifecycle-owned — never swept here.
+        Path engine = Files.writeString(dir.resolve("engine-1.0.0-aaaaaaaaaaaaaaaa.aot"), "engine");
+        Files.setLastModifiedTime(engine, java.nio.file.attribute.FileTime.fromMillis(System.currentTimeMillis() - 400 * day));
 
+        Path cache = dir.resolve("javac-newkey0000000000.aot");
         // A stand-in trainer: any command that writes the aot output and exits 0.
         WorkerAot.trainAsync("test", cache, (aotOutput, scratch) ->
                 List.of("bash", "-c", "echo trained > '" + aotOutput + "'"));
-
         waitUntil(Duration.ofSeconds(10), () -> Files.exists(cache));
-        waitUntil(Duration.ofSeconds(10), () -> !Files.exists(stale) && !Files.exists(staleMarker));
+        waitUntil(Duration.ofSeconds(10), () -> !Files.exists(stale[4]));
+
+        // Keep 4 by recency: the new cache + the 3 youngest stale keys; the rest reclaimed.
+        assertThat(stale[0]).exists();
+        assertThat(stale[1]).exists();
+        assertThat(stale[2]).exists();
+        assertThat(stale[3]).doesNotExist();
+        assertThat(dead).doesNotExist();
+        assertThat(deadMarker).doesNotExist();
+        assertThat(freshMarker).exists();
+        assertThat(engine).exists();
         assertThat(Files.exists(cache.resolveSibling(cache.getFileName() + ".training")))
                 .isFalse(); // claim released
     }
