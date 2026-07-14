@@ -129,11 +129,14 @@ class EngineProtocolTest {
     @Test
     void build_request_carries_freshen_lock() {
         String on = EngineProtocol.buildRequest(
-                "/w", "/c", null, 1, null, false, false, 0, false, false, false, false, true);
+                "/w", "/c", null, 1, null, false, false, 0, false, false, false, true);
         assertThat(Ndjson.bool(on, "freshenLock", false)).isTrue();
         String off = EngineProtocol.buildRequest(
-                "/w", "/c", null, 1, null, false, false, 0, false, false, false, false, false);
+                "/w", "/c", null, 1, null, false, false, 0, false, false, false, false);
         assertThat(Ndjson.bool(off, "freshenLock", true)).isFalse();
+        // rebuild rides the session envelope, not the builder.
+        assertThat(Ndjson.bool(EngineProtocol.withSession(off, null, null, null, true), "rebuild", false))
+                .isTrue();
     }
 
     @Test
@@ -309,19 +312,19 @@ class EngineProtocolTest {
     @Test
     void image_request_keeps_the_tarball_tristate() {
         String none = EngineProtocol.imageRequest(
-                "/w", "/c", null, "com.example.Main", null, null, null, null, false, false, false, false, false);
+                "/w", "/c", null, "com.example.Main", null, null, null, null, false, false, false, false);
         assertThat(EngineProtocol.typeOf(none)).isEqualTo(EngineProtocol.IMAGE_REQUEST);
         assertThat(Ndjson.str(none, "tarball")).isNull();
         String defaulted = EngineProtocol.imageRequest(
-                "/w", "/c", null, null, null, null, "", null, false, false, false, false, false);
+                "/w", "/c", null, null, null, null, "", null, false, false, false, false);
         assertThat(Ndjson.str(defaulted, "tarball")).isEmpty();
         String explicit = EngineProtocol.imageRequest(
-                "/w", "/c", null, null, "reg.io", "v2", "/out/img.tar", "podman", true, true, true, true, true);
+                "/w", "/c", null, null, "reg.io", "v2", "/out/img.tar", "podman", true, true, true, true);
         assertThat(Ndjson.str(explicit, "tarball")).isEqualTo("/out/img.tar");
         assertThat(Ndjson.str(explicit, "registry")).isEqualTo("reg.io");
         assertThat(Ndjson.str(explicit, "dockerExecutable")).isEqualTo("podman");
         assertThat(Ndjson.bool(explicit, "skipTests", false)).isTrue();
-        assertThat(Ndjson.bool(explicit, "rebuild", false)).isTrue();
+        // rebuild rides the session envelope (withSession), not the image builder.
     }
 
     @Test

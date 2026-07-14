@@ -293,7 +293,8 @@ public final class BuildCommand implements CliCommand {
         // stale lock disables the fully-cached shortcut AND the dirty hint (the engine re-forecasts
         // after freshening).
         boolean lockStale = forecast.lockStale();
-        if (forecast.fullyCached()) {
+        // A distrusting build (--force/--rebuild) never takes the trust-the-cache shortcut.
+        if (forecast.fullyCached() && !global.force && !global.rebuild) {
             // Fully cached — print chip line directly with no spinner ever created.
             CliOutput.out(dev.jkbuild.cli.tui.GoalWedge.chipLine(
                     dev.jkbuild.cli.tui.Glyphs.CHECK, "Build", nerdfont,
@@ -608,7 +609,8 @@ public final class BuildCommand implements CliCommand {
 
         // Single-module fast path: skip the TUI entirely when the engine's forecast says every
         // work phase is already cached (stat/CAS lookups engine-side, one round trip here).
-        if (GoalConsole.isInteractiveTerminal() && !global.outputIsJson()) {
+        // A distrusting build (--force/--rebuild) never takes the trust-the-cache shortcut.
+        if (GoalConsole.isInteractiveTerminal() && !global.outputIsJson() && !global.force && !global.rebuild) {
             try {
                 var forecast = dev.jkbuild.cli.engine.EngineClient.forecast(
                         dev.jkbuild.engine.EnginePaths.current(), dir, cache, buildOpts.skipTests);

@@ -870,7 +870,6 @@ public final class EngineClient {
                                 req.skipTests(),
                                 req.offline(),
                                 req.force(),
-                                req.rerun(),
                                 req.verbose()),
                         "image",
                         listenerFactory,

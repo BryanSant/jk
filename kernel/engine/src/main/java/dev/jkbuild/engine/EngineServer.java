@@ -1253,7 +1253,7 @@ public final class EngineServer implements AutoCloseable {
             JkConfig config = new JkConfig(
                     Optional.empty(),
                     Optional.of(Ndjson.bool(requestLine, "offline", false)),
-                    Optional.empty(),
+                    Optional.of(Ndjson.bool(requestLine, "rebuild", false)),
                     Optional.empty(),
                     Optional.empty(),
                     Optional.empty(),
@@ -1584,7 +1584,7 @@ public final class EngineServer implements AutoCloseable {
             JkConfig config = new JkConfig(
                     Optional.empty(),
                     Optional.of(offline),
-                    Optional.empty(),
+                    Optional.of(Ndjson.bool(requestLine, "rebuild", false)),
                     Optional.empty(),
                     Optional.empty(),
                     Optional.of(verbose),
@@ -1677,7 +1677,7 @@ public final class EngineServer implements AutoCloseable {
             JkConfig config = new JkConfig(
                     Optional.empty(),
                     Optional.of(offline),
-                    Optional.empty(),
+                    Optional.of(Ndjson.bool(requestLine, "rebuild", false)),
                     Optional.empty(),
                     Optional.empty(),
                     Optional.of(verbose),
@@ -2653,7 +2653,7 @@ public final class EngineServer implements AutoCloseable {
         JkConfig config = new JkConfig(
                 Optional.empty(),
                 Optional.of(Ndjson.bool(requestLine, "offline", false)),
-                Optional.empty(),
+                Optional.of(Ndjson.bool(requestLine, "rebuild", false)),
                 Optional.empty(),
                 Optional.empty(),
                 Optional.of(Ndjson.bool(requestLine, "verbose", false)),

@@ -85,7 +85,8 @@ final class EngineWorkerAdapter {
             // An empty envelope attaches nothing, so unadorned goals are byte-identical.
             var session = dev.jkbuild.config.SessionContext.current();
             send(writer, EngineProtocol.withSession(
-                    requestLine, session.variant(), session.clientEnv(), session.jvm()));
+                    requestLine, session.variant(), session.clientEnv(), session.jvm(),
+                    session.config().rebuildOr(false)));
 
             List<Phase> phases = new ArrayList<>();
             List<GoalResult.Diagnostic> diagnostics = new ArrayList<>();
@@ -147,7 +148,8 @@ final class EngineWorkerAdapter {
             // An empty envelope attaches nothing, so unadorned goals are byte-identical.
             var session = dev.jkbuild.config.SessionContext.current();
             send(writer, EngineProtocol.withSession(
-                    requestLine, session.variant(), session.clientEnv(), session.jvm()));
+                    requestLine, session.variant(), session.clientEnv(), session.jvm(),
+                    session.config().rebuildOr(false)));
 
             String line;
             while ((line = reader.readLine()) != null) {

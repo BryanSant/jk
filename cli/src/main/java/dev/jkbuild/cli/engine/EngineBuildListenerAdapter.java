@@ -108,13 +108,15 @@ final class EngineBuildListenerAdapter {
                     session.parallelTests(),
                     session.offline(),
                     session.force(),
-                    // rerun rides separately from force: it bypasses the action cache without
-                    // implying refresh, so verify's scratch rebuild stays CAS-local (no re-download).
-                    session.config().rebuildOr(false),
                     // jk build asks the engine to auto-freshen a stale workspace lock; verify's
                     // scratch rebuild must use the pinned lock verbatim (see WorkspaceRequest).
                     req.freshenLock()),
-                    req.variant(), req.clientEnv(), SessionContext.current().jvm()));
+                    req.variant(),
+                    req.clientEnv(),
+                    SessionContext.current().jvm(),
+                    // rebuild rides the session envelope: bypass jk's caches without implying
+                    // refresh — verify's scratch rebuild stays CAS-local (no re-download).
+                    session.config().rebuildOr(false)));
             writer.write('\n');
             writer.flush();
 
@@ -159,7 +161,8 @@ final class EngineBuildListenerAdapter {
                             req.force()),
                     SessionContext.current().variant(),
                     SessionContext.current().clientEnv(),
-                    SessionContext.current().jvm()));
+                    SessionContext.current().jvm(),
+                    SessionContext.current().config().rebuildOr(false)));
             writer.write('\n');
             writer.flush();
 
@@ -202,7 +205,8 @@ final class EngineBuildListenerAdapter {
                             req.force()),
                     req.variant(),
                     req.clientEnv(),
-                    SessionContext.current().jvm()));
+                    SessionContext.current().jvm(),
+                    SessionContext.current().config().rebuildOr(false)));
             writer.write('\n');
             writer.flush();
 
@@ -246,7 +250,8 @@ final class EngineBuildListenerAdapter {
                             graalHomes),
                     SessionContext.current().variant(),
                     SessionContext.current().clientEnv(),
-                    SessionContext.current().jvm()));
+                    SessionContext.current().jvm(),
+                    SessionContext.current().config().rebuildOr(false)));
             writer.write('\n');
             writer.flush();
 
@@ -286,7 +291,8 @@ final class EngineBuildListenerAdapter {
                             req.verbose()),
                     SessionContext.current().variant(),
                     SessionContext.current().clientEnv(),
-                    SessionContext.current().jvm()));
+                    SessionContext.current().jvm(),
+                    SessionContext.current().config().rebuildOr(false)));
             writer.write('\n');
             writer.flush();
 
@@ -536,7 +542,8 @@ final class EngineBuildListenerAdapter {
                     EngineProtocol.pluginVerbRequest(dir.toString(), cache.toString(), verb, args),
                     SessionContext.current().variant(),
                     SessionContext.current().clientEnv(),
-                    SessionContext.current().jvm()));
+                    SessionContext.current().jvm(),
+                    SessionContext.current().config().rebuildOr(false)));
             writer.write('\n');
             writer.flush();
             String line;
@@ -615,7 +622,8 @@ final class EngineBuildListenerAdapter {
                             libDir == null ? null : libDir.toString()),
                     SessionContext.current().variant(),
                     SessionContext.current().clientEnv(),
-                    SessionContext.current().jvm()));
+                    SessionContext.current().jvm(),
+                    SessionContext.current().config().rebuildOr(false)));
             writer.write('\n');
             writer.flush();
             String line;

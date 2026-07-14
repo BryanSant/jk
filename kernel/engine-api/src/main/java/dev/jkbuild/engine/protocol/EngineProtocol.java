@@ -732,7 +732,6 @@ public final class EngineProtocol {
             boolean parallelTests,
             boolean offline,
             boolean force,
-            boolean rerun,
             boolean freshenLock) {
         return "{\"t\":\""
                 + BUILD_REQUEST
@@ -758,8 +757,6 @@ public final class EngineProtocol {
                 + offline
                 + ",\"force\":"
                 + force
-                + ",\"rebuild\":"
-                + rerun
                 + ",\"freshenLock\":"
                 + freshenLock
                 + "}";
@@ -1097,7 +1094,6 @@ public final class EngineProtocol {
             boolean skipTests,
             boolean offline,
             boolean force,
-            boolean rerun,
             boolean verbose) {
         return "{\"t\":\""
                 + IMAGE_REQUEST
@@ -1123,8 +1119,6 @@ public final class EngineProtocol {
                 + offline
                 + ",\"force\":"
                 + force
-                + ",\"rebuild\":"
-                + rerun
                 + ",\"verbose\":"
                 + verbose
                 + "}";
@@ -2318,6 +2312,16 @@ public final class EngineProtocol {
      */
     public static String withSession(
             String request, String variant, java.util.Map<String, String> clientEnv, dev.jkbuild.config.WorkerTuning t) {
+        return withSession(request, variant, clientEnv, t, false);
+    }
+
+    /** As above, additionally carrying the session's {@code rebuild} distrust flag when set. */
+    public static String withSession(
+            String request,
+            String variant,
+            java.util.Map<String, String> clientEnv,
+            dev.jkbuild.config.WorkerTuning t,
+            boolean rebuild) {
         if (request == null
                 || request.length() < 2
                 || request.charAt(0) != '{'
@@ -2328,8 +2332,9 @@ public final class EngineProtocol {
         boolean hasEnv = clientEnv != null && !clientEnv.isEmpty();
         boolean hasJvm = t != null
                 && (t.maxRamPercent() != null || t.gc() != null || t.stringDedup() != null || !t.extraArgs().isEmpty());
-        if (!hasVariant && !hasEnv && !hasJvm) return request;
+        if (!hasVariant && !hasEnv && !hasJvm && !rebuild) return request;
         StringBuilder b = new StringBuilder(request.substring(0, request.length() - 1));
+        if (rebuild) b.append(",\"rebuild\":true");
         if (hasVariant) b.append(",\"variant\":").append(Ndjson.quote(variant));
         if (hasEnv) b.append(",\"env\":").append(Ndjson.map(clientEnv));
         if (hasJvm) {

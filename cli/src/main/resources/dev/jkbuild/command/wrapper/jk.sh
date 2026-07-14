@@ -4,26 +4,43 @@
 # Dumb and frozen by design (docs/engine-versioning-plan.md §7): read the exact pin from
 # jk.lock, materialize that client under ~/.jk/versions/<v>/ if missing (sha-verified
 # against the PIN), exec it. Never resolves version selectors; never updates itself —
-# `jk wrapper --version <v|latest>` springboards through whatever client answers.
+# `jk wrapper <v|latest>` springboards through whatever client answers.
+#
+# The FAST PATH (pinned binary present — every ordinary run) is fork-free: builtin
+# parameter expansion instead of grep/sed, no cd/pwd subshell, one [ -x ] stat, exec.
+# The wrapper's whole overhead is the shell interpreter itself (~1 ms).
 set -eu
 
 JK_HOME="${JK_HOME:-$HOME/.jk}"
-RELEASES="${JK_RELEASES_URL:-https://jkbuild.dev/releases}"
-DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+case "$0" in */*) DIR="${0%/*}" ;; *) DIR="." ;; esac
 
 VERSION=""
 SHA=""
 if [ -f "$DIR/jk.lock" ]; then
-  LINE="$(grep '^jk = ' "$DIR/jk.lock" 2>/dev/null || true)"
-  VERSION="$(printf '%s' "$LINE" | sed -n 's/.*version = "\([^"]*\)".*/\1/p')"
-  SHA="$(printf '%s' "$LINE" | sed -n 's/.*sha256 = "\([^"]*\)".*/\1/p')"
-fi
-if [ -z "$VERSION" ]; then
-  # No lock yet: bootstrap the latest release; the real client resolves and locks.
-  VERSION="$(curl -fsSL "$RELEASES/latest/VERSION" | tr -d '[:space:]')"
+  while IFS= read -r LINE || [ -n "$LINE" ]; do
+    case "$LINE" in
+      "jk = "*)
+        VERSION="${LINE#*version = \"}"; VERSION="${VERSION%%\"*}"
+        SHA="${LINE#*sha256 = \"}"; SHA="${SHA%%\"*}"
+        break
+        ;;
+    esac
+  done < "$DIR/jk.lock"
 fi
 
 BIN="$JK_HOME/versions/$VERSION/bin/jk"
+if [ -n "$VERSION" ] && [ -x "$BIN" ]; then
+  exec "$BIN" "$@"
+fi
+
+# ---- slow path: bootstrap/materialize (forks are fine next to a download) ----
+RELEASES="${JK_RELEASES_URL:-https://jkbuild.dev/releases}"
+if [ -z "$VERSION" ]; then
+  # No lock yet: bootstrap the latest release; the real client resolves and locks.
+  VERSION="$(curl -fsSL "$RELEASES/latest/VERSION" | tr -d '[:space:]')"
+  BIN="$JK_HOME/versions/$VERSION/bin/jk"
+fi
+
 if [ ! -x "$BIN" ]; then
   OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
   case "$OS" in darwin) OS=macos ;; esac

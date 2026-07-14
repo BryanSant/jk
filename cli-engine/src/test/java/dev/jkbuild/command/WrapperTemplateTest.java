@@ -26,7 +26,7 @@ class WrapperTemplateTest {
     void posix_wrapper_touches_only_the_frozen_surfaces() throws Exception {
         String sh = template("jk.sh");
         // The two frozen dependencies…
-        assertThat(sh).contains("jk.lock").contains("^jk = ").contains("latest/VERSION");
+        assertThat(sh).contains("jk.lock").contains("\"jk = \"*").contains("latest/VERSION");
         assertThat(sh).contains("versions/$VERSION/bin/jk");
         // …and the sha pin gates the download.
         assertThat(sh).contains("sha256");

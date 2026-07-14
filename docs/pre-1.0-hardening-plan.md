@@ -772,3 +772,16 @@ entries go (via the `cache clear` machinery, no prompt — the flag is the
 consent); CAS blobs stay shared. clean gained the hidden `--cache-dir` seam
 its peers have. Tests: rebuild bypasses the up-to-date fast path;
 clean --force empties the project's action keys while plain clean keeps them.
+
+**Bite-3 follow-ups (same session):** the smoke caught engine-hosted builds
+dropping `--rebuild` — only the workspace buildRequest carried the field.
+Fixed at the design level: `rebuild` now rides the SESSION ENVELOPE
+(`withSession`, where session state belongs per docs/protocol.md), the
+per-builder fields on buildRequest/imageRequest are gone (forecastRequest
+keeps its explicit param — it's a cache-state query, not a build), every
+hosted-verb config decode reads the envelope key, and the client-side
+fully-cached shortcuts skip under --force/--rebuild. Separately, the wrapper
+fast path is now FORK-FREE (builtin parameter expansion instead of
+grep/sed/cd subshells): measured overhead 5.8 ms → 0.77 ms per `./jk` run —
+the bare /bin/sh startup floor. A presence stat beat exec-and-catch-127
+(sh can't recover from a failed exec).
