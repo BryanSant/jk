@@ -81,9 +81,7 @@ public final class ToolRunCommand implements CliCommand {
                 Opt.value("<dir>", "Override the JDK install root.", "--jdks-dir")
                         .hide(),
                 Opt.value("<url>", "Override the Maven repository URL (for tests).", "--repo-url")
-                        .hide(),
-                Opt.flag("Ignore cached classes and recompile (file targets only).", "--force-recompile")
-                        .hide()); // --force-recompile hidden; global --force covers this
+                        .hide());
         var all = new ArrayList<>(opts);
         all.addAll(VariantSelection.options()); // project targets only; tool/script targets ignore them
         return all;
@@ -182,7 +180,7 @@ public final class ToolRunCommand implements CliCommand {
         String refStr = split.ref() != null ? split.ref() : "main";
         Path cacheDir = cacheDirOverride != null ? cacheDirOverride : JkDirs.cache();
         Files.createDirectories(cacheDir);
-        boolean refresh = dev.jkbuild.config.SessionContext.current().config().refreshOr(false);
+        boolean refresh = dev.jkbuild.config.SessionContext.current().config().forceOr(false);
         GoalConsole.Mode mode = GoalConsole.modeFor(global);
 
         Path checkout;
@@ -283,8 +281,7 @@ public final class ToolRunCommand implements CliCommand {
         this.stateDirOverride = in.value("state-dir").map(Path::of).orElse(null);
         this.jdksDir = in.value("jdks-dir").map(Path::of).orElse(null);
         this.repoUrl = in.value("repo-url").map(URI::create).orElse(null);
-        // --force (global) and legacy --force-recompile both force recompilation.
-        this.forceRecompile = in.isSet("force") || in.isSet("force-recompile");
+        this.forceRecompile = in.isSet("force");
         this.global = GlobalOptions.from(in);
         // --release / --variant parameterize project targets (current dir or a directory target):
         // the selection rides the ambient session into the delegate's build + deploy verb.

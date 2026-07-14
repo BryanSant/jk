@@ -96,7 +96,5 @@ The engine owns the journal on disk; every reader goes through it.
 
 ## Calibration move
 
-`calibration.toml` moved from `~/.jk/state/` into `~/.jk/state/builds/`, alongside the journal. It
-self-regenerates (an absent file just triggers a fresh probe on the next build), so a file left at
-the legacy path is migrated on first read as a best-effort nicety — it preserves the learned EWMA
-and skips one cold probe.
+`calibration.toml` lives in `~/.jk/state/builds/`, alongside the journal. It self-regenerates —
+an absent file just triggers a fresh probe on the next build.

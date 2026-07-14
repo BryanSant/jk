@@ -310,26 +310,53 @@ public final class RepoArtifactStore {
      * artifact file. Never touches an opt-in {@code ~/.m2} mirror (jk doesn't GC Maven's store; see
      * {@code project.m2install}). Returns count removed. Never throws.
      */
-    public int removeShas(Set<String> shas, boolean dryRun) {
-        if (root == null || shas.isEmpty() || !Files.isDirectory(root)) return 0;
+    /**
+     * Remove entries hashing to {@code shas} from EVERY named repo store under
+     * {@code <cacheRoot>/repos/} — the shared tail of cache GC / sweep / LRU eviction, keeping
+     * the repo trees in lock-step with the CAS. Best-effort; returns entries removed.
+     */
+    public static int removeShasFromAll(Path cacheRoot, Set<String> shas, boolean dryRun) {
+        if (shas.isEmpty()) return 0;
+        Path reposDir = cacheRoot.resolve("repos");
+        if (!Files.isDirectory(reposDir)) return 0;
         int removed = 0;
-        try (Stream<Path> walk = Files.walk(root)) {
-            for (Path sidecar : (Iterable<Path>) walk.filter(p -> p.toString().endsWith(".sha256"))::iterator) {
-                try {
-                    String hash = Files.readString(sidecar).strip();
-                    if (!shas.contains(hash)) continue;
-                    if (!dryRun) {
-                        Files.deleteIfExists(sidecar);
-                        // Every store is a full store now: also delete the artifact file.
-                        String sp = sidecar.toString();
-                        Files.deleteIfExists(Path.of(sp.substring(0, sp.length() - ".sha256".length())));
-                        pruneEmptyParents(sidecar.getParent());
-                    }
-                    removed++;
-                } catch (IOException ignored) {
-                }
+        try (Stream<Path> named = Files.list(reposDir)) {
+            for (Path nameDir : (Iterable<Path>) named::iterator) {
+                if (!Files.isDirectory(nameDir)) continue;
+                removed += new RepoArtifactStore(cacheRoot, nameDir.getFileName().toString())
+                        .removeShas(shas, dryRun);
             }
         } catch (IOException ignored) {
+            // best-effort
+        }
+        return removed;
+    }
+
+    public int removeShas(Set<String> shas, boolean dryRun) {
+        if (root == null || shas.isEmpty() || !Files.isDirectory(root)) return 0;
+        // Collect BEFORE deleting: pruning directories under a still-lazy Files.walk iterator
+        // throws NoSuchFileException from the stream.
+        java.util.List<Path> sidecars;
+        try (Stream<Path> walk = Files.walk(root)) {
+            sidecars = walk.filter(p -> p.toString().endsWith(".sha256")).toList();
+        } catch (IOException e) {
+            return 0;
+        }
+        int removed = 0;
+        for (Path sidecar : sidecars) {
+            try {
+                String hash = Files.readString(sidecar).strip();
+                if (!shas.contains(hash)) continue;
+                if (!dryRun) {
+                    Files.deleteIfExists(sidecar);
+                    // Every store is a full store now: also delete the artifact file.
+                    Files.deleteIfExists(sidecar.resolveSibling(
+                            sidecar.getFileName().toString().replaceFirst("\\.sha256$", "")));
+                    pruneEmptyParents(sidecar.getParent());
+                }
+                removed++;
+            } catch (IOException ignored) {
+            }
         }
         return removed;
     }

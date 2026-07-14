@@ -1435,16 +1435,15 @@ public final class EngineClient {
     private static EngineTarget resolveEngineTarget(EnginePaths.Paths paths, String clientVersion) throws IOException {
         String jkExe = CachePruneScheduler.resolveJkExe()
                 .orElseThrow(() -> new IOException("could not resolve the running jk binary's path"));
-        Path libDir = dev.jkbuild.util.JkDirs.lib();
-        EngineArtifact engine = resolveEngineArtifact(System.getenv("JK_ENGINE_EXE"), jkExe, clientVersion, libDir);
+        EngineArtifact engine = resolveEngineArtifact(System.getenv("JK_ENGINE_EXE"), jkExe, clientVersion);
         // Self-heal a missing/version-skewed engine jar before falling back: the released native
         // client can't host the engine itself, but it can download the matching jar.
         if (engine.kind() == EngineArtifact.Kind.FALLBACK
                 && EngineJarFetcher.applicable(
                         clientVersion, isNativeImage(), dev.jkbuild.config.SessionContext.current().offline())) {
             System.err.println("jk: downloading the build engine (jk-engine-" + clientVersion + ".jar) ...");
-            EngineJarFetcher.fetch(EngineJarFetcher.releasesBase(), clientVersion, libDir);
-            engine = resolveEngineArtifact(System.getenv("JK_ENGINE_EXE"), jkExe, clientVersion, libDir);
+            EngineJarFetcher.fetch(EngineJarFetcher.releasesBase(), clientVersion);
+            engine = resolveEngineArtifact(System.getenv("JK_ENGINE_EXE"), jkExe, clientVersion);
         }
         if (engine.kind() != EngineArtifact.Kind.JAR) {
             return new EngineTarget(engine, null, false, null, false);
@@ -1574,7 +1573,7 @@ public final class EngineClient {
     /**
      * Which engine artifact a spawn chose. {@code EXE}: {@code path} is an executable whose {@code
      * main()} IS the engine loop (no {@code --engine-server} flag). {@code JAR}: {@code path} is
-     * the engine's fat jar ({@code ~/.jk/lib/jk-engine-<version>.jar}), launched as {@code
+     * the engine's fat jar ({@code ~/.jk/versions/<v>/lib/jk-engine.jar}), launched as {@code
      * <managed-jdk>/bin/java … -cp <path> dev.jkbuild.cli.EngineMain} — the engine is a plain JVM
      * app, never a native image. {@code FALLBACK}: {@code path} is the client binary itself,
      * re-invoked with the flag. {@code how} is the one-word provenance for the log header.
@@ -1590,34 +1589,27 @@ public final class EngineClient {
     /**
      * Resolution order for the engine artifact (docs/engine.md lifecycle §2):
      * (a) the {@code JK_ENGINE_EXE} env override — always treated as a dedicated engine
-     * executable; (b) {@code jk-engine-<version>.jar} in {@code libDir} ({@code ~/.jk/lib/}) whose
-     * filename version equals this client's version — the installed layout, hosted on the
-     * jk-managed JDK; a missing or version-skewed jar never launches; (c) the client binary itself
-     * with {@code --engine-server} — the JVM dist (installDist ships no second start script) and
-     * dev workflows.
+     * executable; (b) the side-by-side layout, {@code ~/.jk/versions/<v>/lib/jk-engine.jar}
+     * (engine-versioning-plan R2) — the ONLY installed layout, hosted on the jk-managed JDK;
+     * (c) the client binary itself with {@code --engine-server} — the JVM dist (installDist
+     * ships no second start script) and dev workflows.
      */
-    static EngineArtifact resolveEngineArtifact(String envOverride, String jkExe, String version, Path libDir) {
-        return resolveEngineArtifact(envOverride, jkExe, version, libDir, dev.jkbuild.cache.VersionStore.current());
+    static EngineArtifact resolveEngineArtifact(String envOverride, String jkExe, String version) {
+        return resolveEngineArtifact(envOverride, jkExe, version, dev.jkbuild.cache.VersionStore.current());
     }
 
     /** Root-injected variant — the testable seam. */
     static EngineArtifact resolveEngineArtifact(
-            String envOverride, String jkExe, String version, Path libDir, dev.jkbuild.cache.VersionStore store) {
+            String envOverride, String jkExe, String version, dev.jkbuild.cache.VersionStore store) {
         if (envOverride != null && !envOverride.isBlank()) {
             return new EngineArtifact(EngineArtifact.Kind.EXE, envOverride, "JK_ENGINE_EXE");
         }
-        // The side-by-side layout is authoritative (engine-versioning-plan R2)…
         var materialized = store.resolve(version);
         if (materialized.isPresent()) {
             dev.jkbuild.task.AccessLedger.atDefaultPath()
-                    .touch(dev.jkbuild.cache.VersionStore.ledgerKey(version)); // GC input (P6)
+                    .touch(dev.jkbuild.cache.VersionStore.ledgerKey(version)); // version-GC input
             return new EngineArtifact(
                     EngineArtifact.Kind.JAR, materialized.get().engineJar().toString(), "versions");
-        }
-        // …with the legacy ~/.jk/lib slot honored transitionally (pre-versioning installs).
-        Path engineJar = libDir.resolve("jk-engine-" + version + ".jar");
-        if (Files.isRegularFile(engineJar)) {
-            return new EngineArtifact(EngineArtifact.Kind.JAR, engineJar.toString(), "lib");
         }
         return new EngineArtifact(EngineArtifact.Kind.FALLBACK, jkExe, "fallback");
     }

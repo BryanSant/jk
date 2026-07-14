@@ -146,7 +146,7 @@ public final class JdkInstallCommand implements CliCommand {
                 .scope(1)
                 .execute(ctx -> {
                     ctx.label("fetch JetBrains JDK feed");
-                    boolean refresh = dev.jkbuild.config.SessionContext.current().config().refreshOr(false);
+                    boolean refresh = dev.jkbuild.config.SessionContext.current().config().forceOr(false);
                     try {
                         ctx.put(CATALOG, service.fetchCatalog(feedUrl, cacheFile, refresh, ctx::output));
                     } catch (Exception e) {
@@ -225,7 +225,7 @@ public final class JdkInstallCommand implements CliCommand {
                 .scope(1)
                 .execute(ctx -> {
                     JdkCatalog.Entry entry = ctx.require(ENTRY);
-                    boolean refresh = dev.jkbuild.config.SessionContext.current().config().refreshOr(false);
+                    boolean refresh = dev.jkbuild.config.SessionContext.current().config().forceOr(false);
                     ctx.label("install " + JdkService.displayLabel(entry));
                     // try-with-resources guarantees the download bar / spinner is
                     // wiped even when the install throws mid-download (matches the

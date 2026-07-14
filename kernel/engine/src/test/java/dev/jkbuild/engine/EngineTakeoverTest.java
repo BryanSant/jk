@@ -106,8 +106,6 @@ class EngineTakeoverTest {
         waitUntil(Duration.ofSeconds(5), () -> Files.exists(EnginePaths.endpoint(p)));
         Path firstSocket = EnginePaths.activeSocket(p);
         assertThat(helloVersion(firstSocket)).isEqualTo("1.0.0-test");
-        // Legacy compatibility: the flat socket path reaches the live generation too.
-        assertThat(helloVersion(p.socket())).isEqualTo("1.0.0-test");
 
         // A newer engine starts: it must claim a fresh generation, repoint the endpoint, and
         // drain the old engine — which, idle, exits promptly. Nothing is killed.
@@ -127,7 +125,7 @@ class EngineTakeoverTest {
                 .isTrue();
         assertThat(oldExited).isTrue();
 
-        // The survivor still serves, including via the refreshed legacy pointer.
+        // The survivor still serves via the repointed endpoint.
         assertThat(helloVersion(EnginePaths.activeSocket(p))).isEqualTo("2.0.0-test");
         newer.close();
         newT.join(10_000);

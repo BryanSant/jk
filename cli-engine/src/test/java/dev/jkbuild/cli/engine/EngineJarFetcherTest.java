@@ -10,7 +10,6 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -19,9 +18,10 @@ import org.junit.jupiter.api.io.TempDir;
 
 /**
  * The spawn path's engine-jar self-heal ({@link EngineJarFetcher}): download from the release
- * layout ({@code releases/<version>/jk-engine-<version>.jar} + {@code SHA256SUMS}), verify, land
- * atomically in the lib dir. The wiring INTO {@code spawn()} is native-client-only and stays
- * manual-verification territory, like the spawn itself (see {@code EngineClientTest}).
+ * layout ({@code releases/<version>/jk-engine-<version>.jar} + {@code SHA256SUMS}), verify,
+ * ingest into the CAS, and materialize {@code versions/<v>/} — the only installed layout. The
+ * wiring INTO {@code spawn()} is native-client-only and stays manual-verification territory,
+ * like the spawn itself (see {@code EngineClientTest}).
  */
 class EngineJarFetcherTest {
 
@@ -59,60 +59,63 @@ class EngineJarFetcherTest {
         server.stop(0);
     }
 
-    @Test
-    void fetch_verifies_installs_atomically_and_removes_stale_versions(@TempDir Path libDir) throws Exception {
-        Path stale = libDir.resolve("jk-engine-0.9.0.jar");
-        Files.createDirectories(libDir);
-        Files.writeString(stale, "old");
+    private static dev.jkbuild.cache.Cas cas(Path root) {
+        return new dev.jkbuild.cache.Cas(root.resolve("cache"));
+    }
 
-        dev.jkbuild.cache.Cas cas = new dev.jkbuild.cache.Cas(libDir.resolve("cache"));
-        dev.jkbuild.cache.VersionStore store = new dev.jkbuild.cache.VersionStore(libDir.resolve("versions"));
-        Path installed = EngineJarFetcher.fetch(base, VERSION, libDir, cas, store, null);
-
-        assertThat(installed).isEqualTo(libDir.resolve("jk-engine-1.2.3.jar"));
-        assertThat(installed).hasBinaryContent(JAR);
-        assertThat(stale).doesNotExist();
-        assertThat(libDir.resolve("jk-engine-1.2.3.jar.part")).doesNotExist();
-        // …and the same verified bytes were materialized into the side-by-side layout via the CAS.
-        var m = store.resolve(VERSION).orElseThrow();
-        assertThat(m.engineJar()).hasBinaryContent(JAR);
+    private static dev.jkbuild.cache.VersionStore store(Path root) {
+        return new dev.jkbuild.cache.VersionStore(root.resolve("versions"));
     }
 
     @Test
-    void checksum_mismatch_fails_and_installs_nothing(@TempDir Path libDir) {
+    void fetch_verifies_and_materializes_cas_first(@TempDir Path root) throws Exception {
+        var cas = cas(root);
+        var store = store(root);
+        Path installed = EngineJarFetcher.fetch(base, VERSION, cas, store, null);
+
+        var m = store.resolve(VERSION).orElseThrow();
+        assertThat(installed).isEqualTo(m.engineJar());
+        assertThat(installed).hasBinaryContent(JAR);
+        // The CAS holds the blob — a pruned version re-materializes from it offline.
+        assertThat(cas.pathFor(Hashing.sha256Hex(JAR))).exists();
+    }
+
+    @Test
+    void checksum_mismatch_fails_and_installs_nothing(@TempDir Path root) {
         jarBody = "tampered bytes".getBytes(StandardCharsets.UTF_8);
 
-        assertThatThrownBy(() -> EngineJarFetcher.fetch(base, VERSION, libDir))
+        var store = store(root);
+        assertThatThrownBy(() -> EngineJarFetcher.fetch(base, VERSION, cas(root), store, null))
                 .isInstanceOf(IOException.class)
                 .hasMessageContaining("checksum mismatch");
-        assertThat(libDir.resolve("jk-engine-1.2.3.jar")).doesNotExist();
-        assertThat(libDir.resolve("jk-engine-1.2.3.jar.part")).doesNotExist();
+        assertThat(store.resolve(VERSION)).isEmpty();
     }
 
     @Test
-    void missing_checksums_file_refuses_to_install(@TempDir Path libDir) {
+    void missing_checksums_file_refuses_to_install(@TempDir Path root) {
         sumsStatus = 404;
 
-        assertThatThrownBy(() -> EngineJarFetcher.fetch(base, VERSION, libDir))
+        var store = store(root);
+        assertThatThrownBy(() -> EngineJarFetcher.fetch(base, VERSION, cas(root), store, null))
                 .isInstanceOf(IOException.class)
                 .hasMessageContaining("HTTP 404");
-        assertThat(libDir.resolve("jk-engine-1.2.3.jar")).doesNotExist();
+        assertThat(store.resolve(VERSION)).isEmpty();
     }
 
     @Test
-    void checksums_without_an_entry_for_the_jar_refuses_to_install(@TempDir Path libDir) {
+    void checksums_without_an_entry_for_the_jar_refuses_to_install(@TempDir Path root) {
         sumsBody = "abc123  jk-linux-x86_64.xz\n".getBytes(StandardCharsets.UTF_8);
 
-        assertThatThrownBy(() -> EngineJarFetcher.fetch(base, VERSION, libDir))
+        assertThatThrownBy(() -> EngineJarFetcher.fetch(base, VERSION, cas(root), store(root), null))
                 .isInstanceOf(IOException.class)
                 .hasMessageContaining("no entry for jk-engine-1.2.3.jar");
     }
 
     @Test
-    void missing_jar_fails_with_the_url_and_status(@TempDir Path libDir) {
+    void missing_jar_fails_with_the_url_and_status(@TempDir Path root) {
         jarStatus = 404;
 
-        assertThatThrownBy(() -> EngineJarFetcher.fetch(base, VERSION, libDir))
+        assertThatThrownBy(() -> EngineJarFetcher.fetch(base, VERSION, cas(root), store(root), null))
                 .isInstanceOf(IOException.class)
                 .hasMessageContaining("engine jar")
                 .hasMessageContaining("HTTP 404");

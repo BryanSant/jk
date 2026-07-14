@@ -146,7 +146,7 @@ public final class ImageCommand implements CliCommand {
                                 buildOpts.skipTests,
                                 session.offline(),
                                 session.force(),
-                                session.config().rerunOr(false),
+                                session.config().rebuildOr(false),
                                 global.verbose),
                         phases -> GoalConsole.chooseConsoleListener(phases, mode, spec, module),
                         summary);

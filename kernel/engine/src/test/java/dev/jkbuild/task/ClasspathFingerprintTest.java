@@ -87,7 +87,6 @@ class ClasspathFingerprintTest {
         // the fingerprint must ignore them.
         write(classes.resolve(".jstamp"), "stamp-2-different");
         write(classes.resolve(".kstamp"), "k");
-        write(classes.resolve(".test-stamp"), "t");
         assertThat(ClasspathFingerprint.entry(classes)).isEqualTo(before);
         // A real class change still busts it.
         write(classes.resolve("a/A.class"), "BBBB");

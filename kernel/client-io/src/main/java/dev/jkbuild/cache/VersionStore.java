@@ -231,15 +231,6 @@ public final class VersionStore {
     }
 
     private static void deleteRecursively(Path root) {
-        if (root == null || !Files.exists(root)) return;
-        try (var stream = Files.walk(root)) {
-            stream.sorted(Comparator.reverseOrder()).forEach(p -> {
-                try {
-                    Files.deleteIfExists(p);
-                } catch (IOException ignored) {
-                }
-            });
-        } catch (IOException ignored) {
-        }
+        dev.jkbuild.util.PathUtil.deleteRecursively(root);
     }
 }

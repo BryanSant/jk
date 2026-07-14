@@ -141,7 +141,7 @@ public final class SyncCommand implements CliCommand {
                             sources,
                             session.offline(),
                             session.force(),
-                            session.config().refreshOr(false),
+                            session.config().forceOr(false),
                             global.verbose),
                     phases -> GoalConsole.chooseConsoleListener(phases, mode, spec, targetLabel),
                     fetched,

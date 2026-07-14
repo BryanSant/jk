@@ -37,4 +37,13 @@ public final class PathUtil {
         } catch (IOException ignored) {
         }
     }
+
+    /** As {@link #deleteRecursively}, but a failed delete propagates instead of being swallowed. */
+    public static void deleteRecursivelyOrThrow(Path root) throws IOException {
+        if (root == null || !Files.exists(root)) return;
+        try (var stream = Files.walk(root)) {
+            var paths = stream.sorted(Comparator.reverseOrder()).toList();
+            for (Path p : paths) Files.deleteIfExists(p);
+        }
+    }
 }

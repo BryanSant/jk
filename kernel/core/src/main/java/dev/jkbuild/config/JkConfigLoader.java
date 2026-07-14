@@ -41,10 +41,6 @@ public final class JkConfigLoader {
 
     private static final String ENV_OFFLINE = "JK_OFFLINE";
     private static final String ENV_FORCE = "JK_FORCE";
-    /** Legacy alias for {@code JK_FORCE}; still accepted for backward compatibility. */
-    private static final String ENV_RERUN = "JK_RERUN";
-    /** Legacy alias for {@code JK_FORCE}; still accepted for backward compatibility. */
-    private static final String ENV_REFRESH = "JK_REFRESH";
     private static final String ENV_NO_PROGRESS = "JK_NO_PROGRESS";
     private static final String ENV_QUIET = "JK_QUIET";
     private static final String ENV_VERBOSE = "JK_VERBOSE";
@@ -92,8 +88,7 @@ public final class JkConfigLoader {
         return new JkConfig(
                 Optional.ofNullable(scan.get("config.color")).flatMap(JkConfig.ColorChoice::parse),
                 scanBool(scan, "config.offline"),
-                scanBool(scan, "config.rerun"),   // legacy alias
-                scanBool(scan, "config.refresh"), // legacy alias
+                Optional.empty(), // rebuild is verify's internal lane, not a config key
                 scanBool(scan, "config.no-progress"),
                 scanBool(scan, "config.quiet"),
                 scanBool(scan, "config.verbose"),
@@ -121,17 +116,11 @@ public final class JkConfigLoader {
                             ? Optional.of(JkConfig.ColorChoice.NEVER)
                             : Optional.empty();
                 });
-        // JK_RERUN and JK_REFRESH are legacy aliases — treat them the same as JK_FORCE.
-        Optional<Boolean> legacyRerun = EnvValues.bool(env, ENV_RERUN);
-        Optional<Boolean> legacyRefresh = EnvValues.bool(env, ENV_REFRESH);
-        Optional<Boolean> force = EnvValues.bool(env, ENV_FORCE)
-                .or(() -> legacyRerun.isPresent() || legacyRefresh.isPresent()
-                        ? Optional.of(true) : Optional.empty());
+        Optional<Boolean> force = EnvValues.bool(env, ENV_FORCE);
         return new JkConfig(
                 color,
                 EnvValues.bool(env, ENV_OFFLINE),
-                Optional.empty(), // rerun: legacy env alias folded into force above
-                Optional.empty(), // refresh: legacy env alias folded into force above
+                Optional.empty(), // rebuild is verify's internal lane, not env-driven
                 EnvValues.bool(env, ENV_NO_PROGRESS),
                 EnvValues.bool(env, ENV_QUIET),
                 EnvValues.bool(env, ENV_VERBOSE),

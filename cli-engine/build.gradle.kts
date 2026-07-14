@@ -135,8 +135,8 @@ application {
 }
 
 // The engine artifact of the native dist (docs/engine.md "Two artifacts"): this module's runtime
-// classpath rolled up into a single fat jar, jk-engine-<version>.jar, installed to ~/.jk/lib/,
-// where the client spawns it as `<managed-jdk>/bin/java … -cp ~/.jk/lib/jk-engine-<version>.jar
+// classpath rolled up into a single fat jar, jk-engine-<version>.jar, materialized into
+// ~/.jk/versions/<v>/lib/, where the client spawns it as `<managed-jdk>/bin/java … -cp <jar>
 // dev.jkbuild.cli.EngineMain`. The version in the filename IS the compatibility contract: the
 // client only launches a jar whose version matches its own. The engine is deliberately NOT a
 // native image: it is long-lived, so HotSpot's JIT and SHA-256 intrinsics serve its hashing-heavy

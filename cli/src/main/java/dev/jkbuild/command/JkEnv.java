@@ -181,14 +181,6 @@ public final class JkEnv {
      * installs (whose identifier is the basename of the install dir).
      */
     Optional<ResolvedJdk> lookupJdkHome(String id) throws IOException {
-        // Absolute-path identifier — used by legacy lockfiles that stamped
-        // the home path directly. Honour it if the home is still on disk.
-        if (id.startsWith("/") || id.startsWith("\\") || isWindowsAbsolute(id)) {
-            var p = Path.of(id);
-            if (Files.isDirectory(p.resolve("bin"))) {
-                return Optional.of(new ResolvedJdk(p, matchVendor(p)));
-            }
-        }
         var managed = registry.find(id);
         if (managed.isPresent()) {
             var home = managed.get().home();

@@ -17,7 +17,7 @@ public final class Jk {
     /**
      * Hidden verb aliases for ergonomic migration from other build tools. Documented in {@code
      * docs/aliases.md}. Keys are alias names; values are the canonical verb path (one or more
-     * positionals). We don't register these with picocli (so they stay out of {@code --help} and
+     * positionals). These are not registered commands (they stay out of {@code --help} and
      * shell completion); instead we rewrite the first positional arg before parsing — possibly
      * expanding it into multiple positionals.
      */
@@ -31,16 +31,14 @@ public final class Jk {
             Map.entry("bash", List.of("shell")),
             Map.entry("nativeCompile", List.of("native")), // Gradle :nativeCompile task
             Map.entry("verify-target", List.of("verify")), // Maven's `verify` phase output naming
-            Map.entry("verify-build", List.of("verify")), // renamed verb; verify-build kept for back-compat
-            Map.entry("check", List.of("compile")), // renamed verb; check kept for back-compat
             Map.entry("why-rebuilt", List.of("explain"))); // early-roadmap name for the cache-diff report
 
     /**
      * Internal, hidden flag that re-invokes this same binary as the engine server loop instead of a
      * normal client command — mirrors how {@code jk cache prune --background} reuses the binary as a
-     * detached one-shot worker. Not registered with picocli; never appears in {@code --help} or shell
+     * detached one-shot worker. Not a registered command; never appears in {@code --help} or shell
      * completion. This is the JVM-dist path and the fallback when no engine artifact is installed;
-     * the native dist ships the engine as a fat jar ({@code ~/.jk/lib/jk-engine-<version>.jar},
+     * the native dist ships the engine as a fat jar ({@code ~/.jk/versions/<version>/lib/jk-engine.jar},
      * from {@code :cli-engine:shadowJar}) that the client runs on the jk-managed JDK — the engine
      * is a JVM app, never a native image. Both routes run the exact same {@code EngineMain.run} — reached here through the
      * {@link dev.jkbuild.cli.engine.InProcessEngine} ServiceLoader seam, because the slim client
@@ -69,7 +67,7 @@ public final class Jk {
             var engine = dev.jkbuild.cli.engine.InProcessEngine.find().orElse(null);
             if (engine == null) {
                 System.err.println("jk: this binary does not include the engine; "
-                        + "install ~/.jk/lib/jk-engine-" + VERSION + ".jar (or set JK_ENGINE_EXE)");
+                        + "materialize jk " + VERSION + " (`jk self update` or the project wrapper), or set JK_ENGINE_EXE");
                 System.exit(70);
                 return;
             }
@@ -83,14 +81,14 @@ public final class Jk {
     /** Run jk with the given argv. The first positional is rewritten if it's a known alias. */
     public static int execute(String... args) {
         // `--list` is an undocumented synonym for `--help`. Rewrite it before any
-        // arg scan so both the config loader and picocli only ever see `--help`.
+        // arg scan so both the config loader and the dispatcher only ever see `--help`.
         args = rewriteListToHelp(args);
-        // Resolve configuration first — picocli's subsequent option parsing only
+        // Resolve configuration first — the dispatcher's subsequent option parsing only
         // determines explicit flag values; defaults still need to come from the
         // env / project jk.toml / user / system layers via JkConfigLoader.
         loadAndInstallConfig(args);
         // Fold the explicit-CLI layer in last so the rest of the runtime sees the
-        // fully-resolved JkConfig before picocli even dispatches a subcommand.
+        // fully-resolved JkConfig before any subcommand dispatches.
         applyCliOverrides(args);
         // -q/--quiet must take effect before any println happens. Apply it now
         // based on the resolved config (which already knows about env/file/CLI layers).
@@ -202,16 +200,14 @@ public final class Jk {
 
     /**
      * Argv-scan pass that folds explicit CLI flags into {@link dev.jkbuild.config.SessionContext}. This is intentionally a
-     * small scan rather than reusing picocli's parser: the highest-precedence layer needs to be
-     * available <em>before</em> picocli runs (e.g. so {@link Quietable} can mute
+     * small scan rather than reusing ArgParser: the highest-precedence layer needs to be
+     * available <em>before</em> dispatch (e.g. so {@link Quietable} can mute
      * stdout before the first subcommand println). Only flags that affect global behavior are read
-     * here; everything else flows through picocli.
+     * here; everything else flows through the dispatcher.
      */
     private static void applyCliOverrides(String[] args) {
         java.util.Optional<JkConfig.ColorChoice> color = java.util.Optional.empty();
         java.util.Optional<Boolean> offline = java.util.Optional.empty();
-        java.util.Optional<Boolean> rerun = java.util.Optional.empty();   // legacy
-        java.util.Optional<Boolean> refresh = java.util.Optional.empty(); // legacy
         java.util.Optional<Boolean> force = java.util.Optional.empty();
         java.util.Optional<Boolean> noProgress = java.util.Optional.empty();
         java.util.Optional<Boolean> noAnsi = java.util.Optional.empty();
@@ -225,8 +221,6 @@ public final class Jk {
                 case "-v", "--verbose" -> verbose = java.util.Optional.of(true);
                 case "--offline" -> offline = java.util.Optional.of(true);
                 case "--force" -> force = java.util.Optional.of(true);
-                // Legacy aliases — still accepted, fold into force.
-                case "--rerun", "--refresh" -> force = java.util.Optional.of(true);
                 case "--no-progress" -> noProgress = java.util.Optional.of(true);
                 // --no-ansi: strip ALL ANSI (color + bold/italic) and disable animations.
                 // Sets noAnsi=true (→ isAnsi()=false → colorize() returns plain text) and
@@ -251,7 +245,8 @@ public final class Jk {
                 }
             }
         }
-        JkConfig cli = new JkConfig(color, offline, rerun, refresh, noProgress, quiet, verbose, directory, force, noAnsi);
+        JkConfig cli = new JkConfig(
+                color, offline, java.util.Optional.empty(), noProgress, quiet, verbose, directory, force, noAnsi);
         dev.jkbuild.config.SessionContext.installConfig(dev.jkbuild.config.SessionContext.current().config().mergedWith(cli));
     }
 

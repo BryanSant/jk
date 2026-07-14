@@ -856,7 +856,7 @@ public final class BuildPipeline {
                             ctx.progress(1);
                         }
                     };
-                    boolean refresh = in.session().config().refreshOr(false);
+                    boolean refresh = in.session().config().forceOr(false);
                     var report = new CacheSync(cas, new Http(), mirrorToM2).sync(lock, observer, refresh);
                     if (report.hasErrors()) throw new RuntimeException("dep sync had errors");
                 })
@@ -1038,7 +1038,7 @@ public final class BuildPipeline {
                     stampInputs.addAll(pluginContributedSources(ctx.require(LAYOUT), pluginDecls, ".java"));
                     List<Path> stampCp = new ArrayList<>(classpath);
                     stampCp.addAll(split.ksp());
-                    boolean rerun = in.session().config().rerunOr(false);
+                    boolean rerun = in.session().config().rebuildOr(false);
                     if (!rerun
                             && dev.jkbuild.task.FreshnessStamp.isFresh(
                                     outBase, KSP_STAMP, stampInputs, stampCp, ctx.require(RELEASE))) {
@@ -1295,7 +1295,7 @@ public final class BuildPipeline {
                     @SuppressWarnings("unchecked")
                     List<Path> processorCp =
                             (List<Path>) ctx.get(JAVAC_PROCESSOR_CP).orElseGet(() -> ctx.require(PROCESSOR_CP));
-                    boolean rerun = in.session().config().rerunOr(false);
+                    boolean rerun = in.session().config().rebuildOr(false);
                     // Fold the processor path into the freshness inputs so a processor
                     // bump busts the stamp (it isn't on the compile classpath).
                     List<Path> stampInputs = classpath;
@@ -1523,7 +1523,7 @@ public final class BuildPipeline {
                         dev.jkbuild.util.PathUtil.deleteRecursively(classes);
                         Files.createDirectories(classes);
                     }
-                    boolean rerun = in.session().config().rerunOr(false);
+                    boolean rerun = in.session().config().rebuildOr(false);
                     if (!rerun
                             && dev.jkbuild.task.FreshnessStamp.isFresh(
                                     classes,
@@ -1802,7 +1802,7 @@ public final class BuildPipeline {
                     // freshness checks above (which all guard on !rerun). Without
                     // this guard the action record would skip the runner even when
                     // the user explicitly asked to bypass build caches.
-                    boolean rerun = in.session().config().rerunOr(false);
+                    boolean rerun = in.session().config().rebuildOr(false);
                     // The "tests passed for this input" marker lives in the CAS (keyed by
                     // the content key), NOT in target/ — so it survives `jk clean`: a later
                     // build that restores byte-identical classes recomputes the same key and
@@ -3126,7 +3126,7 @@ public final class BuildPipeline {
                 // (Hilt factories calling internal providers).
                 .moduleName(moduleName)
                 .build();
-        boolean rerun = in.session().config().rerunOr(false);
+        boolean rerun = in.session().config().rebuildOr(false);
         // Reweight from the real request: a CAS hit is a cheap restore (3), else a
         // full kotlinc. Same forKotlinc key KotlinCompile.run looks up.
         if (!rerun) {
@@ -3219,7 +3219,7 @@ public final class BuildPipeline {
      * caller then skips the (re)packaging work. Honors {@code --force}.
      */
     private static boolean restorePackaged(Path cacheRoot, String key, Path baseDir) throws IOException {
-        if (dev.jkbuild.config.SessionContext.current().config().rerunOr(false)) return false;
+        if (dev.jkbuild.config.SessionContext.current().config().rebuildOr(false)) return false;
         ActionCache ac = new ActionCache(new Cas(cacheRoot), cacheRoot.resolve("actions"));
         var hit = ac.lookup(key);
         return hit.isPresent() && ac.restoreArtifacts(hit.get(), baseDir);
@@ -3229,7 +3229,7 @@ public final class BuildPipeline {
     private static void storePackaged(
             Path cacheRoot, String taskId, String key, List<String> tokens, Path baseDir, List<Path> artifacts)
             throws IOException {
-        if (dev.jkbuild.config.SessionContext.current().config().rerunOr(false)) return;
+        if (dev.jkbuild.config.SessionContext.current().config().rebuildOr(false)) return;
         new ActionCache(new Cas(cacheRoot), cacheRoot.resolve("actions"))
                 .storeArtifacts(taskId, key, Map.of("inputs", String.join(";", tokens)), baseDir, artifacts);
     }

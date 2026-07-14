@@ -38,7 +38,8 @@ class JkBuildWorkspaceTest {
     }
 
     @Test
-    void members_is_an_undocumented_synonym_for_modules() {
+    void members_is_not_a_workspace_key() {
+        // The pre-1.0 `members = [...]` synonym is gone: `modules` is the one spelling.
         JkBuild parsed = JkBuildParser.parse("""
                 [project]
                 group = "com.example"
@@ -49,24 +50,7 @@ class JkBuildWorkspaceTest {
                 members = ["libs/core", "services/api"]
                 """);
 
-        assertThat(parsed.workspace().modules()).containsExactly("libs/core", "services/api");
-    }
-
-    @Test
-    void modules_and_members_merge_with_members_appended() {
-        JkBuild parsed = JkBuildParser.parse("""
-                [project]
-                group = "com.example"
-                name = "root"
-                version = "0.1.0"
-
-                [workspace]
-                modules = ["a", "b"]
-                members = ["c", "d"]
-                """);
-
-        // modules first, then members appended — in declaration order within each.
-        assertThat(parsed.workspace().modules()).containsExactly("a", "b", "c", "d");
+        assertThat(parsed.workspace().modules()).isEmpty();
     }
 
     @Test

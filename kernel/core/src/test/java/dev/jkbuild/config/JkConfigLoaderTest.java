@@ -26,8 +26,7 @@ class JkConfigLoaderTest {
         JkConfig base = new JkConfig(
                 Optional.of(JkConfig.ColorChoice.NEVER),
                 Optional.of(true),
-                Optional.empty(), // rerun
-                Optional.empty(), // refresh
+                Optional.empty(), // rebuild
                 Optional.empty(), // noProgress
                 Optional.empty(),
                 Optional.empty(),
@@ -37,8 +36,7 @@ class JkConfigLoaderTest {
         JkConfig over = new JkConfig(
                 Optional.of(JkConfig.ColorChoice.ALWAYS),
                 Optional.empty(),
-                Optional.empty(), // rerun
-                Optional.empty(), // refresh
+                Optional.empty(), // rebuild
                 Optional.of(true), // noProgress — over sets it
                 Optional.empty(),
                 Optional.empty(),

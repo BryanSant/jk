@@ -142,9 +142,9 @@ class EngineServerTest {
         EnginePaths.Paths p = paths(shortTempDir());
         EngineServer server = new EngineServer(p, JkEngineConfig.DEFAULTS, "9.9.9-test", null);
         runInBackground(server);
-        waitUntil(Duration.ofSeconds(5), () -> Files.exists(p.socket()));
+        waitUntil(Duration.ofSeconds(5), () -> Files.exists(EnginePaths.endpoint(p)));
 
-        try (Client c = new Client(p.socket())) {
+        try (Client c = new Client(EnginePaths.activeSocket(p))) {
             String ack = c.send(EngineProtocol.hello("9.9.9-test"));
             assertThat(EngineProtocol.typeOf(ack)).isEqualTo(EngineProtocol.HELLO_ACK);
             assertThat(Ndjson.str(ack, "version")).isEqualTo("9.9.9-test");
@@ -192,9 +192,9 @@ class EngineServerTest {
         EngineServer server = new EngineServer(p, JkEngineConfig.DEFAULTS, "1.0", null);
         server.metricsFileForTests(metricsFile);
         runInBackground(server);
-        waitUntil(Duration.ofSeconds(5), () -> Files.exists(p.socket()));
+        waitUntil(Duration.ofSeconds(5), () -> Files.exists(EnginePaths.endpoint(p)));
 
-        try (Client c = new Client(p.socket())) {
+        try (Client c = new Client(EnginePaths.activeSocket(p))) {
             // Unfiltered: global build row + both project rows + global/project phase rows.
             c.sendLine(EngineProtocol.metricsRequest(null));
             List<String> rows = new ArrayList<>();
@@ -247,7 +247,7 @@ class EngineServerTest {
         EnginePaths.Paths p = paths(shortTempDir());
         EngineServer first = new EngineServer(p, JkEngineConfig.DEFAULTS, "1.0", null);
         runInBackground(first);
-        waitUntil(Duration.ofSeconds(5), () -> Files.exists(p.socket()));
+        waitUntil(Duration.ofSeconds(5), () -> Files.exists(EnginePaths.endpoint(p)));
 
         EngineServer second = new EngineServer(p, JkEngineConfig.DEFAULTS, "1.0", null);
         assertThat(second.run()).isFalse(); // loses the tryLock() race immediately, does not block
@@ -260,15 +260,15 @@ class EngineServerTest {
         EnginePaths.Paths p = paths(shortTempDir());
         EngineServer server = new EngineServer(p, JkEngineConfig.DEFAULTS, "1.0", null);
         Thread serverThread = runInBackground(server);
-        waitUntil(Duration.ofSeconds(5), () -> Files.exists(p.socket()));
+        waitUntil(Duration.ofSeconds(5), () -> Files.exists(EnginePaths.endpoint(p)));
 
-        try (Client c = new Client(p.socket())) {
+        try (Client c = new Client(EnginePaths.activeSocket(p))) {
             String bye = c.send(EngineProtocol.shutdown());
             assertThat(EngineProtocol.typeOf(bye)).isEqualTo(EngineProtocol.BYE);
         }
         serverThread.join(5_000);
         assertThat(serverThread.isAlive()).isFalse();
-        assertThat(Files.exists(p.socket())).isFalse(); // cleaned up
+        assertThat(Files.exists(EnginePaths.endpoint(p))).isFalse(); // endpoint retired at exit
         assertThat(Files.exists(p.lock())).isFalse();
     }
 
@@ -285,10 +285,11 @@ class EngineServerTest {
             EnginePaths.Paths p = paths(shortTempDir());
             EngineServer server = new EngineServer(p, JkEngineConfig.DEFAULTS, "1.0", null);
             Thread serverThread = runInBackground(server);
-            waitUntil(Duration.ofSeconds(5), () -> Files.exists(p.socket()) && Files.exists(p.token()));
+            waitUntil(Duration.ofSeconds(5), () -> Files.exists(EnginePaths.endpoint(p)));
 
-            int port = Integer.parseInt(Files.readString(p.socket()).trim());
-            String token = Files.readString(p.token()).trim();
+            Path liveSocket = EnginePaths.activeSocket(p);
+            int port = Integer.parseInt(Files.readString(liveSocket).trim());
+            String token = Files.readString(EnginePaths.tokenFor(liveSocket)).trim();
             assertThat(token).isNotBlank();
 
             // Wrong token: the server closes the connection without ever replying.
@@ -323,7 +324,7 @@ class EngineServerTest {
 
             server.close();
             serverThread.join(5_000);
-            assertThat(Files.exists(p.token())).isFalse(); // cleaned up on shutdown, like .sock/.pid/.lock
+            assertThat(Files.exists(EnginePaths.tokenFor(liveSocket))).isFalse(); // cleaned up on shutdown
         } finally {
             if (previousOsName != null) System.setProperty("os.name", previousOsName);
             else System.clearProperty("os.name");
@@ -380,7 +381,7 @@ class EngineServerTest {
             EnginePaths.Paths p = paths(shortTempDir());
             EngineServer server = new EngineServer(p, JkEngineConfig.DEFAULTS, "1.0", null);
             Thread serverThread = runInBackground(server);
-            waitUntil(Duration.ofSeconds(5), () -> Files.exists(p.socket()));
+            waitUntil(Duration.ofSeconds(5), () -> Files.exists(EnginePaths.endpoint(p)));
 
             List<String> types = new ArrayList<>();
             String lockModule = null;
@@ -388,7 +389,7 @@ class EngineServerTest {
             String lockFinish = null;
             String buildError = null;
             boolean sawLeafPackage = false;
-            try (Client c = new Client(p.socket())) {
+            try (Client c = new Client(EnginePaths.activeSocket(p))) {
                 c.sendLine(EngineProtocol.lockRequest(
                         project.toString(),
                         cache.toString(),
@@ -502,13 +503,13 @@ class EngineServerTest {
             EnginePaths.Paths p = paths(shortTempDir());
             EngineServer server = new EngineServer(p, JkEngineConfig.DEFAULTS, "1.0", null);
             Thread serverThread = runInBackground(server);
-            waitUntil(Duration.ofSeconds(5), () -> Files.exists(p.socket()));
+            waitUntil(Duration.ofSeconds(5), () -> Files.exists(EnginePaths.endpoint(p)));
 
             List<String> types = new ArrayList<>();
             String finding = null;
             String goalFinish = null;
             String buildError = null;
-            try (Client c = new Client(p.socket())) {
+            try (Client c = new Client(EnginePaths.activeSocket(p))) {
                 c.sendLine(EngineProtocol.auditRequest(
                         project.toString(), cache.toString(), "LOW", base + "/querybatch", base + "/vulns/"));
                 String line;
@@ -590,13 +591,13 @@ class EngineServerTest {
         EnginePaths.Paths p = paths(shortTempDir());
         EngineServer server = new EngineServer(p, JkEngineConfig.DEFAULTS, "1.0", null);
         Thread serverThread = runInBackground(server);
-        waitUntil(Duration.ofSeconds(5), () -> Files.exists(p.socket()));
+        waitUntil(Duration.ofSeconds(5), () -> Files.exists(EnginePaths.endpoint(p)));
 
         List<String> types = new ArrayList<>();
         List<String> diagnostics = new ArrayList<>();
         String goalFinish = null;
         String buildError = null;
-        try (Client c = new Client(p.socket())) {
+        try (Client c = new Client(EnginePaths.activeSocket(p))) {
             c.sendLine(EngineProtocol.compileRequest(
                     project.toString(), cache.toString(), null, false, false, false));
             String line;
@@ -667,12 +668,12 @@ class EngineServerTest {
             EnginePaths.Paths p = paths(shortTempDir());
             EngineServer server = new EngineServer(p, JkEngineConfig.DEFAULTS, "1.0", null);
             Thread serverThread = runInBackground(server);
-            waitUntil(Duration.ofSeconds(5), () -> Files.exists(p.socket()));
+            waitUntil(Duration.ofSeconds(5), () -> Files.exists(EnginePaths.endpoint(p)));
 
             List<String> types = new ArrayList<>();
             String goalFinish = null;
             String buildError = null;
-            try (Client c = new Client(p.socket())) {
+            try (Client c = new Client(EnginePaths.activeSocket(p))) {
                 c.sendLine(EngineProtocol.toolResolveRequest(
                         "com.example:widget-cli:1.0.0",
                         List.of(),
@@ -740,12 +741,12 @@ class EngineServerTest {
         EnginePaths.Paths p = paths(shortTempDir());
         EngineServer server = new EngineServer(p, JkEngineConfig.DEFAULTS, "1.0", null);
         Thread serverThread = runInBackground(server);
-        waitUntil(Duration.ofSeconds(5), () -> Files.exists(p.socket()));
+        waitUntil(Duration.ofSeconds(5), () -> Files.exists(EnginePaths.endpoint(p)));
 
         List<String> types = new ArrayList<>();
         String goalFinish = null;
         String buildError = null;
-        try (Client c = new Client(p.socket())) {
+        try (Client c = new Client(EnginePaths.activeSocket(p))) {
             c.sendLine(EngineProtocol.cachePruneRequest("prune", cache.toString(), 30, false, false, null, false));
             String line;
             while ((line = c.readLine()) != null) {
@@ -812,11 +813,11 @@ class EngineServerTest {
         EnginePaths.Paths p = paths(shortTempDir());
         EngineServer server = new EngineServer(p, JkEngineConfig.DEFAULTS, "1.0", null);
         Thread serverThread = runInBackground(server);
-        waitUntil(Duration.ofSeconds(5), () -> Files.exists(p.socket()));
+        waitUntil(Duration.ofSeconds(5), () -> Files.exists(EnginePaths.endpoint(p)));
 
         String goalFinish = null;
         String buildError = null;
-        try (Client c = new Client(p.socket())) {
+        try (Client c = new Client(EnginePaths.activeSocket(p))) {
             c.sendLine(EngineProtocol.cacheClearRequest(cache.toString(), project.toString(), false));
             String line;
             while ((line = c.readLine()) != null) {
@@ -868,12 +869,16 @@ class EngineServerTest {
             throws Exception {
         EnginePaths.Paths p = paths(shortTempDir());
         Files.createDirectories(p.dir());
-        Files.createFile(p.socket()); // simulate a leftover socket file from a kill -9'd engine
+        // Simulate a kill -9'd engine's leftovers: a dead generation socket file plus an
+        // endpoint that still names it.
+        EnginePaths.Paths gen1 = EnginePaths.generation(p, 1);
+        Files.createFile(gen1.socket());
+        EnginePaths.writeEndpoint(p, gen1.socket());
 
         EngineServer server = new EngineServer(p, JkEngineConfig.DEFAULTS, "1.0", null);
         Thread serverThread = runInBackground(server);
         waitUntil(Duration.ofSeconds(5), () -> {
-            try (Client c = new Client(p.socket())) {
+            try (Client c = new Client(EnginePaths.activeSocket(p))) {
                 return EngineProtocol.PONG.equals(EngineProtocol.typeOf(c.send(EngineProtocol.ping())));
             } catch (IOException e) {
                 return false;
@@ -919,7 +924,7 @@ class EngineServerTest {
 
         assertThat(Files.readString(p.httpToken()).trim()).isNotEmpty(); // minted alongside the URL file
 
-        try (Client c = new Client(p.socket())) {
+        try (Client c = new Client(EnginePaths.activeSocket(p))) {
             String ack = c.send(EngineProtocol.statusRequest());
             assertThat(Ndjson.str(ack, "httpUrl")).isEqualTo(url);
             assertThat(Ndjson.str(ack, "httpError")).isNull();
@@ -942,9 +947,9 @@ class EngineServerTest {
                     "127.0.0.1", blocker.getLocalPort(), 16, stateDir.resolve("www").toString());
             EngineServer server = new EngineServer(p, JkEngineConfig.DEFAULTS, http, "1.0", null);
             Thread serverThread = runInBackground(server);
-            waitUntil(Duration.ofSeconds(5), () -> Files.exists(p.socket()));
+            waitUntil(Duration.ofSeconds(5), () -> Files.exists(EnginePaths.endpoint(p)));
 
-            try (Client c = new Client(p.socket())) {
+            try (Client c = new Client(EnginePaths.activeSocket(p))) {
                 // The engine's primary role is unharmed...
                 assertThat(EngineProtocol.typeOf(c.send(EngineProtocol.ping()))).isEqualTo(EngineProtocol.PONG);
                 // ...and status reports the bind failure instead of a URL.

@@ -47,7 +47,7 @@ public final class EngineStatusCommand implements CliCommand {
     public int run(Invocation in) {
         GlobalOptions global = GlobalOptions.from(in);
         EnginePaths.Paths paths = EnginePaths.current();
-        Optional<EngineClient.Status> status = EngineClient.status(paths.socket());
+        Optional<EngineClient.Status> status = EngineClient.status(dev.jkbuild.engine.EnginePaths.activeSocket(paths));
         if (status.isEmpty()) {
             if (global.outputIsJson()) {
                 CliOutput.out("{\"running\":false}");

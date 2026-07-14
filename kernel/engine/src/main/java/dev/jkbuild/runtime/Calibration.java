@@ -123,26 +123,6 @@ public final class Calibration {
     }
 
     /**
-     * Best-effort one-time move of a pre-existing {@code state/calibration.toml} into {@code
-     * state/builds/}. The file self-regenerates (an absent one just triggers a fresh probe on the
-     * next build), so migration is a nicety — it preserves the learned EWMA and skips one ~1–2s cold
-     * probe. Any failure is swallowed.
-     */
-    private static void migrateLegacy() {
-        try {
-            Path legacy = JkDirs.state().resolve("calibration.toml");
-            Path now = file();
-            if (Files.isRegularFile(legacy) && !Files.exists(now)) {
-                Path parent = now.getParent();
-                if (parent != null) Files.createDirectories(parent);
-                Files.move(legacy, now, StandardCopyOption.ATOMIC_MOVE);
-            }
-        } catch (IOException | RuntimeException ignored) {
-            // advisory — the file regenerates if the move fails
-        }
-    }
-
-    /**
      * Memoized read of the stored calibration. Returns the safe fallback (an instance whose {@link
      * #present()} is false) when the file is missing, unreadable, or stale — so a caller can always
      * use {@link #msPerWeight()} without a null check. Use {@link #ensure} to probe-if-absent.
@@ -150,7 +130,6 @@ public final class Calibration {
     public static Calibration load() {
         Calibration cached = MEMO.get();
         if (cached != null) return cached;
-        migrateLegacy();
         Calibration read = readOrAbsent();
         MEMO.set(read);
         return read;

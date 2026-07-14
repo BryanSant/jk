@@ -73,7 +73,7 @@ public final class KspResolver {
     public static List<Path> resolveClasspath(RepoGroup repos, Cas cas, String kspVersion)
             throws IOException, InterruptedException {
         Path cacheFile = cacheFile(cas, kspVersion);
-        boolean refresh = dev.jkbuild.config.SessionContext.current().config().refreshOr(false);
+        boolean refresh = dev.jkbuild.config.SessionContext.current().config().forceOr(false);
         if (!refresh) {
             List<Path> cached = readCachedClosure(cacheFile, cas);
             if (cached != null) return cached;

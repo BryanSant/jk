@@ -248,7 +248,7 @@ public final class EffortWeights {
             boolean useJava,
             boolean useKotlin,
             boolean forceRebuild) {
-        boolean rerun = in.session().config().rerunOr(false) || forceRebuild;
+        boolean rerun = in.session().config().rebuildOr(false) || forceRebuild;
         // If jk.toml is newer than jk.lock AND the lock no longer satisfies all declared
         // deps, treat the module as dirty so parse-lock runs and updates the lock.
         boolean lockStale = !rerun && AutoLock.needsRelocking(in.dir(), in.lockFile());
@@ -392,7 +392,7 @@ public final class EffortWeights {
      */
     private static boolean artifactFresh(Path dir, java.util.function.Function<BuildLayout, Path> artifact) {
         try {
-            if (dev.jkbuild.config.SessionContext.current().config().rerunOr(false)) return false;
+            if (dev.jkbuild.config.SessionContext.current().config().rebuildOr(false)) return false;
             JkBuild project = JkBuildParser.parse(dir.resolve("jk.toml"));
             BuildLayout layout = BuildLayout.of(dir, project);
             Path art = artifact.apply(layout);

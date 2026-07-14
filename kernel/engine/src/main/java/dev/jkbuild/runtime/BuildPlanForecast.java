@@ -73,7 +73,7 @@ public final class BuildPlanForecast {
         // so too (otherwise the plan tree renders "Fully Cached" while the ETA, which honors force,
         // predicts a full rebuild — a self-contradiction).
         boolean force = dev.jkbuild.config.SessionContext.current().config().forceOr(false)
-                || dev.jkbuild.config.SessionContext.current().config().rerunOr(false);
+                || dev.jkbuild.config.SessionContext.current().config().rebuildOr(false);
         // Dirs whose *main output* will change this build — seeds downstream and
         // cross-module dirtiness. Filled as we walk in dependency order.
         Set<Path> dirty = new java.util.HashSet<>();

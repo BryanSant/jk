@@ -309,7 +309,7 @@ public final class InstallCommand implements CliCommand {
         String refStr = split.ref() != null ? split.ref() : "main";
         Path cacheDir = cacheDir();
         Files.createDirectories(cacheDir);
-        boolean refresh = dev.jkbuild.config.SessionContext.current().config().refreshOr(false);
+        boolean refresh = dev.jkbuild.config.SessionContext.current().config().forceOr(false);
         GoalConsole.Mode mode = GoalConsole.modeFor(global);
 
         GoalResult fetchResult;

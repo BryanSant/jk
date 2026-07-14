@@ -30,7 +30,7 @@ class CompileCommandTest {
                 """);
 
         int exit = run(
-                "check",
+                "compile",
                 "-C",
                 tempDir.toString(),
                 "--cache-dir",
@@ -51,7 +51,7 @@ class CompileCommandTest {
         int exit;
         try {
             exit = run(
-                    "check",
+                    "compile",
                     "-C",
                     tempDir.toString(),
                     "--cache-dir",
@@ -74,7 +74,7 @@ class CompileCommandTest {
         scaffold(tempDir);
         // No src/ at all — empty project.
         int exit = run(
-                "check",
+                "compile",
                 "-C",
                 tempDir.toString(),
                 "--cache-dir",

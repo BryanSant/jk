@@ -21,7 +21,7 @@ import java.util.Optional;
  * flock inside the child ensures only one prune runs at a time across concurrent invocations. The
  * parent doesn't wait — the build/sync command exits immediately after the spawn.
  *
- * <p><b>Legacy path (slim-client Wave 4):</b> the resident engine no longer spawns this — a
+ * <p><b>In-process path:</b> the resident engine never spawns this — a
  * successful engine-hosted build/sync enqueues an engine-internal prune that runs at the next idle
  * boundary (no pipelines in flight; see {@code EngineServer}). Only the test-only in-process
  * command paths still use the detached spawn, since they run with no engine by definition; {@link

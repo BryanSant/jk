@@ -164,7 +164,7 @@ public final class BuildService {
     public static Set<Path> forecastDirtyDirs(BuildGraph.Result graph, Path cache, boolean skipTests) {
         Set<Path> all = new HashSet<>();
         for (BuildGraph.BuildUnit u : graph.topoOrder()) all.add(u.dir());
-        if (SessionContext.current().config().rerunOr(false)) return all;
+        if (SessionContext.current().config().rebuildOr(false)) return all;
         try {
             Cas cas = new Cas(cache);
             ActionCache ac = new ActionCache(cas, cache.resolve("actions"));

@@ -81,7 +81,7 @@ class EngineClientTest {
     @Test
     void ping_is_false_when_nothing_is_listening() throws IOException {
         EnginePaths.Paths p = EnginePaths.resolve(shortTempDir());
-        assertThat(EngineClient.ping(p.socket())).isFalse();
+        assertThat(EngineClient.ping(EnginePaths.activeSocket(p))).isFalse();
     }
 
     @Test
@@ -89,16 +89,16 @@ class EngineClientTest {
         EnginePaths.Paths p = EnginePaths.resolve(shortTempDir());
         EngineServer server = new EngineServer(p, JkEngineConfig.DEFAULTS, "7.7.7", null);
         startInBackground(server);
-        waitUntil(Duration.ofSeconds(5), () -> Files.exists(p.socket()));
+        waitUntil(Duration.ofSeconds(5), () -> Files.exists(EnginePaths.endpoint(p)));
 
-        assertThat(EngineClient.ping(p.socket())).isTrue();
+        assertThat(EngineClient.ping(EnginePaths.activeSocket(p))).isTrue();
 
-        var hs = EngineClient.handshake(p.socket(), "7.7.7");
+        var hs = EngineClient.handshake(EnginePaths.activeSocket(p), "7.7.7");
         assertThat(hs).isPresent();
         assertThat(hs.get().version()).isEqualTo("7.7.7");
         assertThat(hs.get().pid()).isEqualTo(ProcessHandle.current().pid());
 
-        var status = EngineClient.status(p.socket());
+        var status = EngineClient.status(EnginePaths.activeSocket(p));
         assertThat(status).isPresent();
         assertThat(status.get().version()).isEqualTo("7.7.7");
         assertThat(status.get().heapUsedBytes()).isPositive(); // best-effort memory made it across the wire
@@ -112,9 +112,9 @@ class EngineClientTest {
         EnginePaths.Paths p = EnginePaths.resolve(shortTempDir());
         EngineServer server = new EngineServer(p, JkEngineConfig.DEFAULTS, "1.0", null);
         Thread serverThread = startInBackground(server);
-        waitUntil(Duration.ofSeconds(5), () -> Files.exists(p.socket()));
+        waitUntil(Duration.ofSeconds(5), () -> Files.exists(EnginePaths.endpoint(p)));
 
-        assertThat(EngineClient.stop(p.socket())).isTrue();
+        assertThat(EngineClient.stop(EnginePaths.activeSocket(p))).isTrue();
         serverThread.join(5_000);
         assertThat(serverThread.isAlive()).isFalse();
     }
@@ -122,7 +122,7 @@ class EngineClientTest {
     @Test
     void stop_on_a_non_running_engine_is_a_no_op_success() throws IOException {
         EnginePaths.Paths p = EnginePaths.resolve(shortTempDir());
-        assertThat(EngineClient.stop(p.socket())).isTrue();
+        assertThat(EngineClient.stop(EnginePaths.activeSocket(p))).isTrue();
     }
 
     @Test
@@ -130,10 +130,10 @@ class EngineClientTest {
         EnginePaths.Paths p = EnginePaths.resolve(shortTempDir());
         EngineServer server = new EngineServer(p, JkEngineConfig.DEFAULTS, "1.0", null);
         startInBackground(server);
-        waitUntil(Duration.ofSeconds(5), () -> Files.exists(p.socket()));
+        waitUntil(Duration.ofSeconds(5), () -> Files.exists(EnginePaths.endpoint(p)));
 
-        assertThat(EngineClient.handshake(p.socket(), "1.0").orElseThrow().draining()).isFalse();
-        var s = EngineClient.status(p.socket()).orElseThrow();
+        assertThat(EngineClient.handshake(EnginePaths.activeSocket(p), "1.0").orElseThrow().draining()).isFalse();
+        var s = EngineClient.status(EnginePaths.activeSocket(p)).orElseThrow();
         assertThat(s.draining()).isFalse();
         assertThat(s.activePipelines()).isZero();
 
@@ -145,9 +145,9 @@ class EngineClientTest {
         EnginePaths.Paths p = EnginePaths.resolve(shortTempDir());
         EngineServer server = new EngineServer(p, JkEngineConfig.DEFAULTS, "1.0", null);
         Thread serverThread = startInBackground(server);
-        waitUntil(Duration.ofSeconds(5), () -> Files.exists(p.socket()));
+        waitUntil(Duration.ofSeconds(5), () -> Files.exists(EnginePaths.endpoint(p)));
 
-        assertThat(EngineClient.drain(p.socket())).isZero(); // no in-flight jobs → immediate exit
+        assertThat(EngineClient.drain(EnginePaths.activeSocket(p))).isZero(); // no in-flight jobs → immediate exit
         serverThread.join(5_000);
         assertThat(serverThread.isAlive()).isFalse();
     }
@@ -157,9 +157,9 @@ class EngineClientTest {
         EnginePaths.Paths p = EnginePaths.resolve(shortTempDir());
         EngineServer server = new EngineServer(p, JkEngineConfig.DEFAULTS, "1.0", null);
         Thread serverThread = startInBackground(server);
-        waitUntil(Duration.ofSeconds(5), () -> Files.exists(p.socket()));
+        waitUntil(Duration.ofSeconds(5), () -> Files.exists(EnginePaths.endpoint(p)));
 
-        assertThat(EngineClient.forceStop(p.socket())).isTrue();
+        assertThat(EngineClient.forceStop(EnginePaths.activeSocket(p))).isTrue();
         serverThread.join(5_000);
         assertThat(serverThread.isAlive()).isFalse();
     }
@@ -167,7 +167,7 @@ class EngineClientTest {
     @Test
     void drain_on_a_non_running_engine_is_minus_one() throws IOException {
         EnginePaths.Paths p = EnginePaths.resolve(shortTempDir());
-        assertThat(EngineClient.drain(p.socket())).isEqualTo(-1);
+        assertThat(EngineClient.drain(EnginePaths.activeSocket(p))).isEqualTo(-1);
     }
 
     /**
@@ -183,19 +183,19 @@ class EngineClientTest {
             EnginePaths.Paths p = EnginePaths.resolve(shortTempDir());
             EngineServer server = new EngineServer(p, JkEngineConfig.DEFAULTS, "7.7.7", null);
             startInBackground(server);
-            waitUntil(Duration.ofSeconds(5), () -> Files.exists(p.socket()) && Files.exists(p.token()));
+            waitUntil(Duration.ofSeconds(5), () -> Files.exists(EnginePaths.endpoint(p)));
 
-            assertThat(EngineClient.ping(p.socket())).isTrue();
+            assertThat(EngineClient.ping(EnginePaths.activeSocket(p))).isTrue();
 
-            var hs = EngineClient.handshake(p.socket(), "7.7.7");
+            var hs = EngineClient.handshake(EnginePaths.activeSocket(p), "7.7.7");
             assertThat(hs).isPresent();
             assertThat(hs.get().version()).isEqualTo("7.7.7");
 
-            var status = EngineClient.status(p.socket());
+            var status = EngineClient.status(EnginePaths.activeSocket(p));
             assertThat(status).isPresent();
             assertThat(status.get().version()).isEqualTo("7.7.7");
 
-            assertThat(EngineClient.stop(p.socket())).isTrue();
+            assertThat(EngineClient.stop(EnginePaths.activeSocket(p))).isTrue();
         } finally {
             if (previousOsName != null) System.setProperty("os.name", previousOsName);
             else System.clearProperty("os.name");
@@ -203,52 +203,57 @@ class EngineClientTest {
     }
 
     /**
-     * The spawn path's artifact resolution: JK_ENGINE_EXE override, then {@code
-     * ~/.jk/lib/jk-engine-<version>.jar} whose filename version matches this client's (the
-     * installed JVM-hosted engine), then the client binary itself re-invoked with {@code
-     * --engine-server}. The actual OS-process spawn stays manual-verification territory (see class
-     * javadoc); this pins the decision logic.
+     * The spawn path's artifact resolution: JK_ENGINE_EXE override, then the side-by-side layout
+     * ({@code ~/.jk/versions/<v>/lib/jk-engine.jar} — the only installed layout), then the client
+     * binary itself re-invoked with {@code --engine-server}. The actual OS-process spawn stays
+     * manual-verification territory (see class javadoc); this pins the decision logic.
      */
     @Test
-    void engine_artifact_resolution_prefers_override_then_versioned_lib_jar_then_fallback() throws IOException {
+    void engine_artifact_resolution_prefers_override_then_versions_layout_then_fallback() throws IOException {
         Path dir = shortTempDir();
         Path client = dir.resolve("jk");
         Files.createFile(client);
-        Path libDir = dir.resolve("lib");
         // Isolated store: the machine-global ~/.jk/versions must not leak into this contract.
         dev.jkbuild.cache.VersionStore store = new dev.jkbuild.cache.VersionStore(dir.resolve("versions"));
 
-        // (c) no override, no lib dir: the client binary itself, needing --engine-server
+        // (c) no override, nothing materialized: the client binary itself, needing --engine-server
         EngineClient.EngineArtifact fallback =
-                EngineClient.resolveEngineArtifact(null, client.toString(), "1.2.3", libDir, store);
+                EngineClient.resolveEngineArtifact(null, client.toString(), "1.2.3", store);
         assertThat(fallback.kind()).isEqualTo(EngineClient.EngineArtifact.Kind.FALLBACK);
         assertThat(fallback.path()).isEqualTo(client.toString());
 
-        // a version-skewed engine jar never launches — the version match is the contract
-        Files.createDirectories(libDir);
-        Files.createFile(libDir.resolve("jk-engine-9.9.9.jar"));
-        assertThat(EngineClient.resolveEngineArtifact(null, client.toString(), "1.2.3", libDir, store)
+        // a version-skewed materialization never launches — the version match is the contract
+        materialize(store, dir, "9.9.9");
+        assertThat(EngineClient.resolveEngineArtifact(null, client.toString(), "1.2.3", store)
                         .kind())
                 .isEqualTo(EngineClient.EngineArtifact.Kind.FALLBACK);
 
-        // (b) lib/jk-engine-<client version>.jar: the JVM-hosted engine's fat jar
-        Path engineJar = libDir.resolve("jk-engine-1.2.3.jar");
-        Files.createFile(engineJar);
-        EngineClient.EngineArtifact viaLib =
-                EngineClient.resolveEngineArtifact(null, client.toString(), "1.2.3", libDir, store);
-        assertThat(viaLib.kind()).isEqualTo(EngineClient.EngineArtifact.Kind.JAR);
-        assertThat(viaLib.path()).isEqualTo(engineJar.toString());
+        // (b) versions/<client version>/lib/jk-engine.jar: the JVM-hosted engine's fat jar
+        Path engineJar = materialize(store, dir, "1.2.3");
+        EngineClient.EngineArtifact viaVersions =
+                EngineClient.resolveEngineArtifact(null, client.toString(), "1.2.3", store);
+        assertThat(viaVersions.kind()).isEqualTo(EngineClient.EngineArtifact.Kind.JAR);
+        assertThat(viaVersions.path()).isEqualTo(engineJar.toString());
 
-        // (a) JK_ENGINE_EXE wins over the lib jar, and is always treated as a dedicated executable
+        // (a) JK_ENGINE_EXE wins over the materialized jar, always a dedicated executable
         EngineClient.EngineArtifact viaEnv =
-                EngineClient.resolveEngineArtifact("/opt/jk/jk-engine", client.toString(), "1.2.3", libDir, store);
+                EngineClient.resolveEngineArtifact("/opt/jk/jk-engine", client.toString(), "1.2.3", store);
         assertThat(viaEnv.kind()).isEqualTo(EngineClient.EngineArtifact.Kind.EXE);
         assertThat(viaEnv.path()).isEqualTo("/opt/jk/jk-engine");
 
         // a blank override is ignored, not obeyed
-        assertThat(EngineClient.resolveEngineArtifact("  ", client.toString(), "1.2.3", libDir, store)
+        assertThat(EngineClient.resolveEngineArtifact("  ", client.toString(), "1.2.3", store)
                         .path())
-                .isEqualTo(viaLib.path());
+                .isEqualTo(viaVersions.path());
+    }
+
+    /** Materialize a fake engine jar for {@code version} into the isolated store. */
+    private static Path materialize(dev.jkbuild.cache.VersionStore store, Path dir, String version)
+            throws IOException {
+        Path jar = dir.resolve("jk-engine-" + version + "-src.jar");
+        Files.writeString(jar, "fake engine " + version);
+        dev.jkbuild.cache.Cas cas = new dev.jkbuild.cache.Cas(dir.resolve("cache"));
+        return store.materializeFromFiles(version, cas, jar, null).engineJar();
     }
 
     @Test
@@ -256,7 +261,7 @@ class EngineClientTest {
         EnginePaths.Paths p = EnginePaths.resolve(shortTempDir());
         EngineServer server = new EngineServer(p, JkEngineConfig.DEFAULTS, "3.3.3", null);
         startInBackground(server);
-        waitUntil(Duration.ofSeconds(5), () -> Files.exists(p.socket()));
+        waitUntil(Duration.ofSeconds(5), () -> Files.exists(EnginePaths.endpoint(p)));
 
         EngineClient.Handshake hs = EngineClient.ensureRunning(p, "3.3.3");
         assertThat(hs.version()).isEqualTo("3.3.3");

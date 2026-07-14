@@ -11,11 +11,11 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
- * End-to-end coverage for {@code jk idea}'s JDK/SDK wiring and source roots. Uses {@code
+ * End-to-end coverage for {@code jk ide --idea}'s JDK/SDK wiring and source roots. Uses {@code
  * --jdks-dir}/{@code --ide-config-dir} overrides so nothing touches the developer's real {@code
  * ~/.jk} or IntelliJ config.
  */
-class IdeaCommandTest {
+class IdeIdeaGenerationTest {
 
     @Test
     void workspace_sibling_becomes_an_idea_module(@TempDir Path tmp) throws IOException {
@@ -84,7 +84,8 @@ class IdeaCommandTest {
 
     private static int runIdea(Path ws, Path jdks, Path ideConfig, Path cache) {
         return Jk.execute(new String[] {
-            "idea",
+            "ide",
+            "--idea",
             "-C",
             ws.toString(),
             "--cache-dir",

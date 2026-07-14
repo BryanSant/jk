@@ -42,7 +42,7 @@ Three things are worth knowing:
 
 ## Lifecycle
 
-The native dist ships the engine as a single fat jar — `~/.jk/lib/jk-engine-<version>.jar`, built
+The native dist ships the engine as a single fat jar — `~/.jk/versions/<v>/lib/jk-engine.jar`, built
 from the same sources at the same version as the `jk` client that spawns it (see
 [Two artifacts](#two-artifacts) below). The engine is a normal Java app on the jk-managed JDK,
 never a native image; the client — a JDK installer and JVM launcher by trade — launches it. The
@@ -59,17 +59,17 @@ and the fallback when no engine artifact is installed. Both routes execute the e
    file, not the caller's terminal), and waits (a few seconds, bounded) for the new engine's socket
    to come up. Which artifact it spawns is resolved in order: **(a)** a `JK_ENGINE_EXE` env
    override (always treated as a dedicated engine executable — its `main` is the engine loop, no
-   flag); **(b)** `~/.jk/lib/jk-engine-<version>.jar` — the installed layout, where the filename's
+   flag); **(b)** `~/.jk/versions/<v>/lib/jk-engine.jar` — the side-by-side installed layout, where the version's
    version must equal the client's own version (a missing or version-skewed jar never launches).
    When the released native client finds no matching jar, it downloads one itself before falling
    back — `releases/<its own version>/jk-engine-<version>.jar` from the release site, verified
-   against the release's `SHA256SUMS` and moved into `~/.jk/lib/` atomically (`EngineJarFetcher`;
+   against the release's `SHA256SUMS`, ingested into the CAS, and materialized into `versions/<v>/` (`EngineJarFetcher`;
    the client is a JDK installer and JVM launcher by trade — fetching its own engine is the same
    move as installing a JDK to host it, and it makes upgrades self-healing). There is deliberately
    no `jk engine fetch` verb: the fetch is built into the spawn. The JVM dist (which hosts the
    engine itself), `--offline` runs, and `-SNAPSHOT` builds never auto-fetch. The jar is
    launched as `<managed-jdk>/bin/java -XX:+UseSerialGC
-   -Xms…/-Xmx… -cp ~/.jk/lib/jk-engine-<version>.jar dev.jkbuild.cli.EngineMain` on the jk-managed
+   -Xms…/-Xmx… -cp ~/.jk/versions/<v>/lib/jk-engine.jar dev.jkbuild.cli.EngineMain` on the jk-managed
    default JDK. The host JDK must meet the engine's runtime floor (the release that compiled the
    client and jar — a global default pinned older for *project* builds is skipped, since it governs
    worker JVMs, not the engine host); when nothing installed qualifies, the client installs
@@ -142,7 +142,7 @@ performance budgets:
   traffic, FFM for the terminal) plus the GraalVM runtime; `MinimalXml` keeps the `java.xml`
   module (Xerces, ~3.7 MiB of image) off the classpath the same way `MinimalTar` avoids
   commons-compress.
-- **`~/.jk/lib/jk-engine-<version>.jar` (the engine, `:cli-engine:shadowJar`)** is a long-lived
+- **`~/.jk/versions/<v>/lib/jk-engine.jar` (the engine, `:cli-engine:shadowJar`)** is a long-lived
   resident process, which is exactly what a JVM is best at — so it is a plain Java app, never a
   native image. The client spawns it on the jk-managed JDK; HotSpot's JIT and SHA-256 intrinsics
   serve its hashing-heavy hot path (CAS and classpath fingerprinting on every no-op build), and its

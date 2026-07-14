@@ -43,7 +43,7 @@ public final class EngineStopCommand implements CliCommand {
     @Override
     public int run(Invocation in) {
         EnginePaths.Paths paths = EnginePaths.current();
-        Optional<EngineClient.Status> before = EngineClient.status(paths.socket());
+        Optional<EngineClient.Status> before = EngineClient.status(dev.jkbuild.engine.EnginePaths.activeSocket(paths));
         if (before.isEmpty()) {
             CliOutput.out("jk engine: not running");
             return Exit.SUCCESS;
@@ -52,13 +52,13 @@ public final class EngineStopCommand implements CliCommand {
 
         // Force: stop now via the clean-exit path (SIGKILL fallback if unresponsive).
         if (in.isSet("now")) {
-            if (!EngineClient.forceStop(paths.socket())) EngineClient.hardKill(before.get().pid());
+            if (!EngineClient.forceStop(dev.jkbuild.engine.EnginePaths.activeSocket(paths))) EngineClient.hardKill(before.get().pid());
             CliOutput.out(stoppedWedge(elapsed(started)));
             return Exit.SUCCESS;
         }
 
         // Graceful drain. The engine enters draining and reports the in-flight job count.
-        int jobs = EngineClient.drain(paths.socket());
+        int jobs = EngineClient.drain(dev.jkbuild.engine.EnginePaths.activeSocket(paths));
         if (jobs <= 0) {
             // Idle (or already gone): the engine exits immediately.
             CliOutput.out(stoppedWedge(elapsed(started)));
@@ -78,14 +78,14 @@ public final class EngineStopCommand implements CliCommand {
         try {
             while (true) {
                 if (view.forceRequested()) {
-                    EngineClient.forceStop(paths.socket());
+                    EngineClient.forceStop(dev.jkbuild.engine.EnginePaths.activeSocket(paths));
                     break;
                 }
-                Optional<EngineClient.Status> s = EngineClient.status(paths.socket());
+                Optional<EngineClient.Status> s = EngineClient.status(dev.jkbuild.engine.EnginePaths.activeSocket(paths));
                 if (s.isEmpty()) {
                     // Confirm the engine really exited (avoid a transient accept/close false positive).
                     sleep(150);
-                    if (EngineClient.status(paths.socket()).isEmpty() && !EngineClient.ping(paths.socket())) break;
+                    if (EngineClient.status(dev.jkbuild.engine.EnginePaths.activeSocket(paths)).isEmpty() && !EngineClient.ping(dev.jkbuild.engine.EnginePaths.activeSocket(paths))) break;
                     continue;
                 }
                 view.setJobs(Math.max(0, s.get().activePipelines()));

@@ -288,7 +288,6 @@ public final class EngineServer implements AutoCloseable {
 
         // TAKEOVER: from this write on, every new connection resolves to this generation.
         EnginePaths.writeEndpoint(paths, active.socket());
-        legacyCompatPointer();
         releaseStartupLock();
 
         connectionExecutor = Executors.newThreadPerTaskExecutor(
@@ -314,31 +313,6 @@ public final class EngineServer implements AutoCloseable {
         }
         lock = null;
         lockChannel = null;
-    }
-
-    /**
-     * Legacy client compatibility: pre-generation clients connect at the flat {@code <key>.sock}.
-     * POSIX: leave a symlink to the live generation socket. Windows: copy the port + token to the
-     * flat files. Best-effort — skipped when a live pre-generation engine still owns the path
-     * (it is being drained; its exit frees the name for the next takeover).
-     */
-    private void legacyCompatPointer() {
-        try {
-            if (EngineTransport.useLoopbackTcp()) {
-                Files.copy(active.socket(), paths.socket(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-                Files.copy(active.token(), paths.token(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-            } else {
-                // Holding the startup mutex proves no PRE-generation engine is alive (they held
-                // this same lock for their whole life), so whatever sits at the flat path — a
-                // stale socket from a killed engine, or a previous generation's symlink — is
-                // safe to replace. A still-draining previous GENERATION keeps its own gen
-                // socket; redirecting the legacy name to us is exactly the takeover.
-                Files.deleteIfExists(paths.socket());
-                Files.createSymbolicLink(paths.socket(), active.socket().getFileName());
-            }
-        } catch (IOException | UnsupportedOperationException ignored) {
-            // Legacy pointer is convenience for OLD clients only; new clients use the endpoint.
-        }
     }
 
     /**
@@ -1171,7 +1145,6 @@ public final class EngineServer implements AutoCloseable {
                     Optional.of(rerun),
                     Optional.empty(),
                     Optional.empty(),
-                    Optional.empty(),
                     Optional.of(verbose),
                     Optional.empty(),
                     Optional.of(force),
@@ -1253,7 +1226,6 @@ public final class EngineServer implements AutoCloseable {
             JkConfig config = new JkConfig(
                     Optional.empty(),
                     Optional.of(Ndjson.bool(requestLine, "offline", false)),
-                    Optional.empty(),
                     Optional.empty(),
                     Optional.empty(),
                     Optional.empty(),
@@ -1453,7 +1425,6 @@ public final class EngineServer implements AutoCloseable {
                     Optional.empty(),
                     Optional.empty(),
                     Optional.empty(),
-                    Optional.empty(),
                     Optional.of(Ndjson.bool(requestLine, "force", false)),
                     Optional.empty());
             Session session = Session.defaults()
@@ -1589,7 +1560,6 @@ public final class EngineServer implements AutoCloseable {
                     Optional.empty(),
                     Optional.empty(),
                     Optional.empty(),
-                    Optional.empty(),
                     Optional.of(verbose),
                     Optional.empty(),
                     Optional.of(force),
@@ -1680,7 +1650,6 @@ public final class EngineServer implements AutoCloseable {
             JkConfig config = new JkConfig(
                     Optional.empty(),
                     Optional.of(offline),
-                    Optional.empty(),
                     Optional.empty(),
                     Optional.empty(),
                     Optional.empty(),
@@ -2021,7 +1990,6 @@ public final class EngineServer implements AutoCloseable {
                     Optional.of(Ndjson.bool(requestLine, "rerun", false)),
                     Optional.empty(),
                     Optional.empty(),
-                    Optional.empty(),
                     Optional.of(verbose),
                     Optional.empty(),
                     Optional.of(Ndjson.bool(requestLine, "force", false)),
@@ -2222,12 +2190,11 @@ public final class EngineServer implements AutoCloseable {
                     Optional.empty(),
                     Optional.empty(),
                     Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
                     Optional.of(refresh),
-                    Optional.empty(),
-                    Optional.empty(),
-                    Optional.empty(),
-                    Optional.empty(),
-                    Optional.empty(),
                     Optional.empty());
             Session session = Session.defaults()
                     .withConfig(config)
@@ -2663,12 +2630,11 @@ public final class EngineServer implements AutoCloseable {
                 Optional.empty(),
                 Optional.of(Ndjson.bool(requestLine, "offline", false)),
                 Optional.empty(),
-                Optional.of(refresh),
                 Optional.empty(),
                 Optional.empty(),
                 Optional.of(Ndjson.bool(requestLine, "verbose", false)),
                 Optional.empty(),
-                Optional.of(Ndjson.bool(requestLine, "force", false)),
+                Optional.of(Ndjson.bool(requestLine, "force", false) || refresh),
                 Optional.empty());
         return Session.defaults()
                 .withConfig(config)
@@ -3487,18 +3453,13 @@ public final class EngineServer implements AutoCloseable {
             deleteQuietly(active.socket());
             deleteQuietly(active.token());
             deleteQuietly(active.pid());
-            // Retire the endpoint + legacy pointer only if they still name US — a takeover
-            // successor owns them now and must not be un-pointed by the lame duck's exit.
+            // Retire the endpoint only if it still names US — a takeover successor owns it
+            // now and must not be un-pointed by the lame duck's exit.
             try {
                 Path ep = EnginePaths.endpoint(paths);
                 String mine = active.socket().getFileName().toString();
                 if (Files.isRegularFile(ep) && mine.equals(Files.readString(ep).trim())) {
-                    // We are the current generation at exit — retire the pointer AND the legacy
-                    // flat compatibility files (symlink on POSIX, port+token copies on TCP). A
-                    // takeover successor owns these by now and is never un-pointed here.
                     deleteQuietly(ep);
-                    deleteQuietly(paths.socket());
-                    deleteQuietly(paths.token());
                 }
             } catch (IOException ignored) {
                 // best-effort

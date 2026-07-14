@@ -186,7 +186,7 @@ public final class TestSupport {
                 .processorPath(processorPath)
                 .build();
         ActionCache actionCache = new ActionCache(cas, cacheRoot.resolve("actions"));
-        boolean useCache = !dev.jkbuild.config.SessionContext.current().config().rerunOr(false);
+        boolean useCache = !dev.jkbuild.config.SessionContext.current().config().rebuildOr(false);
         java.nio.file.Path stateDir =
                 cacheRoot.resolve("actions").resolve("incremental-java").resolve(cacheTaskId);
 

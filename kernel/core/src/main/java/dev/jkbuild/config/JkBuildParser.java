@@ -1143,16 +1143,9 @@ public final class JkBuildParser {
     private static Workspace parseWorkspace(TomlTable root, LibraryCatalog catalog) {
         TomlTable workspace = root.getTable("workspace");
         if (workspace == null) return null;
-        // `modules` is the documented key; `members` is an undocumented synonym kept
-        // for back-compat. When both are present, members are appended after modules.
         List<String> modules = optionalStringList(workspace, "modules", "workspace.modules");
-        List<String> members = optionalStringList(workspace, "members", "workspace.members");
-        List<String> all = members.isEmpty()
-                ? modules
-                : java.util.stream.Stream.concat(modules.stream(), members.stream())
-                        .toList();
         Map<String, WorkspaceDependency> wsDeps = parseWorkspaceDependencies(workspace, catalog);
-        return new Workspace(all, wsDeps);
+        return new Workspace(modules, wsDeps);
     }
 
     private static Map<String, WorkspaceDependency> parseWorkspaceDependencies(

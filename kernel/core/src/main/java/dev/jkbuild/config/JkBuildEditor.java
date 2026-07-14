@@ -45,9 +45,6 @@ public final class JkBuildEditor {
     /** The {@code modules = ...} assignment within {@code [workspace]}. */
     private static final Pattern MODULES_KEY = Pattern.compile("^\\s*modules\\s*=.*$");
 
-    /** Legacy {@code members = ...} synonym — appended to if a manifest still uses it. */
-    private static final Pattern MEMBERS_KEY = Pattern.compile("^\\s*members\\s*=.*$");
-
     /** A double-quoted string literal element. */
     private static final Pattern QUOTED = Pattern.compile("\"([^\"]*)\"");
 
@@ -251,10 +248,7 @@ public final class JkBuildEditor {
         int end = endOfTable(lines, wsHeader);
         int modulesLine = -1;
         for (int i = wsHeader + 1; i < end; i++) {
-            // Append to whichever key the manifest already uses — `modules` or the
-            // legacy `members` synonym — so existing workspaces aren't force-migrated.
-            if (MODULES_KEY.matcher(lines.get(i)).matches()
-                    || MEMBERS_KEY.matcher(lines.get(i)).matches()) {
+            if (MODULES_KEY.matcher(lines.get(i)).matches()) {
                 modulesLine = i;
                 break;
             }

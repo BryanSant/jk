@@ -4,7 +4,7 @@ package dev.jkbuild.cli;
 /**
  * Dedicated engine entrypoint — the engine JVM's {@code main}. The engine is a plain Java app,
  * never a native image: the native {@code jk} client spawns it on the jk-managed JDK as {@code
- * java -XX:+UseSerialGC -Xms…/-Xmx… -cp ~/.jk/lib/jk-engine-<version>.jar
+ * java -XX:+UseSerialGC -Xms…/-Xmx… -cp ~/.jk/versions/<v>/lib/jk-engine.jar
  * dev.jkbuild.cli.EngineMain}. Its
  * whole {@code main()} IS the engine-server loop: no verb routing, no {@code --engine-server}
  * flag. The same code also backs {@code jk --engine-server} (see {@link Jk#main}), which stays as

@@ -527,3 +527,45 @@ resources, lint/baseline profiles, solver version interning (BOM soft pins).
 - **P0.7** — resolution order: `JK_EXE` → `/proc/self/exe` → `ProcessHandle.info()`,
   rejecting `java`/`java.exe`/`javaw.exe`; any other executable name IS jk (the
   running binary is by definition the jk executing the code).
+
+### H2
+
+- **`~/.jk/lib` retired for the engine jar** (fetcher, `resolveEngineArtifact`,
+  install.sh, docs). `JkDirs.lib()` itself STAYS — it is also `jk install`'s live
+  app-lib dir; only the engine-jar slot was legacy.
+- **Flat-socket compat pointer retired.** All lifecycle commands and tests resolve
+  via `EnginePaths.activeSocket` (endpoint file); `activeSocket`'s flat return is
+  now a never-bound placeholder whose probes fail cleanly ("no engine"), not a
+  legacy lane. The stale-socket test now simulates the modern kill-9 leftover (dead
+  generation socket + endpoint naming it).
+- **`rerun`/`refresh` did NOT blindly collapse into `force`.** The audit called them
+  legacy aliases, but the wire doc records a real distinction: rerun = rebuild
+  without re-fetching locked artifacts (`jk verify`'s offline-safe lane), force =
+  rebuild + refresh. A blind collapse would have made `jk verify` hit the network.
+  Landed shape: JkConfig keeps ONE user flag (`force`) plus an internal `rebuild`
+  component (`rebuildOr` = force-or-rebuild) that verify sets; the `--rerun`/
+  `--refresh`/`JK_RERUN`/`JK_REFRESH` aliases and TOML keys are gone. The wire
+  `rerun` field maps to `rebuild` (rename lands with H3).
+- **`jk clean` no longer deletes `build/` or `.jk/generated`** ("legacy pre-layout"
+  sweep): jk cleans only what jk creates; a hybrid repo's Gradle `build/` is not
+  jk's to remove.
+- Deleted: `verify-build`/`check` aliases, `--force-recompile`, `IdeaCommand` (its
+  320-line e2e test was retargeted at `jk ide --idea`, not deleted), jkx unsets in
+  all four deactivate scripts, `members=` synonym, `Calibration.migrateLegacy`,
+  `JkMavenLocalRepo` (GC-only remnant), JdkList identifier-only fallback, JkEnv
+  absolute-path identifiers, `.test-stamp` exclusion, `installLocalCas`, stale
+  picocli/phase-label comments.
+- **Bonus consistency fix:** `CacheGc` and `LruEvictor` swept only the dead legacy
+  m2 mirror while `CasSweep` also swept named repo stores — all three now share
+  `RepoArtifactStore.removeShasFromAll`. Fixing that exposed a latent bug in
+  `removeShas`: it deleted files and pruned directories under a still-lazy
+  `Files.walk` iterator (NoSuchFileException from the stream) — now collects
+  sidecars before deleting.
+- `AtomicWrites` helper added (temp-sibling + ATOMIC_MOVE + REPLACE fallback);
+  `Cas.putStream` no longer creates temp files at the CAS root (nothing sweeps the
+  root; crashed streams littered it). Broad adoption of AtomicWrites across the
+  remaining writers lands with H6's Part 4 remainder.
+- `deleteRecursively` consolidated onto `PathUtil` (+ new `deleteRecursivelyOrThrow`)
+  for kernel modules; `plugins/shrink` keeps a local copy BY DESIGN (workers stay
+  dependency-free of kernel modules); `CleanCommand` keeps its stats-counting
+  variant.

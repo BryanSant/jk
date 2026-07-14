@@ -270,7 +270,7 @@ A small, stable, Cargo-style verb set. No verbs are pluggable in v1.
 | `jk build [-p <module>] [--profile=...] [--features=...]` | Compile and package. |
 | `jk test [-p <module>] [--filter=...]` | Run tests. |
 | `jk run [-- args...]` | Run the current project's main artifact, forwarding args to its `main`. (Loose files/tools run via `jk tool run`.) |
-| `jk check` | Type-check without producing artifacts (Kotlin/Java compile to in-memory). |
+| `jk compile` | Type-check without producing artifacts (Kotlin/Java compile to in-memory). |
 | `jk fmt` | Format `jk.toml`/`build.toml`/`jk.lock` and (optionally) source via plugged-in formatter. |
 | `jk lint` | Run blessed linters (Checkstyle/ktlint/Spotless) emitting SARIF. |
 | `jk tree [-i <coord>] [-e features] [--duplicates] [--depth N]` | Print resolved dependency tree. |
@@ -295,7 +295,7 @@ A small, stable, Cargo-style verb set. No verbs are pluggable in v1.
 | `jk import {pom.xml\|build.gradle\|build.gradle.kts}` | Best-effort convert to `jk.toml`. |
 | `jk export {pom.xml}` | Emit a publishable POM (Gradle export is v1.1+). |
 | `jk scan` | Write a local HTML/JSON build scan report. |
-| `jk verify` | Rebuild in a clean directory and diff outputs. (`jk verify-build` is a back-compat alias.) |
+| `jk verify` | Rebuild in a clean directory and diff outputs. |
 
 Common flags:
 
@@ -929,7 +929,7 @@ Maven's phases are useful *as mental anchors* even if the underlying execution m
 
 | Verb | What runs |
 |---|---|
-| `jk check` | Resolve, compile (in-memory only), no artifacts. |
+| `jk compile` | Resolve, compile (in-memory only), no artifacts. |
 | `jk build` | Resolve, compile, process annotations/KSP, package jars, run linters. |
 | `jk test` | `build` + execute tests, emit JUnit XML + SARIF + JaCoCo coverage. |
 | `jk publish` | `build` + `test` + sign + upload. |

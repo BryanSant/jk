@@ -608,7 +608,7 @@ public final class JdkListCommand implements CliCommand {
     private JdkCatalog fetchCatalogOrNull() {
         if (!HostPlatform.supported()) return null;
         try {
-            boolean refresh = dev.jkbuild.config.SessionContext.current().config().refreshOr(false);
+            boolean refresh = dev.jkbuild.config.SessionContext.current().config().forceOr(false);
             JdkCatalogClient client = (feedUrl != null
                             ? new JdkCatalogClient(
                                     new Http(),

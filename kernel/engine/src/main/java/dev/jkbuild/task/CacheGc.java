@@ -2,7 +2,6 @@
 package dev.jkbuild.task;
 
 import dev.jkbuild.cache.Cas;
-import dev.jkbuild.repo.JkMavenLocalRepo;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -78,7 +77,7 @@ public final class CacheGc {
             }
         }
 
-        int repoLinks = new JkMavenLocalRepo(cacheRoot).removeShas(purged, dryRun);
+        int repoLinks = dev.jkbuild.repo.RepoArtifactStore.removeShasFromAll(cacheRoot, purged, dryRun);
 
         // Compact the access log: sum each sha's counts, dedupe to the latest
         // entry, and drop entries for anything we just purged.

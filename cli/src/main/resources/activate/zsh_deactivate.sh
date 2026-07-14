@@ -13,4 +13,3 @@ unset __JK_DIFF
 (( $+functions[_jk_hook_precmd] )) && unset -f _jk_hook_precmd
 (( $+functions[_jk_hook_chpwd] )) && unset -f _jk_hook_chpwd
 (( $+functions[jk] )) && unset -f jk
-(( $+functions[jkx] )) && unset -f jkx  # legacy: jkx was a function before it became a real binary

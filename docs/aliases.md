@@ -22,8 +22,6 @@ renders the canonical verb's help.
 | `jk bash` | `jk shell` | Names the underlying shell. |
 | `jk nativeCompile` | `jk native` | Matches Gradle's `:nativeCompile` task. |
 | `jk verify-target` | `jk verify` | Matches Maven's `verify` phase output naming. |
-| `jk verify-build` | `jk verify` | Pre-v1.0 name for the reproducibility check verb. Kept for back-compat. |
-| `jk check` | `jk compile` | Pre-v1.0 name for the type-check verb. Kept for back-compat. |
 | `jk why-rebuilt` | `jk explain` | Early-roadmap name for the cache-diff report; `explain` absorbed it. |
 | `jk exec` / `jk tool exec` | `jk run` / `jk tool run` | Matches `dotnet tool exec`. Command alias (`CliCommand.aliases()`), not a verb rewrite. |
 

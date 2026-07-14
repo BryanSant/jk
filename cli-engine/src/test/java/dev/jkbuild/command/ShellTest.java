@@ -106,15 +106,6 @@ class ShellTest {
         assertThat(new PwshShell().activateScript("/opt/jk/bin/jk")).doesNotContain("function global:jkx");
     }
 
-    @Test
-    void deactivate_scripts_still_clear_legacy_jkx_functions() {
-        // Sessions activated by a pre-binary jk still carry the old function;
-        // deactivation clears it so it can't shadow the real jkx afterwards.
-        assertThat(new BashShell().deactivateScript()).contains("unset -f jkx");
-        assertThat(new ZshShell().deactivateScript()).contains("unset -f jkx");
-        assertThat(new FishShell().deactivateScript()).contains("functions --erase jkx");
-        assertThat(new PwshShell().deactivateScript()).contains("function:jkx");
-    }
 
     @Test
     void zsh_rc_file_is_dot_zshrc_not_zshenv() {

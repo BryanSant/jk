@@ -142,7 +142,7 @@ public final class ScriptGoals {
                 .scope(1)
                 .execute(ctx -> {
                     boolean rerun = forceRecompile
-                            || dev.jkbuild.config.SessionContext.current().config().rerunOr(false);
+                            || dev.jkbuild.config.SessionContext.current().config().rebuildOr(false);
                     if (!rerun && Files.exists(classesDir.resolve(mainClass.replace('.', '/') + ".class"))) {
                         ctx.label("cache hit (" + mainClass + ".class)");
                         materializeFiles(script, header, classesDir);
@@ -280,7 +280,7 @@ public final class ScriptGoals {
                 .scope(1)
                 .execute(ctx -> {
                     boolean rerun = forceRecompile
-                            || dev.jkbuild.config.SessionContext.current().config().rerunOr(false);
+                            || dev.jkbuild.config.SessionContext.current().config().rebuildOr(false);
                     if (!rerun && Files.exists(classesDir.resolve(mainClass.replace('.', '/') + ".class"))) {
                         ctx.label("cache hit (" + mainClass + ".class)");
                         materializeFiles(script, header, classesDir);

@@ -302,9 +302,6 @@ public final class ActionCache {
     }
 
     private static void deleteRecursively(Path target) throws IOException {
-        try (Stream<Path> stream = Files.walk(target)) {
-            List<Path> paths = stream.sorted(Comparator.reverseOrder()).toList();
-            for (Path p : paths) Files.deleteIfExists(p);
-        }
+        dev.jkbuild.util.PathUtil.deleteRecursivelyOrThrow(target);
     }
 }

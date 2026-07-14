@@ -220,7 +220,7 @@ public final class SyncGoals {
                             ctx.progress(1);
                         }
                     };
-                    boolean refresh = SessionContext.current().config().refreshOr(false);
+                    boolean refresh = SessionContext.current().config().forceOr(false);
                     var report = new CacheSync(cas, http, mirrorToM2).sync(lock, observer, refresh);
                     ctx.put(CAS_REPORT, report);
                     if (report.hasErrors()) {
@@ -388,7 +388,7 @@ public final class SyncGoals {
 
                     Cas cas = new Cas(cache);
                     Http http = new Http();
-                    boolean refresh = SessionContext.current().config().refreshOr(false);
+                    boolean refresh = SessionContext.current().config().forceOr(false);
 
                     for (Map.Entry<Path, JkBuild> entry : modules.entrySet()) {
                         Path moduleDir = entry.getKey();

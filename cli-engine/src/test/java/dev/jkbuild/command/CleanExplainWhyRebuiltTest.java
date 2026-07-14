@@ -26,14 +26,13 @@ class CleanExplainWhyRebuiltTest {
         // Final artifacts live under target/.
         Files.createDirectories(tempDir.resolve("target"));
         Files.writeString(tempDir.resolve("target/widget-0.1.0.jar"), "fake");
-        Files.createDirectories(tempDir.resolve(".jk/generated"));
-        Files.writeString(tempDir.resolve(".jk/generated/Source.java"), "// gen");
+        // Foreign build systems' dirs are not jk's to clean.
+        Files.createDirectories(tempDir.resolve("build"));
 
         int exit = run("clean", "-C", tempDir.toString());
         assertThat(exit).isEqualTo(0);
-        assertThat(tempDir.resolve("build")).doesNotExist();
         assertThat(tempDir.resolve("target")).doesNotExist();
-        assertThat(tempDir.resolve(".jk/generated")).doesNotExist();
+        assertThat(tempDir.resolve("build")).exists();
     }
 
     @Test

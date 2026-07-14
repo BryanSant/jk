@@ -8,12 +8,12 @@ import java.net.URI;
 import java.net.http.HttpResponse;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 
 /**
- * Downloads the engine's fat jar into {@code ~/.jk/lib/} when {@link EngineClient}'s spawn path
- * finds none installed — the client is a JDK installer and JVM launcher by trade, and fetching its
- * own engine is the same move as installing a JDK to host it. There is no separate {@code jk
+ * Downloads the engine's fat jar into the side-by-side version layout
+ * ({@code ~/.jk/versions/<v>/}, CAS-first) when {@link EngineClient}'s spawn path finds none
+ * installed — the client is a JDK installer and JVM launcher by trade, and fetching its own
+ * engine is the same move as installing a JDK to host it. There is no separate {@code jk
  * engine fetch} verb by design: the download is built into the spawn, so every route that needs an
  * engine ({@code jk build}, {@code jk engine start}, an upgrade that left a version-skewed jar
  * behind) self-heals the same way.
@@ -48,24 +48,23 @@ final class EngineJarFetcher {
     }
 
     /**
-     * Fetch {@code <releasesBase>/<version>/jk-engine-<version>.jar} into {@code libDir}, verified
-     * against the same release's {@code SHA256SUMS}. Writes to a {@code .part} sibling and moves
-     * atomically; other {@code jk-engine-*.jar} versions in {@code libDir} are removed best-effort
-     * on success. Throws {@link IOException} with an actionable message on any failure — a partial
-     * or unverified jar is never left at the final name.
+     * Fetch {@code <releasesBase>/<version>/jk-engine-<version>.jar}, verified against the same
+     * release's {@code SHA256SUMS}, ingest it into the CAS, and materialize
+     * {@code versions/<version>/}. Returns the materialized engine jar. Throws
+     * {@link IOException} with an actionable message on any failure — a partial or unverified
+     * jar is never left launchable.
      */
-    static Path fetch(URI releasesBase, String version, Path libDir) throws IOException {
+    static Path fetch(URI releasesBase, String version) throws IOException {
         return fetch(
                 releasesBase,
                 version,
-                libDir,
                 new dev.jkbuild.cache.Cas(dev.jkbuild.util.JkDirs.cache()),
                 dev.jkbuild.cache.VersionStore.current(),
                 dev.jkbuild.task.CachePruneScheduler.resolveJkExe().map(Path::of).orElse(null));
     }
 
     /** Root-injected variant — the testable seam; production uses the live {@code ~/.jk} roots. */
-    static Path fetch(URI releasesBase, String version, Path libDir,
+    static Path fetch(URI releasesBase, String version,
             dev.jkbuild.cache.Cas cas, dev.jkbuild.cache.VersionStore store, Path clientBin)
             throws IOException {
         String jarName = "jk-engine-" + version + ".jar";
@@ -76,7 +75,7 @@ final class EngineJarFetcher {
         // Authenticity gate (engine-versioning-plan §4): when this host trusts any release key,
         // the sums MUST carry a valid signature — signature-then-hash, before any byte is used.
         // A host with no keys at all (dev builds, pre-signing releases) proceeds on checksums
-        // alone, exactly the pre-P4 posture.
+        // alone (dev builds carry no trust anchors yet).
         var verifier = dev.jkbuild.repo.ReleaseVerifier.current(
                 dev.jkbuild.config.GlobalConfig.releaseTrustedKeys());
         if (verifier.available()) {
@@ -101,20 +100,7 @@ final class EngineJarFetcher {
             clientSha = Hashing.sha256Hex(clientBin);
             cas.putFile(clientBin, clientSha);
         }
-        store.materialize(version, cas, actualSha, clientSha);
-        // Transitional: keep the legacy libDir copy so an older client on this machine still
-        // finds its jar; the prune phase retires libDir entirely (engine-versioning-plan P6).
-        Files.createDirectories(libDir);
-        Path dest = libDir.resolve(jarName);
-        Path part = libDir.resolve(jarName + ".part");
-        try {
-            Files.write(part, jar);
-            Files.move(part, dest, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-        } finally {
-            Files.deleteIfExists(part);
-        }
-        deleteStaleVersions(libDir, dest);
-        return dest;
+        return store.materialize(version, cas, actualSha, clientSha).engineJar();
     }
 
     private static byte[] get(Http http, URI uri, String what) throws IOException {
@@ -127,7 +113,7 @@ final class EngineJarFetcher {
         } catch (IOException e) {
             throw new IOException(
                     "could not download the " + what + " from " + uri + " — " + e.getMessage()
-                            + " (check your network, or install the jar into ~/.jk/lib manually)",
+                            + " (check your network, or materialize the version with `jk self update`)",
                     e);
         }
         if (response.statusCode() != 200) {
@@ -146,16 +132,5 @@ final class EngineJarFetcher {
         }
         throw new IOException("release SHA256SUMS carries no entry for " + jarName
                 + " — refusing to install an unverifiable engine jar");
-    }
-
-    /** A successful install owns the directory's engine slot: older/newer strays just waste disk. */
-    private static void deleteStaleVersions(Path libDir, Path keep) {
-        try (var jars = Files.newDirectoryStream(libDir, "jk-engine-*.jar")) {
-            for (Path jar : jars) {
-                if (!jar.equals(keep)) Files.deleteIfExists(jar);
-            }
-        } catch (IOException ignored) {
-            // Best-effort cleanup; the versioned filename means strays are inert, not harmful.
-        }
     }
 }

@@ -72,7 +72,7 @@ public final class StatusCommand implements CliCommand {
             return 0;
         }
 
-        Optional<EngineClient.Status> engine = EngineClient.status(paths.socket());
+        Optional<EngineClient.Status> engine = EngineClient.status(dev.jkbuild.engine.EnginePaths.activeSocket(paths));
         engine.ifPresent(s -> CliOutput.out(GoalWedge.chipLine(
                 Glyphs.PLAY, "Engine", GlobalConfig.nerdfont(), "Engine is running (pid " + s.pid() + ")")));
 

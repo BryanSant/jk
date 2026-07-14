@@ -31,16 +31,19 @@ import java.util.Optional;
 public record JkConfig(
         Optional<ColorChoice> color,
         Optional<Boolean> offline,
-        Optional<Boolean> rerun,
-        Optional<Boolean> refresh,
+        /**
+         * Bypass jk's own build caches (action cache, freshness stamps) WITHOUT re-fetching
+         * locked dependencies — {@code jk verify}'s lane: a genuine recompile+repackage that
+         * still serves artifacts from the local CAS and works offline. Implied by {@code force}.
+         */
+        Optional<Boolean> rebuild,
         Optional<Boolean> noProgress,
         Optional<Boolean> quiet,
         Optional<Boolean> verbose,
         Optional<Path> directory,
         /**
-         * {@code --force} / {@code JK_FORCE} — bypass all of jk's caching for this invocation.
-         * Supersedes both {@code rerun} and {@code refresh}: any code that checks either of those
-         * will also see {@code true} when {@code force} is set.
+         * {@code --force} / {@code JK_FORCE} — bypass all of jk's caching for this invocation
+         * (recompile, re-resolve, rerun tests).
          */
         Optional<Boolean> force,
         /**
@@ -69,8 +72,6 @@ public record JkConfig(
     public JkConfig {
         Objects.requireNonNull(color, "color");
         Objects.requireNonNull(offline, "offline");
-        Objects.requireNonNull(rerun, "rerun");
-        Objects.requireNonNull(refresh, "refresh");
         Objects.requireNonNull(noProgress, "noProgress");
         Objects.requireNonNull(quiet, "quiet");
         Objects.requireNonNull(verbose, "verbose");
@@ -90,7 +91,6 @@ public record JkConfig(
                 Optional.empty(),
                 Optional.empty(),
                 Optional.empty(),
-                Optional.empty(),
                 Optional.empty());
     }
 
@@ -102,8 +102,7 @@ public record JkConfig(
         return new JkConfig(
                 over.color.or(() -> this.color),
                 over.offline.or(() -> this.offline),
-                over.rerun.or(() -> this.rerun),
-                over.refresh.or(() -> this.refresh),
+                over.rebuild.or(() -> this.rebuild),
                 over.noProgress.or(() -> this.noProgress),
                 over.quiet.or(() -> this.quiet),
                 over.verbose.or(() -> this.verbose),
@@ -121,25 +120,14 @@ public record JkConfig(
         return offline.orElse(fallback);
     }
 
-    /**
-     * True when {@code --force} (or the legacy {@code --rerun}) was set. {@code --force} is the
-     * canonical flag; {@code --rerun} is accepted for backward compatibility.
-     */
-    public boolean rerunOr(boolean fallback) {
-        return force.or(() -> rerun).orElse(fallback);
-    }
-
-    /**
-     * True when {@code --force} (or the legacy {@code --refresh}) was set. {@code --force} is the
-     * canonical flag; {@code --refresh} is accepted for backward compatibility.
-     */
-    public boolean refreshOr(boolean fallback) {
-        return force.or(() -> refresh).orElse(fallback);
-    }
-
     /** True when {@code --force} / {@code JK_FORCE} was set for this invocation. */
     public boolean forceOr(boolean fallback) {
         return force.orElse(fallback);
+    }
+
+    /** True when this build must bypass jk's own caches ({@code force} implies it). */
+    public boolean rebuildOr(boolean fallback) {
+        return force.or(() -> rebuild).orElse(fallback);
     }
 
     /** True when {@code --no-ansi} was set — all ANSI sequences suppressed, ASCII only. */

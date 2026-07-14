@@ -29,7 +29,7 @@ class KotlinCompilationTest {
                 fun greet(): String = "hi from kotlin"
                 """);
 
-        int exit = run("check", "-C", tempDir.toString(), "--cache-dir", SharedTestCache.arg());
+        int exit = run("compile", "-C", tempDir.toString(), "--cache-dir", SharedTestCache.arg());
         assertThat(exit).isEqualTo(0);
     }
 
@@ -122,7 +122,7 @@ class KotlinCompilationTest {
         Files.createDirectories(src.getParent());
         Files.writeString(src, "fun broken( = oops");
 
-        int exit = run("check", "-C", tempDir.toString(), "--cache-dir", SharedTestCache.arg());
+        int exit = run("compile", "-C", tempDir.toString(), "--cache-dir", SharedTestCache.arg());
         assertThat(exit).isEqualTo(1);
     }
 
@@ -215,7 +215,7 @@ class KotlinCompilationTest {
                 }
                 """);
 
-        int exit = run("check", "-C", tempDir.toString(), "--cache-dir", SharedTestCache.arg());
+        int exit = run("compile", "-C", tempDir.toString(), "--cache-dir", SharedTestCache.arg());
         assertThat(exit).isEqualTo(0);
     }
 

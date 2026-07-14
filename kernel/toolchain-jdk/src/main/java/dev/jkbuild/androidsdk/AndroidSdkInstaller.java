@@ -212,11 +212,8 @@ public final class AndroidSdkInstaller {
         }
     }
 
-    private static void deleteRecursively(Path root) throws IOException {
-        if (!Files.exists(root)) return;
-        try (var walk = Files.walk(root)) {
-            walk.sorted(java.util.Comparator.reverseOrder()).forEach(p -> p.toFile().delete());
-        }
+    private static void deleteRecursively(Path root) {
+        dev.jkbuild.util.PathUtil.deleteRecursively(root);
     }
 
     private static MessageDigest sha1() {

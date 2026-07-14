@@ -28,7 +28,6 @@ import dev.jkbuild.command.FormatCommand;
 import dev.jkbuild.command.GradleCommand;
 import dev.jkbuild.command.HookEnvCommand;
 import dev.jkbuild.command.IdeCommand;
-import dev.jkbuild.command.IdeaCommand;
 import dev.jkbuild.command.ImageCommand;
 import dev.jkbuild.command.ImportCommand;
 import dev.jkbuild.command.InitCommand;
@@ -70,10 +69,8 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Routes verbs that have been ported off picocli through jk's own {@link ArgParser} + {@link
- * HelpRenderer}; everything else falls back to picocli. This is the coexistence seam for Phase 3
- * (docs/plugin-refactor.md §5): commands move into the registry below one tranche at a time, and
- * picocli is deleted once it's empty on the other side.
+ * Routes every verb through jk's own {@link ArgParser} + {@link HelpRenderer} (picocli is long
+ * gone; the registry below is the complete command surface).
  *
  * <p>Handles both leaf verbs and parent groups (a {@link CliCommand} with subcommands) — {@code jk
  * jdk install …} descends into the parent, finds the sub-verb, and dispatches it; {@code jk
@@ -115,7 +112,6 @@ public final class CommandDispatch {
             new LibraryCommand(),
             new RepoCommand(),
             new IdeCommand(),
-            new IdeaCommand(),
             new VscodeCommand(),
             new ExportCommand(),
             new ImportCommand(),
@@ -197,7 +193,7 @@ public final class CommandDispatch {
                         .pluginVerb(dir, dev.jkbuild.util.JkDirs.cache(), verb, args);
             } else {
                 var paths = dev.jkbuild.engine.EnginePaths.current();
-                if (!dev.jkbuild.cli.engine.EngineClient.ping(paths.socket())) return null;
+                if (!dev.jkbuild.cli.engine.EngineClient.ping(dev.jkbuild.engine.EnginePaths.activeSocket(paths))) return null;
                 report = dev.jkbuild.cli.engine.EngineClient.pluginVerb(
                         paths, dir, dev.jkbuild.util.JkDirs.cache(), verb, args);
             }

@@ -2,7 +2,6 @@
 package dev.jkbuild.task;
 
 import dev.jkbuild.cache.Cas;
-import dev.jkbuild.repo.JkMavenLocalRepo;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -92,8 +91,8 @@ public final class LruEvictor {
             remaining -= e.size();
             deletedShas.add(e.hex());
         }
-        // Keep the m2 mirror in lock-step — drop hard-links to evicted blobs.
-        new JkMavenLocalRepo(cas.root()).removeShas(deletedShas, dryRun);
+        // Keep every named repo store in lock-step with the CAS.
+        dev.jkbuild.repo.RepoArtifactStore.removeShasFromAll(cas.root(), deletedShas, dryRun);
         return new Report(deleted, freed, reachableEvicted, remaining);
     }
 

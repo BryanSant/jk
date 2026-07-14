@@ -3,7 +3,7 @@
 // Shared conventions for jk's child-JVM worker modules (the "runner" plugins).
 // Each worker jar is published to the local Maven repo so `jk sync` can pull it
 // into the CAS, is launchable as `java -jar` via the shared PluginWorkerMain entry
-// point, and ships an `installLocalCas` task that side-loads the freshly-built
+// point, and ships an `installLocal` task that side-loads the freshly-built
 // jar into ~/.jk/cache by its SHA-256.
 //
 // What stays in each worker's build.gradle.kts: its `description`, its
@@ -78,9 +78,3 @@ tasks.register("installLocal") {
     }
 }
 
-// Keep installLocalCas for backward compatibility — delegates to installLocal.
-tasks.register("installLocalCas") {
-    description = "Deprecated: use installLocal. Side-load the freshly-built $workerArtifact jar into the jk CAS."
-    group = "jk"
-    dependsOn("installLocal")
-}

@@ -183,7 +183,7 @@ public final class ImageGoals {
                     // the main class, the image config, and the image-builder worker version.
                     ActionCache ac = new ActionCache(new Cas(cache), cache.resolve("actions"));
                     boolean useCache = tarballPath != null
-                            && !SessionContext.current().config().rerunOr(false);
+                            && !SessionContext.current().config().rebuildOr(false);
                     String imgTask = null, imgKey = null;
                     if (tarballPath != null) {
                         List<String> tokens = List.of(

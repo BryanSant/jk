@@ -166,20 +166,13 @@ else
   note "Installed $JKX_BIN (shim)"
 fi
 
-# The engine ships as a single fat jar, jk-engine-<version>.jar, installed to
-# ~/.jk/lib (see docs/engine.md "Two artifacts"; the engine is a JVM app, not a
-# second binary — the client only launches a jar whose version matches its
-# own). A local install from a dist layout carries it along; the download flow
-# doesn't fetch it here at all — the client downloads its own checksum-verified
-# engine jar the first time it spawns one (the warm-up below triggers that).
+# The engine ships as a single fat jar, jk-engine-<version>.jar (see
+# docs/engine.md "Two artifacts"; the engine is a JVM app, not a second
+# binary). It lives ONLY in the side-by-side version layout,
+# ~/.jk/versions/<v>/lib/jk-engine.jar — materialized below for local dists;
+# download installs self-fetch it on first engine spawn.
 if [ -n "$LOCAL_FILE" ]; then
   SRC_LIB="$(cd "$(dirname "$LOCAL_FILE")" && pwd)/lib"
-  if compgen -G "$SRC_LIB/jk-engine-*.jar" > /dev/null; then
-    mkdir -p "$JK_HOME/lib"
-    rm -f "$JK_HOME/lib"/jk-engine-*.jar
-    cp "$SRC_LIB"/jk-engine-*.jar "$JK_HOME/lib/"
-    note "Installed $JK_HOME/lib/$(basename "$SRC_LIB"/jk-engine-*.jar)"
-  fi
 fi
 
 # ---- side-by-side version layout (docs/engine-versioning-plan.md R2) --------

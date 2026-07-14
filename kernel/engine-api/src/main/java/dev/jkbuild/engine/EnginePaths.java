@@ -95,7 +95,9 @@ public final class EnginePaths {
                 return paths.dir().resolve(name);
             }
         } catch (java.io.IOException ignored) {
-            // No pointer → legacy path below.
+            // No pointer → no engine. The flat path below is a never-bound placeholder (nothing
+            // creates it since the legacy compat pointer was retired): probes against it fail
+            // cleanly, which is exactly the "no engine running" answer.
         }
         return paths.socket();
     }

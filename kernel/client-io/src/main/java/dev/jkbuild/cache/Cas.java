@@ -108,8 +108,11 @@ public final class Cas {
      * and the existing entry returned.
      */
     public Stored putStream(InputStream in) throws IOException {
-        Files.createDirectories(root);
-        Path tmp = Files.createTempFile(root, ".put-", ".tmp");
+        // Temp lives under a shard dir, not the CAS root: a crash must not litter the root
+        // (nothing sweeps it), and the final move stays within one directory tree.
+        Path shard = root.resolve("sha256");
+        Files.createDirectories(shard);
+        Path tmp = Files.createTempFile(shard, ".put-", ".tmp");
         MessageDigest digest = Hashing.newSha256();
         long size = 0;
         try {

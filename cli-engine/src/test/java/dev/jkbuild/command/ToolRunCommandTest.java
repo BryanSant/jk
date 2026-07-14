@@ -609,7 +609,7 @@ class ToolRunCommandTest {
                 tempDir.resolve("home/cache").toString(),
                 "--state-dir",
                 tempDir.resolve("home").toString(),
-                "--force-recompile",
+                "--force",
                 script.toString());
         long secondMtime = Files.getLastModifiedTime(classFile).toMillis();
         assertThat(secondMtime).isGreaterThan(firstMtime);

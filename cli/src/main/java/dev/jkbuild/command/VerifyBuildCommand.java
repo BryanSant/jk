@@ -295,8 +295,7 @@ public final class VerifyBuildCommand implements CliCommand {
         return new JkConfig(
                 Optional.empty(),
                 Optional.empty(),
-                Optional.of(true),
-                Optional.empty(),
+                Optional.of(true), // rebuild: bypass jk's caches, but never re-fetch (offline-safe)
                 Optional.empty(),
                 Optional.empty(),
                 Optional.empty(),

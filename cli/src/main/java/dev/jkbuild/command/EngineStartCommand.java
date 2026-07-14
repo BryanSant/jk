@@ -43,7 +43,7 @@ public final class EngineStartCommand implements CliCommand {
         EnginePaths.Paths paths = EnginePaths.current();
         // Was a matching engine already up before we touched it? Distinguishes "already running"
         // from a fresh start in the settled wedge below.
-        boolean alreadyUp = EngineClient.handshake(paths.socket(), Jk.VERSION)
+        boolean alreadyUp = EngineClient.handshake(dev.jkbuild.engine.EnginePaths.activeSocket(paths), Jk.VERSION)
                 .map(h -> Jk.VERSION.equals(h.version()))
                 .orElse(false);
         try {

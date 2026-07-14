@@ -111,7 +111,7 @@ class HttpTest {
                 Optional.empty(), Optional.empty(),
                 Optional.empty(), Optional.empty(),
                 Optional.empty(), Optional.empty(),
-                Optional.empty(), Optional.empty())));
+                Optional.empty())));
         try {
             assertThatThrownBy(() -> http().get(base.resolve("/anything")))
                     .isInstanceOf(OfflineException.class)

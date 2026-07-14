@@ -52,7 +52,7 @@ public final class KotlinBtaResolver {
             throws IOException, InterruptedException {
         requireSupportedVersion(kotlinVersion);
         Path cacheFile = cacheFile(cas, kotlinVersion);
-        boolean refresh = dev.jkbuild.config.SessionContext.current().config().refreshOr(false);
+        boolean refresh = dev.jkbuild.config.SessionContext.current().config().forceOr(false);
         if (!refresh) {
             List<Path> cached = readCachedClosure(cacheFile, cas);
             if (cached != null) return cached;

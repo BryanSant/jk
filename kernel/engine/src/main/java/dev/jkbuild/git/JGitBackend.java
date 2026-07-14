@@ -194,15 +194,6 @@ public final class JGitBackend implements GitBackend {
     }
 
     static void deleteRecursively(Path root) {
-        if (!Files.exists(root)) return;
-        try (var s = Files.walk(root)) {
-            s.sorted((a, b) -> b.getNameCount() - a.getNameCount()).forEach(p -> {
-                try {
-                    Files.deleteIfExists(p);
-                } catch (IOException ignored) {
-                }
-            });
-        } catch (IOException ignored) {
-        }
+        dev.jkbuild.util.PathUtil.deleteRecursively(root);
     }
 }

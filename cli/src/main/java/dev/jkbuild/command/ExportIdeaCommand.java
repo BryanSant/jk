@@ -7,13 +7,14 @@ import dev.jkbuild.model.command.Opt;
 import java.util.List;
 
 /**
- * {@code jk export idea} — generate IntelliJ IDEA project files. Shares {@code jk idea}'s behavior
- * exactly; provided under {@code export} so the three target systems (gradle / maven / idea) live
- * together.
+ * {@code jk export idea} — generate IntelliJ IDEA project files. Shares {@code jk ide --idea}'s
+ * behavior exactly; provided under {@code export} so the three target systems (gradle / maven /
+ * idea) live together.
  */
 public final class ExportIdeaCommand implements CliCommand {
 
-    private final IdeaCommand delegate = new IdeaCommand();
+    private final IdeCommand delegate =
+            new IdeCommand(java.util.EnumSet.of(dev.jkbuild.command.ide.IdeTarget.IDEA));
 
     @Override
     public String name() {
@@ -22,7 +23,7 @@ public final class ExportIdeaCommand implements CliCommand {
 
     @Override
     public String description() {
-        return "Generate IntelliJ IDEA project files (alias of `jk idea`)";
+        return "Generate IntelliJ IDEA project files (alias of `jk ide --idea`)";
     }
 
     @Override

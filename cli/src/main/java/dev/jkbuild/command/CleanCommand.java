@@ -87,9 +87,6 @@ public final class CleanCommand implements CliCommand {
                         deleteRecursively(target.resolve(sub), stats);
                     }
                 }
-                // Legacy pre-layout directories, best-effort.
-                deleteRecursively(projectDir.resolve("build"), stats);
-                deleteRecursively(projectDir.resolve(".jk").resolve("generated"), stats);
             }
         }
 

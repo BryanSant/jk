@@ -457,15 +457,7 @@ public final class JdkRegistry {
         return IntellijJdkDir.installDirOf(home).getFileName().toString();
     }
 
-    private static void deleteRecursively(Path root) throws IOException {
-        if (!Files.exists(root)) return;
-        try (Stream<Path> stream = Files.walk(root)) {
-            stream.sorted(Comparator.reverseOrder()).forEach(p -> {
-                try {
-                    Files.deleteIfExists(p);
-                } catch (IOException ignored) {
-                }
-            });
-        }
+    private static void deleteRecursively(Path root) {
+        dev.jkbuild.util.PathUtil.deleteRecursively(root);
     }
 }
