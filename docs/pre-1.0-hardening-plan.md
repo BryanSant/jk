@@ -692,3 +692,18 @@ resources, lint/baseline profiles, solver version interning (BOM soft pins).
   builders into EngineProtocol (both explicitly non-contract in docs/protocol.md);
   EngineDelegate picking the pinned version's floor JDK from its manifest;
   goal-finish kind assertions in adapter callers.
+- **Smoke-found bug (fixed + regression-tested):** `VersionStore.materialize`
+  short-circuited on "already materialized" by VERSION alone, so a same-version
+  re-install with different bytes (every dev `-SNAPSHOT` rebuild) silently kept
+  the stale tree — the smoke ran a NEW client against an OLD-protocol engine and
+  wedged. It now compares the manifest's engine sha and REPLACES the tree on
+  mismatch (release versions are immutable, so they still fast-path). This is
+  also why the H1 self-drain fix initially seemed not to hold in the live log:
+  the running engine was the stale jar. The fresh engine starts with zero
+  "drained displaced" lines.
+- Final smoke (installed dist): scaffold → build → test → run → `--release` →
+  lock pins the correct sha → `jk wrapper` emit → build THROUGH the wrapper →
+  help surfaces (globals section, `self update [version]` positional) — all
+  green. Forced-TCP on the native binary needs the property on both sides of
+  the engine spawn (client got it, spawned engine didn't) — the TCP lane stays
+  covered by EngineTcpTransportTest/EngineServerTest JVM-side; noted as residue.

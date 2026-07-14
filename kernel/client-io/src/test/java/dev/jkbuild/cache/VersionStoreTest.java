@@ -52,4 +52,29 @@ class VersionStoreTest {
         assertThat(VersionStore.compare("1.0.0-SNAPSHOT", "1.0.0")).isNegative();
         assertThat(VersionStore.compare("1.0.0", "1.0")).isZero();
     }
+    /**
+     * Same version, different bytes — a dev -SNAPSHOT re-install — must REPLACE the tree.
+     * The short-circuit once kept a stale engine jar in place while a freshly-built client
+     * believed it had installed itself (new client speaking to an old-protocol engine).
+     */
+    @Test
+    void rematerializing_the_same_version_with_new_bytes_replaces_the_tree(@TempDir Path dir) throws Exception {
+        var cas = new dev.jkbuild.cache.Cas(dir.resolve("cache"));
+        var store = new VersionStore(dir.resolve("versions"));
+        Path jarV1 = dir.resolve("engine-v1.jar");
+        Files.writeString(jarV1, "engine bytes v1");
+        Path jarV2 = dir.resolve("engine-v2.jar");
+        Files.writeString(jarV2, "engine bytes v2 (rebuilt snapshot)");
+
+        var first = store.materializeFromFiles("1.0.0-SNAPSHOT", cas, jarV1, null);
+        assertThat(first.engineJar()).hasContent("engine bytes v1");
+
+        var second = store.materializeFromFiles("1.0.0-SNAPSHOT", cas, jarV2, null);
+        assertThat(second.engineJar()).hasContent("engine bytes v2 (rebuilt snapshot)");
+
+        // And identical bytes short-circuit (release immutability fast path).
+        var third = store.materializeFromFiles("1.0.0-SNAPSHOT", cas, jarV2, null);
+        assertThat(third.root()).isEqualTo(second.root());
+    }
+
 }
