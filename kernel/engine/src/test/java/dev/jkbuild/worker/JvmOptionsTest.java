@@ -89,10 +89,36 @@ class JvmOptionsTest {
     }
 
     @Test
-    void launcher_flags_prefix_every_worker_flag_with_dash_j() {
+    void launcher_flags_prefix_every_batch_flag_with_dash_j() {
         assertThat(JvmOptions.launcherFlags(1))
                 .allMatch(f -> f.startsWith("-J-"))
-                .hasSameSizeAs(JvmOptions.flags(WorkerTuning.NONE, 1));
+                .hasSameSizeAs(JvmOptions.batchFlags(1))
+                .contains("-J-XX:+UseParallelGC");
+    }
+
+    @Test
+    void batch_flags_default_to_parallel_gc_but_worker_flags_do_not() {
+        // jk-owned batch forks (compilers, plugin tools) pin the throughput collector; test
+        // workers ride the JVM's own default so user code sees the GC every other runner gives it.
+        assertThat(JvmOptions.batchFlags(1)).contains("-XX:+UseParallelGC");
+        assertThat(JvmOptions.workerFlags(1)).noneMatch(f -> f.startsWith("-XX:+Use") && f.endsWith("GC"));
+    }
+
+    @Test
+    void gc_parallel_and_serial_are_recognized_names() {
+        assertThat(JvmOptions.flags(new WorkerTuning(null, "parallel", false, List.of()), 1))
+                .contains("-XX:+UseParallelGC");
+        assertThat(JvmOptions.flags(new WorkerTuning(null, "serial", false, List.of()), 1))
+                .contains("-XX:+UseSerialGC");
+    }
+
+    @Test
+    void explicit_gc_pin_overrides_the_batch_default() {
+        HeapPlan.Plan plan = new HeapPlan.Plan(1, 64L << 20, 256L << 20, 256L << 20, null);
+        WorkerTuning g1 = new WorkerTuning(null, "g1", false, List.of());
+        assertThat(JvmOptions.absoluteFlags(plan, g1, JvmOptions.BATCH_DEFAULT_GC))
+                .contains("-XX:+UseG1GC")
+                .doesNotContain("-XX:+UseParallelGC");
     }
 
     @Test

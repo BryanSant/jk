@@ -1007,7 +1007,7 @@ public final class BuildPipeline {
                     Path javaHome = ctx.require(JAVA_HOME);
                     List<String> cmd = new ArrayList<>();
                     cmd.add(dev.jkbuild.jdk.JavaHomes.runningJavaHome().resolve("bin/java").toString());
-                    cmd.addAll(dev.jkbuild.worker.JvmOptions.workerFlags(1));
+                    cmd.addAll(dev.jkbuild.worker.JvmOptions.batchFlags(1));
                     cmd.add("-cp");
                     cmd.add(joinPaths(kspClasspath, sep));
                     cmd.add(KspResolver.KSP_MAIN);

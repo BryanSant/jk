@@ -122,7 +122,7 @@ public final class WorkerAot {
         try {
             JdkId id = jdkId(javaHome);
             if (id == null) return List.of();
-            String gc = effectiveGc(JvmOptions.workerFlags(1));
+            String gc = effectiveGc(JvmOptions.batchFlags(1)); // must match javaCommand, the actual spawn
             Path cache = dir().resolve("kotlinc-" + key(id, gc, workerClasspath) + ".aot");
             if (Files.exists(cache)) {
                 return List.of("-XX:AOTCache=" + cache, "-Xlog:aot=off");

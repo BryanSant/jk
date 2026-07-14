@@ -82,7 +82,7 @@ public final class WorkerJavac {
             List<String> command = dev.jkbuild.worker.PluginLoader.command(
                     javaExe,
                     req.workerJar().toString(),
-                    dev.jkbuild.worker.JvmOptions.workerFlags(1),
+                    dev.jkbuild.worker.JvmOptions.batchFlags(1),
                     List.of("@" + spec.toAbsolutePath()));
             int exit = new dev.jkbuild.worker.WorkerClient(PREFIX)
                     .on("diag", json -> diagnostics.add(new CompileResult.Diagnostic(

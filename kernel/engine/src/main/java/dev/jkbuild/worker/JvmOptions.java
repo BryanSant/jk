@@ -42,6 +42,17 @@ public final class JvmOptions {
     public static final String DEFAULT_GC = "default";
 
     /**
+     * Default collector for jk-OWNED batch forks — compilers (javac, kotlinc, KSP, the AP worker)
+     * and plugin tools (audit, image, publish, format, git). Pure throughput work with no user-code
+     * semantics riding on the collector, so the classic batch collector wins: measured on a
+     * single-file javac fork with a mapped AOT cache, parallel 155ms vs G1 164ms. Test workers
+     * deliberately do NOT get this: they run user code, and the JVM's own default (G1) is what
+     * that code sees under every other runner — GC-sensitive tests (reference/Cleaner timing)
+     * must not behave differently under jk. An explicit {@code [jvm] gc} pin wins everywhere.
+     */
+    public static final String BATCH_DEFAULT_GC = "parallel";
+
+    /**
      * Metaspace lives outside the heap budget {@link HeapPlan} sizes, so an unbounded default lets
      * several concurrent worker JVMs overcommit native memory even when their heaps are well behaved.
      * Capped unless the caller already set one.
@@ -57,10 +68,14 @@ public final class JvmOptions {
      * worker count).
      */
     public static List<String> flags(WorkerTuning settings, int concurrency) {
+        return flags(settings, concurrency, DEFAULT_GC);
+    }
+
+    private static List<String> flags(WorkerTuning settings, int concurrency, String defaultGc) {
         WorkerTuning s = settings == null ? WorkerTuning.NONE : settings;
         double base = s.maxRamPercent() != null ? s.maxRamPercent() : DEFAULT_MAX_RAM_PERCENT;
         double perJvm = base / Math.max(1, concurrency);
-        String gc = (s.gc() != null ? s.gc() : DEFAULT_GC).toLowerCase(Locale.ROOT);
+        String gc = (s.gc() != null ? s.gc() : defaultGc).toLowerCase(Locale.ROOT);
         boolean dedup = s.stringDedup() == null || s.stringDedup();
 
         List<String> out = new ArrayList<>();
@@ -68,6 +83,8 @@ public final class JvmOptions {
         switch (gc) {
             case "zgc" -> out.add("-XX:+UseZGC");
             case "g1" -> out.add("-XX:+UseG1GC");
+            case "parallel" -> out.add("-XX:+UseParallelGC");
+            case "serial" -> out.add("-XX:+UseSerialGC");
             case "none", "default", "" -> {
                 /* leave the JVM's own default */
             }
@@ -112,10 +129,23 @@ public final class JvmOptions {
      * at once, so {@code concurrency} is ignored in that case.
      */
     public static List<String> workerFlags(int concurrency) {
+        return workerFlags(concurrency, DEFAULT_GC);
+    }
+
+    /**
+     * {@link #workerFlags} with the {@linkplain #BATCH_DEFAULT_GC batch collector} as the GC
+     * default — for jk-owned batch forks (compilers, plugin tools), never test workers. An
+     * explicit {@code [jvm] gc} still wins.
+     */
+    public static List<String> batchFlags(int concurrency) {
+        return workerFlags(concurrency, BATCH_DEFAULT_GC);
+    }
+
+    private static List<String> workerFlags(int concurrency, String defaultGc) {
         WorkerTuning s = tuning();
         HeapPlan.Plan plan = processHeapPlan();
-        if (plan != null && autoHeapEnabled(s)) return absoluteFlags(plan, s);
-        return flags(s, concurrency);
+        if (plan != null && autoHeapEnabled(s)) return absoluteFlags(plan, s, defaultGc);
+        return flags(s, concurrency, defaultGc);
     }
 
     /**
@@ -196,7 +226,11 @@ public final class JvmOptions {
      * {@code gc = "none"} — G1 and ZGC honour it, everything else recognizes and ignores it.
      */
     static List<String> absoluteFlags(HeapPlan.Plan plan, WorkerTuning s) {
-        String gc = (s.gc() != null ? s.gc() : DEFAULT_GC).toLowerCase(Locale.ROOT);
+        return absoluteFlags(plan, s, DEFAULT_GC);
+    }
+
+    static List<String> absoluteFlags(HeapPlan.Plan plan, WorkerTuning s, String defaultGc) {
+        String gc = (s.gc() != null ? s.gc() : defaultGc).toLowerCase(Locale.ROOT);
         boolean dedup = s.stringDedup() == null || s.stringDedup();
         boolean softMaxAware = !gc.equals("none");
 
@@ -211,6 +245,8 @@ public final class JvmOptions {
                 out.add("-XX:ZUncommitDelay=" + ZGC_UNCOMMIT_DELAY_SECONDS);
             }
             case "g1" -> out.add("-XX:+UseG1GC");
+            case "parallel" -> out.add("-XX:+UseParallelGC");
+            case "serial" -> out.add("-XX:+UseSerialGC");
             case "none", "default", "" -> {
                 /* JVM default collector */
             }
@@ -275,7 +311,7 @@ public final class JvmOptions {
      */
     public static List<String> launcherFlags(int concurrency) {
         List<String> out = new ArrayList<>();
-        for (String f : workerFlags(concurrency)) out.add("-J" + f);
+        for (String f : batchFlags(concurrency)) out.add("-J" + f);
         return out;
     }
 
@@ -288,7 +324,7 @@ public final class JvmOptions {
     public static List<String> javaCommand(String javaExe, int concurrency, List<String> rest) {
         List<String> cmd = new ArrayList<>();
         cmd.add(javaExe);
-        cmd.addAll(workerFlags(concurrency));
+        cmd.addAll(batchFlags(concurrency));
         cmd.addAll(rest);
         return cmd;
     }
