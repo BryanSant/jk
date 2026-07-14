@@ -735,3 +735,15 @@ resources, lint/baseline profiles, solver version interning (BOM soft pins).
   blob and the repo GC removed the jar with it (all 12 workers vanished
   mid-smoke). Fix: repos/local sidecars are sweep ROOTS in CacheRoots.collect;
   other repos/<name> stores remain sweepable re-fetchable mirrors.
+
+### Residue bite 2 — cache-bypassing builds no longer write the action cache
+
+Prompted by the user's question about `jk verify` cache waste: the scratch
+rebuild's action keys hash absolute (random temp) paths, so every store it made
+was a permanent orphan. `storePackaged` already skipped stores on `rebuild`;
+the three compile-path stores (KotlinCompile, JavaIncrementalCompile's full
+path, the run-tests marker) now follow the same convention — a bypassing run
+(`--force`, verify) neither reads nor writes. JavaIncrementalCompile's
+INCREMENTAL path keeps storing: it is reachable only via a prior cache record,
+i.e. never on a bypassing run. VerifyBuildCommandTest pins "verify leaves the
+action-key set untouched".
