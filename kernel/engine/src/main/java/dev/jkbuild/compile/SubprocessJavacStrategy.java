@@ -72,6 +72,9 @@ public final class SubprocessJavacStrategy implements JavaCompileStrategy {
                 List<String> command = new ArrayList<>();
                 command.add(javac.toString());
                 command.addAll(JvmOptions.launcherFlags(1));
+                // AOT cache for javac's own JVM (WorkerAot): mapped when one exists for this
+                // JDK + GC, else a background trainer is kicked off so the NEXT compile maps it.
+                command.addAll(dev.jkbuild.worker.WorkerAot.javacFlags(javaHome));
                 command.add("@" + argfile);
                 ProcessBuilder pb = new ProcessBuilder(command).redirectErrorStream(true);
                 Process process = pb.start();

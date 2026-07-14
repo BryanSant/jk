@@ -852,3 +852,28 @@ agents) into "stale engine" diagnoses. New shape:
   `EngineReady` collapsed into `ensureRunning` (first start = plain fast cold
   start). Docs: engine.md explains the transient `--aot-training` process so
   a `ps` sighting self-identifies.
+
+### Worker AOT caches (2026-07-14)
+
+Extends the sidecar idea from the engine to the fork-per-run worker JVMs —
+the startup cost paid on every build, not once per install. `WorkerAot`
+(kernel/engine): caches under `~/.jk/state/aot/`, exact-match keys
+(JDK canonical home + vendor + full version + effective GC name; kotlinc
+adds the worker classpath, so a Kotlin bump retrains), background training
+kicked off by the first fork that finds no cache (claim file + in-JVM guard,
+atomic-rename publish, sticky `.noaot` on failure so a broken key never
+retry-storms), stale-key sweep on publish, `-Djk.worker.aot=off` kill switch.
+javac maps via `-J-XX:AOTCache` + `-J-Xlog:aot=off` (mismatch/corrupt = silent
+no-op — measured); kotlinc worker maps bare JVM flags, trainer compiles a
+synthetic hello.kt against the triggering request's own compile classpath
+(CAS entries are content-named; there is no stdlib jar to find by name — a
+real trap hit live).
+
+Measured (Temurin 25.0.3, this machine): raw javac 1-file 212→93ms (G1/default),
+328→237ms (ZGC, the worker default — GC-mismatched cache maps NOTHING, hence
+GC in the key). Through the full `jk build` path per real recompile:
+java 292→236ms; **kotlin 2155→1248ms** (the compiler's JIT warmup dominates).
+Trainer corpus bug found live: `List<? extends T>` + `Comparator.naturalOrder()`
+does not compile (capture conversion) — the prototype masked it because JEP 514
+assembles the cache regardless of javac's exit status; WorkerAot requires
+exit 0, which caught it.

@@ -47,21 +47,27 @@ public final class KotlincDriver {
             // pinned JDK; requirements.md promises a 17+ project floor). The project JDK is an
             // INPUT: writeSpec passes it as kotlinc's -jdk-home so cross-compilation still
             // resolves the pinned JDK's platform classes.
+            Path hostJavaHome = dev.jkbuild.jdk.JavaHomes.runningJavaHome();
+            String classpath = request.workerClasspath().stream()
+                    .map(Path::toString)
+                    .collect(Collectors.joining(java.io.File.pathSeparator));
+            List<String> rest = new ArrayList<>();
+            // AOT cache for the worker JVM (WorkerAot): the Kotlin compiler IS this classpath, so
+            // the cache tames its multi-second JIT warmup. Mapped when one exists for (host JDK,
+            // GC, classpath); else a background trainer compiles a synthetic hello.kt so the NEXT
+            // kotlin build maps it. JVM flags, so they precede -cp.
+            rest.addAll(dev.jkbuild.worker.WorkerAot.kotlincFlags(
+                    hostJavaHome, classpath, (aotOutput, scratch) -> trainerCommand(
+                            request.classpath(), classpath, hostJavaHome, aotOutput, scratch)));
+            rest.addAll(List.of(
+                    // Silence the JDK's native-access / Unsafe warnings the compiler triggers.
+                    "--enable-native-access=ALL-UNNAMED",
+                    "-cp",
+                    classpath,
+                    WORKER_MAIN,
+                    "@" + spec.toAbsolutePath()));
             List<String> cmd = dev.jkbuild.worker.JvmOptions.javaCommand(
-                    dev.jkbuild.jdk.JavaHomes.runningJavaHome()
-                            .resolve("bin")
-                            .resolve("java")
-                            .toString(),
-                    1,
-                    List.of(
-                            // Silence the JDK's native-access / Unsafe warnings the compiler triggers.
-                            "--enable-native-access=ALL-UNNAMED",
-                            "-cp",
-                            request.workerClasspath().stream()
-                                    .map(Path::toString)
-                                    .collect(Collectors.joining(java.io.File.pathSeparator)),
-                            WORKER_MAIN,
-                            "@" + spec.toAbsolutePath()));
+                    hostJavaHome.resolve("bin").resolve("java").toString(), 1, rest);
 
             List<String> diagnostics = new ArrayList<>();
             String[] status = {null};
@@ -87,6 +93,61 @@ public final class KotlincDriver {
         } finally {
             Files.deleteIfExists(spec);
         }
+    }
+
+    /**
+     * The AOT trainer's command line: the same worker spawn shape as {@link #run}, recording with
+     * {@code -XX:AOTCacheOutput} while compiling a synthetic hello.kt against the triggering
+     * request's own compile classpath (CAS entries are content-named, so there is no jar to hunt
+     * for by name — but every real Kotlin compile already carries the version-matched
+     * kotlin-stdlib the request pairs with {@code -no-stdlib}). Full startup + compile fidelity —
+     * exactly the warmup the cache exists to skip.
+     */
+    private static List<String> trainerCommand(
+            List<Path> compileClasspath, String classpath, Path hostJavaHome, Path aotOutput, Path scratch)
+            throws IOException {
+        Path source = scratch.resolve("Hello.kt");
+        Files.writeString(
+                source,
+                """
+                package demo
+
+                data class Point(val x: Int, val y: Int)
+
+                sealed interface Shape
+                data class Circle(val r: Double) : Shape
+                data class Square(val s: Double) : Shape
+
+                fun area(shape: Shape): Double = when (shape) {
+                    is Circle -> Math.PI * shape.r * shape.r
+                    is Square -> shape.s * shape.s
+                }
+
+                fun main() {
+                    val points = (1..10).map { Point(it, it * 2) }
+                    val shapes: List<Shape> = listOf(Circle(2.0), Square(3.0))
+                    println(points.filter { it.x % 2 == 0 }.joinToString { "${it.x},${it.y}" })
+                    println(shapes.sumOf { area(it) })
+                }
+                """);
+        List<String> lines = new ArrayList<>();
+        lines.add("OUTPUT " + scratch.resolve("out").toAbsolutePath());
+        lines.add("JVM_TARGET 21");
+        lines.add("ARG -jdk-home");
+        lines.add("ARG " + hostJavaHome.toAbsolutePath());
+        lines.add("ARG -no-stdlib");
+        lines.add("SOURCE " + source.toAbsolutePath());
+        for (Path cp : compileClasspath) {
+            lines.add("CLASSPATH " + cp.toAbsolutePath());
+        }
+        Path spec = scratch.resolve("train.spec");
+        Files.write(spec, lines, StandardCharsets.UTF_8);
+        List<String> rest = new ArrayList<>();
+        rest.add("-XX:AOTCacheOutput=" + aotOutput);
+        rest.addAll(List.of(
+                "--enable-native-access=ALL-UNNAMED", "-cp", classpath, WORKER_MAIN, "@" + spec.toAbsolutePath()));
+        return dev.jkbuild.worker.JvmOptions.javaCommand(
+                hostJavaHome.resolve("bin").resolve("java").toString(), 1, rest);
     }
 
     /** Render the request into the worker's line-oriented spec format. */

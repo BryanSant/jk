@@ -90,7 +90,16 @@ and the fallback when no engine artifact is installed. Both routes execute the e
    reports it as `AOT: training in progress (pid N)` in `jk engine status` while it lives).
    The key ties the cache to the exact jar because
    `AOTMode=auto` silently ignores a mismatched cache — an unkeyed file would stop helping at
-   the first upgrade and never retrain; **(c)**
+   the first upgrade and never retrain. The same treatment covers jk's short-lived **worker
+   JVMs** (`WorkerAot`, caches under `~/.jk/state/aot/`): javac forks map a cache keyed to the
+   project's toolchain JDK + effective GC (measured ~40-55% off a small compile), and the
+   kotlinc worker maps one additionally keyed to its compiler classpath, so a Kotlin-version
+   bump retrains. The first fork that finds no cache proceeds untrained and kicks off a
+   background trainer (a synthetic compile, `ps` shows a short-lived extra `javac`/worker
+   process; the engine log records it); the next fork maps the result. Exact-match keying is
+   the rule everywhere — a different JDK build, vendor, or GC mints a new key, the old cache
+   is swept, and a mismatched or corrupt cache is a silent no-op, never a failed build.
+   `-Djk.worker.aot=off` (or `JK_WORKER_AOT=off`) disables it. **(c)**
    the `jk` binary itself, re-invoked with the internal `--engine-server` flag — the JVM dist and
    dev workflows. The choice is recorded as the first line of the engine's log file. Every route
    sizes the heap from `max-heap-mb` (see [Memory target](#memory-target)): real JVM flags on the
