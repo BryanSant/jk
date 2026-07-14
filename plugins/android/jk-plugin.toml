@@ -79,8 +79,6 @@ store-file      = { type = "string", required = true, example = "env:KEYSTORE_FI
 store-password  = { type = "string", secret = true }
 key-alias       = { type = "string", required = true }
 key-password    = { type = "string", secret = true }
-# v3 key rotation: schema'd for forward-compat, not yet wired (android-plan Phase 3 records it).
-next-store-file = { type = "string" }
 
 [sub-tables.signing]
 schema = "signing"

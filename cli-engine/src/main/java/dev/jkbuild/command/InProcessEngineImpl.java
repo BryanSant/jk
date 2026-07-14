@@ -177,7 +177,10 @@ public final class InProcessEngineImpl implements InProcessEngine {
                 jdksDir,
                 /* skipTests */ false,
                 global.verbose, /* testOnly */
-                true);
+                true,
+                false,
+                java.util.Set.of(),
+                dev.jkbuild.config.SessionContext.current());
         Goal goal = BuildPipeline.coreBuilder(inputs).build();
 
         // Deferred lookup: goal.get(TEST_RESULT) is empty until the run-tests phase populates it
@@ -742,7 +745,11 @@ public final class InProcessEngineImpl implements InProcessEngine {
                 null,
                 jdksDir,
                 skipTests,
-                verbose);
+                verbose,
+                false,
+                false,
+                java.util.Set.of(),
+                dev.jkbuild.config.SessionContext.current());
         Goal.Builder builder = BuildPipeline.coreBuilder(inputs);
         BuildPipeline.appendDeclaredTails(builder, inputs);
         Goal goal = builder.build();

@@ -2,7 +2,7 @@
 package dev.jkbuild.runtime;
 
 import dev.jkbuild.engine.protocol.GeneratedFiles;
-import dev.jkbuild.plugin.manifest.PluginManifest;
+import dev.jkbuild.plugin.manifest.PluginDescriptor;
 import dev.jkbuild.plugin.manifest.PluginTableRegistry;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -26,11 +26,11 @@ public final class ScaffoldOps {
 
     public static GeneratedFiles scaffold(Path dir, Map<String, String> params) {
         String flag = String.valueOf(params.get("plugin"));
-        PluginManifest manifest = byScaffoldFlag(flag);
+        PluginDescriptor manifest = byScaffoldFlag(flag);
         if (manifest == null) {
             return GeneratedFiles.error("no installed plugin scaffolds --" + flag);
         }
-        PluginManifest.Scaffold scaffold = manifest.scaffold();
+        PluginDescriptor.Scaffold scaffold = manifest.scaffold();
         String lang = params.getOrDefault("lang", "java");
         String pkg = String.valueOf(params.get("package"));
         boolean simple = Boolean.parseBoolean(params.getOrDefault("simpleLayout", "false"));
@@ -42,7 +42,7 @@ public final class ScaffoldOps {
         // jk.toml = the client-rendered base + this plugin's fragments (order preserved).
         StringBuilder toml = new StringBuilder(String.valueOf(params.getOrDefault("baseToml", "")));
         if (toml.length() > 0 && toml.charAt(toml.length() - 1) != '\n') toml.append('\n');
-        for (PluginManifest.Append append : scaffold.appends()) {
+        for (PluginDescriptor.Append append : scaffold.appends()) {
             if (append.whenLang() != null && !append.whenLang().equals(lang)) continue;
             toml.append(interpolate(PluginTableRegistry.resourceText(manifest, append.template()), pkg));
         }
@@ -50,7 +50,7 @@ public final class ScaffoldOps {
         contents.add(toml.toString());
 
         if (sample) {
-            for (PluginManifest.FileTemplate file : scaffold.files()) {
+            for (PluginDescriptor.FileTemplate file : scaffold.files()) {
                 if (file.whenLang() != null && !file.whenLang().equals(lang)) continue;
                 Path target = dir.resolve(interpolatePath(file.path(), lang, pkg, simple));
                 if (file.keepExisting() && Files.exists(target)) continue;
@@ -61,8 +61,8 @@ public final class ScaffoldOps {
         return new GeneratedFiles(null, paths, contents, List.of());
     }
 
-    private static PluginManifest byScaffoldFlag(String flag) {
-        for (PluginManifest m : PluginTableRegistry.manifests()) {
+    private static PluginDescriptor byScaffoldFlag(String flag) {
+        for (PluginDescriptor m : PluginTableRegistry.manifests()) {
             if (m.scaffold() == null) continue;
             if (m.scaffold().flag().equals(flag) || m.id().equals(flag)) return m;
         }

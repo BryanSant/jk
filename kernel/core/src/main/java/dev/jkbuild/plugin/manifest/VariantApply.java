@@ -105,7 +105,7 @@ public final class VariantApply {
         // Plugin folds: overlay keys onto each plugin config, inject the selected names, then
         // flatten named group references (signing) with env: resolution / secret diversion.
         Map<String, String> secrets = new LinkedHashMap<>();
-        for (PluginManifest manifest : PluginTableRegistry.manifestsFor(moduleDir, build.plugins())) {
+        for (PluginDescriptor manifest : PluginTableRegistry.manifestsFor(moduleDir, build.plugins())) {
             PluginConfig config = out.pluginConfig(manifest.id()).orElse(null);
             if (config == null) continue;
             out = out.withPluginConfig(effective(manifest, config, chosen, clientEnv, secrets));
@@ -152,7 +152,7 @@ public final class VariantApply {
     }
 
     private static PluginConfig effective(
-            PluginManifest manifest,
+            PluginDescriptor manifest,
             PluginConfig config,
             List<Chosen> chosen,
             Map<String, String> clientEnv,
@@ -174,7 +174,7 @@ public final class VariantApply {
 
         // Named-group references (signing = "release" → [android.signing.release] flattens to
         // signing.<key>, secrets diverted to the side channel).
-        for (PluginManifest.SubTable group : manifest.subTables().values()) {
+        for (PluginDescriptor.SubTable group : manifest.subTables().values()) {
             Object ref = values.get(group.table());
             if (!(ref instanceof String name) || name.isBlank()) continue;
             Map<String, Object> entry = config.group(group.table()).get(name);
@@ -182,14 +182,14 @@ public final class VariantApply {
                 throw new JkBuildParseException("[" + manifest.table() + "] references " + group.table() + " = \""
                         + name + "\" but declares no [" + manifest.table() + "." + group.table() + "." + name + "]");
             }
-            Map<String, PluginManifest.SchemaKey> subSchema = manifest.subSchemas().get(group.schema());
+            Map<String, PluginDescriptor.SchemaKey> subSchema = manifest.subSchemas().get(group.schema());
             for (Map.Entry<String, Object> e : entry.entrySet()) {
                 Object value = e.getValue();
                 if (value instanceof String s) {
                     value = resolveEnv(
                             s, clientEnv, manifest.table() + "." + group.table() + "." + name + "." + e.getKey());
                 }
-                PluginManifest.SchemaKey schemaKey = subSchema.get(e.getKey());
+                PluginDescriptor.SchemaKey schemaKey = subSchema.get(e.getKey());
                 String flatKey = group.table() + "." + e.getKey();
                 if (schemaKey != null && schemaKey.secret()) {
                     secrets.put(flatKey, String.valueOf(value));

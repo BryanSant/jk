@@ -116,7 +116,11 @@ class VariantSwitchTest {
                         null,
                         null,
                         true,
-                        false)
+                        false,
+                false,
+                false,
+                java.util.Set.of(),
+                dev.jkbuild.config.SessionContext.current())
                 .withVariant(selection, java.util.Map.of());
         Goal goal = BuildPipeline.coreBuilder(in).build();
         GoalResult result = goal.run();

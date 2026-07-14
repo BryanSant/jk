@@ -75,7 +75,11 @@ public final class InstallGoals {
                 null,
                 null,
                 skipTests,
-                verbose);
+                verbose,
+                false,
+                false,
+                java.util.Set.of(),
+                dev.jkbuild.config.SessionContext.current());
         Goal.Builder builder = BuildPipeline.coreBuilder(inputs);
         BuildPipeline.appendDeclaredTails(builder, inputs);
 

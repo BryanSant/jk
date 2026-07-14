@@ -14,10 +14,14 @@ import java.util.Optional;
  * {@code jk-plugin.toml} schema — required keys checked, defaults applied, types coerced — so
  * consumers read through the typed accessors without null-checking or re-validating.
  *
- * <p>Values are {@link String}, {@link Boolean}, {@link Long}, or {@code List<String>} —
- * exactly the manifest schema's type vocabulary ({@code string | bool | int | string-list}).
- * A key that is absent here was absent in the table <em>and</em> carried no default (the
- * tri-state pattern: {@code [spring-boot] aot} unset means "auto").
+ * <p>Values are {@link String}, {@link Boolean}, {@link Long}, {@code List<String>}, or —
+ * the fifth shape — a nested {@code Map<String, Map<String, Object>>} GROUP: a key declared
+ * as a sub-table schema ({@code [android.signing.<name>]}) holds every named entry's own
+ * validated map, read via {@link #group}. The SAME key may instead hold a {@link String}
+ * REFERENCE naming one entry of a group declared elsewhere (the parser disambiguates by
+ * shape: nested table = the group, string = a reference to one). A key that is absent here
+ * was absent in the table <em>and</em> carried no default (the tri-state pattern:
+ * {@code [spring-boot] aot} unset means "auto").
  *
  * <p>Insertion order is preserved for faithful round-tripping (the import renderer writes the
  * table back in declaration order).
@@ -59,7 +63,6 @@ public record PluginConfig(String id, Map<String, Object> values) {
         return values.get(key) instanceof List<?> l ? (List<String>) l : List.of();
     }
 
-    /** An int with a call-site fallback. */
     /**
      * A nested-table group ({@code [android.signing.<name>]} entries): entry name → its
      * validated key/value map. Empty when the group is absent. Values inside follow the same

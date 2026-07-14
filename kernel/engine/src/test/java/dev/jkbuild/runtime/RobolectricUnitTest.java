@@ -59,7 +59,11 @@ class RobolectricUnitTest {
                 null,
                 null,
                 false, // run the test — that IS the assertion
-                false);
+                false,
+                false,
+                false,
+                java.util.Set.of(),
+                dev.jkbuild.config.SessionContext.current());
         GoalResult result = BuildPipeline.coreBuilder(in).build().run();
         assertThat(result.errors()).isEmpty();
         assertThat(result.success())

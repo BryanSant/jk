@@ -85,7 +85,11 @@ public final class NativeGoals {
                 null,
                 jdksDir,
                 skipTests,
-                verbose);
+                verbose,
+                false,
+                false,
+                java.util.Set.of(),
+                dev.jkbuild.config.SessionContext.current());
         Goal.Builder builder = BuildPipeline.coreBuilder(inputs);
         if (isNativeEligible(module)) {
             builder.addPhase(BuildPipeline.nativePhase(

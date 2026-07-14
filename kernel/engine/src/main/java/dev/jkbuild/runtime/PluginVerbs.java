@@ -41,7 +41,7 @@ public final class PluginVerbs {
             Path buildFile = dir.resolve("jk.toml");
             if (!Files.isRegularFile(buildFile)) return PluginVerbReport.notFound();
             JkBuild project = JkBuildParser.parse(buildFile);
-            if (!project.plugins().isEmpty() && PluginManifestOps.ensureMaterialized(dir, cache)) {
+            if (!project.plugins().isEmpty() && PluginDescriptorOps.ensureMaterialized(dir, cache)) {
                 project = JkBuildParser.reparse(buildFile);
             }
             project = dev.jkbuild.plugin.manifest.VariantApply.applyLenient(

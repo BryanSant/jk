@@ -97,7 +97,11 @@ class ProtobufPluginTest {
                 null,
                 null,
                 true,
-                false);
+                false,
+                false,
+                false,
+                java.util.Set.of(),
+                dev.jkbuild.config.SessionContext.current());
         Goal goal = BuildPipeline.coreBuilder(in).build();
         GoalResult result = goal.run();
         assertThat(result.errors()).isEmpty();
@@ -184,7 +188,11 @@ class ProtobufPluginTest {
                 null,
                 null,
                 true,
-                false);
+                false,
+                false,
+                false,
+                java.util.Set.of(),
+                dev.jkbuild.config.SessionContext.current());
         GoalResult result = BuildPipeline.coreBuilder(in).build().run();
         assertThat(result.errors()).isEmpty();
         assertThat(result.success()).isTrue();

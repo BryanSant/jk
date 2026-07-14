@@ -55,7 +55,11 @@ class HiltTransformTest {
                 null,
                 null,
                 true,
-                false);
+                false,
+                false,
+                false,
+                java.util.Set.of(),
+                dev.jkbuild.config.SessionContext.current());
         GoalResult result = BuildPipeline.coreBuilder(in).build().run();
         assertThat(result.errors()).isEmpty();
         assertThat(result.success()).isTrue();

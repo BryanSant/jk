@@ -26,12 +26,12 @@ import java.util.concurrent.ConcurrentHashMap;
  * from a SHA-verified jar and safe to evaluate even for untrusted plugins (the trust gate sits
  * in front of worker <em>forks</em>, not manifest reads).
  */
-public final class PluginManifestStore {
+public final class PluginDescriptorStore {
 
-    private PluginManifestStore() {}
+    private PluginDescriptorStore() {}
 
     /** Parsed manifests memoized by the jar SHA the store file is named for. */
-    private static final Map<String, PluginManifest> BY_SHA = new ConcurrentHashMap<>();
+    private static final Map<String, PluginDescriptor> BY_SHA = new ConcurrentHashMap<>();
 
     public static Path storeDir(Path moduleDir) {
         return moduleDir.resolve("target").resolve("plugin-manifests");
@@ -59,17 +59,17 @@ public final class PluginManifestStore {
     }
 
     /** The materialized manifest for {@code decl}, or empty when not yet locked + extracted. */
-    public static Optional<PluginManifest> manifestFor(Path moduleDir, PluginDeclaration decl) {
+    public static Optional<PluginDescriptor> manifestFor(Path moduleDir, PluginDeclaration decl) {
         if (moduleDir == null) return Optional.empty();
         Optional<Lockfile.PluginEntry> entry = lockEntry(moduleDir, decl);
         if (entry.isEmpty()) return Optional.empty();
         String sha = entry.get().sha256Hex();
-        PluginManifest memo = BY_SHA.get(sha);
+        PluginDescriptor memo = BY_SHA.get(sha);
         if (memo != null) return Optional.of(memo);
         Path file = fileFor(moduleDir, sha);
         if (!Files.isRegularFile(file)) return Optional.empty();
         try {
-            PluginManifest parsed = PluginManifests.parse(
+            PluginDescriptor parsed = PluginDescriptors.parse(
                     Files.readString(file, StandardCharsets.UTF_8),
                     decl.coordinateWithVersion() + "!jk-plugin.toml");
             BY_SHA.put(sha, parsed);

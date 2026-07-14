@@ -10,7 +10,7 @@ import java.util.Objects;
 /**
  * A build plugin's declarative manifest ({@code jk-plugin.toml} — build-plugins plan §3.1): the
  * table it owns, its schema, and (from P2 on) its declarative contributions. Parsed by
- * {@link PluginManifests}; the engine never loads plugin classes to evaluate this layer.
+ * {@link PluginDescriptors}; the engine never loads plugin classes to evaluate this layer.
  *
  * @param id the plugin id ({@code [plugin] id})
  * @param table the jk.toml table this plugin owns ({@code [plugin] table})
@@ -18,7 +18,7 @@ import java.util.Objects;
  * @param jkCompat the jk version range this plugin supports (informational in P1)
  * @param schema typed keys of the owned table, in declaration order
  */
-public record PluginManifest(
+public record PluginDescriptor(
         String id,
         String table,
         String version,
@@ -32,7 +32,7 @@ public record PluginManifest(
         Map<String, Map<String, SchemaKey>> subSchemas,
         Map<String, SubTable> subTables) {
 
-    public PluginManifest {
+    public PluginDescriptor {
         Objects.requireNonNull(id, "id");
         Objects.requireNonNull(table, "table");
         schema = schema == null || schema.isEmpty()
@@ -48,21 +48,6 @@ public record PluginManifest(
                 : Collections.unmodifiableMap(new LinkedHashMap<>(subTables));
     }
 
-    /** Back-compat: the P4/P5 shape (no sub-schemas / sub-tables). */
-    public PluginManifest(
-            String id,
-            String table,
-            String version,
-            String jkCompat,
-            Map<String, SchemaKey> schema,
-            Contributions contributions,
-            Code code,
-            Packaging packaging,
-            Scaffold scaffold,
-            List<GradleImport> gradleImports) {
-        this(id, table, version, jkCompat, schema, contributions, code, packaging, scaffold, gradleImports,
-                Map.of(), Map.of());
-    }
 
     /**
      * One {@code [sub-tables.<name>]} declaration: a named nested-table group on the plugin's own
@@ -78,29 +63,7 @@ public record PluginManifest(
         }
     }
 
-    /** Back-compat: a purely declarative manifest (no code layer, no packaging shape). */
-    public PluginManifest(
-            String id,
-            String table,
-            String version,
-            String jkCompat,
-            Map<String, SchemaKey> schema,
-            Contributions contributions) {
-        this(id, table, version, jkCompat, schema, contributions, null, null, null, List.of());
-    }
 
-    /** Back-compat: the P3 shape (no scaffold, no import rules). */
-    public PluginManifest(
-            String id,
-            String table,
-            String version,
-            String jkCompat,
-            Map<String, SchemaKey> schema,
-            Contributions contributions,
-            Code code,
-            Packaging packaging) {
-        this(id, table, version, jkCompat, schema, contributions, code, packaging, null, List.of());
-    }
 
     /**
      * The {@code [scaffold]} section (plan row 9 — pure data): what {@code jk new --<flag>}
@@ -171,20 +134,6 @@ public record PluginManifest(
             String deployVerb,
             List<Variant> variants) {
 
-        /** Back-compat: no variants. */
-        public Packaging(
-                String packager,
-                String execMode,
-                boolean selfContained,
-                boolean classesRun,
-                boolean mainScan,
-                boolean layeredImage,
-                String artifactExtension,
-                String deployVerb) {
-            this(
-                    packager, execMode, selfContained, classesRun, mainScan, layeredImage, artifactExtension,
-                    deployVerb, List.of());
-        }
 
         /**
          * A config-conditional descriptor override ({@code [[packaging.variant]]} — an [android]
@@ -206,28 +155,7 @@ public record PluginManifest(
             return this;
         }
 
-        /** Back-compat: the pre-deploy-verb descriptor shape. */
-        public Packaging(
-                String packager,
-                String execMode,
-                boolean selfContained,
-                boolean classesRun,
-                boolean mainScan,
-                boolean layeredImage,
-                String artifactExtension) {
-            this(packager, execMode, selfContained, classesRun, mainScan, layeredImage, artifactExtension, "");
-        }
 
-        /** Back-compat: the P3 descriptor shape (jar-extension artifact). */
-        public Packaging(
-                String packager,
-                String execMode,
-                boolean selfContained,
-                boolean classesRun,
-                boolean mainScan,
-                boolean layeredImage) {
-            this(packager, execMode, selfContained, classesRun, mainScan, layeredImage, "jar", "");
-        }
     }
 
     /**
@@ -262,34 +190,8 @@ public record PluginManifest(
             providedClasspath = providedClasspath == null ? List.of() : List.copyOf(providedClasspath);
         }
 
-        /** Back-compat: the P6 contribution set (no resolution environment). */
-        public Contributions(
-                List<PlatformDependency> platformDependencies,
-                List<CompilerArgs> compilerArgs,
-                List<KotlinPlugin> kotlinPlugins,
-                List<PackagerDependency> packagerDependencies,
-                List<StepDependency> stepDependencies,
-                List<ProvidedClasspath> providedClasspath) {
-            this(platformDependencies, compilerArgs, kotlinPlugins, packagerDependencies, stepDependencies,
-                    providedClasspath, null);
-        }
 
-        /** Back-compat: the P3 contribution set (no step dependencies). */
-        public Contributions(
-                List<PlatformDependency> platformDependencies,
-                List<CompilerArgs> compilerArgs,
-                List<KotlinPlugin> kotlinPlugins,
-                List<PackagerDependency> packagerDependencies) {
-            this(platformDependencies, compilerArgs, kotlinPlugins, packagerDependencies, List.of(), List.of());
-        }
 
-        /** Back-compat: the P2 contribution set (no packager dependencies). */
-        public Contributions(
-                List<PlatformDependency> platformDependencies,
-                List<CompilerArgs> compilerArgs,
-                List<KotlinPlugin> kotlinPlugins) {
-            this(platformDependencies, compilerArgs, kotlinPlugins, List.of(), List.of(), List.of());
-        }
 
         public boolean isEmpty() {
             return platformDependencies.isEmpty()
@@ -364,10 +266,6 @@ public record PluginManifest(
             ksp = ksp == null ? List.of() : List.copyOf(ksp);
         }
 
-        /** Back-compat (pre-{@code ksp}). */
-        public CompilerArgs(List<String> javac, List<String> kotlin, Condition when) {
-            this(javac, kotlin, List.of(), when);
-        }
     }
 
     /**
@@ -410,10 +308,6 @@ public record PluginManifest(
             String name, Type type, boolean required, Object defaultValue, String example, String hint,
             boolean secret) {
 
-        /** Back-compat: a non-secret key. */
-        public SchemaKey(String name, Type type, boolean required, Object defaultValue, String example, String hint) {
-            this(name, type, required, defaultValue, example, hint, false);
-        }
 
         public enum Type {
             STRING,

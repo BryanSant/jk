@@ -66,20 +66,6 @@ public record Session(
                 : java.util.Map.copyOf(clientEnv);
     }
 
-    /** Back-compat: the pre-variant canonical shape (no selection, no client env). */
-    public Session(
-            JkConfig config,
-            Path workingDir,
-            Path cacheDir,
-            Path jdksDir,
-            WorkerTuning jvm,
-            String jdkSpec,
-            String graalSpec,
-            boolean parallelTests,
-            CancelToken cancel) {
-        this(config, workingDir, cacheDir, jdksDir, jvm, jdkSpec, graalSpec, parallelTests, cancel, "", null);
-    }
-
     /** A copy carrying the given variant selection + client-resolved env. */
     public Session withVariant(String variant, java.util.Map<String, String> clientEnv) {
         return new Session(
@@ -146,7 +132,9 @@ public record Session(
                 null,
                 null,
                 false,
-                CancelToken.live());
+                CancelToken.live(),
+                "",
+                null);
     }
 
     public Session withConfig(JkConfig newConfig) {

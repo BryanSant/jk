@@ -102,7 +102,11 @@ class NiaScratchTest {
                         null,
                         null,
                         true,
-                        false)
+                        false,
+                false,
+                false,
+                java.util.Set.of(),
+                dev.jkbuild.config.SessionContext.current())
                 .withVariant(
                         "release|contentType=demo",
                         java.util.Map.of(
@@ -149,7 +153,11 @@ class NiaScratchTest {
                 null,
                 null,
                 true,
-                false);
+                false,
+                false,
+                false,
+                java.util.Set.of(),
+                dev.jkbuild.config.SessionContext.current());
         // Flavored modules build the demo variant (the flavor NiA's own CI exercises — no
         // backend needed). True workspace variant propagation (the app's selection reaching
         // sibling AAR builds automatically) is a recorded follow-up; the sweep selects

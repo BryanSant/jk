@@ -71,8 +71,9 @@ public sealed interface VersionSelector {
         if (trimmed.startsWith(">") || trimmed.startsWith("<") || trimmed.contains(",")) {
             return new Range(spec);
         }
-        // Leading `=` is always Exact (back-compat with older lockfiles and an
-        // explicit pin under the @-form).
+        // Leading `=` is always Exact — the LIVE pin syntax lockfiles write today and the
+        // explicit pin spelling under the @-form. (Not legacy: bare versions parse as Caret
+        // in manifests, so `=` is how a resolved pin round-trips exactly.)
         if (trimmed.startsWith("=")) {
             return new Exact(spec, trimmed.substring(1).trim());
         }

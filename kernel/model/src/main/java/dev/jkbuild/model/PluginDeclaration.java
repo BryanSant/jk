@@ -52,11 +52,6 @@ public record PluginDeclaration(String alias, String group, String name, String 
         config = config == null ? Map.of() : Map.copyOf(config);
     }
 
-    /** Back-compat constructor for callers that supply no config. */
-    public PluginDeclaration(String alias, String group, String name, String version) {
-        this(alias, group, name, version, Map.of());
-    }
-
     /** Maven {@code group:name} coordinate without version. */
     public String coordinate() {
         return group + ":" + name;

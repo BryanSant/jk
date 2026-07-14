@@ -319,7 +319,7 @@ public final class SyncGoals {
                     }
                     // Extract the fetched jars' manifests so the very next parse validates
                     // the plugins' tables (and applies their contributions).
-                    PluginManifestOps.ensureMaterialized(dir, cache);
+                    PluginDescriptorOps.ensureMaterialized(dir, cache);
                 })
                 .build();
 

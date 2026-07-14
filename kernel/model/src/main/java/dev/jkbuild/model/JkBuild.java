@@ -621,40 +621,12 @@ public record JkBuild(
                     : List.copyOf(new java.util.LinkedHashSet<>(extraSrc));
         }
 
-        /** Back-compat (pre-{@code extra-src}). */
-        public Build(
-                List<String> orderAfter, List<String> testWorkerJars, boolean lint,
-                List<KotlinPluginDecl> kotlinPlugins, List<String> kspOptions) {
-            this(orderAfter, testWorkerJars, lint, kotlinPlugins, kspOptions, List.of());
-        }
-
         /** This block with {@code dirs} appended to {@code extra-src} — the variant fold point. */
         public Build withExtraSrc(List<String> dirs) {
             if (dirs.isEmpty()) return this;
             var all = new java.util.ArrayList<>(extraSrc);
             all.addAll(dirs);
             return new Build(orderAfter, testWorkerJars, lint, kotlinPlugins, kspOptions, all);
-        }
-
-        /** Back-compat (pre-{@code ksp-options}). */
-        public Build(
-                List<String> orderAfter, List<String> testWorkerJars, boolean lint,
-                List<KotlinPluginDecl> kotlinPlugins) {
-            this(orderAfter, testWorkerJars, lint, kotlinPlugins, List.of(), List.of());
-        }
-
-        /** Back-compat (pre-{@code [[kotlin-plugins]]}). */
-        public Build(List<String> orderAfter, List<String> testWorkerJars, boolean lint) {
-            this(orderAfter, testWorkerJars, lint, List.of(), List.of());
-        }
-
-        /**
-         * Back-compat constructor (pre-{@code lint}); defaults lint <b>on</b> so {@code jk build}
-         * surfaces javac deprecation/unchecked warnings. Set {@code [build] lint = false} in jk.toml to
-         * suppress that default.
-         */
-        public Build(List<String> orderAfter, List<String> testWorkerJars) {
-            this(orderAfter, testWorkerJars, true);
         }
 
         /**

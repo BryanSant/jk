@@ -83,7 +83,11 @@ class JdkFloorTest {
                 null,
                 null,
                 /* skipTests */ false,
-                false);
+                false,
+                false,
+                false,
+                java.util.Set.of(),
+                dev.jkbuild.config.SessionContext.current());
         Goal goal = BuildPipeline.coreBuilder(in).build();
         GoalResult result = goal.run();
         for (GoalResult.Diagnostic d : result.errors()) {

@@ -158,9 +158,10 @@ public final class BuildPipeline {
             // whole-host median — before falling back to that host median. Empty (the default) leaves
             // the fallback chain as module → host-median → static, exactly as before.
             Set<Path> projectModules,
-            // The request-scoped session (config incl. --force/--refresh, working dir, cache/JDK
-            // roots). Threaded so the engine reads request state explicitly instead of the ambient
-            // global. Delegating ctors default it from SessionContext.current() at construction.
+            // The request-scoped session (config incl. --force, working dir, cache/JDK roots).
+            // Threaded so the engine reads request state explicitly instead of the ambient
+            // global — callers that want the ambient session say SessionContext.current() OUT
+            // LOUD at the call site; no overload hides that read anymore.
             dev.jkbuild.config.Session session,
             // The variant selection ("", "release", "release|tier=free") — folded into plugin
             // configs at parse time (VariantApply.apply), so goals are parameterized, never configured.
@@ -204,101 +205,8 @@ public final class BuildPipeline {
                     variant == null ? "" : variant, clientEnv == null ? Map.of() : clientEnv);
         }
 
-        /** Back-compat: a full build (not test-only, not compile-only), no project context. */
-        public Inputs(
-                Path dir,
-                Path cache,
-                Path buildFile,
-                Path lockFile,
-                Path lockDir,
-                int workerCount,
-                int estimatedTestCount,
-                String profileName,
-                Path jdksDir,
-                boolean skipTests,
-                boolean verbose) {
-            this(
-                    dir,
-                    cache,
-                    buildFile,
-                    lockFile,
-                    lockDir,
-                    workerCount,
-                    estimatedTestCount,
-                    profileName,
-                    jdksDir,
-                    skipTests,
-                    verbose,
-                    false,
-                    false,
-                    Set.of(),
-                    dev.jkbuild.config.SessionContext.current());
-        }
 
-        /** A test-only or full build (not compile-only), no project context. */
-        public Inputs(
-                Path dir,
-                Path cache,
-                Path buildFile,
-                Path lockFile,
-                Path lockDir,
-                int workerCount,
-                int estimatedTestCount,
-                String profileName,
-                Path jdksDir,
-                boolean skipTests,
-                boolean verbose,
-                boolean testOnly) {
-            this(
-                    dir,
-                    cache,
-                    buildFile,
-                    lockFile,
-                    lockDir,
-                    workerCount,
-                    estimatedTestCount,
-                    profileName,
-                    jdksDir,
-                    skipTests,
-                    verbose,
-                    testOnly,
-                    false,
-                    Set.of(),
-                    dev.jkbuild.config.SessionContext.current());
-        }
 
-        /** Former canonical arity (testOnly + compileOnly), no project context. */
-        public Inputs(
-                Path dir,
-                Path cache,
-                Path buildFile,
-                Path lockFile,
-                Path lockDir,
-                int workerCount,
-                int estimatedTestCount,
-                String profileName,
-                Path jdksDir,
-                boolean skipTests,
-                boolean verbose,
-                boolean testOnly,
-                boolean compileOnly) {
-            this(
-                    dir,
-                    cache,
-                    buildFile,
-                    lockFile,
-                    lockDir,
-                    workerCount,
-                    estimatedTestCount,
-                    profileName,
-                    jdksDir,
-                    skipTests,
-                    verbose,
-                    testOnly,
-                    compileOnly,
-                    Set.of(),
-                    dev.jkbuild.config.SessionContext.current());
-        }
 
         /** Copy carrying the project/workspace module set — set by the estimate paths (explain/build). */
         public Inputs withProjectModules(Set<Path> modules) {
@@ -387,7 +295,7 @@ public final class BuildPipeline {
             // from the CAS and re-parse, so a declared plugin's table validates (and its
             // contributions apply) on the very first build after `jk sync`.
             if (!jkBuild.plugins().isEmpty()
-                    && PluginManifestOps.ensureMaterialized(in.dir(), in.cache())) {
+                    && PluginDescriptorOps.ensureMaterialized(in.dir(), in.cache())) {
                 jkBuild = JkBuildParser.reparse(in.buildFile());
             }
             // Variant overlays fold into plugin configs HERE, so describe keys, contribution

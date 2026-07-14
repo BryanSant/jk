@@ -67,7 +67,11 @@ class AndroidReleaseTest {
                         null,
                         null,
                         true,
-                        false)
+                        false,
+                false,
+                false,
+                java.util.Set.of(),
+                dev.jkbuild.config.SessionContext.current())
                 .withVariant(
                         "release",
                         Map.of(

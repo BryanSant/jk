@@ -145,7 +145,11 @@ public final class BuildPlanForecast {
         int estimatedTestCount = skipTests ? 0 : TestSupport.estimateTestCount(dir.resolve("src/test/java"));
         return new BuildPipeline.Inputs(
                         dir, cache, buildFile, lockFile, dir, workerCount, estimatedTestCount, profile, jdksDir,
-                        skipTests, verbose)
+                        skipTests, verbose,
+                false,
+                false,
+                java.util.Set.of(),
+                dev.jkbuild.config.SessionContext.current())
                 .withProjectModules(projectModules);
     }
 

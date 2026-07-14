@@ -15,7 +15,7 @@ import java.util.Set;
  * declarative layer. Engine-side reachability only (the manifests live behind tomlj).
  *
  * <p>A plugin contributes only when its owned table is present in the project ({@code
- * pluginConfigs} carries a config for it); each entry's optional {@link PluginManifest.Condition}
+ * pluginConfigs} carries a config for it); each entry's optional {@link PluginDescriptor.Condition}
  * gates it further. {@code classpath-has} evaluates against the resolved lock's
  * {@code group:artifact} names — the exact semantics the hard-coded jakarta.persistence check
  * had before this layer existed.
@@ -44,12 +44,12 @@ public final class PluginContributions {
             JkBuild.Project project,
             boolean nativeDeclared,
             java.util.Map<String, PluginConfig> pluginConfigs,
-            List<PluginManifest> manifests) {
+            List<PluginDescriptor> manifests) {
         List<PlatformDep> out = new ArrayList<>();
-        for (PluginManifest manifest : manifests) {
+        for (PluginDescriptor manifest : manifests) {
             PluginConfig config = pluginConfigs.get(manifest.id());
             if (config == null) continue;
-            for (PluginManifest.PlatformDependency dep :
+            for (PluginDescriptor.PlatformDependency dep :
                     manifest.contributions().platformDependencies()) {
                 if (!holds(dep.when(), config, project, nativeDeclared, null, manifest.id())) continue;
                 String coordinate = Interpolation.resolve(dep.coordinate(), config, project, null);
@@ -61,12 +61,12 @@ public final class PluginContributions {
 
     /** The javac args every present plugin contributes, conditions evaluated against {@code classpathModules}. */
     public static List<String> javacArgs(JkBuild build, java.nio.file.Path moduleDir, Set<String> classpathModules) {
-        return compilerArgs(build, moduleDir, classpathModules, PluginManifest.CompilerArgs::javac);
+        return compilerArgs(build, moduleDir, classpathModules, PluginDescriptor.CompilerArgs::javac);
     }
 
     /** The kotlinc args every present plugin contributes. */
     public static List<String> kotlinArgs(JkBuild build, java.nio.file.Path moduleDir, Set<String> classpathModules) {
-        return compilerArgs(build, moduleDir, classpathModules, PluginManifest.CompilerArgs::kotlin);
+        return compilerArgs(build, moduleDir, classpathModules, PluginDescriptor.CompilerArgs::kotlin);
     }
 
     /**
@@ -74,7 +74,7 @@ public final class PluginContributions {
      * the KSP round as {@code -processor-options} (Hilt's superclass-validation toggle et al.).
      */
     public static List<String> kspOptions(JkBuild build, java.nio.file.Path moduleDir, Set<String> classpathModules) {
-        return compilerArgs(build, moduleDir, classpathModules, PluginManifest.CompilerArgs::ksp);
+        return compilerArgs(build, moduleDir, classpathModules, PluginDescriptor.CompilerArgs::ksp);
     }
 
     /**
@@ -84,10 +84,10 @@ public final class PluginContributions {
     public static List<KotlinPluginUse> kotlinPlugins(
             JkBuild build, java.nio.file.Path moduleDir, String kotlinVersion, Set<String> classpathModules) {
         List<KotlinPluginUse> out = new ArrayList<>();
-        for (PluginManifest manifest : PluginTableRegistry.manifestsFor(moduleDir, build.plugins())) {
+        for (PluginDescriptor manifest : PluginTableRegistry.manifestsFor(moduleDir, build.plugins())) {
             PluginConfig config = build.pluginConfigs().get(manifest.id());
             if (config == null) continue;
-            for (PluginManifest.KotlinPlugin plugin : manifest.contributions().kotlinPlugins()) {
+            for (PluginDescriptor.KotlinPlugin plugin : manifest.contributions().kotlinPlugins()) {
                 if (!holds(
                         plugin.when(),
                         config,
@@ -116,12 +116,12 @@ public final class PluginContributions {
             JkBuild build,
             java.nio.file.Path moduleDir,
             Set<String> classpathModules,
-            java.util.function.Function<PluginManifest.CompilerArgs, List<String>> lane) {
+            java.util.function.Function<PluginDescriptor.CompilerArgs, List<String>> lane) {
         List<String> out = new ArrayList<>();
-        for (PluginManifest manifest : PluginTableRegistry.manifestsFor(moduleDir, build.plugins())) {
+        for (PluginDescriptor manifest : PluginTableRegistry.manifestsFor(moduleDir, build.plugins())) {
             PluginConfig config = build.pluginConfigs().get(manifest.id());
             if (config == null) continue;
-            for (PluginManifest.CompilerArgs args : manifest.contributions().compilerArgs()) {
+            for (PluginDescriptor.CompilerArgs args : manifest.contributions().compilerArgs()) {
                 if (!holds(
                         args.when(),
                         config,
@@ -162,10 +162,10 @@ public final class PluginContributions {
      */
     public static java.util.List<StepDep> stepDependencies(JkBuild build, java.nio.file.Path moduleDir) {
         java.util.List<StepDep> out = new java.util.ArrayList<>();
-        for (PluginManifest manifest : PluginTableRegistry.manifestsFor(moduleDir, build.plugins())) {
+        for (PluginDescriptor manifest : PluginTableRegistry.manifestsFor(moduleDir, build.plugins())) {
             PluginConfig config = build.pluginConfig(manifest.id()).orElse(null);
             if (config == null) continue;
-            for (PluginManifest.StepDependency sd : manifest.contributions().stepDependencies()) {
+            for (PluginDescriptor.StepDependency sd : manifest.contributions().stepDependencies()) {
                 if (!holds(sd.when(), config, build.project(), build.nativeConfig().isPresent(), null, manifest.id())) {
                     continue;
                 }
@@ -193,10 +193,10 @@ public final class PluginContributions {
      */
     public static java.util.List<String> providedClasspath(JkBuild build, java.nio.file.Path moduleDir) {
         java.util.List<String> out = new java.util.ArrayList<>();
-        for (PluginManifest manifest : PluginTableRegistry.manifestsFor(moduleDir, build.plugins())) {
+        for (PluginDescriptor manifest : PluginTableRegistry.manifestsFor(moduleDir, build.plugins())) {
             PluginConfig config = build.pluginConfig(manifest.id()).orElse(null);
             if (config == null) continue;
-            for (PluginManifest.ProvidedClasspath pc : manifest.contributions().providedClasspath()) {
+            for (PluginDescriptor.ProvidedClasspath pc : manifest.contributions().providedClasspath()) {
                 if (!holds(pc.when(), config, build.project(), build.nativeConfig().isPresent(), null, manifest.id())) {
                     continue;
                 }
@@ -214,7 +214,7 @@ public final class PluginContributions {
     public static String jvmEnvironment(JkBuild build, java.nio.file.Path moduleDir) {
         String selected = null;
         String selectedBy = null;
-        for (PluginManifest manifest : PluginTableRegistry.manifestsFor(moduleDir, build.plugins())) {
+        for (PluginDescriptor manifest : PluginTableRegistry.manifestsFor(moduleDir, build.plugins())) {
             if (build.pluginConfig(manifest.id()).isEmpty()) continue;
             String env = manifest.contributions().jvmEnvironment();
             if (env == null) continue;
@@ -235,10 +235,10 @@ public final class PluginContributions {
      */
     public static java.util.List<PackagerDep> packagerDependencies(JkBuild build, java.nio.file.Path moduleDir) {
         java.util.List<PackagerDep> out = new java.util.ArrayList<>();
-        for (PluginManifest manifest : PluginTableRegistry.manifestsFor(moduleDir, build.plugins())) {
+        for (PluginDescriptor manifest : PluginTableRegistry.manifestsFor(moduleDir, build.plugins())) {
             PluginConfig config = build.pluginConfig(manifest.id()).orElse(null);
             if (config == null) continue;
-            for (PluginManifest.PackagerDependency pd :
+            for (PluginDescriptor.PackagerDependency pd :
                     manifest.contributions().packagerDependencies()) {
                 if (!holds(pd.when(), config, build.project(), build.nativeConfig().isPresent(), null, manifest.id())) {
                     continue;
@@ -253,7 +253,7 @@ public final class PluginContributions {
 
     /** One predicate, or unconditional when {@code when} is null. */
     private static boolean holds(
-            PluginManifest.Condition when,
+            PluginDescriptor.Condition when,
             PluginConfig config,
             JkBuild.Project project,
             boolean nativeDeclared,
@@ -261,17 +261,17 @@ public final class PluginContributions {
             String pluginId) {
         if (when == null) return true;
         return switch (when) {
-            case PluginManifest.Condition.ClasspathHas c -> {
+            case PluginDescriptor.Condition.ClasspathHas c -> {
                 if (classpathModules == null) {
                     throw new JkBuildParseException("[" + pluginId + "] contribution uses classpath-has on a"
                             + " path evaluated before resolution");
                 }
                 yield classpathModules.contains(c.module());
             }
-            case PluginManifest.Condition.ConfigEquals c ->
+            case PluginDescriptor.Condition.ConfigEquals c ->
                 c.equals().equals(String.valueOf(config.values().get(c.key())));
-            case PluginManifest.Condition.NativeDeclared ignored -> nativeDeclared;
-            case PluginManifest.Condition.KotlinProject ignored -> project.isKotlin();
+            case PluginDescriptor.Condition.NativeDeclared ignored -> nativeDeclared;
+            case PluginDescriptor.Condition.KotlinProject ignored -> project.isKotlin();
         };
     }
 

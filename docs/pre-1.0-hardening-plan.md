@@ -613,3 +613,33 @@ resources, lint/baseline profiles, solver version interning (BOM soft pins).
   DEFERRED — they are consumed only by jk's own client/dashboard, the doc
   explicitly exempts them from the freeze, and renderer churn at the tail of this
   phase was judged worse than carrying two internal event families.
+
+### H4
+
+- Core `PluginManifest` (the parsed jk-plugin.toml model) is now `PluginDescriptor`
+  (+ `PluginDescriptors` parser, `PluginDescriptorStore`, `PluginDescriptorOps`);
+  the plugin-api worker-identity `PluginManifest` — the type 12 workers import —
+  keeps the established name. The coin-flip auto-import is gone.
+- Deleted from the contract: `BuildPluginContext.run(RunShape)`/`nativeImage
+  (NativeShape)` (always-throwing "reserved" hooks) + both shape records — the
+  hooks return WITH the feature; `next-store-file` (schema'd, never read);
+  `Dependency(module, version, pinnedIgnored)` (a public ctor that ignored its
+  argument — ScriptHeaderParser was actually passing `!floating` into it,
+  believing it did something); `PluginDeclaration` 4-arg; `JkBuild.Build`'s four
+  telescoping ctors (one live 5-arg caller found in the parser, moved to
+  canonical); ALL 11 "P2…P6 shape" overloads in PluginDescriptor (zero callers —
+  pure archaeology); `Session`'s 9-arg pre-variant ctor.
+- `BuildPipeline.Inputs` lost the three overloads that silently defaulted the
+  session from `SessionContext.current()` — all 25 call sites now say the ambient
+  read OUT LOUD (mostly tests, which legitimately run in-process).
+- `PluginConfig`'s fifth value shape (group-vs-reference dual shape) is documented
+  on the record; the stranded javadoc fixed. `VersionSelector`'s leading-`=`
+  comment now says what it is (the LIVE pin syntax), not "back-compat".
+- KEPT deliberately: `JkBuild(project, deps[, repos])` — already documented as
+  explicit shortcuts delegating to canonical, used by ~28 tests; not back-compat.
+- DEFERRED (H4-residue, most valuable first): evicting `dev.jkbuild.util`/
+  `credential`/`image` from the jk-api leaf into a `:support` module (P2.1) and the
+  `:model`→`:jk-api` Gradle rename (P2.2) — module-graph surgery touching every
+  build file, parked to protect H5/H6's verification budget tonight; the
+  `Lockfile`/`Artifact` builder consolidation (P2.5's "real but bounded" tail) and
+  the `versionSelector`/`objectId`/`moduleDir` naming pass (P2.7).

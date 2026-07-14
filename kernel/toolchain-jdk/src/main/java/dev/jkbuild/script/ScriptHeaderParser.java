@@ -238,7 +238,9 @@ public final class ScriptHeaderParser {
             }
             selector = VersionSelector.parse(versionPart);
         }
-        return new Dependency(module, selector, !floating);
+        // (The old 3-arg ctor IGNORED its pinned flag — `pinned` is derived from the selector,
+        // so `!floating` here never did anything. The 2-arg form is the same behavior, honestly.)
+        return new Dependency(module, selector);
     }
 
     /**

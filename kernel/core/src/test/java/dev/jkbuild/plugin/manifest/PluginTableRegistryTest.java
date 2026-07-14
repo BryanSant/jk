@@ -56,9 +56,9 @@ class PluginTableRegistryTest {
 
     @Test
     void manifest_parser_rejects_bad_manifests() {
-        assertThatThrownBy(() -> PluginManifests.parse("[schema]\nx = { type = \"string\" }", "p.toml"))
+        assertThatThrownBy(() -> PluginDescriptors.parse("[schema]\nx = { type = \"string\" }", "p.toml"))
                 .hasMessageContaining("missing the required [plugin] table");
-        assertThatThrownBy(() -> PluginManifests.parse(
+        assertThatThrownBy(() -> PluginDescriptors.parse(
                         "[plugin]\nid = \"x\"\ntable = \"x\"\n[schema]\nk = { type = \"nope\" }", "p.toml"))
                 .hasMessageContaining("unknown schema type");
     }

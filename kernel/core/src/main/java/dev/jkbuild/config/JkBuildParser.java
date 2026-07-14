@@ -14,8 +14,8 @@ import dev.jkbuild.model.PathSource;
 import dev.jkbuild.plugin.PluginConfig;
 import dev.jkbuild.model.PluginDeclaration;
 import dev.jkbuild.plugin.manifest.PluginContributions;
-import dev.jkbuild.plugin.manifest.PluginManifest;
-import dev.jkbuild.plugin.manifest.PluginManifestStore;
+import dev.jkbuild.plugin.manifest.PluginDescriptor;
+import dev.jkbuild.plugin.manifest.PluginDescriptorStore;
 import dev.jkbuild.plugin.manifest.PluginTableRegistry;
 import dev.jkbuild.model.Profile;
 import dev.jkbuild.model.Profiles;
@@ -135,7 +135,7 @@ public final class JkBuildParser {
     /**
      * The full parse. {@code moduleDir} (nullable — string parses have no directory) anchors
      * third-party plugin manifests: declared {@code [plugins]} whose jars are locked + extracted
-     * ({@link PluginManifestStore}) contribute their tables/contributions exactly like built-ins.
+     * ({@link PluginDescriptorStore}) contribute their tables/contributions exactly like built-ins.
      */
     private static JkBuild parse(String toml, LibraryCatalog catalog, Path moduleDir) {
         Objects.requireNonNull(toml, "toml");
@@ -156,7 +156,7 @@ public final class JkBuildParser {
         List<PluginDeclaration> plugins = parsePlugins(result);
         Optional<JkBuild.Application> application = parseApplication(result);
         Optional<JkBuild.NativeConfig> nativeConfig = parseNativeConfig(result);
-        List<PluginManifest> installedManifests = PluginTableRegistry.manifestsFor(moduleDir, plugins);
+        List<PluginDescriptor> installedManifests = PluginTableRegistry.manifestsFor(moduleDir, plugins);
         Map<String, PluginConfig> pluginConfigs = parsePluginTables(result, installedManifests);
         checkUnownedTables(result, moduleDir, plugins, installedManifests);
         deps = withPlatformContributions(deps, project, nativeConfig.isPresent(), pluginConfigs, installedManifests);
@@ -164,7 +164,12 @@ public final class JkBuildParser {
         List<JkBuild.KotlinPluginDecl> kotlinPlugins = parseKotlinPlugins(result);
         if (!kotlinPlugins.isEmpty()) {
             build = new JkBuild.Build(
-                    build.orderAfter(), build.testWorkerJars(), build.lint(), kotlinPlugins, build.kspOptions());
+                    build.orderAfter(),
+                    build.testWorkerJars(),
+                    build.lint(),
+                    kotlinPlugins,
+                    build.kspOptions(),
+                    build.extraSrc());
         }
         JkBuild.FormatConfig format = parseFormat(result);
         Variants variants = parseVariants(result, workspace, effective, installedManifests);
@@ -182,11 +187,11 @@ public final class JkBuildParser {
      * optional; without it a declared dimension must be selected ({@code --variant <dim>=<value>}).
      */
     private static Variants parseVariants(
-            TomlTable root, Workspace workspace, LibraryCatalog catalog, List<PluginManifest> installed) {
+            TomlTable root, Workspace workspace, LibraryCatalog catalog, List<PluginDescriptor> installed) {
         TomlTable table = root.getTable("variants");
         if (table == null) return Variants.EMPTY;
-        Map<String, PluginManifest> byTable = new LinkedHashMap<>();
-        for (PluginManifest m : installed) byTable.put(m.table(), m);
+        Map<String, PluginDescriptor> byTable = new LinkedHashMap<>();
+        for (PluginDescriptor m : installed) byTable.put(m.table(), m);
         List<Variants.Dimension> dimensions = new ArrayList<>();
         for (String dim : table.keySet()) {
             TomlTable dimTable = table.getTable(dim);
@@ -221,7 +226,7 @@ public final class JkBuildParser {
 
     private static Variants.Value parseVariantValue(
             String where, TomlTable valueTable, Workspace workspace, LibraryCatalog catalog,
-            Map<String, PluginManifest> pluginsByTable) {
+            Map<String, PluginDescriptor> pluginsByTable) {
         List<String> extraSrc = List.of();
         EnumMap<Scope, List<Dependency>> deps = new EnumMap<>(Scope.class);
         Map<String, Map<String, Object>> pluginOverlays = new LinkedHashMap<>();
@@ -241,7 +246,7 @@ public final class JkBuildParser {
                 if (!parsed.isEmpty()) deps.put(scope, parsed);
                 continue;
             }
-            PluginManifest plugin = pluginsByTable.get(key);
+            PluginDescriptor plugin = pluginsByTable.get(key);
             if (plugin != null) {
                 TomlTable overlay = valueTable.getTable(key);
                 if (overlay == null) {
@@ -1271,9 +1276,9 @@ public final class JkBuildParser {
      * the built-in {@code spring-boot.jk-plugin.toml} manifest resource. Unknown tables stay
      * ignored exactly as before (the "unowned table" error arrives with P5's third-party set).
      */
-    private static Map<String, PluginConfig> parsePluginTables(TomlTable root, List<PluginManifest> installed) {
+    private static Map<String, PluginConfig> parsePluginTables(TomlTable root, List<PluginDescriptor> installed) {
         Map<String, PluginConfig> out = new LinkedHashMap<>();
-        for (PluginManifest manifest : installed) {
+        for (PluginDescriptor manifest : installed) {
             TomlTable table = root.getTable(manifest.table());
             if (table == null) continue;
             out.put(manifest.id(), PluginTableRegistry.validate(manifest, table));
@@ -1321,15 +1326,15 @@ public final class JkBuildParser {
      * directory-less string parses carrying declarations.
      */
     private static void checkUnownedTables(
-            TomlTable root, Path moduleDir, List<PluginDeclaration> plugins, List<PluginManifest> installed) {
-        if (!plugins.isEmpty() && PluginManifestStore.hasUnresolved(moduleDir, plugins)) return;
+            TomlTable root, Path moduleDir, List<PluginDeclaration> plugins, List<PluginDescriptor> installed) {
+        if (!plugins.isEmpty() && PluginDescriptorStore.hasUnresolved(moduleDir, plugins)) return;
         java.util.Set<String> owned = new java.util.HashSet<>(CORE_TABLES);
-        for (PluginManifest m : installed) owned.add(m.table());
+        for (PluginDescriptor m : installed) owned.add(m.table());
         for (String key : root.keySet()) {
             if (owned.contains(key)) continue;
             if (!(root.get(key) instanceof TomlTable) && !(root.get(key) instanceof org.tomlj.TomlArray)) continue;
             StringBuilder known = new StringBuilder();
-            for (PluginManifest m : installed) {
+            for (PluginDescriptor m : installed) {
                 if (known.length() > 0) known.append(", ");
                 known.append('[').append(m.table()).append(']');
             }
@@ -1349,7 +1354,7 @@ public final class JkBuildParser {
             JkBuild.Project project,
             boolean nativeDeclared,
             Map<String, PluginConfig> pluginConfigs,
-            List<PluginManifest> installedManifests) {
+            List<PluginDescriptor> installedManifests) {
         List<PluginContributions.PlatformDep> contributed =
                 PluginContributions.platformDependencies(project, nativeDeclared, pluginConfigs, installedManifests);
         if (contributed.isEmpty()) return deps;

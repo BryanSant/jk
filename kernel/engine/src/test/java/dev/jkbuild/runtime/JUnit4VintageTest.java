@@ -82,7 +82,11 @@ class JUnit4VintageTest {
                 null,
                 null,
                 false, // run the tests — that IS the assertion
-                false);
+                false,
+                false,
+                false,
+                java.util.Set.of(),
+                dev.jkbuild.config.SessionContext.current());
         GoalResult result = BuildPipeline.coreBuilder(in).build().run();
         assertThat(result.errors()).isEmpty();
         assertThat(result.success()).as("JUnit4 test discovered and passed via vintage").isTrue();

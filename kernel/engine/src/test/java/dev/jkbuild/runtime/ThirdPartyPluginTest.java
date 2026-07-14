@@ -116,7 +116,7 @@ class ThirdPartyPluginTest {
                         Lockfile.CURRENT_VERSION, "test", Lockfile.RESOLUTION_ALGORITHM, null, null,
                         List.of(), List.of(entry)),
                 project.resolve("jk.lock"));
-        assertThat(PluginManifestOps.ensureMaterialized(project, cache)).isTrue();
+        assertThat(PluginDescriptorOps.ensureMaterialized(project, cache)).isTrue();
 
         // 3. Re-parse: the table validates against the extracted schema; the contribution applies.
         build = JkBuildParser.reparse(project.resolve("jk.toml"));

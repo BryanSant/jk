@@ -126,14 +126,6 @@ public record Dependency(
         this(artifactOf(module), module, version, null, null, false);
     }
 
-    /**
-     * Legacy three-arg constructor preserved for non-core callers that passed an explicit {@code
-     * pinned} flag. The flag is now derived, so the parameter is ignored.
-     */
-    public Dependency(String module, VersionSelector version, boolean pinnedIgnored) {
-        this(artifactOf(module), module, version, null, null, false);
-    }
-
     /** Maven-coord with an explicit library handle. */
     public static Dependency of(String library, String module, VersionSelector version) {
         return new Dependency(library, module, version, null, null, false);

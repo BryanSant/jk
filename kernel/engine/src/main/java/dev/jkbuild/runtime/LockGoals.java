@@ -220,7 +220,7 @@ public final class LockGoals {
                             entries.add(new Lockfile.PluginEntry(
                                     pd.coordinate(), pd.version(), "sha256:" + fetched.fetched().sha256()));
                             try {
-                                PluginManifestOps.materialize(
+                                PluginDescriptorOps.materialize(
                                         dir, fetched.fetched().sha256(), fetched.fetched().cachePath());
                             } catch (java.io.IOException e) {
                                 ctx.output("note: " + pd.coordinate() + " has no jk-plugin.toml — locked, but"

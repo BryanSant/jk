@@ -103,7 +103,7 @@ class PluginContributionsTest {
 
     @Test
     void unknown_interpolation_variable_fails_at_manifest_load() {
-        assertThatThrownBy(() -> PluginManifests.parse(
+        assertThatThrownBy(() -> PluginDescriptors.parse(
                         """
                         [plugin]
                         id = "p"
@@ -123,7 +123,7 @@ class PluginContributionsTest {
 
     @Test
     void classpath_has_cannot_gate_a_platform_dependency() {
-        assertThatThrownBy(() -> PluginManifests.parse(
+        assertThatThrownBy(() -> PluginDescriptors.parse(
                         """
                         [plugin]
                         id = "p"
@@ -150,29 +150,29 @@ class PluginContributionsTest {
                 javac = ["-x"]
                 when = { %s }
                 """;
-        assertThat(PluginManifests.parse(base.formatted("native-declared = true"), "p.toml")
+        assertThat(PluginDescriptors.parse(base.formatted("native-declared = true"), "p.toml")
                         .contributions()
                         .compilerArgs()
                         .getFirst()
                         .when())
-                .isInstanceOf(PluginManifest.Condition.NativeDeclared.class);
-        assertThat(PluginManifests.parse(base.formatted("kotlin-project = true"), "p.toml")
+                .isInstanceOf(PluginDescriptor.Condition.NativeDeclared.class);
+        assertThat(PluginDescriptors.parse(base.formatted("kotlin-project = true"), "p.toml")
                         .contributions()
                         .compilerArgs()
                         .getFirst()
                         .when())
-                .isInstanceOf(PluginManifest.Condition.KotlinProject.class);
-        assertThat(PluginManifests.parse(base.formatted("config = \"aot\", equals = \"true\""), "p.toml")
+                .isInstanceOf(PluginDescriptor.Condition.KotlinProject.class);
+        assertThat(PluginDescriptors.parse(base.formatted("config = \"aot\", equals = \"true\""), "p.toml")
                         .contributions()
                         .compilerArgs()
                         .getFirst()
                         .when())
-                .isEqualTo(new PluginManifest.Condition.ConfigEquals("aot", "true"));
-        assertThatThrownBy(() -> PluginManifests.parse(base.formatted("frobnicates = true"), "p.toml"))
+                .isEqualTo(new PluginDescriptor.Condition.ConfigEquals("aot", "true"));
+        assertThatThrownBy(() -> PluginDescriptors.parse(base.formatted("frobnicates = true"), "p.toml"))
                 .isInstanceOf(JkBuildParseException.class)
                 .hasMessageContaining("no known predicate");
         assertThatThrownBy(() ->
-                        PluginManifests.parse(base.formatted("native-declared = true, kotlin-project = true"), "p.toml"))
+                        PluginDescriptors.parse(base.formatted("native-declared = true, kotlin-project = true"), "p.toml"))
                 .isInstanceOf(JkBuildParseException.class)
                 .hasMessageContaining("more than one predicate");
     }

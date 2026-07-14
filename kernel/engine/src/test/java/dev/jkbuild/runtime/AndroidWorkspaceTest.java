@@ -126,7 +126,11 @@ class AndroidWorkspaceTest {
                 null,
                 null,
                 true,
-                false);
+                false,
+                false,
+                false,
+                java.util.Set.of(),
+                dev.jkbuild.config.SessionContext.current());
         Goal goal = BuildPipeline.coreBuilder(in).build();
         return goal.run();
     }

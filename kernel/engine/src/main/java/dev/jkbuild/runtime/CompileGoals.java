@@ -36,7 +36,9 @@ public final class CompileGoals {
                 /* skipTests */ true,
                 verbose, /* testOnly */
                 false, /* compileOnly */
-                true);
+                true,
+                java.util.Set.of(),
+                dev.jkbuild.config.SessionContext.current());
         return BuildPipeline.coreBuilder(inputs).build();
     }
 }

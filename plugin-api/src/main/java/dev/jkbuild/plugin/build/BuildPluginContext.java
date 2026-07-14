@@ -26,18 +26,11 @@ public interface BuildPluginContext {
     void verb(VerbSpec spec);
 
     // ---- reserved hooks -----------------------------------------------------------------
-    // run()/nativeImage() shaping is P7 (jk dev's hot-reload hooks). Scaffold and import are
+    // run()/nativeImage() shaping is a LATER phase (jk dev's hot-reload hooks) — the hooks and
+    // their shape records land WITH the feature; a published method that always throws is
+    // a lie in the contract. Scaffold and import are
     // manifest data (plan rows 9-10 — pure data, no code hook needed; see [scaffold] and
     // [[import.gradle-plugin]]). Declared now so the blueprint shows the full surface;
     // registering one today is a loud error rather than a silent no-op.
 
-    /** Reserved (P7): run/dev classpath + hot-reload shaping. */
-    default void run(RunShape shape) {
-        throw new UnsupportedOperationException("RunShape hooks land in a later phase");
-    }
-
-    /** Reserved (P7): native-image classpath/args shaping beyond step contributions. */
-    default void nativeImage(NativeShape shape) {
-        throw new UnsupportedOperationException("NativeShape hooks land in a later phase");
-    }
 }

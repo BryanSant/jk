@@ -98,7 +98,11 @@ public final class ImageGoals {
                 null,
                 jdksDir,
                 skipTests,
-                verbose);
+                verbose,
+                false,
+                false,
+                java.util.Set.of(),
+                dev.jkbuild.config.SessionContext.current());
 
         Phase imagePlan = Phase.builder("image-plan")
                 .requires("package-jar")

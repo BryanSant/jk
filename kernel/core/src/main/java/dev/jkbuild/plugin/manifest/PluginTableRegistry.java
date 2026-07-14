@@ -40,7 +40,7 @@ public final class PluginTableRegistry {
      * <id>/<relPath>} next to the built-in manifests). P5 extends resolution to third-party
      * plugin jars; built-in plugins bake their files at build time.
      */
-    public static String resourceText(PluginManifest manifest, String relPath) {
+    public static String resourceText(PluginDescriptor manifest, String relPath) {
         String resource = manifest.id() + "/" + relPath;
         try (java.io.InputStream in = PluginTableRegistry.class.getResourceAsStream(resource)) {
             if (in == null) {
@@ -54,18 +54,18 @@ public final class PluginTableRegistry {
         }
     }
 
-    private static final Map<String, PluginManifest> BY_TABLE = loadBuiltIns();
+    private static final Map<String, PluginDescriptor> BY_TABLE = loadBuiltIns();
 
     private PluginTableRegistry() {}
 
     /** Every installed manifest, in registration order. */
-    public static List<PluginManifest> manifests() {
+    public static List<PluginDescriptor> manifests() {
         return List.copyOf(BY_TABLE.values());
     }
 
     /** True when {@code id} names a first-party manifest shipped inside jk itself. */
     public static boolean isBuiltIn(String id) {
-        for (PluginManifest m : BY_TABLE.values()) {
+        for (PluginDescriptor m : BY_TABLE.values()) {
             if (m.id().equals(id)) return true;
         }
         return false;
@@ -73,23 +73,23 @@ public final class PluginTableRegistry {
 
     /**
      * The manifests a build of {@code moduleDir} sees: built-ins plus every {@code [plugins]}
-     * declaration whose manifest is locked + materialized ({@link PluginManifestStore}). An
+     * declaration whose manifest is locked + materialized ({@link PluginDescriptorStore}). An
      * unresolved declaration is silently absent — its table validates on the next parse after the
      * engine materializes (sync/lock/build pre-flight). A third-party manifest claiming a built-in
      * id or an already-owned table is a parse error, not a shadow.
      */
-    public static List<PluginManifest> manifestsFor(
+    public static List<PluginDescriptor> manifestsFor(
             java.nio.file.Path moduleDir, List<dev.jkbuild.model.PluginDeclaration> decls) {
         if (decls == null || decls.isEmpty()) return manifests();
-        List<PluginManifest> out = new java.util.ArrayList<>(manifests());
+        List<PluginDescriptor> out = new java.util.ArrayList<>(manifests());
         java.util.Set<String> ids = new java.util.HashSet<>();
         java.util.Set<String> tables = new java.util.HashSet<>();
-        for (PluginManifest m : out) {
+        for (PluginDescriptor m : out) {
             ids.add(m.id());
             tables.add(m.table());
         }
         for (dev.jkbuild.model.PluginDeclaration decl : decls) {
-            PluginManifest m = PluginManifestStore.manifestFor(moduleDir, decl).orElse(null);
+            PluginDescriptor m = PluginDescriptorStore.manifestFor(moduleDir, decl).orElse(null);
             if (m == null) continue;
             if (!ids.add(m.id())) {
                 throw new dev.jkbuild.config.JkBuildParseException("plugin " + decl.coordinateWithVersion()
@@ -105,14 +105,14 @@ public final class PluginTableRegistry {
     }
 
     /** The manifest owning jk.toml table {@code table}, when a plugin declares it. */
-    public static Optional<PluginManifest> byTable(String table) {
+    public static Optional<PluginDescriptor> byTable(String table) {
         return Optional.ofNullable(BY_TABLE.get(table));
     }
 
     /** Schema-validate {@code table} (the raw {@code [<manifest.table>]} TOML) into a config. */
-    public static PluginConfig validate(PluginManifest manifest, TomlTable table) {
+    public static PluginConfig validate(PluginDescriptor manifest, TomlTable table) {
         Map<String, Object> values = new LinkedHashMap<>();
-        for (PluginManifest.SchemaKey key : manifest.schema().values()) {
+        for (PluginDescriptor.SchemaKey key : manifest.schema().values()) {
             // A schema key sharing its name with a sub-table group: the TOML value decides which
             // spelling this module used — a nested table is the group (handled below), a string
             // is the reference read here.
@@ -128,10 +128,10 @@ public final class PluginTableRegistry {
         // Declared nested-table groups ([sub-tables.<name>]): each entry validates against its
         // sub-schema and rides the config as a nested map, resolved by name from a schema key
         // (signing = "release") and flattened into the effective config by VariantApply.
-        for (PluginManifest.SubTable group : manifest.subTables().values()) {
+        for (PluginDescriptor.SubTable group : manifest.subTables().values()) {
             TomlTable groupTable = readTable(table, group.table());
             if (groupTable == null) continue;
-            Map<String, PluginManifest.SchemaKey> subSchema = manifest.subSchemas().get(group.schema());
+            Map<String, PluginDescriptor.SchemaKey> subSchema = manifest.subSchemas().get(group.schema());
             String whereBase = manifest.table() + "." + group.table();
             Map<String, Map<String, Object>> entries = new LinkedHashMap<>();
             for (String entry : groupTable.keySet()) {
@@ -153,7 +153,7 @@ public final class PluginTableRegistry {
      * sets). Nested groups (signing definitions) don't belong in overlays — reference them by
      * name via their schema key instead ({@code signing = "release"}).
      */
-    public static Map<String, Object> validateOverlay(PluginManifest manifest, String where, TomlTable table) {
+    public static Map<String, Object> validateOverlay(PluginDescriptor manifest, String where, TomlTable table) {
         Map<String, Object> values = new LinkedHashMap<>();
         for (String raw : table.keySet()) {
             // Group DEFINITIONS don't belong in overlays; the string REFERENCE spelling does.
@@ -162,7 +162,7 @@ public final class PluginTableRegistry {
                         + manifest.table() + "." + raw + ".<name>] groups on the plugin table and reference"
                         + " them from the overlay by name (" + raw + " = \"<name>\")");
             }
-            PluginManifest.SchemaKey key = manifest.schema().get(raw);
+            PluginDescriptor.SchemaKey key = manifest.schema().get(raw);
             if (key == null) {
                 throw new JkBuildParseException("[" + where + "]." + raw + " is not a ["
                         + manifest.table() + "] key (schema: " + manifest.schema().keySet() + ")");
@@ -180,9 +180,9 @@ public final class PluginTableRegistry {
 
     /** One nested entry against its sub-schema — same coercion + required semantics as the table. */
     private static Map<String, Object> validateSub(
-            String where, Map<String, PluginManifest.SchemaKey> subSchema, TomlTable entryTable) {
+            String where, Map<String, PluginDescriptor.SchemaKey> subSchema, TomlTable entryTable) {
         Map<String, Object> out = new LinkedHashMap<>();
-        for (PluginManifest.SchemaKey key : subSchema.values()) {
+        for (PluginDescriptor.SchemaKey key : subSchema.values()) {
             Object value = read(where, key, entryTable);
             if (value == null) value = key.normalizedDefault();
             if (value == null) {
@@ -197,7 +197,7 @@ public final class PluginTableRegistry {
         return out;
     }
 
-    private static Object read(String tableName, PluginManifest.SchemaKey key, TomlTable table) {
+    private static Object read(String tableName, PluginDescriptor.SchemaKey key, TomlTable table) {
         if (!table.contains(key.name())) return null;
         String where = "[" + tableName + "]." + key.name();
         return switch (key.type()) {
@@ -242,7 +242,7 @@ public final class PluginTableRegistry {
     }
 
     /** Message parity with the old hand-written parsers: example + hint when the schema has them. */
-    private static String requiredMessage(String tableName, PluginManifest.SchemaKey key) {
+    private static String requiredMessage(String tableName, PluginDescriptor.SchemaKey key) {
         StringBuilder sb = new StringBuilder("[" + tableName + "]." + key.name() + " is required");
         if (key.example() != null) {
             sb.append(" (e.g. ").append(key.name()).append(" = \"").append(key.example()).append("\")");
@@ -251,15 +251,15 @@ public final class PluginTableRegistry {
         return sb.toString();
     }
 
-    private static Map<String, PluginManifest> loadBuiltIns() {
-        Map<String, PluginManifest> byTable = new LinkedHashMap<>();
+    private static Map<String, PluginDescriptor> loadBuiltIns() {
+        Map<String, PluginDescriptor> byTable = new LinkedHashMap<>();
         for (String resource : BUILT_IN) {
             try (InputStream in = PluginTableRegistry.class.getResourceAsStream(resource)) {
                 if (in == null) {
                     throw new IllegalStateException("missing built-in plugin manifest resource: " + resource);
                 }
-                PluginManifest manifest =
-                        PluginManifests.parse(new String(in.readAllBytes(), StandardCharsets.UTF_8), resource);
+                PluginDescriptor manifest =
+                        PluginDescriptors.parse(new String(in.readAllBytes(), StandardCharsets.UTF_8), resource);
                 if (manifest.code() != null && manifest.code().worker() == null) {
                     throw new IllegalStateException("built-in plugin manifest " + resource
                             + " must name its registered worker jar ([code] worker)");

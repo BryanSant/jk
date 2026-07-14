@@ -16,11 +16,11 @@ import org.tomlj.TomlTable;
  * a tomlj parse, and the manifest layer never runs client-side (the same method-level
  * native-image reachability discipline as {@code JkBuildParser}).
  */
-public final class PluginManifests {
+public final class PluginDescriptors {
 
-    private PluginManifests() {}
+    private PluginDescriptors() {}
 
-    public static PluginManifest parse(String toml, String displayPath) {
+    public static PluginDescriptor parse(String toml, String displayPath) {
         TomlParseResult result = Toml.parse(toml);
         if (result.hasErrors()) {
             throw new JkBuildParseException(displayPath + " has invalid TOML: "
@@ -35,11 +35,11 @@ public final class PluginManifests {
         String version = plugin.getString("version");
         String jkCompat = plugin.getString("jk-compat");
 
-        Map<String, PluginManifest.SchemaKey> schema =
+        Map<String, PluginDescriptor.SchemaKey> schema =
                 parseSchemaKeys(result.getTable("schema"), displayPath + ".schema");
 
         // [sub-schema.<name>]: named key sets for nested-table groups (build types, signing).
-        Map<String, Map<String, PluginManifest.SchemaKey>> subSchemas = new LinkedHashMap<>();
+        Map<String, Map<String, PluginDescriptor.SchemaKey>> subSchemas = new LinkedHashMap<>();
         TomlTable subSchemaRoot = result.getTable("sub-schema");
         if (subSchemaRoot != null) {
             for (String name : subSchemaRoot.keySet()) {
@@ -52,7 +52,7 @@ public final class PluginManifests {
         }
 
         // [sub-tables.<table>]: nested-table groups on the owned table; optionally variant axes.
-        Map<String, PluginManifest.SubTable> subTables = new LinkedHashMap<>();
+        Map<String, PluginDescriptor.SubTable> subTables = new LinkedHashMap<>();
         TomlTable subTableRoot = result.getTable("sub-tables");
         if (subTableRoot != null) {
             for (String name : subTableRoot.keySet()) {
@@ -69,30 +69,30 @@ public final class PluginManifests {
                 // A same-named [schema] key is the REFERENCE spelling (signing = "release") — legal,
                 // because TOML itself forbids one key being both a string and a table: a module
                 // either declares [<table>.<group>.<name>] definitions or sets the string.
-                if (schema.containsKey(name) && schema.get(name).type() != PluginManifest.SchemaKey.Type.STRING) {
+                if (schema.containsKey(name) && schema.get(name).type() != PluginDescriptor.SchemaKey.Type.STRING) {
                     throw new JkBuildParseException(where + " collides with a non-string [schema] key");
                 }
                 if (spec.contains("variant-axis") || spec.contains("dimensioned")) {
                     throw new JkBuildParseException(where + ": variant axes are core's [variants]"
                             + " section now — sub-tables are named definition groups only");
                 }
-                subTables.put(name, new PluginManifest.SubTable(name, schemaRef));
+                subTables.put(name, new PluginDescriptor.SubTable(name, schemaRef));
             }
         }
 
-        PluginManifest.Contributions contributions = parseContributions(result, schema.keySet(), displayPath);
-        PluginManifest.Code code = parseCode(result, displayPath);
-        PluginManifest.Packaging packaging = parsePackaging(result, displayPath);
-        PluginManifest.Scaffold scaffold = parseScaffold(result, displayPath);
-        List<PluginManifest.GradleImport> gradleImports = parseGradleImports(result, displayPath);
-        return new PluginManifest(
+        PluginDescriptor.Contributions contributions = parseContributions(result, schema.keySet(), displayPath);
+        PluginDescriptor.Code code = parseCode(result, displayPath);
+        PluginDescriptor.Packaging packaging = parsePackaging(result, displayPath);
+        PluginDescriptor.Scaffold scaffold = parseScaffold(result, displayPath);
+        List<PluginDescriptor.GradleImport> gradleImports = parseGradleImports(result, displayPath);
+        return new PluginDescriptor(
                 id, table, version, jkCompat, schema, contributions, code, packaging, scaffold, gradleImports,
                 subSchemas, subTables);
     }
 
     /** Typed schema keys from one table of {@code key = { type = "…", … }} specs. */
-    private static Map<String, PluginManifest.SchemaKey> parseSchemaKeys(TomlTable schemaTable, String where) {
-        Map<String, PluginManifest.SchemaKey> schema = new LinkedHashMap<>();
+    private static Map<String, PluginDescriptor.SchemaKey> parseSchemaKeys(TomlTable schemaTable, String where) {
+        Map<String, PluginDescriptor.SchemaKey> schema = new LinkedHashMap<>();
         if (schemaTable == null) return schema;
         for (String key : schemaTable.keySet()) {
             Object raw = schemaTable.get(key);
@@ -103,10 +103,10 @@ public final class PluginManifests {
             if (typeRaw == null) {
                 throw new JkBuildParseException(where + "." + key + " requires `type`");
             }
-            var type = PluginManifest.SchemaKey.Type.parse(typeRaw, where + "." + key);
+            var type = PluginDescriptor.SchemaKey.Type.parse(typeRaw, where + "." + key);
             boolean required = Boolean.TRUE.equals(spec.getBoolean("required"));
             Object defaultValue = defaultFor(spec, type, where + "." + key);
-            schema.put(key, new PluginManifest.SchemaKey(
+            schema.put(key, new PluginDescriptor.SchemaKey(
                     key, type, required, defaultValue, spec.getString("example"), spec.getString("hint"),
                     Boolean.TRUE.equals(spec.getBoolean("secret"))));
         }
@@ -114,28 +114,28 @@ public final class PluginManifests {
     }
 
     /** The {@code [scaffold]} section — {@code jk new --<flag>} templates (P4, pure data). */
-    private static PluginManifest.Scaffold parseScaffold(TomlParseResult result, String displayPath) {
+    private static PluginDescriptor.Scaffold parseScaffold(TomlParseResult result, String displayPath) {
         TomlTable scaffold = result.getTable("scaffold");
         if (scaffold == null) return null;
         String flag = scaffold.getString("flag");
         if (flag == null || flag.isBlank()) {
             throw new JkBuildParseException(displayPath + ".scaffold.flag is required (the jk new --<flag> name)");
         }
-        List<PluginManifest.Append> appends = new ArrayList<>();
+        List<PluginDescriptor.Append> appends = new ArrayList<>();
         for (TomlTable t : tableArray(scaffold, "append", displayPath)) {
-            appends.add(new PluginManifest.Append(
+            appends.add(new PluginDescriptor.Append(
                     requireString(t, "template", displayPath + ".scaffold.append"),
                     scaffoldLang(t, displayPath + ".scaffold.append")));
         }
-        List<PluginManifest.FileTemplate> files = new ArrayList<>();
+        List<PluginDescriptor.FileTemplate> files = new ArrayList<>();
         for (TomlTable t : tableArray(scaffold, "file", displayPath)) {
-            files.add(new PluginManifest.FileTemplate(
+            files.add(new PluginDescriptor.FileTemplate(
                     requireString(t, "path", displayPath + ".scaffold.file"),
                     requireString(t, "template", displayPath + ".scaffold.file"),
                     scaffoldLang(t, displayPath + ".scaffold.file"),
                     Boolean.TRUE.equals(t.getBoolean("keep-existing"))));
         }
-        return new PluginManifest.Scaffold(flag, scaffold.getString("description"), appends, files);
+        return new PluginDescriptor.Scaffold(flag, scaffold.getString("description"), appends, files);
     }
 
     /**
@@ -157,12 +157,12 @@ public final class PluginManifests {
     }
 
     /** The {@code [[import.gradle-plugin]]} rules — jk import's plugin-id mappings (P4). */
-    private static List<PluginManifest.GradleImport> parseGradleImports(TomlParseResult result, String displayPath) {
+    private static List<PluginDescriptor.GradleImport> parseGradleImports(TomlParseResult result, String displayPath) {
         TomlTable importTable = result.getTable("import");
         if (importTable == null) return List.of();
-        List<PluginManifest.GradleImport> rules = new ArrayList<>();
+        List<PluginDescriptor.GradleImport> rules = new ArrayList<>();
         for (TomlTable t : tableArray(importTable, "gradle-plugin", displayPath)) {
-            rules.add(new PluginManifest.GradleImport(
+            rules.add(new PluginDescriptor.GradleImport(
                     requireString(t, "id", displayPath + ".import.gradle-plugin"),
                     t.getString("version-to"),
                     t.getString("missing-version-warning")));
@@ -171,7 +171,7 @@ public final class PluginManifests {
     }
 
     /** The {@code [code]} table — the plugin's worker jar carrying step/packager bodies (P3). */
-    private static PluginManifest.Code parseCode(TomlParseResult result, String displayPath) {
+    private static PluginDescriptor.Code parseCode(TomlParseResult result, String displayPath) {
         TomlTable code = result.getTable("code");
         if (code == null) return null;
         // `worker` names a registered first-party worker jar; a third-party plugin IS its own
@@ -184,14 +184,14 @@ public final class PluginManifests {
             throw new JkBuildParseException(
                     displayPath + ".code.protocol-prefix is required (the worker's protocol line marker)");
         }
-        return new PluginManifest.Code(worker, prefix);
+        return new PluginDescriptor.Code(worker, prefix);
     }
 
     /** The {@code [packaging]} table — the packager's static artifact descriptor (plan §3.3). */
-    private static PluginManifest.Packaging parsePackaging(TomlParseResult result, String displayPath) {
+    private static PluginDescriptor.Packaging parsePackaging(TomlParseResult result, String displayPath) {
         TomlTable packaging = result.getTable("packaging");
         if (packaging == null) return null;
-        List<PluginManifest.Packaging.Variant> variants = new ArrayList<>();
+        List<PluginDescriptor.Packaging.Variant> variants = new ArrayList<>();
         var variantArray = packaging.getArray("variant");
         if (variantArray != null) {
             for (int i = 0; i < variantArray.size(); i++) {
@@ -203,8 +203,8 @@ public final class PluginManifests {
                             + ".packaging.variant requires when = { config = ..., equals = ... } — packaging"
                             + " resolves before any classpath exists, so only config predicates apply");
                 }
-                variants.add(new PluginManifest.Packaging.Variant(
-                        new PluginManifest.Condition.ConfigEquals(
+                variants.add(new PluginDescriptor.Packaging.Variant(
+                        new PluginDescriptor.Condition.ConfigEquals(
                                 when.getString("config"), when.getString("equals")),
                         parsePackagingTable(v, displayPath, List.of())));
             }
@@ -212,8 +212,8 @@ public final class PluginManifests {
         return parsePackagingTable(packaging, displayPath, variants);
     }
 
-    private static PluginManifest.Packaging parsePackagingTable(
-            TomlTable packaging, String displayPath, List<PluginManifest.Packaging.Variant> variants) {
+    private static PluginDescriptor.Packaging parsePackagingTable(
+            TomlTable packaging, String displayPath, List<PluginDescriptor.Packaging.Variant> variants) {
         String execMode = packaging.getString("exec-mode");
         if (execMode == null) execMode = "classpath";
         if (!List.of("jar", "classpath", "binary", "device", "none").contains(execMode)) {
@@ -233,7 +233,7 @@ public final class PluginManifests {
                     displayPath + ".packaging.artifact-extension must be a short lowercase extension — got: "
                             + extension);
         }
-        return new PluginManifest.Packaging(
+        return new PluginDescriptor.Packaging(
                 packaging.getString("packager"),
                 execMode,
                 Boolean.TRUE.equals(packaging.getBoolean("self-contained")),
@@ -247,28 +247,28 @@ public final class PluginManifests {
 
     // ---- [[contribute.*]] — the declarative layer (P2) --------------------------------------
 
-    private static PluginManifest.Contributions parseContributions(
+    private static PluginDescriptor.Contributions parseContributions(
             TomlParseResult result, java.util.Set<String> schemaKeys, String displayPath) {
         TomlTable contribute = result.getTable("contribute");
-        if (contribute == null) return PluginManifest.Contributions.NONE;
+        if (contribute == null) return PluginDescriptor.Contributions.NONE;
 
-        List<PluginManifest.PlatformDependency> platformDeps = new ArrayList<>();
+        List<PluginDescriptor.PlatformDependency> platformDeps = new ArrayList<>();
         for (TomlTable t : tableArray(contribute, "platform-dependency", displayPath)) {
             String where = displayPath + ".contribute.platform-dependency";
             String coordinate = requireString(t, "coordinate", where);
             Interpolation.validate(coordinate, schemaKeys, where);
-            PluginManifest.Condition when = parseCondition(t, where);
-            if (when instanceof PluginManifest.Condition.ClasspathHas) {
+            PluginDescriptor.Condition when = parseCondition(t, where);
+            if (when instanceof PluginDescriptor.Condition.ClasspathHas) {
                 // Platform deps inject at parse time, before resolution — there is no
                 // classpath to test yet. Fail at load, not mid-build.
                 throw new JkBuildParseException(
                         where + ": classpath-has cannot gate a platform-dependency (it is evaluated"
                                 + " before resolution)");
             }
-            platformDeps.add(new PluginManifest.PlatformDependency(coordinate, when));
+            platformDeps.add(new PluginDescriptor.PlatformDependency(coordinate, when));
         }
 
-        List<PluginManifest.CompilerArgs> compilerArgs = new ArrayList<>();
+        List<PluginDescriptor.CompilerArgs> compilerArgs = new ArrayList<>();
         for (TomlTable t : tableArray(contribute, "compiler-args", displayPath)) {
             String where = displayPath + ".contribute.compiler-args";
             List<String> javac = stringList(t, "javac", where);
@@ -277,10 +277,10 @@ public final class PluginManifests {
             for (String arg : javac) Interpolation.validate(arg, schemaKeys, where + ".javac");
             for (String arg : kotlin) Interpolation.validate(arg, schemaKeys, where + ".kotlin");
             for (String arg : ksp) Interpolation.validate(arg, schemaKeys, where + ".ksp");
-            compilerArgs.add(new PluginManifest.CompilerArgs(javac, kotlin, ksp, parseCondition(t, where)));
+            compilerArgs.add(new PluginDescriptor.CompilerArgs(javac, kotlin, ksp, parseCondition(t, where)));
         }
 
-        List<PluginManifest.KotlinPlugin> kotlinPlugins = new ArrayList<>();
+        List<PluginDescriptor.KotlinPlugin> kotlinPlugins = new ArrayList<>();
         for (TomlTable t : tableArray(contribute, "kotlin-plugin", displayPath)) {
             String where = displayPath + ".contribute.kotlin-plugin";
             String id = requireString(t, "id", where);
@@ -288,25 +288,25 @@ public final class PluginManifests {
             Interpolation.validate(coordinate, schemaKeys, where);
             List<String> options = stringList(t, "options", where);
             for (String opt : options) Interpolation.validate(opt, schemaKeys, where + ".options");
-            kotlinPlugins.add(new PluginManifest.KotlinPlugin(id, coordinate, options, parseCondition(t, where)));
+            kotlinPlugins.add(new PluginDescriptor.KotlinPlugin(id, coordinate, options, parseCondition(t, where)));
         }
 
-        List<PluginManifest.PackagerDependency> packagerDeps = new ArrayList<>();
+        List<PluginDescriptor.PackagerDependency> packagerDeps = new ArrayList<>();
         for (TomlTable t : tableArray(contribute, "packager-dependency", displayPath)) {
             String where = displayPath + ".contribute.packager-dependency";
             String artifact = requireString(t, "artifact", where);
             String coordinate = requireString(t, "coordinate", where);
             Interpolation.validate(coordinate, schemaKeys, where);
-            PluginManifest.Condition when = parseCondition(t, where);
-            if (when instanceof PluginManifest.Condition.ClasspathHas) {
+            PluginDescriptor.Condition when = parseCondition(t, where);
+            if (when instanceof PluginDescriptor.Condition.ClasspathHas) {
                 throw new JkBuildParseException(
                         where + ": classpath-has cannot gate a packager-dependency (fetch decisions"
                                 + " precede packaging classpath evaluation)");
             }
-            packagerDeps.add(new PluginManifest.PackagerDependency(artifact, coordinate, when));
+            packagerDeps.add(new PluginDescriptor.PackagerDependency(artifact, coordinate, when));
         }
 
-        List<PluginManifest.StepDependency> stepDeps = new ArrayList<>();
+        List<PluginDescriptor.StepDependency> stepDeps = new ArrayList<>();
         for (TomlTable t : tableArray(contribute, "step-dependency", displayPath)) {
             String where = displayPath + ".contribute.step-dependency";
             String artifact = requireString(t, "artifact", where);
@@ -327,17 +327,17 @@ public final class PluginManifests {
             if (transitive && coordinate == null) {
                 throw new JkBuildParseException(where + ": transitive only applies to a coordinate entry");
             }
-            PluginManifest.Condition when = parseCondition(t, where);
-            if (when instanceof PluginManifest.Condition.ClasspathHas) {
+            PluginDescriptor.Condition when = parseCondition(t, where);
+            if (when instanceof PluginDescriptor.Condition.ClasspathHas) {
                 throw new JkBuildParseException(
                         where + ": classpath-has cannot gate a step-dependency (tool fetches are"
                                 + " decided from config/facts, not the resolved classpath)");
             }
-            stepDeps.add(new PluginManifest.StepDependency(artifact, coordinate, transitive, sdkComponent, sdkPath,
+            stepDeps.add(new PluginDescriptor.StepDependency(artifact, coordinate, transitive, sdkComponent, sdkPath,
                     when));
         }
 
-        List<PluginManifest.ProvidedClasspath> provided = new ArrayList<>();
+        List<PluginDescriptor.ProvidedClasspath> provided = new ArrayList<>();
         for (TomlTable t : tableArray(contribute, "provided-classpath", displayPath)) {
             String where = displayPath + ".contribute.provided-classpath";
             String dependency = requireString(t, "dependency", where);
@@ -346,7 +346,7 @@ public final class PluginManifests {
                 throw new JkBuildParseException(where + ": `" + dependency
                         + "` does not name a declared [[contribute.step-dependency]] artifact");
             }
-            provided.add(new PluginManifest.ProvidedClasspath(dependency, parseCondition(t, where)));
+            provided.add(new PluginDescriptor.ProvidedClasspath(dependency, parseCondition(t, where)));
         }
 
         // [contribute.resolution] — a single table (not an array): the GMM jvm-environment
@@ -364,16 +364,16 @@ public final class PluginManifests {
             }
         }
 
-        return new PluginManifest.Contributions(
+        return new PluginDescriptor.Contributions(
                 platformDeps, compilerArgs, kotlinPlugins, packagerDeps, stepDeps, provided, jvmEnvironment);
     }
 
     /**
      * Parse the optional {@code when} inline table into exactly one {@link
-     * PluginManifest.Condition} — the closed predicate set; two predicates in one {@code when}
+     * PluginDescriptor.Condition} — the closed predicate set; two predicates in one {@code when}
      * (or an unknown one) is a load error, never a silently-false condition.
      */
-    private static PluginManifest.Condition parseCondition(TomlTable entry, String where) {
+    private static PluginDescriptor.Condition parseCondition(TomlTable entry, String where) {
         if (!entry.contains("when")) return null;
         TomlTable when = entry.getTable("when");
         if (when == null) {
@@ -388,7 +388,7 @@ public final class PluginManifests {
             if (module == null || module.isBlank()) {
                 throw new JkBuildParseException(where + ".when.classpath-has must be \"group:artifact\"");
             }
-            return new PluginManifest.Condition.ClasspathHas(module);
+            return new PluginDescriptor.Condition.ClasspathHas(module);
         }
         if (when.contains("config")) {
             String key = when.getString("config");
@@ -397,15 +397,15 @@ public final class PluginManifests {
                 throw new JkBuildParseException(
                         where + ".when config predicate needs both `config = \"<key>\"` and `equals = \"<value>\"`");
             }
-            return new PluginManifest.Condition.ConfigEquals(key, equals);
+            return new PluginDescriptor.Condition.ConfigEquals(key, equals);
         }
         if (when.contains("native-declared")) {
             requireTrue(when, "native-declared", where);
-            return new PluginManifest.Condition.NativeDeclared();
+            return new PluginDescriptor.Condition.NativeDeclared();
         }
         if (when.contains("kotlin-project")) {
             requireTrue(when, "kotlin-project", where);
-            return new PluginManifest.Condition.KotlinProject();
+            return new PluginDescriptor.Condition.KotlinProject();
         }
         throw new JkBuildParseException(where + ".when has no known predicate (classpath-has, config/equals,"
                 + " native-declared, kotlin-project)");
@@ -450,7 +450,7 @@ public final class PluginManifests {
         return out;
     }
 
-    private static Object defaultFor(TomlTable spec, PluginManifest.SchemaKey.Type type, String where) {
+    private static Object defaultFor(TomlTable spec, PluginDescriptor.SchemaKey.Type type, String where) {
         if (!spec.contains("default")) return null;
         return switch (type) {
             case STRING -> spec.getString("default");

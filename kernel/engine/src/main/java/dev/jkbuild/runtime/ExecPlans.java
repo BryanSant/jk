@@ -257,7 +257,7 @@ public final class ExecPlans {
         if (dev && !hotReload && project.pluginConfig("spring-boot").isPresent()) {
             // Tier 2: fetch devtools version-matched to the declared Boot line; offline
             // degrades silently to process-restart mode. DELIBERATE residue: hot-reload
-            // shaping folds into the plugin SPI's RunShape in P7 (build-plugins plan §5).
+            // shaping folds into the plugin SPI's run hooks when that phase lands (build-plugins plan §5).
             Path devtools = fetchDevtools(project, cache);
             if (devtools != null) {
                 classpath.add(devtools);

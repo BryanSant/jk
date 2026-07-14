@@ -6,7 +6,7 @@ import dev.jkbuild.layout.BuildLayout;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.plugin.PluginConfig;
 import dev.jkbuild.plugin.manifest.PluginContributions;
-import dev.jkbuild.plugin.manifest.PluginManifest;
+import dev.jkbuild.plugin.manifest.PluginDescriptor;
 import dev.jkbuild.plugin.manifest.PluginTableRegistry;
 import dev.jkbuild.plugin.protocol.Ndjson;
 import dev.jkbuild.util.Hashing;
@@ -42,19 +42,19 @@ public final class PluginBuild {
      * null for built-ins — it carries the coordinate the trust gate and jar lookup key on.
      */
     public record Active(
-            PluginManifest manifest,
+            PluginDescriptor manifest,
             PluginConfig config,
             Path moduleDir,
             dev.jkbuild.model.PluginDeclaration declaration) {}
 
     public static Optional<Active> activeCodePlugin(JkBuild project, Path moduleDir) {
-        for (PluginManifest m : PluginTableRegistry.manifestsFor(moduleDir, project.plugins())) {
+        for (PluginDescriptor m : PluginTableRegistry.manifestsFor(moduleDir, project.plugins())) {
             if (m.code() == null) continue;
             Optional<PluginConfig> config = project.pluginConfig(m.id());
             if (config.isPresent()) {
                 dev.jkbuild.model.PluginDeclaration declaration = PluginTableRegistry.isBuiltIn(m.id())
                         ? null
-                        : PluginManifestOps.declarationOf(moduleDir, project, m.id()).orElse(null);
+                        : PluginDescriptorOps.declarationOf(moduleDir, project, m.id()).orElse(null);
                 return Optional.of(new Active(m, config.get(), moduleDir, declaration));
             }
         }
@@ -62,8 +62,8 @@ public final class PluginBuild {
     }
 
     /** The active packager's static artifact descriptor, or empty — manifest data, no fork. */
-    public static Optional<PluginManifest.Packaging> shape(JkBuild project, Path moduleDir) {
-        for (PluginManifest m : PluginTableRegistry.manifestsFor(moduleDir, project.plugins())) {
+    public static Optional<PluginDescriptor.Packaging> shape(JkBuild project, Path moduleDir) {
+        for (PluginDescriptor m : PluginTableRegistry.manifestsFor(moduleDir, project.plugins())) {
             if (m.packaging() == null) continue;
             Optional<PluginConfig> config = project.pluginConfig(m.id());
             if (config.isPresent()) {
@@ -647,7 +647,7 @@ public final class PluginBuild {
                     + " is not trusted to run build code on this machine.\n"
                     + "Trust it first: jk trust plugin " + declaration.coordinate());
         }
-        return PluginManifestOps.jarFor(active.moduleDir(), declaration, cache)
+        return PluginDescriptorOps.jarFor(active.moduleDir(), declaration, cache)
                 .orElseThrow(() -> new IOException("plugin " + declaration.coordinateWithVersion()
                         + " is not in the local cache — run `jk sync` first"));
     }
