@@ -39,7 +39,7 @@ the forge token automatically when the backend is a forge's package registry.
 | GitLab Package Registry | `https://<host>/api/v4/projects/…/packages/maven` | HTTP GET/PUT | **forge token** (bridge) |
 | AWS S3 / MinIO | `s3://bucket/prefix` | HTTPS + SigV4 | AWS keys / chain |
 | Google Cloud Storage | `gs://bucket/prefix` | HTTPS (S3-compatible XML API) + HMAC | GCS HMAC keys |
-| Azure Blob Storage | `azblob://account/container` | HTTPS + SharedKey/SAS | account key / SAS |
+| Azure Blob Storage — **not implemented** (`azblob://` is reserved and errors clearly) | `azblob://account/container` | HTTPS + SharedKey/SAS | account key / SAS |
 | Local | `file://` | filesystem | n/a |
 | OCI image registry | `oci://` / registry refs | Docker registry protocol | Bearer token dance |
 
@@ -121,7 +121,6 @@ interface RepoTransport {
 - **`S3Transport`** — `s3://` and S3-compatible (`gs://` via the GCS XML API,
   MinIO via an endpoint override). Hand-rolled **AWS SigV4** over `Http` (no
   AWS SDK — keeps the GraalVM native image small). Endpoint/region are knobs.
-- **`AzureBlobTransport`** — `azblob://`. SharedKey signing (different from
   SigV4) or a SAS token.
 - **`FileTransport`** — `file://`, for local/offline mirrors.
 
@@ -186,7 +185,6 @@ sources** where they overlap (env, store, cloud chains) but needs a distinct
   `RepositorySpec`, applied via `RepoTransports.forUrl(url, http, cfg)` and the
   `S3Transport.forS3`/`forGcs` factories; `jk publish` gains `--region` /
   `--endpoint`. Precedence: config → AWS env → built-in default.
-- ⬜ `AzureBlobTransport` (SharedKey / SAS — skipped for now).
 - ⬜ Virtual-host addressing (path-style only for now).
 
 **Phase 4 — OCI registries:**

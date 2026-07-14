@@ -11,7 +11,7 @@ import java.util.Optional;
 /**
  * Moves artifact bytes to and from a repository, abstracted over the wire protocol so a repository
  * URL's <em>scheme</em> selects the implementation: {@link HttpTransport} for {@code http(s)}
- * today, with {@code s3://}, {@code gs://}, {@code azblob://}, and {@code file://} arriving in
+ * today alongside {@code s3://}, {@code gs://}, and {@code file://}; {@code azblob://} is reserved (errors clearly) in
  * Phase 3 (see docs/artifact-repos.md). {@link MavenRepo} (resolve) and {@code MavenPublisher}
  * (publish) route through this interface instead of speaking HTTP directly.
  *

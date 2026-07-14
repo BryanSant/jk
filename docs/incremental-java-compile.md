@@ -1,5 +1,12 @@
 # Incremental Java Compilation
 
+> **STATUS (2026-07-13):** this design shipped as option **(c)** — `JavaIncrementalCompile.run`
+> owns the multi-pass loop over `JavacDriver` + the ASM analyzers (`ClassAbi`,
+> `ClassDependencies`) and is live in `BuildPipeline`/`TestSupport`. The single-pass
+> `IncrementalCompiler`/`FullRebuildCompiler`/`IncrementalCompilers` seam described below was
+> RETIRED with it (the classes no longer exist). The rest of this document is the design
+> record.
+
 **Status:** In progress — phased. Phases 1 (ASM dirty-set, no worker) and 3
 (classpath ABI snapshots) are DONE; phase 2 (source-generating-AP incrementality)
 has its engine core done through slice 3b (worker + provenance + arity gate),
