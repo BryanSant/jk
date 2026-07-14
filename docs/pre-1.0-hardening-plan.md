@@ -756,3 +756,19 @@ older engine produced, which surfaced today as a false "Not reproducible" from
 `--force` build + verify then passed). Candidate fix: for `-SNAPSHOT` versions
 fold the engine jar's sha into the key's version component. Needs a decision on
 the in-process/test path (no engine jar to hash), so parked for review.
+
+### Residue bite 3 — `--rebuild` global flag + `jk clean --force` hammer
+
+User-decided (Cargo comparison in the transcript): the trust ladder is now
+user-visible. `--rebuild` exposes the existing internal knob globally — redo
+this build's work (stamps + action cache bypassed, both directions) while
+still serving locked deps from the CAS, offline-safe; `--force` keeps its
+"re-fetch too" superset meaning. No `check` verb: Cargo's `check` means fast
+CACHED type-checking, which `jk compile` already is — shipping a `check` whose
+point is bypassing the cache would invert ecosystem intuition. `--rerun` stays
+dead (vague name, murky history). `jk clean --force` is the per-project
+hammer (`cargo clean -p` analog): local files AND the project's action-cache
+entries go (via the `cache clear` machinery, no prompt — the flag is the
+consent); CAS blobs stay shared. clean gained the hidden `--cache-dir` seam
+its peers have. Tests: rebuild bypasses the up-to-date fast path;
+clean --force empties the project's action keys while plain clean keeps them.

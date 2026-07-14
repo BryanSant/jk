@@ -46,6 +46,29 @@ class BuildCacheTest {
     }
 
     @Test
+    void rebuild_flag_bypasses_the_up_to_date_fast_path(@TempDir Path tempDir) throws Exception {
+        run("new", "--name", "widget", tempDir.toString());
+        Path src = tempDir.resolve("src/main/java/example/Hello.java");
+        Files.createDirectories(src.getParent());
+        Files.writeString(src, """
+                package example;
+                public class Hello { public static String greet() { return "hi"; } }
+                """);
+
+        Path cache = tempDir.resolve("cache");
+        assertThat(run("build", "-C", tempDir.toString(), "--cache-dir", cache.toString()))
+                .isEqualTo(0);
+        Files.setLastModifiedTime(src, FileTime.fromMillis(System.currentTimeMillis() - 5_000));
+
+        // --rebuild: stamps and action cache are distrusted — a genuine recompile, never the
+        // "project up to date" fast path (and unlike --force, no dependency re-fetch).
+        String stdout = captureStdout(
+                () -> run("build", "--rebuild", "-C", tempDir.toString(), "--cache-dir", cache.toString()));
+        assertThat(stdout).doesNotContain("project up to date");
+        assertThat(stdout).contains("Build successful");
+    }
+
+    @Test
     void wiping_classes_dir_falls_through_to_action_cache(@TempDir Path tempDir) throws Exception {
         // The freshness stamp lives inside the classes dir; deleting the
         // dir (e.g. `jk clean`) removes the stamp and forces the action-key
@@ -68,6 +91,35 @@ class BuildCacheTest {
 
         String stdout = captureStdout(() -> run("build", "-C", tempDir.toString(), "--cache-dir", cache.toString()));
         assertThat(stdout).contains("Built");
+    }
+
+    @Test
+    void clean_force_also_invalidates_the_project_action_cache(@TempDir Path tempDir) throws Exception {
+        run("new", "--name", "widget", tempDir.toString());
+        Path src = tempDir.resolve("src/main/java/example/Hello.java");
+        Files.createDirectories(src.getParent());
+        Files.writeString(src, """
+                package example;
+                public class Hello { public static String greet() { return "hi"; } }
+                """);
+        Path cache = tempDir.resolve("cache");
+        run("build", "-C", tempDir.toString(), "--cache-dir", cache.toString());
+        Path keys = cache.resolve("actions/keys");
+        assertThat(Files.list(keys).count()).as("build populated the action cache").isPositive();
+
+        // Plain clean: files go, the action cache STAYS (the next build restores from it).
+        assertThat(run("clean", "-C", tempDir.toString(), "--cache-dir", cache.toString())).isEqualTo(0);
+        assertThat(tempDir.resolve("target")).doesNotExist();
+        assertThat(Files.list(keys).count()).isPositive();
+
+        // The hammer: clean --force ALSO invalidates this project's action-cache entries.
+        run("build", "-C", tempDir.toString(), "--cache-dir", cache.toString());
+        assertThat(run("clean", "--force", "-C", tempDir.toString(), "--cache-dir", cache.toString()))
+                .isEqualTo(0);
+        assertThat(tempDir.resolve("target")).doesNotExist();
+        assertThat(Files.list(keys).count())
+                .as("clean --force left no action-cache entries for the project")
+                .isZero();
     }
 
     private static void deleteRecursively(Path root) throws IOException {

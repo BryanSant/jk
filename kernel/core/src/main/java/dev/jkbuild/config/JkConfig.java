@@ -32,9 +32,10 @@ public record JkConfig(
         Optional<ColorChoice> color,
         Optional<Boolean> offline,
         /**
-         * Bypass jk's own build caches (action cache, freshness stamps) WITHOUT re-fetching
-         * locked dependencies — {@code jk verify}'s lane: a genuine recompile+repackage that
-         * still serves artifacts from the local CAS and works offline. Implied by {@code force}.
+         * {@code --rebuild} — bypass jk's own build caches (action cache, freshness stamps)
+         * WITHOUT re-fetching locked dependencies: a genuine recompile+repackage+test-rerun that
+         * still serves artifacts from the local CAS and works offline. Also {@code jk verify}'s
+         * scratch-rebuild lane. Implied by {@code force} (which additionally re-fetches).
          */
         Optional<Boolean> rebuild,
         Optional<Boolean> noProgress,

@@ -209,6 +209,7 @@ public final class Jk {
         java.util.Optional<JkConfig.ColorChoice> color = java.util.Optional.empty();
         java.util.Optional<Boolean> offline = java.util.Optional.empty();
         java.util.Optional<Boolean> force = java.util.Optional.empty();
+        java.util.Optional<Boolean> rebuild = java.util.Optional.empty();
         java.util.Optional<Boolean> noProgress = java.util.Optional.empty();
         java.util.Optional<Boolean> noAnsi = java.util.Optional.empty();
         java.util.Optional<Boolean> quiet = java.util.Optional.empty();
@@ -221,6 +222,7 @@ public final class Jk {
                 case "-v", "--verbose" -> verbose = java.util.Optional.of(true);
                 case "--offline" -> offline = java.util.Optional.of(true);
                 case "--force" -> force = java.util.Optional.of(true);
+                case "--rebuild" -> rebuild = java.util.Optional.of(true);
                 case "--no-progress" -> noProgress = java.util.Optional.of(true);
                 // --no-ansi: strip ALL ANSI (color + bold/italic) and disable animations.
                 // Sets noAnsi=true (→ isAnsi()=false → colorize() returns plain text) and
@@ -246,7 +248,7 @@ public final class Jk {
             }
         }
         JkConfig cli = new JkConfig(
-                color, offline, java.util.Optional.empty(), noProgress, quiet, verbose, directory, force, noAnsi);
+                color, offline, rebuild, noProgress, quiet, verbose, directory, force, noAnsi);
         dev.jkbuild.config.SessionContext.installConfig(dev.jkbuild.config.SessionContext.current().config().mergedWith(cli));
     }
 

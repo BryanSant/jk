@@ -88,7 +88,7 @@ public final class JkConfigLoader {
         return new JkConfig(
                 Optional.ofNullable(scan.get("config.color")).flatMap(JkConfig.ColorChoice::parse),
                 scanBool(scan, "config.offline"),
-                Optional.empty(), // rebuild is verify's internal lane, not a config key
+                Optional.empty(), // rebuild is a per-invocation CLI flag, not a config-file key
                 scanBool(scan, "config.no-progress"),
                 scanBool(scan, "config.quiet"),
                 scanBool(scan, "config.verbose"),
@@ -120,7 +120,7 @@ public final class JkConfigLoader {
         return new JkConfig(
                 color,
                 EnvValues.bool(env, ENV_OFFLINE),
-                Optional.empty(), // rebuild is verify's internal lane, not env-driven
+                Optional.empty(), // rebuild is a per-invocation CLI flag, not env-driven
                 EnvValues.bool(env, ENV_NO_PROGRESS),
                 EnvValues.bool(env, ENV_QUIET),
                 EnvValues.bool(env, ENV_VERBOSE),

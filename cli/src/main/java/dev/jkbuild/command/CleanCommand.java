@@ -4,6 +4,7 @@ package dev.jkbuild.command;
 import dev.jkbuild.cli.CliOutput;
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.run.ConsoleSpec;
+import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.cli.tui.Glyphs;
 import dev.jkbuild.cli.tui.GoalWedge;
@@ -41,6 +42,12 @@ import java.util.stream.Stream;
  * unreferenced CAS blobs (and their {@code repo/} mirror links) idle for more than 90 days, then
  * compacts the access log.
  *
+ * <p>{@code jk clean --force} is the full per-project hammer (Cargo's {@code cargo clean -p}
+ * analog): after removing the local files it also invalidates this project's (and its
+ * workspace's) ACTION-CACHE entries — the next build can't restore a cached compile, test
+ * marker, or packaged artifact. CAS blobs are untouched (content-addressed and shared; the
+ * sweep reclaims them later).
+ *
  * <p>The first command ported off picocli to jk's own {@link CliCommand} model
  * (docs/plugin-refactor.md §5).
  */
@@ -60,14 +67,18 @@ public final class CleanCommand implements CliCommand {
     public List<Opt> options() {
         return List.of(
                 Opt.flag("Delete only build/ intermediates; keep artifacts.", "--keep-artifacts"),
-                Opt.flag("GC the shared cache: purge blobs idle 90+ days.", "--cache"));
+                Opt.flag("GC the shared cache: purge blobs idle 90+ days.", "--cache"),
+                Opt.value("<dir>", "Override the jk cache directory.", "--cache-dir")
+                        .hide());
     }
 
     @Override
     public int run(Invocation in) throws IOException {
         boolean keepArtifacts = in.isSet("keep-artifacts");
         boolean gcCache = in.isSet("cache");
-        Path dir = new GlobalOptions().workingDir();
+        boolean force = GlobalOptions.from(in).force;
+        Path cacheDirOverride = in.value("cache-dir").map(Path::of).orElse(null);
+        Path dir = GlobalOptions.from(in).workingDir();
         Path workspaceRoot = resolveWorkspaceRoot(dir);
         List<Path> projectDirs = collectProjectDirs(workspaceRoot);
 
@@ -106,6 +117,12 @@ public final class CleanCommand implements CliCommand {
 
         if (gcCache) {
             gcCache();
+        }
+        if (force) {
+            // The hammer's second half: this project's action-cache entries go too, so the
+            // next build genuinely starts from scratch. No prompt — --force IS the consent.
+            int cleared = clearProjectActionCache(dir, cacheDirOverride);
+            if (cleared != 0) return cleared;
         }
         return 0;
     }
@@ -191,6 +208,44 @@ public final class CleanCommand implements CliCommand {
 
     private static Path resolveWorkspaceRoot(Path dir) {
         return WorkspaceScan.findRoot(dir).orElse(dir);
+    }
+
+    /** Invalidate this project's (+ workspace's) action-cache entries — `jk cache clear -y`. */
+    private static int clearProjectActionCache(Path projectDir, Path cacheDirOverride) {
+        if (!Files.isRegularFile(projectDir.resolve("jk.toml"))) {
+            // Not a project dir: nothing project-scoped to clear; the file clean already ran.
+            return 0;
+        }
+        Path root = CacheCommand.resolveCacheRoot(cacheDirOverride);
+        GoalConsole.Mode mode = GoalConsole.modeFor(new GlobalOptions());
+        if (Boolean.getBoolean("jk.test.noEngine")
+                || "dev.jkbuild.test.runner.JkRunner".equals(System.getProperty("jk.plugin.class"))) {
+            try {
+                return dev.jkbuild.cli.engine.InProcessEngine.require()
+                        .clearInProcess(root, projectDir, false, mode);
+            } catch (IOException e) {
+                CliOutput.err("jk clean --force: " + e.getMessage());
+                return dev.jkbuild.model.command.Exit.SOFTWARE;
+            }
+        }
+        var summary = new dev.jkbuild.cli.engine.EngineClient.CacheMaintSummary[1];
+        ConsoleSpec spec = CacheCommand.CacheClearCommand.clearSpec(
+                false,
+                () -> summary[0] != null ? summary[0].files() : 0L,
+                () -> summary[0] != null ? summary[0].bytes() : 0L);
+        try {
+            var result = dev.jkbuild.cli.engine.EngineClient.runCacheMaintenance(
+                    dev.jkbuild.engine.EnginePaths.current(),
+                    new dev.jkbuild.cli.engine.EngineClient.CacheMaintRequest(
+                            "clear", root, 0, false, false, null, false, projectDir),
+                    phases -> GoalConsole.chooseConsoleListener(phases, mode, spec, "Cache"),
+                    CacheCommand::printWait,
+                    summary);
+            return result.success() ? 0 : 1;
+        } catch (IOException e) {
+            CliOutput.err("jk clean --force: " + e.getMessage());
+            return dev.jkbuild.model.command.Exit.SOFTWARE;
+        }
     }
 
     private static void deleteRecursively(Path root, long[] stats) throws IOException {

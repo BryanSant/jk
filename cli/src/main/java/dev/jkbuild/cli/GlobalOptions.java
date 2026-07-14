@@ -23,6 +23,13 @@ public final class GlobalOptions {
     /** {@code --force}: bypass all of jk's caching for this invocation. */
     public boolean force;
 
+    /**
+     * {@code --rebuild} — recompile/repackage/re-run tests (skip freshness stamps and the action
+     * cache, both directions) while still serving locked deps from the CAS: offline-safe cache
+     * distrust. {@code --force} implies it and additionally re-fetches.
+     */
+    public boolean rebuild;
+
     public boolean noProgress;
 
     /** {@code --no-ansi} — declared as a global; read here so command code never misses it. */
@@ -97,6 +104,7 @@ public final class GlobalOptions {
         g.color = in.value("color").orElse(null);
         g.offline = in.isSet("offline");
         g.force = in.isSet("force");
+        g.rebuild = in.isSet("rebuild");
         g.noProgress = in.isSet("no-progress");
         g.noAnsi = in.isSet("no-ansi");
         g.output = in.value("output").orElse(null);
@@ -139,7 +147,8 @@ public final class GlobalOptions {
                 Opt.flag("Print additional diagnostic output", "-v", "--verbose"),
                 Opt.value("<WHEN>", "When to colorize output: auto, always, never", "--color"),
                 Opt.flag("Disable network access for this run", "--offline"),
-                Opt.flag("Bypass jk's caching and redo this operation", "--force"),
+                Opt.flag("Bypass jk's caching and redo this operation, re-fetching deps too", "--force"),
+                Opt.flag("Redo this build's work (skip jk's caches) without re-fetching deps", "--rebuild"),
                 Opt.flag("Disable all progress bars and spinners", "--no-progress"),
                 Opt.flag("Disable all ANSI/color/Unicode; ASCII-only output", "--no-ansi"),
                 Opt.value("<FORMAT>", "Output format: text (default) or json", "--output"),
