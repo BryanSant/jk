@@ -30,18 +30,42 @@ RELEASES_URL="${JK_RELEASES_URL:-https://jkbuild.dev/releases}"
 # Optional positional argument: local path to jk, jk.xz, or jk.zip.
 LOCAL_FILE="${1:-}"
 
-# ---- pretty output ---------------------------------------------------------
+# ---- terminal / interactivity detection ------------------------------------
+#
+# Two independent signals, resolved once:
+#   * colour — gated on stdout being a real terminal (and not NO_COLOR / a dumb
+#     terminal), so piped/redirected output stays clean.
+#   * interactivity — whether a controlling terminal is reachable at all. Under
+#     `curl … | bash`, fd 0 is the PIPE feeding bash the script, NOT a tty, so
+#     `[ -t 0 ]` is the wrong probe — /dev/tty is. This drives TTY_IN, the stdin
+#     every child `jk` command is given: a real terminal when one exists (so
+#     jk's own prompts / console detection work), else /dev/null. Routing
+#     children away from the script's stdin also stops a child from consuming
+#     the rest of the piped script — the classic `curl | bash` truncation.
+#
+# Honour CI and JK_NONINTERACTIVE to force the non-interactive path explicitly.
 
-if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
+if [ -t 1 ] && [ -z "${NO_COLOR:-}" ] && [ "${TERM:-}" != "dumb" ]; then
   BOLD=$'\033[1m'; RED=$'\033[31m'; GREEN=$'\033[32m'; DIM=$'\033[2m'; RESET=$'\033[0m'
 else
   BOLD=""; RED=""; GREEN=""; DIM=""; RESET=""
 fi
 
-info()  { printf '%s==>%s %s\n' "$GREEN" "$RESET" "$*"; }
+if [ -z "${CI:-}" ] && [ -z "${JK_NONINTERACTIVE:-}" ] && { : </dev/tty; } 2>/dev/null; then
+  INTERACTIVE=1; TTY_IN=/dev/tty
+else
+  INTERACTIVE=0; TTY_IN=/dev/null
+fi
+
+info()  { printf '%s●%s %s\n' "$GREEN" "$RESET" "$*"; }
 note()  { printf '%s    %s%s\n' "$DIM" "$*" "$RESET"; }
-err()   { printf '%serror:%s %s\n' "$RED" "$RESET" "$*" >&2; }
+err()   { printf '%s✖%s %s\n' "$RED" "$RESET" "$*" >&2; }
 die()   { err "$@"; exit 1; }
+
+# Run a child `jk` with its stdin bound to the terminal (or /dev/null) — never
+# the (possibly piped) script stdin. Callers add their own stdout/stderr redirs.
+# ($JK_BIN is resolved at call time, after the install step sets it.)
+run_jk() { "$JK_BIN" "$@" 0<"$TTY_IN"; }
 
 # ---- detect tools ----------------------------------------------------------
 
@@ -190,8 +214,8 @@ if [ -n "$LOCAL_FILE" ]; then
     [ -f "$f" ] && ENGINE_JAR="$f" && break
   done
   if [ -n "$ENGINE_JAR" ]; then
-    if "$JK_BIN" self materialize "$JK_BIN" "$ENGINE_JAR" >/dev/null 2>&1; then
-      note "Materialized $JK_HOME/versions/$("$JK_BIN" --version 2>/dev/null | awk '{print $2}')"
+    if run_jk self materialize "$JK_BIN" "$ENGINE_JAR" >/dev/null 2>&1; then
+      note "Materialized $JK_HOME/versions/$(run_jk --version 2>/dev/null | awk '{print $2}')"
     else
       note "versions/ materialization skipped (jk self materialize failed; the client re-fetches on demand)"
     fi
@@ -201,7 +225,7 @@ fi
 # ---- activate --------------------------------------------------------------
 
 info "Running jk activate"
-"$JK_BIN" activate || die "'jk activate' failed; not restarting shell."
+run_jk activate || die "'jk activate' failed; not restarting shell."
 
 # ---- warm the engine -------------------------------------------------------
 #
@@ -232,11 +256,11 @@ if [ -z "$LOCAL_FILE" ] || compgen -G "$JK_HOME/lib/jk-engine-*.jar" > /dev/null
   # The settle between start and stop matters: a stop issued within the
   # engine's first second yields an empty training dump and the assembly
   # child rejects it (verified against JDK 25).
-  if "$JK_BIN" engine start >/dev/null 2>&1 \
+  if run_jk engine start >/dev/null 2>&1 \
       && sleep 3 \
-      && "$JK_BIN" engine stop >/dev/null 2>&1 \
+      && run_jk engine stop >/dev/null 2>&1 \
       && await_aot_cache \
-      && "$JK_BIN" engine start >/dev/null 2>&1; then
+      && run_jk engine start >/dev/null 2>&1; then
     note "Engine started; AOT startup cache prepared"
   else
     note "Engine warm-up skipped; it will start on first build"
@@ -247,13 +271,25 @@ printf '\n%s%sjk installed successfully.%s\n\n' "$BOLD" "$GREEN" "$RESET"
 
 # ---- restart shell ---------------------------------------------------------
 #
-# Only exec a new shell when running interactively. When the script is piped
-# from curl|bash in a non-interactive context, exec'ing $SHELL would hang or
-# detach, so we just tell the user how to reload.
+# Three cases:
+#   1. Real interactive shell (fd 0 + fd 1 are ttys): exec $SHELL directly.
+#   2. `curl … | bash` in a terminal (fd 0 is the pipe, but /dev/tty is
+#      reachable → INTERACTIVE): don't hijack the terminal — ask first, and if
+#      yes exec with stdin rebound to the terminal so the new shell is usable.
+#   3. No terminal (CI, Docker build, cron, NO_COLOR pipe): just print how to
+#      reload; exec'ing here would hang or detach.
+RELOAD_HINT="Open a new terminal or run 'exec \$SHELL' to start using jk."
 
 if [ -t 0 ] && [ -t 1 ] && [ -n "${SHELL:-}" ]; then
   note "Restarting your shell ($SHELL) to apply changes..."
   exec "$SHELL"
+elif [ "$INTERACTIVE" = 1 ] && [ -n "${SHELL:-}" ]; then
+  printf '%s    Reload your shell (%s) now to apply changes? [Y/n] %s' "$DIM" "$SHELL" "$RESET"
+  read -r reply </dev/tty || reply=""
+  case "$reply" in
+    [Nn]*) note "$RELOAD_HINT" ;;
+    *)     note "Restarting your shell ($SHELL)..."; exec "$SHELL" </dev/tty ;;
+  esac
 else
-  note "Open a new terminal or run 'exec \$SHELL' to start using jk."
+  note "$RELOAD_HINT"
 fi
