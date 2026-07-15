@@ -104,7 +104,9 @@ and the fallback when no engine artifact is installed. Both routes execute the e
    The same one-home rule covers the installations themselves: every jk version — including
    the current one — is materialized in `~/.jk/versions/<v>/` (client binary + engine jar +
    manifest), and `~/.jk/bin/jk`/`jkx` are just pointers to the current version's binary
-   (symlinks where the platform allows, copies elsewhere). The initial install, a wrapper pin,
+   (a symlink → hard-link → copy ladder: symlinks on POSIX; unprivileged NTFS hard links on
+   Windows, atomic and zero-disk; byte copies only for cross-volume installs or FAT-family
+   filesystems). The initial install, a wrapper pin,
    and `jk self update` all end in the same state: materialize into `versions/`, flip the
    pointer. Lifetimes differ by prefix: `engine-<version>-…` files are jk-version-scoped (retired with
    the version by the cache prune's version sweep), while `javac-`/`kotlinc-` files are

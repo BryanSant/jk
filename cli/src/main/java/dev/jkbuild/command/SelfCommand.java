@@ -236,27 +236,55 @@ public final class SelfCommand extends GroupCommand {
         }
 
         /**
-         * Flip {@code ~/.jk/bin/jk} to the materialized client — atomic symlink swap where the
-         * platform allows, copy elsewhere. {@code jkx} follows.
+         * Flip {@code ~/.jk/bin/jk} to the materialized client; {@code jkx} follows. Pointer
+         * strategy is a ladder: symlink (POSIX; on Windows it needs Developer Mode /
+         * SeCreateSymbolicLinkPrivilege) → hard link (NTFS allows it unprivileged, same-volume
+         * only — bin/ and versions/ share ~/.jk — and it costs zero disk) → byte copy (last
+         * resort: cross-volume {@code JK_INSTALL_DIR}, FAT-family filesystems). Every rung stages
+         * at a temp sibling and renames into place, so readers never see a partial pointer.
          */
         private static void flipPointer(VersionStore.Materialized m) throws IOException {
             Path client = m.clientBin()
                     .orElseThrow(() -> new IOException("materialized " + m.version() + " has no client binary"));
             Path bin = JkDirs.binDir();
             Files.createDirectories(bin);
-            Path jk = bin.resolve("jk");
-            Path jkx = bin.resolve("jkx");
+            repoint(bin.resolve("jk"), client);
+            repoint(bin.resolve("jkx"), client);
+        }
+
+        private static void repoint(Path pointer, Path client) throws IOException {
+            Path tmp = pointer.resolveSibling("." + pointer.getFileName() + "-new");
+            Files.deleteIfExists(tmp);
             try {
-                Path tmp = bin.resolve(".jk-new");
-                Files.deleteIfExists(tmp);
                 Files.createSymbolicLink(tmp, client);
-                Files.move(tmp, jk, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-                Files.deleteIfExists(jkx);
-                Files.createSymbolicLink(jkx, client);
-            } catch (IOException | UnsupportedOperationException e) {
-                // No symlinks (some Windows setups): plain copies still upgrade correctly.
-                Files.copy(client, jk, StandardCopyOption.REPLACE_EXISTING);
-                Files.copy(client, jkx, StandardCopyOption.REPLACE_EXISTING);
+            } catch (IOException | UnsupportedOperationException noSymlink) {
+                try {
+                    Files.createLink(tmp, client);
+                } catch (IOException | UnsupportedOperationException noHardlink) {
+                    Files.copy(client, tmp, StandardCopyOption.REPLACE_EXISTING);
+                }
+            }
+            try {
+                Files.move(tmp, pointer, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            } catch (IOException replaceDenied) {
+                // Windows can rename a RUNNING exe but never delete/replace it (the image is
+                // memory-mapped): step the live pointer aside, then slide the new one in. The
+                // parked old image stays locked until that process exits — the next flip's
+                // deleteIfExists reclaims it.
+                Path old = pointer.resolveSibling("." + pointer.getFileName() + "-old");
+                try {
+                    Files.deleteIfExists(old);
+                } catch (IOException stillRunning) {
+                    // a previous update's parked image is still executing; park beside it
+                    old = pointer.resolveSibling("." + pointer.getFileName() + "-old-" + System.nanoTime());
+                }
+                Files.move(pointer, old, StandardCopyOption.REPLACE_EXISTING);
+                Files.move(tmp, pointer);
+                try {
+                    Files.deleteIfExists(old);
+                } catch (IOException ignored) {
+                    // locked while the old image runs; reclaimed on a later flip
+                }
             }
         }
 
