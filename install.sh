@@ -3,8 +3,8 @@
 # jk installer
 #
 # Usage:
-#   curl -fsSL https://jkbuild.dev/install.sh | bash
-#   wget -qO- https://jkbuild.dev/install.sh | bash
+#   curl -fsSL https://jumpkick.build/install.sh | bash
+#   wget -qO- https://jumpkick.build/install.sh | bash
 #   bash install.sh [/path/to/jk[.xz|.zip]]
 #
 # Environment variables:
@@ -25,7 +25,7 @@ INSTALL_DIR="${JK_INSTALL_DIR:-$JK_HOME/bin}"
 # resolved ONCE and both artifacts come from the frozen directory, so a release
 # published mid-install can never hand out a binary and an engine jar that
 # disagree (the client refuses to launch a version-skewed jar).
-RELEASES_URL="${JK_RELEASES_URL:-https://jkbuild.dev/releases}"
+RELEASES_URL="${JK_RELEASES_URL:-https://jumpkick.build/releases}"
 
 # Optional positional argument: local path to jk, jk.xz, or jk.zip.
 LOCAL_FILE="${1:-}"

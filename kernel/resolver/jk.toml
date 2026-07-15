@@ -1,13 +1,13 @@
 [project]
-group    = "dev.jkbuild"
+group    = "build.jumpkick"
 name     = "jk-resolver"
 version  = "0.10.0-SNAPSHOT"
 jdk      = 25
 java     = 25
 
 [dependencies]
-jk-core        = { group = "dev.jkbuild",       name     = "jk-core",        version = "0.10.0-SNAPSHOT" }
-jk-io          = { group = "dev.jkbuild",       name     = "jk-io",          version = "0.10.0-SNAPSHOT" }
+jk-core        = { group = "build.jumpkick",       name     = "jk-core",        version = "0.10.0-SNAPSHOT" }
+jk-io          = { group = "build.jumpkick",       name     = "jk-io",          version = "0.10.0-SNAPSHOT" }
 # ComparableVersion is the Maven-canonical version comparator (e.g.
 # `1.0-alpha < 1.0-rc < 1.0 < 1.0-sp1`). Used by Versions.compare.
 maven-artifact = { group = "org.apache.maven",  name     = "maven-artifact", version = "3.9.16" }

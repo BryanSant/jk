@@ -91,8 +91,8 @@ forced.
   help text, selector encoding untouched. Docs use dimension/value/variant everywhere.
 - **V2 — core build-type dimension** (small/medium): parse `[variants.build-type.*]`,
   fold overlays into core model post-parse (a core-side sibling of `Variants.apply`,
-  same Selection, applied in LockFlow/BuildPipeline/describe alongside the plugin-side
-  apply); injected `build-type` key; goal/action keys already carry the selection via
+  same Selection, applied in LockFlow/BuildPipelines/describe alongside the plugin-side
+  apply); injected `build-type` key; pipeline/action keys already carry the selection via
   config — verify describe keys for core sections include it.
 - **V3 — custom dimensions + extra-src promotion** (medium): dimension declaration +
   mandatory-selection error (reuse Variants' message shape), opt-in `default`,
@@ -123,4 +123,4 @@ forced.
    *consumer* of the shared dimension. Needs a collision rule (core declares the
    dimension; plugins may not redeclare it with different values).
 3. Per-value test-dependency overlays: in scope for V4 (same mechanism) but verify the
-   test goal's action keys pick up the selection.
+   test pipeline's action keys pick up the selection.

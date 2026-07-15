@@ -6,7 +6,7 @@ plugins {
     id("com.gradleup.shadow") version "9.2.2"
 }
 
-// Must match dev.jkbuild.util.JkVersion.VERSION (and the worker-conventions version): the client
+// Must match build.jumpkick.util.JkVersion.VERSION (and the worker-conventions version): the client
 // only spawns an engine jar whose filename version equals its own baked-in version.
 version = "0.10.0-SNAPSHOT"
 
@@ -123,7 +123,7 @@ application {
     // The JVM distribution (installDist) deliberately stays a single artifact with the client
     // entrypoint: `jk` verbs run the thin client code, and `jk --engine-server` reaches EngineMain
     // through the InProcessEngine seam — everything is on this module's classpath.
-    mainClass.set("dev.jkbuild.cli.Jk")
+    mainClass.set("build.jumpkick.cli.Jk")
     applicationName = "jk"
     // The client verbs' runtime profile: SerialGC + a small, capped heap (the same numbers the
     // native client bakes as -R: defaults). The engine spawn overrides the sizing for its own
@@ -137,7 +137,7 @@ application {
 // The engine artifact of the native dist (docs/engine.md "Two artifacts"): this module's runtime
 // classpath rolled up into a single fat jar, jk-engine-<version>.jar, materialized into
 // ~/.jk/versions/<v>/lib/, where the client spawns it as `<managed-jdk>/bin/java … -cp <jar>
-// dev.jkbuild.cli.EngineMain`. The version in the filename IS the compatibility contract: the
+// build.jumpkick.cli.EngineMain`. The version in the filename IS the compatibility contract: the
 // client only launches a jar whose version matches its own. The engine is deliberately NOT a
 // native image: it is long-lived, so HotSpot's JIT and SHA-256 intrinsics serve its hashing-heavy
 // hot path, and its heap/GC profile is plain JVM flags on the spawn line (SerialGC, -Xms32m

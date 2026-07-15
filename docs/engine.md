@@ -66,10 +66,10 @@ and the fallback when no engine artifact is installed. Both routes execute the e
    against the release's `SHA256SUMS`, ingested into the CAS, and materialized into `versions/<v>/` (`EngineJarFetcher`;
    the client is a JDK installer and JVM launcher by trade — fetching its own engine is the same
    move as installing a JDK to host it, and it makes upgrades self-healing). There is deliberately
-   no `jk engine fetch` verb: the fetch is built into the spawn. The JVM dist (which hosts the
+   no `jk engine fetch` command: the fetch is built into the spawn. The JVM dist (which hosts the
    engine itself), `--offline` runs, and `-SNAPSHOT` builds never auto-fetch. The jar is
    launched as `<managed-jdk>/bin/java -XX:+UseSerialGC
-   -Xms…/-Xmx… -cp ~/.jk/versions/<v>/lib/jk-engine.jar dev.jkbuild.cli.EngineMain` on the jk-managed
+   -Xms…/-Xmx… -cp ~/.jk/versions/<v>/lib/jk-engine.jar build.jumpkick.cli.EngineMain` on the jk-managed
    default JDK. The host JDK must meet the engine's runtime floor (the release that compiled the
    client and jar — a global default pinned older for *project* builds is skipped, since it governs
    worker JVMs, not the engine host); when nothing installed qualifies, the client installs
@@ -80,7 +80,7 @@ and the fallback when no engine artifact is installed. Both routes execute the e
    change boots cold and serves immediately; the client's spawn line adds
    `-Djk.aot.train.output=<cache>`, and once that engine wins its election it launches a
    **sidecar trainer** — its own jar re-entered as `java -XX:AOTCacheOutput=<cache> -cp
-   jk-engine.jar dev.jkbuild.cli.EngineMain --aot-training`. The trainer is a real engine run
+   jk-engine.jar build.jumpkick.cli.EngineMain --aot-training`. The trainer is a real engine run
    (full startup class-loading fidelity — exactly the profile worth recording) against a private
    temp state dir, so it binds only throwaway paths, can never touch the real endpoint or
    elections, and is invisible to clients; it idles ~3 s, stops itself cleanly, and the JVM
@@ -180,7 +180,7 @@ performance budgets:
   native image. The client spawns it on the jk-managed JDK; HotSpot's JIT and SHA-256 intrinsics
   serve its hashing-heavy hot path (CAS and classpath fingerprinting on every no-op build), and its
   profile is ordinary JVM flags on the spawn line: SerialGC with the 256 MiB / 96 MiB heap
-  numbers from `max-heap-mb`. Its `main` (`EngineMain`) *is* the engine-server loop — no verb
+  numbers from `max-heap-mb`. Its `main` (`EngineMain`) *is* the engine-server loop — no command
   routing, no flag. Building it is `./gradlew dist` territory (one jar, seconds) — no native-image
   compile, no multi-gigabyte builder process.
 
@@ -254,11 +254,11 @@ didn't just spawn itself.)
 - **Message shape**: the same `{"t":"<type>", ...}` discriminated-envelope shape jk's existing
   worker protocol already uses (see `WorkerClient`) — connection handshake
   (`hello`/`hello-ack`/`ping`/`pong`), a `build-request`/`test-request` to start an operation and a
-  `build-cancel` to abort one, one event type per `WorkspaceBuildListener`/`GoalListener` callback
-  (`plan-module`/`module-start`/`progress`/`output`/`warn`/`error`/`goal-finish`/...), and a terminal
-  `workspace-finish` or `build-error`. A variable-length collection (the module plan, a goal's
+  `build-cancel` to abort one, one event type per `WorkspaceBuildListener`/`PipelineListener` callback
+  (`plan-module`/`module-start`/`progress`/`output`/`warn`/`error`/`pipeline-finish`/...), and a terminal
+  `workspace-finish` or `build-error`. A variable-length collection (the module plan, a pipeline's
   accumulated diagnostics) is always a burst of repeated single-item messages plus a terminal marker
-  (`plan-module`+`plan-phase`+`plan-done`, `goal-diagnostic`*+`goal-finish`) rather than one message
+  (`plan-module`+`plan-step`+`plan-done`, `pipeline-diagnostic`*+`pipeline-finish`) rather than one message
   with a nested JSON array — the hand-rolled codec (`EngineProtocol`, mirroring `Ndjson`) only reads
   flat scalar fields and string arrays, deliberately, to stay dependency-free. See
   `EngineProtocol`/`EngineServer`/`EngineBuildListenerAdapter` for the exact, current vocabulary —
@@ -275,9 +275,9 @@ didn't just spawn itself.)
 ## What runs where
 
 **In the engine:** `jk build` (`BuildService.buildWorkspace` for a workspace, plus a dedicated
-single-goal path for a single project with no `[workspace]` table — both fork worker JVMs the same
+single-pipeline path for a single project with no `[workspace]` table — both fork worker JVMs the same
 way, so both needed to move for the OOM fix to actually close), `jk test` (a single project's
-compile+test goal), and `jk explain` (`BuildService.explain`, a synchronous read with no worker JVM
+compile+test pipeline), and `jk explain` (`BuildService.explain`, a synchronous read with no worker JVM
 forked — hosted mainly for consistency: the engine is the one process that always has a live,
 correctly-resolved build graph and caches open), plus the resolver family — `jk lock`, `jk sync`,
 and `jk update` (slim-client Wave 1: the PubGrub solve, CAS fetches, and git-source
@@ -288,11 +288,11 @@ build/action caches. `jk build` also freshens a stale merged workspace lock engi
 building (the request carries `freshenLock`; `jk verify`'s scratch rebuild opts out to keep the
 pinned lock verbatim).
 
-Also in the engine (slim-client Wave 2 — the hosted worker verbs): `jk audit`, `jk format`,
+Also in the engine (slim-client Wave 2 — the hosted worker commands): `jk audit`, `jk format`,
 `jk publish`, `jk image`, `jk import`, and `jk mvn`/`jk gradle`'s distribution *provisioning* —
 the six paths that used to fork plugin workers directly from the CLI process now fork them from
 the engine (sized by its shared worker-memory plan), with structured results streaming back as
-events (`audit-finding`, `format-file`, `import-note`) and count/summary-carrying `goal-finish`
+events (`audit-finding`, `format-file`, `import-note`) and count/summary-carrying `pipeline-finish`
 variants. `jk format`'s formatter-jar resolution (previously an in-client `ToolResolver` run)
 moved with it. Pre-flight stays client-side: `jk publish` resolves its repository credential and
 GPG passphrase in the client (env/keychain belong to the invocation, not to the engine's inherited
@@ -301,8 +301,8 @@ source detection/overwrite checks before sending. The `jk mvn`/`gradle` *exec* o
 tool deliberately stays in the client with inherited stdio — a foreign build's interactive run
 belongs to your terminal; only its download/link moved.
 
-Also in the engine (slim-client Wave 3 — the in-process `BuildPipeline` stragglers): `jk compile`
-(the shared pipeline in compile-only mode, `jk test`'s single-goal wire shape), `jk run`'s *build*
+Also in the engine (slim-client Wave 3 — the in-process `BuildPipelines` stragglers): `jk compile`
+(the shared pipeline in compile-only mode, `jk test`'s single-pipeline wire shape), `jk run`'s *build*
 half (it rides the existing single-project build request; only the exec of the user's program stays
 client-side — it owns your terminal, same reasoning as `jk mvn`/`gradle`'s exec), `jk native` (the
 full pipeline plus the native-image tail, the `native-image` child process forked engine-side like
@@ -314,10 +314,10 @@ the local repo index). Pre-flight stays client-side, same rule as always: GraalV
 with consent, its install — happens in the client before the `native`/`install` request is sent
 (the prompt owns the terminal; the engine only ever runs an already-resolved toolchain), and `jk
 install`'s "make install" (launcher/binary into `~/.jk/bin` + `~/.jk/lib`) runs client-side after the
-hosted goal succeeds. `jk explain`'s build-time estimate also moved engine-side: the request
+hosted pipeline succeeds. `jk explain`'s build-time estimate also moved engine-side: the request
 carries the plan-affecting build options, `BuildService.estimateEtaMillis` computes the
 schedule-aware ETA next to the plan (closing the long-standing client-side
-`BuildPipeline`/`EffortWeights`/`Calibration` reach the re-foundation flagged), and the result
+`BuildPipelines`/`EffortWeights`/`Calibration` reach the re-foundation flagged), and the result
 rides back as an `eta` event in the explain burst.
 
 Also in the engine (slim-client Wave 4 — the long tail; Stage 3 of the slim-client migration is
@@ -348,9 +348,9 @@ at), shell completion generation — and, deliberately, all of `jk jdk install` 
 non-interactive core, not just the install wizard). A JDK install can't cause the kind of memory
 contention the engine exists to prevent, installs are already safe to run concurrently without any
 coordination, and a machine that has never even built anything shouldn't need an engine just to
-install a JDK. The same rule shapes hosted `jk sync`: its `ensure-jdk` phase *can* trigger a JDK
+install a JDK. The same rule shapes hosted `jk sync`: its `ensure-jdk` step *can* trigger a JDK
 download, so the sync command pre-flights the ensure/install client-side before sending the
-request, and the engine-side phase only ever resolves an already-installed JDK (reporting a
+request, and the engine-side step only ever resolves an already-installed JDK (reporting a
 structured "not installed" error otherwise — it never downloads silently). The same pre-flight rule
 covers GraalVM for `jk native`/`jk install`: the client resolves (prompting/installing with
 consent) before the request, and the engine runs only the resolved toolchain.
@@ -393,7 +393,7 @@ disk-backed cache (the content-addressed build cache, the action cache) stays ex
 
 ## Rollout
 
-Landed in phases, each shipped with its own passing test suite and manual verification against a
+Landed in steps, each shipped with its own passing test suite and manual verification against a
 real native-image binary:
 
 1. **Prerequisite hardening (done).** The engine's per-request session state (`SessionContext`)
@@ -405,27 +405,27 @@ real native-image binary:
    Unix-domain-socket handshake/liveness/status/shutdown protocol, and `jk engine start/stop/status`.
    Verified end-to-end: start/status/stop, `kill -9` recovery (stale socket/lock cleanup) against the
    real binary. The engine is resident — it never self-terminates; `jk engine stop` drains it.
-3. **`jk build` (done).** Every `WorkspaceBuildListener`/`GoalListener` callback streams over the
-   wire as its own message type (`EngineServer`'s `wireListener`/`wireGoalListener`,
+3. **`jk build` (done).** Every `WorkspaceBuildListener`/`PipelineListener` callback streams over the
+   wire as its own message type (`EngineServer`'s `wireListener`/`wirePipelineListener`,
    `EngineBuildListenerAdapter` client-side); the CLI's existing renderers (`AggregateModuleListener`,
    the headless buffer listener) are unchanged — only where their events originate from changed.
    Verified with a real multi-module workspace: correct compilation/packaging/cross-module
    dependencies, a clear error (no hang) when the engine is killed mid-build, and — the actual bug
    this exists to fix — two concurrent `jk build`s in different directories sharing one engine
    without OOMing.
-4. **`jk test` (done).** A single project's test goal reuses the exact same goal-level wire vocabulary
-   `jk build` already speaks (tagged with a fixed sentinel `dir` since there's only one goal, not a
+4. **`jk test` (done).** A single project's test pipeline reuses the exact same pipeline-level wire vocabulary
+   `jk build` already speaks (tagged with a fixed sentinel `dir` since there's only one pipeline, not a
    module list) — no new protocol surface beyond the request/response pair and carrying the test
-   pass/fail counts on the terminal `goal-finish` event. Verified: passing tests, a failing test
+   pass/fail counts on the terminal `pipeline-finish` event. Verified: passing tests, a failing test
    (correct exit code 4, full failure detail rendered), and two concurrent `jk test` runs sharing one
    engine.
 5. **Single-project `jk build` (done).** Closed the gap where only *workspace* builds were
    engine-hosted: a single project with no `[workspace]` table now runs its real (non-test-only)
-   build goal through the same single-goal wire vocabulary as `jk test`, on the engine. The build
+   build pipeline through the same single-pipeline wire vocabulary as `jk test`, on the engine. The build
    outcome summary line (e.g. "project up to date" vs. "project built") carries over the wire on the
-   terminal `goal-finish` event so the CLI's post-build message matches the in-process path exactly.
-6. **`jk explain` (done).** `BuildService.explain`'s module/phase/edge forecast streams over the wire
-   as a burst of messages (one per module, one per phase, one per dependency edge), reconstructed
+   terminal `pipeline-finish` event so the CLI's post-build message matches the in-process path exactly.
+6. **`jk explain` (done).** `BuildService.explain`'s module/step/edge forecast streams over the wire
+   as a burst of messages (one per module, one per step, one per dependency edge), reconstructed
    client-side into a real `BuildService.ExplainPlan` — no in-process fallback for the plan itself.
    The ETA estimate built on top of it initially stayed client-side; slim-client Wave 3 moved it
    engine-side too (see [What runs where](#what-runs-where)).

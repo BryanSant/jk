@@ -43,7 +43,7 @@ max-concurrent-requests = 16  # default; 0 = the container-aware core count
 www-root = "state/www"        # absolute, or relative to the resolved JK_HOME (~/.jk)
 ```
 
-Parsed by the `JkHttpConfig` record beside `JkEngineConfig` in `dev.jkbuild.config` (`:core`),
+Parsed by the `JkHttpConfig` record beside `JkEngineConfig` in `build.jumpkick.config` (`:core`),
 via the same lenient `TomlValues` reader: missing file or missing table → the defaults (feature
 on); a present table with malformed keys falls back per-key to defaults (config is advisory, never
 a build-breaking gate). One asymmetry is deliberate: an *existing but unparseable* config file
@@ -73,9 +73,9 @@ core count" semantic.
 
 ## Placement
 
-- `dev.jkbuild.engine.http` package in `:engine` (`kernel/engine`) — engine-only code; the slim
+- `build.jumpkick.engine.http` package in `:engine` (`kernel/engine`) — engine-only code; the slim
   client never links it, preserving the compiler-enforced engine/front-end split.
-- `JkHttpConfig` in `dev.jkbuild.config` (`:core`), sibling of `JkEngineConfig`.
+- `JkHttpConfig` in `build.jumpkick.config` (`:core`), sibling of `JkEngineConfig`.
 - Shipped SPA assets in `kernel/engine/src/main/resources/www/` — rolled into the
   `jk-engine-<version>.jar` fat jar by `:cli-engine:shadowJar` with no build-file changes.
 - One new `EnginePaths.Paths` member: `<key>.http` (see Lifecycle).
@@ -184,7 +184,7 @@ already parses — the same deliberate flat-message discipline as the engine wir
 | `/api/history` | GET | read-tier | The persisted build journal. No `?id=` → a JSON array of the newest entries' full records; `?id=<id>` → that one entry's `record.json`. Backfills the Activity feed on load. See [`build-history.md`](build-history.md). |
 | `/api/history/artifact` | GET | read-tier | `?id=<id>&name=<test-results.md\|jk.lock\|diagnostics.txt>` — a snapshot artifact as plain text; `name` is whitelisted so it can't escape the entry dir. |
 | `/api/history` | DELETE | **token, always** | `?id=<id>` — delete one entry (like removing a CI run). `200 {"deleted":true}` or `404`. |
-| `/api/metrics` | GET | read-tier | The running build aggregates (see [`metrics.md`](metrics.md)): a flat JSON array, one object per tier row (`scope`: `global` / `project` / `phase` / `project-phase`) with ok/failed/cancelled counts, total/min/max millis, and a pre-computed `okAvgMillis`. Optional `?dir=` keeps one project's rows (the global tiers are always included). Feeds the Status view's build-stats section and `jk status`. |
+| `/api/metrics` | GET | read-tier | The running build aggregates (see [`metrics.md`](metrics.md)): a flat JSON array, one object per tier row (`scope`: `global` / `project` / `step` / `project/step`) with ok/failed/cancelled counts, total/min/max millis, and a pre-computed `okAvgMillis`. Optional `?dir=` keeps one project's rows (the global tiers are always included). Feeds the Status view's build-stats section and `jk status`. |
 | `/api/cache` | GET | read-tier | The cache-directory breakdown — the same sections `jk cache info` renders (CAS blobs, action cache, worker JARs, run logs, format stamps: count + bytes each), plus `totalCount`/`totalBytes`, the configured `maxBytes` ceiling, and `lastPrunedMillis` (0 = never). IO-shaped (walks the cache), computed per request. Feeds the Status view's Cache panel. |
 
 Anything mutating is POST/DELETE and token-gated everywhere, including on loopback (see Security).
@@ -192,7 +192,7 @@ Anything mutating is POST/DELETE and token-gated everywhere, including on loopba
 ### SSE (`/api/events`)
 
 `text/event-stream`, one `event:`/`data:` pair per engine event, flat JSON in `data:`. v1 events
-are coarse request-level lifecycle (`request-start`, `module-start`, `goal-finish`,
+are coarse request-level lifecycle (`request-start`, `module-start`, `pipeline-finish`,
 `request-finish`, heartbeat comment lines every 15 s to defeat idle proxies and detect dead
 clients). Internally a small fan-out: a bounded per-client queue (drop-oldest on overflow — a slow
 browser must never backpressure a build) fed by the same listener seams `EngineServer` already

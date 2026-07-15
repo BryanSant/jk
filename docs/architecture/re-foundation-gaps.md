@@ -11,7 +11,7 @@ claims describe an *intended end-state* rather than what shipped, and there are 
 correctness leaks.
 
 **Load-bearing win that holds:** the kernel has **zero** dependency on the CLI — no
-`dev.jkbuild.cli`/`dev.jkbuild.command` import exists anywhere in `kernel/*/src/main`. The one-way
+`build.jumpkick.cli`/`build.jumpkick.command` import exists anywhere in `kernel/*/src/main`. The one-way
 layering (`model → core → {io,resolver,toolchain} → engine → cli`) is intact. M4 (worker SPI) and M5f
 (builders) are accurate as claimed.
 
@@ -44,7 +44,7 @@ process-global mutable state … Two builds must be able to run in one JVM."* Th
 - `Session` gained a per-session cooperative `CancelToken` (`defaults()` mints a live one; `null` →
   inert `NONE`). `GlobalCancel` signals `SessionContext.current().cancel().cancel()` before its
   `halt(2)`, and the engine honors it by OR-ing `SessionContext.current().cancelled()` into the
-  existing `PhaseContext.cancelled()` poll — so any phase already checking cancellation observes a
+  existing `StepContext.cancelled()` poll — so any step already checking cancellation observes a
   session-level cancel (no new polling sites). The CLI keeps `halt(2)` as its process guarantee.
 - **Known limitation (logged, follow-up):** a `ScopedValue` binding does NOT propagate to tasks
   dispatched on the shared `JkThreads.io()` pool (it propagates only to structured forks). So a
@@ -55,7 +55,7 @@ process-global mutable state … Two builds must be able to run in one JVM."* Th
   The holder now *supports* concurrency (the structural unlock); the async dispatch must propagate it
   to be *completely* effective.
 - Output sink: **not** added to `Session` — the one kernel-console-I/O consumer (`NativeImageDriver`)
-  was fixed by routing through the in-scope `PhaseContext.output` instead (see the NativeImageDriver
+  was fixed by routing through the in-scope `StepContext.output` instead (see the NativeImageDriver
   item), which is the existing engine output seam; a redundant `Session` sink was unnecessary.
 
 - `SessionContext` holds `private static volatile Session current` (`kernel/core/.../config/SessionContext.java:17`)
@@ -67,12 +67,12 @@ process-global mutable state … Two builds must be able to run in one JVM."* Th
   cancellation token onto this record" (`Session.java:19-21`). It carries `parallelTests` instead.
 - `GlobalCancel` (`cli/.../tui/GlobalCancel.java:22-48`) is a static SIGINT handler that calls
   `Runtime.getRuntime().halt(2)` — process-global and unconditionally fatal to any second build. The
-  cooperative token that *does* exist lives on `Goal` (`Goal.java:73`), not `Session`.
-- `Session` is threaded into `BuildPipeline.Inputs` (`BuildPipeline.java:134`), and hot-path phase
+  cooperative token that *does* exist lives on `Pipeline` (`Pipeline.java:73`), not `Session`.
+- `Session` is threaded into `BuildPipelines.Inputs` (`BuildPipelines.java:134`), and hot-path step
   bodies read `in.session()`. But the delegating `Inputs` ctors *default the field from*
-  `SessionContext.current()` (`BuildPipeline.java:165,197,230`), and ~5 leaf sites still read the
+  `SessionContext.current()` (`BuildPipelines.java:165,197,230`), and ~5 leaf sites still read the
   global directly rather than a threaded value: `TestSupport.java:188`, `CompileToolchain.java:51,165`,
-  `KotlinBtaResolver.java:55`, `EffortWeights.java:338,340`. `PhaseContext`/`DefaultPhaseContext` do
+  `KotlinBtaResolver.java:55`, `EffortWeights.java:338,340`. `StepContext`/`DefaultStepContext` do
   not carry `Session` at all (only a `cancelled()` flag).
 
 **Fix plan:** make `SessionContext` `ScopedValue`-backed (keeping the static as a fallback default for
@@ -87,7 +87,7 @@ ExplainPlan` — a `BuildGraph`-free forecast (dependency-ordered `BuildPlanFore
 `dir → prereq dirs` edge map + width + errors) — plus a `ResolvedGraph` opaque handle
 (package-private `graph()`, mirroring `ModulePlan`) and a `resolveGraph`/`forecastDirtyDirs` overload
 for the build preflight. `ExplainCommand` and `BuildCommand` migrated and **no longer name
-`dev.jkbuild.runtime.BuildGraph` or `BuildGraph.BuildUnit`** — closing the M6-logged leak. The only
+`build.jumpkick.runtime.BuildGraph` or `BuildGraph.BuildUnit`** — closing the M6-logged leak. The only
 remaining `BuildGraph` reference in the CLI is `NativeCommand`'s front-end-safe
 `BuildGraph.orderModules(Map)` (the M4 map API, not graph internals).
 _Update (2026-07-06):_ **`installJdk` facade landed** — `JdkService` (engine) owns catalog fetch →
@@ -102,8 +102,8 @@ the one un-hoisted L8 item — offered, not yet requested.
 `BuildService`'s actual public surface is `buildWorkspace(...)` + a lock-freshness guard
 (`ensureWorkspaceLockFresh`/`workspaceLockStale`) + link/forecast helpers. There is **no `explain()`,
 no `installJdk()`, no `lock()`** — the doc's M2 line "`build/explain/lock/installJdk(request,
-GoalListener) → result`" (`re-foundation.md:53`) is a goal, not the code. Consequently the CLI reaches
-deep into engine internals: `BuildPipeline` (7 imports), `BuildGraph` (2), `CompileToolchain` (14),
+PipelineListener) → result`" (`re-foundation.md:53`) is a goal, not the code. Consequently the CLI reaches
+deep into engine internals: `BuildPipelines` (7 imports), `BuildGraph` (2), `CompileToolchain` (14),
 `WorkerClient` (6), `BuildPlanForecast` (2), `JUnitLauncher` (2), plus `JavacDriver`, `ClasspathResolver`,
 `ActionCache`, etc. A non-CLI front-end cannot drive explain / single-module build / JDK install through
 the facade today.
@@ -150,14 +150,14 @@ dispatches through `runGraphParallel` with cap=1, so the engine owns the whole s
 spectrum and the CLI's duplicate `runWorkspaceBuild` (+ its private ETA/median re-projection,
 `buildFailedAt`) is deleted. Verified end-to-end: an 8-module serial build of `jk.jk` in correct
 dependency order (model→…→cli), artifact linking, and both success + fail-fast rendering.
-_Compromises (logged):_ (1) serial builds now record `PhaseTimings` (the old path didn't) — an
+_Compromises (logged):_ (1) serial builds now record `StepTimings` (the old path didn't) — an
 improvement; (2) under an *intermediate* cap (2..N-1) the scheduler's `remaining` excludes in-flight
 units, slightly under-counting the ETA remainder — moot for the only shipped caps (0 and 1); (3) on
 fail-fast under a cap, in-flight peers drain in the background rather than being cancelled — moot for
 cap=1 (no peers), and the cooperative-cancel wiring is L7's job.
 
 `runWorkspaceBuild` (`BuildCommand.java:538`) does not call `buildWorkspace`. It re-implements memory
-planning (`applyMemoryPlan`), ETA/calibration (`PhaseTimings`/`Calibration`/median-rate re-projection
+planning (`applyMemoryPlan`), ETA/calibration (`StepTimings`/`Calibration`/median-rate re-projection
 at `:610-672`), and the prepare/run loop. The engine owns all of this for the parallel path inside
 `buildWorkspace`. (`runWorkspaceHeadless` and `runGraphLive`, by contrast, *are* routed through
 `buildWorkspace` — they are not part of this gap.)
@@ -169,8 +169,8 @@ ETA/memory-plan into engine helpers both paths call.
 ### Jdk install DAGs live in the CLI
 
 **Severity: low (no layering violation; single-entry-point consolidation only).** Folded into **L8**.
-`JdkInstallCommand`/`JdkEnsureCommand` assemble and run their own goal DAGs in the CLI over engine
-primitives (`Goal`, `JdkInstaller`, `GoalConsole`). Addressed by L8's `installJdk` facade.
+`JdkInstallCommand`/`JdkEnsureCommand` assemble and run their own pipeline DAGs in the CLI over engine
+primitives (`Pipeline`, `JdkInstaller`, `PipelineConsole`). Addressed by L8's `installJdk` facade.
 
 ---
 
@@ -180,19 +180,19 @@ primitives (`Goal`, `JdkInstaller`, `GoalConsole`). Addressed by L8's `installJd
 
 **Severity: high (live invariant violation).** **Status: FIXED** (commit `AutoLock … Q1`).
 `maybeReLock` now takes a `Consumer<String> warn` sink (mirroring the existing
-`JdkEnsure.ensure(..., Consumer<String> warn)` pattern); both callers (`BuildPipeline`,
-`SyncCommand`) pass `ctx::output`, so the warning flows through `PhaseContext.output` →
-`GoalListener` and a non-CLI front-end captures it. Exact two-line text preserved.
+`JdkEnsure.ensure(..., Consumer<String> warn)` pattern); both callers (`BuildPipelines`,
+`SyncCommand`) pass `ctx::output`, so the warning flows through `StepContext.output` →
+`PipelineListener` and a non-CLI front-end captures it. Exact two-line text preserved.
 _Compromise (logged):_ routed through `output` (verbatim passthrough) rather than the structured
-`ctx.warn(...)` channel, so it is not counted in `GoalResult.warnings()` / the `--ndjson`
+`ctx.warn(...)` channel, so it is not counted in `PipelineResult.warnings()` / the `--ndjson`
 `type:"warn"` stream. Chosen to preserve the exact text; revisit if structured classification is wanted.
 
 `AutoLock.java:252-253` prints `‼ jk: auto-lock warning — could not update jk.lock: …` and a follow-up
 line straight to `System.err`. This directly violates the invariant at `re-foundation.md:275` ("No new
-`System.out`/`System.err` in kernel modules; user text routes through `PhaseContext`/`GoalListener`").
+`System.out`/`System.err` in kernel modules; user text routes through `StepContext`/`PipelineListener`").
 For a non-CLI front-end this text lands on a process stream it can't capture or route.
 
-**Fix plan:** route the warning through the engine's user-facing channel (a `GoalListener`/callback or
+**Fix plan:** route the warning through the engine's user-facing channel (a `PipelineListener`/callback or
 a returned warning the CLI renders). Must not silently drop the warning.
 
 ### NativeImageDriver uses `System.out`/`System.err` in the toolchain
@@ -208,7 +208,7 @@ through the session output sink (depends on L7's output-sink landing).
 
 **Severity: medium (encapsulation).** **Status: FIXED** (commit `compiler-enforce … M6`).
 `BuildService.ModulePlan` and `BuildPlanForecast.Module` are now `final class`es (not records) so their
-`unit()` accessor drops to package-private — reachable by engine consumers in `dev.jkbuild.runtime`,
+`unit()` accessor drops to package-private — reachable by engine consumers in `build.jumpkick.runtime`,
 invisible to the CLI. `ExplainCommand` migrated to the new public `coord()`/`dir()`; the CLI no longer
 calls `.unit()` anywhere.
 _Compromise (logged → folded into L8):_ the CLI still names `BuildGraph`/`BuildGraph.BuildUnit`
@@ -223,7 +223,7 @@ violated elsewhere: `ExplainCommand.java:127,129,239,331` reaches `BuildGraph.Bu
 `BuildPlanForecast.Module.unit()`.
 
 **Fix plan:** stop exposing `BuildGraph.BuildUnit` through public accessors — either package-private the
-component or expose only the sanctioned `coord()`/`dir()`/`goal()`/`weight()`/`fullyCached()`/`cache()`
+component or expose only the sanctioned `coord()`/`dir()`/`pipeline()`/`weight()`/`fullyCached()`/`cache()`
 surface via an interface. Fix `ExplainCommand`'s reach-through.
 
 ---
@@ -256,7 +256,7 @@ happen. ~33 remain. Root cause of the worst cluster: `Resolution.ResolvedModule`
   `NaiveResolver.java:96`, `PubGrubResolver.java:133`, `ScriptRunner.java:613`, `KotlinBtaResolver.java:68`.
 - **15 CLI display/styling splits** (per-segment coloring of `group:artifact`): `NewCommand.java:675`,
   `NewJkBuildRenderer.java:103,124`, `ExplainCommand.java:368,377,454`, `theme/Coords.java:86`,
-  `tui/GoalWedge.java:65`, `DependencyTree.java:725,779,798`, `pubgrub/Diagnostics.java:247`,
+  `tui/PipelineWedge.java:65`, `DependencyTree.java:725,779,798`, `pubgrub/Diagnostics.java:247`,
   `TreeCommand.java:263`, `WhyCommand.java:90`, `RemoveCommand.java:118`.
 - **8 input/import parsers:** `AddCommand.java:411,491`, `ScriptHeaderParser.java:116`,
   `LibraryCatalog.java:296`, `GradleVersionCatalog.java:153`, `GradleImporter.java:394`,
@@ -287,7 +287,7 @@ _Compromises (logged, to revisit):_
 
 - `JkBuildRenderer.java:42` re-declares its own `private static final String
   WORKSPACE_PLACEHOLDER_PREFIX = "workspace:"` and uses it at `:157`, despite importing
-  `dev.jkbuild.model.Dependency` (which exposes `WORKSPACE_PREFIX`/`isWorkspaceRef`).
+  `build.jumpkick.model.Dependency` (which exposes `WORKSPACE_PREFIX`/`isWorkspaceRef`).
 - A `git:` repo-source prefix is written in `GitSourceResolution.java:105` (`"git:" + …`) and read in
   `RepoArtifactResolver.java:37` (`startsWith("git:")`) as bare literals with no shared constant.
 - `CacheSync.java:298` and `PolicyChecker.java:31` still hand-split `+`-delimited sources instead of
@@ -305,7 +305,7 @@ not a `Dependency` concept); route the two `+`-split stragglers through `RepoArt
 `JkBuild.builder(...)` and never calls `.build(...)`/`.format(...)`, so the merged object gets
 `Build.EMPTY`/`FormatConfig.EMPTY`. **Benign today:** every consumer of the merged object uses it only
 for lock resolution; `[build].order-after`/`lint` are read from raw-parsed manifests via
-`WorkspaceLoader` (`BuildGraph.java:124,178`; `BuildPipeline.java:576`), not the merged object, and no
+`WorkspaceLoader` (`BuildGraph.java:124,178`; `BuildPipelines.java:576`), not the merged object, and no
 consumer reads `.format()` off it. It only bites if a future lock-path consumer reads `.build()`/
 `.format()` from the merged object.
 
@@ -331,12 +331,12 @@ no new kernel process-global mutable statics.
 Living log. Every compromise made while fixing an item is recorded here with its item ID, and revisited
 in the final review. `(open)` = still a compromise; `(resolved)` = revisited and closed.
 
-- **[Q1] (open)** auto-lock warning routes via `PhaseContext.output` (verbatim) not the structured
-  `warn()` channel — not counted in `GoalResult.warnings()`/ndjson. Intentional to preserve exact text.
+- **[Q1] (open)** auto-lock warning routes via `StepContext.output` (verbatim) not the structured
+  `warn()` channel — not counted in `PipelineResult.warnings()`/ndjson. Intentional to preserve exact text.
 - **[Q2] (open)** ~11 CLI/resolver display-coloring coordinate splits left un-deduped — adopting the
   shared `Coords` helper would change rendered output bytes; `resolver`'s two cannot see cli's `Coords`.
 - **[Q3] (resolved)** `CacheSync` double-`+`-scan and **[Q3] (resolved)** `PolicyChecker`'s
-  layering-blocked hand-split are BOTH closed by a shared `dev.jkbuild.lock.RepoSource` (in `core`,
+  layering-blocked hand-split are BOTH closed by a shared `build.jumpkick.lock.RepoSource` (in `core`,
   visible to core/io/resolver): one owner of the `<name>+<url>` split with a strict nullable `name()`
   (mirrors `repoName`) and a lenient `url()` (mirrors PolicyChecker), each preserving its exact
   boundary contract (they intentionally diverge only on a trailing `+`, documented + unit-tested).
@@ -352,11 +352,11 @@ in the final review. `(open)` = still a compromise; `(resolved)` = revisited and
   than fully flattening it — deliberate, to keep the fully-cached-shortcut behavior + timing window
   byte-identical. `ResolvedGraph.moduleDirs()` is currently unused (kept as a front-end-safe accessor).
 - **[L8] (deferred, scope decision)** `installJdk` and single-module `build` facades not added:
-  `jk jdk install` is an inherently *interactive* Goal DAG (wizard/prompts, default-adoption) whose
-  mechanical core already runs on engine primitives (`Goal`/`JdkInstaller`/`GoalConsole`) — the same
+  `jk jdk install` is an inherently *interactive* Pipeline DAG (wizard/prompts, default-adoption) whose
+  mechanical core already runs on engine primitives (`Pipeline`/`JdkInstaller`/`PipelineConsole`) — the same
   "CLI renderer over engine primitives" pattern the doc accepts for the serial/native paths; and the
   single-project build path already drives compile/test/package through engine primitives
-  (`BuildPipeline.coreBuilder`). Hoisting either behind a `BuildService` method is additive future
+  (`BuildPipelines.coreBuilder`). Hoisting either behind a `BuildService` method is additive future
   work, not a layering violation. Flagged for the owner to prioritize.
 
 ---
@@ -374,7 +374,7 @@ Independent re-audit of the invariants after all items landed (each verified by 
 - **CLI names no engine build internals:** zero `BuildGraph.BuildUnit` / `.unit()` references in
   `cli/src/main`; `topoSortModules` deleted; only `NativeCommand`'s front-end-safe
   `BuildGraph.orderModules(Map)` remains. (M4 + M6 + L8.)
-- **Kernel → CLI layering:** zero `import dev.jkbuild.cli`/`command` in any kernel/plugin-api main
+- **Kernel → CLI layering:** zero `import build.jumpkick.cli`/`command` in any kernel/plugin-api main
   source. Intact.
 - **Coordinate-split cluster** (the 7 `ResolvedModule → Coordinate` sites) eliminated; remaining
   `indexOf(':')` are the documented display-coloring (`DependencyTree`, `Diagnostics`) and
@@ -402,10 +402,10 @@ invariant (M6/L8) that the review had just verified. The constructors were publi
 the adapter needed them.
 
 **Fix (same day):** the reconstruction moved engine-side behind two wire factories —
-`BuildService.ModulePlan.fromWire(dir, coord, goal, weight, fullyCached, cache)` and
-`BuildPlanForecast.Module.fromWire(dir, coord, phases, …)`. Both `BuildUnit`-taking constructors
+`BuildService.ModulePlan.fromWire(dir, coord, pipeline, weight, fullyCached, cache)` and
+`BuildPlanForecast.Module.fromWire(dir, coord, steps, …)`. Both `BuildUnit`-taking constructors
 dropped to package-private, and `BuildGraph.BuildUnit` itself is now **package-private**, so the
-boundary is compiler-enforced for good: no code outside `dev.jkbuild.runtime` can name or construct
+boundary is compiler-enforced for good: no code outside `build.jumpkick.runtime` can name or construct
 a unit. The adapter names only `BuildService`/`BuildPlanForecast` facade types. Re-verified: zero
 `BuildGraph.BuildUnit` references in `cli/src/main`; `NativeCommand`'s `orderModules(Map)` remains
 the sole (front-end-safe) `BuildGraph` mention.

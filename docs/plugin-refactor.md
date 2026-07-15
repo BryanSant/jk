@@ -34,11 +34,11 @@ It also folds in two adjacent asks that the same refactor should settle:
 
 ### 2.1 What is already right (keep it)
 
-- **`core/run/` is a clean, TUI-agnostic orchestration kernel.** `Goal`,
-  `Phase`, `PhaseContext`, `GoalListener`, `GoalKey`, `GoalResult`,
-  `PhaseStatus`, `PhaseKind` (SYNC/IO/CPU) form a DAG scheduler with typed
-  cross-phase state and an observer interface. The CLI couples to the engine
-  *only* through `GoalListener` — `ProgressBarListener`, `VerboseListener`,
+- **`core/run/` is a clean, TUI-agnostic orchestration kernel.** `Pipeline`,
+  `Step`, `StepContext`, `PipelineListener`, `PipelineKey`, `PipelineResult`,
+  `StepStatus`, `StepKind` (SYNC/IO/CPU) form a DAG scheduler with typed
+  cross-step state and an observer interface. The CLI couples to the engine
+  *only* through `PipelineListener` — `ProgressBarListener`, `VerboseListener`,
   `NdjsonListener`, `EventLogListener`, `SilentListener` all live in
   `cli/run/`. **This is the seam the plugin SPI should reuse, not replace.**
 - **Core modules have no picocli imports.** `core`, `io`, `resolver`,
@@ -87,7 +87,7 @@ threads, one JVM per workspace" goal:
 │  • arg parse + help/usage rendering (own renderer)           │
 │  • JDK install/select/pin, shell + env integration           │
 │  • build-file & environment validation (fail-fast)           │
-│  • terminal ownership + TUI (GoalListener → progress bars)    │
+│  • terminal ownership + TUI (PipelineListener → progress bars)    │
 │  • `jk tool` / `jkx` ephemeral tool runs                     │
 │  • resolves + launches the Workspace Host                    │
 └───────────────┬─────────────────────────────────────────────┘
@@ -96,7 +96,7 @@ threads, one JVM per workspace" goal:
 ┌─────────────────────────────────────────────────────────────┐
 │  Workspace Host  (JVM on the project-pinned JDK)             │
 │  ONE per workspace; runs modules in parallel on threads.     │
-│  • owns the Goal/Phase scheduler (today's core/run)          │
+│  • owns the Pipeline/Step scheduler (today's core/run)          │
 │  • owns CAS, action cache, resolver, model, I/O services     │
 │  • loads plugins via ISOLATED classloaders (in-process)      │
 │  • forks a child JVM only for plugins that demand it         │
@@ -124,7 +124,7 @@ Why this shape:
   needing incompatible Guava). Same protocol, just over stdio instead of an
   in-process classloader boundary. This subsumes every runner that exists today.
 - **Host lifetime is one-shot — no daemon, by design** (see §3.8). The Host
-  starts, runs the workspace's Goal, exits. This is a deliberate departure from
+  starts, runs the workspace's Pipeline, exits. This is a deliberate departure from
   Gradle's daemon: it keeps the model simple (no lifecycle, staleness, IPC, or
   `--stop` surface) and the warm-JVM upside a daemon buys shrinks as AOT /
   Project Leyden land. Per-invocation startup is the cost we accept for it.
@@ -134,14 +134,14 @@ Why this shape:
 ```
 jk/
 ├── kernel/                      # universal capabilities — no plugin deps
-│   ├── model/        ✓ done     # Goal/Phase/GoalListener, Dependency/Coordinate
+│   ├── model/        ✓ done     # Pipeline/Step/PipelineListener, Dependency/Coordinate
 │   │                            # Zero external deps (JDK + Lombok + JSpecify)
 │   ├── core/         ✓ done     # TOML config parser, lockfile, layout, deny policy
 │   │                            # Depends on :model + tomlj
 │   ├── io/           ✓ done     # HTTP, CAS, repo, forge — depends on :core
 │   ├── resolver/     ✓ done     # PubGrub solver, version coercion
 │   ├── toolchain/    ✓ done     # JDK manager, tools, Gradle/Maven importers
-│   └── host/         ✓ done     # Workspace Host JVM, PluginLoader, BuildPipeline,
+│   └── host/         ✓ done     # Workspace Host JVM, PluginLoader, BuildPipelines,
 │                                # action cache, WorkerProcess/WorkerJar registry
 │
 ├── plugin-api/       ✓ done     # Plugin SPI + HostEvent wire codec
@@ -164,21 +164,21 @@ jk/
 ### 3.3 The Plugin SPI (`:plugin-api`)
 
 A plugin is a jar that exposes one `Plugin` via `ServiceLoader`
-(`META-INF/services/dev.jkbuild.plugin.Plugin`) — no hand-maintained registry.
+(`META-INF/services/build.jumpkick.plugin.Plugin`) — no hand-maintained registry.
 Sketch (illustrative, not final):
 
 ```java
 public interface Plugin {
     PluginManifest manifest();          // id, version, capabilities, isolation hint
-    void register(PluginContext ctx);   // contribute goals/phases/commands
+    void register(PluginContext ctx);   // contribute pipelines/steps/commands
 }
 
 public interface PluginContext {
     Workspace workspace();              // read-only domain model
     Services services();                // CAS, ActionCache, Http, Resolver, Clock
     EventSink events();                 // structured progress — never System.out
-    void contribute(GoalContribution c);// phases this plugin fulfills
-    void addCommand(Command command);   // optional: plugins may add verbs
+    void contribute(PipelineContribution c);// steps this plugin fulfills
+    void addCommand(Command command);   // optional: plugins may add commands
 }
 
 // Services: the universal capabilities the kernel exposes to every plugin.
@@ -194,17 +194,17 @@ public interface Services {
 
 Key properties:
 
-- **`plugin-api` depends only on `:model`** (so plugins see `Goal`, `Phase`,
+- **`plugin-api` depends only on `:model`** (so plugins see `Pipeline`, `Step`,
   `Coordinate`, `Dependency`, …) plus JDK/Lombok/JSpecify. It is the *only*
   thing a third-party plugin compiles against.
-- **Plugins contribute Phases, not whole pipelines.** They hand the Host
-  `Phase` objects (with `requires`, `kind`, `scope`, a body that takes
-  `PhaseContext`). The Host merges contributions from all plugins for a command
-  into one `Goal` DAG — exactly how `BuildPipeline` composes phases today, but
-  the phase bodies now come from plugins instead of from `runtime/`.
-- **Plugins never touch the terminal.** They report through `PhaseContext` /
+- **Plugins contribute Steps, not whole pipelines.** They hand the Host
+  `Step` objects (with `requires`, `kind`, `ticks`, a body that takes
+  `StepContext`). The Host merges contributions from all plugins for a command
+  into one `Pipeline` DAG — exactly how `BuildPipelines` composes steps today, but
+  the step bodies now come from plugins instead of from `runtime/`.
+- **Plugins never touch the terminal.** They report through `StepContext` /
   `EventSink` (`progress`, `label`, `output`, `warn`, `error`). The CLI's
-  `GoalListener` implementations render. This is already true of `core/run`;
+  `PipelineListener` implementations render. This is already true of `core/run`;
   the SPI makes it a contract.
 
 ### 3.4 The Command model
@@ -228,10 +228,10 @@ public interface CliCommand extends Command {  // CLI-presentable
 }
 
 public abstract class BuildCommand implements CliCommand {
-    // Declares the Goals/Phases it contributes; the Host merges them into one
+    // Declares the Pipelines/Steps it contributes; the Host merges them into one
     // pipeline. Exposes everything the progressbar TUI needs (already modeled
-    // by GoalListener/GoalView/GoalResult).
-    public abstract List<GoalContribution> goals(Invocation in);
+    // by PipelineListener/PipelineView/PipelineResult).
+    public abstract List<PipelineContribution> pipelines(Invocation in);
 }
 
 public abstract class UiCommand implements CliCommand {
@@ -243,9 +243,9 @@ public abstract class UiCommand implements CliCommand {
 
 - `BuildCommand` covers `build`, `compile`, `test`, `clean`, `image`, `native`,
   `publish`, `audit`, … — everything that drives the progress TUI. Most of its
-  body becomes "ask the Host to run the Goal assembled from plugin
+  body becomes "ask the Host to run the Pipeline assembled from plugin
   contributions."
-- `UiCommand` covers `new` / `init` / `activate` — the Wizard-driven verbs. The
+- `UiCommand` covers `new` / `init` / `activate` — the Wizard-driven commands. The
   existing `Wizard` / `WizardStep` machinery becomes the `UiCommand` runtime.
 - Parameter/Option/Usage are plain records in `model`. **This is what lets us
   delete picocli** (§5).
@@ -279,11 +279,11 @@ CLI↔Host:
 - **Framing:** single-prefix NDJSON (keep NDJSON for debuggability; one prefix
   `##JKH:`, one parser — both `Ndjson.java` copies collapsed into one in
   `plugin-api`).
-- **Messages map to the existing event vocabulary:** `phases`, `goalStart`,
-  `phaseStart`, `progress`, `scopeUpdate`, `label`, `output`, `warn`, `error`,
-  `phaseFinish`, `goalFinish`, `exit` — i.e. the `GoalListener` interface
+- **Messages map to the existing event vocabulary:** `steps`, `pipelineStart`,
+  `stepStart`, `progress`, `tickUpdate`, `label`, `output`, `warn`, `error`,
+  `stepFinish`, `pipelineFinish`, `exit` — i.e. the `PipelineListener` interface
   serialized. The Host deserializes a child plugin's stream straight into
-  `GoalListener` calls, so process-mode and in-process plugins are
+  `PipelineListener` calls, so process-mode and in-process plugins are
   indistinguishable to the TUI.
 - **One codec, one `WorkerLauncher`** replaces the six `*WorkerSetup` classes,
   the `JkWorkerSync.WORKERS` list, and the per-runner `main()` boilerplate. A
@@ -435,12 +435,12 @@ its own `HelpRenderer`. The native-image reflection config for picocli and the
 - **Phase 1** ✓ — `WorkerProcess` / `PluginHostMain` unified launcher; `WorkerJar` registry.
 - **Phase 2** ✓ — `jk.worker-conventions` convention plugin; SHA emission per-module.
 - **Phase 3** ✓ — Own arg parser + help renderer; picocli deleted.
-- **Phase 4** ✓ — Workspace Host (`HostMain`, `HostDispatch`, `HostLauncher`, `StreamingGoalListener`, `ReceivingGoalListener`); progress bar upgrade via `phases` event.
+- **Phase 4** ✓ — Workspace Host (`HostMain`, `HostDispatch`, `HostLauncher`, `StreamingPipelineListener`, `ReceivingPipelineListener`); progress bar upgrade via `steps` event.
 - **Phase 5** ✓ — Module reorg: `engine`/`runtime` → `kernel/host`; vestigial modules deleted; module moves + renames.
 - **Phase 6** ✓ — `PluginLoader` in-process dispatch (URLClassLoader isolation for friendly plugins); `PluginManifest.isolation` field.
-- **Phase 7** — Third-party plugin resolution from `[plugins]` in `jk.toml`: resolve coordinates → CAS, pin SHA in `jk.lock`, forced `isolation=process`. Prerequisite: `plugin-api` exposes `Goal`/`Phase` to plugins via `:model` dependency (done).
+- **Phase 7** — Third-party plugin resolution from `[plugins]` in `jk.toml`: resolve coordinates → CAS, pin SHA in `jk.lock`, forced `isolation=process`. Prerequisite: `plugin-api` exposes `Pipeline`/`Step` to plugins via `:model` dependency (done).
 
-Each phase is independently shippable and leaves the tree green.
+Each step is independently shippable and leaves the tree green.
 
 ---
 
@@ -449,7 +449,7 @@ Each phase is independently shippable and leaves the tree green.
 All foundational decisions are settled.
 
 1. **Host lifetime — one-shot, no daemon.** The Host starts, runs the workspace
-   Goal, exits. Deliberate differentiation from Gradle; keeps the model simple
+   Pipeline, exits. Deliberate differentiation from Gradle; keeps the model simple
    and the warm-JVM upside shrinks as AOT/Leyden land. (§3.1)
 2. **Plugins always run on a real JDK, never inside the native binary.** The
    native CLI cannot host plugins (GraalVM closes the world at build time); only
@@ -462,7 +462,7 @@ All foundational decisions are settled.
    OS sandboxing (Posture C) are deferred.
 4. **`Command` and friends live in `model`.** `Command`, `CliCommand`,
    `BuildCommand`, `UiCommand`, `Parameter`, `Option`, `Usage` are domain types
-   in `kernel/model`, alongside `Goal`/`Phase` — one SPI module, shared by the
+   in `kernel/model`, alongside `Pipeline`/`Step` — one SPI module, shared by the
    CLI and any future front-end.
 5. **Wire protocol — NDJSON.** Single `##JKH:` prefix, one codec in `plugin-api`.
    Binary framing is not planned.
@@ -472,7 +472,7 @@ All foundational decisions are settled.
 ## 9. Risks
 
 - **Reproducibility regression.** Moving code between modules changes jar
-  contents/order. Mitigated by `jk verify` gating every phase.
+  contents/order. Mitigated by `jk verify` gating every step.
 - **Native-image breakage.** Reflection/resource config is currently
   per-subsystem under `META-INF/native-image/`. Module merges must carry that
   config along. The CLI shrinks (picocli gone, plugin bytecode never reachable),

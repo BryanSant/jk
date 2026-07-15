@@ -103,7 +103,7 @@ with a protocol-zero `busy-upgrading` answer (clients retry against the endpoint
 finish in-flight work, exit. Never a hard kill except `jk self update --now`.
 
 No lull needed. No job killed. The fleet converges immediately. In-flight jobs finish
-under the version that started them — correct, since their goals/action keys were
+under the version that started them — correct, since their pipelines/action keys were
 computed by it.
 
 Cross-engine safety during the overlap window (minutes at most): the CAS and action cache
@@ -235,7 +235,7 @@ latest` upgrades itself through the springboard on Linux and Windows lanes.
 
 | Work item | Where |
 |---|---|
-| `versions/<v>/` + `state/engine/<v>/` in the AccessLedger (touch on launch/delegation); prune keeps current + retention window | `VersionStore`, `AccessLedger`, cache-prune goal |
+| `versions/<v>/` + `state/engine/<v>/` in the AccessLedger (touch on launch/delegation); prune keeps current + retention window | `VersionStore`, `AccessLedger`, cache-prune pipeline |
 | `jk engine status`: daemon version/generation, lame ducks, materialized versions, endpoint | `EngineServer` status handler + `jk status` surface (503fb0d2's panel) |
 
 ## 7. The project wrapper (`jk wrapper`)

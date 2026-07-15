@@ -23,7 +23,7 @@ Already shipped (this plan extends, it does not green-field):
 | `jkx` | shell function = `jk tool run`, installed by `jk activate` | `cli/src/main/resources/activate/*` |
 | Tool envs | `$JK_STATE_DIR/tools/envs/<bin>/env.json`, launcher with baked absolute CAS classpath, LRU-evicted | `ToolLauncher.install` |
 | Script headers | `//jk dep`, `//DEPS`, `//JAVA`, `//JAVAC_OPTIONS`, `//JAVA_OPTIONS`, `//SOURCES`, `//KOTLIN` | `kernel/toolchain-jdk/.../script/ScriptHeaderParser.java` |
-| Engine hosting | `tool-resolve` + `script-prepare` goals; exec always client-side with inherited stdio | `EngineClient`, `EngineProtocol`, `kernel/engine/.../runtime/{ToolGoals,ScriptGoals}.java` |
+| Engine hosting | `tool-resolve` + `script-prepare` pipelines; exec always client-side with inherited stdio | `EngineClient`, `EngineProtocol`, `kernel/engine/.../runtime/{ToolPipelines,ScriptPipelines}.java` |
 | Library catalog | layered short-name → `group:artifact` (bundled / global / local / project) | `kernel/core/.../library/LibraryCatalog.java` |
 | Git plumbing | bare-clone cache, `gh:`/`gl:`/`bb:`/`sr:` shorthands, `@ref`/`#ref`/`!subdir`, forge auth, version derivation | `GitFetcher`, `GitUrl`, `InstallCommand.installFromGit`, `docs/git-source-deps.md` |
 | App install from dir/git | `jk install [source]` handles current-project / local path / git URL / coord | `InstallCommand.java` |
@@ -153,7 +153,7 @@ file continuing to exist), resolves header deps, writes the launcher.
 
 Checked in order:
 
-1. **`jk.toml` present** → it's a jk project. `run` = single-build goal
+1. **`jk.toml` present** → it's a jk project. `run` = single-build pipeline
    (tests skipped, same as `jk run`) in that dir, then exec its
    `[application]` main — i.e. `jk run` without `cd`. `install` =
    delegate to the existing `InstallCommand` app pipeline (native binary
@@ -222,7 +222,7 @@ styles — union them). jk resolves the deps itself (engine-side, CAS-first,
 offline-capable — we do **not** hand resolution to kotlin-main-kts's
 embedded Ivy/Maven resolver) and passes `-classpath` to `kotlinc -script`.
 This also fixes the standing gap that `.kts` currently runs with no deps
-at all: `ScriptGoals`' `kts` mode gains the resolve-deps phase the other
+at all: `ScriptPipelines`' `kts` mode gains the resolve-deps step the other
 modes already have, and `ScriptRunner.runKtsScript` appends the resolved
 classpath.
 
@@ -387,9 +387,9 @@ resolution helper (metadata + TTL cache).
 `env.json`; trust store (`TrustedSources`).
 
 **`kernel/engine` / `kernel/engine-api`**: `tool-target-request` protocol
-evolution; `ToolGoals` grows fetch-url / clone / dir-build phases (reusing
-`GitFetcher`, `MavenRepo`, `ScriptGoals`, the single-build goal);
-`ScriptGoals` kts resolve-deps phase + `//FILES` materialization +
+evolution; `ToolPipelines` grows fetch-url / clone / dir-build steps (reusing
+`GitFetcher`, `MavenRepo`, `ScriptPipelines`, the single-build pipeline);
+`ScriptPipelines` kts resolve-deps step + `//FILES` materialization +
 URL-relative `//SOURCES`.
 
 **`cli`**: `ToolRunCommand`/`ToolInstallCommand` re-target onto the

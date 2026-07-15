@@ -244,7 +244,7 @@ main { max-width: 66rem; margin: 0 auto; padding: 18px 20px 3rem; }
 .eta { color: var(--dim); font-size: 11.5px; font-family: var(--mono); }
 .dir { color: var(--path); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* phase chain — the design's DAG strip */
+/* step chain — the design's DAG strip */
 
 /* Running-card progress bar: same indigo→magenta gradient as the CLI progress bars
  * (Theme PROGRESS_GRADIENT: PRIMARY #3F51B5 → BRIGHT_MAGENTA #E040FB). The width transition
@@ -264,18 +264,18 @@ main { max-width: 66rem; margin: 0 auto; padding: 18px 20px 3rem; }
   transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* The phase strip never wraps: it's one horizontal chain that scrolls under ◂ / ▸ nav buttons.
+/* The step strip never wraps: it's one horizontal chain that scrolls under ◂ / ▸ nav buttons.
  * overflow:hidden (not auto/scroll) means no scrollbar — the buttons are the only way to page,
- * and the track is moved programmatically via scrollLeft (see app.js PhaseChain). */
-.phase-chain-wrap { position: relative; margin-top: 11px; }
-.phase-chain {
+ * and the track is moved programmatically via scrollLeft (see app.js StepChain). */
+.step-chain-wrap { position: relative; margin-top: 11px; }
+.step-chain {
   display: flex;
   align-items: center;
   flex-wrap: nowrap;
   overflow: hidden;
 }
 
-/* Edge nav buttons — shown only when phases are hidden on that side. */
+/* Edge nav buttons — shown only when steps are hidden on that side. */
 .chain-nav {
   position: absolute;
   top: 50%;
@@ -299,7 +299,7 @@ main { max-width: 66rem; margin: 0 auto; padding: 18px 20px 3rem; }
 .chain-nav.left { left: 0; }
 .chain-nav.right { right: 0; }
 
-/* A soft fade under each active nav button so a partially-hidden phase reads as "cut off". */
+/* A soft fade under each active nav button so a partially-hidden step reads as "cut off". */
 .chain-fade {
   position: absolute;
   top: 0;
@@ -311,7 +311,7 @@ main { max-width: 66rem; margin: 0 auto; padding: 18px 20px 3rem; }
 .chain-fade.left { left: 0; background: linear-gradient(to right, var(--s1), transparent); }
 .chain-fade.right { right: 0; background: linear-gradient(to left, var(--s1), transparent); }
 
-.phase-node {
+.step-node {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -324,15 +324,15 @@ main { max-width: 66rem; margin: 0 auto; padding: 18px 20px 3rem; }
   white-space: nowrap;
 }
 
-.phase-node.running { border-color: #2f7dd6; color: #cfe6ff; background: var(--runc); }
-.phase-node.success { border-color: rgba(76, 175, 80, 0.4); color: var(--ok); background: rgba(53, 123, 56, 0.14); }
-.phase-node.failed { border-color: rgba(233, 30, 99, 0.5); color: var(--err); background: rgba(233, 30, 99, 0.12); }
-.phase-node.skipped, .phase-node.cancelled { opacity: 0.55; }
-.phase-glyph.ok { color: var(--ok); }
-.phase-glyph.err { color: var(--err); }
+.step-node.running { border-color: #2f7dd6; color: #cfe6ff; background: var(--runc); }
+.step-node.success { border-color: rgba(76, 175, 80, 0.4); color: var(--ok); background: rgba(53, 123, 56, 0.14); }
+.step-node.failed { border-color: rgba(233, 30, 99, 0.5); color: var(--err); background: rgba(233, 30, 99, 0.12); }
+.step-node.skipped, .step-node.cancelled { opacity: 0.55; }
+.step-glyph.ok { color: var(--ok); }
+.step-glyph.err { color: var(--err); }
 
-.phase-edge { height: 2px; width: 18px; background: var(--bd); flex: none; }
-.phase-edge.success { background: rgba(76, 175, 80, 0.45); }
+.step-edge { height: 2px; width: 18px; background: var(--bd); flex: none; }
+.step-edge.success { background: rgba(76, 175, 80, 0.45); }
 
 /* console tail (in-flight output + engine log) */
 
@@ -359,8 +359,8 @@ main { max-width: 66rem; margin: 0 auto; padding: 18px 20px 3rem; }
 .module { margin-top: 12px; }
 .module-row { display: flex; align-items: center; gap: 8px; }
 .mname { color: var(--path); font-size: 12px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* the module's phase-chain sits just beneath its row, slightly tightened */
-.module .phase-chain-wrap { margin-top: 6px; }
+/* the module's step-chain sits just beneath its row, slightly tightened */
+.module .step-chain-wrap { margin-top: 6px; }
 
 .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; align-self: center; }
 .dot.running { background: var(--run); animation: pulse 1.4s ease-in-out infinite; }
@@ -530,7 +530,7 @@ table.stats.history td.ok { color: var(--ok); }
 .panel dt { color: var(--mu); }
 .panel dd { margin: 0; overflow-wrap: anywhere; }
 
-/* A panel that spans the whole .panels grid (the build-stats phase table, the engine log). */
+/* A panel that spans the whole .panels grid (the build-stats step table, the engine log). */
 .panel.wide { grid-column: 1 / -1; }
 
 /* The Cache panel's utilization meter sits above its breakdown list. */

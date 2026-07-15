@@ -35,7 +35,7 @@ Tooling API.
 Android Studio ──(project system SPI)── jk-studio plugin ──(HTTP + NDJSON events)── jk engine
                                                                  │
                                                                  └── the same ExecPlans/IdeOps/
-                                                                     BuildPipeline every CLI verb uses
+                                                                     BuildPipelines every CLI verb uses
 ```
 
 - **Sync** = `GET /ide/model?dir=…` (a JSON rendering of the existing `IdeWireModel`, extended

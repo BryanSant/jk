@@ -1,8 +1,8 @@
 [project]
-group    = "dev.jkbuild"
+group    = "build.jumpkick"
 name     = "jk-model"
 version  = "0.10.0-SNAPSHOT"
-description = "jk domain model: Goal/Phase/GoalListener, Dependency/Coordinate, zero external deps."
+description = "jk domain model: Pipeline/Step/PipelineListener, Dependency/Coordinate, zero external deps."
 jdk      = 25
 java     = 25
 

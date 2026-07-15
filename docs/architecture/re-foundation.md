@@ -12,7 +12,7 @@ app, GitHub Action). Pre-1.0: breaking changes are welcome; no back-compat shims
 > spectrum); the `ModulePlan`/`Module`/`ResolvedGraph` engine boundary is now compiler-enforced
 > (package-private accessors) and the CLI no longer names `BuildGraph`; `BuildService.explain` landed;
 > `SessionContext` is now `ScopedValue`-backed with a per-session cancel token; the `AutoLock` and
-> `NativeImageDriver` kernel-console-I/O leaks are routed through `PhaseContext.output`; and the
+> `NativeImageDriver` kernel-console-I/O leaks are routed through `StepContext.output`; and the
 > `Coordinate.ofModule` helper retired the coordinate-split cluster M5 had left behind.
 
 ## North-star architecture
@@ -24,7 +24,7 @@ app, GitHub Action). Pre-1.0: breaking changes are welcome; no back-compat shims
      ▼
   ┌──────────────────────────── jk-api (published surface) ────────────────────────────┐
   │  BuildService (facade)   Session/BuildRequest/BuildResult (DTOs)                     │
-  │  GoalListener event stream   BuildStep + Worker SPIs   domain model (Coordinate, …)  │
+  │  PipelineListener event stream   BuildStep + Worker SPIs   domain model (Coordinate, …)  │
   └──────────────────────────────────────────────────────────────────────────────────┘
      ▲
   engine (BuildService impl: scheduler, pipeline, tasks)  ── forks ──▶  plugin workers
@@ -60,20 +60,20 @@ Rules:
 
 - **M1 — Session + de-globalize the kernel.** New `Session` (core) carrying `{JkConfig, workingDir,
   cacheDir, jdksDir, jvm settings, jdk/graal selection, output sink, cancel token}`. Thread through
-  `BuildPipeline.Inputs`/`PhaseContext`. Remove kernel globals: `ActiveConfig` (core/io/engine reads),
-  `JvmOptions.processSettings/heapPlan`, `WorkerSlots` static, `BuildPipeline.TEST_GATE/parallelTests`,
+  `BuildPipelines.Inputs`/`StepContext`. Remove kernel globals: `ActiveConfig` (core/io/engine reads),
+  `JvmOptions.processSettings/heapPlan`, `WorkerSlots` static, `BuildPipelines.TEST_GATE/parallelTests`,
   `jk.jdk`/`jk.graal` system properties, `Quietable`'s `System.setOut`. Move `JvmOptions.Settings`
   (value) to `core`; the JVM-applying logic stays in `engine`. `GlobalCancel` becomes a cooperative
   per-session token (CLI keeps a process-level Ctrl-C handler that signals it).
 - **M2 — BuildService facade + hoist orchestration.** Move `BuildCommand`'s workspace driver
   (parallel scheduler, `topoSortModules`, `ensureWorkspaceLockFresh`, memory planning, one shared
-  ETA/calibration planner used by both build and explain) and the `JdkInstall` goal DAG into engine
-  services. `build/explain/lock/installJdk(request, GoalListener) → result`. Typed `BuildResult`.
+  ETA/calibration planner used by both build and explain) and the `JdkInstall` pipeline DAG into engine
+  services. `build/explain/lock/installJdk(request, PipelineListener) → result`. Typed `BuildResult`.
   **Landed (2026-07):** `BuildService.buildWorkspace` (build) + `BuildService.explain → ExplainPlan`
   (dry-run forecast) + the workspace lock-freshness guard. **Deferred:** a first-class
-  `lock`/`installJdk` facade — `jk jdk install` is an interactive Goal DAG whose mechanical core
+  `lock`/`installJdk` facade — `jk jdk install` is an interactive Pipeline DAG whose mechanical core
   already runs on engine primitives; see `re-foundation-gaps.md` §L8 for the rationale.
-- **M3 — BuildStep SPI.** Promote `coreBuilder`'s inline phase-body lambdas to `BuildStep` classes
+- **M3 — BuildStep SPI.** Promote `coreBuilder`'s inline step-body lambdas to `BuildStep` classes
   (Strategy + Template-Method); `coreBuilder` becomes an assembler. Delete the dead
   `PluginContext.contribute`/`Plugin#register` or make it the in-process face of `BuildStep`.
 - **M4 — Worker SPI + adapters.** Typed `WorkerClient<Req,Res>` owning locate(`WorkerJar`) + spec
@@ -101,8 +101,8 @@ Branch: `refoundation`. Every commit below is green (`./gradlew :cli:test`).
 **Done**
 - Blueprint (this doc).
 - **M1a** — `Session` + `SessionContext` (core); `ActiveConfig` reduced to a shim over them.
-- **M1b** — `Session` threaded through `BuildPipeline.Inputs` (delegating ctors default it from
-  `SessionContext.current()`, zero call-site churn); hot build-path reads (`BuildPipeline` phase
+- **M1b** — `Session` threaded through `BuildPipelines.Inputs` (delegating ctors default it from
+  `SessionContext.current()`, zero call-site churn); hot build-path reads (`BuildPipelines` step
   bodies, `EffortWeights.predict`) now read `in.session().config()`.
 - **M5 — Model as single currency (DONE)** —
   - *Post-audit correction (2026-07):* "delete the ~43 `indexOf(':')` splits" was overstated — a
@@ -143,16 +143,16 @@ Branch: `refoundation`. Every commit below is green (`./gradlew :cli:test`).
 The mutable global *channels that carry request data* now live on `Session` (each a green commit):
 - `JvmOptions.processSettings`/`setProcessSettings` → `Session.jvm` (`WorkerTuning`, moved to core).
 - `jk.jdk`/`jk.graal` `System.setProperty` → `Session.jdkSpec`/`graalSpec`; toolchain readers read it.
-- `BuildPipeline.parallelTests`/`setParallelTests` → `Session.parallelTests`.
+- `BuildPipelines.parallelTests`/`setParallelTests` → `Session.parallelTests`.
 - **`ActiveConfig` deleted** — it had been a shim over `SessionContext.current().config()` since M1a;
   all ~40 refs migrated. `SessionContext` is now the single process-wide request holder (adding a
   `ScopedValue` binding would enable concurrent in-JVM builds with no caller changes).
 - **`Quietable` relocated** kernel/core → cli: the kernel no longer calls `System.setOut`. Suppressing
   the CLI's own stdout for `--quiet` is a client concern (the engine routes output through
-  `PhaseContext`/`GoalListener`, never `System.out`).
+  `StepContext`/`PipelineListener`, never `System.out`).
 
 **M1c remainder (deferred — shared primitives; documented)**
-- `WorkerSlots.slots` and `BuildPipeline.TEST_GATE` — shared *concurrency primitives* (not request
+- `WorkerSlots.slots` and `BuildPipelines.TEST_GATE` — shared *concurrency primitives* (not request
   data). Correct as per-invocation for the single-process CLI; per-session pools are server-hardening
   (a per-build engine context or a `ScopedValue`), not a data-leak fix.
 - Leaf `refresh`/`rerun` reads (`restore/storePackaged`, `artifactFresh`, `TestSupport`,
@@ -173,18 +173,18 @@ The mutable global *channels that carry request data* now live on `Session` (eac
   real 2-module workspace (dep ordering, live view, warm-cache no-op, `--no-parallel`, artifact
   linking, fail-fast exit=1).
 - **`BuildService.buildWorkspace(request, WorkspaceBuildListener)`** landed — the front-end-callable
-  entry point that owns the whole workspace build (resolve graph → memory plan → assemble goals →
-  schedule → run each goal → link artifacts → fail-fast), emitting `onPlan`/`onModuleStart`(→ a
-  `GoalListener`)/`onModuleFinish` events and writing nothing to stdout. The CLI's non-animated path
+  entry point that owns the whole workspace build (resolve graph → memory plan → assemble pipelines →
+  schedule → run each pipeline → link artifacts → fail-fast), emitting `onPlan`/`onModuleStart`(→ a
+  `PipelineListener`)/`onModuleFinish` events and writing nothing to stdout. The CLI's non-animated path
   (`--verbose`/`--output json`) is now a pure renderer over it (`runWorkspaceHeadless`), replacing
   `runGraphPlain`+`buildUnit`+`report`. A headless front-end (Action, web backend) drives a full
   build with one call. Verified end-to-end on a real 2-module workspace (dep order, warm-cache,
   artifact linking, fail-fast exit=1, `--output json`).
 - **Phase 2 (done):** the interactive live view (`runGraphLive`) now also routes through
   `buildWorkspace` — one workspace-build entry point for both headless and live. `buildWorkspace`
-  owns the ETA model + emits `onEtaEstimate`, and records the learned `PhaseTimings`/`Calibration`;
+  owns the ETA model + emits `onEtaEstimate`, and records the learned `StepTimings`/`Calibration`;
   the CLI live view is a pure renderer (`onPlan`→calibrate bar, `onModuleStart`→existing
-  `AggregateModuleListener`, `onModuleFinish`→`[k/N]` + deferred output). No `GoalConsole` refactor
+  `AggregateModuleListener`, `onModuleFinish`→`[k/N]` + deferred output). No `PipelineConsole` refactor
   was needed — `AggregateModuleListener` is directly constructible. Removed `buildUnitLive`,
   `UnitOutcome`, the inline pre-scan/ETA. Verified on a real 3-module dep chain (topo order,
   warm-cache shortcut, incremental cascade, artifact linking, fail-fast exit 1). Only TTY *animation*
@@ -195,19 +195,19 @@ The mutable global *channels that carry request data* now live on `Session` (eac
   (both are CLI renderers over engine primitives), just remaining single-entry-point consolidation.
 
 - **M3 — Step SPI + dead-code removal (DONE)** —
-  - Deleted the dead `PluginContext` SPI (`project()`/`workDir()`/`contribute(Phase)`/`config()`): it
+  - Deleted the dead `PluginContext` SPI (`project()`/`workDir()`/`contribute(Step)`/`config()`): it
     described an in-process `Plugin#register` model that never existed — `Plugin` has only
     `manifest()`/`run()`, every plugin runs as a forked worker, and nothing called `contribute()`.
-    The real composable-step SPI is `Phase`/`Phase.Body` + typed `GoalKey` context; a separate
-    `BuildStep` type would be redundant indirection over `Phase.Body`.
-  - Decomposed `coreBuilder`'s ~1000-line monolith: its 12 inline phase bodies (which captured a
-    dozen effectively-final locals by closure) are now `private static Phase <name>Phase(StepContext
-    cx)` methods over an explicit `StepContext` record — matching the pre-existing tail-phase pattern
-    (`shadowPhase`/`sourcesPhase`/`nativeImagePhase`). Bodies relocated verbatim (verified
+    The real composable-step SPI is `Step`/`Step.Body` + typed `PipelineKey` context; a separate
+    `BuildStep` type would be redundant indirection over `Step.Body`.
+  - Decomposed `coreBuilder`'s ~1000-line monolith: its 12 inline step bodies (which captured a
+    dozen effectively-final locals by closure) are now `private static Step <name>Step(StepContext
+    cx)` methods over an explicit `StepContext` record — matching the pre-existing tail-step pattern
+    (`shadowStep`/`sourcesStep`/`nativeStep`). Bodies relocated verbatim (verified
     byte-identical); `coreBuilder` is now a readable assembly.
 
 - **M4 — worker SPI (PARTIALLY DONE)** —
-  - **Done — `compat` de-dup:** `compat-bridge` carried 7 (near-)duplicate `dev.jkbuild.compat`
+  - **Done — `compat` de-dup:** `compat-bridge` carried 7 (near-)duplicate `build.jumpkick.compat`
     classes (`BuildTool`/`InstalledTool`/`PassthroughEnv`/`ToolDistribution`/`ToolInstaller`/
     `ToolProvisioning`/`ToolRegistry`) already provided by `:toolchain` (a dependency). Deleted the
     worker's copies; the two cosmetically-divergent ones were functionally identical.
@@ -242,13 +242,13 @@ The mutable global *channels that carry request data* now live on `Session` (eac
   - **Done — `jk-api` blessed (it already exists as `:model`).** Investigation outcome: the physical
     API module the milestone imagined *already exists* — the codebase evolved so that `:model` is a
     zero-external-dependency, dependency-graph-leaf module holding the entire contract-type surface
-    (`dev.jkbuild.model` + the `model.command` CliCommand/Invocation SPI + the `dev.jkbuild.run`
-    Goal/Phase/GoalListener/GoalKey scheduler SPI). Blessed it explicitly as "jk-api" in its build
+    (`build.jumpkick.model` + the `model.command` CliCommand/Invocation SPI + the `build.jumpkick.run`
+    Pipeline/Step/PipelineListener/PipelineKey scheduler SPI). Blessed it explicitly as "jk-api" in its build
     description. A build-*driving* front-end depends on `:engine` for the `BuildService` facade — same
     as the CLI does — which is the north-star (engine=server, any client incl. CLI drives it), not a
     gap; that facade is engine-coupled by design (`ModulePlan` carries the internal `BuildGraph.BuildUnit`
     to run modules). Verified the front-end event contract is already impl-free: the CLI consumes only
-    `ModulePlan.coord()/dir()/goal()/weight()/fullyCached()/cache()`, never `unit()` — documented `unit()`
+    `ModulePlan.coord()/dir()/pipeline()/weight()/fullyCached()/cache()`, never `unit()` — documented `unit()`
     as engine-internal. Creating a redundant `:api` gradle module (Java packages unchanged, `:model`
     already zero-dep + blessed, no publishing configured) would be ceremony, not value — explicitly not done.
   - **Done — CLI presentation facades (`CliOutput`, `Exit`, `ProjectContext`).**
@@ -260,7 +260,7 @@ The mutable global *channels that carry request data* now live on `Session` (eac
       a blind sweep would mislabel those.
     - **`CliOutput`** (cli): the single user-facing output seam (`out`/`err`/`outRaw`/`errRaw` +
       `stdout()`/`stderr()` stream accessors) — the client-side counterpart to the engine routing
-      through `GoalListener`/`PhaseContext`. All ~361 direct `System.out`/`System.err` uses in 60
+      through `PipelineListener`/`StepContext`. All ~361 direct `System.out`/`System.err` uses in 60
       command files route through it (behaviour-identical; `printf`/`Object`-arg/method-ref/stream-arg
       cases preserved). A generated-code template in `NewScaffolder` correctly keeps `System.out` — it
       is the *user's* scaffolded code, not jk's output.
@@ -280,16 +280,16 @@ The mutable global *channels that carry request data* now live on `Session` (eac
 One engine entry point, `BuildService.buildWorkspace(WorkspaceRequest, WorkspaceBuildListener)`, owns
 *everything* about running a workspace build — because all of it is engine knowledge, reusable by any
 front-end:
-- **Orchestration:** resolve graph → memory plan → assemble goals → schedule (dep order, concurrent
-  levels) → run each goal → link artifacts → fail-fast.
+- **Orchestration:** resolve graph → memory plan → assemble pipelines → schedule (dep order, concurrent
+  levels) → run each pipeline → link artifacts → fail-fast.
 - **Estimation model:** the ETA (schedule-aware `EffortWeights.scheduleMillis` + `Calibration` cold
   anchor + per-module warm/cold rate) is computed in the engine and **emitted as `onEtaEstimate`
   events** — the front-end only renders the number. Re-projected from measured throughput per level.
-- **Learning:** the per-module `PhaseTimings` ledger (EWMA) and host `Calibration` are recorded by the
+- **Learning:** the per-module `StepTimings` ledger (EWMA) and host `Calibration` are recorded by the
   engine after a successful build — so every front-end's future estimates improve, not just the CLI's.
 
 Front-ends are **pure renderers over `WorkspaceBuildListener`**: `onPlan` (per-module weights →
-calibrate a bar), `onModuleStart` (→ return that module's `GoalListener`; the CLI returns its existing
+calibrate a bar), `onModuleStart` (→ return that module's `PipelineListener`; the CLI returns its existing
 `AggregateModuleListener`), `onModuleFinish`, `onEtaEstimate`, `onWorkspaceFinish`. The CLI live TUI,
 the headless `--verbose`/`--output json` path, a GitHub Action, an IDE, and a web backend all consume
 the same events. `WorkspaceRequest.dirtyHint` lets a caller that already forecasted (the CLI's
@@ -301,5 +301,5 @@ ordering, glyph/theme choice, and the fully-cached-shortcut *rendering* decision
 ## Invariants to hold at every commit
 - `./gradlew :cli:test` (and the full suite) green.
 - No new `System.out`/`System.err`/`System.setOut` in kernel modules; user text routes through
-  `PhaseContext`/`GoalListener` (server) or `CliOutput` (client).
+  `StepContext`/`PipelineListener` (server) or `CliOutput` (client).
 - No new process-global mutable statics in the kernel.

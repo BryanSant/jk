@@ -1,5 +1,5 @@
 [project]
-group    = "dev.jkbuild"
+group    = "build.jumpkick"
 name     = "jk-toolchain"
 version  = "0.10.0-SNAPSHOT"
 description = "jk toolchain (engine remainder): resolver-backed tool installs, compat/import machinery."
@@ -7,10 +7,10 @@ jdk      = 25
 java     = 25
 
 [dependencies]
-jk-core          = { group = "dev.jkbuild", name = "jk-core",          version = "0.10.0-SNAPSHOT" }
-jk-io            = { group = "dev.jkbuild", name = "jk-io",            version = "0.10.0-SNAPSHOT" }
-jk-resolver      = { group = "dev.jkbuild", name = "jk-resolver",      version = "0.10.0-SNAPSHOT" }
-jk-toolchain-jdk = { group = "dev.jkbuild", name = "jk-toolchain-jdk", version = "0.10.0-SNAPSHOT" }
+jk-core          = { group = "build.jumpkick", name = "jk-core",          version = "0.10.0-SNAPSHOT" }
+jk-io            = { group = "build.jumpkick", name = "jk-io",            version = "0.10.0-SNAPSHOT" }
+jk-resolver      = { group = "build.jumpkick", name = "jk-resolver",      version = "0.10.0-SNAPSHOT" }
+jk-toolchain-jdk = { group = "build.jumpkick", name = "jk-toolchain-jdk", version = "0.10.0-SNAPSHOT" }
 
 [test-dependencies]
 assertj-core            = { group = "org.assertj",        name = "assertj-core",            version = "3.27.7" }

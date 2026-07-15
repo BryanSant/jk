@@ -1,7 +1,7 @@
 # Authoring a jk build plugin
 
 A build plugin teaches jk a new `jk.toml` table — `[spring-boot]`, `[android]`, `[protobuf]` —
-and shapes the standard verbs around it. This guide walks the whole surface using the plugin jk
+and shapes the standard commands around it. This guide walks the whole surface using the plugin jk
 itself ships, [`plugins/spring-boot`](../plugins/spring-boot), as the blueprint. Design
 rationale lives in [build-plugins-plan.md](./build-plugins-plan.md).
 
@@ -124,15 +124,15 @@ protocol-prefix = "##JKSB:"      # your worker's protocol line marker
 
 ## 3. The code layer
 
-Implement `dev.jkbuild.plugin.build.BuildPlugin` and register hooks; drive the jar's `main`
-through `BuildPluginHarness` (it speaks the describe/run-step/package/verb protocol for you):
+Implement `build.jumpkick.plugin.build.BuildPlugin` and register hooks; drive the jar's `main`
+through `BuildPluginHarness` (it speaks the describe/run-step/package/command protocol for you):
 
 ```java
 public final class SpringBootPlugin implements BuildPlugin {
     @Override
     public void register(BuildPluginContext ctx) {
         ctx.step(StepSpec.named("spring-aot")
-            .after(Anchor.COMPILE).before(Anchor.PACKAGE)
+            .after(Phase.COMPILE).before(Phase.PACKAGE)
             .inputs(In.classes(), In.runtimeClasspath(), In.config())
             .outputs(Out.dir("aot/classes"), Out.dir("aot/resources"))
             .contributesClasses("aot/classes")
@@ -146,7 +146,7 @@ public final class SpringBootPlugin implements BuildPlugin {
             .inputs(In.classes(), In.runtimeEntries(), In.stepOutput("spring-aot"), In.config())
             .produce((in, out) -> { /* assemble the jar from in.runtimeEntries() */ }));
 
-        ctx.verb(VerbSpec.named("hello")
+        ctx.command(VerbSpec.named("hello")
             .description("Say hello")
             .run(exec -> { exec.out("hello"); return 0; }));
     }

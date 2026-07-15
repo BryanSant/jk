@@ -52,7 +52,7 @@ Implications:
 ## Adding a new alias
 
 1. Add an entry to `Jk.VERB_ALIASES` in
-   `cli/src/main/java/dev/jkbuild/cli/Jk.java`. The value is a
+   `cli/src/main/java/build/jumpkick/cli/Jk.java`. The value is a
    `List<String>` — single element for a straight rename, multiple
    elements for a path expansion.
 2. Add a row to the table above.

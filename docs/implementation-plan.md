@@ -19,7 +19,7 @@ This document is a **terse strategic implementation overview**, not a per-featur
 
 - **Language: pure Java 25** for jk's own sources during bootstrap. No Kotlin in jk-the-binary. Rationale: GraalVM native-image is most predictable on plain Java; the Kotlin compiler is a *tool jk consumes* for its users, not a build-time dependency of jk itself. Re-evaluate after v1.0 ships.
 - **Build tool: Gradle 9.5.1** through v0.8, replaced by jk itself at v0.9 (PRD §4 self-hosting milestone).
-- **Base package: `dev.jkbuild`.** All internal packages under `dev.jkbuild.*`.
+- **Base package: `build.jumpkick`.** All internal packages under `build.jumpkick.*`.
 - **License: Apache 2.0.** `LICENSE` + `NOTICE` at repo root; every source file carries `// SPDX-License-Identifier: Apache-2.0` as its first comment. `CONTRIBUTING.md` (added at v0.1 start) will spell out the header form for contributors.
 
 ---
@@ -34,12 +34,12 @@ Listed in dependency order — foundations first, the native binary last.
 
 | Module | Packages | Responsibility |
 |---|---|---|
-| `:model` | `dev.jkbuild.{model, run, util, credential, image, publish}` | Domain types: coordinate model, `jk.toml` data model, `GoalKey` / `Phase` / `PhaseKind`, path utilities, credential types, image and publish metadata. Zero network, zero process spawning. |
-| `:core` | `dev.jkbuild.{config, lock, layout, library, audit, deny}` | TOML parser wrapper (line-precise diagnostics), `jk.toml` parse + validation, `jk.lock` read/write/merge, `BuildLayout` path conventions, library catalog lookup, audit and deny policy parsers. |
-| `:io` | `dev.jkbuild.{http, cache, repo, forge}` | All fetches and on-disk artifact storage. HTTP/2 client wrapper, CAS + action cache + `~/.m2` view, Maven repo client (sparse-index, mirror, auth, normalization), forge credential helpers. |
-| `:resolver` | `dev.jkbuild.resolver` | PubGrub solver, version selectors, prose conflict diagnostics. Depends on `:io` for POM fetch, `:core` for types. |
-| `:toolchain` | `dev.jkbuild.{jdk, script, tool, discovery, compat, gradle, mvn, kotlin}` | Anything that manages a JVM, kotlinc, mvn, or gradle on disk. JDK manager (JetBrains feed client, install/default/graal/pin, the `jk activate` shell hook + `jk shell`, unified resolution shared with the build), JBang-compatible single-file Java 25 scripts, `jk tool install` / `jk tool run` tool envs with LRU eviction, and the good-neighbor `discovery` package (probes for jk/IntelliJ/Gradle/SDKMAN/JBang/mise/asdf/jenv/Homebrew/system — used for JDK discovery and for Maven/Gradle/Kotlin tools). Also owns the Maven/Gradle migration layer (`jk import`, `jk export`, passthroughs). |
-| `:engine` | `dev.jkbuild.{compile, runtime, task, test, git, worker}` | The compile/test pipeline. Action graph engine + parallel worker pool (`BuildPipeline`), subprocess-driven javac and kotlinc strategies behind a pluggable `CompileStrategy` SPI, JUnit Platform launcher with Surefire-XML/SARIF/JaCoCo output, progress-bar weight prediction (`EffortWeights` + `PhaseTimings`). (Named `:engine`, not `:build`, because `build/` at the repo root would collide with Gradle's default output directory.) |
+| `:model` | `build.jumpkick.{model, run, util, credential, image, publish}` | Domain types: coordinate model, `jk.toml` data model, `PipelineKey` / `Step` / `StepKind`, path utilities, credential types, image and publish metadata. Zero network, zero process spawning. |
+| `:core` | `build.jumpkick.{config, lock, layout, library, audit, deny}` | TOML parser wrapper (line-precise diagnostics), `jk.toml` parse + validation, `jk.lock` read/write/merge, `BuildLayout` path conventions, library catalog lookup, audit and deny policy parsers. |
+| `:io` | `build.jumpkick.{http, cache, repo, forge}` | All fetches and on-disk artifact storage. HTTP/2 client wrapper, CAS + action cache + `~/.m2` view, Maven repo client (sparse-index, mirror, auth, normalization), forge credential helpers. |
+| `:resolver` | `build.jumpkick.resolver` | PubGrub solver, version selectors, prose conflict diagnostics. Depends on `:io` for POM fetch, `:core` for types. |
+| `:toolchain` | `build.jumpkick.{jdk, script, tool, discovery, compat, gradle, mvn, kotlin}` | Anything that manages a JVM, kotlinc, mvn, or gradle on disk. JDK manager (JetBrains feed client, install/default/graal/pin, the `jk activate` shell hook + `jk shell`, unified resolution shared with the build), JBang-compatible single-file Java 25 scripts, `jk tool install` / `jk tool run` tool envs with LRU eviction, and the good-neighbor `discovery` package (probes for jk/IntelliJ/Gradle/SDKMAN/JBang/mise/asdf/jenv/Homebrew/system — used for JDK discovery and for Maven/Gradle/Kotlin tools). Also owns the Maven/Gradle migration layer (`jk import`, `jk export`, passthroughs). |
+| `:engine` | `build.jumpkick.{compile, runtime, task, test, git, worker}` | The compile/test pipeline. Action graph engine + parallel worker pool (`BuildPipelines`), subprocess-driven javac and kotlinc strategies behind a pluggable `CompileStrategy` SPI, JUnit Platform launcher with Surefire-XML/SARIF/JaCoCo output, progress-bar weight prediction (`EffortWeights` + `StepTimings`). (Named `:engine`, not `:build`, because `build/` at the repo root would collide with Gradle's default output directory.) |
 
 ### Plugin modules (`plugins/`)
 
@@ -65,7 +65,7 @@ The SPI that kernel `:engine` and all plugin modules share. Plugins declare thei
 
 | Module | Packages | Responsibility |
 |---|---|
-| `:cli` | `dev.jkbuild.{cli, command}` | Verb dispatch, arg parsing (`ArgParser`), ANSI/TUI rendering, exit codes. Depends on every kernel module. Also the application entrypoint: applies `application` + `org.graalvm.buildtools.native` plugins, so `./gradlew :cli:installDist` produces the JVM distribution and `./gradlew :cli:nativeCompile` the native binary. |
+| `:cli` | `build.jumpkick.{cli, command}` | Verb dispatch, arg parsing (`ArgParser`), ANSI/TUI rendering, exit codes. Depends on every kernel module. Also the application entrypoint: applies `application` + `org.graalvm.buildtools.native` plugins, so `./gradlew :cli:installDist` produces the JVM distribution and `./gradlew :cli:nativeCompile` the native binary. |
 
 ---
 
@@ -73,8 +73,8 @@ The SPI that kernel `:engine` and all plugin modules share. Plugins declare thei
 
 | Slot | Pick | Rationale |
 |---|---|---|
-| TOML parser | **tomlj** (`org.tomlj:tomlj`) | Pure Java, TOML 1.0 conformant, GraalVM-friendly, no transitive Jackson. Wrapped in `dev.jkbuild.config` with line-precise error rendering. (Lightbend Config was the original pick; tomlj was substituted for its lighter footprint and GraalVM compatibility.) |
-| CLI parsing | **Hand-rolled `ArgParser`** (`dev.jkbuild.cli.args`) | Zero reflection, no native-image hints needed, gives full control over alias rewriting and help rendering. picocli was the original pick; it was phased out as commands moved to the ported dispatch layer. |
+| TOML parser | **tomlj** (`org.tomlj:tomlj`) | Pure Java, TOML 1.0 conformant, GraalVM-friendly, no transitive Jackson. Wrapped in `build.jumpkick.config` with line-precise error rendering. (Lightbend Config was the original pick; tomlj was substituted for its lighter footprint and GraalVM compatibility.) |
+| CLI parsing | **Hand-rolled `ArgParser`** (`build.jumpkick.cli.args`) | Zero reflection, no native-image hints needed, gives full control over alias rewriting and help rendering. picocli was the original pick; it was phased out as commands moved to the ported dispatch layer. |
 | HTTP/2 client | **`java.net.http.HttpClient`** (JDK built-in) | Zero added dep, HTTP/2 native, virtual-thread friendly, GraalVM-safe. Avoids Netty's binary-size cost. |
 | Git client | **JGit** (`org.eclipse.jgit`) | Pure Java, no native libs, well-tested under GraalVM. libgit2 via FFI is rejected for native-image complexity. |
 | Bytecode / ABI | **ASM 9.10** | PRD-specified. Pulled in at v0.2 for jar manifest assembly; v1.5 ABI fingerprinting reuses it. |
@@ -122,7 +122,7 @@ Logical sequencing, dependency-driven, no calendar estimates. Each milestone is 
 ## 6. Native-image strategy
 
 - Build with **GraalVM 25 CE** (bootstrap JDK) via the `org.graalvm.buildtools.native` Gradle plugin through v0.8. From v0.9 onward, jk builds itself; the Gradle build is retained as bootstrap.
-- Each subsystem owns `META-INF/native-image/dev.jkbuild/<subsystem>/` config (reflection, resource, JNI, proxy). Aggregated at link time.
+- Each subsystem owns `META-INF/native-image/build.jumpkick/<subsystem>/` config (reflection, resource, JNI, proxy). Aggregated at link time.
 - Binary-size knobs applied at v0.9: no-op GC (`-R:+UseSerialGC` with low-throughput tuning), `-Os` size-priority codegen, stripped debug symbols, `--initialize-at-build-time` for the static-init-heavy parsers. Result: 138 MB on linux-x86_64 (down from 187 MB).
 - CI matrix per release: `linux-x86_64-musl-static`, `linux-aarch64-musl-static`, `macos-aarch64-dynamic`, `macos-x86_64-dynamic`, `windows-x86_64-dynamic`.
 - Performance gate before merging to `main`: `jk --help` cold start ≤ 50 ms on a 2024 M-series Mac. requirements.md §27 sets the broader budget; the help-cold-start gate is the cheapest proxy for it.
@@ -158,8 +158,8 @@ Logical sequencing, dependency-driven, no calendar estimates. Each milestone is 
 ## 10. Top risks
 
 1. **GraalVM compat of JGit & Lightbend Config.** *Mitigation:* pin versions known to work, vendor upstream `META-INF/native-image/` config, run a nightly native-binary smoke job against a corpus of real repos. (Resolved through v0.9; carry-forward for v1.0.)
-2. **PubGrub on Maven's wild west.** *Mitigation:* fixture corpus + a defensive normalization layer in `dev.jkbuild.repo.normalize` before constraints reach the solver.
-3. **TOML diagnostics.** *Mitigation:* the `dev.jkbuild.config` wrapper maps `com.typesafe.config.ConfigException` positions to source lines and renders Rust-style carets. Required to close requirements.md §31 #3.
+2. **PubGrub on Maven's wild west.** *Mitigation:* fixture corpus + a defensive normalization layer in `build.jumpkick.repo.normalize` before constraints reach the solver.
+3. **TOML diagnostics.** *Mitigation:* the `build.jumpkick.config` wrapper maps `com.typesafe.config.ConfigException` positions to source lines and renders Rust-style carets. Required to close requirements.md §31 #3.
 4. **Self-hosting chicken-and-egg.** *Mitigation:* the Gradle bootstrap build is kept at the repo root through v1.1 as an escape hatch; parity CI runs per §7.
 5. **IntelliJ plugin staffing (requirements.md §31 #1).** Out of scope for this document; flagged as a v1.0 blocker that requires a separate effort and is not on the critical path of the binary itself.
 6. **Build-tool discovery-link rot.** *Mitigation:* `jk doctor` prunes broken mvn/gradle/kotlin symlinks under `$JK_CACHE_DIR/tools/`. (JDKs are installed directly into IntelliJ's directory now — no symlink layer, no rot.) See [tool-discovery-plan.md](./tool-discovery-plan.md).
@@ -184,12 +184,12 @@ jk/
 │   └── libs.versions.toml           # version catalog (single source of truth for deps)
 ├── docs/                            # design documents
 ├── kernel/                          # universal kernel modules (no plugin-api deps)
-│   ├── model/    src/{main,test}/java/dev/jkbuild/{model,run,util,credential,image,publish}/
-│   ├── core/     src/{main,test}/java/dev/jkbuild/{config,lock,layout,library,audit,deny}/
-│   ├── io/       src/{main,test}/java/dev/jkbuild/{http,cache,repo,forge}/
-│   ├── resolver/ src/{main,test}/java/dev/jkbuild/resolver/
-│   ├── toolchain/ src/{main,test}/java/dev/jkbuild/{jdk,script,tool,discovery,compat,gradle,mvn,kotlin}/
-│   └── engine/   src/{main,test}/java/dev/jkbuild/{compile,runtime,task,test,git,worker}/
+│   ├── model/    src/{main,test}/java/build/jumpkick/{model,run,util,credential,image,publish}/
+│   ├── core/     src/{main,test}/java/build/jumpkick/{config,lock,layout,library,audit,deny}/
+│   ├── io/       src/{main,test}/java/build/jumpkick/{http,cache,repo,forge}/
+│   ├── resolver/ src/{main,test}/java/build/jumpkick/resolver/
+│   ├── toolchain/ src/{main,test}/java/build/jumpkick/{jdk,script,tool,discovery,compat,gradle,mvn,kotlin}/
+│   └── engine/   src/{main,test}/java/build/jumpkick/{compile,runtime,task,test,git,worker}/
 ├── plugin-api/  src/{main,test}/java/                # CompileStrategy / TestStrategy SPI
 ├── plugins/                         # first-party plugins (loaded at runtime)
 │   ├── java-compiler/
@@ -201,7 +201,7 @@ jk/
 │   ├── compat-bridge/
 │   ├── git-client/
 │   └── formatter/
-└── cli/        src/{main,test}/java/dev/jkbuild/{cli,command}/  # verb dispatch + native-image entrypoint
+└── cli/        src/{main,test}/java/build/jumpkick/{cli,command}/  # verb dispatch + native-image entrypoint
 ```
 
 ---

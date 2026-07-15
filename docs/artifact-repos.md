@@ -17,7 +17,7 @@ plane. The two meet at package registries (below).
 A provider like GitHub serves jk in two ways:
 
 1. **Git + forge API** — clone/fetch, and the REST API (issues, releases).
-   Handled by `dev.jkbuild.forge` (OAuth device flow, tokens).
+   Handled by `build.jumpkick.forge` (OAuth device flow, tokens).
 2. **Package/artifact registry** — GitHub Packages (Maven), GitLab Package
    Registry, etc. These are *artifact repositories* that happen to
    authenticate with the **same forge token**.

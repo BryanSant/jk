@@ -1,5 +1,5 @@
 [project]
-group    = "dev.jkbuild"
+group    = "build.jumpkick"
 name     = "jk-io"
 version  = "0.10.0-SNAPSHOT"
 description = "jk I/O foundations: HTTP client, CAS, repo/Maven access, forge credentials."
@@ -7,8 +7,8 @@ jdk      = 25
 java     = 25
 
 [dependencies]
-jk-core      = { group = "dev.jkbuild", name = "jk-core",      version = "0.10.0-SNAPSHOT" }
-jk-client-io = { group = "dev.jkbuild", name = "jk-client-io", version = "0.10.0-SNAPSHOT" }
+jk-core      = { group = "build.jumpkick", name = "jk-core",      version = "0.10.0-SNAPSHOT" }
+jk-client-io = { group = "build.jumpkick", name = "jk-client-io", version = "0.10.0-SNAPSHOT" }
 
 [test-dependencies]
 assertj-core            = { group = "org.assertj",        name = "assertj-core",            version = "3.27.7" }

@@ -15,7 +15,7 @@ java {
 tasks.withType<JavaCompile>().configureEach {
     options.encoding = "UTF-8"
     options.release.set(25)
-    // Keep in lock-step with jk's own default lint policy (dev.jkbuild.compile.JavacLint),
+    // Keep in lock-step with jk's own default lint policy (build.jumpkick.compile.JavacLint),
     // so `gradle build` and `jk build` surface the same javac warnings.
     options.compilerArgs.add("-Xlint:deprecation,unchecked")
 }

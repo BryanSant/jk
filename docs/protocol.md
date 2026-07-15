@@ -72,8 +72,8 @@ are verb *output*, not transport errors, and stay on their messages.
 
 ## Terminals
 
-Every async verb ends in exactly one terminal message: `goal-finish` (single-goal verbs),
-`workspace-finish` (workspace builds), or `error`. `goal-finish` is self-describing via its
+Every async verb ends in exactly one terminal message: `pipeline-finish` (single-pipeline verbs),
+`workspace-finish` (workspace builds), or `error`. `pipeline-finish` is self-describing via its
 mandatory `kind` field — `build | lock | sync | format | git-fetch | publish | import |
 image | tool | script | cache` — each kind's extra fields ride the same message (e.g.
 `syncFetched`, `lockPackages`, `toolCoord`).

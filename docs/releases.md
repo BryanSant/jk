@@ -4,7 +4,7 @@ The layout `install.sh` and the client's engine-jar self-fetch (`EngineJarFetche
 against. The release pipeline (v1.0 roadmap) publishes to it; nothing else about it is live yet.
 
 ```
-https://jkbuild.dev/releases/
+https://jumpkick.build/releases/
 ├── latest/VERSION                 # tiny text file, e.g. "0.10.0" — the ONLY mutable thing
 └── 0.10.0/                        # immutable once published
     ├── jk-linux-x86_64.xz

@@ -16,7 +16,7 @@ export const MAX_DIAGNOSTICS = 12;
  * An event is `{type, data, at}` where `data` is the parsed flat JSON payload the engine
  * publishes and `at` is the client-clock receipt time (fold stays clock-free and pure):
  * request-start/finish carry requestId/kind/dir (+ coord on start when the project's jk.toml
- * parses; + success/cancelled/millis on finish); module/phase/output/goal events carry
+ * parses; + success/cancelled/millis on finish); module/step/output/pipeline events carry
  * requestId/dir plus their specifics.
  */
 export function foldEvent(cards, event) {
@@ -35,10 +35,10 @@ export function foldEvent(cards, event) {
         cancelled: false,
         success: null, // tri-state: null = engine didn't say (socket requests) — derive from modules
         // Every build is a list of module rows (a single-project build has one, keyed by the empty
-        // SINGLE_GOAL_DIR); each row carries its OWN phase chain, so the card shows a chain per
+        // SINGLE_GOAL_DIR); each row carries its OWN step chain, so the card shows a chain per
         // module rather than one merged strip.
         modules: [],
-        // Weight-based progress, identical to the CLI: the engine streams per-module goal
+        // Weight-based progress, identical to the CLI: the engine streams per-module pipeline
         // numerator/denominator (weight units); mods holds the latest per dir, and the card's bar
         // is their sum over the plan total. planWeight seeds the denominator so a workspace bar
         // never jumps backward as later modules start. etaMillis/etaAt drive the ETA countdown.
@@ -62,14 +62,14 @@ export function foldEvent(cards, event) {
       }
       break;
     }
-    case 'phase-start': {
+    case 'step-start': {
       const card = byId(cards, d.requestId);
-      if (card) phaseRow(card, d.dir, d.phase).state = 'running';
+      if (card) stepRow(card, d.dir, d.step, d.phase).state = 'running';
       break;
     }
-    case 'phase-finish': {
+    case 'step-finish': {
       const card = byId(cards, d.requestId);
-      if (card) phaseRow(card, d.dir, d.phase).state = phaseState(d.status);
+      if (card) stepRow(card, d.dir, d.step, d.phase).state = stepState(d.status);
       break;
     }
     case 'plan': {
@@ -77,7 +77,7 @@ export function foldEvent(cards, event) {
       if (card) card.planWeight = d.weight || 0;
       break;
     }
-    case 'goal-progress': {
+    case 'pipeline-progress': {
       const card = byId(cards, d.requestId);
       if (card) card.mods[d.dir || ''] = { num: d.numerator || 0, den: d.denominator || 0 };
       break;
@@ -104,7 +104,7 @@ export function foldEvent(cards, event) {
         const mod = moduleRow(card, d.dir);
         if (mod.diagnostics.length < MAX_DIAGNOSTICS) {
           mod.diagnostics.push({
-            phase: d.phase || '',
+            step: d.step || '',
             code: d.code || '',
             message: d.message || '',
             test: d.test || '',
@@ -114,7 +114,7 @@ export function foldEvent(cards, event) {
       }
       break;
     }
-    case 'goal-finish': {
+    case 'pipeline-finish': {
       const card = byId(cards, d.requestId);
       if (card) {
         const row = moduleRow(card, d.dir);
@@ -160,7 +160,7 @@ export function weightNumerator(card) {
 
 /**
  * The bar's denominator: the plan total when known (stable, so a workspace bar can't jump backward
- * as later modules start), else the sum of per-module denominators (a single-goal build has one).
+ * as later modules start), else the sum of per-module denominators (a single-pipeline build has one).
  */
 export function weightDenominator(card) {
   let den = 0;
@@ -225,7 +225,7 @@ function historyDiags(diags, dir) {
   return (diags || [])
     .filter((d) => d.severity !== 'warning' && (d.dir || '') === (dir || ''))
     .map((d) => ({
-      phase: d.phase || '',
+      step: d.step || '',
       code: d.code || '',
       message: d.message || '',
       test: d.test || '',
@@ -234,34 +234,34 @@ function historyDiags(diags, dir) {
 }
 
 /**
- * Module rows for a persisted record, matching the live card shape (each with its own phase chain).
- * A workspace record has `modules[]` each carrying `phases`; a single-project record has no modules
- * and its phases at the top level — synthesize one row from them so backfilled cards match live.
+ * Module rows for a persisted record, matching the live card shape (each with its own step chain).
+ * A workspace record has `modules[]` each carrying `steps`; a single-project record has no modules
+ * and its steps at the top level — synthesize one row from them so backfilled cards match live.
  */
 function historyModules(rec) {
-  const toPhases = (ps) => (ps || []).map((p) => ({ name: p.name || '?', state: phaseState(p.status) }));
+  const toSteps = (ps) => (ps || []).map((p) => ({ name: p.name || '?', state: stepState(p.status), phase: p.phase || '' }));
   if ((rec.modules || []).length > 0) {
     return rec.modules.map((m) => ({
       dir: m.dir || '',
       coord: m.coord || null,
       state: m.success ? 'success' : 'failed',
       millis: m.millis ?? null,
-      phases: toPhases(m.phases),
+      steps: toSteps(m.steps),
       diagnostics: historyDiags(rec.diagnostics, m.dir || ''),
     }));
   }
-  // Single-project: no modules, phases at top level. Its diagnostics live in the "" bucket, so take
+  // Single-project: no modules, steps at top level. Its diagnostics live in the "" bucket, so take
   // every error the record carries (there is only one module to own them).
   return [{
     dir: rec.dir || '',
     coord: rec.coord || null,
     state: rec.cancelled ? 'cancelled' : rec.success === false ? 'failed' : 'success',
     millis: rec.millis ?? null,
-    phases: toPhases(rec.phases),
+    steps: toSteps(rec.steps),
     diagnostics: (rec.diagnostics || [])
       .filter((d) => d.severity !== 'warning')
       .map((d) => ({
-        phase: d.phase || '',
+        step: d.step || '',
         code: d.code || '',
         message: d.message || '',
         test: d.test || '',
@@ -299,37 +299,40 @@ function byId(cards, requestId) {
 }
 
 /**
- * The card's row for a module dir, created on first sight. A single-goal (single-project) build
- * emits its phase/goal events under the empty SINGLE_GOAL_DIR, so it gets exactly one row keyed by
- * `''`. Each row owns its phase chain (`phases`).
+ * The card's row for a module dir, created on first sight. A single-pipeline (single-project) build
+ * emits its step/pipeline events under the empty SINGLE_GOAL_DIR, so it gets exactly one row keyed by
+ * `''`. Each row owns its step chain (`steps`).
  */
 function moduleRow(card, dir) {
   const key = dir || '';
   let row = card.modules.find((m) => m.dir === key);
   if (!row) {
-    row = { dir: key, coord: null, state: 'running', millis: null, phases: [], diagnostics: [] };
+    row = { dir: key, coord: null, state: 'running', millis: null, steps: [], diagnostics: [] };
     card.modules.push(row);
   }
   return row;
 }
 
 /**
- * The chain entry for a phase name WITHIN its module (keyed by the event's dir), created in arrival
+ * The chain entry for a step name WITHIN its module (keyed by the event's dir), created in arrival
  * order. Unlike the old global-by-name folding, each module keeps its own chain, so the dashboard
- * shows one lock→compile→test→build strip per module.
+ * shows one lock→compile→test→build strip per module. `phase` (the step's pipeline phase wire-name,
+ * or '' when unset) rides the row so the UI can render the phase/step hierarchy.
  */
-function phaseRow(card, dir, phase) {
+function stepRow(card, dir, step, phase) {
   const mod = moduleRow(card, dir);
-  let row = mod.phases.find((p) => p.name === phase);
+  let row = mod.steps.find((p) => p.name === step);
   if (!row) {
-    row = { name: phase || '?', state: 'running' };
-    mod.phases.push(row);
+    row = { name: step || '?', state: 'running', phase: phase || '' };
+    mod.steps.push(row);
+  } else if (phase && !row.phase) {
+    row.phase = phase; // a later event carried the phase the first one omitted
   }
   return row;
 }
 
-/** Engine PhaseStatus → chain-node state. */
-function phaseState(status) {
+/** Engine StepStatus → chain-node state. */
+function stepState(status) {
   switch (status) {
     case 'SUCCESS':
       return 'success';

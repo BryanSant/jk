@@ -65,7 +65,7 @@ optional metadata.
 
 ```toml
 [project]
-group       = "dev.jkbuild"      # required
+group       = "build.jumpkick"      # required
 name        = "jk"               # required
 version     = "0.7.0-SNAPSHOT"   # required
 description = "..."              # optional
@@ -76,7 +76,7 @@ kotlin      = 21                 # optional, mutually exclusive with `java`
 # [application] and [native] are separate top-level tables, not [project] keys.
 # Their mere presence is the enable switch — a library declares neither.
 [application]
-main       = "dev.jkbuild.cli.Jk"  # optional, runnable entry point
+main       = "build.jumpkick.cli.Jk"  # optional, runnable entry point
 shadow-jar = false                 # optional, shaded JAR opt-in
 
 [native]
@@ -263,7 +263,7 @@ top-level table.
 
 ```toml
 [project]
-group       = "dev.jkbuild"
+group       = "build.jumpkick"
 artifact    = "jk"
 version     = "0.7.0-SNAPSHOT"
 description = "A modern build tool for Java and Kotlin."
@@ -284,7 +284,7 @@ assertj-core            = { group = "org.assertj",              name = "assertj-
 
 ```toml
 [project]
-group    = "dev.jkbuild"
+group    = "build.jumpkick"
 name = "jk-core"
 version  = "0.7.0-SNAPSHOT"
 jdk      = 25
@@ -305,14 +305,14 @@ assertj-core.workspace            = true
 
 ```toml
 [project]
-group    = "dev.jkbuild"
+group    = "build.jumpkick"
 name = "jk-cli"
 version  = "0.7.0-SNAPSHOT"
 jdk      = 25
 java     = 25
 
 [application]
-main = "dev.jkbuild.cli.Jk"
+main = "build.jumpkick.cli.Jk"
 
 [dependencies]
 # Workspace siblings — short-name resolves to the matching module.
@@ -333,7 +333,7 @@ junit-jupiter.workspace           = true
 junit-platform-launcher.workspace = true
 
 [image]
-main-class = "dev.jkbuild.cli.Jk"
+main-class = "build.jumpkick.cli.Jk"
 ```
 
 ## Parser semantics
@@ -375,19 +375,19 @@ main-class = "dev.jkbuild.cli.Jk"
 the docs. No external user impact.
 
 Files touched (Java):
-- `core/src/main/java/dev/jkbuild/config/JkBuildParser.java`
-- `core/src/main/java/dev/jkbuild/config/JkBuildEditor.java`
-- `core/src/main/java/dev/jkbuild/model/Dependency.java` (add `name` field)
-- `core/src/main/java/dev/jkbuild/model/Workspace.java` (add `dependencies`)
-- `core/src/main/java/dev/jkbuild/model/WorkspaceMerge.java`
-- `compat/src/main/java/dev/jkbuild/compat/JkBuildRenderer.java`
-- `compat/src/main/java/dev/jkbuild/mvn/PomImporter.java`
-- `compat/src/main/java/dev/jkbuild/mvn/PomExporter.java`
-- `compat/src/main/java/dev/jkbuild/gradle/GradleImporter.java`
-- `cli/src/main/java/dev/jkbuild/cli/NewJkBuildRenderer.java`
-- `cli/src/main/java/dev/jkbuild/cli/NewScaffolder.java`
-- `cli/src/main/java/dev/jkbuild/cli/AddCommand.java`
-- `cli/src/main/java/dev/jkbuild/cli/RemoveCommand.java`
+- `core/src/main/java/build/jumpkick/config/JkBuildParser.java`
+- `core/src/main/java/build/jumpkick/config/JkBuildEditor.java`
+- `core/src/main/java/build/jumpkick/model/Dependency.java` (add `name` field)
+- `core/src/main/java/build/jumpkick/model/Workspace.java` (add `dependencies`)
+- `core/src/main/java/build/jumpkick/model/WorkspaceMerge.java`
+- `compat/src/main/java/build/jumpkick/compat/JkBuildRenderer.java`
+- `compat/src/main/java/build/jumpkick/mvn/PomImporter.java`
+- `compat/src/main/java/build/jumpkick/mvn/PomExporter.java`
+- `compat/src/main/java/build/jumpkick/gradle/GradleImporter.java`
+- `cli/src/main/java/build/jumpkick/cli/NewJkBuildRenderer.java`
+- `cli/src/main/java/build/jumpkick/cli/NewScaffolder.java`
+- `cli/src/main/java/build/jumpkick/cli/AddCommand.java`
+- `cli/src/main/java/build/jumpkick/cli/RemoveCommand.java`
 - Tests across the modules above.
 
 Files touched (TOML):
@@ -465,7 +465,7 @@ defined in multiple places, and the topmost layer wins.
 | **project** | `[libraries]` table in the project's `jk.toml` | Hand-edited |
 | **local** | `~/.jk/libs.toml` | Hand-edited |
 | **global** | `~/.jk/cache/libs.global.toml` | `jk library update`, revalidated by `jk lock` |
-| **bundled** | classpath resource at `dev/jkbuild/library/libraries.toml` | Shipped with the binary |
+| **bundled** | classpath resource at `build/jumpkick/library/libraries.toml` | Shipped with the binary |
 
 Only the bundled layer is guaranteed to exist. The local file lights up
 when present; the global file lights up after the first
@@ -534,7 +534,7 @@ file is read at parser invocation time; no caching in the resident engine.
 These are intentionally deferred — the format leaves room for them but
 the parser does not enforce or honor them yet.
 
-- **Sigstore verification of `jk library update`.** Wire the same verifier `jk audit` uses; pinned identity is `*.jkbuild.dev` via GitHub OIDC.
+- **Sigstore verification of `jk library update`.** Wire the same verifier `jk audit` uses; pinned identity is `*.jumpkick.build` via GitHub OIDC.
 - **PEP 621-style `[project]`** with `authors`, `license`, `urls`,
   `readme`, `keywords`. Adds option value but no immediate feature
   unlock.

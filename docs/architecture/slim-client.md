@@ -93,12 +93,12 @@ The dependency cut landed as real Gradle modules (compiler-enforced forever), fo
 ```
 jk (client image, :cli:nativeCompile, -Os; 26.9 MiB on linux/amd64 — see docs/engine.md)
 ├── :cli            presentation, arg parsing, renderers, EngineClient + wire adapters
-├── :model          jk-api: domain currency, Goal/Phase event types, CliCommand model, TestSummary,
+├── :model          jk-api: domain currency, Pipeline/Step event types, CliCommand model, TestSummary,
 │                   MinimalXml (keeps java.xml/Xerces — ~3.7 MiB of image — off this classpath)
 ├── :core           jk.toml/jk.lock parse+edit, GlobalConfig, LibraryCatalog, deny policy,
 │                   ModuleOrder (shared topo-sort), SourceLayout, WorkerTunings,
 │                   Versions/DependencyTree/Provenance (offline lock walkers, still package
-│                   dev.jkbuild.resolver)
+│                   build.jumpkick.resolver)
 ├── :client-io      http (3 classes) · forge (device-flow auth) · credential stores ·
 │                   LibraryRegistryClient · Cas/Linking + AccessLedger + ClasspathResolver +
 │                   RepoArtifactStore/RepoArtifactResolver/MavenLayout/M2Dirs — the blessed local
@@ -117,7 +117,7 @@ image; :cli-engine:shadowJar) — additionally links
 └── :cli-engine     EngineMain (the engine JVM's main), PosixDetach,
                     InProcessEngineImpl (the seam below), the JVM dist (installDist), and the
                     relocated CLI test suite
-    ├── :engine     EngineServer + BuildService/goal factories + pipeline/tasks/workers
+    ├── :engine     EngineServer + BuildService/pipeline factories + pipeline/tasks/workers
     ├── :toolchain  resolver-backed tool installs, compat/import machinery
     ├── :resolver   PubGrub + orchestrators
     └── :io         repo/Maven machinery, transports, effective POMs
@@ -125,8 +125,8 @@ image; :cli-engine:shadowJar) — additionally links
 
 **The `engineDisabledForTests()` mechanism** (the crux the plan called out): every command's
 test-only in-process branch was moved verbatim into `InProcessEngineImpl` (module `:cli-engine`,
-package `dev.jkbuild.command` so the bodies keep calling the commands' package-private rendering
-helpers). The client-side seam is the `dev.jkbuild.cli.engine.InProcessEngine` interface in
+package `build.jumpkick.command` so the bodies keep calling the commands' package-private rendering
+helpers). The client-side seam is the `build.jumpkick.cli.engine.InProcessEngine` interface in
 `:cli`, discovered via `java.util.ServiceLoader` (the repo's established pattern — `Probes`):
 
 - **JVM dist / test classpath:** `:cli-engine` is present, so `jk --engine-server` and the
@@ -149,7 +149,7 @@ Because the tests' in-process dispatch needs the full kernel, the CLI test suite
   SHA-256 intrinsics are exactly right for this) does the hashing. Cost honestly stated: a
   fully-cached `jk build` now touches (and lazily spawns) the engine, which it previously
   avoided.
-- `script-prepare-request` — `jk tool run <file>`'s parse/resolve/compile half (`ScriptGoals` in
+- `script-prepare-request` — `jk tool run <file>`'s parse/resolve/compile half (`ScriptPipelines` in
   the engine, the close of the inventory's flagged ScriptRunner residue). The exec stays
   client-side; only `//JAVA_OPTIONS` is re-parsed locally.
 

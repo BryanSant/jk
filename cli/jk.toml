@@ -1,5 +1,5 @@
 [project]
-group    = "dev.jkbuild"
+group    = "build.jumpkick"
 name     = "jk-cli"
 version  = "0.10.0-SNAPSHOT"
 description = "jk command-line client: verb dispatch, rendering, the thin kernel slice (Stage 5)."
@@ -7,17 +7,17 @@ jdk      = 25
 java     = 25
 
 [application]
-main = "dev.jkbuild.cli.Jk"
+main = "build.jumpkick.cli.Jk"
 
 # The slim client's whole kernel surface — NO jk-io, jk-resolver, jk-toolchain, or jk-engine
 # (slim-client Stage 5): heavy verbs reach the engine over the wire; the test suite (which needs
 # the full kernel for its in-process dispatch) lives in cli-engine.
 [dependencies]
-jk-core            = { group = "dev.jkbuild", name = "jk-core",            version = "0.10.0-SNAPSHOT" }
-jk-client-io       = { group = "dev.jkbuild", name = "jk-client-io",       version = "0.10.0-SNAPSHOT" }
-jk-toolchain-jdk   = { group = "dev.jkbuild", name = "jk-toolchain-jdk",   version = "0.10.0-SNAPSHOT" }
-jk-engine-api      = { group = "dev.jkbuild", name = "jk-engine-api",      version = "0.10.0-SNAPSHOT" }
-jk-plugin-api      = { group = "dev.jkbuild", name = "jk-plugin-api",      version = "0.10.0-SNAPSHOT" }
+jk-core            = { group = "build.jumpkick", name = "jk-core",            version = "0.10.0-SNAPSHOT" }
+jk-client-io       = { group = "build.jumpkick", name = "jk-client-io",       version = "0.10.0-SNAPSHOT" }
+jk-toolchain-jdk   = { group = "build.jumpkick", name = "jk-toolchain-jdk",   version = "0.10.0-SNAPSHOT" }
+jk-engine-api      = { group = "build.jumpkick", name = "jk-engine-api",      version = "0.10.0-SNAPSHOT" }
+jk-plugin-api      = { group = "build.jumpkick", name = "jk-plugin-api",      version = "0.10.0-SNAPSHOT" }
 jline-terminal-ffm = { group = "org.jline",   name = "jline-terminal-ffm", version = "4.1.2" }
 
 # ProcessProperties for argv[0] `jkx` dispatch (Argv0) — compile-time only; the
@@ -31,4 +31,4 @@ junit-jupiter           = { group = "org.junit.jupiter",  name = "junit-jupiter"
 junit-platform-launcher = { group = "org.junit.platform", name = "junit-platform-launcher", version = "6.1.0" }
 
 [image]
-main-class = "dev.jkbuild.cli.Jk"
+main-class = "build.jumpkick.cli.Jk"

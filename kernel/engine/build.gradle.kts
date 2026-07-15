@@ -5,7 +5,7 @@ plugins {
     id("jk.java-conventions")
 }
 
-description = "jk build engine: the Goal/Phase scheduler and the build pipeline, " +
+description = "jk build engine: the Pipeline/Step scheduler and the build pipeline, " +
         "run in-process by the CLI. Absorbs the former :engine and :runtime modules."
 
 dependencies {

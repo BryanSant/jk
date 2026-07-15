@@ -148,7 +148,7 @@ The north-star run then added (2026-07-12/13):
   `jk engine rotate-token` rotates it on demand.
 - **Engine lifecycle & status UX** — graceful drain for `jk engine stop` (with
   `--force`), idle self-termination removed, `jk engine start` reports "already
-  running", and `jk engine status` gained the GoalWedge layout with uptime, bulleted
+  running", and `jk engine status` gained the PipelineWedge layout with uptime, bulleted
   detail, a 50-cell memory bar, and theme-consistent styling.
 - **Git in-process** — jk runs git via the git CLI when present, falling back to
   embedded JGit; the separate git-client worker plugin is gone.
@@ -186,17 +186,17 @@ The variant mechanism moved from plugin-manifest axes to a core `[variants]` sec
   removed; sub-tables are named definition groups only (android keeps `[sub-tables.signing]`).
   A schema key may share a group's name — the TOML value shape (string reference vs table of
   definitions) disambiguates.
-- `dev.jkbuild.model.Variants` (declaration + `Selection` + `unionDependencies`) and
-  `dev.jkbuild.plugin.manifest.VariantApply` (fold engine) replace the old
+- `build.jumpkick.model.Variants` (declaration + `Selection` + `unionDependencies`) and
+  `build.jumpkick.plugin.manifest.VariantApply` (fold engine) replace the old
   `plugin.manifest.Variants`.
 
 ### Variant selection on every command (same day, follow-up)
 
 `--release` / `--variant <dim>=<value>` moved from jk build-only to every artifact-producing
 command: run, dev, test, compile, image, native, publish, install. The selection + client-
-resolved `env:` values ride the `Session` (`Session.withVariant`); `BuildPipeline.Inputs`
-defaults from it, so every goal factory — engine-hosted or in-process — is parameterized
-without per-goal threading. Engine-side it decodes once in `resolveSession`; client-side it
+resolved `env:` values ride the `Session` (`Session.withVariant`); `BuildPipelines.Inputs`
+defaults from it, so every pipeline factory — engine-hosted or in-process — is parameterized
+without per-pipeline threading. Engine-side it decodes once in `resolveSession`; client-side it
 attaches once in `EngineWorkerAdapter.stream` (plus the test/single-build/exec-plan/verb
 writers). Exec plans and plugin verbs apply the selection LENIENTLY
 (`VariantApply.applyLenient`): unselected mandatory dimensions are skipped, so

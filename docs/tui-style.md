@@ -72,11 +72,11 @@ Colors that communicate the outcome or current state of an operation.
 
 | Role | Theme Method | Hex | Usage |
 |---|---|---|---|
-| `chip-working` / `chip-info` | `goalChip()` bg | `#0F4786` | GoalWedge chip bg — active/in-progress and informational states |
-| `chip-success` | `goalSuccessChip()` bg | `#357B38` | GoalWedge chip bg — successful completion |
-| `chip-error` | `goalFailureChip()` bg | `#E91E63` | GoalWedge chip bg — error/failure |
-| `chip-success-cap` | `goalChipColor()` | `#357B38` | Powerline cap fg after a success chip |
-| `chip-error-cap` | `goalFailColor()` | `#E91E63` | Powerline cap fg after an error chip |
+| `chip-working` / `chip-info` | `pipelineChip()` bg | `#0F4786` | PipelineWedge chip bg — active/in-progress and informational states |
+| `chip-success` | `pipelineSuccessChip()` bg | `#357B38` | PipelineWedge chip bg — successful completion |
+| `chip-error` | `pipelineFailureChip()` bg | `#E91E63` | PipelineWedge chip bg — error/failure |
+| `chip-success-cap` | `pipelineChipColor()` | `#357B38` | Powerline cap fg after a success chip |
+| `chip-error-cap` | `pipelineFailColor()` | `#E91E63` | Powerline cap fg after an error chip |
 | `error-text` | `error()` | `#E91E63` | Inline error text foreground (no bg) |
 | `error-label` | `errorLabel()` | `#E91E63` + bold | Bold error-text — destructive confirmation body, critical advisory labels |
 | `success-text` | `success()` | `#4CAF50` + bold | Inline success text foreground (no bg) |
@@ -208,9 +208,9 @@ color, and text style.
 
 ---
 
-## 4. GoalWedge Component
+## 4. PipelineWedge Component
 
-The GoalWedge is the primary output element for every `jk` command. It names the goal in progress
+The PipelineWedge is the primary output element for every `jk` command. It names the pipeline in progress
 and communicates its status through icon + color + label.
 
 ### Structure
@@ -225,7 +225,7 @@ and communicates its status through icon + color + label.
 | **label** | The goal or command name (e.g. `Build`, `Lock`, `New Project`). |
 | **cap** | A powerline separator that terminates the chip. |
 
-### 4.1 Nerd Font GoalWedge
+### 4.1 Nerd Font PipelineWedge
 
 ```
  ✸ Build ▶
@@ -238,7 +238,7 @@ and communicates its status through icon + color + label.
 - Cap background: unset — **except** when immediately left-adjacent to a ProgressBar, in which
   case the cap background matches the leftmost color of the bar (creating a seamless taper)
 
-### 4.2 Non-Nerd Font GoalWedge
+### 4.2 Non-Nerd Font PipelineWedge
 
 ```
  ✸ Build  
@@ -247,7 +247,7 @@ and communicates its status through icon + color + label.
 - Same chip styling as Nerd Font
 - Cap replaced by two plain spaces (no glyph)
 
-### 4.3 No-Color GoalWedge
+### 4.3 No-Color PipelineWedge
 
 ```
  ✸ Build: 
@@ -257,7 +257,7 @@ and communicates its status through icon + color + label.
 - Cap replaced by `:` followed by a space — the colon provides the visual separator that background
   color would normally supply
 
-### 4.4 No-ANSI GoalWedge
+### 4.4 No-ANSI PipelineWedge
 
 ```
  * Build: 
@@ -321,7 +321,7 @@ Displays elapsed or remaining time, updated every second.
 For build-pipeline commands (`jk build`, `jk test`, `jk compile`, etc.) the standard header line is:
 
 ```
-{GoalWedge with spinner}{ProgressBar} {Counter}
+{PipelineWedge with spinner}{ProgressBar} {Counter}
 ```
 
 Example (Nerd Font, color):
@@ -340,29 +340,29 @@ Keeps the user updated on work distributed across many threads or processes.
 
 ### 8.1 Unit of Work (UoW)
 
-Each item has: `name`, `phase`, `action`, `duration`, `status` (`working` | `complete`).
+Each item has: `name`, `step`, `action`, `duration`, `status` (`working` | `complete`).
 
 **Working UoW** (bottom item uses `╰─`, all others use `├─`):
 
 ```
- ╰─ dev.jkbuild:engine › Testing › relocking_detects_a_force_moved_tag(Path)
+ ╰─ build.jumpkick:engine › Testing › relocking_detects_a_force_moved_tag(Path)
 ```
 
 **Completed UoW**:
 
 ```
-    ✓ [15 of 17] dev.jkbuild:compat-bridge took 34ms
+    ✓ [15 of 17] build.jumpkick:compat-bridge took 34ms
 ```
 
 ### 8.2 Full ParallelTracker View
 
 ```
- ╰─ dev.jkbuild:engine › Testing › relocking_detects_a_force_moved_tag(Path)
-    ✓ [15 of 17] dev.jkbuild:compat-bridge took 34ms
-    ✓ [14 of 17] dev.jkbuild:toolchain took 28ms
-    ✓ [13 of 17] dev.jkbuild:publisher took 86ms
-    ✓ [12 of 17] dev.jkbuild:image-builder took 76ms
-    ✓ [11 of 17] dev.jkbuild:git-client took 69ms
+ ╰─ build.jumpkick:engine › Testing › relocking_detects_a_force_moved_tag(Path)
+    ✓ [15 of 17] build.jumpkick:compat-bridge took 34ms
+    ✓ [14 of 17] build.jumpkick:toolchain took 28ms
+    ✓ [13 of 17] build.jumpkick:publisher took 86ms
+    ✓ [12 of 17] build.jumpkick:image-builder took 76ms
+    ✓ [11 of 17] build.jumpkick:git-client took 69ms
       … plus 10 more …
 ```
 
@@ -371,12 +371,12 @@ Each item has: `name`, `phase`, `action`, `duration`, `status` (`working` | `com
 
 ### 8.3 No-ANSI Mode
 
-Each phase transition is a new line. Actions are not printed unless `-vv`:
+Each step transition is a new line. Actions are not printed unless `-vv`:
 
 ```
-[01 of 17] dev.jkbuild:toolchain > Compiling ...
-[01 of 17] dev.jkbuild:toolchain > Testing ...
-[01 of 17] dev.jkbuild:toolchain - Complete - took 76ms
+[01 of 17] build.jumpkick:toolchain > Compiling ...
+[01 of 17] build.jumpkick:toolchain > Testing ...
+[01 of 17] build.jumpkick:toolchain - Complete - took 76ms
 ```
 
 ---
@@ -420,7 +420,7 @@ Maven / Cargo-style coordinates are always colored when color is enabled. The ne
 ```
 org.apache.commons:commons-io:1.2.3       ← standard GAV
 org.apache.commons:commons-io@=1.2.3      ← Cargo-style (same coloring)
-dev.jkbuild:engine                         ← version absent, still colored
+build.jumpkick:engine                         ← version absent, still colored
 ```
 
 No-color and no-ANSI: plain text, no coloring.
@@ -445,7 +445,7 @@ Command lines passed to subprocesses (e.g. `java -cp … -jar target/app.jar`) a
 ## 13. Plugin / Worker Output
 
 Output collected from `jk` plugins or worker processes is always printed **above** the current
-`jk`-controlled output region. It never interleaves with GoalWedge, ProgressBar, or
+`jk`-controlled output region. It never interleaves with PipelineWedge, ProgressBar, or
 ParallelTracker lines.
 
 ---
@@ -530,7 +530,7 @@ Used by `jk tree`, `jk explain`, and similar commands.
 
 | Element | Style |
 |---|---|
-| Header (`≡ Dependencies Tree`) | GoalWedge using the Info/working chip color |
+| Header (`≡ Dependencies Tree`) | PipelineWedge using the Info/working chip color |
 | Root bullet (`●`) | Dark-gray (`#546E7A`) |
 | Root coordinate | Bold + coord colors (group/name/version) |
 | Connecting lines (`│ ├─ ╰─`) | Dark-gray (`#546E7A`) |
@@ -616,7 +616,7 @@ header, step, and rail styling.
 | Part | Detail |
 |---|---|
 | Icon | `≡` (U+2261 identical-to / "burger menu") |
-| Label | Goal verb (e.g. `New Project`, `New Module`, `Init`) |
+| Label | Pipeline verb (e.g. `New Project`, `New Module`, `Init`) |
 | First cap | U+E0B0; foreground = chip color, background = `#90A4AE` (gray band) |
 | Subtitle text | On `#90A4AE` background; foreground = black (`#000000`); re-applied after any ANSI reset |
 | Closing cap | U+E0B0; foreground = `#90A4AE` (matches band), background unset |
@@ -672,7 +672,7 @@ to supply required inputs non-interactively, or the command exits with a usage e
 
 When adding new output:
 
-1. Identify whether it is pipeline output (use GoalWedge + optionally ProgressBar + Counter) or
+1. Identify whether it is pipeline output (use PipelineWedge + optionally ProgressBar + Counter) or
    interactive (use Wizard components).
 2. Choose the correct status semantic (§3) and apply the corresponding icon and colors.
 3. Implement all four rendering paths: Nerd Font, Non-Nerd Font, No-Color, No-ANSI.
@@ -686,7 +686,7 @@ When adding new output:
 
 The animated download bar shown during `jk jdk install` and `jk ensure`.
 
-**Format:** GoalWedge-style chip prefix + standalone ProgressBar + dim italic label
+**Format:** PipelineWedge-style chip prefix + standalone ProgressBar + dim italic label
 - Nerd Font: `[src]/temurin-25  ████████░░  38%  downloading…`
 - Non-Nerd Font: same (bar uses `█`/`░`)
 - No-Color: plain text `[src]/temurin-25 [====    ] 38% downloading…`
@@ -698,7 +698,7 @@ The animated download bar shown during `jk jdk install` and `jk ensure`.
 
 ## 21. Bare Confirmation Line
 
-A single `✓`/`✘` + verb + noun line printed outside a GoalWedge chip — used when a command completes a sub-task (e.g. `jk jdk pin`).
+A single `✓`/`✘` + verb + noun line printed outside a PipelineWedge chip — used when a command completes a sub-task (e.g. `jk jdk pin`).
 
 **Format:** `✓ Pinned project to <identifier>`
 - Nerd Font/Non-Nerd Font: `✓ Pinned project to temurin-25` (CHECK in `success()`, identifier in `focused()`)
@@ -777,7 +777,7 @@ A `ProgressBar` rendered inside a table row (e.g. `jk cache info` storage usage)
 
 ## 27. Post-Chip Summary
 
-Unstyled (or lightly styled) summary lines printed below a settled GoalWedge chip.
+Unstyled (or lightly styled) summary lines printed below a settled PipelineWedge chip.
 
 **Format (example):** `  Updated 3 of 5 dependencies` or `  Synced 12 artifacts to target/`
 
@@ -926,7 +926,7 @@ Per-module result lines printed during `jk sync` cascade processing in a workspa
 
 ## 38. AutoLock Stderr Warning
 
-The fallback warning emitted to stderr when the engine auto-lock fails outside a goal listener.
+The fallback warning emitted to stderr when the engine auto-lock fails outside a pipeline listener.
 
 **Format:**
 ```
@@ -935,7 +935,7 @@ The fallback warning emitted to stderr when the engine auto-lock fails outside a
 ```
 
 - `‼` literal prefix (no color — engine layer cannot import CLI theme)
-- When inside a goal listener, route via `warn()` callback instead so the warning appears inline with the TUI
+- When inside a pipeline listener, route via `warn()` callback instead so the warning appears inline with the TUI
 - No-Color / No-ANSI: keep plain text on stderr (already appropriate for engine-layer output)
 
 **Design note:** Engine modules must not import from the CLI module. Color is therefore not applied here; only the icon is added. The goal listener path is preferred when available.

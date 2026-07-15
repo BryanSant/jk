@@ -1,5 +1,5 @@
 [project]
-group    = "dev.jkbuild"
+group    = "build.jumpkick"
 name     = "jk"
 version  = "0.10.0-SNAPSHOT"
 description = "A modern build tool for Java and Kotlin."

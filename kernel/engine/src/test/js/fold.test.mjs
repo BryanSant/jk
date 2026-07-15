@@ -21,7 +21,7 @@ const historyRecord = (id, dir, extra = {}) => ({
   cancelled: false,
   success: true,
   modules: [],
-  phases: [],
+  steps: [],
   diagnostics: [],
   ...extra,
 });
@@ -63,7 +63,7 @@ test('socket finish without success derives the outcome from module rows', () =>
 test('all-success module rows derive success; no rows stay neutral', () => {
   const cards = [];
   foldEvent(cards, start(1, '/w'));
-  foldEvent(cards, { type: 'goal-finish', data: { requestId: 1, dir: '/w', success: true } });
+  foldEvent(cards, { type: 'pipeline-finish', data: { requestId: 1, dir: '/w', success: true } });
   foldEvent(cards, finish(1, {}));
   assert.equal(outcomeOf(cards[0]), 'success');
 
@@ -75,15 +75,15 @@ test('all-success module rows derive success; no rows stay neutral', () => {
 test('cancelled wins over derived outcomes', () => {
   const cards = [];
   foldEvent(cards, start(1, '/w'));
-  foldEvent(cards, { type: 'goal-finish', data: { requestId: 1, dir: '/w', success: true } });
+  foldEvent(cards, { type: 'pipeline-finish', data: { requestId: 1, dir: '/w', success: true } });
   foldEvent(cards, finish(1, { cancelled: true }));
   assert.equal(outcomeOf(cards[0]), 'cancelled');
 });
 
-test('goal-finish creates a module row when module-start never fired (single-goal requests)', () => {
+test('pipeline-finish creates a module row when module-start never fired (single-pipeline requests)', () => {
   const cards = [];
   foldEvent(cards, start(1, '/w'));
-  foldEvent(cards, { type: 'goal-finish', data: { requestId: 1, dir: '/w', success: false } });
+  foldEvent(cards, { type: 'pipeline-finish', data: { requestId: 1, dir: '/w', success: false } });
   assert.equal(cards[0].modules.length, 1);
   assert.equal(cards[0].modules[0].state, 'failed');
 });
@@ -104,75 +104,87 @@ test('the feed is bounded at MAX_CARDS', () => {
 
 test('coord and client timestamps ride the card', () => {
   const cards = [];
-  foldEvent(cards, { ...start(1, '/w', { coord: 'dev.jkbuild:jk' }), at: 1000 });
-  assert.equal(cards[0].coord, 'dev.jkbuild:jk');
+  foldEvent(cards, { ...start(1, '/w', { coord: 'build.jumpkick:jk' }), at: 1000 });
+  assert.equal(cards[0].coord, 'build.jumpkick:jk');
   assert.equal(cards[0].startedAt, 1000);
   foldEvent(cards, { ...finish(1, { millis: 500 }), at: 1500 });
   assert.equal(cards[0].finishedAt, 1500);
 });
 
-test('phases fold per module, each module keeping its own chain', () => {
+test('steps fold per module, each module keeping its own chain', () => {
   const cards = [];
   foldEvent(cards, start(1, '/w'));
-  foldEvent(cards, { type: 'phase-start', data: { requestId: 1, dir: '/w/a', phase: 'compile' } });
-  foldEvent(cards, { type: 'phase-start', data: { requestId: 1, dir: '/w/b', phase: 'compile' } });
-  foldEvent(cards, { type: 'phase-finish', data: { requestId: 1, dir: '/w/a', phase: 'compile', status: 'SUCCESS' } });
-  foldEvent(cards, { type: 'phase-start', data: { requestId: 1, dir: '/w/a', phase: 'test' } });
-  foldEvent(cards, { type: 'phase-finish', data: { requestId: 1, dir: '/w/a', phase: 'test', status: 'FAIL' } });
+  foldEvent(cards, { type: 'step-start', data: { requestId: 1, dir: '/w/a', step: 'compile', phase: 'compile' } });
+  foldEvent(cards, { type: 'step-start', data: { requestId: 1, dir: '/w/b', step: 'compile', phase: 'compile' } });
+  foldEvent(cards, { type: 'step-finish', data: { requestId: 1, dir: '/w/a', step: 'compile', phase: 'compile', status: 'SUCCESS' } });
+  foldEvent(cards, { type: 'step-start', data: { requestId: 1, dir: '/w/a', step: 'test', phase: 'test' } });
+  foldEvent(cards, { type: 'step-finish', data: { requestId: 1, dir: '/w/a', step: 'test', phase: 'test', status: 'FAIL' } });
   const byDir = (dir) => cards[0].modules.find((m) => m.dir === dir);
   assert.equal(cards[0].modules.length, 2); // two modules, not one merged chain
   assert.deepEqual(
-    byDir('/w/a').phases.map((p) => p.name + ':' + p.state),
+    byDir('/w/a').steps.map((p) => p.name + ':' + p.state),
     ['compile:success', 'test:failed'],
   );
   assert.deepEqual(
-    byDir('/w/b').phases.map((p) => p.name + ':' + p.state),
+    byDir('/w/b').steps.map((p) => p.name + ':' + p.state),
     ['compile:running'], // /w/b's compile is independent of /w/a's
   );
+  // the phase wire-field rides each step row
+  assert.deepEqual(byDir('/w/a').steps.map((p) => p.phase), ['compile', 'test']);
 });
 
-test('single-goal phase events (empty dir) become one module with a chain', () => {
+test('single-pipeline step events (empty dir) become one module with a chain', () => {
   const cards = [];
   foldEvent(cards, start(1, '/proj'));
-  foldEvent(cards, { type: 'phase-start', data: { requestId: 1, dir: '', phase: 'compile-java' } });
-  foldEvent(cards, { type: 'phase-finish', data: { requestId: 1, dir: '', phase: 'compile-java', status: 'SUCCESS' } });
+  foldEvent(cards, { type: 'step-start', data: { requestId: 1, dir: '', step: 'compile-java', phase: 'compile' } });
+  foldEvent(cards, { type: 'step-finish', data: { requestId: 1, dir: '', step: 'compile-java', phase: 'compile', status: 'SUCCESS' } });
   assert.equal(cards[0].modules.length, 1);
   assert.equal(cards[0].modules[0].dir, '');
-  assert.deepEqual(cards[0].modules[0].phases.map((p) => p.name + ':' + p.state), ['compile-java:success']);
+  assert.deepEqual(cards[0].modules[0].steps.map((p) => p.name + ':' + p.state), ['compile-java:success']);
+  // phase stored on the row; the UI renders it as the "compile/java" hierarchy (phase strips the
+  // redundant leading "compile-" from the step name)
+  assert.equal(cards[0].modules[0].steps[0].phase, 'compile');
 });
 
-test('history backfill maps per-module phases; single-project synthesizes one module', async () => {
+test('a step-start without a phase stores an empty phase', () => {
+  const cards = [];
+  foldEvent(cards, start(1, '/w'));
+  foldEvent(cards, { type: 'step-start', data: { requestId: 1, dir: '', step: 'lock' } });
+  assert.equal(cards[0].modules[0].steps[0].phase, ''); // default, never undefined
+});
+
+test('history backfill maps per-module steps; single-project synthesizes one module', async () => {
   const { seedFromHistory } = await import(pathToFileURL(process.env.JK_FOLD_MJS));
-  // workspace record: modules carry their own phases, and each diagnostic attaches to its module dir
+  // workspace record: modules carry their own steps, and each diagnostic attaches to its module dir
   const ws = [];
   seedFromHistory(ws, [{
     id: 'w1', kind: 'build', dir: '/w', coord: 'g:w', finishedAt: 5000, success: false,
     modules: [
-      { coord: 'g:core', dir: '/w/core', success: true, millis: 100, phases: [{ name: 'compile', status: 'SUCCESS' }] },
-      { coord: 'g:api', dir: '/w/api', success: false, millis: 90, phases: [{ name: 'test', status: 'FAIL' }] },
+      { coord: 'g:core', dir: '/w/core', success: true, millis: 100, steps: [{ name: 'compile', status: 'SUCCESS' }] },
+      { coord: 'g:api', dir: '/w/api', success: false, millis: 90, steps: [{ name: 'test', status: 'FAIL' }] },
     ],
-    phases: [],
+    steps: [],
     diagnostics: [
-      { severity: 'error', dir: '/w/api', phase: 'test', message: 'boom', test: 'it()', exceptionClass: '' },
-      { severity: 'warning', dir: '/w/core', phase: 'lint', message: 'unused import' },
+      { severity: 'error', dir: '/w/api', step: 'test', message: 'boom', test: 'it()', exceptionClass: '' },
+      { severity: 'warning', dir: '/w/core', step: 'lint', message: 'unused import' },
     ],
   }]);
   assert.equal(ws[0].modules.length, 2);
   const wcore = ws[0].modules.find((m) => m.dir === '/w/core');
   const wapi = ws[0].modules.find((m) => m.dir === '/w/api');
-  assert.deepEqual(wcore.phases.map((p) => p.name + ':' + p.state), ['compile:success']);
+  assert.deepEqual(wcore.steps.map((p) => p.name + ':' + p.state), ['compile:success']);
   assert.equal(wcore.diagnostics.length, 0); // the warning is dropped, not shown as failure output
   assert.equal(wapi.diagnostics.length, 1);
   assert.equal(wapi.diagnostics[0].message, 'boom');
-  // single-project record: no modules, phases at top level → synthesize one module owning the errors
+  // single-project record: no modules, steps at top level → synthesize one module owning the errors
   const sp = [];
   seedFromHistory(sp, [{
     id: 's1', kind: 'build', dir: '/p', coord: 'g:p', finishedAt: 6000, success: false,
-    modules: [], phases: [{ name: 'compile-java', status: 'FAIL' }],
-    diagnostics: [{ severity: 'error', dir: '', phase: 'compile-java', message: 'cannot find symbol' }],
+    modules: [], steps: [{ name: 'compile-java', status: 'FAIL' }],
+    diagnostics: [{ severity: 'error', dir: '', step: 'compile-java', message: 'cannot find symbol' }],
   }]);
   assert.equal(sp[0].modules.length, 1);
-  assert.deepEqual(sp[0].modules[0].phases.map((p) => p.name + ':' + p.state), ['compile-java:failed']);
+  assert.deepEqual(sp[0].modules[0].steps.map((p) => p.name + ':' + p.state), ['compile-java:failed']);
   assert.equal(sp[0].modules[0].diagnostics.length, 1);
   assert.equal(sp[0].modules[0].diagnostics[0].message, 'cannot find symbol');
 });
@@ -181,7 +193,7 @@ test('output keeps a bounded tail and clears on finish', () => {
   const cards = [];
   foldEvent(cards, start(1, '/w'));
   for (let i = 1; i <= MAX_OUTPUT_LINES + 5; i++) {
-    foldEvent(cards, { type: 'output', data: { requestId: 1, dir: '/w/m', phase: 'test', line: 'line ' + i } });
+    foldEvent(cards, { type: 'output', data: { requestId: 1, dir: '/w/m', step: 'test', line: 'line ' + i } });
   }
   assert.equal(cards[0].output.length, MAX_OUTPUT_LINES);
   assert.equal(cards[0].output.at(-1).line, 'line ' + (MAX_OUTPUT_LINES + 5));
@@ -195,12 +207,12 @@ test('diagnostics attach to their module by dir, survive finish, and are capped 
   foldEvent(cards, start(1, '/w'));
   foldEvent(cards, {
     type: 'diagnostic',
-    data: { requestId: 1, dir: '/w/core', phase: 'test', code: 'fail', message: 'expected 3 but was 4',
+    data: { requestId: 1, dir: '/w/core', step: 'test', code: 'fail', message: 'expected 3 but was 4',
             test: 'adds()', exceptionClass: 'AssertionFailedError' },
   });
   foldEvent(cards, {
     type: 'diagnostic',
-    data: { requestId: 1, dir: '/w/api', phase: 'lock', code: 'resolve', message: 'no versions for com.foo:bar' },
+    data: { requestId: 1, dir: '/w/api', step: 'lock', code: 'resolve', message: 'no versions for com.foo:bar' },
   });
   foldEvent(cards, finish(1, { success: false }));
   const core = cards[0].modules.find((m) => m.dir === '/w/core');
@@ -208,9 +220,9 @@ test('diagnostics attach to their module by dir, survive finish, and are capped 
   assert.equal(core.diagnostics.length, 1); // NOT cleared on finish, unlike output
   assert.equal(core.diagnostics[0].test, 'adds()');
   assert.equal(api.diagnostics.length, 1);
-  assert.equal(api.diagnostics[0].phase, 'lock');
+  assert.equal(api.diagnostics[0].step, 'lock');
   for (let i = 0; i < MAX_DIAGNOSTICS + 5; i++) {
-    foldEvent(cards, { type: 'diagnostic', data: { requestId: 1, dir: '/w/core', phase: 'p', message: 'm' + i } });
+    foldEvent(cards, { type: 'diagnostic', data: { requestId: 1, dir: '/w/core', step: 'p', message: 'm' + i } });
   }
   assert.equal(core.diagnostics.length, MAX_DIAGNOSTICS); // capped per module
 });
@@ -271,8 +283,8 @@ test('weight progress aggregates numerator/denominator across modules', async ()
   const cards = [];
   foldEvent(cards, start(1, '/w'));
   foldEvent(cards, { type: 'plan', data: { requestId: 1, weight: 300 } });
-  foldEvent(cards, { type: 'goal-progress', data: { requestId: 1, dir: '/w/a', numerator: 50, denominator: 100 } });
-  foldEvent(cards, { type: 'goal-progress', data: { requestId: 1, dir: '/w/b', numerator: 20, denominator: 100 } });
+  foldEvent(cards, { type: 'pipeline-progress', data: { requestId: 1, dir: '/w/a', numerator: 50, denominator: 100 } });
+  foldEvent(cards, { type: 'pipeline-progress', data: { requestId: 1, dir: '/w/b', numerator: 20, denominator: 100 } });
   assert.equal(weightNumerator(cards[0]), 70);
   // denominator = max(planWeight 300, sum of module dens 200) = 300 — stable, no backward jump
   assert.equal(weightDenominator(cards[0]), 300);
@@ -282,16 +294,16 @@ test('weight denominator falls back to summed module dens when no plan (single b
   const { weightDenominator } = await import(pathToFileURL(process.env.JK_FOLD_MJS));
   const cards = [];
   foldEvent(cards, start(1, '/w'));
-  foldEvent(cards, { type: 'goal-progress', data: { requestId: 1, dir: '', numerator: 4, denominator: 12 } });
+  foldEvent(cards, { type: 'pipeline-progress', data: { requestId: 1, dir: '', numerator: 4, denominator: 12 } });
   assert.equal(weightDenominator(cards[0]), 12);
 });
 
-test('goal-progress updates latest per dir (no double count on repeat)', async () => {
+test('pipeline-progress updates latest per dir (no double count on repeat)', async () => {
   const { weightNumerator } = await import(pathToFileURL(process.env.JK_FOLD_MJS));
   const cards = [];
   foldEvent(cards, start(1, '/w'));
-  foldEvent(cards, { type: 'goal-progress', data: { requestId: 1, dir: '/w/a', numerator: 10, denominator: 100 } });
-  foldEvent(cards, { type: 'goal-progress', data: { requestId: 1, dir: '/w/a', numerator: 80, denominator: 100 } });
+  foldEvent(cards, { type: 'pipeline-progress', data: { requestId: 1, dir: '/w/a', numerator: 10, denominator: 100 } });
+  foldEvent(cards, { type: 'pipeline-progress', data: { requestId: 1, dir: '/w/a', numerator: 80, denominator: 100 } });
   assert.equal(weightNumerator(cards[0]), 80); // latest wins, not 10+80
 });
 

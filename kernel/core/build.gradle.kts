@@ -24,23 +24,23 @@ dependencies {
 // engine ships it without a second, drift-prone copy in this module's resources.
 tasks.processResources {
     from(rootProject.file("plugins/spring-boot/jk-plugin.toml")) {
-        into("dev/jkbuild/plugin/manifest")
+        into("build/jumpkick/plugin/manifest")
         rename { "spring-boot.jk-plugin.toml" }
     }
     // Scaffold templates ride next to the manifest (registry resource dir <id>/scaffold/...).
     from(rootProject.file("plugins/spring-boot/scaffold")) {
-        into("dev/jkbuild/plugin/manifest/spring-boot/scaffold")
+        into("build/jumpkick/plugin/manifest/spring-boot/scaffold")
     }
     from(rootProject.file("plugins/android/jk-plugin.toml")) {
-        into("dev/jkbuild/plugin/manifest")
+        into("build/jumpkick/plugin/manifest")
         rename { "android.jk-plugin.toml" }
     }
     from(rootProject.file("plugins/protobuf/jk-plugin.toml")) {
-        into("dev/jkbuild/plugin/manifest")
+        into("build/jumpkick/plugin/manifest")
         rename { "protobuf.jk-plugin.toml" }
     }
     from(rootProject.file("plugins/shrink/jk-plugin.toml")) {
-        into("dev/jkbuild/plugin/manifest")
+        into("build/jumpkick/plugin/manifest")
         rename { "shrink.jk-plugin.toml" }
     }
 }

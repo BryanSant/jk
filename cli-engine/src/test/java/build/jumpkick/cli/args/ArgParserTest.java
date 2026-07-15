@@ -1,0 +1,201 @@
+// SPDX-License-Identifier: Apache-2.0
+package build.jumpkick.cli.args;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.catchThrowableOfType;
+
+import build.jumpkick.model.command.Arity;
+import build.jumpkick.model.command.Command;
+import build.jumpkick.model.command.Invocation;
+import build.jumpkick.model.command.Opt;
+import build.jumpkick.model.command.Param;
+import java.util.List;
+import org.junit.jupiter.api.Test;
+
+class ArgParserTest {
+
+    /** A command exposing one of each option/param shape the parser must handle. */
+    private static Command cmd(List<Opt> opts, List<Param> params) {
+        return new Command() {
+            @Override
+            public String name() {
+                return "demo";
+            }
+
+            @Override
+            public String description() {
+                return "demo";
+            }
+
+            @Override
+            public List<Opt> options() {
+                return opts;
+            }
+
+            @Override
+            public List<Param> parameters() {
+                return params;
+            }
+        };
+    }
+
+    private static Invocation parse(Command c, String... args) throws ParseException {
+        return ArgParser.parse(c, List.of(args));
+    }
+
+    @Test
+    void longValueOption_spaceAndEquals() throws Exception {
+        Command c = cmd(List.of(Opt.value("<name>", "profile", "--profile")), List.of());
+        assertThat(parse(c, "--profile", "ci").value("profile")).contains("ci");
+        assertThat(parse(c, "--profile=ci").value("profile")).contains("ci");
+    }
+
+    @Test
+    void booleanFlag_longAndShortAndBundled() throws Exception {
+        Command c = cmd(List.of(Opt.flag("quiet", "-q", "--quiet"), Opt.flag("verbose", "-v", "--verbose")), List.of());
+        assertThat(parse(c, "--quiet").isSet("quiet")).isTrue();
+        assertThat(parse(c, "-q").isSet("quiet")).isTrue();
+        Invocation bundled = parse(c, "-qv");
+        assertThat(bundled.isSet("quiet")).isTrue();
+        assertThat(bundled.isSet("verbose")).isTrue();
+        assertThat(parse(c).isSet("quiet")).isFalse();
+    }
+
+    @Test
+    void shortValueOption_attachedOrSeparate() throws Exception {
+        Command c = cmd(List.of(Opt.value("<N>", "workers", "-w", "--workers")), List.of());
+        assertThat(parse(c, "-w", "4").value("workers")).contains("4");
+        assertThat(parse(c, "-w4").value("workers")).contains("4");
+        assertThat(parse(c, "--workers=8").value("workers")).contains("8");
+    }
+
+    @Test
+    void negatableFlag() throws Exception {
+        Command c = cmd(List.of(Opt.flag("executable", "--executable").negate()), List.of());
+        assertThat(parse(c, "--executable").flag("executable")).contains(true);
+        assertThat(parse(c, "--no-executable").flag("executable")).contains(false);
+        assertThat(parse(c).flag("executable")).isEmpty();
+    }
+
+    @Test
+    void splitValuesIntoList() throws Exception {
+        Command c = cmd(List.of(Opt.value("<csv>", "features", "--features").splitOn(",")), List.of());
+        assertThat(parse(c, "--features", "a,b,c").values("features")).containsExactly("a", "b", "c");
+    }
+
+    @Test
+    void repeatableOption() throws Exception {
+        Command c = cmd(List.of(Opt.value("<dep>", "dep", "--dep").repeat()), List.of());
+        assertThat(parse(c, "--dep", "x", "--dep", "y").values("dep")).containsExactly("x", "y");
+    }
+
+    @Test
+    void singleValueOption_lastWins() throws Exception {
+        Command c = cmd(List.of(Opt.value("<name>", "profile", "--profile")), List.of());
+        assertThat(parse(c, "--profile", "a", "--profile", "b").value("profile"))
+                .contains("b");
+    }
+
+    @Test
+    void optionalArgOption_usesFallbackWhenPresentWithoutValue() throws Exception {
+        Command c = cmd(List.of(Opt.value("<path>", "tarball", "--tarball").withFallback("")), List.of());
+        assertThat(parse(c, "--tarball").value("tarball")).contains("");
+        assertThat(parse(c, "--tarball", "out.tar").value("tarball")).contains("out.tar");
+    }
+
+    @Test
+    void doubleDashEndsOptionParsing() throws Exception {
+        Command c = cmd(
+                List.of(Opt.flag("quiet", "--quiet")), List.of(Param.of("args", Arity.ZERO_OR_MORE, "passthrough")));
+        Invocation in = parse(c, "--", "--quiet", "-x", "foo");
+        assertThat(in.isSet("quiet")).isFalse();
+        assertThat(in.positionals()).containsExactly("--quiet", "-x", "foo");
+    }
+
+    @Test
+    void positionals_arityValidation() {
+        Command oneRequired = cmd(List.of(), List.of(Param.of("coord", Arity.ONE, "the coord")));
+        assertThatThrownBy(() -> parse(oneRequired)).isInstanceOf(ParseException.class);
+        ParseException tooMany = catchThrowableOfType(ParseException.class, () -> parse(oneRequired, "a", "b"));
+        assertThat(tooMany.kind()).isEqualTo(ParseException.Kind.TOO_MANY_ARGS);
+    }
+
+    @Test
+    void unknownOption_throws() {
+        Command c = cmd(List.of(Opt.flag("quiet", "--quiet")), List.of());
+        ParseException ex = catchThrowableOfType(ParseException.class, () -> parse(c, "--bogus"));
+        assertThat(ex.kind()).isEqualTo(ParseException.Kind.UNKNOWN_OPTION);
+        assertThat(ex.token()).isEqualTo("--bogus");
+    }
+
+    @Test
+    void missingValue_throws() {
+        Command c = cmd(List.of(Opt.value("<name>", "profile", "--profile")), List.of());
+        ParseException ex = catchThrowableOfType(ParseException.class, () -> parse(c, "--profile"));
+        assertThat(ex.kind()).isEqualTo(ParseException.Kind.MISSING_VALUE);
+    }
+
+    @Test
+    void requiredOption_throwsWhenAbsent() {
+        Command c = cmd(List.of(Opt.value("<url>", "repo", "--repo-url").require()), List.of());
+        ParseException ex = catchThrowableOfType(ParseException.class, () -> parse(c));
+        assertThat(ex.kind()).isEqualTo(ParseException.Kind.MISSING_REQUIRED);
+    }
+
+    @Test
+    void mixedOptionsAndPositionals() throws Exception {
+        Command c = cmd(
+                List.of(Opt.flag("quiet", "-q", "--quiet"), Opt.value("<name>", "profile", "--profile")),
+                List.of(Param.of("target", Arity.ZERO_OR_MORE, "targets")));
+        Invocation in = parse(c, "-q", "build", "--profile", "ci", "test");
+        assertThat(in.isSet("quiet")).isTrue();
+        assertThat(in.value("profile")).contains("ci");
+        assertThat(in.positionals()).containsExactly("build", "test");
+    }
+
+    @Test
+    void longOption_uniquePrefixResolves() throws Exception {
+        Command c = cmd(List.of(Opt.flag("flatten", "--flatten"), Opt.flag("stack", "--stack")), List.of());
+        assertThat(parse(c, "--flat").isSet("flatten")).isTrue();
+        assertThat(parse(c, "--fl").isSet("flatten")).isTrue(); // still unique (stack starts with --st)
+    }
+
+    @Test
+    void longValueOption_uniquePrefixTakesValue() throws Exception {
+        Command c = cmd(List.of(Opt.value("<scopes>", "scopes", "--scopes")), List.of());
+        assertThat(parse(c, "--scope", "test,runtime").value("scopes")).contains("test,runtime");
+        assertThat(parse(c, "--sc=all").value("scopes")).contains("all");
+    }
+
+    @Test
+    void longOption_exactWinsOverPrefix() throws Exception {
+        // --flat is an exact name AND a prefix of --flatten; exact must win.
+        Command c = cmd(List.of(Opt.flag("flat", "--flat"), Opt.flag("flatten", "--flatten")), List.of());
+        assertThat(parse(c, "--flat").isSet("flat")).isTrue();
+        assertThat(parse(c, "--flat").isSet("flatten")).isFalse();
+    }
+
+    @Test
+    void ambiguousPrefix_throws() {
+        Command c = cmd(List.of(Opt.flag("stack", "--stack"), Opt.value("<s>", "scopes", "--scopes")), List.of());
+        ParseException ex = catchThrowableOfType(ParseException.class, () -> parse(c, "--s"));
+        assertThat(ex.kind()).isEqualTo(ParseException.Kind.AMBIGUOUS_OPTION);
+        assertThat(ex.getMessage()).contains("--scopes").contains("--stack");
+    }
+
+    @Test
+    void negatableFlag_uniquePrefix() throws Exception {
+        Command c = cmd(List.of(Opt.flag("executable", "--executable").negate()), List.of());
+        assertThat(parse(c, "--no-exec").flag("executable")).contains(false);
+    }
+
+    @Test
+    void passthrough_forwardsAbbreviationsInsteadOfMatching() throws Exception {
+        // A passthrough command must NOT prefix-match; --flat is forwarded, not resolved to --flatten.
+        Command c = cmd(List.of(Opt.flag("flatten", "--flatten")), List.of(Param.of("args", Arity.ZERO_OR_MORE, "a")));
+        Invocation in = ArgParser.parse(c, List.of("--flat", "x"), true);
+        assertThat(in.isSet("flatten")).isFalse();
+        assertThat(in.positionals()).containsExactly("--flat", "x");
+    }
+}

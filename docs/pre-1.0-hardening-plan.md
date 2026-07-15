@@ -117,9 +117,9 @@ The NDJSON protocol works but is three encoders, two spellings of "directory", ~
 error shapes, and one message type wearing eleven schemas. This is the part of the
 sweep with a hard deadline: after 1.0 every one of these becomes a compat constraint.
 
-### P1.1 — Split `goal-finish`'s eleven schemas
-`GOAL_FINISH` is built by eleven builders with disjoint field sets (`goalFinish`,
-`goalFinishLock/Sync/Format/Publish/GitFetch/Import/Image/Tool/Script/Cache`); the
+### P1.1 — Split `pipeline-finish`'s eleven schemas
+`PIPELINE_FINISH` is built by eleven builders with disjoint field sets (`pipelineFinish`,
+`pipelineFinishLock/Sync/Format/Publish/GitFetch/Import/Image/Tool/Script/Cache`); the
 client decodes it by remembering what it asked for (G3 violation), and any field drift
 degrades silently to `-1`/null. Fix: add a mandatory `kind` discriminator field
 emitted by every terminal builder and asserted by the adapters (unknown kind for the
@@ -199,7 +199,7 @@ lying if the server ever starts reading it.
   shutting down — retry" with a clean retry-once on the fresh endpoint.
 
 ### P1.10 — Vocabulary mergers and hygiene
-- Merge `plan-module/plan-phase/plan-done` and `explain-module/phase/edge/done` into
+- Merge `plan-module/plan-step/plan-done` and `explain-module/step/edge/done` into
   one plan vocabulary (`explain` keeps its extra `edge`; same field names).
 - `cache-prune-request`'s four ops with op-specific fields: keep one type but make the
   field set uniform (`op`, `dir`, `scope`) — no fields that only exist for one op.
@@ -224,7 +224,7 @@ lying if the server ever starts reading it.
 (`credential/MavenSettings`), and — worst — `JkThreads`, which installs a JVM
 **shutdown hook** and global thread pools on any classpath that touches the API jar.
 Fix: split. `:jk-api` keeps pure types + the command/run SPI; a new `:kernel/support`
-module takes `dev.jkbuild.util` (JkThreads, PathUtil, Hashing, TreeFingerprint,
+module takes `build.jumpkick.util` (JkThreads, PathUtil, Hashing, TreeFingerprint,
 ContextPropagating*, GitUrl, JkDirs), `credential/`, and `image/`+`publish/` config
 records move to where their consumers live (core/engine). Mechanical but wide; do it
 before 1.0 or never.
@@ -235,8 +235,8 @@ Gradle project id should say what it is. Rename settings.gradle.kts entry + all
 `project(":model")` references (search also for the `-jdk-home`-style worker deps).
 
 ### P2.3 — Two public `PluginManifest` types
-`dev.jkbuild.plugin.PluginManifest` (plugin-api, 2-field worker identity, imported by
-all 12 workers) vs `dev.jkbuild.plugin.manifest.PluginManifest` (core, 12-field parsed
+`build.jumpkick.plugin.PluginManifest` (plugin-api, 2-field worker identity, imported by
+all 12 workers) vs `build.jumpkick.plugin.manifest.PluginManifest` (core, 12-field parsed
 jk-plugin.toml). Coin-flip auto-import for plugin authors. Rename the **core** one to
 `PluginDescriptor` (3 importing files; the worker-facing one keeps the established
 name that 12 workers already import).
@@ -266,7 +266,7 @@ The sweep found ~30 "Back-compat" telescoping overloads. Cutover costs are known
   parser), `CompileRequest`/`KotlincRequest`/`JarPackager`/`ShadowPackager`/
   `EffortWeights`/`PluginBuild`/`DependencyTree`/`WorkspaceClasspath` and the
   cli/toolchain/plugins stragglers from the inventory.
-- **Actively harmful**: `BuildPipeline.Inputs` overloads that default `session` from
+- **Actively harmful**: `BuildPipelines.Inputs` overloads that default `session` from
   `SessionContext.current()` — they reintroduce the ambient global the `Session`
   record exists to kill. Delete first.
 
@@ -288,7 +288,7 @@ interest on the longest.
   (`GitRefSpec.Rev.sha` → `sha256`... it's a git object id (SHA-1/SHA-256 by repo
   format), so rename to `objectId` instead — calling it `sha256` would be wrong).
 - Engine boundary records align to the SPI's `moduleDir` spelling
-  (`BuildPipeline.Inputs.dir` → `moduleDir`? No — `Inputs.dir` is the *entry* dir;
+  (`BuildPipelines.Inputs.dir` → `moduleDir`? No — `Inputs.dir` is the *entry* dir;
   align it with the wire rename in P1.3: `dir`).
 - Fix the stale `VersionSelector` comment: leading `=` is the **live** pin syntax
   lockfiles emit today, not "back-compat with older lockfiles". (Verified — do NOT
@@ -554,7 +554,7 @@ resources, lint/baseline profiles, solver version interning (BOM soft pins).
   all four deactivate scripts, `members=` synonym, `Calibration.migrateLegacy`,
   `JkMavenLocalRepo` (GC-only remnant), JdkList identifier-only fallback, JkEnv
   absolute-path identifiers, `.test-stamp` exclusion, `installLocalCas`, stale
-  picocli/phase-label comments.
+  picocli/step-label comments.
 - **Bonus consistency fix:** `CacheGc` and `LruEvictor` swept only the dead legacy
   m2 mirror while `CasSweep` also swept named repo stores — all three now share
   `RepoArtifactStore.removeShasFromAll`. Fixing that exposed a latent bug in
@@ -573,7 +573,7 @@ resources, lint/baseline profiles, solver version interning (BOM soft pins).
 ### H3
 
 - Wire renames landed: `entryDir`→`dir` everywhere, `rerun`→`rebuild` (carrying H2's
-  semantic split), cache-clear's `projectRoot`→`dir`. `goal-finish` carries a
+  semantic split), cache-clear's `projectRoot`→`dir`. `pipeline-finish` carries a
   mandatory `kind` discriminator (build/lock/sync/format/git-fetch/publish/import/
   image/tool/script/cache) — the message is self-describing.
 - ONE error envelope: `error{code,message}` with codes request-failed / protocol /
@@ -629,7 +629,7 @@ resources, lint/baseline profiles, solver version interning (BOM soft pins).
   telescoping ctors (one live 5-arg caller found in the parser, moved to
   canonical); ALL 11 "P2…P6 shape" overloads in PluginDescriptor (zero callers —
   pure archaeology); `Session`'s 9-arg pre-variant ctor.
-- `BuildPipeline.Inputs` lost the three overloads that silently defaulted the
+- `BuildPipelines.Inputs` lost the three overloads that silently defaulted the
   session from `SessionContext.current()` — all 25 call sites now say the ambient
   read OUT LOUD (mostly tests, which legitimately run in-process).
 - `PluginConfig`'s fifth value shape (group-vs-reference dual shape) is documented
@@ -637,7 +637,7 @@ resources, lint/baseline profiles, solver version interning (BOM soft pins).
   comment now says what it is (the LIVE pin syntax), not "back-compat".
 - KEPT deliberately: `JkBuild(project, deps[, repos])` — already documented as
   explicit shortcuts delegating to canonical, used by ~28 tests; not back-compat.
-- DEFERRED (H4-residue, most valuable first): evicting `dev.jkbuild.util`/
+- DEFERRED (H4-residue, most valuable first): evicting `build.jumpkick.util`/
   `credential`/`image` from the jk-api leaf into a `:support` module (P2.1) and the
   `:model`→`:jk-api` Gradle rename (P2.2) — module-graph surgery touching every
   build file, parked to protect H5/H6's verification budget tonight; the
@@ -648,7 +648,7 @@ resources, lint/baseline profiles, solver version interning (BOM soft pins).
 
 - The dormant incremental-Java seam turned out to be ALREADY RETIRED in code —
   `JavaIncrementalCompile.run` (the doc's recommended option (c)) is live in
-  BuildPipeline/TestSupport and the single-pass `IncrementalCompiler` classes no
+  BuildPipelines/TestSupport and the single-pass `IncrementalCompiler` classes no
   longer exist; docs/incremental-java-compile.md got a STATUS note making it a
   design record. Azure Blob is marked not-implemented in the transport matrix
   (the `azblob://` scheme is reserved and errors clearly).
@@ -691,7 +691,7 @@ resources, lint/baseline profiles, solver version interning (BOM soft pins).
   CompileCommand's missing --jdks-dir); plan-*/explain-* merge + history/metrics
   builders into EngineProtocol (both explicitly non-contract in docs/protocol.md);
   EngineDelegate picking the pinned version's floor JDK from its manifest;
-  goal-finish kind assertions in adapter callers.
+  pipeline-finish kind assertions in adapter callers.
 - **Smoke-found bug (fixed + regression-tested):** `VersionStore.materialize`
   short-circuited on "already materialized" by VERSION alone, so a same-version
   re-install with different bytes (every dev `-SNAPSHOT` rebuild) silently kept
@@ -714,10 +714,10 @@ resources, lint/baseline profiles, solver version interning (BOM soft pins).
   contract leaf: PathUtil, Hashing, TreeFingerprint, JkDirs, GitUrl, MinimalXml,
   AtomicWrites. The leaf keeps NO `util` junk-drawer at all: JkThreads +
   ContextPropagator/ContextPropagatingExecutorService moved to
-  `dev.jkbuild.run` (they ARE the Goal scheduler's execution seam — lazily
+  `build.jumpkick.run` (they ARE the Pipeline scheduler's execution seam — lazily
   inert, the shutdown hook only installs when a build actually runs) and
-  JkVersion to `dev.jkbuild.model`. MavenSettings (a ~/.m2 reader) moved to
-  its only consumer's module, `dev.jkbuild.repo` in :client-io. No split
+  JkVersion to `build.jumpkick.model`. MavenSettings (a ~/.m2 reader) moved to
+  its only consumer's module, `build.jumpkick.repo` in :client-io. No split
   packages anywhere. `:support` layers ON the leaf (implementation(:jk-api))
   for the executor seam; the leaf has no edge to support. Wiring mirrors the
   old visibility: :core api-exposes :support exactly as it api-exposes the
@@ -804,8 +804,8 @@ Resolves BOTH parked -SNAPSHOT findings with one mechanism. `BuildIdentity`
 this class loaded from — empty ("no opinion") in unit tests, native images,
 and anywhere identity isn't derivable, which preserves release behavior
 exactly. Uses:
-- **Action keys**: every key-feeding `jkVersion` argument (BuildPipeline,
-  BuildPlanForecast, TestSupport, ImageGoals, PluginBuild describeKey) is now
+- **Action keys**: every key-feeding `jkVersion` argument (BuildPipelines,
+  BuildPlanForecast, TestSupport, ImagePipelines, PluginBuild describeKey) is now
   `BuildIdentity.cacheKeyVersion()` — `<version>+<id>` for snapshots — so a
   rebuilt dev engine can never restore an older engine's bytes under the same
   key. Non-key uses (worker coordinates, lockfile stamps, calibration) stay on

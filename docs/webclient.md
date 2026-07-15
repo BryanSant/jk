@@ -86,12 +86,12 @@ Three small layers, one file each:
   - `status` — the `/api/status` payload, refreshed on load, on SSE reconnect, and on a slow
     (30 s) timer as a fallback; the SSE stream is the primary freshness signal, not polling.
   - `cards` — `/api/events` entries folded (via `fold.js`, bounded at 50 cards) into per-request
-    cards: a `request-start` opens a card, `module-start`/`goal-finish`/`module-finish` events
+    cards: a `request-start` opens a card, `module-start`/`pipeline-finish`/`module-finish` events
     update its rows, `request-finish` closes it with outcome + duration. Bounded so a long-lived
     tab can't grow the page without limit. A running card carries a **progress bar** and an **ETA
     countdown** using the *identical* method as the CLI: the engine already computes the weight-based
-    plan (`EffortWeights`/`PhaseTimings`/`Calibration`) and the re-projected ETA, and now publishes
-    the same numbers to the SSE hub — `plan` (total weight), `goal-progress` (per-module
+    plan (`EffortWeights`/`StepTimings`/`Calibration`) and the re-projected ETA, and now publishes
+    the same numbers to the SSE hub — `plan` (total weight), `pipeline-progress` (per-module
     `numerator`/`denominator`) and `eta` (millis). `fold.js` aggregates the per-module counters
     (`weightNumerator`/`weightDenominator`, plan-seeded so a workspace bar can't jump backward);
     `app.js` `progress()` is `numerator/denominator` clamped to 99% while running (100% on finish),
@@ -110,16 +110,16 @@ Three small layers, one file each:
 
 **v1 ships two:**
 
-- **Activity** (default) — live feed of engine requests as cards: workspace/project dir, per-goal
-  rows appearing as `goal-finish` events land, outcome badge and wall-clock on completion. This is
+- **Activity** (default) — live feed of engine requests as cards: workspace/project dir, per-pipeline
+  rows appearing as `pipeline-finish` events land, outcome badge and wall-clock on completion. This is
   the "trigger something with the CLI, watch it here" feedback loop. Past runs are backfilled from
   the persisted journal (see below), so the feed is populated even on a cold load. A finished card
   carries a **delete** affordance (like removing a GitHub Actions run) — `DELETE /api/history?id=`,
   then the card is dropped locally. A "Build…" button (POST `/api/build` with a directory string)
   exists but is secondary — the CLI remains the primary trigger; the button proves the mutation
-  path end-to-end. Each card's phase strip is a self-contained `phase-chain` component that never
-  wraps: it's one horizontal chain anchored to the newest phase, with earlier phases pushed off the
-  left. There is no scrollbar — when phases are hidden, a `◂` / `▸` button appears at that edge to
+  path end-to-end. Each card's step strip is a self-contained `step-chain` component that never
+  wraps: it's one horizontal chain anchored to the newest step, with earlier steps pushed off the
+  left. There is no scrollbar — when steps are hidden, a `◂` / `▸` button appears at that edge to
   page the view (the track is moved via `scrollLeft`, `overflow:hidden`).
 - **Status** — the `jk engine status` numbers, rendered: version, pid, uptime, heap used/committed
   /max and RSS (with a small inline bar, no chart library), active connections/pipelines, the
@@ -130,8 +130,8 @@ Three small layers, one file each:
   Below the vitals sits the **build-stats section** (implemented),
   fed by `GET /api/metrics` (the engine's running aggregates — see [`metrics.md`](metrics.md)):
   KPI tiles for total builds recorded, success rate, per-kind average duration and total time
-  building, plus a per-phase table (runs / avg / min / max / total / failed, top 10 by total time).
-  A plugin verb runs as its own phase, so the phase table is also the per-worker/per-plugin view.
+  building, plus a per-step table (runs / avg / min / max / total / failed, top 10 by total time).
+  A plugin verb runs as its own step, so the step table is also the per-worker/per-plugin view.
   Refreshed with the same 30 s fallback poll as the vitals; an empty store shows a quiet
   placeholder line.
 

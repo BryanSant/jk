@@ -29,7 +29,7 @@ Everything else (build-info, main-class scan, SBOM hook, protobuf alignment) is 
 | Dev scopes | main/provided/runtime/test/processor/export/platform | **No `dev` scope** (`developmentOnly`), no `test-dev`, no production-runtime-classpath subtraction |
 | Run loop | `jk run` (build+exec, engine-hosted) | No restart-on-change loop; DevTools works if on the run classpath, but nothing recompiles continuously |
 | Test-main run | — | No "run a main from the test source set on the test classpath" (`bootTestRun` → Testcontainers dev services) |
-| AOT processing | — | No generated-source-set phase; no `SpringApplicationAotProcessor` invocation |
+| AOT processing | — | No generated-source-set step; no `SpringApplicationAotProcessor` invocation |
 | Native image | `jk native` (engine-managed GraalVM 25, `[native]`) | Needs AOT outputs on the image classpath + `reachability-metadata.json` + metadata-repository consumption |
 | CDS/AOT cache | jk trains its **own** engine AOT cache at install | Not exposed as an app-packaging feature (extract layout + training run) |
 | OCI image | `[image]` via jib worker (daemonless) | Not layer-aware (deps/loader/snapshot/app), no Boot env conventions; buildpacks unsupported (deliberately — see §5) |
@@ -68,7 +68,7 @@ docker-compose = { group = "org.springframework.boot", name = "spring-boot-docke
 ```
 
 `[spring-boot]` mirrors the plugin's reactive nature: its presence switches `jk build`'s
-packaging to the Boot layout, wires AOT phases when enabled, and layer-maps `[image]`.
+packaging to the Boot layout, wires AOT steps when enabled, and layer-maps `[image]`.
 No task names to learn — the standard verbs (`jk build/run/test/native/image`) change
 behavior, which is exactly how the Gradle plugin behaves (reacting to `java`/`war`/NBT).
 
@@ -85,7 +85,7 @@ Two new top-level dep tables, matching the plugin's configurations 1:1:
 Both are general-purpose (not Boot-specific) — they also serve Quarkus/Micronaut later.
 Lockfile records them under their own scope so production resolution is unchanged.
 
-### 3.3 Boot-layout packaging (`boot-jar` phase in the build pipeline)
+### 3.3 Boot-layout packaging (`boot-jar` step in the build pipeline)
 
 A new packager alongside `JarPackager`/`ShadowPackager` (pure zip assembly, no Boot code
 runs at build time):
@@ -108,9 +108,9 @@ runs at build time):
 `jk verify`'s reproducibility check applies to the boot jar like any artifact — something
 Gradle does not give Boot users out of the box.
 
-### 3.4 AOT phases
+### 3.4 AOT steps
 
-`[spring-boot] aot = true` (implied by `[native]`) adds pipeline phases after `compile`:
+`[spring-boot] aot = true` (implied by `[native]`) adds pipeline steps after `compile`:
 
 1. **`spring-aot`** — fork `java -cp <app runtime cp> org.springframework.boot.SpringApplicationAotProcessor
    <main> <gen-sources> <gen-resources> <gen-classes> <group> <artifact> [app args]`
@@ -122,12 +122,12 @@ Gradle does not give Boot users out of the box.
 3. Test AOT (`processTestAot`) deferred to phase 3 — `nativeTest` is explicitly a
    "reserve for native-specific behavior" tool even in the Gradle world.
 
-Incrementality: the AOT phase re-runs when app classes/classpath change — engine-hosted,
+Incrementality: the AOT step re-runs when app classes/classpath change — engine-hosted,
 cached by the same action-key machinery as compilation.
 
 ### 3.5 Native + the efficiency ladder
 
-- `jk native` on a `[spring-boot]` project: run AOT phases, add gen-classes/resources to
+- `jk native` on a `[spring-boot]` project: run AOT steps, add gen-classes/resources to
   the image classpath, set `-Dspring.aot.enabled=true` conventions, require GraalVM 25+
   (jk's GraalResolver already provisions it), and consume the **GraalVM Reachability
   Metadata Repository** (a Maven-fetchable artifact set — natural fit for jk's resolver;
@@ -228,7 +228,7 @@ latency is bounded by javac on the delta, with no Gradle configuration phase in 
    layer instead of the whole fat jar. Verified in podman. Also verified against Boot
    **4.1.0** (spring-core 7.0.8 line): lock, build, `java -jar`, jarmode list-layers +
    extract.
-3. **AOT & native** — spring-aot/compile-aot phases; `jk native` integration +
+3. **AOT & native** — spring-aot/compile-aot steps; `jk native` integration +
    reachability-metadata repo; `jk package --aot-cache` ladder. *Exit: native webmvc app
    builds and serves; AOT-cache startup ≈ Boot's documented ~1.5×.*
    **CORE DONE (2026-07-10).** `aot = true` (auto with `[native]`) forks

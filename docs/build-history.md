@@ -5,7 +5,7 @@
 
 Restarting the engine used to lose every trace of past builds — the dashboard's "Live activity"
 feed was live-SSE-only with no backfill, and the rich per-build outcome (`WorkspaceResult` /
-`ModuleOutcome`, `GoalResult` / `PhaseReport` / `Diagnostic`, `TestSummary`) lived only in local
+`ModuleOutcome`, `PipelineResult` / `StepReport` / `Diagnostic`, `TestSummary`) lived only in local
 variables for the duration of a run and was then dropped. Now every engine build is journaled to
 disk, survives restarts, is browsable in the dashboard and a `jk history` CLI, and individual
 entries are deletable like a GitHub Actions run.
@@ -36,7 +36,7 @@ directory move is the existence check that forces a retry on the rare clash.
 **`record.json`** (schema 1): flat scalars — `id, schema, kind, dir, coord?, startedAt, finishedAt,
 millis, success, cancelled, exitCode, jkVersion` — plus a nullable `tests` object
 (`total/succeeded/failed/skipped`) and three arrays: `modules[{coord,dir,success,exitCode,millis}]`,
-`phases[{name,status,millis}]`, `diagnostics[{severity,phase,code,message,test,exceptionClass}]`.
+`steps[{name,status,millis}]`, `diagnostics[{severity,step,code,message,test,exceptionClass}]`.
 
 > The engine's `JsonOut` is deliberately flat (scalars + one string array) and can't express those
 > arrays-of-objects, so the journal carries its own small nested writer/reader, `journal/Json`. The
@@ -47,7 +47,7 @@ millis, success, cancelled, exitCode, jkVersion` — plus a nullable `tests` obj
 
 `EngineServer` opens a per-request `BuildAccumulator` (keyed by the event-request id) for the
 journaled kinds — `build`, `test`, `1build` (single build) — and folds outcomes into it from the
-**same** `WorkspaceBuildListener` / `GoalListener` callbacks that publish dashboard events, plus the
+**same** `WorkspaceBuildListener` / `PipelineListener` callbacks that publish dashboard events, plus the
 runner's terminal result (success/exit, and the `TestSummary` for single builds/tests). At
 request-finish it writes the record + snapshots via `BuildJournal.append`.
 
@@ -56,7 +56,7 @@ SSE client is connected, but the accumulator and the write do not. A build run f
 with no browser open is still journaled. Journaling is best-effort: an append failure is logged and
 never propagated (it must not change a build's outcome).
 
-The journal library (`dev.jkbuild.engine.journal`: `BuildRecord`, `Json`, `BuildJournal`) lives in
+The journal library (`build.jumpkick.engine.journal`: `BuildRecord`, `Json`, `BuildJournal`) lives in
 the engine module. Concurrent builds never contend — each owns a unique `<id>/` and writes only
 within it; `append` stages into a dot-prefixed temp dir and moves it into place atomically, so a
 reader never sees a half-written entry.

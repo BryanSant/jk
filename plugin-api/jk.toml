@@ -1,5 +1,5 @@
 [project]
-group       = "dev.jkbuild"
+group       = "build.jumpkick"
 name        = "jk-plugin-api"
 version     = "0.10.0-SNAPSHOT"
 description = "jk Plugin SPI + HostEvent wire codec. Zero external dependencies."
@@ -7,7 +7,7 @@ jdk         = 25
 java        = 25
 
 [dependencies]
-jk-model = { group = "dev.jkbuild", name = "jk-model", version = "0.10.0-SNAPSHOT" }
+jk-model = { group = "build.jumpkick", name = "jk-model", version = "0.10.0-SNAPSHOT" }
 
 [test-dependencies]
 assertj-core            = { group = "org.assertj",        name = "assertj-core",            version = "3.27.7" }

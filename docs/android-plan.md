@@ -50,7 +50,7 @@ scripted fake adb — a live `adb devices` run is the outstanding proof.
   embeddable Compose compiler at `${kotlin.version}`. **BuildConfig**: explicit
   `build-config = true` codegen step. **`jk dev` redeploy**: dev plans carry the deploy
   verb + src/res/manifest watch roots; the client loop rebuilds and re-dispatches.
-- **SDK revisions pinned**: `[[sdk]]` lock entries (lock-sdk phase; drift reported).
+- **SDK revisions pinned**: `[[sdk]]` lock entries (lock-sdk step; drift reported).
 Phase-2 honest gaps: a live `@Composable` e2e compile (constituents proven; lands with
 Phase 4's Kotlin work), app-module R narrowing (dep Rs are correctly scoped; the app's
 own R still carries merged symbols).
@@ -91,7 +91,7 @@ file naming (same extension → a flavor switch overwrites; per-variant output d
 Phase-4 polish). `jk run`/`jk dev` of a release build deploy via the verb but the
 run/dev EXEC PLAN paths stay debug-shaped. v3 key rotation schema'd, not wired.
 **PHASE 4 LANDED (with two recorded gaps)** (2026-07-11, worktree-android-plugin):
-- **KSP2 (§3.5)**: an engine `ksp` phase forks `KSPJvmMain` (KSP2's own CLI) — processors
+- **KSP2 (§3.5)**: an engine `ksp` step forks `KSPJvmMain` (KSP2's own CLI) — processors
   detected by their registered `SymbolProcessorProvider` service (KSP wins dual-service
   jars; javac keeps the rest on -processorpath); KspResolver picks the newest stable
   STANDALONE KSP2 release (it embeds its own analysis compiler; serves a Kotlin range) and
@@ -250,7 +250,7 @@ own declarative model rather than reimplements (§3.1, §6).
 |---|---|---|
 | Android SDK provisioning | JDK/tool provisioning (`ToolProvisioner`, probe chain, license-free feeds) | **New feed**: cmdline-tools + `sdkmanager`-equivalent (platforms, build-tools, platform-tools, emulator, system-images) + license acceptance UX |
 | Compile against `android.jar` | javac/kotlinc workers with configurable classpath | bootclasspath/`-Xandroid`-style wiring; `core-lambda-stubs`; API-level selection |
-| Resources (aapt2, R) | — | compile/link phases, non-transitive per-module R, resource merging across modules/AARs |
+| Resources (aapt2, R) | — | compile/link steps, non-transitive per-module R, resource merging across modules/AARs |
 | Manifest merge | — | worker around manifest-merger; placeholders, `dist:` namespace for feature modules |
 | Dexing (D8) + desugaring | — | worker around r8 jar in D8 mode; incremental per-module dex; `desugar_jdk_libs` |
 | R8 release pipeline | — | keep-rule collection (app + consumer rules from AARs + generated), full-mode defaults, mapping.txt outputs, optimized resource shrinking |
@@ -325,7 +325,7 @@ overrides use the same table-scoping pattern instead of a Groovy DSL. AGP 9's de
 flips (non-transitive R, target=compile, full-mode R8) are jk's *only* mode — no legacy
 flags to migrate.
 
-Variant mechanics: variants are computed goal parameterizations, not configured objects —
+Variant mechanics: variants are computed pipeline parameterizations, not configured objects —
 there is no configuration phase to explode, so "variant explosion" costs nothing until a
 variant is actually built. The `androidComponents`/convention-plugin machinery (research
 §3–4) exists to fight Gradle's own model; jk's TOML + workspace inheritance replaces it
@@ -344,7 +344,7 @@ explicit `jk android licenses` prompt (recorded hashes, exactly like `sdkmanager
 
 ### 3.3 The build pipeline (app module, debug)
 
-New engine phases (all forked workers, all CAS/action-key cached):
+New engine steps (all forked workers, all CAS/action-key cached):
 
 ```
 merge-manifest → aapt2-compile (per res dir, incremental) → aapt2-link (→ R.txt, R.jar, proto/binary res)
@@ -454,7 +454,7 @@ The entire §4/§8 of the research doc — Kotlin DSL, version catalogs, convent
 configuration cache, isolated projects, build-cache fix plugins, `gradle.properties`
 tuning — is **accidental complexity of Gradle's model**, and jk deletes it: TOML has no
 configuration phase to cache, workspace inheritance replaces convention plugins,
-per-module goals parallelize and cache by construction, and the catalog is built in.
+per-module pipelines parallelize and cache by construction, and the catalog is built in.
 Add hermetic lockfile-pinned SDK/emulator provisioning (Gradle: "install Studio first"),
 supply-chain (SBOM/Sigstore/OSV) for APK/AAB artifacts, reproducible-build verification
 of release artifacts, one native binary instead of wrapper+daemon JVMs, and a

@@ -2,7 +2,7 @@
 
 > **STATUS (2026-07-13):** this design shipped as option **(c)** — `JavaIncrementalCompile.run`
 > owns the multi-pass loop over `JavacDriver` + the ASM analyzers (`ClassAbi`,
-> `ClassDependencies`) and is live in `BuildPipeline`/`TestSupport`. The single-pass
+> `ClassDependencies`) and is live in `BuildPipelines`/`TestSupport`. The single-pass
 > `IncrementalCompiler`/`FullRebuildCompiler`/`IncrementalCompilers` seam described below was
 > RETIRED with it (the classes no longer exist). The rest of this document is the design
 > record.
@@ -16,7 +16,7 @@ Kotlin incremental worker (Build Tools API). javac always performs the actual
 compilation; the incremental layer only decides **which sources to hand javac**
 and **carries the rest over**.
 
-**Scope:** the compile-main / compile-test Java path in `BuildPipeline` (and the
+**Scope:** the compile-main / compile-test Java path in `BuildPipelines` (and the
 `IncrementalCompiler` seam it already exposes). Out of scope: replacing javac,
 cross-module workspace incrementality, and the existing Kotlin worker (covered
 in `kotlin-incremental-bta-decision`, the project memory).
@@ -28,13 +28,13 @@ in `kotlin-incremental-bta-decision`, the project memory).
 jk already ships the orchestration for incremental Java; it's parked behind a
 no-op planner:
 
-- `dev.jkbuild.compile.incremental.IncrementalCompiler` — the seam:
+- `build.jumpkick.compile.incremental.IncrementalCompiler` — the seam:
   `plan(PlanRequest{request, prior, stateDir}) → CompilePlan{recompile, carryOver, dropped}`
   and `attribute(plan, outputDir) → UnitOutputs` (source → produced `.class`).
-- `dev.jkbuild.compile.incremental.FullRebuildCompiler` — the **only** impl today
+- `build.jumpkick.compile.incremental.FullRebuildCompiler` — the **only** impl today
   (recompiles everything, carries nothing). No `ServiceLoader` registration, so
   `IncrementalCompilers.resolve()` falls back to it.
-- `dev.jkbuild.task.IncrementalCompile.run(...)` — the orchestrator, **already
+- `build.jumpkick.task.IncrementalCompile.run(...)` — the orchestrator, **already
   implemented**: action-key fast path → materialise carried-over classes from the
   CAS → recompile only `plan.recompile()` with javac → `attribute()` → store the
   result with a per-source unit grouping.
@@ -255,7 +255,7 @@ in-tree example of a processor whose handling we must get right.
 ## 9. Phasing
 
 1. **Shared ASM core — DONE (no worker needed).** `ClassAbi` + `ClassDependencies`
-   (ASM) and `dev.jkbuild.task.JavaIncrementalCompile` (the precise multi-pass
+   (ASM) and `build.jumpkick.task.JavaIncrementalCompile` (the precise multi-pass
    orchestrator chosen in §5 — a sibling to `KotlinCompile`, not the single-pass
    seam) using the **existing subprocess javac**; the analysis runs in jk's
    process on the output bytecode, so phase 1 needs no worker. Wired into
@@ -277,7 +277,7 @@ in-tree example of a processor whose handling we must get right.
    - **Slice 2 — DONE.** `JavaCompilerWorker` (main + line-oriented spec +
      `##JKJC:` NDJSON: diagnostics / provenance / result), ServiceLoader-discovering
      processors from the processor path. Packaged like the other workers
-     (`maven-publish` `dev.jkbuild:jk-java-compiler`, `installLocalCas`, runtime
+     (`maven-publish` `build.jumpkick:jk-java-compiler`, `installLocalCas`, runtime
      `writeJavaWorkerSha`, `JkWorkerSync` 3rd entry, `JavaWorkerSetup` locator —
      no impl closure needed). `jk sync` pulls it from `~/.m2`.
    - **Slice 3a — DONE.** `WorkerJavac` launcher (engine): runs the worker

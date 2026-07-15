@@ -8,36 +8,36 @@ import { foldEvent, outcomeOf, moduleSummary, seedFromHistory, weightNumerator, 
 
 bootstrapToken();
 
-// The build-phase strip: a single horizontal chain that never wraps. New phases advance rightward
+// The build-step strip: a single horizontal chain that never wraps. New steps advance rightward
 // and push earlier ones off the left (out of, or partially out of, view). There is no scrollbar —
-// when phases are hidden a ◂ / ▸ nav button appears at that edge to page the view. Anchored to the
-// newest phase on mount and whenever the chain grows. See docs/webclient.md.
-const PhaseChain = {
-  props: { phases: { type: Array, required: true } },
+// when steps are hidden a ◂ / ▸ nav button appears at that edge to page the view. Anchored to the
+// newest step on mount and whenever the chain grows. See docs/webclient.md.
+const StepChain = {
+  props: { steps: { type: Array, required: true } },
   data: () => ({ atStart: true, atEnd: true }),
   template: `
-    <div class="phase-chain-wrap">
+    <div class="step-chain-wrap">
       <button v-show="!atStart" type="button" class="chain-nav left" @click="page(-1)"
-              aria-label="show earlier phases" title="earlier phases">◂</button>
+              aria-label="show earlier steps" title="earlier steps">◂</button>
       <span v-show="!atStart" class="chain-fade left" aria-hidden="true"></span>
-      <div class="phase-chain" ref="track">
-        <template v-for="(p, i) in phases" :key="p.name">
-          <span v-if="i > 0" class="phase-edge" :class="phases[i - 1].state"></span>
-          <span class="phase-node" :class="p.state">
+      <div class="step-chain" ref="track">
+        <template v-for="(p, i) in steps" :key="p.name">
+          <span v-if="i > 0" class="step-edge" :class="steps[i - 1].state"></span>
+          <span class="step-node" :class="p.state" :title="stepTitle(p)">
             <span v-if="p.state === 'running'" class="spin small"></span>
-            <span v-else-if="p.state === 'success'" class="phase-glyph ok">✓</span>
-            <span v-else-if="p.state === 'failed'" class="phase-glyph err">✘</span>
-            {{ p.name }}
+            <span v-else-if="p.state === 'success'" class="step-glyph ok">✓</span>
+            <span v-else-if="p.state === 'failed'" class="step-glyph err">✘</span>
+            {{ stepLabel(p) }}
           </span>
         </template>
       </div>
       <span v-show="!atEnd" class="chain-fade right" aria-hidden="true"></span>
       <button v-show="!atEnd" type="button" class="chain-nav right" @click="page(1)"
-              aria-label="show later phases" title="later phases">▸</button>
+              aria-label="show later steps" title="later steps">▸</button>
     </div>`,
-  // `follow` = keep pinned to the newest phase. True until the user pages away with ◂/▸; re-armed
-  // when they page back to the end. While following, every render (new phase, or a phase's node
-  // resizing as it goes running→success) re-anchors, so a build that scrolls phases off the left
+  // `follow` = keep pinned to the newest step. True until the user pages away with ◂/▸; re-armed
+  // when they page back to the end. While following, every render (new step, or a step's node
+  // resizing as it goes running→success) re-anchors, so a build that scrolls steps off the left
   // still finishes pinned to the right end — not stranded mid-chain with a ▸ showing.
   data: () => ({ atStart: true, atEnd: true, follow: true }),
   mounted() {
@@ -46,13 +46,26 @@ const PhaseChain = {
     this.$nextTick(() => this.anchorEnd());
   },
   updated() {
-    // Fires after each phase update (state/width change); nextTick lets layout settle first.
+    // Fires after each step update (state/width change); nextTick lets layout settle first.
     this.$nextTick(() => this.reflow());
   },
   beforeUnmount() {
     if (this.observer) this.observer.disconnect();
   },
   methods: {
+    // A step node's label: "phase/step" when the step carries a phase, stripping a redundant leading
+    // "phase-" from the step name (compile + compile-java → compile/java; test + run-tests →
+    // test/run-tests). No phase → the bare step name.
+    stepLabel(p) {
+      if (!p.phase) return p.name;
+      const prefix = p.phase + '-';
+      const short = p.name.startsWith(prefix) ? p.name.slice(prefix.length) : p.name;
+      return p.phase + '/' + short;
+    },
+    // Tooltip: the full, unstripped phase/step so the raw step name is always recoverable on hover.
+    stepTitle(p) {
+      return p.phase ? p.phase + '/' + p.name : p.name;
+    },
     reflow() {
       if (this.follow) this.anchorEnd();
       else this.measure();
@@ -184,15 +197,15 @@ function routeFromHash() {
   return { view: 'activity', dir: null };
 }
 
-/** Cached-vs-total phase counts for one record → the build's "N of M phases served from cache". */
-function phaseCacheStats(rec) {
-  const phases = (rec.modules && rec.modules.length)
-    ? rec.modules.flatMap((m) => m.phases || [])
-    : rec.phases || [];
+/** Cached-vs-total step counts for one record → the build's "N of M steps served from cache". */
+function stepCacheStats(rec) {
+  const steps = (rec.modules && rec.modules.length)
+    ? rec.modules.flatMap((m) => m.steps || [])
+    : rec.steps || [];
   let cached = 0;
   let total = 0;
-  for (const p of phases) {
-    if (p.status === 'CANCELLED') continue; // a cancelled phase never ran — not a cache decision
+  for (const p of steps) {
+    if (p.status === 'CANCELLED') continue; // a cancelled step never ran — not a cache decision
     total++;
     if (p.status === 'SKIPPED') cached++; // ctx.cached() → up-to-date / served from cache
   }
@@ -381,7 +394,7 @@ Vue.createApp({
           ran++;
           if (o === 'success') passed++;
         }
-        const cs = phaseCacheStats(r);
+        const cs = stepCacheStats(r);
         cachedSum += cs.cached;
         totalSum += cs.total;
         if (r.millis) durs.push(r.millis);
@@ -392,7 +405,7 @@ Vue.createApp({
       const avg = durs.length ? Math.round(durs.reduce((s, x) => s + x, 0) / durs.length) : null;
 
       const rows = records.slice(0, 50).map((r) => {
-        const cs = phaseCacheStats(r);
+        const cs = stepCacheStats(r);
         return {
           id: r.id,
           buildNumber: r.buildNumber || null,
@@ -523,7 +536,7 @@ Vue.createApp({
     progress(card) {
       if (this.outcome(card) !== 'running') return 100;
       const den = weightDenominator(card);
-      if (den <= 0) return 0; // no weight yet (before goal-start) — the bar fills in a beat
+      if (den <= 0) return 0; // no weight yet (before pipeline-start) — the bar fills in a beat
       return Math.min(99, Math.round((100 * weightNumerator(card)) / den));
     },
 
@@ -556,19 +569,19 @@ Vue.createApp({
       return moduleSummary(card);
     },
 
-    // A build is "compact" (one phase chain under the header, no module-name rows) when it has at
+    // A build is "compact" (one step chain under the header, no module-name rows) when it has at
     // most one module — a single-project build, or a 1-module workspace. Multi-module builds render
     // a bullet+name row per module, each with its own chain.
     compact(card) {
       return card.modules.length <= 1;
     },
 
-    // The single chain shown under the header for a compact card (the one module's phases, if any).
+    // The single chain shown under the header for a compact card (the one module's steps, if any).
     singleChain(card) {
-      return card.modules[0] ? card.modules[0].phases : [];
+      return card.modules[0] ? card.modules[0].steps : [];
     },
 
-    // The lone module of a compact card — carries the phases and any failure output shown inline.
+    // The lone module of a compact card — carries the steps and any failure output shown inline.
     singleModule(card) {
       return card.modules[0] || null;
     },
@@ -650,10 +663,10 @@ Vue.createApp({
         .sort((a, b) => a.kind.localeCompare(b.kind));
     },
 
-    // The machine-wide per-phase rows, biggest total first, capped for the panel.
-    metricsPhases() {
+    // The machine-wide per-step rows, biggest total first, capped for the panel.
+    metricsSteps() {
       return (this.metrics || [])
-        .filter((r) => r.scope === 'phase')
+        .filter((r) => r.scope === 'step')
         .sort((a, b) => b.okTotalMillis - a.okTotalMillis)
         .slice(0, 10);
     },
@@ -818,6 +831,6 @@ Vue.createApp({
     },
   },
 })
-  .component('phase-chain', PhaseChain)
+  .component('step-chain', StepChain)
   .component('build-bars', BuildBars)
   .mount('#app');
