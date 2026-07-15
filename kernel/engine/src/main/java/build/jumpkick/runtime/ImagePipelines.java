@@ -108,7 +108,7 @@ public final class ImagePipelines {
                 java.util.Set.of(),
                 build.jumpkick.config.SessionContext.current());
 
-        Step imagePlan = Step.builder(StepNames.IMAGE_PLAN).phase(Phase.PACKAGE)
+        Step imagePlan = Step.builder(StepNames.IMAGE_PLAN).phase(Phase.IMAGE)
                 .requires(StepNames.PACKAGE_JAR)
                 .ticks(1)
                 .execute(ctx -> {
@@ -145,7 +145,7 @@ public final class ImagePipelines {
                 })
                 .build();
 
-        Step writeImage = Step.builder(StepNames.WRITE_IMAGE).phase(Phase.PACKAGE)
+        Step writeImage = Step.builder(StepNames.WRITE_IMAGE).phase(Phase.IMAGE)
                 .kind(StepKind.IO)
                 .requires(StepNames.IMAGE_PLAN)
                 .weight(() -> EffortWeights.ociWeight(projectDir))

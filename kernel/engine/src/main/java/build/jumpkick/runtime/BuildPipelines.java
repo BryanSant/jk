@@ -3,6 +3,7 @@ package build.jumpkick.runtime;
 
 import build.jumpkick.run.StepNames;
 import build.jumpkick.plugin.build.Phase;
+import build.jumpkick.plugin.build.PhaseGraph;
 
 import build.jumpkick.cache.Cas;
 import build.jumpkick.compile.ClasspathResolver;
@@ -2000,6 +2001,13 @@ public final class BuildPipelines {
             throw new IllegalStateException("plugin step " + step.name()
                     + " runs before compile but declares In.classes() — generated-source steps"
                     + " consume project files (In.projectFiles), config, or other step outputs");
+        }
+        if (step.afterPhase() != null && step.beforePhase() != null
+                && !PhaseGraph.isValidWindow(step.afterPhase(), step.beforePhase())) {
+            // Coherent window: after must run no later than before in the phase DAG.
+            throw new IllegalStateException("plugin step " + step.name() + " declares a reversed phase window —"
+                    + " after(" + step.afterPhase().wireName() + ") does not precede before("
+                    + step.beforePhase().wireName() + ")");
         }
         List<String> requires = new ArrayList<>();
         if (beforeCompile) {

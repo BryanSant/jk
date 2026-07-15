@@ -27,6 +27,17 @@ public interface Plugin extends Extension {
     }
 
     /**
+     * A plugin's phases are derived from the capability interfaces it implements ({@link
+     * build.jumpkick.plugin.build.BuildExtension} ⇒ {@link build.jumpkick.plugin.build.Phase#COMPILE},
+     * …); a bare {@link build.jumpkick.plugin.build.BuildPlugin} that only uses {@code register()}
+     * declares its phases through its steps' {@code after}/{@code before} instead.
+     */
+    @Override
+    default java.util.Set<build.jumpkick.plugin.build.Phase> phases() {
+        return build.jumpkick.plugin.build.Capabilities.phasesOf(this);
+    }
+
+    /**
      * Execute the plugin against {@code args} (the verbatim process arguments — typically a single
      * spec-file path), emitting structured results through {@code out}. Return the process exit code
      * (0 = success).

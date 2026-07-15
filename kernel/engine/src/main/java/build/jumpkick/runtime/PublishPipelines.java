@@ -10,6 +10,7 @@ import build.jumpkick.layout.BuildLayout;
 import build.jumpkick.model.Dependency;
 import build.jumpkick.model.GitRefSpec;
 import build.jumpkick.model.JkBuild;
+import build.jumpkick.plugin.build.Phase;
 import build.jumpkick.plugin.protocol.Ndjson;
 import build.jumpkick.run.Pipeline;
 import build.jumpkick.run.PipelineKey;
@@ -113,6 +114,7 @@ public final class PublishPipelines {
                 .build();
 
         Step publish = Step.builder("publish")
+                .phase(Phase.PUBLISH)
                 .kind(StepKind.IO)
                 .requires(StepNames.PARSE_BUILD)
                 .ticks(1)
