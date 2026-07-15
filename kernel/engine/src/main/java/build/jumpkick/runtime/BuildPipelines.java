@@ -2948,7 +2948,7 @@ public final class BuildPipelines {
             List<Path> javaSourceRoots)
             throws IOException {
         String kotlinVersion = CompileToolchain.kotlinVersionFor(ctx.require(LOCKFILE), ctx.require(PROJECT));
-        KotlinWorkerSetup.Prepared kt;
+        KotlinPluginSetup.Prepared kt;
         // The installed plugins' [[contribute.kotlin-plugin]] entries (e.g. spring-boot's
         // all-open, and no-arg gated on jakarta.persistence via classpath-has) — evaluated
         // from the manifest, fetched version-locked to the compiler actually used. The
@@ -2957,8 +2957,8 @@ public final class BuildPipelines {
         List<KotlincRequest.Plugin> ktPlugins = new ArrayList<>();
         try {
             build.jumpkick.repo.RepoGroup repos = RepoGroupBuilder.buildFor(ctx.require(PROJECT), null, cas);
-            kt = KotlinWorkerSetup.prepare(repos, cas, kotlinVersion);
-            // Same null-defaulting as KotlinWorkerSetup.prepare — a contributed plugin must
+            kt = KotlinPluginSetup.prepare(repos, cas, kotlinVersion);
+            // Same null-defaulting as KotlinPluginSetup.prepare — a contributed plugin must
             // match the compiler actually used.
             String pluginVersion = (kotlinVersion == null || kotlinVersion.isBlank())
                     ? build.jumpkick.kotlin.KotlinResolver.DEFAULT_VERSION
@@ -3080,7 +3080,7 @@ public final class BuildPipelines {
         String kotlinVersion = CompileToolchain.kotlinVersionFor(ctx.require(LOCKFILE), ctx.require(PROJECT));
         try {
             build.jumpkick.repo.RepoGroup repos = RepoGroupBuilder.buildFor(ctx.require(PROJECT), null, cas);
-            return KotlinWorkerSetup.prepare(repos, cas, kotlinVersion).stdlib();
+            return KotlinPluginSetup.prepare(repos, cas, kotlinVersion).stdlib();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new RuntimeException("interrupted resolving the Kotlin stdlib", e);

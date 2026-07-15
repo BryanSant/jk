@@ -8,11 +8,11 @@ import org.jetbrains.kotlin.buildtools.api.KotlinLogger;
  * as {@code error}/{@code warn} calls; we forward them to the parent as structured {@code diag}
  * lines. {@code debug} is dropped (we report {@link #isDebugEnabled()} {@code false}).
  */
-final class WorkerLogger implements KotlinLogger {
+final class KcLogger implements KotlinLogger {
 
     private final KcProtocol proto;
 
-    WorkerLogger(KcProtocol proto) {
+    KcLogger(KcProtocol proto) {
         this.proto = proto;
     }
 

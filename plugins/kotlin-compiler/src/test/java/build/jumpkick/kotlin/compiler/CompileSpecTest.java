@@ -4,42 +4,42 @@ package build.jumpkick.kotlin.compiler;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import build.jumpkick.plugin.protocol.PluginProtocol;
+import build.jumpkick.plugin.protocol.PluginSpec;
+import build.jumpkick.plugin.protocol.SpecWriter;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
- * Pure parsing + argument-building behaviour of the worker — no Build Tools API runtime required
- * (those paths are exercised end-to-end once jk's launcher + resolver land).
+ * The kotlin plugin's spec decode ({@link CompileSpec#from}) + argument building over the unified
+ * NDJSON plugin wire — no Build Tools API runtime required.
  */
 class CompileSpecTest {
 
     @Test
     void parses_all_keys_and_repeatables(@TempDir Path dir) throws IOException {
-        Path spec = write(dir, """
-                # a comment, and a blank line follows
-
-                OUTPUT /tmp/out
-                WORKDIR /tmp/work
-                SNAPSHOT_DIR /tmp/snaps
-                JVM_TARGET 21
-                MODULE_NAME main
-                LANGUAGE_VERSION 2.4
-                API_VERSION 2.4
-                SOURCE /src/A.kt
-                SOURCE /src/B.kt
-                CLASSPATH /libs/stdlib.jar
-                CLASSPATH /libs/dep.jar
-                FRIEND /build/classes/other
-                ARG -no-stdlib
-                ARG -Xfoo
-                """);
-
-        CompileSpec s = CompileSpec.parse(spec);
+        CompileSpec s = parse(dir, new SpecWriter()
+                .op(PluginProtocol.OP_COMPILE, null, "jk-kotlin-compiler")
+                .layout(Map.of("classesDir", Path.of("/tmp/out"),
+                        "workdir", Path.of("/tmp/work"),
+                        "snapshotDir", Path.of("/tmp/snaps")))
+                .configString("jvmTarget", "21")
+                .configString("moduleName", "main")
+                .configString("languageVersion", "2.4")
+                .configString("apiVersion", "2.4")
+                .source(Path.of("/src/A.kt"))
+                .source(Path.of("/src/B.kt"))
+                .cp(Path.of("/libs/stdlib.jar"), PluginProtocol.ROLE_COMPILE)
+                .cp(Path.of("/libs/dep.jar"), PluginProtocol.ROLE_COMPILE)
+                .cp(Path.of("/build/classes/other"), PluginProtocol.ROLE_FRIEND)
+                .arg("-no-stdlib")
+                .arg("-Xfoo"));
 
         assertThat(s.outputDir).isEqualTo(new File("/tmp/out"));
         assertThat(s.workingDir).isEqualTo(new File("/tmp/work"));
@@ -57,65 +57,59 @@ class CompileSpecTest {
 
     @Test
     void absent_workdir_means_non_incremental(@TempDir Path dir) throws IOException {
-        CompileSpec s = CompileSpec.parse(write(dir, """
-                OUTPUT /tmp/out
-                JVM_TARGET 21
-                SOURCE /src/A.kt
-                """));
+        CompileSpec s = parse(dir, new SpecWriter()
+                .op(PluginProtocol.OP_COMPILE, null, "jk-kotlin-compiler")
+                .layout(Map.of("classesDir", Path.of("/tmp/out")))
+                .configString("jvmTarget", "21")
+                .source(Path.of("/src/A.kt")));
         assertThat(s.incremental()).isFalse();
     }
 
     @Test
     void value_may_contain_spaces(@TempDir Path dir) throws IOException {
-        CompileSpec s = CompileSpec.parse(write(dir, """
-                OUTPUT /tmp/with space/out
-                JVM_TARGET 21
-                SOURCE /tmp/with space/A.kt
-                """));
+        CompileSpec s = parse(dir, new SpecWriter()
+                .op(PluginProtocol.OP_COMPILE, null, "jk-kotlin-compiler")
+                .layout(Map.of("classesDir", Path.of("/tmp/with space/out")))
+                .configString("jvmTarget", "21")
+                .source(Path.of("/tmp/with space/A.kt")));
         assertThat(s.outputDir).isEqualTo(new File("/tmp/with space/out"));
         assertThat(s.sources).containsExactly(new File("/tmp/with space/A.kt"));
     }
 
     @Test
     void rejects_missing_required_keys(@TempDir Path dir) throws IOException {
-        Path noOutput = write(dir, "JVM_TARGET 21\nSOURCE /a.kt\n");
-        assertThatThrownBy(() -> CompileSpec.parse(noOutput))
+        assertThatThrownBy(() -> parse(dir, new SpecWriter()
+                        .op(PluginProtocol.OP_COMPILE, null, "jk-kotlin-compiler")
+                        .configString("jvmTarget", "21")
+                        .source(Path.of("/a.kt"))))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("OUTPUT");
+                .hasMessageContaining("classesDir");
 
-        Path noSources = write(dir, "OUTPUT /o\nJVM_TARGET 21\n");
-        assertThatThrownBy(() -> CompileSpec.parse(noSources))
+        assertThatThrownBy(() -> parse(dir, new SpecWriter()
+                        .op(PluginProtocol.OP_COMPILE, null, "jk-kotlin-compiler")
+                        .layout(Map.of("classesDir", Path.of("/o")))
+                        .configString("jvmTarget", "21")))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("SOURCE");
-    }
-
-    @Test
-    void rejects_unknown_key(@TempDir Path dir) throws IOException {
-        Path spec = write(dir, "OUTPUT /o\nJVM_TARGET 21\nSOURCE /a.kt\nBOGUS x\n");
-        assertThatThrownBy(() -> CompileSpec.parse(spec))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("BOGUS");
+                .hasMessageContaining("source");
     }
 
     @Test
     void build_args_for_incremental_carry_fir_flag_and_options(@TempDir Path dir) throws IOException {
-        CompileSpec s = CompileSpec.parse(write(dir, """
-                OUTPUT /o
-                WORKDIR /w
-                JVM_TARGET 21
-                MODULE_NAME main
-                LANGUAGE_VERSION 2.4
-                SOURCE /a.kt
-                CLASSPATH /libs/x.jar
-                FRIEND /f1
-                FRIEND /f2
-                ARG -no-stdlib
-                """));
+        CompileSpec s = parse(dir, new SpecWriter()
+                .op(PluginProtocol.OP_COMPILE, null, "jk-kotlin-compiler")
+                .layout(Map.of("classesDir", Path.of("/o"), "workdir", Path.of("/w")))
+                .configString("jvmTarget", "21")
+                .configString("moduleName", "main")
+                .configString("languageVersion", "2.4")
+                .source(Path.of("/a.kt"))
+                .cp(Path.of("/libs/x.jar"), PluginProtocol.ROLE_COMPILE)
+                .cp(Path.of("/f1"), PluginProtocol.ROLE_FRIEND)
+                .cp(Path.of("/f2"), PluginProtocol.ROLE_FRIEND)
+                .arg("-no-stdlib"));
 
         List<String> args = KotlinCompilerPlugin.buildArgs(s);
 
-        // Destination is a builder parameter, never a raw arg.
-        assertThat(args).doesNotContain("-d");
+        assertThat(args).doesNotContain("-d"); // destination is a builder parameter, never a raw arg
         assertThat(args).containsSequence("-jvm-target", "21");
         assertThat(args).containsSequence("-module-name", "main");
         assertThat(args).containsSequence("-language-version", "2.4");
@@ -127,17 +121,17 @@ class CompileSpecTest {
 
     @Test
     void build_args_for_full_compile_omit_fir_flag(@TempDir Path dir) throws IOException {
-        CompileSpec s = CompileSpec.parse(write(dir, """
-                OUTPUT /o
-                JVM_TARGET 21
-                SOURCE /a.kt
-                """));
+        CompileSpec s = parse(dir, new SpecWriter()
+                .op(PluginProtocol.OP_COMPILE, null, "jk-kotlin-compiler")
+                .layout(Map.of("classesDir", Path.of("/o")))
+                .configString("jvmTarget", "21")
+                .source(Path.of("/a.kt")));
         assertThat(KotlinCompilerPlugin.buildArgs(s)).doesNotContain("-Xuse-fir-ic");
     }
 
-    private static Path write(Path dir, String body) throws IOException {
-        Path f = dir.resolve("spec-" + System.nanoTime() + ".txt");
-        Files.writeString(f, body);
-        return f;
+    private static CompileSpec parse(Path dir, SpecWriter sw) throws IOException {
+        Path f = dir.resolve("spec-" + System.nanoTime() + ".spec");
+        Files.write(f, sw.lines());
+        return CompileSpec.from(PluginSpec.read(f));
     }
 }

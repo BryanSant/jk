@@ -23,7 +23,7 @@ import org.junit.jupiter.api.io.TempDir;
  * repo stores; the worker jar content is irrelevant to location, only its presence at the expected
  * m2 path (with .sha256 sidecar) matters.
  */
-class KotlinWorkerSetupTest {
+class KotlinPluginSetupTest {
 
     private static final String VERSION = JkVersion.VERSION;
     private static final String M2_PATH =
@@ -55,12 +55,12 @@ class KotlinWorkerSetupTest {
      * BELOW the override, so it must be absent for their duration.
      */
     private static void withoutOverride(Runnable body) {
-        String prev = System.getProperty(KotlinWorkerSetup.WORKER_JAR_PROPERTY);
-        System.clearProperty(KotlinWorkerSetup.WORKER_JAR_PROPERTY);
+        String prev = System.getProperty(KotlinPluginSetup.WORKER_JAR_PROPERTY);
+        System.clearProperty(KotlinPluginSetup.WORKER_JAR_PROPERTY);
         try {
             body.run();
         } finally {
-            if (prev != null) System.setProperty(KotlinWorkerSetup.WORKER_JAR_PROPERTY, prev);
+            if (prev != null) System.setProperty(KotlinPluginSetup.WORKER_JAR_PROPERTY, prev);
         }
     }
 
@@ -68,13 +68,13 @@ class KotlinWorkerSetupTest {
     void system_property_overrides_repos_lookup(@TempDir Path dir) throws IOException {
         Path jar = Files.writeString(dir.resolve("override.jar"), "x");
         Cas emptyCas = new Cas(dir.resolve("cas"));
-        String prev = System.getProperty(KotlinWorkerSetup.WORKER_JAR_PROPERTY);
-        System.setProperty(KotlinWorkerSetup.WORKER_JAR_PROPERTY, jar.toString());
+        String prev = System.getProperty(KotlinPluginSetup.WORKER_JAR_PROPERTY);
+        System.setProperty(KotlinPluginSetup.WORKER_JAR_PROPERTY, jar.toString());
         try {
             assertThat(PluginJar.KOTLIN_COMPILER.locate(emptyCas)).isEqualTo(jar);
         } finally {
-            if (prev == null) System.clearProperty(KotlinWorkerSetup.WORKER_JAR_PROPERTY);
-            else System.setProperty(KotlinWorkerSetup.WORKER_JAR_PROPERTY, prev);
+            if (prev == null) System.clearProperty(KotlinPluginSetup.WORKER_JAR_PROPERTY);
+            else System.setProperty(KotlinPluginSetup.WORKER_JAR_PROPERTY, prev);
         }
     }
 }

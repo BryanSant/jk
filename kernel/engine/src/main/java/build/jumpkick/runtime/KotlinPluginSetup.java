@@ -21,7 +21,7 @@ import java.util.List;
  * is delegated to the shared {@link PluginJar} registry; this class adds only the Kotlin-specific
  * closure/stdlib resolution on top.
  */
-public final class KotlinWorkerSetup {
+public final class KotlinPluginSetup {
 
     /**
      * Override for the {@code jk-kotlin-compiler} jar path (tests, dev). Takes precedence over the
@@ -29,7 +29,7 @@ public final class KotlinWorkerSetup {
      */
     public static final String WORKER_JAR_PROPERTY = PluginJar.KOTLIN_COMPILER.jarProperty();
 
-    private KotlinWorkerSetup() {}
+    private KotlinPluginSetup() {}
 
     /**
      * @param workerClasspath worker JVM {@code -cp}: worker jar + BTA closure

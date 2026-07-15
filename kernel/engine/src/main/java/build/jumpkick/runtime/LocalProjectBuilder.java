@@ -93,8 +93,8 @@ public final class LocalProjectBuilder {
             if (!ktSources.isEmpty()) {
                 Path ktOut = layout.kotlinClassesDir();
                 Files.createDirectories(ktOut);
-                KotlinWorkerSetup.Prepared kt =
-                        KotlinWorkerSetup.prepare(repos, cas, CompileToolchain.kotlinVersionFor(lock, project));
+                KotlinPluginSetup.Prepared kt =
+                        KotlinPluginSetup.prepare(repos, cas, CompileToolchain.kotlinVersionFor(lock, project));
                 List<Path> ktCp = new ArrayList<>(classpath);
                 ktCp.add(kt.stdlib()); // -no-stdlib: pair the version-matched stdlib
                 List<String> ktArgs = new ArrayList<>();

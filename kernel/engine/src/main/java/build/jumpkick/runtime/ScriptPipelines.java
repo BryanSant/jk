@@ -263,7 +263,7 @@ public final class ScriptPipelines {
                     Cas cas = new Cas(cacheDir);
                     RepoGroup repos = buildRepos(header, repoUrl, new Http(), cas);
                     try {
-                        KotlinWorkerSetup.Prepared prep = KotlinWorkerSetup.prepare(repos, cas, header.kotlinVersion());
+                        KotlinPluginSetup.Prepared prep = KotlinPluginSetup.prepare(repos, cas, header.kotlinVersion());
                         ctx.put(WORKER_CP, prep.workerClasspath());
                         ctx.put(KT_STDLIB, prep.stdlib());
                     } catch (InterruptedException e) {

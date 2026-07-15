@@ -3,6 +3,7 @@ package build.jumpkick.kotlin.compiler;
 
 import build.jumpkick.plugin.Plugin;
 import build.jumpkick.plugin.PluginManifest;
+import build.jumpkick.plugin.protocol.PluginSpec;
 import build.jumpkick.plugin.protocol.ProtocolWriter;
 import java.io.File;
 import java.nio.charset.StandardCharsets;
@@ -51,7 +52,7 @@ public final class KotlinCompilerPlugin implements Plugin {
                 return 2;
             }
             String specArg = args.get(0).startsWith("@") ? args.get(0).substring(1) : args.get(0);
-            CompileSpec spec = CompileSpec.parse(Path.of(specArg));
+            CompileSpec spec = CompileSpec.from(PluginSpec.read(Path.of(specArg)));
             return compile(spec, proto);
         } catch (Throwable t) {
             System.err.println("jk-kotlin-compiler: " + t.getClass().getName() + ": " + t.getMessage());
@@ -70,7 +71,7 @@ public final class KotlinCompilerPlugin implements Plugin {
         CompilationResult result;
         try (KotlinToolchains.BuildSession session = toolchains.createBuildSession()) {
             ExecutionPolicy policy = toolchains.createInProcessExecutionPolicy();
-            WorkerLogger logger = new WorkerLogger(proto);
+            KcLogger logger = new KcLogger(proto);
 
             JvmCompilationOperation.Builder op = jvm.jvmCompilationOperationBuilder(sources, spec.outputDir.toPath());
             // Destination is a first-class builder param above; everything else jk
@@ -116,11 +117,13 @@ public final class KotlinCompilerPlugin implements Plugin {
         }
 
         proto.result(result.name());
-        return switch (result) {
+        int exit = switch (result) {
             case COMPILATION_SUCCESS -> 0;
             case COMPILATION_ERROR -> 1;
             default -> 3; // COMPILATION_OOM_ERROR, COMPILER_INTERNAL_ERROR
         };
+        proto.done(exit);
+        return exit;
     }
 
     /**

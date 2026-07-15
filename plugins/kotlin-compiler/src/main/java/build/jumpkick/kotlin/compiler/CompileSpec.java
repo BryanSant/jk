@@ -1,10 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 package build.jumpkick.kotlin.compiler;
 
+import build.jumpkick.plugin.protocol.PluginSpec;
 import java.io.File;
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -55,38 +53,26 @@ final class CompileSpec {
         return workingDir != null;
     }
 
-    static CompileSpec parse(Path specFile) throws IOException {
+    static CompileSpec from(PluginSpec spec) {
         CompileSpec s = new CompileSpec();
-        for (String raw : Files.readAllLines(specFile, StandardCharsets.UTF_8)) {
-            String line = raw.strip();
-            if (line.isEmpty() || line.startsWith("#")) continue;
-            int sp = line.indexOf(' ');
-            String key = sp < 0 ? line : line.substring(0, sp);
-            String val = sp < 0 ? "" : line.substring(sp + 1);
-            switch (key) {
-                case "OUTPUT" -> s.outputDir = new File(val);
-                case "WORKDIR" -> s.workingDir = new File(val);
-                case "SNAPSHOT_DIR" -> s.snapshotDir = new File(val);
-                case "JVM_TARGET" -> s.jvmTarget = val;
-                case "MODULE_NAME" -> s.moduleName = val;
-                case "LANGUAGE_VERSION" -> s.languageVersion = val;
-                case "API_VERSION" -> s.apiVersion = val;
-                case "SOURCE" -> s.sources.add(new File(val));
-                case "CLASSPATH" -> s.classpath.add(new File(val));
-                case "FRIEND" -> s.friendPaths.add(new File(val));
-                case "ARG" -> s.extraArgs.add(val);
-                case "PLUGIN" -> {
-                    String[] parts = val.split("\t");
-                    List<String> options = new ArrayList<>();
-                    for (int i = 2; i < parts.length; i++) options.add(parts[i]);
-                    s.plugins.add(new Plugin(parts[0], new File(parts[1]), options));
-                }
-                default -> throw new IllegalArgumentException("unknown spec key: " + key);
-            }
+        var c = spec.config();
+        if (spec.classesDir() != null) s.outputDir = spec.classesDir().toFile();
+        if (spec.workdir() != null) s.workingDir = spec.workdir().toFile(); // present ⇒ incremental
+        if (spec.snapshotDir() != null) s.snapshotDir = spec.snapshotDir().toFile();
+        s.jvmTarget = c.stringOpt("jvmTarget").orElse(null);
+        s.moduleName = c.stringOpt("moduleName").orElse(null);
+        s.languageVersion = c.stringOpt("languageVersion").orElse(null);
+        s.apiVersion = c.stringOpt("apiVersion").orElse(null);
+        for (Path p : spec.sources()) s.sources.add(p.toFile());
+        for (Path p : spec.compileClasspath()) s.classpath.add(p.toFile());
+        for (Path p : spec.friendPaths()) s.friendPaths.add(p.toFile());
+        s.extraArgs.addAll(spec.args());
+        for (PluginSpec.CompilerPlugin cp : spec.compilerPlugins()) {
+            s.plugins.add(new Plugin(cp.id(), cp.jar().toFile(), cp.options()));
         }
-        if (s.outputDir == null) throw new IllegalArgumentException("spec missing OUTPUT");
-        if (s.jvmTarget == null) throw new IllegalArgumentException("spec missing JVM_TARGET");
-        if (s.sources.isEmpty()) throw new IllegalArgumentException("spec has no SOURCE entries");
+        if (s.outputDir == null) throw new IllegalArgumentException("spec missing layout.classesDir (OUTPUT)");
+        if (s.jvmTarget == null) throw new IllegalArgumentException("spec missing config jvmTarget");
+        if (s.sources.isEmpty()) throw new IllegalArgumentException("spec has no source entries");
         return s;
     }
 }

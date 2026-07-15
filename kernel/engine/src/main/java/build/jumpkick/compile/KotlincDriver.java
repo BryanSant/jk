@@ -2,6 +2,8 @@
 package build.jumpkick.compile;
 
 import build.jumpkick.plugin.protocol.Ndjson;
+import build.jumpkick.plugin.protocol.PluginProtocol;
+import build.jumpkick.plugin.protocol.SpecWriter;
 import build.jumpkick.engine.plugin.PluginClient;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -77,8 +79,9 @@ public final class KotlincDriver {
             // fails with an empty diagnostic and no way to see why.
             java.util.ArrayDeque<String> chatter = new java.util.ArrayDeque<>();
             int exit = new PluginClient(PROTOCOL_PREFIX)
-                    .on("diag", json -> diagnostics.add(Ndjson.str(json, "sev") + ": " + Ndjson.str(json, "msg")))
-                    .on("result", json -> status[0] = Ndjson.str(json, "status"))
+                    .on(PluginProtocol.DIAGNOSTIC,
+                            json -> diagnostics.add(Ndjson.str(json, "sev") + ": " + Ndjson.str(json, "msg")))
+                    .on(PluginProtocol.RESULT, json -> status[0] = Ndjson.str(json, "status"))
                     .passthrough(line -> {
                         if (chatter.size() >= 40) chatter.removeFirst();
                         chatter.addLast(line);
@@ -130,18 +133,17 @@ public final class KotlincDriver {
                     println(shapes.sumOf { area(it) })
                 }
                 """);
-        List<String> lines = new ArrayList<>();
-        lines.add("OUTPUT " + scratch.resolve("out").toAbsolutePath());
-        lines.add("JVM_TARGET 21");
-        lines.add("ARG -jdk-home");
-        lines.add("ARG " + hostJavaHome.toAbsolutePath());
-        lines.add("ARG -no-stdlib");
-        lines.add("SOURCE " + source.toAbsolutePath());
-        for (Path cp : compileClasspath) {
-            lines.add("CLASSPATH " + cp.toAbsolutePath());
-        }
+        SpecWriter sw = new SpecWriter()
+                .op(PluginProtocol.OP_COMPILE, null, "jk-kotlin-compiler")
+                .configString("jvmTarget", "21")
+                .layout(java.util.Map.of("classesDir", scratch.resolve("out")))
+                .arg("-jdk-home")
+                .arg(hostJavaHome.toAbsolutePath().toString())
+                .arg("-no-stdlib")
+                .source(source);
+        for (Path cp : compileClasspath) sw.cp(cp, PluginProtocol.ROLE_COMPILE);
         Path spec = scratch.resolve("train.spec");
-        Files.write(spec, lines, StandardCharsets.UTF_8);
+        Files.write(spec, sw.lines(), StandardCharsets.UTF_8);
         List<String> rest = new ArrayList<>();
         rest.add("-XX:AOTCacheOutput=" + aotOutput);
         rest.addAll(List.of(
@@ -150,44 +152,31 @@ public final class KotlincDriver {
                 hostJavaHome.resolve("bin").resolve("java").toString(), 1, rest);
     }
 
-    /** Render the request into the worker's line-oriented spec format. */
+    /** Render the request into the unified NDJSON plugin spec. */
     private static Path writeSpec(KotlincRequest request) throws IOException {
-        List<String> lines = new ArrayList<>();
-        lines.add("OUTPUT " + request.outputDir().toAbsolutePath());
-        if (request.workingDir() != null) {
-            lines.add("WORKDIR " + request.workingDir().toAbsolutePath());
-        }
-        if (request.snapshotDir() != null) {
-            lines.add("SNAPSHOT_DIR " + request.snapshotDir().toAbsolutePath());
-        }
-        lines.add("JVM_TARGET " + request.jvmTarget());
-        // Cross-compile against the project's pinned JDK: the worker HOST is jk's runtime, so
-        // without -jdk-home kotlinc would resolve platform classes from jk's newer JDK and let
-        // a 17-pinned project reference APIs it can't run against.
-        lines.add("ARG -jdk-home");
-        lines.add("ARG " + request.javaHome().toAbsolutePath());
+        SpecWriter sw = new SpecWriter()
+                .op(PluginProtocol.OP_COMPILE, null, "jk-kotlin-compiler")
+                .configString("jvmTarget", String.valueOf(request.jvmTarget()));
+        java.util.Map<String, Path> layout = new java.util.LinkedHashMap<>();
+        layout.put("classesDir", request.outputDir());
+        if (request.workingDir() != null) layout.put("workdir", request.workingDir());
+        if (request.snapshotDir() != null) layout.put("snapshotDir", request.snapshotDir());
+        sw.layout(layout);
         if (request.moduleName() != null && !request.moduleName().isBlank()) {
-            lines.add("MODULE_NAME " + request.moduleName());
+            sw.configString("moduleName", request.moduleName());
         }
-        for (Path src : request.sources()) {
-            lines.add("SOURCE " + src.toAbsolutePath());
-        }
-        for (Path cp : request.classpath()) {
-            lines.add("CLASSPATH " + cp.toAbsolutePath());
-        }
-        for (String arg : request.extraArgs()) {
-            lines.add("ARG " + arg);
-        }
+        // Cross-compile against the project's pinned JDK: the plugin HOST is jk's runtime, so without
+        // -jdk-home kotlinc would resolve platform classes from jk's newer JDK and let a 17-pinned
+        // project reference APIs it can't run against.
+        sw.arg("-jdk-home").arg(request.javaHome().toAbsolutePath().toString());
+        for (Path src : request.sources()) sw.source(src);
+        for (Path cp : request.classpath()) sw.cp(cp, PluginProtocol.ROLE_COMPILE);
+        for (String arg : request.extraArgs()) sw.arg(arg);
         for (KotlincRequest.Plugin plugin : request.plugins()) {
-            // Tab-separated: id, jar path, then key=value options (tabs are not
-            // meaningful in any of these values).
-            StringBuilder line = new StringBuilder("PLUGIN ");
-            line.append(plugin.id()).append('\t').append(plugin.jar().toAbsolutePath());
-            for (String opt : plugin.options()) line.append('\t').append(opt);
-            lines.add(line.toString());
+            sw.compilerPlugin(plugin.id(), plugin.jar(), plugin.options());
         }
         Path spec = Files.createTempFile("jk-kotlinc-", ".spec");
-        Files.write(spec, lines, StandardCharsets.UTF_8);
+        Files.write(spec, sw.lines(), StandardCharsets.UTF_8);
         return spec;
     }
 }
