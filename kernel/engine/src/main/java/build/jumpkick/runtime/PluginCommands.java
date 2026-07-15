@@ -7,8 +7,8 @@ import build.jumpkick.engine.protocol.PluginCommandReport;
 import build.jumpkick.layout.BuildLayout;
 import build.jumpkick.model.JkBuild;
 import build.jumpkick.plugin.protocol.Ndjson;
-import build.jumpkick.worker.WorkerClient;
-import build.jumpkick.worker.WorkerJar;
+import build.jumpkick.worker.PluginClient;
+import build.jumpkick.worker.PluginJar;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -78,13 +78,13 @@ public final class PluginCommands {
                 Path jar = PluginBuild.workerJarFor(active, cache);
                 List<String> output = new ArrayList<>();
                 String[] error = new String[1];
-                WorkerClient client = new WorkerClient(active.manifest().code().protocolPrefix())
+                PluginClient client = new PluginClient(active.manifest().code().protocolPrefix())
                         .on("command-out", line -> output.add(Ndjson.str(line, "line")))
                         .on("error", line -> error[0] = Ndjson.str(line, "message"))
                         .onOther(line -> {
                             // labels/done — not part of the command's user-facing output
                         });
-                int exit = client.run(WorkerCommands.javaCommand(jar, spec));
+                int exit = client.run(PluginLaunch.javaCommand(jar, spec));
                 if (error[0] != null) return PluginCommandReport.error(error[0]);
                 return new PluginCommandReport(null, true, exit, output);
             } finally {

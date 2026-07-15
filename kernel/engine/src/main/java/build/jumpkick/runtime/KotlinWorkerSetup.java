@@ -4,7 +4,7 @@ package build.jumpkick.runtime;
 import build.jumpkick.cache.Cas;
 import build.jumpkick.kotlin.KotlinResolver;
 import build.jumpkick.repo.RepoGroup;
-import build.jumpkick.worker.WorkerJar;
+import build.jumpkick.worker.PluginJar;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -18,7 +18,7 @@ import java.util.List;
  *
  * <p>Shared by every Kotlin compile entry point ({@code jk build}'s {@code compile-kotlin}, {@code
  * jk compile}, {@code jk run} scripts) so they resolve and locate consistently. Jar location itself
- * is delegated to the shared {@link WorkerJar} registry; this class adds only the Kotlin-specific
+ * is delegated to the shared {@link PluginJar} registry; this class adds only the Kotlin-specific
  * closure/stdlib resolution on top.
  */
 public final class KotlinWorkerSetup {
@@ -27,7 +27,7 @@ public final class KotlinWorkerSetup {
      * Override for the {@code jk-kotlin-compiler} jar path (tests, dev). Takes precedence over the
      * CAS lookup.
      */
-    public static final String WORKER_JAR_PROPERTY = WorkerJar.KOTLIN_COMPILER.jarProperty();
+    public static final String WORKER_JAR_PROPERTY = PluginJar.KOTLIN_COMPILER.jarProperty();
 
     private KotlinWorkerSetup() {}
 
@@ -59,6 +59,6 @@ public final class KotlinWorkerSetup {
      * #WORKER_JAR_PROPERTY} override, then the CAS by expected SHA.
      */
     public static Path locateWorkerJar(Cas cas) {
-        return WorkerJar.KOTLIN_COMPILER.locate(cas);
+        return PluginJar.KOTLIN_COMPILER.locate(cas);
     }
 }

@@ -25,7 +25,7 @@ public record WorkspaceRequest(
         // memory plan (see the buildWorkspace javadoc). False: the caller already owns memory
         // planning for the process — e.g. a host serving several concurrent buildWorkspace calls
         // in one JVM plans once for its own assumed concurrency, and a per-call plan here would
-        // stomp the shared HeapPlan/WorkerSlots state out from under a sibling call in flight.
+        // stomp the shared HeapPlan/PluginSlots state out from under a sibling call in flight.
         boolean applyMemoryPlan,
         // True (jk build): auto-freshen the merged workspace lock before any build decision via
         // ensureWorkspaceLockFresh — the guard BuildCommand used to run client-side, now applied

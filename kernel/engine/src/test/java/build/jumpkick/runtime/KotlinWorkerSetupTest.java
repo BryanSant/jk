@@ -7,8 +7,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import build.jumpkick.cache.Cas;
 import build.jumpkick.repo.RepoArtifactStore;
 import build.jumpkick.model.JkVersion;
-import build.jumpkick.worker.WorkerJar;
-import build.jumpkick.worker.WorkerJarNotFoundException;
+import build.jumpkick.worker.PluginJar;
+import build.jumpkick.worker.PluginJarNotFoundException;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -39,14 +39,14 @@ class KotlinWorkerSetupTest {
         Files.writeString(artifact, "stand-in worker jar");
         Files.writeString(Path.of(artifact + ".sha256"), "deadbeef");
 
-        withoutOverride(() -> assertThat(WorkerJar.KOTLIN_COMPILER.locate(cas)).isEqualTo(artifact));
+        withoutOverride(() -> assertThat(PluginJar.KOTLIN_COMPILER.locate(cas)).isEqualTo(artifact));
     }
 
     @Test
     void throws_with_clear_hint_when_absent(@TempDir Path dir) {
         Cas cas = new Cas(dir);
-        withoutOverride(() -> assertThatThrownBy(() -> WorkerJar.KOTLIN_COMPILER.locate(cas))
-                .isInstanceOf(WorkerJarNotFoundException.class));
+        withoutOverride(() -> assertThatThrownBy(() -> PluginJar.KOTLIN_COMPILER.locate(cas))
+                .isInstanceOf(PluginJarNotFoundException.class));
     }
 
     /**
@@ -71,7 +71,7 @@ class KotlinWorkerSetupTest {
         String prev = System.getProperty(KotlinWorkerSetup.WORKER_JAR_PROPERTY);
         System.setProperty(KotlinWorkerSetup.WORKER_JAR_PROPERTY, jar.toString());
         try {
-            assertThat(WorkerJar.KOTLIN_COMPILER.locate(emptyCas)).isEqualTo(jar);
+            assertThat(PluginJar.KOTLIN_COMPILER.locate(emptyCas)).isEqualTo(jar);
         } finally {
             if (prev == null) System.clearProperty(KotlinWorkerSetup.WORKER_JAR_PROPERTY);
             else System.setProperty(KotlinWorkerSetup.WORKER_JAR_PROPERTY, prev);

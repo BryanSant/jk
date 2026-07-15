@@ -5,14 +5,14 @@ import java.nio.file.Path;
 import java.util.List;
 
 /** Thrown when a worker jar is absent from the local and central repos and no {@code -D} override resolves it. */
-public final class WorkerJarNotFoundException extends RuntimeException {
+public final class PluginJarNotFoundException extends RuntimeException {
 
     private final String artifactId;
     private final String coordinate;
     private final List<Path> pathsChecked;
     private final String jarProperty;
 
-    WorkerJarNotFoundException(String artifactId, String coordinate, List<Path> pathsChecked, String jarProperty) {
+    PluginJarNotFoundException(String artifactId, String coordinate, List<Path> pathsChecked, String jarProperty) {
         super(buildMessage(artifactId, coordinate, pathsChecked, jarProperty));
         this.artifactId = artifactId;
         this.coordinate = coordinate;

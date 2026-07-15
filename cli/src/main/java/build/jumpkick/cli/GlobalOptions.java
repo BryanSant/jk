@@ -83,12 +83,12 @@ public final class GlobalOptions {
     public List<String> jvmArgs = List.of();
 
     /**
-     * The CLI-supplied JVM tuning as the highest-precedence {@link build.jumpkick.config.WorkerTuning}
+     * The CLI-supplied JVM tuning as the highest-precedence {@link build.jumpkick.config.PluginTuning}
      * layer. {@code gc} / {@code string-dedup} are left unset here — those come from env / {@code
      * jk.toml}; the CLI exposes only the two most common knobs.
      */
-    public build.jumpkick.config.WorkerTuning jvmCli() {
-        return new build.jumpkick.config.WorkerTuning(maxRamPercent, null, null, jvmArgs);
+    public build.jumpkick.config.PluginTuning jvmCli() {
+        return new build.jumpkick.config.PluginTuning(maxRamPercent, null, null, jvmArgs);
     }
 
     /**
@@ -132,7 +132,7 @@ public final class GlobalOptions {
         build.jumpkick.config.SessionContext.install(build.jumpkick.config.SessionContext.current()
                 .withToolchainSpecs(g.jdk, g.graal)
                 .withWorkingDir(g.workingDir())
-                .withJvm(build.jumpkick.config.WorkerTunings.resolveClient(g.jvmCli())));
+                .withJvm(build.jumpkick.config.PluginTunings.resolveClient(g.jvmCli())));
         return g;
     }
 

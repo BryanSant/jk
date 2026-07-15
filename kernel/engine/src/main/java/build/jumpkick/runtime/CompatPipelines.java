@@ -7,8 +7,8 @@ import build.jumpkick.run.Pipeline;
 import build.jumpkick.run.PipelineKey;
 import build.jumpkick.run.Step;
 import build.jumpkick.run.StepKind;
-import build.jumpkick.worker.WorkerClient;
-import build.jumpkick.worker.WorkerJar;
+import build.jumpkick.worker.PluginClient;
+import build.jumpkick.worker.PluginJar;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -63,7 +63,7 @@ public final class CompatPipelines {
             Path report,
             Path cache,
             NoteObserver observer) {
-        Path workerJar = WorkerJar.COMPAT_BRIDGE.locate(new Cas(cache));
+        Path workerJar = PluginJar.COMPAT_BRIDGE.locate(new Cas(cache));
 
         List<String> specLines = new ArrayList<>();
         specLines.add("COMMAND import");
@@ -83,7 +83,7 @@ public final class CompatPipelines {
                     try {
                         Files.write(spec, specLines, StandardCharsets.UTF_8);
                         StringBuilder diag = new StringBuilder();
-                        int exit = new WorkerClient("##JKCMP:")
+                        int exit = new PluginClient("##JKCMP:")
                                 .on("wrote", json -> observer.onNote("wrote", Ndjson.str(json, "path")))
                                 .on("note", json -> observer.onNote("note", Ndjson.str(json, "msg")))
                                 .on("result", json -> {
@@ -92,7 +92,7 @@ public final class CompatPipelines {
                                     ctx.put(WARNINGS, Ndjson.intValue(json, "warnings", 0));
                                 })
                                 .passthrough(ln -> diag.append(ln).append('\n'))
-                                .run(WorkerCommands.javaCommand(workerJar, spec));
+                                .run(PluginLaunch.javaCommand(workerJar, spec));
                         ctx.put(EXIT, exit);
                         if (exit != 0 && diag.length() > 0) {
                             ctx.put(DIAG, diag.toString().trim());
@@ -120,7 +120,7 @@ public final class CompatPipelines {
      */
     public static Provision provision(Path cache, Path projectDir, Path toolsRoot, boolean noDiscover, boolean isGradle)
             throws IOException, InterruptedException {
-        Path workerJar = WorkerJar.COMPAT_BRIDGE.locate(new Cas(cache));
+        Path workerJar = PluginJar.COMPAT_BRIDGE.locate(new Cas(cache));
         Path spec = Files.createTempFile("jk-compat-", ".spec");
         try {
             Files.write(
@@ -137,7 +137,7 @@ public final class CompatPipelines {
             String[] source = {null};
             String[] error = {null};
             StringBuilder diag = new StringBuilder();
-            int exit = new WorkerClient("##JKCMP:")
+            int exit = new PluginClient("##JKCMP:")
                     .on("result", json -> {
                         bin[0] = Ndjson.str(json, "bin");
                         version[0] = Ndjson.str(json, "version");
@@ -145,7 +145,7 @@ public final class CompatPipelines {
                         error[0] = Ndjson.str(json, "error");
                     })
                     .passthrough(ln -> diag.append(ln).append('\n'))
-                    .run(WorkerCommands.javaCommand(workerJar, spec));
+                    .run(PluginLaunch.javaCommand(workerJar, spec));
             return new Provision(
                     bin[0],
                     version[0],

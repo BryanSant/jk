@@ -2,7 +2,7 @@
 package build.jumpkick.compile;
 
 import build.jumpkick.plugin.protocol.Ndjson;
-import build.jumpkick.worker.WorkerClient;
+import build.jumpkick.worker.PluginClient;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
@@ -26,7 +26,7 @@ public final class KotlincDriver {
     /** Mirrors the worker's {@code Ndjson.PREFIX}. */
     private static final String PROTOCOL_PREFIX = "##JKKC:";
 
-    private static final String WORKER_MAIN = "build.jumpkick.plugin.worker.PluginWorkerMain";
+    private static final String WORKER_MAIN = "build.jumpkick.plugin.worker.PluginMain";
 
     public KotlincResult compile(KotlincRequest request) {
         try {
@@ -52,11 +52,11 @@ public final class KotlincDriver {
                     .map(Path::toString)
                     .collect(Collectors.joining(java.io.File.pathSeparator));
             List<String> rest = new ArrayList<>();
-            // AOT cache for the worker JVM (WorkerAot): the Kotlin compiler IS this classpath, so
+            // AOT cache for the worker JVM (PluginAot): the Kotlin compiler IS this classpath, so
             // the cache tames its multi-second JIT warmup. Mapped when one exists for (host JDK,
             // GC, classpath); else a background trainer compiles a synthetic hello.kt so the NEXT
             // kotlin build maps it. JVM flags, so they precede -cp.
-            rest.addAll(build.jumpkick.worker.WorkerAot.kotlincFlags(
+            rest.addAll(build.jumpkick.worker.PluginAot.kotlincFlags(
                     hostJavaHome, classpath, (aotOutput, scratch) -> trainerCommand(
                             request.classpath(), classpath, hostJavaHome, aotOutput, scratch)));
             rest.addAll(List.of(
@@ -76,7 +76,7 @@ public final class KotlincDriver {
             // whole story there — keep a bounded tail and surface it on failure, or the build
             // fails with an empty diagnostic and no way to see why.
             java.util.ArrayDeque<String> chatter = new java.util.ArrayDeque<>();
-            int exit = new WorkerClient(PROTOCOL_PREFIX)
+            int exit = new PluginClient(PROTOCOL_PREFIX)
                     .on("diag", json -> diagnostics.add(Ndjson.str(json, "sev") + ": " + Ndjson.str(json, "msg")))
                     .on("result", json -> status[0] = Ndjson.str(json, "status"))
                     .passthrough(line -> {

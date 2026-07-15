@@ -41,7 +41,7 @@ public record Session(
         Path workingDir,
         Path cacheDir,
         Path jdksDir,
-        WorkerTuning jvm,
+        PluginTuning jvm,
         String jdkSpec,
         String graalSpec,
         boolean parallelTests,
@@ -128,7 +128,7 @@ public record Session(
                 Path.of("").toAbsolutePath().normalize(),
                 JkDirs.cache(),
                 null,
-                WorkerTuning.NONE,
+                PluginTuning.NONE,
                 null,
                 null,
                 false,
@@ -161,13 +161,13 @@ public record Session(
                 variant, clientEnv);
     }
 
-    public Session withJvm(WorkerTuning tuning) {
+    public Session withJvm(PluginTuning tuning) {
         return new Session(
                 config,
                 workingDir,
                 cacheDir,
                 jdksDir,
-                tuning == null ? WorkerTuning.NONE : tuning,
+                tuning == null ? PluginTuning.NONE : tuning,
                 jdkSpec,
                 graalSpec,
                 parallelTests,

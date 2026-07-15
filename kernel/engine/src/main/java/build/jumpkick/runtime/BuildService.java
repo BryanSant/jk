@@ -355,7 +355,7 @@ public final class BuildService {
      * <p>This method does not assume it is the only in-flight caller in the process: memory planning
      * is opt-out precisely so a host running several concurrent builds in one JVM (a resident engine)
      * can plan once for its own concurrency instead of letting each call overwrite the shared
-     * {@code HeapPlan}/{@code WorkerSlots} state sized for just itself.
+     * {@code HeapPlan}/{@code PluginSlots} state sized for just itself.
      */
     public static WorkspaceResult buildWorkspace(WorkspaceRequest req, WorkspaceBuildListener listener) {
         // Whole-workspace staleness guard (moved engine-side from BuildCommand in the slim-client

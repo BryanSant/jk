@@ -192,7 +192,7 @@ public final class InstallPipelines {
      * <ul>
      *   <li><b>m2install = false (default)</b> — {@code repos/local/} is primary. Used as-is for
      *       jk's own worker modules and any project that hasn't opted into Maven/Gradle interop;
-     *       found by {@link build.jumpkick.worker.WorkerJar#locate} without going through {@code
+     *       found by {@link build.jumpkick.worker.PluginJar#locate} without going through {@code
      *       ~/.m2}.</li>
      *   <li><b>m2install = true</b> — {@code repos/local/} is still written (jk's own O(1) index),
      *       and the JAR and POM are additionally mirrored to {@code m2Dir/repository} with full

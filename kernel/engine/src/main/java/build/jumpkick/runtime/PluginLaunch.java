@@ -14,9 +14,9 @@ import java.util.List;
  * shared plan (in the resident engine, the plan {@code EngineServer.planSharedWorkerMemoryOnce}
  * computed at startup). Shared by the {@code *Pipelines} factories so no fork site hand-rolls it.
  */
-final class WorkerCommands {
+final class PluginLaunch {
 
-    private WorkerCommands() {}
+    private PluginLaunch() {}
 
     /** {@code java [extraJvmArgs] -jar workerJar spec}, heap-sized for one requested JVM. */
     static List<String> javaCommand(Path workerJar, List<String> extraJvmArgs, Path spec) {

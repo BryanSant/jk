@@ -84,7 +84,7 @@ public final class WorkerJavac {
                     req.workerJar().toString(),
                     build.jumpkick.worker.JvmOptions.batchFlags(1),
                     List.of("@" + spec.toAbsolutePath()));
-            int exit = new build.jumpkick.worker.WorkerClient(PREFIX)
+            int exit = new build.jumpkick.worker.PluginClient(PREFIX)
                     .on("diag", json -> diagnostics.add(new CompileResult.Diagnostic(
                             CompileResult.Severity.fromName(Ndjson.str(json, "sev")),
                             null,

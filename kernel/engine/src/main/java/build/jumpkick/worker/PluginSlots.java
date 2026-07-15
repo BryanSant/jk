@@ -5,7 +5,7 @@ import java.util.concurrent.Semaphore;
 
 /**
  * A process-wide cap on how many worker JVMs run concurrently. jk forks all workers — compilers,
- * the test runner, git, image/format/etc. — through {@link WorkerProcess}, which takes a
+ * the test runner, git, image/format/etc. — through {@link PluginProcess}, which takes a
  * {@linkplain #acquire() lease} for the lifetime of each child process. The CLI sizes the permit
  * count from the memory plan (see {@code HeapPlan}) so that the per-JVM heap times the number of
  * simultaneously-live JVMs stays within the machine's usable memory.
@@ -14,9 +14,9 @@ import java.util.concurrent.Semaphore;
  * immediately, preserving the pre-memory-plan behavior for code paths and tests that never call
  * {@link #configure}.
  */
-public final class WorkerSlots {
+public final class PluginSlots {
 
-    private WorkerSlots() {}
+    private PluginSlots() {}
 
     /** {@code null} ⇒ unbounded (open gate). */
     private static volatile Semaphore slots;

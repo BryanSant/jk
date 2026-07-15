@@ -7,7 +7,7 @@ import java.util.List;
 /**
  * The engine wire protocol's message vocabulary: one newline-delimited JSON object per message, each
  * carrying a {@code "t"} type discriminator — the same canonical envelope shape {@link
- * build.jumpkick.worker.WorkerClient} already uses for jk's worker-process protocol (see {@code
+ * build.jumpkick.worker.PluginClient} already uses for jk's worker-process protocol (see {@code
  * docs/engine.md}). Deliberately internal and unversioned: the client can only ever be a same-version
  * {@code jk} binary (enforced by the engine spawn path), so this vocabulary is free to change between
  * jk releases.
@@ -2330,7 +2330,7 @@ public final class EngineProtocol {
      * identical. The splice is validated: {@code request} must be a one-line encoded object.
      */
     public static String withSession(
-            String request, String variant, java.util.Map<String, String> clientEnv, build.jumpkick.config.WorkerTuning t) {
+            String request, String variant, java.util.Map<String, String> clientEnv, build.jumpkick.config.PluginTuning t) {
         return withSession(request, variant, clientEnv, t, false);
     }
 
@@ -2339,7 +2339,7 @@ public final class EngineProtocol {
             String request,
             String variant,
             java.util.Map<String, String> clientEnv,
-            build.jumpkick.config.WorkerTuning t,
+            build.jumpkick.config.PluginTuning t,
             boolean rebuild) {
         if (request == null
                 || request.length() < 2
@@ -2385,13 +2385,13 @@ public final class EngineProtocol {
     }
 
     /** Decode side of {@link #withSession}; NONE when the request carries no tuning fields. */
-    public static build.jumpkick.config.WorkerTuning jvmTuning(String request) {
+    public static build.jumpkick.config.PluginTuning jvmTuning(String request) {
         String maxRam = Ndjson.str(request, "jvmMaxRam");
         String gc = Ndjson.str(request, "jvmGc");
         String dedup = Ndjson.str(request, "jvmStringDedup");
         List<String> args = Ndjson.strArray(request, "jvmArgs");
         if (maxRam == null && gc == null && dedup == null && args.isEmpty()) {
-            return build.jumpkick.config.WorkerTuning.NONE;
+            return build.jumpkick.config.PluginTuning.NONE;
         }
         Double ram = null;
         try {
@@ -2399,7 +2399,7 @@ public final class EngineProtocol {
         } catch (NumberFormatException ignored) {
             // a malformed number degrades to absent, like every tolerant config read
         }
-        return new build.jumpkick.config.WorkerTuning(
+        return new build.jumpkick.config.PluginTuning(
                 ram, gc, dedup == null ? null : Boolean.valueOf(dedup), args);
     }
 

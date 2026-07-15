@@ -4,14 +4,14 @@ package build.jumpkick.runtime;
 import build.jumpkick.cache.Cas;
 import build.jumpkick.repo.RepoArtifactStore;
 import build.jumpkick.model.JkVersion;
-import build.jumpkick.worker.WorkerJar;
+import build.jumpkick.worker.PluginJar;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
 /**
  * Ensures jk's own child-JVM worker jars ({@code jk-test-runner}, {@code jk-kotlin-compiler}, …)
- * are present in {@code repos/local/} so {@link WorkerJar#locate()} can find them by Maven
+ * are present in {@code repos/local/} so {@link PluginJar#locate()} can find them by Maven
  * coordinate.
  *
  * <p>These aren't project dependencies — they're jk's tooling, pinned to jk's own version. Until
@@ -22,7 +22,7 @@ import java.nio.file.Path;
  * <p>Best-effort: a worker already in {@code repos/local/} or {@code repos/central/} is skipped,
  * and a worker absent from {@code ~/.m2} is reported but doesn't fail the sync.
  */
-public final class JkWorkerSync {
+public final class JkPluginSync {
 
     /** Group the worker artifacts publish under (see the worker modules' build.gradle.kts). */
     static final String GROUP = "build.jumpkick";
@@ -38,7 +38,7 @@ public final class JkWorkerSync {
 
     public record Result(int present, int fetched, int missing) {}
 
-    private JkWorkerSync() {}
+    private JkPluginSync() {}
 
     public static Result ensureInCas(Cas cas, Observer obs) throws IOException, InterruptedException {
         Path m2 = Path.of(System.getProperty("user.home"), ".m2", "repository");
@@ -49,7 +49,7 @@ public final class JkWorkerSync {
         int fetched = 0;
         int missing = 0;
 
-        for (WorkerJar w : WorkerJar.values()) {
+        for (PluginJar w : PluginJar.values()) {
             String relPath = relativeM2Path(w.artifactId());
 
             // Already in local or central repos?

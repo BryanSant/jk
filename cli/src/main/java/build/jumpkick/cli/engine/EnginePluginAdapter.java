@@ -36,9 +36,9 @@ import java.util.function.Function;
  * <p>Per the rendering rule, everything arriving here is plain structured text — the engine never
  * themes output; the command's renderer colorizes client-side.
  */
-final class EngineWorkerAdapter {
+final class EnginePluginAdapter {
 
-    private EngineWorkerAdapter() {}
+    private EnginePluginAdapter() {}
 
     /** A hosted single-pipeline run's outcome: the replayed result plus the raw terminal line to decode. */
     record HostedFinish(PipelineResult result, String finishLine) {}

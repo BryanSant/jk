@@ -35,7 +35,7 @@ junit-platform-launcher = { group = "org.junit.platform", name = "junit-platform
 # worker JVMs; under self-host the jk-built test classpath carries neither a -D override nor the
 # Gradle-generated /META-INF/jk-<worker>-sha256.txt resource, so a nested build can't locate its
 # workers. Inject the RUNNING jk's workers as absolute -Djk.<worker>.worker.jar overrides (located
-# from the real ~/.jk CAS), which WorkerJar.locate checks first — see the pre-split cli/jk.toml
+# from the real ~/.jk CAS), which PluginJar.locate checks first — see the pre-split cli/jk.toml
 # history for the per-worker rationale.
 [build]
 test-worker-jars = [

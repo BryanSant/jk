@@ -5,8 +5,8 @@ import build.jumpkick.cache.Cas;
 import build.jumpkick.jdk.HostPlatform;
 import build.jumpkick.plugin.protocol.Ndjson;
 import build.jumpkick.run.TestSummary;
-import build.jumpkick.worker.WorkerJar;
-import build.jumpkick.worker.WorkerProcess;
+import build.jumpkick.worker.PluginJar;
+import build.jumpkick.worker.PluginProcess;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
@@ -216,7 +216,7 @@ public final class JUnitLauncher {
             t.start();
             workerThreads.add(t);
         }
-        // Each worker thread owns its process (via WorkerProcess.converse) and
+        // Each worker thread owns its process (via PluginProcess.converse) and
         // returns its exit code once stdout is fully drained and the process
         // has exited. Join them and take the worst exit.
         for (Thread t : workerThreads) t.join();
@@ -282,7 +282,7 @@ public final class JUnitLauncher {
             TestProgressListener listener,
             CaptureBuffer crash) {
         // Pull protocol: each "ready" pulls the next class from the shared queue.
-        java.util.function.BiConsumer<String, WorkerProcess.Conversation> handler = (json, convo) -> {
+        java.util.function.BiConsumer<String, PluginProcess.Conversation> handler = (json, convo) -> {
             String event = Ndjson.str(json, "e");
             if ("ready".equals(event)) {
                 String next = queue.pollFirst();
@@ -365,9 +365,9 @@ public final class JUnitLauncher {
      */
     private static Path locateRunner(Path cacheRoot) throws IOException {
         // Location (override → CAS-by-SHA) is shared with every other worker via
-        // WorkerJar; adapt its IllegalStateException to this method's IOException.
+        // PluginJar; adapt its IllegalStateException to this method's IOException.
         try {
-            return WorkerJar.TEST_RUNNER.locate(new Cas(cacheRoot));
+            return PluginJar.TEST_RUNNER.locate(new Cas(cacheRoot));
         } catch (IllegalStateException e) {
             throw new IOException("jk test: " + e.getMessage(), e);
         }

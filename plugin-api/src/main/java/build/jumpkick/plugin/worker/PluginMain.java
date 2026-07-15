@@ -20,9 +20,9 @@ import java.util.ServiceLoader;
  * <p>Exit codes: the plugin's own return value on success; {@code 70} when no plugin can be
  * selected; {@code 1} when {@code run} throws.
  */
-public final class PluginWorkerMain {
+public final class PluginMain {
 
-    private PluginWorkerMain() {}
+    private PluginMain() {}
 
     public static void main(String[] args) {
         List<Plugin> plugins = new ArrayList<>();

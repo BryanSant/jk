@@ -10,8 +10,8 @@ import build.jumpkick.plugin.manifest.PluginDescriptor;
 import build.jumpkick.plugin.manifest.PluginTableRegistry;
 import build.jumpkick.plugin.protocol.Ndjson;
 import build.jumpkick.util.Hashing;
-import build.jumpkick.worker.WorkerClient;
-import build.jumpkick.worker.WorkerJar;
+import build.jumpkick.worker.PluginClient;
+import build.jumpkick.worker.PluginJar;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -604,14 +604,14 @@ public final class PluginBuild {
     }
 
     /**
-     * The jar a plugin's code hooks fork: first-party plugins name a registered {@link WorkerJar};
+     * The jar a plugin's code hooks fork: first-party plugins name a registered {@link PluginJar};
      * a third-party plugin IS its worker — the [plugins]-declared, lock-pinned, SHA-verified jar
      * from the CAS — and it forks only once its coordinate is trusted (plugin-refactor Posture A:
      * the engine refuses untrusted third-party code with the {@code jk trust plugin} remediation).
      */
     static Path workerJarFor(Active active, Path cache) throws IOException {
         if (PluginTableRegistry.isBuiltIn(active.manifest().id())) {
-            WorkerJar workerJar = WorkerJar.byArtifactId(active.manifest().code().worker())
+            PluginJar workerJar = PluginJar.byArtifactId(active.manifest().code().worker())
                     .orElseThrow(() -> new IllegalStateException(
                             "plugin " + active.manifest().id() + " names unregistered worker "
                                     + active.manifest().code().worker()));
@@ -698,13 +698,13 @@ public final class PluginBuild {
         Path jar = workerJarFor(active, cache);
         List<String> collected = new ArrayList<>();
         String[] error = new String[1];
-        WorkerClient client = new WorkerClient(active.manifest().code().protocolPrefix())
+        PluginClient client = new PluginClient(active.manifest().code().protocolPrefix())
                 .on("label", line -> {
                     if (onLabel != null) onLabel.accept(Ndjson.str(line, "text"));
                 })
                 .on("error", line -> error[0] = Ndjson.str(line, "message"))
                 .onOther(collected::add);
-        int exit = client.run(WorkerCommands.javaCommand(jar, spec));
+        int exit = client.run(PluginLaunch.javaCommand(jar, spec));
         if (error[0] != null) {
             throw new IOException(error[0]);
         }

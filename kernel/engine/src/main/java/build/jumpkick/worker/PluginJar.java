@@ -26,10 +26,10 @@ import java.util.List;
  * </ol>
  *
  * <p>This enum replaces the seven near-identical {@code *WorkerSetup} locator classes and {@code
- * JkWorkerSync}'s hand-maintained worker list — one source of truth for the property name, the
+ * JkPluginSync}'s hand-maintained worker list — one source of truth for the property name, the
  * coordinate, and the side-load hint.
  */
-public enum WorkerJar {
+public enum PluginJar {
     TEST_RUNNER("jk-test-runner", "jk.test.runner.jar", ":test-runner:installLocal"),
     KOTLIN_COMPILER("jk-kotlin-compiler", "jk.kotlin.worker.jar", ":kotlin-compiler:installLocal"),
     JAVA_COMPILER("jk-java-compiler", "jk.java.worker.jar", ":java-compiler:installLocal"),
@@ -47,7 +47,7 @@ public enum WorkerJar {
     private final String jarProperty;
     private final String installTask;
 
-    WorkerJar(String artifactId, String jarProperty, String installTask) {
+    PluginJar(String artifactId, String jarProperty, String installTask) {
         this.artifactId = artifactId;
         this.jarProperty = jarProperty;
         this.installTask = installTask;
@@ -79,7 +79,7 @@ public enum WorkerJar {
 
     /**
      * Locate the worker jar: {@code -D<jarProperty>} override first, then {@code repos/local/},
-     * then {@code repos/central/}. Throws {@link WorkerJarNotFoundException} with side-load
+     * then {@code repos/central/}. Throws {@link PluginJarNotFoundException} with side-load
      * instructions if none resolves.
      */
     public Path locate(Cas cas) {
@@ -104,7 +104,7 @@ public enum WorkerJar {
             checked.add(cacheRoot.resolve("repos").resolve(repoName).resolve(relPath));
         }
 
-        throw new WorkerJarNotFoundException(artifactId, coordinate, checked, jarProperty);
+        throw new PluginJarNotFoundException(artifactId, coordinate, checked, jarProperty);
     }
 
     /** Locate using the default jk CAS ({@code $JK_CACHE_DIR}). */
@@ -122,8 +122,8 @@ public enum WorkerJar {
     }
 
     /** The worker whose {@code artifactId} (e.g. {@code jk-git-client}) matches, if any. */
-    public static java.util.Optional<WorkerJar> byArtifactId(String artifactId) {
-        for (WorkerJar w : values()) {
+    public static java.util.Optional<PluginJar> byArtifactId(String artifactId) {
+        for (PluginJar w : values()) {
             if (w.artifactId.equals(artifactId)) return java.util.Optional.of(w);
         }
         return java.util.Optional.empty();

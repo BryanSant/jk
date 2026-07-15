@@ -10,8 +10,8 @@ import java.util.function.Consumer;
 
 /**
  * Forks a jk plugin worker JVM and bridges its NDJSON event stream back to the caller. A worker is
- * launched as {@code <java> <jvmFlags> -cp <classpath> build.jumpkick.plugin.worker.PluginWorkerMain
- * <args>}: {@code PluginWorkerMain} {@code ServiceLoader}-loads the single {@link
+ * launched as {@code <java> <jvmFlags> -cp <classpath> build.jumpkick.plugin.worker.PluginMain
+ * <args>}: {@code PluginMain} {@code ServiceLoader}-loads the single {@link
  * build.jumpkick.plugin.Plugin} on that classpath, runs it, and the plugin emits {@code
  * <prefix>}-tagged protocol lines on stdout.
  *
@@ -26,7 +26,7 @@ public final class PluginLoader {
     private PluginLoader() {}
 
     /** Fully-qualified main class every worker jar runs under (vendored from plugin-api). */
-    static final String WORKER_MAIN = "build.jumpkick.plugin.worker.PluginWorkerMain";
+    static final String WORKER_MAIN = "build.jumpkick.plugin.worker.PluginMain";
 
     /**
      * Fork a worker and stream its events. Returns the worker's exit code.
@@ -35,7 +35,7 @@ public final class PluginLoader {
      * @param classpath the worker's classpath (must include the plugin jar)
      * @param jvmFlags heap/GC/etc. tuning flags (see {@link build.jumpkick.worker.JvmOptions})
      * @param prefix the protocol-line marker the plugin emits (its manifest prefix)
-     * @param args program args passed after {@code PluginWorkerMain}
+     * @param args program args passed after {@code PluginMain}
      */
     public static int run(
             Path javaExe,
@@ -46,12 +46,12 @@ public final class PluginLoader {
             Consumer<String> onProtocol,
             Consumer<String> onPassthrough)
             throws IOException, InterruptedException {
-        return WorkerProcess.run(command(javaExe, classpath, jvmFlags, args), prefix, onProtocol, onPassthrough);
+        return PluginProcess.run(command(javaExe, classpath, jvmFlags, args), prefix, onProtocol, onPassthrough);
     }
 
     /**
      * As {@link #run}, but drives a two-way conversation (pull protocol): each protocol line arrives
-     * with a {@link WorkerProcess.Conversation} the caller can use to send commands back to the
+     * with a {@link PluginProcess.Conversation} the caller can use to send commands back to the
      * worker's stdin.
      */
     public static int converse(
@@ -60,16 +60,16 @@ public final class PluginLoader {
             List<String> jvmFlags,
             String prefix,
             List<String> args,
-            BiConsumer<String, WorkerProcess.Conversation> onProtocol,
+            BiConsumer<String, PluginProcess.Conversation> onProtocol,
             Consumer<String> onPassthrough)
             throws IOException, InterruptedException {
-        return WorkerProcess.converse(command(javaExe, classpath, jvmFlags, args), prefix, onProtocol, onPassthrough);
+        return PluginProcess.converse(command(javaExe, classpath, jvmFlags, args), prefix, onProtocol, onPassthrough);
     }
 
     /**
      * Build the worker launch command {@code <java> <jvmFlags> -cp <classpath>
-     * build.jumpkick.plugin.worker.PluginWorkerMain <args>} without running it — for callers that drive
-     * the stream themselves via {@link WorkerClient}.
+     * build.jumpkick.plugin.worker.PluginMain <args>} without running it — for callers that drive
+     * the stream themselves via {@link PluginClient}.
      */
     public static List<String> command(Path javaExe, String classpath, List<String> jvmFlags, List<String> args) {
         var cmd = new ArrayList<String>();

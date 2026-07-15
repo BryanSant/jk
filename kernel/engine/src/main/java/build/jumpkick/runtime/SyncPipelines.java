@@ -63,8 +63,8 @@ public final class SyncPipelines {
     public static final PipelineKey<JkBuild> BUILD = PipelineKey.of("build", JkBuild.class);
     public static final PipelineKey<JdkEnsure.Outcome> JDK_OUTCOME = PipelineKey.of("jdk-outcome", JdkEnsure.Outcome.class);
     public static final PipelineKey<CacheSync.Report> CAS_REPORT = PipelineKey.of("cas-report", CacheSync.Report.class);
-    public static final PipelineKey<JkWorkerSync.Result> WORKER_REPORT =
-            PipelineKey.of("worker-report", JkWorkerSync.Result.class);
+    public static final PipelineKey<JkPluginSync.Result> WORKER_REPORT =
+            PipelineKey.of("worker-report", JkPluginSync.Result.class);
     public static final PipelineKey<Integer> WORKSPACE_MODULES = PipelineKey.of("workspace-modules", Integer.class);
     public static final PipelineKey<Boolean> LOCKFILE_CREATED = PipelineKey.of("lockfile-created", Boolean.class);
 
@@ -243,7 +243,7 @@ public final class SyncPipelines {
                     ctx.label("sync jk workers");
                     Cas cas = new Cas(cache);
                     try {
-                        var report = JkWorkerSync.ensureInCas(cas, new JkWorkerSync.Observer() {
+                        var report = JkPluginSync.ensureInCas(cas, new JkPluginSync.Observer() {
                             @Override
                             public void fetched(String artifact) {
                                 ctx.label("fetched " + artifact);

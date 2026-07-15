@@ -7,8 +7,8 @@ description = "jk-test-runner: child-JVM entry point that drives JUnit Platform 
 jdk      = 25
 java     = 25
 
-# runnable fat jar: bundles plugin-api (PluginWorkerMain) so the forked worker launches
-# standalone (`-cp <jar> PluginWorkerMain`), like the other workers.
+# runnable fat jar: bundles plugin-api (PluginMain) so the forked worker launches
+# standalone (`-cp <jar> PluginMain`), like the other workers.
 [application]
 main       = "build.jumpkick.testrunner.JkRunner"
 shadow-jar = true

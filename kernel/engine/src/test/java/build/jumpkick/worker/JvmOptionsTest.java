@@ -4,7 +4,7 @@ package build.jumpkick.worker;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import build.jumpkick.config.SessionContext;
-import build.jumpkick.config.WorkerTuning;
+import build.jumpkick.config.PluginTuning;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -14,7 +14,7 @@ import org.junit.jupiter.api.io.TempDir;
 class JvmOptionsTest {
 
     /** Install worker tuning onto the current session (mirrors what the CLI composition root does). */
-    private static void installTuning(WorkerTuning tuning) {
+    private static void installTuning(PluginTuning tuning) {
         SessionContext.install(SessionContext.current().withJvm(tuning));
     }
 
@@ -38,18 +38,18 @@ class JvmOptionsTest {
         // (G1 on server-class machines) — see the DEFAULT_GC javadoc for why ZGC was abandoned.
         List<String> expected = new java.util.ArrayList<>(List.of("-XX:MaxRAMPercentage=50"));
         expected.addAll(hardening(1));
-        assertThat(JvmOptions.flags(WorkerTuning.NONE, 1)).containsExactlyElementsOf(expected);
+        assertThat(JvmOptions.flags(PluginTuning.NONE, 1)).containsExactlyElementsOf(expected);
     }
 
     @Test
     void heap_cap_is_divided_across_concurrent_jvms() {
         // 4 concurrent test workers → each gets a quarter of the base cap.
-        assertThat(JvmOptions.flags(WorkerTuning.NONE, 4)).contains("-XX:MaxRAMPercentage=12.5");
+        assertThat(JvmOptions.flags(PluginTuning.NONE, 4)).contains("-XX:MaxRAMPercentage=12.5");
     }
 
     @Test
     void explicit_settings_win_and_extra_args_append() {
-        WorkerTuning s = new WorkerTuning(70.0, "g1", false, List.of("-XX:+AlwaysPreTouch"));
+        PluginTuning s = new PluginTuning(70.0, "g1", false, List.of("-XX:+AlwaysPreTouch"));
         List<String> expected = new java.util.ArrayList<>(List.of("-XX:MaxRAMPercentage=70", "-XX:+UseG1GC"));
         expected.addAll(hardening(1));
         expected.add("-XX:+AlwaysPreTouch");
@@ -59,7 +59,7 @@ class JvmOptionsTest {
 
     @Test
     void gc_none_emits_no_collector_and_no_dedup() {
-        WorkerTuning s = new WorkerTuning(null, "none", true, List.of());
+        PluginTuning s = new PluginTuning(null, "none", true, List.of());
         List<String> expected = new java.util.ArrayList<>(List.of("-XX:MaxRAMPercentage=50"));
         expected.addAll(hardening(1));
         assertThat(JvmOptions.flags(s, 1)).containsExactlyElementsOf(expected);
@@ -67,7 +67,7 @@ class JvmOptionsTest {
 
     @Test
     void hardening_flags_skip_anything_the_caller_already_pinned() {
-        WorkerTuning s = new WorkerTuning(
+        PluginTuning s = new PluginTuning(
                 null,
                 "none",
                 null,
@@ -106,16 +106,16 @@ class JvmOptionsTest {
 
     @Test
     void gc_parallel_and_serial_are_recognized_names() {
-        assertThat(JvmOptions.flags(new WorkerTuning(null, "parallel", false, List.of()), 1))
+        assertThat(JvmOptions.flags(new PluginTuning(null, "parallel", false, List.of()), 1))
                 .contains("-XX:+UseParallelGC");
-        assertThat(JvmOptions.flags(new WorkerTuning(null, "serial", false, List.of()), 1))
+        assertThat(JvmOptions.flags(new PluginTuning(null, "serial", false, List.of()), 1))
                 .contains("-XX:+UseSerialGC");
     }
 
     @Test
     void explicit_gc_pin_overrides_the_batch_default() {
         HeapPlan.Plan plan = new HeapPlan.Plan(1, 64L << 20, 256L << 20, 256L << 20, null);
-        WorkerTuning g1 = new WorkerTuning(null, "g1", false, List.of());
+        PluginTuning g1 = new PluginTuning(null, "g1", false, List.of());
         assertThat(JvmOptions.absoluteFlags(plan, g1, JvmOptions.BATCH_DEFAULT_GC))
                 .contains("-XX:+UseG1GC")
                 .doesNotContain("-XX:+UseParallelGC");
@@ -125,7 +125,7 @@ class JvmOptionsTest {
     void session_tuning_drives_worker_flags() {
         try {
             // The CLI carries resolved tuning on the session; worker forks read it back.
-            installTuning(new WorkerTuning(80.0, "g1", false, List.of()));
+            installTuning(new PluginTuning(80.0, "g1", false, List.of()));
             List<String> expected = new java.util.ArrayList<>(List.of("-XX:MaxRAMPercentage=80", "-XX:+UseG1GC"));
             expected.addAll(hardening(1));
             assertThat(JvmOptions.workerFlags(1)).containsExactlyElementsOf(expected);
@@ -142,13 +142,13 @@ class JvmOptionsTest {
         List<String> expected =
                 new java.util.ArrayList<>(List.of("-Xms64m", "-Xmx800m", "-XX:SoftMaxHeapSize=512m"));
         expected.addAll(hardening(4)); // plan.parallelism() == 4
-        assertThat(JvmOptions.absoluteFlags(plan, WorkerTuning.NONE)).containsExactlyElementsOf(expected);
+        assertThat(JvmOptions.absoluteFlags(plan, PluginTuning.NONE)).containsExactlyElementsOf(expected);
     }
 
     @Test
     void absolute_flags_pin_zgc_with_uncommit_when_asked() {
         HeapPlan.Plan plan = new HeapPlan.Plan(4, 64L << 20, 512L << 20, 800L << 20, null);
-        WorkerTuning zgc = new WorkerTuning(null, "zgc", null, List.of());
+        PluginTuning zgc = new PluginTuning(null, "zgc", null, List.of());
         List<String> expected = new java.util.ArrayList<>(List.of(
                 "-Xms64m",
                 "-Xmx800m",
@@ -164,7 +164,7 @@ class JvmOptionsTest {
     @Test
     void absolute_flags_skip_softmax_for_serial_gc() {
         HeapPlan.Plan plan = new HeapPlan.Plan(1, 64L << 20, 256L << 20, 256L << 20, null);
-        WorkerTuning serial = new WorkerTuning(null, "none", false, List.of());
+        PluginTuning serial = new PluginTuning(null, "none", false, List.of());
         List<String> expected = new java.util.ArrayList<>(List.of("-Xms64m", "-Xmx256m"));
         expected.addAll(hardening(1)); // plan.parallelism() == 1; no SoftMaxHeapSize, no collector
         assertThat(JvmOptions.absoluteFlags(plan, serial)).containsExactlyElementsOf(expected);
@@ -173,11 +173,11 @@ class JvmOptionsTest {
     @Test
     void auto_heap_disabled_when_user_pins_a_heap_flag() {
         try {
-            installTuning(new WorkerTuning(null, null, null, List.of("-Xmx2g")));
+            installTuning(new PluginTuning(null, null, null, List.of("-Xmx2g")));
             assertThat(JvmOptions.autoHeapEnabled()).isFalse();
-            installTuning(new WorkerTuning(50.0, null, null, List.of()));
+            installTuning(new PluginTuning(50.0, null, null, List.of()));
             assertThat(JvmOptions.autoHeapEnabled()).isFalse();
-            installTuning(WorkerTuning.NONE);
+            installTuning(PluginTuning.NONE);
             assertThat(JvmOptions.autoHeapEnabled()).isTrue();
         } finally {
             SessionContext.reset();
@@ -199,7 +199,7 @@ class JvmOptionsTest {
                 string-dedup = false
                 args = ["-XX:+AlwaysPreTouch"]
                 """);
-        WorkerTuning s = build.jumpkick.config.WorkerTunings.fromToml(toml);
+        PluginTuning s = build.jumpkick.config.PluginTunings.fromToml(toml);
         assertThat(s.maxRamPercent()).isEqualTo(33.0);
         assertThat(s.gc()).isEqualTo("g1");
         assertThat(s.stringDedup()).isFalse();
@@ -210,7 +210,7 @@ class JvmOptionsTest {
     void missing_jvm_table_is_empty(@TempDir Path dir) throws Exception {
         Path toml = dir.resolve("jk.toml");
         Files.writeString(toml, "[project]\ngroup=\"x\"\nname=\"y\"\nversion=\"1\"\n");
-        assertThat(build.jumpkick.config.WorkerTunings.fromToml(toml)).isEqualTo(WorkerTuning.NONE);
+        assertThat(build.jumpkick.config.PluginTunings.fromToml(toml)).isEqualTo(PluginTuning.NONE);
     }
 
     @Test
@@ -224,8 +224,8 @@ class JvmOptionsTest {
                 max-ram-percent = 30
                 """);
         // CLI maxRam is non-null → wins over the toml layer regardless of env.
-        WorkerTuning cli = new WorkerTuning(80.0, null, null, List.of());
-        WorkerTuning eff = build.jumpkick.config.WorkerTunings.resolve(cli, dir);
+        PluginTuning cli = new PluginTuning(80.0, null, null, List.of());
+        PluginTuning eff = build.jumpkick.config.PluginTunings.resolve(cli, dir);
         assertThat(eff.maxRamPercent()).isEqualTo(80.0);
     }
 }

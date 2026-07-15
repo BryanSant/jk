@@ -26,8 +26,8 @@ import build.jumpkick.task.ClasspathFingerprint;
 import build.jumpkick.util.JkDirs;
 import build.jumpkick.model.BuildIdentity;
 import build.jumpkick.model.JkVersion;
-import build.jumpkick.worker.WorkerClient;
-import build.jumpkick.worker.WorkerJar;
+import build.jumpkick.worker.PluginClient;
+import build.jumpkick.worker.PluginJar;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -201,7 +201,7 @@ public final class ImagePipelines {
                                 "classes:" + (classesDir == null ? "" : ClasspathFingerprint.entry(classesDir)),
                                 "main:" + chosen,
                                 "cfg:" + imageConfigToken(config),
-                                "worker:" + WorkerJar.IMAGE_BUILDER.artifactId() + ":" + BuildIdentity.cacheKeyVersion());
+                                "worker:" + PluginJar.IMAGE_BUILDER.artifactId() + ":" + BuildIdentity.cacheKeyVersion());
                         imgTask = ActionKey.qualifiedTaskId(StepNames.WRITE_IMAGE, tarballPath);
                         imgKey = ActionKey.forArtifact(imgTask, BuildIdentity.cacheKeyVersion(), tokens);
                         if (useCache) {
@@ -319,7 +319,7 @@ public final class ImagePipelines {
             Path classesDir,
             Path tarballPath) {
         try {
-            Path workerJar = WorkerJar.IMAGE_BUILDER.locate(new Cas(cache));
+            Path workerJar = PluginJar.IMAGE_BUILDER.locate(new Cas(cache));
             boolean daemonMode = tarballPath == null
                     && (config.registry() == null || config.registry().isBlank());
             List<String> lines = new ArrayList<>();
@@ -348,14 +348,14 @@ public final class ImagePipelines {
                 String[] ref = {null};
                 String[] workerError = {null};
                 StringBuilder diag = new StringBuilder();
-                int exit = new WorkerClient("##JKIM:")
+                int exit = new PluginClient("##JKIM:")
                         .on("result", json -> {
                             ref[0] = Ndjson.str(json, "ref");
                             String err = Ndjson.str(json, "error");
                             if (err != null) workerError[0] = err;
                         })
                         .passthrough(ln -> diag.append(ln).append('\n'))
-                        .run(WorkerCommands.javaCommand(workerJar, spec));
+                        .run(PluginLaunch.javaCommand(workerJar, spec));
                 if (workerError[0] != null) throw new RuntimeException("image worker: " + workerError[0]);
                 if (exit != 0) {
                     String d = diag.length() > 0 ? diag.toString().trim() : null;

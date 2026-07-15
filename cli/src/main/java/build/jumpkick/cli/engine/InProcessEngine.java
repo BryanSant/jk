@@ -182,7 +182,7 @@ public interface InProcessEngine {
 
     /**
      * {@code jk import}'s in-process pipeline: fork the compat-bridge worker. A missing worker jar
-     * throws {@code WorkerJarNotFoundException} here, which {@code CommandDispatch} renders with
+     * throws {@code PluginJarNotFoundException} here, which {@code CommandDispatch} renders with
      * side-load hints.
      */
     ImportPipelineOutcome importPipeline(

@@ -16,8 +16,8 @@ import build.jumpkick.run.Pipeline;
 import build.jumpkick.run.PipelineKey;
 import build.jumpkick.run.Step;
 import build.jumpkick.run.StepKind;
-import build.jumpkick.worker.WorkerClient;
-import build.jumpkick.worker.WorkerJar;
+import build.jumpkick.worker.PluginClient;
+import build.jumpkick.worker.PluginJar;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -69,7 +69,7 @@ public final class PublishPipelines {
 
     /** Build the publish pipeline for {@code projectDir}. Locates the worker jar eagerly (fail fast, with side-load hints). */
     public static Pipeline publishPipeline(Path projectDir, Path cache, Request req) {
-        Path workerJar = WorkerJar.PUBLISHER.locate(new Cas(cache));
+        Path workerJar = PluginJar.PUBLISHER.locate(new Cas(cache));
         Path jkBuildPath = projectDir.resolve("jk.toml");
 
         Step parseBuild = Step.builder(StepNames.PARSE_BUILD)
@@ -142,13 +142,13 @@ public final class PublishPipelines {
                 int[] files = {0};
                 String[] error = {null};
                 StringBuilder workerDiag = new StringBuilder();
-                int exit = new WorkerClient("##JKPU:")
+                int exit = new PluginClient("##JKPU:")
                         .on("result", json -> {
                             files[0] = Ndjson.intValue(json, "files", 0);
                             error[0] = Ndjson.str(json, "error");
                         })
                         .passthrough(line -> workerDiag.append(line).append('\n'))
-                        .run(WorkerCommands.javaCommand(workerJar, spec));
+                        .run(PluginLaunch.javaCommand(workerJar, spec));
                 if (exit != 0) {
                     String diag = workerDiag.length() > 0 ? workerDiag.toString().trim() : null;
                     throw new RuntimeException("publish worker failed"

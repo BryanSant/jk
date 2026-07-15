@@ -567,7 +567,7 @@ class EngineServerTest {
                         case EngineProtocol.PIPELINE_FINISH -> pipelineFinish = line;
                         // Terminal too (e.g. the worker jar wasn't locatable): break instead of
                         // waiting for a pipeline-finish that will never come — the real client
-                        // (EngineWorkerAdapter) treats build-error the same way.
+                        // (EnginePluginAdapter) treats build-error the same way.
                         case EngineProtocol.ERROR -> buildError = line;
                         default -> {
                             /* plan/progress events — presence asserted via `types` below */

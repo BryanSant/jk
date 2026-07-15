@@ -13,12 +13,12 @@ import java.util.List;
  * lives in {@code build.jumpkick.worker.JvmOptions}; this is the plain value it produces and the {@code
  * Session} carries.
  */
-public record WorkerTuning(Double maxRamPercent, String gc, Boolean stringDedup, List<String> extraArgs) {
+public record PluginTuning(Double maxRamPercent, String gc, Boolean stringDedup, List<String> extraArgs) {
 
-    public WorkerTuning {
+    public PluginTuning {
         extraArgs = extraArgs == null ? List.of() : List.copyOf(extraArgs);
     }
 
     /** The empty layer — every field unset. */
-    public static final WorkerTuning NONE = new WorkerTuning(null, null, null, List.of());
+    public static final PluginTuning NONE = new PluginTuning(null, null, null, List.of());
 }

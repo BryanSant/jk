@@ -62,7 +62,7 @@ import build.jumpkick.model.command.Command;
 import build.jumpkick.model.command.Invocation;
 import build.jumpkick.model.command.Opt;
 import build.jumpkick.model.command.Param;
-import build.jumpkick.worker.WorkerJarNotFoundException;
+import build.jumpkick.worker.PluginJarNotFoundException;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -252,7 +252,7 @@ public final class CommandDispatch {
         }
         try {
             return cmd.run(in);
-        } catch (WorkerJarNotFoundException e) {
+        } catch (PluginJarNotFoundException e) {
             printWorkerJarError(e, ansi);
             return 1;
         } catch (Exception e) {
@@ -324,7 +324,7 @@ public final class CommandDispatch {
         return HelpRenderer.renderHelp(model, ansi);
     }
 
-    private static void printWorkerJarError(WorkerJarNotFoundException e, boolean ansi) {
+    private static void printWorkerJarError(PluginJarNotFoundException e, boolean ansi) {
         Theme t = Theme.active();
         String label = HelpRenderer.paint(Glyphs.CROSS + " Error:", t.errorLabel(), ansi);
         String jar = HelpRenderer.paint(e.artifactId() + ".jar", t.warning(), ansi);

@@ -11,7 +11,7 @@ import org.junit.jupiter.api.Test;
 
 /**
  * Exercises {@link PluginLoader}'s fork dispatch end-to-end: it launches the worker as {@code
- * <java> -cp <jar> PluginWorkerMain <args>}, which ServiceLoad-s the plugin and runs it. (jk has no
+ * <java> -cp <jar> PluginMain <args>}, which ServiceLoad-s the plugin and runs it. (jk has no
  * in-process plugin path — every worker is its own JVM.)
  */
 class PluginLoaderTest {
@@ -35,7 +35,7 @@ class PluginLoaderTest {
         List<String> passthrough = new ArrayList<>();
         // The forked worker loads the java-compiler plugin and is handed a
         // nonexistent spec file — it must exit non-zero, proving the
-        // `-cp <jar> PluginWorkerMain` dispatch actually reached the plugin.
+        // `-cp <jar> PluginMain` dispatch actually reached the plugin.
         int code = PluginLoader.run(
                 javaExe(),
                 jar.toString(),

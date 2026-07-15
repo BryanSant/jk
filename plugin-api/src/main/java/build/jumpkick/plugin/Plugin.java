@@ -9,7 +9,7 @@ import java.util.List;
  * java.util.ServiceLoader} ({@code META-INF/services/build.jumpkick.plugin.Plugin}).
  *
  * <p>A {@code Plugin} is an {@link Extension} that runs <em>outside</em> the engine JVM: it runs as
- * a managed, sandboxed forked worker JVM ({@code PluginWorkerMain} on the worker's classpath
+ * a managed, sandboxed forked worker JVM ({@code PluginMain} on the worker's classpath
  * {@code ServiceLoader}-loads the plugin and calls {@link #run}), emitting structured results
  * through the {@link ProtocolWriter} tagged with the plugin's {@link
  * PluginManifest#protocolPrefix()}. (In-engine extensions like the git backend implement

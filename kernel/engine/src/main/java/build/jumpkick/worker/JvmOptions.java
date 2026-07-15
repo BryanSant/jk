@@ -2,7 +2,7 @@
 package build.jumpkick.worker;
 
 import build.jumpkick.config.SessionContext;
-import build.jumpkick.config.WorkerTuning;
+import build.jumpkick.config.PluginTuning;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -15,13 +15,13 @@ import java.util.Locale;
  * compile/test/etc. Because {@code jk build --workers N} forks {@code N} test JVMs at once, a flat
  * "use 70% of RAM" would overcommit. The default here is a conservative {@link
  * #DEFAULT_MAX_RAM_PERCENT}; for a set of {@code N} concurrently-launched JVMs the cap is divided
- * by {@code N} (see {@link #flags(WorkerTuning, int)}), so the live workers fit.
+ * by {@code N} (see {@link #flags(PluginTuning, int)}), so the live workers fit.
  *
  * <p>Settings resolve highest-precedence-first: <b>CLI flag</b> ({@code --max-ram-percent} / {@code
  * --jvm-arg}) &gt; <b>env</b> ({@code JK_MAX_RAM_PERCENT}, {@code JK_JVM_GC}, {@code
  * JK_JVM_STRING_DEDUP}, {@code JK_JVM_ARGS}) &gt; <b>{@code [jvm]} in jk.toml</b> &gt; default.
  *
- * <p>The resolved {@link WorkerTuning} is carried on the request-scoped {@link
+ * <p>The resolved {@link PluginTuning} is carried on the request-scoped {@link
  * build.jumpkick.config.Session} (installed by the CLI composition root) and read here via {@link
  * #tuning()} — so worker forks pick up the request's tuning instead of a process-global channel.
  */
@@ -67,12 +67,12 @@ public final class JvmOptions {
      * simultaneously-launched JVMs (pass {@code 1} for a lone worker; the test-runner passes its
      * worker count).
      */
-    public static List<String> flags(WorkerTuning settings, int concurrency) {
+    public static List<String> flags(PluginTuning settings, int concurrency) {
         return flags(settings, concurrency, DEFAULT_GC);
     }
 
-    private static List<String> flags(WorkerTuning settings, int concurrency, String defaultGc) {
-        WorkerTuning s = settings == null ? WorkerTuning.NONE : settings;
+    private static List<String> flags(PluginTuning settings, int concurrency, String defaultGc) {
+        PluginTuning s = settings == null ? PluginTuning.NONE : settings;
         double base = s.maxRamPercent() != null ? s.maxRamPercent() : DEFAULT_MAX_RAM_PERCENT;
         double perJvm = base / Math.max(1, concurrency);
         String gc = (s.gc() != null ? s.gc() : defaultGc).toLowerCase(Locale.ROOT);
@@ -107,15 +107,15 @@ public final class JvmOptions {
      * root), fall back to the {@code JK_*} env layer — mirroring the old {@code processSettings()}
      * default.
      */
-    private static WorkerTuning tuning() {
+    private static PluginTuning tuning() {
         var session = SessionContext.current();
-        WorkerTuning t = session.jvm();
-        WorkerTuning base =
-                (t == null || t == WorkerTuning.NONE) ? build.jumpkick.config.WorkerTunings.fromEnv() : t;
+        PluginTuning t = session.jvm();
+        PluginTuning base =
+                (t == null || t == PluginTuning.NONE) ? build.jumpkick.config.PluginTunings.fromEnv() : t;
         // The jk.toml [jvm] table overlays here, at fork time, engine-side (thin-client contract):
         // the session carries only the client's flag/env layers, so a client of any age gets
         // current-engine [jvm] interpretation.
-        return build.jumpkick.config.WorkerTunings.overlayProject(base, session.workingDir());
+        return build.jumpkick.config.PluginTunings.overlayProject(base, session.workingDir());
     }
 
     /**
@@ -142,7 +142,7 @@ public final class JvmOptions {
     }
 
     private static List<String> workerFlags(int concurrency, String defaultGc) {
-        WorkerTuning s = tuning();
+        PluginTuning s = tuning();
         HeapPlan.Plan plan = processHeapPlan();
         if (plan != null && autoHeapEnabled(s)) return absoluteFlags(plan, s, defaultGc);
         return flags(s, concurrency, defaultGc);
@@ -152,7 +152,7 @@ public final class JvmOptions {
      * Resolved heap budget for this invocation, or {@code null} when unset / explicitly overridden.
      *
      * <p>Unlike JVM tuning (now request-scoped on {@link build.jumpkick.config.Session}), the heap plan
-     * and its paired {@link WorkerSlots} permit count remain per-invocation resource-management state
+     * and its paired {@link PluginSlots} permit count remain per-invocation resource-management state
      * configured once by the CLI ({@link #planAndApply}). Making them per-session pools is a later
      * server-hardening step (see docs/architecture/re-foundation.md, M1c remainder).
      */
@@ -160,19 +160,19 @@ public final class JvmOptions {
 
     /**
      * Probe memory, compute the heap budget for {@code requestedJvms} desired forks, and apply it:
-     * stash it for {@link #workerFlags} and size {@link WorkerSlots} so no more than the plan's
+     * stash it for {@link #workerFlags} and size {@link PluginSlots} so no more than the plan's
      * parallelism run at once. A no-op (returns {@code null}, opens the worker gate) when the request
      * supplied explicit heap tuning — those settings then drive sizing as before.
      */
     public static HeapPlan.Plan planAndApply(int requestedJvms) {
         if (!autoHeapEnabled(tuning())) {
-            WorkerSlots.configure(0); // unbounded: honour the user's relative/explicit sizing
+            PluginSlots.configure(0); // unbounded: honour the user's relative/explicit sizing
             heapPlan = null;
             return null;
         }
         HeapPlan.Plan plan = HeapPlan.compute(MemoryProbe.probe().availableBytes(), requestedJvms);
         heapPlan = plan;
-        WorkerSlots.configure(plan.parallelism());
+        PluginSlots.configure(plan.parallelism());
         return plan;
     }
 
@@ -183,14 +183,14 @@ public final class JvmOptions {
 
     /**
      * Test-only: undo {@link #planAndApply} — clears the shared heap plan and reopens the {@link
-     * WorkerSlots} gate. Production code never calls this (a real process's plan is meant to live for
+     * PluginSlots} gate. Production code never calls this (a real process's plan is meant to live for
      * the process's whole lifetime); it exists because a test that spins up a real {@code
      * EngineServer} (which calls {@code planAndApply} as a side effect of starting) would otherwise
      * leak that process-wide static into unrelated tests sharing the same test JVM.
      */
     public static void resetSharedPlanForTests() {
         heapPlan = null;
-        WorkerSlots.configure(0);
+        PluginSlots.configure(0);
     }
 
     /**
@@ -203,7 +203,7 @@ public final class JvmOptions {
         return autoHeapEnabled(tuning());
     }
 
-    private static boolean autoHeapEnabled(WorkerTuning s) {
+    private static boolean autoHeapEnabled(PluginTuning s) {
         if (s.maxRamPercent() != null) return false;
         for (String a : s.extraArgs()) {
             if (a.startsWith("-Xmx")
@@ -225,11 +225,11 @@ public final class JvmOptions {
      * idle heap is returned to the OS). {@code SoftMaxHeapSize} is emitted except under an explicit
      * {@code gc = "none"} — G1 and ZGC honour it, everything else recognizes and ignores it.
      */
-    static List<String> absoluteFlags(HeapPlan.Plan plan, WorkerTuning s) {
+    static List<String> absoluteFlags(HeapPlan.Plan plan, PluginTuning s) {
         return absoluteFlags(plan, s, DEFAULT_GC);
     }
 
-    static List<String> absoluteFlags(HeapPlan.Plan plan, WorkerTuning s, String defaultGc) {
+    static List<String> absoluteFlags(HeapPlan.Plan plan, PluginTuning s, String defaultGc) {
         String gc = (s.gc() != null ? s.gc() : defaultGc).toLowerCase(Locale.ROOT);
         boolean dedup = s.stringDedup() == null || s.stringDedup();
         boolean softMaxAware = !gc.equals("none");
@@ -279,7 +279,7 @@ public final class JvmOptions {
      *       so the parent sees a failed fork instead of a thrashing process still holding a slot.
      * </ul>
      */
-    private static void addHardening(List<String> out, WorkerTuning s, int concurrency) {
+    private static void addHardening(List<String> out, PluginTuning s, int concurrency) {
         List<String> extra = s.extraArgs();
         if (!hasArgPrefix(extra, "-XX:MaxMetaspaceSize", "-XX:MetaspaceSize")) {
             out.add("-XX:MaxMetaspaceSize=" + DEFAULT_MAX_METASPACE_MB + "m");

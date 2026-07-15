@@ -39,9 +39,9 @@ import java.util.concurrent.TimeUnit;
  * <p>Kill switch: {@code -Djk.worker.aot=off} (or env {@code JK_WORKER_AOT=off}) disables both use
  * and training.
  */
-public final class WorkerAot {
+public final class PluginAot {
 
-    private WorkerAot() {}
+    private PluginAot() {}
 
     /** Ceiling for one training run (fork + synthetic compile + assembly); typical is ~2s. */
     private static final long TRAINING_TIMEOUT_SECONDS = 120;
@@ -315,7 +315,7 @@ public final class WorkerAot {
         } catch (IOException ignored) {
             return; // opportunistic: a leftover cache costs disk, not correctness
         }
-        primaries.sort(java.util.Comparator.comparingLong(WorkerAot::mtime).reversed());
+        primaries.sort(java.util.Comparator.comparingLong(PluginAot::mtime).reversed());
         for (int i = 0; i < primaries.size(); i++) {
             Path p = primaries.get(i);
             if (p.equals(cache)) continue; // the cache that just landed always survives
@@ -435,7 +435,7 @@ public final class WorkerAot {
 
     private static void deleteRecursivelyQuietly(Path root) {
         try (var walk = Files.walk(root)) {
-            walk.sorted(java.util.Comparator.reverseOrder()).forEach(WorkerAot::deleteQuietly);
+            walk.sorted(java.util.Comparator.reverseOrder()).forEach(PluginAot::deleteQuietly);
         } catch (IOException ignored) {
             // best-effort
         }

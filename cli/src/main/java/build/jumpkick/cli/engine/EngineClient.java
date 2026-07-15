@@ -639,7 +639,7 @@ public final class EngineClient {
             java.util.function.Function<List<build.jumpkick.run.Step>, build.jumpkick.run.PipelineListener> listenerFactory,
             build.jumpkick.runtime.HostedEvents.FindingObserver findings)
             throws IOException {
-        return EngineWorkerAdapter.stream(
+        return EnginePluginAdapter.stream(
                         paths,
                         EngineProtocol.auditRequest(
                                 req.entryDir().toString(),
@@ -685,7 +685,7 @@ public final class EngineClient {
             java.util.function.Function<List<build.jumpkick.run.Step>, build.jumpkick.run.PipelineListener> listenerFactory,
             build.jumpkick.runtime.HostedEvents.FileObserver files)
             throws IOException {
-        EngineWorkerAdapter.HostedFinish finish = EngineWorkerAdapter.stream(
+        EnginePluginAdapter.HostedFinish finish = EnginePluginAdapter.stream(
                 paths,
                 EngineProtocol.formatRequest(
                         req.entryDir().toString(),
@@ -759,7 +759,7 @@ public final class EngineClient {
         } else {
             authType = "anonymous";
         }
-        EngineWorkerAdapter.HostedFinish finish = EngineWorkerAdapter.stream(
+        EnginePluginAdapter.HostedFinish finish = EnginePluginAdapter.stream(
                 paths,
                 EngineProtocol.publishRequest(
                         req.entryDir().toString(),
@@ -829,7 +829,7 @@ public final class EngineClient {
             java.util.function.Function<List<build.jumpkick.run.Step>, build.jumpkick.run.PipelineListener> listenerFactory,
             ImageSummary[] summaryOut)
             throws IOException {
-        return EngineWorkerAdapter.stream(
+        return EnginePluginAdapter.stream(
                         paths,
                         EngineProtocol.imageRequest(
                                 req.entryDir().toString(),
@@ -883,7 +883,7 @@ public final class EngineClient {
             java.util.function.Function<List<build.jumpkick.run.Step>, build.jumpkick.run.PipelineListener> listenerFactory,
             build.jumpkick.runtime.HostedEvents.NoteObserver notes)
             throws IOException {
-        EngineWorkerAdapter.HostedFinish finish = EngineWorkerAdapter.stream(
+        EnginePluginAdapter.HostedFinish finish = EnginePluginAdapter.stream(
                 paths,
                 EngineProtocol.importRequest(
                         req.source().toString(),
@@ -913,7 +913,7 @@ public final class EngineClient {
     public static build.jumpkick.runtime.HostedEvents.Provision provision(
             EnginePaths.Paths paths, Path cache, Path projectDir, Path toolsRoot, boolean noDiscover, boolean gradle)
             throws IOException {
-        return EngineWorkerAdapter.provision(
+        return EnginePluginAdapter.provision(
                 paths,
                 EngineProtocol.provisionRequest(
                         cache.toString(), projectDir.toString(), toolsRoot.toString(), noDiscover, gradle));
@@ -934,7 +934,7 @@ public final class EngineClient {
             CompileRequest req,
             java.util.function.Function<List<build.jumpkick.run.Step>, build.jumpkick.run.PipelineListener> listenerFactory)
             throws IOException {
-        return EngineWorkerAdapter.stream(
+        return EnginePluginAdapter.stream(
                         paths,
                         EngineProtocol.compileRequest(
                                 req.entryDir().toString(),
@@ -1028,7 +1028,7 @@ public final class EngineClient {
             GitFetchRequest req,
             java.util.function.Function<List<build.jumpkick.run.Step>, build.jumpkick.run.PipelineListener> listenerFactory)
             throws IOException {
-        EngineWorkerAdapter.HostedFinish finish = EngineWorkerAdapter.stream(
+        EnginePluginAdapter.HostedFinish finish = EnginePluginAdapter.stream(
                 paths,
                 EngineProtocol.gitFetchRequest(
                         req.url(),
@@ -1073,7 +1073,7 @@ public final class EngineClient {
             ToolResolveRequest req,
             java.util.function.Function<List<build.jumpkick.run.Step>, build.jumpkick.run.PipelineListener> listenerFactory)
             throws IOException {
-        EngineWorkerAdapter.HostedFinish finish = EngineWorkerAdapter.stream(
+        EnginePluginAdapter.HostedFinish finish = EnginePluginAdapter.stream(
                 paths,
                 EngineProtocol.toolResolveRequest(
                         req.coord(),
@@ -1136,7 +1136,7 @@ public final class EngineClient {
             ScriptPrepareRequest req,
             java.util.function.Function<List<build.jumpkick.run.Step>, build.jumpkick.run.PipelineListener> listenerFactory)
             throws IOException {
-        EngineWorkerAdapter.HostedFinish finish = EngineWorkerAdapter.stream(
+        EnginePluginAdapter.HostedFinish finish = EnginePluginAdapter.stream(
                 paths,
                 EngineProtocol.scriptPrepareRequest(
                         req.mode(),
@@ -1215,7 +1215,7 @@ public final class EngineClient {
                         req.sweep(),
                         req.maxSize(),
                         req.includeJkTmp());
-        return EngineWorkerAdapter.stream(
+        return EnginePluginAdapter.stream(
                         paths,
                         requestLine,
                         "cache-" + req.op(),

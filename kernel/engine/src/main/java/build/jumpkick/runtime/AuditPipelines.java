@@ -11,8 +11,8 @@ import build.jumpkick.plugin.protocol.PluginProtocol;
 import build.jumpkick.run.Pipeline;
 import build.jumpkick.run.Step;
 import build.jumpkick.run.StepKind;
-import build.jumpkick.worker.WorkerClient;
-import build.jumpkick.worker.WorkerJar;
+import build.jumpkick.worker.PluginClient;
+import build.jumpkick.worker.PluginJar;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -43,7 +43,7 @@ public final class AuditPipelines {
 
     /**
      * Build the audit pipeline for {@code lockPath}. Locates the worker jar eagerly, so a missing worker
-     * fails here (with {@link build.jumpkick.worker.WorkerJarNotFoundException}'s side-load
+     * fails here (with {@link build.jumpkick.worker.PluginJarNotFoundException}'s side-load
      * instructions) rather than mid-pipeline. {@code thresholdLabel} only feeds the evaluate step's
      * label; {@code osvBatchUrl}/{@code osvVulnsUrl} are the hidden test overrides ({@code null} =
      * the real OSV endpoints).
@@ -55,7 +55,7 @@ public final class AuditPipelines {
             URI osvBatchUrl,
             URI osvVulnsUrl,
             FindingObserver observer) {
-        Path workerJar = WorkerJar.AUDITOR.locate(new Cas(cache));
+        Path workerJar = PluginJar.AUDITOR.locate(new Cas(cache));
 
         Step readLock = Step.builder(StepNames.READ_LOCK)
                 .ticks(1)
@@ -106,7 +106,7 @@ public final class AuditPipelines {
             Path spec = writeSpec(lockPath, osvBatchUrl, osvVulnsUrl);
             try {
                 String[] error = {null};
-                int exit = new WorkerClient("##JKAU:")
+                int exit = new PluginClient("##JKAU:")
                         .on(PluginProtocol.FINDING, json -> observer.onFinding(
                                 Ndjson.str(json, "module"),
                                 Ndjson.str(json, "version"),
@@ -114,7 +114,7 @@ public final class AuditPipelines {
                                 Ndjson.str(json, "severity"),
                                 Ndjson.str(json, "summary")))
                         .on(PluginProtocol.ERROR, json -> error[0] = Ndjson.str(json, PluginProtocol.MESSAGE))
-                        .run(WorkerCommands.javaCommand(workerJar, spec));
+                        .run(PluginLaunch.javaCommand(workerJar, spec));
                 if (error[0] != null) {
                     throw new RuntimeException("audit worker: " + error[0]);
                 }

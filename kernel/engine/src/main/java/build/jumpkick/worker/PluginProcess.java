@@ -28,9 +28,9 @@ import java.util.function.Consumer;
  *       {@code RUN}/{@code DONE} in response to the worker's {@code ready} events).
  * </ul>
  */
-public final class WorkerProcess {
+public final class PluginProcess {
 
-    private WorkerProcess() {}
+    private PluginProcess() {}
 
     /** A handle for talking back to a running worker over its stdin. */
     public interface Conversation {
@@ -106,7 +106,7 @@ public final class WorkerProcess {
         if (extraEnv != null && !extraEnv.isEmpty()) pb.environment().putAll(extraEnv);
         // Hold a worker slot for the child's whole lifetime so no more than the
         // memory plan's parallelism run at once (open gate when unconfigured).
-        try (WorkerSlots.Lease lease = WorkerSlots.acquire()) {
+        try (PluginSlots.Lease lease = PluginSlots.acquire()) {
             return converse(pb, prefix, onProtocol, onPassthrough);
         }
     }

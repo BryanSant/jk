@@ -15,8 +15,8 @@ import build.jumpkick.run.PipelineKey;
 import build.jumpkick.run.Step;
 import build.jumpkick.run.StepKind;
 import build.jumpkick.tool.ToolResolver;
-import build.jumpkick.worker.WorkerClient;
-import build.jumpkick.worker.WorkerJar;
+import build.jumpkick.worker.PluginClient;
+import build.jumpkick.worker.PluginJar;
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -172,7 +172,7 @@ public final class FormatPipelines {
                     @SuppressWarnings("unchecked")
                     List<Path> kotlinJars = (List<Path>) ctx.require(kotlinJarsKey);
 
-                    Path workerJar = WorkerJar.FORMATTER.locate(new Cas(cache));
+                    Path workerJar = PluginJar.FORMATTER.locate(new Cas(cache));
                     Path spec = writeSpec(
                             check,
                             javaStyle,
@@ -189,7 +189,7 @@ public final class FormatPipelines {
                         AtomicInteger clean = new AtomicInteger();
                         AtomicInteger errors = new AtomicInteger();
                         AtomicInteger index = new AtomicInteger();
-                        int exit = new WorkerClient("##JKFMT:")
+                        int exit = new PluginClient("##JKFMT:")
                                 .on("file", json -> {
                                     String status = Ndjson.str(json, "status");
                                     if ("changed".equals(status)) changed.incrementAndGet();
@@ -204,7 +204,7 @@ public final class FormatPipelines {
                                     ctx.progress(1);
                                 })
                                 .passthrough(ctx::output)
-                                .run(WorkerCommands.javaCommand(
+                                .run(PluginLaunch.javaCommand(
                                         workerJar, javaFiles.isEmpty() ? List.of() : JAVAC_EXPORTS, spec));
                         ctx.put(CHANGED, changed.get());
                         ctx.put(CLEAN, clean.get());

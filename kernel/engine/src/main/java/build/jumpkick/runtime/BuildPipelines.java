@@ -36,7 +36,7 @@ import build.jumpkick.task.ActionCache;
 import build.jumpkick.task.ActionKey;
 import build.jumpkick.test.JUnitLauncher;
 import build.jumpkick.test.TestProgressListener;
-import build.jumpkick.worker.WorkerJar;
+import build.jumpkick.worker.PluginJar;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -1277,7 +1277,7 @@ public final class BuildPipelines {
                         ap = new build.jumpkick.task.JavaIncrementalCompile.ApSetup(
                                 () -> {
                                     try {
-                                        return WorkerJar.JAVA_COMPILER.locate(cas);
+                                        return PluginJar.JAVA_COMPILER.locate(cas);
                                     } catch (RuntimeException e) {
                                         ctx.warn(
                                                 "javac",
@@ -1620,7 +1620,7 @@ public final class BuildPipelines {
                             ap = new build.jumpkick.task.JavaIncrementalCompile.ApSetup(
                                     () -> {
                                         try {
-                                            return WorkerJar.JAVA_COMPILER.locate(cas);
+                                            return PluginJar.JAVA_COMPILER.locate(cas);
                                         } catch (RuntimeException e) {
                                             ctx.warn(
                                                     "javac",
@@ -2529,7 +2529,7 @@ public final class BuildPipelines {
                         // Workspace siblings are filtered out of the lockfile by
                         // WorkspaceMerge, but a fat jar must bundle them (and their
                         // own transitive external deps) or it can't run standalone —
-                        // e.g. a worker jar would be missing PluginWorkerMain.
+                        // e.g. a worker jar would be missing PluginMain.
                         WorkspaceClasspath.Result siblings = WorkspaceClasspath.resolve(
                                 layout.moduleRoot(), project, Set.of(Scope.EXPORT, Scope.MAIN));
                         for (Path j : siblings.jars()) {
@@ -3124,7 +3124,7 @@ public final class BuildPipelines {
             }
             BuildLayout layout = BuildLayout.of(dir, sib);
             // A shadow (fat) worker runs from its -all.jar — that's the artifact
-            // that bundles plugin-api/PluginWorkerMain and the worker's deps; a
+            // that bundles plugin-api/PluginMain and the worker's deps; a
             // plain module ships only its main jar.
             Path jar = sib.shadowJar() ? layout.shadowJar() : layout.mainJar();
             out.put(sib.project().name(), jar);
@@ -3159,7 +3159,7 @@ public final class BuildPipelines {
         if (modules.isEmpty()) return props;
         Map<String, Path> jarByModule = siblingMainJars(moduleDir);
         for (String module : modules) {
-            var wj = build.jumpkick.worker.WorkerJar.byArtifactId("jk-" + module);
+            var wj = build.jumpkick.worker.PluginJar.byArtifactId("jk-" + module);
             if (wj.isEmpty()) continue;
             Path jar = jarByModule.get(module);
             if (jar != null && Files.exists(jar)) {
