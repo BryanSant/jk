@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package build.jumpkick.testrunner;
 
+import build.jumpkick.plugin.protocol.PluginProtocol;
 import build.jumpkick.plugin.protocol.ProtocolWriter;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -25,9 +26,11 @@ public final class JsonEventWriter implements EventWriter {
 
     @Override
     public synchronized void write(EventType type, Map<String, Object> payload) {
-        // Preserve insertion order — `e` first reads more naturally on the wire.
+        // Unified wire: {"t":"test","event":"<kind>",...} — the top-level `t` vocabulary stays bounded
+        // (label/diagnostic/test/result/…) while the test-specific kind rides the `event` field.
         var event = new LinkedHashMap<String, Object>();
-        event.put("e", type.wire());
+        event.put(PluginProtocol.T, PluginProtocol.TEST);
+        event.put(PluginProtocol.EVENT, type.wire());
         if (payload != null) event.putAll(payload);
         out.emit(JsonOut.string(event));
     }

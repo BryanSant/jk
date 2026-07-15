@@ -37,7 +37,7 @@ public final class TestRunnerPlugin implements Plugin {
 
     @Override
     public PluginManifest manifest() {
-        return new PluginManifest("jk-test-runner", "##JK:");
+        return new PluginManifest("jk-test-runner", "##JKT:");
     }
 
     @Override

@@ -39,7 +39,7 @@ import java.util.concurrent.ConcurrentLinkedDeque;
 public final class JUnitLauncher {
 
     /** Marker prefix every protocol line carries. Must match {@code JsonEventWriter.PREFIX}. */
-    private static final String PROTOCOL_PREFIX = "##JK:";
+    private static final String PROTOCOL_PREFIX = "##JKT:";
 
     /**
      * The plugin the worker host must run. The test-runner jar is launched with the module-under-test
@@ -283,7 +283,7 @@ public final class JUnitLauncher {
             CaptureBuffer crash) {
         // Pull protocol: each "ready" pulls the next class from the shared queue.
         java.util.function.BiConsumer<String, PluginProcess.Conversation> handler = (json, convo) -> {
-            String event = Ndjson.str(json, "e");
+            String event = Ndjson.str(json, "event");
             if ("ready".equals(event)) {
                 String next = queue.pollFirst();
                 if (next != null) {
@@ -336,7 +336,7 @@ public final class JUnitLauncher {
                 PROTOCOL_PREFIX,
                 List.of("--list-only", "--scan-classpath=" + testClassesDir),
                 json -> {
-                    String event = Ndjson.str(json, "e");
+                    String event = Ndjson.str(json, "event");
                     if ("discovered".equals(event)) {
                         classes.add(Ndjson.str(json, "class"));
                     } else if ("discovery_total".equals(event)) {
@@ -446,7 +446,7 @@ public final class JUnitLauncher {
         }
 
         private void acceptJson(String json) {
-            String event = Ndjson.str(json, "e");
+            String event = Ndjson.str(json, "event");
             if (event == null) return;
             switch (event) {
                 case "discovery_total" ->
