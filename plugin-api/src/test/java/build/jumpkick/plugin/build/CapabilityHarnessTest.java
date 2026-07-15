@@ -72,15 +72,15 @@ class CapabilityHarnessTest {
     }
 
     @Test
-    void terminal_goal_capability_is_not_wired_yet(@TempDir Path dir) throws Exception {
+    void terminal_goal_capability_is_rejected_by_the_build_harness(@TempDir Path dir) throws Exception {
         Plugin imagePlugin = new ImageFixture();
         assertThatThrownBy(() ->
                         BuildPluginHarness.run(imagePlugin, List.of(describeSpec(dir).toString()), capture().writer))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("Stream 6");
+                .hasMessageContaining("own worker entry");
     }
 
-    /** A plugin claiming a terminal capability whose execution is not wired yet. */
+    /** A plugin claiming a terminal capability, which the build harness must not drive. */
     static final class ImageFixture implements Plugin, ImageExtension {
         @Override
         public PluginManifest manifest() {
@@ -93,8 +93,8 @@ class CapabilityHarnessTest {
         }
 
         @Override
-        public void image(ImageContext ctx) {
-            /* unreachable until Stream 6 wires terminal-goal execution */
+        public ImageResult image(ImageContext ctx) {
+            return ImageResult.pushed("unused"); // unreachable: the build harness rejects terminal caps
         }
     }
 

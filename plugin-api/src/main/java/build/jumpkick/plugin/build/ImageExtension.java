@@ -3,12 +3,14 @@ package build.jumpkick.plugin.build;
 
 /**
  * A plugin capability: own the terminal {@link Phase#IMAGE} goal — assemble an image (an OCI image
- * via Jib, a native image) from the finished module. Terminal-goal execution is wired in the
- * extension-remodel plan's Stream 6. Implemented alongside {@link build.jumpkick.plugin.Plugin}.
+ * via Jib, a native image) from the finished module. The plugin's worker entry builds an {@link
+ * ImageContext} from the finished module (main artifact + runtime closure + {@code [image]} config)
+ * and calls {@link #image}, then reports the returned {@link ImageResult}. Implemented alongside
+ * {@link build.jumpkick.plugin.Plugin}.
  */
 @FunctionalInterface
 public interface ImageExtension {
 
-    /** Assemble the image against {@code ctx}. */
-    void image(ImageContext ctx) throws Exception;
+    /** Assemble the image described by {@code ctx}; return where it landed (reference or tarball). */
+    ImageResult image(ImageContext ctx) throws Exception;
 }

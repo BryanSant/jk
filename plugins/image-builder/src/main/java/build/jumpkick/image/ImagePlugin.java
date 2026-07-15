@@ -4,7 +4,13 @@ package build.jumpkick.image;
 import build.jumpkick.image.ImageBuilder;
 import build.jumpkick.image.ImageConfig;
 import build.jumpkick.plugin.Plugin;
+import build.jumpkick.plugin.PluginConfig;
 import build.jumpkick.plugin.PluginManifest;
+import build.jumpkick.plugin.build.ImageContext;
+import build.jumpkick.plugin.build.ImageExtension;
+import build.jumpkick.plugin.build.ImageResult;
+import build.jumpkick.plugin.build.PackageIo;
+import build.jumpkick.plugin.build.ProjectFacts;
 import build.jumpkick.plugin.protocol.Ndjson;
 import build.jumpkick.plugin.protocol.ProtocolWriter;
 import java.io.IOException;
@@ -13,46 +19,29 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
- * Entry point for the {@code jk-image-runner} worker subprocess.
+ * The {@code jk-image-builder} worker: the terminal {@link ImageExtension} goal for OCI images. Its
+ * worker entry ({@link #run}) reads the engine's spec, assembles an {@link ImageContext} from the
+ * finished module (main jar + runtime closure + {@code [image]} settings), and hands it to {@link
+ * #image}, which drives {@link ImageBuilder} (Jib) to a tarball, the local daemon, or a registry.
  *
- * <p>Receives a single argument: path to a line-oriented spec file:
- *
- * <pre>
- * MAIN_JAR  /abs/path/to/app-1.0.jar
- * ARTIFACT  app
- * VERSION   1.0.0
- * MAIN_CLASS com.example.App
- * BASE      gcr.io/distroless/java21-debian12:nonroot
- * USER      nonroot
- * TARBALL   /abs/path/to/out.oci.tar   # omit for push mode
- * REGISTRY  registry.example.com       # omit for tarball mode
- * TAG       1.0.0
- * PLATFORM  linux/amd64
- * DEP_JAR   /abs/path/to/dep.jar       # repeated
- * PORT      8080                       # repeated
- * ENV       KEY=value                  # repeated
- * LABEL     key=value                  # repeated
- * </pre>
- *
- * <p>Streams {@value #PREFIX}-prefixed NDJSON to stdout:
- *
- * <pre>
- * ##JKIM:{"t":"progress","msg":"building layers"}
- * ##JKIM:{"t":"result","ok":true,"ref":"registry/app:1.0"}
- * ##JKIM:{"t":"result","ok":false,"error":"..."}
- * </pre>
- *
- * <p>Exit 0 on success, 1 on build/push error, 2 on bad arguments.
+ * <p>The spec is line-oriented ({@code MAIN_JAR /abs/app.jar}, {@code BASE …}, {@code TARBALL …},
+ * {@code DEP_JAR …}, …); the reply is {@value #PREFIX}-prefixed NDJSON, terminating in
+ * {@code {"t":"result","ok":true,"ref":"…"}} (or {@code "tarball"}), {@code {"t":"result",
+ * "ok":false,"error":"…"}} on failure. Exit 0 success, 1 build/push error, 2 bad arguments.
  */
-public final class ImagePlugin implements Plugin {
+public final class ImagePlugin implements Plugin, ImageExtension {
+
+    private static final String PREFIX = "##JKIM:";
 
     @Override
     public PluginManifest manifest() {
-        return new PluginManifest("jk-image-builder", "##JKIM:");
+        return new PluginManifest("jk-image-builder", PREFIX);
     }
 
     @Override
@@ -73,9 +62,9 @@ public final class ImagePlugin implements Plugin {
         String mode = null, dockerExecutable = null;
         List<Path> depJars = new ArrayList<>();
         List<Path> snapshotJars = new ArrayList<>();
-        List<Integer> ports = new ArrayList<>();
-        Map<String, String> env = new HashMap<>();
-        Map<String, String> labels = new HashMap<>();
+        List<String> ports = new ArrayList<>();
+        List<String> env = new ArrayList<>();
+        List<String> labels = new ArrayList<>();
         List<String> platforms = new ArrayList<>();
 
         try {
@@ -102,19 +91,11 @@ public final class ImagePlugin implements Plugin {
                     case "SNAPSHOT_DEP_JAR" -> snapshotJars.add(Path.of(val));
                     case "CLASSES_DIR" -> classesDir = Path.of(val);
                     case "PLATFORM" -> platforms.add(val);
-                    case "PORT" -> {
-                        try {
-                            ports.add(Integer.parseInt(val));
-                        } catch (NumberFormatException ignored) {
-                        }
-                    }
-                    case "ENV" -> {
-                        int eq = val.indexOf('=');
-                        if (eq > 0) env.put(val.substring(0, eq), val.substring(eq + 1));
-                    }
-                    case "LABEL" -> {
-                        int eq = val.indexOf('=');
-                        if (eq > 0) labels.put(val.substring(0, eq), val.substring(eq + 1));
+                    case "PORT" -> ports.add(val);
+                    case "ENV" -> env.add(val);
+                    case "LABEL" -> labels.add(val);
+                    default -> {
+                        // forward compatibility: ignore unknown keys
                     }
                 }
             }
@@ -128,35 +109,141 @@ public final class ImagePlugin implements Plugin {
             return 2;
         }
 
-        ImageConfig config = new ImageConfig(
-                base, user, ports, env, labels, registry, tag,
-                platforms.isEmpty() ? null : platforms, mainClass, dockerExecutable, null);
-        ImageBuilder.Plan plan =
-                new ImageBuilder.Plan(config, artifact, version, mainClass, mainJar, depJars, snapshotJars, classesDir);
-        Path dockerExePath = dockerExecutable != null ? Path.of(dockerExecutable) : null;
+        // Assemble the generic terminal context: image settings ride config(), the built jar rides
+        // mainArtifact(), the dependency closure rides runtimeEntries() (snapshot flag per entry).
+        Map<String, Object> cfg = new LinkedHashMap<>();
+        cfg.put("artifact", artifact);
+        cfg.put("version", version);
+        cfg.put("mainClass", mainClass);
+        if (base != null) cfg.put("base", base);
+        if (user != null) cfg.put("user", user);
+        if (registry != null) cfg.put("registry", registry);
+        if (tag != null) cfg.put("tag", tag);
+        if (mode != null) cfg.put("mode", mode);
+        if (dockerExecutable != null) cfg.put("dockerExecutable", dockerExecutable);
+        if (tarball != null) cfg.put("tarball", tarball.toString());
+        if (!ports.isEmpty()) cfg.put("ports", List.copyOf(ports));
+        if (!env.isEmpty()) cfg.put("env", List.copyOf(env));
+        if (!labels.isEmpty()) cfg.put("labels", List.copyOf(labels));
+        if (!platforms.isEmpty()) cfg.put("platforms", List.copyOf(platforms));
+
+        List<PackageIo.RuntimeEntry> entries = new ArrayList<>();
+        for (Path dep : depJars) entries.add(new PackageIo.RuntimeEntry(dep.getFileName().toString(), dep, false));
+        for (Path dep : snapshotJars) entries.add(new PackageIo.RuntimeEntry(dep.getFileName().toString(), dep, true));
+
+        ImageContext ctx = new SpecImageContext(
+                new PluginConfig("jk-image-builder", cfg),
+                new ProjectFacts("", artifact, version, 0, mainClass, false, false, Map.of()),
+                Optional.of(mainJar),
+                entries,
+                Optional.ofNullable(classesDir),
+                out);
 
         try {
-            if (tarball != null) {
-                out.emit("{\"t\":\"progress\",\"msg\":\"building OCI tarball\"}");
-                Files.createDirectories(tarball.getParent());
-                ImageBuilder.writeToTarball(plan, tarball);
-                out.emit("{\"t\":\"result\",\"ok\":true,\"tarball\":" + Ndjson.quote(tarball.toString()) + "}");
-            } else if ("daemon".equals(mode)) {
-                String ref = config.targetReference(artifact, version);
-                String exe = dockerExecutable != null ? dockerExecutable : "docker";
-                out.emit("{\"t\":\"progress\",\"msg\":" + Ndjson.quote("loading " + ref + " into " + exe) + "}");
-                ImageBuilder.loadToLocalDaemon(plan, dockerExePath);
-                out.emit("{\"t\":\"result\",\"ok\":true,\"ref\":" + Ndjson.quote(ref) + ",\"daemon\":true}");
+            ImageResult result = image(ctx);
+            if (result.tarball() != null) {
+                out.emit("{\"t\":\"result\",\"ok\":true,\"tarball\":" + Ndjson.quote(result.tarball().toString()) + "}");
+            } else if (result.daemon()) {
+                out.emit("{\"t\":\"result\",\"ok\":true,\"ref\":" + Ndjson.quote(result.reference()) + ",\"daemon\":true}");
             } else {
-                String ref = config.targetReference(artifact, version);
-                out.emit("{\"t\":\"progress\",\"msg\":" + Ndjson.quote("pushing " + ref) + "}");
-                ImageBuilder.pushToRegistry(plan);
-                out.emit("{\"t\":\"result\",\"ok\":true,\"ref\":" + Ndjson.quote(ref) + "}");
+                out.emit("{\"t\":\"result\",\"ok\":true,\"ref\":" + Ndjson.quote(result.reference()) + "}");
             }
             return 0;
         } catch (Exception e) {
             out.emit("{\"t\":\"result\",\"ok\":false,\"error\":" + Ndjson.quote(e.getMessage()) + "}");
             return 1;
+        }
+    }
+
+    @Override
+    public ImageResult image(ImageContext ctx) throws Exception {
+        PluginConfig c = ctx.config();
+        String artifact = c.string("artifact");
+        String version = c.string("version");
+        String mainClass = c.string("mainClass");
+        List<Integer> ports = new ArrayList<>();
+        for (String p : c.stringList("ports")) {
+            try {
+                ports.add(Integer.parseInt(p));
+            } catch (NumberFormatException ignored) {
+                // skip malformed port
+            }
+        }
+        Map<String, String> env = splitPairs(c.stringList("env"));
+        Map<String, String> labels = splitPairs(c.stringList("labels"));
+        List<String> platforms = c.stringList("platforms");
+        String base = c.stringOpt("base").orElse(null);
+        String registry = c.stringOpt("registry").orElse(null);
+        String tag = c.stringOpt("tag").orElse(null);
+        String dockerExecutable = c.stringOpt("dockerExecutable").orElse(null);
+
+        Path mainJar = ctx.mainArtifact()
+                .orElseThrow(() -> new IOException("image goal needs a built main artifact"));
+        List<Path> depJars = new ArrayList<>();
+        List<Path> snapshotJars = new ArrayList<>();
+        for (PackageIo.RuntimeEntry e : ctx.runtimeEntries()) {
+            (e.snapshot() ? snapshotJars : depJars).add(e.jar());
+        }
+        Path classesDir = ctx.classesDir().orElse(null);
+
+        ImageConfig config = new ImageConfig(
+                base, c.stringOpt("user").orElse(null), ports, env, labels, registry, tag,
+                platforms.isEmpty() ? null : platforms, mainClass, dockerExecutable, null);
+        ImageBuilder.Plan plan =
+                new ImageBuilder.Plan(config, artifact, version, mainClass, mainJar, depJars, snapshotJars, classesDir);
+
+        Optional<String> tarball = c.stringOpt("tarball");
+        if (tarball.isPresent()) {
+            Path tarballPath = Path.of(tarball.get());
+            ctx.label("building OCI tarball");
+            if (tarballPath.getParent() != null) Files.createDirectories(tarballPath.getParent());
+            ImageBuilder.writeToTarball(plan, tarballPath);
+            return ImageResult.tarball(tarballPath);
+        }
+        String ref = config.targetReference(artifact, version);
+        if ("daemon".equals(c.stringOpt("mode").orElse(null))) {
+            String exe = dockerExecutable != null ? dockerExecutable : "docker";
+            ctx.label("loading " + ref + " into " + exe);
+            ImageBuilder.loadToLocalDaemon(plan, dockerExecutable != null ? Path.of(dockerExecutable) : null);
+            return ImageResult.loaded(ref);
+        }
+        ctx.label("pushing " + ref);
+        ImageBuilder.pushToRegistry(plan);
+        return ImageResult.pushed(ref);
+    }
+
+    private static Map<String, String> splitPairs(List<String> pairs) {
+        Map<String, String> out = new HashMap<>();
+        for (String pair : pairs) {
+            int eq = pair.indexOf('=');
+            if (eq > 0) out.put(pair.substring(0, eq), pair.substring(eq + 1));
+        }
+        return out;
+    }
+
+    /** The generic terminal context assembled from the worker spec. */
+    private record SpecImageContext(
+            PluginConfig config,
+            ProjectFacts project,
+            Optional<Path> mainArtifact,
+            List<PackageIo.RuntimeEntry> runtimeEntries,
+            Optional<Path> classesDir,
+            ProtocolWriter out)
+            implements ImageContext {
+
+        @Override
+        public Path moduleDir() {
+            return null; // the image goal consumes the built artifact, not the project tree
+        }
+
+        @Override
+        public Path javaHome() {
+            return null; // Jib runs in-process; no JDK fork
+        }
+
+        @Override
+        public void label(String text) {
+            out.emit("{\"t\":\"progress\",\"msg\":" + Ndjson.quote(text) + "}");
         }
     }
 }

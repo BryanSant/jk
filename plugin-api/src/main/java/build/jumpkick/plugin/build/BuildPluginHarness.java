@@ -78,7 +78,7 @@ public final class BuildPluginHarness {
             if (plugin instanceof RunExtension || plugin instanceof ImageExtension
                     || plugin instanceof PublishExtension) {
                 throw new IllegalStateException("terminal-goal capability (run/image/publish) on plugin `" + id
-                        + "` is not wired yet (extension-remodel Stream 6)");
+                        + "` runs via its own worker entry, not the build harness");
             }
         };
     }
