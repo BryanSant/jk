@@ -169,6 +169,10 @@ info "Installing into $INSTALL_DIR"
 mkdir -p "$INSTALL_DIR"
 
 JK_BIN="$INSTALL_DIR/jk"
+# A prior install leaves bin/jk as a symlink into ~/.jk/versions/<v>/ — remove
+# it first so decompress writes a fresh file instead of THROUGH the link into
+# the immutable versions tree.
+rm -f "$JK_BIN"
 decompress "$ARCHIVE_FILE" "$JK_BIN" \
   || die "failed to install jk"
 chmod +x "$JK_BIN"
@@ -181,6 +185,7 @@ note "Installed $JK_BIN"
 # also refreshes a stale jkx left by a previous install. Falls back to an
 # exec shim when the filesystem refuses hardlinks.
 JKX_BIN="$INSTALL_DIR/jkx"
+rm -f "$JKX_BIN"
 if ln -f "$JK_BIN" "$JKX_BIN" 2>/dev/null; then
   note "Installed $JKX_BIN"
 else
@@ -225,45 +230,52 @@ fi
 # ---- activate --------------------------------------------------------------
 
 info "Running jk activate"
-run_jk activate || die "'jk activate' failed; not restarting shell."
+# Best-effort: activate needs a tty to pick a shell (CI/pipe installs have
+# none) and its failure must not abort the warm-up and bin/ consolidation
+# below — the install itself is already complete.
+run_jk activate || note "'jk activate' failed (no tty?); run 'jk activate <shell>' manually."
 
 # ---- warm the engine -------------------------------------------------------
 #
 # Pre-pay the engine's cold-start costs now so the first real build doesn't:
 # `jk engine start` installs the JDK that hosts the engine when none
-# qualifies, and — with no AOT cache on disk yet — spawns the engine as a
-# JEP 514 *training* run (-XX:AOTCacheOutput). The .aot file is assembled
-# when that engine exits cleanly, so start → stop leaves
-# ~/.jk/state/engine/engine-<key>.aot pre-prepared, and the final start
-# leaves a warm resident engine already mapping it. On a download install
-# the first start also triggers the client's own engine-jar fetch, so this
-# one step materialises the jar, the JDK, and the AOT cache. Best-effort by
-# design: a failed warm-up never fails the install (the engine starts
-# lazily on first use either way). Skipped only for a local dist install
-# that carried no engine jar — a -SNAPSHOT client won't self-fetch.
-await_aot_cache() {
-  # The .aot is assembled during the stopped engine's JVM shutdown; give it a
-  # moment so the warm restart below maps the cache instead of retraining.
-  for _ in $(seq 1 20); do
-    compgen -G "${JK_STATE_DIR:-$JK_HOME/state}/engine/engine-*.aot" > /dev/null && return 0
-    sleep 0.5
-  done
-  return 1
-}
-
-if [ -z "$LOCAL_FILE" ] || compgen -G "$JK_HOME/lib/jk-engine-*.jar" > /dev/null; then
+# qualifies, and on a download install triggers the client's own engine-jar
+# fetch (which also completes ~/.jk/versions/<v>/ — jar, manifest, AND this
+# client binary). The engine serves immediately and manages its own AOT
+# training sidecar off to the side (docs/engine.md), so ONE start is the
+# whole warm-up — no stop/restart dance. Best-effort by design: a failed
+# warm-up never fails the install (the engine starts lazily on first use
+# either way). Skipped only for a local dist install that carried no engine
+# jar — a -SNAPSHOT client won't self-fetch.
+if [ -z "$LOCAL_FILE" ] || [ -n "${ENGINE_JAR:-}" ]; then
   info "Warming up the build engine (may download the engine and a JDK on first run)"
-  # The settle between start and stop matters: a stop issued within the
-  # engine's first second yields an empty training dump and the assembly
-  # child rejects it (verified against JDK 25).
-  if run_jk engine start >/dev/null 2>&1 \
-      && sleep 3 \
-      && run_jk engine stop >/dev/null 2>&1 \
-      && await_aot_cache \
-      && run_jk engine start >/dev/null 2>&1; then
-    note "Engine started; AOT startup cache prepared"
+  if run_jk engine start >/dev/null 2>&1; then
+    note "Engine started (AOT cache trains in the background)"
   else
     note "Engine warm-up skipped; it will start on first build"
+  fi
+fi
+
+# ---- one home for the bits ---------------------------------------------------
+#
+# Every installed jk — including this one — lives in ~/.jk/versions/<v>/
+# (materialized above for local dists, by the engine-jar fetch during warm-up
+# for downloads). bin/jk and bin/jkx become SYMLINKS to the current version's
+# binary — the same end state `jk self update` leaves with its atomic symlink
+# flip, so the initial install, a pin, and an update are one consistent story.
+# Falls back to keeping the real copies when versions/ didn't materialize or
+# the filesystem refuses symlinks; the first `jk self update` converges it.
+VERSION="$(run_jk --version 2>/dev/null | awk '{print $2}')"
+VBIN="$JK_HOME/versions/${VERSION:-none}/bin/jk"
+if [ -n "$VERSION" ] && [ -x "$VBIN" ]; then
+  if ln -sfn "$VBIN" "$INSTALL_DIR/.jk-new" 2>/dev/null \
+      && mv -f "$INSTALL_DIR/.jk-new" "$JK_BIN" 2>/dev/null \
+      && ln -sfn "$VBIN" "$INSTALL_DIR/.jkx-new" 2>/dev/null \
+      && mv -f "$INSTALL_DIR/.jkx-new" "$JKX_BIN" 2>/dev/null; then
+    note "Linked $JK_BIN -> $VBIN"
+  else
+    rm -f "$INSTALL_DIR/.jk-new" "$INSTALL_DIR/.jkx-new"
+    note "bin/ kept as real copies (no symlink support); 'jk self update' converges it"
   fi
 fi
 

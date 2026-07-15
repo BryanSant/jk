@@ -101,7 +101,12 @@ and the fallback when no engine artifact is installed. Both routes execute the e
    is swept, and a mismatched or corrupt cache is a silent no-op, never a failed build.
    `-Djk.worker.aot=off` (or `JK_WORKER_AOT=off`) disables it. Every `.aot` file — engine and
    workers alike — lives side by side in `~/.jk/state/aot/`, one honest place to audit or wipe.
-   Lifetimes differ by prefix: `engine-<version>-…` files are jk-version-scoped (retired with
+   The same one-home rule covers the installations themselves: every jk version — including
+   the current one — is materialized in `~/.jk/versions/<v>/` (client binary + engine jar +
+   manifest), and `~/.jk/bin/jk`/`jkx` are just pointers to the current version's binary
+   (symlinks where the platform allows, copies elsewhere). The initial install, a wrapper pin,
+   and `jk self update` all end in the same state: materialize into `versions/`, flip the
+   pointer. Lifetimes differ by prefix: `engine-<version>-…` files are jk-version-scoped (retired with
    the version by the cache prune's version sweep), while `javac-`/`kotlinc-` files are
    toolchain-scoped and retention-swept (the ~4 most-recently-used per tool survive; anything
    untouched for ~30 days is reclaimed, including failure markers — so a once-failed key
