@@ -14,8 +14,10 @@ import build.jumpkick.model.JkBuild;
 import build.jumpkick.mvn.MavenResolver;
 import build.jumpkick.mvn.PomImporter;
 import build.jumpkick.plugin.Plugin;
+import build.jumpkick.plugin.PluginConfig;
 import build.jumpkick.plugin.PluginManifest;
-import build.jumpkick.plugin.protocol.Ndjson;
+import build.jumpkick.plugin.protocol.PluginReply;
+import build.jumpkick.plugin.protocol.PluginSpec;
 import build.jumpkick.plugin.protocol.ProtocolWriter;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -27,22 +29,11 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * Entry point for the {@code jk-compat-runner} worker subprocess.
- *
- * <p>Handles four commands — {@code import}, {@code export}, {@code provision_mvn}, {@code
- * provision_gradle} — selected by the {@code COMMAND} line in the spec file.
- *
- * <p>Streams {@value #PREFIX}-prefixed NDJSON to stdout:
- *
- * <pre>
- * ##JKCMP:{"t":"wrote","path":"/path/jk.toml"}
- * ##JKCMP:{"t":"note","msg":"3 import notes"}
- * ##JKCMP:{"t":"result","ok":true}
- * ##JKCMP:{"t":"result","ok":false,"error":"..."}
- * ##JKCMP:{"t":"result","ok":true,"bin":"/path/mvn","source":"CACHED"}
- * </pre>
- *
- * <p>Exit 0 on success, 1 on operation error, 2 on bad arguments.
+ * The {@code jk-compat-bridge} plugin (op {@code command}, name {@code import}/{@code provision_mvn}/
+ * {@code provision_gradle}): Maven/Gradle import + tool provisioning, isolated in a forked plugin JVM
+ * so the Maven/Gradle machinery never loads in jk's own process. Speaks the unified wire — NDJSON
+ * config spec, {@code wrote}/{@code result} replies + {@code error} on failure. Exit 0 success, 1
+ * operation error, 2 bad arguments, 64 unrecognised source, 73 overwrite-without-force.
  */
 public final class CompatPlugin implements Plugin {
 
@@ -54,68 +45,43 @@ public final class CompatPlugin implements Plugin {
     @Override
     public int run(List<String> args, ProtocolWriter out) {
         if (args.isEmpty()) {
-            System.err.println("jk-compat-runner: expected spec file path");
+            System.err.println("jk-compat-bridge: expected spec file path");
             return 2;
         }
         Path specFile = Path.of(args.get(0));
         if (!Files.isRegularFile(specFile)) {
-            System.err.println("jk-compat-runner: spec file not found: " + specFile);
+            System.err.println("jk-compat-bridge: spec file not found: " + specFile);
             return 2;
         }
-
-        // Parse spec.
-        String command = null;
-        Path source = null, out_ = null, report = null, tmpDir = null, baseDir = null;
-        Path projectDir = null, target = null, toolsRoot = null;
-        boolean force = false, noDiscover = false;
-
+        PluginSpec spec;
         try {
-            for (String line : Files.readAllLines(specFile, StandardCharsets.UTF_8)) {
-                line = line.strip();
-                if (line.isEmpty() || line.startsWith("#")) continue;
-                int sp = line.indexOf(' ');
-                if (sp < 0) continue;
-                String key = line.substring(0, sp);
-                String val = line.substring(sp + 1).strip();
-                switch (key) {
-                    case "COMMAND" -> command = val;
-                    case "SOURCE" -> source = Path.of(val);
-                    case "OUT" -> out_ = Path.of(val);
-                    case "REPORT" -> report = Path.of(val);
-                    case "TMP_DIR" -> tmpDir = Path.of(val);
-                    case "BASE_DIR" -> baseDir = Path.of(val);
-                    case "PROJECT_DIR" -> projectDir = Path.of(val);
-                    case "TARGET" -> target = Path.of(val);
-                    case "TOOLS_ROOT" -> toolsRoot = Path.of(val);
-                    case "FORCE" -> force = "true".equalsIgnoreCase(val);
-                    case "NO_DISCOVER" -> noDiscover = "true".equalsIgnoreCase(val);
-                }
-            }
+            spec = PluginSpec.read(specFile);
         } catch (IOException e) {
-            System.err.println("jk-compat-runner: could not read spec: " + e.getMessage());
+            System.err.println("jk-compat-bridge: could not read spec: " + e.getMessage());
             return 2;
         }
-
-        if (command == null) {
-            System.err.println("jk-compat-runner: spec missing COMMAND");
-            return 2;
-        }
-
+        String command = spec.name().orElse("");
+        PluginConfig config = spec.config();
         return switch (command) {
-            case "import" -> runImport(out, source, out_, report, tmpDir, baseDir, force);
-            case "provision_mvn" -> runProvision(out, projectDir, toolsRoot, noDiscover, false);
-            case "provision_gradle" -> runProvision(out, projectDir, toolsRoot, noDiscover, true);
+            case "import" -> runImport(out, config);
+            case "provision_mvn" -> runProvision(out, config, false);
+            case "provision_gradle" -> runProvision(out, config, true);
             default -> {
-                System.err.println("jk-compat-runner: unknown command: " + command);
+                System.err.println("jk-compat-bridge: unknown command: " + command);
                 yield 2;
             }
         };
     }
 
-    private static int runImport(
-            ProtocolWriter out, Path source, Path outPath, Path report, Path tmpDir, Path baseDir, boolean force) {
+    private static int runImport(ProtocolWriter out, PluginConfig c) {
+        Path source = c.stringOpt("source").map(Path::of).orElse(null);
+        Path outPath = c.stringOpt("out").map(Path::of).orElse(null);
+        Path report = c.stringOpt("report").map(Path::of).orElse(null);
+        Path tmpDir = c.stringOpt("tmpDir").map(Path::of).orElse(null);
+        Path baseDir = c.stringOpt("baseDir").map(Path::of).orElse(null);
+        boolean force = c.bool("force", false);
         if (source == null || outPath == null) {
-            System.err.println("jk-compat-runner: import requires SOURCE and OUT");
+            System.err.println("jk-compat-bridge: import requires source and out");
             return 2;
         }
         try {
@@ -134,27 +100,24 @@ public final class CompatPlugin implements Plugin {
                 root = result.jkBuild();
                 importReport = result.report();
             } else {
-                System.err.println("jk-compat-runner: unrecognised source: " + source.getFileName());
+                System.err.println("jk-compat-bridge: unrecognised source: " + source.getFileName());
                 return 64;
             }
 
             Files.writeString(outPath, JkBuildRenderer.render(root), StandardCharsets.UTF_8);
-            out.emit("{\"t\":\"wrote\",\"path\":" + Ndjson.quote(outPath.toString()) + "}");
+            out.emit(PluginReply.wrote(outPath.toString()));
 
             Path effectiveBaseDir = baseDir != null ? baseDir : source.getParent();
             for (Map.Entry<String, JkBuild> e : modules.entrySet()) {
                 Path moduleJkBuild = effectiveBaseDir.resolve(e.getKey()).resolve("jk.toml");
                 if (Files.exists(moduleJkBuild) && !force) {
-                    out.emit("{\"t\":\"result\",\"ok\":false,\"error\":"
-                            + Ndjson.quote("would overwrite " + moduleJkBuild + " — pass --force")
-                            + "}");
+                    out.emit(PluginReply.error("overwrite", "would overwrite " + moduleJkBuild + " — pass --force"));
                     return 73;
                 }
                 Files.writeString(moduleJkBuild, JkBuildRenderer.render(e.getValue()), StandardCharsets.UTF_8);
-                out.emit("{\"t\":\"wrote\",\"path\":" + Ndjson.quote(moduleJkBuild.toString()) + "}");
+                out.emit(PluginReply.wrote(moduleJkBuild.toString()));
             }
 
-            // Write import report.
             Path reportTarget = report;
             if (reportTarget == null && tmpDir != null) {
                 var proj = root.project();
@@ -171,23 +134,24 @@ public final class CompatPlugin implements Plugin {
                 Path rDir = reportTarget.getParent();
                 if (rDir != null) Files.createDirectories(rDir);
                 Files.writeString(reportTarget, importReport.renderMarkdown(source.toString()), StandardCharsets.UTF_8);
-                out.emit("{\"t\":\"wrote\",\"path\":" + Ndjson.quote(reportTarget.toString()) + "}");
+                out.emit(PluginReply.wrote(reportTarget.toString()));
             }
 
-            int warnings = importReport.issues().size();
-            boolean hasErrors = importReport.hasErrors();
-            out.emit("{\"t\":\"result\",\"ok\":true,\"warnings\":" + warnings + ",\"errors\":" + hasErrors + "}");
+            out.emit(PluginReply.result(Map.of("warnings", importReport.issues().size())));
+            out.emit(PluginReply.done(0));
             return 0;
         } catch (IOException e) {
-            out.emit("{\"t\":\"result\",\"ok\":false,\"error\":" + Ndjson.quote(e.getMessage()) + "}");
+            out.emit(PluginReply.error("import", e.getMessage()));
             return 1;
         }
     }
 
-    private static int runProvision(
-            ProtocolWriter out, Path projectDir, Path toolsRoot, boolean noDiscover, boolean isGradle) {
+    private static int runProvision(ProtocolWriter out, PluginConfig c, boolean isGradle) {
+        Path projectDir = c.stringOpt("projectDir").map(Path::of).orElse(null);
+        Path toolsRoot = c.stringOpt("toolsRoot").map(Path::of).orElse(null);
+        boolean noDiscover = c.bool("noDiscover", false);
         if (projectDir == null || toolsRoot == null) {
-            System.err.println("jk-compat-runner: provision requires PROJECT_DIR and TOOLS_ROOT");
+            System.err.println("jk-compat-bridge: provision requires projectDir and toolsRoot");
             return 2;
         }
         try {
@@ -196,20 +160,15 @@ public final class CompatPlugin implements Plugin {
                     isGradle ? new GradleResolver().resolve(projectDir) : new MavenResolver().resolve(projectDir);
             ToolProvisioning.Result result = ToolProvisioning.provision(dist, registry, new Http(), noDiscover);
             InstalledTool tool = result.tool();
-            out.emit("{\"t\":\"result\",\"ok\":true"
-                    + ",\"bin\":"
-                    + Ndjson.quote(tool.binary().toString())
-                    + ",\"home\":"
-                    + Ndjson.quote(tool.home().toString())
-                    + ",\"version\":"
-                    + Ndjson.quote(dist.version())
-                    + ",\"source\":"
-                    + Ndjson.quote(result.source().name())
-                    + "}");
+            out.emit(PluginReply.result(Map.of(
+                    "bin", tool.binary().toString(),
+                    "version", dist.version(),
+                    "source", result.source().name())));
+            out.emit(PluginReply.done(0));
             return 0;
         } catch (IOException | InterruptedException e) {
             if (e instanceof InterruptedException) Thread.currentThread().interrupt();
-            out.emit("{\"t\":\"result\",\"ok\":false,\"error\":" + Ndjson.quote(e.getMessage()) + "}");
+            out.emit(PluginReply.error("provision", e.getMessage()));
             return 1;
         }
     }
