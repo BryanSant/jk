@@ -10,9 +10,11 @@ import com.diffplug.spotless.java.GoogleJavaFormatStep;
 import com.diffplug.spotless.java.PalantirJavaFormatStep;
 import com.diffplug.spotless.kotlin.KtfmtStep;
 import build.jumpkick.plugin.Plugin;
+import build.jumpkick.plugin.PluginConfig;
 import build.jumpkick.plugin.PluginManifest;
-import build.jumpkick.plugin.protocol.Ndjson;
 import build.jumpkick.plugin.protocol.ProtocolWriter;
+import build.jumpkick.plugin.protocol.WorkerReply;
+import build.jumpkick.plugin.protocol.WorkerSpec;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -77,7 +79,7 @@ public final class FormatPlugin implements Plugin {
             System.err.println("jk-formatter: expected spec file path");
             return 2;
         }
-        Spec spec = Spec.parse(Path.of(args.get(0)));
+        Spec spec = Spec.from(WorkerSpec.read(Path.of(args.get(0))));
 
         // Per-file stamp cache — skips unchanged files without running the formatter.
         FormatStampCache stampCache =
@@ -183,11 +185,11 @@ public final class FormatPlugin implements Plugin {
             if (kotlinFmt != null) kotlinFmt.close();
         }
 
-        out.emit("{\"t\":\"done\",\"changed\":" + changed + ",\"clean\":" + clean + ",\"errors\":" + errors + "}");
-        // In --check mode, an unformatted (changed) file is a failure; errors always are.
-        if (errors > 0) return 1;
-        if (!spec.apply && changed > 0) return 1;
-        return 0;
+        // In --check mode, an unformatted (changed) file is a failure; errors always are. The engine
+        // recomputes the changed/clean/error tallies from the per-file events, so `done` carries only exit.
+        int exit = errors > 0 || (!spec.apply && changed > 0) ? 1 : 0;
+        out.emit(WorkerReply.done(exit));
+        return exit;
     }
 
     // -------------------------------------------------------------------------
@@ -253,12 +255,7 @@ public final class FormatPlugin implements Plugin {
     // -------------------------------------------------------------------------
 
     private static void emitFile(ProtocolWriter out, File file, String status, String msg) {
-        StringBuilder sb = new StringBuilder("{\"t\":\"file\",\"path\":")
-                .append(Ndjson.quote(file.getAbsolutePath()))
-                .append(",\"status\":")
-                .append(Ndjson.quote(status));
-        if (msg != null) sb.append(",\"msg\":").append(Ndjson.quote(msg));
-        out.emit(sb.append("}").toString());
+        out.emit(WorkerReply.file(file.getAbsolutePath(), status, msg));
     }
 
     /**
@@ -329,48 +326,28 @@ public final class FormatPlugin implements Plugin {
             return optimizeImports || rewriteConfigFile != null;
         }
 
-        static Spec parse(Path specFile) throws IOException {
+        static Spec from(WorkerSpec ws) {
             Spec s = new Spec();
-            for (String line : Files.readAllLines(specFile, StandardCharsets.UTF_8)) {
-                if (line.isBlank()) continue;
-                String[] p = line.split("\t", -1);
-                switch (p[0]) {
-                    case "mode" -> s.apply = !"check".equals(p[1]);
-                    case "java" -> {
-                        s.javaStyle = p[1];
-                        s.javaVersion = p[2];
-                        s.javaJars = jars(p[3]);
-                    }
-                    case "kotlin" -> {
-                        s.kotlinStyle = p[1];
-                        s.kotlinVersion = p[2];
-                        s.kotlinMaxWidth = Integer.parseInt(p[3]);
-                        s.kotlinJars = jars(p[4]);
-                    }
-                    case "rewrite-flags" -> {
-                        // tokens: "optimize-imports=<bool>"
-                        for (int i = 1; i < p.length; i++) {
-                            String[] kv = p[i].split("=", 2);
-                            if (kv.length == 2 && "optimize-imports".equals(kv[0])) {
-                                s.optimizeImports = Boolean.parseBoolean(kv[1]);
-                            }
-                        }
-                    }
-                    case "rewrite-config" -> s.rewriteConfigFile = new File(p[1]);
-                    case "cache-dir" -> s.cacheDir = Path.of(p[1]);
-                    case "f" -> s.files.add(new FileRef("kotlin".equals(p[1]), new File(p[2])));
-                    default -> {
-                        /* ignore unknown records for forward-compat */
-                    }
-                }
-            }
+            PluginConfig c = ws.config();
+            s.apply = c.bool("apply", true);
+            s.javaStyle = c.stringOpt("javaStyle").orElse(s.javaStyle);
+            s.javaVersion = c.stringOpt("javaVersion").orElse(s.javaVersion);
+            s.javaJars = jars(c.stringList("javaJars"));
+            s.kotlinStyle = c.stringOpt("kotlinStyle").orElse(s.kotlinStyle);
+            s.kotlinVersion = c.stringOpt("kotlinVersion").orElse(s.kotlinVersion);
+            s.kotlinMaxWidth = (int) c.intValue("kotlinMaxWidth", 0);
+            s.kotlinJars = jars(c.stringList("kotlinJars"));
+            s.optimizeImports = c.bool("optimizeImports", false);
+            c.stringOpt("rewriteConfigFile").ifPresent(p -> s.rewriteConfigFile = new File(p));
+            c.stringOpt("cacheDir").ifPresent(p -> s.cacheDir = Path.of(p));
+            for (String f : c.stringList("javaFiles")) s.files.add(new FileRef(false, new File(f)));
+            for (String f : c.stringList("kotlinFiles")) s.files.add(new FileRef(true, new File(f)));
             return s;
         }
 
-        private static Set<File> jars(String joined) {
+        private static Set<File> jars(List<String> paths) {
             Set<File> out = new LinkedHashSet<>();
-            if (joined == null || joined.isBlank()) return out;
-            for (String path : joined.split(File.pathSeparator)) {
+            for (String path : paths) {
                 if (!path.isBlank()) out.add(new File(path));
             }
             return out;

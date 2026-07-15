@@ -8,6 +8,8 @@ import build.jumpkick.cache.Cas;
 import build.jumpkick.http.Http;
 import build.jumpkick.model.Coordinate;
 import build.jumpkick.plugin.protocol.Ndjson;
+import build.jumpkick.plugin.protocol.SpecWriter;
+import build.jumpkick.plugin.protocol.WorkerProtocol;
 import build.jumpkick.run.Pipeline;
 import build.jumpkick.run.PipelineKey;
 import build.jumpkick.run.Step;
@@ -246,44 +248,35 @@ public final class FormatPipelines {
             Path rewriteConfig,
             Path cacheDir)
             throws IOException {
-        List<String> lines = new ArrayList<>();
-        lines.add("mode\t" + (check ? "check" : "apply"));
+        SpecWriter w = new SpecWriter()
+                .op(WorkerProtocol.OP_COMMAND, "format", "jk-formatter")
+                .configBool("apply", !check);
         if (!javaFiles.isEmpty()) {
-            lines.add("java\t" + javaStyle + "\t" + javaVersion(javaStyle) + "\t" + joinJars(javaJars));
+            w.configString("javaStyle", javaStyle)
+                    .configString("javaVersion", javaVersion(javaStyle))
+                    .configList("javaJars", absPaths(javaJars))
+                    .configList("javaFiles", absPaths(javaFiles));
         }
         if (!kotlinFiles.isEmpty()) {
-            lines.add("kotlin\t"
-                    + kotlinStyle
-                    + "\t"
-                    + KTFMT_VERSION
-                    + "\t"
-                    + KOTLIN_MAX_WIDTH
-                    + "\t"
-                    + joinJars(kotlinJars));
+            w.configString("kotlinStyle", kotlinStyle)
+                    .configString("kotlinVersion", KTFMT_VERSION)
+                    .configInt("kotlinMaxWidth", KOTLIN_MAX_WIDTH)
+                    .configList("kotlinJars", absPaths(kotlinJars))
+                    .configList("kotlinFiles", absPaths(kotlinFiles));
         }
-        boolean anyRewrite = (optimizeImports || rewriteConfig != null) && !javaFiles.isEmpty();
-        if (anyRewrite) {
-            lines.add("rewrite-flags\toptimize-imports=" + optimizeImports);
-            if (rewriteConfig != null) {
-                lines.add("rewrite-config\t" + rewriteConfig.toAbsolutePath());
-            }
+        if ((optimizeImports || rewriteConfig != null) && !javaFiles.isEmpty()) {
+            w.configBool("optimizeImports", optimizeImports);
+            if (rewriteConfig != null) w.configString("rewriteConfigFile", rewriteConfig.toAbsolutePath().toString());
         }
         // Pass the cache root so the worker can read/write per-file format stamps.
-        if (cacheDir != null) {
-            lines.add("cache-dir\t" + cacheDir.toAbsolutePath());
-        }
-        for (Path f : javaFiles) lines.add("f\tjava\t" + f.toAbsolutePath());
-        for (Path f : kotlinFiles) lines.add("f\tkotlin\t" + f.toAbsolutePath());
+        if (cacheDir != null) w.configString("cacheDir", cacheDir.toAbsolutePath().toString());
         Path spec = Files.createTempFile("jk-format-", ".spec");
-        Files.write(spec, lines, StandardCharsets.UTF_8);
+        Files.write(spec, w.lines(), StandardCharsets.UTF_8);
         return spec;
     }
 
-    private static String joinJars(List<Path> jars) {
-        return jars.stream()
-                .map(p -> p.toAbsolutePath().toString())
-                .reduce((a, b) -> a + File.pathSeparator + b)
-                .orElse("");
+    private static List<String> absPaths(List<Path> paths) {
+        return paths.stream().map(p -> p.toAbsolutePath().toString()).toList();
     }
 
     /** Collect project source files with the given extension, skipping build/VCS output dirs. */
