@@ -6,6 +6,8 @@ import build.jumpkick.run.StepNames;
 import build.jumpkick.cache.Cas;
 import build.jumpkick.lock.LockfileReader;
 import build.jumpkick.plugin.protocol.Ndjson;
+import build.jumpkick.plugin.protocol.SpecWriter;
+import build.jumpkick.plugin.protocol.WorkerProtocol;
 import build.jumpkick.run.Pipeline;
 import build.jumpkick.run.Step;
 import build.jumpkick.run.StepKind;
@@ -16,8 +18,6 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * The shared {@code jk audit} pipeline — scan {@code jk.lock} against OSV via the {@code jk-auditor}
@@ -105,14 +105,19 @@ public final class AuditPipelines {
         try {
             Path spec = writeSpec(lockPath, osvBatchUrl, osvVulnsUrl);
             try {
+                String[] error = {null};
                 int exit = new WorkerClient("##JKAU:")
-                        .on("finding", json -> observer.onFinding(
+                        .on(WorkerProtocol.FINDING, json -> observer.onFinding(
                                 Ndjson.str(json, "module"),
                                 Ndjson.str(json, "version"),
-                                Ndjson.str(json, "vuln_id"),
+                                Ndjson.str(json, "id"),
                                 Ndjson.str(json, "severity"),
                                 Ndjson.str(json, "summary")))
+                        .on(WorkerProtocol.ERROR, json -> error[0] = Ndjson.str(json, WorkerProtocol.MESSAGE))
                         .run(WorkerCommands.javaCommand(workerJar, spec));
+                if (error[0] != null) {
+                    throw new RuntimeException("audit worker: " + error[0]);
+                }
                 if (exit != 0) {
                     throw new RuntimeException("audit worker exited with code " + exit);
                 }
@@ -128,12 +133,13 @@ public final class AuditPipelines {
     }
 
     private static Path writeSpec(Path lockPath, URI osvBatchUrl, URI osvVulnsUrl) throws IOException {
-        List<String> lines = new ArrayList<>();
-        lines.add("LOCKFILE " + lockPath.toAbsolutePath());
-        if (osvBatchUrl != null) lines.add("BATCH_URL " + osvBatchUrl);
-        if (osvVulnsUrl != null) lines.add("VULNS_URL " + osvVulnsUrl);
-        Path spec = Files.createTempFile("jk-audit-", ".spec");
-        Files.write(spec, lines, StandardCharsets.UTF_8);
-        return spec;
+        SpecWriter spec = new SpecWriter()
+                .op(WorkerProtocol.OP_COMMAND, "audit", "jk-auditor")
+                .configString("lockfile", lockPath.toAbsolutePath().toString());
+        if (osvBatchUrl != null) spec.configString("batchUrl", osvBatchUrl.toString());
+        if (osvVulnsUrl != null) spec.configString("vulnsUrl", osvVulnsUrl.toString());
+        Path file = Files.createTempFile("jk-audit-", ".spec");
+        Files.write(file, spec.lines(), StandardCharsets.UTF_8);
+        return file;
     }
 }

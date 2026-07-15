@@ -7,38 +7,24 @@ import build.jumpkick.audit.OsvClient;
 import build.jumpkick.lock.Lockfile;
 import build.jumpkick.lock.LockfileReader;
 import build.jumpkick.plugin.Plugin;
+import build.jumpkick.plugin.PluginConfig;
 import build.jumpkick.plugin.PluginManifest;
-import build.jumpkick.plugin.protocol.Ndjson;
 import build.jumpkick.plugin.protocol.ProtocolWriter;
+import build.jumpkick.plugin.protocol.WorkerReply;
+import build.jumpkick.plugin.protocol.WorkerSpec;
 import java.io.IOException;
 import java.net.URI;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Optional;
 
 /**
- * The {@code jk-audit-runner} plugin: queries the OSV vulnerability API in an isolated child JVM so
- * Jackson and the OSV HTTP client never load in jk's own process. Discovered by the shared {@link
- * build.jumpkick.plugin.worker.PluginWorkerMain} via {@link java.util.ServiceLoader}.
- *
- * <p>Receives a single argument: the path to a line-oriented spec file:
- *
- * <pre>
- * LOCKFILE /absolute/path/to/jk.lock
- * BATCH_URL https://api.osv.dev/v1/querybatch  # optional override
- * VULNS_URL https://api.osv.dev/v1/vulns/       # optional override
- * </pre>
- *
- * <p>Streams NDJSON to stdout, each line prefixed {@code ##JKAU:}:
- *
- * <pre>
- * ##JKAU:{"t":"finding","module":"g:a","version":"1.0","vuln_id":"GHSA-xx","severity":"HIGH","summary":"..."}
- * ##JKAU:{"t":"result","total":1}
- * </pre>
- *
- * <p>Exit codes: 0 success (findings may still be present; threshold is the caller's decision), 1
- * network/parse error, 2 bad arguments.
+ * The {@code jk-auditor} worker (op {@code command}/{@code audit}): queries the OSV vulnerability
+ * API in an isolated child JVM so Jackson and the OSV HTTP client never load in jk's own process.
+ * Speaks the unified worker wire — the spec is NDJSON ({@code config}: {@code lockfile},
+ * {@code batchUrl}?, {@code vulnsUrl}?) and the reply is {@code finding} lines + a terminal
+ * {@code done}. Exit 0 success, 1 network/parse error, 2 bad arguments.
  */
 public final class AuditPlugin implements Plugin {
 
@@ -50,47 +36,36 @@ public final class AuditPlugin implements Plugin {
     @Override
     public int run(List<String> args, ProtocolWriter out) {
         if (args.isEmpty()) {
-            System.err.println("jk-audit-runner: expected spec file path as first argument");
+            System.err.println("jk-auditor: expected spec file path as first argument");
             return 2;
         }
         Path specFile = Path.of(args.get(0));
         if (!Files.isRegularFile(specFile)) {
-            System.err.println("jk-audit-runner: spec file not found: " + specFile);
+            System.err.println("jk-auditor: spec file not found: " + specFile);
+            return 2;
+        }
+        WorkerSpec spec;
+        try {
+            spec = WorkerSpec.read(specFile);
+        } catch (IOException e) {
+            System.err.println("jk-auditor: could not read spec file: " + e.getMessage());
+            return 2;
+        }
+        PluginConfig config = spec.config();
+        Optional<String> lockfile = config.stringOpt("lockfile");
+        if (lockfile.isEmpty()) {
+            System.err.println("jk-auditor: spec missing `lockfile` config");
             return 2;
         }
 
-        Path lockfilePath = null;
-        URI batchUrl = null;
-        URI vulnsUrl = null;
-        try {
-            for (String line : Files.readAllLines(specFile, StandardCharsets.UTF_8)) {
-                line = line.strip();
-                if (line.isEmpty() || line.startsWith("#")) continue;
-                int space = line.indexOf(' ');
-                if (space < 0) continue;
-                String key = line.substring(0, space);
-                String val = line.substring(space + 1).strip();
-                switch (key) {
-                    case "LOCKFILE" -> lockfilePath = Path.of(val);
-                    case "BATCH_URL" -> batchUrl = URI.create(val);
-                    case "VULNS_URL" -> vulnsUrl = URI.create(val);
-                    default -> {}
-                }
-            }
-        } catch (IOException e) {
-            System.err.println("jk-audit-runner: could not read spec file: " + e.getMessage());
-            return 2;
-        }
-        if (lockfilePath == null) {
-            System.err.println("jk-audit-runner: spec file missing LOCKFILE line");
-            return 2;
-        }
+        URI batchUrl = config.stringOpt("batchUrl").map(URI::create).orElse(null);
+        URI vulnsUrl = config.stringOpt("vulnsUrl").map(URI::create).orElse(null);
 
         Lockfile lock;
         try {
-            lock = LockfileReader.read(lockfilePath);
+            lock = LockfileReader.read(Path.of(lockfile.get()));
         } catch (IOException e) {
-            System.err.println("jk-audit-runner: could not read lockfile: " + e.getMessage());
+            out.emit(WorkerReply.error("lockfile", e.getMessage()));
             return 1;
         }
 
@@ -105,31 +80,14 @@ public final class AuditPlugin implements Plugin {
             report = new Auditor(client).audit(lock);
         } catch (IOException | InterruptedException e) {
             if (e instanceof InterruptedException) Thread.currentThread().interrupt();
-            System.err.println("jk-audit-runner: OSV query failed: " + e.getMessage());
+            out.emit(WorkerReply.error("osv", e.getMessage()));
             return 1;
         }
 
-        List<AuditReport.Finding> findings = report.findings();
-        for (AuditReport.Finding f : findings) {
-            out.emit("{"
-                    + "\"t\":\"finding\","
-                    + "\"module\":"
-                    + Ndjson.quote(f.module())
-                    + ","
-                    + "\"version\":"
-                    + Ndjson.quote(f.version())
-                    + ","
-                    + "\"vuln_id\":"
-                    + Ndjson.quote(f.vulnId())
-                    + ","
-                    + "\"severity\":"
-                    + Ndjson.quote(f.severity().name())
-                    + ","
-                    + "\"summary\":"
-                    + Ndjson.quote(f.summary())
-                    + "}");
+        for (AuditReport.Finding f : report.findings()) {
+            out.emit(WorkerReply.finding(f.module(), f.version(), f.vulnId(), f.severity().name(), f.summary()));
         }
-        out.emit("{\"t\":\"result\",\"total\":" + findings.size() + "}");
+        out.emit(WorkerReply.done(0));
         return 0;
     }
 }
