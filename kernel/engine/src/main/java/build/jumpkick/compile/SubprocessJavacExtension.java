@@ -3,7 +3,7 @@ package build.jumpkick.compile;
 
 import build.jumpkick.jdk.HostPlatform;
 import build.jumpkick.util.PathUtil;
-import build.jumpkick.worker.JvmOptions;
+import build.jumpkick.engine.plugin.JvmOptions;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -74,7 +74,7 @@ public final class SubprocessJavacExtension implements JavaCompileStrategy {
                 command.addAll(JvmOptions.launcherFlags(1));
                 // AOT cache for javac's own JVM (PluginAot): mapped when one exists for this
                 // JDK + GC, else a background trainer is kicked off so the NEXT compile maps it.
-                command.addAll(build.jumpkick.worker.PluginAot.javacFlags(javaHome));
+                command.addAll(build.jumpkick.engine.plugin.PluginAot.javacFlags(javaHome));
                 command.add("@" + argfile);
                 ProcessBuilder pb = new ProcessBuilder(command).redirectErrorStream(true);
                 Process process = pb.start();

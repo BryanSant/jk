@@ -88,7 +88,7 @@ migration effort (S/M/L), `—` = no migration work.
 | `ide` / `idea` / `vscode` | Generate IntelliJ/VS Code project files | **Hidden heavy hitter**: `IdeSupport.build` runs `new CacheSync(cas, new Http()).sync(lock, …)` (IdeSupport.java:274 — a `jk sync` equivalent), `RepoArtifactResolver.locateOrMaterialize` (IdeSupport.java:294,302), `WorkspaceClasspath` (:core), `JdkRegistry`/`StableJdkPointer`/`IntellijJdkTable` (:toolchain jdk slice) | Split: **ENGINE-HOSTED** model computation (sync + classpath → serialized `IdeModel` burst); **CLIENT-ONLY** file emission + `IntellijSdkRegistrar` (writes user-home IDE config; depends on the client-resident JDK flow) | L |
 | `new` / `init` | Scaffold a project/module (wizard); `init` = `new` pinned to `.` | `JdkCatalogClient().fetch()` (NewCommand.java:792, best-effort feed GET); `JdkInstaller` when the wizard installs a JDK (NewCommand.java:833–846); `JdkRegistry` discovery; `LibraryCatalog` (bundled resource); `JkBuildEditor`. No resolver, no CAS, no worker | **CLIENT-ONLY** — the existence proof of the client slice: HTTP + JSON + TOML + JDK installer + TUI | — |
 
-### 1.5 Direct plugin-worker forks from the CLI today (the `build.jumpkick.worker.*` cut)
+### 1.5 Direct plugin-worker forks from the CLI today (the `build.jumpkick.engine.plugin.*` cut)
 
 Yes — six verbs fork workers directly from the client process:
 
@@ -101,7 +101,7 @@ Yes — six verbs fork workers directly from the client process:
 | `import` | `WorkerJar.COMPAT_BRIDGE` | `new WorkerClient("##JKCMP:")` ImportCommand.java:126 |
 | `mvn`/`gradle` | `WorkerJar.COMPAT_BRIDGE` | `new WorkerClient("##JKCMP:")` MvnCommand.java:124 |
 
-Moving these forks engine-side removes `build.jumpkick.worker.WorkerClient`/`WorkerJar`/`JvmOptions`
+Moving these forks engine-side removes `build.jumpkick.engine.plugin.WorkerClient`/`WorkerJar`/`JvmOptions`
 (and the `CompileToolchain.runningJavaHome` JVM-location helper) from the client. The
 `WorkerJarNotFoundException` handling in `CommandDispatch` (CommandDispatch.java:201) becomes a
 structured engine error. The workers' NDJSON event streams relay 1:1 over the engine protocol —
@@ -386,7 +386,7 @@ handler + client renderer:
 | Wave | Verbs | Size | Rationale / protocol shape |
 |---|---|---|---|
 | 1 | `lock`, `sync`, `update` | L, L, M | The memory/CPU-heavy resolution+fetch family the ceilings exist for; includes git-source materialization. New lock/sync request+event vocabulary (single-pipeline shape fits: progress + `pipeline-diagnostic`* + `pipeline-finish`; workspace cascade = `plan-module` burst). `update` rides `lock`'s vocabulary |
-| 2 | `import`, `mvn`/`gradle` provisioning, `audit`, `publish`, `format`, `image` | S–M each | The direct worker forks (§1.5) — moving them engine-side deletes `build.jumpkick.worker.*` from the client in one tranche. Workers' NDJSON streams relay 1:1; `mvn`/`gradle` is a one-shot request → `{bin,version,source}` result |
+| 2 | `import`, `mvn`/`gradle` provisioning, `audit`, `publish`, `format`, `image` | S–M each | The direct worker forks (§1.5) — moving them engine-side deletes `build.jumpkick.engine.plugin.*` from the client in one tranche. Workers' NDJSON streams relay 1:1; `mvn`/`gradle` is a one-shot request → `{bin,version,source}` result |
 | 3 | `compile`, `run` (build part), `native`, `install` | S, M, M, L | The in-process `BuildPipelines` stragglers; `compile` reuses `jk test`'s single-pipeline vocabulary as-is; `install`'s git mode overlaps Wave 1's git-source work |
 | 4 | `ide`/`idea`/`vscode` (model part), `cache prune/purge`, `clean --cache`, `export gradle/maven`, `tool install/run` (resolve part), `explain` ETA rehome | L, M, S, S, M, S | Long tail; `ide` is the largest new wire vocabulary (serialized `IdeModel` burst + sync progress) but reuses Wave 1's sync machinery engine-side |
 
@@ -410,7 +410,7 @@ Waves 1–3 land and the §4 move list through step 4 is done.
 | 45 | build.jumpkick.lock | core.jar | 6 |
 | 38 | build.jumpkick.repo | io.jar | 18 |
 | 32 | build.jumpkick.resolver | resolver.jar | 15 |
-| 27 | build.jumpkick.worker | engine.jar | 6 |
+| 27 | build.jumpkick.engine.plugin | engine.jar | 6 |
 | 25 | build.jumpkick.task | engine.jar | 20 |
 | 25 | build.jumpkick.forge | io.jar | 11 |
 | 23 | build.jumpkick.engine | engine.jar | 4 |

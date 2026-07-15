@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 plugins {
-    id("jk.worker-conventions")
+    id("jk.plugin-conventions")
 }
 
 description = "jk-publish-runner: child-JVM worker that assembles, signs, and publishes Maven " +

@@ -3,7 +3,7 @@ package build.jumpkick.runtime;
 
 import build.jumpkick.jdk.HostPlatform;
 import build.jumpkick.jdk.JavaHomes;
-import build.jumpkick.worker.JvmOptions;
+import build.jumpkick.engine.plugin.JvmOptions;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;

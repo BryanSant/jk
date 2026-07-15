@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-package build.jumpkick.worker;
+package build.jumpkick.engine.plugin;
 
 /**
  * Turns "how much memory is free" + "how many worker JVMs we'd like to run at once" into a concrete

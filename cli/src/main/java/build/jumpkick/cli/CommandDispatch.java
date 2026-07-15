@@ -62,7 +62,7 @@ import build.jumpkick.model.command.Command;
 import build.jumpkick.model.command.Invocation;
 import build.jumpkick.model.command.Opt;
 import build.jumpkick.model.command.Param;
-import build.jumpkick.worker.PluginJarNotFoundException;
+import build.jumpkick.engine.plugin.PluginJarNotFoundException;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;

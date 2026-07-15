@@ -12,7 +12,7 @@ import org.tomlj.TomlTable;
  * Resolves the effective {@link PluginTuning} for a request from its config layers — CLI flags,
  * {@code JK_JVM_*} environment, and the project's {@code jk.toml [jvm]} table. The client installs
  * only its flag/env layers ({@link #resolveClient}) on the {@link Session}; the {@code [jvm]}
- * table is a jk.toml read and therefore engine-side — {@code build.jumpkick.worker.JvmOptions}
+ * table is a jk.toml read and therefore engine-side — {@code build.jumpkick.engine.plugin.JvmOptions}
  * overlays it at worker-fork time via {@link #overlayProject} (thin-client contract).
  */
 public final class PluginTunings {

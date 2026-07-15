@@ -17,7 +17,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 /**
  * End-to-end of the launcher → worker subprocess round-trip: launches the real {@code
- * jk-java-compiler} jar (path from the {@code jk.java.worker.jar} property the Gradle test task
+ * jk-java-compiler} jar (path from the {@code jk.java.plugin.jar} property the Gradle test task
  * sets), compiles a source with a real annotation processor, and asserts the parsed generated →
  * originating provenance.
  */
@@ -25,10 +25,10 @@ class WorkerJavacTest {
 
     @Test
     void launches_the_worker_and_parses_provenance(@TempDir Path dir) throws IOException {
-        String workerProp = System.getProperty("jk.java.worker.jar");
+        String workerProp = System.getProperty("jk.java.plugin.jar");
         assumeTrue(
                 workerProp != null && Files.isRegularFile(Path.of(workerProp)),
-                "jk.java.worker.jar must point at the built worker jar");
+                "jk.java.plugin.jar must point at the built worker jar");
 
         // A standalone annotation processor + annotation, on a processor path.
         Path procDir = dir.resolve("proc");

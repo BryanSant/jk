@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-package build.jumpkick.worker;
+package build.jumpkick.engine.plugin;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -19,7 +19,7 @@ class PluginProcessTest {
     private static List<String> cmd(String... extra) {
         String javaExe = System.getProperty("java.home") + "/bin/java";
         List<String> c = new ArrayList<>(
-                List.of(javaExe, "-cp", System.getProperty("java.class.path"), "build.jumpkick.worker.EchoPluginMain"));
+                List.of(javaExe, "-cp", System.getProperty("java.class.path"), "build.jumpkick.engine.plugin.EchoPluginMain"));
         c.addAll(List.of(extra));
         return c;
     }

@@ -10,7 +10,7 @@ import java.util.List;
  * default", and {@code extraArgs} are raw flags appended verbatim.
  *
  * <p>The resolution logic (env / {@code jk.toml} / flag precedence, flag rendering, heap planning)
- * lives in {@code build.jumpkick.worker.JvmOptions}; this is the plain value it produces and the {@code
+ * lives in {@code build.jumpkick.engine.plugin.JvmOptions}; this is the plain value it produces and the {@code
  * Session} carries.
  */
 public record PluginTuning(Double maxRamPercent, String gc, Boolean stringDedup, List<String> extraArgs) {

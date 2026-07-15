@@ -154,8 +154,8 @@ public final class InProcessEngineImpl implements InProcessEngine {
             throws IOException, InterruptedException {
         // Size the test-runner JVMs' heaps (and cap how many fork at once) to the
         // host's free memory before launching them.
-        build.jumpkick.worker.HeapPlan.Plan heapPlan =
-                build.jumpkick.worker.JvmOptions.planAndApply(build.jumpkick.worker.HeapPlan.requestedJvms(
+        build.jumpkick.engine.plugin.HeapPlan.Plan heapPlan =
+                build.jumpkick.engine.plugin.JvmOptions.planAndApply(build.jumpkick.engine.plugin.HeapPlan.requestedJvms(
                         1, workerCount, false, Runtime.getRuntime().availableProcessors()));
         if (heapPlan != null && heapPlan.warning() != null && !global.outputIsJson()) {
             CliOutput.err("jk test: " + heapPlan.warning());
@@ -1144,8 +1144,8 @@ public final class InProcessEngineImpl implements InProcessEngine {
         // fork — one module; tests fork `workers` JVMs.
         int cap = Runtime.getRuntime().availableProcessors();
         boolean parallelTests = build.jumpkick.config.SessionContext.current().parallelTests();
-        int requested = build.jumpkick.worker.HeapPlan.requestedJvms(1, workers, parallelTests, cap);
-        build.jumpkick.worker.HeapPlan.Plan plan = build.jumpkick.worker.JvmOptions.planAndApply(requested);
+        int requested = build.jumpkick.engine.plugin.HeapPlan.requestedJvms(1, workers, parallelTests, cap);
+        build.jumpkick.engine.plugin.HeapPlan.Plan plan = build.jumpkick.engine.plugin.JvmOptions.planAndApply(requested);
         if (plan != null && plan.warning() != null && !global.outputIsJson()) {
             CliOutput.err("jk build: " + plan.warning());
         }

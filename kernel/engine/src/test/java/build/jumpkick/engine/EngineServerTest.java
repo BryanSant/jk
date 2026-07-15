@@ -46,7 +46,7 @@ class EngineServerTest {
         // Every test that gets a real EngineServer to run() triggers planSharedWorkerMemoryOnce(),
         // which mutates JvmOptions' process-wide static heap plan — reset it so it doesn't leak into
         // unrelated tests (e.g. JvmOptionsTest) sharing this test JVM.
-        build.jumpkick.worker.JvmOptions.resetSharedPlanForTests();
+        build.jumpkick.engine.plugin.JvmOptions.resetSharedPlanForTests();
         for (Path dir : tempDirs) {
             try (var walk = Files.walk(dir)) {
                 walk.sorted(Comparator.reverseOrder()).forEach(p -> {
@@ -504,7 +504,7 @@ class EngineServerTest {
     /**
      * Engine-hosted {@code jk audit} round-trip (Wave 2 of the slim-client migration — the hosted
      * worker commands): a real server over the socket forks a real {@code jk-auditor} worker JVM
-     * (located via {@code -Djk.auditor.worker.jar}, wired by the Gradle build) against a mock OSV
+     * (located via {@code -Djk.auditor.plugin.jar}, wired by the Gradle build) against a mock OSV
      * API. Asserts the single-pipeline wire conversation — plan burst → pipeline events → structured
      * {@code audit-finding} stream → terminal {@code pipeline-finish} — carrying the mock vulnerability.
      */

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-package build.jumpkick.worker;
+package build.jumpkick.engine.plugin;
 
 import java.nio.file.Path;
 import java.util.List;

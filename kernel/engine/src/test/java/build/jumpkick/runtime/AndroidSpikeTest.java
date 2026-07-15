@@ -209,7 +209,7 @@ class AndroidSpikeTest {
 
     /** apksig's verifier from the fetched CAS jar — proves v1+v2 without an emulator. */
     private static boolean verifiedByApksig(Path apk) throws Exception {
-        Path jar = Path.of(System.getProperty("jk.android.worker.jar"));
+        Path jar = Path.of(System.getProperty("jk.android.plugin.jar"));
         try (var loader = new java.net.URLClassLoader(new java.net.URL[] {jar.toUri().toURL()})) {
             Class<?> builderClass = loader.loadClass("com.android.apksig.ApkVerifier$Builder");
             Object builder = builderClass

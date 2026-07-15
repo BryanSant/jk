@@ -20,7 +20,7 @@ plugins {
 }
 
 // Coordinates + version must match build.jumpkick.util.JkVersion.VERSION and the
-// build.jumpkick.worker.PluginJar registry (artifactId = jk-<projectName>).
+// build.jumpkick.engine.plugin.PluginJar registry (artifactId = jk-<projectName>).
 group = "build.jumpkick"
 version = "0.10.0-SNAPSHOT"
 
@@ -38,7 +38,7 @@ publishing {
 tasks.jar {
     manifest {
         attributes(
-                "Main-Class" to "build.jumpkick.plugin.worker.PluginMain",
+                "Main-Class" to "build.jumpkick.plugin.process.PluginMain",
                 "Implementation-Title" to workerArtifact,
                 "Implementation-Version" to project.version)
     }
@@ -49,7 +49,7 @@ tasks.jar {
 
 // Side-load the freshly-built worker jar into the developer's local Maven repo at
 // ~/.jk/cache/repos/local/build/jumpkick/<artifact>/<version>/<artifact>-<version>.jar
-// so PluginJar.locate() finds the worker without requiring -Djk.<x>.worker.jar.
+// so PluginJar.locate() finds the worker without requiring -Djk.<x>.plugin.jar.
 // Also writes a .sha256 sidecar so RepoArtifactStore.locate() sees it as complete.
 tasks.register("installLocal") {
     description = "Side-load the freshly-built $workerArtifact jar into ~/.jk/cache/repos/local/ (m2 layout)"

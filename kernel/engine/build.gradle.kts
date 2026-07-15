@@ -48,7 +48,7 @@ tasks.withType<Test>().configureEach {
     jvmArgs("--enable-native-access=ALL-UNNAMED")
     dependsOn(javaCompilerWorkerJar, testRunnerJarCfg)
     doFirst {
-        systemProperty("jk.java.worker.jar", javaCompilerWorkerJar.singleFile.absolutePath)
+        systemProperty("jk.java.plugin.jar", javaCompilerWorkerJar.singleFile.absolutePath)
         systemProperty("jk.test.runner.jar", testRunnerJarCfg.singleFile.absolutePath)
     }
 }
@@ -60,7 +60,7 @@ val testSpringBootWorkerJar by configurations.creating {
 dependencies { testSpringBootWorkerJar(project(":spring-boot")) }
 tasks.withType<Test>().configureEach {
     dependsOn(testSpringBootWorkerJar)
-    doFirst { systemProperty("jk.spring-boot.worker.jar", testSpringBootWorkerJar.singleFile.absolutePath) }
+    doFirst { systemProperty("jk.spring-boot.plugin.jar", testSpringBootWorkerJar.singleFile.absolutePath) }
 }
 
 // Pass the android worker jar to tests (the Android-spike integration test forks it).
@@ -70,7 +70,7 @@ val testAndroidWorkerJar by configurations.creating {
 dependencies { testAndroidWorkerJar(project(":android")) }
 tasks.withType<Test>().configureEach {
     dependsOn(testAndroidWorkerJar)
-    doFirst { systemProperty("jk.android.worker.jar", testAndroidWorkerJar.singleFile.absolutePath) }
+    doFirst { systemProperty("jk.android.plugin.jar", testAndroidWorkerJar.singleFile.absolutePath) }
 }
 
 // Pass the protobuf worker jar to tests (the protoc codegen integration test forks it).
@@ -80,7 +80,7 @@ val testProtobufWorkerJar by configurations.creating {
 dependencies { testProtobufWorkerJar(project(":protobuf")) }
 tasks.withType<Test>().configureEach {
     dependsOn(testProtobufWorkerJar)
-    doFirst { systemProperty("jk.protobuf.worker.jar", testProtobufWorkerJar.singleFile.absolutePath) }
+    doFirst { systemProperty("jk.protobuf.plugin.jar", testProtobufWorkerJar.singleFile.absolutePath) }
 }
 
 // Pass the shrink worker jar to tests (the R8 shrunk-jar integration test forks it).
@@ -90,7 +90,7 @@ val testShrinkWorkerJar by configurations.creating {
 dependencies { testShrinkWorkerJar(project(":shrink")) }
 tasks.withType<Test>().configureEach {
     dependsOn(testShrinkWorkerJar)
-    doFirst { systemProperty("jk.shrink.worker.jar", testShrinkWorkerJar.singleFile.absolutePath) }
+    doFirst { systemProperty("jk.shrink.plugin.jar", testShrinkWorkerJar.singleFile.absolutePath) }
 }
 
 // Pass the kotlin-compiler worker jar to tests (the KSP/Room/Hilt gate compiles Kotlin).
@@ -100,7 +100,7 @@ val testKotlinWorkerJar by configurations.creating {
 dependencies { testKotlinWorkerJar(project(":kotlin-compiler")) }
 tasks.withType<Test>().configureEach {
     dependsOn(testKotlinWorkerJar)
-    doFirst { systemProperty("jk.kotlin.worker.jar", testKotlinWorkerJar.singleFile.absolutePath) }
+    doFirst { systemProperty("jk.kotlin.plugin.jar", testKotlinWorkerJar.singleFile.absolutePath) }
 }
 
 // Pass the auditor jar path to tests (EngineServerTest's hosted jk audit round-trip forks it).
@@ -110,5 +110,5 @@ val testAuditorWorkerJar by configurations.creating {
 dependencies { testAuditorWorkerJar(project(":auditor")) }
 tasks.withType<Test>().configureEach {
     dependsOn(testAuditorWorkerJar)
-    doFirst { systemProperty("jk.auditor.worker.jar", testAuditorWorkerJar.singleFile.absolutePath) }
+    doFirst { systemProperty("jk.auditor.plugin.jar", testAuditorWorkerJar.singleFile.absolutePath) }
 }

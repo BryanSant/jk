@@ -4,7 +4,7 @@ package build.jumpkick.runtime;
 import build.jumpkick.cache.Cas;
 import build.jumpkick.kotlin.KotlinResolver;
 import build.jumpkick.repo.RepoGroup;
-import build.jumpkick.worker.PluginJar;
+import build.jumpkick.engine.plugin.PluginJar;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;

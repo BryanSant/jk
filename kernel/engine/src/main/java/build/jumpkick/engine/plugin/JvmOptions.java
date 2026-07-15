@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-package build.jumpkick.worker;
+package build.jumpkick.engine.plugin;
 
 import build.jumpkick.config.SessionContext;
 import build.jumpkick.config.PluginTuning;
@@ -318,7 +318,7 @@ public final class JvmOptions {
     /**
      * Assemble a worker JVM command line: {@code javaExe}, then the tuning flags ({@link
      * #workerFlags}), then {@code rest} (e.g. {@code -cp <jar> Main <spec>}). For forks not driven by
-     * {@link build.jumpkick.worker.PluginLoader} — the compiler/git workers and the CLI's standalone
+     * {@link build.jumpkick.engine.plugin.PluginLoader} — the compiler/git workers and the CLI's standalone
      * worker commands.
      */
     public static List<String> javaCommand(String javaExe, int concurrency, List<String> rest) {

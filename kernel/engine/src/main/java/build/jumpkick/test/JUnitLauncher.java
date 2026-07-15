@@ -5,8 +5,8 @@ import build.jumpkick.cache.Cas;
 import build.jumpkick.jdk.HostPlatform;
 import build.jumpkick.plugin.protocol.Ndjson;
 import build.jumpkick.run.TestSummary;
-import build.jumpkick.worker.PluginJar;
-import build.jumpkick.worker.PluginProcess;
+import build.jumpkick.engine.plugin.PluginJar;
+import build.jumpkick.engine.plugin.PluginProcess;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
@@ -50,7 +50,7 @@ public final class JUnitLauncher {
     private static final String RUNNER_PLUGIN_CLASS = "build.jumpkick.testrunner.TestRunnerPlugin";
 
     /**
-     * {@code jk.<worker>.worker.jar} overrides handed to the test JVM so tests that fork a
+     * {@code jk.<worker>.plugin.jar} overrides handed to the test JVM so tests that fork a
      * first-party worker (e.g. the git client) locate its jar by path. Mirrors what Gradle's test
      * config provides; under {@code jk build} the {@code run-tests} step resolves the freshly-built
      * sibling worker jars (built before this module via the {@code [build.embed-sha]} order-after
@@ -61,10 +61,10 @@ public final class JUnitLauncher {
 
     /**
      * Worker JVM flags: the heap/GC tuning, the {@code jk.plugin.class} selector for the runner, and
-     * any {@code jk.<worker>.worker.jar} overrides.
+     * any {@code jk.<worker>.plugin.jar} overrides.
      */
     private List<String> runnerFlags(int concurrency) {
-        List<String> flags = new ArrayList<>(build.jumpkick.worker.JvmOptions.workerFlags(concurrency));
+        List<String> flags = new ArrayList<>(build.jumpkick.engine.plugin.JvmOptions.workerFlags(concurrency));
         flags.add("-Djk.plugin.class=" + RUNNER_PLUGIN_CLASS);
         workerJarProps.forEach((prop, jar) -> flags.add("-D" + prop + "=" + jar));
         return flags;
@@ -77,7 +77,7 @@ public final class JUnitLauncher {
      * <p>{@code listener} receives a stream of progress callbacks as events arrive — pass {@link
      * TestProgressListener#noop()} when no UI is wired.
      *
-     * <p>{@code workerJarProps} maps {@code jk.<worker>.worker.jar} property names to built
+     * <p>{@code workerJarProps} maps {@code jk.<worker>.plugin.jar} property names to built
      * worker-jar paths, forwarded to the test JVM so worker-forking tests can locate their worker by
      * path (see {@link #workerJarProps}).
      */
@@ -142,7 +142,7 @@ public final class JUnitLauncher {
         // throwable / System.exit before any test event) can be explained instead
         // of surfacing only as "runner exited N".
         var crash = new CaptureBuffer();
-        int exit = build.jumpkick.worker.PluginLoader.run(
+        int exit = build.jumpkick.engine.plugin.PluginLoader.run(
                 javaBinary,
                 classpath,
                 runnerFlags(1),
@@ -302,7 +302,7 @@ public final class JUnitLauncher {
         };
 
         try {
-            return build.jumpkick.worker.PluginLoader.converse(
+            return build.jumpkick.engine.plugin.PluginLoader.converse(
                     javaBinary,
                     classpath,
                     // N test JVMs run at once → divide the heap cap by N so they fit.
@@ -329,7 +329,7 @@ public final class JUnitLauncher {
             Path javaBinary, String classpath, Path testClassesDir, TestProgressListener listener)
             throws IOException, InterruptedException {
         var classes = new ArrayList<String>();
-        build.jumpkick.worker.PluginLoader.run(
+        build.jumpkick.engine.plugin.PluginLoader.run(
                 javaBinary,
                 classpath,
                 runnerFlags(1),

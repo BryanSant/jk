@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 plugins {
-    id("jk.worker-conventions")
+    id("jk.plugin-conventions")
 }
 
 description = "jk-java-compiler: child-JVM worker that runs javac in-process via the " +

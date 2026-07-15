@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 plugins {
-    id("jk.worker-conventions")
+    id("jk.plugin-conventions")
 }
 
 description = "jk-spring-boot: the built-in Spring Boot build plugin's code layer — the " +

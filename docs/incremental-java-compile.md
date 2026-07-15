@@ -100,7 +100,7 @@ reuses the now-proven worker infrastructure:
 
 - Module `:java-compiler`, `compileOnly` nothing exotic (javac is in the JDK);
   manifest `Main-Class`, a line-oriented spec, `##JKJC:` NDJSON back to jk.
-- Located via **CAS-by-SHA** with a `-Djk.java.worker.jar` override
+- Located via **CAS-by-SHA** with a `-Djk.java.plugin.jar` override
   (`JkWorkerSync` already syncs from `~/.m2` after `publishToMavenLocal`; add the
   third artifact). `installLocalCas` for the dev loop.
 

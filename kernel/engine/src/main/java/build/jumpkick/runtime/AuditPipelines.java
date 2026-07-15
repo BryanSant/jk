@@ -11,8 +11,8 @@ import build.jumpkick.plugin.protocol.PluginProtocol;
 import build.jumpkick.run.Pipeline;
 import build.jumpkick.run.Step;
 import build.jumpkick.run.StepKind;
-import build.jumpkick.worker.PluginClient;
-import build.jumpkick.worker.PluginJar;
+import build.jumpkick.engine.plugin.PluginClient;
+import build.jumpkick.engine.plugin.PluginJar;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -43,7 +43,7 @@ public final class AuditPipelines {
 
     /**
      * Build the audit pipeline for {@code lockPath}. Locates the worker jar eagerly, so a missing worker
-     * fails here (with {@link build.jumpkick.worker.PluginJarNotFoundException}'s side-load
+     * fails here (with {@link build.jumpkick.engine.plugin.PluginJarNotFoundException}'s side-load
      * instructions) rather than mid-pipeline. {@code thresholdLabel} only feeds the evaluate step's
      * label; {@code osvBatchUrl}/{@code osvVulnsUrl} are the hidden test overrides ({@code null} =
      * the real OSV endpoints).

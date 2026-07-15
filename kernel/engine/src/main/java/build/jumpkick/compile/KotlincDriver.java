@@ -2,7 +2,7 @@
 package build.jumpkick.compile;
 
 import build.jumpkick.plugin.protocol.Ndjson;
-import build.jumpkick.worker.PluginClient;
+import build.jumpkick.engine.plugin.PluginClient;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
@@ -26,7 +26,7 @@ public final class KotlincDriver {
     /** Mirrors the worker's {@code Ndjson.PREFIX}. */
     private static final String PROTOCOL_PREFIX = "##JKKC:";
 
-    private static final String WORKER_MAIN = "build.jumpkick.plugin.worker.PluginMain";
+    private static final String WORKER_MAIN = "build.jumpkick.plugin.process.PluginMain";
 
     public KotlincResult compile(KotlincRequest request) {
         try {
@@ -56,7 +56,7 @@ public final class KotlincDriver {
             // the cache tames its multi-second JIT warmup. Mapped when one exists for (host JDK,
             // GC, classpath); else a background trainer compiles a synthetic hello.kt so the NEXT
             // kotlin build maps it. JVM flags, so they precede -cp.
-            rest.addAll(build.jumpkick.worker.PluginAot.kotlincFlags(
+            rest.addAll(build.jumpkick.engine.plugin.PluginAot.kotlincFlags(
                     hostJavaHome, classpath, (aotOutput, scratch) -> trainerCommand(
                             request.classpath(), classpath, hostJavaHome, aotOutput, scratch)));
             rest.addAll(List.of(
@@ -66,7 +66,7 @@ public final class KotlincDriver {
                     classpath,
                     WORKER_MAIN,
                     "@" + spec.toAbsolutePath()));
-            List<String> cmd = build.jumpkick.worker.JvmOptions.javaCommand(
+            List<String> cmd = build.jumpkick.engine.plugin.JvmOptions.javaCommand(
                     hostJavaHome.resolve("bin").resolve("java").toString(), 1, rest);
 
             List<String> diagnostics = new ArrayList<>();
@@ -146,7 +146,7 @@ public final class KotlincDriver {
         rest.add("-XX:AOTCacheOutput=" + aotOutput);
         rest.addAll(List.of(
                 "--enable-native-access=ALL-UNNAMED", "-cp", classpath, WORKER_MAIN, "@" + spec.toAbsolutePath()));
-        return build.jumpkick.worker.JvmOptions.javaCommand(
+        return build.jumpkick.engine.plugin.JvmOptions.javaCommand(
                 hostJavaHome.resolve("bin").resolve("java").toString(), 1, rest);
     }
 

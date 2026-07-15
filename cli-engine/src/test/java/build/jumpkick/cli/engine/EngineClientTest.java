@@ -38,7 +38,7 @@ class EngineClientTest {
         // Every test that gets a real EngineServer to run() triggers planSharedWorkerMemoryOnce(),
         // which mutates JvmOptions' process-wide static heap plan — reset it so it doesn't leak into
         // unrelated tests sharing this test JVM.
-        build.jumpkick.worker.JvmOptions.resetSharedPlanForTests();
+        build.jumpkick.engine.plugin.JvmOptions.resetSharedPlanForTests();
         for (Path dir : tempDirs) {
             try (var walk = Files.walk(dir)) {
                 walk.sorted(Comparator.reverseOrder()).forEach(p -> {

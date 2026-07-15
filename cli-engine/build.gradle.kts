@@ -108,14 +108,14 @@ tasks.withType<Test>().configureEach {
     // the real native binary (docs/engine.md), not this suite.
     systemProperty("jk.test.noEngine", "true")
     doFirst {
-        systemProperty("jk.kotlin.worker.jar",       kotlinWorkerJar.singleFile.absolutePath)
+        systemProperty("jk.kotlin.plugin.jar",       kotlinWorkerJar.singleFile.absolutePath)
         systemProperty("jk.test.runner.jar",         testRunnerJar.singleFile.absolutePath)
-        systemProperty("jk.auditor.worker.jar",      auditorWorkerJar.singleFile.absolutePath)
-        systemProperty("jk.publisher.worker.jar",    publisherWorkerJar.singleFile.absolutePath)
-        systemProperty("jk.image-builder.worker.jar", imageBuilderWorkerJar.singleFile.absolutePath)
-        systemProperty("jk.compat-bridge.worker.jar", compatBridgeWorkerJar.singleFile.absolutePath)
-        systemProperty("jk.spring-boot.worker.jar",  springBootWorkerJar.singleFile.absolutePath)
-        systemProperty("jk.android.worker.jar",      androidWorkerJar.singleFile.absolutePath)
+        systemProperty("jk.auditor.plugin.jar",      auditorWorkerJar.singleFile.absolutePath)
+        systemProperty("jk.publisher.plugin.jar",    publisherWorkerJar.singleFile.absolutePath)
+        systemProperty("jk.image-builder.plugin.jar", imageBuilderWorkerJar.singleFile.absolutePath)
+        systemProperty("jk.compat-bridge.plugin.jar", compatBridgeWorkerJar.singleFile.absolutePath)
+        systemProperty("jk.spring-boot.plugin.jar",  springBootWorkerJar.singleFile.absolutePath)
+        systemProperty("jk.android.plugin.jar",      androidWorkerJar.singleFile.absolutePath)
     }
 }
 

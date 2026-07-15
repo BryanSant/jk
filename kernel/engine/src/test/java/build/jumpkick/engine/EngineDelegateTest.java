@@ -44,7 +44,7 @@ class EngineDelegateTest {
 
     @AfterEach
     void cleanupTempDirs() {
-        build.jumpkick.worker.JvmOptions.resetSharedPlanForTests();
+        build.jumpkick.engine.plugin.JvmOptions.resetSharedPlanForTests();
         for (Path dir : tempDirs) {
             try (var walk = Files.walk(dir)) {
                 walk.sorted(Comparator.reverseOrder()).forEach(p -> {

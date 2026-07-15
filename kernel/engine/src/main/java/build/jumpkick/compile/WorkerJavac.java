@@ -79,12 +79,12 @@ public final class WorkerJavac {
             Path javaExe = build.jumpkick.jdk.JavaHomes.runningJavaHome()
                     .resolve("bin")
                     .resolve(win ? "java.exe" : "java");
-            List<String> command = build.jumpkick.worker.PluginLoader.command(
+            List<String> command = build.jumpkick.engine.plugin.PluginLoader.command(
                     javaExe,
                     req.workerJar().toString(),
-                    build.jumpkick.worker.JvmOptions.batchFlags(1),
+                    build.jumpkick.engine.plugin.JvmOptions.batchFlags(1),
                     List.of("@" + spec.toAbsolutePath()));
-            int exit = new build.jumpkick.worker.PluginClient(PREFIX)
+            int exit = new build.jumpkick.engine.plugin.PluginClient(PREFIX)
                     .on("diag", json -> diagnostics.add(new CompileResult.Diagnostic(
                             CompileResult.Severity.fromName(Ndjson.str(json, "sev")),
                             null,

@@ -594,7 +594,7 @@ public record JkBuild(
      * "build-order-only dependency" jk otherwise can't express.
      *
      * <p>{@code testWorkerJars} ({@code [build.test-worker-jars]}) lists workspace modules whose
-     * built worker jar must be handed to this module's test JVM (as {@code -Djk.<worker>.worker.jar})
+     * built worker jar must be handed to this module's test JVM (as {@code -Djk.<worker>.plugin.jar})
      * so tests that fork that worker locate it by path. Also implicitly {@code orderAfter} (the
      * worker must be built first).
      *

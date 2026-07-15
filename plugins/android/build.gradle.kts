@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 plugins {
-    id("jk.worker-conventions")
+    id("jk.plugin-conventions")
 }
 
 description = "jk-android: the built-in Android build plugin's code layer — the aapt2 " +

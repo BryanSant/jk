@@ -7,7 +7,7 @@ import java.util.List;
 /**
  * The engine wire protocol's message vocabulary: one newline-delimited JSON object per message, each
  * carrying a {@code "t"} type discriminator — the same canonical envelope shape {@link
- * build.jumpkick.worker.PluginClient} already uses for jk's worker-process protocol (see {@code
+ * build.jumpkick.engine.plugin.PluginClient} already uses for jk's worker-process protocol (see {@code
  * docs/engine.md}). Deliberately internal and unversioned: the client can only ever be a same-version
  * {@code jk} binary (enforced by the engine spawn path), so this vocabulary is free to change between
  * jk releases.

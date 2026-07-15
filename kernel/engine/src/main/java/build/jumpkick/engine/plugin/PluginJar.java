@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-package build.jumpkick.worker;
+package build.jumpkick.engine.plugin;
 
 import build.jumpkick.cache.Cas;
 import build.jumpkick.repo.RepoArtifactStore;
@@ -31,17 +31,17 @@ import java.util.List;
  */
 public enum PluginJar {
     TEST_RUNNER("jk-test-runner", "jk.test.runner.jar", ":test-runner:installLocal"),
-    KOTLIN_COMPILER("jk-kotlin-compiler", "jk.kotlin.worker.jar", ":kotlin-compiler:installLocal"),
-    JAVA_COMPILER("jk-java-compiler", "jk.java.worker.jar", ":java-compiler:installLocal"),
-    AUDITOR("jk-auditor", "jk.auditor.worker.jar", ":auditor:installLocal"),
-    PUBLISHER("jk-publisher", "jk.publisher.worker.jar", ":publisher:installLocal"),
-    IMAGE_BUILDER("jk-image-builder", "jk.image-builder.worker.jar", ":image-builder:installLocal"),
-    COMPAT_BRIDGE("jk-compat-bridge", "jk.compat-bridge.worker.jar", ":compat-bridge:installLocal"),
-    FORMATTER("jk-formatter", "jk.formatter.worker.jar", ":formatter:installLocal"),
-    SPRING_BOOT("jk-spring-boot", "jk.spring-boot.worker.jar", ":spring-boot:installLocal"),
-    ANDROID("jk-android", "jk.android.worker.jar", ":android:installLocal"),
-    PROTOBUF("jk-protobuf", "jk.protobuf.worker.jar", ":protobuf:installLocal"),
-    SHRINK("jk-shrink", "jk.shrink.worker.jar", ":shrink:installLocal");
+    KOTLIN_COMPILER("jk-kotlin-compiler", "jk.kotlin.plugin.jar", ":kotlin-compiler:installLocal"),
+    JAVA_COMPILER("jk-java-compiler", "jk.java.plugin.jar", ":java-compiler:installLocal"),
+    AUDITOR("jk-auditor", "jk.auditor.plugin.jar", ":auditor:installLocal"),
+    PUBLISHER("jk-publisher", "jk.publisher.plugin.jar", ":publisher:installLocal"),
+    IMAGE_BUILDER("jk-image-builder", "jk.image-builder.plugin.jar", ":image-builder:installLocal"),
+    COMPAT_BRIDGE("jk-compat-bridge", "jk.compat-bridge.plugin.jar", ":compat-bridge:installLocal"),
+    FORMATTER("jk-formatter", "jk.formatter.plugin.jar", ":formatter:installLocal"),
+    SPRING_BOOT("jk-spring-boot", "jk.spring-boot.plugin.jar", ":spring-boot:installLocal"),
+    ANDROID("jk-android", "jk.android.plugin.jar", ":android:installLocal"),
+    PROTOBUF("jk-protobuf", "jk.protobuf.plugin.jar", ":protobuf:installLocal"),
+    SHRINK("jk-shrink", "jk.shrink.plugin.jar", ":shrink:installLocal");
 
     private final String artifactId;
     private final String jarProperty;

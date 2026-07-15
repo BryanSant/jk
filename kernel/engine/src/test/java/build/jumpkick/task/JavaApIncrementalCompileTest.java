@@ -112,10 +112,10 @@ class JavaApIncrementalCompileTest {
     // ---- harness ----------------------------------------------------------
 
     private static Path workerJar() {
-        String prop = System.getProperty("jk.java.worker.jar");
+        String prop = System.getProperty("jk.java.plugin.jar");
         assumeTrue(
                 prop != null && Files.isRegularFile(Path.of(prop)),
-                "jk.java.worker.jar must point at the built worker jar");
+                "jk.java.plugin.jar must point at the built worker jar");
         return Path.of(prop);
     }
 

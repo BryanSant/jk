@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-package build.jumpkick.worker;
+package build.jumpkick.engine.plugin;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -10,7 +10,7 @@ import java.util.function.Consumer;
 
 /**
  * Forks a jk plugin worker JVM and bridges its NDJSON event stream back to the caller. A worker is
- * launched as {@code <java> <jvmFlags> -cp <classpath> build.jumpkick.plugin.worker.PluginMain
+ * launched as {@code <java> <jvmFlags> -cp <classpath> build.jumpkick.plugin.process.PluginMain
  * <args>}: {@code PluginMain} {@code ServiceLoader}-loads the single {@link
  * build.jumpkick.plugin.Plugin} on that classpath, runs it, and the plugin emits {@code
  * <prefix>}-tagged protocol lines on stdout.
@@ -18,7 +18,7 @@ import java.util.function.Consumer;
  * <p>jk has no host JVM and the CLI is a closed-world native image, so plugins never run in-process
  * — every worker is its own JVM, dispatched directly. The caller supplies the worker's classpath
  * (which must carry the plugin jar plus whatever it needs — e.g. the user's test classes + engines
- * for the test runner), the JVM tuning flags ({@link build.jumpkick.worker.JvmOptions}), and the
+ * for the test runner), the JVM tuning flags ({@link build.jumpkick.engine.plugin.JvmOptions}), and the
  * protocol prefix the plugin emits.
  */
 public final class PluginLoader {
@@ -26,14 +26,14 @@ public final class PluginLoader {
     private PluginLoader() {}
 
     /** Fully-qualified main class every worker jar runs under (vendored from plugin-api). */
-    static final String WORKER_MAIN = "build.jumpkick.plugin.worker.PluginMain";
+    static final String WORKER_MAIN = "build.jumpkick.plugin.process.PluginMain";
 
     /**
      * Fork a worker and stream its events. Returns the worker's exit code.
      *
      * @param javaExe the JVM to launch (the project-pinned JDK's {@code java})
      * @param classpath the worker's classpath (must include the plugin jar)
-     * @param jvmFlags heap/GC/etc. tuning flags (see {@link build.jumpkick.worker.JvmOptions})
+     * @param jvmFlags heap/GC/etc. tuning flags (see {@link build.jumpkick.engine.plugin.JvmOptions})
      * @param prefix the protocol-line marker the plugin emits (its manifest prefix)
      * @param args program args passed after {@code PluginMain}
      */
@@ -68,7 +68,7 @@ public final class PluginLoader {
 
     /**
      * Build the worker launch command {@code <java> <jvmFlags> -cp <classpath>
-     * build.jumpkick.plugin.worker.PluginMain <args>} without running it — for callers that drive
+     * build.jumpkick.plugin.process.PluginMain <args>} without running it — for callers that drive
      * the stream themselves via {@link PluginClient}.
      */
     public static List<String> command(Path javaExe, String classpath, List<String> jvmFlags, List<String> args) {

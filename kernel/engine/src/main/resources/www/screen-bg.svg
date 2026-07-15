@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 64" preserveAspectRatio="none">
+  <!-- SPDX-License-Identifier: Apache-2.0 — a slim vertical slice of the jumpkick-logo.svg
+       green-screen CRT background (the radial phosphor gradient + faint scanlines), with the
+       "jumpkick" wordmark and rounded corners removed. Meant to be tiled/repeated horizontally
+       as a page background; the strip is thin enough that the radial gradient reads as an even
+       vertical band, so it seams cleanly when repeated. -->
+  <defs>
+    <radialGradient id="crt-bg" cx="50%" cy="46%" r="75%">
+      <stop offset="0%" stop-color="#37672f"/>
+      <stop offset="100%" stop-color="#2a3e21"/>
+    </radialGradient>
+    <pattern id="scanlines" width="8" height="1.8" patternUnits="userSpaceOnUse">
+      <rect y="1.1" width="8" height="0.7" fill="#08130a"/>
+    </pattern>
+  </defs>
+
+  <rect width="8" height="64" fill="url(#crt-bg)"/>
+  <rect width="8" height="64" fill="url(#scanlines)" opacity="0.22"/>
+</svg>

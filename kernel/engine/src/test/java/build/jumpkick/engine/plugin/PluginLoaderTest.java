@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-package build.jumpkick.worker;
+package build.jumpkick.engine.plugin;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -18,8 +18,8 @@ class PluginLoaderTest {
 
     /** The java-compiler worker jar, side-loaded by Gradle via this system property. */
     private static Path javaCompilerJar() {
-        String prop = System.getProperty("jk.java.worker.jar");
-        Assumptions.assumeTrue(prop != null, "jk.java.worker.jar not set — skipping fork test");
+        String prop = System.getProperty("jk.java.plugin.jar");
+        Assumptions.assumeTrue(prop != null, "jk.java.plugin.jar not set — skipping fork test");
         return Path.of(prop);
     }
 

@@ -36,7 +36,7 @@ import build.jumpkick.task.ActionCache;
 import build.jumpkick.task.ActionKey;
 import build.jumpkick.test.JUnitLauncher;
 import build.jumpkick.test.TestProgressListener;
-import build.jumpkick.worker.PluginJar;
+import build.jumpkick.engine.plugin.PluginJar;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -1011,7 +1011,7 @@ public final class BuildPipelines {
                     Path javaHome = ctx.require(JAVA_HOME);
                     List<String> cmd = new ArrayList<>();
                     cmd.add(build.jumpkick.jdk.JavaHomes.runningJavaHome().resolve("bin/java").toString());
-                    cmd.addAll(build.jumpkick.worker.JvmOptions.batchFlags(1));
+                    cmd.addAll(build.jumpkick.engine.plugin.JvmOptions.batchFlags(1));
                     cmd.add("-cp");
                     cmd.add(joinPaths(kspClasspath, sep));
                     cmd.add(KspResolver.KSP_MAIN);
@@ -3159,7 +3159,7 @@ public final class BuildPipelines {
         if (modules.isEmpty()) return props;
         Map<String, Path> jarByModule = siblingMainJars(moduleDir);
         for (String module : modules) {
-            var wj = build.jumpkick.worker.PluginJar.byArtifactId("jk-" + module);
+            var wj = build.jumpkick.engine.plugin.PluginJar.byArtifactId("jk-" + module);
             if (wj.isEmpty()) continue;
             Path jar = jarByModule.get(module);
             if (jar != null && Files.exists(jar)) {

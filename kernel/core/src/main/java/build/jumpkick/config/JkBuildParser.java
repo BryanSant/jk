@@ -1409,7 +1409,7 @@ public final class JkBuildParser {
      *   <li>{@code order-after} — workspace modules (by project name or {@code group:artifact}) that
      *       must build before this one, with no classpath/lockfile edge.
      *   <li>{@code test-worker-jars} — workspace modules whose built worker jar is handed to this
-     *       module's test JVM via {@code -Djk.<worker>.worker.jar}.
+     *       module's test JVM via {@code -Djk.<worker>.plugin.jar}.
      *   <li>{@code lint} — defaults {@code true}; set {@code false} to suppress javac lint flags.
      * </ul>
      *

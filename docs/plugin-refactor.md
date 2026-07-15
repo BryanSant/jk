@@ -63,7 +63,7 @@ The same eight-runner pattern is open-coded eight times:
 | Parent-side jar locator | `*WorkerSetup` class per runner | 6 classes in `runtime/` |
 | Worker registry | Hand-maintained `JkWorkerSync.WORKERS` list | 8 entries |
 | `build.gradle.kts` SHA-emit task | Copy-pasted `writeXxxWorkerSha` blocks | 8 in `runtime/`, +1 in `engine/` |
-| Test-time `-Djk.*.worker.jar` plumbing | Repeated per runner in 3 build files | ~21 lines |
+| Test-time `-Djk.*.plugin.jar` plumbing | Repeated per runner in 3 build files | ~21 lines |
 
 There is **no `Plugin` or `Runner` interface, no shared protocol module, no
 shared launcher.** Adding a ninth runner today means copying all seven rows
@@ -292,7 +292,7 @@ CLI↔Host:
 
 ### 3.7 Plugin packaging & build wiring
 
-- One Gradle convention plugin (`jk.worker-conventions`) replaces the
+- One Gradle convention plugin (`jk.plugin-conventions`) replaces the
   copy-pasted `maven-publish` + fat-jar + `installLocalCas` + `writeXxxSha`
   blocks. Applying it to a module under `plugins/` gives it the manifest
   resource, the CAS side-load task, and the SHA emission automatically.
@@ -422,8 +422,8 @@ its own `HelpRenderer`. The native-image reflection config for picocli and the
 - Deleted 5 of 6 `*WorkerSetup` classes → `WorkerJar` enum.
 - Deleted the `JkWorkerSync.WORKERS` hand-list → `WorkerJar` enum + SHA resources.
 - Deleted both `Ndjson.java` copies → one codec in `plugin-api`.
-- Deleted 8 `writeXxxWorkerSha` blocks → one `jk.worker-conventions` plugin.
-- Deleted the repeated `-Djk.*.worker.jar` test plumbing → one block per module.
+- Deleted 8 `writeXxxWorkerSha` blocks → one `jk.plugin-conventions` plugin.
+- Deleted the repeated `-Djk.*.plugin.jar` test plumbing → one block per module.
 - Collapsed all per-runner `main()`+spec-parse+JSON-escape impls → `PluginHostMain`.
 - Deleted `supply-chain`, `image`, `compat`, `engine`, `runtime` as standalone modules.
 
@@ -433,7 +433,7 @@ its own `HelpRenderer`. The native-image reflection config for picocli and the
 
 - **Phase 0** ✓ — Extract `plugin-api` + protocol codec, no behaviour change.
 - **Phase 1** ✓ — `WorkerProcess` / `PluginHostMain` unified launcher; `WorkerJar` registry.
-- **Phase 2** ✓ — `jk.worker-conventions` convention plugin; SHA emission per-module.
+- **Phase 2** ✓ — `jk.plugin-conventions` convention plugin; SHA emission per-module.
 - **Phase 3** ✓ — Own arg parser + help renderer; picocli deleted.
 - **Phase 4** ✓ — Workspace Host (`HostMain`, `HostDispatch`, `HostLauncher`, `StreamingPipelineListener`, `ReceivingPipelineListener`); progress bar upgrade via `steps` event.
 - **Phase 5** ✓ — Module reorg: `engine`/`runtime` → `kernel/host`; vestigial modules deleted; module moves + renames.

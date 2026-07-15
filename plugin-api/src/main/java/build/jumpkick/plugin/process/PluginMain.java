@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-package build.jumpkick.plugin.worker;
+package build.jumpkick.plugin.process;
 
 import build.jumpkick.plugin.Plugin;
 import build.jumpkick.plugin.protocol.ProtocolWriter;
