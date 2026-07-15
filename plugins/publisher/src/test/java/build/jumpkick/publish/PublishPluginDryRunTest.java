@@ -34,12 +34,14 @@ class PublishPluginDryRunTest {
         Files.write(jar, new byte[] {0x50, 0x4b, 0x05, 0x06}); // empty-zip signature
 
         Path spec = dir.resolve("publish.spec");
-        Files.write(spec, List.of(
-                "PROJECT_DIR " + dir.toAbsolutePath(),
-                "JAR " + jar.toAbsolutePath(),
-                "REPO_URL https://repo.example.com/",
-                "REPO_AUTH_TYPE anonymous",
-                "DRY_RUN true"));
+        Files.write(spec, new build.jumpkick.plugin.protocol.SpecWriter()
+                .op(build.jumpkick.plugin.protocol.PluginProtocol.OP_PUBLISH, null, "jk-publisher")
+                .configString("repoUrl", "https://repo.example.com/")
+                .configString("repoAuthType", "anonymous")
+                .configBool("dryRun", true)
+                .artifact(jar)
+                .layout(java.util.Map.of("moduleDir", dir))
+                .lines());
 
         var buffer = new ByteArrayOutputStream();
         ProtocolWriter out = new ProtocolWriter(new PrintStream(buffer, true, StandardCharsets.UTF_8), "##JKPU:");
@@ -47,7 +49,7 @@ class PublishPluginDryRunTest {
 
         assertThat(exit).isZero();
         String output = buffer.toString(StandardCharsets.UTF_8);
-        assertThat(output).contains("\"t\":\"result\"").contains("\"dry_run\":true").contains("\"ok\":true");
+        assertThat(output).contains("\"t\":\"result\"").contains("\"dry_run\":true");
         // jar + pom at minimum (sources/slsa/sbom off) → files >= 2.
         assertThat(output).containsPattern("\"files\":[2-9]");
     }

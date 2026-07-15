@@ -15,6 +15,8 @@ import build.jumpkick.lock.Lockfile;
 import build.jumpkick.lock.LockfileReader;
 import build.jumpkick.model.JkBuild;
 import build.jumpkick.plugin.protocol.Ndjson;
+import build.jumpkick.plugin.protocol.PluginProtocol;
+import build.jumpkick.plugin.protocol.SpecWriter;
 import build.jumpkick.run.Pipeline;
 import build.jumpkick.run.PipelineKey;
 import build.jumpkick.run.Step;
@@ -322,38 +324,43 @@ public final class ImagePipelines {
             Path workerJar = PluginJar.IMAGE_BUILDER.locate(new Cas(cache));
             boolean daemonMode = tarballPath == null
                     && (config.registry() == null || config.registry().isBlank());
-            List<String> lines = new ArrayList<>();
-            lines.add("MAIN_JAR " + layout.mainJar().toAbsolutePath());
-            lines.add("ARTIFACT " + project.project().name());
-            lines.add("VERSION " + project.project().version());
-            lines.add("MAIN_CLASS " + chosen);
-            lines.add("MODE " + (tarballPath != null ? "tarball" : daemonMode ? "daemon" : "push"));
-            if (config.base() != null) lines.add("BASE " + config.base());
-            if (config.user() != null) lines.add("USER " + config.user());
-            if (config.registry() != null) lines.add("REGISTRY " + config.registry());
-            if (config.tag() != null) lines.add("TAG " + config.tag());
-            if (tarballPath != null) lines.add("TARBALL " + tarballPath.toAbsolutePath());
-            if (config.dockerExecutable() != null) lines.add("DOCKER_EXECUTABLE " + config.dockerExecutable());
-            for (int p : config.ports()) lines.add("PORT " + p);
-            for (var e : config.env().entrySet()) lines.add("ENV " + e.getKey() + "=" + e.getValue());
-            for (var e : config.labels().entrySet()) lines.add("LABEL " + e.getKey() + "=" + e.getValue());
-            for (String plat : config.platforms()) lines.add("PLATFORM " + plat);
-            for (Path dep : depJars) lines.add("DEP_JAR " + dep.toAbsolutePath());
-            for (Path dep : snapshotJars) lines.add("SNAPSHOT_DEP_JAR " + dep.toAbsolutePath());
-            if (classesDir != null) lines.add("CLASSES_DIR " + classesDir.toAbsolutePath());
+            SpecWriter sw = new SpecWriter()
+                    .op(PluginProtocol.OP_IMAGE, null, "jk-image-builder")
+                    .configString("artifact", project.project().name())
+                    .configString("version", project.project().version())
+                    .configString("mainClass", chosen)
+                    .configString("mode", tarballPath != null ? "tarball" : daemonMode ? "daemon" : "push");
+            if (config.base() != null) sw.configString("base", config.base());
+            if (config.user() != null) sw.configString("user", config.user());
+            if (config.registry() != null) sw.configString("registry", config.registry());
+            if (config.tag() != null) sw.configString("tag", config.tag());
+            if (tarballPath != null) sw.configString("tarball", tarballPath.toAbsolutePath().toString());
+            if (config.dockerExecutable() != null) sw.configString("dockerExecutable", config.dockerExecutable());
+            if (!config.ports().isEmpty()) {
+                sw.configList("ports", config.ports().stream().map(String::valueOf).toList());
+            }
+            if (!config.env().isEmpty()) {
+                sw.configList("env", config.env().entrySet().stream().map(e -> e.getKey() + "=" + e.getValue()).toList());
+            }
+            if (!config.labels().isEmpty()) {
+                sw.configList(
+                        "labels", config.labels().entrySet().stream().map(e -> e.getKey() + "=" + e.getValue()).toList());
+            }
+            if (!config.platforms().isEmpty()) sw.configList("platforms", config.platforms());
+            sw.artifact(layout.mainJar());
+            for (Path dep : depJars) sw.entry(dep.getFileName().toString(), dep, false, null);
+            for (Path dep : snapshotJars) sw.entry(dep.getFileName().toString(), dep, true, null);
+            if (classesDir != null) sw.layout(java.util.Map.of("classesDir", classesDir));
 
             Path spec = Files.createTempFile("jk-image-", ".spec");
             try {
-                Files.write(spec, lines, StandardCharsets.UTF_8);
+                Files.write(spec, sw.lines(), StandardCharsets.UTF_8);
                 String[] ref = {null};
                 String[] workerError = {null};
                 StringBuilder diag = new StringBuilder();
                 int exit = new PluginClient("##JKIM:")
-                        .on("result", json -> {
-                            ref[0] = Ndjson.str(json, "ref");
-                            String err = Ndjson.str(json, "error");
-                            if (err != null) workerError[0] = err;
-                        })
+                        .on(PluginProtocol.RESULT, json -> ref[0] = Ndjson.str(json, "ref"))
+                        .on(PluginProtocol.ERROR, json -> workerError[0] = Ndjson.str(json, PluginProtocol.MESSAGE))
                         .passthrough(ln -> diag.append(ln).append('\n'))
                         .run(PluginLaunch.javaCommand(workerJar, spec));
                 if (workerError[0] != null) throw new RuntimeException("image worker: " + workerError[0]);

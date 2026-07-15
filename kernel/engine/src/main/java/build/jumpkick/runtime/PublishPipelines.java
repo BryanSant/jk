@@ -12,6 +12,8 @@ import build.jumpkick.model.GitRefSpec;
 import build.jumpkick.model.JkBuild;
 import build.jumpkick.plugin.build.Phase;
 import build.jumpkick.plugin.protocol.Ndjson;
+import build.jumpkick.plugin.protocol.PluginProtocol;
+import build.jumpkick.plugin.protocol.SpecWriter;
 import build.jumpkick.run.Pipeline;
 import build.jumpkick.run.PipelineKey;
 import build.jumpkick.run.Step;
@@ -143,10 +145,8 @@ public final class PublishPipelines {
                 String[] error = {null};
                 StringBuilder workerDiag = new StringBuilder();
                 int exit = new PluginClient("##JKPU:")
-                        .on("result", json -> {
-                            files[0] = Ndjson.intValue(json, "files", 0);
-                            error[0] = Ndjson.str(json, "error");
-                        })
+                        .on(PluginProtocol.RESULT, json -> files[0] = Ndjson.intValue(json, "files", 0))
+                        .on(PluginProtocol.ERROR, json -> error[0] = Ndjson.str(json, PluginProtocol.MESSAGE))
                         .passthrough(line -> workerDiag.append(line).append('\n'))
                         .run(PluginLaunch.javaCommand(workerJar, spec));
                 if (exit != 0) {
@@ -167,35 +167,31 @@ public final class PublishPipelines {
     }
 
     private static Path writeSpec(Path projectDir, Path jar, Request req) throws IOException {
-        List<String> lines = new ArrayList<>();
-        lines.add("PROJECT_DIR " + projectDir.toAbsolutePath());
-        lines.add("JAR " + jar.toAbsolutePath());
-        lines.add("REPO_URL " + req.repoUrl());
-        lines.add("DRY_RUN " + req.dryRun());
-        lines.add("SLSA " + req.slsa());
-        lines.add("SBOM " + req.sbom());
-        lines.add("SIGN_SIGSTORE " + req.sigstore());
+        SpecWriter sw = new SpecWriter()
+                .op(PluginProtocol.OP_PUBLISH, null, "jk-publisher")
+                .configString("repoUrl", req.repoUrl().toString())
+                .configBool("dryRun", req.dryRun())
+                .configBool("slsa", req.slsa())
+                .configBool("sbom", req.sbom())
+                .configBool("signSigstore", req.sigstore());
 
         // Credential (resolved client-side so neither the engine nor the worker needs env/keychain access).
         if (req.credential() instanceof RepoCredential.Basic b) {
-            lines.add("REPO_AUTH_TYPE basic");
-            lines.add("REPO_USER " + b.username());
-            lines.add("REPO_PASS " + b.password());
+            sw.configString("repoAuthType", "basic").secret("repoUser", b.username()).secret("repoPass", b.password());
         } else if (req.credential() instanceof RepoCredential.Bearer b) {
-            lines.add("REPO_AUTH_TYPE bearer");
-            lines.add("REPO_TOKEN " + b.token());
+            sw.configString("repoAuthType", "bearer").secret("repoToken", b.token());
         } else {
-            lines.add("REPO_AUTH_TYPE anonymous");
+            sw.configString("repoAuthType", "anonymous");
         }
 
         if (req.keyFile() != null) {
-            lines.add("SIGN_GPG " + req.keyFile().toAbsolutePath());
-            if (req.gpgPassphrase() != null) lines.add("SIGN_GPG_PASS " + req.gpgPassphrase());
+            sw.configBool("signGpg", true).configString("gpgKeyFile", req.keyFile().toAbsolutePath().toString());
+            if (req.gpgPassphrase() != null) sw.secret("gpgPassphrase", req.gpgPassphrase());
         }
-        if (req.region() != null && !req.region().isBlank()) lines.add("OBJECT_STORE_REGION " + req.region());
-        if (req.endpoint() != null && !req.endpoint().isBlank()) {
-            lines.add("OBJECT_STORE_ENDPOINT " + req.endpoint());
-        }
+        if (req.region() != null && !req.region().isBlank()) sw.configString("objectStoreRegion", req.region());
+        if (req.endpoint() != null && !req.endpoint().isBlank()) sw.configString("objectStoreEndpoint", req.endpoint());
+        sw.artifact(jar);
+        sw.layout(java.util.Map.of("moduleDir", projectDir));
 
         // Use a 0600 temp file so credentials aren't world-readable.
         Path spec;
@@ -208,7 +204,7 @@ public final class PublishPipelines {
             // Non-POSIX filesystem (Windows): fall back to default permissions.
             spec = Files.createTempFile("jk-publish-", ".spec");
         }
-        Files.write(spec, lines, StandardCharsets.UTF_8);
+        Files.write(spec, sw.lines(), StandardCharsets.UTF_8);
         return spec;
     }
 

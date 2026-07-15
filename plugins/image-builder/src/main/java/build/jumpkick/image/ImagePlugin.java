@@ -11,10 +11,10 @@ import build.jumpkick.plugin.build.ImageExtension;
 import build.jumpkick.plugin.build.ImageResult;
 import build.jumpkick.plugin.build.PackageIo;
 import build.jumpkick.plugin.build.ProjectFacts;
-import build.jumpkick.plugin.protocol.Ndjson;
+import build.jumpkick.plugin.protocol.PluginReply;
+import build.jumpkick.plugin.protocol.PluginSpec;
 import build.jumpkick.plugin.protocol.ProtocolWriter;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -52,105 +52,31 @@ public final class ImagePlugin implements Plugin, ImageExtension {
         }
         Path specFile = Path.of(args.get(0));
         if (!Files.isRegularFile(specFile)) {
-            System.err.println("jk-image-runner: spec file not found: " + specFile);
+            System.err.println("jk-image-builder: spec file not found: " + specFile);
             return 2;
         }
-
-        Path mainJar = null, tarball = null, classesDir = null;
-        String artifact = null, version = null, mainClass = null;
-        String base = null, user = null, registry = null, tag = null;
-        String mode = null, dockerExecutable = null;
-        List<Path> depJars = new ArrayList<>();
-        List<Path> snapshotJars = new ArrayList<>();
-        List<String> ports = new ArrayList<>();
-        List<String> env = new ArrayList<>();
-        List<String> labels = new ArrayList<>();
-        List<String> platforms = new ArrayList<>();
-
+        PluginSpec spec;
         try {
-            for (String line : Files.readAllLines(specFile, StandardCharsets.UTF_8)) {
-                line = line.strip();
-                if (line.isEmpty() || line.startsWith("#")) continue;
-                int sp = line.indexOf(' ');
-                if (sp < 0) continue;
-                String key = line.substring(0, sp);
-                String val = line.substring(sp + 1).strip();
-                switch (key) {
-                    case "MAIN_JAR" -> mainJar = Path.of(val);
-                    case "ARTIFACT" -> artifact = val;
-                    case "VERSION" -> version = val;
-                    case "MAIN_CLASS" -> mainClass = val;
-                    case "BASE" -> base = val;
-                    case "USER" -> user = val;
-                    case "TARBALL" -> tarball = Path.of(val);
-                    case "REGISTRY" -> registry = val;
-                    case "TAG" -> tag = val;
-                    case "MODE" -> mode = val;
-                    case "DOCKER_EXECUTABLE" -> dockerExecutable = val;
-                    case "DEP_JAR" -> depJars.add(Path.of(val));
-                    case "SNAPSHOT_DEP_JAR" -> snapshotJars.add(Path.of(val));
-                    case "CLASSES_DIR" -> classesDir = Path.of(val);
-                    case "PLATFORM" -> platforms.add(val);
-                    case "PORT" -> ports.add(val);
-                    case "ENV" -> env.add(val);
-                    case "LABEL" -> labels.add(val);
-                    default -> {
-                        // forward compatibility: ignore unknown keys
-                    }
-                }
-            }
+            spec = PluginSpec.read(specFile);
         } catch (IOException e) {
-            System.err.println("jk-image-runner: could not read spec: " + e.getMessage());
+            System.err.println("jk-image-builder: could not read spec: " + e.getMessage());
             return 2;
         }
-
-        if (mainJar == null || artifact == null || version == null || mainClass == null) {
-            System.err.println("jk-image-runner: spec missing MAIN_JAR, ARTIFACT, VERSION, or MAIN_CLASS");
-            return 2;
-        }
-
-        // Assemble the generic terminal context: image settings ride config(), the built jar rides
-        // mainArtifact(), the dependency closure rides runtimeEntries() (snapshot flag per entry).
-        Map<String, Object> cfg = new LinkedHashMap<>();
-        cfg.put("artifact", artifact);
-        cfg.put("version", version);
-        cfg.put("mainClass", mainClass);
-        if (base != null) cfg.put("base", base);
-        if (user != null) cfg.put("user", user);
-        if (registry != null) cfg.put("registry", registry);
-        if (tag != null) cfg.put("tag", tag);
-        if (mode != null) cfg.put("mode", mode);
-        if (dockerExecutable != null) cfg.put("dockerExecutable", dockerExecutable);
-        if (tarball != null) cfg.put("tarball", tarball.toString());
-        if (!ports.isEmpty()) cfg.put("ports", List.copyOf(ports));
-        if (!env.isEmpty()) cfg.put("env", List.copyOf(env));
-        if (!labels.isEmpty()) cfg.put("labels", List.copyOf(labels));
-        if (!platforms.isEmpty()) cfg.put("platforms", List.copyOf(platforms));
-
-        List<PackageIo.RuntimeEntry> entries = new ArrayList<>();
-        for (Path dep : depJars) entries.add(new PackageIo.RuntimeEntry(dep.getFileName().toString(), dep, false));
-        for (Path dep : snapshotJars) entries.add(new PackageIo.RuntimeEntry(dep.getFileName().toString(), dep, true));
-
-        ImageContext ctx = new SpecImageContext(
-                new PluginConfig("jk-image-builder", cfg),
-                new ProjectFacts("", artifact, version, 0, mainClass, false, false, Map.of()),
-                Optional.of(mainJar),
-                entries,
-                Optional.ofNullable(classesDir),
-                out);
 
         try {
-            ImageResult result = image(ctx);
+            ImageResult result = image(new SpecImageContext(spec, out));
+            Map<String, Object> fields = new LinkedHashMap<>();
             if (result.tarball() != null) {
-                out.emit("{\"t\":\"result\",\"ok\":true,\"tarball\":" + Ndjson.quote(result.tarball().toString()) + "}");
-            } else if (result.daemon()) {
-                out.emit("{\"t\":\"result\",\"ok\":true,\"ref\":" + Ndjson.quote(result.reference()) + ",\"daemon\":true}");
+                fields.put("tarball", result.tarball().toString());
             } else {
-                out.emit("{\"t\":\"result\",\"ok\":true,\"ref\":" + Ndjson.quote(result.reference()) + "}");
+                fields.put("ref", result.reference());
+                if (result.daemon()) fields.put("daemon", true);
             }
+            out.emit(PluginReply.result(fields));
+            out.emit(PluginReply.done(0));
             return 0;
         } catch (Exception e) {
-            out.emit("{\"t\":\"result\",\"ok\":false,\"error\":" + Ndjson.quote(e.getMessage()) + "}");
+            out.emit(PluginReply.error("image", e.getMessage()));
             return 1;
         }
     }
@@ -221,29 +147,46 @@ public final class ImagePlugin implements Plugin, ImageExtension {
         return out;
     }
 
-    /** The generic terminal context assembled from the worker spec. */
-    private record SpecImageContext(
-            PluginConfig config,
-            ProjectFacts project,
-            Optional<Path> mainArtifact,
-            List<PackageIo.RuntimeEntry> runtimeEntries,
-            Optional<Path> classesDir,
-            ProtocolWriter out)
-            implements ImageContext {
+    /** The generic terminal context, backed directly by the plugin spec. */
+    private record SpecImageContext(PluginSpec spec, ProtocolWriter out) implements ImageContext {
+        @Override
+        public PluginConfig config() {
+            return spec.config();
+        }
+
+        @Override
+        public ProjectFacts project() {
+            return spec.project();
+        }
 
         @Override
         public Path moduleDir() {
-            return null; // the image goal consumes the built artifact, not the project tree
+            return spec.moduleDir();
+        }
+
+        @Override
+        public Optional<Path> mainArtifact() {
+            return Optional.ofNullable(spec.artifactPath());
+        }
+
+        @Override
+        public List<PackageIo.RuntimeEntry> runtimeEntries() {
+            return spec.entries();
         }
 
         @Override
         public Path javaHome() {
-            return null; // Jib runs in-process; no JDK fork
+            return spec.javaHome();
+        }
+
+        @Override
+        public Optional<Path> classesDir() {
+            return Optional.ofNullable(spec.classesDir());
         }
 
         @Override
         public void label(String text) {
-            out.emit("{\"t\":\"progress\",\"msg\":" + Ndjson.quote(text) + "}");
+            out.emit(PluginReply.label(text));
         }
     }
 }

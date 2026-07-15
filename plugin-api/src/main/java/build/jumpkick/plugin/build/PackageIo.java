@@ -20,13 +20,7 @@ public interface PackageIo {
      * null for a plain jar. {@code jar} is the host-classpath entry (a container's
      * {@code classes.jar}); null when the container carries no classes.
      */
-    record RuntimeEntry(String fileName, Path jar, boolean snapshot, Path container) {
-
-        /** Back-compat: a plain-jar entry. */
-        public RuntimeEntry(String fileName, Path jar, boolean snapshot) {
-            this(fileName, jar, snapshot, null);
-        }
-    }
+    record RuntimeEntry(String fileName, Path jar, boolean snapshot, Path container) {}
 
     Path classesDir();
 

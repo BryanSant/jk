@@ -15,7 +15,8 @@ import build.jumpkick.plugin.build.ProjectFacts;
 import build.jumpkick.plugin.build.PublishContext;
 import build.jumpkick.plugin.build.PublishExtension;
 import build.jumpkick.plugin.build.PublishResult;
-import build.jumpkick.plugin.protocol.Ndjson;
+import build.jumpkick.plugin.protocol.PluginReply;
+import build.jumpkick.plugin.protocol.PluginSpec;
 import build.jumpkick.plugin.protocol.ProtocolWriter;
 import build.jumpkick.publish.Checksums;
 import build.jumpkick.publish.GpgSigner;
@@ -68,100 +69,31 @@ public final class PublishPlugin implements Plugin, PublishExtension {
         }
         Path specFile = Path.of(args.get(0));
         if (!Files.isRegularFile(specFile)) {
-            System.err.println("jk-publish-runner: spec file not found: " + specFile);
+            System.err.println("jk-publisher: spec file not found: " + specFile);
             return 2;
         }
-
-        // Parse spec.
-        Path projectDir = null, jar = null;
-        String repoUrl = null;
-        String repoAuthType = "anonymous", repoUser = null, repoPass = null, repoToken = null;
-        boolean dryRun = false, slsa = false, sbom = false;
-        boolean signGpg = false, signSigstore = false;
-        String gpgKeyFile = null, gpgPassphrase = null;
-        String osRegion = null, osEndpoint = null;
-
+        PluginSpec spec;
         try {
-            for (String line : Files.readAllLines(specFile, StandardCharsets.UTF_8)) {
-                line = line.strip();
-                if (line.isEmpty() || line.startsWith("#")) continue;
-                int sp = line.indexOf(' ');
-                if (sp < 0) continue;
-                String key = line.substring(0, sp);
-                String val = line.substring(sp + 1).strip();
-                switch (key) {
-                    case "PROJECT_DIR" -> projectDir = Path.of(val);
-                    case "JAR" -> jar = Path.of(val);
-                    case "REPO_URL" -> repoUrl = val;
-                    case "REPO_AUTH_TYPE" -> repoAuthType = val;
-                    case "REPO_USER" -> repoUser = val;
-                    case "REPO_PASS" -> repoPass = val;
-                    case "REPO_TOKEN" -> repoToken = val;
-                    case "DRY_RUN" -> dryRun = "true".equalsIgnoreCase(val);
-                    case "SLSA" -> slsa = "true".equalsIgnoreCase(val);
-                    case "SBOM" -> sbom = "true".equalsIgnoreCase(val);
-                    case "SIGN_GPG" -> {
-                        signGpg = true;
-                        gpgKeyFile = val;
-                    }
-                    case "SIGN_GPG_PASS" -> gpgPassphrase = val;
-                    case "SIGN_SIGSTORE" -> signSigstore = "true".equalsIgnoreCase(val);
-                    case "OBJECT_STORE_REGION" -> osRegion = val;
-                    case "OBJECT_STORE_ENDPOINT" -> osEndpoint = val;
-                    default -> {
-                        // forward compatibility: ignore unknown keys
-                    }
-                }
-            }
+            spec = PluginSpec.read(specFile);
         } catch (IOException e) {
-            System.err.println("jk-publish-runner: could not read spec: " + e.getMessage());
+            System.err.println("jk-publisher: could not read spec: " + e.getMessage());
             return 2;
         }
-        if (projectDir == null || jar == null || repoUrl == null) {
-            System.err.println("jk-publish-runner: spec missing PROJECT_DIR, JAR, or REPO_URL");
-            return 2;
-        }
-
-        // Repo/signing settings ride config(); credentials + passphrase ride secret().
-        Map<String, Object> cfg = new LinkedHashMap<>();
-        cfg.put("repoUrl", repoUrl);
-        cfg.put("repoAuthType", repoAuthType);
-        cfg.put("dryRun", dryRun);
-        cfg.put("slsa", slsa);
-        cfg.put("sbom", sbom);
-        cfg.put("signGpg", signGpg);
-        cfg.put("signSigstore", signSigstore);
-        if (gpgKeyFile != null) cfg.put("gpgKeyFile", gpgKeyFile);
-        if (osRegion != null) cfg.put("objectStoreRegion", osRegion);
-        if (osEndpoint != null) cfg.put("objectStoreEndpoint", osEndpoint);
-
-        Map<String, String> secrets = new LinkedHashMap<>();
-        if (repoUser != null) secrets.put("repoUser", repoUser);
-        if (repoPass != null) secrets.put("repoPass", repoPass);
-        if (repoToken != null) secrets.put("repoToken", repoToken);
-        if (gpgPassphrase != null) secrets.put("gpgPassphrase", gpgPassphrase);
-
-        PublishContext ctx = new SpecPublishContext(
-                new PluginConfig("jk-publisher", cfg),
-                secrets,
-                Optional.of(jar),
-                projectDir,
-                out);
 
         try {
-            PublishResult result = publish(ctx);
-            if (result.dryRun()) {
-                out.emit("{\"t\":\"result\",\"ok\":true,\"dry_run\":true,\"files\":" + result.files() + "}");
-            } else {
-                out.emit("{\"t\":\"result\",\"ok\":true,\"files\":" + result.files() + "}");
-            }
+            PublishResult result = publish(new SpecPublishContext(spec, out));
+            Map<String, Object> fields = new LinkedHashMap<>();
+            fields.put("files", result.files());
+            if (result.dryRun()) fields.put("dry_run", true);
+            out.emit(PluginReply.result(fields));
+            out.emit(PluginReply.done(0));
             return 0;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            out.emit("{\"t\":\"result\",\"ok\":false,\"error\":" + Ndjson.quote(e.getMessage()) + "}");
+            out.emit(PluginReply.error("publish", e.getMessage()));
             return 1;
         } catch (Exception e) {
-            out.emit("{\"t\":\"result\",\"ok\":false,\"error\":" + Ndjson.quote(e.getMessage()) + "}");
+            out.emit(PluginReply.error("publish", e.getMessage()));
             return 1;
         }
     }
@@ -283,37 +215,45 @@ public final class PublishPlugin implements Plugin, PublishExtension {
     }
 
     /** The generic terminal context assembled from the worker spec. */
-    private record SpecPublishContext(
-            PluginConfig config,
-            Map<String, String> secrets,
-            Optional<Path> mainArtifact,
-            Path moduleDir,
-            ProtocolWriter out)
-            implements PublishContext {
+    private record SpecPublishContext(PluginSpec spec, ProtocolWriter out) implements PublishContext {
+        @Override
+        public PluginConfig config() {
+            return spec.config();
+        }
 
         @Override
         public ProjectFacts project() {
-            return new ProjectFacts("", "", "", 0, null, false, false, Map.of());
+            return spec.project();
+        }
+
+        @Override
+        public Path moduleDir() {
+            return spec.moduleDir();
+        }
+
+        @Override
+        public Optional<Path> mainArtifact() {
+            return Optional.ofNullable(spec.artifactPath());
         }
 
         @Override
         public List<PackageIo.RuntimeEntry> runtimeEntries() {
-            return List.of();
+            return spec.entries();
         }
 
         @Override
         public Path javaHome() {
-            return null; // publishing forks no JDK tool
+            return spec.javaHome();
         }
 
         @Override
         public Optional<String> secret(String key) {
-            return Optional.ofNullable(secrets.get(key));
+            return spec.secret(key);
         }
 
         @Override
         public void label(String text) {
-            out.emit("{\"t\":\"progress\",\"msg\":" + Ndjson.quote(text) + "}");
+            out.emit(PluginReply.label(text));
         }
     }
 }
