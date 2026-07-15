@@ -5,14 +5,14 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Builds {@link WorkerProtocol} reply lines (worker→engine) as NDJSON strings. A worker emits them
- * through its {@link ProtocolWriter} ({@code out.emit(WorkerReply.finding(...))}), so no worker
+ * Builds {@link PluginProtocol} reply lines (plugin→engine) as NDJSON strings. A plugin emits them
+ * through its {@link ProtocolWriter} ({@code out.emit(PluginReply.finding(...))}), so no plugin
  * hand-writes the wire JSON. Value types are serialized by shape: {@link String} quoted, numbers
  * and booleans raw.
  */
-public final class WorkerReply {
+public final class PluginReply {
 
-    private WorkerReply() {}
+    private PluginReply() {}
 
     /** A free-text progress label. */
     public static String label(String text) {
@@ -86,7 +86,7 @@ public final class WorkerReply {
         return "{\"t\":\"error\",\"code\":" + Ndjson.quote(code) + ",\"message\":" + Ndjson.quote(message) + "}";
     }
 
-    /** The terminal marker carrying the worker's exit code. */
+    /** The terminal marker carrying the plugin's exit code. */
     public static String done(int exit) {
         return "{\"t\":\"done\",\"exit\":" + exit + "}";
     }

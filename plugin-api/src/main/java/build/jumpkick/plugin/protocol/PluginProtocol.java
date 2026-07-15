@@ -2,18 +2,18 @@
 package build.jumpkick.plugin.protocol;
 
 /**
- * The single vocabulary of the engine↔worker wire — one NDJSON protocol every forked worker
- * speaks (see {@code docs/wip/unified-worker-wire.md}). Every line is a flat object keyed by
- * {@link #T} ({@code "t"}); the spec (engine→worker, a file) and the reply (worker→engine, stdout,
+ * The single vocabulary of the engine↔plugin wire — one NDJSON protocol every forked plugin
+ * speaks (see {@code docs/wip/unified-plugin-wire.md}). Every line is a flat object keyed by
+ * {@link #T} ({@code "t"}); the spec (engine→plugin, a file) and the reply (plugin→engine, stdout,
  * {@code ##JK<XX>:}-prefixed) draw from the constants here so neither side hard-codes a string.
  *
  * <p>Spec and reply share the envelope but not the type sets: spec lines describe inputs; reply
  * lines describe progress, structured events, and the terminal outcome. Each op uses only the
  * subset it needs; unknown types and unknown {@link #CONFIG_KIND}s are ignored (forward-compat).
  */
-public final class WorkerProtocol {
+public final class PluginProtocol {
 
-    private WorkerProtocol() {}
+    private PluginProtocol() {}
 
     /** The discriminator field present on every spec and reply line. */
     public static final String T = "t";
@@ -32,7 +32,7 @@ public final class WorkerProtocol {
     public static final String OP_PUBLISH = "publish";
     public static final String OP_RUN = "run";
 
-    // ---- spec line types (engine → worker) ------------------------------------------------
+    // ---- spec line types (engine → plugin) ------------------------------------------------
 
     public static final String CONFIG = "config";
     public static final String PROJECT = "project";
@@ -50,7 +50,7 @@ public final class WorkerProtocol {
     public static final String ARG = "arg"; // raw compiler-arg passthrough
     public static final String COMPILER_PLUGIN = "compiler-plugin";
 
-    // ---- reply line types (worker → engine) -----------------------------------------------
+    // ---- reply line types (plugin → engine) -----------------------------------------------
 
     public static final String LABEL = "label"; // free-text progress label
     public static final String PROGRESS = "progress"; // numeric progress {done,total?}

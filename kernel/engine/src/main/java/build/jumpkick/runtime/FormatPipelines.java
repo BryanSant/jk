@@ -9,7 +9,7 @@ import build.jumpkick.http.Http;
 import build.jumpkick.model.Coordinate;
 import build.jumpkick.plugin.protocol.Ndjson;
 import build.jumpkick.plugin.protocol.SpecWriter;
-import build.jumpkick.plugin.protocol.WorkerProtocol;
+import build.jumpkick.plugin.protocol.PluginProtocol;
 import build.jumpkick.run.Pipeline;
 import build.jumpkick.run.PipelineKey;
 import build.jumpkick.run.Step;
@@ -249,7 +249,7 @@ public final class FormatPipelines {
             Path cacheDir)
             throws IOException {
         SpecWriter w = new SpecWriter()
-                .op(WorkerProtocol.OP_COMMAND, "format", "jk-formatter")
+                .op(PluginProtocol.OP_COMMAND, "format", "jk-formatter")
                 .configBool("apply", !check);
         if (!javaFiles.isEmpty()) {
             w.configString("javaStyle", javaStyle)

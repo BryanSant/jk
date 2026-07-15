@@ -7,7 +7,7 @@ import build.jumpkick.cache.Cas;
 import build.jumpkick.lock.LockfileReader;
 import build.jumpkick.plugin.protocol.Ndjson;
 import build.jumpkick.plugin.protocol.SpecWriter;
-import build.jumpkick.plugin.protocol.WorkerProtocol;
+import build.jumpkick.plugin.protocol.PluginProtocol;
 import build.jumpkick.run.Pipeline;
 import build.jumpkick.run.Step;
 import build.jumpkick.run.StepKind;
@@ -107,13 +107,13 @@ public final class AuditPipelines {
             try {
                 String[] error = {null};
                 int exit = new WorkerClient("##JKAU:")
-                        .on(WorkerProtocol.FINDING, json -> observer.onFinding(
+                        .on(PluginProtocol.FINDING, json -> observer.onFinding(
                                 Ndjson.str(json, "module"),
                                 Ndjson.str(json, "version"),
                                 Ndjson.str(json, "id"),
                                 Ndjson.str(json, "severity"),
                                 Ndjson.str(json, "summary")))
-                        .on(WorkerProtocol.ERROR, json -> error[0] = Ndjson.str(json, WorkerProtocol.MESSAGE))
+                        .on(PluginProtocol.ERROR, json -> error[0] = Ndjson.str(json, PluginProtocol.MESSAGE))
                         .run(WorkerCommands.javaCommand(workerJar, spec));
                 if (error[0] != null) {
                     throw new RuntimeException("audit worker: " + error[0]);
@@ -134,7 +134,7 @@ public final class AuditPipelines {
 
     private static Path writeSpec(Path lockPath, URI osvBatchUrl, URI osvVulnsUrl) throws IOException {
         SpecWriter spec = new SpecWriter()
-                .op(WorkerProtocol.OP_COMMAND, "audit", "jk-auditor")
+                .op(PluginProtocol.OP_COMMAND, "audit", "jk-auditor")
                 .configString("lockfile", lockPath.toAbsolutePath().toString());
         if (osvBatchUrl != null) spec.configString("batchUrl", osvBatchUrl.toString());
         if (osvVulnsUrl != null) spec.configString("vulnsUrl", osvVulnsUrl.toString());

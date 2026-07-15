@@ -15,12 +15,12 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * The parsed engine→worker spec: one NDJSON reader for every worker, replacing the per-worker
- * KEY-value/tab parsers. It decodes the {@link WorkerProtocol} spec vocabulary into typed
+ * The parsed engine→plugin spec: one NDJSON reader for every plugin, replacing the per-plugin
+ * KEY-value/tab parsers. It decodes the {@link PluginProtocol} spec vocabulary into typed
  * accessors; each op reads only the fields it declared. Unknown line types and config kinds are
  * ignored (forward-compat).
  */
-public final class WorkerSpec {
+public final class PluginSpec {
 
     private String op = "";
     private String name; // step/command name from the op line
@@ -43,37 +43,37 @@ public final class WorkerSpec {
     private final Map<String, String> secrets = new LinkedHashMap<>();
     private final List<String> commandArgs = new ArrayList<>();
 
-    private WorkerSpec() {}
+    private PluginSpec() {}
 
     /** A typed Kotlin compiler-plugin entry: coordinate id, jar path, and its options. */
     public record CompilerPlugin(String id, Path jar, List<String> options) {}
 
-    public static WorkerSpec read(Path file) throws IOException {
-        WorkerSpec s = new WorkerSpec();
+    public static PluginSpec read(Path file) throws IOException {
+        PluginSpec s = new PluginSpec();
         String group = "", pname = "", version = "", mainClass = null;
         int javaRelease = 0;
         boolean nativeDeclared = false, kotlin = false;
         for (String line : Files.readAllLines(file, StandardCharsets.UTF_8)) {
             if (line.isBlank()) continue;
-            switch (String.valueOf(Ndjson.str(line, WorkerProtocol.T))) {
-                case WorkerProtocol.OP -> {
-                    s.op = String.valueOf(Ndjson.str(line, WorkerProtocol.OP_NAME));
-                    s.name = Ndjson.str(line, WorkerProtocol.NAME);
-                    s.pluginId = String.valueOf(Ndjson.str(line, WorkerProtocol.PLUGIN));
+            switch (String.valueOf(Ndjson.str(line, PluginProtocol.T))) {
+                case PluginProtocol.OP -> {
+                    s.op = String.valueOf(Ndjson.str(line, PluginProtocol.OP_NAME));
+                    s.name = Ndjson.str(line, PluginProtocol.NAME);
+                    s.pluginId = String.valueOf(Ndjson.str(line, PluginProtocol.PLUGIN));
                 }
-                case WorkerProtocol.CONFIG -> {
-                    String key = Ndjson.str(line, WorkerProtocol.KEY);
-                    switch (String.valueOf(Ndjson.str(line, WorkerProtocol.CONFIG_KIND))) {
-                        case WorkerProtocol.KIND_STRING -> s.config.put(key, Ndjson.str(line, WorkerProtocol.VALUE));
-                        case WorkerProtocol.KIND_BOOL -> s.config.put(key, Ndjson.bool(line, WorkerProtocol.VALUE, false));
-                        case WorkerProtocol.KIND_INT -> s.config.put(key, Ndjson.longValue(line, WorkerProtocol.VALUE, 0));
-                        case WorkerProtocol.KIND_LIST -> s.config.put(key, Ndjson.strArray(line, WorkerProtocol.VALUES));
+                case PluginProtocol.CONFIG -> {
+                    String key = Ndjson.str(line, PluginProtocol.KEY);
+                    switch (String.valueOf(Ndjson.str(line, PluginProtocol.CONFIG_KIND))) {
+                        case PluginProtocol.KIND_STRING -> s.config.put(key, Ndjson.str(line, PluginProtocol.VALUE));
+                        case PluginProtocol.KIND_BOOL -> s.config.put(key, Ndjson.bool(line, PluginProtocol.VALUE, false));
+                        case PluginProtocol.KIND_INT -> s.config.put(key, Ndjson.longValue(line, PluginProtocol.VALUE, 0));
+                        case PluginProtocol.KIND_LIST -> s.config.put(key, Ndjson.strArray(line, PluginProtocol.VALUES));
                         default -> {
                             // unknown kind — forward-compat
                         }
                     }
                 }
-                case WorkerProtocol.PROJECT -> {
+                case PluginProtocol.PROJECT -> {
                     group = String.valueOf(Ndjson.str(line, "group"));
                     pname = String.valueOf(Ndjson.str(line, "name"));
                     version = String.valueOf(Ndjson.str(line, "version"));
@@ -82,9 +82,9 @@ public final class WorkerSpec {
                     nativeDeclared = Ndjson.bool(line, "nativeDeclared", false);
                     kotlin = Ndjson.bool(line, "kotlin", false);
                 }
-                case WorkerProtocol.MANIFEST_ATTR ->
-                    s.manifest.put(Ndjson.str(line, WorkerProtocol.KEY), Ndjson.str(line, WorkerProtocol.VALUE));
-                case WorkerProtocol.LAYOUT -> {
+                case PluginProtocol.MANIFEST_ATTR ->
+                    s.manifest.put(Ndjson.str(line, PluginProtocol.KEY), Ndjson.str(line, PluginProtocol.VALUE));
+                case PluginProtocol.LAYOUT -> {
                     s.classesDir = path(Ndjson.str(line, "classesDir"));
                     s.sourceOutput = path(Ndjson.str(line, "sourceOutput"));
                     s.moduleDir = path(Ndjson.str(line, "moduleDir"));
@@ -92,46 +92,46 @@ public final class WorkerSpec {
                     s.workdir = path(Ndjson.str(line, "workdir"));
                     s.snapshotDir = path(Ndjson.str(line, "snapshotDir"));
                 }
-                case WorkerProtocol.JAVA_HOME -> s.javaHome = path(Ndjson.str(line, WorkerProtocol.PATH));
-                case WorkerProtocol.ARTIFACT -> s.artifactPath = path(Ndjson.str(line, WorkerProtocol.PATH));
-                case WorkerProtocol.CP -> {
-                    Path p = path(Ndjson.str(line, WorkerProtocol.PATH));
-                    switch (String.valueOf(Ndjson.str(line, WorkerProtocol.ROLE))) {
-                        case WorkerProtocol.ROLE_PROCESSOR -> s.processorClasspath.add(p);
-                        case WorkerProtocol.ROLE_FRIEND -> s.friendPaths.add(p);
-                        case WorkerProtocol.ROLE_RUNTIME -> s.runtimeClasspath.add(p);
+                case PluginProtocol.JAVA_HOME -> s.javaHome = path(Ndjson.str(line, PluginProtocol.PATH));
+                case PluginProtocol.ARTIFACT -> s.artifactPath = path(Ndjson.str(line, PluginProtocol.PATH));
+                case PluginProtocol.CP -> {
+                    Path p = path(Ndjson.str(line, PluginProtocol.PATH));
+                    switch (String.valueOf(Ndjson.str(line, PluginProtocol.ROLE))) {
+                        case PluginProtocol.ROLE_PROCESSOR -> s.processorClasspath.add(p);
+                        case PluginProtocol.ROLE_FRIEND -> s.friendPaths.add(p);
+                        case PluginProtocol.ROLE_RUNTIME -> s.runtimeClasspath.add(p);
                         default -> s.compileClasspath.add(p); // compile is the default role
                     }
                 }
-                case WorkerProtocol.ENTRY -> {
-                    String jar = Ndjson.str(line, WorkerProtocol.PATH);
-                    String container = Ndjson.str(line, WorkerProtocol.CONTAINER);
+                case PluginProtocol.ENTRY -> {
+                    String jar = Ndjson.str(line, PluginProtocol.PATH);
+                    String container = Ndjson.str(line, PluginProtocol.CONTAINER);
                     s.entries.add(new PackageIo.RuntimeEntry(
-                            String.valueOf(Ndjson.str(line, WorkerProtocol.FILE_NAME)),
+                            String.valueOf(Ndjson.str(line, PluginProtocol.FILE_NAME)),
                             jar == null ? null : Path.of(jar),
-                            Ndjson.bool(line, WorkerProtocol.SNAPSHOT, false),
+                            Ndjson.bool(line, PluginProtocol.SNAPSHOT, false),
                             container == null ? null : Path.of(container)));
                 }
-                case WorkerProtocol.SOURCE -> s.sources.add(path(Ndjson.str(line, WorkerProtocol.PATH)));
-                case WorkerProtocol.ARG -> s.args.add(Ndjson.str(line, WorkerProtocol.VALUE));
-                case WorkerProtocol.COMPILER_PLUGIN ->
+                case PluginProtocol.SOURCE -> s.sources.add(path(Ndjson.str(line, PluginProtocol.PATH)));
+                case PluginProtocol.ARG -> s.args.add(Ndjson.str(line, PluginProtocol.VALUE));
+                case PluginProtocol.COMPILER_PLUGIN ->
                     s.compilerPlugins.add(new CompilerPlugin(
                             Ndjson.str(line, "id"),
-                            path(Ndjson.str(line, WorkerProtocol.PATH)),
+                            path(Ndjson.str(line, PluginProtocol.PATH)),
                             Ndjson.strArray(line, "options")));
-                case WorkerProtocol.STEP_OUTPUT ->
+                case PluginProtocol.STEP_OUTPUT ->
                     s.stepOutputs.put(
-                            String.valueOf(Ndjson.str(line, WorkerProtocol.NAME)),
-                            path(Ndjson.str(line, WorkerProtocol.DIR)));
-                case WorkerProtocol.EXTRA ->
+                            String.valueOf(Ndjson.str(line, PluginProtocol.NAME)),
+                            path(Ndjson.str(line, PluginProtocol.DIR)));
+                case PluginProtocol.EXTRA ->
                     s.extras.put(
-                            String.valueOf(Ndjson.str(line, WorkerProtocol.NAME)),
-                            path(Ndjson.str(line, WorkerProtocol.PATH)));
-                case WorkerProtocol.SECRET ->
+                            String.valueOf(Ndjson.str(line, PluginProtocol.NAME)),
+                            path(Ndjson.str(line, PluginProtocol.PATH)));
+                case PluginProtocol.SECRET ->
                     s.secrets.put(
-                            String.valueOf(Ndjson.str(line, WorkerProtocol.KEY)),
-                            String.valueOf(Ndjson.str(line, WorkerProtocol.VALUE)));
-                case WorkerProtocol.COMMAND_ARGS -> s.commandArgs.addAll(Ndjson.strArray(line, WorkerProtocol.VALUES));
+                            String.valueOf(Ndjson.str(line, PluginProtocol.KEY)),
+                            String.valueOf(Ndjson.str(line, PluginProtocol.VALUE)));
+                case PluginProtocol.COMMAND_ARGS -> s.commandArgs.addAll(Ndjson.strArray(line, PluginProtocol.VALUES));
                 default -> {
                     // unknown line — forward-compat
                 }

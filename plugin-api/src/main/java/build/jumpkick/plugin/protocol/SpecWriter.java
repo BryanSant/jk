@@ -9,16 +9,16 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Builds a {@link WorkerProtocol} spec (engine→worker) as NDJSON lines — one writer for every
- * worker, replacing the per-worker KEY-value/tab spec builders. Fluent; call {@link #lines} and
- * write them to the spec file the worker is forked with.
+ * Builds a {@link PluginProtocol} spec (engine→plugin) as NDJSON lines — one writer for every
+ * plugin, replacing the per-plugin KEY-value/tab spec builders. Fluent; call {@link #lines} and
+ * write them to the spec file the plugin is forked with.
  */
 public final class SpecWriter {
 
     private final List<String> lines = new ArrayList<>();
 
     public SpecWriter op(String op, String name, String pluginId) {
-        StringBuilder b = new StringBuilder("{\"t\":").append(Ndjson.quote(WorkerProtocol.OP))
+        StringBuilder b = new StringBuilder("{\"t\":").append(Ndjson.quote(PluginProtocol.OP))
                 .append(",\"op\":").append(Ndjson.quote(op));
         if (name != null) b.append(",\"name\":").append(Ndjson.quote(name));
         b.append(",\"plugin\":").append(Ndjson.quote(pluginId)).append('}');
@@ -152,7 +152,7 @@ public final class SpecWriter {
         return this;
     }
 
-    /** A resolved secret — package/publish specs only; never echoed by workers. */
+    /** A resolved secret — package/publish specs only; never echoed by plugins. */
     public SpecWriter secret(String key, String value) {
         lines.add("{\"t\":\"secret\",\"key\":" + Ndjson.quote(key) + ",\"value\":" + Ndjson.quote(value) + "}");
         return this;

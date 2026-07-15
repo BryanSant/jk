@@ -10,8 +10,8 @@ import build.jumpkick.plugin.Plugin;
 import build.jumpkick.plugin.PluginConfig;
 import build.jumpkick.plugin.PluginManifest;
 import build.jumpkick.plugin.protocol.ProtocolWriter;
-import build.jumpkick.plugin.protocol.WorkerReply;
-import build.jumpkick.plugin.protocol.WorkerSpec;
+import build.jumpkick.plugin.protocol.PluginReply;
+import build.jumpkick.plugin.protocol.PluginSpec;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Files;
@@ -44,9 +44,9 @@ public final class AuditPlugin implements Plugin {
             System.err.println("jk-auditor: spec file not found: " + specFile);
             return 2;
         }
-        WorkerSpec spec;
+        PluginSpec spec;
         try {
-            spec = WorkerSpec.read(specFile);
+            spec = PluginSpec.read(specFile);
         } catch (IOException e) {
             System.err.println("jk-auditor: could not read spec file: " + e.getMessage());
             return 2;
@@ -65,7 +65,7 @@ public final class AuditPlugin implements Plugin {
         try {
             lock = LockfileReader.read(Path.of(lockfile.get()));
         } catch (IOException e) {
-            out.emit(WorkerReply.error("lockfile", e.getMessage()));
+            out.emit(PluginReply.error("lockfile", e.getMessage()));
             return 1;
         }
 
@@ -80,14 +80,14 @@ public final class AuditPlugin implements Plugin {
             report = new Auditor(client).audit(lock);
         } catch (IOException | InterruptedException e) {
             if (e instanceof InterruptedException) Thread.currentThread().interrupt();
-            out.emit(WorkerReply.error("osv", e.getMessage()));
+            out.emit(PluginReply.error("osv", e.getMessage()));
             return 1;
         }
 
         for (AuditReport.Finding f : report.findings()) {
-            out.emit(WorkerReply.finding(f.module(), f.version(), f.vulnId(), f.severity().name(), f.summary()));
+            out.emit(PluginReply.finding(f.module(), f.version(), f.vulnId(), f.severity().name(), f.summary()));
         }
-        out.emit(WorkerReply.done(0));
+        out.emit(PluginReply.done(0));
         return 0;
     }
 }

@@ -15,12 +15,12 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /** The unified spec writer and reader round-trip every line type without loss. */
-class WorkerSpecTest {
+class PluginSpecTest {
 
     @Test
     void round_trips_the_spec_vocabulary(@TempDir Path dir) throws Exception {
         SpecWriter w = new SpecWriter()
-                .op(WorkerProtocol.OP_COMPILE, "compile-java", "jk-java-compiler")
+                .op(PluginProtocol.OP_COMPILE, "compile-java", "jk-java-compiler")
                 .configString("moduleName", "widget")
                 .configBool("incremental", true)
                 .configInt("release", 25)
@@ -30,9 +30,9 @@ class WorkerSpecTest {
                 .layout(Map.of("classesDir", dir.resolve("classes"), "moduleDir", dir))
                 .javaHome(dir.resolve("jdk"))
                 .artifact(dir.resolve("widget.jar"))
-                .cp(dir.resolve("dep.jar"), WorkerProtocol.ROLE_COMPILE)
-                .cp(dir.resolve("proc.jar"), WorkerProtocol.ROLE_PROCESSOR)
-                .cp(dir.resolve("friend.jar"), WorkerProtocol.ROLE_FRIEND)
+                .cp(dir.resolve("dep.jar"), PluginProtocol.ROLE_COMPILE)
+                .cp(dir.resolve("proc.jar"), PluginProtocol.ROLE_PROCESSOR)
+                .cp(dir.resolve("friend.jar"), PluginProtocol.ROLE_FRIEND)
                 .entry("dep-1.0.jar", dir.resolve("dep.jar"), false, null)
                 .entry("snap-2.0.jar", dir.resolve("snap.jar"), true, null)
                 .source(dir.resolve("Main.java"))
@@ -45,9 +45,9 @@ class WorkerSpecTest {
 
         Path spec = dir.resolve("worker.spec");
         Files.write(spec, w.lines(), StandardCharsets.UTF_8);
-        WorkerSpec s = WorkerSpec.read(spec);
+        PluginSpec s = PluginSpec.read(spec);
 
-        assertThat(s.op()).isEqualTo(WorkerProtocol.OP_COMPILE);
+        assertThat(s.op()).isEqualTo(PluginProtocol.OP_COMPILE);
         assertThat(s.name()).contains("compile-java");
         assertThat(s.pluginId()).isEqualTo("jk-java-compiler");
 

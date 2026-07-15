@@ -13,8 +13,8 @@ import build.jumpkick.plugin.Plugin;
 import build.jumpkick.plugin.PluginConfig;
 import build.jumpkick.plugin.PluginManifest;
 import build.jumpkick.plugin.protocol.ProtocolWriter;
-import build.jumpkick.plugin.protocol.WorkerReply;
-import build.jumpkick.plugin.protocol.WorkerSpec;
+import build.jumpkick.plugin.protocol.PluginReply;
+import build.jumpkick.plugin.protocol.PluginSpec;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -79,7 +79,7 @@ public final class FormatPlugin implements Plugin {
             System.err.println("jk-formatter: expected spec file path");
             return 2;
         }
-        Spec spec = Spec.from(WorkerSpec.read(Path.of(args.get(0))));
+        Spec spec = Spec.from(PluginSpec.read(Path.of(args.get(0))));
 
         // Per-file stamp cache — skips unchanged files without running the formatter.
         FormatStampCache stampCache =
@@ -188,7 +188,7 @@ public final class FormatPlugin implements Plugin {
         // In --check mode, an unformatted (changed) file is a failure; errors always are. The engine
         // recomputes the changed/clean/error tallies from the per-file events, so `done` carries only exit.
         int exit = errors > 0 || (!spec.apply && changed > 0) ? 1 : 0;
-        out.emit(WorkerReply.done(exit));
+        out.emit(PluginReply.done(exit));
         return exit;
     }
 
@@ -255,7 +255,7 @@ public final class FormatPlugin implements Plugin {
     // -------------------------------------------------------------------------
 
     private static void emitFile(ProtocolWriter out, File file, String status, String msg) {
-        out.emit(WorkerReply.file(file.getAbsolutePath(), status, msg));
+        out.emit(PluginReply.file(file.getAbsolutePath(), status, msg));
     }
 
     /**
@@ -326,7 +326,7 @@ public final class FormatPlugin implements Plugin {
             return optimizeImports || rewriteConfigFile != null;
         }
 
-        static Spec from(WorkerSpec ws) {
+        static Spec from(PluginSpec ws) {
             Spec s = new Spec();
             PluginConfig c = ws.config();
             s.apply = c.bool("apply", true);

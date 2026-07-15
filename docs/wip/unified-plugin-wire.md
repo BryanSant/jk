@@ -1,28 +1,28 @@
-# Unified worker wire protocol
+# Unified plugin wire protocol
 
-**Goal:** one engine↔worker protocol for every forked worker, replacing the 9 bespoke
+**Goal:** one engine↔plugin protocol for every forked plugin, replacing the 9 bespoke
 ones (build-plugin harness NDJSON + javac/kotlinc/test/audit/format/compat/publish/image
 hand-rolled specs). Breaking changes welcome; no backward compatibility. Correctness and a
 single, superset protocol are the objective. (CLI/client plugin support is out of scope.)
 
 ## Transport & envelope
 
-- A worker is forked `java <Main> <spec-file>`. It reads an **NDJSON spec file** (one
+- A plugin is forked `java <Main> <spec-file>`. It reads an **NDJSON spec file** (one
   `{"t":…}` object per line) and writes **NDJSON reply lines** to stdout, each prefixed with
-  the worker's `##JK<XX>:` marker. Per-worker prefixes stay (stdout disambiguation) and are
+  the plugin's `##JK<XX>:` marker. Per-plugin prefixes stay (stdout disambiguation) and are
   normalized to the `##JK<XX>:` shape — **test-runner `##JK:` → `##JKT:`**.
 - **One discriminator: `t`** on every line (test-runner's `e` is converted to `t`).
 - Kill the two other spec encodings: KEY-value text (javac/kotlinc/audit/compat/publish/
   image) and tab records (formatter). Everything is NDJSON.
 - Terminal marker: every op ends with `{"t":"done","exit":<code>}`. A typed payload (image
   ref, compile status, …) rides a `{"t":"result",…}` line immediately before `done`.
-- Bidirectional (test pull-mode only): the worker emits `{"t":"test","event":"ready"}` and
-  the engine writes `RUN <fqcn>` / `DONE` on the worker's **stdin** — the one two-way op,
+- Bidirectional (test pull-mode only): the plugin emits `{"t":"test","event":"ready"}` and
+  the engine writes `RUN <fqcn>` / `DONE` on the plugin's **stdin** — the one two-way op,
   preserved via the existing `converse` loop.
 
 ## Ops (`{"t":"op","op":<name>,"name":<step/command>?,"plugin":<id>}`)
 
-| op | worker(s) | notes |
+| op | plugin(s) | notes |
 |---|---|---|
 | `describe` | build-plugins | cached declaration replay (unchanged) |
 | `run-step` | build-plugins | one step body; `name` = step |
@@ -75,7 +75,7 @@ slsa,sbom,signGpg,signSigstore,objectStore*` (publish, with creds/passphrase as 
 | `out` | `line` | command (user-facing stdout) |
 | `diagnostic` | `sev, file?, line?, col?, msg` | compile, format — **structured (adds file/line/col that javac/kotlinc drop today)** |
 | `provenance` | `gen, src[]` | java-compiler (AP incremental) |
-| `test` | `event∈{discovered,discovery-total,started,finished,skipped,dynamic,ready,plan-finished}, id?,display?,parent?,type?,source?,status?,durationMs?,throwable?{class,message,stack},reason?,classes?,tests?,worker?` | test-runner |
+| `test` | `event∈{discovered,discovery-total,started,finished,skipped,dynamic,ready,plan-finished}, id?,display?,parent?,type?,source?,status?,durationMs?,throwable?{class,message,stack},reason?,classes?,tests?,plugin?` | test-runner |
 | `step` / `packager` / `command` | describe declarations (unchanged) | describe |
 | `finding` | `module,version,id,severity,summary` | audit |
 | `file` | `path, status∈{changed,clean,error,skipped}, msg?` | format |
@@ -93,7 +93,7 @@ slsa,sbom,signGpg,signSigstore,objectStore*` (publish, with creds/passphrase as 
   from `file` events), image `tarball`/`daemon`/`ok` (engine knows the tarball path; keep `ref`
   + a boolean via `result`), publish `dry_run`/`ok`, compat `home`/`ok`, test `report`/
   `plan_started`. Keep only what a consumer reads.
-- **One terminal shape**: `result` (typed) + `done{exit}` everywhere, replacing each worker's
+- **One terminal shape**: `result` (typed) + `done{exit}` everywhere, replacing each plugin's
   ad-hoc terminal line.
 
 ## Foundation & migration order
@@ -101,9 +101,9 @@ slsa,sbom,signGpg,signSigstore,objectStore*` (publish, with creds/passphrase as 
 1. **Foundation** (`plugin-api` `build.jumpkick.plugin.protocol`): protocol constants (types +
    field names + op names), a `WorkerSpec` reader (generalize `BuildPluginHarness.Spec`), a
    `SpecWriter` (generalize `PluginBuild.SpecWriter`), and the engine-side `WorkerClient` reply
-   vocabulary. Generalize `BuildPluginHarness` → the one worker harness dispatching all ops.
+   vocabulary. Generalize `BuildPluginHarness` → the one plugin harness dispatching all ops.
    Delete back-compat ctors (`StepDecl`, `Declarations`, `PackageIo.RuntimeEntry`).
-2. **Command/terminal workers** (each its own verified commit): audit, format, compat, image,
+2. **Command/terminal plugins** (each its own verified commit): audit, format, compat, image,
    publish (image/publish = the correct redo of S6).
 3. **Compilers**: java-compiler, kotlin-compiler (NDJSON spec, structured diagnostics).
 4. **Test-runner** (last, most care): `e`→`t`, prefix `##JKT:`, `test` event envelope, pull loop
