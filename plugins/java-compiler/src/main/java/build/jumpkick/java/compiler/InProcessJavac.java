@@ -73,18 +73,14 @@ public final class InProcessJavac {
      * file:line:} location prefix so the parent doesn't need the structured coordinates over the
      * wire.
      */
-    public record Diag(String kind, String message) {}
+    public record Diag(String kind, String file, long line, long col, String message) {}
 
-    /** {@code <file>:<line>: <message>} — location prefix included, severity omitted. */
-    private static String locatedMessage(Diagnostic<? extends JavaFileObject> d) {
-        StringBuilder sb = new StringBuilder();
+    private static Diag toDiag(Diagnostic<? extends JavaFileObject> d) {
         JavaFileObject src = d.getSource();
-        if (src != null) {
-            sb.append(src.getName());
-            if (d.getLineNumber() != Diagnostic.NOPOS) sb.append(':').append(d.getLineNumber());
-            sb.append(": ");
-        }
-        return sb.append(d.getMessage(Locale.ROOT)).toString();
+        String file = src != null ? Path.of(src.toUri()).toString() : null;
+        long line = d.getLineNumber() != Diagnostic.NOPOS ? d.getLineNumber() : 0;
+        long col = d.getColumnNumber() != Diagnostic.NOPOS ? d.getColumnNumber() : 0;
+        return new Diag(d.getKind().name(), file, line, col, d.getMessage(Locale.ROOT));
     }
 
     /**
@@ -126,7 +122,7 @@ public final class InProcessJavac {
             List<Diag> messages = new ArrayList<>();
             boolean errors = false;
             for (Diagnostic<? extends JavaFileObject> d : diags.getDiagnostics()) {
-                messages.add(new Diag(d.getKind().name(), locatedMessage(d)));
+                messages.add(toDiag(d));
                 if (d.getKind() == Diagnostic.Kind.ERROR) errors = true;
             }
             return new Result(ok && !errors, messages, provenance.generated);

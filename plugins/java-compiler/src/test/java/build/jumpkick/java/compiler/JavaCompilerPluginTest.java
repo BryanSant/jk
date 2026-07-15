@@ -22,7 +22,7 @@ import org.junit.jupiter.api.io.TempDir;
  * annotation processor is ServiceLoader-discovered from a processor path, runs, and its
  * generated-file provenance is reported as NDJSON.
  */
-class JavaCompilerWorkerTest {
+class JavaCompilerPluginTest {
 
     @Test
     void compiles_with_processor_and_reports_provenance(@TempDir Path dir) throws Exception {
@@ -76,17 +76,16 @@ class JavaCompilerWorkerTest {
         Path classOut = dir.resolve("classes");
         Path genOut = dir.resolve("gen-src");
         Path spec = dir.resolve("spec.txt");
-        Files.writeString(
+        Files.write(
                 spec,
-                String.join(
-                                "\n",
-                                "CLASSOUTPUT " + classOut,
-                                "SOURCEOUTPUT " + genOut,
-                                "RELEASE 21",
-                                "SOURCE " + src.toAbsolutePath(),
-                                "CLASSPATH " + procDir, // so javac resolves @gen.Gen
-                                "PROCESSORPATH " + procDir)
-                        + "\n");
+                new build.jumpkick.plugin.protocol.SpecWriter()
+                        .op(build.jumpkick.plugin.protocol.PluginProtocol.OP_COMPILE, null, "jk-java-compiler")
+                        .configInt("release", 21)
+                        .layout(Map.of("classesDir", classOut, "sourceOutput", genOut))
+                        .source(src.toAbsolutePath())
+                        .cp(procDir, build.jumpkick.plugin.protocol.PluginProtocol.ROLE_COMPILE) // resolves @gen.Gen
+                        .cp(procDir, build.jumpkick.plugin.protocol.PluginProtocol.ROLE_PROCESSOR)
+                        .lines());
 
         ByteArrayOutputStream buf = new ByteArrayOutputStream();
         int code = JavaCompilerPlugin.compileSpec(
@@ -97,7 +96,7 @@ class JavaCompilerWorkerTest {
 
         assertThat(code).isZero();
         assertThat(out).contains("\"t\":\"result\",\"status\":\"OK\"");
-        assertThat(out).contains("\"t\":\"prov\"");
+        assertThat(out).contains("\"t\":\"provenance\"");
         assertThat(out).contains("WidgetGen");
         assertThat(out).contains("Widget.java");
         assertThat(classOut.resolve("app/WidgetGen.class")).isRegularFile();

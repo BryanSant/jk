@@ -5,7 +5,7 @@ import build.jumpkick.cache.Cas;
 import build.jumpkick.compile.CompileRequest;
 import build.jumpkick.compile.CompileResult;
 import build.jumpkick.compile.JavacDriver;
-import build.jumpkick.compile.WorkerJavac;
+import build.jumpkick.compile.ForkedJavac;
 import build.jumpkick.compile.incremental.ClassAbi;
 import build.jumpkick.compile.incremental.ClassDependencies;
 import build.jumpkick.util.Hashing;
@@ -689,7 +689,7 @@ public final class JavaIncrementalCompile {
     private static Compiler workerCompiler(
             Path workerJar, Path generatedSourceDir, Path javaHome, List<Path> processorPath) {
         return (sources, classpath, outputDir, release, options) -> {
-            WorkerJavac.Result wr = WorkerJavac.compile(new WorkerJavac.Request(
+            ForkedJavac.Result wr = ForkedJavac.compile(new ForkedJavac.Request(
                     javaHome,
                     workerJar,
                     sources,

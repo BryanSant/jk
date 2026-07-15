@@ -3,6 +3,8 @@ package build.jumpkick.compile;
 
 import build.jumpkick.jdk.HostPlatform;
 import build.jumpkick.plugin.protocol.Ndjson;
+import build.jumpkick.plugin.protocol.PluginProtocol;
+import build.jumpkick.plugin.protocol.SpecWriter;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
@@ -25,11 +27,11 @@ import java.util.TreeSet;
  * build.jumpkick.java.compiler.JavaCompilerPlugin @<spec>}; the worker streams {@value #PREFIX} NDJSON
  * back on stdout. Mirrors {@link KotlincDriver}.
  */
-public final class WorkerJavac {
+public final class ForkedJavac {
 
     private static final String PREFIX = "##JKJC:";
 
-    private WorkerJavac() {}
+    private ForkedJavac() {}
 
     /**
      * @param generated generated source file → the input source file(s) it originated from
@@ -85,13 +87,16 @@ public final class WorkerJavac {
                     build.jumpkick.engine.plugin.JvmOptions.batchFlags(1),
                     List.of("@" + spec.toAbsolutePath()));
             int exit = new build.jumpkick.engine.plugin.PluginClient(PREFIX)
-                    .on("diag", json -> diagnostics.add(new CompileResult.Diagnostic(
-                            CompileResult.Severity.fromName(Ndjson.str(json, "sev")),
-                            null,
-                            0,
-                            0,
-                            Ndjson.str(json, "msg"))))
-                    .on("prov", json -> {
+                    .on(PluginProtocol.DIAGNOSTIC, json -> {
+                        String file = Ndjson.str(json, "file");
+                        diagnostics.add(new CompileResult.Diagnostic(
+                                CompileResult.Severity.fromName(Ndjson.str(json, "sev")),
+                                file == null ? null : Path.of(file),
+                                Ndjson.longValue(json, "line", 0),
+                                Ndjson.longValue(json, "col", 0),
+                                Ndjson.str(json, "msg")));
+                    })
+                    .on(PluginProtocol.PROVENANCE, json -> {
                         String genStr = Ndjson.str(json, "gen");
                         if (genStr == null) return;
                         Path gen = Path.of(genStr);
@@ -99,7 +104,7 @@ public final class WorkerJavac {
                         for (String s : Ndjson.strArray(json, "src")) origins.add(Path.of(s));
                         generated.put(gen, origins);
                     })
-                    .on("result", json -> status[0] = Ndjson.str(json, "status"))
+                    .on(PluginProtocol.RESULT, json -> status[0] = Ndjson.str(json, "status"))
                     .run(command);
             boolean success = exit == 0 && "OK".equals(status[0]);
             return new Result(success, diagnostics, generated);
@@ -109,16 +114,16 @@ public final class WorkerJavac {
     }
 
     private static Path writeSpec(Request req) throws IOException {
-        List<String> lines = new ArrayList<>();
-        lines.add("CLASSOUTPUT " + req.classOutput().toAbsolutePath());
-        lines.add("SOURCEOUTPUT " + req.sourceOutput().toAbsolutePath());
-        lines.add("RELEASE " + req.release());
-        for (Path s : req.sources()) lines.add("SOURCE " + s.toAbsolutePath());
-        for (Path c : req.classpath()) lines.add("CLASSPATH " + c.toAbsolutePath());
-        for (Path p : req.processorPath()) lines.add("PROCESSORPATH " + p.toAbsolutePath());
-        for (String a : req.extraArgs()) lines.add("ARG " + a);
+        SpecWriter sw = new SpecWriter()
+                .op(PluginProtocol.OP_COMPILE, null, "jk-java-compiler")
+                .configInt("release", req.release())
+                .layout(Map.of("classesDir", req.classOutput(), "sourceOutput", req.sourceOutput()));
+        for (Path s : req.sources()) sw.source(s);
+        for (Path c : req.classpath()) sw.cp(c, PluginProtocol.ROLE_COMPILE);
+        for (Path p : req.processorPath()) sw.cp(p, PluginProtocol.ROLE_PROCESSOR);
+        for (String a : req.extraArgs()) sw.arg(a);
         Path spec = Files.createTempFile("jk-javac-", ".spec");
-        Files.write(spec, lines, StandardCharsets.UTF_8);
+        Files.write(spec, sw.lines(), StandardCharsets.UTF_8);
         return spec;
     }
 }

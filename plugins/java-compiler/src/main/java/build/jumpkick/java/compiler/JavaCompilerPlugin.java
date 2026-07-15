@@ -3,12 +3,11 @@ package build.jumpkick.java.compiler;
 
 import build.jumpkick.plugin.Plugin;
 import build.jumpkick.plugin.PluginManifest;
-import build.jumpkick.plugin.protocol.Ndjson;
+import build.jumpkick.plugin.protocol.PluginReply;
+import build.jumpkick.plugin.protocol.PluginSpec;
 import build.jumpkick.plugin.protocol.ProtocolWriter;
 import java.net.URL;
 import java.net.URLClassLoader;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -57,31 +56,27 @@ public final class JavaCompilerPlugin implements Plugin {
 
     /** Run a compile from {@code specFile}, emitting NDJSON to {@code out}; returns the exit code. */
     static int compileSpec(Path specFile, ProtocolWriter out) throws Exception {
-        Spec spec = Spec.parse(specFile);
-        List<Processor> processors = loadProcessors(spec.processorPath);
+        PluginSpec spec = PluginSpec.read(specFile);
+        List<Processor> processors = loadProcessors(spec.processorClasspath());
 
         InProcessJavac.Result r = InProcessJavac.compile(
-                spec.sources, spec.classpath, spec.classOutput, spec.sourceOutput, spec.release, spec.args, processors);
+                spec.sources(),
+                spec.compileClasspath(),
+                spec.classesDir(),
+                spec.sourceOutput(),
+                (int) spec.config().intValue("release", 0),
+                spec.args(),
+                processors);
 
         for (InProcessJavac.Diag d : r.diagnostics()) {
-            out.emit("{\"t\":\"diag\",\"sev\":"
-                    + Ndjson.quote(d.kind())
-                    + ",\"msg\":"
-                    + Ndjson.quote(d.message())
-                    + "}");
+            out.emit(PluginReply.diagnostic(d.kind(), d.file(), (int) d.line(), (int) d.col(), d.message()));
         }
         for (Map.Entry<Path, Set<Path>> e : r.generated().entrySet()) {
-            StringBuilder src = new StringBuilder("[");
-            boolean first = true;
-            for (Path s : e.getValue()) {
-                if (!first) src.append(',');
-                src.append(Ndjson.quote(s.toString()));
-                first = false;
-            }
-            src.append(']');
-            out.emit("{\"t\":\"prov\",\"gen\":" + Ndjson.quote(e.getKey().toString()) + ",\"src\":" + src + "}");
+            out.emit(PluginReply.provenance(
+                    e.getKey().toString(), e.getValue().stream().map(Path::toString).toList()));
         }
-        out.emit("{\"t\":\"result\",\"status\":\"" + (r.success() ? "OK" : "ERROR") + "\"}");
+        out.emit(PluginReply.result(Map.of("status", r.success() ? "OK" : "ERROR")));
+        out.emit(PluginReply.done(r.success() ? 0 : 1));
         return r.success() ? 0 : 1;
     }
 
@@ -102,44 +97,4 @@ public final class JavaCompilerPlugin implements Plugin {
         return processors;
     }
 
-    private record Spec(
-            Path classOutput,
-            Path sourceOutput,
-            int release,
-            List<Path> sources,
-            List<Path> classpath,
-            List<Path> processorPath,
-            List<String> args) {
-        static Spec parse(Path file) throws java.io.IOException {
-            Path classOutput = null;
-            Path sourceOutput = null;
-            int release = -1;
-            List<Path> sources = new ArrayList<>();
-            List<Path> classpath = new ArrayList<>();
-            List<Path> processorPath = new ArrayList<>();
-            List<String> args = new ArrayList<>();
-            for (String raw : Files.readAllLines(file, StandardCharsets.UTF_8)) {
-                String line = raw.strip();
-                if (line.isEmpty() || line.startsWith("#")) continue;
-                int sp = line.indexOf(' ');
-                String key = sp < 0 ? line : line.substring(0, sp);
-                String val = sp < 0 ? "" : line.substring(sp + 1);
-                switch (key) {
-                    case "CLASSOUTPUT" -> classOutput = Path.of(val);
-                    case "SOURCEOUTPUT" -> sourceOutput = Path.of(val);
-                    case "RELEASE" -> release = Integer.parseInt(val);
-                    case "SOURCE" -> sources.add(Path.of(val));
-                    case "CLASSPATH" -> classpath.add(Path.of(val));
-                    case "PROCESSORPATH" -> processorPath.add(Path.of(val));
-                    case "ARG" -> args.add(val);
-                    default -> throw new IllegalArgumentException("unknown spec key: " + key);
-                }
-            }
-            if (classOutput == null) throw new IllegalArgumentException("spec missing CLASSOUTPUT");
-            if (sourceOutput == null) throw new IllegalArgumentException("spec missing SOURCEOUTPUT");
-            if (release < 0) throw new IllegalArgumentException("spec missing RELEASE");
-            if (sources.isEmpty()) throw new IllegalArgumentException("spec has no SOURCE entries");
-            return new Spec(classOutput, sourceOutput, release, sources, classpath, processorPath, args);
-        }
-    }
 }

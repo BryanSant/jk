@@ -21,7 +21,7 @@ import org.junit.jupiter.api.io.TempDir;
  * sets), compiles a source with a real annotation processor, and asserts the parsed generated →
  * originating provenance.
  */
-class WorkerJavacTest {
+class JavacDriverTest {
 
     @Test
     void launches_the_worker_and_parses_provenance(@TempDir Path dir) throws IOException {
@@ -77,7 +77,7 @@ class WorkerJavacTest {
         Files.createDirectories(src.getParent());
         Files.writeString(src, "package app; @gen.Gen public class Widget {}");
 
-        WorkerJavac.Result r = WorkerJavac.compile(new WorkerJavac.Request(
+        ForkedJavac.Result r = ForkedJavac.compile(new ForkedJavac.Request(
                 Path.of(System.getProperty("java.home")),
                 Path.of(workerProp),
                 List.of(src),
