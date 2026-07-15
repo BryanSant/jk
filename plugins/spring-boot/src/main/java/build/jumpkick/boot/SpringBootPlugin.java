@@ -4,15 +4,15 @@ package build.jumpkick.boot;
 import build.jumpkick.plugin.PluginConfig;
 import build.jumpkick.plugin.Plugin;
 import build.jumpkick.plugin.PluginManifest;
-import build.jumpkick.plugin.build.Phase;
-import build.jumpkick.plugin.build.BuildPlugin;
-import build.jumpkick.plugin.build.BuildPluginContext;
+import build.jumpkick.plugin.build.BuildContext;
+import build.jumpkick.plugin.build.BuildExtension;
 import build.jumpkick.plugin.build.BuildPluginHarness;
 import build.jumpkick.plugin.build.In;
+import build.jumpkick.plugin.build.PackageContext;
+import build.jumpkick.plugin.build.PackageExtension;
 import build.jumpkick.plugin.build.PackageIo;
-import build.jumpkick.plugin.build.PackagerSpec;
+import build.jumpkick.plugin.build.Phase;
 import build.jumpkick.plugin.build.StepExec;
-import build.jumpkick.plugin.build.StepSpec;
 import build.jumpkick.plugin.protocol.ProtocolWriter;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -41,7 +41,7 @@ import java.util.stream.Stream;
  * <p>Note what is <em>absent</em>: action keys, cache lookups, CAS paths, jk directory layout —
  * the engine fingerprints the declared inputs and skips these bodies entirely on a hit.
  */
-public final class SpringBootPlugin implements Plugin, BuildPlugin {
+public final class SpringBootPlugin implements Plugin, BuildExtension, PackageExtension {
 
     private static final String AOT_PROCESSOR = "org.springframework.boot.SpringApplicationAotProcessor";
 
@@ -56,23 +56,26 @@ public final class SpringBootPlugin implements Plugin, BuildPlugin {
     }
 
     @Override
-    public void register(BuildPluginContext ctx) {
+    public void build(BuildContext ctx) {
         PluginConfig boot = ctx.config();
         // AOT gate (spring-boot plan §3.4): explicit aot = true, or auto when [native] is
         // declared — registration-time code is exactly where this conditional shape belongs.
         if (boot.bool("aot").orElse(ctx.project().nativeDeclared())) {
-            ctx.step(StepSpec.named("spring-aot")
+            ctx.named("spring-aot")
                     .after(Phase.COMPILE)
                     .before(Phase.PACKAGE)
                     .inputs(In.classes(), In.runtimeClasspath(), In.config())
                     .outputs("classes", "resources", "sources")
                     .contributesClasses("classes")
                     .contributesResources("resources")
-                    .run(SpringBootPlugin::runAot));
+                    .run(SpringBootPlugin::runAot);
         }
-        ctx.packaging(PackagerSpec.replacingMainArtifact("boot-jar")
-                .inputs(In.classes(), In.runtimeEntries(), In.stepOutput("spring-aot"), In.config())
-                .produce(SpringBootPlugin::produceBootJar));
+    }
+
+    @Override
+    public void pack(PackageContext ctx) {
+        ctx.inputs(In.classes(), In.runtimeEntries(), In.stepOutput("spring-aot"), In.config())
+                .produce("boot-jar", SpringBootPlugin::produceBootJar);
     }
 
     // ---- spring-aot step --------------------------------------------------------------------

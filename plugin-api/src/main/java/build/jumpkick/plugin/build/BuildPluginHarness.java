@@ -34,7 +34,58 @@ public final class BuildPluginHarness {
 
     private BuildPluginHarness() {}
 
-    public static int run(BuildPlugin plugin, List<String> args, ProtocolWriter out) throws Exception {
+    /**
+     * The worker entry point every plugin's {@code Plugin.run} delegates to. A plugin either
+     * implements {@link BuildPlugin} directly (the low-level escape hatch — Android) or one or more
+     * capability interfaces ({@link BuildExtension}/{@link PackageExtension}/…); either way this
+     * replays its registration and answers the requested op.
+     */
+    public static int run(build.jumpkick.plugin.Plugin plugin, List<String> args, ProtocolWriter out)
+            throws Exception {
+        return run(asBuildPlugin(plugin), args, out);
+    }
+
+    /**
+     * Adapt a capability plugin to the low-level {@link BuildPlugin} substrate: a {@code register()}
+     * that drives each implemented capability against a phase-scoped context, recording the same
+     * {@link StepSpec}/{@link PackagerSpec} declarations. A plugin that implements {@link BuildPlugin}
+     * directly is returned unchanged.
+     */
+    static BuildPlugin asBuildPlugin(build.jumpkick.plugin.Plugin plugin) {
+        if (plugin instanceof BuildPlugin bp) {
+            return bp;
+        }
+        return ctx -> {
+            String id = plugin.id();
+            try {
+                if (plugin instanceof ResolveExtension e) {
+                    e.resolve(new DefaultStepContext(ctx, id, Phase.RESOLVE, Phase.COMPILE));
+                }
+                if (plugin instanceof BuildExtension e) {
+                    e.build(new DefaultStepContext(ctx, id, Phase.COMPILE, Phase.PACKAGE));
+                }
+                if (plugin instanceof TestExtension e) {
+                    e.test(new DefaultStepContext(ctx, id, Phase.COMPILE, Phase.TEST));
+                }
+                if (plugin instanceof PackageExtension e) {
+                    e.pack(new DefaultPackageContext(ctx));
+                }
+            } catch (RuntimeException | Error ex) {
+                throw ex;
+            } catch (Exception ex) {
+                throw new IllegalStateException(ex);
+            }
+            if (plugin instanceof RunExtension || plugin instanceof ImageExtension
+                    || plugin instanceof PublishExtension) {
+                throw new IllegalStateException("terminal-goal capability (run/image/publish) on plugin `" + id
+                        + "` is not wired yet (extension-remodel Stream 6)");
+            }
+        };
+    }
+
+    // Package-private: the substrate path. Real plugins reach it through run(Plugin, …); same-package
+    // tests may drive a bare BuildPlugin fixture directly.
+    static int run(BuildPlugin plugin, List<String> args, ProtocolWriter out) throws Exception {
         if (args.isEmpty()) {
             System.err.println("build-plugin worker: expected spec file path as first argument");
             return 64;

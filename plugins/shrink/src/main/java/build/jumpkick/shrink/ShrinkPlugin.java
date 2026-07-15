@@ -3,22 +3,21 @@ package build.jumpkick.shrink;
 
 import build.jumpkick.plugin.Plugin;
 import build.jumpkick.plugin.PluginManifest;
-import build.jumpkick.plugin.build.BuildPlugin;
-import build.jumpkick.plugin.build.BuildPluginContext;
 import build.jumpkick.plugin.build.BuildPluginHarness;
 import build.jumpkick.plugin.build.In;
-import build.jumpkick.plugin.build.PackagerSpec;
+import build.jumpkick.plugin.build.PackageContext;
+import build.jumpkick.plugin.build.PackageExtension;
 import build.jumpkick.plugin.protocol.ProtocolWriter;
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * The shrink build plugin's code layer: one registration — the {@code shrunk-jar} packager,
- * which runs R8 (--classfile, full mode) over the module's classes + runtime closure and
- * packages the surviving classes as one slim executable jar. Keep-rule files are declared
- * inputs, so a rules edit re-shrinks; everything else the engine fingerprints as usual.
+ * The shrink build plugin's code layer: one PACKAGE-phase contribution — the {@code shrunk-jar}
+ * packager, which runs R8 (--classfile, full mode) over the module's classes + runtime closure and
+ * packages the surviving classes as one slim executable jar. Keep-rule files are declared inputs,
+ * so a rules edit re-shrinks; everything else the engine fingerprints as usual.
  */
-public final class ShrinkPlugin implements Plugin, BuildPlugin {
+public final class ShrinkPlugin implements Plugin, PackageExtension {
 
     @Override
     public PluginManifest manifest() {
@@ -31,13 +30,11 @@ public final class ShrinkPlugin implements Plugin, BuildPlugin {
     }
 
     @Override
-    public void register(BuildPluginContext ctx) {
+    public void pack(PackageContext ctx) {
         List<In> inputs = new ArrayList<>(List.of(In.classes(), In.runtimeEntries(), In.config()));
         for (String rel : ctx.config().stringList("keep-files")) {
             inputs.add(In.projectFiles(rel));
         }
-        ctx.packaging(PackagerSpec.replacingMainArtifact("shrunk-jar")
-                .inputs(inputs.toArray(new In[0]))
-                .produce(ShrunkJarPackager::produce));
+        ctx.inputs(inputs.toArray(new In[0])).produce("shrunk-jar", ShrunkJarPackager::produce);
     }
 }
