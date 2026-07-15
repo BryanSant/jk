@@ -21,14 +21,14 @@ import java.nio.file.Path;
 
 /**
  * The shared {@code jk audit} pipeline — scan {@code jk.lock} against OSV via the {@code jk-auditor}
- * worker — hoisted out of the CLI so the resident engine can host the command (Wave 2 of {@code
+ * plugin — hoisted out of the CLI so the resident engine can host the command (Wave 2 of {@code
  * docs/architecture/slim-client.md}) while the command's test-only in-process path builds the exact
  * same pipeline. Three steps: {@code read-lock} (SYNC) validates the lockfile is readable, {@code
- * query-osv} (IO) forks the worker and streams its NDJSON findings to the {@link FindingObserver},
+ * query-osv} (IO) forks the plugin and streams its NDJSON findings to the {@link FindingObserver},
  * {@code evaluate} (SYNC) is the threshold bookkeeping marker (the threshold itself is applied by
  * the client, which owns the report rendering and the exit code).
  *
- * <p>Findings cross the observer as plain structured strings exactly as the worker reported them —
+ * <p>Findings cross the observer as plain structured strings exactly as the plugin reported them —
  * no theming, no report assembly — so the same observer contract serves the wire ({@code
  * audit-finding} events) and the in-process accumulation.
  */
@@ -36,13 +36,13 @@ public final class AuditPipelines {
 
     private AuditPipelines() {}
 
-    /** Receives each finding as the worker streams it (raw worker fields; any may be {@code null}). */
+    /** Receives each finding as the plugin streams it (raw plugin fields; any may be {@code null}). */
     public interface FindingObserver {
         void onFinding(String module, String version, String vulnId, String severity, String summary);
     }
 
     /**
-     * Build the audit pipeline for {@code lockPath}. Locates the worker jar eagerly, so a missing worker
+     * Build the audit pipeline for {@code lockPath}. Locates the plugin jar eagerly, so a missing plugin
      * fails here (with {@link build.jumpkick.engine.plugin.PluginJarNotFoundException}'s side-load
      * instructions) rather than mid-pipeline. {@code thresholdLabel} only feeds the evaluate step's
      * label; {@code osvBatchUrl}/{@code osvVulnsUrl} are the hidden test overrides ({@code null} =
@@ -61,7 +61,7 @@ public final class AuditPipelines {
                 .ticks(1)
                 .execute(ctx -> {
                     ctx.label("read jk.lock");
-                    // Validates the lockfile is readable; the worker re-reads it.
+                    // Validates the lockfile is readable; the plugin re-reads it.
                     LockfileReader.read(lockPath);
                     ctx.progress(1);
                 })
@@ -99,7 +99,7 @@ public final class AuditPipelines {
                 .build();
     }
 
-    /** Fork the {@code jk-auditor} worker and stream its NDJSON findings to {@code observer}. */
+    /** Fork the {@code jk-auditor} plugin and stream its NDJSON findings to {@code observer}. */
     private static void runWorker(
             Path workerJar, Path lockPath, URI osvBatchUrl, URI osvVulnsUrl, FindingObserver observer) {
         try {

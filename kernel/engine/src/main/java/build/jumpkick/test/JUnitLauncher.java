@@ -33,7 +33,7 @@ import java.util.concurrent.ConcurrentLinkedDeque;
  * </ul>
  *
  * <p>Wire protocol: child emits one NDJSON event per line on stdout, each line prefixed with {@code
- * ##JK:}. Lines without the prefix are the user's test stdout/stderr — forwarded to the parent's
+ * ##JKT:}. Lines without the prefix are the user's test stdout/stderr — forwarded to the parent's
  * stdout with a {@code [w<N>] } worker prefix in parallel mode.
  */
 public final class JUnitLauncher {
@@ -42,7 +42,7 @@ public final class JUnitLauncher {
     private static final String PROTOCOL_PREFIX = "##JKT:";
 
     /**
-     * The plugin the worker host must run. The test-runner jar is launched with the module-under-test
+     * The plugin the plugin host must run. The test-runner jar is launched with the module-under-test
      * on its classpath (to discover its tests); when that module is itself a plugin, the host would
      * otherwise see two {@code Plugin} services. Naming the runner explicitly via {@code
      * -Djk.plugin.class} keeps the host on {@code TestRunnerPlugin} regardless of what the module registers.
@@ -51,9 +51,9 @@ public final class JUnitLauncher {
 
     /**
      * {@code jk.<worker>.plugin.jar} overrides handed to the test JVM so tests that fork a
-     * first-party worker (e.g. the git client) locate its jar by path. Mirrors what Gradle's test
+     * first-party plugin (e.g. the git client) locate its jar by path. Mirrors what Gradle's test
      * config provides; under {@code jk build} the {@code run-tests} step resolves the freshly-built
-     * sibling worker jars (built before this module via the {@code [build.embed-sha]} order-after
+     * sibling plugin jars (built before this module via the {@code [build.embed-sha]} order-after
      * edges) and passes them here. Empty when none are built (e.g. a scoped single-module build) —
      * tests then fall back to CAS-by-sha.
      */
@@ -78,7 +78,7 @@ public final class JUnitLauncher {
      * TestProgressListener#noop()} when no UI is wired.
      *
      * <p>{@code workerJarProps} maps {@code jk.<worker>.plugin.jar} property names to built
-     * worker-jar paths, forwarded to the test JVM so worker-forking tests can locate their worker by
+     * plugin-jar paths, forwarded to the test JVM so plugin-forking tests can locate their plugin by
      * path (see {@link #workerJarProps}).
      */
     public TestSummary run(

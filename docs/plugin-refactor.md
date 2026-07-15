@@ -10,7 +10,7 @@
 Today jk has *accidentally* grown a plugin system. The "runner" modules
 (`test-runner`, `kotlin-compiler`, `java-compiler`, `audit-runner`,
 `publish-runner`, `image-runner`, `compat-runner`, `git-runner`) are already
-child-JVM workers that the parent locates in the CAS by SHA-256 and drives over
+child-JVM plugins that the parent locates in the CAS by SHA-256 and drives over
 an NDJSON-on-stdout protocol. That is a plugin architecture in everything but
 name — but it was built one runner at a time, so the wire format, the launcher,
 the spec encoding, the CAS locator, and the build wiring are **reimplemented per
@@ -46,8 +46,8 @@ It also folds in two adjacent asks that the same refactor should settle:
 - **The child-JVM isolation goal is already met.** Heavy/conflicting deps
   (JGit, Jib + Guava + Protobuf, BouncyCastle, sigstore-java, Jackson, the Kotlin
   compiler closure) are kept out of the native binary's reachable set by living
-  in forked workers. The native image stays small precisely because of this.
-- **CAS-keyed worker delivery works.** Workers are addressed by SHA-256, placed
+  in forked plugins. The native image stays small precisely because of this.
+- **CAS-keyed plugin delivery works.** Plugins are addressed by SHA-256, placed
   under `~/.jk/cache/sha256/AB/CD/<rest>`, side-loaded in dev via
   `installLocalCas`, and (eventually) fetched from Maven Central by `jk sync`.
 
@@ -58,10 +58,10 @@ The same eight-runner pattern is open-coded eight times:
 | Concern | Today | Count |
 |---|---|---|
 | Worker `main()` + spec parse + JSON escape + exit codes | Hand-rolled per runner | 8 copies |
-| Wire prefix marker (`##JK:`, `##JKJC:`, `##JKGIT:`, `##JKAU:`, …) | Ad-hoc per runner | 8 markers |
+| Wire prefix marker (`##JKT:`, `##JKJC:`, `##JKGIT:`, `##JKAU:`, …) | Ad-hoc per runner | 8 markers |
 | `Ndjson` flat-JSON parser | Copy-pasted | 2 copies (`engine/compile/`, `kotlin-compiler/`) |
 | Parent-side jar locator | `*WorkerSetup` class per runner | 6 classes in `runtime/` |
-| Worker registry | Hand-maintained `JkWorkerSync.WORKERS` list | 8 entries |
+| Worker registry | Hand-maintained `JkPluginSync.WORKERS` list | 8 entries |
 | `build.gradle.kts` SHA-emit task | Copy-pasted `writeXxxWorkerSha` blocks | 8 in `runtime/`, +1 in `engine/` |
 | Test-time `-Djk.*.plugin.jar` plumbing | Repeated per runner in 3 build files | ~21 lines |
 
@@ -77,7 +77,7 @@ above.
 
 A native-image binary **cannot load arbitrary plugin bytecode in-process** —
 GraalVM closes the world at build time. The current design already works around
-this by forking JVM workers. The target makes that explicit with **two tiers**,
+this by forking JVM plugins. The target makes that explicit with **two tiers**,
 and reconciles the "run plugins in one JVM with classloader isolation and
 threads, one JVM per workspace" goal:
 
@@ -142,7 +142,7 @@ jk/
 │   ├── resolver/     ✓ done     # PubGrub solver, version coercion
 │   ├── toolchain/    ✓ done     # JDK manager, tools, Gradle/Maven importers
 │   └── host/         ✓ done     # Workspace Host JVM, PluginLoader, BuildPipelines,
-│                                # action cache, WorkerProcess/WorkerJar registry
+│                                # action cache, PluginProcess/PluginJar registry
 │
 ├── plugin-api/       ✓ done     # Plugin SPI + HostEvent wire codec
 │                                # Depends on :model only
@@ -254,7 +254,7 @@ public abstract class UiCommand implements CliCommand {
 
 1. **Discovery.** The Host resolves plugin jars (first-party shipped + any in
    `[plugins]` of `jk.toml`) into the CAS — the same SHA-256/`jk sync` path used
-   for workers today, generalized. A plugin's `PluginManifest` (a resource in
+   for plugins today, generalized. A plugin's `PluginManifest` (a resource in
    the jar) is read without loading its classes.
 2. **In-process load (default).** Each plugin gets a child `URLClassLoader`
    parented to a shared API classloader that exports only `plugin-api` + `model`
@@ -286,7 +286,7 @@ CLI↔Host:
   `PipelineListener` calls, so process-mode and in-process plugins are
   indistinguishable to the TUI.
 - **One codec, one `WorkerLauncher`** replaces the six `*WorkerSetup` classes,
-  the `JkWorkerSync.WORKERS` list, and the per-runner `main()` boilerplate. A
+  the `JkPluginSync.WORKERS` list, and the per-runner `main()` boilerplate. A
   plugin's process-mode entry point is `PluginHostMain` — zero protocol/launch
   code per plugin.
 
@@ -296,7 +296,7 @@ CLI↔Host:
   copy-pasted `maven-publish` + fat-jar + `installLocalCas` + `writeXxxSha`
   blocks. Applying it to a module under `plugins/` gives it the manifest
   resource, the CAS side-load task, and the SHA emission automatically.
-- The Host reads available plugins from the `WorkerJar` enum (one registry, no
+- The Host reads available plugins from the `PluginJar` enum (one registry, no
   hand-edited list), generated SHA resources embedded in the jar.
 
 ### 3.8 Plugin trust model
@@ -403,7 +403,7 @@ loaded into the Host. They keep their current model.
 | `java-compiler`, `kotlin-compiler`, `test-runner` | `plugins/*` | ✓ Done (moved) |
 | `cli/command/*` (picocli) | own renderer + `CliCommand` impls | ✓ Done (Phase 3) |
 | `Ndjson.java` ×2, `##JK*:` markers ×8 | `plugin-api` protocol codec | ✓ Done (Phase 0–1) |
-| `*WorkerSetup` ×6, `JkWorkerSync.WORKERS` | `WorkerJar` enum | ✓ Done (Phase 2) |
+| `*WorkerSetup` ×6, `JkPluginSync.WORKERS` | `PluginJar` enum | ✓ Done (Phase 2) |
 | `compat-bridge` → `maven-bridge` + `gradle-bridge` | `plugins/maven-bridge`, `plugins/gradle-bridge` | Deferred (Phase 7+) |
 
 ---
@@ -419,8 +419,8 @@ its own `HelpRenderer`. The native-image reflection config for picocli and the
 
 ## 6. DRY wins delivered
 
-- Deleted 5 of 6 `*WorkerSetup` classes → `WorkerJar` enum.
-- Deleted the `JkWorkerSync.WORKERS` hand-list → `WorkerJar` enum + SHA resources.
+- Deleted 5 of 6 `*WorkerSetup` classes → `PluginJar` enum.
+- Deleted the `JkPluginSync.WORKERS` hand-list → `PluginJar` enum + SHA resources.
 - Deleted both `Ndjson.java` copies → one codec in `plugin-api`.
 - Deleted 8 `writeXxxWorkerSha` blocks → one `jk.plugin-conventions` plugin.
 - Deleted the repeated `-Djk.*.plugin.jar` test plumbing → one block per module.
@@ -432,7 +432,7 @@ its own `HelpRenderer`. The native-image reflection config for picocli and the
 ## 7. Migration plan (phased — keep self-hosting & native build green at every step)
 
 - **Phase 0** ✓ — Extract `plugin-api` + protocol codec, no behaviour change.
-- **Phase 1** ✓ — `WorkerProcess` / `PluginHostMain` unified launcher; `WorkerJar` registry.
+- **Phase 1** ✓ — `PluginProcess` / `PluginHostMain` unified launcher; `PluginJar` registry.
 - **Phase 2** ✓ — `jk.plugin-conventions` convention plugin; SHA emission per-module.
 - **Phase 3** ✓ — Own arg parser + help renderer; picocli deleted.
 - **Phase 4** ✓ — Workspace Host (`HostMain`, `HostDispatch`, `HostLauncher`, `StreamingPipelineListener`, `ReceivingPipelineListener`); progress bar upgrade via `steps` event.

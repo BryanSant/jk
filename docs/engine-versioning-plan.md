@@ -199,7 +199,7 @@ Windows named-pipe equivalent gated to a Windows CI lane. Kill-on-skew code dele
 |---|---|
 | Lock toolchain line: `jk = "<version>" sha256 = "<hex>"` written at lock time (grep-able, the wrapper's contract) | `LockfileWriter`/`LockfileReader`, `LockFlow` |
 | Pin comparison at request intake: pin == daemon → run; pin < daemon → delegate; pin > daemon → materialize + takeover (§3) | `EngineServer` request pre-flight |
-| Child-engine exec over stdio: `jk-engine … --job` one-shot mode (no socket, no daemonize, NDJSON on stdout — the `WorkerClient`/`PluginWorkerMain` pattern verbatim); daemon streams child events to the client unchanged | `EngineMain` (job mode flag), new `EngineDelegate` in `kernel/engine` (drives the child via `WorkerClient`) |
+| Child-engine exec over stdio: `jk-engine … --job` one-shot mode (no socket, no daemonize, NDJSON on stdout — the `PluginClient`/`PluginMain` pattern verbatim); daemon streams child events to the client unchanged | `EngineMain` (job mode flag), new `EngineDelegate` in `kernel/engine` (drives the child via `PluginClient`) |
 | Child resolves ITS OWN worker set from its `manifest.toml` (never the daemon's) | `EngineDelegate` env/args |
 
 Acceptance: a project locked to an older materialized version builds through the newer

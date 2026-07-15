@@ -32,7 +32,7 @@ import java.util.List;
  *       repos/local/} (or additionally mirrored to {@code ~/.m2} when {@code m2install = true})
  *       with index sidecars.
  *   <li>{@link #gitFetchPipeline} — materialize a git checkout (clone via the engine-forked git-client
- *       worker), publishing {@link #CHECKOUT}/{@link #FETCHED_SHA} for the follow-up project
+ *       plugin), publishing {@link #CHECKOUT}/{@link #FETCHED_SHA} for the follow-up project
  *       install.
  * </ul>
  *
@@ -191,7 +191,7 @@ public final class InstallPipelines {
      *
      * <ul>
      *   <li><b>m2install = false (default)</b> — {@code repos/local/} is primary. Used as-is for
-     *       jk's own worker modules and any project that hasn't opted into Maven/Gradle interop;
+     *       jk's own plugin modules and any project that hasn't opted into Maven/Gradle interop;
      *       found by {@link build.jumpkick.engine.plugin.PluginJar#locate} without going through {@code
      *       ~/.m2}.</li>
      *   <li><b>m2install = true</b> — {@code repos/local/} is still written (jk's own O(1) index),
@@ -233,7 +233,7 @@ public final class InstallPipelines {
             writeLocalIndexSidecar(cacheDir, jarRelPath, Hashing.sha256Hex(jar));
             writeLocalIndexSidecar(cacheDir, pomRelPath, Hashing.sha256Hex(pomBytes));
         } else {
-            // repos/local/ is primary (worker JARs, jk-internal use).
+            // repos/local/ is primary (plugin JARs, jk-internal use).
             writeToLocalStore(cacheDir, jarRelPath, jar);
             writeContentToLocalStore(cacheDir, pomRelPath, pomBytes);
         }

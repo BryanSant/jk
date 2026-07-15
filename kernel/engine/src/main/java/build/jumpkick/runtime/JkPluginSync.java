@@ -10,7 +10,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 /**
- * Ensures jk's own child-JVM worker jars ({@code jk-test-runner}, {@code jk-kotlin-compiler}, …)
+ * Ensures jk's own child-JVM plugin jars ({@code jk-test-runner}, {@code jk-kotlin-compiler}, …)
  * are present in {@code repos/local/} so {@link PluginJar#locate()} can find them by Maven
  * coordinate.
  *
@@ -19,15 +19,15 @@ import java.nio.file.Path;
  * ({@code ~/.m2/repository}, populated by {@code ./gradlew publishToMavenLocal} in jk's tree) into
  * {@code <cache>/repos/local/} in the m2 layout that {@link RepoArtifactStore} understands.
  *
- * <p>Best-effort: a worker already in {@code repos/local/} or {@code repos/central/} is skipped,
- * and a worker absent from {@code ~/.m2} is reported but doesn't fail the sync.
+ * <p>Best-effort: a plugin already in {@code repos/local/} or {@code repos/central/} is skipped,
+ * and a plugin absent from {@code ~/.m2} is reported but doesn't fail the sync.
  */
 public final class JkPluginSync {
 
-    /** Group the worker artifacts publish under (see the worker modules' build.gradle.kts). */
+    /** Group the plugin artifacts publish under (see the plugin modules' build.gradle.kts). */
     static final String GROUP = "build.jumpkick";
 
-    /** Per-worker progress callbacks. */
+    /** Per-plugin progress callbacks. */
     public interface Observer {
         default void present(String artifact) {}
 
@@ -70,7 +70,7 @@ public final class JkPluginSync {
 
             try {
                 // Streamed hash + hard-link into the CAS (cross-fs falls back to a copy) —
-                // a worker jar never has to fit in the heap.
+                // a plugin jar never has to fit in the heap.
                 String hex = build.jumpkick.util.Hashing.sha256Hex(m2Jar);
                 Path casBlob = cas.putFile(m2Jar, hex);
                 localStore.materialize(relPath, casBlob, hex);
@@ -84,7 +84,7 @@ public final class JkPluginSync {
         return new Result(present, fetched, missing);
     }
 
-    /** The m2-layout relative path for a worker artifact at the current jk version. */
+    /** The m2-layout relative path for a plugin artifact at the current jk version. */
     private static String relativeM2Path(String artifactId) {
         String version = JkVersion.VERSION;
         return "build/jumpkick/" + artifactId + "/" + version + "/" + artifactId + "-" + version + ".jar";

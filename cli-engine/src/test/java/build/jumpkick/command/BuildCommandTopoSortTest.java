@@ -57,8 +57,8 @@ class BuildCommandTopoSortTest {
     void test_worker_jar_source_is_a_build_order_prerequisite() {
         Map<Path, JkBuild> modules = new LinkedHashMap<>();
         // engine hands a's worker jar to its test JVM → a must build first, with no
-        // explicit order-after. test-worker-jars feeds allOrderAfter() as a build-order edge.
-        modules.put(Path.of("engine"), module("engine", "[build]\ntest-worker-jars = [\"a\"]"));
+        // explicit order-after. test-plugin-jars feeds allOrderAfter() as a build-order edge.
+        modules.put(Path.of("engine"), module("engine", "[build]\ntest-plugin-jars = [\"a\"]"));
         modules.put(Path.of("a"), module("a", ""));
 
         List<Path> sorted = BuildGraph.orderModules(modules);

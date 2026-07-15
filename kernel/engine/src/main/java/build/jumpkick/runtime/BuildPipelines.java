@@ -303,7 +303,7 @@ public final class BuildPipelines {
                 jkBuild = JkBuildParser.reparse(in.buildFile());
             }
             // Variant overlays fold into plugin configs HERE, so describe keys, contribution
-            // predicates, step/packager action keys, and worker specs all see one flat effective
+            // predicates, step/packager action keys, and plugin specs all see one flat effective
             // config (build-plugins §3.1: parameterized pipelines, not configured objects).
             var applied = build.jumpkick.plugin.manifest.VariantApply.apply(
                     jkBuild, in.dir(), build.jumpkick.model.Variants.Selection.parse(in.variant()),
@@ -332,7 +332,7 @@ public final class BuildPipelines {
         }
 
         // Build-plugin code layer (build-plugins plan §3.2): learn the registered steps/packager
-        // over the file-cached describe protocol. A missing worker jar or a broken registration
+        // over the file-cached describe protocol. A missing plugin jar or a broken registration
         // must fail the build loudly here, not mid-pipeline.
         PluginBuild.Active pluginActive = null;
         PluginBuild.Declarations pluginDecls = null;
@@ -1005,7 +1005,7 @@ public final class BuildPipelines {
 
                     String languageVersion = majorMinor(kotlinVersion);
                     // KSP is jk's tool: it runs on jk's own runtime, not the project's pinned
-                    // JDK (same rule as every worker — requirements.md "worker host"). AGP runs
+                    // JDK (same rule as every plugin — requirements.md "plugin host"). AGP runs
                     // KSP in the Gradle daemon's JVM the same way; the project JDK stays the
                     // -jdk-home cross-compile input below.
                     Path javaHome = ctx.require(JAVA_HOME);
@@ -1262,12 +1262,12 @@ public final class BuildPipelines {
                         }
                     }
                     // With processors declared, hand the incremental compiler an AP setup:
-                    // a *lazy* worker-jar resolver + a stable generated-sources dir. The
-                    // engine routes through the worker only once it has detected
+                    // a *lazy* plugin-jar resolver + a stable generated-sources dir. The
+                    // engine routes through the plugin only once it has detected
                     // source-generating processors, so bytecode-only processors (e.g.
                     // Lombok) and first builds never resolve it — which matters because
-                    // a jk build that didn't bundle the worker (or its sha resource)
-                    // would otherwise fail here even though the worker isn't needed.
+                    // a jk build that didn't bundle the plugin (or its sha resource)
+                    // would otherwise fail here even though the plugin isn't needed.
                     // When it *is* needed but unavailable, warn once and fall back to
                     // plain javac (correct, just without incremental AP provenance).
                     build.jumpkick.task.JavaIncrementalCompile.ApSetup ap = null;
@@ -1396,7 +1396,7 @@ public final class BuildPipelines {
                     Files.createDirectories(classes); // compile-java may be skipped
                     List<Path> ktSources = kotlinSources(ctx);
                     // Plugin-contributed generated Kotlin (a KSP round, a codegen step) joins the
-                    // source list exactly like the Java side — the freshness stamp and the worker
+                    // source list exactly like the Java side — the freshness stamp and the plugin
                     // see generated files as ordinary sources.
                     List<Path> generatedKt = pluginContributedSources(ctx.require(LAYOUT), pluginDecls, ".kt");
                     List<Path> kspKt = kspGeneratedSources(ctx.require(LAYOUT), ".kt");
@@ -1697,16 +1697,16 @@ public final class BuildPipelines {
                     Path testClassesForStamp = ctx.require(TEST_CLASSES);
                     @SuppressWarnings("unchecked")
                     List<Path> testSrcs = ctx.get(TEST_SOURCES).orElse(java.util.List.of());
-                    // Worker jars handed to the test JVM ([build.test-worker-jars]) —
-                    // worker-forking tests' behavior depends on their content, so resolve
+                    // Plugin jars handed to the test JVM ([build.test-plugin-jars]) —
+                    // plugin-forking tests' behavior depends on their content, so resolve
                     // them up front so they also feed the freshness key below.
                     Map<String, String> workerJars = workerJarProps(
-                            in.dir(), ctx.require(PROJECT).build().testWorkerJars());
+                            in.dir(), ctx.require(PROJECT).build().testPluginJars());
 
                     // Incremental test skip: a content key over every input that affects
                     // the outcome — own main output, test sources, the *content* of the
                     // runtime classpath (sibling modules included), the lock, and the
-                    // toolchain/runner/worker identity. Unchanged → skip the runner.
+                    // toolchain/runner/plugin identity. Unchanged → skip the runner.
                     String stampKey = build.jumpkick.task.TestStamp.computeKey(
                             testSrcs, ctx.require(MAIN_CLASSES), in.lockFile(), testRtCp, testStampExtras(workerJars));
                     String testTaskId = ActionKey.qualifiedTaskId(StepNames.RUN_TESTS, testClassesForStamp);
@@ -1936,8 +1936,8 @@ public final class BuildPipelines {
     /**
      * One declared build-plugin step as a pipeline step (build-plugins plan §3.2). The engine
      * owns the whole caching contract: the declared inputs are fingerprinted into the action key,
-     * a hit restores the step's scratch and skips the worker entirely, a miss forks the plugin's
-     * worker with the resolved inputs. The step body never learns any of this.
+     * a hit restores the step's scratch and skips the plugin entirely, a miss forks the plugin
+     * with the resolved inputs. The step body never learns any of this.
      */
     /** True when a declared step must run before the compilers (source generation). */
     static boolean beforeCompile(PluginBuild.StepDecl step) {
@@ -2034,7 +2034,7 @@ public final class BuildPipelines {
                 .kind(StepKind.CPU)
                 .requires(requires.toArray(new String[0]))
                 .ticks(1)
-                // A plugin command forks its worker JVM and can dominate a build (d8 dex, AOT), yet its
+                // A plugin command forks its process and can dominate a build (d8 dex, AOT), yet its
                 // static reservation is a token 1 unit — price it from the running metrics once this
                 // machine has seen it run (own-project average, else host average).
                 .weight(() -> EffortWeights.learnedFixedWeight(in.dir().toString(), "plugin-" + step.name(), 1))
@@ -2096,7 +2096,7 @@ public final class BuildPipelines {
                     tokens.add("facts:" + project.project().group() + ":" + project.project().name() + ":"
                             + project.project().version() + ":" + project.project().javaRelease() + ":"
                             + startClass);
-                    // The step's CODE is an input: a changed plugin worker jar must re-run the
+                    // The step's CODE is an input: a changed plugin jar must re-run the
                     // step, or a plugin upgrade (or first-party dev iteration) silently restores
                     // outputs produced by the old code.
                     tokens.add("worker:"
@@ -2167,7 +2167,7 @@ public final class BuildPipelines {
      * Run the plugin's packager in place of plain jar packaging (build-plugins plan §3.3). The
      * engine keys the artifact cache on the packager's declared inputs (same rebuild triggers the
      * hand-written boot-jar path had), fetches manifest-declared packager dependencies, prepares
-     * the SBOM, and hands the worker coordinate-named runtime entries — the worker only assembles.
+     * the SBOM, and hands the plugin coordinate-named runtime entries — the plugin only assembles.
      */
     private static void packagePlugin(
             StepContext ctx,
@@ -2529,7 +2529,7 @@ public final class BuildPipelines {
                         // Workspace siblings are filtered out of the lockfile by
                         // WorkspaceMerge, but a fat jar must bundle them (and their
                         // own transitive external deps) or it can't run standalone —
-                        // e.g. a worker jar would be missing PluginMain.
+                        // e.g. a plugin jar would be missing PluginMain.
                         WorkspaceClasspath.Result siblings = WorkspaceClasspath.resolve(
                                 layout.moduleRoot(), project, Set.of(Scope.EXPORT, Scope.MAIN));
                         for (Path j : siblings.jars()) {
@@ -2927,8 +2927,8 @@ public final class BuildPipelines {
     }
 
     /**
-     * Compile Kotlin {@code sources} into {@code outputDir} via the worker (action-cached: restores
-     * from the CAS on an exact-input hit without launching the worker, else compiles incrementally).
+     * Compile Kotlin {@code sources} into {@code outputDir} via the plugin (action-cached: restores
+     * from the CAS on an exact-input hit without launching the plugin, else compiles incrementally).
      * Shared by the main {@code compile-kotlin} and {@code compile-test} steps. The caller owns
      * freshness stamps, output assembly, and outcome reporting.
      *
@@ -2952,7 +2952,7 @@ public final class BuildPipelines {
         // The installed plugins' [[contribute.kotlin-plugin]] entries (e.g. spring-boot's
         // all-open, and no-arg gated on jakarta.persistence via classpath-has) — evaluated
         // from the manifest, fetched version-locked to the compiler actually used. The
-        // embeddable variants match the BTA worker's embeddable compiler.
+        // embeddable variants match the BTA plugin's embeddable compiler.
         java.util.Set<String> lockModules = lockModules(ctx.require(LOCKFILE));
         List<KotlincRequest.Plugin> ktPlugins = new ArrayList<>();
         try {
@@ -2991,7 +2991,7 @@ public final class BuildPipelines {
             throw new RuntimeException("interrupted resolving the Kotlin compiler", e);
         }
         // Compilation classpath: project deps + the version-matched stdlib (the
-        // in-process worker has no kotlin-home to auto-supply it; -no-stdlib).
+        // in-process plugin has no kotlin-home to auto-supply it; -no-stdlib).
         List<Path> compileCp = new ArrayList<>(classpath);
         compileCp.add(kt.stdlib());
         List<String> ktArgs = new ArrayList<>();
@@ -3071,7 +3071,7 @@ public final class BuildPipelines {
     }
 
     /**
-     * The version-matched {@code kotlin-stdlib} path (already in the CAS from the worker closure).
+     * The version-matched {@code kotlin-stdlib} path (already in the CAS from the plugin closure).
      * Kotlin output needs it on the <em>runtime</em> classpath too — compilation pairs the stdlib
      * with {@code -no-stdlib}, but the JVM still needs {@code kotlin.jvm.internal.*} etc. when the
      * code runs.
@@ -3102,7 +3102,7 @@ public final class BuildPipelines {
 
     /**
      * Map each workspace sibling to its main output jar, keyed by both project name and {@code
-     * group:artifact} coord. Used by {@link #workerJarProps} to locate {@code test-worker-jars}
+     * group:artifact} coord. Used by {@link #workerJarProps} to locate {@code test-plugin-jars}
      * entries. Empty when this module isn't in a workspace.
      */
     static Map<String, Path> siblingMainJars(Path moduleDir) throws IOException {
@@ -3123,8 +3123,8 @@ public final class BuildPipelines {
                 continue;
             }
             BuildLayout layout = BuildLayout.of(dir, sib);
-            // A shadow (fat) worker runs from its -all.jar — that's the artifact
-            // that bundles plugin-api/PluginMain and the worker's deps; a
+            // A shadow (fat) plugin runs from its -all.jar — that's the artifact
+            // that bundles plugin-api/PluginMain and the plugin's deps; a
             // plain module ships only its main jar.
             Path jar = sib.shadowJar() ? layout.shadowJar() : layout.mainJar();
             out.put(sib.project().name(), jar);
@@ -3165,7 +3165,7 @@ public final class BuildPipelines {
             if (jar != null && Files.exists(jar)) {
                 props.put(wj.get().jarProperty(), jar.toAbsolutePath().toString());
             } else {
-                // Not a built sibling — self-host by reusing the running jk's worker
+                // Not a built sibling — self-host by reusing the running jk's plugin
                 // jar (located via its sha resource + CAS, or a -D override).
                 Path located = wj.get().locateOrNull(new build.jumpkick.cache.Cas(build.jumpkick.util.JkDirs.cache()));
                 if (located != null) props.put(wj.get().jarProperty(), located.toString());
@@ -3180,13 +3180,13 @@ public final class BuildPipelines {
      * test-skip without drifting.
      */
     public static List<String> testStampExtras(Path dir, JkBuild project) throws IOException {
-        return testStampExtras(workerJarProps(dir, project.build().testWorkerJars()));
+        return testStampExtras(workerJarProps(dir, project.build().testPluginJars()));
     }
 
     private static List<String> testStampExtras(Map<String, String> workerJars) {
         List<String> extras = new ArrayList<>();
         extras.add("jk:" + build.jumpkick.model.BuildIdentity.cacheKeyVersion());
-        // Worker jars by content — a worker change retests the module that forks it.
+        // Plugin jars by content — a plugin change retests the module that forks it.
         for (Map.Entry<String, String> e : workerJars.entrySet()) {
             String fp;
             try {

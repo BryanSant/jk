@@ -10,7 +10,7 @@ single, superset protocol are the objective. (CLI/client plugin support is out o
 - A plugin is forked `java <Main> <spec-file>`. It reads an **NDJSON spec file** (one
   `{"t":…}` object per line) and writes **NDJSON reply lines** to stdout, each prefixed with
   the plugin's `##JK<XX>:` marker. Per-plugin prefixes stay (stdout disambiguation) and are
-  normalized to the `##JK<XX>:` shape — **test-runner `##JK:` → `##JKT:`**.
+  normalized to the `##JK<XX>:` shape — **test-runner `##JKT:` → `##JKT:`**.
 - **One discriminator: `t`** on every line (test-runner's `e` is converted to `t`).
 - Kill the two other spec encodings: KEY-value text (javac/kotlinc/audit/compat/publish/
   image) and tab records (formatter). Everything is NDJSON.
@@ -87,7 +87,7 @@ slsa,sbom,signGpg,signSigstore,objectStore*` (publish, with creds/passphrase as 
 ## Deliberate cleanups (breaking, welcome)
 
 - **Structured diagnostics**: `diagnostic` carries file/line/col; javac (`InProcessJavac.Diag`)
-  and kotlinc (`WorkerLogger`) are upgraded to populate them where the underlying API exposes
+  and kotlinc (`KcLogger`) are upgraded to populate them where the underlying API exposes
   them, instead of the current sev+msg-only.
 - **Drop fields the engine ignores today**: audit `result.total`, format `done` counts (recomputed
   from `file` events), image `tarball`/`daemon`/`ok` (engine knows the tarball path; keep `ref`
@@ -100,7 +100,7 @@ slsa,sbom,signGpg,signSigstore,objectStore*` (publish, with creds/passphrase as 
 
 1. **Foundation** (`plugin-api` `build.jumpkick.plugin.protocol`): protocol constants (types +
    field names + op names), a `WorkerSpec` reader (generalize `BuildPluginHarness.Spec`), a
-   `SpecWriter` (generalize `PluginBuild.SpecWriter`), and the engine-side `WorkerClient` reply
+   `SpecWriter` (generalize `PluginBuild.SpecWriter`), and the engine-side `PluginClient` reply
    vocabulary. Generalize `BuildPluginHarness` → the one plugin harness dispatching all ops.
    Delete back-compat ctors (`StepDecl`, `Declarations`, `PackageIo.RuntimeEntry`).
 2. **Command/terminal plugins** (each its own verified commit): audit, format, compat, image,

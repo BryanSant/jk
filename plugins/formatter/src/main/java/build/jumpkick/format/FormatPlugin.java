@@ -43,7 +43,7 @@ import org.openrewrite.java.JavaParser;
 import org.openrewrite.java.ShortenFullyQualifiedTypeReferences;
 
 /**
- * The {@code jk-formatter} worker: formats Java/Kotlin sources through an optional OpenRewrite pass
+ * The {@code jk-formatter} plugin: formats Java/Kotlin sources through an optional OpenRewrite pass
  * (import optimisation) followed by the Spotless engine. The host forks it with a single spec-file
  * path; the spec is tab-delimited records:
  *
@@ -62,7 +62,7 @@ import org.openrewrite.java.ShortenFullyQualifiedTypeReferences;
  * files for its own formatting step.
  *
  * <p>The formatter implementation jars (palantir-java-format, ktfmt) are resolved by jk and passed
- * in — the worker serves them to Spotless via a classpath {@link Provisioner}, so nothing is
+ * in — the plugin serves them to Spotless via a classpath {@link Provisioner}, so nothing is
  * downloaded here. OpenRewrite's engine is bundled directly in this fat JAR. Emits one NDJSON
  * record per file plus a final summary, all prefixed with {@code ##JKFMT:}.
  */

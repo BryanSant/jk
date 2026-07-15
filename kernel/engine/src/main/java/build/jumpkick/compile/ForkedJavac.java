@@ -18,13 +18,13 @@ import java.util.TreeMap;
 import java.util.TreeSet;
 
 /**
- * Drives the {@code jk-java-compiler} worker: runs javac in-process (under the project's JDK) with
+ * Drives the {@code jk-java-compiler} plugin: runs javac in-process (under the project's JDK) with
  * annotation processors wrapped for provenance capture, and returns the diagnostics plus the
  * generated-file → originating-source mapping the incremental compiler needs for
  * annotation-processor incrementality.
  *
  * <p>Launched as {@code <javaHome>/bin/java -cp <workerJar>
- * build.jumpkick.java.compiler.JavaCompilerPlugin @<spec>}; the worker streams {@value #PREFIX} NDJSON
+ * build.jumpkick.java.compiler.JavaCompilerPlugin @<spec>}; the plugin streams {@value #PREFIX} NDJSON
  * back on stdout. Mirrors {@link KotlincDriver}.
  */
 public final class ForkedJavac {
@@ -71,11 +71,11 @@ public final class ForkedJavac {
             Map<Path, Set<Path>> generated = new TreeMap<>();
             String[] status = {null};
 
-            // Fork the java-compiler worker on jk's OWN runtime — the same rule as every
-            // worker (requirements.md "worker host"), and the same javac the non-AP path
+            // Fork the java-compiler plugin on jk's OWN runtime — the same rule as every
+            // plugin (requirements.md "plugin host"), and the same javac the non-AP path
             // already uses in-process (ToolProvider on the engine JDK): --release supplies
             // the project's target semantics. It's a thin, JDK-only plugin (the compile
-            // classpath travels in the spec, not on the worker JVM classpath), so its own
+            // classpath travels in the spec, not on the plugin's classpath), so its own
             // jar is the whole classpath.
             boolean win = HostPlatform.isWindows();
             Path javaExe = build.jumpkick.jdk.JavaHomes.runningJavaHome()

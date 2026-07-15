@@ -42,8 +42,8 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * The {@code jk-publisher} worker: the terminal {@link PublishExtension} goal for Maven publishing.
- * Its worker entry ({@link #run}) reads the engine's spec and assembles a {@link PublishContext}
+ * The {@code jk-publisher} plugin: the terminal {@link PublishExtension} goal for Maven publishing.
+ * Its plugin entry ({@link #run}) reads the engine's spec and assembles a {@link PublishContext}
  * (main jar + repo/signing config + resolved secrets) which {@link #publish} consumes to assemble,
  * sign, and upload the Maven artifacts.
  *
@@ -214,7 +214,7 @@ public final class PublishPlugin implements Plugin, PublishExtension {
         }
     }
 
-    /** The generic terminal context assembled from the worker spec. */
+    /** The generic terminal context assembled from the plugin spec. */
     private record SpecPublishContext(PluginSpec spec, ProtocolWriter out) implements PublishContext {
         @Override
         public PluginConfig config() {

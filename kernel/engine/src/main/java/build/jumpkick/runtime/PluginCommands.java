@@ -17,7 +17,7 @@ import java.util.List;
 
 /**
  * Engine-hosted plugin commands (build-plugins plan row 11): when the CLI sees a command it doesn't
- * own, the project's active code plugin may — the command runs in the plugin's worker JVM over the
+ * own, the project's active code plugin may — the command runs in the plugin's process over the
  * existing spec/NDJSON protocol, its {@code command-out} lines stream back as the command's output,
  * and its exit code is the command's. {@code found=false} (no jk.toml / no plugin / no such
  * command) sends the client back to its normal unknown-command help.

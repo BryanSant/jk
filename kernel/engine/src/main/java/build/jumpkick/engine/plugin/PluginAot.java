@@ -19,7 +19,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
 /**
- * AOT caches (JEP 514) for jk's short-lived worker JVMs — javac and the kotlinc worker — so the
+ * AOT caches (JEP 514) for jk's short-lived plugin processes — javac and the kotlinc plugin — so the
  * JIT-warmup tail is paid once per key instead of on every fork. Measured on Temurin 25: a
  * single-file javac compile drops ~40-55% depending on GC; kotlinc's warmup is heavier still.
  *
@@ -72,7 +72,7 @@ public final class PluginAot {
         return !"off".equalsIgnoreCase(prop);
     }
 
-    /** Where worker AOT caches live: {@code <state>/aot/}. */
+    /** Where plugin AOT caches live: {@code <state>/aot/}. */
     static Path dir() {
         return JkDirs.state().resolve("aot");
     }
@@ -119,13 +119,13 @@ public final class PluginAot {
         return List.of();
     }
 
-    // ---- kotlinc worker -------------------------------------------------------------------
+    // ---- kotlinc plugin -------------------------------------------------------------------
 
     /**
-     * JVM flags to prepend to the kotlinc worker's {@code java} spawn: {@code -XX:AOTCache=…} when a
-     * cache exists for (host JDK, effective GC, worker classpath), else empty — kicking off the
+     * JVM flags to prepend to the kotlinc plugin's {@code java} spawn: {@code -XX:AOTCache=…} when a
+     * cache exists for (host JDK, effective GC, plugin classpath), else empty — kicking off the
      * caller-supplied trainer in the background when the host qualifies. The classpath is part of
-     * the key because the Kotlin compiler IS the worker's app classpath: a Kotlin-version bump must
+     * the key because the Kotlin compiler IS the plugin's app classpath: a Kotlin-version bump must
      * retrain. Never blocks, never throws.
      */
     public static List<String> kotlincFlags(Path javaHome, String workerClasspath, TrainerCommand trainer) {

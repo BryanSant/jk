@@ -25,7 +25,7 @@ import org.jetbrains.kotlin.buildtools.api.jvm.operations.JvmCompilationOperatio
  * Child-JVM entry point that drives the Kotlin Build Tools API.
  *
  * <p>jk launches this as {@code java -cp <worker.jar>:<kotlin-bta-closure>
- * build.jumpkick.kotlin.compiler.KotlinCompilerPlugin @&lt;spec&gt;}. The worker reads the {@link
+ * build.jumpkick.kotlin.compiler.KotlinCompilerPlugin @&lt;spec&gt;}. The plugin reads the {@link
  * CompileSpec}, runs an in-process JVM compile (incremental when the spec carries a {@code
  * WORKDIR}), streams diagnostics back as NDJSON, and exits: {@code 0} success, {@code 1}
  * compilation error, {@code 3} OOM/internal compiler error, {@code 2} bad spec / unexpected
@@ -34,7 +34,7 @@ import org.jetbrains.kotlin.buildtools.api.jvm.operations.JvmCompilationOperatio
  * <p>It uses the {@link KotlinToolchains} entry point (the post-2.4 BTA surface; the older {@code
  * CompilationService} flow is deprecated). It depends on nothing but the Build Tools API at compile
  * time — the implementation and the Kotlin compiler arrive on the classpath at runtime,
- * version-matched by jk, so the worker never leaks compiler deps into jk.
+ * version-matched by jk, so the plugin never leaks compiler deps into jk.
  */
 public final class KotlinCompilerPlugin implements Plugin {
 
@@ -173,7 +173,7 @@ public final class KotlinCompilerPlugin implements Plugin {
 
     /**
      * Translate the spec into raw Kotlin compiler arguments (destination excluded — it's a builder
-     * parameter). The worker sets only what the spec describes; jk owns all policy (e.g. {@code
+     * parameter). The plugin sets only what the spec describes; jk owns all policy (e.g. {@code
      * -no-stdlib}) via {@code ARG} entries appended verbatim at the end.
      */
     static List<String> buildArgs(CompileSpec spec) {

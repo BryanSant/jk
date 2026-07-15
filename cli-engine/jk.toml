@@ -38,7 +38,7 @@ junit-platform-launcher = { group = "org.junit.platform", name = "junit-platform
 # from the real ~/.jk CAS), which PluginJar.locate checks first — see the pre-split cli/jk.toml
 # history for the per-worker rationale.
 [build]
-test-worker-jars = [
+test-plugin-jars = [
     "test-runner",
     "java-compiler",
     "kotlin-compiler",

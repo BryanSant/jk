@@ -11,9 +11,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * The single registry of jk's child-JVM worker jars, and the one place that locates one on disk.
+ * The single registry of jk's child-JVM plugin jars, and the one place that locates one on disk.
  *
- * <p>Each worker is jk's own tooling — pinned to jk's version, not a project dependency — and is
+ * <p>Each plugin is jk's own tooling — pinned to jk's version, not a project dependency — and is
  * addressed by its Maven coordinate ({@code build.jumpkick:<artifactId>:<version>}). Location order
  * is uniform:
  *
@@ -21,12 +21,12 @@ import java.util.List;
  *   <li>the {@code -D<jarProperty>} override (tests / dev), then
  *   <li>{@code repos/local/} in the jk cache (populated by {@code ./gradlew <module>:installLocal}
  *       in jk's own tree), then
- *   <li>{@code repos/central/} in the jk cache (populated by {@code jk sync} once the worker is
+ *   <li>{@code repos/central/} in the jk cache (populated by {@code jk sync} once the plugin is
  *       published).
  * </ol>
  *
  * <p>This enum replaces the seven near-identical {@code *WorkerSetup} locator classes and {@code
- * JkPluginSync}'s hand-maintained worker list — one source of truth for the property name, the
+ * JkPluginSync}'s hand-maintained plugin list — one source of truth for the property name, the
  * coordinate, and the side-load hint.
  */
 public enum PluginJar {
@@ -53,7 +53,7 @@ public enum PluginJar {
         this.installTask = installTask;
     }
 
-    /** Maven artifactId the worker publishes under (group is always {@code build.jumpkick}). */
+    /** Maven artifactId the plugin publishes under (group is always {@code build.jumpkick}). */
     public String artifactId() {
         return artifactId;
     }
@@ -63,13 +63,13 @@ public enum PluginJar {
         return jarProperty;
     }
 
-    /** The Gradle task that installs this worker into the local repo. */
+    /** The Gradle task that installs this plugin into the local repo. */
     public String installTask() {
         return installTask;
     }
 
     /**
-     * The m2-layout relative path for this worker at its current version.
+     * The m2-layout relative path for this plugin at its current version.
      * E.g. {@code build/jumpkick/jk-formatter/0.10.0-SNAPSHOT/jk-formatter-0.10.0-SNAPSHOT.jar}.
      */
     private String relativePath() {
@@ -78,7 +78,7 @@ public enum PluginJar {
     }
 
     /**
-     * Locate the worker jar: {@code -D<jarProperty>} override first, then {@code repos/local/},
+     * Locate the plugin jar: {@code -D<jarProperty>} override first, then {@code repos/local/},
      * then {@code repos/central/}. Throws {@link PluginJarNotFoundException} with side-load
      * instructions if none resolves.
      */
@@ -112,7 +112,7 @@ public enum PluginJar {
         return locate(new Cas(JkDirs.cache()));
     }
 
-    /** As {@link #locate(Cas)} but {@code null} (not throwing) when the worker can't be located. */
+    /** As {@link #locate(Cas)} but {@code null} (not throwing) when the plugin can't be located. */
     public Path locateOrNull(Cas cas) {
         try {
             return locate(cas);
@@ -121,7 +121,7 @@ public enum PluginJar {
         }
     }
 
-    /** The worker whose {@code artifactId} (e.g. {@code jk-git-client}) matches, if any. */
+    /** The plugin whose {@code artifactId} (e.g. {@code jk-git-client}) matches, if any. */
     public static java.util.Optional<PluginJar> byArtifactId(String artifactId) {
         for (PluginJar w : values()) {
             if (w.artifactId.equals(artifactId)) return java.util.Optional.of(w);

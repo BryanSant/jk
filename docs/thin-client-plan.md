@@ -18,7 +18,7 @@ drop off the client path. Verified live: clean / parse-error / violations.
 **Worker-JVM tuning LANDED** (0181bdda) — and fixed a real bug: the client resolved
 cli > env > `[jvm]` and installed it on its OWN session; it never crossed the wire, so
 hosted builds silently dropped all worker tuning. Now the client resolves only its
-flag/env layers (WorkerTunings.resolveClient), they ride build/test/single-build/native/
+flag/env layers (PluginTunings.resolveClient), they ride build/test/single-build/native/
 install requests (EngineProtocol.withJvmTuning/jvmTuning), and the engine overlays the
 project's `[jvm]` table itself at worker-fork time (JvmOptions.tuning → overlayProject).
 **Milestone B COMPLETE** (41a480bd..b3a7831b): tree/why run engine-side with marker-tag
@@ -33,7 +33,7 @@ JkConfigLoader's [config] layer, JkEngineConfig (engine spawn opts), JkCacheConf
 GlobalDefaultJdk's config fallback; TrustedSources and ForgeAuthConfig got dedicated
 line scanners (their shapes have open-ended keys). GraalVM reachability is method-level,
 so engine-only methods of shared classes may keep tomlj (GlobalConfig.repositories,
-WorkerTunings.fromToml/overlayProject; JkHttp/JkHistory/ImageConfig/RepositoryToml are
+PluginTunings.fromToml/overlayProject; JkHttp/JkHistory/ImageConfig/RepositoryToml are
 engine-only files).
 **Milestone C COMPLETE**: LibraryCatalog.parseTable is a strict line scanner (the catalog
 files are jk-owned `name = "group:artifact"` flat scalars; parseLibrariesTable(TomlTable)
@@ -164,7 +164,7 @@ age gets current-engine behavior — the skew class dies by construction.
 **Milestone C — tomlj eviction from the native image:**
 
 - The config family (`GlobalConfig`, `JkConfigLoader`, `JkEngineConfig`, `JkHttpConfig`,
-  `JkCacheConfig`, `JkHistoryConfig`, `WorkerTunings`, `TrustedSources`, `RepositoryToml`,
+  `JkCacheConfig`, `JkHistoryConfig`, `PluginTunings`, `TrustedSources`, `RepositoryToml`,
   `ForgeAuthConfig`, `DenyPolicyParser`) moves onto a small hand-rolled `ConfigToml` scanner
   (sections, scalars, string arrays — formats we own; anything richer belongs engine-side).
   The engine keeps tomlj for `jk.toml`/`jk.lock`/catalogs (user-authored full TOML).

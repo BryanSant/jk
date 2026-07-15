@@ -11,8 +11,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Prepares everything a Kotlin compile needs to fork the {@code jk-kotlin-compiler} worker: the
- * worker JVM classpath (the worker jar + the resolved Build Tools API implementation closure,
+ * Prepares everything a Kotlin compile needs to fork the {@code jk-kotlin-compiler} plugin: the
+ * plugin classpath (the plugin jar + the resolved Build Tools API implementation closure,
  * version-matched to the project's Kotlin) and the version-matched {@code kotlin-stdlib} for the
  * compilation classpath.
  *
@@ -32,14 +32,14 @@ public final class KotlinPluginSetup {
     private KotlinPluginSetup() {}
 
     /**
-     * @param workerClasspath worker JVM {@code -cp}: worker jar + BTA closure
+     * @param workerClasspath plugin {@code -cp}: plugin jar + BTA closure
      * @param stdlib the version-matched kotlin-stdlib for the compile classpath
      */
     public record Prepared(List<Path> workerClasspath, Path stdlib) {}
 
     /**
      * Resolve the closure + stdlib for {@code kotlinVersion} (null ⇒ jk's default) against {@code
-     * repos}, and locate the worker jar.
+     * repos}, and locate the plugin jar.
      */
     public static Prepared prepare(RepoGroup repos, Cas cas, String kotlinVersion)
             throws IOException, InterruptedException {
@@ -55,7 +55,7 @@ public final class KotlinPluginSetup {
     }
 
     /**
-     * Locate the {@code jk-kotlin-compiler} worker jar via the shared registry: the {@value
+     * Locate the {@code jk-kotlin-compiler} plugin jar via the shared registry: the {@value
      * #WORKER_JAR_PROPERTY} override, then the CAS by expected SHA.
      */
     public static Path locateWorkerJar(Cas cas) {

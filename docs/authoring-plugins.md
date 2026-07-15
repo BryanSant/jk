@@ -21,7 +21,7 @@ scaffold/…                                           ← template resources th
 
 The **declarative layer** covers most integrations and executes zero plugin code in the engine:
 jk parses `jk-plugin.toml` (data — safe even for untrusted plugins) and applies its
-contributions itself. The **code layer** runs only in a forked worker JVM over an NDJSON
+contributions itself. The **code layer** runs only in a forked plugin process over an NDJSON
 protocol; the engine never classloads your classes.
 
 ## 2. The manifest, section by section
@@ -118,7 +118,7 @@ Scaffold interpolation adds `${package}`, `${package-path}`, `${main-root}`, `${
 
 ```toml
 [code]
-protocol-prefix = "##JKSB:"      # your worker's protocol line marker
+protocol-prefix = "##JKSB:"      # your plugin's protocol line marker
 # worker = "jk-spring-boot"      # first-party only; a third-party plugin IS its own jar
 ```
 
@@ -167,7 +167,7 @@ through what it doesn't rewrite, and there can be at most one per build — a se
 error, not a priority. Unit tests run against the untransformed classes: a transform
 shapes the artifact, not the test fixture.
 
-Steps and packagers run in **your worker JVM** — one fork per plugin per build, multiplexing
+Steps and packagers run in **your plugin process** — one fork per plugin per build, multiplexing
 every step over the protocol. Keep the jar self-contained (shade your dependencies);
 `plugin-api` types are provided by jk.
 
@@ -188,8 +188,8 @@ Then:
 - `jk lock` / `jk sync` resolve the coordinate, **pin its SHA-256 in `jk.lock`**, and extract
   your manifest. Declarative contributions apply from the next parse on — manifest data is
   safe without trust.
-- **Code hooks are consent-gated.** The engine refuses to fork an untrusted third-party plugin
-  worker; the user runs `jk trust plugin com.example:my-jk-plugin` (or `com.example:` for the
+- **Code hooks are consent-gated.** The engine refuses to fork an untrusted third-party plugin;
+  the user runs `jk trust plugin com.example:my-jk-plugin` (or `com.example:` for the
   whole group) once per machine. First-party plugins shipped inside jk are implicitly trusted.
 - A table nobody owns is a parse error naming the remedy — so a typo'd table or a forgotten
   `[plugins]` entry fails loudly, never silently.

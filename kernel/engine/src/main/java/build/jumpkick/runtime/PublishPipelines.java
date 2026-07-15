@@ -31,14 +31,14 @@ import java.util.List;
 
 /**
  * The shared {@code jk publish} pipeline — validate the project, then assemble/sign/upload via the
- * {@code jk-publisher} worker — hoisted out of the CLI so the resident engine can host the command
+ * {@code jk-publisher} plugin — hoisted out of the CLI so the resident engine can host the command
  * (Wave 2 of {@code docs/architecture/slim-client.md}) while the command's test-only in-process
  * path builds the exact same pipeline.
  *
  * <p>Interactivity split: everything env/keychain-shaped is resolved <em>client-side</em> and
  * arrives in the {@link Request} — the repository credential and the GPG passphrase — because the
  * engine's environment belongs to whichever invocation first spawned it, not to this one. Secrets
- * reach the worker via the same 0600 spec file the CLI fork used; they are never logged.
+ * reach the plugin via the same 0600 spec file the CLI fork used; they are never logged.
  */
 public final class PublishPipelines {
 
@@ -66,10 +66,10 @@ public final class PublishPipelines {
     public static final PipelineKey<JkBuild> PROJECT = PipelineKey.of("project", JkBuild.class);
     public static final PipelineKey<Path> JAR = PipelineKey.of("jar", Path.class);
 
-    /** The worker's uploaded-file count (0 for {@code --dry-run}), populated by the publish step. */
+    /** The plugin's uploaded-file count (0 for {@code --dry-run}), populated by the publish step. */
     public static final PipelineKey<Integer> FILES = PipelineKey.of("pub-files", Integer.class);
 
-    /** Build the publish pipeline for {@code projectDir}. Locates the worker jar eagerly (fail fast, with side-load hints). */
+    /** Build the publish pipeline for {@code projectDir}. Locates the plugin jar eagerly (fail fast, with side-load hints). */
     public static Pipeline publishPipeline(Path projectDir, Path cache, Request req) {
         Path workerJar = PluginJar.PUBLISHER.locate(new Cas(cache));
         Path jkBuildPath = projectDir.resolve("jk.toml");
@@ -136,7 +136,7 @@ public final class PublishPipelines {
         return Pipeline.builder("publish").addStep(parseBuild).addStep(publish).build();
     }
 
-    /** Fork the {@code jk-publisher} worker; returns the uploaded-file count. */
+    /** Fork the {@code jk-publisher} plugin; returns the uploaded-file count. */
     private static int runWorker(Path workerJar, Path projectDir, Path jar, Request req) {
         try {
             Path spec = writeSpec(projectDir, jar, req);
@@ -175,7 +175,7 @@ public final class PublishPipelines {
                 .configBool("sbom", req.sbom())
                 .configBool("signSigstore", req.sigstore());
 
-        // Credential (resolved client-side so neither the engine nor the worker needs env/keychain access).
+        // Credential (resolved client-side so neither the engine nor the plugin needs env/keychain access).
         if (req.credential() instanceof RepoCredential.Basic b) {
             sw.configString("repoAuthType", "basic").secret("repoUser", b.username()).secret("repoPass", b.password());
         } else if (req.credential() instanceof RepoCredential.Bearer b) {

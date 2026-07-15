@@ -9,7 +9,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Builds the {@code java -jar <worker>.jar <spec>} command line every plugin-worker fork uses —
+ * Builds the {@code java -jar <worker>.jar <spec>} command line every plugin fork uses —
  * the JVM located from the running process's own java home, heap-sized through {@link JvmOptions}'
  * shared plan (in the resident engine, the plan {@code EngineServer.planSharedWorkerMemoryOnce}
  * computed at startup). Shared by the {@code *Pipelines} factories so no fork site hand-rolls it.

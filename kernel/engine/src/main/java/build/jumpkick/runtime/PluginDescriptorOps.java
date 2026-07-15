@@ -22,7 +22,7 @@ import java.util.zip.ZipFile;
  * jar's {@code jk-plugin.toml} out of the SHA-verified CAS into the module's manifest store, so
  * the parser (a plain-file reader) can validate the plugin's table on the next parse. Manifest
  * extraction is data, not code — it happens for untrusted plugins too; the trust gate sits in
- * front of worker forks ({@link PluginBuild#runWorker}).
+ * front of plugin forks ({@link PluginBuild#runWorker}).
  */
 public final class PluginDescriptorOps {
 

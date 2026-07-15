@@ -197,7 +197,7 @@ command: run, dev, test, compile, image, native, publish, install. The selection
 resolved `env:` values ride the `Session` (`Session.withVariant`); `BuildPipelines.Inputs`
 defaults from it, so every pipeline factory — engine-hosted or in-process — is parameterized
 without per-pipeline threading. Engine-side it decodes once in `resolveSession`; client-side it
-attaches once in `EngineWorkerAdapter.stream` (plus the test/single-build/exec-plan/verb
+attaches once in `EnginePluginAdapter.stream` (plus the test/single-build/exec-plan/verb
 writers). Exec plans and plugin verbs apply the selection LENIENTLY
 (`VariantApply.applyLenient`): unselected mandatory dimensions are skipped, so
 `jk android licenses` still answers pre-selection while `jk run --release` deploys the AAB.

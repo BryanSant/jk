@@ -50,7 +50,7 @@ import javax.tools.ToolProvider;
  * to {@code createSourceFile} / {@code createClassFile}, resolved to their source files via {@link
  * Trees}.
  *
- * <p>Depends only on the JDK compiler APIs, so it runs in the {@code :java-compiler} worker under
+ * <p>Depends only on the JDK compiler APIs, so it runs in the {@code :java-compiler} plugin under
  * the project's JDK (never in jk's own native-image process).
  */
 public final class InProcessJavac {

@@ -8,7 +8,7 @@ import java.util.Map;
  * Strategy for emitting protocol events back to the parent jk process.
  *
  * <p>The wire payloads are fixed (see {@link EventType}); only the on-the-wire <em>encoding</em>
- * varies. Today: {@link JsonEventWriter} (NDJSON, one event per line, prefixed with {@code ##JK:}
+ * varies. Today: {@link JsonEventWriter} (NDJSON, one event per line, prefixed with {@code ##JKT:}
  * so the parent can distinguish protocol lines from user test stdout). Tomorrow: a CBOR encoder
  * with the same schema for size/parse-speed wins on huge test suites.
  */

@@ -5,7 +5,7 @@ import build.jumpkick.run.TestSummary;
 
 /**
  * Streaming callback surface for live test progress UI. {@link JUnitLauncher} invokes these as each
- * {@code ##JK:} protocol event flows past the parent's aggregator, so a CLI can render a pinned
+ * {@code ##JKT:} protocol event flows past the parent's aggregator, so a CLI can render a pinned
  * status line, append failure details to a buffer, etc., without re-implementing the wire-format
  * parsing.
  *

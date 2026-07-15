@@ -104,7 +104,7 @@ the one un-hoisted L8 item — offered, not yet requested.
 no `installJdk()`, no `lock()`** — the doc's M2 line "`build/explain/lock/installJdk(request,
 PipelineListener) → result`" (`re-foundation.md:53`) is a goal, not the code. Consequently the CLI reaches
 deep into engine internals: `BuildPipelines` (7 imports), `BuildGraph` (2), `CompileToolchain` (14),
-`WorkerClient` (6), `BuildPlanForecast` (2), `JUnitLauncher` (2), plus `JavacDriver`, `ClasspathResolver`,
+`PluginClient` (6), `BuildPlanForecast` (2), `JUnitLauncher` (2), plus `JavacDriver`, `ClasspathResolver`,
 `ActionCache`, etc. A non-CLI front-end cannot drive explain / single-module build / JDK install through
 the facade today.
 
@@ -128,7 +128,7 @@ reach are deleted. Cycle fallback preserved.
 _Bonus finding (resolved):_ tie-break among independent modules is now deterministic declaration order
 (was `HashMap` hash order — a latent non-determinism); and the stale `[build.embed-sha]` reference in
 the old javadoc/one test described a **non-existent feature** (no `embed-sha` parsing exists) — the
-test only passed by hash luck and was corrected to exercise the real `test-worker-jars` edge.
+test only passed by hash luck and was corrected to exercise the real `test-plugin-jars` edge.
 
 `BuildCommand.topoSortModules` (`cli/.../command/BuildCommand.java:693`) is a complete second
 workspace-DAG topo-sort — including `workspace:` name resolution and `[build].order-after` edges —
@@ -367,7 +367,7 @@ Independent re-audit of the invariants after all items landed (each verified by 
 `:cli:test`/`:engine:test`/`:core:test`/`:toolchain:test`/`:model:test` run):
 
 - **No kernel `System.out`/`System.err`/`setOut`** outside comments, EXCEPT
-  `plugin-api/.../worker/PluginWorkerMain.java` — a forked worker process's `main()` reporting fatal
+  `plugin-api/.../process/PluginMain.java` — a forked plugin process's `main()` reporting fatal
   bootstrap errors (no jk output infra exists yet in that process). **Accepted exception** (a separate
   process's last-resort stderr, not the engine writing user text). Q1 (`AutoLock`) and L7c
   (`NativeImageDriver`) leaks confirmed gone.
@@ -387,7 +387,7 @@ to the `JkThreads.io()` worker pool~~ (DONE since — both `JkThreads` pools are
 `build` facades (their mechanical cores already run on engine primitives; `installJdk` has since
 landed as `JdkService`); **Q2** an optional output-normalizing pass to dedup the CLI coordinate
 display-coloring. The `SessionCancel` bind-once DI seam and the accepted concurrency
-primitives (`WorkerSlots`/`TEST_GATE`/`HeapPlan.heapPlan`) are not request-data globals.
+primitives (`PluginSlots`/`TEST_GATE`/`HeapPlan.heapPlan`) are not request-data globals.
 
 Verdict: every audited gap is FIXED or a documented, rationalized deferral; all logged compromises are
 resolved or intentional; the build is green.

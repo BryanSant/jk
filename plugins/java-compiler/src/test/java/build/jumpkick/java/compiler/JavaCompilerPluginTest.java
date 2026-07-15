@@ -18,7 +18,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
- * Drives the worker's protocol end-to-end (in-process via {@link JavaCompilerPlugin#run}): a real
+ * Drives the plugin's protocol end-to-end (in-process via {@link JavaCompilerPlugin#run}): a real
  * annotation processor is ServiceLoader-discovered from a processor path, runs, and its
  * generated-file provenance is reported as NDJSON.
  */
@@ -27,7 +27,7 @@ class JavaCompilerPluginTest {
     @Test
     void compiles_with_processor_and_reports_provenance(@TempDir Path dir) throws Exception {
         // A standalone annotation processor + annotation, compiled into procDir and
-        // registered via META-INF/services so the worker discovers it.
+        // registered via META-INF/services so the plugin discovers it.
         Path procDir = dir.resolve("proc");
         compile(
                 procDir,

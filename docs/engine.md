@@ -9,7 +9,7 @@ the daemon; it's the **engine** now.) This doc explains why it exists, and how i
 
 Every `jk` invocation that runs a build sizes its own worker-JVM heaps by probing how much memory
 the host has *right now* and dividing it across the JVMs that invocation plans to fork (see
-`HeapPlan`/`JvmOptions`/`MemoryProbe` in `kernel/engine/.../worker/`). That's correct for one build
+`HeapPlan`/`JvmOptions`/`MemoryProbe` in `kernel/engine/.../plugin/`). That's correct for one build
 at a time. It's wrong the moment two `jk build`s run concurrently in different terminals: each one
 independently sees "8 GiB free" and independently claims up to half of it, and together they
 overcommit real RAM — the OOM this project has hit in practice.
@@ -72,7 +72,7 @@ and the fallback when no engine artifact is installed. Both routes execute the e
    -Xms…/-Xmx… -cp ~/.jk/versions/<v>/lib/jk-engine.jar build.jumpkick.cli.EngineMain` on the jk-managed
    default JDK. The host JDK must meet the engine's runtime floor (the release that compiled the
    client and jar — a global default pinned older for *project* builds is skipped, since it governs
-   worker JVMs, not the engine host); when nothing installed qualifies, the client installs
+   plugin processes, not the engine host); when nothing installed qualifies, the client installs
    exactly the floor release, with no global-default side effects. The spawn line also carries
    an AOT cache (JEP 514, `~/.jk/state/aot/engine-<version>-<jar-key>.aot`): every cold start after the
    first maps pre-parsed class metadata plus AOT-compiled code, taming the fresh JVM's
@@ -90,17 +90,17 @@ and the fallback when no engine artifact is installed. Both routes execute the e
    reports it as `AOT: training in progress (pid N)` in `jk engine status` while it lives).
    The key ties the cache to the exact jar because
    `AOTMode=auto` silently ignores a mismatched cache — an unkeyed file would stop helping at
-   the first upgrade and never retrain. The same treatment covers jk's short-lived **worker
-   JVMs** (`WorkerAot`): javac forks map a cache keyed to the
+   the first upgrade and never retrain. The same treatment covers jk's short-lived **plugin
+   processes** (`PluginAot`): javac forks map a cache keyed to the
    project's toolchain JDK + effective GC (measured ~40-55% off a small compile), and the
-   kotlinc worker maps one additionally keyed to its compiler classpath, so a Kotlin-version
+   kotlinc plugin maps one additionally keyed to its compiler classpath, so a Kotlin-version
    bump retrains. The first fork that finds no cache proceeds untrained and kicks off a
-   background trainer (a synthetic compile, `ps` shows a short-lived extra `javac`/worker
+   background trainer (a synthetic compile, `ps` shows a short-lived extra `javac`/plugin
    process; the engine log records it); the next fork maps the result. Exact-match keying is
    the rule everywhere — a different JDK build, vendor, or GC mints a new key, the old cache
    is swept, and a mismatched or corrupt cache is a silent no-op, never a failed build.
    `-Djk.worker.aot=off` (or `JK_WORKER_AOT=off`) disables it. Every `.aot` file — engine and
-   workers alike — lives side by side in `~/.jk/state/aot/`, one honest place to audit or wipe.
+   plugins alike — lives side by side in `~/.jk/state/aot/`, one honest place to audit or wipe.
    The same one-home rule covers the installations themselves: every jk version — including
    the current one — is materialized in `~/.jk/versions/<v>/` (client binary + engine jar +
    manifest), and `~/.jk/bin/jk`/`jkx` are just pointers to the current version's binary
@@ -152,7 +152,7 @@ version-skew replacement). It does not self-terminate when idle — it's lightwe
 (`-Xmx`, alongside `-Xms32m` pre-sizing and SerialGC; a process can't shrink its own ceiling, so
 this necessarily lives on the spawn path). Default `256` — this *is* the memory target, enforced.
 The engine never needs the runtime's uncapped default (¼ of RAM) because it is pure orchestration:
-compiles and tests run in separately-sized worker JVMs. Raise it on a CI box hosting many large
+compiles and tests run in separately-sized plugin processes. Raise it on a CI box hosting many large
 concurrent builds; **`0`** = uncapped. Verify with the `heapMaxBytes` field of
 `jk engine status --output json`.
 
@@ -248,11 +248,11 @@ didn't just spawn itself.)
   that don't are closed without a reply. `EngineServer`/`EngineClient`'s request-handling code is
   otherwise transport-agnostic; it only ever deals with an already-connected `SocketChannel`.
 - **Framing**: newline-delimited JSON, one message per line — the same style `jk`'s existing
-  worker-process protocol already uses for compiler/test/git workers, rather than a new
+  plugin protocol already uses for compiler/test/git plugins, rather than a new
   length-prefixed scheme. Every dynamic string (a path, an error message, a line of build output)
   is escaped the same way that existing protocol already requires.
 - **Message shape**: the same `{"t":"<type>", ...}` discriminated-envelope shape jk's existing
-  worker protocol already uses (see `WorkerClient`) — connection handshake
+  plugin protocol already uses (see `PluginClient`) — connection handshake
   (`hello`/`hello-ack`/`ping`/`pong`), a `build-request`/`test-request` to start an operation and a
   `build-cancel` to abort one, one event type per `WorkspaceBuildListener`/`PipelineListener` callback
   (`plan-module`/`module-start`/`progress`/`output`/`warn`/`error`/`pipeline-finish`/...), and a terminal
@@ -275,22 +275,22 @@ didn't just spawn itself.)
 ## What runs where
 
 **In the engine:** `jk build` (`BuildService.buildWorkspace` for a workspace, plus a dedicated
-single-pipeline path for a single project with no `[workspace]` table — both fork worker JVMs the same
+single-pipeline path for a single project with no `[workspace]` table — both fork plugin processes the same
 way, so both needed to move for the OOM fix to actually close), `jk test` (a single project's
-compile+test pipeline), and `jk explain` (`BuildService.explain`, a synchronous read with no worker JVM
+compile+test pipeline), and `jk explain` (`BuildService.explain`, a synchronous read with no plugin process
 forked — hosted mainly for consistency: the engine is the one process that always has a live,
 correctly-resolved build graph and caches open), plus the resolver family — `jk lock`, `jk sync`,
 and `jk update` (slim-client Wave 1: the PubGrub solve, CAS fetches, and git-source
 materialization run engine-side; the CLI renders the streamed events and colorizes them
-client-side) — dependency resolution, the build pipeline and scheduler, worker-JVM orchestration
+client-side) — dependency resolution, the build pipeline and scheduler, plugin orchestration
 and the shared memory/heap-slot accounting that this whole effort exists to fix, and the on-disk
 build/action caches. `jk build` also freshens a stale merged workspace lock engine-side before
 building (the request carries `freshenLock`; `jk verify`'s scratch rebuild opts out to keep the
 pinned lock verbatim).
 
-Also in the engine (slim-client Wave 2 — the hosted worker commands): `jk audit`, `jk format`,
+Also in the engine (slim-client Wave 2 — the hosted plugin commands): `jk audit`, `jk format`,
 `jk publish`, `jk image`, `jk import`, and `jk mvn`/`jk gradle`'s distribution *provisioning* —
-the six paths that used to fork plugin workers directly from the CLI process now fork them from
+the six paths that used to fork plugins directly from the CLI process now fork them from
 the engine (sized by its shared worker-memory plan), with structured results streaming back as
 events (`audit-finding`, `format-file`, `import-note`) and count/summary-carrying `pipeline-finish`
 variants. `jk format`'s formatter-jar resolution (previously an in-client `ToolResolver` run)
@@ -306,7 +306,7 @@ Also in the engine (slim-client Wave 3 — the in-process `BuildPipelines` strag
 half (it rides the existing single-project build request; only the exec of the user's program stays
 client-side — it owns your terminal, same reasoning as `jk mvn`/`gradle`'s exec), `jk native` (the
 full pipeline plus the native-image tail, the `native-image` child process forked engine-side like
-a worker; the cascade speaks `jk build`'s workspace event vocabulary with engine-computed exit
+a plugin; the cascade speaks `jk build`'s workspace event vocabulary with engine-computed exit
 codes), and `jk install`'s heavy halves — the git clone of a `jk install <git-url>` (git runs
 in-process in the engine: `GitFetcher` prefers a local `git` command, else bundled
 JGit) and the build + cache-install of the project (jar/pom into `~/.m2` and
@@ -384,7 +384,7 @@ exactly that (`max-heap-mb` — see [Configuring the engine](#configuring-the-en
 size. Observable at any time via the
 memory line of `jk engine status`. It doesn't do the heavy lifting
 itself — compiles
-and test runs still happen in forked worker JVMs, sized by the same shared `HeapPlan` machinery as
+and test runs still happen in forked plugin processes, sized by the same shared `HeapPlan` machinery as
 always, just now coordinated across every concurrent request instead of guessed independently per
 process. The engine's own footprint stays small because it deliberately avoids new large resident
 caches: dependency-resolution ledgers and build-timing history are small and cheap enough to
@@ -446,9 +446,9 @@ real native-image binary:
 8. **Explicitly deferred, not scheduled — precise concurrent memory accounting (demand registry).**
    **Status: DEFERRED (logged), not OPEN** — this is a considered decision, not a known bug. The
    current engine sizes one shared worker-JVM budget for the host's core count once at startup
-   (`planSharedWorkerMemoryOnce`), not a live registry that grows/shrinks `HeapPlan`/`WorkerSlots` per
+   (`planSharedWorkerMemoryOnce`), not a live registry that grows/shrinks `HeapPlan`/`PluginSlots` per
    in-flight request. A demand-registry is real complexity (live recomputation on request churn,
-   re-plumbing `HeapPlan`/`WorkerSlots` from static to reactive) that's only worth paying for if the
+   re-plumbing `HeapPlan`/`PluginSlots` from static to reactive) that's only worth paying for if the
    coarse sizing actually under-parallelizes in practice — no such evidence exists yet, so building it
    speculatively would be complexity for a hypothetical need.
 
@@ -467,7 +467,7 @@ real native-image binary:
      for that build alone). A measurable regression in the common single-build case is the real cost
      of *not* having a demand-registry.
    - *Queuing-while-idle*: under synthetic concurrent load (2/4/8 simultaneous single-project or
-     workspace builds), check whether anything blocks on `WorkerSlots` while host RAM/CPU sits idle —
+     workspace builds), check whether anything blocks on `PluginSlots` while host RAM/CPU sits idle —
      that's the literal signal of "under-parallelizes."
 
    If none of these ever shows a real cost, this item should stay deferred indefinitely — it is not a

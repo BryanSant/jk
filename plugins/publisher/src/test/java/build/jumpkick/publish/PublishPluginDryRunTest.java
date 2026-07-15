@@ -15,7 +15,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 /**
  * Exercises the terminal {@link build.jumpkick.plugin.build.PublishExtension} path end-to-end in
- * dry-run mode (no network): the worker spec is parsed, mapped onto a {@code PublishContext}, and
+ * dry-run mode (no network): the plugin spec is parsed, mapped onto a {@code PublishContext}, and
  * {@link PublishPlugin#publish} assembles the artifacts and reports them — proving the spec→config
  * roundtrip without a live repository.
  */

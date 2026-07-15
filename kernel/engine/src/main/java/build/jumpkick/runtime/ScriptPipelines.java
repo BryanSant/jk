@@ -298,7 +298,7 @@ public final class ScriptPipelines {
                             ? header.release()
                             : Runtime.version().feature();
                     // Compilation classpath: script deps + the version-matched
-                    // stdlib (the in-process worker has no kotlin-home to auto-add
+                    // stdlib (the in-process plugin has no kotlin-home to auto-add
                     // it; paired with -no-stdlib).
                     List<Path> compileCp = new ArrayList<>(depsClasspath);
                     compileCp.add(ctx.require(KT_STDLIB));

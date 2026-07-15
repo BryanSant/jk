@@ -86,10 +86,10 @@ class JkBuildParserTest {
         JkBuild parsed = JkBuildParser.parse(PROJECT + """
 
                 [build]
-                test-worker-jars = ["publisher", "compat-bridge"]
+                test-plugin-jars = ["publisher", "compat-bridge"]
                 """);
-        assertThat(parsed.build().testWorkerJars()).containsExactly("publisher", "compat-bridge");
-        // test-worker-jars modules must build first → they're order-after prerequisites
+        assertThat(parsed.build().testPluginJars()).containsExactly("publisher", "compat-bridge");
+        // test-plugin-jars modules must build first → they're order-after prerequisites
         assertThat(parsed.build().allOrderAfter()).contains("publisher", "compat-bridge");
     }
 

@@ -26,9 +26,9 @@ junit-platform-launcher = { group = "org.junit.platform", name = "junit-platform
 # Self-host: engine's tests fork jk's own worker jars. These workers are
 # Gradle-only (no jk.toml), so jk build can't build them as modules — it reuses
 # the running jk's worker identity instead.
-#  - test-worker-jars: the EngineServerTest hosted-audit round-trip forks the
+#  - test-plugin-jars: the EngineServerTest hosted-audit round-trip forks the
 #    auditor, injected as -Djk.auditor.plugin.jar (located from the running jk's
 #    repos/local/ store; requires `./gradlew :auditor:installLocal`). Git work now
 #    runs in-process (git CLI or bundled JGit), so no git worker jar is needed.
 [build]
-test-worker-jars = ["auditor"]
+test-plugin-jars = ["auditor"]

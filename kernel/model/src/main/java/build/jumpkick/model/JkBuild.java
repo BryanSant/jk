@@ -593,7 +593,7 @@ public record JkBuild(
      * must build before this one, <em>without</em> adding a compile/test/runtime edge — the
      * "build-order-only dependency" jk otherwise can't express.
      *
-     * <p>{@code testWorkerJars} ({@code [build.test-worker-jars]}) lists workspace modules whose
+     * <p>{@code testPluginJars} ({@code [build.test-plugin-jars]}) lists workspace modules whose
      * built worker jar must be handed to this module's test JVM (as {@code -Djk.<worker>.plugin.jar})
      * so tests that fork that worker locate it by path. Also implicitly {@code orderAfter} (the
      * worker must be built first).
@@ -604,14 +604,14 @@ public record JkBuild(
      * {@code room.schemaLocation} is the canonical consumer).
      */
     public record Build(
-            List<String> orderAfter, List<String> testWorkerJars, boolean lint,
+            List<String> orderAfter, List<String> testPluginJars, boolean lint,
             List<KotlinPluginDecl> kotlinPlugins, List<String> kspOptions, List<String> extraSrc) {
 
         public static final Build EMPTY = new Build(List.of(), List.of(), true, List.of(), List.of(), List.of());
 
         public Build {
             orderAfter = orderAfter == null ? List.of() : List.copyOf(orderAfter);
-            testWorkerJars = testWorkerJars == null ? List.of() : List.copyOf(testWorkerJars);
+            testPluginJars = testPluginJars == null ? List.of() : List.copyOf(testPluginJars);
             kotlinPlugins = kotlinPlugins == null ? List.of() : List.copyOf(kotlinPlugins);
             kspOptions = kspOptions == null ? List.of() : List.copyOf(kspOptions);
             // [build] extra-src — additional module-relative source roots (variant overlays append
@@ -626,18 +626,18 @@ public record JkBuild(
             if (dirs.isEmpty()) return this;
             var all = new java.util.ArrayList<>(extraSrc);
             all.addAll(dirs);
-            return new Build(orderAfter, testWorkerJars, lint, kotlinPlugins, kspOptions, all);
+            return new Build(orderAfter, testPluginJars, lint, kotlinPlugins, kspOptions, all);
         }
 
         /**
-         * All build-order prerequisites: explicit {@code orderAfter} plus every {@code testWorkerJars}
+         * All build-order prerequisites: explicit {@code orderAfter} plus every {@code testPluginJars}
          * module (a sibling must be built before its jar can be handed to a test). De-duplicated,
          * order preserved.
          */
         public List<String> allOrderAfter() {
-            if (testWorkerJars.isEmpty()) return orderAfter;
+            if (testPluginJars.isEmpty()) return orderAfter;
             var all = new java.util.LinkedHashSet<>(orderAfter);
-            all.addAll(testWorkerJars);
+            all.addAll(testPluginJars);
             return List.copyOf(all);
         }
     }

@@ -6,7 +6,7 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Input to {@link KotlincDriver}, which forks the {@code jk-kotlin-compiler} worker to drive the
+ * Input to {@link KotlincDriver}, which forks the {@code jk-kotlin-compiler} plugin to drive the
  * Kotlin Build Tools API.
  *
  * <ul>
@@ -14,9 +14,9 @@ import java.util.Objects;
  *       compilation itself. {@code classpath} is the <em>compilation</em> classpath (project deps +
  *       a version-matched kotlin-stdlib); the caller pairs it with {@code -no-stdlib} in {@code
  *       extraArgs}.
- *   <li>{@code workerClasspath} — the worker JVM's own classpath: the worker jar plus the resolved
+ *   <li>{@code workerClasspath} — the plugin's own classpath: the plugin jar plus the resolved
  *       Build Tools API implementation closure.
- *   <li>{@code javaHome} — the JDK that hosts the worker JVM.
+ *   <li>{@code javaHome} — the JDK that hosts the plugin process.
  *   <li>{@code workingDir} — incremental state dir; {@code null} ⇒ a full (non-incremental)
  *       compile.
  *   <li>{@code extraArgs} — free compiler arguments appended verbatim.

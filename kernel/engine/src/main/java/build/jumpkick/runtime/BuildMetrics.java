@@ -25,8 +25,8 @@ import java.util.function.Function;
 /**
  * Persistent running aggregates for every build-related job the engine has run on this machine:
  * invocation count, total wall-clock, and min/max (avg derived) — kept in four tiers: engine-wide,
- * per project, per step, and per project per step. A plugin executes as its worker jar wrapped in
- * an ordinary step, so the step tier is also the per-worker/per-plugin tier.
+ * per project, per step, and per project per step. A plugin executes as its jar wrapped in
+ * an ordinary step, so the step tier is also the per-plugin tier.
  *
  * <p>Successful, failed, and cancelled runs each get their own {@link Stats} block: every
  * invocation is counted, but a failed build's duration never pollutes the success numbers the

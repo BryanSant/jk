@@ -15,7 +15,7 @@ but the honest fix is that the CLI should not have those classpaths at all.
 
 Combined-resource-usage is the differentiator vs Gradle (whose daemon's memory appetite is its
 most-complained-about trait): a tiny client that exits in milliseconds + one memory-disciplined
-~256 MiB engine + workers that exit when the build ends.
+~256 MiB engine + plugins that exit when the build ends.
 
 ## Target end-state
 
@@ -30,7 +30,7 @@ The `jk` client is exactly three things:
    completion. The client renders engine event streams; it never computes what it renders.
 
 Everything else — resolution, fetching, hashing, compiling, packaging, publishing, auditing,
-import/export, git-source materialization — is served by the engine (which forks workers for the
+import/export, git-source materialization — is served by the engine (which forks plugins for the
 truly heavy lifting) over the existing wire protocol.
 
 Dependency rule at end-state: `:cli` depends on `:model` (+ the future thin `jk-api` client
@@ -56,7 +56,7 @@ compile).
   request/event vocabulary. The protocol stays version-locked to the binary (no compat shims)
   until a second front-end needs stability — same policy as docs/engine.md.
 - **Memory ceilings are already enforced** (client 128 MiB / engine 256 MiB, SerialGC everywhere);
-  migrating a verb into the engine must respect the 256 MiB budget or delegate to a worker.
+  migrating a verb into the engine must respect the 256 MiB budget or delegate to a plugin.
 
 ## Staged plan
 
@@ -96,7 +96,7 @@ jk (client image, :cli:nativeCompile, -Os; 26.9 MiB on linux/amd64 — see docs/
 ├── :model          jk-api: domain currency, Pipeline/Step event types, CliCommand model, TestSummary,
 │                   MinimalXml (keeps java.xml/Xerces — ~3.7 MiB of image — off this classpath)
 ├── :core           jk.toml/jk.lock parse+edit, GlobalConfig, LibraryCatalog, deny policy,
-│                   ModuleOrder (shared topo-sort), SourceLayout, WorkerTunings,
+│                   ModuleOrder (shared topo-sort), SourceLayout, PluginTunings,
 │                   Versions/DependencyTree/Provenance (offline lock walkers, still package
 │                   build.jumpkick.resolver)
 ├── :client-io      http (3 classes) · forge (device-flow auth) · credential stores ·
@@ -109,7 +109,7 @@ jk (client image, :cli:nativeCompile, -Os; 26.9 MiB on linux/amd64 — see docs/
 ├── :engine-api     the wire contract: EngineProtocol codec, EnginePaths/EngineTransport,
 │                   WorkspaceRequest/Result, ModulePlan/ModuleOutcome, ExplainPlan, BuildPlan,
 │                   BuildForecast, HostedEvents, WorkspaceBuildListener, CachePruneScheduler,
-│                   WorkerJarNotFoundException
+│                   PluginJarNotFoundException
 └── :plugin-api     Ndjson codec
 
 ~/.jk/lib/jk-engine-<version>.jar (the engine: a JVM app on the jk-managed JDK, never a native
@@ -117,7 +117,7 @@ image; :cli-engine:shadowJar) — additionally links
 └── :cli-engine     EngineMain (the engine JVM's main), PosixDetach,
                     InProcessEngineImpl (the seam below), the JVM dist (installDist), and the
                     relocated CLI test suite
-    ├── :engine     EngineServer + BuildService/pipeline factories + pipeline/tasks/workers
+    ├── :engine     EngineServer + BuildService/pipeline factories + pipeline/tasks/plugin
     ├── :toolchain  resolver-backed tool installs, compat/import machinery
     ├── :resolver   PubGrub + orchestrators
     └── :io         repo/Maven machinery, transports, effective POMs
@@ -138,7 +138,7 @@ helpers). The client-side seam is the `build.jumpkick.cli.engine.InProcessEngine
 
 Because the tests' in-process dispatch needs the full kernel, the CLI test suite moved to
 `:cli-engine` wholesale (same packages; the self-host `cli-engine/jk.toml` carries the
-`test-worker-jars` list that used to live in `cli/jk.toml`).
+`test-plugin-jars` list that used to live in `cli/jk.toml`).
 
 **Wire vocabulary added by the cut** (the two residues that had kept engine code on the client):
 

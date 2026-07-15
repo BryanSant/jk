@@ -20,7 +20,7 @@ import java.util.HexFormat;
  * <ol>
  *   <li>{@value #VERSION} — format version prefix; change to bust all stamps when the key schema
  *       evolves.
- *   <li>Config descriptor — newline-delimited summary of style, versions, flags, and the worker JAR
+ *   <li>Config descriptor — newline-delimited summary of style, versions, flags, and the plugin jar
  *       SHA (which captures OpenRewrite + Spotless versions).
  *   <li>Raw file bytes — the exact content that was determined clean.
  * </ol>
@@ -53,7 +53,7 @@ final class FormatStamp {
 
     /**
      * Build the stable config descriptor from all formatter parameters. Each field that could change
-     * the formatted output of a file contributes a line. The worker-JAR SHA captures the OpenRewrite
+     * the formatted output of a file contributes a line. The plugin-jar SHA captures the OpenRewrite
      * + Spotless versions in one token.
      */
     static String configDescriptor(
@@ -85,7 +85,7 @@ final class FormatStamp {
     }
 
     /**
-     * Read the formatter worker JAR's own SHA-256 from the embedded resource written by the build.
+     * Read the formatter plugin jar's own SHA-256 from the embedded resource written by the build.
      * This captures the exact OpenRewrite + Spotless versions bundled in the fat JAR — any dependency
      * upgrade changes this value and automatically busts all existing stamps.
      */

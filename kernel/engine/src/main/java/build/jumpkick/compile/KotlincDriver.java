@@ -15,17 +15,17 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 /**
- * Drives Kotlin compilation by forking the {@code jk-kotlin-compiler} worker, which runs the Kotlin
+ * Drives Kotlin compilation by forking the {@code jk-kotlin-compiler} plugin, which runs the Kotlin
  * Build Tools API in-process on jk's own runtime (the project JDK rides as -jdk-home).
  *
- * <p>The worker is launched as {@code <javaHome>/bin/java -cp <workerClasspath>
+ * <p>The plugin is launched as {@code <javaHome>/bin/java -cp <workerClasspath>
  * build.jumpkick.kotlin.compiler.KotlinCompilerPlugin @<spec>}. It streams NDJSON back on stdout (each
  * line prefixed {@value #PROTOCOL_PREFIX}); we collect the diagnostics and the terminal result.
  * Replaces the former {@code <kotlin-home>/bin/kotlinc} subprocess.
  */
 public final class KotlincDriver {
 
-    /** Mirrors the worker's {@code Ndjson.PREFIX}. */
+    /** Mirrors the plugin's {@code Ndjson.PREFIX}. */
     private static final String PROTOCOL_PREFIX = "##JKKC:";
 
     private static final String WORKER_MAIN = "build.jumpkick.plugin.process.PluginMain";
@@ -44,7 +44,7 @@ public final class KotlincDriver {
     private KotlincResult run(KotlincRequest request) throws IOException, InterruptedException {
         Path spec = writeSpec(request);
         try {
-            // The worker is jk's OWN process: it runs on jk's runtime (workers are built at
+            // The plugin is jk's OWN process: it runs on jk's runtime (plugins are built at
             // jk's language level — class-file 69 — and must not be hostage to the project's
             // pinned JDK; requirements.md promises a 17+ project floor). The project JDK is an
             // INPUT: writeSpec passes it as kotlinc's -jdk-home so cross-compilation still
@@ -54,7 +54,7 @@ public final class KotlincDriver {
                     .map(Path::toString)
                     .collect(Collectors.joining(java.io.File.pathSeparator));
             List<String> rest = new ArrayList<>();
-            // AOT cache for the worker JVM (PluginAot): the Kotlin compiler IS this classpath, so
+            // AOT cache for the plugin process (PluginAot): the Kotlin compiler IS this classpath, so
             // the cache tames its multi-second JIT warmup. Mapped when one exists for (host JDK,
             // GC, classpath); else a background trainer compiles a synthetic hello.kt so the NEXT
             // kotlin build maps it. JVM flags, so they precede -cp.
@@ -73,7 +73,7 @@ public final class KotlincDriver {
 
             List<String> diagnostics = new ArrayList<>();
             String[] status = {null};
-            // Non-protocol lines (JDK/compiler chatter) are dropped on success, but a worker
+            // Non-protocol lines (JDK/compiler chatter) are dropped on success, but a plugin
             // that DIES before speaking protocol (a broken classpath, a JVM crash) leaves its
             // whole story there — keep a bounded tail and surface it on failure, or the build
             // fails with an empty diagnostic and no way to see why.
@@ -99,7 +99,7 @@ public final class KotlincDriver {
     }
 
     /**
-     * The AOT trainer's command line: the same worker spawn shape as {@link #run}, recording with
+     * The AOT trainer's command line: the same plugin spawn shape as {@link #run}, recording with
      * {@code -XX:AOTCacheOutput} while compiling a synthetic hello.kt against the triggering
      * request's own compile classpath (CAS entries are content-named, so there is no jar to hunt
      * for by name — but every real Kotlin compile already carries the version-matched

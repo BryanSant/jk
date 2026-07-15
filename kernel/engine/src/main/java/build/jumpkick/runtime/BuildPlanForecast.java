@@ -66,7 +66,7 @@ public final class BuildPlanForecast {
      * not consult them either. Otherwise a workspace whose tests were never run green (e.g. only
      * ever built with {@code --skip-tests}) forecasts every module as perpetually dirty — forcing a
      * full engine round-trip on a fully-cached build — and pays the test-stamp content hashing
-     * (main classes tree + every sibling/worker jar) for steps the build will not execute.
+     * (main classes tree + every sibling/plugin jar) for steps the build will not execute.
      */
     public static List<BuildPlan.Module> of(BuildGraph.Result graph, Cas cas, ActionCache actionCache, Path cache, boolean skipTests) {
         List<BuildPlan.Module> out = new ArrayList<>();

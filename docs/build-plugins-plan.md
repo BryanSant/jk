@@ -22,9 +22,9 @@ GENERICALLY (P6a, b12e609d):
 - `[packaging] artifact-extension`: a packager replaces the main artifact under its own
   extension (`target/lib/app-1.0.apk`); `exec-mode = "device"` names a non-host artifact —
   run/dev answer with the descriptor error pointing at the plugin's deploy command.
-- Worker-side finding (no SPI change): extension-judging tools (d8 `--lib`) need a
+- Plugin-side finding (no SPI change): extension-judging tools (d8 `--lib`) need a
   `.jar`-named alias of the extension-less cached blob — plugin-side link/copy, the same
-  quirk the Kotlin worker handles.
+  quirk the Kotlin plugin handles.
 
 Android Phase 1 (worktree-android-plugin) grew the SPI further, still generically:
 - `[[contribute.step-dependency]]` sources: `sdk-component`/`sdk-path` (a provisioned SDK
@@ -80,16 +80,16 @@ traditional-layout/Application main) stay client-side until P5's dynamic plugin 
 scaffold/import stayed manifest data — no ScaffoldSpec/ImportRule code hooks were needed.
 
 **Previous — P3** (ff5cd9f9..3ed652c4) — the steps/packagers SPI.
-StepSpec/PackagerSpec/BuildPluginContext + the BuildPluginHarness worker driver live in
+StepSpec/PackagerSpec/BuildPluginContext + the BuildPluginHarness plugin driver live in
 plugin-api (depends on :model alone); the engine learns registrations over a file-cached
-`describe` worker fork (key: jk+plugin versions, config, registration-visible facts — a
+`describe` plugin fork (key: jk+plugin versions, config, registration-visible facts — a
 fully-cached rebuild forks nothing) and drives `run-step`/`package` executions with action
 keys fingerprinting exactly the DECLARED inputs, restoring scratches/artifacts on hits so
 step bodies never learn the cache exists. `[packaging]` in the manifest is the packager's
 static artifact descriptor (exec-mode/self-contained/classes-run/main-scan/layered-image):
 run/install/image/aot-cache consult it with zero plugin code — every isSpringBoot() decision
 branch in BuildPipelines/ImagePipelines/ExecPlans is a descriptor check now. SpringAotRunner +
-BootJarPackager bodies moved into the plugins/spring-boot worker; the engine fetches
+BootJarPackager bodies moved into the plugins/spring-boot plugin; the engine fetches
 `[[contribute.packager-dependency]]` artifacts (loader, jarmode-tools) and renders the SBOM.
 Deliberate residue: jk dev's DevTools tier-2 injection stays hard-coded until RunShape (P7,
 §5); ProjectInfo's springBoot wire fields still read table presence (client wire compat);
@@ -106,7 +106,7 @@ engine-side: the parser's BOM injection (`withPlatformContributions`, user-decla
 wins), JavacLint's contributed-args lane (BuildPipelines + BuildPlanForecast against the same
 lock, so forecast keys match), and the Kotlin block (allopen unconditional, noarg gated on
 jakarta.persistence via classpath-has, `${kotlin.version}` lockstep with the compiler — the
-worker's .jar-suffix link quirk untouched downstream). `plugins/spring-boot/jk-plugin.toml`
+plugin's .jar-suffix link quirk untouched downstream). `plugins/spring-boot/jk-plugin.toml`
 is the single source of truth; kernel/core processResources bakes it in as the registry
 resource. Boot builds green through the full suite.
 P1 LANDED (2026-07-11, worktree branch `worktree-build-plugins`) — table routing
@@ -114,12 +114,12 @@ P1 LANDED (2026-07-11, worktree branch `worktree-build-plugins`) — table routi
 against their manifest's `[schema]` (`PluginTableRegistry` + built-in
 `spring-boot.jk-plugin.toml` resource in kernel/core) into generic `PluginConfig` values on
 `JkBuild.pluginConfigs` (`JkBuild.SpringBoot` deleted; typed reads via `SpringBootFacts`
-engine-side, which P3 dissolves into the plugin worker). `isSpringBoot()` remains as a
+engine-side, which P3 dissolves into the plugin). `isSpringBoot()` remains as a
 presence convenience until P3's capability checks. Unknown tables stay ignored in P1 — the
 "unowned table is an error" UX arrives with P5, when the installed set becomes user-visible.
 Required-key diagnostics keep hand-written quality via schema `example`/`hint` metadata.
 P2–P6 below remain.
-**Companions:** [plugin-refactor.md](./plugin-refactor.md) (the worker/process SPI — steps 0–6
+**Companions:** [plugin-refactor.md](./plugin-refactor.md) (the plugin process SPI — steps 0–6
 done), [spring-boot-plan.md](./spring-boot-plan.md) (the capability inventory this SPI must
 carry), [android-plan.md](./android-plan.md) (the stress-test consumer).
 
@@ -136,7 +136,7 @@ importer, scaffolder). Repeat that for `[micronaut]`, `[quarkus]`, `[android]`,
 
 - A plugin **owns a table** (`[spring-boot]`, `[android]`) — schema, validation, defaults.
 - A plugin **shapes the build** through declarative contributions and, where code is
-  unavoidable, isolated worker steps.
+  unavoidable, isolated plugin steps.
 - The **spring-boot plugin ships with jk** (we maintain it) and is the blueprint third
   parties copy. Most of Boot's value already landed as *general* jk capabilities (dev
   scopes, BOMs, main-class scan, SBOM, layered images, `--aot-cache`); what remains is
@@ -183,13 +183,13 @@ Two observations drive the whole design:
 
 ## 3. Design
 
-### 3.1 Two layers: declarative manifest + worker code
+### 3.1 Two layers: declarative manifest + plugin code
 
 A build plugin is one jar containing:
 
 ```
 jk-plugin.toml                      ← the declarative layer (parsed by jk, no plugin code runs)
-META-INF/services/build.jumpkick.plugin.BuildPlugin   ← the code layer (runs in a worker JVM)
+META-INF/services/build.jumpkick.plugin.BuildPlugin   ← the code layer (runs in a plugin process)
 ```
 
 **The declarative layer covers the easy 90%** and executes *zero plugin code in the
@@ -236,8 +236,8 @@ not an expression language: `classpath-has`, `config`, `native-declared`,
 `kotlin-project`. Anything conditional beyond these belongs in code — a tiny DSL that
 grows expressions is how build systems rot.
 
-**The code layer covers the hard 10%** and always runs in the plugin's forked worker JVM
-(the process SPI that already exists — `Plugin`/`PluginWorkerMain`/NDJSON protocol):
+**The code layer covers the hard 10%** and always runs in the plugin's forked process
+(the process SPI that already exists — `Plugin`/`PluginMain`/NDJSON protocol):
 
 ```java
 public interface BuildPlugin {
@@ -257,7 +257,7 @@ public interface BuildPluginContext {
     void nativeImage(NativeShape s); // row 8: extra classpath dirs, image args
     void scaffold(ScaffoldSpec s);   // row 9: templates for `jk new --<id>`
     void importer(ImportRule rule);  // row 10: foreign-build construct → table/config
-    void command(VerbSpec spec);        // row 11: a new command, worker-executed
+    void command(VerbSpec spec);        // row 11: a new command, plugin-executed
 }
 ```
 
@@ -274,7 +274,7 @@ ctx.step(StepSpec.named("spring-aot")
     .outputs(Out.dir("aot/classes"), Out.dir("aot/resources"))  // relative to a jk-owned scratch
     .contributesClasses("aot/classes")        // folded into packaging + native classpath
     .contributesResources("aot/resources")
-    .run(exec -> exec.java()                  // runs IN THE PLUGIN WORKER
+    .run(exec -> exec.java()                  // runs IN THE PLUGIN PROCESS
         .classpath(exec.in().runtimeClasspath())
         .mainClass("org.springframework.boot.SpringApplicationAotProcessor")
         .args(...)));
@@ -317,10 +317,10 @@ special cases generalize (an APK descriptor would declare `execMode: device`).
   contributions apply in-engine. A table with no owning plugin is an error naming the
   known tables ("`[micronaut]` is not owned by any installed plugin — add it under
   `[plugins]`").
-- **Code hooks execute in the plugin's worker JVM** over the existing spec-file/NDJSON
+- **Code hooks execute in the plugin process** over the existing spec-file/NDJSON
   protocol (steps and packagers each get a spec: resolved input paths in, output paths +
   structured events out). The engine never classloads third-party code — same isolation
-  and the same trust posture as today's workers, plus the `jk trust` model for
+  and the same trust posture as today's plugins, plus the `jk trust` model for
   third-party plugin coordinates.
 - **Caching of the plugin itself:** manifest contributions are keyed by (plugin id,
   version, config) — they participate in action keys automatically, so bumping a plugin
@@ -349,10 +349,10 @@ publishing — a build plugin decorates the pipeline, it does not replace the ke
    hard-coded versions in JkBuildParser/BuildPipelines). The noarg classpath condition and
    `${config.version}` interpolation are the acceptance tests.
    *Exit: `plugins/spring-boot/` exists holding only `jk-plugin.toml`; Boot builds byte-identical.*
-3. **P3 — Steps + packagers.** `StepSpec`/`PackagerSpec` in `plugin-api`; worker-side
+3. **P3 — Steps + packagers.** `StepSpec`/`PackagerSpec` in `plugin-api`; plugin-side
    `BuildPluginContext` runtime; phases wired into `BuildPipelines`; artifact descriptors
    replace the Run/Install/Image/AotCache branches. Move `SpringAotRunner` and
-   `BootJarPackager` bodies into the spring-boot plugin worker.
+   `BootJarPackager` bodies into the spring-boot plugin.
    *Exit: engine has no Boot-specific code; the boot jar is produced by the plugin;
    caching behavior unchanged (same rebuild triggers as today).*
 4. **P4 — Scaffold + import + commands.** `jk new --<plugin-id>` templates and importer
@@ -360,7 +360,7 @@ publishing — a build plugin decorates the pipeline, it does not replace the ke
    `VerbSpec` for plugin commands.
    *Exit: `jk new --spring`, `jk import` of a Boot build work purely via the plugin.*
 5. **P5 — Third-party resolution + trust** (= plugin-refactor Phase 7). `[plugins]`
-   coordinates → resolve → SHA in `jk.lock` → worker-only execution + `jk trust` gating.
+   coordinates → resolve → SHA in `jk.lock` → plugin-only execution + `jk trust` gating.
    Authoring guide: `docs/authoring-plugins.md` (the blueprint walkthrough of
    `plugins/spring-boot`).
    *Exit: a third-party hello-world table plugin runs from a published coordinate.*
@@ -398,7 +398,7 @@ Android Phase 3 (release) additions — all generic, none Android-special-cased:
   `variant-axis` (+ `built-in`, `default`, `dimensioned` for flavor dimensions);
   `Variants.apply` folds the selection into ONE flat effective config at parse time, so
   describe keys, contribution predicates, step/packager action keys,
-  `[[packaging.variant]]`, and worker specs are all variant-correct with zero variant
+  `[[packaging.variant]]`, and plugin specs are all variant-correct with zero variant
   awareness. The selection rides requests as a compact selector
   (`EngineProtocol.withVariant` — the jvm-tuning suffix pattern); `jk build --release`.
 - **Secrets side channel**: `secret = true` sub-schema keys + `env:` indirection resolve
@@ -417,8 +417,8 @@ Android Phase 3 (release) additions — all generic, none Android-special-cased:
 - **Manifest DSL creep.** The closed predicate set will attract feature requests
   ("just one more condition"). The answer is always "write a code hook" — the manifest
   stays boring on purpose.
-- **Worker round-trips for steps.** An Android build chains 5–6 steps; per-step JVM forks
-  could hurt. Mitigation: one worker JVM per plugin per build (steps multiplex over the
+- **Plugin round-trips for steps.** An Android build chains 5–6 steps; per-step JVM forks
+  could hurt. Mitigation: one plugin process per plugin per build (steps multiplex over the
   protocol), which the process SPI already supports in spirit.
 - **Two-plugin composition** (spring-boot + jib-extras both touching packaging): first
   version rules — one packager may replace the main artifact; contributions otherwise

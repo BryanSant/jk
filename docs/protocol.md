@@ -50,8 +50,8 @@ point for session state, applied to every hosted request:
 
 - `variant` — the build-variant selector (`release|tier=free`).
 - `env` — client-resolved env values for `env:`-indirected plugin config (flat map).
-- `jvmMaxRam` / `jvmGc` / `jvmStringDedup` / `jvmArgs` — worker-JVM tuning; because the
-  envelope is universal, `--jvm-arg`/`JK_JVM_*` apply to every verb that forks workers.
+- `jvmMaxRam` / `jvmGc` / `jvmStringDedup` / `jvmArgs` — plugin-process tuning; because the
+  envelope is universal, `--jvm-arg`/`JK_JVM_*` apply to every verb that forks plugins.
 
 An empty envelope leaves the request line byte-identical.
 

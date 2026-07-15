@@ -178,7 +178,7 @@ final class ShrunkJarPackager {
         return String.format(java.util.Locale.ROOT, "%.1f MB", bytes / 1_000_000.0);
     }
 
-    // Local copy by design: worker plugins stay dependency-free of jk's kernel modules.
+    // Local copy by design: plugins stay dependency-free of jk's kernel modules.
     private static void deleteRecursively(Path root) throws IOException {
         if (!Files.exists(root)) return;
         try (Stream<Path> walk = Files.walk(root)) {

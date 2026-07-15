@@ -25,8 +25,8 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * The {@code jk-image-builder} worker: the terminal {@link ImageExtension} goal for OCI images. Its
- * worker entry ({@link #run}) reads the engine's spec, assembles an {@link ImageContext} from the
+ * The {@code jk-image-builder} plugin: the terminal {@link ImageExtension} goal for OCI images. Its
+ * plugin entry ({@link #run}) reads the engine's spec, assembles an {@link ImageContext} from the
  * finished module (main jar + runtime closure + {@code [image]} settings), and hands it to {@link
  * #image}, which drives {@link ImageBuilder} (Jib) to a tarball, the local daemon, or a registry.
  *

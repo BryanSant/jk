@@ -41,7 +41,7 @@ import java.util.Map;
 /**
  * The shared {@code jk image} pipeline — the full build pipeline (compile → test → package) plus the
  * OCI tail: an image-plan step that resolves the merged {@code [image]} config, and a write-image
- * step that either forks the {@code jk-image-builder} (Jib) worker or, in Dockerfile mode, shells
+ * step that either forks the {@code jk-image-builder} (Jib) plugin or, in Dockerfile mode, shells
  * out to {@code docker}/{@code podman} — hoisted out of the CLI so the resident engine can host the
  * command (Wave 2 of {@code docs/architecture/slim-client.md}) while the command's test-only
  * in-process path builds the exact same pipeline.
@@ -190,7 +190,7 @@ public final class ImagePipelines {
                     // Packaging cache — tarball only. A registry push is a network
                     // side-effect (the remote's state is unknown), so it's never skipped.
                     // The tarball is a pure function of the main jar, the dependency jars,
-                    // the main class, the image config, and the image-builder worker version.
+                    // the main class, the image config, and the image-builder plugin version.
                     ActionCache ac = new ActionCache(new Cas(cache), cache.resolve("actions"));
                     boolean useCache = tarballPath != null
                             && !SessionContext.current().config().rebuildOr(false);
@@ -443,7 +443,7 @@ public final class ImagePipelines {
 
     /**
      * Auto-detect the local container runtime by probing {@code docker} then {@code podman} on
-     * {@code PATH}. Falls back to {@code "docker"} if neither responds — the worker will fail with a
+     * {@code PATH}. Falls back to {@code "docker"} if neither responds — the plugin will fail with a
      * clear error in that case rather than silently choosing wrong.
      */
     private static String detectDockerExecutable() {

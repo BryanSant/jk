@@ -30,7 +30,7 @@ import org.junit.platform.engine.discovery.DiscoverySelectors;
  * </ol>
  *
  * <p>Exit codes: 0 = success, 1 = at least one test failed, 2 = arg/engine error. The wire
- * protocol on stdout matches the schema described in {@link EventType}; lines without the worker's
+ * protocol on stdout matches the schema described in {@link EventType}; lines without the plugin's
  * protocol prefix are user test output and pass through to the parent's stdout.
  */
 public final class TestRunnerPlugin implements Plugin {

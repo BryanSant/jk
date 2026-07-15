@@ -17,9 +17,9 @@ import java.util.List;
 
 /**
  * Resolves the Kotlin Build Tools API <em>implementation</em> closure — the jars the {@code
- * :kotlin-compiler} worker needs on its classpath at runtime ({@code kotlin-build-tools-impl} plus
+ * :kotlin-compiler} plugin needs on its classpath at runtime ({@code kotlin-build-tools-impl} plus
  * its transitive {@code -api}, {@code compiler-embeddable}, {@code kotlinx-coroutines}, …). The
- * worker is compiled against only the tiny stable API; everything else is fetched here,
+ * plugin is compiled against only the tiny stable API; everything else is fetched here,
  * version-matched to the Kotlin the build targets.
  *
  * <p>Unlike {@link CompileToolchain#resolveKotlinHome} — which provisions a pre-built {@code
@@ -41,7 +41,7 @@ public final class KotlinBtaResolver {
 
     /**
      * Resolve and fetch the Build Tools API impl closure for {@code kotlinVersion}, returning the
-     * local jar paths (in the CAS) for the worker's classpath.
+     * local jar paths (in the CAS) for the plugin's classpath.
      *
      * @param repos the repositories to resolve against (build via {@link RepoGroupBuilder#buildFor},
      *     so project mirrors / credentials apply)
@@ -87,7 +87,7 @@ public final class KotlinBtaResolver {
 
     /**
      * Resolve (and fetch into the CAS) the version-matched {@code kotlin-stdlib} jar. It must go on
-     * the <em>compilation</em> classpath: the worker runs the compiler in-process with no Kotlin
+     * the <em>compilation</em> classpath: the plugin runs the compiler in-process with no Kotlin
      * distribution, so — unlike the old {@code kotlinc} — nothing auto-supplies the stdlib. The
      * caller pairs this with {@code -no-stdlib}. Already in the CAS after {@link #resolveClasspath}
      * (stdlib is part of the closure), so this is a cache hit, not a download.
@@ -103,7 +103,7 @@ public final class KotlinBtaResolver {
     }
 
     /**
-     * Guard the 2.4.0 floor: the worker drives the Build Tools API through its {@code
+     * Guard the 2.4.0 floor: the plugin drives the Build Tools API through its {@code
      * KotlinToolchains} entry point, which does not exist before 2.4.0.
      */
     static void requireSupportedVersion(String version) {

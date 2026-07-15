@@ -19,13 +19,13 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * The shared compat-bridge worker drivers — {@code jk import}'s conversion pipeline and {@code jk mvn}/
+ * The shared compat-bridge plugin drivers — {@code jk import}'s conversion pipeline and {@code jk mvn}/
  * {@code jk gradle}'s distribution provisioning — hoisted out of the CLI so the resident engine can
  * host them (Wave 2 of {@code docs/architecture/slim-client.md}) while the commands' test-only
  * in-process paths run the exact same code.
  *
  * <p>Import is a single-step pipeline streaming plain {@code wrote}/{@code note} strings through the
- * {@link NoteObserver}; the worker's exit code is a <em>result</em> (carried on {@link #EXIT}), not
+ * {@link NoteObserver}; the plugin's exit code is a <em>result</em> (carried on {@link #EXIT}), not
  * a pipeline failure. Provisioning is a plain one-shot call — no pipeline, no events, just a {@link
  * Provision} outcome — because the passthrough <em>exec</em> of the provisioned tool (which needs
  * the client's inherited stdio/terminal) stays client-side by design.
@@ -34,27 +34,27 @@ public final class CompatPipelines {
 
     private CompatPipelines() {}
 
-    /** Receives each import progress note ({@code kind} = {@code wrote}/{@code note}) as the worker streams it. */
+    /** Receives each import progress note ({@code kind} = {@code wrote}/{@code note}) as the plugin streams it. */
     public interface NoteObserver {
         void onNote(String kind, String text);
     }
 
-    /** The import worker's exit code (0 = converted cleanly). */
+    /** The import plugin's exit code (0 = converted cleanly). */
     public static final PipelineKey<Integer> EXIT = PipelineKey.of("import-exit", Integer.class);
 
-    /** The import worker's reported issue count (rendered as "Import notes: N issue(s)"). */
+    /** The import plugin's reported issue count (rendered as "Import notes: N issue(s)"). */
     public static final PipelineKey<Integer> WARNINGS = PipelineKey.of("import-warnings", Integer.class);
 
-    /** The import worker's terminal error text, if any. */
+    /** The import plugin's terminal error text, if any. */
     public static final PipelineKey<String> ERROR = PipelineKey.of("import-error", String.class);
 
-    /** The worker's passthrough chatter, kept only when it exited non-zero. */
+    /** The plugin's passthrough chatter, kept only when it exited non-zero. */
     public static final PipelineKey<String> DIAG = PipelineKey.of("import-diag", String.class);
 
     /**
      * Build the import pipeline. All paths arrive absolute (the command pre-flighted source detection
-     * and overwrite checks); {@code report} may be {@code null}. Locates the worker jar eagerly, so
-     * a missing worker fails here with side-load instructions rather than mid-pipeline.
+     * and overwrite checks); {@code report} may be {@code null}. Locates the plugin jar eagerly, so
+     * a missing plugin fails here with side-load instructions rather than mid-pipeline.
      */
     public static Pipeline importPipeline(
             Path source,
@@ -112,7 +112,7 @@ public final class CompatPipelines {
     public record Provision(String bin, String version, String source, String error, int exit, String diag) {}
 
     /**
-     * Provision a Maven/Gradle distribution via the compat-bridge worker: link a discovered install
+     * Provision a Maven/Gradle distribution via the compat-bridge plugin: link a discovered install
      * or download one, and return its launcher path. Non-interactive by construction — the exec of
      * the provisioned tool is the caller's business.
      */

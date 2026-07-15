@@ -25,9 +25,9 @@ import java.util.Optional;
 /**
  * The engine side of the build-plugin code layer (build-plugins plan §3.2/3.3): learns a plugin's
  * registered steps/packager over the {@code describe} protocol (file-cached per config+facts, so
- * fully-cached builds never fork), writes execution specs, and forks the plugin's worker jar per
+ * fully-cached builds never fork), writes execution specs, and forks the plugin's jar per
  * step/package run. The engine never classloads plugin code — declarations and executions both
- * cross the spec-file/NDJSON worker boundary.
+ * cross the spec-file/NDJSON plugin boundary.
  *
  * <p>Static artifact shape ({@code [packaging]}) deliberately does NOT come through here — it is
  * manifest data, readable by run/install/image plan requests without any fork ({@link #shape}).
@@ -144,7 +144,7 @@ public final class PluginBuild {
 
     /**
      * The plugin's registered declarations for this project. Registration runs plugin code, so it
-     * happens in the worker ({@code describe}); the answer is a pure function of (jk version,
+     * happens in the plugin ({@code describe}); the answer is a pure function of (jk version,
      * plugin version, config, registration-visible facts), so it is cached in a content-keyed file
      * under the module's target dir — a fully-cached rebuild reads the file and forks nothing.
      */
@@ -407,7 +407,7 @@ public final class PluginBuild {
     /**
      * The production classpath a step sees ({@code In.runtimeClasspath()}): lockfile RUNTIME jars
      * + workspace sibling jars (and their transitive RUNTIME deps). The module's own classes dir
-     * is NOT included — the worker adds {@code exec.classesDir()} itself.
+     * is NOT included — the plugin adds {@code exec.classesDir()} itself.
      */
     public static List<Path> productionClasspath(Path projectDir, Path cache, Path lockFile, JkBuild project)
             throws IOException {
@@ -582,7 +582,7 @@ public final class PluginBuild {
 
         /**
          * A resolved secret (signing credentials): package specs only — never describe or step
-         * specs, never action-key plaintext (the key carries a digest), never echoed by workers.
+         * specs, never action-key plaintext (the key carries a digest), never echoed by plugins.
          */
         public SpecWriter secret(String key, String value) {
             lines.add("{\"t\":\"secret\",\"key\":" + Ndjson.quote(key) + ",\"value\":"
@@ -605,7 +605,7 @@ public final class PluginBuild {
 
     /**
      * The jar a plugin's code hooks fork: first-party plugins name a registered {@link PluginJar};
-     * a third-party plugin IS its worker — the [plugins]-declared, lock-pinned, SHA-verified jar
+     * a third-party plugin IS its jar — the [plugins]-declared, lock-pinned, SHA-verified jar
      * from the CAS — and it forks only once its coordinate is trusted (plugin-refactor Posture A:
      * the engine refuses untrusted third-party code with the {@code jk trust plugin} remediation).
      */
@@ -623,7 +623,7 @@ public final class PluginBuild {
                     + " has no matching [plugins] declaration — declare it (or run `jk sync`)");
         }
         // The trust file lives in the machine's state dir; the sysprop is the test seam,
-        // exactly like the jk.<worker>.jar properties the worker registry uses.
+        // exactly like the jk.<worker>.jar properties the plugin registry uses.
         String stateOverride = System.getProperty("jk.trust.state.dir");
         Path stateDir = stateOverride != null ? Path.of(stateOverride) : build.jumpkick.util.JkDirs.state();
         build.jumpkick.tool.TrustedPlugins trust;
@@ -690,8 +690,8 @@ public final class PluginBuild {
     }
 
     /**
-     * Fork the plugin's worker on the spec and collect its protocol lines. Throws with the
-     * worker's own error message when it reports one (or exits non-zero without reporting).
+     * Fork the plugin on the spec and collect its protocol lines. Throws with the
+     * plugin's own error message when it reports one (or exits non-zero without reporting).
      */
     public static List<String> runWorker(Active active, Path cache, Path spec, java.util.function.Consumer<String> onLabel)
             throws IOException, InterruptedException {

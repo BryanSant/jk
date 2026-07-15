@@ -165,7 +165,7 @@ public final class JkBuildParser {
         if (!kotlinPlugins.isEmpty()) {
             build = new JkBuild.Build(
                     build.orderAfter(),
-                    build.testWorkerJars(),
+                    build.testPluginJars(),
                     build.lint(),
                     kotlinPlugins,
                     build.kspOptions(),
@@ -1408,7 +1408,7 @@ public final class JkBuildParser {
      * <ul>
      *   <li>{@code order-after} — workspace modules (by project name or {@code group:artifact}) that
      *       must build before this one, with no classpath/lockfile edge.
-     *   <li>{@code test-worker-jars} — workspace modules whose built worker jar is handed to this
+     *   <li>{@code test-plugin-jars} — workspace modules whose built worker jar is handed to this
      *       module's test JVM via {@code -Djk.<worker>.plugin.jar}.
      *   <li>{@code lint} — defaults {@code true}; set {@code false} to suppress javac lint flags.
      * </ul>
@@ -1428,14 +1428,14 @@ public final class JkBuildParser {
                 if (!s.isBlank()) orderAfter.add(s);
             }
         }
-        List<String> testWorkerJars = new ArrayList<>();
-        TomlArray twj = build.getArray("test-worker-jars");
+        List<String> testPluginJars = new ArrayList<>();
+        TomlArray twj = build.getArray("test-plugin-jars");
         if (twj != null) {
             for (int i = 0; i < twj.size(); i++) {
                 Object val = twj.get(i);
                 if (!(val instanceof String s))
-                    throw new JkBuildParseException("[build].test-worker-jars must be an array of strings");
-                if (!s.isBlank()) testWorkerJars.add(s);
+                    throw new JkBuildParseException("[build].test-plugin-jars must be an array of strings");
+                if (!s.isBlank()) testPluginJars.add(s);
             }
         }
         // `lint` defaults on (surface deprecation/unchecked); `lint = false`
@@ -1466,7 +1466,7 @@ public final class JkBuildParser {
                 extraSrc.add(s);
             }
         }
-        return new JkBuild.Build(orderAfter, testWorkerJars, lint, List.of(), kspOptions, extraSrc);
+        return new JkBuild.Build(orderAfter, testPluginJars, lint, List.of(), kspOptions, extraSrc);
     }
 
     /**

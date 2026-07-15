@@ -42,7 +42,7 @@ public final class JvmOptions {
     public static final String DEFAULT_GC = "default";
 
     /**
-     * Default collector for jk-OWNED batch forks — compilers (javac, kotlinc, KSP, the AP worker)
+     * Default collector for jk-OWNED batch forks — compilers (javac, kotlinc, KSP, the AP plugin)
      * and plugin tools (audit, image, publish, format, git). Pure throughput work with no user-code
      * semantics riding on the collector, so the classic batch collector wins: measured on a
      * single-file javac fork with a mapped AOT cache, parallel 155ms vs G1 164ms. Test workers
@@ -318,8 +318,8 @@ public final class JvmOptions {
     /**
      * Assemble a worker JVM command line: {@code javaExe}, then the tuning flags ({@link
      * #workerFlags}), then {@code rest} (e.g. {@code -cp <jar> Main <spec>}). For forks not driven by
-     * {@link build.jumpkick.engine.plugin.PluginLoader} — the compiler/git workers and the CLI's standalone
-     * worker commands.
+     * {@link build.jumpkick.engine.plugin.PluginLoader} — the compiler/git plugins and the CLI's standalone
+     * plugin commands.
      */
     public static List<String> javaCommand(String javaExe, int concurrency, List<String> rest) {
         List<String> cmd = new ArrayList<>();

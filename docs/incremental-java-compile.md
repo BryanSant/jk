@@ -7,18 +7,18 @@
 > RETIRED with it (the classes no longer exist). The rest of this document is the design
 > record.
 
-**Status:** In progress — phased. Phases 1 (ASM dirty-set, no worker) and 3
+**Status:** In progress — phased. Phases 1 (ASM dirty-set, no plugin) and 3
 (classpath ABI snapshots) are DONE; phase 2 (source-generating-AP incrementality)
-has its engine core done through slice 3b (worker + provenance + arity gate),
+has its engine core done through slice 3b (plugin + provenance + arity gate),
 pending pipeline activation (PROCESSOR-scope plumbing). This doc defines how jk
 gains a robust incremental Java compiler, modelled on what we learned building the
-Kotlin incremental worker (Build Tools API). javac always performs the actual
+Kotlin incremental plugin (Build Tools API). javac always performs the actual
 compilation; the incremental layer only decides **which sources to hand javac**
 and **carries the rest over**.
 
 **Scope:** the compile-main / compile-test Java path in `BuildPipelines` (and the
 `IncrementalCompiler` seam it already exposes). Out of scope: replacing javac,
-cross-module workspace incrementality, and the existing Kotlin worker (covered
+cross-module workspace incrementality, and the existing Kotlin plugin (covered
 in `kotlin-incremental-bta-decision`, the project memory).
 
 ---
@@ -58,10 +58,10 @@ today via `SubprocessJavacStrategy`.
 | Classpath ABI snapshots | ASM-extracted ABI snapshot per classpath jar (mirror the snapshot cache built for Kotlin) |
 | ABI-level granularity (body change ≠ dependent recompile) | per-class **ABI hash** (public/protected signature only) |
 | Minimal recompile + carry the rest | `IncrementalCompile.run` already carries over from CAS |
-| In-process compiler under a worker JVM | the `jk-java-compiler` worker (see §4) |
+| In-process compiler under a plugin JVM | the `jk-java-compiler` plugin (see §4) |
 
 **The crucial inversion vs Kotlin:** the Kotlin compiler *provides* its
-incremental engine (BTA), and needed a worker only because it isn't in the JDK.
+incremental engine (BTA), and needed a plugin only because it isn't in the JDK.
 javac *is* in the project's JDK, but provides *no* incremental engine — so the
 new work is the dirty-set analysis, not "driving a compiler."
 
@@ -69,18 +69,18 @@ new work is the dirty-set analysis, not "driving a compiler."
 
 ## 3. The design is one hybrid, not two competing options
 
-Earlier discussion framed an "ASM, no worker" Option A vs a "JavacTask worker"
+Earlier discussion framed an "ASM, no plugin" Option A vs a "JavacTask plugin"
 Option B. The production-grade answer (this is essentially Gradle's design) is a
 **single hybrid**, and the pieces *layer*:
 
-- **Execution:** javac in-process in a worker JVM under the project's JDK.
+- **Execution:** javac in-process in a plugin JVM under the project's JDK.
 - **Dependency graph + ABI hashing:** ASM bytecode analysis of the produced
   classes — the durable analysis engine, reused regardless of execution.
 - **Source-generating-AP incrementality:** the compiler's `Filer` /
   `RoundEnvironment` (only observable in-process).
 
 The ASM analysis engine is a **permanent component**, not a throwaway. The only
-discarded idea is "subprocess javac, no worker" as the *execution* choice.
+discarded idea is "subprocess javac, no plugin" as the *execution* choice.
 ~70% of the work is **option-agnostic and built once**:
 
 - change detection (content-hash diff vs prior snapshot),
@@ -91,29 +91,29 @@ discarded idea is "subprocess javac, no worker" as the *execution* choice.
 
 ---
 
-## 4. Execution: the `jk-java-compiler` worker
+## 4. Execution: the `jk-java-compiler` plugin
 
-A child-JVM worker that runs **under the project's JDK** and invokes javac
+A child-JVM plugin that runs **under the project's JDK** and invokes javac
 in-process via `javax.tools.ToolProvider.getSystemJavaCompiler()` /
 `com.sun.source.util.JavacTask`. This mirrors `:kotlin-compiler` exactly and
-reuses the now-proven worker infrastructure:
+reuses the now-proven plugin infrastructure:
 
 - Module `:java-compiler`, `compileOnly` nothing exotic (javac is in the JDK);
   manifest `Main-Class`, a line-oriented spec, `##JKJC:` NDJSON back to jk.
 - Located via **CAS-by-SHA** with a `-Djk.java.plugin.jar` override
-  (`JkWorkerSync` already syncs from `~/.m2` after `publishToMavenLocal`; add the
+  (`JkPluginSync` already syncs from `~/.m2` after `publishToMavenLocal`; add the
   third artifact). `installLocalCas` for the dev loop.
 
-**Why in-process javac (a worker), not subprocess:**
+**Why in-process javac (a plugin), not subprocess:**
 
 1. `Filer`/`RoundEnvironment` for source-generating-AP incrementality (§6) — only
    available in-process.
 2. Warm compiler across recompiles (no JVM spawn per build).
 3. Native-image jk has no JDK, so an in-process compiler must run somewhere with a
-   JDK — i.e. a worker under the project JDK (same reason the Kotlin worker exists).
+   JDK — i.e. a plugin under the project JDK (same reason the Kotlin plugin exists).
 
 The dependency graph + ABI can still be derived by **ASM bytecode analysis of the
-output** inside the worker (Gradle does exactly this even with in-process javac);
+output** inside the plugin (Gradle does exactly this even with in-process javac);
 a `TaskListener`-based source-level graph is a later precision option, not
 required.
 
@@ -230,10 +230,10 @@ in-tree example of a processor whose handling we must get right.
   unchanged case before any analysis (3-tier model, same as Kotlin:
   `.jstamp` → action-cache CAS restore → incremental recompile).
 - **Classpath ABI snapshots:** reuse the snapshot-cache pattern from
-  `KotlinBtaResolver`/the Kotlin worker — ASM-extract each dependency jar's public
+  `KotlinBtaResolver`/the Kotlin plugin — ASM-extract each dependency jar's public
   API so a dep change recompiles only affected sources rather than everything.
-- **Worker plumbing:** `JkWorkerSync`, `installLocalCas`, the `writeWorkerSha`
-  resource pattern, the `-D…worker.jar` override — extend to a third worker.
+- **Plugin plumbing:** `JkPluginSync`, `installLocalCas`, the `writeWorkerSha`
+  resource pattern, the `-D…worker.jar` override — extend to a third plugin.
 
 ---
 
@@ -247,25 +247,25 @@ in-tree example of a processor whose handling we must get right.
 - **`lombok.config` / annotation-processor-path / javac-args changes:** global
   inputs → full rebuild (already part of the action key).
 - **Cross-language modules:** a Java↔Kotlin module wants each side's ABI snapshot
-  to feed the other's dirty set. Both workers producing comparable ABI snapshots
+  to feed the other's dirty set. Both plugins producing comparable ABI snapshots
   makes this composable later; not in initial scope.
 
 ---
 
 ## 9. Phasing
 
-1. **Shared ASM core — DONE (no worker needed).** `ClassAbi` + `ClassDependencies`
+1. **Shared ASM core — DONE (no plugin needed).** `ClassAbi` + `ClassDependencies`
    (ASM) and `build.jumpkick.task.JavaIncrementalCompile` (the precise multi-pass
    orchestrator chosen in §5 — a sibling to `KotlinCompile`, not the single-pass
    seam) using the **existing subprocess javac**; the analysis runs in jk's
-   process on the output bytecode, so phase 1 needs no worker. Wired into
+   process on the output bytecode, so phase 1 needs no plugin. Wired into
    `compile-java`. Delivers precise incremental for plain Java **and Lombok**
    (Lombok output is in-bytecode → ASM sees it). Constants handled conservatively.
    **Source removals are incremental** (DONE): a removed source's classes are
    deleted and the referencers of the now-vanished classes recompile (surfacing any
    dangling reference); a removed *constant holder* — persisted via `ClassFacts.constants`
    — falls back to recompiling the remaining sources, since its inliners have no
-   bytecode edge. The worker arrives in phase 2 only because `Filer` incrementality
+   bytecode edge. The plugin arrives in phase 2 only because `Filer` incrementality
    requires in-process javac.
 2. **Source-generating-AP incrementality.** `Filer`/`RoundEnvironment`
    isolating/aggregating tracking, gated on orphan-class detection. Unlocks
@@ -276,27 +276,27 @@ in-tree example of a processor whose handling we must get right.
      Validated with a real processor. The hard, novel core.
    - **Slice 2 — DONE.** `JavaCompilerWorker` (main + line-oriented spec +
      `##JKJC:` NDJSON: diagnostics / provenance / result), ServiceLoader-discovering
-     processors from the processor path. Packaged like the other workers
+     processors from the processor path. Packaged like the other plugins
      (`maven-publish` `build.jumpkick:jk-java-compiler`, `installLocalCas`, runtime
-     `writeJavaWorkerSha`, `JkWorkerSync` 3rd entry, `JavaWorkerSetup` locator —
+     `writeJavaWorkerSha`, `JkPluginSync` 3rd entry, `JavaWorkerSetup` locator —
      no impl closure needed). `jk sync` pulls it from `~/.m2`.
-   - **Slice 3a — DONE.** `WorkerJavac` launcher (engine): runs the worker
+   - **Slice 3a — DONE.** `ForkedJavac` launcher (engine): runs the plugin
      subprocess, parses the `##JKJC:` NDJSON into `(success, diagnostics,
-     generated→originating)`. Validated end-to-end against the real worker jar.
+     generated→originating)`. Validated end-to-end against the real plugin jar.
    - **Slice 3b — ENGINE CORE DONE.** `JavaIncrementalCompile` integration. A
-     private `Compiler` seam routes javac (subprocess vs `WorkerJavac`), selected by
+     private `Compiler` seam routes javac (subprocess vs `ForkedJavac`), selected by
      a per-project `java-ap.json` flag `{sourceGenAps, isolating}`. **Detection** is
      the orphan signal: the plain-javac build sees a generated `.class` with no
      provenance → flips `sourceGenAps` on → the *next* build routes through the
-     worker (which captures provenance). Lombok (in-bytecode, no generated `.java`)
-     never trips it, so it never needs the worker. **Attribution + arity gate:**
+     plugin (which captures provenance). Lombok (in-bytecode, no generated `.java`)
+     never trips it, so it never needs the plugin. **Attribution + arity gate:**
      `analyze()` maps a generated `.class` → generated `.java` (SourceFile attr) →
      originating source via provenance; exactly-1 originator → isolating (fold into
-     the dirty-set/ABI graph); >1 → aggregating → FULL via the worker (a subset
-     compile would stale the aggregate). Worker mode goes incremental only when the
+     the dirty-set/ABI graph); >1 → aggregating → FULL via the plugin (a subset
+     compile would stale the aggregate). Plugin mode goes incremental only when the
      prior build was isolating; carried-over generated classes are recognised via
      prior-units paths (not treated as orphans). Conservative-on-doubt — worst case
-     "less incremental," never stale. Tested against the real worker
+     "less incremental," never stale. Tested against the real plugin
      (`JavaApIncrementalCompileTest`): isolating detect→establish→incremental (proven
      via an output sentinel) + never-stale; aggregating classified + stays full.
      **Pipeline activation — DONE.** The PROCESSOR scope (previously a stub, dropped
@@ -308,7 +308,7 @@ in-tree example of a processor whose handling we must get right.
      `JavaIncrementalCompile.run`. Non-AP builds are unaffected (empty processor path
      → no `ApSetup`). Not yet exercised at the dist level with a real processor (jk's
      path-deps are local *projects*, not arbitrary jars); validated at the engine seam
-     against the real worker. `compile-test` is still non-AP.
+     against the real plugin. `compile-test` is still non-AP.
 3. **Classpath ABI snapshots — DONE.** `JavaClasspathAbi` snapshots each cp
    entry's per-class ABI (+ inlinable-constant flag); per-jar cached by CAS sha,
    directory entries scanned fresh (so a mixed module's Kotlin output dir is
@@ -317,8 +317,8 @@ in-tree example of a processor whose handling we must get right.
    `referencers(changedDepClasses)` into the dirty set — a dependency bump
    recompiles only affected sources instead of forcing a full rebuild
    (conservative when a changed dep inlines constants).
-4. **Worker packaging.** Publish `jk-java-compiler` to mavenLocal; extend
-   `JkWorkerSync`; CAS-by-SHA location; `installLocalCas`.
+4. **Plugin packaging.** Publish `jk-java-compiler` to mavenLocal; extend
+   `JkPluginSync`; CAS-by-SHA location; `installLocalCas`.
 5. *(optional)* **`TaskListener` source-level dependency graph** if ASM bytecode
    precision proves insufficient (e.g. finer-grained than class-level).
 
@@ -328,8 +328,8 @@ in-tree example of a processor whose handling we must get right.
 
 - ABI-hash granularity: class-level (simple, slightly over-recompiles) vs
   module-level (precise, more state). Start class-level.
-- Worker lifecycle: one-shot per compile vs a persistent daemon (warm javac across
+- Plugin lifecycle: one-shot per compile vs a persistent daemon (warm javac across
   builds). Start one-shot; daemon is a later perf lever (shared with the Kotlin
-  worker's deferred daemon question).
+  plugin's deferred daemon question).
 - Test compilation (`compile-test`) reuses the same planner with the main output
   on the classpath — confirm the dirty-set closure spans main→test correctly.

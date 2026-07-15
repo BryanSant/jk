@@ -27,7 +27,7 @@ app, GitHub Action). Pre-1.0: breaking changes are welcome; no back-compat shims
   │  PipelineListener event stream   BuildStep + Worker SPIs   domain model (Coordinate, …)  │
   └──────────────────────────────────────────────────────────────────────────────────┘
      ▲
-  engine (BuildService impl: scheduler, pipeline, tasks)  ── forks ──▶  plugin workers
+  engine (BuildService impl: scheduler, pipeline, tasks)  ── forks ──▶  plugins
      │
   toolchain · resolver · io · core · model
 ```
@@ -40,13 +40,13 @@ Rules:
   effective: `ScopedValue` bindings don't propagate to the shared `JkThreads.io()` worker pool, so
   scoped multi-tenant isolation across the engine's async dispatch needs `StructuredTaskScope` /
   per-task rebinding (a logged follow-up). The accepted shared *concurrency primitives*
-  (`WorkerSlots`, `TEST_GATE`, `HeapPlan.heapPlan`) and the bind-once `SessionCancel` DI seam are not
+  (`PluginSlots`, `TEST_GATE`, `HeapPlan.heapPlan`) and the bind-once `SessionCancel` DI seam are not
   request data. See `re-foundation-gaps.md` §L7.
 - **Front-ends never reach into engine internals** — only `jk-api` (`BuildService` + DTOs + events).
 - **CLI-local presentation state is allowed** (`Theme.active`, glyph choice, ANSI): it is client-side
   and per-process; a web/IDE client brings its own presentation and never links it.
 - One coherent SPI for "a thing that does build work" (`BuildStep`), and one for out-of-process tools
-  (`WorkerClient`). No dead/aspirational contracts.
+  (`PluginClient`). No dead/aspirational contracts.
 
 ## Module layering (current, extended)
 
@@ -61,7 +61,7 @@ Rules:
 - **M1 — Session + de-globalize the kernel.** New `Session` (core) carrying `{JkConfig, workingDir,
   cacheDir, jdksDir, jvm settings, jdk/graal selection, output sink, cancel token}`. Thread through
   `BuildPipelines.Inputs`/`StepContext`. Remove kernel globals: `ActiveConfig` (core/io/engine reads),
-  `JvmOptions.processSettings/heapPlan`, `WorkerSlots` static, `BuildPipelines.TEST_GATE/parallelTests`,
+  `JvmOptions.processSettings/heapPlan`, `PluginSlots` static, `BuildPipelines.TEST_GATE/parallelTests`,
   `jk.jdk`/`jk.graal` system properties, `Quietable`'s `System.setOut`. Move `JvmOptions.Settings`
   (value) to `core`; the JVM-applying logic stays in `engine`. `GlobalCancel` becomes a cooperative
   per-session token (CLI keeps a process-level Ctrl-C handler that signals it).
@@ -76,7 +76,7 @@ Rules:
 - **M3 — BuildStep SPI.** Promote `coreBuilder`'s inline step-body lambdas to `BuildStep` classes
   (Strategy + Template-Method); `coreBuilder` becomes an assembler. Delete the dead
   `PluginContext.contribute`/`Plugin#register` or make it the in-process face of `BuildStep`.
-- **M4 — Worker SPI + adapters.** Typed `WorkerClient<Req,Res>` owning locate(`WorkerJar`) + spec
+- **M4 — Worker SPI + adapters.** Typed `PluginClient<Req,Res>` owning locate(`PluginJar`) + spec
   codec + launch(`PluginLoader`) + demux(prefix from manifest) + exit→result. Standardize the worker
   result envelope + one spec codec in `plugin-api`. Bridge java/kotlin compiler stacks
   (`CompilerWorker`). `IdeSdkRegistrar` SPI + move `Intellij*` out of `kernel/toolchain`. De-duplicate
@@ -114,8 +114,8 @@ Branch: `refoundation`. Every commit below is green (`./gradlew :cli:test`).
   - `Scope.canonical()`/`tomlSection()` precomputed into enum fields; `GlobalConfig` memoizes
     `~/.jk/config.toml` per `(path,size,mtime)`.
   - **M5a** `Hashing` consolidation: added `newDigest`/`hex`/`hashHex`; routed the hand-rolled
-    `MessageDigest`/hex copies (`JkWorkerSync`, `SigV4Signer`, publisher `Checksums`, `M2CompatWriter`,
-    `JdkInstaller`, `TestStamp`) through it. Shaded worker plugins left isolated.
+    `MessageDigest`/hex copies (`JkPluginSync`, `SigV4Signer`, publisher `Checksums`, `M2CompatWriter`,
+    `JdkInstaller`, `TestStamp`) through it. Shaded plugins left isolated.
   - **M5b** single currency for locked artifacts: `Lockfile.Artifact` gained `moduleGroup()`/
     `moduleArtifact()`/`coordinate()` + `checksumHex()`/`sourcesChecksumHex()`; migrated the manual
     `name` splits + `sha256:` strips in `CacheSync`, `ClasspathResolver`, `LockOrchestrator`,
@@ -136,12 +136,12 @@ Branch: `refoundation`. Every commit below is green (`./gradlew :cli:test`).
     readable path; deleted `JkBuild`'s 4–10-arg rungs and `Project`'s 10/12-arg rungs (kept the two/one
     genuinely-clear positional shortcuts). Migrated all callers preserving exact semantics.
     - *Observed latent smell (not fixed — out of scope):* `WorkspaceMerge`'s merged `JkBuild` drops the
-      module's `[build]` (orderAfter/testWorkerJars/lint) and `[format]` blocks (the old 9-arg rung set
+      module's `[build]` (orderAfter/testPluginJars/lint) and `[format]` blocks (the old 9-arg rung set
       them null). Preserved faithfully; worth a deliberate follow-up if merged modules should keep them.
 
 **M1c — kernel globals onto `Session` (essentially done)**
 The mutable global *channels that carry request data* now live on `Session` (each a green commit):
-- `JvmOptions.processSettings`/`setProcessSettings` → `Session.jvm` (`WorkerTuning`, moved to core).
+- `JvmOptions.processSettings`/`setProcessSettings` → `Session.jvm` (`PluginTuning`, moved to core).
 - `jk.jdk`/`jk.graal` `System.setProperty` → `Session.jdkSpec`/`graalSpec`; toolchain readers read it.
 - `BuildPipelines.parallelTests`/`setParallelTests` → `Session.parallelTests`.
 - **`ActiveConfig` deleted** — it had been a shim over `SessionContext.current().config()` since M1a;
@@ -152,7 +152,7 @@ The mutable global *channels that carry request data* now live on `Session` (eac
   `StepContext`/`PipelineListener`, never `System.out`).
 
 **M1c remainder (deferred — shared primitives; documented)**
-- `WorkerSlots.slots` and `BuildPipelines.TEST_GATE` — shared *concurrency primitives* (not request
+- `PluginSlots.slots` and `BuildPipelines.TEST_GATE` — shared *concurrency primitives* (not request
   data). Correct as per-invocation for the single-process CLI; per-session pools are server-hardening
   (a per-build engine context or a `ScopedValue`), not a data-leak fix.
 - Leaf `refresh`/`rerun` reads (`restore/storePackaged`, `artifactFresh`, `TestSupport`,
@@ -197,7 +197,7 @@ The mutable global *channels that carry request data* now live on `Session` (eac
 - **M3 — Step SPI + dead-code removal (DONE)** —
   - Deleted the dead `PluginContext` SPI (`project()`/`workDir()`/`contribute(Step)`/`config()`): it
     described an in-process `Plugin#register` model that never existed — `Plugin` has only
-    `manifest()`/`run()`, every plugin runs as a forked worker, and nothing called `contribute()`.
+    `manifest()`/`run()`, every plugin runs as a forked process, and nothing called `contribute()`.
     The real composable-step SPI is `Step`/`Step.Body` + typed `PipelineKey` context; a separate
     `BuildStep` type would be redundant indirection over `Step.Body`.
   - Decomposed `coreBuilder`'s ~1000-line monolith: its 12 inline step bodies (which captured a
@@ -219,19 +219,19 @@ The mutable global *channels that carry request data* now live on `Session` (eac
     `IdeSdkRegistrar` *interface* was judged premature: only IntelliJ registers SDKs today (VS Code
     uses `settings.json` runtimes, a structurally different path) — introduce it if a second registrar
     lands.
-  - **Done — `WorkerClient` SPI + standardized envelope.** Established the canonical envelope: every
-    protocol line is `{"t":"<type>", ...}` with `t:"result"` the terminal outcome (8/9 workers already
+  - **Done — `PluginClient` SPI + standardized envelope.** Established the canonical envelope: every
+    protocol line is `{"t":"<type>", ...}` with `t:"result"` the terminal outcome (8/9 plugins already
     matched; only the test runner's richer `"e"` pull-protocol differs, kept as a documented exception).
-    Added `WorkerClient` — a fluent host driver over `WorkerProcess` that splits the stream by `"t"` and
+    Added `PluginClient` — a fluent host driver over `PluginProcess` that splits the stream by `"t"` and
     dispatches each type to a registered handler (`.on("diag", …).on("result", …).run(cmd)`). Migrated
-    all 9 one-shot launch sites off the hand-rolled fork+read+`switch(t)`: `GitFetcher`, `WorkerJavac` +
+    all 9 one-shot launch sites off the hand-rolled fork+read+`switch(t)`: `GitFetcher`, `ForkedJavac` +
     `KotlincDriver` (the **CompilerWorker bridge** — both compilers now share the client + `diag`/`result`
-    envelope), and the CLI `Publish`/`Format`/`Audit`/`Image`/`Import`/`Mvn` workers. `PluginLoader.command`
-    made public so callers build the command and drive it via `WorkerClient`. Also fixed 3 worker emit
+    envelope), and the CLI `Publish`/`Format`/`Audit`/`Image`/`Import`/`Mvn` plugins. `PluginLoader.command`
+    made public so callers build the command and drive it via `PluginClient`. Also fixed 3 worker emit
     sites that concatenated dynamic paths/refs into JSON without escaping (routed through `Ndjson.quote`).
     Verified by `nativeCompile` + installed-binary smoke (build/test/format/publish paths). The
     test-runner (`JUnitLauncher`) stays on `PluginLoader` directly — its stateful 10-event pull-protocol
-    would be higher risk than value to reshape; `WorkerClient` already supports it (`converse` + custom
+    would be higher risk than value to reshape; `PluginClient` already supports it (`converse` + custom
     discriminator) if desired later.
 - **M6 — API module + CLI facades (PARTIALLY DONE)** —
   - **Done — unreachable parent `run()` removed:** the 7 group verbs (`jk export/repo/jdk/library/

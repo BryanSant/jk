@@ -10,7 +10,7 @@ import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
 /**
- * Host-side driver for a forked plugin worker. Launches the command, splits the worker's NDJSON
+ * Host-side driver for a forked plugin. Launches the command, splits the plugin's NDJSON
  * protocol stream ({@code ##PREFIX:{...}}) by its message-type discriminator, and dispatches each
  * typed message to a registered handler — collapsing the fork + read-loop + {@code switch (t)} that
  * every launch site used to hand-roll directly over {@link PluginProcess}.
@@ -43,7 +43,7 @@ public final class PluginClient {
     private Consumer<String> onOther;
     private Consumer<String> passthrough;
 
-    /** A client for a worker using the canonical {@code "t"} discriminator and the given prefix. */
+    /** A client for a plugin using the canonical {@code "t"} discriminator and the given prefix. */
     public PluginClient(String prefix) {
         this(prefix, TYPE);
     }
@@ -84,7 +84,7 @@ public final class PluginClient {
 
     /**
      * Two-way pull protocol: each protocol message is delivered to {@code onMessage} with a {@link
-     * PluginProcess.Conversation} for sending commands back to the worker's stdin. The registered
+     * PluginProcess.Conversation} for sending commands back to the plugin's stdin. The registered
      * {@link #on} handlers are not used in this mode (the caller dispatches on the message itself).
      */
     public int converse(List<String> command, BiConsumer<String, PluginProcess.Conversation> onMessage)

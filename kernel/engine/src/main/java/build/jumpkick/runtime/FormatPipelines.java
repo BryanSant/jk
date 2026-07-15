@@ -30,12 +30,12 @@ import java.util.stream.Stream;
 /**
  * The shared {@code jk format} pipeline — collect Java/Kotlin sources, resolve the formatter
  * implementation jars through jk's own resolver into the CAS, and fork the {@code jk-formatter}
- * worker (Spotless + optional OpenRewrite) — hoisted out of the CLI so the resident engine can host
+ * plugin (Spotless + optional OpenRewrite) — hoisted out of the CLI so the resident engine can host
  * the command (Wave 2 of {@code docs/architecture/slim-client.md}) while the command's test-only
  * in-process path builds the exact same pipeline.
  *
  * <p>Per-file results stream through the {@link FileObserver} as plain structured strings — the
- * client renders (and themes) them. The worker's exit code is a <em>result</em>, not a failure:
+ * client renders (and themes) them. The plugin's exit code is a <em>result</em>, not a failure:
  * {@code --check} exits non-zero when files need formatting, so it rides the {@link #WORKER_EXIT}
  * key (and the wire's {@code pipeline-finish} variant) instead of failing the pipeline.
  */
@@ -43,7 +43,7 @@ public final class FormatPipelines {
 
     private FormatPipelines() {}
 
-    // jk-pinned formatter impl versions (resolved via jk; the worker uses these).
+    // jk-pinned formatter impl versions (resolved via jk; the plugin uses these).
     public static final String PALANTIR_VERSION = "2.80.0";
     public static final String GOOGLE_VERSION = "1.28.0";
     public static final String KTFMT_VERSION = "0.61";
@@ -60,7 +60,7 @@ public final class FormatPipelines {
             "--add-opens=jdk.compiler/com.sun.tools.javac.code=ALL-UNNAMED",
             "--add-opens=jdk.compiler/com.sun.tools.javac.comp=ALL-UNNAMED");
 
-    /** Receives each file's result as the worker streams it ({@code status} = {@code changed}/{@code clean}/{@code error}). */
+    /** Receives each file's result as the plugin streams it ({@code status} = {@code changed}/{@code clean}/{@code error}). */
     public interface FileObserver {
         void onFile(String path, String status, String message, int index, int total);
     }
@@ -77,8 +77,8 @@ public final class FormatPipelines {
      * Build the format pipeline for {@code projectDir}. Style names arrive already resolved (flags/env/
      * {@code [format]} block are the client's concern). Steps: {@code collect-sources} (SYNC) walks
      * the tree, {@code resolve-formatters} (IO) pulls the impl jars via {@link ToolResolver}, {@code
-     * format} (IO) forks the worker and streams per-file results. A project with no sources
-     * finishes successfully with {@link #TOTAL} = 0 and no worker forked.
+     * format} (IO) forks the plugin and streams per-file results. A project with no sources
+     * finishes successfully with {@link #TOTAL} = 0 and no plugin forked.
      */
     public static Pipeline formatPipeline(
             Path projectDir,
@@ -268,7 +268,7 @@ public final class FormatPipelines {
             w.configBool("optimizeImports", optimizeImports);
             if (rewriteConfig != null) w.configString("rewriteConfigFile", rewriteConfig.toAbsolutePath().toString());
         }
-        // Pass the cache root so the worker can read/write per-file format stamps.
+        // Pass the cache root so the plugin can read/write per-file format stamps.
         if (cacheDir != null) w.configString("cacheDir", cacheDir.toAbsolutePath().toString());
         Path spec = Files.createTempFile("jk-format-", ".spec");
         Files.write(spec, w.lines(), StandardCharsets.UTF_8);

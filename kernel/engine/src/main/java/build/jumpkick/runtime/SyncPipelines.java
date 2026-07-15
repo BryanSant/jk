@@ -232,9 +232,9 @@ public final class SyncPipelines {
                 })
                 .build();
 
-        // jk's own worker jars (test-runner, kotlin-compiler) — pulled from the
+        // jk's own plugin jars (test-runner, kotlin-compiler) — pulled from the
         // local Maven repo into the CAS so `jk test` / Kotlin builds find them by
-        // SHA. Best-effort: absent workers warn but don't fail the sync.
+        // SHA. Best-effort: absent plugins warn but don't fail the sync.
         Step syncWorkers = Step.builder(StepNames.SYNC_WORKERS)
                 .kind(StepKind.IO)
                 .requires(StepNames.PARSE_LOCK)
