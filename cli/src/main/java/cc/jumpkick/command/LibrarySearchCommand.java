@@ -77,8 +77,8 @@ public final class LibrarySearchCommand implements CliCommand {
                     name.toLowerCase(Locale.ROOT),
                     src.module().group().toLowerCase(Locale.ROOT),
                     src.module().artifact().toLowerCase(Locale.ROOT))) continue;
-            List<String> cached = new ArrayList<>(
-                    RepoArtifactStore.allVersions(cacheRoot, src.module().group(), src.module().artifact()));
+            List<String> cached = new ArrayList<>(RepoArtifactStore.allVersions(
+                    cacheRoot, src.module().group(), src.module().artifact()));
             cached.sort((a, b) -> Versions.compare(b, a));
             if (global.offline && cached.isEmpty()) continue;
             hits.add(new Hit(name, src, cached));

@@ -54,8 +54,39 @@ public record ProjectInfo(
 
     public static ProjectInfo error(String message) {
         return new ProjectInfo(
-                message, "", "", "", "", 0, false, "", true, false, "", List.of(), false, "", false, "DISABLED",
-                "", false, "", "", "", "", false, false, "", "", "", "", "", List.of(), "", "", List.of());
+                message,
+                "",
+                "",
+                "",
+                "",
+                0,
+                false,
+                "",
+                true,
+                false,
+                "",
+                List.of(),
+                false,
+                "",
+                false,
+                "DISABLED",
+                "",
+                false,
+                "",
+                "",
+                "",
+                "",
+                false,
+                false,
+                "",
+                "",
+                "",
+                "",
+                "",
+                List.of(),
+                "",
+                "",
+                List.of());
     }
 
     public String encode() {

@@ -25,8 +25,8 @@ import java.util.Objects;
  */
 public final class LibraryRegistryClient {
 
-    public static final URI DEFAULT_SOURCE = URI.create(
-            "https://raw.githubusercontent.com/jkbuild/jk-library-registry/refs/heads/main/libraries.toml");
+    public static final URI DEFAULT_SOURCE =
+            URI.create("https://raw.githubusercontent.com/jkbuild/jk-library-registry/refs/heads/main/libraries.toml");
 
     private final Http http;
 

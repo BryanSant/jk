@@ -48,7 +48,6 @@ public record PluginDescriptor(
                 : Collections.unmodifiableMap(new LinkedHashMap<>(subTables));
     }
 
-
     /**
      * One {@code [sub-tables.<name>]} declaration: a named nested-table group on the plugin's own
      * table ({@code [android.signing.<entry>]}), each entry validated against the referenced
@@ -62,8 +61,6 @@ public record PluginDescriptor(
             Objects.requireNonNull(schema, "schema");
         }
     }
-
-
 
     /**
      * The {@code [scaffold]} section (plan row 9 — pure data): what {@code jk new --<flag>}
@@ -134,7 +131,6 @@ public record PluginDescriptor(
             String deployCommand,
             List<Variant> variants) {
 
-
         /**
          * A config-conditional descriptor override ({@code [[packaging.variant]]} — an [android]
          * library packages an AAR while an app packages an APK): the first variant whose
@@ -154,8 +150,6 @@ public record PluginDescriptor(
             }
             return this;
         }
-
-
     }
 
     /**
@@ -189,9 +183,6 @@ public record PluginDescriptor(
             stepDependencies = stepDependencies == null ? List.of() : List.copyOf(stepDependencies);
             providedClasspath = providedClasspath == null ? List.of() : List.copyOf(providedClasspath);
         }
-
-
-
 
         public boolean isEmpty() {
             return platformDependencies.isEmpty()
@@ -230,7 +221,11 @@ public record PluginDescriptor(
      * <p>Fetch-only: never injected into the project's dependency graph.
      */
     public record StepDependency(
-            String artifact, String coordinate, boolean transitive, String sdkComponent, String sdkPath,
+            String artifact,
+            String coordinate,
+            boolean transitive,
+            String sdkComponent,
+            String sdkPath,
             Condition when) {
 
         public StepDependency(String artifact, String coordinate, Condition when) {
@@ -265,7 +260,6 @@ public record PluginDescriptor(
             kotlin = kotlin == null ? List.of() : List.copyOf(kotlin);
             ksp = ksp == null ? List.of() : List.copyOf(ksp);
         }
-
     }
 
     /**
@@ -305,9 +299,13 @@ public record PluginDescriptor(
      * so schema-driven validation keeps the hand-written diagnostics' quality.
      */
     public record SchemaKey(
-            String name, Type type, boolean required, Object defaultValue, String example, String hint,
+            String name,
+            Type type,
+            boolean required,
+            Object defaultValue,
+            String example,
+            String hint,
             boolean secret) {
-
 
         public enum Type {
             STRING,
@@ -321,15 +319,17 @@ public record PluginDescriptor(
                     case "bool" -> BOOL;
                     case "int" -> INT;
                     case "string-list" -> STRING_LIST;
-                    default -> throw new IllegalArgumentException(
-                            where + ": unknown schema type `" + raw + "` (string|bool|int|string-list)");
+                    default ->
+                        throw new IllegalArgumentException(
+                                where + ": unknown schema type `" + raw + "` (string|bool|int|string-list)");
                 };
             }
         }
 
         /** The default's runtime shape, normalized to the {@code PluginConfig} value vocabulary. */
         public Object normalizedDefault() {
-            if (defaultValue instanceof List<?> l) return List.copyOf(l.stream().map(String::valueOf).toList());
+            if (defaultValue instanceof List<?> l)
+                return List.copyOf(l.stream().map(String::valueOf).toList());
             return defaultValue;
         }
     }

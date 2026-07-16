@@ -97,14 +97,16 @@ class WorkspaceMergeTest {
                 "contentType",
                 null,
                 Map.of(
-                        "demo", new Variants.Value(
-                                List.of("src/demo/java"),
-                                Map.of(Scope.MAIN, List.of(dep("demo-only", "com.foo:demo-only", "1.0"))),
-                                Map.of()),
-                        "prod", new Variants.Value(
-                                List.of(),
-                                Map.of(Scope.MAIN, List.of(dep("prod-only", "com.foo:prod-only", "1.0"))),
-                                Map.of())))));
+                        "demo",
+                                new Variants.Value(
+                                        List.of("src/demo/java"),
+                                        Map.of(Scope.MAIN, List.of(dep("demo-only", "com.foo:demo-only", "1.0"))),
+                                        Map.of()),
+                        "prod",
+                                new Variants.Value(
+                                        List.of(),
+                                        Map.of(Scope.MAIN, List.of(dep("prod-only", "com.foo:prod-only", "1.0"))),
+                                        Map.of())))));
         JkBuild root = workspaceRoot("jk", List.of("app", "network"));
         JkBuild network = JkBuild.builder(new JkBuild.Project("cc.jumpkick", "network", "0.1.0", 0))
                 .variants(variants)

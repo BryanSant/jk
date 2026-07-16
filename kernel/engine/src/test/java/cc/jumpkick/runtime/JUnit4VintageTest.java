@@ -3,8 +3,8 @@ package cc.jumpkick.runtime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import cc.jumpkick.config.SessionContext;
 import cc.jumpkick.config.JkBuildParser;
+import cc.jumpkick.config.SessionContext;
 import cc.jumpkick.model.JkBuild;
 import cc.jumpkick.resolver.ResolveObserver;
 import cc.jumpkick.run.Pipeline;
@@ -90,6 +90,8 @@ class JUnit4VintageTest {
                 SessionContext.current());
         PipelineResult result = BuildPipelines.coreBuilder(in).build().run();
         assertThat(result.errors()).isEmpty();
-        assertThat(result.success()).as("JUnit4 test discovered and passed via vintage").isTrue();
+        assertThat(result.success())
+                .as("JUnit4 test discovered and passed via vintage")
+                .isTrue();
     }
 }

@@ -3,8 +3,8 @@ package cc.jumpkick.runtime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import cc.jumpkick.config.SessionContext;
 import cc.jumpkick.config.JkBuildParser;
+import cc.jumpkick.config.SessionContext;
 import cc.jumpkick.model.JkBuild;
 import cc.jumpkick.resolver.ResolveObserver;
 import cc.jumpkick.run.Pipeline;
@@ -108,9 +108,7 @@ class ShrinkPluginTest {
 
         // Behavioral: the shrunk jar actually runs — R8 kept the reachable closure.
         Process run = new ProcessBuilder(
-                        Path.of(System.getProperty("java.home"), "bin", "java").toString(),
-                        "-jar",
-                        jar.toString())
+                        Path.of(System.getProperty("java.home"), "bin", "java").toString(), "-jar", jar.toString())
                 .redirectErrorStream(true)
                 .start();
         String output = new String(run.getInputStream().readAllBytes());
@@ -120,7 +118,8 @@ class ShrinkPluginTest {
         // Structural: dead library code is gone; the app + used helpers survived.
         try (JarFile jf = new JarFile(jar.toFile())) {
             assertThat(jf.getJarEntry("com/example/slim/Main.class")).isNotNull();
-            assertThat(jf.getJarEntry("org/apache/commons/lang3/StringUtils.class")).isNotNull();
+            assertThat(jf.getJarEntry("org/apache/commons/lang3/StringUtils.class"))
+                    .isNotNull();
             assertThat(jf.getJarEntry("org/apache/commons/lang3/time/DateUtils.class"))
                     .as("unreferenced commons-lang3 code shrunk away")
                     .isNull();

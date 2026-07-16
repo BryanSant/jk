@@ -53,8 +53,7 @@ class AndroidKmpRedirectTest {
         // POM-only alias: no artifact bytes, classpath-inert, sync-skipped.
         assertThat(root.checksum()).isNull();
         assertThat(root.path()).isNull();
-        assertThat(root.deps())
-                .anyMatch(d -> d.startsWith("androidx.compose.runtime:runtime-annotation-android@"));
+        assertThat(root.deps()).anyMatch(d -> d.startsWith("androidx.compose.runtime:runtime-annotation-android@"));
 
         Lockfile.Artifact android = artifact(lockfile, "androidx.compose.runtime:runtime-annotation-android");
         assertThat(android.checksum()).startsWith("sha256:");
@@ -86,7 +85,8 @@ class AndroidKmpRedirectTest {
         Lockfile.Artifact root = artifact(lockfile, "androidx.compose.runtime:runtime-annotation");
         assertThat(root.checksum()).isNull();
         assertThat(root.deps()).anyMatch(d -> d.startsWith("androidx.compose.runtime:runtime-annotation-jvm@"));
-        assertThat(artifact(lockfile, "androidx.compose.runtime:runtime-annotation-jvm").checksum())
+        assertThat(artifact(lockfile, "androidx.compose.runtime:runtime-annotation-jvm")
+                        .checksum())
                 .startsWith("sha256:");
         assertThat(lockfile.artifacts())
                 .noneMatch(a -> a.name().equals("androidx.compose.runtime:runtime-annotation-android"));

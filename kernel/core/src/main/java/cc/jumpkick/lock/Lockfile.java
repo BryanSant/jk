@@ -72,8 +72,7 @@ public record Lockfile(
 
     /** This lock with the jk toolchain pin set. */
     public Lockfile withJk(JkToolchain toolchain) {
-        return new Lockfile(
-                version, generatedBy, resolutionAlgorithm, jdk, kotlin, artifacts, plugins, sdk, toolchain);
+        return new Lockfile(version, generatedBy, resolutionAlgorithm, jdk, kotlin, artifacts, plugins, sdk, toolchain);
     }
 
     /** Back-compat constructor without SDK entries. */

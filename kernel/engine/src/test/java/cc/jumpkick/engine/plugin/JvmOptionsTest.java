@@ -3,10 +3,11 @@ package cc.jumpkick.engine.plugin;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import cc.jumpkick.config.SessionContext;
 import cc.jumpkick.config.PluginTuning;
+import cc.jumpkick.config.SessionContext;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -36,7 +37,7 @@ class JvmOptionsTest {
     void default_flags_are_50_percent_and_the_jvms_own_collector() {
         // No -XX:+Use*GC and no dedup by default: workers ride the JVM's default collector
         // (G1 on server-class machines) — see the DEFAULT_GC javadoc for why ZGC was abandoned.
-        List<String> expected = new java.util.ArrayList<>(List.of("-XX:MaxRAMPercentage=50"));
+        List<String> expected = new ArrayList<>(List.of("-XX:MaxRAMPercentage=50"));
         expected.addAll(hardening(1));
         assertThat(JvmOptions.flags(PluginTuning.NONE, 1)).containsExactlyElementsOf(expected);
     }
@@ -50,7 +51,7 @@ class JvmOptionsTest {
     @Test
     void explicit_settings_win_and_extra_args_append() {
         PluginTuning s = new PluginTuning(70.0, "g1", false, List.of("-XX:+AlwaysPreTouch"));
-        List<String> expected = new java.util.ArrayList<>(List.of("-XX:MaxRAMPercentage=70", "-XX:+UseG1GC"));
+        List<String> expected = new ArrayList<>(List.of("-XX:MaxRAMPercentage=70", "-XX:+UseG1GC"));
         expected.addAll(hardening(1));
         expected.add("-XX:+AlwaysPreTouch");
         assertThat(JvmOptions.flags(s, 1)).containsExactlyElementsOf(expected);
@@ -60,7 +61,7 @@ class JvmOptionsTest {
     @Test
     void gc_none_emits_no_collector_and_no_dedup() {
         PluginTuning s = new PluginTuning(null, "none", true, List.of());
-        List<String> expected = new java.util.ArrayList<>(List.of("-XX:MaxRAMPercentage=50"));
+        List<String> expected = new ArrayList<>(List.of("-XX:MaxRAMPercentage=50"));
         expected.addAll(hardening(1));
         assertThat(JvmOptions.flags(s, 1)).containsExactlyElementsOf(expected);
     }
@@ -71,7 +72,11 @@ class JvmOptionsTest {
                 null,
                 "none",
                 null,
-                List.of("-XX:MaxMetaspaceSize=1g", "-XX:ActiveProcessorCount=2", "-Xss2m", "-XX:+CrashOnOutOfMemoryError"));
+                List.of(
+                        "-XX:MaxMetaspaceSize=1g",
+                        "-XX:ActiveProcessorCount=2",
+                        "-Xss2m",
+                        "-XX:+CrashOnOutOfMemoryError"));
         assertThat(JvmOptions.flags(s, 1))
                 .containsExactly(
                         "-XX:MaxRAMPercentage=50",
@@ -126,7 +131,7 @@ class JvmOptionsTest {
         try {
             // The CLI carries resolved tuning on the session; worker forks read it back.
             installTuning(new PluginTuning(80.0, "g1", false, List.of()));
-            List<String> expected = new java.util.ArrayList<>(List.of("-XX:MaxRAMPercentage=80", "-XX:+UseG1GC"));
+            List<String> expected = new ArrayList<>(List.of("-XX:MaxRAMPercentage=80", "-XX:+UseG1GC"));
             expected.addAll(hardening(1));
             assertThat(JvmOptions.workerFlags(1)).containsExactlyElementsOf(expected);
             // Concurrency still divides the resolved cap.
@@ -139,8 +144,7 @@ class JvmOptionsTest {
     @Test
     void absolute_flags_emit_xms_softmax_xmx_and_no_collector_by_default() {
         HeapPlan.Plan plan = new HeapPlan.Plan(4, 64L << 20, 512L << 20, 800L << 20, null);
-        List<String> expected =
-                new java.util.ArrayList<>(List.of("-Xms64m", "-Xmx800m", "-XX:SoftMaxHeapSize=512m"));
+        List<String> expected = new ArrayList<>(List.of("-Xms64m", "-Xmx800m", "-XX:SoftMaxHeapSize=512m"));
         expected.addAll(hardening(4)); // plan.parallelism() == 4
         assertThat(JvmOptions.absoluteFlags(plan, PluginTuning.NONE)).containsExactlyElementsOf(expected);
     }
@@ -149,7 +153,7 @@ class JvmOptionsTest {
     void absolute_flags_pin_zgc_with_uncommit_when_asked() {
         HeapPlan.Plan plan = new HeapPlan.Plan(4, 64L << 20, 512L << 20, 800L << 20, null);
         PluginTuning zgc = new PluginTuning(null, "zgc", null, List.of());
-        List<String> expected = new java.util.ArrayList<>(List.of(
+        List<String> expected = new ArrayList<>(List.of(
                 "-Xms64m",
                 "-Xmx800m",
                 "-XX:SoftMaxHeapSize=512m",
@@ -165,7 +169,7 @@ class JvmOptionsTest {
     void absolute_flags_skip_softmax_for_serial_gc() {
         HeapPlan.Plan plan = new HeapPlan.Plan(1, 64L << 20, 256L << 20, 256L << 20, null);
         PluginTuning serial = new PluginTuning(null, "none", false, List.of());
-        List<String> expected = new java.util.ArrayList<>(List.of("-Xms64m", "-Xmx256m"));
+        List<String> expected = new ArrayList<>(List.of("-Xms64m", "-Xmx256m"));
         expected.addAll(hardening(1)); // plan.parallelism() == 1; no SoftMaxHeapSize, no collector
         assertThat(JvmOptions.absoluteFlags(plan, serial)).containsExactlyElementsOf(expected);
     }

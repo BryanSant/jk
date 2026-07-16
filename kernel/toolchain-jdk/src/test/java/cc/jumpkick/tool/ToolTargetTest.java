@@ -38,7 +38,8 @@ class ToolTargetTest {
         assertThat(ToolTarget.classify("https://example.com/x/y/thing.git")).isInstanceOf(ToolTarget.Git.class);
         // Forge repo roots are clones, not downloads — with or without an embedded ref.
         assertThat(ToolTarget.classify("https://github.com/acme/widgets")).isInstanceOf(ToolTarget.Git.class);
-        assertThat(ToolTarget.classify("https://github.com/acme/widgets@v1.2.0")).isInstanceOf(ToolTarget.Git.class);
+        assertThat(ToolTarget.classify("https://github.com/acme/widgets@v1.2.0"))
+                .isInstanceOf(ToolTarget.Git.class);
     }
 
     @Test

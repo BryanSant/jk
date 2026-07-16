@@ -63,11 +63,12 @@ public final class CachePipelines {
                     try {
                         var ledger = cc.jumpkick.task.AccessLedger.atDefaultPath();
                         java.util.Map<String, Long> latest = ledger.latestByHash();
-                        var prunedVersions = cc.jumpkick.cache.VersionStore.current().prune(
-                                cc.jumpkick.model.JkVersion.VERSION,
-                                java.time.Duration.ofDays(30),
-                                key -> latest.getOrDefault(key, 0L),
-                                cc.jumpkick.util.JkDirs.state());
+                        var prunedVersions = cc.jumpkick.cache.VersionStore.current()
+                                .prune(
+                                        cc.jumpkick.model.JkVersion.VERSION,
+                                        java.time.Duration.ofDays(30),
+                                        key -> latest.getOrDefault(key, 0L),
+                                        cc.jumpkick.util.JkDirs.state());
                         for (String v : prunedVersions) ctx.warn("prune", "retired unused jk " + v);
                     } catch (java.io.IOException | RuntimeException ignored) {
                         // version sweep is best-effort maintenance
@@ -99,12 +100,13 @@ public final class CachePipelines {
                             }
                         }
                     }
-                    var runLogReport = cc.jumpkick.task.RunLogGc.sweep(root, cc.jumpkick.task.RunLogGc.DEFAULT_TTL, dryRun);
+                    var runLogReport =
+                            cc.jumpkick.task.RunLogGc.sweep(root, cc.jumpkick.task.RunLogGc.DEFAULT_TTL, dryRun);
                     totalFiles += runLogReport.deleted();
                     totalBytes += runLogReport.freedBytes();
 
-                    var formatStampReport =
-                            cc.jumpkick.task.FormatStampGc.sweep(root, cc.jumpkick.task.FormatStampGc.DEFAULT_TTL, dryRun);
+                    var formatStampReport = cc.jumpkick.task.FormatStampGc.sweep(
+                            root, cc.jumpkick.task.FormatStampGc.DEFAULT_TTL, dryRun);
                     totalFiles += formatStampReport.deleted();
                     totalBytes += formatStampReport.freedBytes();
 
@@ -219,9 +221,8 @@ public final class CachePipelines {
                     if (Files.isDirectory(actionsDir)) {
                         List<Path> moduleDirs = resolveModuleDirs(projectDir);
                         Set<String> tags = tagsFor(moduleDirs);
-                        List<String> prefixes = moduleDirs.stream()
-                                .map(p -> p.toString())
-                                .toList();
+                        List<String> prefixes =
+                                moduleDirs.stream().map(p -> p.toString()).toList();
                         Set<String> deletedTaskIds = new LinkedHashSet<>();
 
                         // 1) key records: match by qualified-task tag, or by an INPUT path under a module dir.
@@ -311,7 +312,8 @@ public final class CachePipelines {
     /** First {@code TASK <id>} line of an action record, or {@code null}. */
     private static String taskIdOf(String recordContent) {
         for (String line : recordContent.split("\n", -1)) {
-            if (line.startsWith("TASK ")) return line.substring("TASK ".length()).trim();
+            if (line.startsWith("TASK "))
+                return line.substring("TASK ".length()).trim();
         }
         return null;
     }
@@ -344,8 +346,8 @@ public final class CachePipelines {
      * or whose name is in {@code alsoDelete}. Handles both plain files (task pointers) and directory
      * trees (incremental state), accumulating {@code {files, bytes}} into {@code acc}.
      */
-    private static void deleteQualified(
-            Path dir, Set<String> tags, Set<String> alsoDelete, boolean dryRun, long[] acc) throws IOException {
+    private static void deleteQualified(Path dir, Set<String> tags, Set<String> alsoDelete, boolean dryRun, long[] acc)
+            throws IOException {
         if (!Files.isDirectory(dir)) return;
         try (var stream = Files.list(dir)) {
             for (Path child : (Iterable<Path>) stream::iterator) {
@@ -353,7 +355,8 @@ public final class CachePipelines {
                 if (!tags.contains(tagOf(name)) && !alsoDelete.contains(name)) continue;
                 if (Files.isDirectory(child)) {
                     try (var tree = Files.walk(child)) {
-                        List<Path> paths = tree.sorted(Comparator.reverseOrder()).toList();
+                        List<Path> paths =
+                                tree.sorted(Comparator.reverseOrder()).toList();
                         for (Path p : paths) {
                             if (Files.isRegularFile(p)) {
                                 acc[1] += Files.size(p);

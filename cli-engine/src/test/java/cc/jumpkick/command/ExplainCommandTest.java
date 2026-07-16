@@ -42,10 +42,9 @@ class ExplainCommandTest {
     /** A workspace-root jk.toml listing the given modules. */
     private static void workspace(Path dir, String... modules) throws IOException {
         Files.createDirectories(dir);
-        String mods = String.join(", ", Arrays.stream(modules).map(m -> '"' + m + '"').toList());
-        Files.writeString(
-                dir.resolve("jk.toml"),
-                """
+        String mods =
+                String.join(", ", Arrays.stream(modules).map(m -> '"' + m + '"').toList());
+        Files.writeString(dir.resolve("jk.toml"), """
                 [project]
                 group   = "com.example"
                 name    = "root"
@@ -53,8 +52,7 @@ class ExplainCommandTest {
 
                 [workspace]
                 modules = [%s]
-                """
-                        .formatted(mods));
+                """.formatted(mods));
     }
 
     private static String runExplainCapturingStdout(Path dir) {

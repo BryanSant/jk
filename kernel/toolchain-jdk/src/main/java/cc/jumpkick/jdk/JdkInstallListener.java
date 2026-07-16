@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.jdk;
 
-
 /**
  * Progress sink for {@link JdkService}'s non-interactive install pipeline. Every method is a no-op
  * by default, so a headless caller that only wants the {@link InstalledJdk} back can pass {@link

@@ -78,9 +78,8 @@ public final class ForkedJavac {
             // classpath travels in the spec, not on the plugin's classpath), so its own
             // jar is the whole classpath.
             boolean win = HostPlatform.isWindows();
-            Path javaExe = cc.jumpkick.jdk.JavaHomes.runningJavaHome()
-                    .resolve("bin")
-                    .resolve(win ? "java.exe" : "java");
+            Path javaExe =
+                    cc.jumpkick.jdk.JavaHomes.runningJavaHome().resolve("bin").resolve(win ? "java.exe" : "java");
             List<String> command = cc.jumpkick.engine.plugin.PluginLoader.command(
                     javaExe,
                     req.workerJar().toString(),

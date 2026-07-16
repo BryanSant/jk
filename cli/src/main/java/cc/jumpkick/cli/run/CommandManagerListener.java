@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.cli.run;
 
-import cc.jumpkick.plugin.build.Phase;
 import cc.jumpkick.cli.tui.CommandManager;
+import cc.jumpkick.plugin.build.Phase;
 import cc.jumpkick.run.PipelineListener;
 import cc.jumpkick.run.PipelineResult;
 import cc.jumpkick.run.PipelineView;
@@ -32,6 +32,7 @@ public final class CommandManagerListener implements PipelineListener {
     private final PrintStream out;
     /** May be {@code null} — use {@link #command} as the display name and dismiss on completion. */
     private final ConsoleSpec spec;
+
     private final String command;
     private final String module;
     private final List<Step> steps;
@@ -40,8 +41,7 @@ public final class CommandManagerListener implements PipelineListener {
     private CommandManager cm;
     private CommandManager.OutputScope capture;
 
-    public CommandManagerListener(
-            PrintStream out, ConsoleSpec spec, String module, List<Step> steps, boolean animate) {
+    public CommandManagerListener(PrintStream out, ConsoleSpec spec, String module, List<Step> steps, boolean animate) {
         this.out = out;
         this.spec = spec;
         this.command = spec != null ? spec.command() : module;
@@ -54,8 +54,7 @@ public final class CommandManagerListener implements PipelineListener {
      * No-spec constructor: uses {@code command} as the spinner display name and calls {@link
      * CommandManager#dismiss()} on completion so the caller can print its own result line.
      */
-    public CommandManagerListener(
-            PrintStream out, String command, String module, List<Step> steps, boolean animate) {
+    public CommandManagerListener(PrintStream out, String command, String module, List<Step> steps, boolean animate) {
         this.out = out;
         this.spec = null;
         this.command = command;

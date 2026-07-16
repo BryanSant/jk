@@ -48,12 +48,18 @@ public record CacheSnapshot(
         long maxBytes = configuredMaxBytes();
         long lastPruned = readLastPrunedMillis(cacheRoot);
         return new CacheSnapshot(
-                cas[0], cas[1],
-                actions[0], actions[1],
-                repos[0], repos[1],
-                runs[0], runs[1],
-                stamps[0], stamps[1],
-                maxBytes, lastPruned);
+                cas[0],
+                cas[1],
+                actions[0],
+                actions[1],
+                repos[0],
+                repos[1],
+                runs[0],
+                runs[1],
+                stamps[0],
+                stamps[1],
+                maxBytes,
+                lastPruned);
     }
 
     /** {files, bytes} of every regular file under {@code dir}; missing/unreadable → zeros. */

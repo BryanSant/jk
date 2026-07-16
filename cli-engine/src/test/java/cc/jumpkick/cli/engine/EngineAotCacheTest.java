@@ -47,8 +47,8 @@ class EngineAotCacheTest {
         Path base = EngineClient.aotCachePath(paths, jarA, temurin("25.0.3"));
         Path diffJar = EngineClient.aotCachePath(paths, jarB, temurin("25.0.3"));
         Path diffVersion = EngineClient.aotCachePath(paths, jarA, temurin("25.0.4"));
-        Path diffVendor =
-                EngineClient.aotCachePath(paths, jarA, new EngineJdk(Path.of("/opt/jdk"), JdkVendor.ORACLE_GRAALVM, "25.0.3"));
+        Path diffVendor = EngineClient.aotCachePath(
+                paths, jarA, new EngineJdk(Path.of("/opt/jdk"), JdkVendor.ORACLE_GRAALVM, "25.0.3"));
         Path noJdk = EngineClient.aotCachePath(paths, jarA, null);
 
         assertThat(base).isNotEqualTo(diffJar);
@@ -72,8 +72,8 @@ class EngineAotCacheTest {
         Path jar = jar(dir, "jk-engine-1.jar", "aaa");
 
         Path current = EngineClient.aotCachePath(paths, jar, temurin("25.0.3"));
-        Path currentMarker = current.resolveSibling(
-                current.getFileName().toString().replaceAll("\\.aot$", "") + ".noaot");
+        Path currentMarker =
+                current.resolveSibling(current.getFileName().toString().replaceAll("\\.aot$", "") + ".noaot");
         // A marker for the CURRENT key must survive; pre-create it and confirm.
         Files.writeString(currentMarker, "");
         EngineClient.aotCachePath(paths, jar, temurin("25.0.3")); // second call performs the sweep again
@@ -113,7 +113,8 @@ class EngineAotCacheTest {
 
     @Test
     void log_scan_detects_aot_markers(@TempDir Path dir) throws IOException {
-        assertThat(EngineClient.scanLogForAotError(write(dir, "a.log", "[0.0s][error][aot] boom\n"))).isTrue();
+        assertThat(EngineClient.scanLogForAotError(write(dir, "a.log", "[0.0s][error][aot] boom\n")))
+                .isTrue();
         assertThat(EngineClient.scanLogForAotError(
                         write(dir, "b.log", "Mismatched values for property jdk.module.addmods: ...\n")))
                 .isTrue();

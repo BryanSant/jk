@@ -16,9 +16,9 @@ import cc.jumpkick.jdk.JdkKeywords;
 import cc.jumpkick.jdk.JdkRegistry;
 import cc.jumpkick.jdk.JdkSelector;
 import cc.jumpkick.jdk.JdkSpec;
-import cc.jumpkick.model.command.Exit;
 import cc.jumpkick.model.command.Arity;
 import cc.jumpkick.model.command.CliCommand;
+import cc.jumpkick.model.command.Exit;
 import cc.jumpkick.model.command.Invocation;
 import cc.jumpkick.model.command.Opt;
 import cc.jumpkick.model.command.Param;
@@ -231,7 +231,8 @@ public final class JdkEnsureCommand implements CliCommand {
         String label = label(entry);
         long total = entry.archiveSize();
         InstalledJdk installed;
-        try (cc.jumpkick.cli.tui.JdkDownloadBar pb = cc.jumpkick.cli.tui.JdkDownloadBar.show(CliOutput.stdout(), label)) {
+        try (cc.jumpkick.cli.tui.JdkDownloadBar pb =
+                cc.jumpkick.cli.tui.JdkDownloadBar.show(CliOutput.stdout(), label)) {
             installed = installer.install(entry, bytes -> pb.update(bytes, total));
             pb.finish();
         }

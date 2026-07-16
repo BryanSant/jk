@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.runtime;
 
-import cc.jumpkick.model.Variants;
 import cc.jumpkick.cache.Cas;
 import cc.jumpkick.config.JkBuildParser;
 import cc.jumpkick.config.WorkspaceLoader;
@@ -10,6 +9,7 @@ import cc.jumpkick.jdk.JavaHomes;
 import cc.jumpkick.lock.Lockfile;
 import cc.jumpkick.lock.LockfileWriter;
 import cc.jumpkick.model.JkBuild;
+import cc.jumpkick.model.Variants;
 import cc.jumpkick.model.WorkspaceMerge;
 import cc.jumpkick.repo.RepoGroup;
 import cc.jumpkick.resolver.LockOrchestrator;
@@ -104,12 +104,12 @@ public final class LockFlow {
             return new Result(6, e.getMessage(), null, effective, moduleCount);
         }
         LockOrchestrator orchestrator = new LockOrchestrator(pathPrep.repos())
-                .withJvmEnvironment(
-                        cc.jumpkick.plugin.manifest.PluginContributions.jvmEnvironment(effective, dir));
+                .withJvmEnvironment(cc.jumpkick.plugin.manifest.PluginContributions.jvmEnvironment(effective, dir));
 
         Lockfile lock;
         try {
-            lock = orchestrator.lock(pathPrep.project(), cc.jumpkick.model.JkVersion.VERSION, features, !noDefaultFeatures);
+            lock = orchestrator.lock(
+                    pathPrep.project(), cc.jumpkick.model.JkVersion.VERSION, features, !noDefaultFeatures);
         } catch (IOException e) {
             return new Result(6, e.getMessage() + variantUnionHint(dir, parsed), null, effective, moduleCount);
         }
@@ -138,10 +138,9 @@ public final class LockFlow {
             // hint construction must never mask the real resolve error
         }
         if (lines.isEmpty()) return "";
-        StringBuilder b = new StringBuilder(
-                "\nnote: jk.lock resolves the UNION of every variant value's dependencies,"
-                        + "\nso this conflict may be between values that never build together — align their"
-                        + "\nversions across values (docs/variants.md → Locking). Overlays in play:");
+        StringBuilder b = new StringBuilder("\nnote: jk.lock resolves the UNION of every variant value's dependencies,"
+                + "\nso this conflict may be between values that never build together — align their"
+                + "\nversions across values (docs/variants.md → Locking). Overlays in play:");
         for (String line : lines) b.append("\n  ").append(line);
         return b.toString();
     }

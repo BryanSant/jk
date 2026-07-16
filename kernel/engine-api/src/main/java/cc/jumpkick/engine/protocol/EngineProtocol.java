@@ -68,7 +68,6 @@ public final class EngineProtocol {
      * is in progress). The client surfaces this as a clear "engine is shutting down" failure.
      */
 
-
     /** Client → server: start a workspace build (see {@link #buildRequest}). Owns the rest of the connection. */
     public static final String BUILD_REQUEST = "build-request";
 
@@ -609,8 +608,7 @@ public final class EngineProtocol {
      * releases and identity-less contexts; a jar sha prefix for -SNAPSHOT dev builds, so a
      * REBUILT dev engine is distinguishable from a stale one under the same version string.
      */
-    public static String helloAck(
-            String version, long pid, long startedAtMillis, boolean draining, String buildId) {
+    public static String helloAck(String version, long pid, long startedAtMillis, boolean draining, String buildId) {
         return "{\"t\":\""
                 + HELLO_ACK
                 + "\",\"version\":"
@@ -1476,13 +1474,12 @@ public final class EngineProtocol {
     }
 
     public static String editAck(boolean changed, String error) {
-        return "{\"t\":\"" + EDIT_ACK + "\",\"changed\":" + changed
-                + ",\"error\":" + Ndjson.quote(error) + "}";
+        return "{\"t\":\"" + EDIT_ACK + "\",\"changed\":" + changed + ",\"error\":" + Ndjson.quote(error) + "}";
     }
 
     public static String projectInfoRequest(String dir, String cache) {
-        return "{\"t\":\"" + PROJECT_INFO_REQUEST + "\",\"dir\":" + Ndjson.quote(dir)
-                + ",\"cache\":" + Ndjson.quote(cache) + "}";
+        return "{\"t\":\"" + PROJECT_INFO_REQUEST + "\",\"dir\":" + Ndjson.quote(dir) + ",\"cache\":"
+                + Ndjson.quote(cache) + "}";
     }
 
     public static String outdatedRequest(String dir, String cache, String repoUrl, boolean offline, boolean force) {
@@ -1495,8 +1492,7 @@ public final class EngineProtocol {
     }
 
     public static String execPlanRequest(
-            String dir, String cache, String kind, String mainOverride, String binName, String binDir,
-            String libDir) {
+            String dir, String cache, String kind, String mainOverride, String binName, String binDir, String libDir) {
         return "{\"t\":\"" + EXEC_PLAN_REQUEST + "\",\"dir\":" + Ndjson.quote(dir)
                 + ",\"cache\":" + Ndjson.quote(cache)
                 + ",\"kind\":" + Ndjson.quote(kind)
@@ -1521,8 +1517,6 @@ public final class EngineProtocol {
                 + quoteArray(errors)
                 + "}";
     }
-
-
 
     public static String explainDone(int maxReadyWidth, int moduleCount) {
         return "{\"t\":\""
@@ -1722,7 +1716,8 @@ public final class EngineProtocol {
         return diagnosticLike(WARN, dir, step, code, message, "", "");
     }
 
-    public static String errorLine(String dir, String step, String code, String message, String test, String exceptionClass) {
+    public static String errorLine(
+            String dir, String step, String code, String message, String test, String exceptionClass) {
         return diagnosticLike(ERROR_LINE, dir, step, code, message, test, exceptionClass);
     }
 
@@ -1746,7 +1741,8 @@ public final class EngineProtocol {
     }
 
     public static String pipelineFinish(String dir, boolean success) {
-        return "{\"t\":\"" + PIPELINE_FINISH + "\",\"kind\":\"build\",\"dir\":" + Ndjson.quote(dir) + ",\"success\":" + success + "}";
+        return "{\"t\":\"" + PIPELINE_FINISH + "\",\"kind\":\"build\",\"dir\":" + Ndjson.quote(dir) + ",\"success\":"
+                + success + "}";
     }
 
     /**
@@ -1756,7 +1752,8 @@ public final class EngineProtocol {
      * these counts <em>before</em> dispatching this event to its console listener: the listener's own
      * {@code pipelineFinish} handler is what renders the "Passed N tests" summary line.
      */
-    public static String pipelineFinish(String dir, boolean success, long total, long succeeded, long failed, long skipped) {
+    public static String pipelineFinish(
+            String dir, boolean success, long total, long succeeded, long failed, long skipped) {
         return pipelineFinish(dir, success, null, total, succeeded, failed, skipped);
     }
 
@@ -1831,7 +1828,8 @@ public final class EngineProtocol {
 
     /** Opens one module's event scope in a {@code jk lock}/{@code jk update} cascade (see {@link #LOCK_MODULE}). */
     public static String lockModule(String dir, String coord) {
-        return "{\"t\":\"" + LOCK_MODULE + "\",\"dir\":" + Ndjson.quote(dir) + ",\"coord\":" + Ndjson.quote(coord) + "}";
+        return "{\"t\":\"" + LOCK_MODULE + "\",\"dir\":" + Ndjson.quote(dir) + ",\"coord\":" + Ndjson.quote(coord)
+                + "}";
     }
 
     /** One resolved package, streamed as it is recorded (see {@link #LOCK_PACKAGE}). */
@@ -1931,7 +1929,8 @@ public final class EngineProtocol {
      * "Maven X downloaded" note; {@code diag} is the worker's passthrough chatter, carried only when
      * {@code exit != 0}.
      */
-    public static String provisionResult(String bin, String version, String source, String error, int exit, String diag) {
+    public static String provisionResult(
+            String bin, String version, String source, String error, int exit, String diag) {
         return "{\"t\":\""
                 + PROVISION_RESULT
                 + "\",\"bin\":"
@@ -2108,8 +2107,8 @@ public final class EngineProtocol {
 
     /** The one error envelope; see {@link #ERROR} for the code vocabulary. */
     public static String error(String code, String message) {
-        return "{\"t\":\"" + ERROR + "\",\"code\":" + Ndjson.quote(code)
-                + ",\"message\":" + Ndjson.quote(message) + "}";
+        return "{\"t\":\"" + ERROR + "\",\"code\":" + Ndjson.quote(code) + ",\"message\":" + Ndjson.quote(message)
+                + "}";
     }
 
     /** {@code error} with {@link #ERR_REQUEST_FAILED} — the former build-error catch-all. */
@@ -2241,7 +2240,13 @@ public final class EngineProtocol {
      * in-process command's behavior).
      */
     public static String cachePruneRequest(
-            String op, String cache, int olderThanDays, boolean dryRun, boolean sweep, String maxSize, boolean includeJkTmp) {
+            String op,
+            String cache,
+            int olderThanDays,
+            boolean dryRun,
+            boolean sweep,
+            String maxSize,
+            boolean includeJkTmp) {
         return "{\"t\":\""
                 + CACHE_PRUNE_REQUEST
                 + "\",\"op\":"
@@ -2282,13 +2287,7 @@ public final class EngineProtocol {
 
     /** The maintenance job is waiting for the cache to quiesce (see {@link #PRUNE_WAIT}). */
     public static String pruneWait(int pipelines, boolean external) {
-        return "{\"t\":\""
-                + PRUNE_WAIT
-                + "\",\"pipelines\":"
-                + pipelines
-                + ",\"external\":"
-                + external
-                + "}";
+        return "{\"t\":\"" + PRUNE_WAIT + "\",\"pipelines\":" + pipelines + ",\"external\":" + external + "}";
     }
 
     /**
@@ -2330,7 +2329,10 @@ public final class EngineProtocol {
      * identical. The splice is validated: {@code request} must be a one-line encoded object.
      */
     public static String withSession(
-            String request, String variant, java.util.Map<String, String> clientEnv, cc.jumpkick.config.PluginTuning t) {
+            String request,
+            String variant,
+            java.util.Map<String, String> clientEnv,
+            cc.jumpkick.config.PluginTuning t) {
         return withSession(request, variant, clientEnv, t, false);
     }
 
@@ -2350,16 +2352,21 @@ public final class EngineProtocol {
         boolean hasVariant = variant != null && !variant.isBlank();
         boolean hasEnv = clientEnv != null && !clientEnv.isEmpty();
         boolean hasJvm = t != null
-                && (t.maxRamPercent() != null || t.gc() != null || t.stringDedup() != null || !t.extraArgs().isEmpty());
+                && (t.maxRamPercent() != null
+                        || t.gc() != null
+                        || t.stringDedup() != null
+                        || !t.extraArgs().isEmpty());
         if (!hasVariant && !hasEnv && !hasJvm && !rebuild) return request;
         StringBuilder b = new StringBuilder(request.substring(0, request.length() - 1));
         if (rebuild) b.append(",\"rebuild\":true");
         if (hasVariant) b.append(",\"variant\":").append(Ndjson.quote(variant));
         if (hasEnv) b.append(",\"env\":").append(Ndjson.map(clientEnv));
         if (hasJvm) {
-            if (t.maxRamPercent() != null) b.append(",\"jvmMaxRam\":\"").append(t.maxRamPercent()).append('\"');
+            if (t.maxRamPercent() != null)
+                b.append(",\"jvmMaxRam\":\"").append(t.maxRamPercent()).append('\"');
             if (t.gc() != null) b.append(",\"jvmGc\":").append(Ndjson.quote(t.gc()));
-            if (t.stringDedup() != null) b.append(",\"jvmStringDedup\":\"").append(t.stringDedup()).append('\"');
+            if (t.stringDedup() != null)
+                b.append(",\"jvmStringDedup\":\"").append(t.stringDedup()).append('\"');
             if (!t.extraArgs().isEmpty()) b.append(",\"jvmArgs\":").append(quoteArray(t.extraArgs()));
         }
         return b.append('}').toString();
@@ -2399,8 +2406,7 @@ public final class EngineProtocol {
         } catch (NumberFormatException ignored) {
             // a malformed number degrades to absent, like every tolerant config read
         }
-        return new cc.jumpkick.config.PluginTuning(
-                ram, gc, dedup == null ? null : Boolean.valueOf(dedup), args);
+        return new cc.jumpkick.config.PluginTuning(ram, gc, dedup == null ? null : Boolean.valueOf(dedup), args);
     }
 
     /** {@code Ndjson} only reads string arrays; it has no writer half, so this is the encode side. */

@@ -125,7 +125,8 @@ public final class JkBuildRenderer {
     private static void renderApplication(StringBuilder sb, JkBuild.Application app) {
         if (app == null) return;
         sb.append("\n[application]\n");
-        if (app.main() != null) sb.append("main       = ").append(quote(app.main())).append('\n');
+        if (app.main() != null)
+            sb.append("main       = ").append(quote(app.main())).append('\n');
         if (app.shadowJar()) sb.append("shadow-jar = true\n");
     }
 
@@ -133,8 +134,10 @@ public final class JkBuildRenderer {
     private static void renderNative(StringBuilder sb, JkBuild.NativeConfig nc) {
         if (nc == null) return;
         sb.append("\n[native]\n");
-        if (nc.mainClass() != null) sb.append("main-class = ").append(quote(nc.mainClass())).append('\n');
-        if (nc.name() != null) sb.append("name       = ").append(quote(nc.name())).append('\n');
+        if (nc.mainClass() != null)
+            sb.append("main-class = ").append(quote(nc.mainClass())).append('\n');
+        if (nc.name() != null)
+            sb.append("name       = ").append(quote(nc.name())).append('\n');
         if (!nc.args().isEmpty()) {
             sb.append("args       = [");
             for (int i = 0; i < nc.args().size(); i++) {
@@ -180,7 +183,13 @@ public final class JkBuildRenderer {
         Map<Scope, List<Dependency>> byScope = jkBuild.dependencies().byScope();
         if (byScope.isEmpty()) return;
         for (Scope scope : new Scope[] {
-            Scope.PLATFORM, Scope.MAIN, Scope.RUNTIME, Scope.DEV, Scope.TEST_DEV, Scope.PROVIDED, Scope.TEST,
+            Scope.PLATFORM,
+            Scope.MAIN,
+            Scope.RUNTIME,
+            Scope.DEV,
+            Scope.TEST_DEV,
+            Scope.PROVIDED,
+            Scope.TEST,
             Scope.PROCESSOR
         }) {
             List<Dependency> deps = byScope.get(scope);

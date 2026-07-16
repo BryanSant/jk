@@ -84,8 +84,7 @@ public record OutdatedReport(String error, boolean workspace, List<Row> rows) {
         List<Row> rows = new ArrayList<>();
         for (String enc : Ndjson.strArray(line, "rows")) {
             String[] f = enc.split("\\|", -1);
-            rows.add(new Row(
-                    at(f, 0), at(f, 1), at(f, 2), at(f, 3), at(f, 4), at(f, 5), at(f, 6), at(f, 7)));
+            rows.add(new Row(at(f, 0), at(f, 1), at(f, 2), at(f, 3), at(f, 4), at(f, 5), at(f, 6), at(f, 7)));
         }
         return new OutdatedReport(error, workspace, rows);
     }

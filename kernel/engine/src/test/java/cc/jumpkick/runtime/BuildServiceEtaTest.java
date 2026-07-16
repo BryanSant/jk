@@ -16,7 +16,8 @@ class BuildServiceEtaTest {
     void no_history_leaves_the_base_untouched() {
         assertThat(BuildService.applyHistoryPrior(0, null)).isZero();
         assertThat(BuildService.applyHistoryPrior(0, BuildMetrics.Stats.EMPTY)).isZero();
-        assertThat(BuildService.applyHistoryPrior(4200, BuildMetrics.Stats.EMPTY)).isEqualTo(4200);
+        assertThat(BuildService.applyHistoryPrior(4200, BuildMetrics.Stats.EMPTY))
+                .isEqualTo(4200);
     }
 
     @Test
@@ -27,7 +28,8 @@ class BuildServiceEtaTest {
 
     @Test
     void absurd_over_estimates_clamp_down_to_twice_the_historical_max() {
-        assertThat(BuildService.applyHistoryPrior(60_000, ok(5, 2000, 800, 6000))).isEqualTo(12_000);
+        assertThat(BuildService.applyHistoryPrior(60_000, ok(5, 2000, 800, 6000)))
+                .isEqualTo(12_000);
     }
 
     @Test
@@ -37,6 +39,7 @@ class BuildServiceEtaTest {
         // Within 2× max → trusted as-is.
         assertThat(BuildService.applyHistoryPrior(9000, ok(5, 2000, 800, 6000))).isEqualTo(9000);
         // Fewer than 3 successful builds is too thin to clamp against.
-        assertThat(BuildService.applyHistoryPrior(60_000, ok(2, 2000, 800, 6000))).isEqualTo(60_000);
+        assertThat(BuildService.applyHistoryPrior(60_000, ok(2, 2000, 800, 6000)))
+                .isEqualTo(60_000);
     }
 }

@@ -225,7 +225,8 @@ public final class BuildJournal {
         try (Stream<Path> s = Files.list(journalDir)) {
             return s.filter(Files::isDirectory)
                     .filter(p -> !p.getFileName().toString().startsWith("."))
-                    .sorted(Comparator.comparing((Path p) -> p.getFileName().toString()).reversed())
+                    .sorted(Comparator.comparing((Path p) -> p.getFileName().toString())
+                            .reversed())
                     .toList();
         } catch (IOException e) {
             return List.of();
@@ -259,13 +260,15 @@ public final class BuildJournal {
 
     private static long sizeOf(Path dir) {
         try (Stream<Path> w = Files.walk(dir)) {
-            return w.filter(Files::isRegularFile).mapToLong(p -> {
-                try {
-                    return Files.size(p);
-                } catch (IOException e) {
-                    return 0L;
-                }
-            }).sum();
+            return w.filter(Files::isRegularFile)
+                    .mapToLong(p -> {
+                        try {
+                            return Files.size(p);
+                        } catch (IOException e) {
+                            return 0L;
+                        }
+                    })
+                    .sum();
         } catch (IOException e) {
             return 0L;
         }
@@ -314,9 +317,25 @@ public final class BuildJournal {
 
     private static BuildRecord withId(BuildRecord r, String id) {
         return new BuildRecord(
-                id, r.buildNumber(), r.schema(), r.kind(), r.dir(), r.coord(),
-                r.startedAt(), r.finishedAt(), r.millis(),
-                r.success(), r.cancelled(), r.exitCode(), r.jkVersion(),
-                r.tests(), r.modules(), r.steps(), r.diagnostics(), r.trigger(), r.commit(), r.benefit());
+                id,
+                r.buildNumber(),
+                r.schema(),
+                r.kind(),
+                r.dir(),
+                r.coord(),
+                r.startedAt(),
+                r.finishedAt(),
+                r.millis(),
+                r.success(),
+                r.cancelled(),
+                r.exitCode(),
+                r.jkVersion(),
+                r.tests(),
+                r.modules(),
+                r.steps(),
+                r.diagnostics(),
+                r.trigger(),
+                r.commit(),
+                r.benefit());
     }
 }

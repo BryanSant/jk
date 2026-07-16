@@ -64,8 +64,20 @@ public record JkBuild(
      */
     public JkBuild(Project project, Dependencies dependencies) {
         this(
-                project, dependencies, List.of(), Profiles.empty(), Features.empty(), null, null, List.of(), null,
-                null, null, null, null, null);
+                project,
+                dependencies,
+                List.of(),
+                Profiles.empty(),
+                Features.empty(),
+                null,
+                null,
+                List.of(),
+                null,
+                null,
+                null,
+                null,
+                null,
+                null);
     }
 
     /**
@@ -74,8 +86,20 @@ public record JkBuild(
      */
     public JkBuild(Project project, Dependencies dependencies, List<RepositorySpec> repositories) {
         this(
-                project, dependencies, repositories, Profiles.empty(), Features.empty(), null, null, List.of(), null,
-                null, null, null, null, null);
+                project,
+                dependencies,
+                repositories,
+                Profiles.empty(),
+                Features.empty(),
+                null,
+                null,
+                List.of(),
+                null,
+                null,
+                null,
+                null,
+                null,
+                null);
     }
 
     /** {@code [application].main}, or {@code null} when {@code [application]} is absent or unset. */
@@ -107,22 +131,58 @@ public record JkBuild(
         Map<String, PluginConfig> next = new LinkedHashMap<>(pluginConfigs);
         next.put(config.id(), config);
         return new JkBuild(
-                project, dependencies, repositories, profiles, features, workspace, manifest, plugins,
-                application, nativeConfig, next, build, format, variants);
+                project,
+                dependencies,
+                repositories,
+                profiles,
+                features,
+                workspace,
+                manifest,
+                plugins,
+                application,
+                nativeConfig,
+                next,
+                build,
+                format,
+                variants);
     }
 
     /** This build with its {@code [build]} block replaced — the variant extra-src fold point. */
     public JkBuild withBuild(Build build) {
         return new JkBuild(
-                project, dependencies, repositories, profiles, features, workspace, manifest, plugins,
-                application, nativeConfig, pluginConfigs, build, format, variants);
+                project,
+                dependencies,
+                repositories,
+                profiles,
+                features,
+                workspace,
+                manifest,
+                plugins,
+                application,
+                nativeConfig,
+                pluginConfigs,
+                build,
+                format,
+                variants);
     }
 
     /** This build with its dependencies replaced — the variant dependency-overlay fold point. */
     public JkBuild withDependencies(Dependencies dependencies) {
         return new JkBuild(
-                project, dependencies, repositories, profiles, features, workspace, manifest, plugins,
-                application, nativeConfig, pluginConfigs, build, format, variants);
+                project,
+                dependencies,
+                repositories,
+                profiles,
+                features,
+                workspace,
+                manifest,
+                plugins,
+                application,
+                nativeConfig,
+                pluginConfigs,
+                build,
+                format,
+                variants);
     }
 
     /**
@@ -200,39 +260,87 @@ public record JkBuild(
             this.project = project;
         }
 
-        public Builder dependencies(Dependencies dependencies) { this.dependencies = dependencies; return this; }
+        public Builder dependencies(Dependencies dependencies) {
+            this.dependencies = dependencies;
+            return this;
+        }
 
-        public Builder repositories(List<RepositorySpec> repositories) { this.repositories = repositories; return this; }
+        public Builder repositories(List<RepositorySpec> repositories) {
+            this.repositories = repositories;
+            return this;
+        }
 
-        public Builder profiles(Profiles profiles) { this.profiles = profiles; return this; }
+        public Builder profiles(Profiles profiles) {
+            this.profiles = profiles;
+            return this;
+        }
 
-        public Builder features(Features features) { this.features = features; return this; }
+        public Builder features(Features features) {
+            this.features = features;
+            return this;
+        }
 
-        public Builder workspace(Workspace workspace) { this.workspace = workspace; return this; }
+        public Builder workspace(Workspace workspace) {
+            this.workspace = workspace;
+            return this;
+        }
 
-        public Builder manifest(Map<String, String> manifest) { this.manifest = manifest; return this; }
+        public Builder manifest(Map<String, String> manifest) {
+            this.manifest = manifest;
+            return this;
+        }
 
-        public Builder plugins(List<PluginDeclaration> plugins) { this.plugins = plugins; return this; }
+        public Builder plugins(List<PluginDeclaration> plugins) {
+            this.plugins = plugins;
+            return this;
+        }
 
-        public Builder application(Application application) { this.application = Optional.ofNullable(application); return this; }
+        public Builder application(Application application) {
+            this.application = Optional.ofNullable(application);
+            return this;
+        }
 
-        public Builder nativeConfig(NativeConfig nativeConfig) { this.nativeConfig = Optional.ofNullable(nativeConfig); return this; }
+        public Builder nativeConfig(NativeConfig nativeConfig) {
+            this.nativeConfig = Optional.ofNullable(nativeConfig);
+            return this;
+        }
 
         public Builder pluginConfig(PluginConfig config) {
             if (config != null) this.pluginConfigs.put(config.id(), config);
             return this;
         }
 
-        public Builder build(Build build) { this.build = build; return this; }
+        public Builder build(Build build) {
+            this.build = build;
+            return this;
+        }
 
-        public Builder format(FormatConfig format) { this.format = format; return this; }
+        public Builder format(FormatConfig format) {
+            this.format = format;
+            return this;
+        }
 
-        public Builder variants(Variants variants) { this.variants = variants; return this; }
+        public Builder variants(Variants variants) {
+            this.variants = variants;
+            return this;
+        }
 
         public JkBuild build() {
             return new JkBuild(
-                    project, dependencies, repositories, profiles, features, workspace,
-                    manifest, plugins, application, nativeConfig, pluginConfigs, build, format, variants);
+                    project,
+                    dependencies,
+                    repositories,
+                    profiles,
+                    features,
+                    workspace,
+                    manifest,
+                    plugins,
+                    application,
+                    nativeConfig,
+                    pluginConfigs,
+                    build,
+                    format,
+                    variants);
         }
     }
 
@@ -455,26 +563,51 @@ public record JkBuild(
             }
 
             /** Toolchain JDK spec, e.g. {@code "temurin-25"} or {@code "25"}. */
-            public Builder jdk(String jdk) { this.jdk = jdk; return this; }
+            public Builder jdk(String jdk) {
+                this.jdk = jdk;
+                return this;
+            }
 
             /** Toolchain JDK from a bare major ({@code 25} → {@code "25"}; 0/negative → unset). */
-            public Builder jdkMajor(int major) { this.jdk = majorSpec(major); return this; }
+            public Builder jdkMajor(int major) {
+                this.jdk = majorSpec(major);
+                return this;
+            }
 
             /** {@code --release} target for javac (0 → falls back to the jdk major). */
-            public Builder java(int java) { this.java = java; return this; }
+            public Builder java(int java) {
+                this.java = java;
+                return this;
+            }
 
-            public Builder kotlin(VersionSelector kotlin) { this.kotlin = kotlin; return this; }
+            public Builder kotlin(VersionSelector kotlin) {
+                this.kotlin = kotlin;
+                return this;
+            }
 
-            public Builder sourcesMode(SourcesMode sourcesMode) { this.sourcesMode = sourcesMode; return this; }
+            public Builder sourcesMode(SourcesMode sourcesMode) {
+                this.sourcesMode = sourcesMode;
+                return this;
+            }
 
-            public Builder description(String description) { this.description = description; return this; }
+            public Builder description(String description) {
+                this.description = description;
+                return this;
+            }
 
-            public Builder m2install(boolean m2install) { this.m2install = m2install; return this; }
+            public Builder m2install(boolean m2install) {
+                this.m2install = m2install;
+                return this;
+            }
 
-            public Builder layout(Layout layout) { this.layout = layout; return this; }
+            public Builder layout(Layout layout) {
+                this.layout = layout;
+                return this;
+            }
 
             public Project build() {
-                return new Project(group, name, version, jdk, java, kotlin, sourcesMode, description, m2install, layout);
+                return new Project(
+                        group, name, version, jdk, java, kotlin, sourcesMode, description, m2install, layout);
             }
         }
 
@@ -604,8 +737,12 @@ public record JkBuild(
      * {@code room.schemaLocation} is the canonical consumer).
      */
     public record Build(
-            List<String> orderAfter, List<String> testPluginJars, boolean lint,
-            List<KotlinPluginDecl> kotlinPlugins, List<String> kspOptions, List<String> extraSrc) {
+            List<String> orderAfter,
+            List<String> testPluginJars,
+            boolean lint,
+            List<KotlinPluginDecl> kotlinPlugins,
+            List<String> kspOptions,
+            List<String> extraSrc) {
 
         public static final Build EMPTY = new Build(List.of(), List.of(), true, List.of(), List.of(), List.of());
 
@@ -616,9 +753,7 @@ public record JkBuild(
             kspOptions = kspOptions == null ? List.of() : List.copyOf(kspOptions);
             // [build] extra-src — additional module-relative source roots (variant overlays append
             // here; see Variants). Deduplicated, order preserved.
-            extraSrc = extraSrc == null
-                    ? List.of()
-                    : List.copyOf(new java.util.LinkedHashSet<>(extraSrc));
+            extraSrc = extraSrc == null ? List.of() : List.copyOf(new java.util.LinkedHashSet<>(extraSrc));
         }
 
         /** This block with {@code dirs} appended to {@code extra-src} — the variant fold point. */

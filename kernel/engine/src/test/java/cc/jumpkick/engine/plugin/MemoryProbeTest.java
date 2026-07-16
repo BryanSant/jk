@@ -39,7 +39,8 @@ class MemoryProbeTest {
 
     @Test
     void macos_reports_reclaimable_memory_not_just_idle_pages() {
-        Assumptions.assumeTrue(System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("mac"));
+        Assumptions.assumeTrue(
+                System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("mac"));
         // Regression check for the bug this class's host_statistics64 read fixes:
         // com.sun.management's free-memory figure alone counts only truly-idle pages, not the
         // inactive/purgeable pages macOS's VM keeps stocked with reclaimable file cache — on a

@@ -3,10 +3,10 @@ package cc.jumpkick.command;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.sun.net.httpserver.HttpServer;
 import cc.jumpkick.cli.Jk;
 import cc.jumpkick.lock.Lockfile;
 import cc.jumpkick.lock.LockfileReader;
+import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
@@ -125,7 +125,6 @@ class UpdateCommandTest {
         Lockfile updated = LockfileReader.read(tempDir.resolve("jk.lock"));
         assertThat(DefaultTestDepsFixture.projectCoords(updated)).containsExactly("com.foo:leaf");
     }
-
 
     @Test
     void update_without_build_jk_fails(@TempDir Path tempDir) {

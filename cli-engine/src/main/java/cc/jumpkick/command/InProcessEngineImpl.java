@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.command;
 
-import cc.jumpkick.runtime.EffortWeights;
-import cc.jumpkick.runtime.CompileSupport;
 import cc.jumpkick.cli.CliOutput;
 import cc.jumpkick.cli.GlobalOptions;
 import cc.jumpkick.cli.engine.EngineClient;
@@ -22,20 +20,22 @@ import cc.jumpkick.model.WorkspaceMerge;
 import cc.jumpkick.model.command.Exit;
 import cc.jumpkick.resolver.ResolveObserver;
 import cc.jumpkick.run.Pipeline;
-import cc.jumpkick.run.PipelineListener;
 import cc.jumpkick.run.PipelineKey;
+import cc.jumpkick.run.PipelineListener;
 import cc.jumpkick.run.PipelineResult;
 import cc.jumpkick.run.TestSummary;
 import cc.jumpkick.runtime.BuildPipelines;
 import cc.jumpkick.runtime.CompatPipelines;
+import cc.jumpkick.runtime.CompileSupport;
+import cc.jumpkick.runtime.EffortWeights;
 import cc.jumpkick.runtime.FormatPipelines;
+import cc.jumpkick.runtime.HostedEvents;
 import cc.jumpkick.runtime.ImagePipelines;
-import cc.jumpkick.runtime.PublishPipelines;
 import cc.jumpkick.runtime.LockPipelines;
 import cc.jumpkick.runtime.NativePipelines;
-import cc.jumpkick.runtime.ToolPipelines;
-import cc.jumpkick.runtime.HostedEvents;
+import cc.jumpkick.runtime.PublishPipelines;
 import cc.jumpkick.runtime.TestSupport;
+import cc.jumpkick.runtime.ToolPipelines;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -103,10 +103,9 @@ public final class InProcessEngineImpl implements InProcessEngine {
     }
 
     @Override
-    public java.util.Map<java.nio.file.Path, JkBuild> loadWorkspaceModules(
-            java.nio.file.Path wsRoot) throws java.io.IOException {
-        return cc.jumpkick.config.WorkspaceLoader.loadModules(
-                wsRoot, JkBuildParser.parse(wsRoot.resolve("jk.toml")));
+    public java.util.Map<java.nio.file.Path, JkBuild> loadWorkspaceModules(java.nio.file.Path wsRoot)
+            throws java.io.IOException {
+        return cc.jumpkick.config.WorkspaceLoader.loadModules(wsRoot, JkBuildParser.parse(wsRoot.resolve("jk.toml")));
     }
 
     @Override
@@ -126,7 +125,6 @@ public final class InProcessEngineImpl implements InProcessEngine {
             java.nio.file.Path libDir) {
         return cc.jumpkick.runtime.ExecPlans.execPlan(dir, cache, kind, mainOverride, binName, binDir, libDir);
     }
-
 
     /** Public no-arg constructor for {@link java.util.ServiceLoader}. */
     public InProcessEngineImpl() {}
@@ -241,8 +239,7 @@ public final class InProcessEngineImpl implements InProcessEngine {
             PipelineListener listener)
             throws IOException {
         Pipeline pipeline = FormatPipelines.formatPipeline(
-                projectDir, cache, check, javaStyle, kotlinStyle, optimizeImports, rewriteConfig,
-                observer::onFile);
+                projectDir, cache, check, javaStyle, kotlinStyle, optimizeImports, rewriteConfig, observer::onFile);
         pipeline.addListener(listener);
         PipelineResult result = pipeline.run();
         return new FormatPipelineOutcome(
@@ -289,7 +286,8 @@ public final class InProcessEngineImpl implements InProcessEngine {
                         sbom,
                         credential));
         PipelineResult result = PipelineConsole.run(pipeline, mode, cache);
-        return new PublishPipelineOutcome(result, pipeline.get(PublishPipelines.FILES).orElse(0));
+        return new PublishPipelineOutcome(
+                result, pipeline.get(PublishPipelines.FILES).orElse(0));
     }
 
     @Override
@@ -308,12 +306,11 @@ public final class InProcessEngineImpl implements InProcessEngine {
             String module)
             throws IOException, InterruptedException {
         Pipeline pipeline = ImagePipelines.imagePipeline(
-                projectDir, cache, jdksDir, skipTests, verbose, mainClass, registry, tag, tarballArg,
-                dockerExecutable);
-        ConsoleSpec spec =
-                new ConsoleSpec("Image", r -> imageSuccessTail(pipeline), r -> "Image build failed", true);
+                projectDir, cache, jdksDir, skipTests, verbose, mainClass, registry, tag, tarballArg, dockerExecutable);
+        ConsoleSpec spec = new ConsoleSpec("Image", r -> imageSuccessTail(pipeline), r -> "Image build failed", true);
         PipelineResult result = PipelineConsole.runPipeline(pipeline, mode, cache, spec, module);
-        return new PipelineOutcome(result, pipeline.get(BuildPipelines.TEST_RESULT).orElse(null));
+        return new PipelineOutcome(
+                result, pipeline.get(BuildPipelines.TEST_RESULT).orElse(null));
     }
 
     @Override
@@ -327,7 +324,8 @@ public final class InProcessEngineImpl implements InProcessEngine {
             Path cache,
             HostedEvents.NoteObserver notes)
             throws IOException, InterruptedException {
-        Pipeline pipeline = CompatPipelines.importPipeline(source, out, baseDir, tmpDir, force, report, cache, notes::onNote);
+        Pipeline pipeline =
+                CompatPipelines.importPipeline(source, out, baseDir, tmpDir, force, report, cache, notes::onNote);
         PipelineResult result = pipeline.run();
         return new ImportPipelineOutcome(
                 result,
@@ -338,7 +336,8 @@ public final class InProcessEngineImpl implements InProcessEngine {
     }
 
     @Override
-    public HostedEvents.Provision provision(Path cache, Path projectDir, Path toolsRoot, boolean noDiscover, boolean gradle)
+    public HostedEvents.Provision provision(
+            Path cache, Path projectDir, Path toolsRoot, boolean noDiscover, boolean gradle)
             throws IOException, InterruptedException {
         CompatPipelines.Provision p = CompatPipelines.provision(cache, projectDir, toolsRoot, noDiscover, gradle);
         return new HostedEvents.Provision(p.bin(), p.version(), p.source(), p.error(), p.exit(), p.diag());
@@ -365,7 +364,8 @@ public final class InProcessEngineImpl implements InProcessEngine {
         Pipeline pipeline = ToolPipelines.resolvePipeline(spec, with, bin, mainClass, repoUrl, cacheDir, label);
         PipelineResult result = PipelineConsole.run(pipeline, mode, cacheDir);
         if (!result.success()) return new ToolPipelineOutcome(result, null);
-        return new ToolPipelineOutcome(result, pipeline.get(ToolPipelines.TOOL_ENV).orElseThrow());
+        return new ToolPipelineOutcome(
+                result, pipeline.get(ToolPipelines.TOOL_ENV).orElseThrow());
     }
 
     // ---- jk lock's test-only in-process path (identical pipeline via LockPipelines) ----------------
@@ -393,7 +393,8 @@ public final class InProcessEngineImpl implements InProcessEngine {
 
         if (!live) {
             // --verbose / --output json: existing simple-task rendering.
-            int result = lockSingleProject(dir, effectiveRoot, cache, "Lock", mode, features, noDefaultFeatures, sources, repoUrl);
+            int result = lockSingleProject(
+                    dir, effectiveRoot, cache, "Lock", mode, features, noDefaultFeatures, sources, repoUrl);
             if (result != 0) return result;
             if (effectiveRoot.isWorkspaceRoot()) {
                 Map<Path, JkBuild> modules;
@@ -408,7 +409,16 @@ public final class InProcessEngineImpl implements InProcessEngine {
                     JkBuild rawModule = entry.getValue();
                     JkBuild effectiveModule = WorkspaceMerge.applyToModule(effectiveRoot, rawModule, modules.values());
                     String moduleLabel = dir.getFileName() + "/" + dir.relativize(moduleDir);
-                    int moduleResult = lockSingleProject(moduleDir, effectiveModule, cache, moduleLabel, mode, features, noDefaultFeatures, sources, repoUrl);
+                    int moduleResult = lockSingleProject(
+                            moduleDir,
+                            effectiveModule,
+                            cache,
+                            moduleLabel,
+                            mode,
+                            features,
+                            noDefaultFeatures,
+                            sources,
+                            repoUrl);
                     if (moduleResult != 0) return moduleResult;
                 }
             }
@@ -441,7 +451,18 @@ public final class InProcessEngineImpl implements InProcessEngine {
         List<String> errorLines = new ArrayList<>();
 
         String rootCoord = LockPipelines.coordLabel(effectiveRoot, dir);
-        int exit = lockModuleLive(dir, effectiveRoot, cache, rootCoord, view, globalLocked, errorLines, features, noDefaultFeatures, sources, repoUrl);
+        int exit = lockModuleLive(
+                dir,
+                effectiveRoot,
+                cache,
+                rootCoord,
+                view,
+                globalLocked,
+                errorLines,
+                features,
+                noDefaultFeatures,
+                sources,
+                repoUrl);
         if (exit != 0) {
             view.finishPipelineFailure(LockCommand.lockFailTail(), errorLines);
             return exit;
@@ -461,7 +482,18 @@ public final class InProcessEngineImpl implements InProcessEngine {
                 JkBuild rawModule = entry.getValue();
                 JkBuild effectiveModule = WorkspaceMerge.applyToModule(effectiveRoot, rawModule, modules.values());
                 String moduleCoord = LockPipelines.coordLabel(rawModule, moduleDir);
-                exit = lockModuleLive(moduleDir, effectiveModule, cache, moduleCoord, view, globalLocked, errorLines, features, noDefaultFeatures, sources, repoUrl);
+                exit = lockModuleLive(
+                        moduleDir,
+                        effectiveModule,
+                        cache,
+                        moduleCoord,
+                        view,
+                        globalLocked,
+                        errorLines,
+                        features,
+                        noDefaultFeatures,
+                        sources,
+                        repoUrl);
                 if (exit != 0) {
                     view.finishPipelineFailure(LockCommand.lockFailTail(), errorLines);
                     return exit;
@@ -562,8 +594,15 @@ public final class InProcessEngineImpl implements InProcessEngine {
             java.net.URI repoUrl)
             throws Exception {
         Pipeline pipeline = LockPipelines.lockPipeline(
-                dir, effective, cache, repoUrl, features, !noDefaultFeatures, sources,
-                ResolveObserver.NOOP, Coords::module);
+                dir,
+                effective,
+                cache,
+                repoUrl,
+                features,
+                !noDefaultFeatures,
+                sources,
+                ResolveObserver.NOOP,
+                Coords::module);
 
         ConsoleSpec spec = new ConsoleSpec(
                 label,
@@ -584,12 +623,10 @@ public final class InProcessEngineImpl implements InProcessEngine {
         return result.success() ? 0 : LockPipelines.failureExitCode(result);
     }
 
-
     // ---- jk outdated's test-only in-process path (identical computation via OutdatedPipelines) -----
 
     @Override
-    public cc.jumpkick.engine.protocol.OutdatedReport outdatedInProcess(
-            Path dir, Path cache, java.net.URI repoUrl) {
+    public cc.jumpkick.engine.protocol.OutdatedReport outdatedInProcess(Path dir, Path cache, java.net.URI repoUrl) {
         return cc.jumpkick.runtime.OutdatedPipelines.compute(dir, cache, repoUrl);
     }
 
@@ -649,7 +686,8 @@ public final class InProcessEngineImpl implements InProcessEngine {
                 Path moduleDir = entry.getKey();
                 JkBuild rawModule = entry.getValue();
                 JkBuild effectiveModule = WorkspaceMerge.applyToModule(effectiveRoot, rawModule, modules.values());
-                int moduleResult = updateSingleProject(moduleDir, effectiveModule, cache, features, noDefaultFeatures, repoUrl, global);
+                int moduleResult = updateSingleProject(
+                        moduleDir, effectiveModule, cache, features, noDefaultFeatures, repoUrl, global);
                 if (moduleResult != 0) return moduleResult;
             }
         }
@@ -680,7 +718,6 @@ public final class InProcessEngineImpl implements InProcessEngine {
         return 0;
     }
 
-
     // ---- jk sync's test-only in-process path (identical pipeline via SyncPipelines) --------------------
 
     @Override
@@ -696,8 +733,15 @@ public final class InProcessEngineImpl implements InProcessEngine {
         java.util.concurrent.atomic.AtomicInteger totalUpToDate = new java.util.concurrent.atomic.AtomicInteger(0);
 
         Pipeline pipeline = cc.jumpkick.runtime.SyncPipelines.syncPipeline(
-                dir, cache, jdksDir, repoUrl, sources, totalFetched, totalUpToDate,
-                cc.jumpkick.cli.theme.Coords::module, true);
+                dir,
+                cache,
+                jdksDir,
+                repoUrl,
+                sources,
+                totalFetched,
+                totalUpToDate,
+                cc.jumpkick.cli.theme.Coords::module,
+                true);
 
         ConsoleSpec spec = SyncCommand.syncSpec(totalFetched::get, totalUpToDate::get);
         PipelineResult result = PipelineConsole.runPipeline(pipeline, mode, cache, spec, targetLabel);
@@ -756,7 +800,8 @@ public final class InProcessEngineImpl implements InProcessEngine {
         BuildPipelines.appendDeclaredTails(builder, inputs);
         Pipeline pipeline = builder.build();
         PipelineResult result = PipelineConsole.runPipeline(pipeline, mode, cache, spec, coord);
-        return new PipelineOutcome(result, pipeline.get(BuildPipelines.TEST_RESULT).orElse(null));
+        return new PipelineOutcome(
+                result, pipeline.get(BuildPipelines.TEST_RESULT).orElse(null));
     }
 
     @Override
@@ -796,14 +841,13 @@ public final class InProcessEngineImpl implements InProcessEngine {
         String version = project != null ? project.project().version() : "";
         boolean daemonMode = tarballPath == null
                 && (cfg == null || cfg.registry() == null || cfg.registry().isBlank());
-        String daemonExe = !daemonMode
-                ? null
-                : cfg != null && cfg.dockerExecutable() != null ? cfg.dockerExecutable() : "docker";
-        String ref = pipeline.get(ImagePipelines.IMAGE_REF)
-                .orElse(cfg != null ? cfg.targetReference(name, version) : "");
-        return ImageCommand.imageSuccessTail(tarballPath != null ? tarballPath.toString() : null, name, version, daemonExe, ref);
+        String daemonExe =
+                !daemonMode ? null : cfg != null && cfg.dockerExecutable() != null ? cfg.dockerExecutable() : "docker";
+        String ref =
+                pipeline.get(ImagePipelines.IMAGE_REF).orElse(cfg != null ? cfg.targetReference(name, version) : "");
+        return ImageCommand.imageSuccessTail(
+                tarballPath != null ? tarballPath.toString() : null, name, version, daemonExe, ref);
     }
-
 
     // ---- jk cache prune/purge in-process paths (test-only + legacy --background child) ----------
 
@@ -850,10 +894,12 @@ public final class InProcessEngineImpl implements InProcessEngine {
                     () -> pipeline.get(cc.jumpkick.runtime.CachePipelines.FILES).orElse(0L),
                     () -> pipeline.get(cc.jumpkick.runtime.CachePipelines.BYTES).orElse(0L));
 
-            PipelineResult pipelineResult = PipelineConsole.runPipeline(pipeline, PipelineConsole.modeFor(global), root, spec, "Cache");
+            PipelineResult pipelineResult =
+                    PipelineConsole.runPipeline(pipeline, PipelineConsole.modeFor(global), root, spec, "Cache");
 
             CacheCommand.CachePruneCommand.warnReachableEvicted(
-                    pipeline.get(cc.jumpkick.runtime.CachePipelines.REACHABLE_EVICTED).orElse(0L));
+                    pipeline.get(cc.jumpkick.runtime.CachePipelines.REACHABLE_EVICTED)
+                            .orElse(0L));
 
             return pipelineResult.success() ? 0 : 1;
         } finally {
@@ -891,7 +937,8 @@ public final class InProcessEngineImpl implements InProcessEngine {
     }
 
     @Override
-    public int clearInProcess(Path root, Path projectDir, boolean dryRun, PipelineConsole.Mode mode) throws IOException {
+    public int clearInProcess(Path root, Path projectDir, boolean dryRun, PipelineConsole.Mode mode)
+            throws IOException {
         Pipeline pipeline = cc.jumpkick.runtime.CachePipelines.clearPipeline(root, projectDir, dryRun);
         ConsoleSpec spec = CacheCommand.CacheClearCommand.clearSpec(
                 dryRun,
@@ -926,11 +973,18 @@ public final class InProcessEngineImpl implements InProcessEngine {
                 Path moduleDir = sorted.get(i);
                 JkBuild module = modulesByDir.get(moduleDir);
                 CliOutput.out();
-                CliOutput.out(
-                        "══ " + wsRoot.relativize(moduleDir) + " (" + (i + 1) + "/" + sorted.size() + ") ══");
+                CliOutput.out("══ " + wsRoot.relativize(moduleDir) + " (" + (i + 1) + "/" + sorted.size() + ") ══");
                 int exit = runPreparedNative(
-                        prepareNativeModule(moduleDir, module, cache, graalHomes.get(moduleDir), jdksDir,
-                                mainClass, extra, skipTests, verbose),
+                        prepareNativeModule(
+                                moduleDir,
+                                module,
+                                cache,
+                                graalHomes.get(moduleDir),
+                                jdksDir,
+                                mainClass,
+                                extra,
+                                skipTests,
+                                verbose),
                         null,
                         mode);
                 if (exit != 0) {
@@ -959,8 +1013,15 @@ public final class InProcessEngineImpl implements InProcessEngine {
             long total = 0;
             for (Path moduleDir : sorted) {
                 PreparedNativeModule pm = prepareNativeModule(
-                        moduleDir, modulesByDir.get(moduleDir), cache, graalHomes.get(moduleDir), jdksDir,
-                        mainClass, extra, skipTests, verbose);
+                        moduleDir,
+                        modulesByDir.get(moduleDir),
+                        cache,
+                        graalHomes.get(moduleDir),
+                        jdksDir,
+                        mainClass,
+                        extra,
+                        skipTests,
+                        verbose);
                 total += pm.barWeight();
                 prepared.add(pm);
             }
@@ -972,11 +1033,13 @@ public final class InProcessEngineImpl implements InProcessEngine {
                 try {
                     exit = runPreparedNative(pm, agg, mode);
                 } catch (Exception e) {
-                    view.finishPipelineFailure(PipelineWedge.coord(moduleName) + " " + BuildCommand.elapsedSince(buildStart));
+                    view.finishPipelineFailure(
+                            PipelineWedge.coord(moduleName) + " " + BuildCommand.elapsedSince(buildStart));
                     throw e;
                 }
                 if (exit != 0) {
-                    view.finishPipelineFailure(PipelineWedge.coord(moduleName) + " " + BuildCommand.elapsedSince(buildStart));
+                    view.finishPipelineFailure(
+                            PipelineWedge.coord(moduleName) + " " + BuildCommand.elapsedSince(buildStart));
                     for (PipelineResult.Diagnostic d : agg.lastErrors()) {
                         CliOutput.err(ConsoleSpec.renderError(d));
                     }
@@ -986,11 +1049,12 @@ public final class InProcessEngineImpl implements InProcessEngine {
             }
         }
 
-        view.finishPipelineSuccess(Theme.colorize("Native build successful", Theme.active().success())
-                + ", "
-                + NativeCommand.workspaceSummary(built, nativeCount)
-                + " "
-                + BuildCommand.elapsedSince(buildStart));
+        view.finishPipelineSuccess(
+                Theme.colorize("Native build successful", Theme.active().success())
+                        + ", "
+                        + NativeCommand.workspaceSummary(built, nativeCount)
+                        + " "
+                        + BuildCommand.elapsedSince(buildStart));
         return 0;
     }
 
@@ -1050,7 +1114,6 @@ public final class InProcessEngineImpl implements InProcessEngine {
     private record PreparedNativeModule(
             Path dir, String target, Path cache, Pipeline pipeline, long barWeight, boolean eligible) {}
 
-
     @Override
     public int nativeSingleInProcess(
             Path projectDir,
@@ -1068,9 +1131,7 @@ public final class InProcessEngineImpl implements InProcessEngine {
                 projectDir, build, cache, jdksDir, graalHome, mainClass, extra, skipTests, verbose);
         ConsoleSpec spec = new ConsoleSpec(
                 "Build",
-                r -> Theme.colorize(
-                                "Native build successful",
-                                Theme.active().success())
+                r -> Theme.colorize("Native build successful", Theme.active().success())
                         + BuildCommand.builtArtifact(pipeline),
                 r -> PipelineWedge.coord(coord),
                 true);
@@ -1088,13 +1149,15 @@ public final class InProcessEngineImpl implements InProcessEngine {
             boolean requireJkToml,
             PipelineConsole.Mode mode)
             throws IOException, InterruptedException {
-        Pipeline fetchPipeline =
-                cc.jumpkick.runtime.InstallPipelines.gitFetchPipeline(url, canonicalUrl, ref, cache, refresh, requireJkToml);
+        Pipeline fetchPipeline = cc.jumpkick.runtime.InstallPipelines.gitFetchPipeline(
+                url, canonicalUrl, ref, cache, refresh, requireJkToml);
         PipelineResult result = PipelineConsole.run(fetchPipeline, mode, cache);
         return new EngineClient.GitFetchOutcome(
                 result,
                 fetchPipeline.get(cc.jumpkick.runtime.InstallPipelines.CHECKOUT).orElse(null),
-                fetchPipeline.get(cc.jumpkick.runtime.InstallPipelines.FETCHED_SHA).orElse(null));
+                fetchPipeline
+                        .get(cc.jumpkick.runtime.InstallPipelines.FETCHED_SHA)
+                        .orElse(null));
     }
 
     @Override
@@ -1110,22 +1173,23 @@ public final class InProcessEngineImpl implements InProcessEngine {
         Pipeline pipeline = cc.jumpkick.runtime.InstallPipelines.projectInstallPipeline(
                 projectDir, cacheDir, m2Dir, skipTests, verbose, graalHome);
         PipelineResult result = PipelineConsole.run(pipeline, mode, cacheDir);
-        return new PipelineOutcome(result, pipeline.get(BuildPipelines.TEST_RESULT).orElse(null));
+        return new PipelineOutcome(
+                result, pipeline.get(BuildPipelines.TEST_RESULT).orElse(null));
     }
 
     // ---- jk build's test-only in-process paths -------------------------------------------------
 
     @Override
-    public cc.jumpkick.runtime.BuildForecast forecast(
-            Path entryDir, JkBuild entryBuild, Path cache, boolean skipTests) throws IOException {
+    public cc.jumpkick.runtime.BuildForecast forecast(Path entryDir, JkBuild entryBuild, Path cache, boolean skipTests)
+            throws IOException {
         cc.jumpkick.runtime.BuildService.ResolvedGraph graph =
                 cc.jumpkick.runtime.BuildService.resolveGraph(entryDir, entryBuild);
         if (graph.hasErrors()) {
             return new cc.jumpkick.runtime.BuildForecast(java.util.Set.of(), false, false, graph.errors());
         }
         java.util.Set<Path> dirty = cc.jumpkick.runtime.BuildService.forecastDirtyDirs(graph, cache, skipTests);
-        boolean lockStale = cc.jumpkick.runtime.BuildService.workspaceLockStale(
-                entryDir, entryBuild, entryDir.resolve("jk.lock"));
+        boolean lockStale =
+                cc.jumpkick.runtime.BuildService.workspaceLockStale(entryDir, entryBuild, entryDir.resolve("jk.lock"));
         return new cc.jumpkick.runtime.BuildForecast(dirty, lockStale, graph.isEmpty(), java.util.List.of());
     }
 
@@ -1166,11 +1230,9 @@ public final class InProcessEngineImpl implements InProcessEngine {
         try {
             cc.jumpkick.cache.Cas cas = new cc.jumpkick.cache.Cas(inputs.cache());
             JkBuild build = JkBuildParser.parse(buildFile);
-            CompileSupport.Languages langs =
-                    CompileSupport.resolveLanguages(build.project(), dir);
+            CompileSupport.Languages langs = CompileSupport.resolveLanguages(build.project(), dir);
             boolean compact = CompileSupport.isSimpleLayout(build.project(), dir);
-            EffortWeights.Plan effort =
-                    EffortWeights.predict(inputs, cas, compact, langs.java(), langs.kotlin());
+            EffortWeights.Plan effort = EffortWeights.predict(inputs, cas, compact, langs.java(), langs.kotlin());
             fullyCached = effort.fullyCached();
         } catch (Exception ignored) {
             // best-effort; proceed normally if prediction throws
@@ -1192,11 +1254,9 @@ public final class InProcessEngineImpl implements InProcessEngine {
         // chip = true → settle through the pipeline chip (" ✓ Build ▶ Build successful …"),
         // matching the workspace path. onSuccess/onFailure return the tail after the command.
         ConsoleSpec spec = new ConsoleSpec(
-                "Build",
-                r -> BuildCommand.projectTail(pipeline),
-                r -> PipelineWedge.coord(target),
-                true);
-        PipelineResult result = PipelineConsole.runPipeline(pipeline, PipelineConsole.modeFor(global), cache, spec, target);
+                "Build", r -> BuildCommand.projectTail(pipeline), r -> PipelineWedge.coord(target), true);
+        PipelineResult result =
+                PipelineConsole.runPipeline(pipeline, PipelineConsole.modeFor(global), cache, spec, target);
         TestSummary testResult = pipeline.get(TEST_RESULT).orElse(null);
         if (result.success()) {
             // Fold this run's measured throughput into the host calibration so the cold estimate
@@ -1235,11 +1295,14 @@ public final class InProcessEngineImpl implements InProcessEngine {
                 .toList();
         Pipeline pipeline =
                 switch (mode) {
-                    case "java" -> cc.jumpkick.runtime.ScriptPipelines.javaScriptPipeline(
-                            script, cacheDir, stateDir, repoUrl, forceRecompile, extraDeps);
-                    case "kt" -> cc.jumpkick.runtime.ScriptPipelines.kotlinScriptPipeline(
-                            script, cacheDir, stateDir, repoUrl, forceRecompile, extraDeps);
-                    case "kts" -> cc.jumpkick.runtime.ScriptPipelines.ktsScriptPipeline(script, cacheDir, repoUrl, extraDeps);
+                    case "java" ->
+                        cc.jumpkick.runtime.ScriptPipelines.javaScriptPipeline(
+                                script, cacheDir, stateDir, repoUrl, forceRecompile, extraDeps);
+                    case "kt" ->
+                        cc.jumpkick.runtime.ScriptPipelines.kotlinScriptPipeline(
+                                script, cacheDir, stateDir, repoUrl, forceRecompile, extraDeps);
+                    case "kts" ->
+                        cc.jumpkick.runtime.ScriptPipelines.ktsScriptPipeline(script, cacheDir, repoUrl, extraDeps);
                     case "jar" -> cc.jumpkick.runtime.ScriptPipelines.jarPipeline(script, cacheDir, repoUrl);
                     default -> throw new IllegalArgumentException("unknown script mode: " + mode);
                 };

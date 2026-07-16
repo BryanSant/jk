@@ -10,8 +10,7 @@ class BuildIdentityTest {
     @Test
     void snapshots_fold_the_build_id_in_releases_do_not() {
         assertThat(BuildIdentity.compose("1.0.0", "abc123def456")).isEqualTo("1.0.0");
-        assertThat(BuildIdentity.compose("1.0.0-SNAPSHOT", "abc123def456"))
-                .isEqualTo("1.0.0-SNAPSHOT+abc123def456");
+        assertThat(BuildIdentity.compose("1.0.0-SNAPSHOT", "abc123def456")).isEqualTo("1.0.0-SNAPSHOT+abc123def456");
         // No derivable identity -> the version-string rule stands (release behavior).
         assertThat(BuildIdentity.compose("1.0.0-SNAPSHOT", "")).isEqualTo("1.0.0-SNAPSHOT");
     }

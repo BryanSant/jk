@@ -130,9 +130,7 @@ public final class IntellijIdeGenerator implements IdeGenerator {
                 + Theme.colorize(".idea", t.path()));
         boolean ansi = t.isAnsi();
         for (int i = 0; i < items.size(); i++) {
-            String connector = i == items.size() - 1
-                    ? (ansi ? "╰─ " : "`- ")
-                    : (ansi ? "├─ " : "+- ");
+            String connector = i == items.size() - 1 ? (ansi ? "╰─ " : "`- ") : (ansi ? "├─ " : "+- ");
             CliOutput.out(" " + (ansi ? Theme.colorize(connector, t.darkGray()) : connector) + items.get(i));
         }
 
@@ -199,8 +197,8 @@ public final class IntellijIdeGenerator implements IdeGenerator {
         return 1;
     }
 
-    private static int writeCompilerXml(
-            Path ideaDir, Map<Path, IdeModule> modules, Map<Path, List<Path>> processorJars) throws IOException {
+    private static int writeCompilerXml(Path ideaDir, Map<Path, IdeModule> modules, Map<Path, List<Path>> processorJars)
+            throws IOException {
         StringBuilder sb = xmlHeader();
         sb.append("<project version=\"4\">\n");
         sb.append("  <component name=\"CompilerConfiguration\">\n");
@@ -236,13 +234,19 @@ public final class IntellijIdeGenerator implements IdeGenerator {
                         .toString()
                         .replace('\\', '/');
                 sb.append("      <profile name=\"jk-").append(esc(mod)).append("\" enabled=\"true\">\n");
-                sb.append("        <sourceOutputDir name=\"").append(esc(genRel)).append("\" />\n");
-                sb.append("        <sourceTestOutputDir name=\"").append(esc(genTestRel)).append("\" />\n");
+                sb.append("        <sourceOutputDir name=\"")
+                        .append(esc(genRel))
+                        .append("\" />\n");
+                sb.append("        <sourceTestOutputDir name=\"")
+                        .append(esc(genTestRel))
+                        .append("\" />\n");
                 sb.append("        <outputRelativeToContentRoot value=\"true\" />\n");
                 sb.append("        <module name=\"").append(esc(mod)).append("\" />\n");
                 sb.append("        <processorPath useClasspath=\"false\">\n");
                 for (Path jar : procs) {
-                    sb.append("          <entry name=\"").append(repoJarUrl(jar)).append("\" />\n");
+                    sb.append("          <entry name=\"")
+                            .append(repoJarUrl(jar))
+                            .append("\" />\n");
                 }
                 sb.append("        </processorPath>\n");
                 sb.append("      </profile>\n");
@@ -265,7 +269,9 @@ public final class IntellijIdeGenerator implements IdeGenerator {
         sb.append("    <JAVADOC />\n");
         sb.append("    <SOURCES>\n");
         if (lib.sourcesPath() != null) {
-            sb.append("      <root url=\"").append(repoJarUrl(lib.sourcesPath())).append("\" />\n");
+            sb.append("      <root url=\"")
+                    .append(repoJarUrl(lib.sourcesPath()))
+                    .append("\" />\n");
         }
         sb.append("    </SOURCES>\n");
         sb.append("  </library>\n</component>\n");
@@ -356,7 +362,8 @@ public final class IntellijIdeGenerator implements IdeGenerator {
             sb.append("    <orderEntry type=\"library\" name=\"")
                     .append(esc(lr.name()))
                     .append("\" level=\"project\"");
-            if (!"COMPILE".equals(lr.scope())) sb.append(" scope=\"").append(lr.scope()).append("\"");
+            if (!"COMPILE".equals(lr.scope()))
+                sb.append(" scope=\"").append(lr.scope()).append("\"");
             sb.append(" />\n");
         }
 
@@ -370,7 +377,9 @@ public final class IntellijIdeGenerator implements IdeGenerator {
         sb.append("  <configuration default=\"false\" name=\"")
                 .append(esc(moduleName))
                 .append("\" type=\"Application\" factoryName=\"Application\">\n");
-        sb.append("    <option name=\"MAIN_CLASS_NAME\" value=\"").append(esc(mainClass)).append("\" />\n");
+        sb.append("    <option name=\"MAIN_CLASS_NAME\" value=\"")
+                .append(esc(mainClass))
+                .append("\" />\n");
         sb.append("    <module name=\"").append(esc(moduleName)).append("\" />\n");
         sb.append("    <method v=\"2\">\n");
         sb.append("      <option name=\"Make\" enabled=\"true\" />\n");
@@ -431,7 +440,10 @@ public final class IntellijIdeGenerator implements IdeGenerator {
     }
 
     private static String esc(String s) {
-        return s.replace("&", "&amp;").replace("\"", "&quot;").replace("<", "&lt;").replace(">", "&gt;");
+        return s.replace("&", "&amp;")
+                .replace("\"", "&quot;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;");
     }
 
     private static void write(Path file, String content) throws IOException {

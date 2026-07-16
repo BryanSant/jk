@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.test;
 
-import cc.jumpkick.run.TestSummary;
-
 /**
  * Streaming callback surface for live test progress UI. {@link JUnitLauncher} invokes these as each
  * {@code ##JKT:} protocol event flows past the parent's aggregator, so a CLI can render a pinned

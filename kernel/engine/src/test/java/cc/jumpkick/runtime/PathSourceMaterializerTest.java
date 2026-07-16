@@ -83,13 +83,14 @@ class PathSourceMaterializerTest {
         var after = materializer.materialize(new PathSource("./lib"));
 
         assertThat(after.repoUrl()).isNotEqualTo(before.repoUrl()); // new fingerprint → new repo dir
-        assertThat(Path.of(after.repoUrl()).resolve("com/acme/widgets/0.1.0/widgets-0.1.0.jar")).exists();
+        assertThat(Path.of(after.repoUrl()).resolve("com/acme/widgets/0.1.0/widgets-0.1.0.jar"))
+                .exists();
     }
 
     @Test
     void fails_when_the_target_directory_is_missing(@TempDir Path tmp) throws Exception {
-        assertThatThrownBy(() ->
-                materializer(tmp, tmp.resolve("path-artifacts")).materialize(new PathSource("./nope")))
+        assertThatThrownBy(
+                        () -> materializer(tmp, tmp.resolve("path-artifacts")).materialize(new PathSource("./nope")))
                 .isInstanceOf(java.io.IOException.class)
                 .hasMessageContaining("does not resolve to a directory");
     }

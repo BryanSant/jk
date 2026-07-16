@@ -54,8 +54,8 @@ final class UrlToolSource {
             CliOutput.err("Allowed once. To trust this source permanently: jk trust add " + suggested);
             return null;
         }
-        CliOutput.err(command + ": " + url + " is not a trusted source.\n"
-                + "Trust it first: jk trust add " + suggested);
+        CliOutput.err(
+                command + ": " + url + " is not a trusted source.\n" + "Trust it first: jk trust add " + suggested);
         return Exit.USAGE;
     }
 

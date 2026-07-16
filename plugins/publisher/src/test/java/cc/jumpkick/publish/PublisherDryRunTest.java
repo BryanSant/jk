@@ -34,14 +34,16 @@ class PublisherDryRunTest {
         Files.write(jar, new byte[] {0x50, 0x4b, 0x05, 0x06}); // empty-zip signature
 
         Path spec = dir.resolve("publish.spec");
-        Files.write(spec, new cc.jumpkick.plugin.protocol.SpecWriter()
-                .op(cc.jumpkick.plugin.protocol.PluginProtocol.OP_PUBLISH, null, "jk-publisher")
-                .configString("repoUrl", "https://repo.example.com/")
-                .configString("repoAuthType", "anonymous")
-                .configBool("dryRun", true)
-                .artifact(jar)
-                .layout(java.util.Map.of("moduleDir", dir))
-                .lines());
+        Files.write(
+                spec,
+                new cc.jumpkick.plugin.protocol.SpecWriter()
+                        .op(cc.jumpkick.plugin.protocol.PluginProtocol.OP_PUBLISH, null, "jk-publisher")
+                        .configString("repoUrl", "https://repo.example.com/")
+                        .configString("repoAuthType", "anonymous")
+                        .configBool("dryRun", true)
+                        .artifact(jar)
+                        .layout(java.util.Map.of("moduleDir", dir))
+                        .lines());
 
         var buffer = new ByteArrayOutputStream();
         ProtocolWriter out = new ProtocolWriter(new PrintStream(buffer, true, StandardCharsets.UTF_8), "##JKPU:");

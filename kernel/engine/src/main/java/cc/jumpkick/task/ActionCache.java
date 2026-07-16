@@ -2,7 +2,6 @@
 package cc.jumpkick.task;
 
 import cc.jumpkick.cache.Cas;
-import cc.jumpkick.cache.Linking;
 import cc.jumpkick.util.Hashing;
 import java.io.File;
 import java.io.IOException;

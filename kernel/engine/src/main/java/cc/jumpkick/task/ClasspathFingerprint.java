@@ -134,8 +134,7 @@ public final class ClasspathFingerprint {
      * <em>should</em> ripple through the embedded SHA into every module that pins it.
      */
     private static boolean isBuildMetadata(String name) {
-        return name.equals(FreshnessStamp.JAVA_STAMP)
-                || name.equals(FreshnessStamp.KOTLIN_STAMP);
+        return name.equals(FreshnessStamp.JAVA_STAMP) || name.equals(FreshnessStamp.KOTLIN_STAMP);
     }
 
     private static String baseName(String entryName) {

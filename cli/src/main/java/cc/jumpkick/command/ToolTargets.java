@@ -85,8 +85,8 @@ final class ToolTargets {
             try {
                 cc.jumpkick.model.VersionSelector.parseFloating(c.suffix());
             } catch (IllegalArgumentException e) {
-                throw new TargetException("jk tool: bad version selector `@" + c.suffix() + "` on `" + c.name()
-                        + "`: " + e.getMessage());
+                throw new TargetException(
+                        "jk tool: bad version selector `@" + c.suffix() + "` on `" + c.name() + "`: " + e.getMessage());
             }
         }
         String coordSpec = module.group() + ":" + module.artifact() + (c.suffix() != null ? "@" + c.suffix() : "");
@@ -108,7 +108,9 @@ final class ToolTargets {
         }
         List<String> suggestions = catalog.suggestionsFor(c.name(), 3);
         if (!suggestions.isEmpty()) {
-            msg.append("\nDid you mean: ").append(String.join(", ", suggestions)).append("?");
+            msg.append("\nDid you mean: ")
+                    .append(String.join(", ", suggestions))
+                    .append("?");
         }
         msg.append("\nUse a full coordinate (`group:artifact[:version]`) to skip the catalog.");
         return new TargetException(msg.toString());

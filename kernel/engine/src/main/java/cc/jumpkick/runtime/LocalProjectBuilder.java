@@ -71,8 +71,7 @@ public final class LocalProjectBuilder {
 
         // 1. Resolve the project's own dependencies and the compile classpath.
         Lockfile lock = new LockOrchestrator(repos)
-                .withJvmEnvironment(
-                        cc.jumpkick.plugin.manifest.PluginContributions.jvmEnvironment(project, projectDir))
+                .withJvmEnvironment(cc.jumpkick.plugin.manifest.PluginContributions.jvmEnvironment(project, projectDir))
                 .lock(project, jkVersion);
         List<Path> classpath =
                 new ArrayList<>(new ClasspathResolver(cas).classpathFor(lock, ClasspathResolver.COMPILE_MAIN));
@@ -150,8 +149,7 @@ public final class LocalProjectBuilder {
         // 3. Package the jar (epoch 0 → deterministic; identity isn't lock-pinned).
         Path jarOut = layout.mainJar();
         Files.createDirectories(jarOut.getParent());
-        new JarPackager()
-                .packageJar(new JarPackager.JarRequest(classes, jarOut, project.mainClass(), 0L, Map.of()));
+        new JarPackager().packageJar(new JarPackager.JarRequest(classes, jarOut, project.mainClass(), 0L, Map.of()));
 
         // 4. Render the POM, stamped with the published coordinate + version.
         String pomXml = PublishablePom.render(

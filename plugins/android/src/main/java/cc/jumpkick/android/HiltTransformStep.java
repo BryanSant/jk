@@ -34,8 +34,8 @@ import org.objectweb.asm.Opcodes;
  */
 final class HiltTransformStep {
 
-    private static final java.util.Set<String> HILT_ANNOTATIONS = java.util.Set.of(
-            "Ldagger/hilt/android/AndroidEntryPoint;", "Ldagger/hilt/android/HiltAndroidApp;");
+    private static final java.util.Set<String> HILT_ANNOTATIONS =
+            java.util.Set.of("Ldagger/hilt/android/AndroidEntryPoint;", "Ldagger/hilt/android/HiltAndroidApp;");
 
     private HiltTransformStep() {}
 

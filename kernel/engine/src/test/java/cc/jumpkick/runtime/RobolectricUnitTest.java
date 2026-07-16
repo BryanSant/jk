@@ -3,8 +3,8 @@ package cc.jumpkick.runtime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import cc.jumpkick.config.SessionContext;
 import cc.jumpkick.config.JkBuildParser;
+import cc.jumpkick.config.SessionContext;
 import cc.jumpkick.model.JkBuild;
 import cc.jumpkick.resolver.ResolveObserver;
 import cc.jumpkick.run.Pipeline;
@@ -73,8 +73,7 @@ class RobolectricUnitTest {
 
         // The wiring that made it work: the test-config step's classpath dir exists with the
         // properties file pointing at the linked resources.
-        Path props = project.resolve(
-                "target/plugin/android-test-config/cp/com/android/tools/test_config.properties");
+        Path props = project.resolve("target/plugin/android-test-config/cp/com/android/tools/test_config.properties");
         assertThat(props).exists();
         assertThat(Files.readString(props))
                 .contains("android_resource_apk=")

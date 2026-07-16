@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.cli.engine;
 
-import cc.jumpkick.plugin.build.Phase;
 import cc.jumpkick.cli.Jk;
 import cc.jumpkick.config.Session;
 import cc.jumpkick.config.SessionContext;
 import cc.jumpkick.engine.EnginePaths;
 import cc.jumpkick.engine.protocol.EngineProtocol;
+import cc.jumpkick.plugin.build.Phase;
 import cc.jumpkick.plugin.protocol.Ndjson;
 import cc.jumpkick.run.Pipeline;
 import cc.jumpkick.run.PipelineListener;
@@ -14,7 +14,6 @@ import cc.jumpkick.run.PipelineResult;
 import cc.jumpkick.run.PipelineView;
 import cc.jumpkick.run.Step;
 import cc.jumpkick.run.StepStatus;
-import cc.jumpkick.runtime.BuildPlan;
 import cc.jumpkick.runtime.ExplainPlan;
 import cc.jumpkick.runtime.ModuleOutcome;
 import cc.jumpkick.runtime.ModulePlan;
@@ -24,7 +23,6 @@ import cc.jumpkick.runtime.WorkspaceResult;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.nio.channels.Channels;
 import java.nio.channels.SocketChannel;
@@ -86,32 +84,31 @@ final class EngineBuildListenerAdapter {
      * no in-process fallback.
      */
     static WorkspaceResult buildWorkspace(
-            EnginePaths.Paths paths, WorkspaceRequest req, WorkspaceBuildListener listener)
-            throws IOException {
+            EnginePaths.Paths paths, WorkspaceRequest req, WorkspaceBuildListener listener) throws IOException {
         EngineClient.ensureRunning(paths, Jk.VERSION);
         Session session = SessionContext.current();
 
         try (SocketChannel ch = EngineClient.connect(cc.jumpkick.engine.EnginePaths.activeSocket(paths))) {
             BufferedWriter writer =
                     new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
-            BufferedReader reader =
-                    EngineClient.protocolReader(ch);
+            BufferedReader reader = EngineClient.protocolReader(ch);
 
-            writer.write(EngineProtocol.withSession(EngineProtocol.buildRequest(
-                    req.entryDir().toString(),
-                    req.cache().toString(),
-                    req.jdksDir() != null ? req.jdksDir().toString() : null,
-                    req.workers(),
-                    req.profile(),
-                    req.skipTests(),
-                    req.verbose(),
-                    req.maxModuleConcurrency(),
-                    session.parallelTests(),
-                    session.offline(),
-                    session.force(),
-                    // jk build asks the engine to auto-freshen a stale workspace lock; verify's
-                    // scratch rebuild must use the pinned lock verbatim (see WorkspaceRequest).
-                    req.freshenLock()),
+            writer.write(EngineProtocol.withSession(
+                    EngineProtocol.buildRequest(
+                            req.entryDir().toString(),
+                            req.cache().toString(),
+                            req.jdksDir() != null ? req.jdksDir().toString() : null,
+                            req.workers(),
+                            req.profile(),
+                            req.skipTests(),
+                            req.verbose(),
+                            req.maxModuleConcurrency(),
+                            session.parallelTests(),
+                            session.offline(),
+                            session.force(),
+                            // jk build asks the engine to auto-freshen a stale workspace lock; verify's
+                            // scratch rebuild must use the pinned lock verbatim (see WorkspaceRequest).
+                            req.freshenLock()),
                     req.variant(),
                     req.clientEnv(),
                     SessionContext.current().jvm(),
@@ -147,8 +144,7 @@ final class EngineBuildListenerAdapter {
         try (SocketChannel ch = EngineClient.connect(cc.jumpkick.engine.EnginePaths.activeSocket(paths))) {
             BufferedWriter writer =
                     new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
-            BufferedReader reader =
-                    EngineClient.protocolReader(ch);
+            BufferedReader reader = EngineClient.protocolReader(ch);
 
             writer.write(EngineProtocol.withSession(
                     EngineProtocol.testRequest(
@@ -190,8 +186,7 @@ final class EngineBuildListenerAdapter {
         try (SocketChannel ch = EngineClient.connect(cc.jumpkick.engine.EnginePaths.activeSocket(paths))) {
             BufferedWriter writer =
                     new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
-            BufferedReader reader =
-                    EngineClient.protocolReader(ch);
+            BufferedReader reader = EngineClient.protocolReader(ch);
 
             writer.write(EngineProtocol.withSession(
                     EngineProtocol.singleBuildRequest(
@@ -230,8 +225,7 @@ final class EngineBuildListenerAdapter {
         try (SocketChannel ch = EngineClient.connect(cc.jumpkick.engine.EnginePaths.activeSocket(paths))) {
             BufferedWriter writer =
                     new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
-            BufferedReader reader =
-                    EngineClient.protocolReader(ch);
+            BufferedReader reader = EngineClient.protocolReader(ch);
 
             Map<String, String> graalHomes = new java.util.LinkedHashMap<>();
             for (Map.Entry<Path, Path> e : req.graalByDir().entrySet()) {
@@ -277,8 +271,7 @@ final class EngineBuildListenerAdapter {
         try (SocketChannel ch = EngineClient.connect(cc.jumpkick.engine.EnginePaths.activeSocket(paths))) {
             BufferedWriter writer =
                     new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
-            BufferedReader reader =
-                    EngineClient.protocolReader(ch);
+            BufferedReader reader = EngineClient.protocolReader(ch);
 
             writer.write(EngineProtocol.withSession(
                     EngineProtocol.installRequest(
@@ -315,15 +308,14 @@ final class EngineBuildListenerAdapter {
      * eta} event inside the burst and settles {@code etaOut[0]} ({@code 0} = unknown) before the
      * terminal {@code explain-done}.
      */
-    static ExplainPlan explain(
-            EnginePaths.Paths paths, EngineClient.ExplainRequest req, long[] etaOut) throws IOException {
+    static ExplainPlan explain(EnginePaths.Paths paths, EngineClient.ExplainRequest req, long[] etaOut)
+            throws IOException {
         EngineClient.ensureRunning(paths, Jk.VERSION);
 
         try (SocketChannel ch = EngineClient.connect(cc.jumpkick.engine.EnginePaths.activeSocket(paths))) {
             BufferedWriter writer =
                     new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
-            BufferedReader reader =
-                    EngineClient.protocolReader(ch);
+            BufferedReader reader = EngineClient.protocolReader(ch);
 
             writer.write(EngineProtocol.explainRequest(
                     req.entryDir().toString(),
@@ -370,15 +362,15 @@ final class EngineBuildListenerAdapter {
                                 .get(dir)
                                 .add(new cc.jumpkick.runtime.BuildPlan.Step(
                                         Ndjson.str(line, "name"),
-                                        cc.jumpkick.runtime.BuildPlan.Status.valueOf(
-                                                Ndjson.str(line, "status")),
+                                        cc.jumpkick.runtime.BuildPlan.Status.valueOf(Ndjson.str(line, "status")),
                                         Ndjson.str(line, "text"),
                                         Ndjson.str(line, "key")));
                     }
                     case EngineProtocol.EXPLAIN_EDGE -> {
                         Path dir = Path.of(Ndjson.str(line, "dir"));
                         Path dependsOn = Path.of(Ndjson.str(line, "dependsOnDir"));
-                        edges.computeIfAbsent(dir, d -> new java.util.LinkedHashSet<>()).add(dependsOn);
+                        edges.computeIfAbsent(dir, d -> new java.util.LinkedHashSet<>())
+                                .add(dependsOn);
                     }
                     case EngineProtocol.ERROR -> errors.add(Ndjson.str(line, "message"));
                     case EngineProtocol.ETA -> {
@@ -397,8 +389,7 @@ final class EngineBuildListenerAdapter {
                                     flags[0],
                                     flags[1]));
                         }
-                        return new ExplainPlan(
-                                modules, edges, Ndjson.intValue(line, "maxReadyWidth", 1), errors);
+                        return new ExplainPlan(modules, edges, Ndjson.intValue(line, "maxReadyWidth", 1), errors);
                     }
                     default -> {
                         /* forward-compatible no-op */
@@ -417,14 +408,12 @@ final class EngineBuildListenerAdapter {
      * the request so the engine's forecast honors them exactly as the in-process one did.
      */
     /** One engine-hosted jk.toml edit: returns changed; throws with the engine's message. */
-    static boolean edit(EnginePaths.Paths paths, Path file, String op, java.util.List<String> args)
-            throws IOException {
+    static boolean edit(EnginePaths.Paths paths, Path file, String op, java.util.List<String> args) throws IOException {
         EngineClient.ensureRunning(paths, Jk.VERSION);
         try (SocketChannel ch = EngineClient.connect(cc.jumpkick.engine.EnginePaths.activeSocket(paths))) {
             BufferedWriter writer =
                     new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
-            BufferedReader reader =
-                    EngineClient.protocolReader(ch);
+            BufferedReader reader = EngineClient.protocolReader(ch);
             writer.write(EngineProtocol.editRequest(file.toString(), op, args));
             writer.write('\n');
             writer.flush();
@@ -441,15 +430,18 @@ final class EngineBuildListenerAdapter {
 
     /** One engine-hosted tree render: the marker-tagged tree; throws with the engine's message. */
     static String treeRender(
-            EnginePaths.Paths paths, Path dir, int maxDepth, boolean flatten, boolean stack,
+            EnginePaths.Paths paths,
+            Path dir,
+            int maxDepth,
+            boolean flatten,
+            boolean stack,
             java.util.List<String> scopes)
             throws IOException {
         EngineClient.ensureRunning(paths, Jk.VERSION);
         try (SocketChannel ch = EngineClient.connect(cc.jumpkick.engine.EnginePaths.activeSocket(paths))) {
             BufferedWriter writer =
                     new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
-            BufferedReader reader =
-                    EngineClient.protocolReader(ch);
+            BufferedReader reader = EngineClient.protocolReader(ch);
             writer.write(EngineProtocol.treeRequest(dir.toString(), maxDepth, flatten, stack, scopes));
             writer.write('\n');
             writer.flush();
@@ -471,8 +463,7 @@ final class EngineBuildListenerAdapter {
         try (SocketChannel ch = EngineClient.connect(cc.jumpkick.engine.EnginePaths.activeSocket(paths))) {
             BufferedWriter writer =
                     new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
-            BufferedReader reader =
-                    EngineClient.protocolReader(ch);
+            BufferedReader reader = EngineClient.protocolReader(ch);
             writer.write(EngineProtocol.whyRequest(dir.toString(), query));
             writer.write('\n');
             writer.flush();
@@ -492,8 +483,7 @@ final class EngineBuildListenerAdapter {
         try (SocketChannel ch = EngineClient.connect(cc.jumpkick.engine.EnginePaths.activeSocket(paths))) {
             BufferedWriter writer =
                     new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
-            BufferedReader reader =
-                    EngineClient.protocolReader(ch);
+            BufferedReader reader = EngineClient.protocolReader(ch);
             writer.write(EngineProtocol.ideModelRequest(
                     dir.toString(), cache.toString(), jdksDir == null ? null : jdksDir.toString()));
             writer.write('\n');
@@ -509,14 +499,12 @@ final class EngineBuildListenerAdapter {
 
     /** One engine-hosted generator run: file payloads back, guards/writes stay client-side. */
     static cc.jumpkick.engine.protocol.GeneratedFiles generate(
-            EnginePaths.Paths paths, Path dir, String kind, java.util.Map<String, String> params)
-            throws IOException {
+            EnginePaths.Paths paths, Path dir, String kind, java.util.Map<String, String> params) throws IOException {
         EngineClient.ensureRunning(paths, Jk.VERSION);
         try (SocketChannel ch = EngineClient.connect(cc.jumpkick.engine.EnginePaths.activeSocket(paths))) {
             BufferedWriter writer =
                     new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
-            BufferedReader reader =
-                    EngineClient.protocolReader(ch);
+            BufferedReader reader = EngineClient.protocolReader(ch);
             writer.write(EngineProtocol.generateRequest(dir.toString(), kind, params));
             writer.write('\n');
             writer.flush();
@@ -537,8 +525,7 @@ final class EngineBuildListenerAdapter {
         try (SocketChannel ch = EngineClient.connect(cc.jumpkick.engine.EnginePaths.activeSocket(paths))) {
             BufferedWriter writer =
                     new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
-            BufferedReader reader =
-                    EngineClient.protocolReader(ch);
+            BufferedReader reader = EngineClient.protocolReader(ch);
             writer.write(EngineProtocol.withSession(
                     EngineProtocol.pluginCommandRequest(dir.toString(), cache.toString(), command, args),
                     SessionContext.current().variant(),
@@ -562,8 +549,7 @@ final class EngineBuildListenerAdapter {
         try (SocketChannel ch = EngineClient.connect(cc.jumpkick.engine.EnginePaths.activeSocket(paths))) {
             BufferedWriter writer =
                     new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
-            BufferedReader reader =
-                    EngineClient.protocolReader(ch);
+            BufferedReader reader = EngineClient.protocolReader(ch);
             writer.write(EngineProtocol.denyCheckRequest(dir.toString()));
             writer.write('\n');
             writer.flush();
@@ -576,14 +562,12 @@ final class EngineBuildListenerAdapter {
         }
     }
 
-    static cc.jumpkick.engine.protocol.ProjectInfo projectInfo(EnginePaths.Paths paths, Path dir)
-            throws IOException {
+    static cc.jumpkick.engine.protocol.ProjectInfo projectInfo(EnginePaths.Paths paths, Path dir) throws IOException {
         EngineClient.ensureRunning(paths, Jk.VERSION);
         try (SocketChannel ch = EngineClient.connect(cc.jumpkick.engine.EnginePaths.activeSocket(paths))) {
             BufferedWriter writer =
                     new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
-            BufferedReader reader =
-                    EngineClient.protocolReader(ch);
+            BufferedReader reader = EngineClient.protocolReader(ch);
             writer.write(EngineProtocol.projectInfoRequest(dir.toString(), ""));
             writer.write('\n');
             writer.flush();
@@ -610,8 +594,7 @@ final class EngineBuildListenerAdapter {
         try (SocketChannel ch = EngineClient.connect(cc.jumpkick.engine.EnginePaths.activeSocket(paths))) {
             BufferedWriter writer =
                     new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
-            BufferedReader reader =
-                    EngineClient.protocolReader(ch);
+            BufferedReader reader = EngineClient.protocolReader(ch);
             writer.write(EngineProtocol.withSession(
                     EngineProtocol.execPlanRequest(
                             dir.toString(),
@@ -643,8 +626,7 @@ final class EngineBuildListenerAdapter {
         try (SocketChannel ch = EngineClient.connect(cc.jumpkick.engine.EnginePaths.activeSocket(paths))) {
             BufferedWriter writer =
                     new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
-            BufferedReader reader =
-                    EngineClient.protocolReader(ch);
+            BufferedReader reader = EngineClient.protocolReader(ch);
             writer.write(EngineProtocol.forecastRequest(
                     entryDir.toString(),
                     cache.toString(),
@@ -689,35 +671,48 @@ final class EngineBuildListenerAdapter {
             String type = EngineProtocol.typeOf(line);
             if (type == null) continue;
             switch (type) {
-                case EngineProtocol.PLAN_STEP -> steps.add(Step.builder(Ndjson.str(line, "name"))
-                        .label(Ndjson.str(line, "label")).phase(Phase.fromWireOrNull(Ndjson.str(line, "phase")))
-                        .build());
+                case EngineProtocol.PLAN_STEP ->
+                    steps.add(Step.builder(Ndjson.str(line, "name"))
+                            .label(Ndjson.str(line, "label"))
+                            .phase(Phase.fromWireOrNull(Ndjson.str(line, "phase")))
+                            .build());
                 case EngineProtocol.PLAN_DONE -> listener = listenerFactory.apply(steps);
                 case EngineProtocol.PIPELINE_START -> listener.pipelineStart(readPipelineView(line));
-                case EngineProtocol.STEP_START -> listener.stepStart(
-                        Ndjson.str(line, "step"), Phase.fromWireOrNull(Ndjson.str(line, "phase")), Ndjson.intValue(line, "ticks", 0));
-                case EngineProtocol.PROGRESS -> listener.progress(
-                        Ndjson.str(line, "step"), Ndjson.intValue(line, "delta", 0), readPipelineView(line));
-                case EngineProtocol.TICK_UPDATE -> listener.tickUpdate(
-                        Ndjson.str(line, "step"), Ndjson.intValue(line, "delta", 0), readPipelineView(line));
+                case EngineProtocol.STEP_START ->
+                    listener.stepStart(
+                            Ndjson.str(line, "step"),
+                            Phase.fromWireOrNull(Ndjson.str(line, "phase")),
+                            Ndjson.intValue(line, "ticks", 0));
+                case EngineProtocol.PROGRESS ->
+                    listener.progress(
+                            Ndjson.str(line, "step"), Ndjson.intValue(line, "delta", 0), readPipelineView(line));
+                case EngineProtocol.TICK_UPDATE ->
+                    listener.tickUpdate(
+                            Ndjson.str(line, "step"), Ndjson.intValue(line, "delta", 0), readPipelineView(line));
                 case EngineProtocol.LABEL -> listener.label(Ndjson.str(line, "step"), Ndjson.str(line, "label"));
                 case EngineProtocol.OUTPUT -> listener.output(Ndjson.str(line, "step"), Ndjson.str(line, "line"));
-                case EngineProtocol.WARN -> listener.warn(
-                        Ndjson.str(line, "step"), Ndjson.str(line, "code"), Ndjson.str(line, "message"));
-                case EngineProtocol.ERROR_LINE -> listener.error(
-                        Ndjson.str(line, "step"),
-                        Ndjson.str(line, "code"),
-                        Ndjson.str(line, "message"),
-                        Ndjson.str(line, "test"),
-                        Ndjson.str(line, "exceptionClass"));
-                case EngineProtocol.PIPELINE_DIAGNOSTIC -> diagnostics.add(new PipelineResult.Diagnostic(
-                        Ndjson.str(line, "step"),
-                        Ndjson.str(line, "code"),
-                        Ndjson.str(line, "message"),
-                        Ndjson.str(line, "test"),
-                        Ndjson.str(line, "exceptionClass")));
-                case EngineProtocol.STEP_FINISH -> listener.stepFinish(
-                        Ndjson.str(line, "step"), Phase.fromWireOrNull(Ndjson.str(line, "phase")), StepStatus.valueOf(Ndjson.str(line, "status")), Duration.ZERO);
+                case EngineProtocol.WARN ->
+                    listener.warn(Ndjson.str(line, "step"), Ndjson.str(line, "code"), Ndjson.str(line, "message"));
+                case EngineProtocol.ERROR_LINE ->
+                    listener.error(
+                            Ndjson.str(line, "step"),
+                            Ndjson.str(line, "code"),
+                            Ndjson.str(line, "message"),
+                            Ndjson.str(line, "test"),
+                            Ndjson.str(line, "exceptionClass"));
+                case EngineProtocol.PIPELINE_DIAGNOSTIC ->
+                    diagnostics.add(new PipelineResult.Diagnostic(
+                            Ndjson.str(line, "step"),
+                            Ndjson.str(line, "code"),
+                            Ndjson.str(line, "message"),
+                            Ndjson.str(line, "test"),
+                            Ndjson.str(line, "exceptionClass")));
+                case EngineProtocol.STEP_FINISH ->
+                    listener.stepFinish(
+                            Ndjson.str(line, "step"),
+                            Phase.fromWireOrNull(Ndjson.str(line, "phase")),
+                            StepStatus.valueOf(Ndjson.str(line, "status")),
+                            Duration.ZERO);
                 case EngineProtocol.PIPELINE_FINISH -> {
                     boolean success = Ndjson.bool(line, "success", false);
                     long total = Ndjson.longValue(line, "testTotal", -1);
@@ -744,8 +739,8 @@ final class EngineBuildListenerAdapter {
                     listener.pipelineFinish(result);
                     return result;
                 }
-                case EngineProtocol.ERROR -> throw new IOException(
-                        "jk engine: run failed: " + Ndjson.str(line, "message"));
+                case EngineProtocol.ERROR ->
+                    throw new IOException("jk engine: run failed: " + Ndjson.str(line, "message"));
                 default -> {
                     /* forward-compatible no-op */
                 }
@@ -755,8 +750,8 @@ final class EngineBuildListenerAdapter {
                 + "(it may have crashed); run `jk engine status` for details");
     }
 
-    private static WorkspaceResult streamEvents(
-            BufferedReader reader, WorkspaceBuildListener listener, Path cache) throws IOException {
+    private static WorkspaceResult streamEvents(BufferedReader reader, WorkspaceBuildListener listener, Path cache)
+            throws IOException {
         Map<String, ModuleMeta> planByDir = new LinkedHashMap<>();
         Map<String, PipelineListener> pipelineListenersByDir = new LinkedHashMap<>();
         Map<String, List<PipelineResult.Diagnostic>> diagnosticsByDir = new LinkedHashMap<>();
@@ -783,7 +778,8 @@ final class EngineBuildListenerAdapter {
                     ModuleMeta m = planByDir.get(dir != null ? dir : pendingPlanDir);
                     if (m != null) {
                         m.steps.add(Step.builder(Ndjson.str(line, "name"))
-                                .label(Ndjson.str(line, "label")).phase(Phase.fromWireOrNull(Ndjson.str(line, "phase")))
+                                .label(Ndjson.str(line, "label"))
+                                .phase(Phase.fromWireOrNull(Ndjson.str(line, "phase")))
                                 .build());
                     }
                 }
@@ -794,50 +790,67 @@ final class EngineBuildListenerAdapter {
                     PipelineListener gl = listener.onModuleStart(plan);
                     pipelineListenersByDir.put(dir, gl != null ? gl : new PipelineListener() {});
                 }
-                case EngineProtocol.PIPELINE_START -> pipelineListenersByDir
-                        .getOrDefault(dir, NOOP)
-                        .pipelineStart(readPipelineView(line));
-                case EngineProtocol.STEP_START -> pipelineListenersByDir
-                        .getOrDefault(dir, NOOP)
-                        .stepStart(Ndjson.str(line, "step"), Phase.fromWireOrNull(Ndjson.str(line, "phase")), Ndjson.intValue(line, "ticks", 0));
-                case EngineProtocol.PROGRESS -> pipelineListenersByDir
-                        .getOrDefault(dir, NOOP)
-                        .progress(Ndjson.str(line, "step"), Ndjson.intValue(line, "delta", 0), readPipelineView(line));
-                case EngineProtocol.TICK_UPDATE -> pipelineListenersByDir
-                        .getOrDefault(dir, NOOP)
-                        .tickUpdate(Ndjson.str(line, "step"), Ndjson.intValue(line, "delta", 0), readPipelineView(line));
-                case EngineProtocol.LABEL -> pipelineListenersByDir
-                        .getOrDefault(dir, NOOP)
-                        .label(Ndjson.str(line, "step"), Ndjson.str(line, "label"));
-                case EngineProtocol.OUTPUT -> pipelineListenersByDir
-                        .getOrDefault(dir, NOOP)
-                        .output(Ndjson.str(line, "step"), Ndjson.str(line, "line"));
-                case EngineProtocol.WARN -> pipelineListenersByDir
-                        .getOrDefault(dir, NOOP)
-                        .warn(Ndjson.str(line, "step"), Ndjson.str(line, "code"), Ndjson.str(line, "message"));
-                case EngineProtocol.ERROR_LINE -> pipelineListenersByDir
-                        .getOrDefault(dir, NOOP)
-                        .error(
-                                Ndjson.str(line, "step"),
-                                Ndjson.str(line, "code"),
-                                Ndjson.str(line, "message"),
-                                Ndjson.str(line, "test"),
-                                Ndjson.str(line, "exceptionClass"));
-                case EngineProtocol.PIPELINE_DIAGNOSTIC -> diagnosticsByDir
-                        .computeIfAbsent(dir, d -> new ArrayList<>())
-                        .add(new PipelineResult.Diagnostic(
-                                Ndjson.str(line, "step"),
-                                Ndjson.str(line, "code"),
-                                Ndjson.str(line, "message"),
-                                Ndjson.str(line, "test"),
-                                Ndjson.str(line, "exceptionClass")));
-                case EngineProtocol.STEP_FINISH -> pipelineListenersByDir
-                        .getOrDefault(dir, NOOP)
-                        .stepFinish(
-                                Ndjson.str(line, "step"),
-                                Phase.fromWireOrNull(Ndjson.str(line, "phase")),
-                                StepStatus.valueOf(Ndjson.str(line, "status")),
-                                Duration.ZERO);
+                case EngineProtocol.PIPELINE_START ->
+                    pipelineListenersByDir.getOrDefault(dir, NOOP).pipelineStart(readPipelineView(line));
+                case EngineProtocol.STEP_START ->
+                    pipelineListenersByDir
+                            .getOrDefault(dir, NOOP)
+                            .stepStart(
+                                    Ndjson.str(line, "step"),
+                                    Phase.fromWireOrNull(Ndjson.str(line, "phase")),
+                                    Ndjson.intValue(line, "ticks", 0));
+                case EngineProtocol.PROGRESS ->
+                    pipelineListenersByDir
+                            .getOrDefault(dir, NOOP)
+                            .progress(
+                                    Ndjson.str(line, "step"),
+                                    Ndjson.intValue(line, "delta", 0),
+                                    readPipelineView(line));
+                case EngineProtocol.TICK_UPDATE ->
+                    pipelineListenersByDir
+                            .getOrDefault(dir, NOOP)
+                            .tickUpdate(
+                                    Ndjson.str(line, "step"),
+                                    Ndjson.intValue(line, "delta", 0),
+                                    readPipelineView(line));
+                case EngineProtocol.LABEL ->
+                    pipelineListenersByDir
+                            .getOrDefault(dir, NOOP)
+                            .label(Ndjson.str(line, "step"), Ndjson.str(line, "label"));
+                case EngineProtocol.OUTPUT ->
+                    pipelineListenersByDir
+                            .getOrDefault(dir, NOOP)
+                            .output(Ndjson.str(line, "step"), Ndjson.str(line, "line"));
+                case EngineProtocol.WARN ->
+                    pipelineListenersByDir
+                            .getOrDefault(dir, NOOP)
+                            .warn(Ndjson.str(line, "step"), Ndjson.str(line, "code"), Ndjson.str(line, "message"));
+                case EngineProtocol.ERROR_LINE ->
+                    pipelineListenersByDir
+                            .getOrDefault(dir, NOOP)
+                            .error(
+                                    Ndjson.str(line, "step"),
+                                    Ndjson.str(line, "code"),
+                                    Ndjson.str(line, "message"),
+                                    Ndjson.str(line, "test"),
+                                    Ndjson.str(line, "exceptionClass"));
+                case EngineProtocol.PIPELINE_DIAGNOSTIC ->
+                    diagnosticsByDir
+                            .computeIfAbsent(dir, d -> new ArrayList<>())
+                            .add(new PipelineResult.Diagnostic(
+                                    Ndjson.str(line, "step"),
+                                    Ndjson.str(line, "code"),
+                                    Ndjson.str(line, "message"),
+                                    Ndjson.str(line, "test"),
+                                    Ndjson.str(line, "exceptionClass")));
+                case EngineProtocol.STEP_FINISH ->
+                    pipelineListenersByDir
+                            .getOrDefault(dir, NOOP)
+                            .stepFinish(
+                                    Ndjson.str(line, "step"),
+                                    Phase.fromWireOrNull(Ndjson.str(line, "phase")),
+                                    StepStatus.valueOf(Ndjson.str(line, "status")),
+                                    Duration.ZERO);
                 case EngineProtocol.PIPELINE_FINISH -> {
                     ModuleMeta meta = planByDir.get(dir);
                     String pipelineName = meta != null ? meta.pipelineName : dir;
@@ -872,8 +885,8 @@ final class EngineBuildListenerAdapter {
                     listener.onWorkspaceFinish(result);
                     return result;
                 }
-                case EngineProtocol.ERROR -> throw new IOException(
-                        "jk engine: build failed: " + Ndjson.str(line, "message"));
+                case EngineProtocol.ERROR ->
+                    throw new IOException("jk engine: build failed: " + Ndjson.str(line, "message"));
                 default -> {
                     /* forward-compatible no-op */
                 }
@@ -892,7 +905,8 @@ final class EngineBuildListenerAdapter {
     }
 
     private static ModulePlan buildModulePlan(String dir, ModuleMeta m, Path cache) {
-        Pipeline inertPipeline = Pipeline.builder(m.pipelineName).addAllSteps(m.steps).build();
+        Pipeline inertPipeline =
+                Pipeline.builder(m.pipelineName).addAllSteps(m.steps).build();
         return ModulePlan.fromWire(Path.of(dir), m.coord, inertPipeline, m.weight, m.fullyCached, cache);
     }
 

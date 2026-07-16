@@ -106,7 +106,6 @@ class ShellTest {
         assertThat(new PwshShell().activateScript("/opt/jk/bin/jk")).doesNotContain("function global:jkx");
     }
 
-
     @Test
     void zsh_rc_file_is_dot_zshrc_not_zshenv() {
         // .zshrc is the interactive-shell config; .zshenv runs even for

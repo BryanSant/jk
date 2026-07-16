@@ -61,16 +61,23 @@ public record Session(
         Objects.requireNonNull(jvm, "jvm");
         cancel = (cancel == null) ? CancelToken.NONE : cancel;
         variant = (variant == null) ? "" : variant;
-        clientEnv = (clientEnv == null || clientEnv.isEmpty())
-                ? java.util.Map.of()
-                : java.util.Map.copyOf(clientEnv);
+        clientEnv = (clientEnv == null || clientEnv.isEmpty()) ? java.util.Map.of() : java.util.Map.copyOf(clientEnv);
     }
 
     /** A copy carrying the given variant selection + client-resolved env. */
     public Session withVariant(String variant, java.util.Map<String, String> clientEnv) {
         return new Session(
-                config, workingDir, cacheDir, jdksDir, jvm, jdkSpec, graalSpec, parallelTests, cancel,
-                variant, clientEnv);
+                config,
+                workingDir,
+                cacheDir,
+                jdksDir,
+                jvm,
+                jdkSpec,
+                graalSpec,
+                parallelTests,
+                cancel,
+                variant,
+                clientEnv);
     }
 
     /**
@@ -139,26 +146,42 @@ public record Session(
 
     public Session withConfig(JkConfig newConfig) {
         return new Session(
-                newConfig, workingDir, cacheDir, jdksDir, jvm, jdkSpec, graalSpec, parallelTests, cancel,
-                variant, clientEnv);
+                newConfig,
+                workingDir,
+                cacheDir,
+                jdksDir,
+                jvm,
+                jdkSpec,
+                graalSpec,
+                parallelTests,
+                cancel,
+                variant,
+                clientEnv);
     }
 
     public Session withWorkingDir(Path dir) {
         return new Session(
-                config, dir.toAbsolutePath().normalize(), cacheDir, jdksDir, jvm, jdkSpec, graalSpec, parallelTests,
-                cancel, variant, clientEnv);
+                config,
+                dir.toAbsolutePath().normalize(),
+                cacheDir,
+                jdksDir,
+                jvm,
+                jdkSpec,
+                graalSpec,
+                parallelTests,
+                cancel,
+                variant,
+                clientEnv);
     }
 
     public Session withCacheDir(Path dir) {
         return new Session(
-                config, workingDir, dir, jdksDir, jvm, jdkSpec, graalSpec, parallelTests, cancel,
-                variant, clientEnv);
+                config, workingDir, dir, jdksDir, jvm, jdkSpec, graalSpec, parallelTests, cancel, variant, clientEnv);
     }
 
     public Session withJdksDir(Path dir) {
         return new Session(
-                config, workingDir, cacheDir, dir, jvm, jdkSpec, graalSpec, parallelTests, cancel,
-                variant, clientEnv);
+                config, workingDir, cacheDir, dir, jvm, jdkSpec, graalSpec, parallelTests, cancel, variant, clientEnv);
     }
 
     public Session withJvm(PluginTuning tuning) {
@@ -179,21 +202,38 @@ public record Session(
     /** The top-tier JDK / GraalVM selection ({@code --jdk} / {@code --graal}); blanks normalize to null. */
     public Session withToolchainSpecs(String jdk, String graal) {
         return new Session(
-                config, workingDir, cacheDir, jdksDir, jvm, blankToNull(jdk), blankToNull(graal), parallelTests,
-                cancel, variant, clientEnv);
+                config,
+                workingDir,
+                cacheDir,
+                jdksDir,
+                jvm,
+                blankToNull(jdk),
+                blankToNull(graal),
+                parallelTests,
+                cancel,
+                variant,
+                clientEnv);
     }
 
     public Session withParallelTests(boolean enabled) {
         return new Session(
-                config, workingDir, cacheDir, jdksDir, jvm, jdkSpec, graalSpec, enabled, cancel,
-                variant, clientEnv);
+                config, workingDir, cacheDir, jdksDir, jvm, jdkSpec, graalSpec, enabled, cancel, variant, clientEnv);
     }
 
     /** A copy carrying the given cancellation token ({@code null} → {@link CancelToken#NONE}). */
     public Session withCancel(CancelToken token) {
         return new Session(
-                config, workingDir, cacheDir, jdksDir, jvm, jdkSpec, graalSpec, parallelTests, token,
-                variant, clientEnv);
+                config,
+                workingDir,
+                cacheDir,
+                jdksDir,
+                jvm,
+                jdkSpec,
+                graalSpec,
+                parallelTests,
+                token,
+                variant,
+                clientEnv);
     }
 
     private static String blankToNull(String s) {

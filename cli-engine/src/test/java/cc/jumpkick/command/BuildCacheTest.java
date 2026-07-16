@@ -105,10 +105,13 @@ class BuildCacheTest {
         Path cache = tempDir.resolve("cache");
         run("build", "-C", tempDir.toString(), "--cache-dir", cache.toString());
         Path keys = cache.resolve("actions/keys");
-        assertThat(Files.list(keys).count()).as("build populated the action cache").isPositive();
+        assertThat(Files.list(keys).count())
+                .as("build populated the action cache")
+                .isPositive();
 
         // Plain clean: files go, the action cache STAYS (the next build restores from it).
-        assertThat(run("clean", "-C", tempDir.toString(), "--cache-dir", cache.toString())).isEqualTo(0);
+        assertThat(run("clean", "-C", tempDir.toString(), "--cache-dir", cache.toString()))
+                .isEqualTo(0);
         assertThat(tempDir.resolve("target")).doesNotExist();
         assertThat(Files.list(keys).count()).isPositive();
 

@@ -72,8 +72,8 @@ final class PathSourceMaterializer {
     Materialized materialize(PathSource source) throws IOException, InterruptedException {
         Path projectDir = lockRootDir.resolve(source.rawPath()).normalize();
         if (!Files.isDirectory(projectDir)) {
-            throw new IOException("path dependency `" + source.rawPath()
-                    + "` does not resolve to a directory (" + projectDir + ")");
+            throw new IOException(
+                    "path dependency `" + source.rawPath() + "` does not resolve to a directory (" + projectDir + ")");
         }
 
         String pathHash = shortHash(projectDir.toAbsolutePath().toString());
@@ -165,7 +165,9 @@ final class PathSourceMaterializer {
     }
 
     private static String shortHash(String value) {
-        return HexFormat.of().formatHex(sha256().digest(value.getBytes(StandardCharsets.UTF_8))).substring(0, 16);
+        return HexFormat.of()
+                .formatHex(sha256().digest(value.getBytes(StandardCharsets.UTF_8)))
+                .substring(0, 16);
     }
 
     private static MessageDigest sha256() {

@@ -44,34 +44,43 @@ public final class Diagnostics {
      * @param name   color for the artifact segment (BRIGHT_CYAN)
      * @param version color for version constraints (coordVersion — midpoint cyan/white)
      */
-    public record Palette(
-            String reset, String header, String rail, String group, String name, String version) {
+    public record Palette(String reset, String header, String rail, String group, String name, String version) {
 
         /** Default palette — hardcoded to match {@code JkDarkTheme}. Used when no palette is injected. */
         public static final Palette DEFAULT = fromRgb(
-                0x00, 0xBC, 0xD4,   // NORMAL_CYAN  — coordGroup
-                0x18, 0xFF, 0xFF,   // BRIGHT_CYAN  — coordName
-                0xC1, 0xFB, 0xFC,   // COORD_VERSION — coordVersion (#C1FBFC)
-                0xE9, 0x1E, 0x63,   // NORMAL_RED   — ‼ header
-                0x54, 0x6E, 0x7A);  // BRIGHT_BLACK — │ rail
+                0x00, 0xBC, 0xD4, // NORMAL_CYAN  — coordGroup
+                0x18, 0xFF, 0xFF, // BRIGHT_CYAN  — coordName
+                0xC1, 0xFB, 0xFC, // COORD_VERSION — coordVersion (#C1FBFC)
+                0xE9, 0x1E, 0x63, // NORMAL_RED   — ‼ header
+                0x54, 0x6E, 0x7A); // BRIGHT_BLACK — │ rail
 
         /** Plain palette — no colors. */
         public static final Palette PLAIN = new Palette("", "", "", "", "", "");
 
         /** Build a palette from raw RGB components supplied by the CLI theme layer. */
         public static Palette fromRgb(
-                int groupR, int groupG, int groupB,
-                int nameR,  int nameG,  int nameB,
-                int verR,   int verG,   int verB,
-                int headerR, int headerG, int headerB,
-                int railR,   int railG,   int railB) {
+                int groupR,
+                int groupG,
+                int groupB,
+                int nameR,
+                int nameG,
+                int nameB,
+                int verR,
+                int verG,
+                int verB,
+                int headerR,
+                int headerG,
+                int headerB,
+                int railR,
+                int railG,
+                int railB) {
             return new Palette(
                     "\033[m",
                     rgb(headerR, headerG, headerB),
-                    rgb(railR,   railG,   railB),
+                    rgb(railR, railG, railB),
                     rgb(groupR, groupG, groupB),
-                    rgb(nameR,  nameG,  nameB),
-                    rgb(verR,   verG,   verB));
+                    rgb(nameR, nameG, nameB),
+                    rgb(verR, verG, verB));
         }
 
         private static String rgb(int r, int g, int b) {
@@ -189,9 +198,7 @@ public final class Diagnostics {
                         .append(colorVersion(u.version(), palette))
                         .append(" is advertised but not fetchable (half-published release?) — skipped\n");
             case Incompatibility.Cause.Root r ->
-                out.append(prefix)
-                        .append(label)
-                        .append("The project\n");
+                out.append(prefix).append(label).append("The project\n");
         }
     }
 
@@ -253,7 +260,8 @@ public final class Diagnostics {
         if (!ansi) return pkg;
         int colon = pkg.indexOf(':');
         if (colon < 0) return palette.name() + pkg + palette.reset();
-        return palette.group() + pkg.substring(0, colon) + palette.reset() + ":" + palette.name() + pkg.substring(colon + 1) + palette.reset();
+        return palette.group() + pkg.substring(0, colon) + palette.reset() + ":" + palette.name()
+                + pkg.substring(colon + 1) + palette.reset();
     }
 
     private static String colorVersion(String version, Palette palette) {

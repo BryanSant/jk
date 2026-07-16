@@ -73,7 +73,8 @@ final class HostCheck {
         if (s.isEmpty() || s.indexOf(':') < 0) return false;
         for (int i = 0; i < s.length(); i++) {
             char c = s.charAt(i);
-            boolean ok = c == ':' || c == '.' || (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+            boolean ok =
+                    c == ':' || c == '.' || (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
             if (!ok) return false;
         }
         return true;

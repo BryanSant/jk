@@ -36,7 +36,11 @@ final class Interpolation {
                 continue;
             }
             switch (var) {
-                case "kotlin.version", "project.group", "project.name", "project.version", "host.os",
+                case "kotlin.version",
+                        "project.group",
+                        "project.name",
+                        "project.version",
+                        "host.os",
                         "host.os-arch" -> {}
                 default ->
                     throw new JkBuildParseException(where + " references unknown variable ${" + var
@@ -69,13 +73,14 @@ final class Interpolation {
      */
     static String hostOsArch() {
         String arch = System.getProperty("os.arch", "").toLowerCase(java.util.Locale.ROOT);
-        String normalized = switch (arch) {
-            case "amd64", "x86_64" -> "x86_64";
-            case "aarch64", "arm64" -> "aarch_64";
-            case "ppc64le" -> "ppcle_64";
-            case "s390x" -> "s390_64";
-            default -> arch;
-        };
+        String normalized =
+                switch (arch) {
+                    case "amd64", "x86_64" -> "x86_64";
+                    case "aarch64", "arm64" -> "aarch_64";
+                    case "ppc64le" -> "ppcle_64";
+                    case "s390x" -> "s390_64";
+                    default -> arch;
+                };
         return hostOs() + "-" + normalized;
     }
 

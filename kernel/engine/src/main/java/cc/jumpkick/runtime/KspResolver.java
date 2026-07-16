@@ -45,8 +45,7 @@ public final class KspResolver {
      */
     public static String discoverVersion(RepoGroup repos) throws IOException, InterruptedException {
         int colon = KSP_AA_MODULE.indexOf(':');
-        Coordinate coord =
-                Coordinate.of(KSP_AA_MODULE.substring(0, colon), KSP_AA_MODULE.substring(colon + 1), "any");
+        Coordinate coord = Coordinate.of(KSP_AA_MODULE.substring(0, colon), KSP_AA_MODULE.substring(colon + 1), "any");
         List<String> available = repos.availableVersions(coord);
         return available.stream()
                 .filter(KspResolver::standalone)

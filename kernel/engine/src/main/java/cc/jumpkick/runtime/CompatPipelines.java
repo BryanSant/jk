@@ -2,6 +2,8 @@
 package cc.jumpkick.runtime;
 
 import cc.jumpkick.cache.Cas;
+import cc.jumpkick.engine.plugin.PluginClient;
+import cc.jumpkick.engine.plugin.PluginJar;
 import cc.jumpkick.plugin.protocol.Ndjson;
 import cc.jumpkick.plugin.protocol.PluginProtocol;
 import cc.jumpkick.plugin.protocol.SpecWriter;
@@ -9,14 +11,10 @@ import cc.jumpkick.run.Pipeline;
 import cc.jumpkick.run.PipelineKey;
 import cc.jumpkick.run.Step;
 import cc.jumpkick.run.StepKind;
-import cc.jumpkick.engine.plugin.PluginClient;
-import cc.jumpkick.engine.plugin.PluginJar;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * The shared compat-bridge plugin drivers — {@code jk import}'s conversion pipeline and {@code jk mvn}/
@@ -74,7 +72,8 @@ public final class CompatPipelines {
                 .configString("baseDir", baseDir.toAbsolutePath().toString())
                 .configString("tmpDir", tmpDir.toAbsolutePath().toString())
                 .configBool("force", force);
-        if (report != null) specWriter.configString("report", report.toAbsolutePath().toString());
+        if (report != null)
+            specWriter.configString("report", report.toAbsolutePath().toString());
 
         Step convert = Step.builder("import")
                 .kind(StepKind.IO)
@@ -87,8 +86,12 @@ public final class CompatPipelines {
                         StringBuilder diag = new StringBuilder();
                         int exit = new PluginClient("##JKCMP:")
                                 .on(PluginProtocol.WROTE, json -> observer.onNote("wrote", Ndjson.str(json, "path")))
-                                .on(PluginProtocol.ERROR, json -> ctx.put(ERROR, Ndjson.str(json, PluginProtocol.MESSAGE)))
-                                .on(PluginProtocol.RESULT, json -> ctx.put(WARNINGS, Ndjson.intValue(json, "warnings", 0)))
+                                .on(
+                                        PluginProtocol.ERROR,
+                                        json -> ctx.put(ERROR, Ndjson.str(json, PluginProtocol.MESSAGE)))
+                                .on(
+                                        PluginProtocol.RESULT,
+                                        json -> ctx.put(WARNINGS, Ndjson.intValue(json, "warnings", 0)))
                                 .passthrough(ln -> diag.append(ln).append('\n'))
                                 .run(PluginLaunch.javaCommand(workerJar, spec));
                         ctx.put(EXIT, exit);
@@ -124,10 +127,14 @@ public final class CompatPipelines {
             Files.write(
                     spec,
                     new SpecWriter()
-                            .op(PluginProtocol.OP_COMMAND, isGradle ? "provision_gradle" : "provision_mvn",
+                            .op(
+                                    PluginProtocol.OP_COMMAND,
+                                    isGradle ? "provision_gradle" : "provision_mvn",
                                     "jk-compat-bridge")
-                            .configString("projectDir", projectDir.toAbsolutePath().toString())
-                            .configString("toolsRoot", toolsRoot.toAbsolutePath().toString())
+                            .configString(
+                                    "projectDir", projectDir.toAbsolutePath().toString())
+                            .configString(
+                                    "toolsRoot", toolsRoot.toAbsolutePath().toString())
                             .configBool("noDiscover", noDiscover)
                             .lines(),
                     StandardCharsets.UTF_8);

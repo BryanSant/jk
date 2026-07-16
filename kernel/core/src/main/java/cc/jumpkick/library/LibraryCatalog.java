@@ -285,7 +285,9 @@ public final class LibraryCatalog {
             if (line.startsWith("[")) {
                 int close = line.indexOf(']');
                 String section = close > 1
-                        ? line.substring(line.startsWith("[[") ? 2 : 1, close).replace("]", "").strip()
+                        ? line.substring(line.startsWith("[[") ? 2 : 1, close)
+                                .replace("]", "")
+                                .strip()
                         : "";
                 inTable = section.equals("libraries");
                 seenTable |= inTable;

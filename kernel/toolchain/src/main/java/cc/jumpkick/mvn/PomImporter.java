@@ -147,8 +147,10 @@ public final class PomImporter {
         JkBuild.Application rootApplication =
                 rootMainClass != null ? new JkBuild.Application(rootMainClass, false) : null;
         // The workspace root is a coordination point — no deps of its own.
-        JkBuild rootJkBuild =
-                JkBuild.builder(rootProject).workspace(workspace).application(rootApplication).build();
+        JkBuild rootJkBuild = JkBuild.builder(rootProject)
+                .workspace(workspace)
+                .application(rootApplication)
+                .build();
 
         Map<String, JkBuild> moduleBuilds = new LinkedHashMap<>();
         Path projectDir = rootPom.toAbsolutePath().getParent();

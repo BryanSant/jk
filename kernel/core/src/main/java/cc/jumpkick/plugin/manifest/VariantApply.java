@@ -4,10 +4,10 @@ package cc.jumpkick.plugin.manifest;
 import cc.jumpkick.config.JkBuildParseException;
 import cc.jumpkick.model.Dependency;
 import cc.jumpkick.model.JkBuild;
-import cc.jumpkick.plugin.PluginConfig;
 import cc.jumpkick.model.Scope;
 import cc.jumpkick.model.Variants;
 import cc.jumpkick.model.Variants.Selection;
+import cc.jumpkick.plugin.PluginConfig;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.EnumMap;
@@ -67,7 +67,8 @@ public final class VariantApply {
      * selection ({@code jk android licenses} runs pre-selection by design). Builds never use
      * this: silently building "no variant" is exactly what the mandatory check prevents.
      */
-    public static Applied applyLenient(JkBuild build, Path moduleDir, Selection selection, Map<String, String> clientEnv) {
+    public static Applied applyLenient(
+            JkBuild build, Path moduleDir, Selection selection, Map<String, String> clientEnv) {
         return apply(build, moduleDir, selection, clientEnv, true);
     }
 
@@ -90,8 +91,9 @@ public final class VariantApply {
         EnumMap<Scope, List<Dependency>> extraDeps = new EnumMap<>(Scope.class);
         for (Chosen c : chosen) {
             extraSrc.addAll(c.overlay().extraSrc());
-            c.overlay().dependencies().forEach((scope, deps) ->
-                    extraDeps.computeIfAbsent(scope, s -> new ArrayList<>()).addAll(deps));
+            c.overlay().dependencies().forEach((scope, deps) -> extraDeps
+                    .computeIfAbsent(scope, s -> new ArrayList<>())
+                    .addAll(deps));
         }
         if (!extraSrc.isEmpty()) out = out.withBuild(out.build().withExtraSrc(extraSrc));
         if (!extraDeps.isEmpty()) {
@@ -128,8 +130,8 @@ public final class VariantApply {
         }
         Variants.Value overlay = dimension.values().get(name);
         if (overlay == null) {
-            throw new JkBuildParseException("no value `" + name + "` in [variants." + dimension.name()
-                    + "] (declared: " + dimension.values().keySet() + ")");
+            throw new JkBuildParseException("no value `" + name + "` in [variants." + dimension.name() + "] (declared: "
+                    + dimension.values().keySet() + ")");
         }
         return new Chosen(dimension.name(), name, overlay);
     }
@@ -182,7 +184,8 @@ public final class VariantApply {
                 throw new JkBuildParseException("[" + manifest.table() + "] references " + group.table() + " = \""
                         + name + "\" but declares no [" + manifest.table() + "." + group.table() + "." + name + "]");
             }
-            Map<String, PluginDescriptor.SchemaKey> subSchema = manifest.subSchemas().get(group.schema());
+            Map<String, PluginDescriptor.SchemaKey> subSchema =
+                    manifest.subSchemas().get(group.schema());
             for (Map.Entry<String, Object> e : entry.entrySet()) {
                 Object value = e.getValue();
                 if (value instanceof String s) {
@@ -213,8 +216,7 @@ public final class VariantApply {
         String v = clientEnv.get(name);
         if (v == null) v = System.getenv(name);
         if (v == null) {
-            throw new JkBuildParseException(
-                    "[" + where + "] references env:" + name + " but " + name + " is not set");
+            throw new JkBuildParseException("[" + where + "] references env:" + name + " but " + name + " is not set");
         }
         return v;
     }

@@ -11,8 +11,7 @@ class MinimalXmlTest {
 
     @Test
     void parses_elements_attributes_and_text() {
-        Element root = MinimalXml.parse(
-                """
+        Element root = MinimalXml.parse("""
                 <?xml version="1.0" encoding="UTF-8"?>
                 <settings>
                   <servers>
@@ -33,8 +32,7 @@ class MinimalXmlTest {
 
     @Test
     void decodes_entities_in_text_and_attributes() {
-        Element root = MinimalXml.parse(
-                "<a name=\"q&quot;&amp;&apos;\"><b>1 &lt; 2 &gt; 0 &amp; &#65;&#x42;</b></a>");
+        Element root = MinimalXml.parse("<a name=\"q&quot;&amp;&apos;\"><b>1 &lt; 2 &gt; 0 &amp; &#65;&#x42;</b></a>");
         assertThat(root.attr("name")).isEqualTo("q\"&'");
         assertThat(root.element("b").orElseThrow().text()).isEqualTo("1 < 2 > 0 & AB");
     }
@@ -59,8 +57,7 @@ class MinimalXmlTest {
 
     @Test
     void round_trips_an_intellij_style_jdk_table() {
-        String table =
-                """
+        String table = """
                 <application>
                   <component name="ProjectJdkTable">
                     <jdk version="2">

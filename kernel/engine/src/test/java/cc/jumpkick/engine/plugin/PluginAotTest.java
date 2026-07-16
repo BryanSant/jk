@@ -6,8 +6,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.FileTime;
 import java.time.Duration;
 import java.util.List;
+import java.util.function.BooleanSupplier;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -51,7 +53,9 @@ class PluginAotTest {
         assertThat(PluginAot.eligible(PluginAot.jdkId(old))).isFalse();
 
         Path graal = Files.createDirectories(tmp.resolve("graal25"));
-        Files.writeString(graal.resolve("release"), "IMPLEMENTOR=\"Oracle Corporation\"\nIMPLEMENTOR_VERSION=\"Oracle GraalVM 25\"\nJAVA_VERSION=\"25\"\n");
+        Files.writeString(
+                graal.resolve("release"),
+                "IMPLEMENTOR=\"Oracle Corporation\"\nIMPLEMENTOR_VERSION=\"Oracle GraalVM 25\"\nJAVA_VERSION=\"25\"\n");
         PluginAot.JdkId graalId = PluginAot.jdkId(graal);
         if (graalId.vendor() == cc.jumpkick.jdk.JdkVendor.ORACLE_GRAALVM) {
             assertThat(PluginAot.eligible(graalId)).isFalse();
@@ -62,8 +66,7 @@ class PluginAotTest {
 
     // ---- training lifecycle -------------------------------------------------------------------
 
-    private static void waitUntil(Duration timeout, java.util.function.BooleanSupplier cond)
-            throws InterruptedException {
+    private static void waitUntil(Duration timeout, BooleanSupplier cond) throws InterruptedException {
         long deadline = System.nanoTime() + timeout.toNanos();
         while (!cond.getAsBoolean()) {
             if (System.nanoTime() > deadline) throw new AssertionError("condition not met within " + timeout);
@@ -80,25 +83,23 @@ class PluginAotTest {
         Path[] stale = new Path[5];
         for (int i = 0; i < 5; i++) {
             stale[i] = Files.writeString(dir.resolve("javac-stalekey000000" + i + "00.aot"), "old" + i);
-            Files.setLastModifiedTime(
-                    stale[i], java.nio.file.attribute.FileTime.fromMillis(System.currentTimeMillis() - (i + 1) * day));
+            Files.setLastModifiedTime(stale[i], FileTime.fromMillis(System.currentTimeMillis() - (i + 1) * day));
         }
         // A key untouched for 40 days is dead regardless of count; an orphaned failure marker
         // that old gets a fresh training chance; a young orphan marker stays sticky.
         Path dead = Files.writeString(dir.resolve("javac-deadkey000000000a.aot"), "dead");
-        Files.setLastModifiedTime(dead, java.nio.file.attribute.FileTime.fromMillis(System.currentTimeMillis() - 40 * day));
+        Files.setLastModifiedTime(dead, FileTime.fromMillis(System.currentTimeMillis() - 40 * day));
         Path deadMarker = Files.writeString(dir.resolve("javac-failkey000000000b.aot.noaot"), "");
-        Files.setLastModifiedTime(
-                deadMarker, java.nio.file.attribute.FileTime.fromMillis(System.currentTimeMillis() - 40 * day));
+        Files.setLastModifiedTime(deadMarker, FileTime.fromMillis(System.currentTimeMillis() - 40 * day));
         Path freshMarker = Files.writeString(dir.resolve("javac-failkey000000000c.aot.noaot"), "");
         // Engine caches share the directory but are version-lifecycle-owned — never swept here.
         Path engine = Files.writeString(dir.resolve("engine-1.0.0-aaaaaaaaaaaaaaaa.aot"), "engine");
-        Files.setLastModifiedTime(engine, java.nio.file.attribute.FileTime.fromMillis(System.currentTimeMillis() - 400 * day));
+        Files.setLastModifiedTime(engine, FileTime.fromMillis(System.currentTimeMillis() - 400 * day));
 
         Path cache = dir.resolve("javac-newkey0000000000.aot");
         // A stand-in trainer: any command that writes the aot output and exits 0.
-        PluginAot.trainAsync("test", cache, (aotOutput, scratch) ->
-                List.of("bash", "-c", "echo trained > '" + aotOutput + "'"));
+        PluginAot.trainAsync(
+                "test", cache, (aotOutput, scratch) -> List.of("bash", "-c", "echo trained > '" + aotOutput + "'"));
         waitUntil(Duration.ofSeconds(10), () -> Files.exists(cache));
         waitUntil(Duration.ofSeconds(10), () -> !Files.exists(stale[4]));
 
@@ -127,8 +128,8 @@ class PluginAotTest {
     void a_fresh_claim_file_from_another_process_blocks_training() throws Exception {
         Path cache = Files.createDirectories(tmp.resolve("aot3")).resolve("javac-claimed000000000.aot");
         Files.createFile(cache.resolveSibling(cache.getFileName() + ".training")); // fresh foreign claim
-        PluginAot.trainAsync("test", cache, (aotOutput, scratch) ->
-                List.of("bash", "-c", "echo trained > '" + aotOutput + "'"));
+        PluginAot.trainAsync(
+                "test", cache, (aotOutput, scratch) -> List.of("bash", "-c", "echo trained > '" + aotOutput + "'"));
         Thread.sleep(300); // trainAsync claims synchronously; nothing should have been spawned
         assertThat(cache).doesNotExist();
     }

@@ -71,8 +71,8 @@ public final class AndroidSdkInstaller {
 
         AndroidRepoFeed.Component component = feed().find(componentPath);
         if (component == null) {
-            throw new IOException("unknown Android SDK component: " + componentPath
-                    + " — not in Google's repository feed");
+            throw new IOException(
+                    "unknown Android SDK component: " + componentPath + " — not in Google's repository feed");
         }
         AndroidRepoFeed.Archive archive = component.archiveFor(AndroidRepoFeed.hostOs());
         if (archive == null) {
@@ -82,8 +82,8 @@ public final class AndroidSdkInstaller {
         String licenseId = component.licenseId();
         String licenseText = licenseId.isEmpty() ? null : feed().licenseText(licenseId);
         if (licenseText != null && !sdk.licenseAccepted(licenseId, AndroidRepoFeed.licenseHash(licenseText))) {
-            throw new IOException("Android SDK component " + componentPath + " requires accepting the '"
-                    + licenseId + "' license — run `jk android licenses --yes` first");
+            throw new IOException("Android SDK component " + componentPath + " requires accepting the '" + licenseId
+                    + "' license — run `jk android licenses --yes` first");
         }
 
         if (pinnedRevision != null && !pinnedRevision.equals(component.revision())) {
@@ -119,8 +119,7 @@ public final class AndroidSdkInstaller {
                 feed = AndroidRepoFeed.parse(Files.readAllBytes(Path.of(URI.create(url))));
             } else {
                 HttpResponse<byte[]> response = http.send(
-                        HttpRequest.newBuilder(URI.create(url)).GET().build(),
-                        HttpResponse.BodyHandlers.ofByteArray());
+                        HttpRequest.newBuilder(URI.create(url)).GET().build(), HttpResponse.BodyHandlers.ofByteArray());
                 if (response.statusCode() != 200) {
                     throw new IOException("Android SDK feed " + url + " returned " + response.statusCode());
                 }
@@ -139,8 +138,8 @@ public final class AndroidSdkInstaller {
         Path downloads = Files.createDirectories(sdk.root().resolve(".downloads"));
         Path target = Files.createTempFile(downloads, "jk-sdk-", ".zip");
         URI uri = URI.create(AndroidRepoFeed.REPOSITORY_BASE + archive.url());
-        HttpResponse<InputStream> response = http.send(
-                HttpRequest.newBuilder(uri).GET().build(), HttpResponse.BodyHandlers.ofInputStream());
+        HttpResponse<InputStream> response =
+                http.send(HttpRequest.newBuilder(uri).GET().build(), HttpResponse.BodyHandlers.ofInputStream());
         if (response.statusCode() != 200) {
             Files.deleteIfExists(target);
             throw new IOException("Android SDK download " + uri + " returned " + response.statusCode());
@@ -152,8 +151,8 @@ public final class AndroidSdkInstaller {
         String actual = hex(sha1.digest());
         if (!actual.equalsIgnoreCase(archive.sha1())) {
             Files.deleteIfExists(target);
-            throw new IOException("Android SDK download " + uri + " checksum mismatch: expected "
-                    + archive.sha1() + ", got " + actual);
+            throw new IOException("Android SDK download " + uri + " checksum mismatch: expected " + archive.sha1()
+                    + ", got " + actual);
         }
         return target;
     }
@@ -164,8 +163,8 @@ public final class AndroidSdkInstaller {
      * matching sdkmanager's layout exactly.
      */
     private static void extractZip(Path zip, Path dir) throws IOException {
-        Path staging = Files.createTempDirectory(dir.getParent() == null ? zip.getParent() : mkdirs(dir.getParent()),
-                ".extract-");
+        Path staging = Files.createTempDirectory(
+                dir.getParent() == null ? zip.getParent() : mkdirs(dir.getParent()), ".extract-");
         try (ZipInputStream in = new ZipInputStream(Files.newInputStream(zip))) {
             for (ZipEntry entry = in.getNextEntry(); entry != null; entry = in.getNextEntry()) {
                 Path out = staging.resolve(entry.getName()).normalize();

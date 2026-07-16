@@ -49,8 +49,8 @@ class PluginTableRegistryTest {
         assertThatThrownBy(() ->
                         PluginTableRegistry.validate(manifest, Toml.parse("version = \"4.0.0\"\naot-args = [1, 2]")))
                 .hasMessageContaining("[spring-boot].aot-args must be an array of strings");
-        assertThatThrownBy(() ->
-                        PluginTableRegistry.validate(manifest, Toml.parse("version = \"4.0.0\"\naot = \"yes\"")))
+        assertThatThrownBy(
+                        () -> PluginTableRegistry.validate(manifest, Toml.parse("version = \"4.0.0\"\naot = \"yes\"")))
                 .hasMessageContaining("[spring-boot].aot must be a boolean");
     }
 

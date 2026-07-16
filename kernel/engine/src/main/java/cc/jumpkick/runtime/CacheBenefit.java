@@ -125,8 +125,8 @@ public final class CacheBenefit {
         }
 
         Map<String, Set<String>> edges = moduleEdges == null ? Map.of() : moduleEdges;
-        long estimatedUncached = longestPath(
-                new ArrayList<>(moduleCost.keySet()), edges, d -> moduleCost.getOrDefault(d, 0L));
+        long estimatedUncached =
+                longestPath(new ArrayList<>(moduleCost.keySet()), edges, d -> moduleCost.getOrDefault(d, 0L));
 
         long saved = Math.max(0, estimatedUncached - Math.max(0, actualWallClockMillis));
         return new Result(estimatedUncached, saved, coveredSkips, totalSkips);

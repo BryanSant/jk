@@ -22,12 +22,9 @@ import java.util.regex.Pattern;
  */
 public final class UrlRewriter {
 
-    private static final Pattern GITHUB_BLOB =
-            Pattern.compile("https://github\\.com/([^/]+)/([^/]+)/blob/(.+)");
-    private static final Pattern GIST_PAGE =
-            Pattern.compile("https://gist\\.github\\.com/([^/]+)/([0-9a-fA-F]+)/?");
-    private static final Pattern BITBUCKET_SRC =
-            Pattern.compile("https://bitbucket\\.org/([^/]+)/([^/]+)/src/(.+)");
+    private static final Pattern GITHUB_BLOB = Pattern.compile("https://github\\.com/([^/]+)/([^/]+)/blob/(.+)");
+    private static final Pattern GIST_PAGE = Pattern.compile("https://gist\\.github\\.com/([^/]+)/([0-9a-fA-F]+)/?");
+    private static final Pattern BITBUCKET_SRC = Pattern.compile("https://bitbucket\\.org/([^/]+)/([^/]+)/src/(.+)");
 
     private UrlRewriter() {}
 

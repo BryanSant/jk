@@ -94,6 +94,8 @@ class JdkFloorTest {
             System.out.println("DIAG [" + d.step() + "]: " + d.message());
         }
         assertThat(result.errors()).isEmpty();
-        assertThat(result.success()).as("jdk=17 pinned Kotlin project builds and its test passes").isTrue();
+        assertThat(result.success())
+                .as("jdk=17 pinned Kotlin project builds and its test passes")
+                .isTrue();
     }
 }

@@ -55,21 +55,19 @@ public final class SessionContext {
         // loads early (everything reads current()), so the binding is in place before any pool
         // submission. Under a single static session (the CLI) this just rebinds the same session —
         // behavior unchanged.
-        cc.jumpkick.run.ContextPropagator.bind(
-                new cc.jumpkick.run.ContextPropagator.Propagator() {
-                    @Override
-                    public Runnable wrapRunnable(Runnable r) {
-                        Session s = current();
-                        return () -> runWhere(s, r);
-                    }
+        cc.jumpkick.run.ContextPropagator.bind(new cc.jumpkick.run.ContextPropagator.Propagator() {
+            @Override
+            public Runnable wrapRunnable(Runnable r) {
+                Session s = current();
+                return () -> runWhere(s, r);
+            }
 
-                    @Override
-                    public <T> java.util.concurrent.Callable<T> wrapCallable(
-                            java.util.concurrent.Callable<T> c) {
-                        Session s = current();
-                        return () -> where(s, c);
-                    }
-                });
+            @Override
+            public <T> java.util.concurrent.Callable<T> wrapCallable(java.util.concurrent.Callable<T> c) {
+                Session s = current();
+                return () -> where(s, c);
+            }
+        });
     }
 
     private SessionContext() {}

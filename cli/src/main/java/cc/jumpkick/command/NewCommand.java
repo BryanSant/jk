@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.command;
 
-import cc.jumpkick.run.StepNames;
-
 import cc.jumpkick.cli.CliOutput;
 import cc.jumpkick.cli.GlobalOptions;
 import cc.jumpkick.cli.run.PipelineConsole;
@@ -11,21 +9,20 @@ import cc.jumpkick.cli.tui.Answers;
 import cc.jumpkick.cli.tui.Glyphs;
 import cc.jumpkick.cli.tui.Wizard;
 import cc.jumpkick.cli.tui.WizardStep;
-import cc.jumpkick.config.JkBuildEditor;
-import cc.jumpkick.config.JkBuildParser;
-import cc.jumpkick.model.command.Exit;
 import cc.jumpkick.model.command.Arity;
 import cc.jumpkick.model.command.CliCommand;
+import cc.jumpkick.model.command.Exit;
 import cc.jumpkick.model.command.Invocation;
 import cc.jumpkick.model.command.Opt;
 import cc.jumpkick.model.command.Param;
+import cc.jumpkick.run.JkThreads;
 import cc.jumpkick.run.Pipeline;
 import cc.jumpkick.run.PipelineKey;
 import cc.jumpkick.run.PipelineResult;
 import cc.jumpkick.run.Step;
 import cc.jumpkick.run.StepKind;
+import cc.jumpkick.run.StepNames;
 import cc.jumpkick.util.JkDirs;
-import cc.jumpkick.run.JkThreads;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -36,7 +33,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import org.jline.terminal.Terminal;
-import org.jline.utils.AttributedStringBuilder;
 
 /**
  * {@code jk new} — create a new jk project (aliases: {@code init}, {@code create}).
@@ -338,8 +334,13 @@ public final class NewCommand implements CliCommand {
                             Optional.ofNullable(System.getProperty("user.home"))
                                     .map(Path::of)
                                     .orElse(null));
-                    var wizard = buildWizard(candidates, ctx.get(CATALOG).orElse(null), groupGuess, parent,
-                            defaultJdk.isPresent(), directory != null && isCurrentDirArg(directory));
+                    var wizard = buildWizard(
+                            candidates,
+                            ctx.get(CATALOG).orElse(null),
+                            groupGuess,
+                            parent,
+                            defaultJdk.isPresent(),
+                            directory != null && isCurrentDirArg(directory));
                     var wizardResult = wizard.run(terminal, preset);
                     if (wizardResult.isEmpty()) {
                         // Cancelled via Ctrl-C. Wizard.printCancellation
@@ -348,8 +349,7 @@ public final class NewCommand implements CliCommand {
                         // shutdown hooks — JLine's cleanup hook would block
                         // on the NonBlockingReader.
                         Wizard.printCancellation(
-                                terminal,
-                                parent != null ? "Module creation canceled" : "Project creation canceled");
+                                terminal, parent != null ? "Module creation canceled" : "Project creation canceled");
                         Runtime.getRuntime().halt(130);
                     }
                     ctx.put(ANSWERS, wizardResult.get());
@@ -426,9 +426,7 @@ public final class NewCommand implements CliCommand {
                     }
                     if ("exists".equals(d.code())) {
                         NewInputs partial = pipeline.get(INPUTS).orElse(null);
-                        String coord = partial != null
-                                ? partial.group() + ":" + partial.name()
-                                : "project";
+                        String coord = partial != null ? partial.group() + ":" + partial.name() : "project";
                         boolean isInit = directory != null && isCurrentDirArg(directory);
                         Terminal term = pipeline.get(TERMINAL).orElse(null);
                         emitProjectExistsError(coord, parent != null, isInit, term);
@@ -475,7 +473,9 @@ public final class NewCommand implements CliCommand {
         if (Files.exists(inputs.directory().resolve("jk.toml"))) {
             emitProjectExistsError(
                     inputs.group() + ":" + inputs.name(),
-                    parent != null, directory != null && isCurrentDirArg(directory), null);
+                    parent != null,
+                    directory != null && isCurrentDirArg(directory),
+                    null);
             return Exit.CONFIG;
         }
         Path cache = JkDirs.cache();
@@ -605,7 +605,8 @@ public final class NewCommand implements CliCommand {
                 : spring ? "traditional" : "simple";
         var resolvedMain = spring
                 // Kotlin's top-level main lives on the ApplicationKt facade class.
-                ? Optional.of(resolvedGroup + (resolvedLang == NewInputs.Language.KOTLIN ? ".ApplicationKt" : ".Application"))
+                ? Optional.of(
+                        resolvedGroup + (resolvedLang == NewInputs.Language.KOTLIN ? ".ApplicationKt" : ".Application"))
                 : isExecutable
                         ? Optional.of(
                                 deriveMainFqcn(resolvedGroup, resolvedLang, "simple".equalsIgnoreCase(resolvedLayout)))
@@ -694,18 +695,17 @@ public final class NewCommand implements CliCommand {
                 : Theme.colorize(coord, t.coordName());
 
         // Line 1: ‼ The group:name project already exists in this directory.
-        String warnLine = Theme.colorize(Glyphs.BANG, t.warning())
-                + " The " + coordStyled + " " + noun + " already exists in this directory.";
+        String warnLine = Theme.colorize(Glyphs.BANG, t.warning()) + " The " + coordStyled + " " + noun
+                + " already exists in this directory.";
 
         // Line 2: ✘ New Project  Failed to create project large. Project already exists.
         // Use chipLine (not failureLine) — failureLine auto-prepends "Failed to {command}"
         // which would double up if the tail also starts with "Failed to".
         String chipCommand = isModule ? "New Module" : "New Project";
         String bareName = colon > 0 ? coord.substring(colon + 1) : coord;
-        String failTail = "Failed to " + (isInit ? "initialize" : "create") + " " + noun
-                + " " + bareName + ". Project already exists.";
-        String chipLine = cc.jumpkick.cli.tui.PipelineWedge.chipLine(
-                Glyphs.CROSS, chipCommand, nerdfont, failTail);
+        String failTail = "Failed to " + (isInit ? "initialize" : "create") + " " + noun + " " + bareName
+                + ". Project already exists.";
+        String chipLine = cc.jumpkick.cli.tui.PipelineWedge.chipLine(Glyphs.CROSS, chipCommand, nerdfont, failTail);
 
         if (terminal != null) {
             var writer = terminal.writer();
@@ -972,12 +972,13 @@ public final class NewCommand implements CliCommand {
         String arch = cc.jumpkick.jdk.HostPlatform.currentArch();
         List<Integer> standardMajors = orElseList(
                 cc.jumpkick.jdk.SupportedJdk.offerableMajors(catalog, false, os, arch), offlineMajors(false));
-        List<Integer> nativeMajors = orElseList(
-                cc.jumpkick.jdk.SupportedJdk.offerableMajors(catalog, true, os, arch), offlineMajors(true));
+        List<Integer> nativeMajors =
+                orElseList(cc.jumpkick.jdk.SupportedJdk.offerableMajors(catalog, true, os, arch), offlineMajors(true));
         var javaVersion = WizardStep.RadioStep.horizontal("javaVersion", "Java Language Version:")
-                .choicesFn(a -> (a.getList("targets").contains("native") ? nativeMajors : standardMajors).stream()
-                        .map(m -> new cc.jumpkick.cli.tui.Choice(String.valueOf(m), String.valueOf(m)))
-                        .toList())
+                .choicesFn(a -> (a.getList("targets").contains("native") ? nativeMajors : standardMajors)
+                        .stream()
+                                .map(m -> new cc.jumpkick.cli.tui.Choice(String.valueOf(m), String.valueOf(m)))
+                                .toList())
                 .defaultChoice(String.valueOf(LATEST_LTS_MAJOR))
                 .when(a -> "java".equals(a.get("lang")) && !module && !hasDefaultJdk)
                 .build();

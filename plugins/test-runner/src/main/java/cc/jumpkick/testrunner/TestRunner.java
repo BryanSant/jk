@@ -135,8 +135,7 @@ public final class TestRunner implements Plugin {
      * counts. Single source of truth so the wire shape is identical regardless of which mode
      * invoked it.
      */
-    private static void emitDiscovery(
-            org.junit.platform.engine.TestDescriptor root, StreamingListener listener) {
+    private static void emitDiscovery(org.junit.platform.engine.TestDescriptor root, StreamingListener listener) {
         var counts = new int[] {0, 0}; // [classes, tests]
         for (var child : root.getChildren()) {
             walkAndEmit(child, listener, counts);
@@ -150,9 +149,7 @@ public final class TestRunner implements Plugin {
      * full execution would find, but without running anything.
      */
     private static void walkAndEmit(
-            org.junit.platform.engine.TestDescriptor node,
-            StreamingListener listener,
-            int[] counts) {
+            org.junit.platform.engine.TestDescriptor node, StreamingListener listener, int[] counts) {
         boolean isContainer = node.getType() == org.junit.platform.engine.TestDescriptor.Type.CONTAINER;
         boolean isTest = node.getType() == org.junit.platform.engine.TestDescriptor.Type.TEST;
         node.getSource().ifPresent(src -> {
@@ -181,13 +178,13 @@ public final class TestRunner implements Plugin {
     private static int runPullMode(Args args, JsonEventWriter writer) throws Exception {
         var streaming = new StreamingListener(writer, args.workerId);
         // Load engines once and reuse across all classes — keeps JIT warm.
-        var engines = java.util.ServiceLoader.load(org.junit.platform.engine.TestEngine.class)
-                .stream().map(java.util.ServiceLoader.Provider::get).toList();
+        var engines = java.util.ServiceLoader.load(org.junit.platform.engine.TestEngine.class).stream()
+                .map(java.util.ServiceLoader.Provider::get)
+                .toList();
 
         streaming.emitReady();
 
-        try (var stdin = new BufferedReader(
-                new InputStreamReader(System.in, StandardCharsets.UTF_8))) {
+        try (var stdin = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8))) {
             String line;
             while ((line = stdin.readLine()) != null) {
                 if (line.equals("DONE")) break;
@@ -196,9 +193,8 @@ public final class TestRunner implements Plugin {
                     continue;
                 }
                 String className = line.substring(4).trim();
-                var classRequest = new SimpleDiscoveryRequest(
-                        List.of(DiscoverySelectors.selectClass(className)),
-                        List.of());
+                var classRequest =
+                        new SimpleDiscoveryRequest(List.of(DiscoverySelectors.selectClass(className)), List.of());
                 for (var engine : engines) {
                     var uid = org.junit.platform.engine.UniqueId.root("[engine]", engine.getId());
                     var descriptor = engine.discover(classRequest, uid);
@@ -241,18 +237,19 @@ public final class TestRunner implements Plugin {
         try {
             // Jupiter requires requestLevelStore.getParent() to be present.
             // Create a launcher-level root store then a child for this request.
-            var parentStore =
-                    new org.junit.platform.engine.support.store.NamespacedHierarchicalStore<
-                            org.junit.platform.engine.support.store.Namespace>(null);
+            var parentStore = new org.junit.platform.engine.support.store.NamespacedHierarchicalStore<
+                    org.junit.platform.engine.support.store.Namespace>(null);
             var store = parentStore.newChild();
             return org.junit.platform.engine.ExecutionRequest.create(
-                    descriptor, listener, EmptyConfigParams.INSTANCE,
-                    NoOpOutputDirectoryCreator.INSTANCE, store,
+                    descriptor,
+                    listener,
+                    EmptyConfigParams.INSTANCE,
+                    NoOpOutputDirectoryCreator.INSTANCE,
+                    store,
                     org.junit.platform.engine.CancellationToken.disabled());
         } catch (NoClassDefFoundError e) {
             // JUnit 5.x: NamespacedHierarchicalStore / CancellationToken absent.
-            return new org.junit.platform.engine.ExecutionRequest(
-                    descriptor, listener, EmptyConfigParams.INSTANCE);
+            return new org.junit.platform.engine.ExecutionRequest(descriptor, listener, EmptyConfigParams.INSTANCE);
         }
     }
 
@@ -295,8 +292,7 @@ public final class TestRunner implements Plugin {
     // --- inner helpers -------------------------------------------------------
 
     /** Minimal {@link org.junit.platform.engine.EngineDiscoveryRequest} backed by fixed lists. */
-    private static final class SimpleDiscoveryRequest
-            implements org.junit.platform.engine.EngineDiscoveryRequest {
+    private static final class SimpleDiscoveryRequest implements org.junit.platform.engine.EngineDiscoveryRequest {
         private final List<org.junit.platform.engine.DiscoverySelector> selectors;
         private final List<org.junit.platform.engine.DiscoveryFilter<?>> filters;
 
@@ -309,15 +305,13 @@ public final class TestRunner implements Plugin {
 
         @Override
         @SuppressWarnings("unchecked")
-        public <T extends org.junit.platform.engine.DiscoverySelector> List<T> getSelectorsByType(
-                Class<T> type) {
+        public <T extends org.junit.platform.engine.DiscoverySelector> List<T> getSelectorsByType(Class<T> type) {
             return selectors.stream().filter(type::isInstance).map(type::cast).toList();
         }
 
         @Override
         @SuppressWarnings("unchecked")
-        public <T extends org.junit.platform.engine.DiscoveryFilter<?>> List<T> getFiltersByType(
-                Class<T> type) {
+        public <T extends org.junit.platform.engine.DiscoveryFilter<?>> List<T> getFiltersByType(Class<T> type) {
             return filters.stream().filter(type::isInstance).map(type::cast).toList();
         }
 
@@ -334,8 +328,7 @@ public final class TestRunner implements Plugin {
     }
 
     /** No-op {@link org.junit.platform.engine.OutputDirectoryCreator} — added in JUnit 6.x. */
-    private static final class NoOpOutputDirectoryCreator
-            implements org.junit.platform.engine.OutputDirectoryCreator {
+    private static final class NoOpOutputDirectoryCreator implements org.junit.platform.engine.OutputDirectoryCreator {
         static final NoOpOutputDirectoryCreator INSTANCE = new NoOpOutputDirectoryCreator();
         private static final java.nio.file.Path TMP =
                 java.nio.file.Path.of(System.getProperty("java.io.tmpdir", "/tmp"));
@@ -346,19 +339,28 @@ public final class TestRunner implements Plugin {
         }
 
         @Override
-        public java.nio.file.Path createOutputDirectory(
-                org.junit.platform.engine.TestDescriptor descriptor) {
+        public java.nio.file.Path createOutputDirectory(org.junit.platform.engine.TestDescriptor descriptor) {
             return null; // no per-test output directory
         }
     }
 
     /** ConfigurationParameters implementation that returns empty/false for all keys. */
-    private static final class EmptyConfigParams
-            implements org.junit.platform.engine.ConfigurationParameters {
+    private static final class EmptyConfigParams implements org.junit.platform.engine.ConfigurationParameters {
         static final EmptyConfigParams INSTANCE = new EmptyConfigParams();
 
-        @Override public java.util.Optional<String> get(String key) { return java.util.Optional.empty(); }
-        @Override public java.util.Optional<Boolean> getBoolean(String key) { return java.util.Optional.empty(); }
-        @Override public java.util.Set<String> keySet() { return java.util.Set.of(); }
+        @Override
+        public java.util.Optional<String> get(String key) {
+            return java.util.Optional.empty();
+        }
+
+        @Override
+        public java.util.Optional<Boolean> getBoolean(String key) {
+            return java.util.Optional.empty();
+        }
+
+        @Override
+        public java.util.Set<String> keySet() {
+            return java.util.Set.of();
+        }
     }
 }

@@ -101,7 +101,9 @@ public final class TrustedPlugins {
         sb.append("# entry (\"com.example:\") trusts every plugin in the group.\n");
         sb.append("plugins = [\n");
         for (String e : entries) {
-            sb.append("  \"").append(e.replace("\\", "\\\\").replace("\"", "\\\"")).append("\",\n");
+            sb.append("  \"")
+                    .append(e.replace("\\", "\\\\").replace("\"", "\\\""))
+                    .append("\",\n");
         }
         sb.append("]\n");
         Files.createDirectories(file.getParent());

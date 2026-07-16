@@ -25,10 +25,8 @@ class HttpEventsTest {
         try (HttpEvents.Subscription s = hub.subscribe()) {
             hub.publish("request-start", JsonOut.object().put("requestId", 1));
             hub.publish("request-finish", JsonOut.object().put("requestId", 1));
-            assertThat(s.next(1000))
-                    .isEqualTo("id: 1\nevent: request-start\ndata: {\"requestId\":1}\n\n");
-            assertThat(s.next(1000))
-                    .isEqualTo("id: 2\nevent: request-finish\ndata: {\"requestId\":1}\n\n");
+            assertThat(s.next(1000)).isEqualTo("id: 1\nevent: request-start\ndata: {\"requestId\":1}\n\n");
+            assertThat(s.next(1000)).isEqualTo("id: 2\nevent: request-finish\ndata: {\"requestId\":1}\n\n");
         }
     }
 

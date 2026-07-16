@@ -115,11 +115,15 @@ final class JdkInstallWizard {
                     int major = 0;
                     String versionStr = answers.get("version");
                     if (versionStr != null && !versionStr.isBlank()) {
-                        try { major = Integer.parseInt(versionStr); } catch (NumberFormatException ignored) {}
+                        try {
+                            major = Integer.parseInt(versionStr);
+                        } catch (NumberFormatException ignored) {
+                        }
                     }
                     final int selectedMajor = major;
                     return vendors.stream()
-                            .filter(v -> selectedMajor == 0 || v.installFolderByMajor().containsKey(selectedMajor))
+                            .filter(v -> selectedMajor == 0
+                                    || v.installFolderByMajor().containsKey(selectedMajor))
                             .map(v -> new Choice(v.id(), v.label(), a -> hintForAnswers(v, a)))
                             .toList();
                 })

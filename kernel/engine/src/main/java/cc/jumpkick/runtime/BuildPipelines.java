@@ -1,20 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.runtime;
 
-import cc.jumpkick.run.StepNames;
-import cc.jumpkick.plugin.build.Phase;
-import cc.jumpkick.plugin.build.PhaseGraph;
-
 import cc.jumpkick.cache.Cas;
 import cc.jumpkick.compile.ClasspathResolver;
-import cc.jumpkick.compile.CycloneDxSbom;
 import cc.jumpkick.compile.CompileRequest;
 import cc.jumpkick.compile.CompileResult;
+import cc.jumpkick.compile.CycloneDxSbom;
 import cc.jumpkick.compile.JarPackager;
 import cc.jumpkick.compile.KotlincRequest;
 import cc.jumpkick.compile.ShadowPackager;
 import cc.jumpkick.config.JkBuildParser;
 import cc.jumpkick.config.WorkspaceClasspath;
+import cc.jumpkick.engine.plugin.PluginJar;
 import cc.jumpkick.http.Http;
 import cc.jumpkick.jdk.JavaHomes;
 import cc.jumpkick.jdk.JdkEnsure;
@@ -24,6 +21,8 @@ import cc.jumpkick.lock.LockfileReader;
 import cc.jumpkick.model.JkBuild;
 import cc.jumpkick.model.Profile;
 import cc.jumpkick.model.Scope;
+import cc.jumpkick.plugin.build.Phase;
+import cc.jumpkick.plugin.build.PhaseGraph;
 import cc.jumpkick.resolver.CacheSync;
 import cc.jumpkick.resolver.pubgrub.UnsatisfiableException;
 import cc.jumpkick.run.Pipeline;
@@ -31,12 +30,12 @@ import cc.jumpkick.run.PipelineKey;
 import cc.jumpkick.run.Step;
 import cc.jumpkick.run.StepContext;
 import cc.jumpkick.run.StepKind;
+import cc.jumpkick.run.StepNames;
 import cc.jumpkick.run.TestSummary;
 import cc.jumpkick.task.ActionCache;
 import cc.jumpkick.task.ActionKey;
 import cc.jumpkick.test.JUnitLauncher;
 import cc.jumpkick.test.TestProgressListener;
-import cc.jumpkick.engine.plugin.PluginJar;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -126,8 +125,7 @@ public final class BuildPipelines {
     public static final PipelineKey<Path> MAIN_CLASSES = PipelineKey.of("main-classes", Path.class);
     public static final PipelineKey<Path> TEST_CLASSES = PipelineKey.of("test-classes", Path.class);
     public static final PipelineKey<BuildLayout> LAYOUT = PipelineKey.of("layout", BuildLayout.class);
-    public static final PipelineKey<TestSummary> TEST_RESULT =
-            PipelineKey.of("test-result", TestSummary.class);
+    public static final PipelineKey<TestSummary> TEST_RESULT = PipelineKey.of("test-result", TestSummary.class);
     public static final PipelineKey<Boolean> NO_TEST_SOURCES = PipelineKey.of("no-test-sources", Boolean.class);
 
     /**
@@ -196,21 +194,46 @@ public final class BuildPipelines {
                 Set<Path> projectModules,
                 cc.jumpkick.config.Session session) {
             this(
-                    dir, cache, buildFile, lockFile, lockDir, workerCount, estimatedTestCount, profileName,
-                    jdksDir, skipTests, verbose, testOnly, compileOnly, projectModules, session,
-                    session.variant(), session.clientEnv());
+                    dir,
+                    cache,
+                    buildFile,
+                    lockFile,
+                    lockDir,
+                    workerCount,
+                    estimatedTestCount,
+                    profileName,
+                    jdksDir,
+                    skipTests,
+                    verbose,
+                    testOnly,
+                    compileOnly,
+                    projectModules,
+                    session,
+                    session.variant(),
+                    session.clientEnv());
         }
 
         /** This request with a variant selection + client-resolved env attached. */
         public Inputs withVariant(String variant, Map<String, String> clientEnv) {
             return new Inputs(
-                    dir, cache, buildFile, lockFile, lockDir, workerCount, estimatedTestCount, profileName,
-                    jdksDir, skipTests, verbose, testOnly, compileOnly, projectModules, session,
-                    variant == null ? "" : variant, clientEnv == null ? Map.of() : clientEnv);
+                    dir,
+                    cache,
+                    buildFile,
+                    lockFile,
+                    lockDir,
+                    workerCount,
+                    estimatedTestCount,
+                    profileName,
+                    jdksDir,
+                    skipTests,
+                    verbose,
+                    testOnly,
+                    compileOnly,
+                    projectModules,
+                    session,
+                    variant == null ? "" : variant,
+                    clientEnv == null ? Map.of() : clientEnv);
         }
-
-
-
 
         /** Copy carrying the project/workspace module set — set by the estimate paths (explain/build). */
         public Inputs withProjectModules(Set<Path> modules) {
@@ -298,16 +321,14 @@ public final class BuildPipelines {
             // Third-party plugin pre-flight: extract any locked-but-unmaterialized manifests
             // from the CAS and re-parse, so a declared plugin's table validates (and its
             // contributions apply) on the very first build after `jk sync`.
-            if (!jkBuild.plugins().isEmpty()
-                    && PluginDescriptorOps.ensureMaterialized(in.dir(), in.cache())) {
+            if (!jkBuild.plugins().isEmpty() && PluginDescriptorOps.ensureMaterialized(in.dir(), in.cache())) {
                 jkBuild = JkBuildParser.reparse(in.buildFile());
             }
             // Variant overlays fold into plugin configs HERE, so describe keys, contribution
             // predicates, step/packager action keys, and plugin specs all see one flat effective
             // config (build-plugins §3.1: parameterized pipelines, not configured objects).
             var applied = cc.jumpkick.plugin.manifest.VariantApply.apply(
-                    jkBuild, in.dir(), cc.jumpkick.model.Variants.Selection.parse(in.variant()),
-                    in.clientEnv());
+                    jkBuild, in.dir(), cc.jumpkick.model.Variants.Selection.parse(in.variant()), in.clientEnv());
             jkBuild = applied.build();
             variantSecrets = applied.secrets();
             parsedBuild = jkBuild;
@@ -383,7 +404,8 @@ public final class BuildPipelines {
         // when mixed, else whichever single compiler ran.
         final boolean mixed = useJava && useKotlin;
         final boolean kotlinModule = useKotlin; // effectively-final copy for lambdas
-        String mainCompile = mixed ? StepNames.ASSEMBLE_CLASSES : (useKotlin ? StepNames.COMPILE_KOTLIN : StepNames.COMPILE_JAVA);
+        String mainCompile =
+                mixed ? StepNames.ASSEMBLE_CLASSES : (useKotlin ? StepNames.COMPILE_KOTLIN : StepNames.COMPILE_JAVA);
 
         // Predict each step's bar weight from the work it will actually do this
         // run (skipped/cached steps collapse to ~1; real work dominates). Computed
@@ -416,8 +438,19 @@ public final class BuildPipelines {
         // ---- parse-build ------------------------------------------------
         final boolean kspEnabled = useKotlin && parsedBuild != null && hasProcessorDeps(parsedBuild);
         Ctx cx = new Ctx(
-                in, cas, actionCache, plan, javaMainSrcRef, kotlinMainSrcRef,
-                javaMainSrcDir, compact, mixed, kotlinModule, mixedWithJava, mainCompile, kspEnabled);
+                in,
+                cas,
+                actionCache,
+                plan,
+                javaMainSrcRef,
+                kotlinMainSrcRef,
+                javaMainSrcDir,
+                compact,
+                mixed,
+                kotlinModule,
+                mixedWithJava,
+                mainCompile,
+                kspEnabled);
 
         Step parseBuild = parseBuildStep(cx);
 
@@ -549,7 +582,8 @@ public final class BuildPipelines {
         boolean kotlinModule = cx.kotlinModule();
         boolean mixedWithJava = cx.mixedWithJava();
         String mainCompile = cx.mainCompile();
-        return Step.builder(StepNames.PARSE_BUILD).phase(Phase.RESOLVE)
+        return Step.builder(StepNames.PARSE_BUILD)
+                .phase(Phase.RESOLVE)
                 .label("Parsing")
                 .weight(() -> plan.get().fullyCached() ? W_CACHED_TOUCH : W_PARSE)
                 .ticks(() -> {
@@ -592,7 +626,9 @@ public final class BuildPipelines {
                             throw new RuntimeException("dependency resolution failed");
                         }
                         if (result.status() != 0) {
-                            ctx.error("verbatim", result.error() != null ? result.error() : "dependency resolution failed");
+                            ctx.error(
+                                    "verbatim",
+                                    result.error() != null ? result.error() : "dependency resolution failed");
                             throw new RuntimeException("lock failed");
                         }
                         ctx.put(LOCKFILE, result.lockfile());
@@ -727,7 +763,8 @@ public final class BuildPipelines {
         boolean kotlinModule = cx.kotlinModule();
         boolean mixedWithJava = cx.mixedWithJava();
         String mainCompile = cx.mainCompile();
-        return Step.builder(StepNames.RESOLVE_DEPS).phase(Phase.RESOLVE)
+        return Step.builder(StepNames.RESOLVE_DEPS)
+                .phase(Phase.RESOLVE)
                 .label("Syncing")
                 .kind(StepKind.IO)
                 .requires(StepNames.PARSE_BUILD)
@@ -788,7 +825,8 @@ public final class BuildPipelines {
         boolean kotlinModule = cx.kotlinModule();
         boolean mixedWithJava = cx.mixedWithJava();
         String mainCompile = cx.mainCompile();
-        return Step.builder(StepNames.ENSURE_JDK).phase(Phase.RESOLVE)
+        return Step.builder(StepNames.ENSURE_JDK)
+                .phase(Phase.RESOLVE)
                 .label("JDK")
                 .kind(StepKind.IO)
                 .requires(StepNames.PARSE_BUILD)
@@ -806,9 +844,11 @@ public final class BuildPipelines {
                         // the running JVM and compiled/tested on the wrong JDK (self-healing on
                         // the next build — but wrong once is wrong). The ensure's own outcome is
                         // authoritative; the walk is only the no-pin fallback.
-                        ctx.put(JAVA_HOME, outcome.jdk()
-                                .map(cc.jumpkick.jdk.InstalledJdk::home)
-                                .orElseGet(() -> JavaHomes.resolveJavaHome(in.dir())));
+                        ctx.put(
+                                JAVA_HOME,
+                                outcome.jdk()
+                                        .map(cc.jumpkick.jdk.InstalledJdk::home)
+                                        .orElseGet(() -> JavaHomes.resolveJavaHome(in.dir())));
                     } catch (Exception e) {
                         ctx.error("jdk", e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage());
                         throw e;
@@ -919,9 +959,11 @@ public final class BuildPipelines {
         // Plugin-contributed sources (protoc output, variant extra-src) must exist before the
         // round and join its source roots — a contributed @Module/@Entity is processor input
         // like any hand-written one.
-        List<String> requires = new ArrayList<>(List.of(StepNames.PARSE_BUILD, StepNames.RESOLVE_DEPS, StepNames.ENSURE_JDK));
+        List<String> requires =
+                new ArrayList<>(List.of(StepNames.PARSE_BUILD, StepNames.RESOLVE_DEPS, StepNames.ENSURE_JDK));
         requires.addAll(sourceGenStepSteps(pluginDecls));
-        return Step.builder("ksp").phase(Phase.COMPILE)
+        return Step.builder("ksp")
+                .phase(Phase.COMPILE)
                 .label("KSP")
                 .kind(StepKind.CPU)
                 .requires(requires.toArray(new String[0]))
@@ -1010,7 +1052,9 @@ public final class BuildPipelines {
                     // -jdk-home cross-compile input below.
                     Path javaHome = ctx.require(JAVA_HOME);
                     List<String> cmd = new ArrayList<>();
-                    cmd.add(cc.jumpkick.jdk.JavaHomes.runningJavaHome().resolve("bin/java").toString());
+                    cmd.add(cc.jumpkick.jdk.JavaHomes.runningJavaHome()
+                            .resolve("bin/java")
+                            .toString());
                     cmd.addAll(cc.jumpkick.engine.plugin.JvmOptions.batchFlags(1));
                     cmd.add("-cp");
                     cmd.add(joinPaths(kspClasspath, sep));
@@ -1024,7 +1068,8 @@ public final class BuildPipelines {
                     cmd.add("-class-output-dir=" + outBase.resolve("classes").toAbsolutePath());
                     cmd.add("-kotlin-output-dir=" + outBase.resolve("kotlin").toAbsolutePath());
                     cmd.add("-java-output-dir=" + outBase.resolve("java").toAbsolutePath());
-                    cmd.add("-resource-output-dir=" + outBase.resolve("resources").toAbsolutePath());
+                    cmd.add("-resource-output-dir="
+                            + outBase.resolve("resources").toAbsolutePath());
                     cmd.add("-language-version=" + languageVersion);
                     cmd.add("-api-version=" + languageVersion);
                     cmd.add("-jvm-target=" + CompileSupport.kotlinJvmTarget(ctx.require(RELEASE)));
@@ -1036,8 +1081,8 @@ public final class BuildPipelines {
                     // KSP's map syntax joins entries with the platform path separator, same as
                     // its list args; relative option paths resolve against the module dir (the
                     // KSP process CWD).
-                    List<String> kspOptions = new ArrayList<>(
-                            cc.jumpkick.plugin.manifest.PluginContributions.kspOptions(
+                    List<String> kspOptions =
+                            new ArrayList<>(cc.jumpkick.plugin.manifest.PluginContributions.kspOptions(
                                     project, in.dir(), lockModules(ctx.require(LOCKFILE))));
                     kspOptions.addAll(project.build().kspOptions());
                     if (!kspOptions.isEmpty()) {
@@ -1110,7 +1155,8 @@ public final class BuildPipelines {
         if (decls != null) {
             for (PluginBuild.StepDecl step : decls.steps()) {
                 for (String rel : step.contributesSources()) {
-                    Path contributed = PluginBuild.stepScratch(layout, step.name()).resolve(rel);
+                    Path contributed =
+                            PluginBuild.stepScratch(layout, step.name()).resolve(rel);
                     if (Files.isDirectory(contributed)) roots.add(contributed);
                 }
             }
@@ -1150,7 +1196,8 @@ public final class BuildPipelines {
         boolean kotlinModule = cx.kotlinModule();
         boolean mixedWithJava = cx.mixedWithJava();
         String mainCompile = cx.mainCompile();
-        return Step.builder(StepNames.COMPILE_JAVA).phase(Phase.COMPILE)
+        return Step.builder(StepNames.COMPILE_JAVA)
+                .phase(Phase.COMPILE)
                 .label("Compiling")
                 .kind(StepKind.CPU)
                 .requires(javaCompileRequires(mixed, pluginDecls, cx.ksp()))
@@ -1253,7 +1300,8 @@ public final class BuildPipelines {
                     if (!rerun) {
                         try {
                             boolean restores = actionCache
-                                    .lookup(ActionKey.forJavac(taskId, request, cc.jumpkick.model.BuildIdentity.cacheKeyVersion()))
+                                    .lookup(ActionKey.forJavac(
+                                            taskId, request, cc.jumpkick.model.BuildIdentity.cacheKeyVersion()))
                                     .isPresent();
                             ctx.reweight(
                                     restores ? EffortWeights.RESTORE : EffortWeights.compileWeight(sources.size()));
@@ -1318,7 +1366,9 @@ public final class BuildPipelines {
                         // Never fail silently: if no ERROR diagnostic surfaced (crash,
                         // swallowed output), say so explicitly.
                         if (!errored) {
-                            ctx.error("javac", "compile failed without compiler diagnostics (outcome: " + r.outcome() + ")");
+                            ctx.error(
+                                    "javac",
+                                    "compile failed without compiler diagnostics (outcome: " + r.outcome() + ")");
                         }
                         throw new RuntimeException("javac reported errors");
                     }
@@ -1333,14 +1383,16 @@ public final class BuildPipelines {
     }
 
     private static String[] kotlinCompileRequires(PluginBuild.Declarations decls, boolean ksp) {
-        List<String> requires = new ArrayList<>(List.of(StepNames.PARSE_BUILD, StepNames.RESOLVE_DEPS, StepNames.ENSURE_JDK));
+        List<String> requires =
+                new ArrayList<>(List.of(StepNames.PARSE_BUILD, StepNames.RESOLVE_DEPS, StepNames.ENSURE_JDK));
         if (ksp) requires.add("ksp");
         requires.addAll(sourceGenStepSteps(decls));
         return requires.toArray(new String[0]);
     }
 
     private static String[] javaCompileRequires(boolean mixed, PluginBuild.Declarations decls, boolean ksp) {
-        List<String> requires = new ArrayList<>(List.of(StepNames.PARSE_BUILD, StepNames.RESOLVE_DEPS, StepNames.ENSURE_JDK));
+        List<String> requires =
+                new ArrayList<>(List.of(StepNames.PARSE_BUILD, StepNames.RESOLVE_DEPS, StepNames.ENSURE_JDK));
         if (mixed) requires.add(StepNames.COMPILE_KOTLIN);
         if (ksp) requires.add("ksp");
         requires.addAll(sourceGenStepSteps(decls));
@@ -1367,7 +1419,8 @@ public final class BuildPipelines {
         boolean kotlinModule = cx.kotlinModule();
         boolean mixedWithJava = cx.mixedWithJava();
         String mainCompile = cx.mainCompile();
-        return Step.builder(StepNames.COMPILE_KOTLIN).phase(Phase.COMPILE)
+        return Step.builder(StepNames.COMPILE_KOTLIN)
+                .phase(Phase.COMPILE)
                 .label("Kotlin")
                 .kind(StepKind.CPU)
                 // Kotlin compiles first (reads Java declarations from source), so it
@@ -1473,8 +1526,7 @@ public final class BuildPipelines {
                             ktOut,
                             taskId,
                             workingDir,
-                            kotlinJavaSourceRoots(
-                                    mixedWithJava, compact, in.dir(), ctx.require(LAYOUT), pluginDecls));
+                            kotlinJavaSourceRoots(mixedWithJava, compact, in.dir(), ctx.require(LAYOUT), pluginDecls));
                     if (!kr.success()) {
                         ctx.error("kotlinc", kr.output());
                         throw new RuntimeException("kotlinc reported errors");
@@ -1505,7 +1557,8 @@ public final class BuildPipelines {
         boolean kotlinModule = cx.kotlinModule();
         boolean mixedWithJava = cx.mixedWithJava();
         String mainCompile = cx.mainCompile();
-        return Step.builder(StepNames.COPY_RESOURCES).phase(Phase.COMPILE)
+        return Step.builder(StepNames.COPY_RESOURCES)
+                .phase(Phase.COMPILE)
                 .label("Resources")
                 .kind(StepKind.CPU)
                 .requires(mainCompile)
@@ -1538,7 +1591,8 @@ public final class BuildPipelines {
         boolean kotlinModule = cx.kotlinModule();
         boolean mixedWithJava = cx.mixedWithJava();
         String mainCompile = cx.mainCompile();
-        return Step.builder(StepNames.COMPILE_TEST).phase(Phase.TEST)
+        return Step.builder(StepNames.COMPILE_TEST)
+                .phase(Phase.TEST)
                 .label("Test Compile")
                 .kind(StepKind.CPU)
                 .requires(mainCompile, StepNames.RESOLVE_DEPS)
@@ -1612,7 +1666,7 @@ public final class BuildPipelines {
                         // without this a Lombok-using test wouldn't see its generated modules.
                         @SuppressWarnings("unchecked")
                         List<Path> processorCp =
-                            (List<Path>) ctx.get(JAVAC_PROCESSOR_CP).orElseGet(() -> ctx.require(PROCESSOR_CP));
+                                (List<Path>) ctx.get(JAVAC_PROCESSOR_CP).orElseGet(() -> ctx.require(PROCESSOR_CP));
                         cc.jumpkick.task.JavaIncrementalCompile.ApSetup ap = null;
                         if (!processorCp.isEmpty()) {
                             Path genDir = ctx.require(LAYOUT).generatedSourcesDir("annotations", "test");
@@ -1673,7 +1727,8 @@ public final class BuildPipelines {
         boolean kotlinModule = cx.kotlinModule();
         boolean mixedWithJava = cx.mixedWithJava();
         String mainCompile = cx.mainCompile();
-        return Step.builder(StepNames.RUN_TESTS).phase(Phase.TEST)
+        return Step.builder(StepNames.RUN_TESTS)
+                .phase(Phase.TEST)
                 .label("Testing")
                 .kind(StepKind.IO)
                 .requires(StepNames.COMPILE_TEST, StepNames.COPY_RESOURCES)
@@ -1833,8 +1888,7 @@ public final class BuildPipelines {
             if (total == null) return null;
             long succeeded = Long.parseLong(record.outputs().getOrDefault("tests.succeeded", total));
             long skipped = Long.parseLong(record.outputs().getOrDefault("tests.skipped", "0"));
-            return new cc.jumpkick.run.TestSummary(
-                    Long.parseLong(total), succeeded, 0, skipped, java.util.List.of());
+            return new cc.jumpkick.run.TestSummary(Long.parseLong(total), succeeded, 0, skipped, java.util.List.of());
         } catch (NumberFormatException e) {
             return null;
         }
@@ -1857,7 +1911,8 @@ public final class BuildPipelines {
         boolean kotlinModule = cx.kotlinModule();
         boolean mixedWithJava = cx.mixedWithJava();
         String mainCompile = cx.mainCompile();
-        return Step.builder(StepNames.PACKAGE_JAR).phase(Phase.PACKAGE)
+        return Step.builder(StepNames.PACKAGE_JAR)
+                .phase(Phase.PACKAGE)
                 .label("Packaging")
                 .kind(StepKind.CPU)
                 .requires(packageRequires(in, pluginDecls))
@@ -1894,7 +1949,8 @@ public final class BuildPipelines {
                             "sbom:" + (sbom == null ? "" : cc.jumpkick.util.Hashing.sha256Hex(sbom)),
                             "manifest:" + project.manifest());
                     String pkgTask = ActionKey.qualifiedTaskId(StepNames.PACKAGE_JAR, jarPath);
-                    String pkgKey = ActionKey.forArtifact(pkgTask, cc.jumpkick.model.BuildIdentity.cacheKeyVersion(), tokens);
+                    String pkgKey =
+                            ActionKey.forArtifact(pkgTask, cc.jumpkick.model.BuildIdentity.cacheKeyVersion(), tokens);
                     if (restorePackaged(in.cache(), pkgKey, jarPath.getParent())) {
                         ctx.put(JAR_PATH, jarPath);
                         ctx.label(jarPath.getFileName() + " up-to-date");
@@ -1977,7 +2033,8 @@ public final class BuildPipelines {
                         + " declares transformsClasses but not In.classes() — the classes dir is what"
                         + " it transforms");
             }
-            if (!s.contributesClasses().isEmpty() || !s.contributesResources().isEmpty()
+            if (!s.contributesClasses().isEmpty()
+                    || !s.contributesResources().isEmpty()
                     || !s.contributesSources().isEmpty()) {
                 throw new IllegalStateException("plugin step " + s.name()
                         + " declares transformsClasses and contributes* — a transform REPLACES the"
@@ -2002,7 +2059,8 @@ public final class BuildPipelines {
                     + " runs before compile but declares In.classes() — generated-source steps"
                     + " consume project files (In.projectFiles), config, or other step outputs");
         }
-        if (step.afterPhase() != null && step.beforePhase() != null
+        if (step.afterPhase() != null
+                && step.beforePhase() != null
                 && !PhaseGraph.isValidWindow(step.afterPhase(), step.beforePhase())) {
             // Coherent window: after must run no later than before in the phase DAG.
             throw new IllegalStateException("plugin step " + step.name() + " declares a reversed phase window —"
@@ -2026,7 +2084,9 @@ public final class BuildPipelines {
         }
         // Any other classes-consuming step reads MAIN_CLASSES, which the transform re-points —
         // it must observe the transformed dir, never race the transform (dex after Hilt's rewrite).
-        if (transform != null && !step.name().equals(transform.name()) && step.inputs().contains("classes")) {
+        if (transform != null
+                && !step.name().equals(transform.name())
+                && step.inputs().contains("classes")) {
             requires.add("plugin-" + transform.name());
         }
         return Step.builder("plugin-" + step.name())
@@ -2049,9 +2109,8 @@ public final class BuildPipelines {
                     Path javaHome = ctx.require(JAVA_HOME);
                     Path scratch = PluginBuild.stepScratch(layout, step.name());
                     // Before compile no classes exist to scan — the declared main (or null) rides.
-                    String startClass = beforeCompile(step)
-                            ? project.mainClass()
-                            : resolvedMain(project, in.dir(), classes);
+                    String startClass =
+                            beforeCompile(step) ? project.mainClass() : resolvedMain(project, in.dir(), classes);
 
                     List<Path> classpath =
                             PluginBuild.productionClasspath(in.dir(), in.cache(), in.lockFile(), project);
@@ -2061,8 +2120,8 @@ public final class BuildPipelines {
 
                     // Manifest-contributed tool artifacts (aapt2, r8, a platform jar) — fetched
                     // into the cache, handed to the body by artifact name, keyed like any input.
-                    java.util.Map<String, Path> toolExtras =
-                            PluginBuild.fetchStepDependencies(project, in.dir(), cx.cas(), PluginBuild.sdkPins(in.lockFile()));
+                    java.util.Map<String, Path> toolExtras = PluginBuild.fetchStepDependencies(
+                            project, in.dir(), cx.cas(), PluginBuild.sdkPins(in.lockFile()));
 
                     // Action key: exactly the declared inputs, plus the facts the body sees.
                     List<String> tokens = new ArrayList<>();
@@ -2097,8 +2156,10 @@ public final class BuildPipelines {
                         tokens.add("tool:" + tool.getKey() + ":"
                                 + cc.jumpkick.task.ClasspathFingerprint.entry(tool.getValue()));
                     }
-                    tokens.add("facts:" + project.project().group() + ":" + project.project().name() + ":"
-                            + project.project().version() + ":" + project.project().javaRelease() + ":"
+                    tokens.add("facts:" + project.project().group() + ":"
+                            + project.project().name() + ":"
+                            + project.project().version() + ":"
+                            + project.project().javaRelease() + ":"
                             + startClass);
                     // The step's CODE is an input: a changed plugin jar must re-run the
                     // step, or a plugin upgrade (or first-party dev iteration) silently restores
@@ -2107,7 +2168,8 @@ public final class BuildPipelines {
                             + cc.jumpkick.task.ClasspathFingerprint.entry(
                                     PluginBuild.workerJarFor(active, in.cache())));
                     String taskId = ActionKey.qualifiedTaskId("plugin-" + step.name(), scratch);
-                    String actionKey = ActionKey.forArtifact(taskId, cc.jumpkick.model.BuildIdentity.cacheKeyVersion(), tokens);
+                    String actionKey =
+                            ActionKey.forArtifact(taskId, cc.jumpkick.model.BuildIdentity.cacheKeyVersion(), tokens);
                     cc.jumpkick.task.ActionCache actionCache = cx.actionCache();
                     var hit = actionCache.lookup(actionKey);
                     if (hit.isPresent()) {
@@ -2200,8 +2262,8 @@ public final class BuildPipelines {
                     entry.jar(),
                     a.version().contains("SNAPSHOT"),
                     entry.container()));
-            sbomComponents.add(new CycloneDxSbom.Component(
-                    a.moduleGroup(), a.moduleArtifact(), a.version(), a.checksumHex()));
+            sbomComponents.add(
+                    new CycloneDxSbom.Component(a.moduleGroup(), a.moduleArtifact(), a.version(), a.checksumHex()));
         }
         // Packagers get the packager-dependency artifacts AND the step-dependency tools (the
         // same artifacts commands receive — an AAB packager forks bundletool exactly like a step
@@ -2252,15 +2314,16 @@ public final class BuildPipelines {
             for (var e : new java.util.TreeMap<>(secrets).entrySet()) {
                 sb.append(e.getKey()).append('=').append(e.getValue()).append('\n');
             }
-            tokens.add("secrets:" + cc.jumpkick.util.Hashing.sha256Hex(
-                    sb.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+            tokens.add("secrets:"
+                    + cc.jumpkick.util.Hashing.sha256Hex(
+                            sb.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8)));
         }
-        tokens.add("facts:" + project.project().group() + ":" + project.project().name() + ":"
-                + project.project().version() + ":" + startClass);
+        tokens.add("facts:" + project.project().group() + ":"
+                + project.project().name() + ":" + project.project().version() + ":" + startClass);
         tokens.add("manifest:" + project.manifest());
         // The packager's CODE is an input, same as plugin steps (see pluginStepStep).
-        tokens.add("worker:"
-                + cc.jumpkick.task.ClasspathFingerprint.entry(PluginBuild.workerJarFor(active, in.cache())));
+        tokens.add(
+                "worker:" + cc.jumpkick.task.ClasspathFingerprint.entry(PluginBuild.workerJarFor(active, in.cache())));
         String pkgTask = ActionKey.qualifiedTaskId(StepNames.PACKAGE_JAR, jarPath);
         String pkgKey = ActionKey.forArtifact(pkgTask, cc.jumpkick.model.BuildIdentity.cacheKeyVersion(), tokens);
         if (restorePackaged(in.cache(), pkgKey, jarPath.getParent())) {
@@ -2273,7 +2336,10 @@ public final class BuildPipelines {
 
         // SBOM (always on): free and deterministic straight from the lockfile.
         byte[] sbom = CycloneDxSbom.write(
-                project.project().group(), project.project().name(), project.project().version(), sbomComponents);
+                project.project().group(),
+                project.project().name(),
+                project.project().version(),
+                sbomComponents);
         Path sbomFile = Files.createTempFile("jk-plugin-sbom-", ".cdx.json");
         Files.write(sbomFile, sbom);
 
@@ -2332,7 +2398,9 @@ public final class BuildPipelines {
     private static String resolvedMain(JkBuild project, Path moduleDir, Path classes) throws IOException {
         String main = project.mainClass();
         if ((main == null || main.isBlank())
-                && PluginBuild.shape(project, moduleDir).map(sh -> sh.mainScan()).orElse(false)) {
+                && PluginBuild.shape(project, moduleDir)
+                        .map(sh -> sh.mainScan())
+                        .orElse(false)) {
             main = cc.jumpkick.layout.MainClassScanner.scanUnique(classes);
         }
         return main;
@@ -2347,11 +2415,14 @@ public final class BuildPipelines {
         List<CycloneDxSbom.Component> components = new ArrayList<>();
         for (ClasspathResolver.Entry entry : new ClasspathResolver(cas).entriesFor(lock, ClasspathResolver.RUNTIME)) {
             Lockfile.Artifact a = entry.artifact();
-            components.add(new CycloneDxSbom.Component(
-                    a.moduleGroup(), a.moduleArtifact(), a.version(), a.checksumHex()));
+            components.add(
+                    new CycloneDxSbom.Component(a.moduleGroup(), a.moduleArtifact(), a.version(), a.checksumHex()));
         }
         return CycloneDxSbom.write(
-                project.project().group(), project.project().name(), project.project().version(), components);
+                project.project().group(),
+                project.project().name(),
+                project.project().version(),
+                components);
     }
 
     /** SBOM path inside plain/shadow application jars (jar root = classpath root). */
@@ -2370,7 +2441,8 @@ public final class BuildPipelines {
         boolean kotlinModule = cx.kotlinModule();
         boolean mixedWithJava = cx.mixedWithJava();
         String mainCompile = cx.mainCompile();
-        return Step.builder(StepNames.WRITE_STAMP).phase(Phase.COMPILE)
+        return Step.builder(StepNames.WRITE_STAMP)
+                .phase(Phase.COMPILE)
                 .requires(StepNames.COMPILE_JAVA)
                 .weight(() -> plan.get().fullyCached() ? 0 : W_STAMP)
                 .ticks(1)
@@ -2419,7 +2491,8 @@ public final class BuildPipelines {
         boolean kotlinModule = cx.kotlinModule();
         boolean mixedWithJava = cx.mixedWithJava();
         String mainCompile = cx.mainCompile();
-        return Step.builder(StepNames.WRITE_STAMP_KOTLIN).phase(Phase.COMPILE)
+        return Step.builder(StepNames.WRITE_STAMP_KOTLIN)
+                .phase(Phase.COMPILE)
                 .requires(StepNames.COMPILE_KOTLIN)
                 .weight(() -> plan.get().fullyCached() ? 0 : W_STAMP)
                 .ticks(1)
@@ -2462,7 +2535,8 @@ public final class BuildPipelines {
         boolean kotlinModule = cx.kotlinModule();
         boolean mixedWithJava = cx.mixedWithJava();
         String mainCompile = cx.mainCompile();
-        return Step.builder(StepNames.ASSEMBLE_CLASSES).phase(Phase.COMPILE)
+        return Step.builder(StepNames.ASSEMBLE_CLASSES)
+                .phase(Phase.COMPILE)
                 .label("Assembling")
                 .kind(StepKind.CPU)
                 .requires(StepNames.COMPILE_JAVA, StepNames.COMPILE_KOTLIN)
@@ -2515,7 +2589,8 @@ public final class BuildPipelines {
 
     /** Fat-jar (shadow) packaging — requires package-jar. */
     public static Step shadowStep(Path cache, Path lockFile) {
-        return Step.builder(StepNames.PACKAGE_SHADOW).phase(Phase.PACKAGE)
+        return Step.builder(StepNames.PACKAGE_SHADOW)
+                .phase(Phase.PACKAGE)
                 .label("Shadow")
                 .kind(StepKind.CPU)
                 .requires(StepNames.PACKAGE_JAR)
@@ -2559,7 +2634,8 @@ public final class BuildPipelines {
                             "main:" + (project.mainClass() == null ? "" : project.mainClass()),
                             "manifest:" + project.manifest());
                     String shTask = ActionKey.qualifiedTaskId(StepNames.PACKAGE_SHADOW, shadowJar);
-                    String shKey = ActionKey.forArtifact(shTask, cc.jumpkick.model.BuildIdentity.cacheKeyVersion(), tokens);
+                    String shKey =
+                            ActionKey.forArtifact(shTask, cc.jumpkick.model.BuildIdentity.cacheKeyVersion(), tokens);
                     if (restorePackaged(cache, shKey, shadowJar.getParent())) {
                         ctx.label(shadowJar.getFileName() + " up-to-date");
                         ctx.cached();
@@ -2591,7 +2667,8 @@ public final class BuildPipelines {
 
     /** Sources-jar packaging — writes {@code <artifact>-<version>-sources.jar} to the artifact dir. */
     public static Step sourcesStep(Path cache) {
-        return Step.builder(StepNames.PACKAGE_SOURCES).phase(Phase.PACKAGE)
+        return Step.builder(StepNames.PACKAGE_SOURCES)
+                .phase(Phase.PACKAGE)
                 .label("Sources")
                 .kind(StepKind.CPU)
                 .requires(StepNames.PACKAGE_JAR)
@@ -2606,9 +2683,7 @@ public final class BuildPipelines {
                     boolean compact = CompileSupport.isSimpleLayout(project.project(), moduleRoot);
                     List<Path> sourceRoots = compact
                             ? List.of(moduleRoot.resolve("src"))
-                            : List.of(
-                                    moduleRoot.resolve("src/main/java"),
-                                    moduleRoot.resolve("src/main/kotlin"));
+                            : List.of(moduleRoot.resolve("src/main/java"), moduleRoot.resolve("src/main/kotlin"));
                     // Cache key: hash of all source roots' content.
                     String srcHash = String.join(
                             ";",
@@ -2660,7 +2735,8 @@ public final class BuildPipelines {
             String mainOverride,
             List<String> extraArgs) {
         List<String> extra = extraArgs == null ? List.of() : extraArgs;
-        return Step.builder(StepNames.NATIVE_IMAGE).phase(Phase.PACKAGE)
+        return Step.builder(StepNames.NATIVE_IMAGE)
+                .phase(Phase.PACKAGE)
                 .label("Native")
                 .kind(StepKind.IO)
                 .requires(StepNames.PACKAGE_JAR)
@@ -2698,7 +2774,9 @@ public final class BuildPipelines {
                             ? mainOverride
                             : (nativeCfg.mainClass() != null ? nativeCfg.mainClass() : project.mainClass());
                     if ((mainClass == null || mainClass.isBlank())
-                            && PluginBuild.shape(project, dir).map(sh -> sh.mainScan()).orElse(false)) {
+                            && PluginBuild.shape(project, dir)
+                                    .map(sh -> sh.mainScan())
+                                    .orElse(false)) {
                         // main-scan packagers carry exactly one main — same scan packaging used.
                         mainClass = cc.jumpkick.layout.MainClassScanner.scanUnique(layout.classesDir());
                     }
@@ -2722,7 +2800,9 @@ public final class BuildPipelines {
                     Path javaHome = javaHomeEarly; // resolved above in fail-fast check
 
                     List<Path> classpath = new ArrayList<>();
-                    if (PluginBuild.shape(project, dir).map(sh -> sh.classesRun()).orElse(false)) {
+                    if (PluginBuild.shape(project, dir)
+                            .map(sh -> sh.classesRun())
+                            .orElse(false)) {
                         // A classes-run packager's jar is not classpath-able (e.g. Boot's
                         // BOOT-INF nesting) — native-image gets the exploded classes plus
                         // whatever the plugin's steps contributed (generated classes +
@@ -2813,7 +2893,8 @@ public final class BuildPipelines {
                             "out:" + out.getFileName(),
                             "graal:" + graalTok);
                     String nTask = ActionKey.qualifiedTaskId(StepNames.NATIVE_IMAGE, out);
-                    String nKey = ActionKey.forArtifact(nTask, cc.jumpkick.model.BuildIdentity.cacheKeyVersion(), nativeTokens);
+                    String nKey = ActionKey.forArtifact(
+                            nTask, cc.jumpkick.model.BuildIdentity.cacheKeyVersion(), nativeTokens);
                     if (!shared && restorePackaged(cache, nKey, out.getParent())) {
                         ctx.label(out.getFileName() + " up-to-date");
                         ctx.progress(1);
@@ -2890,8 +2971,8 @@ public final class BuildPipelines {
         List<String> names = cc.jumpkick.plugin.manifest.PluginContributions.providedClasspath(project, in.dir());
         if (names.isEmpty()) return List.of();
         try {
-            java.util.Map<String, Path> fetched = PluginBuild.fetchStepDependencies(
-                    project, in.dir(), cas, PluginBuild.sdkPins(in.lockFile()));
+            java.util.Map<String, Path> fetched =
+                    PluginBuild.fetchStepDependencies(project, in.dir(), cas, PluginBuild.sdkPins(in.lockFile()));
             List<Path> out = new ArrayList<>();
             for (String name : names) {
                 Path path = fetched.get(name);
@@ -2903,8 +2984,7 @@ public final class BuildPipelines {
             }
             return out;
         } catch (java.io.IOException | InterruptedException e) {
-            throw new RuntimeException("cannot resolve the plugin-contributed compile classpath: " + e.getMessage(),
-                    e);
+            throw new RuntimeException("cannot resolve the plugin-contributed compile classpath: " + e.getMessage(), e);
         }
     }
 
@@ -3023,17 +3103,15 @@ public final class BuildPipelines {
         // BTA's IC sees "no source changes" after an args/plugins/module-name change and would
         // emit nothing into a clean output dir. Key the working dir by a config hash so any
         // config change starts fresh IC state (stale dirs age out with the cache).
-        String configToken = cc.jumpkick.util.Hashing.sha256Hex((CompileSupport.kotlinJvmTarget(
-                                        ctx.require(RELEASE))
+        String configToken = cc.jumpkick.util.Hashing.sha256Hex((CompileSupport.kotlinJvmTarget(ctx.require(RELEASE))
                                 + "|" + moduleName + "|" + String.join(",", ktArgs) + "|"
                                 + ktPlugins.stream()
                                         .map(p -> p.id() + "=" + p.options())
                                         .collect(java.util.stream.Collectors.joining(",")))
                         .getBytes(java.nio.charset.StandardCharsets.UTF_8))
                 .substring(0, 12);
-        Path icWorkingDir = workingDir == null
-                ? null
-                : workingDir.resolveSibling(workingDir.getFileName() + "-" + configToken);
+        Path icWorkingDir =
+                workingDir == null ? null : workingDir.resolveSibling(workingDir.getFileName() + "-" + configToken);
         KotlincRequest req = KotlincRequest.builder()
                 .sources(sources)
                 .classpath(compileCp)

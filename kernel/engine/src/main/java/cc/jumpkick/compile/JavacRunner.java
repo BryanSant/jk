@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.compile;
 
+import cc.jumpkick.engine.plugin.JvmOptions;
 import cc.jumpkick.jdk.HostPlatform;
 import cc.jumpkick.util.PathUtil;
-import cc.jumpkick.engine.plugin.JvmOptions;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -188,8 +188,7 @@ public final class JavacRunner {
      * remaining unattributed lines (usage text, crash traces) are collected into {@code stray} so
      * the caller can surface them when javac fails without a parsed error.
      */
-    private static List<CompileResult.Diagnostic> parseStream(Process process, List<String> stray)
-            throws IOException {
+    private static List<CompileResult.Diagnostic> parseStream(Process process, List<String> stray) throws IOException {
         List<CompileResult.Diagnostic> diagnostics = new ArrayList<>();
         try (BufferedReader reader =
                 new BufferedReader(new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
@@ -217,12 +216,10 @@ public final class JavacRunner {
                     // Snippet, caret, symbol:/location:, or wrapped message — keep verbatim.
                     block.append('\n').append(line);
                 } else if ((bare = BARE_DIAGNOSTIC.matcher(line)).matches()) {
-                    diagnostics.add(new CompileResult.Diagnostic(
-                            parseSeverity(bare.group("sev")), null, -1, -1, line));
+                    diagnostics.add(new CompileResult.Diagnostic(parseSeverity(bare.group("sev")), null, -1, -1, line));
                 } else if (line.startsWith("javac: ")) {
                     // Launcher-level failure (invalid flag, file not found, bad argfile).
-                    diagnostics.add(
-                            new CompileResult.Diagnostic(CompileResult.Severity.ERROR, null, -1, -1, line));
+                    diagnostics.add(new CompileResult.Diagnostic(CompileResult.Severity.ERROR, null, -1, -1, line));
                 } else if (SUMMARY.matcher(line).matches()) {
                     // Tally after a bare error ("1 error") — already accounted for.
                 } else {

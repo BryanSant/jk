@@ -53,8 +53,13 @@ class AndroidReleaseTest {
 
         LockfileWriter.write(
                 new Lockfile(
-                        Lockfile.CURRENT_VERSION, "test", Lockfile.RESOLUTION_ALGORITHM, null, null,
-                        List.of(), List.of()),
+                        Lockfile.CURRENT_VERSION,
+                        "test",
+                        Lockfile.RESOLUTION_ALGORITHM,
+                        null,
+                        null,
+                        List.of(),
+                        List.of()),
                 app.resolve("jk.lock"));
         BuildPipelines.Inputs in = new BuildPipelines.Inputs(
                         app,
@@ -68,10 +73,10 @@ class AndroidReleaseTest {
                         null,
                         true,
                         false,
-                false,
-                false,
-                java.util.Set.of(),
-                cc.jumpkick.config.SessionContext.current())
+                        false,
+                        false,
+                        java.util.Set.of(),
+                        cc.jumpkick.config.SessionContext.current())
                 .withVariant(
                         "release",
                         Map.of(
@@ -92,9 +97,12 @@ class AndroidReleaseTest {
         Path aab = app.resolve("target/lib/relapp-1.0.0.aab");
         assertThat(aab).exists();
         Set<String> entries = zipEntries(aab);
-        assertThat(entries).contains(
-                "base/manifest/AndroidManifest.xml", "base/resources.pb", "base/dex/classes.dex",
-                "base/assets/greeting.txt");
+        assertThat(entries)
+                .contains(
+                        "base/manifest/AndroidManifest.xml",
+                        "base/resources.pb",
+                        "base/dex/classes.dex",
+                        "base/assets/greeting.txt");
 
         // R8 really shrank: retrace artifacts at target/r8/, the unused class stripped, the
         // launcher activity kept (aapt2's generated rules), the proguard-files keep honored.

@@ -53,7 +53,8 @@ class HttpEngineServerTest {
 
     /** A journal rooted under the test's temp state dir — endpoints exist; content is per-test. */
     private cc.jumpkick.engine.journal.BuildJournal testJournal() {
-        return new cc.jumpkick.engine.journal.BuildJournal(stateDir.resolve("builds").resolve("journal"));
+        return new cc.jumpkick.engine.journal.BuildJournal(
+                stateDir.resolve("builds").resolve("journal"));
     }
 
     /** The stub {@link BuildTrigger}: records the dir, returns a fixed id, rejects "reject me". */
@@ -75,8 +76,18 @@ class HttpEngineServerTest {
         events = new HttpEvents();
         JkHttpConfig config = new JkHttpConfig("127.0.0.1", 0, 16, wwwRoot.toString());
         server = new HttpEngineServer(
-                config, wwwRoot, tokenFile, logFile, "9.9.9-test", () -> SNAPSHOT, events, this::stubTrigger,
-                testJournal(), () -> metricsRows, () -> cacheSnapshot, null);
+                config,
+                wwwRoot,
+                tokenFile,
+                logFile,
+                "9.9.9-test",
+                () -> SNAPSHOT,
+                events,
+                this::stubTrigger,
+                testJournal(),
+                () -> metricsRows,
+                () -> cacheSnapshot,
+                null);
         server.start();
         baseUrl = server.url();
         port = Integer.parseInt(baseUrl.replaceAll(".*:(\\d+)/$", "$1"));
@@ -196,7 +207,8 @@ class HttpEngineServerTest {
         try {
             snapshot.start();
             HttpResponse<String> resp = client.send(
-                    HttpRequest.newBuilder(URI.create(snapshot.url() + "classpath-only.txt")).build(),
+                    HttpRequest.newBuilder(URI.create(snapshot.url() + "classpath-only.txt"))
+                            .build(),
                     HttpResponse.BodyHandlers.ofString());
             assertThat(resp.statusCode()).isEqualTo(200);
             assertThat(resp.headers().firstValue("Cache-Control")).contains("no-cache");
@@ -215,7 +227,8 @@ class HttpEngineServerTest {
 
     @Test
     void if_modified_since_yields_304_for_unchanged_disk_file() throws Exception {
-        String lastModified = get("/hello.txt").headers().firstValue("Last-Modified").orElseThrow();
+        String lastModified =
+                get("/hello.txt").headers().firstValue("Last-Modified").orElseThrow();
         HttpResponse<String> resp = get("/hello.txt", "If-Modified-Since", lastModified);
         assertThat(resp.statusCode()).isEqualTo(304);
         assertThat(resp.body()).isEmpty();
@@ -327,8 +340,8 @@ class HttpEngineServerTest {
         var empty = cc.jumpkick.runtime.BuildMetrics.Stats.EMPTY;
         metricsRows.add(new cc.jumpkick.runtime.BuildMetrics.Entry("build", "", null, null, ok, empty, empty, 5L));
         metricsRows.add(new cc.jumpkick.runtime.BuildMetrics.Entry("build", "/p", "g:n", null, ok, empty, empty, 5L));
-        metricsRows.add(new cc.jumpkick.runtime.BuildMetrics.Entry(
-                null, "/other", null, "compile-java", ok, empty, empty, 5L));
+        metricsRows.add(
+                new cc.jumpkick.runtime.BuildMetrics.Entry(null, "/other", null, "compile-java", ok, empty, empty, 5L));
 
         HttpResponse<String> resp = get("/api/metrics");
         assertThat(resp.statusCode()).isEqualTo(200);
@@ -375,9 +388,7 @@ class HttpEngineServerTest {
         HttpResponse<String> resp = get("/api/log");
         assertThat(resp.statusCode()).isEqualTo(200);
         assertThat(resp.headers().firstValue("Content-Type")).contains("text/plain; charset=utf-8");
-        assertThat(resp.body())
-                .contains("jk engine: listening")
-                .contains("line three");
+        assertThat(resp.body()).contains("jk engine: listening").contains("line three");
     }
 
     @Test
@@ -407,8 +418,8 @@ class HttpEngineServerTest {
         Files.createDirectories(stateDir.resolve("workspace/.git")); // hidden: skipped
         Files.writeString(stateDir.resolve("workspace/jk.toml"), "[project]");
         Files.writeString(stateDir.resolve("workspace/README.md"), "not a dir");
-        HttpResponse<String> resp = get(
-                "/api/fs?dir=" + stateDir.resolve("workspace"), "Authorization", "Bearer " + token());
+        HttpResponse<String> resp =
+                get("/api/fs?dir=" + stateDir.resolve("workspace"), "Authorization", "Bearer " + token());
         assertThat(resp.statusCode()).isEqualTo(200);
         assertThat(resp.body())
                 .contains("\"dirs\":[\"module-a\",\"module-b\"]")
@@ -418,7 +429,8 @@ class HttpEngineServerTest {
 
     @Test
     void fs_rejects_relative_and_unreadable_paths() throws Exception {
-        assertThat(get("/api/fs?dir=relative/path", "Authorization", "Bearer " + token()).statusCode())
+        assertThat(get("/api/fs?dir=relative/path", "Authorization", "Bearer " + token())
+                        .statusCode())
                 .isEqualTo(400);
         assertThat(get("/api/fs?dir=" + stateDir.resolve("no-such-dir"), "Authorization", "Bearer " + token())
                         .statusCode())
@@ -487,8 +499,17 @@ class HttpEngineServerTest {
 
         HttpEngineServer restarted = new HttpEngineServer(
                 new JkHttpConfig("127.0.0.1", 0, 16, wwwRoot.toString()),
-                wwwRoot, tokenFile, logFile, "9.9.9-test", () -> SNAPSHOT, events, this::stubTrigger,
-                testJournal(), java.util.List::of, () -> EMPTY_CACHE, null);
+                wwwRoot,
+                tokenFile,
+                logFile,
+                "9.9.9-test",
+                () -> SNAPSHOT,
+                events,
+                this::stubTrigger,
+                testJournal(),
+                java.util.List::of,
+                () -> EMPTY_CACHE,
+                null);
         try {
             restarted.start();
             assertThat(token()).isEqualTo(original); // file unchanged
@@ -513,8 +534,17 @@ class HttpEngineServerTest {
 
         HttpEngineServer restarted = new HttpEngineServer(
                 new JkHttpConfig("127.0.0.1", 0, 16, wwwRoot.toString()),
-                wwwRoot, tokenFile, logFile, "9.9.9-test", () -> SNAPSHOT, events, this::stubTrigger,
-                testJournal(), java.util.List::of, () -> EMPTY_CACHE, null);
+                wwwRoot,
+                tokenFile,
+                logFile,
+                "9.9.9-test",
+                () -> SNAPSHOT,
+                events,
+                this::stubTrigger,
+                testJournal(),
+                java.util.List::of,
+                () -> EMPTY_CACHE,
+                null);
         try {
             restarted.start();
             assertThat(token()).isNotEmpty().isNotEqualTo(original);
@@ -528,7 +558,18 @@ class HttpEngineServerTest {
         JkHttpConfig config = new JkHttpConfig("0.0.0.0", 0, 16, wwwRoot.toString());
         Path lanTokenFile = stateDir.resolve("lan.http-token");
         HttpEngineServer lan = new HttpEngineServer(
-                config, wwwRoot, lanTokenFile, stateDir.resolve("lan.log"), "9.9.9-test", () -> SNAPSHOT, new HttpEvents(), this::stubTrigger, testJournal(), java.util.List::of, () -> EMPTY_CACHE, null);
+                config,
+                wwwRoot,
+                lanTokenFile,
+                stateDir.resolve("lan.log"),
+                "9.9.9-test",
+                () -> SNAPSHOT,
+                new HttpEvents(),
+                this::stubTrigger,
+                testJournal(),
+                java.util.List::of,
+                () -> EMPTY_CACHE,
+                null);
         try {
             lan.start();
             String lanUrl = lan.url(); // advertises the always-valid loopback form for a wildcard bind
@@ -573,7 +614,8 @@ class HttpEngineServerTest {
     /** Open the SSE stream and return a line iterator (the JDK client de-chunks for us). */
     private java.util.Iterator<String> openEvents(String query) throws Exception {
         HttpResponse<java.util.stream.Stream<String>> resp = client.send(
-                HttpRequest.newBuilder(URI.create(baseUrl + "api/events" + query)).build(),
+                HttpRequest.newBuilder(URI.create(baseUrl + "api/events" + query))
+                        .build(),
                 HttpResponse.BodyHandlers.ofLines());
         assertThat(resp.statusCode()).isEqualTo(200);
         assertThat(resp.headers().firstValue("Content-Type")).contains("text/event-stream; charset=utf-8");
@@ -624,7 +666,8 @@ class HttpEngineServerTest {
                 null);
         try {
             lan.start();
-            String lanToken = Files.readString(stateDir.resolve("sse.http-token")).trim();
+            String lanToken =
+                    Files.readString(stateDir.resolve("sse.http-token")).trim();
             String lanUrl = lan.url();
 
             HttpResponse<String> unauthorized = client.send(

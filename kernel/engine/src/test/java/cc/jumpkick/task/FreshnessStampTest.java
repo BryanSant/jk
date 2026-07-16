@@ -25,8 +25,13 @@ class FreshnessStampTest {
         assertThat(FreshnessStamp.hasRemovedSources(classes, FreshnessStamp.JAVA_STAMP, List.of(kept)))
                 .isFalse();
         FreshnessStamp.write(
-                classes, FreshnessStamp.JAVA_STAMP, "compile-main", "key123",
-                List.of(kept, dropped), List.of(), RELEASE);
+                classes,
+                FreshnessStamp.JAVA_STAMP,
+                "compile-main",
+                "key123",
+                List.of(kept, dropped),
+                List.of(),
+                RELEASE);
         // Same set: no removals. Grown set: no removals. Shrunk set: removal detected —
         // the variant-switch case (an extra-src root left the selection).
         assertThat(FreshnessStamp.hasRemovedSources(classes, FreshnessStamp.JAVA_STAMP, List.of(kept, dropped)))

@@ -40,7 +40,6 @@ public final class GitCliExtension implements GitBackend {
         return "git-cli";
     }
 
-
     private static final Pattern VERSION = Pattern.compile("^git version (\\d+)\\.(\\d+).*");
     private static final long LOCAL_TIMEOUT_SEC = 120;
     private static final long NETWORK_TIMEOUT_SEC = 600;
@@ -153,7 +152,8 @@ public final class GitCliExtension implements GitBackend {
     public GitFetcher.RefInfo resolveRef(GitSource source) throws IOException {
         Path bareDir = ensureBareClone(source);
         String sha = resolveRefSha(source, bareDir);
-        ProcResult t = exec(bareDir, null, List.of("show", "-s", "--format=%ct", "--end-of-options", sha), LOCAL_TIMEOUT_SEC);
+        ProcResult t =
+                exec(bareDir, null, List.of("show", "-s", "--format=%ct", "--end-of-options", sha), LOCAL_TIMEOUT_SEC);
         if (t.exit != 0) throw new IOException("git show failed for " + sha + ": " + t.output.strip());
         long epoch;
         try {
@@ -229,7 +229,8 @@ public final class GitCliExtension implements GitBackend {
                 display = "refs/heads/" + b.name();
             }
         }
-        ProcResult res = exec(bareDir, null, List.of("rev-parse", "--verify", "--end-of-options", rev), LOCAL_TIMEOUT_SEC);
+        ProcResult res =
+                exec(bareDir, null, List.of("rev-parse", "--verify", "--end-of-options", rev), LOCAL_TIMEOUT_SEC);
         if (res.exit != 0) {
             String detail = res.output.strip();
             throw new IOException("ref " + display + " not found" + (detail.isEmpty() ? "" : ": " + detail));
@@ -247,7 +248,10 @@ public final class GitCliExtension implements GitBackend {
         // Local clone from the bare mirror; pass the bare dir as a plain filesystem path (not a
         // file:// URI) so it works on Windows.
         ProcResult clone = exec(
-                null, null, List.of("clone", "--no-checkout", "--", bareDir.toString(), dir.toString()), LOCAL_TIMEOUT_SEC);
+                null,
+                null,
+                List.of("clone", "--no-checkout", "--", bareDir.toString(), dir.toString()),
+                LOCAL_TIMEOUT_SEC);
         if (clone.exit != 0) {
             JGitExtension.deleteRecursively(dir);
             throw new IOException("checkout clone failed: " + clone.output.strip());

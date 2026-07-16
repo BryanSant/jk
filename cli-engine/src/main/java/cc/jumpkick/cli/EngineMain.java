@@ -52,8 +52,10 @@ public final class EngineMain {
                     Jk.VERSION,
                     System.err::println);
             server.serveJob(
-                    new java.io.BufferedReader(new java.io.InputStreamReader(System.in, java.nio.charset.StandardCharsets.UTF_8)),
-                    new java.io.BufferedWriter(new java.io.OutputStreamWriter(System.out, java.nio.charset.StandardCharsets.UTF_8)));
+                    new java.io.BufferedReader(
+                            new java.io.InputStreamReader(System.in, java.nio.charset.StandardCharsets.UTF_8)),
+                    new java.io.BufferedWriter(
+                            new java.io.OutputStreamWriter(System.out, java.nio.charset.StandardCharsets.UTF_8)));
             return 0;
         } catch (RuntimeException e) {
             System.err.println("jk engine (job): " + e.getMessage());
@@ -81,8 +83,8 @@ public final class EngineMain {
             cc.jumpkick.config.JkEngineConfig config = cc.jumpkick.config.JkEngineConfig.resolve();
             cc.jumpkick.config.JkHttpConfig httpConfig =
                     cc.jumpkick.config.JkHttpConfig.resolve().orElse(null);
-            cc.jumpkick.engine.EngineServer server = new cc.jumpkick.engine.EngineServer(
-                    paths, config, httpConfig, Jk.VERSION, System.err::println);
+            cc.jumpkick.engine.EngineServer server =
+                    new cc.jumpkick.engine.EngineServer(paths, config, httpConfig, Jk.VERSION, System.err::println);
             // The spawner asks for an AOT cache with -Djk.aot.train.output=<path> when none exists
             // yet (see EngineClient.spawn). The server invokes the factory only after WINNING its
             // election — a losing redundant spawn never trains — and owns the child end-to-end.
@@ -107,11 +109,9 @@ public final class EngineMain {
      */
     private static Process spawnAotTrainer(String aotOut) {
         try {
-            String javaExe = ProcessHandle.current()
-                    .info()
-                    .command()
-                    .orElseGet(() -> java.nio.file.Path.of(System.getProperty("java.home"), "bin", "java")
-                            .toString());
+            String javaExe = ProcessHandle.current().info().command().orElseGet(() -> java.nio.file.Path.of(
+                            System.getProperty("java.home"), "bin", "java")
+                    .toString());
             ProcessBuilder pb = new ProcessBuilder(
                     javaExe,
                     "-XX:+UseSerialGC",

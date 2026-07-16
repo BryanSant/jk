@@ -1,18 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.runtime;
 
-import cc.jumpkick.run.StepNames;
-
 import cc.jumpkick.cache.Cas;
+import cc.jumpkick.engine.plugin.PluginClient;
+import cc.jumpkick.engine.plugin.PluginJar;
 import cc.jumpkick.lock.LockfileReader;
 import cc.jumpkick.plugin.protocol.Ndjson;
-import cc.jumpkick.plugin.protocol.SpecWriter;
 import cc.jumpkick.plugin.protocol.PluginProtocol;
+import cc.jumpkick.plugin.protocol.SpecWriter;
 import cc.jumpkick.run.Pipeline;
 import cc.jumpkick.run.Step;
 import cc.jumpkick.run.StepKind;
-import cc.jumpkick.engine.plugin.PluginClient;
-import cc.jumpkick.engine.plugin.PluginJar;
+import cc.jumpkick.run.StepNames;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -107,12 +106,14 @@ public final class AuditPipelines {
             try {
                 String[] error = {null};
                 int exit = new PluginClient("##JKAU:")
-                        .on(PluginProtocol.FINDING, json -> observer.onFinding(
-                                Ndjson.str(json, "module"),
-                                Ndjson.str(json, "version"),
-                                Ndjson.str(json, "id"),
-                                Ndjson.str(json, "severity"),
-                                Ndjson.str(json, "summary")))
+                        .on(
+                                PluginProtocol.FINDING,
+                                json -> observer.onFinding(
+                                        Ndjson.str(json, "module"),
+                                        Ndjson.str(json, "version"),
+                                        Ndjson.str(json, "id"),
+                                        Ndjson.str(json, "severity"),
+                                        Ndjson.str(json, "summary")))
                         .on(PluginProtocol.ERROR, json -> error[0] = Ndjson.str(json, PluginProtocol.MESSAGE))
                         .run(PluginLaunch.javaCommand(workerJar, spec));
                 if (error[0] != null) {

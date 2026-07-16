@@ -65,8 +65,11 @@ public final class VersionStore {
      * engine AOT cache and its markers) plus the pre-1.0 legacy {@code state/engine/<v>/} dir.
      * A pruned pin re-materializes on demand: R1 made that cheap and verified.
      */
-    public List<String> prune(String keep, java.time.Duration retention,
-            java.util.function.ToLongFunction<String> lastUsedMillis, Path stateDir) {
+    public List<String> prune(
+            String keep,
+            java.time.Duration retention,
+            java.util.function.ToLongFunction<String> lastUsedMillis,
+            Path stateDir) {
         List<String> pruned = new ArrayList<>();
         Path dir = versionsDir();
         if (!Files.isDirectory(dir)) return pruned;
@@ -151,9 +154,7 @@ public final class VersionStore {
         // makes the serialized loser's resolve() below hit the winner's identical tree.
         Path lockPath = versionsDir().resolve("." + version + ".lock");
         try (java.nio.channels.FileChannel lockCh = java.nio.channels.FileChannel.open(
-                        lockPath,
-                        java.nio.file.StandardOpenOption.CREATE,
-                        java.nio.file.StandardOpenOption.WRITE);
+                        lockPath, java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.WRITE);
                 java.nio.channels.FileLock lock = lockCh.lock()) {
             Optional<Materialized> raced = resolve(version);
             if (raced.isPresent() && hasContent(raced.get(), engineJarSha)) return raced.get();
@@ -200,8 +201,7 @@ public final class VersionStore {
     }
 
     private Materialized materializeLocked(
-            String version, Cas cas, String engineJarSha, String clientBinSha, Path finalRoot)
-            throws IOException {
+            String version, Cas cas, String engineJarSha, String clientBinSha, Path finalRoot) throws IOException {
         Path tmp = Files.createTempDirectory(versionsDir(), "." + version + "-");
         try {
             Path lib = Files.createDirectories(tmp.resolve("lib"));
@@ -215,10 +215,12 @@ public final class VersionStore {
                 makeExecutable(client);
                 clientLine = "client-sha256 = \"" + clientBinSha + "\"\n";
             }
-            Files.writeString(tmp.resolve(MANIFEST), "version = \"" + version + "\"\n"
-                    + "engine-sha256 = \"" + engineJarSha + "\"\n"
-                    + clientLine
-                    + "protocol = 1\n");
+            Files.writeString(
+                    tmp.resolve(MANIFEST),
+                    "version = \"" + version + "\"\n"
+                            + "engine-sha256 = \"" + engineJarSha + "\"\n"
+                            + clientLine
+                            + "protocol = 1\n");
             // An aborted earlier materialization (dir without manifest) blocks the rename —
             // clear it; a COMPLETE dir was returned above and never reaches this point.
             if (Files.isDirectory(finalRoot) && !Files.isRegularFile(finalRoot.resolve(MANIFEST))) {
@@ -236,7 +238,8 @@ public final class VersionStore {
         } finally {
             deleteRecursively(tmp);
         }
-        return resolve(version).orElseThrow(() -> new IOException("materialization of " + version + " left no manifest"));
+        return resolve(version)
+                .orElseThrow(() -> new IOException("materialization of " + version + " left no manifest"));
     }
 
     /**

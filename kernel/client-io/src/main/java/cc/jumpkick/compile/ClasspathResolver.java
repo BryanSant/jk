@@ -35,8 +35,7 @@ public final class ClasspathResolver {
      * Compose support, and friends ride local runs but never artifacts ({@link #RUNTIME} is what
      * packagers consume).
      */
-    public static final Set<Scope> RUN =
-            EnumSet.of(Scope.EXPORT, Scope.MAIN, Scope.RUNTIME, Scope.DEV, Scope.TEST_DEV);
+    public static final Set<Scope> RUN = EnumSet.of(Scope.EXPORT, Scope.MAIN, Scope.RUNTIME, Scope.DEV, Scope.TEST_DEV);
 
     /** Scopes visible while compiling main sources. */
     public static final Set<Scope> COMPILE_MAIN = EnumSet.of(Scope.EXPORT, Scope.MAIN, Scope.PROVIDED);

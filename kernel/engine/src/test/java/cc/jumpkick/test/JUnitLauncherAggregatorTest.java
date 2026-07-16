@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.test;
 
-import cc.jumpkick.run.TestSummary;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import cc.jumpkick.run.TestSummary;
 import org.junit.jupiter.api.Test;
 
 /**

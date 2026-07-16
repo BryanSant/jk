@@ -3,7 +3,6 @@ package cc.jumpkick.runtime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import cc.jumpkick.cache.Cas;
 import cc.jumpkick.lock.Lockfile;
 import cc.jumpkick.lock.LockfileWriter;
 import cc.jumpkick.run.Pipeline;
@@ -58,8 +57,13 @@ class AndroidWorkspaceTest {
         assertThat(aar).exists();
         assertThat(conventional).exists();
         Set<String> aarEntries = zipEntries(aar);
-        assertThat(aarEntries).contains("AndroidManifest.xml", "classes.jar", "R.txt", "res/values/lib_strings.xml",
-                "res/layout/lib_view.xml");
+        assertThat(aarEntries)
+                .contains(
+                        "AndroidManifest.xml",
+                        "classes.jar",
+                        "R.txt",
+                        "res/values/lib_strings.xml",
+                        "res/layout/lib_view.xml");
         // The AAR's classes.jar carries the library code but never its R classes — consumers
         // regenerate R with final ids (AGP's exact exclusion).
         Path extracted = tmp.resolve("classes.jar");
@@ -83,9 +87,7 @@ class AndroidWorkspaceTest {
 
         // The library manifest joined the merge (--libs): its permission is in the app manifest.
         String merged = Files.readString(app.resolve("target/plugin/android-manifest/merged/AndroidManifest.xml"));
-        assertThat(merged)
-                .contains("package=\"com.example.app\"")
-                .contains("android.permission.INTERNET");
+        assertThat(merged).contains("package=\"com.example.app\"").contains("android.permission.INTERNET");
 
         // Non-transitive R: the library's R regenerated under ITS namespace with final ids —
         // its own symbols, not the app's.
@@ -112,8 +114,13 @@ class AndroidWorkspaceTest {
     private static PipelineResult build(Path module, Path cache) throws Exception {
         LockfileWriter.write(
                 new Lockfile(
-                        Lockfile.CURRENT_VERSION, "test", Lockfile.RESOLUTION_ALGORITHM, null, null,
-                        List.of(), List.of()),
+                        Lockfile.CURRENT_VERSION,
+                        "test",
+                        Lockfile.RESOLUTION_ALGORITHM,
+                        null,
+                        null,
+                        List.of(),
+                        List.of()),
                 module.resolve("jk.lock"));
         BuildPipelines.Inputs in = new BuildPipelines.Inputs(
                 module,

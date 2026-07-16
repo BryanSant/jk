@@ -13,8 +13,8 @@ import cc.jumpkick.repo.RepoGroup;
 import cc.jumpkick.resolver.NaiveResolver;
 import cc.jumpkick.resolver.Resolution;
 import cc.jumpkick.resolver.Resolver;
-import cc.jumpkick.resolver.Versions;
 import cc.jumpkick.resolver.VersionSelectors;
+import cc.jumpkick.resolver.Versions;
 import cc.jumpkick.resolver.pubgrub.VersionSet;
 import java.io.IOException;
 import java.net.URI;
@@ -140,21 +140,18 @@ public final class ToolResolver {
         if (selector instanceof VersionSelector.Exact e) return e.version();
         List<String> available = repos.availableVersions(Coordinate.ofModule(module, "any"));
         if (available.isEmpty()) {
-            throw new MavenRepo.ArtifactNotFoundException(
-                    "no versions of " + module + " found in any declared repo");
+            throw new MavenRepo.ArtifactNotFoundException("no versions of " + module + " found in any declared repo");
         }
         VersionSet set = VersionSelectors.toVersionSet(selector);
-        List<String> matching =
-                available.stream().filter(set::contains).toList();
+        List<String> matching = available.stream().filter(set::contains).toList();
         if (selector instanceof VersionSelector.Latest) {
             List<String> stable = matching.stream().filter(Versions::isStable).toList();
             if (!stable.isEmpty()) matching = stable;
         }
         return matching.stream()
                 .max(Versions::compare)
-                .orElseThrow(() -> new MavenRepo.ArtifactNotFoundException(
-                        "no version of " + module + " matches " + selector.raw() + " (available: "
-                                + String.join(", ", available) + ")"));
+                .orElseThrow(() -> new MavenRepo.ArtifactNotFoundException("no version of " + module + " matches "
+                        + selector.raw() + " (available: " + String.join(", ", available) + ")"));
     }
 
     /**

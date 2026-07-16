@@ -178,7 +178,8 @@ public interface InProcessEngine {
             throws java.io.IOException, InterruptedException;
 
     /** A finished in-process {@code jk import} pipeline's summary (mirrors the hosted pipeline-finish). */
-    record ImportPipelineOutcome(cc.jumpkick.run.PipelineResult result, int exitCode, int warnings, String error, String diag) {}
+    record ImportPipelineOutcome(
+            cc.jumpkick.run.PipelineResult result, int exitCode, int warnings, String error, String diag) {}
 
     /**
      * {@code jk import}'s in-process pipeline: fork the compat-bridge worker. A missing worker jar
@@ -206,8 +207,7 @@ public interface InProcessEngine {
             throws java.io.IOException, InterruptedException;
 
     /** {@code jk clean --cache}'s in-process GC (test-only; hosted runs ride the prune vocabulary). */
-    cc.jumpkick.cli.engine.EngineClient.CacheMaintSummary cacheGc(java.nio.file.Path cache)
-            throws java.io.IOException;
+    cc.jumpkick.cli.engine.EngineClient.CacheMaintSummary cacheGc(java.nio.file.Path cache) throws java.io.IOException;
 
     /** A finished in-process tool resolution: the pipeline result plus the launch env (null on failure). */
     record ToolPipelineOutcome(cc.jumpkick.run.PipelineResult result, cc.jumpkick.tool.ToolEnv env) {}
@@ -442,8 +442,8 @@ public interface InProcessEngine {
             boolean forceRecompile,
             cc.jumpkick.cli.run.PipelineConsole.Mode consoleMode)
             throws java.io.IOException, InterruptedException {
-        return scriptPrepare(mode, script, cacheDir, stateDir, repoUrl, forceRecompile, java.util.List.of(),
-                consoleMode);
+        return scriptPrepare(
+                mode, script, cacheDir, stateDir, repoUrl, forceRecompile, java.util.List.of(), consoleMode);
     }
 
     /** The discovered implementation, or empty when {@code :cli-engine} is not on the classpath. */
@@ -456,8 +456,8 @@ public interface InProcessEngine {
      * test-only in-process dispatch, where absence is a harness misconfiguration, not a user state.
      */
     static InProcessEngine require() {
-        return find().orElseThrow(() -> new IllegalStateException(
-                "in-process engine requested but :cli-engine is not on the classpath "
+        return find().orElseThrow(() ->
+                new IllegalStateException("in-process engine requested but :cli-engine is not on the classpath "
                         + "(the slim client binary cannot host an engine)"));
     }
 

@@ -249,7 +249,8 @@ public final class Wizard {
         writer.println(hdr);
         // Box opener: ╭ followed by dashes to match the header's visual width.
         int hdrWidth = visibleLength(hdr);
-        writer.println(Theme.colorize("╭" + "─".repeat(Math.max(0, hdrWidth - 1)), Theme.active().darkGray()));
+        writer.println(Theme.colorize(
+                "╭" + "─".repeat(Math.max(0, hdrWidth - 1)), Theme.active().darkGray()));
         writer.flush();
 
         boolean firstStep = true;
@@ -257,7 +258,8 @@ public final class Wizard {
             // Pre-seeded answers skip the interactive prompt but still render
             // as settled so the user can see what was inferred up front.
             if (answers.containsKey(step.key()) && preset.has(step.key())) {
-                if (!firstStep) writer.println(Theme.colorize("├──────", Theme.active().darkGray()));
+                if (!firstStep)
+                    writer.println(Theme.colorize("├──────", Theme.active().darkGray()));
                 firstStep = false;
                 renderSettledRegion(terminal, step, answers);
                 writer.flush();
@@ -266,7 +268,8 @@ public final class Wizard {
             if (!step.shouldRun().test(Answers.of(answers))) {
                 continue;
             }
-            if (!firstStep) writer.println(Theme.colorize("├──────", Theme.active().darkGray()));
+            if (!firstStep)
+                writer.println(Theme.colorize("├──────", Theme.active().darkGray()));
             firstStep = false;
 
             var state = new ActiveState(step, answers);
@@ -316,20 +319,23 @@ public final class Wizard {
 
     private int renderActiveRegion(Terminal terminal, WizardStep step, ActiveState state) {
         var writer = terminal.writer();
-        writer.println(INDENT + Rail.stepBullet(Rail.StepState.ACTIVE, step.prompt()).toAnsi(terminal));
+        writer.println(
+                INDENT + Rail.stepBullet(Rail.StepState.ACTIVE, step.prompt()).toAnsi(terminal));
         var interactive = state.render();
         for (var line : interactive) {
             writer.println(INDENT + Rail.mid(line, Rail.StepState.ACTIVE).toAnsi(terminal));
         }
         // └ hook one line below the interactive content; gets erased on commit
         // and re-emitted (with the next step's content above it) on each step.
-        writer.println(Theme.colorize("╰──────", Theme.active().railStyle(Rail.StepState.ACTIVE, Rail.RailGlyph.CLOSE)));
+        writer.println(
+                Theme.colorize("╰──────", Theme.active().railStyle(Rail.StepState.ACTIVE, Rail.RailGlyph.CLOSE)));
         return 1 + interactive.size() + 1;
     }
 
     private void renderSettledRegion(Terminal terminal, WizardStep step, Map<String, Object> answers) {
         var writer = terminal.writer();
-        writer.println(INDENT + Rail.stepBullet(Rail.StepState.COMPLETED, step.prompt()).toAnsi(terminal));
+        writer.println(INDENT
+                + Rail.stepBullet(Rail.StepState.COMPLETED, step.prompt()).toAnsi(terminal));
         for (var line : summarize(step, answers)) {
             writer.println(INDENT + Rail.mid(line, Rail.StepState.COMPLETED).toAnsi(terminal));
         }

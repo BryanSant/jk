@@ -73,9 +73,8 @@ public final class JdkPinCommand implements CliCommand {
         Files.writeString(projectDir.resolve(".jdk-version"), pin + "\n", StandardCharsets.UTF_8);
         cc.jumpkick.jdk.JdkAccessLedger.atDefaultPath().touch(pin, "pin");
         Theme t = Theme.active();
-        CliOutput.out(Theme.colorize(Glyphs.CHECK, t.success())
-                + " Pinned project to "
-                + Theme.colorize(pin, t.focused()));
+        CliOutput.out(
+                Theme.colorize(Glyphs.CHECK, t.success()) + " Pinned project to " + Theme.colorize(pin, t.focused()));
         return 0;
     }
 

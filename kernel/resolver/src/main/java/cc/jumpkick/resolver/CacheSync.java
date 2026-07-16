@@ -318,7 +318,8 @@ public final class CacheSync {
         if (!cc.jumpkick.repo.RepoArtifactResolver.isNamedRemote(repoName)) return;
         try {
             String m2Path = cc.jumpkick.repo.MavenLayout.artifactPath(toCoord(pkg));
-            java.nio.file.Path target = cc.jumpkick.repo.M2Dirs.localRepository().resolve(m2Path);
+            java.nio.file.Path target =
+                    cc.jumpkick.repo.M2Dirs.localRepository().resolve(m2Path);
             var hashes = cc.jumpkick.repo.M2CompatWriter.copyToM2AndHash(cas.pathFor(hex), target);
             cc.jumpkick.repo.M2CompatWriter.writeMavenSidecars(target, hashes.sha1(), hashes.md5());
         } catch (IOException | RuntimeException ignored) {
@@ -333,8 +334,7 @@ public final class CacheSync {
      */
     private boolean materializeLocal(Lockfile.Artifact pkg, String hex) {
         if (cas.contains(hex)) return true;
-        cc.jumpkick.repo.RepoArtifactStore local =
-                cc.jumpkick.repo.RepoArtifactStore.forRepoName(cas.root(), "local");
+        cc.jumpkick.repo.RepoArtifactStore local = cc.jumpkick.repo.RepoArtifactStore.forRepoName(cas.root(), "local");
         java.util.Optional<java.nio.file.Path> jar =
                 local.locate(cc.jumpkick.repo.MavenLayout.artifactPath(toCoord(pkg)));
         if (jar.isEmpty()) return false;

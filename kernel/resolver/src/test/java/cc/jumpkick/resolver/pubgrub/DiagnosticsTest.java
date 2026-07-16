@@ -5,7 +5,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
 
 import java.util.List;
-import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 class DiagnosticsTest {
@@ -71,7 +70,8 @@ class DiagnosticsTest {
         String rendered = Diagnostics.render(derived);
         // The shared dependency fact should appear once as a numbered sentence
         // and be referenced by "#" on subsequent mentions — not re-emitted verbatim.
-        long dependsOnCount = rendered.lines().filter(l -> l.contains("depends on")).count();
+        long dependsOnCount =
+                rendered.lines().filter(l -> l.contains("depends on")).count();
         assertThat(dependsOnCount).isEqualTo(1);
     }
 
@@ -127,5 +127,4 @@ class DiagnosticsTest {
         // referenced by number on its second mention.
         assertThat(rendered).contains("(see #");
     }
-
 }

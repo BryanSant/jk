@@ -136,8 +136,7 @@ public final class GenerateOps {
 
     private static void addNotes(List<String> notes, ImportReport report) {
         for (ImportReport.Issue issue : report.issues()) {
-            notes.add((issue.severity() == ImportReport.Severity.ERROR ? "error" : "warning") + "|"
-                    + issue.message());
+            notes.add((issue.severity() == ImportReport.Severity.ERROR ? "error" : "warning") + "|" + issue.message());
         }
     }
 }

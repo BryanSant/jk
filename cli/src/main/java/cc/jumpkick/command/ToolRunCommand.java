@@ -73,7 +73,8 @@ public final class ToolRunCommand implements CliCommand {
     public List<Opt> options() {
         List<Opt> opts = List.of(
                 Opt.value("<class>", "Override the Main-Class to exec (coordinate targets only).", "--main"),
-                Opt.value("<coord>", "Add an extra dependency to the tool's classpath (repeatable).", "--with").repeat(),
+                Opt.value("<coord>", "Add an extra dependency to the tool's classpath (repeatable).", "--with")
+                        .repeat(),
                 Opt.value("<dir>", "Override the jk cache directory.", "--cache-dir")
                         .hide(),
                 Opt.value("<dir>", "Override the jk state directory.", "--state-dir")
@@ -241,8 +242,14 @@ public final class ToolRunCommand implements CliCommand {
             Integer urlGate = UrlToolSource.gate(ref, stateDir, command);
             if (urlGate != null) return urlGate;
             Path fetched = UrlToolSource.fetch(ref, cacheDir, forceRecompile);
-            return new ScriptRunner(global, cacheDirOverride, stateDirOverride, repoUrl, forceRecompile,
-                            r.dependencies(), r.javaOptions())
+            return new ScriptRunner(
+                            global,
+                            cacheDirOverride,
+                            stateDirOverride,
+                            repoUrl,
+                            forceRecompile,
+                            r.dependencies(),
+                            r.javaOptions())
                     .run(fetched, merged);
         }
         if (ref.contains(":")) {
@@ -254,8 +261,14 @@ public final class ToolRunCommand implements CliCommand {
             return null;
         }
         Path fetched = UrlToolSource.fetch(r.rawBase().resolve(ref).toString(), cacheDir, forceRecompile);
-        return new ScriptRunner(global, cacheDirOverride, stateDirOverride, repoUrl, forceRecompile,
-                        r.dependencies(), r.javaOptions())
+        return new ScriptRunner(
+                        global,
+                        cacheDirOverride,
+                        stateDirOverride,
+                        repoUrl,
+                        forceRecompile,
+                        r.dependencies(),
+                        r.javaOptions())
                 .run(fetched, merged);
     }
 
@@ -351,9 +364,15 @@ public final class ToolRunCommand implements CliCommand {
             var o = cc.jumpkick.cli.engine.InProcessEngine.require()
                     .toolResolvePipeline(
                             cc.jumpkick.model.ToolCoordSpec.parse(resolved.coordSpec()),
-                            with.stream().map(cc.jumpkick.model.ToolCoordSpec::parse).toList(),
-                            bin, mainClass, repoUrl, cacheDir,
-                            resolved.coordSpec(), PipelineConsole.modeFor(global));
+                            with.stream()
+                                    .map(cc.jumpkick.model.ToolCoordSpec::parse)
+                                    .toList(),
+                            bin,
+                            mainClass,
+                            repoUrl,
+                            cacheDir,
+                            resolved.coordSpec(),
+                            PipelineConsole.modeFor(global));
             if (o.env() == null) return 1;
             env = o.env();
         } else {

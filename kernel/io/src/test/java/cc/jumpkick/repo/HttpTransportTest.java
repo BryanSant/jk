@@ -4,9 +4,9 @@ package cc.jumpkick.repo;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.sun.net.httpserver.HttpServer;
 import cc.jumpkick.credential.RepoCredential;
 import cc.jumpkick.http.Http;
+import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetSocketAddress;

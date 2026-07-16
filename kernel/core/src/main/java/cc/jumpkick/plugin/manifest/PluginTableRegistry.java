@@ -30,10 +30,7 @@ import org.tomlj.TomlTable;
 public final class PluginTableRegistry {
 
     private static final List<String> BUILT_IN = List.of(
-            "spring-boot.jk-plugin.toml",
-            "android.jk-plugin.toml",
-            "protobuf.jk-plugin.toml",
-            "shrink.jk-plugin.toml");
+            "spring-boot.jk-plugin.toml", "android.jk-plugin.toml", "protobuf.jk-plugin.toml", "shrink.jk-plugin.toml");
 
     /**
      * A plugin's template/data resource, addressed relative to its manifest ({@code
@@ -89,7 +86,8 @@ public final class PluginTableRegistry {
             tables.add(m.table());
         }
         for (cc.jumpkick.model.PluginDeclaration decl : decls) {
-            PluginDescriptor m = PluginDescriptorStore.manifestFor(moduleDir, decl).orElse(null);
+            PluginDescriptor m =
+                    PluginDescriptorStore.manifestFor(moduleDir, decl).orElse(null);
             if (m == null) continue;
             if (!ids.add(m.id())) {
                 throw new cc.jumpkick.config.JkBuildParseException("plugin " + decl.coordinateWithVersion()
@@ -131,7 +129,8 @@ public final class PluginTableRegistry {
         for (PluginDescriptor.SubTable group : manifest.subTables().values()) {
             TomlTable groupTable = readTable(table, group.table());
             if (groupTable == null) continue;
-            Map<String, PluginDescriptor.SchemaKey> subSchema = manifest.subSchemas().get(group.schema());
+            Map<String, PluginDescriptor.SchemaKey> subSchema =
+                    manifest.subSchemas().get(group.schema());
             String whereBase = manifest.table() + "." + group.table();
             Map<String, Map<String, Object>> entries = new LinkedHashMap<>();
             for (String entry : groupTable.keySet()) {
@@ -164,8 +163,8 @@ public final class PluginTableRegistry {
             }
             PluginDescriptor.SchemaKey key = manifest.schema().get(raw);
             if (key == null) {
-                throw new JkBuildParseException("[" + where + "]." + raw + " is not a ["
-                        + manifest.table() + "] key (schema: " + manifest.schema().keySet() + ")");
+                throw new JkBuildParseException("[" + where + "]." + raw + " is not a [" + manifest.table()
+                        + "] key (schema: " + manifest.schema().keySet() + ")");
             }
             Object value = read(where, key, table);
             if (value != null) values.put(key.name(), value);
@@ -245,7 +244,11 @@ public final class PluginTableRegistry {
     private static String requiredMessage(String tableName, PluginDescriptor.SchemaKey key) {
         StringBuilder sb = new StringBuilder("[" + tableName + "]." + key.name() + " is required");
         if (key.example() != null) {
-            sb.append(" (e.g. ").append(key.name()).append(" = \"").append(key.example()).append("\")");
+            sb.append(" (e.g. ")
+                    .append(key.name())
+                    .append(" = \"")
+                    .append(key.example())
+                    .append("\")");
         }
         if (key.hint() != null) sb.append(" — ").append(key.hint());
         return sb.toString();

@@ -16,8 +16,7 @@ import org.junit.jupiter.api.Test;
 class PluginContributionsTest {
 
     private static JkBuild boot(String extra) {
-        return JkBuildParser.parse(
-                """
+        return JkBuildParser.parse("""
                 [project]
                 name = "demo"
                 group = "com.example"
@@ -36,20 +35,19 @@ class PluginContributionsTest {
         JkBuild build = boot("");
         assertThat(build.dependencies().of(Scope.PLATFORM))
                 .extracting(Dependency::module, d -> d.version().raw())
-                .containsExactly(
-                        org.assertj.core.groups.Tuple.tuple(
-                                "org.springframework.boot:spring-boot-dependencies", "=4.0.0"));
+                .containsExactly(org.assertj.core.groups.Tuple.tuple(
+                        "org.springframework.boot:spring-boot-dependencies", "=4.0.0"));
     }
 
     @Test
     void user_declared_bom_wins_over_the_contribution() {
-        JkBuild build = boot(
-                """
+        JkBuild build = boot("""
                 [platform-dependencies]
                 boot-bom = { group = "org.springframework.boot", name = "spring-boot-dependencies", version = "3.9.9" }
                 """);
         assertThat(build.dependencies().of(Scope.PLATFORM)).hasSize(1);
-        assertThat(build.dependencies().of(Scope.PLATFORM).getFirst().version().raw()).contains("3.9.9");
+        assertThat(build.dependencies().of(Scope.PLATFORM).getFirst().version().raw())
+                .contains("3.9.9");
     }
 
     // ---- [[contribute.compiler-args]] ----------------------------------------------------------
@@ -63,8 +61,7 @@ class PluginContributionsTest {
 
     @Test
     void non_boot_project_contributes_nothing() {
-        JkBuild build = JkBuildParser.parse(
-                """
+        JkBuild build = JkBuildParser.parse("""
                 [project]
                 name = "plain"
                 group = "com.example"
@@ -72,7 +69,8 @@ class PluginContributionsTest {
                 jdk = "25"
                 """);
         assertThat(PluginContributions.javacArgs(build, null, Set.of())).isEmpty();
-        assertThat(PluginContributions.kotlinPlugins(build, null, "2.3.0", Set.of())).isEmpty();
+        assertThat(PluginContributions.kotlinPlugins(build, null, "2.3.0", Set.of()))
+                .isEmpty();
         assertThat(build.dependencies().of(Scope.PLATFORM)).isEmpty();
     }
 
@@ -87,7 +85,8 @@ class PluginContributionsTest {
                 .extracting(PluginContributions.KotlinPluginUse::id)
                 .containsExactly("org.jetbrains.kotlin.allopen");
 
-        var withJpa = PluginContributions.kotlinPlugins(build, null, "2.3.0", Set.of("jakarta.persistence:jakarta.persistence-api"));
+        var withJpa = PluginContributions.kotlinPlugins(
+                build, null, "2.3.0", Set.of("jakarta.persistence:jakarta.persistence-api"));
         assertThat(withJpa)
                 .extracting(PluginContributions.KotlinPluginUse::id)
                 .containsExactly("org.jetbrains.kotlin.allopen", "org.jetbrains.kotlin.noarg");
@@ -103,8 +102,7 @@ class PluginContributionsTest {
 
     @Test
     void unknown_interpolation_variable_fails_at_manifest_load() {
-        assertThatThrownBy(() -> PluginDescriptors.parse(
-                        """
+        assertThatThrownBy(() -> PluginDescriptors.parse("""
                         [plugin]
                         id = "p"
                         table = "p"
@@ -114,8 +112,7 @@ class PluginContributionsTest {
 
                         [[contribute.platform-dependency]]
                         coordinate = "a:b:${config.versoin}"
-                        """,
-                        "p.toml"))
+                        """, "p.toml"))
                 .isInstanceOf(JkBuildParseException.class)
                 .hasMessageContaining("${config.versoin}")
                 .hasMessageContaining("declares no `versoin`");
@@ -123,8 +120,7 @@ class PluginContributionsTest {
 
     @Test
     void classpath_has_cannot_gate_a_platform_dependency() {
-        assertThatThrownBy(() -> PluginDescriptors.parse(
-                        """
+        assertThatThrownBy(() -> PluginDescriptors.parse("""
                         [plugin]
                         id = "p"
                         table = "p"
@@ -132,16 +128,14 @@ class PluginContributionsTest {
                         [[contribute.platform-dependency]]
                         coordinate = "a:b:1"
                         when = { classpath-has = "x:y" }
-                        """,
-                        "p.toml"))
+                        """, "p.toml"))
                 .isInstanceOf(JkBuildParseException.class)
                 .hasMessageContaining("classpath-has cannot gate a platform-dependency");
     }
 
     @Test
     void when_predicates_parse_and_reject_unknown_or_stacked() {
-        String base =
-                """
+        String base = """
                 [plugin]
                 id = "p"
                 table = "p"
@@ -171,8 +165,8 @@ class PluginContributionsTest {
         assertThatThrownBy(() -> PluginDescriptors.parse(base.formatted("frobnicates = true"), "p.toml"))
                 .isInstanceOf(JkBuildParseException.class)
                 .hasMessageContaining("no known predicate");
-        assertThatThrownBy(() ->
-                        PluginDescriptors.parse(base.formatted("native-declared = true, kotlin-project = true"), "p.toml"))
+        assertThatThrownBy(() -> PluginDescriptors.parse(
+                        base.formatted("native-declared = true, kotlin-project = true"), "p.toml"))
                 .isInstanceOf(JkBuildParseException.class)
                 .hasMessageContaining("more than one predicate");
     }

@@ -3,9 +3,9 @@ package cc.jumpkick.command;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.sun.net.httpserver.HttpServer;
 import cc.jumpkick.cli.Jk;
 import cc.jumpkick.lock.LockfileReader;
+import com.sun.net.httpserver.HttpServer;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;
@@ -197,8 +197,13 @@ class OutdatedCommandTest {
     @Test
     void without_jk_toml_fails_with_config_exit(@TempDir Path tempDir) {
         int exit = run(
-                "outdated", "-C", tempDir.toString(), "--repo-url", base.toString(),
-                "--cache-dir", tempDir.resolve("cache").toString());
+                "outdated",
+                "-C",
+                tempDir.toString(),
+                "--repo-url",
+                base.toString(),
+                "--cache-dir",
+                tempDir.resolve("cache").toString());
         assertThat(exit).isEqualTo(2);
     }
 
@@ -281,8 +286,8 @@ class OutdatedCommandTest {
     }
 
     private static String coordPath(String group, String artifact, String version, String ext) {
-        return "/" + group.replace('.', '/') + "/" + artifact + "/" + version + "/"
-                + artifact + "-" + version + "." + ext;
+        return "/" + group.replace('.', '/') + "/" + artifact + "/" + version + "/" + artifact + "-" + version + "."
+                + ext;
     }
 
     private static String pom(String group, String artifact, String version) {

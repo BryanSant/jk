@@ -142,9 +142,9 @@ public final class AuthLoginCommand implements CliCommand {
         Theme t = Theme.active();
         CliOutput.out("\n  First copy your one-time code: "
                 + Theme.colorize(dc.userCode(), t.focused().bold()));
-        CliOutput.out("  Then open:                     "
-                + Theme.colorize(dc.verificationUri(), t.cyan()));
-        CliOutput.out("\n  " + Theme.colorize("Waiting for authorization…", t.normalGray().italic()));
+        CliOutput.out("  Then open:                     " + Theme.colorize(dc.verificationUri(), t.cyan()));
+        CliOutput.out("\n  "
+                + Theme.colorize("Waiting for authorization…", t.normalGray().italic()));
         openBrowser(url);
     }
 

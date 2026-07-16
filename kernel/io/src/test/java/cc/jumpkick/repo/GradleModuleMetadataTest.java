@@ -70,8 +70,8 @@ class GradleModuleMetadataTest {
 
     @Test
     void falls_back_to_the_other_environment_when_preferred_is_absent(@TempDir Path dir) throws Exception {
-        String jvmOnly = KMP_ROOT.replace("\"org.gradle.jvm.environment\": \"android\"",
-                "\"org.gradle.jvm.environment\": \"absent-env\"");
+        String jvmOnly = KMP_ROOT.replace(
+                "\"org.gradle.jvm.environment\": \"android\"", "\"org.gradle.jvm.environment\": \"absent-env\"");
         Path module = Files.writeString(dir.resolve("m.module"), jvmOnly);
         var gmm = GradleModuleMetadata.parse(module);
 

@@ -32,6 +32,7 @@ class JavacLintTest {
 
     @Test
     void parameters_default_is_not_duplicated_when_the_user_passes_it() {
-        assertThat(JavacLint.effectiveArgs(false, List.of("-parameters"), List.of("-parameters"))).containsExactly("-parameters");
+        assertThat(JavacLint.effectiveArgs(false, List.of("-parameters"), List.of("-parameters")))
+                .containsExactly("-parameters");
     }
 }

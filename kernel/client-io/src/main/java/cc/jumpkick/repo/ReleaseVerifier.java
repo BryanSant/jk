@@ -95,8 +95,7 @@ public final class ReleaseVerifier {
     private static java.util.Optional<PublicKey> parse(String base64Spki) {
         try {
             byte[] der = Base64.getDecoder().decode(base64Spki.trim());
-            return java.util.Optional.of(
-                    KeyFactory.getInstance("Ed25519").generatePublic(new X509EncodedKeySpec(der)));
+            return java.util.Optional.of(KeyFactory.getInstance("Ed25519").generatePublic(new X509EncodedKeySpec(der)));
         } catch (GeneralSecurityException | IllegalArgumentException e) {
             return java.util.Optional.empty();
         }

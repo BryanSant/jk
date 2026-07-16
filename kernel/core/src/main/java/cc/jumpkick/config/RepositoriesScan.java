@@ -142,8 +142,8 @@ public final class RepositoriesScan {
         return RepositoryToml.interpolate(raw, var -> {
             String val = System.getenv(var);
             if (val == null) {
-                throw new JkBuildParseException("repository credential references unset environment variable ${"
-                        + var + "}");
+                throw new JkBuildParseException(
+                        "repository credential references unset environment variable ${" + var + "}");
             }
             return val;
         });

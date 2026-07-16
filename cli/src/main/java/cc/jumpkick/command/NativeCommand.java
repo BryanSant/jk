@@ -1,26 +1,24 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.command;
 
+import cc.jumpkick.cli.CliOutput;
+import cc.jumpkick.cli.GlobalOptions;
 import cc.jumpkick.cli.engine.EngineClient;
 import cc.jumpkick.cli.engine.InProcessEngine;
 import cc.jumpkick.cli.run.CompositePipelineListener;
-import cc.jumpkick.cli.run.EventLogListener;
-import cc.jumpkick.engine.EnginePaths;
-import cc.jumpkick.cli.CliOutput;
-import cc.jumpkick.cli.GlobalOptions;
 import cc.jumpkick.cli.run.ConsoleSpec;
+import cc.jumpkick.cli.run.EventLogListener;
 import cc.jumpkick.cli.run.PipelineConsole;
 import cc.jumpkick.cli.theme.Theme;
 import cc.jumpkick.cli.tui.CommandManager;
 import cc.jumpkick.cli.tui.PipelineWedge;
-import cc.jumpkick.config.JkBuildParser;
-import cc.jumpkick.layout.BuildLayout;
+import cc.jumpkick.config.ModuleOrder;
+import cc.jumpkick.engine.EnginePaths;
 import cc.jumpkick.model.JkBuild;
 import cc.jumpkick.model.command.CliCommand;
 import cc.jumpkick.model.command.Exit;
 import cc.jumpkick.model.command.Invocation;
 import cc.jumpkick.model.command.Opt;
-import cc.jumpkick.config.ModuleOrder;
 import cc.jumpkick.run.PipelineResult;
 import cc.jumpkick.util.JkDirs;
 import java.io.IOException;
@@ -156,8 +154,7 @@ public final class NativeCommand implements CliCommand {
     }
 
     /** The engine request for {@code entryDir}, with the client-resolved GraalVM homes attached. */
-    private EngineClient.NativeRequest hostedRequest(
-            Path entryDir, Path cache, Map<Path, Path> graalHomes) {
+    private EngineClient.NativeRequest hostedRequest(Path entryDir, Path cache, Map<Path, Path> graalHomes) {
         var session = cc.jumpkick.config.SessionContext.current();
         return new EngineClient.NativeRequest(
                 entryDir,
@@ -208,8 +205,20 @@ public final class NativeCommand implements CliCommand {
                     .filter(NativeCommand::nativeEligible)
                     .count();
             return InProcessEngine.require()
-                    .nativeWorkspaceInProcess(wsRoot, modulesByDir, sorted, cache, graalHomes, mode, buildStart,
-                            nativeCount, jdksDir, mainClass, extra, buildOpts.skipTests, global.verbose);
+                    .nativeWorkspaceInProcess(
+                            wsRoot,
+                            modulesByDir,
+                            sorted,
+                            cache,
+                            graalHomes,
+                            mode,
+                            buildStart,
+                            nativeCount,
+                            jdksDir,
+                            mainClass,
+                            extra,
+                            buildOpts.skipTests,
+                            global.verbose);
         }
 
         // Thin client: per-module native-mode + graal spec ride ProjectInfo summaries; the
@@ -231,13 +240,18 @@ public final class NativeCommand implements CliCommand {
             var info = BuildCommand.projectInfoOrNull(moduleDir);
             if (info == null || !"ALWAYS".equals(info.nativeMode())) continue;
             nativeCount++;
-            Optional<Path> home =
-                    graal.resolve(moduleDir, info.graal().isEmpty() ? null : info.graal());
+            Optional<Path> home = graal.resolve(moduleDir, info.graal().isEmpty() ? null : info.graal());
             if (home.isEmpty()) return Exit.CONFIG; // GraalResolver already printed why
             graalHomes.put(moduleDir, home.get());
         }
         return runWorkspaceHosted(
-                wsRoot, cache, graalHomes, mode, buildStart, rootInfo.moduleDirs().size(), nativeCount);
+                wsRoot,
+                cache,
+                graalHomes,
+                mode,
+                buildStart,
+                rootInfo.moduleDirs().size(),
+                nativeCount);
     }
 
     /**
@@ -246,8 +260,13 @@ public final class NativeCommand implements CliCommand {
      * back; this method only renders. Exit codes arrive engine-computed.
      */
     private int runWorkspaceHosted(
-            Path wsRoot, Path cache, Map<Path, Path> graalHomes, PipelineConsole.Mode mode, long buildStart,
-            int totalModules, long nativeCount) {
+            Path wsRoot,
+            Path cache,
+            Map<Path, Path> graalHomes,
+            PipelineConsole.Mode mode,
+            long buildStart,
+            int totalModules,
+            long nativeCount) {
         var req = hostedRequest(wsRoot, cache, graalHomes);
         var paths = EnginePaths.current();
 
@@ -258,11 +277,12 @@ public final class NativeCommand implements CliCommand {
                 @Override
                 public cc.jumpkick.run.PipelineListener onModuleStart(cc.jumpkick.runtime.ModulePlan m) {
                     CliOutput.out();
-                    CliOutput.out("══ " + wsRoot.relativize(m.dir()) + " (" + (++idx[0]) + "/" + totalModules
-                            + ") ══");
+                    CliOutput.out("══ " + wsRoot.relativize(m.dir()) + " (" + (++idx[0]) + "/" + totalModules + ") ══");
                     var log = EventLogListener.open(m.cache(), m.pipeline().name());
                     return CompositePipelineListener.of(
-                            PipelineConsole.chooseConsoleListener(m.pipeline().name(), m.pipeline().steps(), mode), log);
+                            PipelineConsole.chooseConsoleListener(
+                                    m.pipeline().name(), m.pipeline().steps(), mode),
+                            log);
                 }
 
                 @Override
@@ -336,11 +356,12 @@ public final class NativeCommand implements CliCommand {
             }
             return result.exitCode();
         }
-        view.finishPipelineSuccess(Theme.colorize("Native build successful", Theme.active().success())
-                + ", "
-                + workspaceSummary(built[0], nativeCount)
-                + " "
-                + BuildCommand.elapsedSince(buildStart));
+        view.finishPipelineSuccess(
+                Theme.colorize("Native build successful", Theme.active().success())
+                        + ", "
+                        + workspaceSummary(built[0], nativeCount)
+                        + " "
+                        + BuildCommand.elapsedSince(buildStart));
         return 0;
     }
 
@@ -352,7 +373,6 @@ public final class NativeCommand implements CliCommand {
                 + " built"
                 + (nativeCount > 0 ? ", " + nativeCount + " native artifact" + (nativeCount == 1 ? "" : "s") : "");
     }
-
 
     // --- single-project (unchanged behaviour) --------------------------------
 
@@ -381,8 +401,18 @@ public final class NativeCommand implements CliCommand {
             // The in-process seam still takes the parsed model — acceptable in the JVM test
             // dist, which links the parser anyway; the native client never reaches this.
             var inProc = InProcessEngine.require();
-            return inProc.nativeSingleInProcess(projectDir, inProc.parseBuild(buildFile), cache, graalHome.get(),
-                    coord, mode, jdksDir, mainClass, extra, buildOpts.skipTests, global.verbose);
+            return inProc.nativeSingleInProcess(
+                    projectDir,
+                    inProc.parseBuild(buildFile),
+                    cache,
+                    graalHome.get(),
+                    coord,
+                    mode,
+                    jdksDir,
+                    mainClass,
+                    extra,
+                    buildOpts.skipTests,
+                    global.verbose);
         }
 
         // Engine-hosted (a cascade of one): the success tail names the built artifact from

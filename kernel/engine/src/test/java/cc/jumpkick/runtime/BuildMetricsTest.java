@@ -20,7 +20,8 @@ class BuildMetricsTest {
         return dir.resolve("metrics.json");
     }
 
-    private static BuildMetrics.Outcome build(String dir, boolean success, long millis, BuildMetrics.StepSample... steps) {
+    private static BuildMetrics.Outcome build(
+            String dir, boolean success, long millis, BuildMetrics.StepSample... steps) {
         return new BuildMetrics.Outcome("build", dir, "g:n", success, false, millis, List.of(steps));
     }
 
@@ -103,7 +104,8 @@ class BuildMetricsTest {
                         new BuildMetrics.StepSample("/p/a", "run-tests", "FAIL", 400)),
                 NOW);
         BuildMetrics m = BuildMetrics.load(f);
-        assertThat(m.step("/p/a", "compile-java").orElseThrow().ok().totalMillis()).isEqualTo(600);
+        assertThat(m.step("/p/a", "compile-java").orElseThrow().ok().totalMillis())
+                .isEqualTo(600);
         assertThat(m.step("", "compile-java").orElseThrow().ok().totalMillis()).isEqualTo(600);
         assertThat(m.step("/p/a", "run-tests").orElseThrow().failed().count()).isEqualTo(1);
         assertThat(m.step("/p/a", "run-tests").orElseThrow().ok().count()).isZero();
@@ -130,12 +132,23 @@ class BuildMetricsTest {
     void survives_a_json_round_trip_with_pathy_keys(@TempDir Path dir) {
         Path f = file(dir);
         String project = "/home/me/src/oss/jk kernel"; // embedded space stays intact
-        record(f, new BuildMetrics.Outcome("build", project, "dev.jk:kernel", true, false, 750,
-                List.of(new BuildMetrics.StepSample(project, "compile-java", "SUCCESS", 500))), NOW);
+        record(
+                f,
+                new BuildMetrics.Outcome(
+                        "build",
+                        project,
+                        "dev.jk:kernel",
+                        true,
+                        false,
+                        750,
+                        List.of(new BuildMetrics.StepSample(project, "compile-java", "SUCCESS", 500))),
+                NOW);
         BuildMetrics.clearMemo(); // force a real re-read from disk
         BuildMetrics m = BuildMetrics.load(f);
-        assertThat(m.invocation("build", project).orElseThrow().ok().totalMillis()).isEqualTo(750);
-        assertThat(m.step(project, "compile-java").orElseThrow().ok().totalMillis()).isEqualTo(500);
+        assertThat(m.invocation("build", project).orElseThrow().ok().totalMillis())
+                .isEqualTo(750);
+        assertThat(m.step(project, "compile-java").orElseThrow().ok().totalMillis())
+                .isEqualTo(500);
     }
 
     @Test

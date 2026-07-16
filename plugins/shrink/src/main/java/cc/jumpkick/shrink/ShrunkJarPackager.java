@@ -64,8 +64,7 @@ final class ShrunkJarPackager {
             boolean obfuscate = io.config().bool("obfuscate", false);
             Path rules = work.resolve("keep.pro");
             StringBuilder pro = new StringBuilder();
-            pro.append("-keep class ").append(mainClass)
-                    .append(" { public static void main(java.lang.String[]); }\n");
+            pro.append("-keep class ").append(mainClass).append(" { public static void main(java.lang.String[]); }\n");
             pro.append("-keepattributes *Annotation*,Signature,InnerClasses,EnclosingMethod,")
                     .append("SourceFile,LineNumberTable\n");
             if (!obfuscate) pro.append("-dontobfuscate\n");
@@ -92,7 +91,8 @@ final class ShrunkJarPackager {
             }
             if (obfuscate) {
                 run.arg("--pg-map-output")
-                        .arg(io.artifactPath().resolveSibling(stripExtension(io.artifactPath()) + "-mapping.txt")
+                        .arg(io.artifactPath()
+                                .resolveSibling(stripExtension(io.artifactPath()) + "-mapping.txt")
                                 .toString());
             }
             long before = 0;
@@ -124,7 +124,9 @@ final class ShrunkJarPackager {
         try (OutputStream out = Files.newOutputStream(jar);
                 JarOutputStream jos = new JarOutputStream(out);
                 Stream<Path> walk = Files.walk(classesDir)) {
-            List<Path> files = walk.filter(Files::isRegularFile).sorted(Comparator.naturalOrder()).toList();
+            List<Path> files = walk.filter(Files::isRegularFile)
+                    .sorted(Comparator.naturalOrder())
+                    .toList();
             for (Path file : files) {
                 String name = classesDir.relativize(file).toString().replace('\\', '/');
                 JarEntry entry = new JarEntry(name);

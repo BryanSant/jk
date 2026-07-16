@@ -11,7 +11,6 @@ import cc.jumpkick.cli.tui.PipelineWedge;
 import cc.jumpkick.cli.tui.Spinner;
 import cc.jumpkick.config.GlobalConfig;
 import cc.jumpkick.config.WorkspaceScan;
-import cc.jumpkick.model.JkBuild;
 import cc.jumpkick.model.command.CliCommand;
 import cc.jumpkick.model.command.Invocation;
 import cc.jumpkick.model.command.Opt;
@@ -24,7 +23,6 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Optional;
 import java.util.stream.Stream;
 
 /**
@@ -221,8 +219,7 @@ public final class CleanCommand implements CliCommand {
         if (Boolean.getBoolean("jk.test.noEngine")
                 || "cc.jumpkick.testrunner.TestRunner".equals(System.getProperty("jk.plugin.class"))) {
             try {
-                return cc.jumpkick.cli.engine.InProcessEngine.require()
-                        .clearInProcess(root, projectDir, false, mode);
+                return cc.jumpkick.cli.engine.InProcessEngine.require().clearInProcess(root, projectDir, false, mode);
             } catch (IOException e) {
                 CliOutput.err("jk clean --force: " + e.getMessage());
                 return cc.jumpkick.model.command.Exit.SOFTWARE;

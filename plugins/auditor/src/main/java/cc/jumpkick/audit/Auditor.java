@@ -1,17 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.audit;
 
-import cc.jumpkick.audit.AuditReport;
-import cc.jumpkick.audit.OsvAuditor;
-import cc.jumpkick.audit.OsvClient;
 import cc.jumpkick.lock.Lockfile;
 import cc.jumpkick.lock.LockfileReader;
 import cc.jumpkick.plugin.Plugin;
 import cc.jumpkick.plugin.PluginConfig;
 import cc.jumpkick.plugin.PluginManifest;
-import cc.jumpkick.plugin.protocol.ProtocolWriter;
 import cc.jumpkick.plugin.protocol.PluginReply;
 import cc.jumpkick.plugin.protocol.PluginSpec;
+import cc.jumpkick.plugin.protocol.ProtocolWriter;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Files;
@@ -85,7 +82,8 @@ public final class Auditor implements Plugin {
         }
 
         for (AuditReport.Finding f : report.findings()) {
-            out.emit(PluginReply.finding(f.module(), f.version(), f.vulnId(), f.severity().name(), f.summary()));
+            out.emit(PluginReply.finding(
+                    f.module(), f.version(), f.vulnId(), f.severity().name(), f.summary()));
         }
         out.emit(PluginReply.done(0));
         return 0;

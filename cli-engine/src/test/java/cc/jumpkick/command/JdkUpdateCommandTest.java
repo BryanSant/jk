@@ -3,10 +3,10 @@ package cc.jumpkick.command;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.sun.net.httpserver.HttpServer;
 import cc.jumpkick.cli.Jk;
 import cc.jumpkick.jdk.HostPlatform;
 import cc.jumpkick.util.Hashing;
+import com.sun.net.httpserver.HttpServer;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;

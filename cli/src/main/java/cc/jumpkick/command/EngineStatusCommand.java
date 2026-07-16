@@ -94,7 +94,9 @@ public final class EngineStatusCommand implements CliCommand {
         }
         String http = describeHttp(s, paths);
         // OSC-8 hyperlink with the URL in the theme's path color so it reads AND behaves as a link.
-        String webUi = s.httpUrl() != null ? Ansi.hyperlink(http, Theme.colorize(http, Theme.active().path())) : http;
+        String webUi = s.httpUrl() != null
+                ? Ansi.hyperlink(http, Theme.colorize(http, Theme.active().path()))
+                : http;
         detail("Web UI", webUi);
         return Exit.SUCCESS;
     }

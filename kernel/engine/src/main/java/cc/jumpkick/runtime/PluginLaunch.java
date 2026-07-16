@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.runtime;
 
+import cc.jumpkick.engine.plugin.JvmOptions;
 import cc.jumpkick.jdk.HostPlatform;
 import cc.jumpkick.jdk.JavaHomes;
-import cc.jumpkick.engine.plugin.JvmOptions;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -20,9 +20,8 @@ final class PluginLaunch {
 
     /** {@code java [extraJvmArgs] -jar workerJar spec}, heap-sized for one requested JVM. */
     static List<String> javaCommand(Path workerJar, List<String> extraJvmArgs, Path spec) {
-        Path javaExe = JavaHomes.runningJavaHome()
-                .resolve("bin")
-                .resolve(HostPlatform.isWindows() ? "java.exe" : "java");
+        Path javaExe =
+                JavaHomes.runningJavaHome().resolve("bin").resolve(HostPlatform.isWindows() ? "java.exe" : "java");
         List<String> rest = new ArrayList<>(extraJvmArgs);
         rest.add("-jar");
         rest.add(workerJar.toString());

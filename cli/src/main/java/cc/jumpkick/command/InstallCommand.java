@@ -2,26 +2,16 @@
 package cc.jumpkick.command;
 
 import cc.jumpkick.cli.CliOutput;
-import cc.jumpkick.cache.Cas;
-import cc.jumpkick.cache.Linking;
 import cc.jumpkick.cli.GlobalOptions;
 import cc.jumpkick.cli.PathDisplay;
 import cc.jumpkick.cli.run.PipelineConsole;
 import cc.jumpkick.cli.theme.Coords;
 import cc.jumpkick.jdk.JavaHomes;
 import cc.jumpkick.model.Coordinate;
-import cc.jumpkick.model.JkBuild;
-import cc.jumpkick.model.command.Arity;
-import cc.jumpkick.model.command.CliCommand;
 import cc.jumpkick.model.command.Exit;
-import cc.jumpkick.model.command.Invocation;
-import cc.jumpkick.model.command.Opt;
-import cc.jumpkick.model.command.Param;
 import cc.jumpkick.repo.MavenLayout;
-import cc.jumpkick.run.Pipeline;
 import cc.jumpkick.run.PipelineResult;
 import cc.jumpkick.run.TestSummary;
-import cc.jumpkick.tool.AppLauncher;
 import cc.jumpkick.tool.JarManifest;
 import cc.jumpkick.tool.ToolEnv;
 import cc.jumpkick.tool.ToolLauncher;
@@ -32,9 +22,7 @@ import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.PosixFilePermission;
-import java.util.ArrayList;
 import java.util.EnumSet;
-import java.util.List;
 import java.util.Set;
 
 /**
@@ -194,7 +182,12 @@ public final class InstallCommand {
                     .toolResolvePipeline(
                             cc.jumpkick.model.ToolCoordSpec.parse(resolved.coordSpec()),
                             java.util.List.of(),
-                            bin, mainClass, repoUrl, cacheDir, resolved.coordSpec(), mode);
+                            bin,
+                            mainClass,
+                            repoUrl,
+                            cacheDir,
+                            resolved.coordSpec(),
+                            mode);
             if (o.env() == null) return failureExit(o.result(), "jk install", cacheDir);
             env = o.env();
         } else {
@@ -334,8 +327,8 @@ public final class InstallCommand {
         TestSummary testResult;
         if (engineDisabledForTests()) {
             var o = cc.jumpkick.cli.engine.InProcessEngine.require()
-                    .installProjectPipeline(projectDir, cacheDir, m2Dir(), buildOpts.skipTests, global.verbose,
-                            graalHome, mode);
+                    .installProjectPipeline(
+                            projectDir, cacheDir, m2Dir(), buildOpts.skipTests, global.verbose, graalHome, mode);
             result = o.result();
             testResult = o.testResult();
         } else {
@@ -387,8 +380,7 @@ public final class InstallCommand {
     private cc.jumpkick.engine.protocol.ProjectInfo projectInfo(Path projectDir) throws IOException {
         return engineDisabledForTests()
                 ? cc.jumpkick.cli.engine.InProcessEngine.require().projectInfo(projectDir)
-                : cc.jumpkick.cli.engine.EngineClient.projectInfo(
-                        cc.jumpkick.engine.EnginePaths.current(), projectDir);
+                : cc.jumpkick.cli.engine.EngineClient.projectInfo(cc.jumpkick.engine.EnginePaths.current(), projectDir);
     }
 
     /**
@@ -399,11 +391,16 @@ public final class InstallCommand {
     private Path applyInstallPlan(Path projectDir, Path cacheDir) throws IOException {
         cc.jumpkick.engine.protocol.ExecPlan plan = engineDisabledForTests()
                 ? cc.jumpkick.cli.engine.InProcessEngine.require()
-                        .execPlan(projectDir, cacheDir, "install", mainClass, binName, binDirOverride,
-                                libDirOverride)
+                        .execPlan(projectDir, cacheDir, "install", mainClass, binName, binDirOverride, libDirOverride)
                 : cc.jumpkick.cli.engine.EngineClient.execPlan(
-                        cc.jumpkick.engine.EnginePaths.current(), projectDir, cacheDir, "install", mainClass,
-                        binName, binDirOverride, libDirOverride);
+                        cc.jumpkick.engine.EnginePaths.current(),
+                        projectDir,
+                        cacheDir,
+                        "install",
+                        mainClass,
+                        binName,
+                        binDirOverride,
+                        libDirOverride);
         if (plan.error() != null) {
             throw new IOException(plan.error());
         }

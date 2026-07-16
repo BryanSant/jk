@@ -49,7 +49,8 @@ public final class EngineRotateTokenCommand implements CliCommand {
         }
         // A running engine still holds the old token in memory — stop it so the old value is
         // genuinely revoked, not just replaced on disk. The next command respawns and mints fresh.
-        if (EngineClient.ping(cc.jumpkick.engine.EnginePaths.activeSocket(paths)) && !EngineClient.stop(cc.jumpkick.engine.EnginePaths.activeSocket(paths))) {
+        if (EngineClient.ping(cc.jumpkick.engine.EnginePaths.activeSocket(paths))
+                && !EngineClient.stop(cc.jumpkick.engine.EnginePaths.activeSocket(paths))) {
             CliOutput.err("jk engine: token file removed, but stopping the running engine failed;"
                     + " run 'jk engine stop' so the old token stops being accepted");
             return Exit.SOFTWARE;

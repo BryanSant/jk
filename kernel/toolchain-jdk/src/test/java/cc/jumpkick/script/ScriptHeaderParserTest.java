@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import cc.jumpkick.model.Dependency;
 import cc.jumpkick.model.VersionSelector;
+import java.net.URI;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -193,9 +194,7 @@ class ScriptHeaderParserTest {
                 class X {}
                 """);
         assertThat(h.repos())
-                .containsExactly(
-                        java.net.URI.create("https://repo.maven.apache.org/maven2"),
-                        java.net.URI.create("https://jitpack.io"));
+                .containsExactly(URI.create("https://repo.maven.apache.org/maven2"), URI.create("https://jitpack.io"));
     }
 
     @Test
@@ -255,7 +254,7 @@ class ScriptHeaderParserTest {
                 """);
         assertThat(h.deps()).hasSize(3);
         assertThat(h.deps().get(1).module()).isEqualTo("com.example:second");
-        assertThat(h.repos()).containsExactly(java.net.URI.create("https://jitpack.io"));
+        assertThat(h.repos()).containsExactly(URI.create("https://jitpack.io"));
     }
 
     @Test

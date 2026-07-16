@@ -50,8 +50,8 @@ final class SdkComponents {
             throw new IOException("sdk-path escapes the component: " + pathInside);
         }
         if (!Files.exists(inside)) {
-            throw new IOException("sdk component " + component + " has no " + pathInside + " (looked at " + inside
-                    + ")");
+            throw new IOException(
+                    "sdk component " + component + " has no " + pathInside + " (looked at " + inside + ")");
         }
         return inside;
     }

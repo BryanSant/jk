@@ -39,7 +39,9 @@ final class StreamingListener implements EngineExecutionListener {
         var payload = new LinkedHashMap<String, Object>();
         payload.put("id", descriptor.getUniqueId().toString());
         payload.put("display", descriptor.getDisplayName());
-        payload.put("parent", descriptor.getParent().map(p -> p.getUniqueId().toString()).orElse(null));
+        payload.put(
+                "parent",
+                descriptor.getParent().map(p -> p.getUniqueId().toString()).orElse(null));
         payload.put("type", descriptor.getType().name());
         emit(EventType.DYNAMIC_REGISTERED, payload);
     }
@@ -61,7 +63,9 @@ final class StreamingListener implements EngineExecutionListener {
         var payload = new LinkedHashMap<String, Object>();
         payload.put("id", uid);
         payload.put("display", descriptor.getDisplayName());
-        payload.put("parent", descriptor.getParent().map(p -> p.getUniqueId().toString()).orElse(null));
+        payload.put(
+                "parent",
+                descriptor.getParent().map(p -> p.getUniqueId().toString()).orElse(null));
         payload.put("type", descriptor.getType().name());
         descriptor.getSource().ifPresent(src -> payload.put("source", src.toString()));
         emit(EventType.STARTED, payload);

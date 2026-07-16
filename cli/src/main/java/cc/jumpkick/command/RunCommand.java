@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.command;
 
-import cc.jumpkick.cli.CliOutput;
 import cc.jumpkick.cli.Ansi;
+import cc.jumpkick.cli.CliOutput;
 import cc.jumpkick.cli.GlobalOptions;
 import cc.jumpkick.cli.PathDisplay;
 import cc.jumpkick.cli.run.ConsoleSpec;
@@ -10,15 +10,9 @@ import cc.jumpkick.cli.run.PipelineConsole;
 import cc.jumpkick.cli.theme.Theme;
 import cc.jumpkick.cli.tui.PipelineWedge;
 import cc.jumpkick.model.command.Exit;
-import cc.jumpkick.model.command.Arity;
-import cc.jumpkick.model.command.CliCommand;
-import cc.jumpkick.model.command.Invocation;
-import cc.jumpkick.model.command.Opt;
-import cc.jumpkick.model.command.Param;
 import cc.jumpkick.run.PipelineResult;
 import cc.jumpkick.util.JkDirs;
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -101,7 +95,8 @@ public final class RunCommand {
         cc.jumpkick.run.TestSummary testResult;
         if (engineDisabledForTests()) {
             var o = cc.jumpkick.cli.engine.InProcessEngine.require()
-                    .runBuildPipeline(projectDir, cache, jdksDir, buildOpts.skipTests, global.verbose, mode, spec, coord);
+                    .runBuildPipeline(
+                            projectDir, cache, jdksDir, buildOpts.skipTests, global.verbose, mode, spec, coord);
             result = o.result();
             testResult = o.testResult();
         } else {
@@ -190,7 +185,8 @@ public final class RunCommand {
         cc.jumpkick.engine.protocol.PluginCommandReport report;
         try {
             report = engineDisabledForTests()
-                    ? cc.jumpkick.cli.engine.InProcessEngine.require().pluginCommand(projectDir, cache, command, appArgs)
+                    ? cc.jumpkick.cli.engine.InProcessEngine.require()
+                            .pluginCommand(projectDir, cache, command, appArgs)
                     : cc.jumpkick.cli.engine.EngineClient.pluginCommand(
                             cc.jumpkick.engine.EnginePaths.current(), projectDir, cache, command, appArgs);
         } catch (Exception e) {
@@ -310,5 +306,4 @@ public final class RunCommand {
     private Path cacheDir() {
         return cacheDirOverride != null ? cacheDirOverride : JkDirs.cache();
     }
-
 }

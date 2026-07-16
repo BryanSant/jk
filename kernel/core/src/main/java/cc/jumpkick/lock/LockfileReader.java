@@ -86,8 +86,7 @@ public final class LockfileReader {
         org.tomlj.TomlTable jkTable = result.getTable("jk");
         if (jkTable != null && jkTable.getString("version") != null) {
             String sha = jkTable.getString("sha256");
-            jkPin = new Lockfile.JkToolchain(
-                    jkTable.getString("version"), sha == null || sha.isBlank() ? "" : sha);
+            jkPin = new Lockfile.JkToolchain(jkTable.getString("version"), sha == null || sha.isBlank() ? "" : sha);
         }
         String kotlin = result.getString("kotlin"); // optional, resolved Kotlin compiler version
 

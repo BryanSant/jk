@@ -4,7 +4,6 @@ package cc.jumpkick.resolver;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.sun.net.httpserver.HttpServer;
 import cc.jumpkick.cache.Cas;
 import cc.jumpkick.http.Http;
 import cc.jumpkick.lock.Lockfile;
@@ -16,6 +15,7 @@ import cc.jumpkick.model.Scope;
 import cc.jumpkick.model.VersionSelector;
 import cc.jumpkick.repo.MavenRepo;
 import cc.jumpkick.repo.RepoGroup;
+import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
@@ -228,8 +228,7 @@ class LockOrchestratorBomTest {
                 """);
 
         JkBuild project = jkBuildWithDeps(Map.of(
-                Scope.PLATFORM,
-                        List.of(Dependency.of("the-bom", "org.example:the-bom", VersionSelector.parse("=1.0"))),
+                Scope.PLATFORM, List.of(Dependency.of("the-bom", "org.example:the-bom", VersionSelector.parse("=1.0"))),
                 Scope.MAIN, List.of(Dependency.platformManaged("widget", "com.foo:widget"))));
 
         Lockfile lock = new LockOrchestrator(repoGroup(tempDir)).lock(project, "test");

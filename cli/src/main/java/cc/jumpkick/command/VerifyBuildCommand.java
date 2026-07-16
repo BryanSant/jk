@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.command;
 
-import cc.jumpkick.run.StepNames;
-
 import cc.jumpkick.cli.CliOutput;
 import cc.jumpkick.cli.GlobalOptions;
 import cc.jumpkick.cli.run.PipelineConsole;
@@ -21,6 +19,7 @@ import cc.jumpkick.run.PipelineListener;
 import cc.jumpkick.run.PipelineResult;
 import cc.jumpkick.run.Step;
 import cc.jumpkick.run.StepKind;
+import cc.jumpkick.run.StepNames;
 import cc.jumpkick.runtime.ModulePlan;
 import cc.jumpkick.runtime.WorkspaceBuildListener;
 import cc.jumpkick.runtime.WorkspaceRequest;
@@ -105,8 +104,7 @@ public final class VerifyBuildCommand implements CliCommand {
         Path buildFile = dir.resolve("jk.toml");
         Path lockFile = dir.resolve("jk.lock");
         if (!Files.exists(buildFile) || !Files.exists(lockFile)) {
-            CliOutput.err(
-                    "jk verify: jk.toml and jk.lock required in " + cc.jumpkick.cli.PathDisplay.styledRaw(dir));
+            CliOutput.err("jk verify: jk.toml and jk.lock required in " + cc.jumpkick.cli.PathDisplay.styledRaw(dir));
             return Exit.CONFIG;
         }
         Path cache = cacheDir != null ? cacheDir : JkDirs.cache();
@@ -183,8 +181,7 @@ public final class VerifyBuildCommand implements CliCommand {
         }
 
         Report report = pipeline.get(REPORT).orElseThrow();
-        long mismatches =
-                report.comparisons().stream().filter(c -> !c.match()).count();
+        long mismatches = report.comparisons().stream().filter(c -> !c.match()).count();
         if (!global.outputIsJson()) {
             for (Comparison c : report.comparisons()) {
                 if (c.match()) {

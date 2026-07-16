@@ -46,7 +46,8 @@ public final class WrapperCommand implements CliCommand {
     public List<Opt> options() {
         // No --version option: the global -V/--version flag owns that name (the dispatcher
         // rejects duplicates), so the springboard target rides as a positional.
-        return List.of(Opt.flag("Write the scripts and stop (the springboard target's mode).", "--emit").hide());
+        return List.of(Opt.flag("Write the scripts and stop (the springboard target's mode).", "--emit")
+                .hide());
     }
 
     @Override
@@ -63,8 +64,8 @@ public final class WrapperCommand implements CliCommand {
         String target = in.positionals().isEmpty() ? null : in.positionals().get(0);
         if (target == null || in.isSet("emit")) {
             emit(projectDir);
-            CliOutput.out("wrote " + projectDir.resolve("jk") + " and " + projectDir.resolve("jk.bat")
-                    + " (jk " + cc.jumpkick.cli.Jk.VERSION + ")");
+            CliOutput.out("wrote " + projectDir.resolve("jk") + " and " + projectDir.resolve("jk.bat") + " (jk "
+                    + cc.jumpkick.cli.Jk.VERSION + ")");
             return 0;
         }
 

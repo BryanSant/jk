@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import javax.tools.ToolProvider;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -14,7 +15,7 @@ class MainClassScannerTest {
     private static void compile(Path dir, String name, String source) throws Exception {
         Path src = dir.resolve(name + ".java");
         Files.writeString(src, source);
-        var compiler = javax.tools.ToolProvider.getSystemJavaCompiler();
+        var compiler = ToolProvider.getSystemJavaCompiler();
         int rc = compiler.run(null, null, null, "-d", dir.toString(), src.toString());
         if (rc != 0) throw new IllegalStateException("compile failed for " + name);
     }
@@ -68,10 +69,12 @@ class MainClassScannerTest {
     void rejects_private_wrong_return_and_wrong_param_mains(@TempDir Path dir) throws Exception {
         compile(dir, "Priv", "public class Priv { private static void main(String[] a) {} }"); // private
         compile(dir, "IntRet", "public class IntRet { public static int main(String[] a) { return 0; } }"); // non-void
-        compile(dir, "WrongSig", "public class WrongSig { public static void main(String a) {} }"); // String, not String[]
+        compile(
+                dir,
+                "WrongSig",
+                "public class WrongSig { public static void main(String a) {} }"); // String, not String[]
         assertThat(MainClassScanner.scan(dir)).isEmpty();
-        assertThatThrownBy(() -> MainClassScanner.scanUnique(dir))
-                .hasMessageContaining("[application] main");
+        assertThatThrownBy(() -> MainClassScanner.scanUnique(dir)).hasMessageContaining("[application] main");
     }
 
     @Test
@@ -105,7 +108,7 @@ class MainClassScannerTest {
         Files.createDirectories(dir.resolve("com/example"));
         Path src = dir.resolve("com/example/Main.java");
         Files.writeString(src, "package com.example; public class Main { public static void main(String[] a) {} }");
-        var compiler = javax.tools.ToolProvider.getSystemJavaCompiler();
+        var compiler = ToolProvider.getSystemJavaCompiler();
         compiler.run(null, null, null, "-d", dir.toString(), src.toString());
         assertThat(MainClassScanner.scanUnique(dir)).isEqualTo("com.example.Main");
     }

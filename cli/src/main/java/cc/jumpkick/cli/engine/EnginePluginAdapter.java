@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.cli.engine;
 
-import cc.jumpkick.plugin.build.Phase;
 import cc.jumpkick.cli.Jk;
 import cc.jumpkick.engine.EnginePaths;
 import cc.jumpkick.engine.protocol.EngineProtocol;
+import cc.jumpkick.plugin.build.Phase;
 import cc.jumpkick.plugin.protocol.Ndjson;
 import cc.jumpkick.run.PipelineListener;
 import cc.jumpkick.run.PipelineResult;
@@ -14,7 +14,6 @@ import cc.jumpkick.run.StepStatus;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.nio.channels.Channels;
 import java.nio.channels.SocketChannel;
@@ -79,15 +78,19 @@ final class EnginePluginAdapter {
         try (SocketChannel ch = EngineClient.connect(cc.jumpkick.engine.EnginePaths.activeSocket(paths))) {
             BufferedWriter writer =
                     new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
-            BufferedReader reader =
-                    EngineClient.protocolReader(ch);
+            BufferedReader reader = EngineClient.protocolReader(ch);
             // The session envelope — variant selection, client env, and worker-JVM tuning —
             // rides EVERY hosted-pipeline request line (compile/image/native/publish/install/...).
             // An empty envelope attaches nothing, so unadorned pipelines are byte-identical.
             var session = cc.jumpkick.config.SessionContext.current();
-            send(writer, EngineProtocol.withSession(
-                    requestLine, session.variant(), session.clientEnv(), session.jvm(),
-                    session.config().rebuildOr(false)));
+            send(
+                    writer,
+                    EngineProtocol.withSession(
+                            requestLine,
+                            session.variant(),
+                            session.clientEnv(),
+                            session.jvm(),
+                            session.config().rebuildOr(false)));
 
             List<Step> steps = new ArrayList<>();
             List<PipelineResult.Diagnostic> diagnostics = new ArrayList<>();
@@ -98,15 +101,16 @@ final class EnginePluginAdapter {
                 String type = EngineProtocol.typeOf(line);
                 if (type == null) continue;
                 switch (type) {
-                    case EngineProtocol.PLAN_STEP -> steps.add(Step.builder(Ndjson.str(line, "name"))
-                            .label(Ndjson.str(line, "label")).phase(Phase.fromWireOrNull(Ndjson.str(line, "phase")))
-                            .build());
+                    case EngineProtocol.PLAN_STEP ->
+                        steps.add(Step.builder(Ndjson.str(line, "name"))
+                                .label(Ndjson.str(line, "label"))
+                                .phase(Phase.fromWireOrNull(Ndjson.str(line, "phase")))
+                                .build());
                     case EngineProtocol.PLAN_DONE -> listener = listenerFactory.apply(steps);
                     case EngineProtocol.AUDIT_FINDING,
                             EngineProtocol.FORMAT_FILE,
                             EngineProtocol.IMPORT_NOTE,
-                            EngineProtocol.PRUNE_WAIT ->
-                        onEvent.accept(type, line);
+                            EngineProtocol.PRUNE_WAIT -> onEvent.accept(type, line);
                     case EngineProtocol.PIPELINE_FINISH -> {
                         PipelineResult result = new PipelineResult(
                                 pipelineName,
@@ -121,8 +125,8 @@ final class EnginePluginAdapter {
                         if (listener != null) listener.pipelineFinish(result);
                         return new HostedFinish(result, line);
                     }
-                    case EngineProtocol.ERROR -> throw new IOException(
-                            "jk engine: run failed: " + Ndjson.str(line, "message"));
+                    case EngineProtocol.ERROR ->
+                        throw new IOException("jk engine: run failed: " + Ndjson.str(line, "message"));
                     default -> dispatchPipelineEvent(type, line, listener, diagnostics);
                 }
             }
@@ -142,15 +146,19 @@ final class EnginePluginAdapter {
         try (SocketChannel ch = EngineClient.connect(cc.jumpkick.engine.EnginePaths.activeSocket(paths))) {
             BufferedWriter writer =
                     new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
-            BufferedReader reader =
-                    EngineClient.protocolReader(ch);
+            BufferedReader reader = EngineClient.protocolReader(ch);
             // The session envelope — variant selection, client env, and worker-JVM tuning —
             // rides EVERY hosted-pipeline request line (compile/image/native/publish/install/...).
             // An empty envelope attaches nothing, so unadorned pipelines are byte-identical.
             var session = cc.jumpkick.config.SessionContext.current();
-            send(writer, EngineProtocol.withSession(
-                    requestLine, session.variant(), session.clientEnv(), session.jvm(),
-                    session.config().rebuildOr(false)));
+            send(
+                    writer,
+                    EngineProtocol.withSession(
+                            requestLine,
+                            session.variant(),
+                            session.clientEnv(),
+                            session.jvm(),
+                            session.config().rebuildOr(false)));
 
             String line;
             while ((line = reader.readLine()) != null) {
@@ -166,8 +174,8 @@ final class EnginePluginAdapter {
                                 Ndjson.intValue(line, "exit", 1),
                                 Ndjson.str(line, "diag"));
                     }
-                    case EngineProtocol.ERROR -> throw new IOException(
-                            "jk engine: run failed: " + Ndjson.str(line, "message"));
+                    case EngineProtocol.ERROR ->
+                        throw new IOException("jk engine: run failed: " + Ndjson.str(line, "message"));
                     default -> {
                         /* forward-compatible no-op */
                     }
@@ -193,25 +201,34 @@ final class EnginePluginAdapter {
         }
         switch (type) {
             case EngineProtocol.PIPELINE_START -> listener.pipelineStart(readPipelineView(line));
-            case EngineProtocol.STEP_START -> listener.stepStart(
-                    Ndjson.str(line, "step"), Phase.fromWireOrNull(Ndjson.str(line, "phase")), Ndjson.intValue(line, "ticks", 0));
-            case EngineProtocol.PROGRESS -> listener.progress(
-                    Ndjson.str(line, "step"), Ndjson.intValue(line, "delta", 0), readPipelineView(line));
-            case EngineProtocol.TICK_UPDATE -> listener.tickUpdate(
-                    Ndjson.str(line, "step"), Ndjson.intValue(line, "delta", 0), readPipelineView(line));
+            case EngineProtocol.STEP_START ->
+                listener.stepStart(
+                        Ndjson.str(line, "step"),
+                        Phase.fromWireOrNull(Ndjson.str(line, "phase")),
+                        Ndjson.intValue(line, "ticks", 0));
+            case EngineProtocol.PROGRESS ->
+                listener.progress(Ndjson.str(line, "step"), Ndjson.intValue(line, "delta", 0), readPipelineView(line));
+            case EngineProtocol.TICK_UPDATE ->
+                listener.tickUpdate(
+                        Ndjson.str(line, "step"), Ndjson.intValue(line, "delta", 0), readPipelineView(line));
             case EngineProtocol.LABEL -> listener.label(Ndjson.str(line, "step"), Ndjson.str(line, "label"));
             case EngineProtocol.OUTPUT -> listener.output(Ndjson.str(line, "step"), Ndjson.str(line, "line"));
-            case EngineProtocol.WARN -> listener.warn(
-                    Ndjson.str(line, "step"), Ndjson.str(line, "code"), Ndjson.str(line, "message"));
-            case EngineProtocol.ERROR_LINE -> listener.error(
-                    Ndjson.str(line, "step"),
-                    Ndjson.str(line, "code"),
-                    Ndjson.str(line, "message"),
-                    Ndjson.str(line, "test"),
-                    Ndjson.str(line, "exceptionClass"));
+            case EngineProtocol.WARN ->
+                listener.warn(Ndjson.str(line, "step"), Ndjson.str(line, "code"), Ndjson.str(line, "message"));
+            case EngineProtocol.ERROR_LINE ->
+                listener.error(
+                        Ndjson.str(line, "step"),
+                        Ndjson.str(line, "code"),
+                        Ndjson.str(line, "message"),
+                        Ndjson.str(line, "test"),
+                        Ndjson.str(line, "exceptionClass"));
             case EngineProtocol.PIPELINE_DIAGNOSTIC -> diagnostics.add(readDiagnostic(line));
-            case EngineProtocol.STEP_FINISH -> listener.stepFinish(
-                    Ndjson.str(line, "step"), Phase.fromWireOrNull(Ndjson.str(line, "phase")), StepStatus.valueOf(Ndjson.str(line, "status")), Duration.ZERO);
+            case EngineProtocol.STEP_FINISH ->
+                listener.stepFinish(
+                        Ndjson.str(line, "step"),
+                        Phase.fromWireOrNull(Ndjson.str(line, "phase")),
+                        StepStatus.valueOf(Ndjson.str(line, "status")),
+                        Duration.ZERO);
             default -> {
                 /* forward-compatible no-op */
             }

@@ -1,36 +1,34 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.command;
 
-import cc.jumpkick.run.StepNames;
-
 import cc.jumpkick.cli.CliOutput;
 import cc.jumpkick.cli.GlobalOptions;
 import cc.jumpkick.cli.run.PipelineConsole;
 import cc.jumpkick.cli.theme.Theme;
 import cc.jumpkick.cli.tui.Confirm;
 import cc.jumpkick.cli.tui.Glyphs;
-import cc.jumpkick.cli.tui.Spinner;
 import cc.jumpkick.cli.tui.Wizard;
 import cc.jumpkick.jdk.GlobalDefaultJdk;
 import cc.jumpkick.jdk.HostPlatform;
 import cc.jumpkick.jdk.InstalledJdk;
 import cc.jumpkick.jdk.JdkCatalog;
+import cc.jumpkick.jdk.JdkInstallListener;
 import cc.jumpkick.jdk.JdkInstaller;
 import cc.jumpkick.jdk.JdkKeywords;
 import cc.jumpkick.jdk.JdkRegistry;
+import cc.jumpkick.jdk.JdkService;
 import cc.jumpkick.model.command.Arity;
 import cc.jumpkick.model.command.CliCommand;
 import cc.jumpkick.model.command.Exit;
 import cc.jumpkick.model.command.Invocation;
 import cc.jumpkick.model.command.Opt;
 import cc.jumpkick.model.command.Param;
-import cc.jumpkick.jdk.JdkInstallListener;
-import cc.jumpkick.jdk.JdkService;
 import cc.jumpkick.run.Pipeline;
 import cc.jumpkick.run.PipelineKey;
 import cc.jumpkick.run.PipelineResult;
 import cc.jumpkick.run.Step;
 import cc.jumpkick.run.StepKind;
+import cc.jumpkick.run.StepNames;
 import cc.jumpkick.util.JkDirs;
 import java.io.IOException;
 import java.net.URI;
@@ -148,7 +146,8 @@ public final class JdkInstallCommand implements CliCommand {
                 .ticks(1)
                 .execute(ctx -> {
                     ctx.label("fetch JetBrains JDK feed");
-                    boolean refresh = cc.jumpkick.config.SessionContext.current().config().forceOr(false);
+                    boolean refresh =
+                            cc.jumpkick.config.SessionContext.current().config().forceOr(false);
                     try {
                         ctx.put(CATALOG, service.fetchCatalog(feedUrl, cacheFile, refresh, ctx::output));
                     } catch (Exception e) {
@@ -227,7 +226,8 @@ public final class JdkInstallCommand implements CliCommand {
                 .ticks(1)
                 .execute(ctx -> {
                     JdkCatalog.Entry entry = ctx.require(ENTRY);
-                    boolean refresh = cc.jumpkick.config.SessionContext.current().config().forceOr(false);
+                    boolean refresh =
+                            cc.jumpkick.config.SessionContext.current().config().forceOr(false);
                     ctx.label("install " + JdkService.displayLabel(entry));
                     // try-with-resources guarantees the download bar / spinner is
                     // wiped even when the install throws mid-download (matches the
@@ -258,7 +258,8 @@ public final class JdkInstallCommand implements CliCommand {
                     CliOutput.out();
                     CliOutput.out(Theme.colorize("➜", Theme.active().brightGreen())
                             + " "
-                            + Theme.colorize(installed.identifier(), Theme.active().focused())
+                            + Theme.colorize(
+                                    installed.identifier(), Theme.active().focused())
                             + Theme.colorize(" is now the ", Theme.active().normalGray())
                             + Theme.colorize("default", Theme.active().focused())
                             + Theme.colorize(" JDK", Theme.active().normalGray()));
@@ -298,7 +299,8 @@ public final class JdkInstallCommand implements CliCommand {
         // never opened a terminal and never asked about the default.
         boolean wizardRan = Boolean.TRUE.equals(pipeline.get(WIZARD_RAN).orElse(false));
         if (!wizardRan && Confirm.isInteractiveTerminal()) {
-            boolean wantedDefault = Boolean.TRUE.equals(pipeline.get(WANT_DEFAULT).orElse(false));
+            boolean wantedDefault =
+                    Boolean.TRUE.equals(pipeline.get(WANT_DEFAULT).orElse(false));
             pipeline.get(INSTALLED).ifPresent(jdk -> offerDefaults(jdk, wantedDefault));
         }
         return 0;

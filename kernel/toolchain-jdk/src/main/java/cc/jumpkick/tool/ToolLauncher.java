@@ -116,7 +116,10 @@ public final class ToolLauncher {
                     + " -- \"$@\"\n";
         }
         Files.writeString(
-                launcher, scriptBody, StandardCharsets.UTF_8, StandardOpenOption.CREATE,
+                launcher,
+                scriptBody,
+                StandardCharsets.UTF_8,
+                StandardOpenOption.CREATE,
                 StandardOpenOption.TRUNCATE_EXISTING);
         markExecutable(launcher);
         return launcher;
@@ -172,7 +175,8 @@ public final class ToolLauncher {
         sb.append("# Re-run `jk install ").append(env.primary().toGav()).append("` to refresh.\n");
         if (env.isNativeBinary()) {
             sb.append("exec ")
-                    .append(shellQuote(env.classpath().getFirst().toAbsolutePath().toString()))
+                    .append(shellQuote(
+                            env.classpath().getFirst().toAbsolutePath().toString()))
                     .append(" \"$@\"\n");
             return sb.toString();
         }
@@ -231,7 +235,9 @@ public final class ToolLauncher {
             sb.append(",\n  \"provenance\": {\n");
             sb.append("    \"kind\": ").append(jsonString(provenance.kind())).append(",\n");
             sb.append("    \"spec\": ").append(jsonString(provenance.spec())).append(",\n");
-            sb.append("    \"resolved\": ").append(jsonString(provenance.resolved())).append("\n");
+            sb.append("    \"resolved\": ")
+                    .append(jsonString(provenance.resolved()))
+                    .append("\n");
             sb.append("  }");
         }
         sb.append("\n}\n");

@@ -59,8 +59,9 @@ public final class MiniJson {
             case Number n -> sb.append(n); // integral types print naturally
             case Map<?, ?> map -> writeObject(sb, map, indent);
             case List<?> list -> writeArray(sb, list, indent);
-            default -> throw new IllegalArgumentException(
-                    "not JSON-representable: " + value.getClass().getName());
+            default ->
+                throw new IllegalArgumentException(
+                        "not JSON-representable: " + value.getClass().getName());
         }
     }
 

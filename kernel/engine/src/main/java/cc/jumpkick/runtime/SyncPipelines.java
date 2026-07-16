@@ -1,9 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.runtime;
 
-import cc.jumpkick.run.StepNames;
-
-import cc.jumpkick.model.Coordinate;
 import cc.jumpkick.cache.Cas;
 import cc.jumpkick.config.JkBuildParser;
 import cc.jumpkick.config.SessionContext;
@@ -12,12 +9,14 @@ import cc.jumpkick.http.Http;
 import cc.jumpkick.jdk.JdkEnsure;
 import cc.jumpkick.lock.Lockfile;
 import cc.jumpkick.lock.LockfileReader;
+import cc.jumpkick.model.Coordinate;
 import cc.jumpkick.model.JkBuild;
 import cc.jumpkick.resolver.CacheSync;
 import cc.jumpkick.run.Pipeline;
 import cc.jumpkick.run.PipelineKey;
 import cc.jumpkick.run.Step;
 import cc.jumpkick.run.StepKind;
+import cc.jumpkick.run.StepNames;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Files;
@@ -61,7 +60,8 @@ public final class SyncPipelines {
     public static final PipelineKey<Lockfile> LOCKFILE = PipelineKey.of("lockfile", Lockfile.class);
 
     public static final PipelineKey<JkBuild> BUILD = PipelineKey.of("build", JkBuild.class);
-    public static final PipelineKey<JdkEnsure.Outcome> JDK_OUTCOME = PipelineKey.of("jdk-outcome", JdkEnsure.Outcome.class);
+    public static final PipelineKey<JdkEnsure.Outcome> JDK_OUTCOME =
+            PipelineKey.of("jdk-outcome", JdkEnsure.Outcome.class);
     public static final PipelineKey<CacheSync.Report> CAS_REPORT = PipelineKey.of("cas-report", CacheSync.Report.class);
     public static final PipelineKey<JkPluginSync.Result> WORKER_REPORT =
             PipelineKey.of("worker-report", JkPluginSync.Result.class);
@@ -111,9 +111,13 @@ public final class SyncPipelines {
                                 preScannedTotal += CacheSync.countArtifacts(LockfileReader.read(modLock));
                             }
                         }
-                    } catch (Exception ignored) { /* best-effort */ }
+                    } catch (Exception ignored) {
+                        /* best-effort */
+                    }
                 }
-            } catch (Exception ignored) { /* lock unreadable — fall through to dynamic ticks */ }
+            } catch (Exception ignored) {
+                /* lock unreadable — fall through to dynamic ticks */
+            }
         }
         final int preScanDenominator = preScannedTotal;
 

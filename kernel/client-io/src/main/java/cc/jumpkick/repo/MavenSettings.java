@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.repo;
 
-import cc.jumpkick.credential.RepoCredential;
 import cc.jumpkick.util.MinimalXml;
 import java.nio.file.Files;
 import java.nio.file.Path;

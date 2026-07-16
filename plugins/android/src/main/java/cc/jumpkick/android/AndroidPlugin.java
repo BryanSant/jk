@@ -3,14 +3,14 @@ package cc.jumpkick.android;
 
 import cc.jumpkick.plugin.Plugin;
 import cc.jumpkick.plugin.PluginManifest;
-import cc.jumpkick.plugin.build.Phase;
 import cc.jumpkick.plugin.build.BuildPlugin;
 import cc.jumpkick.plugin.build.BuildPluginContext;
 import cc.jumpkick.plugin.build.BuildPluginHarness;
 import cc.jumpkick.plugin.build.In;
 import cc.jumpkick.plugin.build.PackagerSpec;
-import cc.jumpkick.plugin.build.StepSpec;
+import cc.jumpkick.plugin.build.Phase;
 import cc.jumpkick.plugin.build.PluginCommandSpec;
+import cc.jumpkick.plugin.build.StepSpec;
 import cc.jumpkick.plugin.protocol.ProtocolWriter;
 import java.util.List;
 
@@ -112,8 +112,7 @@ public final class AndroidPlugin implements Plugin, BuildPlugin {
             // A library packages an AAR (classes.jar without R classes + raw res + merged
             // manifest + R.txt) and is never dexed or deployed — consumers dex it.
             ctx.packaging(PackagerSpec.replacingMainArtifact("aar")
-                    .inputs(In.classes(), In.stepOutput("android-res"), In.stepOutput("android-manifest"),
-                            In.config())
+                    .inputs(In.classes(), In.stepOutput("android-res"), In.stepOutput("android-manifest"), In.config())
                     .produce(AarPackager::produce));
         } else {
             String dexStep;
@@ -122,8 +121,8 @@ public final class AndroidPlugin implements Plugin, BuildPlugin {
                 // aapt2's generated rules, AAR consumer rules, and the app's proguard-files
                 // (declared inputs, so a rules edit re-shrinks).
                 dexStep = "android-r8";
-                List<In> r8Inputs = new java.util.ArrayList<>(List.of(
-                        In.classes(), In.runtimeEntries(), In.stepOutput("android-res"), In.config()));
+                List<In> r8Inputs = new java.util.ArrayList<>(
+                        List.of(In.classes(), In.runtimeEntries(), In.stepOutput("android-res"), In.config()));
                 for (String rel : ctx.config().stringList("proguard-files")) {
                     r8Inputs.add(In.projectFiles(rel));
                 }
@@ -146,13 +145,23 @@ public final class AndroidPlugin implements Plugin, BuildPlugin {
                 // The release artifact is the Play-uploadable AAB ([[packaging.variant]] picks
                 // the extension); bundletool assembles from the proto-format link.
                 ctx.packaging(PackagerSpec.replacingMainArtifact("aab")
-                        .inputs(In.stepOutput("android-res"), In.stepOutput(dexStep), In.runtimeEntries(),
-                                In.projectFiles("assets"), In.projectFiles("src/main/assets"), In.config())
+                        .inputs(
+                                In.stepOutput("android-res"),
+                                In.stepOutput(dexStep),
+                                In.runtimeEntries(),
+                                In.projectFiles("assets"),
+                                In.projectFiles("src/main/assets"),
+                                In.config())
                         .produce(AabPackager::produce));
             } else {
                 ctx.packaging(PackagerSpec.replacingMainArtifact("apk")
-                        .inputs(In.stepOutput("android-res"), In.stepOutput(dexStep), In.runtimeEntries(),
-                                In.projectFiles("assets"), In.projectFiles("src/main/assets"), In.config())
+                        .inputs(
+                                In.stepOutput("android-res"),
+                                In.stepOutput(dexStep),
+                                In.runtimeEntries(),
+                                In.projectFiles("assets"),
+                                In.projectFiles("src/main/assets"),
+                                In.config())
                         .produce(ApkPackager::produce));
             }
             ctx.command(PluginCommandSpec.named("deploy")
@@ -169,5 +178,4 @@ public final class AndroidPlugin implements Plugin, BuildPlugin {
                 .description("Managed virtual devices: create, list, boot headless")
                 .run(AvdCommand::run));
     }
-
 }

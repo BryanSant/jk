@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.runtime;
 
-import cc.jumpkick.run.StepNames;
-
 import cc.jumpkick.config.JkBuildParser;
 import cc.jumpkick.git.GitFetcher;
 import cc.jumpkick.layout.BuildLayout;
@@ -14,6 +12,7 @@ import cc.jumpkick.run.Pipeline;
 import cc.jumpkick.run.PipelineKey;
 import cc.jumpkick.run.Step;
 import cc.jumpkick.run.StepKind;
+import cc.jumpkick.run.StepNames;
 import cc.jumpkick.util.Hashing;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -88,8 +87,7 @@ public final class InstallPipelines {
         // `jk build` no longer auto-builds native (that's `jk native`), so an installed native
         // application builds its binary here — with the GraalVM the client already resolved.
         if (isNative) {
-            builder.addStep(
-                    BuildPipelines.nativeStep(projectDir, cache, lockFile, null, graalHome, null, List.of()));
+            builder.addStep(BuildPipelines.nativeStep(projectDir, cache, lockFile, null, graalHome, null, List.of()));
         }
 
         // cache-install reads the freshly-built jar and must run after every runnable artifact
@@ -106,8 +104,8 @@ public final class InstallPipelines {
                     BuildLayout layout = ctx.require(BuildPipelines.LAYOUT);
                     var p = project.project();
                     Coordinate coord = Coordinate.of(p.group(), p.name(), p.version());
-                    ctx.label("install " + coord.group() + ":" + coord.artifact() + ":" + coord.version()
-                            + " to cache");
+                    ctx.label(
+                            "install " + coord.group() + ":" + coord.artifact() + ":" + coord.version() + " to cache");
                     try {
                         cacheInstallArtifact(project, layout, cache, m2Dir);
                     } catch (IOException e) {
@@ -128,7 +126,8 @@ public final class InstallPipelines {
      * checkout to carry a {@code jk.toml}. {@code refresh} forces a re-fetch. Publishes {@link
      * #CHECKOUT} + {@link #FETCHED_SHA}.
      */
-    public static Pipeline gitFetchPipeline(String url, String canonicalUrl, String ref, Path cacheDir, boolean refresh) {
+    public static Pipeline gitFetchPipeline(
+            String url, String canonicalUrl, String ref, Path cacheDir, boolean refresh) {
         return gitFetchPipeline(url, canonicalUrl, ref, cacheDir, refresh, /* requireJkToml */ true);
     }
 

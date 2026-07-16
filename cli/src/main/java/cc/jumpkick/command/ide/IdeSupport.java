@@ -107,33 +107,39 @@ public final class IdeSupport {
             Path dir = Path.of(wire.moduleDirs().get(i));
             dirs.add(dir);
             String main = wire.mainClasses().get(i);
-            allModules.put(dir, new IdeModule(
-                    wire.names().get(i),
-                    parseInt(wire.javaReleases().get(i)),
-                    main.isEmpty() ? null : main,
-                    Path.of(wire.classesDirs().get(i)),
-                    Path.of(wire.testClassesDirs().get(i)),
-                    Path.of(wire.jdtClassesDirs().get(i)),
-                    Path.of(wire.jdtTestClassesDirs().get(i)),
-                    Path.of(wire.genSrcDirs().get(i)),
-                    Path.of(wire.genTestSrcDirs().get(i))));
-            sdkRefs.put(dir, new SdkRef(
-                    wire.sdkStableNames().get(i),
-                    wire.sdkNames().get(i),
-                    parseInt(wire.sdkLevels().get(i)),
-                    Path.of(wire.sdkHomes().get(i)),
-                    wire.sdkVersions().get(i)));
+            allModules.put(
+                    dir,
+                    new IdeModule(
+                            wire.names().get(i),
+                            parseInt(wire.javaReleases().get(i)),
+                            main.isEmpty() ? null : main,
+                            Path.of(wire.classesDirs().get(i)),
+                            Path.of(wire.testClassesDirs().get(i)),
+                            Path.of(wire.jdtClassesDirs().get(i)),
+                            Path.of(wire.jdtTestClassesDirs().get(i)),
+                            Path.of(wire.genSrcDirs().get(i)),
+                            Path.of(wire.genTestSrcDirs().get(i))));
+            sdkRefs.put(
+                    dir,
+                    new SdkRef(
+                            wire.sdkStableNames().get(i),
+                            wire.sdkNames().get(i),
+                            parseInt(wire.sdkLevels().get(i)),
+                            Path.of(wire.sdkHomes().get(i)),
+                            wire.sdkVersions().get(i)));
         }
         Map<Path, IdeModule> modules = wire.workspace() ? allModules : Map.of();
 
         Map<String, LibDef> allLibs = new LinkedHashMap<>();
         for (int i = 0; i < wire.libNames().size(); i++) {
             String sources = wire.libSources().get(i);
-            allLibs.put(wire.libNames().get(i), new LibDef(
+            allLibs.put(
                     wire.libNames().get(i),
-                    wire.libFiles().get(i),
-                    Path.of(wire.libJars().get(i)),
-                    sources.isEmpty() ? null : Path.of(sources)));
+                    new LibDef(
+                            wire.libNames().get(i),
+                            wire.libFiles().get(i),
+                            Path.of(wire.libJars().get(i)),
+                            sources.isEmpty() ? null : Path.of(sources)));
         }
 
         Map<Path, List<ModuleRef>> siblingRefs = new LinkedHashMap<>();
@@ -204,8 +210,8 @@ public final class IdeSupport {
      */
     private static Path syncRoot(Path startDir) {
         try {
-            var info = cc.jumpkick.cli.engine.EngineClient.projectInfo(
-                    cc.jumpkick.engine.EnginePaths.current(), startDir);
+            var info =
+                    cc.jumpkick.cli.engine.EngineClient.projectInfo(cc.jumpkick.engine.EnginePaths.current(), startDir);
             if (info.error() == null && !info.workspaceRootDir().isEmpty()) {
                 return Path.of(info.workspaceRootDir());
             }

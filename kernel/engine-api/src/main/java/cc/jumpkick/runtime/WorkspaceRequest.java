@@ -3,6 +3,7 @@ package cc.jumpkick.runtime;
 
 import cc.jumpkick.model.JkBuild;
 import java.nio.file.Path;
+import java.util.Map;
 import java.util.Set;
 
 /** What a front-end asks the engine to build (see {@code BuildService.buildWorkspace} in :engine). */
@@ -37,7 +38,7 @@ public record WorkspaceRequest(
         String variant,
         // Client-resolved env values for env:-indirected plugin config (signing secrets): the
         // user's shell env rides the request; the engine env is only the fallback.
-        java.util.Map<String, String> clientEnv) {
+        Map<String, String> clientEnv) {
 
     /** Back-compat: the pre-variant shape (default build type, no client env). */
     public WorkspaceRequest(
@@ -54,15 +55,38 @@ public record WorkspaceRequest(
             boolean applyMemoryPlan,
             boolean freshenLock) {
         this(
-                entryDir, entryBuild, cache, jdksDir, workers, profile, skipTests, verbose, maxModuleConcurrency,
-                dirtyHint, applyMemoryPlan, freshenLock, "", java.util.Map.of());
+                entryDir,
+                entryBuild,
+                cache,
+                jdksDir,
+                workers,
+                profile,
+                skipTests,
+                verbose,
+                maxModuleConcurrency,
+                dirtyHint,
+                applyMemoryPlan,
+                freshenLock,
+                "",
+                Map.of());
     }
 
     /** This request with a variant selection + client-resolved env attached. */
-    public WorkspaceRequest withVariant(String variant, java.util.Map<String, String> clientEnv) {
+    public WorkspaceRequest withVariant(String variant, Map<String, String> clientEnv) {
         return new WorkspaceRequest(
-                entryDir, entryBuild, cache, jdksDir, workers, profile, skipTests, verbose, maxModuleConcurrency,
-                dirtyHint, applyMemoryPlan, freshenLock, variant == null ? "" : variant,
-                clientEnv == null ? java.util.Map.of() : clientEnv);
+                entryDir,
+                entryBuild,
+                cache,
+                jdksDir,
+                workers,
+                profile,
+                skipTests,
+                verbose,
+                maxModuleConcurrency,
+                dirtyHint,
+                applyMemoryPlan,
+                freshenLock,
+                variant == null ? "" : variant,
+                clientEnv == null ? Map.of() : clientEnv);
     }
 }

@@ -2,8 +2,8 @@
 package cc.jumpkick.runtime;
 
 import cc.jumpkick.cache.Cas;
-import cc.jumpkick.model.JkBuild;
 import cc.jumpkick.config.JkBuildParser;
+import cc.jumpkick.model.JkBuild;
 import cc.jumpkick.repo.RepoGroup;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -59,21 +59,18 @@ final class SourceProjectBuilder {
      * version.
      */
     static Built build(
-            Path projectDir,
-            String versionOverride,
-            Path javaHome,
-            Cas cas,
-            RepoGroup repos,
-            String jkVersion)
+            Path projectDir, String versionOverride, Path javaHome, Cas cas, RepoGroup repos, String jkVersion)
             throws IOException, InterruptedException {
 
         if (Files.isRegularFile(projectDir.resolve("jk.toml"))) {
             JkBuild project = JkBuildParser.parse(Files.readString(projectDir.resolve("jk.toml")));
             String group = project.project().group();
             String artifact = project.project().name();
-            String version = versionOverride != null ? versionOverride : project.project().version();
-            LocalProjectBuilder.Built b =
-                    LocalProjectBuilder.build(projectDir, project, group, artifact, version, javaHome, cas, repos, jkVersion);
+            String version = versionOverride != null
+                    ? versionOverride
+                    : project.project().version();
+            LocalProjectBuilder.Built b = LocalProjectBuilder.build(
+                    projectDir, project, group, artifact, version, javaHome, cas, repos, jkVersion);
             return new Built(b.group(), b.artifact(), b.version(), b.jar(), b.pomXml());
         }
         if (isGradleProject(projectDir)) {
@@ -100,8 +97,7 @@ final class SourceProjectBuilder {
         String tool = resolveTool(projectDir, "gradlew", "gradle");
 
         // GAV: `gradle properties` prints `group: <g>` and `version: <v>`.
-        RunResult props = run(
-                projectDir, javaHome, List.of(tool, "properties", "-q", "--console=plain"), true);
+        RunResult props = run(projectDir, javaHome, List.of(tool, "properties", "-q", "--console=plain"), true);
         if (props.exitCode() != 0) {
             throw new IOException("gradle properties failed (exit " + props.exitCode() + ") in " + projectDir);
         }
@@ -111,8 +107,8 @@ final class SourceProjectBuilder {
         requireGav(version, "version", projectDir);
 
         // Build (tests never run): `assemble` compiles + jars main; `-x test` is belt-and-braces.
-        RunResult build = run(
-                projectDir, javaHome, List.of(tool, "assemble", "-x", "test", "-q", "--console=plain"), false);
+        RunResult build =
+                run(projectDir, javaHome, List.of(tool, "assemble", "-x", "test", "-q", "--console=plain"), false);
         if (build.exitCode() != 0) {
             throw new IOException("gradle assemble failed (exit " + build.exitCode() + ") in " + projectDir);
         }
@@ -158,8 +154,7 @@ final class SourceProjectBuilder {
 
         // `-Dmaven.test.skip=true` skips test *compile* and *run*; `-DskipTests` is belt-and-braces.
         RunResult build = run(
-                projectDir, javaHome,
-                List.of(tool, "package", "-q", "-DskipTests", "-Dmaven.test.skip=true"), false);
+                projectDir, javaHome, List.of(tool, "package", "-q", "-DskipTests", "-Dmaven.test.skip=true"), false);
         if (build.exitCode() != 0) {
             throw new IOException("mvn package failed (exit " + build.exitCode() + ") in " + projectDir);
         }
@@ -167,8 +162,8 @@ final class SourceProjectBuilder {
         Path target = projectDir.resolve("target");
         Path preferred = target.resolve(gav.artifact() + "-" + gav.version() + ".jar");
         Path jar = Files.isRegularFile(preferred) ? preferred : selectMainJar(target, projectDir);
-        return new Built(gav.group(), gav.artifact(), gav.version(),
-                jar, leafPom(gav.group(), gav.artifact(), gav.version()));
+        return new Built(
+                gav.group(), gav.artifact(), gav.version(), jar, leafPom(gav.group(), gav.artifact(), gav.version()));
     }
 
     record Gav(String group, String artifact, String version) {}
@@ -267,7 +262,10 @@ final class SourceProjectBuilder {
             throw new IOException(projectDir + ": no jar produced in " + libsDir);
         }
         if (candidates.size() > 1) {
-            List<String> names = candidates.stream().map(p -> p.getFileName().toString()).sorted().toList();
+            List<String> names = candidates.stream()
+                    .map(p -> p.getFileName().toString())
+                    .sorted()
+                    .toList();
             throw new IOException(projectDir + ": ambiguous build output in " + libsDir + " " + names
                     + " — multi-artifact / multi-module projects are not supported as a source dependency");
         }
@@ -346,7 +344,8 @@ final class SourceProjectBuilder {
 
     /** Scrub tool-behavior override vars; set JAVA_HOME and prepend {@code <jdk>/bin} to PATH. */
     private static void applyEnv(Map<String, String> env, Path javaHome) {
-        for (String key : new String[]{"JAVA_TOOL_OPTIONS", "_JAVA_OPTIONS", "KOTLIN_HOME", "MAVEN_OPTS", "GRADLE_OPTS"}) {
+        for (String key :
+                new String[] {"JAVA_TOOL_OPTIONS", "_JAVA_OPTIONS", "KOTLIN_HOME", "MAVEN_OPTS", "GRADLE_OPTS"}) {
             env.remove(key);
         }
         if (javaHome != null) {
@@ -361,6 +360,8 @@ final class SourceProjectBuilder {
     }
 
     private static boolean isWindows() {
-        return System.getProperty("os.name", "").toLowerCase(java.util.Locale.ROOT).contains("win");
+        return System.getProperty("os.name", "")
+                .toLowerCase(java.util.Locale.ROOT)
+                .contains("win");
     }
 }

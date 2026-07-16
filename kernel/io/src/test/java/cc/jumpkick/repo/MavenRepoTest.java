@@ -4,12 +4,12 @@ package cc.jumpkick.repo;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.sun.net.httpserver.HttpServer;
 import cc.jumpkick.cache.Cas;
 import cc.jumpkick.config.JkConfig;
 import cc.jumpkick.http.Http;
 import cc.jumpkick.model.Coordinate;
 import cc.jumpkick.util.Hashing;
+import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
@@ -140,8 +140,7 @@ class MavenRepoTest {
             repo.fetchArtifact(coord);
 
             // Primary store: repos/<name>/ holds the real, human-readable jar.
-            assertThat(RepoArtifactStore.forRepoName(tempDir, "test")
-                            .locate(MavenLayout.artifactPath(coord)))
+            assertThat(RepoArtifactStore.forRepoName(tempDir, "test").locate(MavenLayout.artifactPath(coord)))
                     .isPresent();
             // ~/.m2 (the temp dir standing in for it) is untouched.
             assertThat(m2.resolve(MavenLayout.artifactPath(coord))).doesNotExist();
@@ -163,8 +162,7 @@ class MavenRepoTest {
             repo.fetchArtifact(coord);
 
             // Primary store, as always.
-            assertThat(RepoArtifactStore.forRepoName(tempDir, "test")
-                            .locate(MavenLayout.artifactPath(coord)))
+            assertThat(RepoArtifactStore.forRepoName(tempDir, "test").locate(MavenLayout.artifactPath(coord)))
                     .isPresent();
             // Opt-in mirror: jar + Maven-compatible sidecars land in ~/.m2 too.
             Path m2Jar = m2.resolve(MavenLayout.artifactPath(coord));

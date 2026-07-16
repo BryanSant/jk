@@ -56,7 +56,7 @@ public final class PipelineWedge {
         // frames, …) uses the neutral blue chip.
         boolean green = Glyphs.CHECK.equals(glyph) || Glyphs.PLAY.equals(glyph);
         var chipStyle = green ? t.pipelineSuccessChip() : t.pipelineChip();
-        var capColor  = green ? t.pipelineChipColor()  : t.planBadgeColor();
+        var capColor = green ? t.pipelineChipColor() : t.planBadgeColor();
         // Background is always applied; the powerline cap glyph is the only nerd-font difference.
         return chip(glyph, command, chipStyle) + cap(capColor, nerdfont) + " " + message;
     }
@@ -109,7 +109,8 @@ public final class PipelineWedge {
         if (!t.isAnsi()) {
             return "! " + name + ": " + sentence;
         }
-        return chip(Glyphs.CROSS, name, t.pipelineFailureChip()) + cap(t.pipelineFailColor(), nerdfont) + " " + sentence;
+        return chip(Glyphs.CROSS, name, t.pipelineFailureChip()) + cap(t.pipelineFailColor(), nerdfont) + " "
+                + sentence;
     }
 
     /**

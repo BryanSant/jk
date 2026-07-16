@@ -1,14 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.runtime;
 
-import cc.jumpkick.cache.Cas;
 import cc.jumpkick.config.JkBuildParser;
+import cc.jumpkick.engine.plugin.PluginClient;
 import cc.jumpkick.engine.protocol.PluginCommandReport;
 import cc.jumpkick.layout.BuildLayout;
 import cc.jumpkick.model.JkBuild;
 import cc.jumpkick.plugin.protocol.Ndjson;
-import cc.jumpkick.engine.plugin.PluginClient;
-import cc.jumpkick.engine.plugin.PluginJar;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -35,8 +33,12 @@ public final class PluginCommands {
      * must resolve the release packaging (the AAB) and its config, not the debug default's.
      */
     public static PluginCommandReport run(
-            Path dir, Path cache, String command, List<String> args,
-            String variant, java.util.Map<String, String> clientEnv) {
+            Path dir,
+            Path cache,
+            String command,
+            List<String> args,
+            String variant,
+            java.util.Map<String, String> clientEnv) {
         try {
             Path buildFile = dir.resolve("jk.toml");
             if (!Files.isRegularFile(buildFile)) return PluginCommandReport.notFound();
@@ -68,8 +70,11 @@ public final class PluginCommands {
             // best-effort: `jk android licenses` must run BEFORE licenses gate provisioning, so
             // an unprovisionable tool is absent and only a command that needs it complains.
             for (var tool : PluginBuild.fetchStepDependencies(
-                    project, dir, new cc.jumpkick.cache.Cas(cache),
-                    PluginBuild.sdkPins(dir.resolve("jk.lock")), true)
+                            project,
+                            dir,
+                            new cc.jumpkick.cache.Cas(cache),
+                            PluginBuild.sdkPins(dir.resolve("jk.lock")),
+                            true)
                     .entrySet()) {
                 specWriter.extra(tool.getKey(), tool.getValue());
             }

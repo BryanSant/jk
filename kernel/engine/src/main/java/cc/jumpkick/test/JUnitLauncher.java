@@ -2,11 +2,11 @@
 package cc.jumpkick.test;
 
 import cc.jumpkick.cache.Cas;
+import cc.jumpkick.engine.plugin.PluginJar;
+import cc.jumpkick.engine.plugin.PluginProcess;
 import cc.jumpkick.jdk.HostPlatform;
 import cc.jumpkick.plugin.protocol.Ndjson;
 import cc.jumpkick.run.TestSummary;
-import cc.jumpkick.engine.plugin.PluginJar;
-import cc.jumpkick.engine.plugin.PluginProcess;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
@@ -246,7 +246,11 @@ public final class JUnitLauncher {
                 }
             }
             return new TestSummary(
-                    1, 0, 1, 0, List.of(new TestSummary.Failure("(test run)", "", "runner exited " + worstExit, crash.toString())));
+                    1,
+                    0,
+                    1,
+                    0,
+                    List.of(new TestSummary.Failure("(test run)", "", "runner exited " + worstExit, crash.toString())));
         }
         if (xml != null) {
             try {
@@ -589,5 +593,4 @@ public final class JUnitLauncher {
             return String.join("\n", lines);
         }
     }
-
 }

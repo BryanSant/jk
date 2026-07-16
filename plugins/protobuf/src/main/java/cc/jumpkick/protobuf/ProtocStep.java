@@ -65,9 +65,11 @@ final class ProtocStep {
     /** Stage the fetched binary into scratch with the executable bit set (cache files are read-only). */
     private static Path executable(StepExec exec) throws IOException {
         Path fetched = exec.requireExtra("protoc");
-        boolean windows = System.getProperty("os.name", "").toLowerCase(java.util.Locale.ROOT).contains("win");
-        Path staged = Files.createDirectories(exec.scratch().resolve("tools"))
-                .resolve(windows ? "protoc.exe" : "protoc");
+        boolean windows = System.getProperty("os.name", "")
+                .toLowerCase(java.util.Locale.ROOT)
+                .contains("win");
+        Path staged =
+                Files.createDirectories(exec.scratch().resolve("tools")).resolve(windows ? "protoc.exe" : "protoc");
         Files.copy(fetched, staged, StandardCopyOption.REPLACE_EXISTING);
         if (!staged.toFile().setExecutable(true) && !windows) {
             throw new IOException("cannot mark protoc executable: " + staged);

@@ -256,8 +256,7 @@ class JkBuildParserTest {
     }
 
     private static String graal(String value) {
-        return PROJECT
-                + """
+        return PROJECT + """
 
                 [native]
                 graal = %s
@@ -1343,16 +1342,14 @@ class JkBuildParserTest {
     @Test
     void native_absent_means_disabled_present_means_supported_or_always() {
         assertThat(JkBuildParser.parse(PROJECT).nativeMode()).isEqualTo(JkBuild.NativeMode.DISABLED);
-        assertThat(JkBuildParser.parse(PROJECT + "\n[native]\n").nativeMode())
-                .isEqualTo(JkBuild.NativeMode.SUPPORTED);
+        assertThat(JkBuildParser.parse(PROJECT + "\n[native]\n").nativeMode()).isEqualTo(JkBuild.NativeMode.SUPPORTED);
         assertThat(JkBuildParser.parse(PROJECT + "\n[native]\nalways = true\n").nativeMode())
                 .isEqualTo(JkBuild.NativeMode.ALWAYS);
     }
 
     @Test
     void native_config_fields_parsed() {
-        JkBuild parsed = JkBuildParser.parse(PROJECT
-                + """
+        JkBuild parsed = JkBuildParser.parse(PROJECT + """
 
                 [native]
                 main-class = "com.example.NativeMain"
@@ -1382,7 +1379,9 @@ class JkBuildParserTest {
                 .isEqualTo(cc.jumpkick.model.JkBuild.SourcesMode.DISABLED);
         assertThat(JkBuildParser.parse(PROJECT + "sources = true\n").project().sourcesMode())
                 .isEqualTo(cc.jumpkick.model.JkBuild.SourcesMode.PUBLISH);
-        assertThat(JkBuildParser.parse(PROJECT + "sources = \"always\"\n").project().sourcesMode())
+        assertThat(JkBuildParser.parse(PROJECT + "sources = \"always\"\n")
+                        .project()
+                        .sourcesMode())
                 .isEqualTo(cc.jumpkick.model.JkBuild.SourcesMode.ALWAYS);
         assertThat(JkBuildParser.parse(PROJECT + "sources = false\n").project().sourcesMode())
                 .isEqualTo(cc.jumpkick.model.JkBuild.SourcesMode.DISABLED);
@@ -1393,7 +1392,9 @@ class JkBuildParserTest {
         assertThat(JkBuildParser.parse(PROJECT).project().m2install()).isFalse();
         assertThat(JkBuildParser.parse(PROJECT + "m2install = true\n").project().m2install())
                 .isTrue();
-        assertThat(JkBuildParser.parse(PROJECT + "m2install = false\n").project().m2install())
+        assertThat(JkBuildParser.parse(PROJECT + "m2install = false\n")
+                        .project()
+                        .m2install())
                 .isFalse();
     }
 
@@ -1513,8 +1514,7 @@ class JkBuildParserTest {
 
                 [dependencies]
                 mystery = { optional = false }
-                """))
-                .hasMessageContaining("must set exactly one of");
+                """)).hasMessageContaining("must set exactly one of");
     }
 
     @Test

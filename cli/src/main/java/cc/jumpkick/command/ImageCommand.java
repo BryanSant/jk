@@ -11,7 +11,6 @@ import cc.jumpkick.model.command.CliCommand;
 import cc.jumpkick.model.command.Exit;
 import cc.jumpkick.model.command.Invocation;
 import cc.jumpkick.model.command.Opt;
-import cc.jumpkick.run.Pipeline;
 import cc.jumpkick.run.PipelineResult;
 import cc.jumpkick.util.JkDirs;
 import java.io.IOException;
@@ -108,8 +107,19 @@ public final class ImageCommand implements CliCommand {
         cc.jumpkick.run.TestSummary testResult;
         if (engineDisabledForTests()) {
             var o = cc.jumpkick.cli.engine.InProcessEngine.require()
-                    .imagePipeline(projectDir, cache, jdksDir, buildOpts.skipTests, global.verbose, mainClass,
-                            registry, tag, tarballArg, dockerExecutableArg, mode, module);
+                    .imagePipeline(
+                            projectDir,
+                            cache,
+                            jdksDir,
+                            buildOpts.skipTests,
+                            global.verbose,
+                            mainClass,
+                            registry,
+                            tag,
+                            tarballArg,
+                            dockerExecutableArg,
+                            mode,
+                            module);
             result = o.result();
             testResult = o.testResult();
         } else {

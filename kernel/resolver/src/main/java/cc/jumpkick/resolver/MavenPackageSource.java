@@ -173,8 +173,7 @@ public final class MavenPackageSource implements PackageSource {
             // Gradle's available-at is an EXACT module reference — the platform artifact must
             // stay lockstep with its root. A lower bound floats across compatibility lines
             // (kotlinx-datetime 0.6.1's -jvm drifted to 0.8.0-0.6.x-compat, whose API differs).
-            out.add(Term.positive(
-                    target.group() + ":" + target.module(), VersionSet.exact(target.version())));
+            out.add(Term.positive(target.group() + ":" + target.module(), VersionSet.exact(target.version())));
             kmpDropped = kmpSelection.get().allTargets();
         }
         for (Pom.Dep dep : pom.dependencies()) {

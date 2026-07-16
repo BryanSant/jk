@@ -22,7 +22,6 @@ final class EngineEdits {
             if (result[1] != null) throw new IOException(result[1]);
             return Boolean.parseBoolean(result[0]);
         }
-        return cc.jumpkick.cli.engine.EngineClient.edit(
-                cc.jumpkick.engine.EnginePaths.current(), file, op, args);
+        return cc.jumpkick.cli.engine.EngineClient.edit(cc.jumpkick.engine.EnginePaths.current(), file, op, args);
     }
 }

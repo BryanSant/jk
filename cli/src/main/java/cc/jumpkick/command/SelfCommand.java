@@ -4,9 +4,9 @@ package cc.jumpkick.command;
 import cc.jumpkick.cache.Cas;
 import cc.jumpkick.cache.VersionStore;
 import cc.jumpkick.cli.CliOutput;
-import cc.jumpkick.model.command.GroupCommand;
 import cc.jumpkick.model.command.CliCommand;
 import cc.jumpkick.model.command.Exit;
+import cc.jumpkick.model.command.GroupCommand;
 import cc.jumpkick.model.command.Invocation;
 import cc.jumpkick.model.command.Opt;
 import cc.jumpkick.util.Hashing;
@@ -130,7 +130,8 @@ public final class SelfCommand extends GroupCommand {
             String target = in.positionals().isEmpty() ? null : in.positionals().get(0);
             cc.jumpkick.http.Http http = new cc.jumpkick.http.Http();
             if (target == null) {
-                target = new String(get(http, URI.create(base + "/latest/VERSION"), "latest version pointer"),
+                target = new String(
+                                get(http, URI.create(base + "/latest/VERSION"), "latest version pointer"),
                                 StandardCharsets.UTF_8)
                         .trim();
             }
@@ -158,8 +159,7 @@ public final class SelfCommand extends GroupCommand {
             // otherwise the NEW engine's startup drains it gracefully — zero interrupted builds.
             var paths = cc.jumpkick.engine.EnginePaths.current();
             if (in.isSet("now")) {
-                cc.jumpkick.cli.engine.EngineClient.forceStop(
-                        cc.jumpkick.engine.EnginePaths.activeSocket(paths));
+                cc.jumpkick.cli.engine.EngineClient.forceStop(cc.jumpkick.engine.EnginePaths.activeSocket(paths));
             }
             Path newClient = m.clientBin().orElse(null);
             if (newClient != null) {
@@ -178,8 +178,8 @@ public final class SelfCommand extends GroupCommand {
                 throws IOException, InterruptedException {
             URI dir = URI.create(base + "/" + version + "/");
             byte[] sums = get(http, dir.resolve("SHA256SUMS"), "release checksums");
-            var verifier = cc.jumpkick.repo.ReleaseVerifier.current(
-                    cc.jumpkick.config.GlobalConfig.releaseTrustedKeys());
+            var verifier =
+                    cc.jumpkick.repo.ReleaseVerifier.current(cc.jumpkick.config.GlobalConfig.releaseTrustedKeys());
             if (verifier.available()) {
                 byte[] sig = get(http, dir.resolve("SHA256SUMS.sig"), "release signature");
                 verifier.verify(sums, new String(sig, StandardCharsets.UTF_8));
@@ -292,17 +292,15 @@ public final class SelfCommand extends GroupCommand {
                 throws IOException, InterruptedException {
             HttpResponse<byte[]> response = http.get(uri);
             if (response.statusCode() != 200) {
-                throw new IOException("could not download the " + what + " from " + uri + " — HTTP "
-                        + response.statusCode());
+                throw new IOException(
+                        "could not download the " + what + " from " + uri + " — HTTP " + response.statusCode());
             }
             return response.body();
         }
 
         static URI releasesBase() {
             String override = System.getenv("JK_RELEASES_URL");
-            return URI.create(override == null || override.isBlank()
-                    ? "https://jumpkick.build/releases"
-                    : override);
+            return URI.create(override == null || override.isBlank() ? "https://jumpkick.build/releases" : override);
         }
     }
 }

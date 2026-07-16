@@ -14,24 +14,21 @@ import cc.jumpkick.command.BuildCommand;
 import cc.jumpkick.command.CacheCommand;
 import cc.jumpkick.command.CleanCommand;
 import cc.jumpkick.command.CompileCommand;
-import cc.jumpkick.command.DevCommand;
-import cc.jumpkick.command.EngineCommand;
-import cc.jumpkick.command.SelfCommand;
-import cc.jumpkick.command.WrapperCommand;
-import cc.jumpkick.command.HistoryCommand;
 import cc.jumpkick.command.DeactivateCommand;
 import cc.jumpkick.command.DenyCommand;
+import cc.jumpkick.command.DevCommand;
 import cc.jumpkick.command.DoctorCommand;
+import cc.jumpkick.command.EngineCommand;
 import cc.jumpkick.command.ExplainCommand;
 import cc.jumpkick.command.ExportCommand;
 import cc.jumpkick.command.FormatCommand;
 import cc.jumpkick.command.GradleCommand;
+import cc.jumpkick.command.HistoryCommand;
 import cc.jumpkick.command.HookEnvCommand;
 import cc.jumpkick.command.IdeCommand;
 import cc.jumpkick.command.ImageCommand;
 import cc.jumpkick.command.ImportCommand;
 import cc.jumpkick.command.InitCommand;
-import cc.jumpkick.command.InstallCommand;
 import cc.jumpkick.command.JdkCommand;
 import cc.jumpkick.command.LibraryCommand;
 import cc.jumpkick.command.LockCommand;
@@ -42,7 +39,7 @@ import cc.jumpkick.command.OutdatedCommand;
 import cc.jumpkick.command.PublishCommand;
 import cc.jumpkick.command.RemoveCommand;
 import cc.jumpkick.command.RepoCommand;
-import cc.jumpkick.command.RunCommand;
+import cc.jumpkick.command.SelfCommand;
 import cc.jumpkick.command.ShellCommand;
 import cc.jumpkick.command.StatusCommand;
 import cc.jumpkick.command.SyncCommand;
@@ -50,19 +47,20 @@ import cc.jumpkick.command.TestCommand;
 import cc.jumpkick.command.ToolCommand;
 import cc.jumpkick.command.ToolInstallCommand;
 import cc.jumpkick.command.ToolRunCommand;
-import cc.jumpkick.command.TrustCommand;
 import cc.jumpkick.command.TreeCommand;
+import cc.jumpkick.command.TrustCommand;
 import cc.jumpkick.command.UpdateCommand;
 import cc.jumpkick.command.VerifyBuildCommand;
 import cc.jumpkick.command.VscodeCommand;
 import cc.jumpkick.command.WhyCommand;
+import cc.jumpkick.command.WrapperCommand;
 import cc.jumpkick.config.JkConfig;
+import cc.jumpkick.engine.plugin.PluginJarNotFoundException;
 import cc.jumpkick.model.command.CliCommand;
 import cc.jumpkick.model.command.Command;
 import cc.jumpkick.model.command.Invocation;
 import cc.jumpkick.model.command.Opt;
 import cc.jumpkick.model.command.Param;
-import cc.jumpkick.engine.plugin.PluginJarNotFoundException;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -193,7 +191,8 @@ public final class CommandDispatch {
                         .pluginCommand(dir, cc.jumpkick.util.JkDirs.cache(), command, args);
             } else {
                 var paths = cc.jumpkick.engine.EnginePaths.current();
-                if (!cc.jumpkick.cli.engine.EngineClient.ping(cc.jumpkick.engine.EnginePaths.activeSocket(paths))) return null;
+                if (!cc.jumpkick.cli.engine.EngineClient.ping(cc.jumpkick.engine.EnginePaths.activeSocket(paths)))
+                    return null;
                 report = cc.jumpkick.cli.engine.EngineClient.pluginCommand(
                         paths, dir, cc.jumpkick.util.JkDirs.cache(), command, args);
             }
@@ -438,7 +437,8 @@ public final class CommandDispatch {
             String name = a.contains("=") ? a.substring(0, a.indexOf('=')) : a;
             // A value-taking global before the command (exact or unique prefix, e.g. --dir for
             // --directory) consumes the next token, so skip both to reach the command.
-            boolean consumesNext = !a.contains("=") && Abbreviations.resolve(name, valueGlobals).resolved();
+            boolean consumesNext = !a.contains("=")
+                    && Abbreviations.resolve(name, valueGlobals).resolved();
             i += consumesNext ? 2 : 1;
         }
         return -1;
@@ -468,7 +468,8 @@ public final class CommandDispatch {
     }
 
     static boolean ansiEnabled() {
-        JkConfig.ColorChoice choice = cc.jumpkick.config.SessionContext.current().config().colorOr(JkConfig.ColorChoice.AUTO);
+        JkConfig.ColorChoice choice =
+                cc.jumpkick.config.SessionContext.current().config().colorOr(JkConfig.ColorChoice.AUTO);
         return switch (choice) {
             case ALWAYS -> true;
             case NEVER -> false;

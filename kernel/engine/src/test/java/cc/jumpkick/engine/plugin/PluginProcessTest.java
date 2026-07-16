@@ -18,8 +18,8 @@ class PluginProcessTest {
 
     private static List<String> cmd(String... extra) {
         String javaExe = System.getProperty("java.home") + "/bin/java";
-        List<String> c = new ArrayList<>(
-                List.of(javaExe, "-cp", System.getProperty("java.class.path"), "cc.jumpkick.engine.plugin.EchoPluginMain"));
+        List<String> c = new ArrayList<>(List.of(
+                javaExe, "-cp", System.getProperty("java.class.path"), "cc.jumpkick.engine.plugin.EchoPluginMain"));
         c.addAll(List.of(extra));
         return c;
     }

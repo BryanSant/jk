@@ -78,7 +78,8 @@ class AndroidSdkTest {
     void installer_gates_on_license_before_downloading(@TempDir Path tmp) throws Exception {
         Path fixtureFile = tmp.resolve("feed.xml");
         Files.write(fixtureFile, fixture());
-        System.setProperty(AndroidSdkInstaller.FEED_URL_PROPERTY, fixtureFile.toUri().toString());
+        System.setProperty(
+                AndroidSdkInstaller.FEED_URL_PROPERTY, fixtureFile.toUri().toString());
         try {
             AndroidSdk sdk = AndroidSdk.resolve(var -> null, tmp.resolve("android-sdk"));
             AndroidSdkInstaller installer = new AndroidSdkInstaller(sdk);

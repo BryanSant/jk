@@ -28,8 +28,7 @@ final class R8Step {
     private R8Step() {}
 
     /** The baseline rules every release build gets — kept tiny on purpose. */
-    private static final String BASELINE_RULES =
-            """
+    private static final String BASELINE_RULES = """
             # jk android baseline (R8 full mode carries the real defaults)
             -keepattributes Signature,InnerClasses,EnclosingMethod
             -keepattributes RuntimeVisibleAnnotations,RuntimeVisibleParameterAnnotations
@@ -77,8 +76,8 @@ final class R8Step {
         Path outputs = exec.scratch().resolve("output-rules.pro");
         Files.writeString(
                 outputs,
-                "-printseeds " + mappingOut.resolve("seeds.txt").toAbsolutePath() + "\n"
-                        + "-printusage " + mappingOut.resolve("usage.txt").toAbsolutePath() + "\n");
+                "-printseeds " + mappingOut.resolve("seeds.txt").toAbsolutePath() + "\n" + "-printusage "
+                        + mappingOut.resolve("usage.txt").toAbsolutePath() + "\n");
         rules.add(outputs);
 
         exec.label("R8 (" + classFiles.size() + " classes + " + runtimeJars.size() + " jars)");

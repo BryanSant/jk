@@ -15,8 +15,7 @@ class BootImportRoundTripTest {
 
     @Test
     void boot_plugin_version_maps_to_the_spring_boot_table() {
-        var result = GradleImporter.importFromString(
-                """
+        var result = GradleImporter.importFromString("""
                 plugins {
                     id("java")
                     id("org.springframework.boot") version "4.0.2"
@@ -29,8 +28,7 @@ class BootImportRoundTripTest {
                 dependencies {
                     implementation("org.springframework.boot:spring-boot-starter-web")
                 }
-                """,
-                "demo");
+                """, "demo");
 
         var config = result.jkBuild().pluginConfig("spring-boot").orElseThrow();
         assertThat(config.string("version")).isEqualTo("4.0.2");
@@ -42,22 +40,18 @@ class BootImportRoundTripTest {
         assertThat(rendered).doesNotContain("include-tools");
         assertThat(rendered).doesNotContain("build-info");
         // dependency-management is recognized (no warning) and produces no table of its own
-        assertThat(result.report().issues())
-                .noneMatch(i -> i.message().contains("io.spring.dependency-management"));
+        assertThat(result.report().issues()).noneMatch(i -> i.message().contains("io.spring.dependency-management"));
     }
 
     @Test
     void boot_plugin_without_version_warns_with_the_manifest_text() {
-        var result = GradleImporter.importFromString(
-                """
+        var result = GradleImporter.importFromString("""
                 plugins {
                     id("java")
                     id("org.springframework.boot")
                 }
-                """,
-                "demo");
+                """, "demo");
         assertThat(result.jkBuild().pluginConfig("spring-boot")).isEmpty();
-        assertThat(result.report().issues())
-                .anyMatch(i -> i.message().contains("applied without an inline version"));
+        assertThat(result.report().issues()).anyMatch(i -> i.message().contains("applied without an inline version"));
     }
 }

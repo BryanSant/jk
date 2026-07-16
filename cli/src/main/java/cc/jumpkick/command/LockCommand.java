@@ -115,7 +115,8 @@ public final class LockCommand implements CliCommand {
         this.sources = in.isSet("sources");
         this.repoUrl = in.value("repo-url").map(URI::create).orElse(null);
         this.cacheDir = in.value("cache-dir").map(Path::of).orElse(null);
-        this.libraryRegistryUrl = in.value("library-registry-url").map(URI::create).orElse(null);
+        this.libraryRegistryUrl =
+                in.value("library-registry-url").map(URI::create).orElse(null);
         this.libraryCacheFile = in.value("library-cache-file").map(Path::of).orElse(null);
         this.global = GlobalOptions.from(in);
 
@@ -150,8 +151,15 @@ public final class LockCommand implements CliCommand {
     private EngineClient.LockRequest lockRequest(Path dir, Path cache) {
         var session = cc.jumpkick.config.SessionContext.current();
         return new EngineClient.LockRequest(
-                dir, cache, features, noDefaultFeatures, sources, repoUrl,
-                session.offline(), session.force(), global.verbose);
+                dir,
+                cache,
+                features,
+                noDefaultFeatures,
+                sources,
+                repoUrl,
+                session.offline(),
+                session.force(),
+                global.verbose);
     }
 
     /**

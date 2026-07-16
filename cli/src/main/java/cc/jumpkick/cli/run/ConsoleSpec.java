@@ -41,12 +41,16 @@ public record ConsoleSpec(
      * {@code Glyphs.PLAY} instead of {@code Glyphs.CHECK} — for commands that hand off to a
      * subprocess after the pipeline (e.g. {@code jk run}).
      */
-    public ConsoleSpec(String command, Function<PipelineResult, String> onSuccess, Function<PipelineResult, String> onFailure) {
+    public ConsoleSpec(
+            String command, Function<PipelineResult, String> onSuccess, Function<PipelineResult, String> onFailure) {
         this(command, onSuccess, onFailure, false, false);
     }
 
     public ConsoleSpec(
-            String command, Function<PipelineResult, String> onSuccess, Function<PipelineResult, String> onFailure, boolean chip) {
+            String command,
+            Function<PipelineResult, String> onSuccess,
+            Function<PipelineResult, String> onFailure,
+            boolean chip) {
         this(command, onSuccess, onFailure, chip, false);
     }
 
@@ -98,8 +102,8 @@ public record ConsoleSpec(
     /** Render a warning diagnostic for the console, per its {@code code}. */
     public static String renderWarning(PipelineResult.Diagnostic d) {
         if (isCompilerCode(d.code())) return compilerWarning(d.step(), d.message());
-        return Theme.colorize(Glyphs.BANG + " Warning", Theme.active().warning())
-                + " [" + d.step() + "]: " + d.message();
+        return Theme.colorize(Glyphs.BANG + " Warning", Theme.active().warning()) + " [" + d.step() + "]: "
+                + d.message();
     }
 
     /**

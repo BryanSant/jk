@@ -84,7 +84,8 @@ public final class OutdatedPipelines {
             Cas cas = new Cas(cache);
             RepoGroup repos = RepoGroupBuilder.buildFor(build, repoUrl, cas);
             Set<String> seen = new LinkedHashSet<>();
-            for (Map.Entry<Scope, List<Dependency>> entry : build.dependencies().byScope().entrySet()) {
+            for (Map.Entry<Scope, List<Dependency>> entry :
+                    build.dependencies().byScope().entrySet()) {
                 String scopeName = entry.getKey().canonical();
                 for (Dependency dep : entry.getValue()) {
                     if (dep.isPath() || dep.isWorkspace() || dep.isFile() || dep.isPlatformManaged()) {
@@ -92,9 +93,10 @@ public final class OutdatedPipelines {
                     }
                     if (!seen.add(dep.module())) continue; // one row per coordinate — first scope wins
                     String display = shortNames.getOrDefault(dep.module(), "");
-                    rows.add(dep.isGit()
-                            ? gitRow(dep, moduleLabel, display, scopeName, git, gitRefsCache)
-                            : mavenRow(dep, moduleLabel, display, scopeName, locked.get(dep.module()), repos));
+                    rows.add(
+                            dep.isGit()
+                                    ? gitRow(dep, moduleLabel, display, scopeName, git, gitRefsCache)
+                                    : mavenRow(dep, moduleLabel, display, scopeName, locked.get(dep.module()), repos));
                 }
             }
         }
@@ -113,7 +115,10 @@ public final class OutdatedPipelines {
                 .max(Versions::compare)
                 .or(() -> available.stream().filter(set::contains).max(Versions::compare))
                 .orElse("");
-        String latest = available.stream().filter(Versions::isStable).max(Versions::compare).orElse("");
+        String latest = available.stream()
+                .filter(Versions::isStable)
+                .max(Versions::compare)
+                .orElse("");
         final String stable = latest;
         String tip = available.stream()
                 .filter(v -> !Versions.isStable(v))
@@ -185,9 +190,8 @@ public final class OutdatedPipelines {
                 tipTag = tag;
             }
         }
-        String tip = (tipVer != null && (latestVer == null || Versions.compare(tipVer, latestVer) > 0))
-                ? tipTag
-                : "tip";
+        String tip =
+                (tipVer != null && (latestVer == null || Versions.compare(tipVer, latestVer) > 0)) ? tipTag : "tip";
         return new String[] {latestTag, tip};
     }
 

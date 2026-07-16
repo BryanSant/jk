@@ -4,14 +4,12 @@ package cc.jumpkick.runtime;
 import cc.jumpkick.cache.Cas;
 import cc.jumpkick.compile.CompileRequest;
 import cc.jumpkick.compile.CompileResult;
+import cc.jumpkick.model.BuildIdentity;
 import cc.jumpkick.run.StepContext;
 import cc.jumpkick.run.TestSummary;
 import cc.jumpkick.task.ActionCache;
 import cc.jumpkick.task.ActionKey;
-import cc.jumpkick.test.JUnitLauncher;
 import cc.jumpkick.test.TestProgressListener;
-import cc.jumpkick.model.BuildIdentity;
-import cc.jumpkick.model.JkVersion;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -42,12 +40,13 @@ public final class TestSupport {
         int count = 0;
         try (Stream<Path> walk = Files.walk(testSrcDir)) {
             for (Path file : (Iterable<Path>) walk.filter(Files::isRegularFile).filter(p -> {
-                        String n = p.getFileName().toString();
-                        return n.endsWith(".java") || n.endsWith(".kt");
-                    })::iterator) {
+                String n = p.getFileName().toString();
+                return n.endsWith(".java") || n.endsWith(".kt");
+            })::iterator) {
                 try {
                     String content = Files.readString(file);
-                    count += (int) TEST_ANNOTATION_REGEX.matcher(content).results().count();
+                    count += (int)
+                            TEST_ANNOTATION_REGEX.matcher(content).results().count();
                 } catch (IOException ignored) {
                     // best-effort: skip unreadable files, keep counting
                 }

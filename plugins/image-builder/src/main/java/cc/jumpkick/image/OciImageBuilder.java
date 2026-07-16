@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.image;
 
-import cc.jumpkick.image.ImageBuilder;
-import cc.jumpkick.image.ImageConfig;
 import cc.jumpkick.plugin.Plugin;
 import cc.jumpkick.plugin.PluginConfig;
 import cc.jumpkick.plugin.PluginManifest;
@@ -103,8 +101,7 @@ public final class OciImageBuilder implements Plugin, ImageExtension {
         String tag = c.stringOpt("tag").orElse(null);
         String dockerExecutable = c.stringOpt("dockerExecutable").orElse(null);
 
-        Path mainJar = ctx.mainArtifact()
-                .orElseThrow(() -> new IOException("image goal needs a built main artifact"));
+        Path mainJar = ctx.mainArtifact().orElseThrow(() -> new IOException("image goal needs a built main artifact"));
         List<Path> depJars = new ArrayList<>();
         List<Path> snapshotJars = new ArrayList<>();
         for (PackageIo.RuntimeEntry e : ctx.runtimeEntries()) {
@@ -113,8 +110,17 @@ public final class OciImageBuilder implements Plugin, ImageExtension {
         Path classesDir = ctx.classesDir().orElse(null);
 
         ImageConfig config = new ImageConfig(
-                base, c.stringOpt("user").orElse(null), ports, env, labels, registry, tag,
-                platforms.isEmpty() ? null : platforms, mainClass, dockerExecutable, null);
+                base,
+                c.stringOpt("user").orElse(null),
+                ports,
+                env,
+                labels,
+                registry,
+                tag,
+                platforms.isEmpty() ? null : platforms,
+                mainClass,
+                dockerExecutable,
+                null);
         ImageBuilder.Plan plan =
                 new ImageBuilder.Plan(config, artifact, version, mainClass, mainJar, depJars, snapshotJars, classesDir);
 

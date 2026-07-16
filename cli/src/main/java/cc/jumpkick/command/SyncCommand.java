@@ -6,21 +6,17 @@ import cc.jumpkick.cli.GlobalOptions;
 import cc.jumpkick.cli.engine.EngineClient;
 import cc.jumpkick.cli.run.ConsoleSpec;
 import cc.jumpkick.cli.run.PipelineConsole;
-import cc.jumpkick.cli.theme.Coords;
-import cc.jumpkick.lock.Lockfile;
-import cc.jumpkick.model.JkBuild;
+import cc.jumpkick.jdk.JdkEnsure;
 import cc.jumpkick.model.command.CliCommand;
 import cc.jumpkick.model.command.Exit;
 import cc.jumpkick.model.command.Invocation;
 import cc.jumpkick.model.command.Opt;
 import cc.jumpkick.run.PipelineResult;
-import cc.jumpkick.jdk.JdkEnsure;
 import cc.jumpkick.util.JkDirs;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * {@code jk sync} — bring the local toolchain + dependency cache in line with the project's {@code
@@ -154,7 +150,6 @@ public final class SyncCommand implements CliCommand {
         // to do here. The progress-bar listener has already surfaced any failure.
         return result.success() ? 0 : 1;
     }
-
 
     /** The Sync chip spec; counts are read lazily, at result-line render time. */
     static ConsoleSpec syncSpec(java.util.function.LongSupplier fetched, java.util.function.LongSupplier upToDate) {

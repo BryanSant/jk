@@ -53,5 +53,4 @@ public final class InitCommand implements CliCommand {
         delegate.global = GlobalOptions.from(in);
         return delegate.callBody();
     }
-
 }

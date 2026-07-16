@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.runtime;
 
-import cc.jumpkick.run.StepNames;
-
 import cc.jumpkick.cache.Cas;
 import cc.jumpkick.config.JkBuildParser;
 import cc.jumpkick.credential.RepoCredential;
+import cc.jumpkick.engine.plugin.PluginClient;
+import cc.jumpkick.engine.plugin.PluginJar;
 import cc.jumpkick.layout.BuildLayout;
 import cc.jumpkick.model.Dependency;
 import cc.jumpkick.model.GitRefSpec;
@@ -18,15 +18,13 @@ import cc.jumpkick.run.Pipeline;
 import cc.jumpkick.run.PipelineKey;
 import cc.jumpkick.run.Step;
 import cc.jumpkick.run.StepKind;
-import cc.jumpkick.engine.plugin.PluginClient;
-import cc.jumpkick.engine.plugin.PluginJar;
+import cc.jumpkick.run.StepNames;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.PosixFilePermissions;
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -150,9 +148,12 @@ public final class PublishPipelines {
                         .passthrough(line -> workerDiag.append(line).append('\n'))
                         .run(PluginLaunch.javaCommand(workerJar, spec));
                 if (exit != 0) {
-                    String diag = workerDiag.length() > 0 ? workerDiag.toString().trim() : null;
+                    String diag =
+                            workerDiag.length() > 0 ? workerDiag.toString().trim() : null;
                     throw new RuntimeException("publish worker failed"
-                            + (error[0] != null ? ": " + error[0] : diag != null ? ": " + diag : " (exit " + exit + ")"));
+                            + (error[0] != null
+                                    ? ": " + error[0]
+                                    : diag != null ? ": " + diag : " (exit " + exit + ")"));
                 }
                 return files[0];
             } finally {
@@ -177,7 +178,9 @@ public final class PublishPipelines {
 
         // Credential (resolved client-side so neither the engine nor the plugin needs env/keychain access).
         if (req.credential() instanceof RepoCredential.Basic b) {
-            sw.configString("repoAuthType", "basic").secret("repoUser", b.username()).secret("repoPass", b.password());
+            sw.configString("repoAuthType", "basic")
+                    .secret("repoUser", b.username())
+                    .secret("repoPass", b.password());
         } else if (req.credential() instanceof RepoCredential.Bearer b) {
             sw.configString("repoAuthType", "bearer").secret("repoToken", b.token());
         } else {
@@ -185,7 +188,8 @@ public final class PublishPipelines {
         }
 
         if (req.keyFile() != null) {
-            sw.configBool("signGpg", true).configString("gpgKeyFile", req.keyFile().toAbsolutePath().toString());
+            sw.configBool("signGpg", true)
+                    .configString("gpgKeyFile", req.keyFile().toAbsolutePath().toString());
             if (req.gpgPassphrase() != null) sw.secret("gpgPassphrase", req.gpgPassphrase());
         }
         if (req.region() != null && !req.region().isBlank()) sw.configString("objectStoreRegion", req.region());

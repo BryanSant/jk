@@ -16,17 +16,11 @@ import cc.jumpkick.model.command.Opt;
 import cc.jumpkick.model.command.Param;
 import cc.jumpkick.repo.RepoArtifactStore;
 import cc.jumpkick.resolver.Versions;
-import cc.jumpkick.run.Pipeline;
-import cc.jumpkick.run.PipelineResult;
 import cc.jumpkick.util.JkDirs;
 import java.io.IOException;
-import java.io.PrintStream;
-import java.nio.channels.FileChannel;
-import java.nio.channels.FileLock;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -86,8 +80,8 @@ public final class CacheCommand extends GroupCommand {
         if (Boolean.TRUE.equals(external)) {
             CliOutput.out("Waiting for another jk process's cache prune to finish…");
         } else {
-            CliOutput.out("Waiting for " + pipelines + " in-flight build" + (pipelines == 1 ? "" : "s")
-                    + " to finish…");
+            CliOutput.out(
+                    "Waiting for " + pipelines + " in-flight build" + (pipelines == 1 ? "" : "s") + " to finish…");
         }
     }
 
@@ -168,8 +162,7 @@ public final class CacheCommand extends GroupCommand {
         public int run(Invocation in) throws IOException {
             Path root = resolveCacheRoot(in.value("cache-dir").map(Path::of).orElse(null));
             if (!Files.isDirectory(root)) {
-                CliOutput.out(
-                        "Cache directory: " + cc.jumpkick.cli.PathDisplay.styledRaw(root) + " (not yet created)");
+                CliOutput.out("Cache directory: " + cc.jumpkick.cli.PathDisplay.styledRaw(root) + " (not yet created)");
                 return 0;
             }
             Stats sha = statsOf(root.resolve("sha256"));
@@ -189,8 +182,8 @@ public final class CacheCommand extends GroupCommand {
             // Last-pruned timestamp from the scheduler stamp file.
             String lastPruned = lastPrunedLabel(root);
 
-            for (String line : renderInfoTable(sha, actions, repos, runs, stamps,
-                    totalFiles, totalBytes, maxBytes, lastPruned)) {
+            for (String line :
+                    renderInfoTable(sha, actions, repos, runs, stamps, totalFiles, totalBytes, maxBytes, lastPruned)) {
                 CliOutput.out(line);
             }
             return 0;
@@ -200,7 +193,8 @@ public final class CacheCommand extends GroupCommand {
             Path stamp = root.resolve(cc.jumpkick.task.CachePruneScheduler.LAST_PRUNED_FILE);
             if (!Files.isRegularFile(stamp)) return "never";
             try {
-                long millis = Long.parseLong(Files.readString(stamp, StandardCharsets.UTF_8).trim());
+                long millis = Long.parseLong(
+                        Files.readString(stamp, StandardCharsets.UTF_8).trim());
                 long ageMs = System.currentTimeMillis() - millis;
                 long days = ageMs / (24L * 60 * 60 * 1000);
                 if (days == 0) return "today";
@@ -212,14 +206,21 @@ public final class CacheCommand extends GroupCommand {
         }
 
         private static List<String> renderInfoTable(
-                Stats sha, Stats actions, Stats repos, Stats runs, Stats stamps,
-                long totalFiles, long totalBytes, long maxBytes, String lastPruned) {
+                Stats sha,
+                Stats actions,
+                Stats repos,
+                Stats runs,
+                Stats stamps,
+                long totalFiles,
+                long totalBytes,
+                long maxBytes,
+                String lastPruned) {
             String[][] rows = {
-                {"CAS Blobs",     fmtCount(sha.files),     fmtSize(sha.bytes)},
-                {"Action Cache",  fmtCount(actions.files), fmtSize(actions.bytes)},
-                {"Worker JARs",   fmtCount(repos.files),   fmtSize(repos.bytes)},
-                {"Run Logs",      fmtCount(runs.files),    fmtSize(runs.bytes)},
-                {"Format Stamps", fmtCount(stamps.files),  fmtSize(stamps.bytes)},
+                {"CAS Blobs", fmtCount(sha.files), fmtSize(sha.bytes)},
+                {"Action Cache", fmtCount(actions.files), fmtSize(actions.bytes)},
+                {"Worker JARs", fmtCount(repos.files), fmtSize(repos.bytes)},
+                {"Run Logs", fmtCount(runs.files), fmtSize(runs.bytes)},
+                {"Format Stamps", fmtCount(stamps.files), fmtSize(stamps.bytes)},
             };
             String[] total = {"Total", fmtCount(totalFiles), fmtSize(totalBytes)};
 
@@ -242,8 +243,8 @@ public final class CacheCommand extends GroupCommand {
             out.add(utilizationRow(totalBytes, maxBytes, inner));
             out.add(border("╰", "╯", inner));
             Theme t = Theme.active();
-            out.add("  Last pruned: " + Theme.colorize(lastPruned, "never".equals(lastPruned)
-                    ? t.warning() : t.normalGray()));
+            out.add("  Last pruned: "
+                    + Theme.colorize(lastPruned, "never".equals(lastPruned) ? t.warning() : t.normalGray()));
             return out;
         }
 
@@ -270,14 +271,17 @@ public final class CacheCommand extends GroupCommand {
             Theme t = Theme.active();
             boolean nerdfont = cc.jumpkick.config.GlobalConfig.nerdfont();
             String rail = Theme.colorize("│", t.darkGray());
-            String leftCap  = nerdfont ? Theme.colorize(cc.jumpkick.cli.tui.Glyphs.PILL_LEFT_NERD,  t.bright(t.planBadgeColor())) : "";
-            String rightCap = nerdfont ? Theme.colorize(cc.jumpkick.cli.tui.Glyphs.PILL_RIGHT_NERD, t.bright(t.planBadgeColor())) : "";
+            String leftCap = nerdfont
+                    ? Theme.colorize(cc.jumpkick.cli.tui.Glyphs.PILL_LEFT_NERD, t.bright(t.planBadgeColor()))
+                    : "";
+            String rightCap = nerdfont
+                    ? Theme.colorize(cc.jumpkick.cli.tui.Glyphs.PILL_RIGHT_NERD, t.bright(t.planBadgeColor()))
+                    : "";
             // Band fills inner minus the two cap columns (or full inner when no Nerd Font).
             int bandWidth = inner - (nerdfont ? 2 : 0);
             int pad = Math.max(0, bandWidth - title.length());
             int left = pad / 2, right = pad - left;
-            String band = Theme.colorize(
-                    " ".repeat(left) + title + " ".repeat(right), t.planBadge());
+            String band = Theme.colorize(" ".repeat(left) + title + " ".repeat(right), t.planBadge());
             return rail + leftCap + band + rightCap + rail;
         }
 
@@ -321,9 +325,11 @@ public final class CacheCommand extends GroupCommand {
             String suffix = "  " + pct + "% ";
             int barWidth = Math.max(0, inner - prefix.length() - suffix.length());
             String bar = cc.jumpkick.cli.tui.ProgressBar.renderBar(
-                    used, max, barWidth,
+                    used,
+                    max,
+                    barWidth,
                     t.bright(t.planBadgeColor()), // filled ▰ — plan-badge blue
-                    t.darkGray());                 // empty  ▱ — bright-black
+                    t.darkGray()); // empty  ▱ — bright-black
             String rail = Theme.colorize("│", t.darkGray());
             return rail + prefix + bar + suffix + rail;
         }
@@ -402,8 +408,7 @@ public final class CacheCommand extends GroupCommand {
             }
             if (shown < total) {
                 Theme st = Theme.active();
-                CliOutput.out(
-                        Theme.colorize("…", st.darkGray())
+                CliOutput.out(Theme.colorize("…", st.darkGray())
                         + " "
                         + Theme.colorize("and ", st.normalGray())
                         + Theme.colorize(String.valueOf(total - shown), st.focused())
@@ -414,8 +419,7 @@ public final class CacheCommand extends GroupCommand {
             }
             {
                 Theme st = Theme.active();
-                CliOutput.out(
-                        Theme.colorize(fmtCount(shown), st.focused())
+                CliOutput.out(Theme.colorize(fmtCount(shown), st.focused())
                         + " "
                         + Theme.colorize("coordinate" + (shown == 1 ? "" : "s"), st.settled())
                         + ", "
@@ -498,8 +502,8 @@ public final class CacheCommand extends GroupCommand {
             Path root = resolveCacheRoot(cacheDir);
 
             if (!dryRun && !assumeYes && !confirmClear()) {
-                CliOutput.out(cc.jumpkick.cli.tui.PipelineWedge.chipLine(
-                        Glyphs.CROSS, "Cache", nerdfont, "Clear aborted."));
+                CliOutput.out(
+                        cc.jumpkick.cli.tui.PipelineWedge.chipLine(Glyphs.CROSS, "Cache", nerdfont, "Clear aborted."));
                 return 1;
             }
 
@@ -635,8 +639,8 @@ public final class CacheCommand extends GroupCommand {
             if (inProcess == null) {
                 return runHosted(root, cacheDir == null, olderThanDays, dryRun, sweep, maxSize, global);
             }
-            return inProcess.pruneInProcess(root, cacheDir == null, olderThanDays, dryRun, sweep, maxSize,
-                    background, global);
+            return inProcess.pruneInProcess(
+                    root, cacheDir == null, olderThanDays, dryRun, sweep, maxSize, background, global);
         }
 
         /** The engine-hosted foreground path: send the request, explain any wait, render the stream. */
@@ -698,13 +702,12 @@ public final class CacheCommand extends GroupCommand {
         static void warnReachableEvicted(long evicted) {
             if (evicted <= 0) return;
             Theme pt = Theme.active();
-            CliOutput.err(
-                    Theme.colorize(Glyphs.BANG, pt.warning())
+            CliOutput.err(Theme.colorize(Glyphs.BANG, pt.warning())
                     + " "
                     + Theme.colorize(
                             "evicted "
-                            + evicted
-                            + " reachable objects to fit the budget — consider raising --max-size.",
+                                    + evicted
+                                    + " reachable objects to fit the budget — consider raising --max-size.",
                             pt.settled()));
         }
     }
@@ -738,26 +741,25 @@ public final class CacheCommand extends GroupCommand {
             boolean nerdfont = cc.jumpkick.config.GlobalConfig.nerdfont();
             Path root = resolveCacheRoot(cacheDir);
             if (!Files.isDirectory(root)) {
-                CliOutput.out(
-                        cc.jumpkick.cli.tui.PipelineWedge.chipLine(
-                                cc.jumpkick.cli.tui.Glyphs.CHECK, "Cache", nerdfont,
-                                "Nothing to purge — cache directory does not exist."));
+                CliOutput.out(cc.jumpkick.cli.tui.PipelineWedge.chipLine(
+                        cc.jumpkick.cli.tui.Glyphs.CHECK,
+                        "Cache",
+                        nerdfont,
+                        "Nothing to purge — cache directory does not exist."));
                 return 0;
             }
             Stats stats = statsOf(root);
             if (dryRun) {
-                CliOutput.out(
-                        cc.jumpkick.cli.tui.PipelineWedge.chipLine(
-                                cc.jumpkick.cli.tui.Glyphs.CHECK, "Cache", nerdfont,
-                                "Dry run: would remove " + fmtCount(stats.files)
-                                        + " files, " + fmtBytes(stats.bytes) + "."));
+                CliOutput.out(cc.jumpkick.cli.tui.PipelineWedge.chipLine(
+                        cc.jumpkick.cli.tui.Glyphs.CHECK,
+                        "Cache",
+                        nerdfont,
+                        "Dry run: would remove " + fmtCount(stats.files) + " files, " + fmtBytes(stats.bytes) + "."));
                 return 0;
             }
             if (!assumeYes && !confirmPurge(root, stats)) {
-                CliOutput.out(
-                        cc.jumpkick.cli.tui.PipelineWedge.chipLine(
-                                cc.jumpkick.cli.tui.Glyphs.CROSS, "Cache", nerdfont,
-                                "Purge aborted."));
+                CliOutput.out(cc.jumpkick.cli.tui.PipelineWedge.chipLine(
+                        cc.jumpkick.cli.tui.Glyphs.CROSS, "Cache", nerdfont, "Purge aborted."));
                 return 1;
             }
             // The confirm/dry-run/stats above are terminal- and read-only concerns and stay here;
@@ -799,12 +801,12 @@ public final class CacheCommand extends GroupCommand {
             Theme t = Theme.active();
             String bang = Theme.colorize(Glyphs.BANG, t.warning());
             CliOutput.out();
-            CliOutput.out(
-                    bang + " " + Theme.colorize("This permanently deletes the ENTIRE jk cache.", t.errorLabel()));
+            CliOutput.out(bang + " " + Theme.colorize("This permanently deletes the ENTIRE jk cache.", t.errorLabel()));
             CliOutput.out("  " + root);
-            CliOutput.stdout().printf(
-                    "  %s files, %s — every cached dependency, CAS blob, and the m2 repo mirror.%n",
-                    fmtCount(stats.files), fmtBytes(stats.bytes));
+            CliOutput.stdout()
+                    .printf(
+                            "  %s files, %s — every cached dependency, CAS blob, and the m2 repo mirror.%n",
+                            fmtCount(stats.files), fmtBytes(stats.bytes));
             CliOutput.out("  jk will re-download everything on the next build.");
             return cc.jumpkick.cli.tui.Confirm.of(bang + " Purge the whole cache?", false)
                     .ask();

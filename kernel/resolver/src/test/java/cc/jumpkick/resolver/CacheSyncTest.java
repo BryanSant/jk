@@ -3,11 +3,11 @@ package cc.jumpkick.resolver;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.sun.net.httpserver.HttpServer;
 import cc.jumpkick.cache.Cas;
 import cc.jumpkick.http.Http;
 import cc.jumpkick.lock.Lockfile;
 import cc.jumpkick.util.Hashing;
+import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
@@ -112,8 +112,7 @@ class CacheSyncTest {
         // Poison both jk's own index sidecar (repos/<name>/ is exclusively jk-owned, so this
         // models local corruption rather than an external rewrite — see repoStoreState's
         // IndexState.MISMATCH) and the opt-in ~/.m2 mirror. The CAS blob is untouched.
-        Path sidecar =
-                tempDir.resolve("cache/repos/central/com/foo/leaf/1.0/leaf-1.0.jar.sha256");
+        Path sidecar = tempDir.resolve("cache/repos/central/com/foo/leaf/1.0/leaf-1.0.jar.sha256");
         Files.writeString(sidecar, "0".repeat(64));
         Path m2Jar = Path.of(System.getProperty("jk.m2.local")).resolve("com/foo/leaf/1.0/leaf-1.0.jar");
         Files.write(m2Jar, "poisoned".getBytes(StandardCharsets.UTF_8));

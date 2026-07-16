@@ -32,9 +32,8 @@ public final class LockfileWriter {
      */
     private static String runningEngineSha(String version) {
         try {
-            java.nio.file.Path manifest = cc.jumpkick.util.JkDirs.versions()
-                    .resolve(version)
-                    .resolve("manifest.toml");
+            java.nio.file.Path manifest =
+                    cc.jumpkick.util.JkDirs.versions().resolve(version).resolve("manifest.toml");
             for (String line : Files.readAllLines(manifest, StandardCharsets.UTF_8)) {
                 line = line.trim();
                 if (line.startsWith("engine-sha256")) {
@@ -69,8 +68,10 @@ public final class LockfileWriter {
                 ? lockfile.jk()
                 : new Lockfile.JkToolchain(
                         cc.jumpkick.model.JkVersion.VERSION, runningEngineSha(cc.jumpkick.model.JkVersion.VERSION));
-        out.append("jk = { version = ").append(quote(jk.version()))
-                .append(", sha256 = ").append(quote(jk.sha256() == null ? "" : jk.sha256()))
+        out.append("jk = { version = ")
+                .append(quote(jk.version()))
+                .append(", sha256 = ")
+                .append(quote(jk.sha256() == null ? "" : jk.sha256()))
                 .append(" }\n");
 
         List<Lockfile.Artifact> sorted = new ArrayList<>(lockfile.artifacts());

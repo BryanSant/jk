@@ -36,8 +36,7 @@ public final class EngineStopCommand implements CliCommand {
 
     @Override
     public List<Opt> options() {
-        return List.of(Opt.flag(
-                "Stop now, abandoning in-flight jobs (still assembles the AOT cache).", "--now"));
+        return List.of(Opt.flag("Stop now, abandoning in-flight jobs (still assembles the AOT cache).", "--now"));
     }
 
     @Override
@@ -52,7 +51,8 @@ public final class EngineStopCommand implements CliCommand {
 
         // Force: stop now via the clean-exit path (SIGKILL fallback if unresponsive).
         if (in.isSet("now")) {
-            if (!EngineClient.forceStop(cc.jumpkick.engine.EnginePaths.activeSocket(paths))) EngineClient.hardKill(before.get().pid());
+            if (!EngineClient.forceStop(cc.jumpkick.engine.EnginePaths.activeSocket(paths)))
+                EngineClient.hardKill(before.get().pid());
             CliOutput.out(stoppedWedge(elapsed(started)));
             return Exit.SUCCESS;
         }
@@ -65,8 +65,8 @@ public final class EngineStopCommand implements CliCommand {
             return Exit.SUCCESS;
         }
         if (!PipelineConsole.isInteractiveTerminal()) {
-            CliOutput.out("jk engine: shutdown scheduled (" + jobs + " job" + (jobs == 1 ? "" : "s")
-                    + " will finish first)");
+            CliOutput.out(
+                    "jk engine: shutdown scheduled (" + jobs + " job" + (jobs == 1 ? "" : "s") + " will finish first)");
             return Exit.SUCCESS;
         }
         return drainOnTty(paths, jobs, started);
@@ -81,11 +81,14 @@ public final class EngineStopCommand implements CliCommand {
                     EngineClient.forceStop(cc.jumpkick.engine.EnginePaths.activeSocket(paths));
                     break;
                 }
-                Optional<EngineClient.Status> s = EngineClient.status(cc.jumpkick.engine.EnginePaths.activeSocket(paths));
+                Optional<EngineClient.Status> s =
+                        EngineClient.status(cc.jumpkick.engine.EnginePaths.activeSocket(paths));
                 if (s.isEmpty()) {
                     // Confirm the engine really exited (avoid a transient accept/close false positive).
                     sleep(150);
-                    if (EngineClient.status(cc.jumpkick.engine.EnginePaths.activeSocket(paths)).isEmpty() && !EngineClient.ping(cc.jumpkick.engine.EnginePaths.activeSocket(paths))) break;
+                    if (EngineClient.status(cc.jumpkick.engine.EnginePaths.activeSocket(paths))
+                                    .isEmpty()
+                            && !EngineClient.ping(cc.jumpkick.engine.EnginePaths.activeSocket(paths))) break;
                     continue;
                 }
                 view.setJobs(Math.max(0, s.get().activePipelines()));

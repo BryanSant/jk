@@ -70,7 +70,11 @@ final class ResourceMerger {
                     if (!Files.isDirectory(configDir)) continue;
                     String config = configDir.getFileName().toString();
                     if (config.equals("values") || config.startsWith("values-")) {
-                        mergeValuesDir(db, configDir, valuesByConfig.computeIfAbsent(config, k -> new LinkedHashMap<>()), xmlns);
+                        mergeValuesDir(
+                                db,
+                                configDir,
+                                valuesByConfig.computeIfAbsent(config, k -> new LinkedHashMap<>()),
+                                xmlns);
                     } else {
                         copyFirstWins(configDir, out.resolve(config));
                     }
@@ -80,7 +84,8 @@ final class ResourceMerger {
         if (!any) return null;
 
         for (var config : valuesByConfig.entrySet()) {
-            writeMergedValues(db, config.getValue(), xmlns, out.resolve(config.getKey()).resolve("values.xml"));
+            writeMergedValues(
+                    db, config.getValue(), xmlns, out.resolve(config.getKey()).resolve("values.xml"));
         }
         Files.createDirectories(out); // an all-values closure still needs the tree root to exist
         return out;
@@ -129,8 +134,7 @@ final class ResourceMerger {
     }
 
     private static void writeMergedValues(
-            DocumentBuilder db, Map<String, Element> entries, Map<String, String> xmlns, Path out)
-            throws Exception {
+            DocumentBuilder db, Map<String, Element> entries, Map<String, String> xmlns, Path out) throws Exception {
         Document doc = db.newDocument();
         Element root = doc.createElement("resources");
         for (var decl : xmlns.entrySet()) {

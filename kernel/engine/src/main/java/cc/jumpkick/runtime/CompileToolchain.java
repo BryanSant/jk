@@ -13,7 +13,6 @@ import cc.jumpkick.model.JkBuild;
 import cc.jumpkick.util.JkDirs;
 import java.io.IOException;
 import java.net.URI;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.function.Consumer;
 
@@ -96,7 +95,8 @@ public final class CompileToolchain {
             dist = new ToolDistribution(BuildTool.KOTLIN, versionOverride, uri, "zip");
         }
         try {
-            boolean refresh = cc.jumpkick.config.SessionContext.current().config().forceOr(false);
+            boolean refresh =
+                    cc.jumpkick.config.SessionContext.current().config().forceOr(false);
             ToolProvisioning.Result result =
                     ToolProvisioning.provision(dist, registry, new Http(), /* noDiscover= */ false, refresh);
             switch (result.source()) {

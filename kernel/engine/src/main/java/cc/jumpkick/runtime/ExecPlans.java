@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.runtime;
 
-import cc.jumpkick.layout.SourceLayout;
-import cc.jumpkick.plugin.manifest.VariantApply;
 import cc.jumpkick.cache.Cas;
 import cc.jumpkick.compile.ClasspathResolver;
 import cc.jumpkick.config.JkBuildParser;
@@ -14,10 +12,12 @@ import cc.jumpkick.jdk.HostPlatform;
 import cc.jumpkick.jdk.JavaHomes;
 import cc.jumpkick.layout.BuildLayout;
 import cc.jumpkick.layout.MainClassScanner;
+import cc.jumpkick.layout.SourceLayout;
 import cc.jumpkick.lock.Lockfile;
 import cc.jumpkick.lock.LockfileReader;
 import cc.jumpkick.model.JkBuild;
 import cc.jumpkick.model.Scope;
+import cc.jumpkick.plugin.manifest.VariantApply;
 import cc.jumpkick.tool.AppLauncher;
 import cc.jumpkick.util.JkDirs;
 import java.io.IOException;
@@ -125,8 +125,7 @@ public final class ExecPlans {
         return out;
     }
 
-    private static String layoutOf(
-            JkBuild build, Path dir, java.util.function.Function<BuildLayout, Path> f) {
+    private static String layoutOf(JkBuild build, Path dir, java.util.function.Function<BuildLayout, Path> f) {
         try {
             return f.apply(BuildLayout.of(dir, build)).toAbsolutePath().toString();
         } catch (RuntimeException e) {
@@ -153,8 +152,15 @@ public final class ExecPlans {
      * not the debug APK's.
      */
     public static ExecPlan execPlan(
-            Path dir, Path cache, String kind, String mainOverride, String binName, Path binDir, Path libDir,
-            String variant, java.util.Map<String, String> clientEnv) {
+            Path dir,
+            Path cache,
+            String kind,
+            String mainOverride,
+            String binName,
+            Path binDir,
+            Path libDir,
+            String variant,
+            java.util.Map<String, String> clientEnv) {
         try {
             JkBuild project = JkBuildParser.parse(dir.resolve("jk.toml"));
             project = VariantApply.applyLenient(
@@ -207,16 +213,36 @@ public final class ExecPlans {
             // argv stays empty (nothing forks on the host JVM).
             List<String> deviceWatch = new ArrayList<>();
             if (dev) {
-                if (Files.isDirectory(dir.resolve("src"))) deviceWatch.add(dir.resolve("src").toString());
-                if (Files.isDirectory(dir.resolve("res"))) deviceWatch.add(dir.resolve("res").toString());
+                if (Files.isDirectory(dir.resolve("src")))
+                    deviceWatch.add(dir.resolve("src").toString());
+                if (Files.isDirectory(dir.resolve("res")))
+                    deviceWatch.add(dir.resolve("res").toString());
                 Path deviceManifest = dir.resolve("AndroidManifest.xml");
                 if (Files.isRegularFile(deviceManifest)) deviceWatch.add(deviceManifest.toString());
             }
             return new ExecPlan(
-                    null, "", dev ? "dev" : "run", java.util.List.of(), dir.toString(),
-                    "deploy → device (" + deployCommand + ")", "", false, false, deviceWatch,
-                    java.util.List.of(), java.util.List.of(), "", "", "", false, "", "", "",
-                    java.util.List.of(), java.util.List.of(), deployCommand);
+                    null,
+                    "",
+                    dev ? "dev" : "run",
+                    java.util.List.of(),
+                    dir.toString(),
+                    "deploy → device (" + deployCommand + ")",
+                    "",
+                    false,
+                    false,
+                    deviceWatch,
+                    java.util.List.of(),
+                    java.util.List.of(),
+                    "",
+                    "",
+                    "",
+                    false,
+                    "",
+                    "",
+                    "",
+                    java.util.List.of(),
+                    java.util.List.of(),
+                    deployCommand);
         }
         Path javaHome = projectJavaHome(dir);
         String java = javaBin(javaHome);
@@ -224,22 +250,35 @@ public final class ExecPlans {
         if (!dev) {
             Path nativeBin = layout.nativeBinary();
             if (Files.isRegularFile(nativeBin) && Files.isExecutable(nativeBin)) {
-                return runAck("run", List.of(nativeBin.toAbsolutePath().toString()), dir, javaHome,
-                        nativeBin.getFileName().toString(), false, false, List.of());
+                return runAck(
+                        "run",
+                        List.of(nativeBin.toAbsolutePath().toString()),
+                        dir,
+                        javaHome,
+                        nativeBin.getFileName().toString(),
+                        false,
+                        false,
+                        List.of());
             }
             Path shadow = layout.shadowJar();
             if (Files.isRegularFile(shadow)) {
-                return runAck("run",
+                return runAck(
+                        "run",
                         List.of(java, "-jar", shadow.toAbsolutePath().toString()),
-                        dir, javaHome, "java -jar " + dir.relativize(shadow), false, false, List.of());
+                        dir,
+                        javaHome,
+                        "java -jar " + dir.relativize(shadow),
+                        false,
+                        false,
+                        List.of());
             }
         }
 
         // Classes-dir + RUN classpath: dev-scope deps ride; a classes-run packager's jar
         // (e.g. Boot's BOOT-INF nesting) never lands on a -cp.
         List<Path> classpath = new ArrayList<>();
-        boolean classesEntry =
-                dev || PluginBuild.shape(project, dir).map(sh -> sh.classesRun()).orElse(false);
+        boolean classesEntry = dev
+                || PluginBuild.shape(project, dir).map(sh -> sh.classesRun()).orElse(false);
         classpath.add(classesEntry ? layout.classesDir() : layout.mainJar());
 
         boolean devtoolsInjected = false;
@@ -305,7 +344,8 @@ public final class ExecPlans {
         }
 
         List<String> watchRoots = new ArrayList<>();
-        if (dev && Files.isDirectory(dir.resolve("src"))) watchRoots.add(dir.resolve("src").toString());
+        if (dev && Files.isDirectory(dir.resolve("src")))
+            watchRoots.add(dir.resolve("src").toString());
         return runAck(dev ? "dev" : "run", argv, dir, javaHome, display, hotReload, devtoolsInjected, watchRoots);
     }
 
@@ -319,9 +359,27 @@ public final class ExecPlans {
             boolean devtoolsInjected,
             List<String> watchRoots) {
         return new ExecPlan(
-                null, "", kind, argv, dir.toString(),
-                display, javaHome.toString(), hotReload, devtoolsInjected, watchRoots, List.of(), List.of(), "", "",
-                "", false, "", "", "", List.of(), List.of(),
+                null,
+                "",
+                kind,
+                argv,
+                dir.toString(),
+                display,
+                javaHome.toString(),
+                hotReload,
+                devtoolsInjected,
+                watchRoots,
+                List.of(),
+                List.of(),
+                "",
+                "",
+                "",
+                false,
+                "",
+                "",
+                "",
+                List.of(),
+                List.of(),
                 "");
     }
 
@@ -371,7 +429,8 @@ public final class ExecPlans {
             Path dest = libDir.resolve(src.getFileName().toString());
             linkSrcs.add(src.toAbsolutePath().toString());
             linkDests.add(dest.toString());
-            String script = selfContained && "jar".equals(shape.map(sh -> sh.execMode()).orElse(""))
+            String script = selfContained
+                            && "jar".equals(shape.map(sh -> sh.execMode()).orElse(""))
                     ? AppLauncher.renderJarScript(javaHome, dest)
                     : AppLauncher.renderScript(javaHome, resolveMain(project, layout, mainOverride), List.of(dest));
             return installAck(linkSrcs, linkDests, launcherPath.toString(), script, launcherPath.toString());
@@ -390,8 +449,8 @@ public final class ExecPlans {
             for (ClasspathResolver.Entry entry :
                     new ClasspathResolver(new Cas(cache)).entriesFor(lock, ClasspathResolver.RUNTIME)) {
                 if (!Files.exists(entry.jar())) continue;
-                Path dest = libDir.resolve(
-                        entry.artifact().moduleArtifact() + "-" + entry.artifact().version() + ".jar");
+                Path dest = libDir.resolve(entry.artifact().moduleArtifact() + "-"
+                        + entry.artifact().version() + ".jar");
                 linkSrcs.add(entry.jar().toAbsolutePath().toString());
                 linkDests.add(dest.toString());
                 classpath.add(dest);
@@ -413,14 +472,32 @@ public final class ExecPlans {
     private static ExecPlan installAck(
             List<String> linkSrcs, List<String> linkDests, String launcherPath, String script, String binPath) {
         return new ExecPlan(
-                null, "", "install", List.of(), "", "", "", false, false, List.of(), linkSrcs, linkDests,
-                launcherPath, script, binPath, false, "", "", "", List.of(), List.of(),
+                null,
+                "",
+                "install",
+                List.of(),
+                "",
+                "",
+                "",
+                false,
+                false,
+                List.of(),
+                linkSrcs,
+                linkDests,
+                launcherPath,
+                script,
+                binPath,
+                false,
+                "",
+                "",
+                "",
+                List.of(),
+                List.of(),
                 "");
     }
 
     /** {@code jk build --aot-cache}: everything the client's layout/training step needs. */
-    private static ExecPlan aotCachePlan(Path dir, Path cache, JkBuild project, BuildLayout layout)
-            throws IOException {
+    private static ExecPlan aotCachePlan(Path dir, Path cache, JkBuild project, BuildLayout layout) throws IOException {
         Path mainJar = layout.mainJar();
         if (!Files.isRegularFile(mainJar)) {
             return ExecPlan.error("aot-cache", "jar not found at " + mainJar + " — build before --aot-cache");
@@ -448,14 +525,31 @@ public final class ExecPlans {
                 .orElse(false);
         String mainClass = "";
         if (!executableJar) {
-            mainClass =
-                    project.mainClass() != null ? project.mainClass() : MainClassScanner.scanUnique(mainJar);
+            mainClass = project.mainClass() != null ? project.mainClass() : MainClassScanner.scanUnique(mainJar);
         }
         Path javaHome = projectJavaHome(dir);
         return new ExecPlan(
-                null, "", "aot-cache", List.of(), dir.toString(), "", javaHome.toString(), false, false, List.of(),
-                List.of(), List.of(), "", "", "", executableJar, mainJar.toAbsolutePath().toString(), tier,
-                mainClass, libNames, libPaths,
+                null,
+                "",
+                "aot-cache",
+                List.of(),
+                dir.toString(),
+                "",
+                javaHome.toString(),
+                false,
+                false,
+                List.of(),
+                List.of(),
+                List.of(),
+                "",
+                "",
+                "",
+                executableJar,
+                mainJar.toAbsolutePath().toString(),
+                tier,
+                mainClass,
+                libNames,
+                libPaths,
                 "");
     }
 

@@ -21,8 +21,7 @@ class JkxDispatchTest {
 
     @Test
     void jkx_help_becomes_tool_run_help() {
-        assertThat(Jk.rewriteForProgramName(new String[] {"--help"}, "jkx"))
-                .containsExactly("tool", "run", "--help");
+        assertThat(Jk.rewriteForProgramName(new String[] {"--help"}, "jkx")).containsExactly("tool", "run", "--help");
     }
 
     @Test

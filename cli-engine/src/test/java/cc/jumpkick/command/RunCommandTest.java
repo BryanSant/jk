@@ -50,8 +50,7 @@ class RunCommandTest {
 
         // App args ride the `.` target (the first positional is always the target since
         // the 2026-07-09 inversion made `jk run` the universal runner).
-        int withArgs = run(
-                "run", "-C", tempDir.toString(), "--cache-dir", SharedTestCache.arg(), ".", "a", "b", "c");
+        int withArgs = run("run", "-C", tempDir.toString(), "--cache-dir", SharedTestCache.arg(), ".", "a", "b", "c");
         assertThat(withArgs).isEqualTo(3);
     }
 
@@ -59,13 +58,19 @@ class RunCommandTest {
     void project_without_declared_main_runs_via_the_scan(@TempDir Path tempDir) throws Exception {
         // No [application] main: after the build jk scans the compiled output for the single
         // `public static void main` (spring-boot plan §3.8).
-        run("new", "--group", "com.example", "--name", "widget", "--executable", "--layout", "traditional",
+        run(
+                "new",
+                "--group",
+                "com.example",
+                "--name",
+                "widget",
+                "--executable",
+                "--layout",
+                "traditional",
                 tempDir.toString());
         // Strip the scaffolded main declaration but keep the [application] table.
         Path toml = tempDir.resolve("jk.toml");
-        Files.writeString(
-                toml,
-                Files.readString(toml).replaceAll("(?m)^main\\s*=.*$", ""));
+        Files.writeString(toml, Files.readString(toml).replaceAll("(?m)^main\\s*=.*$", ""));
         Path src = tempDir.resolve("src/main/java/com/example/Main.java");
         Files.createDirectories(src.getParent());
         Files.writeString(src, """
@@ -87,14 +92,23 @@ class RunCommandTest {
                 name     = "lib-only"
                 version  = "0.1.0"
                 """);
-        String output = stripAnsi(runCapturingOutput(tempDir, exit -> assertThat(exit).isEqualTo(65))); // EX_DATAERR
+        String output =
+                stripAnsi(runCapturingOutput(tempDir, exit -> assertThat(exit).isEqualTo(65))); // EX_DATAERR
         assertThat(output).contains("Failed to run").contains("No valid main method was specified or detected");
     }
 
     @Test
     void project_with_ambiguous_main_returns_data_error(@TempDir Path tempDir) throws Exception {
         // No [application] main + two scanned candidates: the scan can't pick one either.
-        run("new", "--group", "com.example", "--name", "widget", "--executable", "--layout", "traditional",
+        run(
+                "new",
+                "--group",
+                "com.example",
+                "--name",
+                "widget",
+                "--executable",
+                "--layout",
+                "traditional",
                 tempDir.toString());
         Path toml = tempDir.resolve("jk.toml");
         Files.writeString(toml, Files.readString(toml).replaceAll("(?m)^main\\s*=.*$", ""));
@@ -113,7 +127,8 @@ class RunCommandTest {
                 }
                 """);
 
-        String output = stripAnsi(runCapturingOutput(tempDir, exit -> assertThat(exit).isEqualTo(65)));
+        String output =
+                stripAnsi(runCapturingOutput(tempDir, exit -> assertThat(exit).isEqualTo(65)));
         assertThat(output).contains("Failed to run").contains("Multiple main methods found");
     }
 

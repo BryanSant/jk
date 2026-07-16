@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.engine.http;
 
-import com.sun.net.httpserver.HttpExchange;
-import com.sun.net.httpserver.HttpServer;
 import cc.jumpkick.config.JkHttpConfig;
 import cc.jumpkick.engine.EngineTransport;
+import com.sun.net.httpserver.HttpExchange;
+import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -129,7 +129,8 @@ public final class HttpEngineServer implements AutoCloseable {
         readsRequireToken = !bind.getAddress().isLoopbackAddress();
         server = HttpServer.create(bind, 0);
         server.createContext("/", this::handle);
-        executor = Executors.newThreadPerTaskExecutor(Thread.ofVirtual().name("jk-http-", 0).factory());
+        executor = Executors.newThreadPerTaskExecutor(
+                Thread.ofVirtual().name("jk-http-", 0).factory());
         server.setExecutor(executor);
         server.start();
     }
@@ -159,8 +160,7 @@ public final class HttpEngineServer implements AutoCloseable {
         Files.deleteIfExists(tokenFile);
         try {
             Files.createFile(
-                    tokenFile,
-                    PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-------")));
+                    tokenFile, PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-------")));
         } catch (UnsupportedOperationException e) {
             Files.createFile(tokenFile); // non-POSIX filesystem (Windows): default ACLs are per-user
         }
@@ -199,7 +199,9 @@ public final class HttpEngineServer implements AutoCloseable {
     /** Every request funnels through here: gates first, then dispatch. */
     private void handle(HttpExchange exchange) throws IOException {
         try (exchange) {
-            if (!HostCheck.allowed(exchange.getRequestHeaders().getFirst("Host"), server.getAddress().getPort())) {
+            if (!HostCheck.allowed(
+                    exchange.getRequestHeaders().getFirst("Host"),
+                    server.getAddress().getPort())) {
                 sendText(exchange, 421, "unrecognized Host header\n");
                 return;
             }
@@ -388,7 +390,12 @@ public final class HttpEngineServer implements AutoCloseable {
                 ? Path.of(System.getProperty("user.home"))
                 : Path.of(requested);
         if (!dir.isAbsolute()) {
-            sendJson(exchange, 400, JsonOut.object().put("error", "dir must be an absolute path").toString());
+            sendJson(
+                    exchange,
+                    400,
+                    JsonOut.object()
+                            .put("error", "dir must be an absolute path")
+                            .toString());
             return;
         }
         dir = dir.normalize();
@@ -399,7 +406,12 @@ public final class HttpEngineServer implements AutoCloseable {
                 if (!name.startsWith(".") && Files.isDirectory(entry)) subdirs.add(name);
             }
         } catch (IOException | java.nio.file.DirectoryIteratorException e) {
-            sendJson(exchange, 400, JsonOut.object().put("error", "not a readable directory: " + dir).toString());
+            sendJson(
+                    exchange,
+                    400,
+                    JsonOut.object()
+                            .put("error", "not a readable directory: " + dir)
+                            .toString());
             return;
         }
         subdirs.sort(String.CASE_INSENSITIVE_ORDER);
@@ -423,7 +435,10 @@ public final class HttpEngineServer implements AutoCloseable {
         String body = new String(exchange.getRequestBody().readNBytes(MAX_BODY_BYTES), StandardCharsets.UTF_8);
         String dir = cc.jumpkick.plugin.protocol.Ndjson.str(body, "dir");
         if (dir == null || dir.isBlank()) {
-            sendJson(exchange, 400, JsonOut.object().put("error", "missing \"dir\"").toString());
+            sendJson(
+                    exchange,
+                    400,
+                    JsonOut.object().put("error", "missing \"dir\"").toString());
             return;
         }
         long requestId;
@@ -432,16 +447,21 @@ public final class HttpEngineServer implements AutoCloseable {
         } catch (IllegalStateException e) {
             // Engine is draining (graceful shutdown in progress) — refuse new builds.
             exchange.getResponseHeaders().set("Retry-After", "1");
-            sendJson(exchange, 503, JsonOut.object().put("error", e.getMessage()).toString());
+            sendJson(
+                    exchange, 503, JsonOut.object().put("error", e.getMessage()).toString());
             return;
         } catch (IllegalArgumentException e) {
-            sendJson(exchange, 400, JsonOut.object().put("error", e.getMessage()).toString());
+            sendJson(
+                    exchange, 400, JsonOut.object().put("error", e.getMessage()).toString());
             return;
         }
         sendJson(
                 exchange,
                 202,
-                JsonOut.object().put("requestId", requestId).put("events", "/api/events").toString());
+                JsonOut.object()
+                        .put("requestId", requestId)
+                        .put("events", "/api/events")
+                        .toString());
     }
 
     /** Cap on the {@code GET /api/history} list — a picker of recent runs, not a full dump. */
@@ -459,7 +479,10 @@ public final class HttpEngineServer implements AutoCloseable {
         if (id != null && !id.isBlank()) {
             var record = journal.recordFile(id);
             if (record.isEmpty()) {
-                sendJson(exchange, 404, JsonOut.object().put("error", "no such build: " + id).toString());
+                sendJson(
+                        exchange,
+                        404,
+                        JsonOut.object().put("error", "no such build: " + id).toString());
                 return;
             }
             sendJson(exchange, 200, Files.readString(record.get(), StandardCharsets.UTF_8));
@@ -481,8 +504,7 @@ public final class HttpEngineServer implements AutoCloseable {
             if (dirFilter != null && !e.dir().isEmpty() && !e.dir().equals(dirFilter)) continue;
             if (body.length() > 1) body.append(',');
             boolean global = e.dir().isEmpty();
-            String scope =
-                    e.step() == null ? (global ? "global" : "project") : (global ? "step" : "project/step");
+            String scope = e.step() == null ? (global ? "global" : "project") : (global ? "step" : "project/step");
             body.append(JsonOut.object()
                     .put("scope", scope)
                     .put("kind", e.kind())
@@ -540,11 +562,15 @@ public final class HttpEngineServer implements AutoCloseable {
     private void handleProject(HttpExchange exchange) throws IOException {
         String dir = decode(queryParam(exchange.getRequestURI().getQuery(), "dir"));
         if (dir == null || dir.isBlank()) {
-            sendJson(exchange, 400, JsonOut.object().put("error", "missing \"dir\"").toString());
+            sendJson(
+                    exchange,
+                    400,
+                    JsonOut.object().put("error", "missing \"dir\"").toString());
             return;
         }
         try {
-            var project = cc.jumpkick.config.JkBuildParser.parse(Path.of(dir).resolve("jk.toml")).project();
+            var project = cc.jumpkick.config.JkBuildParser.parse(Path.of(dir).resolve("jk.toml"))
+                    .project();
             sendJson(
                     exchange,
                     200,
@@ -568,7 +594,10 @@ public final class HttpEngineServer implements AutoCloseable {
         String query = exchange.getRequestURI().getQuery();
         var artifact = journal.artifact(decode(queryParam(query, "id")), decode(queryParam(query, "name")));
         if (artifact.isEmpty()) {
-            sendJson(exchange, 404, JsonOut.object().put("error", "no such artifact").toString());
+            sendJson(
+                    exchange,
+                    404,
+                    JsonOut.object().put("error", "no such artifact").toString());
             return;
         }
         sendText(exchange, 200, Files.readString(artifact.get(), StandardCharsets.UTF_8));
@@ -581,7 +610,10 @@ public final class HttpEngineServer implements AutoCloseable {
     private void handleHistoryDelete(HttpExchange exchange) throws IOException {
         String id = decode(queryParam(exchange.getRequestURI().getQuery(), "id"));
         if (id == null || !journal.delete(id)) {
-            sendJson(exchange, 404, JsonOut.object().put("error", "no such build").toString());
+            sendJson(
+                    exchange,
+                    404,
+                    JsonOut.object().put("error", "no such build").toString());
             return;
         }
         sendJson(exchange, 200, JsonOut.object().put("deleted", true).toString());

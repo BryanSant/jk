@@ -82,8 +82,7 @@ class EngineDelegateTest {
     }
 
     @Test
-    void newer_pin_is_refused_with_the_upgrade_error_and_older_unmaterialized_with_the_fetch_error()
-            throws Exception {
+    void newer_pin_is_refused_with_the_upgrade_error_and_older_unmaterialized_with_the_fetch_error() throws Exception {
         Path state = shortTempDir();
         EnginePaths.Paths p = EnginePaths.resolve(state);
         EngineServer server = new EngineServer(p, JkEngineConfig.DEFAULTS, "1.0.0-test", null);
@@ -114,13 +113,12 @@ class EngineDelegateTest {
     private static String requestError(Path socket, Path project) throws IOException {
         try (SocketChannel ch = SocketChannel.open(StandardProtocolFamily.UNIX)) {
             ch.connect(UnixDomainSocketAddress.of(socket));
-            BufferedWriter w = new BufferedWriter(
-                    new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
-            BufferedReader r = new BufferedReader(
-                    new InputStreamReader(Channels.newInputStream(ch), StandardCharsets.UTF_8));
+            BufferedWriter w =
+                    new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
+            BufferedReader r =
+                    new BufferedReader(new InputStreamReader(Channels.newInputStream(ch), StandardCharsets.UTF_8));
             w.write(EngineProtocol.singleBuildRequest(
-                    project.toString(), project.resolve("cache").toString(), null, 1, null, true, false, false,
-                    false));
+                    project.toString(), project.resolve("cache").toString(), null, 1, null, true, false, false, false));
             w.write('\n');
             w.flush();
             String line;

@@ -70,10 +70,10 @@ class EngineTakeoverTest {
     private static String helloVersion(Path socket) {
         try (SocketChannel ch = SocketChannel.open(StandardProtocolFamily.UNIX)) {
             ch.connect(UnixDomainSocketAddress.of(socket));
-            BufferedWriter w = new BufferedWriter(
-                    new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
-            BufferedReader r = new BufferedReader(
-                    new InputStreamReader(Channels.newInputStream(ch), StandardCharsets.UTF_8));
+            BufferedWriter w =
+                    new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
+            BufferedReader r =
+                    new BufferedReader(new InputStreamReader(Channels.newInputStream(ch), StandardCharsets.UTF_8));
             w.write(EngineProtocol.hello("probe"));
             w.write('\n');
             w.flush();
@@ -111,7 +111,8 @@ class EngineTakeoverTest {
         assertThat(helloVersion(EnginePaths.activeSocket(p))).isEqualTo("1.0.0-SNAPSHOT");
 
         // Rebuilt dev engine: same version, different content identity — must WIN (take over).
-        EngineServer rebuilt = new EngineServer(p, JkEngineConfig.DEFAULTS, null, "1.0.0-SNAPSHOT", "bbbbbbbbbbbb", null);
+        EngineServer rebuilt =
+                new EngineServer(p, JkEngineConfig.DEFAULTS, null, "1.0.0-SNAPSHOT", "bbbbbbbbbbbb", null);
         Thread rebuiltT = new Thread(() -> {
             try {
                 rebuilt.run();
@@ -177,8 +178,8 @@ class EngineTakeoverTest {
     }
 
     @Test
-    void displacement_watchdog_drains_an_engine_the_endpoint_no_longer_names(@org.junit.jupiter.api.io.TempDir Path unused)
-            throws Exception {
+    void displacement_watchdog_drains_an_engine_the_endpoint_no_longer_names(
+            @org.junit.jupiter.api.io.TempDir Path unused) throws Exception {
         Path state = shortTempDir();
         EnginePaths.Paths p = EnginePaths.resolve(state);
 

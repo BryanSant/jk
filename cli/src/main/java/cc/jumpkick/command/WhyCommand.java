@@ -14,6 +14,7 @@ import cc.jumpkick.model.command.Param;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -61,8 +62,8 @@ public final class WhyCommand implements CliCommand {
 
         CliOutput.out(Theme.active().gradientHeaderAnsi("Jk - Dependency Lookup"));
         for (int i = 0; i < report.matchNames().size(); i++) {
-            CliOutput.out(Coords.module(report.matchNames().get(i), report.matchVersions().get(i))
-                    + " is pulled in by:");
+            CliOutput.out(Coords.module(
+                            report.matchNames().get(i), report.matchVersions().get(i)) + " is pulled in by:");
             boolean any = false;
             for (int j = 0; j < report.paths().size(); j++) {
                 if (!report.pathOwners().get(j).equals(Integer.toString(i))) continue;
@@ -79,7 +80,7 @@ public final class WhyCommand implements CliCommand {
 
     /** Format a wire path ({@code module@version>module@version}) with colored coordinates. */
     private static String renderPath(String path) {
-        return java.util.Arrays.stream(path.split(">"))
+        return Arrays.stream(path.split(">"))
                 .map(step -> {
                     int at = step.lastIndexOf('@');
                     return at > 0 ? Coords.module(step.substring(0, at), step.substring(at + 1)) : step;
@@ -100,5 +101,4 @@ public final class WhyCommand implements CliCommand {
         int second = arg.indexOf(':', first + 1);
         return second < 0 ? arg : arg.substring(0, second);
     }
-
 }

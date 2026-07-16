@@ -121,11 +121,8 @@ public final class CachePruneScheduler {
         }
         if (candidate == null) {
             try {
-                candidate = ProcessHandle.current()
-                        .info()
-                        .command()
-                        .map(Path::of)
-                        .orElse(null);
+                candidate =
+                        ProcessHandle.current().info().command().map(Path::of).orElse(null);
             } catch (RuntimeException ignored) {
                 // fall through
             }
@@ -137,9 +134,7 @@ public final class CachePruneScheduler {
     }
 
     private static boolean isJavaLauncher(Path p) {
-        String name = p.getFileName() == null
-                ? ""
-                : p.getFileName().toString().toLowerCase(java.util.Locale.ROOT);
+        String name = p.getFileName() == null ? "" : p.getFileName().toString().toLowerCase(java.util.Locale.ROOT);
         return name.equals("java") || name.equals("java.exe") || name.equals("javaw.exe");
     }
 }

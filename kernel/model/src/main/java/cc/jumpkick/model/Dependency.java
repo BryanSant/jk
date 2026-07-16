@@ -104,7 +104,13 @@ public record Dependency(
      * caller routes through here, defaulting to no path source.
      */
     public Dependency(
-            String library, String module, VersionSelector version, GitSource gitSource, String sha256, boolean pinned, boolean optional) {
+            String library,
+            String module,
+            VersionSelector version,
+            GitSource gitSource,
+            String sha256,
+            boolean pinned,
+            boolean optional) {
         this(library, module, version, gitSource, sha256, pinned, optional, null);
     }
 
@@ -112,7 +118,13 @@ public record Dependency(
      * Back-compat constructor for the pre-{@code optional} 6-arg shape — every existing factory and
      * caller routes through here, defaulting to a non-optional (always-resolved) dependency.
      */
-    public Dependency(String library, String module, VersionSelector version, GitSource gitSource, String sha256, boolean pinned) {
+    public Dependency(
+            String library,
+            String module,
+            VersionSelector version,
+            GitSource gitSource,
+            String sha256,
+            boolean pinned) {
         this(library, module, version, gitSource, sha256, pinned, false, null);
     }
 

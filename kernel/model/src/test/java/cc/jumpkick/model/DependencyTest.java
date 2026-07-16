@@ -23,7 +23,7 @@ class DependencyTest {
     void a_dependency_cannot_be_both_git_and_path() {
         GitSource git = GitSource.of("https://x/y", "https://x/y", new GitRefSpec.Tag("v1"));
         assertThatThrownBy(() -> new Dependency(
-                "d", "g:a", VersionSelector.parse("=1"), git, null, true, false, new PathSource("../p")))
+                        "d", "g:a", VersionSelector.parse("=1"), git, null, true, false, new PathSource("../p")))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("more than one");
     }

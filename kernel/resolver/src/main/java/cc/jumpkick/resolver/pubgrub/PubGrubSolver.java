@@ -36,6 +36,7 @@ public class PubGrubSolver {
      * incompatibilities (android-plan A5e finding 13's perf wall).
      */
     private final Map<String, List<Incompatibility>> incompatibilitiesByPackage = new LinkedHashMap<>();
+
     protected String rootPkg;
 
     public PubGrubSolver(PackageSource source) {
@@ -81,8 +82,7 @@ public class PubGrubSolver {
         while (!changed.isEmpty()) {
             String pkg = removeFirst(changed);
             // Copy: handleConflict/derivations may append to the index mid-iteration.
-            for (Incompatibility inco :
-                    new ArrayList<>(incompatibilitiesByPackage.getOrDefault(pkg, List.of()))) {
+            for (Incompatibility inco : new ArrayList<>(incompatibilitiesByPackage.getOrDefault(pkg, List.of()))) {
                 PartialSolution.Relation rel = solution.relationTo(inco);
                 switch (rel.kind()) {
                     case SATISFIED -> handleConflict(inco);
@@ -298,7 +298,9 @@ public class PubGrubSolver {
         Set<String> pkgs = new LinkedHashSet<>();
         for (Term term : inco.terms()) pkgs.add(term.pkg());
         for (String pkg : pkgs) {
-            incompatibilitiesByPackage.computeIfAbsent(pkg, k -> new ArrayList<>()).add(inco);
+            incompatibilitiesByPackage
+                    .computeIfAbsent(pkg, k -> new ArrayList<>())
+                    .add(inco);
         }
     }
 

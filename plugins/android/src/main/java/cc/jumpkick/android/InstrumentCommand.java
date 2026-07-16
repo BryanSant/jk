@@ -42,7 +42,14 @@ final class InstrumentCommand {
         exec.label("adb install");
         if (adb(exec, adb, false, "install", "-r", app.toAbsolutePath().toString()) != 0) return 1;
         if (testApk != null
-                && adb(exec, adb, false, "install", "-r", testApk.toAbsolutePath().toString()) != 0) {
+                && adb(
+                                exec,
+                                adb,
+                                false,
+                                "install",
+                                "-r",
+                                testApk.toAbsolutePath().toString())
+                        != 0) {
             return 1;
         }
 
@@ -84,9 +91,11 @@ final class InstrumentCommand {
 
         void line(String line) {
             if (line.startsWith("INSTRUMENTATION_STATUS: class=")) {
-                currentClass = line.substring("INSTRUMENTATION_STATUS: class=".length()).strip();
+                currentClass = line.substring("INSTRUMENTATION_STATUS: class=".length())
+                        .strip();
             } else if (line.startsWith("INSTRUMENTATION_STATUS: test=")) {
-                currentTest = line.substring("INSTRUMENTATION_STATUS: test=".length()).strip();
+                currentTest =
+                        line.substring("INSTRUMENTATION_STATUS: test=".length()).strip();
             } else if (line.startsWith("INSTRUMENTATION_STATUS: stack=")) {
                 stack.setLength(0);
                 stack.append(line.substring("INSTRUMENTATION_STATUS: stack=".length()));

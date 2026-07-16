@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.command;
 
-import cc.jumpkick.cli.ProjectContext;
 import cc.jumpkick.cli.CliOutput;
 import cc.jumpkick.cli.GlobalOptions;
+import cc.jumpkick.cli.ProjectContext;
 import cc.jumpkick.cli.run.ConsoleSpec;
 import cc.jumpkick.cli.run.PipelineConsole;
 import cc.jumpkick.cli.theme.Theme;
@@ -12,7 +12,6 @@ import cc.jumpkick.model.command.Exit;
 import cc.jumpkick.model.command.Invocation;
 import cc.jumpkick.model.command.Opt;
 import cc.jumpkick.run.PipelineResult;
-import cc.jumpkick.run.StepContext;
 import cc.jumpkick.run.TestSummary;
 import cc.jumpkick.util.JkDirs;
 import java.io.IOException;
@@ -162,5 +161,4 @@ public final class TestCommand implements CliCommand {
     static String testFailureMessage(TestSummary testResult, PipelineResult result) {
         return (testResult != null && !testResult.allPassed()) ? "Tests failed" : "Build failed";
     }
-
 }

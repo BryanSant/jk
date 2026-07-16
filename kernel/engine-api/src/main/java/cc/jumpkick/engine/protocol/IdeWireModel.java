@@ -51,10 +51,9 @@ public record IdeWireModel(
 
     public static IdeWireModel error(String message) {
         return new IdeWireModel(
-                message, "", "", false, List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
-                List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
-                List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
-                "", "", 0, "", "", List.of());
+                message, "", "", false, List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
+                List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
+                List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), "", "", 0, "", "", List.of());
     }
 
     public String encode() {

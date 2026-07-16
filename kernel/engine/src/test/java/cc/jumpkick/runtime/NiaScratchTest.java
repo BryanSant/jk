@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.runtime;
 
-import cc.jumpkick.model.WorkspaceMerge;
-import cc.jumpkick.config.WorkspaceLocator;
-import cc.jumpkick.config.WorkspaceLoader;
-import cc.jumpkick.config.SessionContext;
 import cc.jumpkick.config.JkBuildParser;
+import cc.jumpkick.config.SessionContext;
+import cc.jumpkick.config.WorkspaceLoader;
+import cc.jumpkick.config.WorkspaceLocator;
 import cc.jumpkick.model.JkBuild;
+import cc.jumpkick.model.WorkspaceMerge;
 import cc.jumpkick.resolver.ResolveObserver;
 import cc.jumpkick.run.Pipeline;
 import cc.jumpkick.run.PipelineResult;
@@ -26,7 +26,8 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 @EnabledIfEnvironmentVariable(
         named = "JK_NIA_SCRATCH",
         matches = "1",
-        disabledReason = "the marathon NiA sweep — jk-examples/android/nowinandroid/run.sh is the canonical\n                end-to-end; export JK_NIA_SCRATCH=1 to drive it through the engine test harness instead")
+        disabledReason =
+                "the marathon NiA sweep — jk-examples/android/nowinandroid/run.sh is the canonical\n                end-to-end; export JK_NIA_SCRATCH=1 to drive it through the engine test harness instead")
 class NiaScratchTest {
 
     private static final Path NIA = Path.of(
@@ -78,9 +79,24 @@ class NiaScratchTest {
         if (!Files.isRegularFile(keystore)) {
             Path keytool = Path.of(System.getProperty("java.home"), "bin", "keytool");
             new ProcessBuilder(
-                            keytool.toString(), "-genkeypair", "-keystore", keystore.toString(),
-                            "-storepass", "rel-store-pass", "-keypass", "rel-key-pass", "-alias", "upload",
-                            "-keyalg", "RSA", "-keysize", "2048", "-validity", "30", "-dname", "CN=nia")
+                            keytool.toString(),
+                            "-genkeypair",
+                            "-keystore",
+                            keystore.toString(),
+                            "-storepass",
+                            "rel-store-pass",
+                            "-keypass",
+                            "rel-key-pass",
+                            "-alias",
+                            "upload",
+                            "-keyalg",
+                            "RSA",
+                            "-keysize",
+                            "2048",
+                            "-validity",
+                            "30",
+                            "-dname",
+                            "CN=nia")
                     .redirectErrorStream(true)
                     .start()
                     .waitFor();
@@ -107,10 +123,10 @@ class NiaScratchTest {
                         null,
                         true,
                         false,
-                false,
-                false,
-                java.util.Set.of(),
-                SessionContext.current())
+                        false,
+                        false,
+                        java.util.Set.of(),
+                        SessionContext.current())
                 .withVariant(
                         "release|contentType=demo",
                         java.util.Map.of(
@@ -145,7 +161,8 @@ class NiaScratchTest {
         Pipeline lock = LockPipelines.lockPipeline(
                 module, build, cache, null, java.util.List.of(), true, false, ResolveObserver.NOOP, null);
         PipelineResult lockResult = lock.run();
-        if (!lockResult.errors().isEmpty()) return "lock: " + lockResult.errors().getFirst();
+        if (!lockResult.errors().isEmpty())
+            return "lock: " + lockResult.errors().getFirst();
         BuildPipelines.Inputs in = new BuildPipelines.Inputs(
                 module,
                 cache,

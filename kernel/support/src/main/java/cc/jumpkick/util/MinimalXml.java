@@ -164,8 +164,8 @@ public final class MinimalXml {
                 } else if (lookingAt("<!")) {
                     // DOCTYPE (or any other markup declaration): structurally rejected — this
                     // parser has no entity resolution to harden.
-                    throw new IllegalArgumentException("markup declarations are not supported: "
-                            + s.substring(i, Math.min(i + 20, s.length())));
+                    throw new IllegalArgumentException(
+                            "markup declarations are not supported: " + s.substring(i, Math.min(i + 20, s.length())));
                 } else if (lookingAt("<")) {
                     if (root != null) throw new IllegalArgumentException("content after root element");
                     root = element();
@@ -203,8 +203,8 @@ public final class MinimalXml {
                     i += 2;
                     String closing = name();
                     if (!closing.equals(parent.name())) {
-                        throw new IllegalArgumentException("mismatched </" + closing + ">, expected </"
-                                + parent.name() + ">");
+                        throw new IllegalArgumentException(
+                                "mismatched </" + closing + ">, expected </" + parent.name() + ">");
                     }
                     skipWhitespace();
                     expect('>');
@@ -282,22 +282,23 @@ public final class MinimalXml {
                 int semi = raw.indexOf(';', amp);
                 if (semi < 0) throw new IllegalArgumentException("unterminated entity reference");
                 String entity = raw.substring(amp + 1, semi);
-                out.append(switch (entity) {
-                    case "amp" -> "&";
-                    case "lt" -> "<";
-                    case "gt" -> ">";
-                    case "quot" -> "\"";
-                    case "apos" -> "'";
-                    default -> {
-                        if (entity.startsWith("#x") || entity.startsWith("#X")) {
-                            yield Character.toString(Integer.parseInt(entity.substring(2), 16));
-                        }
-                        if (entity.startsWith("#")) {
-                            yield Character.toString(Integer.parseInt(entity.substring(1)));
-                        }
-                        throw new IllegalArgumentException("unsupported entity &" + entity + ";");
-                    }
-                });
+                out.append(
+                        switch (entity) {
+                            case "amp" -> "&";
+                            case "lt" -> "<";
+                            case "gt" -> ">";
+                            case "quot" -> "\"";
+                            case "apos" -> "'";
+                            default -> {
+                                if (entity.startsWith("#x") || entity.startsWith("#X")) {
+                                    yield Character.toString(Integer.parseInt(entity.substring(2), 16));
+                                }
+                                if (entity.startsWith("#")) {
+                                    yield Character.toString(Integer.parseInt(entity.substring(1)));
+                                }
+                                throw new IllegalArgumentException("unsupported entity &" + entity + ";");
+                            }
+                        });
                 pos = semi + 1;
                 amp = raw.indexOf('&', pos);
             }
@@ -355,8 +356,11 @@ public final class MinimalXml {
             case Comment c -> sb.append("<!--").append(c.value()).append("-->");
             case Element e -> {
                 sb.append('<').append(e.name());
-                e.attributes().forEach((k, v) ->
-                        sb.append(' ').append(k).append("=\"").append(escapeAttr(v)).append('"'));
+                e.attributes().forEach((k, v) -> sb.append(' ')
+                        .append(k)
+                        .append("=\"")
+                        .append(escapeAttr(v))
+                        .append('"'));
                 List<Node> kids = e.children();
                 if (kids.isEmpty()) {
                     sb.append(" />");

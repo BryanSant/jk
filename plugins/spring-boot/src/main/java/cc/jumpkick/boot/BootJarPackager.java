@@ -154,13 +154,15 @@ public final class BootJarPackager {
         StringBuilder sb = new StringBuilder();
         sb.append("- \"dependencies\":\n");
         for (Lib lib : libs) {
-            if (!lib.snapshot()) sb.append("  - \"").append(LIB_PREFIX).append(lib.fileName()).append("\"\n");
+            if (!lib.snapshot())
+                sb.append("  - \"").append(LIB_PREFIX).append(lib.fileName()).append("\"\n");
         }
         sb.append("- \"spring-boot-loader\":\n");
         sb.append("  - \"").append(LOADER_PREFIX).append("\"\n");
         sb.append("- \"snapshot-dependencies\":\n");
         for (Lib lib : libs) {
-            if (lib.snapshot()) sb.append("  - \"").append(LIB_PREFIX).append(lib.fileName()).append("\"\n");
+            if (lib.snapshot())
+                sb.append("  - \"").append(LIB_PREFIX).append(lib.fileName()).append("\"\n");
         }
         sb.append("- \"application\":\n");
         sb.append("  - \"BOOT-INF/classes/\"\n");
@@ -356,8 +358,17 @@ public final class BootJarPackager {
                 Map<String, String> attributes,
                 long timestampEpochSeconds) {
             this(
-                    classesDir, libs, loaderJar, outputJar, startClass, bootVersion, attributes, Map.of(), null,
-                    List.of(), timestampEpochSeconds);
+                    classesDir,
+                    libs,
+                    loaderJar,
+                    outputJar,
+                    startClass,
+                    bootVersion,
+                    attributes,
+                    Map.of(),
+                    null,
+                    List.of(),
+                    timestampEpochSeconds);
         }
 
         /** Back-compat constructor: build-info + SBOM, no AOT output. */
@@ -373,8 +384,17 @@ public final class BootJarPackager {
                 byte[] sbom,
                 long timestampEpochSeconds) {
             this(
-                    classesDir, libs, loaderJar, outputJar, startClass, bootVersion, attributes, buildInfo, sbom,
-                    List.of(), timestampEpochSeconds);
+                    classesDir,
+                    libs,
+                    loaderJar,
+                    outputJar,
+                    startClass,
+                    bootVersion,
+                    attributes,
+                    buildInfo,
+                    sbom,
+                    List.of(),
+                    timestampEpochSeconds);
         }
 
         /**

@@ -106,14 +106,16 @@ final class AndroidDeps {
 
     /** Extract the per-OS aapt2 binary from its Maven wrapper jar into {@code destDir}. */
     static Path extractAapt2(Path aapt2Jar, Path destDir) throws IOException {
-        boolean windows = System.getProperty("os.name", "").toLowerCase(java.util.Locale.ROOT).contains("win");
+        boolean windows = System.getProperty("os.name", "")
+                .toLowerCase(java.util.Locale.ROOT)
+                .contains("win");
         String binaryName = windows ? "aapt2.exe" : "aapt2";
         Path out = Files.createDirectories(destDir).resolve(binaryName);
         try (java.util.zip.ZipFile zip = new java.util.zip.ZipFile(aapt2Jar.toFile())) {
             var entry = zip.getEntry(binaryName);
             if (entry == null) {
-                throw new IOException("no " + binaryName + " inside " + aapt2Jar.getFileName()
-                        + " — wrong classifier for this OS?");
+                throw new IOException(
+                        "no " + binaryName + " inside " + aapt2Jar.getFileName() + " — wrong classifier for this OS?");
             }
             try (var in = zip.getInputStream(entry)) {
                 Files.copy(in, out, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
@@ -131,13 +133,16 @@ final class AndroidDeps {
      * tooling (Play upload, crash retrace) reads.
      */
     static void copyRetraceArtifacts(PackageIo io) throws IOException {
-        Path mapping = io.stepOutput("android-r8").map(dir -> dir.resolve("mapping")).orElse(null);
+        Path mapping =
+                io.stepOutput("android-r8").map(dir -> dir.resolve("mapping")).orElse(null);
         if (mapping == null || !Files.isDirectory(mapping)) return;
         Path targetR8 = io.artifactPath().getParent().getParent().resolve("r8");
         Files.createDirectories(targetR8);
         try (var listing = Files.list(mapping)) {
             for (Path file : (Iterable<Path>) listing.sorted()::iterator) {
-                Files.copy(file, targetR8.resolve(file.getFileName().toString()),
+                Files.copy(
+                        file,
+                        targetR8.resolve(file.getFileName().toString()),
                         java.nio.file.StandardCopyOption.REPLACE_EXISTING);
             }
         }

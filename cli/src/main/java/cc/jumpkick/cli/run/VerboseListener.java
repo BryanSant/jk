@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.cli.run;
 
-import cc.jumpkick.plugin.build.Phase;
 import cc.jumpkick.cli.theme.Theme;
 import cc.jumpkick.cli.tui.Glyphs;
+import cc.jumpkick.plugin.build.Phase;
 import cc.jumpkick.run.PipelineListener;
 import cc.jumpkick.run.PipelineResult;
 import cc.jumpkick.run.PipelineView;
@@ -52,8 +52,8 @@ public final class VerboseListener implements PipelineListener {
 
     @Override
     public void stepStart(String step, Phase phase, int ticks) {
-        out.println("  " + Theme.colorize("·", Theme.active().normalGray()) + " " + qualified(step, phase)
-                + " (ticks: " + ticks + ")");
+        out.println("  " + Theme.colorize("·", Theme.active().normalGray()) + " " + qualified(step, phase) + " (ticks: "
+                + ticks + ")");
     }
 
     @Override
@@ -95,8 +95,8 @@ public final class VerboseListener implements PipelineListener {
         if ("verbatim".equals(code)) {
             err.println(message);
         } else {
-            err.println(
-                    "    " + Theme.colorize(Glyphs.CROSS, Theme.active().error()) + " " + step + "/" + code + ": " + message);
+            err.println("    " + Theme.colorize(Glyphs.CROSS, Theme.active().error()) + " " + step + "/" + code + ": "
+                    + message);
         }
     }
 

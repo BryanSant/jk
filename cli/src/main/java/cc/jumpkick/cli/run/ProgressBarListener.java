@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.cli.run;
 
-import cc.jumpkick.plugin.build.Phase;
 import cc.jumpkick.cli.Ansi;
 import cc.jumpkick.cli.theme.Gradient;
 import cc.jumpkick.cli.theme.Theme;
 import cc.jumpkick.cli.tui.Glyphs;
+import cc.jumpkick.plugin.build.Phase;
 import cc.jumpkick.run.PipelineListener;
 import cc.jumpkick.run.PipelineResult;
 import cc.jumpkick.run.PipelineView;
@@ -155,8 +155,8 @@ public final class ProgressBarListener implements PipelineListener {
         if (ConsoleSpec.isCompilerCode(code)) {
             writeAboveInternal(ConsoleSpec.compilerWarning(step, message));
         } else {
-            writeAboveInternal(
-                    renderDiagnostic(Glyphs.BANG + " Warning", Theme.active().warning().bold(), step, code, message));
+            writeAboveInternal(renderDiagnostic(
+                    Glyphs.BANG + " Warning", Theme.active().warning().bold(), step, code, message));
         }
     }
 
@@ -171,8 +171,8 @@ public final class ProgressBarListener implements PipelineListener {
         if ("verbatim".equals(code) || ConsoleSpec.isCompilerCode(code)) {
             writeAboveInternal(ConsoleSpec.renderError(step, code, message));
         } else {
-            writeAboveInternal(
-                    renderDiagnostic(Glyphs.CROSS + " Error", Theme.active().error().bold(), step, code, message));
+            writeAboveInternal(renderDiagnostic(
+                    Glyphs.CROSS + " Error", Theme.active().error().bold(), step, code, message));
         }
     }
 
@@ -257,7 +257,8 @@ public final class ProgressBarListener implements PipelineListener {
         String sep = Theme.colorize("›", Theme.active().darkGray());
         out.print(sep);
         out.print(" ");
-        out.print(Theme.colorize(pipelineDisplayName, Theme.active().brightGreen().bold()));
+        out.print(
+                Theme.colorize(pipelineDisplayName, Theme.active().brightGreen().bold()));
         out.print(" ");
         out.print(sep);
         out.print(" ");
@@ -365,8 +366,8 @@ public final class ProgressBarListener implements PipelineListener {
         AttributedStyle strike = Theme.active().dim().crossedOut();
         out.print(Theme.colorize("›", Theme.active().darkGray()));
         out.print(" ");
-        out.print(
-                Theme.colorize(pipelineDisplayName, Theme.active().warning().bold().crossedOut()));
+        out.print(Theme.colorize(
+                pipelineDisplayName, Theme.active().warning().bold().crossedOut()));
         out.print(" ");
         out.print(Theme.colorize("›", Theme.active().darkGray().crossedOut()));
         out.print(" ");

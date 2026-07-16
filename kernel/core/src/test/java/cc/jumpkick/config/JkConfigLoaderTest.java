@@ -135,5 +135,4 @@ class JkConfigLoaderTest {
         assertThat(unset.rebuildOr(true)).isTrue(); // both empty -> fallback
         assertThat(unset.rebuildOr(false)).isFalse();
     }
-
 }

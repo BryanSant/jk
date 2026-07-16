@@ -98,8 +98,7 @@ class ThirdPartyPluginTest {
 
                 [hello]
                 greeting = "yo"
-                """
-                .formatted(repo.toUri(), GROUP, ARTIFACT, VERSION));
+                """.formatted(repo.toUri(), GROUP, ARTIFACT, VERSION));
 
         // 1. Pre-lock: the declaration is unresolved — the parse stays soft, no config yet.
         JkBuild build = JkBuildParser.parse(project.resolve("jk.toml"));
@@ -108,13 +107,19 @@ class ThirdPartyPluginTest {
         // 2. Lock: resolve the coordinate exactly as lock-plugins does — fetch, SHA-pin, extract.
         Cas cas = new Cas(cache);
         RepoGroup repos = RepoGroupBuilder.buildFor(build, null, cas);
-        var fetched = repos.tryFetchArtifact(Coordinate.of(GROUP, ARTIFACT, VERSION)).orElseThrow();
+        var fetched =
+                repos.tryFetchArtifact(Coordinate.of(GROUP, ARTIFACT, VERSION)).orElseThrow();
         var entry = new Lockfile.PluginEntry(
                 GROUP + ":" + ARTIFACT, VERSION, "sha256:" + fetched.fetched().sha256());
         LockfileWriter.write(
                 new Lockfile(
-                        Lockfile.CURRENT_VERSION, "test", Lockfile.RESOLUTION_ALGORITHM, null, null,
-                        List.of(), List.of(entry)),
+                        Lockfile.CURRENT_VERSION,
+                        "test",
+                        Lockfile.RESOLUTION_ALGORITHM,
+                        null,
+                        null,
+                        List.of(),
+                        List.of(entry)),
                 project.resolve("jk.lock"));
         assertThat(PluginDescriptorOps.ensureMaterialized(project, cache)).isTrue();
 
@@ -122,13 +127,11 @@ class ThirdPartyPluginTest {
         build = JkBuildParser.reparse(project.resolve("jk.toml"));
         assertThat(build.pluginConfig("hello")).isPresent();
         assertThat(build.pluginConfig("hello").orElseThrow().string("greeting")).isEqualTo("yo");
-        assertThat(PluginContributions.javacArgs(build, project, Set.of()))
-                .contains("-Averbose.greeting=yo");
+        assertThat(PluginContributions.javacArgs(build, project, Set.of())).contains("-Averbose.greeting=yo");
 
         // 3b. With the plugin resolved, a genuinely unowned table is the plan's hard error.
         Files.writeString(
-                project.resolve("jk.toml"),
-                Files.readString(project.resolve("jk.toml")) + "\n[bogus]\nx = 1\n");
+                project.resolve("jk.toml"), Files.readString(project.resolve("jk.toml")) + "\n[bogus]\nx = 1\n");
         assertThatThrownBy(() -> JkBuildParser.reparse(project.resolve("jk.toml")))
                 .isInstanceOf(JkBuildParseException.class)
                 .hasMessageContaining("[bogus] is not owned by any installed plugin");
@@ -158,8 +161,7 @@ class ThirdPartyPluginTest {
         Path src = Files.createTempDirectory("hello-plugin-src");
         Path srcFile = src.resolve("HelloPluginMain.java");
         Files.writeString(srcFile, MAIN);
-        int rc = ToolProvider.getSystemJavaCompiler()
-                .run(null, null, null, "-d", src.toString(), srcFile.toString());
+        int rc = ToolProvider.getSystemJavaCompiler().run(null, null, null, "-d", src.toString(), srcFile.toString());
         if (rc != 0) throw new IllegalStateException("fixture compile failed");
 
         Path dir = Files.createDirectories(
@@ -181,8 +183,7 @@ class ThirdPartyPluginTest {
                 <project><modelVersion>4.0.0</modelVersion>
                 <groupId>%s</groupId><artifactId>%s</artifactId><version>%s</version>
                 </project>
-                """
-                .formatted(GROUP, ARTIFACT, VERSION));
+                """.formatted(GROUP, ARTIFACT, VERSION));
         return repo;
     }
 }

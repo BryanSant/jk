@@ -181,7 +181,8 @@ public final class EffortWeights {
             int count,
             int staticWeight,
             java.util.Collection<String> projectDirs) {
-        return learned(timings, BuildMetrics.load(BuildMetrics.defaultFile()), dir, step, count, staticWeight, projectDirs);
+        return learned(
+                timings, BuildMetrics.load(BuildMetrics.defaultFile()), dir, step, count, staticWeight, projectDirs);
     }
 
     static int learned(

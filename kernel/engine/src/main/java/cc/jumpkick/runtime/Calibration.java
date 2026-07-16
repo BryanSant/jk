@@ -5,8 +5,8 @@ import cc.jumpkick.jdk.GlobalDefaultJdk;
 import cc.jumpkick.jdk.JdkLts;
 import cc.jumpkick.jdk.JdkRegistry;
 import cc.jumpkick.jdk.JdkResolution;
-import cc.jumpkick.util.JkDirs;
 import cc.jumpkick.model.JkVersion;
+import cc.jumpkick.util.JkDirs;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -289,7 +289,8 @@ public final class Calibration {
      * construction, so cold estimates scale with the measured host.
      */
     static double deriveMsPerWeight(long forkMs, long javacMs) {
-        int weight = EffortWeights.TEST_STARTUP + EffortWeights.COMPILE_FLOOR + EffortWeights.compileWeight(PROBE_SOURCES);
+        int weight =
+                EffortWeights.TEST_STARTUP + EffortWeights.COMPILE_FLOOR + EffortWeights.compileWeight(PROBE_SOURCES);
         return (forkMs + javacMs) / (double) Math.max(1, weight);
     }
 
@@ -317,14 +318,17 @@ public final class Calibration {
 
     private static double safeLoadAverage() {
         try {
-            return java.lang.management.ManagementFactory.getOperatingSystemMXBean().getSystemLoadAverage();
+            return java.lang.management.ManagementFactory.getOperatingSystemMXBean()
+                    .getSystemLoadAverage();
         } catch (Exception e) {
             return -1;
         }
     }
 
     private static boolean isWindows() {
-        return System.getProperty("os.name", "").toLowerCase(java.util.Locale.ROOT).contains("win");
+        return System.getProperty("os.name", "")
+                .toLowerCase(java.util.Locale.ROOT)
+                .contains("win");
     }
 
     private static void deleteTree(Path dir) {

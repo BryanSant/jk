@@ -47,8 +47,7 @@ public final class PluginDescriptorStore {
         if (!Files.isRegularFile(lock)) return Optional.empty();
         try {
             for (Lockfile.PluginEntry e : LockfileReader.read(lock).plugins()) {
-                if (e.coordinate().equals(decl.coordinate())
-                        && e.version().equals(decl.version())) {
+                if (e.coordinate().equals(decl.coordinate()) && e.version().equals(decl.version())) {
                     return Optional.of(e);
                 }
             }
@@ -70,8 +69,7 @@ public final class PluginDescriptorStore {
         if (!Files.isRegularFile(file)) return Optional.empty();
         try {
             PluginDescriptor parsed = PluginDescriptors.parse(
-                    Files.readString(file, StandardCharsets.UTF_8),
-                    decl.coordinateWithVersion() + "!jk-plugin.toml");
+                    Files.readString(file, StandardCharsets.UTF_8), decl.coordinateWithVersion() + "!jk-plugin.toml");
             BY_SHA.put(sha, parsed);
             return Optional.of(parsed);
         } catch (IOException e) {

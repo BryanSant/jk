@@ -11,12 +11,7 @@ import cc.jumpkick.model.GitSource;
 import cc.jumpkick.model.JkBuild;
 import cc.jumpkick.model.ObjectStoreConfig;
 import cc.jumpkick.model.PathSource;
-import cc.jumpkick.plugin.PluginConfig;
 import cc.jumpkick.model.PluginDeclaration;
-import cc.jumpkick.plugin.manifest.PluginContributions;
-import cc.jumpkick.plugin.manifest.PluginDescriptor;
-import cc.jumpkick.plugin.manifest.PluginDescriptorStore;
-import cc.jumpkick.plugin.manifest.PluginTableRegistry;
 import cc.jumpkick.model.Profile;
 import cc.jumpkick.model.Profiles;
 import cc.jumpkick.model.RepositorySpec;
@@ -25,6 +20,11 @@ import cc.jumpkick.model.Variants;
 import cc.jumpkick.model.VersionSelector;
 import cc.jumpkick.model.Workspace;
 import cc.jumpkick.model.Workspace.WorkspaceDependency;
+import cc.jumpkick.plugin.PluginConfig;
+import cc.jumpkick.plugin.manifest.PluginContributions;
+import cc.jumpkick.plugin.manifest.PluginDescriptor;
+import cc.jumpkick.plugin.manifest.PluginDescriptorStore;
+import cc.jumpkick.plugin.manifest.PluginTableRegistry;
 import cc.jumpkick.util.GitUrl;
 import java.io.IOException;
 import java.net.URI;
@@ -103,7 +103,10 @@ public final class JkBuildParser {
         if (cached != null) {
             return cached;
         }
-        JkBuild parsed = parse(Files.readString(file), LibraryCatalog.layered(), file.toAbsolutePath().getParent());
+        JkBuild parsed = parse(
+                Files.readString(file),
+                LibraryCatalog.layered(),
+                file.toAbsolutePath().getParent());
         PARSE_CACHE.put(key, parsed);
         return parsed;
     }
@@ -174,8 +177,20 @@ public final class JkBuildParser {
         JkBuild.FormatConfig format = parseFormat(result);
         Variants variants = parseVariants(result, workspace, effective, installedManifests);
         return new JkBuild(
-                project, deps, repos, profiles, features, workspace, manifest, plugins, application, nativeConfig,
-                pluginConfigs, build, format, variants);
+                project,
+                deps,
+                repos,
+                profiles,
+                features,
+                workspace,
+                manifest,
+                plugins,
+                application,
+                nativeConfig,
+                pluginConfigs,
+                build,
+                format,
+                variants);
     }
 
     /**
@@ -213,7 +228,8 @@ public final class JkBuildParser {
                     throw new JkBuildParseException("[variants." + dim + "]." + key
                             + " must be a table (a value's overlay) — or `default = \"<value>\"`");
                 }
-                values.put(key, parseVariantValue("variants." + dim + "." + key, valueTable, workspace, catalog, byTable));
+                values.put(
+                        key, parseVariantValue("variants." + dim + "." + key, valueTable, workspace, catalog, byTable));
             }
             try {
                 dimensions.add(new Variants.Dimension(dim, defaultValue, values));
@@ -225,7 +241,10 @@ public final class JkBuildParser {
     }
 
     private static Variants.Value parseVariantValue(
-            String where, TomlTable valueTable, Workspace workspace, LibraryCatalog catalog,
+            String where,
+            TomlTable valueTable,
+            Workspace workspace,
+            LibraryCatalog catalog,
             Map<String, PluginDescriptor> pluginsByTable) {
         List<String> extraSrc = List.of();
         EnumMap<Scope, List<Dependency>> deps = new EnumMap<>(Scope.class);
@@ -241,8 +260,8 @@ public final class JkBuildParser {
                 if (scopeTable == null) {
                     throw new JkBuildParseException("[" + where + "." + key + "] must be a dependency table");
                 }
-                List<Dependency> parsed = parseScopeTable(
-                        scopeTable, new ArrayList<>(scopeTable.keySet()), scope, workspace, catalog);
+                List<Dependency> parsed =
+                        parseScopeTable(scopeTable, new ArrayList<>(scopeTable.keySet()), scope, workspace, catalog);
                 if (!parsed.isEmpty()) deps.put(scope, parsed);
                 continue;
             }
@@ -250,10 +269,11 @@ public final class JkBuildParser {
             if (plugin != null) {
                 TomlTable overlay = valueTable.getTable(key);
                 if (overlay == null) {
-                    throw new JkBuildParseException("[" + where + "." + key + "] must be a table of ["
-                            + plugin.table() + "] key overlays");
+                    throw new JkBuildParseException(
+                            "[" + where + "." + key + "] must be a table of [" + plugin.table() + "] key overlays");
                 }
-                pluginOverlays.put(plugin.table(), PluginTableRegistry.validateOverlay(plugin, where + "." + key, overlay));
+                pluginOverlays.put(
+                        plugin.table(), PluginTableRegistry.validateOverlay(plugin, where + "." + key, overlay));
                 continue;
             }
             throw new JkBuildParseException("[" + where + "]." + key + " is not an overlayable section —"
@@ -389,7 +409,8 @@ public final class JkBuildParser {
         } else {
             layout = JkBuild.Layout.AUTO;
         }
-        return new JkBuild.Project(group, name, version, jdk, java, kotlin, sourcesMode, description, m2install, layout);
+        return new JkBuild.Project(
+                group, name, version, jdk, java, kotlin, sourcesMode, description, m2install, layout);
     }
 
     /**
@@ -530,41 +551,41 @@ public final class JkBuildParser {
     // Dependencies
     // ---------------------------------------------------------------------
 
-    private static JkBuild.Dependencies parseDependencies(
-            TomlTable root, Workspace workspace, LibraryCatalog catalog) {
+    private static JkBuild.Dependencies parseDependencies(TomlTable root, Workspace workspace, LibraryCatalog catalog) {
         EnumMap<Scope, List<Dependency>> byScope = new EnumMap<>(Scope.class);
 
         // [dependencies] → MAIN scope (all entries are flat deps, no sub-tables)
         TomlTable mainDeps = root.getTable("dependencies");
         if (mainDeps != null) {
-            List<Dependency> parsed = parseScopeTable(
-                    mainDeps, new ArrayList<>(mainDeps.keySet()), Scope.MAIN, workspace, catalog);
+            List<Dependency> parsed =
+                    parseScopeTable(mainDeps, new ArrayList<>(mainDeps.keySet()), Scope.MAIN, workspace, catalog);
             if (!parsed.isEmpty()) byScope.put(Scope.MAIN, parsed);
         }
 
         // Top-level scope tables: [test-dependencies], [provided-dependencies], etc.
-        addScopeDeps(byScope, root, Scope.TEST,      workspace, catalog);
-        addScopeDeps(byScope, root, Scope.PROVIDED,  workspace, catalog);
+        addScopeDeps(byScope, root, Scope.TEST, workspace, catalog);
+        addScopeDeps(byScope, root, Scope.PROVIDED, workspace, catalog);
         addScopeDeps(byScope, root, Scope.PROCESSOR, workspace, catalog);
-        addScopeDeps(byScope, root, Scope.EXPORT,    workspace, catalog);
-        addScopeDeps(byScope, root, Scope.RUNTIME,   workspace, catalog);
+        addScopeDeps(byScope, root, Scope.EXPORT, workspace, catalog);
+        addScopeDeps(byScope, root, Scope.RUNTIME, workspace, catalog);
         // [platform-dependencies] — BOM imports (version constraints, not classpath entries).
-        addScopeDeps(byScope, root, Scope.PLATFORM,  workspace, catalog);
+        addScopeDeps(byScope, root, Scope.PLATFORM, workspace, catalog);
         // Dev-loop scopes (spring-boot plan §3.2): run-time only / run+test, never packaged.
-        addScopeDeps(byScope, root, Scope.DEV,       workspace, catalog);
-        addScopeDeps(byScope, root, Scope.TEST_DEV,  workspace, catalog);
+        addScopeDeps(byScope, root, Scope.DEV, workspace, catalog);
+        addScopeDeps(byScope, root, Scope.TEST_DEV, workspace, catalog);
 
         return new JkBuild.Dependencies(byScope);
     }
 
     private static void addScopeDeps(
             EnumMap<Scope, List<Dependency>> byScope,
-            TomlTable root, Scope scope,
-            Workspace workspace, LibraryCatalog catalog) {
+            TomlTable root,
+            Scope scope,
+            Workspace workspace,
+            LibraryCatalog catalog) {
         TomlTable table = root.getTable(scope.tomlSection());
         if (table == null) return;
-        List<Dependency> parsed = parseScopeTable(
-                table, new ArrayList<>(table.keySet()), scope, workspace, catalog);
+        List<Dependency> parsed = parseScopeTable(table, new ArrayList<>(table.keySet()), scope, workspace, catalog);
         if (!parsed.isEmpty()) byScope.put(scope, parsed);
     }
 
@@ -672,8 +693,11 @@ public final class JkBuildParser {
             default -> {
                 char first = value.charAt(0);
                 yield Character.isDigit(first)
-                        || first == '^' || first == '~' || first == '='
-                        || first == '>' || first == '<';
+                        || first == '^'
+                        || first == '~'
+                        || first == '='
+                        || first == '>'
+                        || first == '<';
             }
         };
     }
@@ -733,8 +757,8 @@ public final class JkBuildParser {
         if (sourceCount == 0 && !platformManaged) {
             throw new JkBuildParseException(
                     displayPath + " must set exactly one of `version`, `git`, `path`, `sha256`, or"
-                    + " `workspace = true` — or `group`/`name` alone for a version managed by a"
-                    + " [platform-dependencies] BOM");
+                            + " `workspace = true` — or `group`/`name` alone for a version managed by a"
+                            + " [platform-dependencies] BOM");
         }
         if (sourceCount > 1 && !sha256WithVersion) {
             throw new JkBuildParseException(displayPath
@@ -793,7 +817,7 @@ public final class JkBuildParser {
             // git deps are always pure discovery: the coordinate (group, name) and
             // version come from the cloned repo's jk.toml. Specifying `group`,
             // `name`, or `version` in the dep entry is an error.
-            for (String forbidden : new String[]{"group", "name", "version"}) {
+            for (String forbidden : new String[] {"group", "name", "version"}) {
                 if (entry.contains(forbidden)) {
                     throw new JkBuildParseException(displayPath
                             + " with `git` must not set `" + forbidden + "` — the coordinate"
@@ -807,7 +831,7 @@ public final class JkBuildParser {
             // Like git, a path dep is pure discovery: the coordinate and version are read from the
             // target project when it's built (its jk.toml for a jk project, or the derived GAV for a
             // Gradle/Maven project). Specifying `group`/`name`/`version` here is an error.
-            for (String forbidden : new String[]{"group", "name", "version"}) {
+            for (String forbidden : new String[] {"group", "name", "version"}) {
                 if (entry.contains(forbidden)) {
                     throw new JkBuildParseException(displayPath
                             + " with `path` must not set `" + forbidden + "` — the coordinate"
@@ -921,8 +945,7 @@ public final class JkBuildParser {
                         displayPath + " must set `tag`, `branch`, or `rev` (or embed the ref in the URL)");
             }
             if (set > 1) {
-                throw new JkBuildParseException(
-                        displayPath + " must set exactly one of `tag`, `branch`, or `rev`");
+                throw new JkBuildParseException(displayPath + " must set exactly one of `tag`, `branch`, or `rev`");
             }
             if (tag != null) {
                 ref = new GitRefSpec.Tag(tag);
@@ -1166,8 +1189,8 @@ public final class JkBuildParser {
             } else if (value instanceof TomlTable entry) {
                 out.put(name, parseWorkspaceDepEntry(name, entry, catalog));
             } else {
-                throw new JkBuildParseException(displayPath + " must be a version-string shorthand"
-                        + " (e.g. \"1.2.3\") or an inline table");
+                throw new JkBuildParseException(
+                        displayPath + " must be a version-string shorthand" + " (e.g. \"1.2.3\") or an inline table");
             }
         }
         return out;
@@ -1185,8 +1208,10 @@ public final class JkBuildParser {
         if (value.isBlank()) {
             throw new JkBuildParseException(displayPath + " has an empty value string");
         }
-        if (value.startsWith(".") || value.startsWith("/")
-                || value.startsWith("git://") || value.startsWith("https://")) {
+        if (value.startsWith(".")
+                || value.startsWith("/")
+                || value.startsWith("git://")
+                || value.startsWith("https://")) {
             throw new JkBuildParseException(displayPath + " string shorthand must be a version spec"
                     + " (e.g. \"1.2.3\"); for a git source use the inline `{ git = \"...\" }` form,"
                     + " for a local sibling add it to `[workspace] modules`");
@@ -1211,8 +1236,7 @@ public final class JkBuildParser {
             throw new JkBuildParseException(displayPath + " must set exactly one of `version` or `git`");
         }
         if (sourceCount > 1) {
-            throw new JkBuildParseException(
-                    displayPath + " sets more than one of `version` / `git`; pick exactly one");
+            throw new JkBuildParseException(displayPath + " sets more than one of `version` / `git`; pick exactly one");
         }
         if (hasGit) {
             // Git workspace deps still carry an explicit coordinate: the shared coordinate is what
@@ -1233,14 +1257,13 @@ public final class JkBuildParser {
         // exactly like a [dependencies] entry.
         String groupExplicit = entry.getString("group");
         String artifactExplicit = entry.getString("name");
-        LibraryCatalog.Module catalogHit = (groupExplicit == null) ? catalog.lookup(name).orElse(null) : null;
+        LibraryCatalog.Module catalogHit =
+                (groupExplicit == null) ? catalog.lookup(name).orElse(null) : null;
         String group = groupExplicit != null ? groupExplicit : (catalogHit != null ? catalogHit.group() : null);
-        String artifact = artifactExplicit != null
-                ? artifactExplicit
-                : (catalogHit != null ? catalogHit.artifact() : name);
+        String artifact =
+                artifactExplicit != null ? artifactExplicit : (catalogHit != null ? catalogHit.artifact() : name);
         if (group == null || group.isBlank()) {
-            throw new JkBuildParseException(
-                    displayPath + " must set a `group` (or use a catalog-known short name)");
+            throw new JkBuildParseException(displayPath + " must set a `group` (or use a catalog-known short name)");
         }
         if (artifact.isBlank()) {
             throw new JkBuildParseException(displayPath + ".name must not be blank");

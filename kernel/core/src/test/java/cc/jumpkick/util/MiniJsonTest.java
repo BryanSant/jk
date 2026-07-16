@@ -4,6 +4,8 @@ package cc.jumpkick.util;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -36,14 +38,14 @@ class MiniJsonTest {
     @Test
     void parses_scalars_nesting_and_numbers() {
         assertThat(MiniJson.parse("{\"a\":{\"b\":[1,2.5,-3e2,null,false]}}"))
-                .isEqualTo(Map.of("a", Map.of("b", java.util.Arrays.asList(1.0, 2.5, -300.0, null, false))));
+                .isEqualTo(Map.of("a", Map.of("b", Arrays.asList(1.0, 2.5, -300.0, null, false))));
         assertThat(MiniJson.parse("\"plain\"")).isEqualTo("plain");
         assertThat(MiniJson.parse(" true ")).isEqualTo(true);
     }
 
     @Test
     void write_round_trips_through_parse() {
-        Map<String, Object> obj = new java.util.LinkedHashMap<>();
+        Map<String, Object> obj = new LinkedHashMap<>();
         obj.put("name", "quote \" slash \\ nl \n");
         obj.put("count", 42L);
         obj.put("ratio", 2.5);

@@ -1,9 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.runtime;
 
-import cc.jumpkick.run.StepNames;
-import cc.jumpkick.plugin.build.Phase;
-
 import cc.jumpkick.cache.Cas;
 import cc.jumpkick.config.JkBuildParser;
 import cc.jumpkick.config.SessionContext;
@@ -17,10 +14,12 @@ import cc.jumpkick.model.Coordinate;
 import cc.jumpkick.model.Dependency;
 import cc.jumpkick.model.GitSource;
 import cc.jumpkick.model.JkBuild;
+import cc.jumpkick.model.JkVersion;
 import cc.jumpkick.model.Scope;
 import cc.jumpkick.model.VersionSelector;
 import cc.jumpkick.model.WorkspaceMerge;
 import cc.jumpkick.model.command.Exit;
+import cc.jumpkick.plugin.build.Phase;
 import cc.jumpkick.repo.RepoGroup;
 import cc.jumpkick.resolver.LockOrchestrator;
 import cc.jumpkick.resolver.ResolveObserver;
@@ -33,8 +32,8 @@ import cc.jumpkick.run.PipelineKey;
 import cc.jumpkick.run.PipelineResult;
 import cc.jumpkick.run.Step;
 import cc.jumpkick.run.StepKind;
+import cc.jumpkick.run.StepNames;
 import cc.jumpkick.run.StepStatus;
-import cc.jumpkick.model.JkVersion;
 import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -105,7 +104,8 @@ public final class LockPipelines {
                 })
                 .build();
 
-        Step resolve = Step.builder(StepNames.RESOLVE_DEPS).phase(Phase.RESOLVE)
+        Step resolve = Step.builder(StepNames.RESOLVE_DEPS)
+                .phase(Phase.RESOLVE)
                 .label("Resolving")
                 .kind(StepKind.IO)
                 .requires(StepNames.PARSE_BUILD)
@@ -143,12 +143,7 @@ public final class LockPipelines {
                     try {
                         Path javaHome = JavaHomes.resolveJavaHome(dir);
                         prep = GitSourceResolution.prepare(
-                                eff,
-                                baseRepos,
-                                cas,
-                                javaHome,
-                                JkVersion.VERSION,
-                                lockedShas);
+                                eff, baseRepos, cas, javaHome, JkVersion.VERSION, lockedShas);
                         pathPrep = PathSourceResolution.prepare(
                                 prep.project(), prep.repos(), cas, dir, javaHome, JkVersion.VERSION);
                     } catch (Exception e) {
@@ -182,9 +177,17 @@ public final class LockPipelines {
                     try {
                         Lockfile lock = sources
                                 ? orchestrator.lockWithSources(
-                                        pathPrep.project(), JkVersion.VERSION, features, withDefaultFeatures, wrappedObserver)
+                                        pathPrep.project(),
+                                        JkVersion.VERSION,
+                                        features,
+                                        withDefaultFeatures,
+                                        wrappedObserver)
                                 : orchestrator.lock(
-                                        pathPrep.project(), JkVersion.VERSION, features, withDefaultFeatures, wrappedObserver);
+                                        pathPrep.project(),
+                                        JkVersion.VERSION,
+                                        features,
+                                        withDefaultFeatures,
+                                        wrappedObserver);
                         lock = GitSourceResolution.stamp(lock, prep.gitInfoByKey());
                         String kotlinVersion = resolveKotlinVersion(eff, repos);
                         if (kotlinVersion != null) {
@@ -205,7 +208,8 @@ public final class LockPipelines {
         Step lockPlugins = Step.builder(StepNames.LOCK_PLUGINS)
                 .kind(StepKind.IO)
                 .requires(StepNames.RESOLVE_DEPS)
-                .ticks(() -> effective.plugins().isEmpty() ? 0 : effective.plugins().size())
+                .ticks(() ->
+                        effective.plugins().isEmpty() ? 0 : effective.plugins().size())
                 .execute(ctx -> {
                     var decls = effective.plugins();
                     if (decls.isEmpty()) return;
@@ -221,10 +225,14 @@ public final class LockPipelines {
                                     .orElseThrow(() -> new RuntimeException(
                                             pd.coordinateWithVersion() + " not found in any repo"));
                             entries.add(new Lockfile.PluginEntry(
-                                    pd.coordinate(), pd.version(), "sha256:" + fetched.fetched().sha256()));
+                                    pd.coordinate(),
+                                    pd.version(),
+                                    "sha256:" + fetched.fetched().sha256()));
                             try {
                                 PluginDescriptorOps.materialize(
-                                        dir, fetched.fetched().sha256(), fetched.fetched().cachePath());
+                                        dir,
+                                        fetched.fetched().sha256(),
+                                        fetched.fetched().cachePath());
                             } catch (java.io.IOException e) {
                                 ctx.output("note: " + pd.coordinate() + " has no jk-plugin.toml — locked, but"
                                         + " it will not own a jk.toml table");
@@ -251,8 +259,8 @@ public final class LockPipelines {
                     // build installs them and the next lock records it. Provider-neutral shape.
                     java.util.LinkedHashSet<String> components = new java.util.LinkedHashSet<>();
                     try {
-                        for (var sd : cc.jumpkick.plugin.manifest.PluginContributions.stepDependencies(
-                                effective, dir)) {
+                        for (var sd :
+                                cc.jumpkick.plugin.manifest.PluginContributions.stepDependencies(effective, dir)) {
                             if (sd.sdkComponent() != null && !"root".equals(sd.sdkComponent())) {
                                 components.add(sd.sdkComponent());
                             }
@@ -321,7 +329,8 @@ public final class LockPipelines {
                 })
                 .build();
 
-        Step resolve = Step.builder(StepNames.RESOLVE_DEPS).phase(Phase.RESOLVE)
+        Step resolve = Step.builder(StepNames.RESOLVE_DEPS)
+                .phase(Phase.RESOLVE)
                 .kind(StepKind.IO)
                 .requires(StepNames.PARSE_BUILD)
                 .ticks(1)
@@ -334,13 +343,13 @@ public final class LockPipelines {
                         // Git-source deps: re-materialize against the current ref tip and accept
                         // any movement (no tag-rewrite check; see docs/git-source-deps.md).
                         Path javaHome = JavaHomes.resolveJavaHome(dir);
-                        GitSourceResolution.Prepared prep = GitSourceResolution.prepare(
-                                eff, baseRepos, cas, javaHome, JkVersion.VERSION);
+                        GitSourceResolution.Prepared prep =
+                                GitSourceResolution.prepare(eff, baseRepos, cas, javaHome, JkVersion.VERSION);
                         PathSourceResolution.Prepared pathPrep = PathSourceResolution.prepare(
                                 prep.project(), prep.repos(), cas, dir, javaHome, JkVersion.VERSION);
                         Lockfile lock = new LockOrchestrator(pathPrep.repos())
-                                .withJvmEnvironment(cc.jumpkick.plugin.manifest.PluginContributions
-                                        .jvmEnvironment(pathPrep.project(), dir))
+                                .withJvmEnvironment(cc.jumpkick.plugin.manifest.PluginContributions.jvmEnvironment(
+                                        pathPrep.project(), dir))
                                 .lock(pathPrep.project(), JkVersion.VERSION, features, withDefaultFeatures);
                         lock = GitSourceResolution.stamp(lock, prep.gitInfoByKey());
                         ctx.put(LOCKFILE, lock);
@@ -404,7 +413,9 @@ public final class LockPipelines {
                 return new GitUpdateOutcome(Exit.CONFIG, 0, e.getMessage());
             }
             for (Map.Entry<Path, JkBuild> entry : modules.entrySet()) {
-                scopes.put(entry.getKey(), WorkspaceMerge.applyToModule(effectiveRoot, entry.getValue(), modules.values()));
+                scopes.put(
+                        entry.getKey(),
+                        WorkspaceMerge.applyToModule(effectiveRoot, entry.getValue(), modules.values()));
             }
         }
 
@@ -413,7 +424,9 @@ public final class LockPipelines {
             List<Dependency> gitDeps = declaredGitDeps(scope.getValue());
             List<Dependency> targeted = targetLibrary == null
                     ? gitDeps
-                    : gitDeps.stream().filter(d -> d.library().equals(targetLibrary)).toList();
+                    : gitDeps.stream()
+                            .filter(d -> d.library().equals(targetLibrary))
+                            .toList();
             if (targeted.isEmpty()) continue;
 
             try {
@@ -425,8 +438,7 @@ public final class LockPipelines {
         }
 
         if (targetLibrary != null && totalRefreshed == 0) {
-            return new GitUpdateOutcome(
-                    Exit.CONFIG, 0, "no git dependency named `" + targetLibrary + "` found.");
+            return new GitUpdateOutcome(Exit.CONFIG, 0, "no git dependency named `" + targetLibrary + "` found.");
         }
         return new GitUpdateOutcome(0, totalRefreshed, null);
     }
@@ -452,10 +464,10 @@ public final class LockPipelines {
         Cas cas = new Cas(cache);
         RepoGroup baseRepos = RepoGroupBuilder.buildFor(effective, repoUrl, cas);
         Path javaHome = JavaHomes.resolveJavaHome(dir);
-        GitSourceResolution.Prepared prep = GitSourceResolution.prepare(
-                effective, baseRepos, cas, javaHome, JkVersion.VERSION);
-        PathSourceResolution.Prepared pathPrep = PathSourceResolution.prepare(
-                prep.project(), prep.repos(), cas, dir, javaHome, JkVersion.VERSION);
+        GitSourceResolution.Prepared prep =
+                GitSourceResolution.prepare(effective, baseRepos, cas, javaHome, JkVersion.VERSION);
+        PathSourceResolution.Prepared pathPrep =
+                PathSourceResolution.prepare(prep.project(), prep.repos(), cas, dir, javaHome, JkVersion.VERSION);
         Lockfile newLock = new LockOrchestrator(pathPrep.repos())
                 .withJvmEnvironment(
                         cc.jumpkick.plugin.manifest.PluginContributions.jvmEnvironment(pathPrep.project(), dir))
@@ -471,7 +483,8 @@ public final class LockPipelines {
         List<Lockfile.Artifact> spliced = new ArrayList<>();
         int refreshed = 0;
         for (Lockfile.Artifact a : newLock.artifacts()) {
-            boolean isTargeted = a.git() != null && targetKeys.contains(a.git().url() + "|" + a.git().ref());
+            boolean isTargeted = a.git() != null
+                    && targetKeys.contains(a.git().url() + "|" + a.git().ref());
             if (isTargeted) {
                 spliced.add(a);
                 refreshed++;
@@ -552,7 +565,9 @@ public final class LockPipelines {
             var p = build.project();
             return p.group() + ":" + p.name();
         } catch (Exception e) {
-            return dir.getFileName() == null ? dir.toString() : dir.getFileName().toString();
+            return dir.getFileName() == null
+                    ? dir.toString()
+                    : dir.getFileName().toString();
         }
     }
 

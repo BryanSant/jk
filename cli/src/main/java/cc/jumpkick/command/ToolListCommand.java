@@ -68,11 +68,14 @@ public final class ToolListCommand implements CliCommand {
             Optional<String> kind = readField(envJson, "kind");
             Optional<String> spec = readField(envJson, "spec");
             if (kind.isPresent() && spec.isPresent() && !spec.get().equals(coord)) {
-                CliOutput.stdout().printf("%-24s %s%n",
-                        "", Theme.colorize(kind.get() + " " + spec.get(), t.darkGray()));
+                CliOutput.stdout()
+                        .printf("%-24s %s%n", "", Theme.colorize(kind.get() + " " + spec.get(), t.darkGray()));
             }
-            if (Files.exists(launcher)) CliOutput.stdout().printf("%-24s %s %s%n",
-                    "", Theme.colorize("→", t.darkGray()), Theme.colorize(launcher.toString(), t.path()));
+            if (Files.exists(launcher))
+                CliOutput.stdout()
+                        .printf(
+                                "%-24s %s %s%n",
+                                "", Theme.colorize("→", t.darkGray()), Theme.colorize(launcher.toString(), t.path()));
         }
         return 0;
     }

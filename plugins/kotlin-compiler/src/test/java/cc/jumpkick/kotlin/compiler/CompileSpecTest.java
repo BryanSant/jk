@@ -24,22 +24,28 @@ class CompileSpecTest {
 
     @Test
     void parses_all_keys_and_repeatables(@TempDir Path dir) throws IOException {
-        CompileSpec s = parse(dir, new SpecWriter()
-                .op(PluginProtocol.OP_COMPILE, null, "jk-kotlin-compiler")
-                .layout(Map.of("classesDir", Path.of("/tmp/out"),
-                        "workdir", Path.of("/tmp/work"),
-                        "snapshotDir", Path.of("/tmp/snaps")))
-                .configString("jvmTarget", "21")
-                .configString("moduleName", "main")
-                .configString("languageVersion", "2.4")
-                .configString("apiVersion", "2.4")
-                .source(Path.of("/src/A.kt"))
-                .source(Path.of("/src/B.kt"))
-                .cp(Path.of("/libs/stdlib.jar"), PluginProtocol.ROLE_COMPILE)
-                .cp(Path.of("/libs/dep.jar"), PluginProtocol.ROLE_COMPILE)
-                .cp(Path.of("/build/classes/other"), PluginProtocol.ROLE_FRIEND)
-                .arg("-no-stdlib")
-                .arg("-Xfoo"));
+        CompileSpec s = parse(
+                dir,
+                new SpecWriter()
+                        .op(PluginProtocol.OP_COMPILE, null, "jk-kotlin-compiler")
+                        .layout(Map.of(
+                                "classesDir",
+                                Path.of("/tmp/out"),
+                                "workdir",
+                                Path.of("/tmp/work"),
+                                "snapshotDir",
+                                Path.of("/tmp/snaps")))
+                        .configString("jvmTarget", "21")
+                        .configString("moduleName", "main")
+                        .configString("languageVersion", "2.4")
+                        .configString("apiVersion", "2.4")
+                        .source(Path.of("/src/A.kt"))
+                        .source(Path.of("/src/B.kt"))
+                        .cp(Path.of("/libs/stdlib.jar"), PluginProtocol.ROLE_COMPILE)
+                        .cp(Path.of("/libs/dep.jar"), PluginProtocol.ROLE_COMPILE)
+                        .cp(Path.of("/build/classes/other"), PluginProtocol.ROLE_FRIEND)
+                        .arg("-no-stdlib")
+                        .arg("-Xfoo"));
 
         assertThat(s.outputDir).isEqualTo(new File("/tmp/out"));
         assertThat(s.workingDir).isEqualTo(new File("/tmp/work"));
@@ -57,55 +63,65 @@ class CompileSpecTest {
 
     @Test
     void absent_workdir_means_non_incremental(@TempDir Path dir) throws IOException {
-        CompileSpec s = parse(dir, new SpecWriter()
-                .op(PluginProtocol.OP_COMPILE, null, "jk-kotlin-compiler")
-                .layout(Map.of("classesDir", Path.of("/tmp/out")))
-                .configString("jvmTarget", "21")
-                .source(Path.of("/src/A.kt")));
+        CompileSpec s = parse(
+                dir,
+                new SpecWriter()
+                        .op(PluginProtocol.OP_COMPILE, null, "jk-kotlin-compiler")
+                        .layout(Map.of("classesDir", Path.of("/tmp/out")))
+                        .configString("jvmTarget", "21")
+                        .source(Path.of("/src/A.kt")));
         assertThat(s.incremental()).isFalse();
     }
 
     @Test
     void value_may_contain_spaces(@TempDir Path dir) throws IOException {
-        CompileSpec s = parse(dir, new SpecWriter()
-                .op(PluginProtocol.OP_COMPILE, null, "jk-kotlin-compiler")
-                .layout(Map.of("classesDir", Path.of("/tmp/with space/out")))
-                .configString("jvmTarget", "21")
-                .source(Path.of("/tmp/with space/A.kt")));
+        CompileSpec s = parse(
+                dir,
+                new SpecWriter()
+                        .op(PluginProtocol.OP_COMPILE, null, "jk-kotlin-compiler")
+                        .layout(Map.of("classesDir", Path.of("/tmp/with space/out")))
+                        .configString("jvmTarget", "21")
+                        .source(Path.of("/tmp/with space/A.kt")));
         assertThat(s.outputDir).isEqualTo(new File("/tmp/with space/out"));
         assertThat(s.sources).containsExactly(new File("/tmp/with space/A.kt"));
     }
 
     @Test
     void rejects_missing_required_keys(@TempDir Path dir) throws IOException {
-        assertThatThrownBy(() -> parse(dir, new SpecWriter()
-                        .op(PluginProtocol.OP_COMPILE, null, "jk-kotlin-compiler")
-                        .configString("jvmTarget", "21")
-                        .source(Path.of("/a.kt"))))
+        assertThatThrownBy(() -> parse(
+                        dir,
+                        new SpecWriter()
+                                .op(PluginProtocol.OP_COMPILE, null, "jk-kotlin-compiler")
+                                .configString("jvmTarget", "21")
+                                .source(Path.of("/a.kt"))))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("classesDir");
 
-        assertThatThrownBy(() -> parse(dir, new SpecWriter()
-                        .op(PluginProtocol.OP_COMPILE, null, "jk-kotlin-compiler")
-                        .layout(Map.of("classesDir", Path.of("/o")))
-                        .configString("jvmTarget", "21")))
+        assertThatThrownBy(() -> parse(
+                        dir,
+                        new SpecWriter()
+                                .op(PluginProtocol.OP_COMPILE, null, "jk-kotlin-compiler")
+                                .layout(Map.of("classesDir", Path.of("/o")))
+                                .configString("jvmTarget", "21")))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("source");
     }
 
     @Test
     void build_args_for_incremental_carry_fir_flag_and_options(@TempDir Path dir) throws IOException {
-        CompileSpec s = parse(dir, new SpecWriter()
-                .op(PluginProtocol.OP_COMPILE, null, "jk-kotlin-compiler")
-                .layout(Map.of("classesDir", Path.of("/o"), "workdir", Path.of("/w")))
-                .configString("jvmTarget", "21")
-                .configString("moduleName", "main")
-                .configString("languageVersion", "2.4")
-                .source(Path.of("/a.kt"))
-                .cp(Path.of("/libs/x.jar"), PluginProtocol.ROLE_COMPILE)
-                .cp(Path.of("/f1"), PluginProtocol.ROLE_FRIEND)
-                .cp(Path.of("/f2"), PluginProtocol.ROLE_FRIEND)
-                .arg("-no-stdlib"));
+        CompileSpec s = parse(
+                dir,
+                new SpecWriter()
+                        .op(PluginProtocol.OP_COMPILE, null, "jk-kotlin-compiler")
+                        .layout(Map.of("classesDir", Path.of("/o"), "workdir", Path.of("/w")))
+                        .configString("jvmTarget", "21")
+                        .configString("moduleName", "main")
+                        .configString("languageVersion", "2.4")
+                        .source(Path.of("/a.kt"))
+                        .cp(Path.of("/libs/x.jar"), PluginProtocol.ROLE_COMPILE)
+                        .cp(Path.of("/f1"), PluginProtocol.ROLE_FRIEND)
+                        .cp(Path.of("/f2"), PluginProtocol.ROLE_FRIEND)
+                        .arg("-no-stdlib"));
 
         List<String> args = KotlinCompiler.buildArgs(s);
 
@@ -121,11 +137,13 @@ class CompileSpecTest {
 
     @Test
     void build_args_for_full_compile_omit_fir_flag(@TempDir Path dir) throws IOException {
-        CompileSpec s = parse(dir, new SpecWriter()
-                .op(PluginProtocol.OP_COMPILE, null, "jk-kotlin-compiler")
-                .layout(Map.of("classesDir", Path.of("/o")))
-                .configString("jvmTarget", "21")
-                .source(Path.of("/a.kt")));
+        CompileSpec s = parse(
+                dir,
+                new SpecWriter()
+                        .op(PluginProtocol.OP_COMPILE, null, "jk-kotlin-compiler")
+                        .layout(Map.of("classesDir", Path.of("/o")))
+                        .configString("jvmTarget", "21")
+                        .source(Path.of("/a.kt")));
         assertThat(KotlinCompiler.buildArgs(s)).doesNotContain("-Xuse-fir-ic");
     }
 

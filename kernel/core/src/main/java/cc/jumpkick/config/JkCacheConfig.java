@@ -76,11 +76,12 @@ public record JkCacheConfig(boolean autoPrune, Optional<Integer> maxSizeGb, int 
         // schema (thin-client C — the native client ships no TOML parser).
         TomlScan scan = TomlScan.scan(
                 file, "cache.auto-prune", "cache.max-size-gb", "cache.prune-interval-days", "cache.record-ttl-days");
-        boolean autoPrune = switch (String.valueOf(scan.get("cache.auto-prune"))) {
-            case "true" -> true;
-            case "false" -> false;
-            default -> DEFAULTS.autoPrune;
-        };
+        boolean autoPrune =
+                switch (String.valueOf(scan.get("cache.auto-prune"))) {
+                    case "true" -> true;
+                    case "false" -> false;
+                    default -> DEFAULTS.autoPrune;
+                };
         Optional<Integer> maxSize = nonNegative(scanInt(scan, "cache.max-size-gb"));
         int interval = nonNegative(scanInt(scan, "cache.prune-interval-days")).orElse(DEFAULTS.pruneIntervalDays);
         int ttl = nonNegative(scanInt(scan, "cache.record-ttl-days")).orElse(DEFAULTS.recordTtlDays);

@@ -65,9 +65,12 @@ public final class PluginSpec {
                     String key = Ndjson.str(line, PluginProtocol.KEY);
                     switch (String.valueOf(Ndjson.str(line, PluginProtocol.CONFIG_KIND))) {
                         case PluginProtocol.KIND_STRING -> s.config.put(key, Ndjson.str(line, PluginProtocol.VALUE));
-                        case PluginProtocol.KIND_BOOL -> s.config.put(key, Ndjson.bool(line, PluginProtocol.VALUE, false));
-                        case PluginProtocol.KIND_INT -> s.config.put(key, Ndjson.longValue(line, PluginProtocol.VALUE, 0));
-                        case PluginProtocol.KIND_LIST -> s.config.put(key, Ndjson.strArray(line, PluginProtocol.VALUES));
+                        case PluginProtocol.KIND_BOOL ->
+                            s.config.put(key, Ndjson.bool(line, PluginProtocol.VALUE, false));
+                        case PluginProtocol.KIND_INT ->
+                            s.config.put(key, Ndjson.longValue(line, PluginProtocol.VALUE, 0));
+                        case PluginProtocol.KIND_LIST ->
+                            s.config.put(key, Ndjson.strArray(line, PluginProtocol.VALUES));
                         default -> {
                             // unknown kind — forward-compat
                         }

@@ -139,8 +139,7 @@ public final class JkBuildEditor {
 
         List<String> lines = splitPreservingTerminator(content);
         if (findDepKey(lines, scope, library) >= 0) {
-            throw new IllegalStateException(
-                    scope.tomlSection() + " already contains \"" + library + "\"");
+            throw new IllegalStateException(scope.tomlSection() + " already contains \"" + library + "\"");
         }
 
         StringBuilder sb = new StringBuilder(library)

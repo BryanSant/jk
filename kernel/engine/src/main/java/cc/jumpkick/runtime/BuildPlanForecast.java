@@ -10,6 +10,7 @@ import cc.jumpkick.config.WorkspaceClasspath;
 import cc.jumpkick.layout.BuildLayout;
 import cc.jumpkick.lock.Lockfile;
 import cc.jumpkick.lock.LockfileReader;
+import cc.jumpkick.model.BuildIdentity;
 import cc.jumpkick.model.JkBuild;
 import cc.jumpkick.model.Scope;
 import cc.jumpkick.task.ActionCache;
@@ -18,8 +19,6 @@ import cc.jumpkick.task.ClasspathFingerprint;
 import cc.jumpkick.task.FreshnessStamp;
 import cc.jumpkick.task.JavaIncrementalCompile;
 import cc.jumpkick.task.TestStamp;
-import cc.jumpkick.model.BuildIdentity;
-import cc.jumpkick.model.JkVersion;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -68,7 +67,8 @@ public final class BuildPlanForecast {
      * full engine round-trip on a fully-cached build — and pays the test-stamp content hashing
      * (main classes tree + every sibling/plugin jar) for steps the build will not execute.
      */
-    public static List<BuildPlan.Module> of(BuildGraph.Result graph, Cas cas, ActionCache actionCache, Path cache, boolean skipTests) {
+    public static List<BuildPlan.Module> of(
+            BuildGraph.Result graph, Cas cas, ActionCache actionCache, Path cache, boolean skipTests) {
         List<BuildPlan.Module> out = new ArrayList<>();
         // --force/--rerun bypasses jk's build caches, so every step runs — the forecast must say
         // so too (otherwise the plan tree renders "Fully Cached" while the ETA, which honors force,
@@ -145,12 +145,21 @@ public final class BuildPlanForecast {
         int workerCount = workers > 0 ? workers : 1;
         int estimatedTestCount = skipTests ? 0 : TestSupport.estimateTestCount(dir.resolve("src/test/java"));
         return new BuildPipelines.Inputs(
-                        dir, cache, buildFile, lockFile, dir, workerCount, estimatedTestCount, profile, jdksDir,
-                        skipTests, verbose,
-                false,
-                false,
-                java.util.Set.of(),
-                cc.jumpkick.config.SessionContext.current())
+                        dir,
+                        cache,
+                        buildFile,
+                        lockFile,
+                        dir,
+                        workerCount,
+                        estimatedTestCount,
+                        profile,
+                        jdksDir,
+                        skipTests,
+                        verbose,
+                        false,
+                        false,
+                        java.util.Set.of(),
+                        cc.jumpkick.config.SessionContext.current())
                 .withProjectModules(projectModules);
     }
 
@@ -167,12 +176,14 @@ public final class BuildPlanForecast {
         List<BuildPlan.Step> steps = new ArrayList<>();
         Path lockFile = dir.resolve("jk.lock");
         if (!Files.isRegularFile(lockFile)) {
-            steps.add(new BuildPlan.Step("compile-main", BuildPlan.Status.RUN, "not locked yet (run `jk build`)", null));
+            steps.add(
+                    new BuildPlan.Step("compile-main", BuildPlan.Status.RUN, "not locked yet (run `jk build`)", null));
             return new BuildPlan.Module(u.dir(), u.coord(), steps, 0, 0, false, false);
         }
         // Two-tier lock check: mtime first (cheap), deep dep validation only when stale.
         if (cc.jumpkick.runtime.AutoLock.needsRelocking(dir, lockFile)) {
-            steps.add(new BuildPlan.Step("compile-main", BuildPlan.Status.RUN, "jk.toml changed — lock update needed", null));
+            steps.add(new BuildPlan.Step(
+                    "compile-main", BuildPlan.Status.RUN, "jk.toml changed — lock update needed", null));
             return new BuildPlan.Module(u.dir(), u.coord(), steps, 0, 0, false, false);
         }
         int sourceCount = 0, testCount = 0;
@@ -214,7 +225,8 @@ public final class BuildPlanForecast {
                 Path stateDir =
                         cache.resolve("actions").resolve("incremental-java").resolve(taskId);
                 long tc = Perf.start();
-                var pred = JavaIncrementalCompile.predict(taskId, req, BuildIdentity.cacheKeyVersion(), actionCache, stateDir);
+                var pred = JavaIncrementalCompile.predict(
+                        taskId, req, BuildIdentity.cacheKeyVersion(), actionCache, stateDir);
                 Perf.end("  predict-compile-main", tc);
                 steps.add(compileStep("compile-main", pred, depDirty || force));
                 if (!steps.get(steps.size() - 1).cached()) compileDirty = true;
@@ -256,7 +268,8 @@ public final class BuildPlanForecast {
             if (haveTests && !skipTests) {
                 int testSrcCount = javaTest.size() + ktTest.size();
                 if (compileDirty) {
-                    steps.add(new BuildPlan.Step("compile-test", BuildPlan.Status.RUN, "recompile · main changed", null));
+                    steps.add(
+                            new BuildPlan.Step("compile-test", BuildPlan.Status.RUN, "recompile · main changed", null));
                     testDirty = true;
                 } else if (!javaTest.isEmpty()) {
                     List<Path> baseCp = new ArrayList<>();
@@ -280,7 +293,8 @@ public final class BuildPlanForecast {
                     Path stateDir =
                             cache.resolve("actions").resolve("incremental-java").resolve(taskId);
                     long tt = Perf.start();
-                    var pred = JavaIncrementalCompile.predict(taskId, req, BuildIdentity.cacheKeyVersion(), actionCache, stateDir);
+                    var pred = JavaIncrementalCompile.predict(
+                            taskId, req, BuildIdentity.cacheKeyVersion(), actionCache, stateDir);
                     Perf.end("  predict-compile-test", tt);
                     BuildPlan.Step p = compileStep("compile-test", pred, false);
                     steps.add(p);
@@ -314,7 +328,8 @@ public final class BuildPlanForecast {
                     steps.add(
                             hit
                                     ? new BuildPlan.Step("run-tests", BuildPlan.Status.CACHED, "· " + tests, null)
-                                    : new BuildPlan.Step("run-tests", BuildPlan.Status.RUN, "run tests · " + tests, null));
+                                    : new BuildPlan.Step(
+                                            "run-tests", BuildPlan.Status.RUN, "run tests · " + tests, null));
                 }
             }
 
@@ -332,8 +347,8 @@ public final class BuildPlanForecast {
                         "main:" + (mainClass == null ? "" : mainClass),
                         "manifest:" + project.manifest());
                 Perf.end("  package-fingerprint", tp);
-                String pkgKey =
-                        ActionKey.forArtifact(ActionKey.qualifiedTaskId("package-jar", jar), BuildIdentity.cacheKeyVersion(), tokens);
+                String pkgKey = ActionKey.forArtifact(
+                        ActionKey.qualifiedTaskId("package-jar", jar), BuildIdentity.cacheKeyVersion(), tokens);
                 boolean hit = present(actionCache, pkgKey);
                 steps.add(
                         hit
@@ -368,8 +383,11 @@ public final class BuildPlanForecast {
                         ? new BuildPlan.Step(name, BuildPlan.Status.RUN, "recompile · dependency changed", null)
                         : new BuildPlan.Step(name, BuildPlan.Status.CACHED, "", key8(pred.actionKey()));
             case INCREMENTAL ->
-                new BuildPlan.Step(name, BuildPlan.Status.PARTIAL, "compile · " + count(pred.sourceCount(), "source"), null);
-            case FULL -> new BuildPlan.Step(name, BuildPlan.Status.FULL, "full compile · " + count(pred.sourceCount(), "source"), null);
+                new BuildPlan.Step(
+                        name, BuildPlan.Status.PARTIAL, "compile · " + count(pred.sourceCount(), "source"), null);
+            case FULL ->
+                new BuildPlan.Step(
+                        name, BuildPlan.Status.FULL, "full compile · " + count(pred.sourceCount(), "source"), null);
         };
     }
 

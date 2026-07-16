@@ -126,8 +126,7 @@ final class ReachabilityMetadata {
                 .fetched()
                 .cachePath();
 
-        Path tmp = Files.createTempDirectory(
-                Files.createDirectories(root.getParent()), VERSION + ".extract-");
+        Path tmp = Files.createTempDirectory(Files.createDirectories(root.getParent()), VERSION + ".extract-");
         try (ZipInputStream in = new ZipInputStream(Files.newInputStream(zip))) {
             ZipEntry entry;
             while ((entry = in.getNextEntry()) != null) {

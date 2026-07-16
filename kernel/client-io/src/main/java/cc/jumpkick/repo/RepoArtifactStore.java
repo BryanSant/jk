@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.repo;
 
-import cc.jumpkick.cache.Linking;
 import cc.jumpkick.util.Hashing;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -107,9 +106,7 @@ public final class RepoArtifactStore {
      * than compile against bytes the lockfile never pinned.
      */
     public Optional<Path> locate(String relativePath, String expectedSha256) {
-        return verify(relativePath, expectedSha256) == IndexState.VERIFIED
-                ? locate(relativePath)
-                : Optional.empty();
+        return verify(relativePath, expectedSha256) == IndexState.VERIFIED ? locate(relativePath) : Optional.empty();
     }
 
     /**
@@ -323,8 +320,8 @@ public final class RepoArtifactStore {
         try (Stream<Path> named = Files.list(reposDir)) {
             for (Path nameDir : (Iterable<Path>) named::iterator) {
                 if (!Files.isDirectory(nameDir)) continue;
-                removed += new RepoArtifactStore(cacheRoot, nameDir.getFileName().toString())
-                        .removeShas(shas, dryRun);
+                removed +=
+                        new RepoArtifactStore(cacheRoot, nameDir.getFileName().toString()).removeShas(shas, dryRun);
             }
         } catch (IOException ignored) {
             // best-effort

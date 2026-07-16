@@ -1,13 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.command;
 
-import cc.jumpkick.cli.ProjectContext;
 import cc.jumpkick.cli.CliOutput;
 import cc.jumpkick.cli.GlobalOptions;
+import cc.jumpkick.cli.ProjectContext;
 import cc.jumpkick.cli.run.ConsoleSpec;
 import cc.jumpkick.cli.theme.Theme;
-import cc.jumpkick.config.JkBuildParser;
-import cc.jumpkick.model.JkBuild;
 import cc.jumpkick.model.command.CliCommand;
 import cc.jumpkick.model.command.Exit;
 import cc.jumpkick.model.command.Invocation;
@@ -52,7 +50,8 @@ public final class ExplainCommand implements CliCommand {
                 Opt.value("<name>", "Forecast with a build profile applied. Default: auto (ci on CI).", "--profile"),
                 Opt.value("<N>", "Forecast with N test-runner JVMs forked in parallel. Default 1.", "-w", "--workers"),
                 Opt.flag("Forecast a build that skips compiling and running tests.", "--skip-tests"),
-                Opt.value("<dir>", "Override the JDK install root.", "--jdks-dir").hide(),
+                Opt.value("<dir>", "Override the JDK install root.", "--jdks-dir")
+                        .hide(),
                 Opt.value(
                                 "<dir>",
                                 "Override the jk cache directory. Default: $JK_CACHE_DIR or ~/.cache/jk.",
@@ -108,18 +107,32 @@ public final class ExplainCommand implements CliCommand {
         if (engineDisabledForTests()) {
             long[] etaOut = new long[1];
             plan = cc.jumpkick.cli.engine.InProcessEngine.require()
-                    .explain(startDir,
+                    .explain(
+                            startDir,
                             cc.jumpkick.cli.engine.InProcessEngine.require().parseBuild(buildFile),
-                            cache, workers, jdksDir, profile,
-                            skipTests, global.verbose,
-                            serial, parallelTests, etaOut);
+                            cache,
+                            workers,
+                            jdksDir,
+                            profile,
+                            skipTests,
+                            global.verbose,
+                            serial,
+                            parallelTests,
+                            etaOut);
             etaMillis = etaOut[0];
         } else {
             long[] etaOut = new long[1];
             plan = cc.jumpkick.cli.engine.EngineClient.explain(
                     cc.jumpkick.engine.EnginePaths.current(),
                     new cc.jumpkick.cli.engine.EngineClient.ExplainRequest(
-                            startDir, cache, workers, skipTests, profile, jdksDir, serial, parallelTests,
+                            startDir,
+                            cache,
+                            workers,
+                            skipTests,
+                            profile,
+                            jdksDir,
+                            serial,
+                            parallelTests,
                             global.verbose),
                     etaOut);
             etaMillis = etaOut[0];
@@ -147,10 +160,12 @@ public final class ExplainCommand implements CliCommand {
 
         // Header: a dark royal blue (#0F4786) " ≡ Build Plan " chip, capped by a matching ▶
         // segment arrow when nerdfont, then the build-time estimate (yellow).
-        String header = !ansi ? " - Build Plan "
+        String header = !ansi
+                ? " - Build Plan "
                 : (nerdfont
                         ? Theme.colorize(" ≡ Build Plan ", t.planBadge())
-                                + Theme.colorize(cc.jumpkick.cli.tui.Glyphs.SEGMENT_END_NERD, t.bright(t.planBadgeColor()))
+                                + Theme.colorize(
+                                        cc.jumpkick.cli.tui.Glyphs.SEGMENT_END_NERD, t.bright(t.planBadgeColor()))
                         : Theme.colorize(" ≡ Build Plan ", t.planBadge()));
         String estimate = etaMillis == 0
                 ? "Build time " + Theme.colorize("unknown", t.warning())
@@ -160,21 +175,17 @@ public final class ExplainCommand implements CliCommand {
         // Root node: ● bullet, then the entry project's group:artifact in bold.
         String rootBullet = ansi ? Theme.colorize("●", t.darkGray()) : "*";
         String coord = BuildCommand.buildTarget(buildFile, startDir);
-        CliOutput.out(" "
-                + rootBullet
-                + " "
-                + (ansi ? boldCoord(coord, t) : coord));
+        CliOutput.out(" " + rootBullet + " " + (ansi ? boldCoord(coord, t) : coord));
 
         // Workspace-wide stats directly under the root bullet.
         int totalModules = modules.size();
         int totalSources =
                 modules.stream().mapToInt(BuildPlan.Module::sourceCount).sum();
-        int totalTests =
-                modules.stream().mapToInt(BuildPlan.Module::testCount).sum();
-        int totalJars = (int)
-                modules.stream().filter(BuildPlan.Module::producesJar).count();
-        int totalImages = (int)
-                modules.stream().filter(BuildPlan.Module::producesImage).count();
+        int totalTests = modules.stream().mapToInt(BuildPlan.Module::testCount).sum();
+        int totalJars =
+                (int) modules.stream().filter(BuildPlan.Module::producesJar).count();
+        int totalImages =
+                (int) modules.stream().filter(BuildPlan.Module::producesImage).count();
         String rootPfx = ansi ? " " + Theme.colorize("│", t.darkGray()) + " · " : " | - ";
         if (totalModules > 1) CliOutput.out(rootPfx + "Modules: " + String.format("%,d", totalModules));
         CliOutput.out(rootPfx + "Sources: " + fmtCount(totalSources, "file", "files"));
@@ -196,9 +207,7 @@ public final class ExplainCommand implements CliCommand {
         if (!cachedIdx.isEmpty()) {
             boolean lastSection = dirtyIdx.isEmpty();
             String sectionConnector = lastSection ? "╰─" : "├─";
-            String sectionBadge = ansi
-                    ? cc.jumpkick.cli.tui.Badge.pill("Fully Cached", nerdfont)
-                    : " [Fully Cached]";
+            String sectionBadge = ansi ? cc.jumpkick.cli.tui.Badge.pill("Fully Cached", nerdfont) : " [Fully Cached]";
             CliOutput.out(" "
                     + (ansi ? Theme.colorize(sectionConnector, t.darkGray()) : (lastSection ? "`-" : "+-"))
                     + sectionBadge);
@@ -208,30 +217,26 @@ public final class ExplainCommand implements CliCommand {
             if (verbose) {
                 for (int j = 0; j < cachedIdx.size(); j++) {
                     int i = cachedIdx.get(j);
-                    renderModuleRow(modules.get(i), i + 1, j == cachedIdx.size() - 1, childPrefix, nerdfont, true, t, ansi);
+                    renderModuleRow(
+                            modules.get(i), i + 1, j == cachedIdx.size() - 1, childPrefix, nerdfont, true, t, ansi);
                 }
             } else {
                 List<String> names = new ArrayList<>();
-                for (int i : cachedIdx)
-                    names.add(":" + shortName(modules.get(i).coord()));
+                for (int i : cachedIdx) names.add(":" + shortName(modules.get(i).coord()));
                 // Wrap the full list across lines (no truncation): the first line hangs off
                 // a "╰─ " connector; continuations align under the first name.
                 List<String> lines = wrapNames(names, Math.max(20, width - 7));
                 String cont = childPrefix + "   "; // align past "╰─ " / "`- "
                 String firstConnector = ansi ? Theme.colorize("╰─ ", t.darkGray()) : "`- ";
                 for (int li = 0; li < lines.size(); li++) {
-                    CliOutput.out((li == 0 ? childPrefix + firstConnector : cont)
-                            + renderCachedNames(lines.get(li), t));
+                    CliOutput.out(
+                            (li == 0 ? childPrefix + firstConnector : cont) + renderCachedNames(lines.get(li), t));
                 }
             }
         }
         if (!dirtyIdx.isEmpty()) {
-            String rebuildBadge = ansi
-                    ? cc.jumpkick.cli.tui.Badge.pill("Rebuild", nerdfont)
-                    : " [Rebuild]";
-            CliOutput.out(" "
-                    + (ansi ? Theme.colorize("╰─", t.darkGray()) : "`-")
-                    + rebuildBadge);
+            String rebuildBadge = ansi ? cc.jumpkick.cli.tui.Badge.pill("Rebuild", nerdfont) : " [Rebuild]";
+            CliOutput.out(" " + (ansi ? Theme.colorize("╰─", t.darkGray()) : "`-") + rebuildBadge);
             String secPfx = ansi ? "    " + Theme.colorize("│", t.darkGray()) + " · " : "    | - ";
             int dirtyModules = dirtyIdx.size();
             int dirtySources = modules.stream()
@@ -251,11 +256,9 @@ public final class ExplainCommand implements CliCommand {
                         secPfx + "Modules: " + String.format("%,d", dirtyModules) + pct(dirtyModules, totalModules));
             CliOutput.out(
                     secPfx + "Sources: " + fmtCount(dirtySources, "file", "files") + pct(dirtySources, totalSources));
-            CliOutput.out(
-                    secPfx + "Tests: " + fmtCount(dirtyTests, "test", "tests") + pct(dirtyTests, totalTests));
+            CliOutput.out(secPfx + "Tests: " + fmtCount(dirtyTests, "test", "tests") + pct(dirtyTests, totalTests));
             if (totalJars > 0)
-                CliOutput.out(
-                        secPfx + "Packages: " + fmtCount(dirtyJars, "jar", "jars") + pct(dirtyJars, totalJars));
+                CliOutput.out(secPfx + "Packages: " + fmtCount(dirtyJars, "jar", "jars") + pct(dirtyJars, totalJars));
             if (totalImages > 0)
                 CliOutput.out(secPfx
                         + "Containers: "
@@ -295,17 +298,11 @@ public final class ExplainCommand implements CliCommand {
             boolean verbose,
             Theme t,
             boolean ansi) {
-        String moduleConnector = ansi
-                ? Theme.colorize((last ? "╰" : "├") + "─", t.darkGray())
-                : (last ? "`-" : "+-");
+        String moduleConnector = ansi ? Theme.colorize((last ? "╰" : "├") + "─", t.darkGray()) : (last ? "`-" : "+-");
         String moduleBadge = ansi
                 ? cc.jumpkick.cli.tui.Badge.pill(String.format("%02d", idx), nerdfont)
                 : " [" + String.format("%02d", idx) + "]";
-        CliOutput.out(prefix
-                + moduleConnector
-                + moduleBadge
-                + ' '
-                + (ansi ? coloredCoord(m.coord(), t) : m.coord()));
+        CliOutput.out(prefix + moduleConnector + moduleBadge + ' ' + (ansi ? coloredCoord(m.coord(), t) : m.coord()));
 
         if (m.dirty() || verbose) {
             String spine = ansi
@@ -319,17 +316,11 @@ public final class ExplainCommand implements CliCommand {
             }
             for (int k = 0; k < ph.size(); k++) {
                 boolean lp = k == ph.size() - 1;
-                String stepConnector = ansi
-                        ? Theme.colorize(lp ? "╰─ " : "├─ ", t.darkGray())
-                        : (lp ? "`- " : "+- ");
+                String stepConnector = ansi ? Theme.colorize(lp ? "╰─ " : "├─ ", t.darkGray()) : (lp ? "`- " : "+- ");
                 String stepName = ansi
                         ? Theme.colorize(padRight(ph.get(k).name(), STEP_COL), t.brightWhite())
                         : padRight(ph.get(k).name(), STEP_COL);
-                CliOutput.out(spine
-                        + stepConnector
-                        + stepName
-                        + "  "
-                        + renderStatus(ph.get(k), commandCol, t, ansi));
+                CliOutput.out(spine + stepConnector + stepName + "  " + renderStatus(ph.get(k), commandCol, t, ansi));
             }
         }
     }

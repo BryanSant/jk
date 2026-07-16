@@ -175,6 +175,7 @@ public final class ActionKey {
      * belongs to it, regardless of the base task name.
      */
     public static String taskTag(Path moduleDir) {
-        return Hashing.sha256Hex(moduleDir.toAbsolutePath().normalize().toString()).substring(0, 12);
+        return Hashing.sha256Hex(moduleDir.toAbsolutePath().normalize().toString())
+                .substring(0, 12);
     }
 }

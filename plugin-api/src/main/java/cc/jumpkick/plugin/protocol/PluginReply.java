@@ -41,7 +41,8 @@ public final class PluginReply {
 
     /** Annotation-processing provenance: a generated file and its originating sources. */
     public static String provenance(String generated, List<String> sources) {
-        StringBuilder b = new StringBuilder("{\"t\":\"provenance\",\"gen\":").append(Ndjson.quote(generated))
+        StringBuilder b = new StringBuilder("{\"t\":\"provenance\",\"gen\":")
+                .append(Ndjson.quote(generated))
                 .append(",\"src\":[");
         for (int i = 0; i < sources.size(); i++) {
             if (i > 0) b.append(',');
@@ -61,8 +62,10 @@ public final class PluginReply {
 
     /** A formatter per-file outcome. */
     public static String file(String path, String status, String msg) {
-        StringBuilder b = new StringBuilder("{\"t\":\"file\",\"path\":").append(Ndjson.quote(path))
-                .append(",\"status\":").append(Ndjson.quote(status));
+        StringBuilder b = new StringBuilder("{\"t\":\"file\",\"path\":")
+                .append(Ndjson.quote(path))
+                .append(",\"status\":")
+                .append(Ndjson.quote(status));
         if (msg != null) b.append(",\"msg\":").append(Ndjson.quote(msg));
         return b.append('}').toString();
     }

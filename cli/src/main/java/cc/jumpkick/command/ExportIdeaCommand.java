@@ -13,8 +13,7 @@ import java.util.List;
  */
 public final class ExportIdeaCommand implements CliCommand {
 
-    private final IdeCommand delegate =
-            new IdeCommand(java.util.EnumSet.of(cc.jumpkick.command.ide.IdeTarget.IDEA));
+    private final IdeCommand delegate = new IdeCommand(java.util.EnumSet.of(cc.jumpkick.command.ide.IdeTarget.IDEA));
 
     @Override
     public String name() {

@@ -36,8 +36,8 @@ class PublishablePomTest {
     void branch_git_dependency_is_skipped_for_publish() {
         // Even though a branch-tracked git dep is locked in jk.lock, it's still not a stable
         // reference for external consumers of the published artifact.
-        GitSource source =
-                GitSource.of("https://github.com/acme/lib", "https://github.com/acme/lib", new GitRefSpec.Branch("main"));
+        GitSource source = GitSource.of(
+                "https://github.com/acme/lib", "https://github.com/acme/lib", new GitRefSpec.Branch("main"));
         Map<Scope, List<Dependency>> byScope = new EnumMap<>(Scope.class);
         byScope.put(Scope.MAIN, List.of(Dependency.git("lib", "com.example:lib", source)));
         String xml = PublishablePom.render(

@@ -102,12 +102,11 @@ public final class GitSourceResolution {
                 verifyImmutableRef(materializer, d.gitSource(), lockedShas);
                 GitSourceMaterializer.Materialized m = materializer.materialize(d.gitSource());
                 bySource.put(key, m);
-                extraRepos.add(
-                        new MavenRepo(
-                                RepoArtifactResolver.GIT_SOURCE_PREFIX + m.coordinate() + ":" + m.version(),
-                                m.repoUrl(),
-                                new Http(),
-                                cas));
+                extraRepos.add(new MavenRepo(
+                        RepoArtifactResolver.GIT_SOURCE_PREFIX + m.coordinate() + ":" + m.version(),
+                        m.repoUrl(),
+                        new Http(),
+                        cas));
                 gitInfo.put(provenanceKey(m.coordinate(), m.version()), m.gitInfo());
             }
         }
@@ -211,10 +210,7 @@ public final class GitSourceResolution {
      */
     private static String sourceKey(GitSource source) {
         return String.join(
-                "|",
-                source.canonicalUrl(),
-                source.ref().token(),
-                source.path() == null ? "" : source.path());
+                "|", source.canonicalUrl(), source.ref().token(), source.path() == null ? "" : source.path());
     }
 
     private static String provenanceKey(String coordinate, String version) {

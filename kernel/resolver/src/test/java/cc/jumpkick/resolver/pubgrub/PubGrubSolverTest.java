@@ -4,8 +4,10 @@ package cc.jumpkick.resolver.pubgrub;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 class PubGrubSolverTest {
@@ -194,19 +196,17 @@ class PubGrubSolverTest {
 
     /** Wrap a source so the given {@code pkg@version} coords throw the unavailable signal. */
     private static PackageSource withUnavailable(PackageSource delegate, String... coords) {
-        java.util.Set<String> dead = java.util.Set.of(coords);
+        Set<String> dead = Set.of(coords);
         return new PackageSource() {
             @Override
-            public List<String> versions(String pkg) throws java.io.IOException, InterruptedException {
+            public List<String> versions(String pkg) throws IOException, InterruptedException {
                 return delegate.versions(pkg);
             }
 
             @Override
-            public List<Term> dependencies(String pkg, String version)
-                    throws java.io.IOException, InterruptedException {
+            public List<Term> dependencies(String pkg, String version) throws IOException, InterruptedException {
                 if (dead.contains(pkg + "@" + version)) {
-                    throw new VersionUnavailableException(
-                            "POM not found in any declared repo: " + pkg + ":" + version);
+                    throw new VersionUnavailableException("POM not found in any declared repo: " + pkg + ":" + version);
                 }
                 return delegate.dependencies(pkg, version);
             }

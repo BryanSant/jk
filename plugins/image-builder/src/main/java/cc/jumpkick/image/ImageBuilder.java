@@ -95,11 +95,10 @@ public final class ImageBuilder {
      * resolved CLI path (e.g. {@code "docker"} or {@code "podman"}, or an absolute path); pass
      * {@code null} to let Jib auto-detect via {@code PATH}.
      */
-    public static Result loadToLocalDaemon(Plan plan, Path dockerExecutable)
-            throws IOException, InterruptedException {
+    public static Result loadToLocalDaemon(Plan plan, Path dockerExecutable) throws IOException, InterruptedException {
         try {
-            DockerDaemonImage target = DockerDaemonImage.named(
-                    plan.config().targetReference(plan.artifact(), plan.version()));
+            DockerDaemonImage target =
+                    DockerDaemonImage.named(plan.config().targetReference(plan.artifact(), plan.version()));
             if (dockerExecutable != null) target = target.setDockerExecutable(dockerExecutable);
             JibContainer container = run(plan, Containerizer.to(target));
             return new Result(
@@ -201,7 +200,8 @@ public final class ImageBuilder {
         // repeated builds of unchanged code, accurate when code changes, and git-independent.
         Instant creationTime;
         try {
-            creationTime = java.nio.file.Files.getLastModifiedTime(plan.mainJar()).toInstant();
+            creationTime =
+                    java.nio.file.Files.getLastModifiedTime(plan.mainJar()).toInstant();
         } catch (IOException ignored) {
             creationTime = Instant.now();
         }
@@ -221,7 +221,8 @@ public final class ImageBuilder {
      */
     private static com.google.cloud.tools.jib.api.buildplan.FileEntriesLayer classesLayer(Path classesDir)
             throws IOException {
-        var layer = com.google.cloud.tools.jib.api.buildplan.FileEntriesLayer.builder().setName("classes");
+        var layer = com.google.cloud.tools.jib.api.buildplan.FileEntriesLayer.builder()
+                .setName("classes");
         AbsoluteUnixPath target = AbsoluteUnixPath.get("/app/classes");
         List<Path> files = new ArrayList<>();
         try (var stream = java.nio.file.Files.walk(classesDir)) {

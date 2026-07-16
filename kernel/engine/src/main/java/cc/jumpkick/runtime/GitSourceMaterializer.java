@@ -97,7 +97,9 @@ public final class GitSourceMaterializer {
                 : fetched.checkoutPath();
 
         // Per-commit dirs; reused on a cache hit (immutable tag/rev).
-        Path shaDir = artifactsRoot.resolve(GitUrl.canonicalHash(source.canonicalUrl())).resolve(sha);
+        Path shaDir = artifactsRoot
+                .resolve(GitUrl.canonicalHash(source.canonicalUrl()))
+                .resolve(sha);
         Path repo = shaDir.resolve("repo");
         Lockfile.Artifact.GitInfo gitInfo = new Lockfile.Artifact.GitInfo(
                 source.canonicalUrl(), sha, source.ref().token());
@@ -126,13 +128,14 @@ public final class GitSourceMaterializer {
         }
 
         // Cache hit: coordinate known and the artifact is already installed.
-        if (group != null && Files.isRegularFile(artifactJar(repo, group, artifact, version))
+        if (group != null
+                && Files.isRegularFile(artifactJar(repo, group, artifact, version))
                 && Files.isRegularFile(artifactPom(repo, group, artifact, version))) {
             return new Materialized(group, artifact, version, repo.toUri(), gitInfo);
         }
 
-        SourceProjectBuilder.Built built = SourceProjectBuilder.build(
-                projectDir, versionOverride, javaHome, cas, buildRepos, jkVersion);
+        SourceProjectBuilder.Built built =
+                SourceProjectBuilder.build(projectDir, versionOverride, javaHome, cas, buildRepos, jkVersion);
         group = built.group();
         artifact = built.artifact();
         version = built.version();
@@ -144,11 +147,13 @@ public final class GitSourceMaterializer {
     }
 
     private static Path artifactJar(Path repo, String group, String artifact, String version) {
-        return repo.resolve(group.replace('.', '/') + "/" + artifact + "/" + version + "/" + artifact + "-" + version + ".jar");
+        return repo.resolve(
+                group.replace('.', '/') + "/" + artifact + "/" + version + "/" + artifact + "-" + version + ".jar");
     }
 
     private static Path artifactPom(Path repo, String group, String artifact, String version) {
-        return repo.resolve(group.replace('.', '/') + "/" + artifact + "/" + version + "/" + artifact + "-" + version + ".pom");
+        return repo.resolve(
+                group.replace('.', '/') + "/" + artifact + "/" + version + "/" + artifact + "-" + version + ".pom");
     }
 
     /** Copy the built jar + POM into the {@code file://} repo and (re)write maven-metadata.xml. */

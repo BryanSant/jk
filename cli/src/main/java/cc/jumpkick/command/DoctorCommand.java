@@ -2,9 +2,9 @@
 package cc.jumpkick.command;
 
 import cc.jumpkick.cli.CliOutput;
+import cc.jumpkick.cli.theme.Theme;
 import cc.jumpkick.compat.BuildTool;
 import cc.jumpkick.compat.InstalledTool;
-import cc.jumpkick.cli.theme.Theme;
 import cc.jumpkick.discovery.SymlinkProvisioner;
 import cc.jumpkick.model.command.CliCommand;
 import cc.jumpkick.model.command.Invocation;
@@ -60,8 +60,8 @@ public final class DoctorCommand implements CliCommand {
                     String wasPointingAt = readlinkSafe(home);
                     SymlinkProvisioner.unlink(home);
                     pruned++;
-                    CliOutput.out(Theme.colorize("pruned:  ", t.warning()) + " " + label
-                            + " (link target missing: " + Theme.colorize(wasPointingAt, t.path()) + ")");
+                    CliOutput.out(Theme.colorize("pruned:  ", t.warning()) + " " + label + " (link target missing: "
+                            + Theme.colorize(wasPointingAt, t.path()) + ")");
                     continue;
                 }
                 if (Files.isSymbolicLink(home) && verifyLinked) {
@@ -69,8 +69,8 @@ public final class DoctorCommand implements CliCommand {
                     Path marker = root.resolve(tool.slug()).resolve(installed.version() + ".fingerprint");
                     Files.writeString(marker, fingerprint);
                     verified++;
-                    CliOutput.out(Theme.colorize("verified:", t.completedStep()) + " " + label
-                            + " (sha256-tree=" + fingerprint.substring(0, 12) + "…)");
+                    CliOutput.out(Theme.colorize("verified:", t.completedStep()) + " " + label + " (sha256-tree="
+                            + fingerprint.substring(0, 12) + "…)");
                 } else if (Files.isSymbolicLink(home)) {
                     CliOutput.out("linked:   " + label
                             + " " + Theme.colorize("→", t.darkGray()) + " "
@@ -85,7 +85,9 @@ public final class DoctorCommand implements CliCommand {
         CliOutput.out(Theme.colorize(String.valueOf(healthy), t.focused())
                 + " healthy"
                 + (pruned > 0 ? ", " + Theme.colorize(String.valueOf(pruned), t.focused()) + " pruned" : "")
-                + (verified > 0 ? ", " + Theme.colorize(String.valueOf(verified), t.focused()) + " fingerprinted" : ""));
+                + (verified > 0
+                        ? ", " + Theme.colorize(String.valueOf(verified), t.focused()) + " fingerprinted"
+                        : ""));
         return 0;
     }
 

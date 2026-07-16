@@ -1,6 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.format;
 
+import cc.jumpkick.plugin.Plugin;
+import cc.jumpkick.plugin.PluginConfig;
+import cc.jumpkick.plugin.PluginManifest;
+import cc.jumpkick.plugin.protocol.PluginReply;
+import cc.jumpkick.plugin.protocol.PluginSpec;
+import cc.jumpkick.plugin.protocol.ProtocolWriter;
 import com.diffplug.spotless.DirtyState;
 import com.diffplug.spotless.Formatter;
 import com.diffplug.spotless.FormatterStep;
@@ -9,12 +15,6 @@ import com.diffplug.spotless.Provisioner;
 import com.diffplug.spotless.java.GoogleJavaFormatStep;
 import com.diffplug.spotless.java.PalantirJavaFormatStep;
 import com.diffplug.spotless.kotlin.KtfmtStep;
-import cc.jumpkick.plugin.Plugin;
-import cc.jumpkick.plugin.PluginConfig;
-import cc.jumpkick.plugin.PluginManifest;
-import cc.jumpkick.plugin.protocol.ProtocolWriter;
-import cc.jumpkick.plugin.protocol.PluginReply;
-import cc.jumpkick.plugin.protocol.PluginSpec;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;

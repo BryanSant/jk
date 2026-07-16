@@ -50,8 +50,7 @@ class TrustCommandTest {
                 ]
                 """);
         Path state = tmp.resolve("state");
-        int exit = Jk.execute(
-                "trust", "import", "--jbang", "--file", json.toString(), "--state-dir", state.toString());
+        int exit = Jk.execute("trust", "import", "--jbang", "--file", json.toString(), "--state-dir", state.toString());
         assertThat(exit).isEqualTo(0);
         String listed = capture(() -> Jk.execute("trust", "list", "--state-dir", state.toString()));
         assertThat(listed).contains("https://github.com/jbangdev/").contains("https://gist.github.com/max/");
@@ -59,7 +58,8 @@ class TrustCommandTest {
 
     @Test
     void import_without_jbang_flag_is_a_usage_error(@TempDir Path state) {
-        assertThat(Jk.execute("trust", "import", "--state-dir", state.toString())).isEqualTo(64);
+        assertThat(Jk.execute("trust", "import", "--state-dir", state.toString()))
+                .isEqualTo(64);
     }
 
     private static String capture(Runnable body) {

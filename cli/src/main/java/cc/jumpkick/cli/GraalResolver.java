@@ -189,7 +189,8 @@ public final class GraalResolver {
                     + announce
                     + ")…");
             InstalledJdk installed = new JdkInstaller(new Http(), registry).install(e);
-            System.out.println(Theme.colorize(Glyphs.CHECK, Theme.active().success()) + " GraalVM ready: " + installed.home());
+            System.out.println(
+                    Theme.colorize(Glyphs.CHECK, Theme.active().success()) + " GraalVM ready: " + installed.home());
             return installed.home();
         } catch (InterruptedException ie) {
             Thread.currentThread().interrupt();

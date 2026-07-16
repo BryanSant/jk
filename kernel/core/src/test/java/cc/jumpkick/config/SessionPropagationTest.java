@@ -3,8 +3,8 @@ package cc.jumpkick.config;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import cc.jumpkick.run.SessionCancel;
 import cc.jumpkick.run.JkThreads;
+import cc.jumpkick.run.SessionCancel;
 import java.nio.file.Path;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CyclicBarrier;
@@ -37,12 +37,9 @@ class SessionPropagationTest {
         Session scoped = sessionAt("/tmp/jk-io-scoped");
         SessionContext.install(installed);
 
-        Session seen =
-                SessionContext.where(
-                        scoped,
-                        () ->
-                                CompletableFuture.supplyAsync(SessionContext::current, JkThreads.io())
-                                        .get());
+        Session seen = SessionContext.where(
+                scoped, () -> CompletableFuture.supplyAsync(SessionContext::current, JkThreads.io())
+                        .get());
 
         assertThat(seen).isSameAs(scoped);
         assertThat(SessionContext.current()).isSameAs(installed); // static intact after the scope
@@ -54,12 +51,9 @@ class SessionPropagationTest {
         Session scoped = sessionAt("/tmp/jk-cpu-scoped");
         SessionContext.install(installed);
 
-        Session seen =
-                SessionContext.where(
-                        scoped,
-                        () ->
-                                CompletableFuture.supplyAsync(SessionContext::current, JkThreads.cpu())
-                                        .get());
+        Session seen = SessionContext.where(
+                scoped, () -> CompletableFuture.supplyAsync(SessionContext::current, JkThreads.cpu())
+                        .get());
 
         assertThat(seen).isSameAs(scoped);
     }
@@ -73,10 +67,8 @@ class SessionPropagationTest {
         // this rules out sequential reuse of a single worker masking a leak.
         CyclicBarrier bothInFlight = new CyclicBarrier(2);
 
-        Future<Session> fa =
-                SessionContext.where(a, () -> dispatchSampling(bothInFlight));
-        Future<Session> fb =
-                SessionContext.where(b, () -> dispatchSampling(bothInFlight));
+        Future<Session> fa = SessionContext.where(a, () -> dispatchSampling(bothInFlight));
+        Future<Session> fb = SessionContext.where(b, () -> dispatchSampling(bothInFlight));
 
         assertThat(fa.get()).isSameAs(a);
         assertThat(fb.get()).isSameAs(b);
@@ -102,8 +94,8 @@ class SessionPropagationTest {
         Session installed = sessionAt("/tmp/jk-baseline");
         SessionContext.install(installed);
 
-        Session seen =
-                CompletableFuture.supplyAsync(SessionContext::current, JkThreads.io()).get();
+        Session seen = CompletableFuture.supplyAsync(SessionContext::current, JkThreads.io())
+                .get();
 
         // Baseline / CLI single-session behavior: the wrapper captures current() (the static) on the
         // submitting thread and rebinds the same session on the worker — no change from before.
@@ -120,23 +112,17 @@ class SessionPropagationTest {
         Session cancelled = sessionAt("/tmp/jk-cancel");
         cancelled.cancel().cancel(); // signal this session's token before dispatch
 
-        boolean seenCancelled =
-                SessionContext.where(
-                        cancelled,
-                        () ->
-                                CompletableFuture.supplyAsync(SessionCancel::cancelled, JkThreads.io())
-                                        .get());
+        boolean seenCancelled = SessionContext.where(
+                cancelled, () -> CompletableFuture.supplyAsync(SessionCancel::cancelled, JkThreads.io())
+                        .get());
 
         assertThat(seenCancelled).isTrue();
 
         // And an un-cancelled session's task does not observe cancellation.
         Session live = sessionAt("/tmp/jk-live");
         boolean seenLive =
-                SessionContext.where(
-                        live,
-                        () ->
-                                CompletableFuture.supplyAsync(SessionCancel::cancelled, JkThreads.io())
-                                        .get());
+                SessionContext.where(live, () -> CompletableFuture.supplyAsync(SessionCancel::cancelled, JkThreads.io())
+                        .get());
         assertThat(seenLive).isFalse();
     }
 

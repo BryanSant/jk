@@ -73,7 +73,8 @@ public final class JavaIncrementalCompiler implements Plugin {
         }
         for (Map.Entry<Path, Set<Path>> e : r.generated().entrySet()) {
             out.emit(PluginReply.provenance(
-                    e.getKey().toString(), e.getValue().stream().map(Path::toString).toList()));
+                    e.getKey().toString(),
+                    e.getValue().stream().map(Path::toString).toList()));
         }
         out.emit(PluginReply.result(Map.of("status", r.success() ? "OK" : "ERROR")));
         out.emit(PluginReply.done(r.success() ? 0 : 1));
@@ -96,5 +97,4 @@ public final class JavaIncrementalCompiler implements Plugin {
         for (Processor p : ServiceLoader.load(Processor.class, loader)) processors.add(p);
         return processors;
     }
-
 }

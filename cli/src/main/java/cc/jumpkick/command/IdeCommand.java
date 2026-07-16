@@ -36,8 +36,7 @@ import java.util.Set;
 public final class IdeCommand implements CliCommand {
 
     /** The generators, in a stable emit order. */
-    private static final List<IdeGenerator> GENERATORS =
-            List.of(new IntellijIdeGenerator(), new VscodeIdeGenerator());
+    private static final List<IdeGenerator> GENERATORS = List.of(new IntellijIdeGenerator(), new VscodeIdeGenerator());
 
     /** When non-null, the command runs exactly these targets and ignores the {@code --idea/--vscode} flags. */
     private final Set<IdeTarget> forced;
@@ -67,11 +66,13 @@ public final class IdeCommand implements CliCommand {
             opts.add(Opt.flag("Only generate IntelliJ IDEA files (.idea/ + *.iml).", "--idea"));
             opts.add(Opt.flag("Only generate VS Code files (.vscode/ + Eclipse metadata).", "--vscode"));
         }
-        opts.add(Opt.value("<dir>", "Override the jk cache directory.", "--cache-dir").hide());
+        opts.add(Opt.value("<dir>", "Override the jk cache directory.", "--cache-dir")
+                .hide());
         opts.add(Opt.value("<dir>", "Override the JDK install root (for tests).", "--jdks-dir")
                 .hide());
-        opts.add(Opt.value("<dir>", "Override the IDE config root for SDK registration (for tests).", "--ide-config-dir")
-                .hide());
+        opts.add(
+                Opt.value("<dir>", "Override the IDE config root for SDK registration (for tests).", "--ide-config-dir")
+                        .hide());
         return opts;
     }
 

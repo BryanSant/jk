@@ -76,22 +76,19 @@ public final class EngineDelegate {
                         + " `jk self update`, to fetch it"));
         cc.jumpkick.task.AccessLedger.atDefaultPath().touch(VersionStore.ledgerKey(version)); // GC input
         Path java = cc.jumpkick.jdk.JavaHomes.runningJavaHome().resolve("bin").resolve("java");
-        List<String> cmd = List.of(
-                java.toString(),
-                "-cp",
-                m.engineJar().toString(),
-                "cc.jumpkick.cli.EngineMain",
-                "--job");
+        List<String> cmd =
+                List.of(java.toString(), "-cp", m.engineJar().toString(), "cc.jumpkick.cli.EngineMain", "--job");
         log.accept("jk engine: delegating to pinned jk " + version + " (job child)");
         ProcessBuilder pb = new ProcessBuilder(cmd);
-        pb.redirectError(stderrLog != null
-                ? ProcessBuilder.Redirect.appendTo(stderrLog.toFile())
-                : ProcessBuilder.Redirect.DISCARD);
+        pb.redirectError(
+                stderrLog != null
+                        ? ProcessBuilder.Redirect.appendTo(stderrLog.toFile())
+                        : ProcessBuilder.Redirect.DISCARD);
         Process child = pb.start();
-        try (BufferedWriter childIn = new BufferedWriter(
-                        new OutputStreamWriter(child.getOutputStream(), StandardCharsets.UTF_8));
-                BufferedReader childOut = new BufferedReader(
-                        new InputStreamReader(child.getInputStream(), StandardCharsets.UTF_8))) {
+        try (BufferedWriter childIn =
+                        new BufferedWriter(new OutputStreamWriter(child.getOutputStream(), StandardCharsets.UTF_8));
+                BufferedReader childOut =
+                        new BufferedReader(new InputStreamReader(child.getInputStream(), StandardCharsets.UTF_8))) {
             childIn.write(requestLine);
             childIn.write('\n');
             childIn.flush();
@@ -99,18 +96,20 @@ public final class EngineDelegate {
             // Client → child pump (build-cancel etc.); daemon thread, bounded to this exchange —
             // interrupted once the relay ends so it can never consume a line meant for the
             // parent connection or write to the closed child stdin.
-            Thread pump = new Thread(() -> {
-                try {
-                    String line;
-                    while (!Thread.currentThread().isInterrupted() && (line = clientIn.readLine()) != null) {
-                        childIn.write(line);
-                        childIn.write('\n');
-                        childIn.flush();
-                    }
-                } catch (IOException ignored) {
-                    // client hung up — the child notices EOF on its own
-                }
-            }, "jk-engine-delegate-pump");
+            Thread pump = new Thread(
+                    () -> {
+                        try {
+                            String line;
+                            while (!Thread.currentThread().isInterrupted() && (line = clientIn.readLine()) != null) {
+                                childIn.write(line);
+                                childIn.write('\n');
+                                childIn.flush();
+                            }
+                        } catch (IOException ignored) {
+                            // client hung up — the child notices EOF on its own
+                        }
+                    },
+                    "jk-engine-delegate-pump");
             pump.setDaemon(true);
             pump.start();
 

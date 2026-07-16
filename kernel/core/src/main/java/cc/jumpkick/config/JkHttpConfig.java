@@ -104,9 +104,7 @@ public record JkHttpConfig(String host, int port, int maxConcurrentRequests, Str
         if (!TomlValues.optBoolean(http, "enabled").orElse(true)) return Optional.empty();
         return Optional.of(new JkHttpConfig(
                 TomlValues.optString(http, "host").orElse(DEFAULT_HOST),
-                TomlValues.optInt(http, "port")
-                        .filter(JkHttpConfig::validPort)
-                        .orElse(DEFAULT_PORT),
+                TomlValues.optInt(http, "port").filter(JkHttpConfig::validPort).orElse(DEFAULT_PORT),
                 TomlValues.optInt(http, "max-concurrent-requests")
                         .filter(JkHttpConfig::validMaxConcurrentRequests)
                         .orElse(DEFAULT_MAX_CONCURRENT_REQUESTS),
@@ -123,7 +121,9 @@ public record JkHttpConfig(String host, int port, int maxConcurrentRequests, Str
 
     /** The admission-semaphore size: the configured cap, or the container-aware core count for 0. */
     public int effectiveMaxConcurrentRequests() {
-        return maxConcurrentRequests > 0 ? maxConcurrentRequests : Runtime.getRuntime().availableProcessors();
+        return maxConcurrentRequests > 0
+                ? maxConcurrentRequests
+                : Runtime.getRuntime().availableProcessors();
     }
 
     /** {@code www-root} resolved against the live {@link JkDirs#home()} when relative. */

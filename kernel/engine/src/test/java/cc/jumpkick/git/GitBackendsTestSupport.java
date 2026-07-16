@@ -24,8 +24,8 @@ final class GitBackendsTestSupport {
         Stream.Builder<Arguments> b = Stream.builder();
         b.add(Arguments.of("jgit", (BackendFactory) gitRoot -> new JGitExtension(gitRoot, new ForgeGitCredentials())));
         GitCliExtension.detect()
-                .ifPresent(git -> b.add(Arguments.of(
-                        "cli", (BackendFactory) gitRoot -> new GitCliExtension(gitRoot, new ForgeGitCredentials(), git))));
+                .ifPresent(git -> b.add(Arguments.of("cli", (BackendFactory)
+                        gitRoot -> new GitCliExtension(gitRoot, new ForgeGitCredentials(), git))));
         return b.build();
     }
 }

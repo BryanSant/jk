@@ -3,7 +3,6 @@ package cc.jumpkick.android;
 
 import cc.jumpkick.plugin.build.StepExec;
 import java.io.IOException;
-import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -11,8 +10,6 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipFile;
 
 /**
  * The {@code android-res} step: aapt2 compile over the module's {@code res/} and every AAR
@@ -85,9 +82,21 @@ final class ResourceStep {
         exec.label("aapt2 link");
         Path rTxt = packaged.resolve("R.txt");
         StepExec.ToolRun.Result linked = link(
-                        exec, aapt2, platformJar, manifest, namespace, compileSdk, minSdk, library, depFlats,
-                        ownFlats, packaged.resolve("resources.ap_"), gen, rTxt,
-                        packaged.resolve("keep-rules.pro"), false)
+                        exec,
+                        aapt2,
+                        platformJar,
+                        manifest,
+                        namespace,
+                        compileSdk,
+                        minSdk,
+                        library,
+                        depFlats,
+                        ownFlats,
+                        packaged.resolve("resources.ap_"),
+                        gen,
+                        rTxt,
+                        packaged.resolve("keep-rules.pro"),
+                        false)
                 .run();
         if (linked.exit() != 0) {
             throw new IllegalStateException("aapt2 link failed:\n" + linked.output());
@@ -99,8 +108,21 @@ final class ResourceStep {
         if (release && !library) {
             exec.label("aapt2 link (proto)");
             StepExec.ToolRun.Result proto = link(
-                            exec, aapt2, platformJar, manifest, namespace, compileSdk, minSdk, false, depFlats,
-                            ownFlats, packaged.resolve("resources-proto.ap_"), null, null, null, true)
+                            exec,
+                            aapt2,
+                            platformJar,
+                            manifest,
+                            namespace,
+                            compileSdk,
+                            minSdk,
+                            false,
+                            depFlats,
+                            ownFlats,
+                            packaged.resolve("resources-proto.ap_"),
+                            null,
+                            null,
+                            null,
+                            true)
                     .run();
             if (proto.exit() != 0) {
                 throw new IllegalStateException("aapt2 link --proto-format failed:\n" + proto.output());
@@ -160,8 +182,10 @@ final class ResourceStep {
                 .arg(exec.project().version())
                 .arg("--auto-add-overlay");
         if (gen != null) link.arg("--java").arg(gen.toAbsolutePath().toString());
-        if (rTxt != null) link.arg("--output-text-symbols").arg(rTxt.toAbsolutePath().toString());
-        if (keepRules != null) link.arg("--proguard").arg(keepRules.toAbsolutePath().toString());
+        if (rTxt != null)
+            link.arg("--output-text-symbols").arg(rTxt.toAbsolutePath().toString());
+        if (keepRules != null)
+            link.arg("--proguard").arg(keepRules.toAbsolutePath().toString());
         if (proto) link.arg("--proto-format");
         if (library) link.arg("--non-final-ids");
         for (Path dep : depFlats) link.arg(dep.toAbsolutePath().toString());
@@ -253,7 +277,8 @@ final class ResourceStep {
 
     /** Extract the per-OS aapt2 binary from its Maven wrapper jar into the step scratch. */
     private static Path extractAapt2(StepExec exec) throws IOException {
-        return AndroidDeps.extractAapt2(exec.requireExtra("aapt2"), exec.scratch().resolve("tools"));
+        return AndroidDeps.extractAapt2(
+                exec.requireExtra("aapt2"), exec.scratch().resolve("tools"));
     }
 
     /** Every file under {@code dir} (sorted), for tools that want explicit file lists. */

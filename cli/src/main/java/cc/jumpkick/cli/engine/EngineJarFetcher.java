@@ -60,12 +60,18 @@ final class EngineJarFetcher {
                 version,
                 new cc.jumpkick.cache.Cas(cc.jumpkick.util.JkDirs.cache()),
                 cc.jumpkick.cache.VersionStore.current(),
-                cc.jumpkick.task.CachePruneScheduler.resolveJkExe().map(Path::of).orElse(null));
+                cc.jumpkick.task.CachePruneScheduler.resolveJkExe()
+                        .map(Path::of)
+                        .orElse(null));
     }
 
     /** Root-injected variant — the testable seam; production uses the live {@code ~/.jk} roots. */
-    static Path fetch(URI releasesBase, String version,
-            cc.jumpkick.cache.Cas cas, cc.jumpkick.cache.VersionStore store, Path clientBin)
+    static Path fetch(
+            URI releasesBase,
+            String version,
+            cc.jumpkick.cache.Cas cas,
+            cc.jumpkick.cache.VersionStore store,
+            Path clientBin)
             throws IOException {
         String jarName = "jk-engine-" + version + ".jar";
         URI versionDir = URI.create(releasesBase.toString() + "/" + version + "/");
@@ -76,8 +82,7 @@ final class EngineJarFetcher {
         // the sums MUST carry a valid signature — signature-then-hash, before any byte is used.
         // A host with no keys at all (dev builds, pre-signing releases) proceeds on checksums
         // alone (dev builds carry no trust anchors yet).
-        var verifier = cc.jumpkick.repo.ReleaseVerifier.current(
-                cc.jumpkick.config.GlobalConfig.releaseTrustedKeys());
+        var verifier = cc.jumpkick.repo.ReleaseVerifier.current(cc.jumpkick.config.GlobalConfig.releaseTrustedKeys());
         if (verifier.available()) {
             byte[] sig = get(http, versionDir.resolve("SHA256SUMS.sig"), "release signature");
             verifier.verify(sumsBytes, new String(sig, java.nio.charset.StandardCharsets.UTF_8));
@@ -117,8 +122,8 @@ final class EngineJarFetcher {
                     e);
         }
         if (response.statusCode() != 200) {
-            throw new IOException("could not download the " + what + " from " + uri + " — HTTP "
-                    + response.statusCode());
+            throw new IOException(
+                    "could not download the " + what + " from " + uri + " — HTTP " + response.statusCode());
         }
         return response.body();
     }

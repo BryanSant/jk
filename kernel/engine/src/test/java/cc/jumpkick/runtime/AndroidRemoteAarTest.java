@@ -3,8 +3,8 @@ package cc.jumpkick.runtime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import cc.jumpkick.config.SessionContext;
 import cc.jumpkick.config.JkBuildParser;
+import cc.jumpkick.config.SessionContext;
 import cc.jumpkick.lock.LockfileReader;
 import cc.jumpkick.model.JkBuild;
 import cc.jumpkick.resolver.CacheSync;
@@ -57,8 +57,7 @@ class AndroidRemoteAarTest {
         assertThat(lockfile.sdk()).anyMatch(e -> e.component().equals("platforms;android-34"));
 
         // ---- 2. jk sync: the AAR re-fetches under its real extension ----
-        var sync = new CacheSync(new cc.jumpkick.cache.Cas(cache), new cc.jumpkick.http.Http())
-                .sync(lockfile);
+        var sync = new CacheSync(new cc.jumpkick.cache.Cas(cache), new cc.jumpkick.http.Http()).sync(lockfile);
         assertThat(sync.errors()).isEmpty();
 
         // ---- 3. jk build: compile against classes.jar, R from R.txt, dex the closure ----

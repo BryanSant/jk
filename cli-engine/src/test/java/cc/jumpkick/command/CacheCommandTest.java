@@ -180,12 +180,13 @@ class CacheCommandTest {
         seedRecord(cache, "keyTests", "run-tests@" + tag, null); // path-less: matched by tag
         seedRecord(cache, "keyOther", "compile-main@ffffffffffff", null); // different project
 
-        String stdout = capture(() ->
-                run("cache", "clear", "-C", proj.toString(), "--cache-dir", cache.toString(), "--yes"));
+        String stdout =
+                capture(() -> run("cache", "clear", "-C", proj.toString(), "--cache-dir", cache.toString(), "--yes"));
 
         assertThat(Files.exists(cache.resolve("actions/keys/keyProject"))).isFalse();
         assertThat(Files.exists(cache.resolve("actions/keys/keyTests"))).isFalse();
-        assertThat(Files.exists(cache.resolve("actions/tasks/compile-main@" + tag))).isFalse();
+        assertThat(Files.exists(cache.resolve("actions/tasks/compile-main@" + tag)))
+                .isFalse();
         assertThat(Files.exists(cache.resolve("actions/keys/keyOther"))).isTrue();
         // Two records matched (compile + test), each with its tasks/ pointer → 4 files removed.
         assertThat(stdout).contains("Invalidated").contains("4 cache entries");
@@ -197,7 +198,10 @@ class CacheCommandTest {
         writeProject(proj, "com.example", "proj", "0.1.0");
         Path cache = tempDir.resolve("cache");
         // Unknown tag, but an INPUT source path under the project → still this project's.
-        String src = proj.toAbsolutePath().normalize().resolve("src/main/java/A.java").toString();
+        String src = proj.toAbsolutePath()
+                .normalize()
+                .resolve("src/main/java/A.java")
+                .toString();
         seedRecord(cache, "keyPath", "compile-main@ffffffffffff", "INPUT abc123 " + src);
 
         run("cache", "clear", "-C", proj.toString(), "--cache-dir", cache.toString(), "--yes");
@@ -209,9 +213,7 @@ class CacheCommandTest {
 
     @Test
     void clear_cascades_to_workspace_modules(@TempDir Path tempDir) throws Exception {
-        Files.writeString(
-                tempDir.resolve("jk.toml"),
-                """
+        Files.writeString(tempDir.resolve("jk.toml"), """
                 [project]
                 group = "com.example"
                 name  = "ws"
@@ -220,8 +222,7 @@ class CacheCommandTest {
 
                 [workspace]
                 modules = ["mod"]
-                """,
-                StandardCharsets.UTF_8);
+                """, StandardCharsets.UTF_8);
         Path mod = tempDir.resolve("mod");
         writeProject(mod, "com.example", "mod", "1.0.0");
         Path cache = tempDir.resolve("cache");
@@ -240,8 +241,8 @@ class CacheCommandTest {
         Path cache = tempDir.resolve("cache");
         seedRecord(cache, "keyProject", "compile-main@" + classesTag(proj), null);
 
-        String stdout = capture(() ->
-                run("cache", "clear", "-C", proj.toString(), "--cache-dir", cache.toString(), "--dry-run"));
+        String stdout = capture(
+                () -> run("cache", "clear", "-C", proj.toString(), "--cache-dir", cache.toString(), "--dry-run"));
 
         assertThat(Files.exists(cache.resolve("actions/keys/keyProject"))).isTrue();
         assertThat(stdout).contains("Dry run: would invalidate");
@@ -267,17 +268,13 @@ class CacheCommandTest {
     /** Minimal buildable project manifest. */
     private static void writeProject(Path dir, String group, String name, String version) throws Exception {
         Files.createDirectories(dir);
-        Files.writeString(
-                dir.resolve("jk.toml"),
-                """
+        Files.writeString(dir.resolve("jk.toml"), """
                 [project]
                 group = "%s"
                 name  = "%s"
                 version = "%s"
                 java = 25
-                """
-                        .formatted(group, name, version),
-                StandardCharsets.UTF_8);
+                """.formatted(group, name, version), StandardCharsets.UTF_8);
     }
 
     /** The qualified-task tag the build would use for {@code projectDir}'s main classes dir. */

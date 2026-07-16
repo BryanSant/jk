@@ -124,8 +124,15 @@ public final class ImportCommand implements CliCommand {
         String diag;
         if (engineDisabledForTests()) {
             var o = cc.jumpkick.cli.engine.InProcessEngine.require()
-                    .importPipeline(source.toAbsolutePath(), target.toAbsolutePath(), projectDir, JkDirs.tmp(),
-                            force, reportPath, cache, observer);
+                    .importPipeline(
+                            source.toAbsolutePath(),
+                            target.toAbsolutePath(),
+                            projectDir,
+                            JkDirs.tmp(),
+                            force,
+                            reportPath,
+                            cache,
+                            observer);
             if (!o.result().success()) {
                 for (PipelineResult.Diagnostic d : o.result().errors()) {
                     CliOutput.err("jk import: " + d.message());

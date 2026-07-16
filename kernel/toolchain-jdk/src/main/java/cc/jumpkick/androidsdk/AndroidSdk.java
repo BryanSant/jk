@@ -74,9 +74,7 @@ public final class AndroidSdk {
             }
         }
         String home = System.getProperty("user.home", "");
-        for (Path studio : new Path[] {
-            Path.of(home, "Android", "Sdk"), Path.of(home, "Library", "Android", "sdk")
-        }) {
+        for (Path studio : new Path[] {Path.of(home, "Android", "Sdk"), Path.of(home, "Library", "Android", "sdk")}) {
             // Only adopt a Studio root that really is an SDK (licenses/ or platforms/ present).
             if (Files.isDirectory(studio.resolve("platforms")) || Files.isDirectory(studio.resolve("licenses"))) {
                 return studio.toAbsolutePath();
@@ -99,7 +97,8 @@ public final class AndroidSdk {
         if (!java.nio.file.Files.isRegularFile(props)) return null;
         try {
             for (String line : java.nio.file.Files.readAllLines(props)) {
-                if (line.startsWith("Pkg.Revision=")) return line.substring("Pkg.Revision=".length()).strip();
+                if (line.startsWith("Pkg.Revision="))
+                    return line.substring("Pkg.Revision=".length()).strip();
             }
         } catch (java.io.IOException ignored) {
             // unreadable — treated as unknown
@@ -151,8 +150,8 @@ public final class AndroidSdk {
             for (String line : Files.readAllLines(file, StandardCharsets.UTF_8)) {
                 if (line.strip().equalsIgnoreCase(textHash)) return;
             }
-            Files.writeString(file, Files.readString(file, StandardCharsets.UTF_8).stripTrailing() + "\n" + textHash
-                    + "\n");
+            Files.writeString(
+                    file, Files.readString(file, StandardCharsets.UTF_8).stripTrailing() + "\n" + textHash + "\n");
             return;
         }
         Files.writeString(file, textHash + "\n");

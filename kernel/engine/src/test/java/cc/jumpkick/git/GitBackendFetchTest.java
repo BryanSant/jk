@@ -32,7 +32,8 @@ class GitBackendFetchTest {
         GitFetcher.Fetched fetched = backend.fetch(source, false);
         assertThat(fetched.sha()).isEqualTo(upstream.taggedSha());
         assertThat(fetched.checkoutPath().resolve("README.md")).exists();
-        assertThat(Files.readString(fetched.checkoutPath().resolve("README.md"))).contains("v1.0.0");
+        assertThat(Files.readString(fetched.checkoutPath().resolve("README.md")))
+                .contains("v1.0.0");
     }
 
     @ParameterizedTest(name = "{0}")

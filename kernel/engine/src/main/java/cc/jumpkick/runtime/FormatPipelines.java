@@ -1,28 +1,25 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.runtime;
 
-import cc.jumpkick.run.StepNames;
-import cc.jumpkick.plugin.build.Phase;
-
 import cc.jumpkick.cache.Cas;
+import cc.jumpkick.engine.plugin.PluginClient;
+import cc.jumpkick.engine.plugin.PluginJar;
 import cc.jumpkick.http.Http;
 import cc.jumpkick.model.Coordinate;
+import cc.jumpkick.plugin.build.Phase;
 import cc.jumpkick.plugin.protocol.Ndjson;
-import cc.jumpkick.plugin.protocol.SpecWriter;
 import cc.jumpkick.plugin.protocol.PluginProtocol;
+import cc.jumpkick.plugin.protocol.SpecWriter;
 import cc.jumpkick.run.Pipeline;
 import cc.jumpkick.run.PipelineKey;
 import cc.jumpkick.run.Step;
 import cc.jumpkick.run.StepKind;
+import cc.jumpkick.run.StepNames;
 import cc.jumpkick.tool.ToolResolver;
-import cc.jumpkick.engine.plugin.PluginClient;
-import cc.jumpkick.engine.plugin.PluginJar;
-import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Stream;
@@ -107,7 +104,8 @@ public final class FormatPipelines {
                 })
                 .build();
 
-        Step resolve = Step.builder(StepNames.RESOLVE_FORMATTERS).phase(Phase.RESOLVE)
+        Step resolve = Step.builder(StepNames.RESOLVE_FORMATTERS)
+                .phase(Phase.RESOLVE)
                 .kind(StepKind.IO)
                 .requires(StepNames.COLLECT_SOURCES)
                 .ticks(1)
@@ -266,10 +264,13 @@ public final class FormatPipelines {
         }
         if ((optimizeImports || rewriteConfig != null) && !javaFiles.isEmpty()) {
             w.configBool("optimizeImports", optimizeImports);
-            if (rewriteConfig != null) w.configString("rewriteConfigFile", rewriteConfig.toAbsolutePath().toString());
+            if (rewriteConfig != null)
+                w.configString(
+                        "rewriteConfigFile", rewriteConfig.toAbsolutePath().toString());
         }
         // Pass the cache root so the plugin can read/write per-file format stamps.
-        if (cacheDir != null) w.configString("cacheDir", cacheDir.toAbsolutePath().toString());
+        if (cacheDir != null)
+            w.configString("cacheDir", cacheDir.toAbsolutePath().toString());
         Path spec = Files.createTempFile("jk-format-", ".spec");
         Files.write(spec, w.lines(), StandardCharsets.UTF_8);
         return spec;

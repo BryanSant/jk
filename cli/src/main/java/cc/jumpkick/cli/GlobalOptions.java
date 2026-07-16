@@ -68,7 +68,10 @@ public final class GlobalOptions {
     public Path workingDir() {
         Path raw = directory;
         if (raw == null) {
-            raw = cc.jumpkick.config.SessionContext.current().config().directory().orElse(Path.of(""));
+            raw = cc.jumpkick.config.SessionContext.current()
+                    .config()
+                    .directory()
+                    .orElse(Path.of(""));
         }
         return raw.toAbsolutePath().normalize();
     }

@@ -27,7 +27,8 @@ class TrustedSourcesTest {
     void prefix_matching_is_jbang_style(@TempDir Path state) throws Exception {
         TrustedSources t = TrustedSources.load(state);
         t.add("https://github.com/acme/");
-        assertThat(t.isTrusted("https://github.com/acme/widgets/blob/main/x.java")).isTrue();
+        assertThat(t.isTrusted("https://github.com/acme/widgets/blob/main/x.java"))
+                .isTrue();
         assertThat(t.isTrusted("HTTPS://GITHUB.COM/acme/x.java")).isTrue(); // scheme+host case-folded
         assertThat(t.isTrusted("https://github.com/other/x.java")).isFalse();
         assertThat(t.isTrusted("https://github.com/ACME/x.java")).isFalse(); // path stays case-sensitive
@@ -63,7 +64,8 @@ class TrustedSourcesTest {
                   "https://acme.dev/",
                 ]
                 """);
-        assertThat(TrustedSources.load(state).isTrusted("https://acme.dev/tool.jar")).isTrue();
+        assertThat(TrustedSources.load(state).isTrusted("https://acme.dev/tool.jar"))
+                .isTrue();
     }
 
     @Test
@@ -72,8 +74,7 @@ class TrustedSourcesTest {
                 sources = ["https://[::1]:8443/tools/", "https://acme.dev/"]
                 """);
         var trusted = TrustedSources.load(state);
-        assertThat(trusted.list())
-                .containsExactly("https://[::1]:8443/tools/", "https://acme.dev/");
+        assertThat(trusted.list()).containsExactly("https://[::1]:8443/tools/", "https://acme.dev/");
         assertThat(trusted.isTrusted("https://acme.dev/x.jar")).isTrue();
     }
 }

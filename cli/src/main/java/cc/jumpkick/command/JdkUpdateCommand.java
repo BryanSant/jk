@@ -261,7 +261,8 @@ public final class JdkUpdateCommand implements CliCommand {
         String label = entry.vendor() + " " + entry.product() + " " + entry.majorVersion();
         long total = entry.archiveSize();
         InstalledJdk installed;
-        try (cc.jumpkick.cli.tui.JdkDownloadBar pb = cc.jumpkick.cli.tui.JdkDownloadBar.show(CliOutput.stdout(), label)) {
+        try (cc.jumpkick.cli.tui.JdkDownloadBar pb =
+                cc.jumpkick.cli.tui.JdkDownloadBar.show(CliOutput.stdout(), label)) {
             installed = installer.install(entry, bytes -> pb.update(bytes, total));
             pb.finish();
         }
@@ -320,7 +321,8 @@ public final class JdkUpdateCommand implements CliCommand {
                     + Theme.colorize(
                             u.target.installFolderName(), Theme.active().focused()));
         }
-        return cc.jumpkick.cli.tui.Confirm.of(Theme.colorize(Glyphs.BANG, Theme.active().warning()) + " Proceed?", true)
+        return cc.jumpkick.cli.tui.Confirm.of(
+                        Theme.colorize(Glyphs.BANG, Theme.active().warning()) + " Proceed?", true)
                 .ask();
     }
 

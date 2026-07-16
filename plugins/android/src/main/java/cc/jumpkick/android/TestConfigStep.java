@@ -27,12 +27,18 @@ final class TestConfigStep {
         Path out = exec.outputDir("cp").resolve("com/android/tools/test_config.properties");
         Files.createDirectories(out.getParent());
         StringBuilder props = new StringBuilder();
-        props.append("android_merged_manifest=").append(manifest.toAbsolutePath()).append('\n');
-        props.append("android_merged_resources=").append(rawRes.toAbsolutePath()).append('\n');
+        props.append("android_merged_manifest=")
+                .append(manifest.toAbsolutePath())
+                .append('\n');
+        props.append("android_merged_resources=")
+                .append(rawRes.toAbsolutePath())
+                .append('\n');
         // Assets: the project dir's assets/ when present (merged-assets folding is packaging-time).
         Path assets = AndroidDeps.androidFile(exec.moduleDir(), "assets");
         if (Files.isDirectory(assets)) {
-            props.append("android_merged_assets=").append(assets.toAbsolutePath()).append('\n');
+            props.append("android_merged_assets=")
+                    .append(assets.toAbsolutePath())
+                    .append('\n');
         }
         props.append("android_resource_apk=").append(apk.toAbsolutePath()).append('\n');
         props.append("android_custom_package=").append(pkg).append('\n');

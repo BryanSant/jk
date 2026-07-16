@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.command;
 
-import cc.jumpkick.cli.ProjectContext;
 import cc.jumpkick.cli.CliOutput;
 import cc.jumpkick.cli.GlobalOptions;
+import cc.jumpkick.cli.ProjectContext;
 import cc.jumpkick.cli.theme.Coords;
 import cc.jumpkick.cli.theme.Theme;
 import cc.jumpkick.compile.ClasspathResolver;
@@ -113,7 +113,9 @@ public final class TreeCommand implements CliCommand {
         // engine-side (thin client) with marker-tag styling; this client substitutes its Theme.
         List<String> scopeNames = scopes == null
                 ? List.of()
-                : scopes.stream().map(sc -> sc.name().toLowerCase(Locale.ROOT).replace('_', '-')).toList();
+                : scopes.stream()
+                        .map(sc -> sc.name().toLowerCase(Locale.ROOT).replace('_', '-'))
+                        .toList();
         String tagged;
         try {
             tagged = engineDisabledForTests()
@@ -136,10 +138,11 @@ public final class TreeCommand implements CliCommand {
         }
         if (rendered.contains(DependencyTree.MISSING_SUFFIX)) {
             CliOutput.out();
-            CliOutput.out(ansi
-                    ? "Some dependencies are missing from your local cache. Run "
-                            + Theme.colorize("jk lock", t.warning())
-                    : "Some dependencies are missing from your local cache. Run `jk lock`");
+            CliOutput.out(
+                    ansi
+                            ? "Some dependencies are missing from your local cache. Run "
+                                    + Theme.colorize("jk lock", t.warning())
+                            : "Some dependencies are missing from your local cache. Run `jk lock`");
         }
         return 0;
     }
@@ -236,22 +239,20 @@ public final class TreeCommand implements CliCommand {
             // No-ANSI: replace all Unicode connectors with ASCII equivalents,
             // use [scope] bracket badges, * root bullet, plain uncolored coords.
             UnaryOperator<String> asciiRail = s -> switch (s) {
-                case "├─"  -> "+-";
-                case "╰─"  -> "`-";
+                case "├─" -> "+-";
+                case "╰─" -> "`-";
                 case "├─ " -> "+- ";
                 case "╰─ " -> "`- ";
                 case "│  " -> "|  ";
                 case "   " -> "   ";
-                case "●"   -> "*";
-                default    -> s;
+                case "●" -> "*";
+                default -> s;
             };
             UnaryOperator<String> plain = UnaryOperator.identity();
             // Back-reference rows: connector + coord + " ⎋" all arrive as one string.
             // Replace Unicode connectors and drop the ⎋ marker (no color = no dim cue).
-            UnaryOperator<String> asciiReference = s -> s
-                    .replace("╰─ ", "`- ")
-                    .replace("├─ ", "+- ")
-                    .replace(" ⎋", "");
+            UnaryOperator<String> asciiReference =
+                    s -> s.replace("╰─ ", "`- ").replace("├─ ", "+- ").replace(" ⎋", "");
             UnaryOperator<String> asciiBadge = s -> "[" + s + "]";
             UnaryOperator<String> asciiRoot = gav -> " * " + gav;
             return new DependencyTree.Styling(

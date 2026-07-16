@@ -3,8 +3,8 @@ package cc.jumpkick.runtime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import cc.jumpkick.config.SessionContext;
 import cc.jumpkick.config.JkBuildParser;
+import cc.jumpkick.config.SessionContext;
 import cc.jumpkick.model.JkBuild;
 import cc.jumpkick.resolver.ResolveObserver;
 import cc.jumpkick.run.Pipeline;
@@ -96,7 +96,11 @@ class HiltTransformTest {
     }
 
     private static String superOf(Path classFile) throws Exception {
-        return ClassFile.of().parse(Files.readAllBytes(classFile)).superclass().orElseThrow().asInternalName();
+        return ClassFile.of()
+                .parse(Files.readAllBytes(classFile))
+                .superclass()
+                .orElseThrow()
+                .asInternalName();
     }
 
     /** Does the class's {@code onReceive} invokespecial {@code owner.onReceive}? */

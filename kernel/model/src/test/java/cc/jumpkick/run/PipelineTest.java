@@ -63,8 +63,7 @@ class PipelineTest {
                         .ticks(() -> 7)
                         .execute(ctx -> ran.incrementAndGet())
                         .build())
-                .addStep(
-                        Step.builder("c").execute(ctx -> ran.incrementAndGet()).build()) // default ticks 1
+                .addStep(Step.builder("c").execute(ctx -> ran.incrementAndGet()).build()) // default ticks 1
                 .build();
 
         // No explicit weights → weight tracks ticks, so the total is unchanged.
@@ -147,9 +146,8 @@ class PipelineTest {
     void dag_respects_requires_ordering() {
         List<String> order = new ArrayList<>();
         var pipeline = Pipeline.builder("dag")
-                .addStep(Step.builder("setup")
-                        .execute(ctx -> order.add("setup"))
-                        .build())
+                .addStep(
+                        Step.builder("setup").execute(ctx -> order.add("setup")).build())
                 .addStep(Step.builder("middle")
                         .requires("setup")
                         .execute(ctx -> order.add("middle"))
@@ -222,9 +220,7 @@ class PipelineTest {
         assertThat(result.steps())
                 .extracting(PipelineResult.StepReport::name, PipelineResult.StepReport::requires)
                 .containsExactly(
-                        tuple("ok", List.of()),
-                        tuple("boom", List.of("ok")),
-                        tuple("downstream", List.of("boom")));
+                        tuple("ok", List.of()), tuple("boom", List.of("ok")), tuple("downstream", List.of("boom")));
         assertThat(result.errors()).hasSize(1);
         assertThat(result.errors().getFirst().step()).isEqualTo("boom");
     }

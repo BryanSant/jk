@@ -152,7 +152,8 @@ class KotlinCompilationTest {
         int exit = run("build", "-C", tempDir.toString(), "--cache-dir", SharedTestCache.arg());
         assertThat(exit).isEqualTo(0);
 
-        try (JarFile jf = new JarFile(tempDir.resolve("target/lib/mixed-0.1.0.jar").toFile())) {
+        try (JarFile jf =
+                new JarFile(tempDir.resolve("target/lib/mixed-0.1.0.jar").toFile())) {
             assertThat(jf.getJarEntry("example/Hub.class")).isNotNull();
             assertThat(jf.getJarEntry("example/GreeterKt.class")).isNotNull();
         }
@@ -185,7 +186,8 @@ class KotlinCompilationTest {
         int exit = run("build", "-C", tempDir.toString(), "--cache-dir", SharedTestCache.arg());
         assertThat(exit).isEqualTo(0);
 
-        try (JarFile jf = new JarFile(tempDir.resolve("target/lib/mixed-0.1.0.jar").toFile())) {
+        try (JarFile jf =
+                new JarFile(tempDir.resolve("target/lib/mixed-0.1.0.jar").toFile())) {
             assertThat(jf.getJarEntry("example/Greeter.class")).isNotNull();
             assertThat(jf.getJarEntry("example/App.class")).isNotNull();
         }

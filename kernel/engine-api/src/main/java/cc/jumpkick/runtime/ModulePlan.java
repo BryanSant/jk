@@ -33,7 +33,8 @@ public final class ModulePlan {
     }
 
     /** Reconstruct a plan client-side from wire-level data (engine front-ends). */
-    public static ModulePlan fromWire(Path dir, String coord, Pipeline pipeline, int weight, boolean fullyCached, Path cache) {
+    public static ModulePlan fromWire(
+            Path dir, String coord, Pipeline pipeline, int weight, boolean fullyCached, Path cache) {
         return new ModulePlan(dir, coord, pipeline, weight, fullyCached, cache);
     }
 

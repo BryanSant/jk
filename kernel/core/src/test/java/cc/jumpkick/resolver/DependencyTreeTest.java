@@ -110,8 +110,7 @@ class DependencyTreeTest {
                 new JkBuild.Dependencies(Map.of(Scope.MAIN, deps)));
         Lockfile lock = lockOf(pkg("com.foo:forked", "main-SNAPSHOT", List.of()));
 
-        String rendered =
-                DependencyTree.render(project, lock, tmp, Integer.MAX_VALUE, DependencyTree.Styling.plain());
+        String rendered = DependencyTree.render(project, lock, tmp, Integer.MAX_VALUE, DependencyTree.Styling.plain());
 
         assertThat(rendered).contains("com.foo:forked:main-SNAPSHOT");
         assertThat(rendered).doesNotContain("[git:");

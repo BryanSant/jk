@@ -442,7 +442,8 @@ public final class JdkListCommand implements CliCommand {
     }
 
     private static String headerRow(int[] widths) {
-        String bar = Theme.active().isAnsi() ? Theme.colorize("│", Theme.active().darkGray()) : "|";
+        String bar =
+                Theme.active().isAnsi() ? Theme.colorize("│", Theme.active().darkGray()) : "|";
         var sb = new StringBuilder(bar);
         for (int i = 0; i < HEADERS.length; i++) {
             sb.append(" ");
@@ -474,7 +475,9 @@ public final class JdkListCommand implements CliCommand {
         boolean ansi = Theme.active().isAnsi();
         String outerBar = ansi ? Theme.colorize("│", Theme.active().darkGray()) : "|";
         String innerBar = ansi
-                ? (band == null ? outerBar : Theme.colorize("│", banded(Theme.active().darkGray(), band)))
+                ? (band == null
+                        ? outerBar
+                        : Theme.colorize("│", banded(Theme.active().darkGray(), band)))
                 : "|";
         String sp = bandSpaces(1, band);
         // leftPad / rightPad: normally a single (possibly banded) space; with nerdfont+band
@@ -608,7 +611,8 @@ public final class JdkListCommand implements CliCommand {
     private JdkCatalog fetchCatalogOrNull() {
         if (!HostPlatform.supported()) return null;
         try {
-            boolean refresh = cc.jumpkick.config.SessionContext.current().config().forceOr(false);
+            boolean refresh =
+                    cc.jumpkick.config.SessionContext.current().config().forceOr(false);
             JdkCatalogClient client = (feedUrl != null
                             ? new JdkCatalogClient(
                                     new Http(),

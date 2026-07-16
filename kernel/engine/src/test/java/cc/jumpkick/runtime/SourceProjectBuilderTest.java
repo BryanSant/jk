@@ -9,6 +9,7 @@ import cc.jumpkick.http.Http;
 import cc.jumpkick.model.RepositorySpec;
 import cc.jumpkick.repo.MavenRepo;
 import cc.jumpkick.repo.RepoGroup;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -84,9 +85,9 @@ class SourceProjectBuilderTest {
     void unsupported_target_fails_fast(@TempDir Path dir) {
         Cas cas = new Cas(dir.resolve("cache"));
         RepoGroup repos = RepoGroup.of(new MavenRepo("central", RepositorySpec.MAVEN_CENTRAL.url(), new Http(), cas));
-        assertThatThrownBy(() ->
-                SourceProjectBuilder.build(dir, null, Path.of(System.getProperty("java.home")), cas, repos, "test"))
-                .isInstanceOf(java.io.IOException.class)
+        assertThatThrownBy(() -> SourceProjectBuilder.build(
+                        dir, null, Path.of(System.getProperty("java.home")), cas, repos, "test"))
+                .isInstanceOf(IOException.class)
                 .hasMessageContaining("no jk.toml, build.gradle");
     }
 
@@ -119,8 +120,10 @@ class SourceProjectBuilderTest {
 
         @Test
         void recovers_the_archive_base_name_from_a_jar_filename() {
-            assertThat(SourceProjectBuilder.artifactFromJar("demo-3.1.4.jar", "3.1.4")).isEqualTo("demo");
-            assertThat(SourceProjectBuilder.artifactFromJar("demo.jar", "3.1.4")).isEqualTo("demo");
+            assertThat(SourceProjectBuilder.artifactFromJar("demo-3.1.4.jar", "3.1.4"))
+                    .isEqualTo("demo");
+            assertThat(SourceProjectBuilder.artifactFromJar("demo.jar", "3.1.4"))
+                    .isEqualTo("demo");
         }
 
         @Test
@@ -153,7 +156,7 @@ class SourceProjectBuilderTest {
                     </project>
                     """);
             assertThatThrownBy(() -> SourceProjectBuilder.parseMavenGav(pom))
-                    .isInstanceOf(java.io.IOException.class)
+                    .isInstanceOf(IOException.class)
                     .hasMessageContaining("unresolved property");
         }
 
@@ -165,7 +168,9 @@ class SourceProjectBuilderTest {
             Files.writeString(libs.resolve("demo-1.0-sources.jar"), "x");
             Files.writeString(libs.resolve("demo-1.0-javadoc.jar"), "x");
             Files.writeString(libs.resolve("demo-1.0-plain.jar"), "x");
-            assertThat(SourceProjectBuilder.selectMainJar(libs, dir).getFileName().toString())
+            assertThat(SourceProjectBuilder.selectMainJar(libs, dir)
+                            .getFileName()
+                            .toString())
                     .isEqualTo("demo-1.0.jar");
         }
 
@@ -176,7 +181,7 @@ class SourceProjectBuilderTest {
             Files.writeString(libs.resolve("one-1.0.jar"), "x");
             Files.writeString(libs.resolve("two-1.0.jar"), "x");
             assertThatThrownBy(() -> SourceProjectBuilder.selectMainJar(libs, dir))
-                    .isInstanceOf(java.io.IOException.class)
+                    .isInstanceOf(IOException.class)
                     .hasMessageContaining("ambiguous");
         }
 
@@ -185,7 +190,7 @@ class SourceProjectBuilderTest {
             Path libs = dir.resolve("build/libs");
             Files.createDirectories(libs);
             assertThatThrownBy(() -> SourceProjectBuilder.selectMainJar(libs, dir))
-                    .isInstanceOf(java.io.IOException.class)
+                    .isInstanceOf(IOException.class)
                     .hasMessageContaining("no jar");
         }
 
@@ -204,7 +209,7 @@ class SourceProjectBuilderTest {
             Files.writeString(wrapper, "#!/bin/sh\n");
             wrapper.toFile().setExecutable(false);
             assertThatThrownBy(() -> SourceProjectBuilder.resolveTool(dir, "gradlew", "gradle"))
-                    .isInstanceOf(java.io.IOException.class)
+                    .isInstanceOf(IOException.class)
                     .hasMessageContaining("not executable");
         }
 

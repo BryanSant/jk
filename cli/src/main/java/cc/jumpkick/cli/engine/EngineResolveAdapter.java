@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.cli.engine;
 
-import cc.jumpkick.plugin.build.Phase;
 import cc.jumpkick.cli.Jk;
 import cc.jumpkick.engine.EnginePaths;
 import cc.jumpkick.engine.protocol.EngineProtocol;
+import cc.jumpkick.plugin.build.Phase;
 import cc.jumpkick.plugin.protocol.Ndjson;
 import cc.jumpkick.run.PipelineListener;
 import cc.jumpkick.run.PipelineResult;
@@ -14,7 +14,6 @@ import cc.jumpkick.run.StepStatus;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.nio.channels.Channels;
 import java.nio.channels.SocketChannel;
@@ -54,8 +53,7 @@ final class EngineResolveAdapter {
         try (SocketChannel ch = EngineClient.connect(cc.jumpkick.engine.EnginePaths.activeSocket(paths))) {
             BufferedWriter writer =
                     new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
-            BufferedReader reader =
-                    EngineClient.protocolReader(ch);
+            BufferedReader reader = EngineClient.protocolReader(ch);
             writer.write(EngineProtocol.outdatedRequest(
                     req.entryDir().toString(),
                     req.cache().toString(),
@@ -143,8 +141,7 @@ final class EngineResolveAdapter {
         try (SocketChannel ch = EngineClient.connect(cc.jumpkick.engine.EnginePaths.activeSocket(paths))) {
             BufferedWriter writer =
                     new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
-            BufferedReader reader =
-                    EngineClient.protocolReader(ch);
+            BufferedReader reader = EngineClient.protocolReader(ch);
 
             send(
                     writer,
@@ -168,9 +165,11 @@ final class EngineResolveAdapter {
                 String type = EngineProtocol.typeOf(line);
                 if (type == null) continue;
                 switch (type) {
-                    case EngineProtocol.PLAN_STEP -> steps.add(Step.builder(Ndjson.str(line, "name"))
-                            .label(Ndjson.str(line, "label")).phase(Phase.fromWireOrNull(Ndjson.str(line, "phase")))
-                            .build());
+                    case EngineProtocol.PLAN_STEP ->
+                        steps.add(Step.builder(Ndjson.str(line, "name"))
+                                .label(Ndjson.str(line, "label"))
+                                .phase(Phase.fromWireOrNull(Ndjson.str(line, "phase")))
+                                .build());
                     case EngineProtocol.PLAN_DONE -> listener = listenerFactory.apply(steps);
                     case EngineProtocol.PIPELINE_FINISH -> {
                         if (fetchedOut != null) fetchedOut[0] = Ndjson.longValue(line, "syncFetched", 0);
@@ -187,8 +186,8 @@ final class EngineResolveAdapter {
                         if (listener != null) listener.pipelineFinish(result);
                         return result;
                     }
-                    case EngineProtocol.ERROR -> throw new IOException(
-                            "jk engine: run failed: " + Ndjson.str(line, "message"));
+                    case EngineProtocol.ERROR ->
+                        throw new IOException("jk engine: run failed: " + Ndjson.str(line, "message"));
                     default -> dispatchPipelineEvent(type, line, listener, diagnostics);
                 }
             }
@@ -205,8 +204,7 @@ final class EngineResolveAdapter {
         try (SocketChannel ch = EngineClient.connect(cc.jumpkick.engine.EnginePaths.activeSocket(paths))) {
             BufferedWriter writer =
                     new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
-            BufferedReader reader =
-                    EngineClient.protocolReader(ch);
+            BufferedReader reader = EngineClient.protocolReader(ch);
             send(writer, requestLine);
 
             // Cascade state: the module currently streaming. Modules are strictly sequential on the
@@ -229,12 +227,15 @@ final class EngineResolveAdapter {
                         diagnostics = new ArrayList<>();
                         listener = null;
                     }
-                    case EngineProtocol.PLAN_STEP -> steps.add(Step.builder(Ndjson.str(line, "name"))
-                            .label(Ndjson.str(line, "label")).phase(Phase.fromWireOrNull(Ndjson.str(line, "phase")))
-                            .build());
+                    case EngineProtocol.PLAN_STEP ->
+                        steps.add(Step.builder(Ndjson.str(line, "name"))
+                                .label(Ndjson.str(line, "label"))
+                                .phase(Phase.fromWireOrNull(Ndjson.str(line, "phase")))
+                                .build());
                     case EngineProtocol.PLAN_DONE -> listener = handler.onModuleStart(currentDir, currentCoord, steps);
-                    case EngineProtocol.LOCK_PACKAGE -> handler.onPackage(
-                            Ndjson.str(line, "dir"), Ndjson.str(line, "name"), Ndjson.str(line, "version"));
+                    case EngineProtocol.LOCK_PACKAGE ->
+                        handler.onPackage(
+                                Ndjson.str(line, "dir"), Ndjson.str(line, "name"), Ndjson.str(line, "version"));
                     case EngineProtocol.PIPELINE_FINISH -> {
                         PipelineResult result = new PipelineResult(
                                 pipelineName,
@@ -261,8 +262,8 @@ final class EngineResolveAdapter {
                                 Ndjson.strArray(line, "errors"),
                                 Ndjson.intValue(line, "refreshed", -1));
                     }
-                    case EngineProtocol.ERROR -> throw new IOException(
-                            "jk engine: run failed: " + Ndjson.str(line, "message"));
+                    case EngineProtocol.ERROR ->
+                        throw new IOException("jk engine: run failed: " + Ndjson.str(line, "message"));
                     default -> dispatchPipelineEvent(type, line, listener, diagnostics);
                 }
             }
@@ -286,25 +287,34 @@ final class EngineResolveAdapter {
         }
         switch (type) {
             case EngineProtocol.PIPELINE_START -> listener.pipelineStart(readPipelineView(line));
-            case EngineProtocol.STEP_START -> listener.stepStart(
-                    Ndjson.str(line, "step"), Phase.fromWireOrNull(Ndjson.str(line, "phase")), Ndjson.intValue(line, "ticks", 0));
-            case EngineProtocol.PROGRESS -> listener.progress(
-                    Ndjson.str(line, "step"), Ndjson.intValue(line, "delta", 0), readPipelineView(line));
-            case EngineProtocol.TICK_UPDATE -> listener.tickUpdate(
-                    Ndjson.str(line, "step"), Ndjson.intValue(line, "delta", 0), readPipelineView(line));
+            case EngineProtocol.STEP_START ->
+                listener.stepStart(
+                        Ndjson.str(line, "step"),
+                        Phase.fromWireOrNull(Ndjson.str(line, "phase")),
+                        Ndjson.intValue(line, "ticks", 0));
+            case EngineProtocol.PROGRESS ->
+                listener.progress(Ndjson.str(line, "step"), Ndjson.intValue(line, "delta", 0), readPipelineView(line));
+            case EngineProtocol.TICK_UPDATE ->
+                listener.tickUpdate(
+                        Ndjson.str(line, "step"), Ndjson.intValue(line, "delta", 0), readPipelineView(line));
             case EngineProtocol.LABEL -> listener.label(Ndjson.str(line, "step"), Ndjson.str(line, "label"));
             case EngineProtocol.OUTPUT -> listener.output(Ndjson.str(line, "step"), Ndjson.str(line, "line"));
-            case EngineProtocol.WARN -> listener.warn(
-                    Ndjson.str(line, "step"), Ndjson.str(line, "code"), Ndjson.str(line, "message"));
-            case EngineProtocol.ERROR_LINE -> listener.error(
-                    Ndjson.str(line, "step"),
-                    Ndjson.str(line, "code"),
-                    Ndjson.str(line, "message"),
-                    Ndjson.str(line, "test"),
-                    Ndjson.str(line, "exceptionClass"));
+            case EngineProtocol.WARN ->
+                listener.warn(Ndjson.str(line, "step"), Ndjson.str(line, "code"), Ndjson.str(line, "message"));
+            case EngineProtocol.ERROR_LINE ->
+                listener.error(
+                        Ndjson.str(line, "step"),
+                        Ndjson.str(line, "code"),
+                        Ndjson.str(line, "message"),
+                        Ndjson.str(line, "test"),
+                        Ndjson.str(line, "exceptionClass"));
             case EngineProtocol.PIPELINE_DIAGNOSTIC -> diagnostics.add(readDiagnostic(line));
-            case EngineProtocol.STEP_FINISH -> listener.stepFinish(
-                    Ndjson.str(line, "step"), Phase.fromWireOrNull(Ndjson.str(line, "phase")), StepStatus.valueOf(Ndjson.str(line, "status")), Duration.ZERO);
+            case EngineProtocol.STEP_FINISH ->
+                listener.stepFinish(
+                        Ndjson.str(line, "step"),
+                        Phase.fromWireOrNull(Ndjson.str(line, "phase")),
+                        StepStatus.valueOf(Ndjson.str(line, "status")),
+                        Duration.ZERO);
             default -> {
                 /* forward-compatible no-op */
             }

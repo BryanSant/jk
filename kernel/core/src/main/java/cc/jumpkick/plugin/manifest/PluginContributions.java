@@ -105,7 +105,10 @@ public final class PluginContributions {
                     options.add(Interpolation.resolve(opt, config, build.project(), kotlinVersion));
                 }
                 out.add(new KotlinPluginUse(
-                        plugin.id(), c.module().substring(0, colon), c.module().substring(colon + 1), c.version(),
+                        plugin.id(),
+                        c.module().substring(0, colon),
+                        c.module().substring(colon + 1),
+                        c.version(),
                         options));
             }
         }
@@ -147,8 +150,8 @@ public final class PluginContributions {
      * spec ({@code group:artifact:version[:classifier]}, {@code transitive} = the runtime closure)
      * or a provisioned SDK component ({@code sdkComponent}/{@code sdkPath}).
      */
-    public record StepDep(String artifact, String coordinateSpec, boolean transitive, String sdkComponent,
-            String sdkPath) {
+    public record StepDep(
+            String artifact, String coordinateSpec, boolean transitive, String sdkComponent, String sdkPath) {
 
         public StepDep(String artifact, String coordinateSpec) {
             this(artifact, coordinateSpec, false, null, null);
@@ -166,7 +169,8 @@ public final class PluginContributions {
             PluginConfig config = build.pluginConfig(manifest.id()).orElse(null);
             if (config == null) continue;
             for (PluginDescriptor.StepDependency sd : manifest.contributions().stepDependencies()) {
-                if (!holds(sd.when(), config, build.project(), build.nativeConfig().isPresent(), null, manifest.id())) {
+                if (!holds(
+                        sd.when(), config, build.project(), build.nativeConfig().isPresent(), null, manifest.id())) {
                     continue;
                 }
                 if (sd.sdkComponent() != null) {
@@ -196,8 +200,10 @@ public final class PluginContributions {
         for (PluginDescriptor manifest : PluginTableRegistry.manifestsFor(moduleDir, build.plugins())) {
             PluginConfig config = build.pluginConfig(manifest.id()).orElse(null);
             if (config == null) continue;
-            for (PluginDescriptor.ProvidedClasspath pc : manifest.contributions().providedClasspath()) {
-                if (!holds(pc.when(), config, build.project(), build.nativeConfig().isPresent(), null, manifest.id())) {
+            for (PluginDescriptor.ProvidedClasspath pc :
+                    manifest.contributions().providedClasspath()) {
+                if (!holds(
+                        pc.when(), config, build.project(), build.nativeConfig().isPresent(), null, manifest.id())) {
                     continue;
                 }
                 out.add(pc.dependency());
@@ -240,7 +246,8 @@ public final class PluginContributions {
             if (config == null) continue;
             for (PluginDescriptor.PackagerDependency pd :
                     manifest.contributions().packagerDependencies()) {
-                if (!holds(pd.when(), config, build.project(), build.nativeConfig().isPresent(), null, manifest.id())) {
+                if (!holds(
+                        pd.when(), config, build.project(), build.nativeConfig().isPresent(), null, manifest.id())) {
                     continue;
                 }
                 String coordinate = Interpolation.resolve(pd.coordinate(), config, build.project(), null);

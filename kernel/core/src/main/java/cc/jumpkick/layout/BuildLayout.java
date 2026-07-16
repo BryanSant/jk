@@ -43,8 +43,7 @@ public final class BuildLayout {
     /** True when the project declares a {@code project.main} class (i.e. it is an application). */
     private final boolean hasMain;
 
-    private BuildLayout(
-            Path workspaceRoot, Path moduleRoot, String artifact, String version, boolean hasMain) {
+    private BuildLayout(Path workspaceRoot, Path moduleRoot, String artifact, String version, boolean hasMain) {
         this.workspaceRoot = Objects.requireNonNull(workspaceRoot, "workspaceRoot");
         this.moduleRoot = Objects.requireNonNull(moduleRoot, "moduleRoot");
         this.artifact = Objects.requireNonNull(artifact, "artifact");

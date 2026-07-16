@@ -1,19 +1,20 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.runtime;
 
-import cc.jumpkick.run.StepNames;
-import cc.jumpkick.plugin.build.Phase;
-
 import cc.jumpkick.cache.Cas;
 import cc.jumpkick.compile.ClasspathResolver;
 import cc.jumpkick.config.ImageConfigParser;
 import cc.jumpkick.config.SessionContext;
 import cc.jumpkick.config.WorkspaceLoader;
+import cc.jumpkick.engine.plugin.PluginClient;
+import cc.jumpkick.engine.plugin.PluginJar;
 import cc.jumpkick.image.ImageConfig;
 import cc.jumpkick.layout.BuildLayout;
 import cc.jumpkick.lock.Lockfile;
 import cc.jumpkick.lock.LockfileReader;
+import cc.jumpkick.model.BuildIdentity;
 import cc.jumpkick.model.JkBuild;
+import cc.jumpkick.plugin.build.Phase;
 import cc.jumpkick.plugin.protocol.Ndjson;
 import cc.jumpkick.plugin.protocol.PluginProtocol;
 import cc.jumpkick.plugin.protocol.SpecWriter;
@@ -22,14 +23,11 @@ import cc.jumpkick.run.PipelineKey;
 import cc.jumpkick.run.Step;
 import cc.jumpkick.run.StepContext;
 import cc.jumpkick.run.StepKind;
+import cc.jumpkick.run.StepNames;
 import cc.jumpkick.task.ActionCache;
 import cc.jumpkick.task.ActionKey;
 import cc.jumpkick.task.ClasspathFingerprint;
 import cc.jumpkick.util.JkDirs;
-import cc.jumpkick.model.BuildIdentity;
-import cc.jumpkick.model.JkVersion;
-import cc.jumpkick.engine.plugin.PluginClient;
-import cc.jumpkick.engine.plugin.PluginJar;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -110,7 +108,8 @@ public final class ImagePipelines {
                 java.util.Set.of(),
                 cc.jumpkick.config.SessionContext.current());
 
-        Step imagePlan = Step.builder(StepNames.IMAGE_PLAN).phase(Phase.IMAGE)
+        Step imagePlan = Step.builder(StepNames.IMAGE_PLAN)
+                .phase(Phase.IMAGE)
                 .requires(StepNames.PACKAGE_JAR)
                 .ticks(1)
                 .execute(ctx -> {
@@ -121,7 +120,8 @@ public final class ImagePipelines {
                     if (tarballPath != null) ctx.put(TARBALL_PATH, tarballPath);
                     ImageConfig config = buildConfig(jkBuildPath, project, registry, tag, dockerExecutableArg);
                     ctx.put(CONFIG, config);
-                    boolean dockerfileMode = config.dockerFile() != null && !config.dockerFile().isBlank();
+                    boolean dockerfileMode =
+                            config.dockerFile() != null && !config.dockerFile().isBlank();
                     if (!dockerfileMode) {
                         // Jib mode: main class required; load dep jars for classpath layering.
                         String chosen = resolveMainClass(mainClass, config, project, projectDir);
@@ -129,7 +129,9 @@ public final class ImagePipelines {
                             ctx.error("no-main", "no main class — pass --main, set image.main, or set project.main.");
                             throw new RuntimeException("missing main class");
                         }
-                        if (PluginBuild.shape(project, projectDir).map(sh -> sh.layeredImage()).orElse(false)) {
+                        if (PluginBuild.shape(project, projectDir)
+                                .map(sh -> sh.layeredImage())
+                                .orElse(false)) {
                             // Layered-image packagers (spring-boot plan §3.6): production RUNTIME
                             // deps only, snapshots split into their own layer, app classes
                             // exploded — the layer cadence matches how the bytes actually change.
@@ -147,7 +149,8 @@ public final class ImagePipelines {
                 })
                 .build();
 
-        Step writeImage = Step.builder(StepNames.WRITE_IMAGE).phase(Phase.IMAGE)
+        Step writeImage = Step.builder(StepNames.WRITE_IMAGE)
+                .phase(Phase.IMAGE)
                 .kind(StepKind.IO)
                 .requires(StepNames.IMAGE_PLAN)
                 .weight(() -> EffortWeights.ociWeight(projectDir))
@@ -161,10 +164,11 @@ public final class ImagePipelines {
                     // Dockerfile mode: shell out to docker/podman build; skip Jib entirely.
                     if (config.dockerFile() != null && !config.dockerFile().isBlank()) {
                         boolean daemonMode = tarballPath == null
-                                && (config.registry() == null || config.registry().isBlank());
+                                && (config.registry() == null
+                                        || config.registry().isBlank());
                         String exe = config.dockerExecutable() != null ? config.dockerExecutable() : "docker";
-                        ctx.label((daemonMode ? "build into " : "build + push via ") + exe
-                                + " (" + config.dockerFile() + ")");
+                        ctx.label((daemonMode ? "build into " : "build + push via ") + exe + " (" + config.dockerFile()
+                                + ")");
                         try {
                             String ref = runDockerfileBuild(ctx, config, projectDir, tarballPath, project);
                             ctx.put(IMAGE_REF, ref);
@@ -181,7 +185,9 @@ public final class ImagePipelines {
                     @SuppressWarnings("unchecked")
                     List<Path> snapshotJars =
                             (List<Path>) ctx.get(SNAPSHOT_JARS).orElse(List.of());
-                    Path classesDir = PluginBuild.shape(project, projectDir).map(sh -> sh.layeredImage()).orElse(false)
+                    Path classesDir = PluginBuild.shape(project, projectDir)
+                                    .map(sh -> sh.layeredImage())
+                                    .orElse(false)
                             ? layout.classesDir()
                             : null;
 
@@ -203,7 +209,8 @@ public final class ImagePipelines {
                                 "classes:" + (classesDir == null ? "" : ClasspathFingerprint.entry(classesDir)),
                                 "main:" + chosen,
                                 "cfg:" + imageConfigToken(config),
-                                "worker:" + PluginJar.IMAGE_BUILDER.artifactId() + ":" + BuildIdentity.cacheKeyVersion());
+                                "worker:" + PluginJar.IMAGE_BUILDER.artifactId() + ":"
+                                        + BuildIdentity.cacheKeyVersion());
                         imgTask = ActionKey.qualifiedTaskId(StepNames.WRITE_IMAGE, tarballPath);
                         imgKey = ActionKey.forArtifact(imgTask, BuildIdentity.cacheKeyVersion(), tokens);
                         if (useCache) {
@@ -225,13 +232,14 @@ public final class ImagePipelines {
                                 + (config.dockerExecutable() != null ? config.dockerExecutable() : "docker/podman")
                                 + ")");
                     } else {
-                        ctx.label("push to " + config.targetReference(
-                                project.project().name(), project.project().version()));
+                        ctx.label("push to "
+                                + config.targetReference(
+                                        project.project().name(),
+                                        project.project().version()));
                     }
                     try {
                         String ref = runImageWorker(
-                                cache, project, layout, config, chosen, depJars, snapshotJars, classesDir,
-                                tarballPath);
+                                cache, project, layout, config, chosen, depJars, snapshotJars, classesDir, tarballPath);
                         ctx.put(IMAGE_REF, ref);
                     } catch (RuntimeException e) {
                         ctx.error("image", e.getMessage());
@@ -268,8 +276,7 @@ public final class ImagePipelines {
      * </ol>
      */
     private static ImageConfig buildConfig(
-            Path jkBuild, JkBuild project, String registry, String tag, String dockerExecutableArg)
-            throws IOException {
+            Path jkBuild, JkBuild project, String registry, String tag, String dockerExecutableArg) throws IOException {
         ImageConfigParser.ImageConfigData data = ImageConfigParser.parse(jkBuild);
 
         // Merge user-global [image] from ~/.jk/config.toml underneath the project layer.
@@ -334,17 +341,26 @@ public final class ImagePipelines {
             if (config.user() != null) sw.configString("user", config.user());
             if (config.registry() != null) sw.configString("registry", config.registry());
             if (config.tag() != null) sw.configString("tag", config.tag());
-            if (tarballPath != null) sw.configString("tarball", tarballPath.toAbsolutePath().toString());
+            if (tarballPath != null)
+                sw.configString("tarball", tarballPath.toAbsolutePath().toString());
             if (config.dockerExecutable() != null) sw.configString("dockerExecutable", config.dockerExecutable());
             if (!config.ports().isEmpty()) {
-                sw.configList("ports", config.ports().stream().map(String::valueOf).toList());
+                sw.configList(
+                        "ports", config.ports().stream().map(String::valueOf).toList());
             }
             if (!config.env().isEmpty()) {
-                sw.configList("env", config.env().entrySet().stream().map(e -> e.getKey() + "=" + e.getValue()).toList());
+                sw.configList(
+                        "env",
+                        config.env().entrySet().stream()
+                                .map(e -> e.getKey() + "=" + e.getValue())
+                                .toList());
             }
             if (!config.labels().isEmpty()) {
                 sw.configList(
-                        "labels", config.labels().entrySet().stream().map(e -> e.getKey() + "=" + e.getValue()).toList());
+                        "labels",
+                        config.labels().entrySet().stream()
+                                .map(e -> e.getKey() + "=" + e.getValue())
+                                .toList());
             }
             if (!config.platforms().isEmpty()) sw.configList("platforms", config.platforms());
             sw.artifact(layout.mainJar());
@@ -428,8 +444,8 @@ public final class ImagePipelines {
                 .directory(cwd.toFile())
                 .redirectErrorStream(true)
                 .start();
-        try (var reader = new java.io.BufferedReader(
-                new java.io.InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8))) {
+        try (var reader =
+                new java.io.BufferedReader(new java.io.InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8))) {
             String line;
             while ((line = reader.readLine()) != null) {
                 ctx.output(line);

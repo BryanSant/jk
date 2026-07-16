@@ -44,18 +44,17 @@ public final class ContextPropagator {
     }
 
     /** Pass-through propagator: tasks are returned unchanged (unbound / default behavior). */
-    public static final Propagator IDENTITY =
-            new Propagator() {
-                @Override
-                public Runnable wrapRunnable(Runnable r) {
-                    return r;
-                }
+    public static final Propagator IDENTITY = new Propagator() {
+        @Override
+        public Runnable wrapRunnable(Runnable r) {
+            return r;
+        }
 
-                @Override
-                public <T> Callable<T> wrapCallable(Callable<T> c) {
-                    return c;
-                }
-            };
+        @Override
+        public <T> Callable<T> wrapCallable(Callable<T> c) {
+            return c;
+        }
+    };
 
     private static volatile Propagator active = IDENTITY;
 

@@ -1,9 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.runtime;
 
-import cc.jumpkick.run.StepNames;
-import cc.jumpkick.plugin.build.Phase;
-
 import cc.jumpkick.cache.Cas;
 import cc.jumpkick.compile.CompileRequest;
 import cc.jumpkick.compile.CompileResult;
@@ -19,6 +16,7 @@ import cc.jumpkick.model.Dependency;
 import cc.jumpkick.model.RepositorySpec;
 import cc.jumpkick.model.Scope;
 import cc.jumpkick.mvn.PomImporter;
+import cc.jumpkick.plugin.build.Phase;
 import cc.jumpkick.repo.EffectivePomBuilder;
 import cc.jumpkick.repo.MavenRepo;
 import cc.jumpkick.repo.RepoGroup;
@@ -28,6 +26,7 @@ import cc.jumpkick.run.Pipeline;
 import cc.jumpkick.run.PipelineKey;
 import cc.jumpkick.run.Step;
 import cc.jumpkick.run.StepKind;
+import cc.jumpkick.run.StepNames;
 import cc.jumpkick.script.ScriptHeader;
 import cc.jumpkick.script.ScriptHeaderParser;
 import cc.jumpkick.tool.JarManifest;
@@ -87,14 +86,16 @@ public final class ScriptPipelines {
 
     /** {@code classes/} for compiled output, under the state dir, keyed by the source bytes' hash. */
     public static Path classesDirFor(Path stateDir, byte[] sourceBytes) {
-        return stateDir.resolve("script-cache").resolve(Hashing.sha256Hex(sourceBytes)).resolve("classes");
+        return stateDir.resolve("script-cache")
+                .resolve(Hashing.sha256Hex(sourceBytes))
+                .resolve("classes");
     }
 
     // --- .java -----------------------------------------------------------
 
     /** {@code parse-script → resolve-deps → compile-java} for a {@code .java} script. */
-    public static Pipeline javaScriptPipeline(Path script, Path cacheDir, Path stateDir, URI repoUrl, boolean forceRecompile)
-            throws IOException {
+    public static Pipeline javaScriptPipeline(
+            Path script, Path cacheDir, Path stateDir, URI repoUrl, boolean forceRecompile) throws IOException {
         return javaScriptPipeline(script, cacheDir, stateDir, repoUrl, forceRecompile, List.of());
     }
 
@@ -103,7 +104,8 @@ public final class ScriptPipelines {
             Path script, Path cacheDir, Path stateDir, URI repoUrl, boolean forceRecompile, List<Dependency> extraDeps)
             throws IOException {
         byte[] bytes = Files.readAllBytes(script);
-        ScriptHeader header = withExtras(ScriptHeaderParser.parse(new String(bytes, StandardCharsets.UTF_8)), extraDeps);
+        ScriptHeader header =
+                withExtras(ScriptHeaderParser.parse(new String(bytes, StandardCharsets.UTF_8)), extraDeps);
         Path classesDir = classesDirFor(stateDir, bytes);
         String mainClass = header.main() != null ? header.main() : simpleMainClassName(script, ".java");
 
@@ -120,7 +122,8 @@ public final class ScriptPipelines {
                 })
                 .build();
 
-        Step resolveDeps = Step.builder(StepNames.RESOLVE_DEPS).phase(Phase.RESOLVE)
+        Step resolveDeps = Step.builder(StepNames.RESOLVE_DEPS)
+                .phase(Phase.RESOLVE)
                 .kind(StepKind.IO)
                 .requires(StepNames.PARSE_SCRIPT)
                 .ticks(1)
@@ -140,13 +143,16 @@ public final class ScriptPipelines {
                 })
                 .build();
 
-        Step compile = Step.builder(StepNames.COMPILE_JAVA).phase(Phase.COMPILE)
+        Step compile = Step.builder(StepNames.COMPILE_JAVA)
+                .phase(Phase.COMPILE)
                 .kind(StepKind.CPU)
                 .requires(StepNames.RESOLVE_DEPS)
                 .ticks(1)
                 .execute(ctx -> {
                     boolean rerun = forceRecompile
-                            || cc.jumpkick.config.SessionContext.current().config().rebuildOr(false);
+                            || cc.jumpkick.config.SessionContext.current()
+                                    .config()
+                                    .rebuildOr(false);
                     if (!rerun && Files.exists(classesDir.resolve(mainClass.replace('.', '/') + ".class"))) {
                         ctx.label("cache hit (" + mainClass + ".class)");
                         materializeFiles(script, header, classesDir);
@@ -202,8 +208,8 @@ public final class ScriptPipelines {
     // --- .kt -------------------------------------------------------------
 
     /** {@code parse-script → (resolve-deps ∥ resolve-kotlinc) → compile-kt} for a {@code .kt} script. */
-    public static Pipeline kotlinScriptPipeline(Path script, Path cacheDir, Path stateDir, URI repoUrl, boolean forceRecompile)
-            throws IOException {
+    public static Pipeline kotlinScriptPipeline(
+            Path script, Path cacheDir, Path stateDir, URI repoUrl, boolean forceRecompile) throws IOException {
         return kotlinScriptPipeline(script, cacheDir, stateDir, repoUrl, forceRecompile, List.of());
     }
 
@@ -233,7 +239,8 @@ public final class ScriptPipelines {
 
         // resolve-deps and resolve-kotlinc are independent and slow; run
         // them in parallel.
-        Step resolveDeps = Step.builder(StepNames.RESOLVE_DEPS).phase(Phase.RESOLVE)
+        Step resolveDeps = Step.builder(StepNames.RESOLVE_DEPS)
+                .phase(Phase.RESOLVE)
                 .kind(StepKind.IO)
                 .requires(StepNames.PARSE_SCRIPT)
                 .ticks(1)
@@ -253,7 +260,8 @@ public final class ScriptPipelines {
                 })
                 .build();
 
-        Step resolveKotlinc = Step.builder(StepNames.RESOLVE_KOTLINC).phase(Phase.RESOLVE)
+        Step resolveKotlinc = Step.builder(StepNames.RESOLVE_KOTLINC)
+                .phase(Phase.RESOLVE)
                 .kind(StepKind.IO)
                 .requires(StepNames.PARSE_SCRIPT)
                 .ticks(1)
@@ -279,13 +287,16 @@ public final class ScriptPipelines {
                 })
                 .build();
 
-        Step compile = Step.builder(StepNames.COMPILE_KOTLIN).phase(Phase.COMPILE)
+        Step compile = Step.builder(StepNames.COMPILE_KOTLIN)
+                .phase(Phase.COMPILE)
                 .kind(StepKind.CPU)
                 .requires(StepNames.RESOLVE_DEPS, StepNames.RESOLVE_KOTLINC)
                 .ticks(1)
                 .execute(ctx -> {
                     boolean rerun = forceRecompile
-                            || cc.jumpkick.config.SessionContext.current().config().rebuildOr(false);
+                            || cc.jumpkick.config.SessionContext.current()
+                                    .config()
+                                    .rebuildOr(false);
                     if (!rerun && Files.exists(classesDir.resolve(mainClass.replace('.', '/') + ".class"))) {
                         ctx.label("cache hit (" + mainClass + ".class)");
                         materializeFiles(script, header, classesDir);
@@ -304,8 +315,7 @@ public final class ScriptPipelines {
                     // it; paired with -no-stdlib).
                     List<Path> compileCp = new ArrayList<>(depsClasspath);
                     compileCp.add(ctx.require(KT_STDLIB));
-                    Path workingDir = cacheDir
-                            .resolve("actions")
+                    Path workingDir = cacheDir.resolve("actions")
                             .resolve("incremental-kotlin")
                             .resolve(cc.jumpkick.task.ActionKey.qualifiedTaskId("script", classesDir));
                     @SuppressWarnings("unchecked")
@@ -313,8 +323,8 @@ public final class ScriptPipelines {
                     // @file:DependsOn/@file:Repository were resolved by jk (parseKotlin);
                     // kotlinc can't compile them — feed it a line-preserving neutralized copy.
                     List<Path> ktSources = withDeclaredSources(script, header);
-                    String neutralized = ScriptHeaderParser.neutralizeKotlinAnnotations(
-                            new String(bytes, StandardCharsets.UTF_8));
+                    String neutralized =
+                            ScriptHeaderParser.neutralizeKotlinAnnotations(new String(bytes, StandardCharsets.UTF_8));
                     if (neutralized != null) {
                         Path srcDir = classesDir.resolveSibling("src");
                         Files.createDirectories(srcDir);
@@ -370,7 +380,8 @@ public final class ScriptPipelines {
                 ScriptHeaderParser.parseKotlin(new String(Files.readAllBytes(script), StandardCharsets.UTF_8)),
                 extraDeps);
 
-        Step resolveDeps = Step.builder(StepNames.RESOLVE_DEPS).phase(Phase.RESOLVE)
+        Step resolveDeps = Step.builder(StepNames.RESOLVE_DEPS)
+                .phase(Phase.RESOLVE)
                 .kind(StepKind.IO)
                 .ticks(1)
                 .execute(ctx -> {
@@ -387,7 +398,8 @@ public final class ScriptPipelines {
                 })
                 .build();
 
-        Step resolveKotlinc = Step.builder(StepNames.RESOLVE_KOTLINC).phase(Phase.RESOLVE)
+        Step resolveKotlinc = Step.builder(StepNames.RESOLVE_KOTLINC)
+                .phase(Phase.RESOLVE)
                 .kind(StepKind.IO)
                 .ticks(1)
                 .execute(ctx -> {
@@ -453,7 +465,8 @@ public final class ScriptPipelines {
                 })
                 .build();
 
-        Step resolveJarDeps = Step.builder(StepNames.RESOLVE_JAR_DEPS).phase(Phase.RESOLVE)
+        Step resolveJarDeps = Step.builder(StepNames.RESOLVE_JAR_DEPS)
+                .phase(Phase.RESOLVE)
                 .kind(StepKind.IO)
                 .requires(StepNames.INSPECT_JAR)
                 .ticks(1)

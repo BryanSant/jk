@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.engine.plugin;
 
-import cc.jumpkick.config.SessionContext;
 import cc.jumpkick.config.PluginTuning;
-import java.nio.file.Path;
+import cc.jumpkick.config.SessionContext;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -110,8 +109,7 @@ public final class JvmOptions {
     private static PluginTuning tuning() {
         var session = SessionContext.current();
         PluginTuning t = session.jvm();
-        PluginTuning base =
-                (t == null || t == PluginTuning.NONE) ? cc.jumpkick.config.PluginTunings.fromEnv() : t;
+        PluginTuning base = (t == null || t == PluginTuning.NONE) ? cc.jumpkick.config.PluginTunings.fromEnv() : t;
         // The jk.toml [jvm] table overlays here, at fork time, engine-side (thin-client contract):
         // the session carries only the client's flag/env layers, so a client of any age gets
         // current-engine [jvm] interpretation.
@@ -291,7 +289,8 @@ public final class JvmOptions {
         if (!hasArgPrefix(extra, "-Xss")) {
             out.add("-Xss" + DEFAULT_STACK_KB + "k");
         }
-        if (!hasArgPrefix(extra, "-XX:+ExitOnOutOfMemoryError", "-XX:-ExitOnOutOfMemoryError", "-XX:+CrashOnOutOfMemoryError")) {
+        if (!hasArgPrefix(
+                extra, "-XX:+ExitOnOutOfMemoryError", "-XX:-ExitOnOutOfMemoryError", "-XX:+CrashOnOutOfMemoryError")) {
             out.add("-XX:+ExitOnOutOfMemoryError");
         }
     }

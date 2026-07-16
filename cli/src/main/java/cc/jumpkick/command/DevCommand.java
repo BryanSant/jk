@@ -67,7 +67,8 @@ public final class DevCommand implements CliCommand {
     @Override
     public List<Opt> options() {
         var opts = new java.util.ArrayList<Opt>(List.of(
-                Opt.value("<dir>", "Override the jk cache directory.", "--cache-dir").hide(),
+                Opt.value("<dir>", "Override the jk cache directory.", "--cache-dir")
+                        .hide(),
                 Opt.value("<dir>", "Override the JDK install directory.", "--jdks-dir")
                         .hide()));
         opts.addAll(VariantSelection.options());
@@ -180,8 +181,7 @@ public final class DevCommand implements CliCommand {
      * The device dev loop: watch the plan's roots, rebuild on change, and re-dispatch the plugin's
      * deploy command (install + relaunch happen in the plugin's worker — nothing runs on the host).
      */
-    private int deviceLoop(
-            Path projectDir, Path cache, cc.jumpkick.engine.protocol.ExecPlan plan, List<String> appArgs)
+    private int deviceLoop(Path projectDir, Path cache, cc.jumpkick.engine.protocol.ExecPlan plan, List<String> appArgs)
             throws IOException, InterruptedException {
         List<Path> watchRoots = new ArrayList<>();
         for (String root : plan.watchRoots()) watchRoots.add(Path.of(root));
@@ -219,7 +219,8 @@ public final class DevCommand implements CliCommand {
         cc.jumpkick.engine.protocol.PluginCommandReport report;
         try {
             report = engineDisabledForTests()
-                    ? cc.jumpkick.cli.engine.InProcessEngine.require().pluginCommand(projectDir, cache, command, appArgs)
+                    ? cc.jumpkick.cli.engine.InProcessEngine.require()
+                            .pluginCommand(projectDir, cache, command, appArgs)
                     : cc.jumpkick.cli.engine.EngineClient.pluginCommand(
                             cc.jumpkick.engine.EnginePaths.current(), projectDir, cache, command, appArgs);
         } catch (Exception e) {
@@ -358,8 +359,7 @@ public final class DevCommand implements CliCommand {
      * Consume the triggering key plus everything that arrives inside the debounce window, and
      * classify what changed. New directories are registered on the fly (nested package creation).
      */
-    private static Changes drainEvents(
-            WatchService watcher, Map<WatchKey, Path> keys, WatchKey first, Path projectDir)
+    private static Changes drainEvents(WatchService watcher, Map<WatchKey, Path> keys, WatchKey first, Path projectDir)
             throws IOException, InterruptedException {
         boolean sources = false, resources = false, manifest = false;
         WatchKey key = first;

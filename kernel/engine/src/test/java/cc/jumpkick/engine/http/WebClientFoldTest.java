@@ -30,13 +30,16 @@ class WebClientFoldTest {
         Path foldMjs = tempDir.resolve("fold.mjs");
         Files.copy(foldJs, foldMjs);
 
-        ProcessBuilder builder = new ProcessBuilder("node", "--test", testMjs.toAbsolutePath().toString())
+        ProcessBuilder builder = new ProcessBuilder(
+                        "node", "--test", testMjs.toAbsolutePath().toString())
                 .redirectErrorStream(true)
                 .directory(tempDir.toFile());
         builder.environment().put("JK_FOLD_MJS", foldMjs.toAbsolutePath().toString());
         Process node = builder.start();
         String output = new String(node.getInputStream().readAllBytes());
-        assertThat(node.waitFor(30, TimeUnit.SECONDS)).as("node --test finished").isTrue();
+        assertThat(node.waitFor(30, TimeUnit.SECONDS))
+                .as("node --test finished")
+                .isTrue();
         assertThat(node.exitValue()).as(output).isZero();
         assertThat(output).contains("fail 0"); // both node reporters ("# fail 0" TAP, "ℹ fail 0" spec)
     }

@@ -44,7 +44,8 @@ class TestCommandUserOutputTest {
     @Test
     void user_output_is_suppressed_when_verbose_is_false() {
         var ctx = new RecordingContext();
-        TestProgressListener listener = cc.jumpkick.runtime.TestSupport.bridgeListener(ctx, /* workerCount */ 1, /* verbose */ false);
+        TestProgressListener listener =
+                cc.jumpkick.runtime.TestSupport.bridgeListener(ctx, /* workerCount */ 1, /* verbose */ false);
 
         listener.onUserOutput(0, "hello from a passing test");
 
@@ -56,7 +57,8 @@ class TestCommandUserOutputTest {
     @Test
     void user_output_is_forwarded_through_the_context_when_verbose_is_true() {
         var ctx = new RecordingContext();
-        TestProgressListener listener = cc.jumpkick.runtime.TestSupport.bridgeListener(ctx, /* workerCount */ 1, /* verbose */ true);
+        TestProgressListener listener =
+                cc.jumpkick.runtime.TestSupport.bridgeListener(ctx, /* workerCount */ 1, /* verbose */ true);
 
         listener.onUserOutput(0, "hello from a passing test");
 
@@ -68,7 +70,8 @@ class TestCommandUserOutputTest {
     @Test
     void worker_prefix_appears_in_parallel_mode() {
         var ctx = new RecordingContext();
-        TestProgressListener listener = cc.jumpkick.runtime.TestSupport.bridgeListener(ctx, /* workerCount */ 4, /* verbose */ true);
+        TestProgressListener listener =
+                cc.jumpkick.runtime.TestSupport.bridgeListener(ctx, /* workerCount */ 4, /* verbose */ true);
 
         listener.onUserOutput(2, "from worker two");
 

@@ -15,8 +15,7 @@ import java.util.List;
  * <p>{@code error} non-null means the check could not run (parse failure, unreadable lock); its
  * message is ready to print and every other field is defaulted.
  */
-public record DenyReport(
-        String error, int checked, List<String> modules, List<String> versions, List<String> reasons) {
+public record DenyReport(String error, int checked, List<String> modules, List<String> versions, List<String> reasons) {
 
     public static DenyReport error(String message) {
         return new DenyReport(message, 0, List.of(), List.of(), List.of());

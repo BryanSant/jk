@@ -2,9 +2,9 @@
 package cc.jumpkick.command;
 
 import cc.jumpkick.cli.CliOutput;
+import cc.jumpkick.cli.engine.EngineClient;
 import cc.jumpkick.engine.EnginePaths;
 import cc.jumpkick.engine.protocol.EngineProtocol;
-import cc.jumpkick.cli.engine.EngineClient;
 import cc.jumpkick.model.command.Arity;
 import cc.jumpkick.model.command.CliCommand;
 import cc.jumpkick.model.command.GroupCommand;
@@ -185,12 +185,13 @@ public final class HistoryCommand extends GroupCommand {
             boolean success = Ndjson.bool(record, "success", false);
             boolean cancelled = Ndjson.bool(record, "cancelled", false);
             CliOutput.out(glyph(success, cancelled) + " " + Ndjson.str(record, "id"));
-            CliOutput.out("  status:   " + outcome(success, cancelled) + " (exit " + Ndjson.longValue(record, "exitCode", 0) + ")");
+            CliOutput.out("  status:   " + outcome(success, cancelled) + " (exit "
+                    + Ndjson.longValue(record, "exitCode", 0) + ")");
             CliOutput.out("  kind:     " + Ndjson.str(record, "kind"));
             CliOutput.out("  project:  " + label(Ndjson.str(record, "coord"), Ndjson.str(record, "dir")));
             CliOutput.out("  dir:      " + Ndjson.str(record, "dir"));
-            CliOutput.out("  duration: " + duration(Ndjson.longValue(record, "millis", -1))
-                    + "   " + ago(Ndjson.longValue(record, "finishedAt", 0), System.currentTimeMillis()));
+            CliOutput.out("  duration: " + duration(Ndjson.longValue(record, "millis", -1)) + "   "
+                    + ago(Ndjson.longValue(record, "finishedAt", 0), System.currentTimeMillis()));
             long savedMillis = Ndjson.longValue(record, "savedMillis", -1);
             long estMillis = Ndjson.longValue(record, "estimatedUncachedMillis", -1);
             if (savedMillis >= 0 && estMillis > 0) {
@@ -210,15 +211,25 @@ public final class HistoryCommand extends GroupCommand {
                         + Ndjson.longValue(record, "testsSkipped", 0) + " skipped");
             }
 
-            printRows(lines, EngineProtocol.HISTORY_MODULE, "Modules", m -> "  "
-                    + glyph(Ndjson.bool(m, "success", false), false) + " "
-                    + label(Ndjson.str(m, "coord"), Ndjson.str(m, "dir"))
-                    + "  " + duration(Ndjson.longValue(m, "millis", -1)));
-            printRows(lines, EngineProtocol.HISTORY_STEP, "Steps", p -> "  "
-                    + Ndjson.str(p, "status") + "  " + Ndjson.str(p, "name")
-                    + "  " + duration(Ndjson.longValue(p, "millis", -1)));
+            printRows(
+                    lines,
+                    EngineProtocol.HISTORY_MODULE,
+                    "Modules",
+                    m -> "  "
+                            + glyph(Ndjson.bool(m, "success", false), false) + " "
+                            + label(Ndjson.str(m, "coord"), Ndjson.str(m, "dir"))
+                            + "  " + duration(Ndjson.longValue(m, "millis", -1)));
+            printRows(
+                    lines,
+                    EngineProtocol.HISTORY_STEP,
+                    "Steps",
+                    p -> "  "
+                            + Ndjson.str(p, "status") + "  " + Ndjson.str(p, "name")
+                            + "  " + duration(Ndjson.longValue(p, "millis", -1)));
             printRows(lines, EngineProtocol.HISTORY_DIAG, "Diagnostics", d -> {
-                StringBuilder b = new StringBuilder("  [").append(Ndjson.str(d, "severity")).append("] ");
+                StringBuilder b = new StringBuilder("  [")
+                        .append(Ndjson.str(d, "severity"))
+                        .append("] ");
                 appendIf(b, Ndjson.str(d, "step"), ": ");
                 appendIf(b, Ndjson.str(d, "test"), " — ");
                 String exc = Ndjson.str(d, "exceptionClass");

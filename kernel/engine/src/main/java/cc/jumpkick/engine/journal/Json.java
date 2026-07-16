@@ -125,8 +125,12 @@ final class Json {
         for (Object e : arr(o, "modules")) {
             Map<String, Object> mm = (Map<String, Object>) e;
             modules.add(new BuildRecord.Module(
-                    str(mm, "coord"), str(mm, "dir"), bool(mm, "success"),
-                    (int) lng(mm, "exitCode"), lng(mm, "millis"), readSteps(mm)));
+                    str(mm, "coord"),
+                    str(mm, "dir"),
+                    bool(mm, "success"),
+                    (int) lng(mm, "exitCode"),
+                    lng(mm, "millis"),
+                    readSteps(mm)));
         }
 
         List<BuildRecord.Step> steps = readSteps(o);
@@ -143,16 +147,36 @@ final class Json {
         for (Object e : arr(o, "diagnostics")) {
             Map<String, Object> dm = (Map<String, Object>) e;
             diagnostics.add(new BuildRecord.Diag(
-                    str(dm, "severity"), str(dm, "dir"), str(dm, "step"), str(dm, "code"),
-                    str(dm, "message"), str(dm, "test"), str(dm, "exceptionClass")));
+                    str(dm, "severity"),
+                    str(dm, "dir"),
+                    str(dm, "step"),
+                    str(dm, "code"),
+                    str(dm, "message"),
+                    str(dm, "test"),
+                    str(dm, "exceptionClass")));
         }
 
         return new BuildRecord(
-                str(o, "id"), lng(o, "buildNumber"), (int) lng(o, "schema"),
-                str(o, "kind"), str(o, "dir"), str(o, "coord"),
-                lng(o, "startedAt"), lng(o, "finishedAt"), lng(o, "millis"),
-                bool(o, "success"), bool(o, "cancelled"), (int) lng(o, "exitCode"), str(o, "jkVersion"),
-                tests, modules, steps, diagnostics, str(o, "trigger"), str(o, "commit"), benefit);
+                str(o, "id"),
+                lng(o, "buildNumber"),
+                (int) lng(o, "schema"),
+                str(o, "kind"),
+                str(o, "dir"),
+                str(o, "coord"),
+                lng(o, "startedAt"),
+                lng(o, "finishedAt"),
+                lng(o, "millis"),
+                bool(o, "success"),
+                bool(o, "cancelled"),
+                (int) lng(o, "exitCode"),
+                str(o, "jkVersion"),
+                tests,
+                modules,
+                steps,
+                diagnostics,
+                str(o, "trigger"),
+                str(o, "commit"),
+                benefit);
     }
 
     private static String str(Map<String, Object> o, String key) {

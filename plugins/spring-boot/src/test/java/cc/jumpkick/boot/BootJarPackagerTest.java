@@ -48,8 +48,7 @@ class BootJarPackagerTest {
 
         try (JarFile jar = new JarFile(out.toFile())) {
             Attributes attrs = jar.getManifest().getMainAttributes();
-            assertThat(attrs.getValue("Main-Class"))
-                    .isEqualTo("org.springframework.boot.loader.launch.JarLauncher");
+            assertThat(attrs.getValue("Main-Class")).isEqualTo("org.springframework.boot.loader.launch.JarLauncher");
             assertThat(attrs.getValue("Start-Class")).isEqualTo("com.example.App");
             assertThat(attrs.getValue("Spring-Boot-Version")).isEqualTo("4.0.0");
             assertThat(attrs.getValue("Spring-Boot-Classes")).isEqualTo("BOOT-INF/classes/");
@@ -59,7 +58,8 @@ class BootJarPackagerTest {
             assertThat(attrs.getValue("Implementation-Title")).isEqualTo("app");
 
             // Loader exploded at the root; app content under BOOT-INF/classes/.
-            assertThat(jar.getEntry("org/springframework/boot/loader/launch/JarLauncher.class")).isNotNull();
+            assertThat(jar.getEntry("org/springframework/boot/loader/launch/JarLauncher.class"))
+                    .isNotNull();
             assertThat(jar.getEntry("BOOT-INF/classes/com/example/App.class")).isNotNull();
             assertThat(jar.getEntry("BOOT-INF/classes/application.properties")).isNotNull();
 
@@ -69,8 +69,7 @@ class BootJarPackagerTest {
             assertThat(nested.getMethod()).isEqualTo(ZipEntry.STORED);
 
             String classpathIdx = new String(
-                    jar.getInputStream(jar.getEntry("BOOT-INF/classpath.idx")).readAllBytes(),
-                    StandardCharsets.UTF_8);
+                    jar.getInputStream(jar.getEntry("BOOT-INF/classpath.idx")).readAllBytes(), StandardCharsets.UTF_8);
             assertThat(classpathIdx)
                     .isEqualTo("- \"BOOT-INF/lib/spring-core-7.0.1.jar\"\n"
                             + "- \"BOOT-INF/lib/acme-1.0-SNAPSHOT.jar\"\n");
@@ -125,9 +124,9 @@ class BootJarPackagerTest {
         Path loader = writeJar(tmp.resolve("loader.jar"), "org/springframework/boot/loader/launch/JarLauncher.class");
         // The packager treats the SBOM as opaque bytes (the engine renders CycloneDX upstream).
         byte[] sbom = ("{\"bomFormat\": \"CycloneDX\", \"components\": [{"
-                + "\"purl\": \"pkg:maven/org.springframework/spring-core@7.0.1\","
-                + " \"hashes\": [{\"alg\": \"SHA-256\", \"content\": \"abc123\"}]}]}")
-                .getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                        + "\"purl\": \"pkg:maven/org.springframework/spring-core@7.0.1\","
+                        + " \"hashes\": [{\"alg\": \"SHA-256\", \"content\": \"abc123\"}]}]}")
+                .getBytes(StandardCharsets.UTF_8);
 
         Path out = tmp.resolve("app.jar");
         new BootJarPackager()

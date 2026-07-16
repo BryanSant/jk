@@ -1,19 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.runtime;
 
-import cc.jumpkick.run.StepNames;
-import cc.jumpkick.plugin.build.Phase;
-
 import cc.jumpkick.cache.Cas;
 import cc.jumpkick.http.Http;
 import cc.jumpkick.model.RepositorySpec;
 import cc.jumpkick.model.ToolCoordSpec;
+import cc.jumpkick.plugin.build.Phase;
 import cc.jumpkick.repo.MavenRepo;
 import cc.jumpkick.repo.RepoGroup;
 import cc.jumpkick.run.Pipeline;
 import cc.jumpkick.run.PipelineKey;
 import cc.jumpkick.run.Step;
 import cc.jumpkick.run.StepKind;
+import cc.jumpkick.run.StepNames;
 import cc.jumpkick.tool.ToolEnv;
 import cc.jumpkick.tool.ToolResolver;
 import java.io.IOException;
@@ -57,7 +56,8 @@ public final class ToolPipelines {
             URI repoUrl,
             Path cache,
             String coordLabel) {
-        Step resolve = Step.builder(StepNames.RESOLVE_COORD).phase(Phase.RESOLVE)
+        Step resolve = Step.builder(StepNames.RESOLVE_COORD)
+                .phase(Phase.RESOLVE)
                 .kind(StepKind.IO)
                 .ticks(1)
                 .execute(ctx -> {

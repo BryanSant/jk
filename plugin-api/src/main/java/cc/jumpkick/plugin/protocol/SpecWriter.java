@@ -18,8 +18,10 @@ public final class SpecWriter {
     private final List<String> lines = new ArrayList<>();
 
     public SpecWriter op(String op, String name, String pluginId) {
-        StringBuilder b = new StringBuilder("{\"t\":").append(Ndjson.quote(PluginProtocol.OP))
-                .append(",\"op\":").append(Ndjson.quote(op));
+        StringBuilder b = new StringBuilder("{\"t\":")
+                .append(Ndjson.quote(PluginProtocol.OP))
+                .append(",\"op\":")
+                .append(Ndjson.quote(op));
         if (name != null) b.append(",\"name\":").append(Ndjson.quote(name));
         b.append(",\"plugin\":").append(Ndjson.quote(pluginId)).append('}');
         lines.add(b.toString());
@@ -61,18 +63,24 @@ public final class SpecWriter {
     }
 
     public SpecWriter configList(String key, List<String> values) {
-        lines.add("{\"t\":\"config\",\"key\":" + Ndjson.quote(key) + ",\"kind\":\"list\",\"values\":"
-                + array(values) + "}");
+        lines.add("{\"t\":\"config\",\"key\":" + Ndjson.quote(key) + ",\"kind\":\"list\",\"values\":" + array(values)
+                + "}");
         return this;
     }
 
     public SpecWriter project(ProjectFacts p) {
-        StringBuilder b = new StringBuilder("{\"t\":\"project\",\"group\":").append(Ndjson.quote(p.group()))
-                .append(",\"name\":").append(Ndjson.quote(p.name()))
-                .append(",\"version\":").append(Ndjson.quote(p.version()))
-                .append(",\"javaRelease\":").append(p.javaRelease())
-                .append(",\"nativeDeclared\":").append(p.nativeDeclared())
-                .append(",\"kotlin\":").append(p.kotlin());
+        StringBuilder b = new StringBuilder("{\"t\":\"project\",\"group\":")
+                .append(Ndjson.quote(p.group()))
+                .append(",\"name\":")
+                .append(Ndjson.quote(p.name()))
+                .append(",\"version\":")
+                .append(Ndjson.quote(p.version()))
+                .append(",\"javaRelease\":")
+                .append(p.javaRelease())
+                .append(",\"nativeDeclared\":")
+                .append(p.nativeDeclared())
+                .append(",\"kotlin\":")
+                .append(p.kotlin());
         if (p.mainClass() != null && !p.mainClass().isBlank()) {
             b.append(",\"mainClass\":").append(Ndjson.quote(p.mainClass()));
         }
@@ -89,7 +97,9 @@ public final class SpecWriter {
         StringBuilder b = new StringBuilder("{\"t\":\"layout\"");
         for (Map.Entry<String, Path> e : dirs.entrySet()) {
             if (e.getValue() != null) {
-                b.append(',').append(Ndjson.quote(e.getKey())).append(':')
+                b.append(',')
+                        .append(Ndjson.quote(e.getKey()))
+                        .append(':')
                         .append(Ndjson.quote(e.getValue().toAbsolutePath().toString()));
             }
         }
@@ -99,33 +109,39 @@ public final class SpecWriter {
     }
 
     public SpecWriter javaHome(Path javaHome) {
-        lines.add("{\"t\":\"java-home\",\"path\":" + Ndjson.quote(javaHome.toAbsolutePath().toString()) + "}");
+        lines.add("{\"t\":\"java-home\",\"path\":"
+                + Ndjson.quote(javaHome.toAbsolutePath().toString()) + "}");
         return this;
     }
 
     public SpecWriter artifact(Path path) {
-        lines.add("{\"t\":\"artifact\",\"path\":" + Ndjson.quote(path.toAbsolutePath().toString()) + "}");
+        lines.add("{\"t\":\"artifact\",\"path\":"
+                + Ndjson.quote(path.toAbsolutePath().toString()) + "}");
         return this;
     }
 
     public SpecWriter cp(Path path, String role) {
-        lines.add("{\"t\":\"cp\",\"path\":" + Ndjson.quote(path.toAbsolutePath().toString())
-                + ",\"role\":" + Ndjson.quote(role) + "}");
+        lines.add("{\"t\":\"cp\",\"path\":" + Ndjson.quote(path.toAbsolutePath().toString()) + ",\"role\":"
+                + Ndjson.quote(role) + "}");
         return this;
     }
 
     public SpecWriter entry(String fileName, Path jar, boolean snapshot, Path container) {
         StringBuilder b = new StringBuilder("{\"t\":\"entry\",\"file\":").append(Ndjson.quote(fileName));
-        if (jar != null) b.append(",\"path\":").append(Ndjson.quote(jar.toAbsolutePath().toString()));
+        if (jar != null)
+            b.append(",\"path\":").append(Ndjson.quote(jar.toAbsolutePath().toString()));
         b.append(",\"snapshot\":").append(snapshot);
-        if (container != null) b.append(",\"container\":").append(Ndjson.quote(container.toAbsolutePath().toString()));
+        if (container != null)
+            b.append(",\"container\":")
+                    .append(Ndjson.quote(container.toAbsolutePath().toString()));
         b.append('}');
         lines.add(b.toString());
         return this;
     }
 
     public SpecWriter source(Path path) {
-        lines.add("{\"t\":\"source\",\"path\":" + Ndjson.quote(path.toAbsolutePath().toString()) + "}");
+        lines.add("{\"t\":\"source\",\"path\":"
+                + Ndjson.quote(path.toAbsolutePath().toString()) + "}");
         return this;
     }
 

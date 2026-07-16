@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.android;
 
-import com.android.apksig.ApkSigner;
 import cc.jumpkick.plugin.build.PackageIo;
 import cc.jumpkick.plugin.build.StepExec;
+import com.android.apksig.ApkSigner;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -45,13 +45,10 @@ final class Signing {
             throw new IllegalStateException("signing.store-file does not exist: " + storeFile);
         }
         String alias = io.config().string("signing.key-alias");
-        char[] storePass =
-                io.secret("signing.store-password").orElse("").toCharArray();
-        char[] keyPass = io.secret("signing.key-password")
-                .map(String::toCharArray)
-                .orElse(storePass);
-        KeyStore ks = KeyStore.getInstance(
-                storeFile.toString().endsWith(".jks") ? "JKS" : "PKCS12");
+        char[] storePass = io.secret("signing.store-password").orElse("").toCharArray();
+        char[] keyPass =
+                io.secret("signing.key-password").map(String::toCharArray).orElse(storePass);
+        KeyStore ks = KeyStore.getInstance(storeFile.toString().endsWith(".jks") ? "JKS" : "PKCS12");
         try (InputStream in = Files.newInputStream(storeFile)) {
             ks.load(in, storePass);
         }

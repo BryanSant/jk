@@ -4,8 +4,8 @@ package cc.jumpkick.task;
 import cc.jumpkick.cache.Cas;
 import cc.jumpkick.compile.CompileRequest;
 import cc.jumpkick.compile.CompileResult;
-import cc.jumpkick.compile.JavacRunner;
 import cc.jumpkick.compile.ForkedJavac;
+import cc.jumpkick.compile.JavacRunner;
 import cc.jumpkick.compile.incremental.ClassAbi;
 import cc.jumpkick.compile.incremental.ClassDependencies;
 import cc.jumpkick.util.Hashing;
@@ -267,8 +267,7 @@ public final class JavaIncrementalCompile {
 
     private static boolean classpathUnchanged(CompileRequest request, Map<String, String> in) {
         Set<String> now = new TreeSet<>();
-        for (Path cp : request.classpath())
-            now.add("cp:" + cp.toAbsolutePath().normalize());
+        for (Path cp : request.classpath()) now.add("cp:" + cp.toAbsolutePath().normalize());
         Set<String> prior = new TreeSet<>();
         for (String k : in.keySet()) if (k.startsWith("cp:")) prior.add(k);
         return now.equals(prior);

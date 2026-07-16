@@ -62,7 +62,8 @@ public final class OutdatedCommand implements CliCommand {
         return List.of(
                 Opt.flag("Add a Tip column for the non-stable frontier (prerelease / git HEAD).", "--show-tip"),
                 Opt.flag("Hide dependencies already on the newest compatible version.", "--exclude-up-to-date"),
-                Opt.value("<url>", "Override declared repos with a single URL.", "--repo-url").hide(),
+                Opt.value("<url>", "Override declared repos with a single URL.", "--repo-url")
+                        .hide(),
                 Opt.value(
                                 "<dir>",
                                 "Override the jk cache directory. Default: $JK_CACHE_DIR or ~/.cache/jk.",
@@ -166,14 +167,22 @@ public final class OutdatedCommand implements CliCommand {
         for (int i = 0; i < rows.size(); i++) {
             OutdatedReport.Row r = rows.get(i);
             if (i > 0) sb.append(',');
-            sb.append("{\"module\":").append(Ndjson.quote(r.moduleLabel()))
-                    .append(",\"dependency\":").append(Ndjson.quote(r.coordinate()))
-                    .append(",\"display\":").append(Ndjson.quote(r.display()))
-                    .append(",\"scope\":").append(Ndjson.quote(r.scope()))
-                    .append(",\"current\":").append(Ndjson.quote(r.current()))
-                    .append(",\"compatible\":").append(Ndjson.quote(r.compatible()))
-                    .append(",\"latest\":").append(Ndjson.quote(r.latest()))
-                    .append(",\"tip\":").append(Ndjson.quote(r.tip()))
+            sb.append("{\"module\":")
+                    .append(Ndjson.quote(r.moduleLabel()))
+                    .append(",\"dependency\":")
+                    .append(Ndjson.quote(r.coordinate()))
+                    .append(",\"display\":")
+                    .append(Ndjson.quote(r.display()))
+                    .append(",\"scope\":")
+                    .append(Ndjson.quote(r.scope()))
+                    .append(",\"current\":")
+                    .append(Ndjson.quote(r.current()))
+                    .append(",\"compatible\":")
+                    .append(Ndjson.quote(r.compatible()))
+                    .append(",\"latest\":")
+                    .append(Ndjson.quote(r.latest()))
+                    .append(",\"tip\":")
+                    .append(Ndjson.quote(r.tip()))
                     .append('}');
         }
         return sb.append(']').toString();
@@ -215,7 +224,8 @@ public final class OutdatedCommand implements CliCommand {
             }
             boolean hasShort = !r.display().isEmpty();
             cells[c] = hasShort ? r.display() : r.coordinate();
-            styles[c] = hasShort ? Theme.active().path().italic() : Theme.active().path();
+            styles[c] =
+                    hasShort ? Theme.active().path().italic() : Theme.active().path();
             c++;
             cells[c] = disp(r.current());
             styles[c] = null;
@@ -302,28 +312,40 @@ public final class OutdatedCommand implements CliCommand {
             int pad = Math.max(0, availForBanner - title.length());
             String innerBanner = " ".repeat(pad / 2) + title + " ".repeat(pad - pad / 2);
             return rail
-                    + Theme.colorize(cc.jumpkick.cli.tui.Glyphs.PILL_LEFT_NERD, Theme.active().bright(chipColor))
+                    + Theme.colorize(
+                            cc.jumpkick.cli.tui.Glyphs.PILL_LEFT_NERD,
+                            Theme.active().bright(chipColor))
                     + Theme.colorize(innerBanner, Theme.active().pipelineChip())
-                    + Theme.colorize(cc.jumpkick.cli.tui.Glyphs.PILL_RIGHT_NERD, Theme.active().bright(chipColor))
+                    + Theme.colorize(
+                            cc.jumpkick.cli.tui.Glyphs.PILL_RIGHT_NERD,
+                            Theme.active().bright(chipColor))
                     + rail;
         }
         return rail + Theme.colorize(banner, Theme.active().pipelineChip()) + rail;
     }
 
     private static String headerRow(List<String> headers, int[] widths) {
-        String bar = Theme.active().isAnsi() ? Theme.colorize("│", Theme.active().darkGray()) : "|";
+        String bar =
+                Theme.active().isAnsi() ? Theme.colorize("│", Theme.active().darkGray()) : "|";
         var sb = new StringBuilder(bar);
         for (int i = 0; i < headers.size(); i++) {
-            sb.append(" ").append(padRight(headers.get(i), widths[i])).append(" ").append(bar);
+            sb.append(" ")
+                    .append(padRight(headers.get(i), widths[i]))
+                    .append(" ")
+                    .append(bar);
         }
         return sb.toString();
     }
 
     private static String dataRow(String[] cells, AttributedStyle[] styles, int[] widths) {
-        String bar = Theme.active().isAnsi() ? Theme.colorize("│", Theme.active().darkGray()) : "|";
+        String bar =
+                Theme.active().isAnsi() ? Theme.colorize("│", Theme.active().darkGray()) : "|";
         var sb = new StringBuilder(bar);
         for (int i = 0; i < cells.length; i++) {
-            sb.append(" ").append(styled(cells[i], widths[i], styles[i])).append(" ").append(bar);
+            sb.append(" ")
+                    .append(styled(cells[i], widths[i], styles[i]))
+                    .append(" ")
+                    .append(bar);
         }
         return sb.toString();
     }

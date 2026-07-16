@@ -94,8 +94,7 @@ public final class KotlinCompiler implements Plugin {
                 }
                 op.getCompilerArguments()
                         .set(
-                                org.jetbrains.kotlin.buildtools.api.arguments.CommonCompilerArguments
-                                        .COMPILER_PLUGINS,
+                                org.jetbrains.kotlin.buildtools.api.arguments.CommonCompilerArguments.COMPILER_PLUGINS,
                                 plugins);
             }
 
@@ -117,11 +116,12 @@ public final class KotlinCompiler implements Plugin {
         }
 
         proto.result(result.name());
-        int exit = switch (result) {
-            case COMPILATION_SUCCESS -> 0;
-            case COMPILATION_ERROR -> 1;
-            default -> 3; // COMPILATION_OOM_ERROR, COMPILER_INTERNAL_ERROR
-        };
+        int exit =
+                switch (result) {
+                    case COMPILATION_SUCCESS -> 0;
+                    case COMPILATION_ERROR -> 1;
+                    default -> 3; // COMPILATION_OOM_ERROR, COMPILER_INTERNAL_ERROR
+                };
         proto.done(exit);
         return exit;
     }
@@ -215,8 +215,7 @@ public final class KotlinCompiler implements Plugin {
      */
     private static java.nio.file.Path jarSuffixed(java.nio.file.Path jar) throws java.io.IOException {
         if (jar.getFileName().toString().endsWith(".jar")) return jar;
-        java.nio.file.Path suffixed =
-                java.nio.file.Files.createTempFile("jk-kotlin-plugin-", ".jar");
+        java.nio.file.Path suffixed = java.nio.file.Files.createTempFile("jk-kotlin-plugin-", ".jar");
         java.nio.file.Files.delete(suffixed); // createLink needs the target absent
         try {
             java.nio.file.Files.createLink(suffixed, jar);

@@ -323,7 +323,8 @@ public final class PomExporter {
         sb.append("        <groupId>org.mvnsearch</groupId>\n");
         sb.append("        <artifactId>toolchains-maven-plugin</artifactId>\n");
         sb.append("        <version>").append(TOOLCHAINS_PLUGIN).append("</version>\n");
-        sb.append("        <executions><execution><pipelines><pipeline>toolchain</pipeline></pipelines></execution></executions>\n");
+        sb.append(
+                "        <executions><execution><pipelines><pipeline>toolchain</pipeline></pipelines></execution></executions>\n");
         sb.append("        <configuration>\n          <toolchains>\n            <jdk>\n");
         sb.append("              <version>")
                 .append(major > 0 ? major : p.javaRelease())
@@ -371,9 +372,8 @@ public final class PomExporter {
     }
 
     private static void appendNativePlugin(StringBuilder sb, JkBuild jkBuild) {
-        String main = jkBuild.nativeConfig()
-                .map(JkBuild.NativeConfig::mainClass)
-                .orElseGet(jkBuild::mainClass);
+        String main =
+                jkBuild.nativeConfig().map(JkBuild.NativeConfig::mainClass).orElseGet(jkBuild::mainClass);
         sb.append("      <plugin>\n");
         sb.append("        <groupId>org.graalvm.buildtools</groupId>\n");
         sb.append("        <artifactId>native-maven-plugin</artifactId>\n");

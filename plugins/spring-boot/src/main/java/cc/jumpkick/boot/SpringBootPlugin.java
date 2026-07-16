@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.boot;
 
-import cc.jumpkick.plugin.PluginConfig;
 import cc.jumpkick.plugin.Plugin;
+import cc.jumpkick.plugin.PluginConfig;
 import cc.jumpkick.plugin.PluginManifest;
 import cc.jumpkick.plugin.build.BuildContext;
 import cc.jumpkick.plugin.build.BuildExtension;
@@ -159,9 +159,8 @@ public final class SpringBootPlugin implements Plugin, BuildExtension, PackageEx
         }
         if (boot.bool("include-tools", true)) {
             Path tools = io.extra("spring-boot-jarmode-tools")
-                    .orElseThrow(
-                            () -> new IOException("spring-boot-jarmode-tools artifact missing from the packager"
-                                    + " inputs (include-tools is on)"));
+                    .orElseThrow(() -> new IOException("spring-boot-jarmode-tools artifact missing from the packager"
+                            + " inputs (include-tools is on)"));
             libs.add(new BootJarPackager.Lib("spring-boot-jarmode-tools-" + bootVersion + ".jar", tools, false));
         }
 

@@ -117,10 +117,10 @@ class VariantSwitchTest {
                         null,
                         true,
                         false,
-                false,
-                false,
-                java.util.Set.of(),
-                cc.jumpkick.config.SessionContext.current())
+                        false,
+                        false,
+                        java.util.Set.of(),
+                        cc.jumpkick.config.SessionContext.current())
                 .withVariant(selection, java.util.Map.of());
         Pipeline pipeline = BuildPipelines.coreBuilder(in).build();
         PipelineResult result = pipeline.run();

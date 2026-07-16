@@ -200,7 +200,8 @@ public final class BuildMetrics {
     private static long projectRunCount(Map<String, Entry> inv, String dir) {
         long n = 0;
         for (Entry e : inv.values()) {
-            if (dir.equals(e.dir())) n += e.ok().count() + e.failed().count() + e.cancelled().count();
+            if (dir.equals(e.dir()))
+                n += e.ok().count() + e.failed().count() + e.cancelled().count();
         }
         return n;
     }
@@ -222,8 +223,8 @@ public final class BuildMetrics {
     private static void foldStep(
             Map<String, Entry> ph, String dir, String step, String bucket, long millis, long nowMillis) {
         String k = dir + SEP + step;
-        Entry e = ph.getOrDefault(
-                k, new Entry(null, dir, null, step, Stats.EMPTY, Stats.EMPTY, Stats.EMPTY, nowMillis));
+        Entry e =
+                ph.getOrDefault(k, new Entry(null, dir, null, step, Stats.EMPTY, Stats.EMPTY, Stats.EMPTY, nowMillis));
         Stats ok = e.ok(), failed = e.failed(), cancelled = e.cancelled();
         switch (bucket) {
             case "ok" -> ok = ok.plus(millis);
@@ -378,7 +379,8 @@ public final class BuildMetrics {
 
     private static Stats stats(Object v) {
         if (!(v instanceof Map<?, ?> o)) return Stats.EMPTY;
-        return new Stats(lng(o.get("count")), lng(o.get("totalMillis")), lng(o.get("minMillis")), lng(o.get("maxMillis")));
+        return new Stats(
+                lng(o.get("count")), lng(o.get("totalMillis")), lng(o.get("minMillis")), lng(o.get("maxMillis")));
     }
 
     private static Map<String, Object> render(Map<String, Entry> inv, Map<String, Entry> ph) {

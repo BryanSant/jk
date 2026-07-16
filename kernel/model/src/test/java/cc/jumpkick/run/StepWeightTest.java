@@ -29,11 +29,8 @@ class StepWeightTest {
     void denominator_sums_weights_not_scopes() {
         // A: weight 40 over 4 units; B: no weight → tracks its ticks of 6.
         Pipeline pipeline = Pipeline.builder("g")
-                .addStep(Step.builder("a")
-                        .weight(40)
-                        .ticks(4)
-                        .execute(ctx -> {})
-                        .build())
+                .addStep(
+                        Step.builder("a").weight(40).ticks(4).execute(ctx -> {}).build())
                 .addStep(Step.builder("b").ticks(6).execute(ctx -> {}).build())
                 .build();
 

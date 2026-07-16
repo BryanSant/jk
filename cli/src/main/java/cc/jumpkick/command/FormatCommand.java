@@ -9,8 +9,6 @@ import cc.jumpkick.cli.run.PipelineConsole;
 import cc.jumpkick.cli.theme.Theme;
 import cc.jumpkick.cli.tui.CommandManager;
 import cc.jumpkick.cli.tui.Glyphs;
-import cc.jumpkick.config.JkBuildParser;
-import cc.jumpkick.model.JkBuild;
 import cc.jumpkick.model.command.CliCommand;
 import cc.jumpkick.model.command.Exit;
 import cc.jumpkick.model.command.Invocation;
@@ -133,7 +131,8 @@ public final class FormatCommand implements CliCommand {
                 || (rewriteConfig != null && cliOptimize == null && envBool("JK_FORMAT_OPTIMIZE_IMPORTS") == null);
 
         Path cache = JkDirs.cache();
-        boolean animate = !check && !global.outputIsJson() && !global.noProgress && PipelineConsole.isInteractiveTerminal();
+        boolean animate =
+                !check && !global.outputIsJson() && !global.noProgress && PipelineConsole.isInteractiveTerminal();
 
         if (!animate) {
             // Plain path: --check, piped output, CI, --no-progress.
@@ -142,9 +141,11 @@ public final class FormatCommand implements CliCommand {
                 if ("changed".equals(status)) {
                     counts[0]++;
                     if (!global.outputIsJson()) {
-                        String mark = Theme.colorize(Glyphs.CHECK, Theme.active().success());
+                        String mark =
+                                Theme.colorize(Glyphs.CHECK, Theme.active().success());
                         String rel = Theme.colorize(
-                                PathDisplay.of(Path.of(path), projectDir), Theme.active().path());
+                                PathDisplay.of(Path.of(path), projectDir),
+                                Theme.active().path());
                         CliOutput.out(mark + " " + (check ? "Would format: " : "Formatted: ") + rel);
                     }
                 } else if ("error".equals(status)) {
@@ -157,7 +158,14 @@ public final class FormatCommand implements CliCommand {
             Outcome o;
             try {
                 o = runFormatPipeline(
-                        projectDir, cache, check, styles, optimizeImports, rewriteConfig, global, observer,
+                        projectDir,
+                        cache,
+                        check,
+                        styles,
+                        optimizeImports,
+                        rewriteConfig,
+                        global,
+                        observer,
                         chatterListener(global, line -> CliOutput.err("  [formatter] " + line)));
             } catch (IOException e) {
                 CliOutput.err("jk format: " + e.getMessage());
@@ -211,7 +219,14 @@ public final class FormatCommand implements CliCommand {
             Outcome o;
             try {
                 o = runFormatPipeline(
-                        projectDir, cache, false, styles, optimizeImports, rewriteConfig, global, observer,
+                        projectDir,
+                        cache,
+                        false,
+                        styles,
+                        optimizeImports,
+                        rewriteConfig,
+                        global,
+                        observer,
                         chatterListener(global, line -> cm.writeAbove("  [formatter] " + line)));
             } catch (IOException e) {
                 cm.finishPipelineFailure(String.valueOf(e.getMessage()));
@@ -271,8 +286,16 @@ public final class FormatCommand implements CliCommand {
             throws IOException {
         if (engineDisabledForTests()) {
             var o = cc.jumpkick.cli.engine.InProcessEngine.require()
-                    .formatPipeline(projectDir, cache, check, styles.java(), styles.kotlin(), optimizeImports,
-                            rewriteConfig, observer, listener);
+                    .formatPipeline(
+                            projectDir,
+                            cache,
+                            check,
+                            styles.java(),
+                            styles.kotlin(),
+                            optimizeImports,
+                            rewriteConfig,
+                            observer,
+                            listener);
             return new Outcome(o.result(), o.changed(), o.clean(), o.errors(), o.total(), o.workerExit());
         }
         var session = cc.jumpkick.config.SessionContext.current();

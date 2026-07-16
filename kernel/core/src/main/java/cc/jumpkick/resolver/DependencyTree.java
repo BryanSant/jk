@@ -71,7 +71,14 @@ public final class DependencyTree {
                 UnaryOperator<String> reference,
                 UnaryOperator<String> scopeBadge,
                 UnaryOperator<String> boldCoord) {
-            this(rail, group, artifact, version, reference, scopeBadge, boldCoord,
+            this(
+                    rail,
+                    group,
+                    artifact,
+                    version,
+                    reference,
+                    scopeBadge,
+                    boldCoord,
                     gav -> " " + rail.apply("●") + " " + boldCoord.apply(gav));
         }
 
@@ -97,8 +104,7 @@ public final class DependencyTree {
          * in this class receives raw text.
          */
         public static Styling markers() {
-            return new Styling(
-                    tag('r'), tag('g'), tag('a'), tag('v'), tag('f'), tag('b'), tag('c'));
+            return new Styling(tag('r'), tag('g'), tag('a'), tag('v'), tag('f'), tag('b'), tag('c'));
         }
 
         private static UnaryOperator<String> tag(char kind) {
@@ -118,6 +124,7 @@ public final class DependencyTree {
 
     /** Marker-tag delimiters for {@link Styling#markers()} — printable, so they survive Ndjson. */
     static final char MARK_OPEN = '\u27e6'; // ⟦
+
     static final char MARK_CLOSE = '\u27e7'; // ⟧
 
     /**
@@ -143,16 +150,17 @@ public final class DependencyTree {
             }
             char kind = rendered.charAt(i + 1);
             String content = rendered.substring(i + 2, close);
-            UnaryOperator<String> styler = switch (kind) {
-                case 'r' -> styling.rail();
-                case 'g' -> styling.group();
-                case 'a' -> styling.artifact();
-                case 'v' -> styling.version();
-                case 'f' -> styling.reference();
-                case 'b' -> styling.scopeBadge();
-                case 'c' -> styling.boldCoord();
-                default -> UnaryOperator.identity();
-            };
+            UnaryOperator<String> styler =
+                    switch (kind) {
+                        case 'r' -> styling.rail();
+                        case 'g' -> styling.group();
+                        case 'a' -> styling.artifact();
+                        case 'v' -> styling.version();
+                        case 'f' -> styling.reference();
+                        case 'b' -> styling.scopeBadge();
+                        case 'c' -> styling.boldCoord();
+                        default -> UnaryOperator.identity();
+                    };
             out.append(styler.apply(content));
             i = close + 1;
         }

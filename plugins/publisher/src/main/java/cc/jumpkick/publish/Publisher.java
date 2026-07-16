@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.publish;
 
+import cc.jumpkick.cache.SourcesJar;
 import cc.jumpkick.config.JkBuildParser;
 import cc.jumpkick.credential.RepoCredential;
 import cc.jumpkick.lock.Lockfile;
@@ -18,16 +19,6 @@ import cc.jumpkick.plugin.build.PublishResult;
 import cc.jumpkick.plugin.protocol.PluginReply;
 import cc.jumpkick.plugin.protocol.PluginSpec;
 import cc.jumpkick.plugin.protocol.ProtocolWriter;
-import cc.jumpkick.publish.Checksums;
-import cc.jumpkick.publish.GpgSigner;
-import cc.jumpkick.publish.KeylessSigstoreSigner;
-import cc.jumpkick.publish.MavenPublisher;
-import cc.jumpkick.publish.PublishablePom;
-import cc.jumpkick.publish.Sbom;
-import cc.jumpkick.publish.SigningOptions;
-import cc.jumpkick.publish.SigstoreSigner;
-import cc.jumpkick.publish.SlsaProvenance;
-import cc.jumpkick.cache.SourcesJar;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -102,8 +93,7 @@ public final class Publisher implements Plugin, PublishExtension {
     public PublishResult publish(PublishContext ctx) throws Exception {
         PluginConfig c = ctx.config();
         Path projectDir = ctx.moduleDir();
-        Path jar = ctx.mainArtifact()
-                .orElseThrow(() -> new IOException("publish goal needs a built main artifact"));
+        Path jar = ctx.mainArtifact().orElseThrow(() -> new IOException("publish goal needs a built main artifact"));
         URI repoUrl = URI.create(c.string("repoUrl"));
 
         JkBuild project = JkBuildParser.parse(projectDir.resolve("jk.toml"));
@@ -117,7 +107,8 @@ public final class Publisher implements Plugin, PublishExtension {
         PublishablePom.Pom pom = PublishablePom.render(project, PublishablePom.Metadata.empty());
         byte[] pomBytes = pom.xml().getBytes(StandardCharsets.UTF_8);
         artifacts.add(new MavenPublisher.Artifact(".pom", pomBytes));
-        ctx.label("artifact " + project.project().name() + "-" + project.project().version() + ".pom");
+        ctx.label(
+                "artifact " + project.project().name() + "-" + project.project().version() + ".pom");
 
         if (project.project().sourcesMode().publishSources()) {
             byte[] sourcesBytes;
@@ -133,7 +124,8 @@ public final class Publisher implements Plugin, PublishExtension {
                 sourcesBytes = SourcesJar.build(sourceRoots);
             }
             artifacts.add(new MavenPublisher.Artifact("-sources.jar", sourcesBytes));
-            ctx.label("artifact " + project.project().name() + "-" + project.project().version() + "-sources.jar");
+            ctx.label("artifact " + project.project().name() + "-"
+                    + project.project().version() + "-sources.jar");
         }
 
         if (c.bool("slsa", false)) {
@@ -149,11 +141,15 @@ public final class Publisher implements Plugin, PublishExtension {
                             "group", project.project().group(),
                             "artifact", project.project().name(),
                             "version", project.project().version(),
-                            "jdk", project.project().jdk() == null ? "" : project.project().jdk()));
+                            "jdk",
+                                    project.project().jdk() == null
+                                            ? ""
+                                            : project.project().jdk()));
             byte[] provenance = SlsaProvenance.generate(
                     List.of(new SlsaProvenance.Subject(jarFilename, Checksums.sha256Hex(jarBytes))), buildCtx);
             artifacts.add(new MavenPublisher.Artifact(".intoto.json", provenance));
-            ctx.label("artifact " + project.project().name() + "-" + project.project().version() + ".intoto.json");
+            ctx.label("artifact " + project.project().name() + "-"
+                    + project.project().version() + ".intoto.json");
         }
 
         if (c.bool("sbom", false)) {
@@ -184,15 +180,20 @@ public final class Publisher implements Plugin, PublishExtension {
         try {
             RepoCredential cred =
                     switch (c.string("repoAuthType").toLowerCase()) {
-                        case "basic" -> new RepoCredential.Basic(
-                                ctx.secret("repoUser").orElse(""), ctx.secret("repoPass").orElse(""));
-                        case "bearer" -> new RepoCredential.Bearer(ctx.secret("repoToken").orElse(""));
+                        case "basic" ->
+                            new RepoCredential.Basic(
+                                    ctx.secret("repoUser").orElse(""),
+                                    ctx.secret("repoPass").orElse(""));
+                        case "bearer" ->
+                            new RepoCredential.Bearer(ctx.secret("repoToken").orElse(""));
                         default -> new RepoCredential.Anonymous();
                     };
             ObjectStoreConfig objectStore = new ObjectStoreConfig(
                     c.stringOpt("objectStoreRegion").filter(s -> !s.isBlank()).orElse(null),
                     c.stringOpt("objectStoreEndpoint").filter(s -> !s.isBlank()).orElse(null),
-                    null, null, null);
+                    null,
+                    null,
+                    null);
             MavenPublisher publisher = MavenPublisher.withObjectStore(repoUrl, cred, objectStore);
 
             MavenPublisher.Result result = publisher.publish(project.project(), artifacts, signing);

@@ -75,8 +75,8 @@ public final class JdkRender {
      */
     public static String removed(String source, String identifier, boolean nerdfont) {
         Theme t = Theme.active();
-        String coord = Theme.colorize("{" + source + "}", t.path().italic())
-                + Theme.colorize("/" + identifier, t.path());
+        String coord =
+                Theme.colorize("{" + source + "}", t.path().italic()) + Theme.colorize("/" + identifier, t.path());
         String msg = Theme.colorize("Removed ", t.normalGray()) + coord;
         return PipelineWedge.chipLine(Glyphs.CHECK, "JDK", nerdfont, msg);
     }

@@ -4,6 +4,7 @@ package cc.jumpkick.lock;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.List;
+import java.util.regex.Pattern;
 import org.junit.jupiter.api.Test;
 
 class LockfileRoundTripTest {
@@ -20,8 +21,8 @@ class LockfileRoundTripTest {
                 generated-by = "jk 0.1.0-SNAPSHOT"
                 resolution-algorithm = "pubgrub-v1"
                 """);
-        assertThat(rendered).matches(
-                "(?s).*\\njk = \\{ version = \"" + java.util.regex.Pattern.quote(cc.jumpkick.model.JkVersion.VERSION)
+        assertThat(rendered)
+                .matches("(?s).*\\njk = \\{ version = \"" + Pattern.quote(cc.jumpkick.model.JkVersion.VERSION)
                         + "\", sha256 = \"[0-9a-f]*\" \\}\\n.*");
     }
 

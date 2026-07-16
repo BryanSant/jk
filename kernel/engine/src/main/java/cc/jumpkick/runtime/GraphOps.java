@@ -26,8 +26,8 @@ public final class GraphOps {
     private GraphOps() {}
 
     /** The marker-tagged tree, ready for {@link DependencyTree#applyStyling} client-side. */
-    public static String treeRender(
-            Path dir, int maxDepth, boolean flatten, boolean stack, List<String> scopeNames) throws IOException {
+    public static String treeRender(Path dir, int maxDepth, boolean flatten, boolean stack, List<String> scopeNames)
+            throws IOException {
         JkBuild project = JkBuildParser.parse(dir.resolve("jk.toml"));
         Lockfile lock = LockfileReader.read(dir.resolve("jk.lock"));
         List<Scope> scopes = scopeNames.isEmpty()

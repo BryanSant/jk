@@ -1,14 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.runtime;
 
-import cc.jumpkick.config.WorkspaceLoader;
-import cc.jumpkick.config.WorkspaceLocator;
-import cc.jumpkick.model.Variants;
-import cc.jumpkick.model.WorkspaceMerge;
-import cc.jumpkick.plugin.manifest.PluginContributions;
-import cc.jumpkick.task.AccessLedger;
 import cc.jumpkick.cache.Cas;
 import cc.jumpkick.config.JkBuildParser;
+import cc.jumpkick.config.WorkspaceLoader;
+import cc.jumpkick.config.WorkspaceLocator;
 import cc.jumpkick.jdk.JavaHomes;
 import cc.jumpkick.lock.Lockfile;
 import cc.jumpkick.lock.LockfileReader;
@@ -16,10 +12,14 @@ import cc.jumpkick.lock.LockfileWriter;
 import cc.jumpkick.model.Dependency;
 import cc.jumpkick.model.JkBuild;
 import cc.jumpkick.model.Scope;
+import cc.jumpkick.model.Variants;
 import cc.jumpkick.model.VersionSelector;
+import cc.jumpkick.model.WorkspaceMerge;
+import cc.jumpkick.plugin.manifest.PluginContributions;
 import cc.jumpkick.resolver.LockOrchestrator;
 import cc.jumpkick.resolver.ResolveObserver;
 import cc.jumpkick.resolver.Versions;
+import cc.jumpkick.task.AccessLedger;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Files;
@@ -117,11 +117,11 @@ public final class AutoLock {
     private static boolean versionSatisfied(VersionSelector sel, String locked) {
         if (sel == null) return true;
         return switch (sel) {
-            case VersionSelector.Latest lat  -> true; // any locked version is acceptable
-            case VersionSelector.Exact e     -> locked.equals(e.version());
-            case VersionSelector.Caret c     -> satisfiesCaret(c.version(), locked);
-            case VersionSelector.Tilde t     -> satisfiesTilde(t.version(), locked);
-            case VersionSelector.Range r     -> satisfiesRange(r.raw(), locked);
+            case VersionSelector.Latest lat -> true; // any locked version is acceptable
+            case VersionSelector.Exact e -> locked.equals(e.version());
+            case VersionSelector.Caret c -> satisfiesCaret(c.version(), locked);
+            case VersionSelector.Tilde t -> satisfiesTilde(t.version(), locked);
+            case VersionSelector.Range r -> satisfiesRange(r.raw(), locked);
         };
     }
 
@@ -229,9 +229,8 @@ public final class AutoLock {
 
             Cas cas = new Cas(cache);
             cc.jumpkick.repo.RepoGroup repos = RepoGroupBuilder.buildFor(effective, repoUrl, cas);
-            LockOrchestrator orchestrator = new LockOrchestrator(repos)
-                    .withJvmEnvironment(
-                            PluginContributions.jvmEnvironment(effective, dir));
+            LockOrchestrator orchestrator =
+                    new LockOrchestrator(repos).withJvmEnvironment(PluginContributions.jvmEnvironment(effective, dir));
 
             Lockfile updated = orchestrator.lockConservative(
                     effective, existing, jkVersion, features == null ? List.of() : features, withDefaults, observer);

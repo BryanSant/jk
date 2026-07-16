@@ -1,10 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.command;
 
-import cc.jumpkick.run.StepNames;
-
-import cc.jumpkick.cli.CliOutput;
 import cc.jumpkick.cli.Ansi;
+import cc.jumpkick.cli.CliOutput;
 import cc.jumpkick.cli.GlobalOptions;
 import cc.jumpkick.cli.run.PipelineConsole;
 import cc.jumpkick.cli.theme.Theme;
@@ -19,9 +17,9 @@ import cc.jumpkick.jdk.JdkHit;
 import cc.jumpkick.jdk.JdkInstaller;
 import cc.jumpkick.jdk.JdkRegistry;
 import cc.jumpkick.jdk.JdkToolUninstaller;
-import cc.jumpkick.model.command.Exit;
 import cc.jumpkick.model.command.Arity;
 import cc.jumpkick.model.command.CliCommand;
+import cc.jumpkick.model.command.Exit;
 import cc.jumpkick.model.command.Invocation;
 import cc.jumpkick.model.command.Opt;
 import cc.jumpkick.model.command.Param;
@@ -30,6 +28,7 @@ import cc.jumpkick.run.PipelineKey;
 import cc.jumpkick.run.PipelineResult;
 import cc.jumpkick.run.Step;
 import cc.jumpkick.run.StepKind;
+import cc.jumpkick.run.StepNames;
 import cc.jumpkick.util.JkDirs;
 import java.io.IOException;
 import java.nio.file.Path;
@@ -396,8 +395,7 @@ public final class JdkUninstallCommand implements CliCommand {
     private static String target(JdkHit h) {
         Theme t = Theme.active();
         String identifier = JdkRegistry.identifierFor(h.home());
-        return Theme.colorize("{" + h.source() + "}", t.path().italic())
-                + Theme.colorize("/" + identifier, t.path());
+        return Theme.colorize("{" + h.source() + "}", t.path().italic()) + Theme.colorize("/" + identifier, t.path());
     }
 
     /**
@@ -434,7 +432,9 @@ public final class JdkUninstallCommand implements CliCommand {
                                 survivors.getFirst().identifier(),
                                 Theme.active().focused())
                         + " "
-                        + Theme.colorize(Glyphs.BANG + " (non-LTS fallback)", Theme.active().warning()));
+                        + Theme.colorize(
+                                Glyphs.BANG + " (non-LTS fallback)",
+                                Theme.active().warning()));
             }
         }
     }

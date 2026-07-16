@@ -285,7 +285,9 @@ class NewScaffolderTest {
                 false,
                 Optional.empty());
         NewScaffolder.write(on);
-        assertThat(Files.readString(sub.resolve("jk.toml"))).contains("[native]").contains("always     = true");
+        assertThat(Files.readString(sub.resolve("jk.toml")))
+                .contains("[native]")
+                .contains("always     = true");
     }
 
     @Test
@@ -359,7 +361,8 @@ class NewScaffolderTest {
         assertThat(app).exists();
         assertThat(Files.readString(app)).contains("package com.example;");
         assertThat(Files.readString(app)).contains("@SpringBootApplication");
-        assertThat(tempDir.resolve("src/test/java/com/example/ApplicationTest.java")).exists();
+        assertThat(tempDir.resolve("src/test/java/com/example/ApplicationTest.java"))
+                .exists();
         assertThat(tempDir.resolve("src/main/resources/application.properties")).exists();
     }
 

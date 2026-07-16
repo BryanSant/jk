@@ -3,8 +3,8 @@ package cc.jumpkick.runtime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import cc.jumpkick.config.SessionContext;
 import cc.jumpkick.config.JkBuildParser;
+import cc.jumpkick.config.SessionContext;
 import cc.jumpkick.model.JkBuild;
 import cc.jumpkick.resolver.ResolveObserver;
 import cc.jumpkick.run.Pipeline;
@@ -101,7 +101,8 @@ class KotlinSerializationTest {
                 SessionContext.current());
         Pipeline pipeline = BuildPipelines.coreBuilder(in).build();
         PipelineResult result = pipeline.run();
-        System.out.println("STEPS: " + pipeline.steps().stream().map(ph -> ph.name()).toList());
+        System.out.println(
+                "STEPS: " + pipeline.steps().stream().map(ph -> ph.name()).toList());
         try (var w = Files.walk(project.resolve("target"))) {
             w.forEach(f -> System.out.println("TREE: " + project.relativize(f)));
         } catch (java.io.IOException ignored) {

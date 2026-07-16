@@ -22,7 +22,6 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BooleanSupplier;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -89,8 +88,10 @@ class EngineServerTest {
         Client(Path socket) throws IOException {
             channel = SocketChannel.open(StandardProtocolFamily.UNIX);
             channel.connect(UnixDomainSocketAddress.of(socket));
-            reader = new BufferedReader(new InputStreamReader(Channels.newInputStream(channel), StandardCharsets.UTF_8));
-            writer = new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(channel), StandardCharsets.UTF_8));
+            reader =
+                    new BufferedReader(new InputStreamReader(Channels.newInputStream(channel), StandardCharsets.UTF_8));
+            writer = new BufferedWriter(
+                    new OutputStreamWriter(Channels.newOutputStream(channel), StandardCharsets.UTF_8));
         }
 
         String send(String line) throws IOException {
@@ -148,7 +149,8 @@ class EngineServerTest {
             String ack = c.send(EngineProtocol.hello("9.9.9-test"));
             assertThat(EngineProtocol.typeOf(ack)).isEqualTo(EngineProtocol.HELLO_ACK);
             assertThat(Ndjson.str(ack, "version")).isEqualTo("9.9.9-test");
-            assertThat(Ndjson.longValue(ack, "pid", -1)).isEqualTo(ProcessHandle.current().pid());
+            assertThat(Ndjson.longValue(ack, "pid", -1))
+                    .isEqualTo(ProcessHandle.current().pid());
 
             String pong = c.send(EngineProtocol.ping());
             assertThat(EngineProtocol.typeOf(pong)).isEqualTo(EngineProtocol.PONG);
@@ -241,8 +243,7 @@ class EngineServerTest {
             c.sendLine(EngineProtocol.metricsRequest(null));
             List<String> rows = new ArrayList<>();
             String line;
-            while ((line = c.readLine()) != null
-                    && EngineProtocol.METRICS_ENTRY.equals(EngineProtocol.typeOf(line))) {
+            while ((line = c.readLine()) != null && EngineProtocol.METRICS_ENTRY.equals(EngineProtocol.typeOf(line))) {
                 rows.add(line);
             }
             assertThat(EngineProtocol.typeOf(line)).isEqualTo(EngineProtocol.METRICS_DONE);
@@ -267,8 +268,7 @@ class EngineServerTest {
             // Filtered: /proj/a's rows plus the always-included global tiers; /proj/b drops out.
             c.sendLine(EngineProtocol.metricsRequest("/proj/a"));
             List<String> filtered = new ArrayList<>();
-            while ((line = c.readLine()) != null
-                    && EngineProtocol.METRICS_ENTRY.equals(EngineProtocol.typeOf(line))) {
+            while ((line = c.readLine()) != null && EngineProtocol.METRICS_ENTRY.equals(EngineProtocol.typeOf(line))) {
                 filtered.add(line);
             }
             assertThat(EngineProtocol.typeOf(line)).isEqualTo(EngineProtocol.METRICS_DONE);
@@ -337,8 +337,8 @@ class EngineServerTest {
             // Wrong token: the server closes the connection without ever replying.
             try (SocketChannel ch = SocketChannel.open(
                     new java.net.InetSocketAddress(java.net.InetAddress.getLoopbackAddress(), port))) {
-                BufferedWriter w =
-                        new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
+                BufferedWriter w = new BufferedWriter(
+                        new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
                 BufferedReader r =
                         new BufferedReader(new InputStreamReader(Channels.newInputStream(ch), StandardCharsets.UTF_8));
                 w.write(EngineProtocol.auth("not-the-real-token"));
@@ -356,8 +356,8 @@ class EngineServerTest {
             // Correct token: the connection behaves exactly like the Unix-domain-socket transport.
             try (SocketChannel ch = SocketChannel.open(
                     new java.net.InetSocketAddress(java.net.InetAddress.getLoopbackAddress(), port))) {
-                BufferedWriter w =
-                        new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
+                BufferedWriter w = new BufferedWriter(
+                        new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
                 BufferedReader r =
                         new BufferedReader(new InputStreamReader(Channels.newInputStream(ch), StandardCharsets.UTF_8));
                 w.write(EngineProtocol.auth(token));
@@ -437,15 +437,7 @@ class EngineServerTest {
             boolean sawLeafPackage = false;
             try (Client c = new Client(EnginePaths.activeSocket(p))) {
                 c.sendLine(EngineProtocol.lockRequest(
-                        project.toString(),
-                        cache.toString(),
-                        List.of(),
-                        false,
-                        false,
-                        repoUrl,
-                        false,
-                        false,
-                        false));
+                        project.toString(), cache.toString(), List.of(), false, false, repoUrl, false, false, false));
                 String line;
                 while ((line = c.readLine()) != null) {
                     String type = EngineProtocol.typeOf(line);
@@ -530,9 +522,7 @@ class EngineServerTest {
             String base = "http://127.0.0.1:" + osv.getAddress().getPort();
 
             Path project = shortTempDir();
-            Files.writeString(
-                    project.resolve("jk.lock"),
-                    """
+            Files.writeString(project.resolve("jk.lock"), """
                     version = 1
                     generated-by = "jk test"
                     resolution-algorithm = "pubgrub-v1"
@@ -581,7 +571,9 @@ class EngineServerTest {
                     .as("engine reported a pre-pipeline error instead of hosting the audit")
                     .isNull();
             assertThat(types).contains(EngineProtocol.PLAN_STEP, EngineProtocol.PLAN_DONE);
-            assertThat(finding).as("audit-finding event for the mock vulnerability").isNotNull();
+            assertThat(finding)
+                    .as("audit-finding event for the mock vulnerability")
+                    .isNotNull();
             assertThat(Ndjson.str(finding, "module")).isEqualTo("com.foo:leaf");
             assertThat(Ndjson.str(finding, "version")).isEqualTo("1.0");
             assertThat(Ndjson.str(finding, "vulnId")).isEqualTo("GHSA-test-1");
@@ -714,8 +706,7 @@ class EngineServerTest {
         String pipelineFinish = null;
         String buildError = null;
         try (Client c = new Client(EnginePaths.activeSocket(p))) {
-            c.sendLine(EngineProtocol.compileRequest(
-                    project.toString(), cache.toString(), null, false, false, false));
+            c.sendLine(EngineProtocol.compileRequest(project.toString(), cache.toString(), null, false, false, false));
             String line;
             while ((line = c.readLine()) != null) {
                 String type = EngineProtocol.typeOf(line);
@@ -906,18 +897,16 @@ class EngineServerTest {
     void cache_clear_request_invalidates_the_projects_entries_over_the_socket() throws Exception {
         Path cache = shortTempDir();
         Path project = shortTempDir();
-        Files.writeString(
-                project.resolve("jk.toml"),
-                """
+        Files.writeString(project.resolve("jk.toml"), """
                 [project]
                 group = "com.example"
                 name  = "proj"
                 version = "0.1.0"
                 java = 25
                 """);
-        String tag = cc.jumpkick.task.ActionKey.taskTag(
-                cc.jumpkick.layout.BuildLayout.of(project, cc.jumpkick.config.JkBuildParser.parse(project.resolve("jk.toml")))
-                        .classesDir());
+        String tag = cc.jumpkick.task.ActionKey.taskTag(cc.jumpkick.layout.BuildLayout.of(
+                        project, cc.jumpkick.config.JkBuildParser.parse(project.resolve("jk.toml")))
+                .classesDir());
         Path mine = cache.resolve("actions/keys/mine");
         Files.createDirectories(mine.getParent());
         Files.writeString(mine, "TASK compile-main@" + tag + "\nKEY mine\nOUTPUT deadbeef foo.class\n");
@@ -954,7 +943,8 @@ class EngineServerTest {
         assertThat(Ndjson.bool(pipelineFinish, "success", false)).isTrue();
         assertThat(Ndjson.longValue(pipelineFinish, "cacheFiles", -1)).isEqualTo(2); // record + pointer
         assertThat(Files.exists(mine)).isFalse();
-        assertThat(Files.exists(cache.resolve("actions/tasks/compile-main@" + tag))).isFalse();
+        assertThat(Files.exists(cache.resolve("actions/tasks/compile-main@" + tag)))
+                .isFalse();
         assertThat(Files.exists(other)).isTrue();
         assertThat(Files.exists(cache.resolve(".prune.lock"))).isTrue();
 
@@ -963,7 +953,8 @@ class EngineServerTest {
     }
 
     /** Minimal metadata + dependency-free POM + stub jar for one coordinate on the mock repo. */
-    private static void seedArtifact(java.util.Map<String, byte[]> served, String group, String artifact, String version) {
+    private static void seedArtifact(
+            java.util.Map<String, byte[]> served, String group, String artifact, String version) {
         String base = "/" + group.replace('.', '/') + "/" + artifact;
         served.put(
                 base + "/maven-metadata.xml",
@@ -974,15 +965,14 @@ class EngineServerTest {
         String dir = base + "/" + version + "/" + artifact + "-" + version;
         served.put(
                 dir + ".pom",
-                ("<project><groupId>" + group + "</groupId><artifactId>" + artifact + "</artifactId><version>"
-                                + version + "</version></project>")
+                ("<project><groupId>" + group + "</groupId><artifactId>" + artifact + "</artifactId><version>" + version
+                                + "</version></project>")
                         .getBytes(StandardCharsets.UTF_8));
         served.put(dir + ".jar", (artifact + "-stub").getBytes(StandardCharsets.UTF_8));
     }
 
     @Test
-    void a_stale_socket_file_from_a_killed_engine_does_not_block_a_fresh_start()
-            throws Exception {
+    void a_stale_socket_file_from_a_killed_engine_does_not_block_a_fresh_start() throws Exception {
         EnginePaths.Paths p = paths(shortTempDir());
         Files.createDirectories(p.dir());
         // Simulate a kill -9'd engine's leftovers: a dead generation socket file plus an
@@ -1017,8 +1007,7 @@ class EngineServerTest {
         Path www = Files.createDirectories(stateDir.resolve("www"));
         Files.writeString(www.resolve("hello.txt"), "hi from the engine");
 
-        EngineServer server =
-                new EngineServer(p, JkEngineConfig.DEFAULTS, httpOnEphemeralPort(www), "1.0", null);
+        EngineServer server = new EngineServer(p, JkEngineConfig.DEFAULTS, httpOnEphemeralPort(www), "1.0", null);
         Thread serverThread = runInBackground(server);
         waitUntil(Duration.ofSeconds(5), () -> Files.exists(p.http()));
         String url = Files.readString(p.http());
@@ -1026,14 +1015,16 @@ class EngineServerTest {
 
         var httpClient = java.net.http.HttpClient.newHttpClient();
         var response = httpClient.send(
-                java.net.http.HttpRequest.newBuilder(java.net.URI.create(url + "hello.txt")).build(),
+                java.net.http.HttpRequest.newBuilder(java.net.URI.create(url + "hello.txt"))
+                        .build(),
                 java.net.http.HttpResponse.BodyHandlers.ofString());
         assertThat(response.statusCode()).isEqualTo(200);
         assertThat(response.body()).isEqualTo("hi from the engine");
 
         // The REST surface serves the same vitals the socket status-ack carries.
         var apiStatus = httpClient.send(
-                java.net.http.HttpRequest.newBuilder(java.net.URI.create(url + "api/status")).build(),
+                java.net.http.HttpRequest.newBuilder(java.net.URI.create(url + "api/status"))
+                        .build(),
                 java.net.http.HttpResponse.BodyHandlers.ofString());
         assertThat(apiStatus.statusCode()).isEqualTo(200);
         assertThat(apiStatus.body()).contains("\"version\":\"1.0\"").contains("\"httpUrl\":\"" + url + "\"");
@@ -1060,7 +1051,10 @@ class EngineServerTest {
         EnginePaths.Paths p = paths(stateDir);
         try (var blocker = new java.net.ServerSocket(0, 1, java.net.InetAddress.getLoopbackAddress())) {
             var http = new cc.jumpkick.config.JkHttpConfig(
-                    "127.0.0.1", blocker.getLocalPort(), 16, stateDir.resolve("www").toString());
+                    "127.0.0.1",
+                    blocker.getLocalPort(),
+                    16,
+                    stateDir.resolve("www").toString());
             EngineServer server = new EngineServer(p, JkEngineConfig.DEFAULTS, http, "1.0", null);
             Thread serverThread = runInBackground(server);
             waitUntil(Duration.ofSeconds(5), () -> Files.exists(EnginePaths.endpoint(p)));
@@ -1083,8 +1077,8 @@ class EngineServerTest {
     void http_build_trigger_streams_lifecycle_events_over_sse() throws Exception {
         Path stateDir = shortTempDir();
         EnginePaths.Paths p = paths(stateDir);
-        EngineServer server = new EngineServer(
-                p, JkEngineConfig.DEFAULTS, httpOnEphemeralPort(stateDir.resolve("www")), "1.0", null);
+        EngineServer server =
+                new EngineServer(p, JkEngineConfig.DEFAULTS, httpOnEphemeralPort(stateDir.resolve("www")), "1.0", null);
         Thread serverThread = runInBackground(server);
         waitUntil(Duration.ofSeconds(5), () -> Files.exists(p.http()) && Files.exists(p.httpToken()));
         String url = Files.readString(p.http());
@@ -1093,7 +1087,8 @@ class EngineServerTest {
 
         // Subscribe to the event stream first, so the request events can't race past us.
         var sse = httpClient.send(
-                java.net.http.HttpRequest.newBuilder(java.net.URI.create(url + "api/events")).build(),
+                java.net.http.HttpRequest.newBuilder(java.net.URI.create(url + "api/events"))
+                        .build(),
                 java.net.http.HttpResponse.BodyHandlers.ofLines());
         assertThat(sse.statusCode()).isEqualTo(200);
         var lines = sse.body().iterator();
@@ -1115,8 +1110,7 @@ class EngineServerTest {
         var accepted = httpClient.send(
                 java.net.http.HttpRequest.newBuilder(java.net.URI.create(url + "api/build"))
                         .header("Authorization", "Bearer " + token)
-                        .POST(java.net.http.HttpRequest.BodyPublishers.ofString(
-                                "{\"dir\":\"" + project + "\"}"))
+                        .POST(java.net.http.HttpRequest.BodyPublishers.ofString("{\"dir\":\"" + project + "\"}"))
                         .build(),
                 java.net.http.HttpResponse.BodyHandlers.ofString());
         assertThat(accepted.statusCode()).isEqualTo(202);

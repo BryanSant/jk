@@ -215,7 +215,9 @@ public final class VscodeIdeGenerator implements IdeGenerator {
         }
 
         // Default output.
-        sb.append("  <classpathentry kind=\"output\" path=\"").append(esc(outMain)).append("\"/>\n");
+        sb.append("  <classpathentry kind=\"output\" path=\"")
+                .append(esc(outMain))
+                .append("\"/>\n");
         sb.append("</classpath>\n");
         return sb.toString();
     }
@@ -263,7 +265,9 @@ public final class VscodeIdeGenerator implements IdeGenerator {
             first = false;
             rt.append("    {\n");
             rt.append("      \"name\": \"").append(eeName(e.getKey())).append("\",\n");
-            rt.append("      \"path\": \"").append(jsonEsc(abs(e.getValue().javaHome()))).append("\"");
+            rt.append("      \"path\": \"")
+                    .append(jsonEsc(abs(e.getValue().javaHome())))
+                    .append("\"");
             if (e.getKey() == defaultLevel) rt.append(",\n      \"default\": true");
             rt.append("\n    }");
         }
@@ -275,7 +279,9 @@ public final class VscodeIdeGenerator implements IdeGenerator {
         // highest available >= 21. Omit the key (fall back to JAVA_HOME / bundled JRE) if none.
         Path lsHome = languageServerHome(byLevel, defaultLevel);
         if (lsHome != null) {
-            sb.append("  \"java.jdt.ls.java.home\": \"").append(jsonEsc(abs(lsHome))).append("\",\n");
+            sb.append("  \"java.jdt.ls.java.home\": \"")
+                    .append(jsonEsc(abs(lsHome)))
+                    .append("\",\n");
         }
         sb.append("  \"java.configuration.runtimes\": [\n").append(rt).append("\n  ],\n");
         sb.append("  \"java.import.maven.enabled\": false,\n");
@@ -303,8 +309,7 @@ public final class VscodeIdeGenerator implements IdeGenerator {
 
     private static String launchJson(IdeModel model) {
         List<String> configs = new ArrayList<>();
-        Map<Path, IdeModule> targets =
-                model.modules().isEmpty() ? model.allModules() : model.modules();
+        Map<Path, IdeModule> targets = model.modules().isEmpty() ? model.allModules() : model.modules();
         for (IdeModule module : targets.values()) {
             String main = module.mainClass();
             if (main == null) continue;
@@ -318,8 +323,7 @@ public final class VscodeIdeGenerator implements IdeGenerator {
                     + "    }");
         }
         if (configs.isEmpty()) return null;
-        return "{\n  \"version\": \"0.2.0\",\n  \"configurations\": [\n"
-                + String.join(",\n", configs) + "\n  ]\n}\n";
+        return "{\n  \"version\": \"0.2.0\",\n  \"configurations\": [\n" + String.join(",\n", configs) + "\n  ]\n}\n";
     }
 
     private static String extensionsJson() {
@@ -378,7 +382,10 @@ public final class VscodeIdeGenerator implements IdeGenerator {
     }
 
     private static String esc(String s) {
-        return s.replace("&", "&amp;").replace("\"", "&quot;").replace("<", "&lt;").replace(">", "&gt;");
+        return s.replace("&", "&amp;")
+                .replace("\"", "&quot;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;");
     }
 
     private static String jsonEsc(String s) {

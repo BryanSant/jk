@@ -72,8 +72,7 @@ public final class GradleImporter {
         for (var manifest : cc.jumpkick.plugin.manifest.PluginTableRegistry.manifests()) {
             for (var rule : manifest.gradleImports()) {
                 rules.put(
-                        rule.id(),
-                        new PluginImportRule(manifest.id(), rule.versionTo(), rule.missingVersionWarning()));
+                        rule.id(), new PluginImportRule(manifest.id(), rule.versionTo(), rule.missingVersionWarning()));
             }
         }
         return rules;
@@ -183,10 +182,11 @@ public final class GradleImporter {
                 }
                 default -> {
                     if (!importRules.containsKey(pluginId)) {
-                        report.warning("Gradle plugin `"
-                                + pluginId
-                                + "` not yet mapped."
-                                + " Plugin-aware mappings (Spring Boot, Quarkus, Spotless, ...) arrive in a later slice.");
+                        report.warning(
+                                "Gradle plugin `"
+                                        + pluginId
+                                        + "` not yet mapped."
+                                        + " Plugin-aware mappings (Spring Boot, Quarkus, Spotless, ...) arrive in a later slice.");
                     }
                 }
             }
@@ -204,8 +204,7 @@ public final class GradleImporter {
         // `version`, which auto-imports the BOM so versionless starters stay versionless).
         // Applied-without-version (settings pluginManagement) can't be resolved from this file
         // alone -- the rule's warning asks the user to fill it in.
-        List<cc.jumpkick.plugin.PluginConfig> pluginConfigs =
-                mapPluginTables(pluginsBody, importRules, report);
+        List<cc.jumpkick.plugin.PluginConfig> pluginConfigs = mapPluginTables(pluginsBody, importRules, report);
 
         Map<Scope, List<Dependency>> deps = parseDependencies(stripped, catalog, report);
         List<RepositorySpec> repos = parseRepositories(stripped, report);
@@ -459,8 +458,7 @@ public final class GradleImporter {
             // Versionless `g:a` -- normal in Boot builds, where the plugin's BOM manages the
             // version. jk models it as platform-managed; [spring-boot] (or an explicit
             // [platform-dependencies] BOM) supplies the pin at resolve time.
-            byScope.computeIfAbsent(scope, s -> new ArrayList<>())
-                    .add(Dependency.platformManaged(parts[1], coord));
+            byScope.computeIfAbsent(scope, s -> new ArrayList<>()).add(Dependency.platformManaged(parts[1], coord));
             return;
         }
         if (parts.length < 3) {

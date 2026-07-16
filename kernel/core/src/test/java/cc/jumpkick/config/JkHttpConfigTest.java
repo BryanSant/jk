@@ -59,9 +59,7 @@ class JkHttpConfigTest {
     @Test
     void parses_all_keys(@TempDir Path tempDir) throws IOException {
         Path toml = tempDir.resolve("config.toml");
-        Files.writeString(
-                toml,
-                """
+        Files.writeString(toml, """
                 [http]
                 host = "0.0.0.0"
                 port = 8911
@@ -143,7 +141,8 @@ class JkHttpConfigTest {
         Path toml = Files.createTempFile("jk-http-", ".toml");
         try {
             Files.writeString(toml, "[http]\nport = 8911\n");
-            assertThat(JkHttpConfig.resolve(toml, Map.of("JK_HTTP_ENABLED", "false")::get)).isEmpty();
+            assertThat(JkHttpConfig.resolve(toml, Map.of("JK_HTTP_ENABLED", "false")::get))
+                    .isEmpty();
         } finally {
             Files.deleteIfExists(toml);
         }
@@ -189,8 +188,8 @@ class JkHttpConfigTest {
         Path toml = Files.createTempFile("jk-http-", ".toml");
         try {
             Files.writeString(toml, "[engine]\nmax-heap-mb = 256\n");
-            JkHttpConfig c =
-                    JkHttpConfig.resolve(toml, Map.of("JK_HTTP_PORT", "9000")::get).orElseThrow();
+            JkHttpConfig c = JkHttpConfig.resolve(toml, Map.of("JK_HTTP_PORT", "9000")::get)
+                    .orElseThrow();
             assertThat(c.port()).isEqualTo(9000);
             assertThat(c.host()).isEqualTo(JkHttpConfig.DEFAULT_HOST);
         } finally {
@@ -203,7 +202,8 @@ class JkHttpConfigTest {
         Path toml = Files.createTempFile("jk-http-", ".toml");
         try {
             Files.writeString(toml, "[http]\nport = 8911\n");
-            JkHttpConfig c = JkHttpConfig.resolve(toml, Map.of("JK_HTTP_PORT", "many")::get).orElseThrow();
+            JkHttpConfig c = JkHttpConfig.resolve(toml, Map.of("JK_HTTP_PORT", "many")::get)
+                    .orElseThrow();
             assertThat(c.port()).isEqualTo(8911);
         } finally {
             Files.deleteIfExists(toml);
@@ -215,7 +215,8 @@ class JkHttpConfigTest {
         Path toml = Files.createTempFile("jk-http-", ".toml");
         try {
             Files.writeString(toml, "[http]\nport = 8911\n");
-            JkHttpConfig c = JkHttpConfig.resolve(toml, Map.of("JK_HTTP_PORT", "70000")::get).orElseThrow();
+            JkHttpConfig c = JkHttpConfig.resolve(toml, Map.of("JK_HTTP_PORT", "70000")::get)
+                    .orElseThrow();
             assertThat(c.port()).isEqualTo(8911);
         } finally {
             Files.deleteIfExists(toml);

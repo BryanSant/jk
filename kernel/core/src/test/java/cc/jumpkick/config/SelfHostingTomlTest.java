@@ -106,13 +106,17 @@ class SelfHostingTomlTest {
         // The slim client (Stage 5): the wire contract, never the engine itself.
         assertThat(mainModules).contains("cc.jumpkick:jk-core", "cc.jumpkick:jk-engine-api");
         assertThat(mainModules)
-                .doesNotContain("cc.jumpkick:jk-engine", "cc.jumpkick:jk-io", "cc.jumpkick:jk-resolver",
+                .doesNotContain(
+                        "cc.jumpkick:jk-engine",
+                        "cc.jumpkick:jk-io",
+                        "cc.jumpkick:jk-resolver",
                         "cc.jumpkick:jk-toolchain");
 
         // The engine application is the one module that links both halves.
         JkBuild cliEngine = JkBuildParser.parse(REPO.resolve("cli-engine/jk.toml"));
-        List<String> cliEngineMain =
-                cliEngine.dependencies().of(Scope.MAIN).stream().map(d -> d.module()).toList();
+        List<String> cliEngineMain = cliEngine.dependencies().of(Scope.MAIN).stream()
+                .map(d -> d.module())
+                .toList();
         assertThat(cliEngineMain).contains("cc.jumpkick:jk-cli", "cc.jumpkick:jk-engine");
 
         // Confirm the workspace-root merge still rewrites/dedupes the

@@ -3,8 +3,8 @@ package cc.jumpkick.command;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.sun.net.httpserver.HttpServer;
 import cc.jumpkick.cli.Jk;
+import com.sun.net.httpserver.HttpServer;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -378,7 +378,15 @@ class InstallExecCommandTest {
     @Test
     void tool_install_of_a_project_dir_delegates_to_the_app_pipeline(@TempDir Path tempDir) throws Exception {
         // Convergence (plan §9): `jk tool install <dir>` == `jk install` run in that dir.
-        run("new", "--group", "com.example", "--name", "widget", "--executable", "--layout", "traditional",
+        run(
+                "new",
+                "--group",
+                "com.example",
+                "--name",
+                "widget",
+                "--executable",
+                "--layout",
+                "traditional",
                 tempDir.resolve("proj").toString());
         Path src = tempDir.resolve("proj/src/main/java/com/example/Main.java");
         Files.createDirectories(src.getParent());
@@ -441,12 +449,7 @@ class InstallExecCommandTest {
     @Test
     void tool_install_from_an_untrusted_url_is_rejected(@TempDir Path tempDir) throws Exception {
         served.put("/r/Web.java", "public class Web {}".getBytes());
-        int exit = run(
-                "tool",
-                "install",
-                "--state-dir",
-                tempDir.toString(),
-                base + "/r/Web.java");
+        int exit = run("tool", "install", "--state-dir", tempDir.toString(), base + "/r/Web.java");
         assertThat(exit).isEqualTo(64);
     }
 
@@ -454,11 +457,9 @@ class InstallExecCommandTest {
     void native_classifier_tool_installs_a_direct_exec_launcher(@TempDir Path tempDir) throws Exception {
         // PRD §20.4: a published native binary for this platform beats the JVM path.
         servePom("com.example", "fastcli", "1.0.0");
-        String classifier = "native-" + cc.jumpkick.jdk.HostPlatform.currentArch() + "-"
-                + cc.jumpkick.jdk.HostPlatform.currentOs();
-        served.put(
-                "/com/example/fastcli/1.0.0/fastcli-1.0.0-" + classifier + ".exe",
-                "#!/bin/sh\nexit 7\n".getBytes());
+        String classifier =
+                "native-" + cc.jumpkick.jdk.HostPlatform.currentArch() + "-" + cc.jumpkick.jdk.HostPlatform.currentOs();
+        served.put("/com/example/fastcli/1.0.0/fastcli-1.0.0-" + classifier + ".exe", "#!/bin/sh\nexit 7\n".getBytes());
 
         Path bin = tempDir.resolve("bin");
         int exit = run(

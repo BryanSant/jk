@@ -53,12 +53,21 @@ public final class ImageConfigParser {
         env.putAll(project.env());
         Map<String, String> labels = new LinkedHashMap<>(global.labels());
         labels.putAll(project.labels());
-        String dockerExecutable = nonBlank(project.dockerExecutable()) != null
-                ? project.dockerExecutable() : global.dockerExecutable();
-        String dockerFile = nonBlank(project.dockerFile()) != null
-                ? project.dockerFile() : global.dockerFile();
-        return new ImageConfigData(base, user, ports, Map.copyOf(env), Map.copyOf(labels),
-                registry, tag, platforms, main, dockerExecutable, dockerFile);
+        String dockerExecutable =
+                nonBlank(project.dockerExecutable()) != null ? project.dockerExecutable() : global.dockerExecutable();
+        String dockerFile = nonBlank(project.dockerFile()) != null ? project.dockerFile() : global.dockerFile();
+        return new ImageConfigData(
+                base,
+                user,
+                ports,
+                Map.copyOf(env),
+                Map.copyOf(labels),
+                registry,
+                tag,
+                platforms,
+                main,
+                dockerExecutable,
+                dockerFile);
     }
 
     private static String nonBlank(String s) {
@@ -77,7 +86,8 @@ public final class ImageConfigParser {
         }
         TomlTable image = result.getTable("image");
         if (image == null) {
-            return new ImageConfigData(null, null, List.of(), Map.of(), Map.of(), null, null, List.of(), null, null, null);
+            return new ImageConfigData(
+                    null, null, List.of(), Map.of(), Map.of(), null, null, List.of(), null, null, null);
         }
         return new ImageConfigData(
                 image.getString("base"),

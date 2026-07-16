@@ -90,7 +90,8 @@ class BuildCommandTest {
                 tempDir.resolve("cache").toString());
         assertThat(exit).isEqualTo(0);
 
-        try (JarFile jf = new JarFile(tempDir.resolve("target/lib/widget-0.1.0.jar").toFile())) {
+        try (JarFile jf =
+                new JarFile(tempDir.resolve("target/lib/widget-0.1.0.jar").toFile())) {
             assertThat(jf.getJarEntry("application.properties")).isNotNull();
             String content = new String(
                     jf.getInputStream(jf.getJarEntry("application.properties")).readAllBytes(), StandardCharsets.UTF_8);

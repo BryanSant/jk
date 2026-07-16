@@ -81,12 +81,12 @@ class EngineTcpTransportTest {
         try {
             int port = Integer.parseInt(Files.readString(socketFile).trim());
             String token = Files.readString(EnginePaths.tokenFor(socketFile)).trim();
-            try (SocketChannel ch = SocketChannel.open(new java.net.InetSocketAddress(
-                    java.net.InetAddress.getLoopbackAddress(), port))) {
+            try (SocketChannel ch = SocketChannel.open(
+                    new java.net.InetSocketAddress(java.net.InetAddress.getLoopbackAddress(), port))) {
                 BufferedWriter w = new BufferedWriter(
                         new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
-                BufferedReader r = new BufferedReader(
-                        new InputStreamReader(Channels.newInputStream(ch), StandardCharsets.UTF_8));
+                BufferedReader r =
+                        new BufferedReader(new InputStreamReader(Channels.newInputStream(ch), StandardCharsets.UTF_8));
                 w.write(EngineProtocol.auth(token));
                 w.write('\n');
                 w.write(EngineProtocol.hello("probe"));

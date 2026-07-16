@@ -5,7 +5,6 @@ import cc.jumpkick.cache.Cas;
 import cc.jumpkick.http.Http;
 import cc.jumpkick.model.Dependency;
 import cc.jumpkick.model.JkBuild;
-import cc.jumpkick.model.PathSource;
 import cc.jumpkick.model.Scope;
 import cc.jumpkick.model.VersionSelector;
 import cc.jumpkick.repo.MavenRepo;
@@ -88,7 +87,8 @@ public final class PathSourceResolution {
                     out.add(d);
                     continue;
                 }
-                PathSourceMaterializer.Materialized m = bySource.get(d.pathSource().rawPath());
+                PathSourceMaterializer.Materialized m =
+                        bySource.get(d.pathSource().rawPath());
                 out.add(Dependency.of(d.library(), m.coordinate(), VersionSelector.parse("=" + m.version())));
             }
             rewritten.put(scope, out);

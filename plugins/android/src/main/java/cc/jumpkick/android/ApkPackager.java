@@ -108,5 +108,4 @@ final class ApkPackager {
         zip.write(bytes);
         zip.closeEntry();
     }
-
 }

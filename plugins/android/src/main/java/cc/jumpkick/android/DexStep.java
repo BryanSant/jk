@@ -54,7 +54,8 @@ final class DexStep {
 
     /** A {@code .jar}-suffixed alias of {@code source} under the step's scratch. */
     private static Path jarNamed(StepExec exec, Path source, String name) throws java.io.IOException {
-        Path alias = java.nio.file.Files.createDirectories(exec.scratch().resolve("tools")).resolve(name);
+        Path alias = java.nio.file.Files.createDirectories(exec.scratch().resolve("tools"))
+                .resolve(name);
         java.nio.file.Files.deleteIfExists(alias);
         try {
             java.nio.file.Files.createLink(alias, source);

@@ -39,7 +39,9 @@ public final class GlobalCancel {
             }
             var err = System.err;
             if (!handled) {
-                err.print("\n" + Theme.colorize(Glyphs.CROSS + " " + message, Theme.active().error()) + "\n");
+                err.print("\n"
+                        + Theme.colorize(
+                                Glyphs.CROSS + " " + message, Theme.active().error()) + "\n");
             }
             err.print(Ansi.RESET); // explicit SGR reset beyond the inline reset
             err.flush();

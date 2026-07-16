@@ -24,10 +24,15 @@ class IdeCommandTest {
         Path ideConfig = ideConfig(tmp);
 
         assertThat(Jk.execute(new String[] {
-                    "ide", "-C", ws.toString(),
-                    "--cache-dir", tmp.resolve("cache").toString(),
-                    "--jdks-dir", jdks.toString(),
-                    "--ide-config-dir", ideConfig.toString()
+                    "ide",
+                    "-C",
+                    ws.toString(),
+                    "--cache-dir",
+                    tmp.resolve("cache").toString(),
+                    "--jdks-dir",
+                    jdks.toString(),
+                    "--ide-config-dir",
+                    ideConfig.toString()
                 }))
                 .isEqualTo(0);
 
@@ -45,10 +50,16 @@ class IdeCommandTest {
         Path ideConfig = ideConfig(tmp);
 
         assertThat(Jk.execute(new String[] {
-                    "ide", "--idea", "-C", ws.toString(),
-                    "--cache-dir", tmp.resolve("cache").toString(),
-                    "--jdks-dir", jdks.toString(),
-                    "--ide-config-dir", ideConfig.toString()
+                    "ide",
+                    "--idea",
+                    "-C",
+                    ws.toString(),
+                    "--cache-dir",
+                    tmp.resolve("cache").toString(),
+                    "--jdks-dir",
+                    jdks.toString(),
+                    "--ide-config-dir",
+                    ideConfig.toString()
                 }))
                 .isEqualTo(0);
 
@@ -64,9 +75,14 @@ class IdeCommandTest {
         fakeJdk(jdks, "temurin-25.0.3", "25.0.3");
 
         assertThat(Jk.execute(new String[] {
-                    "ide", "--vscode", "-C", ws.toString(),
-                    "--cache-dir", tmp.resolve("cache").toString(),
-                    "--jdks-dir", jdks.toString()
+                    "ide",
+                    "--vscode",
+                    "-C",
+                    ws.toString(),
+                    "--cache-dir",
+                    tmp.resolve("cache").toString(),
+                    "--jdks-dir",
+                    jdks.toString()
                 }))
                 .isEqualTo(0);
 

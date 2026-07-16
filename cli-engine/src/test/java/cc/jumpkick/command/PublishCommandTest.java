@@ -3,9 +3,9 @@ package cc.jumpkick.command;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.sun.net.httpserver.HttpServer;
 import cc.jumpkick.cli.Jk;
 import cc.jumpkick.publish.testkit.GpgTestFixture;
+import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
@@ -120,8 +120,7 @@ class PublishCommandTest {
                 """);
         writeJar(tempDir.resolve("target/lib/widget-1.0.0-SNAPSHOT.jar"));
 
-        int exit = run(
-                "publish", "-C", tempDir.toString(), "--repo-url", base.toString(), "--allow-snapshot");
+        int exit = run("publish", "-C", tempDir.toString(), "--repo-url", base.toString(), "--allow-snapshot");
         assertThat(exit).isEqualTo(0);
     }
 
@@ -156,7 +155,7 @@ class PublishCommandTest {
                 tempDir.toString(),
                 "--repo-url",
                 base.toString(),
-                                "--sign",
+                "--sign",
                 "--key-file",
                 key.secretKeyFile().toString(),
                 "--key-passphrase",

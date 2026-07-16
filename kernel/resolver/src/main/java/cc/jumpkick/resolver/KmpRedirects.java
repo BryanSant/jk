@@ -76,13 +76,12 @@ public final class KmpRedirects {
             String rawPom = Files.readString(pomHit.get().fetched().cachePath(), StandardCharsets.UTF_8);
             if (!rawPom.contains(GradleModuleMetadata.POM_MARKER)) return Optional.empty();
 
-            Coordinate moduleCoord =
-                    new Coordinate(coord.group(), coord.artifact(), coord.version(), null, "module");
+            Coordinate moduleCoord = new Coordinate(coord.group(), coord.artifact(), coord.version(), null, "module");
             var moduleHit = repos.tryFetchArtifact(moduleCoord);
             if (moduleHit.isEmpty()) return Optional.empty();
 
-            GradleModuleMetadata gmm = GradleModuleMetadata.parse(
-                    moduleHit.get().fetched().cachePath());
+            GradleModuleMetadata gmm =
+                    GradleModuleMetadata.parse(moduleHit.get().fetched().cachePath());
             return gmm.runtimeRedirect(jvmEnvironment).map(target -> {
                 String selected = target.group() + ":" + target.module();
                 for (String sibling : gmm.redirectTargetModules()) {

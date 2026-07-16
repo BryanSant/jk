@@ -20,7 +20,6 @@ import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
-import java.util.Map;
 
 /**
  * {@code jk update} — re-resolve declared dependencies and overwrite {@code jk.lock}. Same pipeline
@@ -118,8 +117,8 @@ public final class UpdateCommand implements CliCommand {
 
         if (engineDisabledForTests()) {
             return cc.jumpkick.cli.engine.InProcessEngine.require()
-                    .updateInProcess(dir, cache, in.has("git"), gitTarget, features, noDefaultFeatures,
-                            repoUrl, global);
+                    .updateInProcess(
+                            dir, cache, in.has("git"), gitTarget, features, noDefaultFeatures, repoUrl, global);
         }
         return in.has("git") ? runHostedGitOnly(dir, cache, gitTarget) : runHosted(dir, cache);
     }
@@ -144,14 +143,16 @@ public final class UpdateCommand implements CliCommand {
             @Override
             public void onModuleFinish(String moduleDir, PipelineResult result, EngineClient.LockCounts counts) {
                 if (result.success() && !global.outputIsJson()) {
-                    printUpdatedLine(Path.of(moduleDir).resolve("jk.lock"), (int) counts.packages(), global.workingDir());
+                    printUpdatedLine(
+                            Path.of(moduleDir).resolve("jk.lock"), (int) counts.packages(), global.workingDir());
                 }
             }
         };
 
         EngineClient.LockOutcome outcome;
         try {
-            outcome = EngineClient.runUpdate(cc.jumpkick.engine.EnginePaths.current(), updateRequest(dir, cache), handler);
+            outcome = EngineClient.runUpdate(
+                    cc.jumpkick.engine.EnginePaths.current(), updateRequest(dir, cache), handler);
         } catch (java.io.IOException e) {
             CliOutput.err("jk update: " + e.getMessage());
             return Exit.SOFTWARE;

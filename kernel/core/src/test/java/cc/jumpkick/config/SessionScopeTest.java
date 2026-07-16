@@ -54,7 +54,8 @@ class SessionScopeTest {
         assertThat(SessionContext.current().workingDir()).isNotEqualTo(b.workingDir());
     }
 
-    private static void await(CyclicBarrier barrier, AtomicReference<Session> sink, AtomicReference<Throwable> failure) {
+    private static void await(
+            CyclicBarrier barrier, AtomicReference<Session> sink, AtomicReference<Throwable> failure) {
         try {
             barrier.await(); // all three meet: both scopes are now concurrently live
             sink.set(SessionContext.current());
@@ -65,7 +66,8 @@ class SessionScopeTest {
 
     @Test
     void falls_back_to_installed_static_when_no_scope_bound() {
-        Session installed = Session.defaults().withWorkingDir(Path.of("/tmp/jk-installed").toAbsolutePath());
+        Session installed =
+                Session.defaults().withWorkingDir(Path.of("/tmp/jk-installed").toAbsolutePath());
         SessionContext.install(installed);
 
         assertThat(SessionContext.current()).isSameAs(installed);
@@ -73,8 +75,10 @@ class SessionScopeTest {
 
     @Test
     void scope_shadows_the_installed_static() throws Exception {
-        Session installed = Session.defaults().withWorkingDir(Path.of("/tmp/jk-installed").toAbsolutePath());
-        Session scoped = Session.defaults().withWorkingDir(Path.of("/tmp/jk-scoped").toAbsolutePath());
+        Session installed =
+                Session.defaults().withWorkingDir(Path.of("/tmp/jk-installed").toAbsolutePath());
+        Session scoped =
+                Session.defaults().withWorkingDir(Path.of("/tmp/jk-scoped").toAbsolutePath());
         SessionContext.install(installed);
 
         Session inside = SessionContext.where(scoped, SessionContext::current);
@@ -85,7 +89,8 @@ class SessionScopeTest {
 
     @Test
     void reset_restores_defaults() {
-        SessionContext.install(Session.defaults().withWorkingDir(Path.of("/tmp/jk-x").toAbsolutePath()));
+        SessionContext.install(
+                Session.defaults().withWorkingDir(Path.of("/tmp/jk-x").toAbsolutePath()));
         SessionContext.reset();
 
         assertThat(SessionContext.current().workingDir())

@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Set;
+import java.util.function.ToDoubleFunction;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -151,8 +152,8 @@ class EffortWeightsTest {
         // The module's OWN history still wins over the project tier.
         StepTimings.clearMemo();
         StepTimings.record(cache, List.of(new StepTimings.Sample("/proj/new", "run-tests", 3.0)), 0.4, 2L);
-        int own = EffortWeights.learned(
-                StepTimings.load(cache), "/proj/new", "run-tests", 10, staticWeight, projectDirs);
+        int own =
+                EffortWeights.learned(StepTimings.load(cache), "/proj/new", "run-tests", 10, staticWeight, projectDirs);
         assertThat(own).isEqualTo((int) Math.round(EffortWeights.TEST_STARTUP_FLOOR + 3.0 * 10)); // 32
     }
 
@@ -242,8 +243,7 @@ class EffortWeightsTest {
                 new EffortWeights.ModuleCost(Path.of("/cold"), Set.of(), 10, 0));
         // Warm module converts at MS_PER_WEIGHT (its learned rates round-trip); cold at a slower
         // reference constant would be wrong — price the cold one at this host's (faster) calibration.
-        java.util.function.ToDoubleFunction<Path> rate =
-                d -> d.equals(Path.of("/warm")) ? EffortWeights.MS_PER_WEIGHT : 50.0;
+        ToDoubleFunction<Path> rate = d -> d.equals(Path.of("/warm")) ? EffortWeights.MS_PER_WEIGHT : 50.0;
         assertThat(EffortWeights.scheduleMillis(mods, 1, true, false, rate))
                 .isEqualTo(10L * EffortWeights.MS_PER_WEIGHT + 10L * 50);
         // A uniform per-module rate reduces to the scalar overload.

@@ -84,7 +84,8 @@ public final class SigV4Signer {
                 + sha256Hex(canonicalRequest.getBytes(StandardCharsets.UTF_8));
 
         byte[] signingKey = signingKey(secretKey, dateStamp, region, service);
-        String signature = cc.jumpkick.util.Hashing.hex(hmac(signingKey, stringToSign.getBytes(StandardCharsets.UTF_8)));
+        String signature =
+                cc.jumpkick.util.Hashing.hex(hmac(signingKey, stringToSign.getBytes(StandardCharsets.UTF_8)));
 
         return ALGORITHM
                 + " Credential="
@@ -152,7 +153,6 @@ public final class SigV4Signer {
             throw new IllegalStateException("HmacSHA256 unavailable", e);
         }
     }
-
 
     /** RFC 3986 unreserved set is left as-is; everything else percent-encoded (uppercase hex). */
     static String rfc3986(String s) {

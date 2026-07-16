@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.FileTime;
 import java.util.List;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
@@ -117,13 +118,11 @@ class ClasspathFingerprintTest {
         // A jar whose mtime has settled takes the FileHashMemo stat fast-path on the
         // second read; a content change (new size/mtime) must still re-fingerprint.
         Path jar = writeJar(dir.resolve("dep.jar"), new String[][] {{"A.class", "AA"}}, 1000);
-        java.nio.file.attribute.FileTime old =
-                java.nio.file.attribute.FileTime.fromMillis(System.currentTimeMillis() - 60_000);
+        FileTime old = FileTime.fromMillis(System.currentTimeMillis() - 60_000);
         Files.setLastModifiedTime(jar, old);
         Path cache = dir.resolve("cache");
         cc.jumpkick.config.SessionContext.where(
-                cc.jumpkick.config.Session.defaults().withCacheDir(cache),
-                () -> {
+                cc.jumpkick.config.Session.defaults().withCacheDir(cache), () -> {
                     String fp1 = ClasspathFingerprint.entry(jar);
                     assertThat(Files.isDirectory(cache.resolve("hash-memo")))
                             .as("settled fingerprint recorded on disk")
@@ -132,8 +131,7 @@ class ClasspathFingerprintTest {
                             .as("memoized read agrees with the computed fingerprint")
                             .isEqualTo(fp1);
                     writeJar(jar, new String[][] {{"A.class", "CHANGED-CONTENT"}}, 2000);
-                    Files.setLastModifiedTime(
-                            jar, java.nio.file.attribute.FileTime.fromMillis(old.toMillis() + 5_000));
+                    Files.setLastModifiedTime(jar, FileTime.fromMillis(old.toMillis() + 5_000));
                     assertThat(ClasspathFingerprint.entry(jar))
                             .as("content change re-fingerprints despite the memo")
                             .isNotEqualTo(fp1);

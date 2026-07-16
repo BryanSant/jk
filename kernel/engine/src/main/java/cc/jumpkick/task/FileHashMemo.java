@@ -72,7 +72,8 @@ public final class FileHashMemo {
         try {
             Files.createDirectories(entry.getParent());
             // Write-then-move so a concurrent reader never sees a torn entry.
-            Path tmp = Files.createTempFile(entry.getParent(), entry.getFileName().toString(), ".tmp");
+            Path tmp =
+                    Files.createTempFile(entry.getParent(), entry.getFileName().toString(), ".tmp");
             Files.writeString(tmp, size + " " + mtimeMillis + " " + token, StandardCharsets.UTF_8);
             Files.move(tmp, entry, StandardCopyOption.REPLACE_EXISTING);
         } catch (IOException | RuntimeException e) {

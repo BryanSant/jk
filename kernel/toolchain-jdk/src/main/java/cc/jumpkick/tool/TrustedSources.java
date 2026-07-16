@@ -140,7 +140,9 @@ public final class TrustedSources {
         sb.append("# Managed by `jk trust add|remove|import`; hand edits are fine.\n");
         sb.append("sources = [\n");
         for (String p : prefixes) {
-            sb.append("  \"").append(p.replace("\\", "\\\\").replace("\"", "\\\"")).append("\",\n");
+            sb.append("  \"")
+                    .append(p.replace("\\", "\\\\").replace("\"", "\\\""))
+                    .append("\",\n");
         }
         sb.append("]\n");
         Files.createDirectories(file.getParent());

@@ -3,8 +3,8 @@ package cc.jumpkick.runtime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import cc.jumpkick.config.SessionContext;
 import cc.jumpkick.config.JkBuildParser;
+import cc.jumpkick.config.SessionContext;
 import cc.jumpkick.model.JkBuild;
 import cc.jumpkick.resolver.ResolveObserver;
 import cc.jumpkick.run.Pipeline;
@@ -71,8 +71,12 @@ class KspRoomHiltTest {
 
         // The KSP round ran: Room generated the database impl, Hilt generated components.
         Path kspOut = project.resolve("target/ksp");
-        assertThat(anyFile(kspOut, "HelloDb_Impl")).as("Room database impl generated").isTrue();
-        assertThat(anyFile(kspOut, "Hilt_HelloApp")).as("Hilt application base generated").isTrue();
+        assertThat(anyFile(kspOut, "HelloDb_Impl"))
+                .as("Room database impl generated")
+                .isTrue();
+        assertThat(anyFile(kspOut, "Hilt_HelloApp"))
+                .as("Hilt application base generated")
+                .isTrue();
         assertThat(anyFile(kspOut, "Hilt_MainActivity"))
                 .as("Hilt activity base generated")
                 .isTrue();

@@ -5,6 +5,8 @@ import cc.jumpkick.cache.Cas;
 import cc.jumpkick.cache.Linking;
 import cc.jumpkick.config.JkBuildParser;
 import cc.jumpkick.config.SessionContext;
+import cc.jumpkick.engine.plugin.HeapPlan;
+import cc.jumpkick.engine.plugin.JvmOptions;
 import cc.jumpkick.layout.BuildLayout;
 import cc.jumpkick.model.JkBuild;
 import cc.jumpkick.resolver.pubgrub.UnsatisfiableException;
@@ -14,9 +16,6 @@ import cc.jumpkick.run.PipelineListener;
 import cc.jumpkick.run.PipelineResult;
 import cc.jumpkick.run.TestSummary;
 import cc.jumpkick.task.ActionCache;
-import cc.jumpkick.test.JUnitLauncher;
-import cc.jumpkick.engine.plugin.HeapPlan;
-import cc.jumpkick.engine.plugin.JvmOptions;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -138,8 +137,7 @@ public final class BuildService {
             String group = moduleGroup.get(normalDir);
             for (Path art : entry.getValue()) {
                 String filename = art.getFileName().toString();
-                String linkName =
-                        filenameCounts.getOrDefault(filename, 0L) > 1 ? group + "-" + filename : filename;
+                String linkName = filenameCounts.getOrDefault(filename, 0L) > 1 ? group + "-" + filename : filename;
                 links.put(art, wsTarget.resolve(linkName));
             }
         }
@@ -174,8 +172,7 @@ public final class BuildService {
                 if (Perf.ENABLED && m.dirty()) {
                     for (BuildPlan.Step p : m.steps()) {
                         if (!p.cached())
-                            System.err.println(
-                                    "[jk-perf] dirty " + m.coord() + " " + p.name() + " (" + p.text() + ")");
+                            System.err.println("[jk-perf] dirty " + m.coord() + " " + p.name() + " (" + p.text() + ")");
                     }
                 }
             }
@@ -256,8 +253,7 @@ public final class BuildService {
                             parallelTests,
                             Runtime.getRuntime().availableProcessors());
             StepTimings timings = StepTimings.load(cache);
-            java.util.function.Predicate<Path> warm =
-                    dir -> timings.hasTimingsFor(List.of(dir.toString()));
+            java.util.function.Predicate<Path> warm = dir -> timings.hasTimingsFor(List.of(dir.toString()));
             double coldRate = costs.stream().allMatch(c -> warm.test(c.dir()))
                     ? EffortWeights.MS_PER_WEIGHT
                     : Calibration.ensure(jdksDir).msPerWeight();
@@ -341,8 +337,7 @@ public final class BuildService {
     // Workspace build (the front-end-callable event-emitting entry point)
     // =========================================================================
 
-    private static final PipelineKey<TestSummary> TEST_RESULT =
-            PipelineKey.of("test-result", TestSummary.class);
+    private static final PipelineKey<TestSummary> TEST_RESULT = PipelineKey.of("test-result", TestSummary.class);
 
     /**
      * Build a whole workspace: resolve the module graph, size the worker-JVM memory plan (unless
@@ -402,7 +397,8 @@ public final class BuildService {
         // memory plan and the ETA below, so serial builds size heaps and estimate time as serial.
         if (req.maxModuleConcurrency() > 0) width = Math.min(width, req.maxModuleConcurrency());
         if (req.applyMemoryPlan()) {
-            JvmOptions.planAndApply(HeapPlan.requestedJvms(width, req.workers() > 0 ? req.workers() : 1, parallelTests, cap));
+            JvmOptions.planAndApply(
+                    HeapPlan.requestedJvms(width, req.workers() > 0 ? req.workers() : 1, parallelTests, cap));
         }
 
         Set<Path> moduleDirs = new LinkedHashSet<>();
@@ -438,7 +434,10 @@ public final class BuildService {
         for (var e : plans.entrySet()) {
             costByDir.put(
                     e.getKey(),
-                    EffortWeights.costOf(e.getKey(), graph.edges().getOrDefault(e.getKey(), Set.of()), e.getValue().pipeline()));
+                    EffortWeights.costOf(
+                            e.getKey(),
+                            graph.edges().getOrDefault(e.getKey(), Set.of()),
+                            e.getValue().pipeline()));
         }
         Perf.end("ws-eta-costs", teta);
         int requestedJvms = HeapPlan.requestedJvms(width, req.workers() > 0 ? req.workers() : 1, parallelTests, cap);
@@ -484,7 +483,8 @@ public final class BuildService {
                         for (var ce : costByDir.entrySet()) if (remDirs.contains(ce.getKey())) rem.add(ce.getValue());
                         long elapsed = (System.nanoTime() - start) / 1_000_000;
                         listener.onEtaEstimate(elapsed
-                                + EffortWeights.scheduleMillis(rem, concurrency, false, parallelTests, Math.round(liveMpw)));
+                                + EffortWeights.scheduleMillis(
+                                        rem, concurrency, false, parallelTests, Math.round(liveMpw)));
                     }
                     return null;
                 },
@@ -495,8 +495,7 @@ public final class BuildService {
             // Fold this run's step durations + measured throughput into the learned ledger + host
             // calibration (EWMA) so the next build's estimate is time-accurate. Failed builds don't
             // record — their step times are abnormal.
-            StepTimings.record(
-                    req.cache(), timingSamples, StepTimings.DEFAULT_ALPHA, System.currentTimeMillis());
+            StepTimings.record(req.cache(), timingSamples, StepTimings.DEFAULT_ALPHA, System.currentTimeMillis());
             Double runMpw = medianRate(observedRates);
             if (runMpw != null) Calibration.refine(runMpw, System.currentTimeMillis());
         }
@@ -584,14 +583,15 @@ public final class BuildService {
         Path buildFile = dir.resolve("jk.toml");
         if (!Files.exists(buildFile)) return null;
         BuildPipelines.Inputs inputs = BuildPlanForecast.inputsFor(
-                dir,
-                req.cache(),
-                req.workers() > 0 ? req.workers() : 1,
-                req.jdksDir(),
-                req.profile(),
-                req.skipTests(),
-                req.verbose(),
-                moduleDirs).withVariant(req.variant(), req.clientEnv());
+                        dir,
+                        req.cache(),
+                        req.workers() > 0 ? req.workers() : 1,
+                        req.jdksDir(),
+                        req.profile(),
+                        req.skipTests(),
+                        req.verbose(),
+                        moduleDirs)
+                .withVariant(req.variant(), req.clientEnv());
         boolean fullyCached = false;
         if (!forceRebuild) {
             try {

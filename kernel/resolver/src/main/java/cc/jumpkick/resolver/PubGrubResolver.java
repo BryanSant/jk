@@ -103,8 +103,11 @@ public final class PubGrubResolver implements Resolver {
                     System.console() != null && !"dumb".equals(System.getenv("TERM")) && System.getenv("CI") == null;
             // Use the injected palette (from the CLI theme) when available; fall back to the
             // built-in DEFAULT which hard-codes the same values as JkDarkTheme.
-            cc.jumpkick.resolver.pubgrub.Diagnostics.Palette palette =
-                    this.palette != null ? this.palette : (ansi ? cc.jumpkick.resolver.pubgrub.Diagnostics.Palette.DEFAULT : cc.jumpkick.resolver.pubgrub.Diagnostics.Palette.PLAIN);
+            cc.jumpkick.resolver.pubgrub.Diagnostics.Palette palette = this.palette != null
+                    ? this.palette
+                    : (ansi
+                            ? cc.jumpkick.resolver.pubgrub.Diagnostics.Palette.DEFAULT
+                            : cc.jumpkick.resolver.pubgrub.Diagnostics.Palette.PLAIN);
             throw new UnsatisfiableException(Diagnostics.render(e.rootCause(), palette), e.rootCause());
         }
 

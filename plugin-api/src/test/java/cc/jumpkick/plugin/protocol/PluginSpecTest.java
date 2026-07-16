@@ -25,7 +25,14 @@ class PluginSpecTest {
                 .configBool("incremental", true)
                 .configInt("release", 25)
                 .configList("flags", List.of("-parameters", "-g"))
-                .project(new ProjectFacts("com.example", "widget", "1.2.3", 25, "com.example.Main", true, false,
+                .project(new ProjectFacts(
+                        "com.example",
+                        "widget",
+                        "1.2.3",
+                        25,
+                        "com.example.Main",
+                        true,
+                        false,
                         Map.of("Built-By", "jk")))
                 .layout(Map.of("classesDir", dir.resolve("classes"), "moduleDir", dir))
                 .javaHome(dir.resolve("jdk"))
@@ -72,20 +79,21 @@ class PluginSpecTest {
         assertThat(s.artifactPath()).isEqualTo(dir.resolve("widget.jar").toAbsolutePath());
 
         assertThat(s.compileClasspath()).containsExactly(dir.resolve("dep.jar").toAbsolutePath());
-        assertThat(s.processorClasspath()).containsExactly(dir.resolve("proc.jar").toAbsolutePath());
+        assertThat(s.processorClasspath())
+                .containsExactly(dir.resolve("proc.jar").toAbsolutePath());
         assertThat(s.friendPaths()).containsExactly(dir.resolve("friend.jar").toAbsolutePath());
 
-        assertThat(s.entries()).extracting(PackageIo.RuntimeEntry::fileName)
+        assertThat(s.entries())
+                .extracting(PackageIo.RuntimeEntry::fileName)
                 .containsExactly("dep-1.0.jar", "snap-2.0.jar");
         assertThat(s.entries()).extracting(PackageIo.RuntimeEntry::snapshot).containsExactly(false, true);
 
         assertThat(s.sources()).containsExactly(dir.resolve("Main.java").toAbsolutePath());
         assertThat(s.args()).containsExactly("-Xlint:all");
-        assertThat(s.compilerPlugins()).singleElement()
-                .satisfies(cp -> {
-                    assertThat(cp.id()).isEqualTo("org.jetbrains.kotlin.allopen");
-                    assertThat(cp.options()).containsExactly("annotation=X");
-                });
+        assertThat(s.compilerPlugins()).singleElement().satisfies(cp -> {
+            assertThat(cp.id()).isEqualTo("org.jetbrains.kotlin.allopen");
+            assertThat(cp.options()).containsExactly("annotation=X");
+        });
         assertThat(s.stepOutput("android-res")).contains(dir.resolve("res").toAbsolutePath());
         assertThat(s.extra("protoc")).contains(dir.resolve("protoc").toAbsolutePath());
         assertThat(s.secret("gpgPassphrase")).contains("hunter2");

@@ -3,8 +3,8 @@ package cc.jumpkick.command;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.sun.net.httpserver.HttpServer;
 import cc.jumpkick.cli.Jk;
+import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
@@ -175,12 +175,7 @@ class ToolRunCommandTest {
         Path state = tempDir.resolve("home");
         run("trust", "add", "--state-dir", state.toString(), base.toString() + "/");
         String host = base.getHost() + ":" + base.getPort();
-        int exit = run(
-                "tool",
-                "run",
-                "--state-dir",
-                state.toString(),
-                "nope@" + host + "/cat");
+        int exit = run("tool", "run", "--state-dir", state.toString(), "nope@" + host + "/cat");
         assertThat(exit).isEqualTo(70); // rendered IOException: catalog has no such alias
     }
 
@@ -277,7 +272,8 @@ class ToolRunCommandTest {
                 """.getBytes(StandardCharsets.UTF_8));
 
         Path state = tempDir.resolve("home");
-        assertThat(run("trust", "add", "--state-dir", state.toString(), base.toString() + "/")).isEqualTo(0);
+        assertThat(run("trust", "add", "--state-dir", state.toString(), base.toString() + "/"))
+                .isEqualTo(0);
         int exit = run(
                 "tool",
                 "run",
@@ -372,7 +368,15 @@ class ToolRunCommandTest {
     @Test
     void directory_with_jk_toml_builds_and_execs_the_project(@TempDir Path tempDir) throws Exception {
         // `jk tool run <dir>` on a jk project == `jk run` without the cd.
-        run("new", "--group", "com.example", "--name", "widget", "--executable", "--layout", "traditional",
+        run(
+                "new",
+                "--group",
+                "com.example",
+                "--name",
+                "widget",
+                "--executable",
+                "--layout",
+                "traditional",
                 tempDir.toString());
         Path src = tempDir.resolve("src/main/java/com/example/Main.java");
         Files.createDirectories(src.getParent());
@@ -840,8 +844,15 @@ class ToolRunCommandTest {
     /** Drive the system git for local-repo fixtures (identity + signing pinned for hermeticity). */
     private static void git(Path dir, String... args) throws Exception {
         java.util.List<String> cmd = new java.util.ArrayList<>(java.util.List.of(
-                "git", "-C", dir.toString(), "-c", "user.name=t", "-c", "user.email=t@t",
-                "-c", "commit.gpgsign=false"));
+                "git",
+                "-C",
+                dir.toString(),
+                "-c",
+                "user.name=t",
+                "-c",
+                "user.email=t@t",
+                "-c",
+                "commit.gpgsign=false"));
         cmd.addAll(java.util.List.of(args));
         Process p = new ProcessBuilder(cmd).redirectErrorStream(true).start();
         String out = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8);

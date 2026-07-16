@@ -131,13 +131,15 @@ public final class DrainView implements LiveRegion, AutoCloseable {
     private String[] lines() {
         int n = jobs;
         String elapsed = Theme.colorize(
-                "+" + fmtElapsed((System.nanoTime() - startNanos) / 1_000_000), Theme.active().warning());
+                "+" + fmtElapsed((System.nanoTime() - startNanos) / 1_000_000),
+                Theme.active().warning());
         String l1 = PipelineWedge.chipLine(
                 Spinner.FRAMES[frame],
                 "Engine",
                 nerdfont,
                 "Draining " + n + " job" + (n == 1 ? "" : "s") + "… " + elapsed);
-        String hint = Theme.colorize("Wait for jobs to finish, or press ", Theme.active().dim())
+        String hint = Theme.colorize(
+                        "Wait for jobs to finish, or press ", Theme.active().dim())
                 + Theme.colorize("Ctrl-X", AttributedStyle.DEFAULT.bold())
                 + Theme.colorize(" to kill the engine now", Theme.active().dim());
         return new String[] {l1, hint};

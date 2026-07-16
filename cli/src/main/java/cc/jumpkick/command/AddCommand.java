@@ -1,23 +1,20 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.command;
 
-import cc.jumpkick.cli.CliOutput;
 import cc.jumpkick.cache.Cas;
 import cc.jumpkick.cli.Ansi;
+import cc.jumpkick.cli.CliOutput;
 import cc.jumpkick.cli.GlobalOptions;
 import cc.jumpkick.cli.theme.Coords;
 import cc.jumpkick.cli.theme.Theme;
 import cc.jumpkick.cli.tui.Glyphs;
-import cc.jumpkick.config.JkBuildEditor;
-import cc.jumpkick.config.JkBuildParser;
 import cc.jumpkick.http.Http;
 import cc.jumpkick.model.Coordinate;
-import cc.jumpkick.model.JkBuild;
 import cc.jumpkick.model.RepositorySpec;
 import cc.jumpkick.model.Scope;
-import cc.jumpkick.model.command.Exit;
 import cc.jumpkick.model.command.Arity;
 import cc.jumpkick.model.command.CliCommand;
+import cc.jumpkick.model.command.Exit;
 import cc.jumpkick.model.command.Invocation;
 import cc.jumpkick.model.command.Opt;
 import cc.jumpkick.model.command.Param;
@@ -27,7 +24,6 @@ import cc.jumpkick.util.Hashing;
 import cc.jumpkick.util.JkDirs;
 import java.io.IOException;
 import java.net.URI;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -157,8 +153,15 @@ public final class AddCommand implements CliCommand {
         Scope scope = resolveScope();
         if (scope == null) return Exit.USAGE;
         try {
-            EngineEdits.apply(file, "add-dependency", java.util.List.of(
-                    scope.canonical(), parsed.library(), parsed.group(), parsed.name(), parsed.versionLiteral()));
+            EngineEdits.apply(
+                    file,
+                    "add-dependency",
+                    java.util.List.of(
+                            scope.canonical(),
+                            parsed.library(),
+                            parsed.group(),
+                            parsed.name(),
+                            parsed.versionLiteral()));
         } catch (IOException e) {
             CliOutput.err("jk add: " + e.getMessage());
             return 1;
@@ -245,8 +248,10 @@ public final class AddCommand implements CliCommand {
         // 1. Dependency edge into the current project, pinned to the module's
         //    version — matching how this repo's own modules reference siblings.
         try {
-            EngineEdits.apply(currentToml, "add-dependency", java.util.List.of(
-                    scope.canonical(), name, group, artifact, "=" + version));
+            EngineEdits.apply(
+                    currentToml,
+                    "add-dependency",
+                    java.util.List.of(scope.canonical(), name, group, artifact, "=" + version));
         } catch (IOException e) {
             CliOutput.err("jk add: " + e.getMessage());
             return 1;
@@ -353,8 +358,10 @@ public final class AddCommand implements CliCommand {
 
         // Edit jk.toml (engine-side).
         try {
-            EngineEdits.apply(tomlFile, "add-file-dependency", java.util.List.of(
-                    scope.canonical(), library, group, artifact, version, sha256));
+            EngineEdits.apply(
+                    tomlFile,
+                    "add-file-dependency",
+                    java.util.List.of(scope.canonical(), library, group, artifact, version, sha256));
         } catch (IOException e) {
             CliOutput.err("jk add: " + e.getMessage());
             return 1;

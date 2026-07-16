@@ -80,8 +80,7 @@ final class ManifestStep {
             // not reach aapt2, which rejects e.g. a <property> left carrying only tools attrs.
             merger.arg("--remove-tools-declarations");
         }
-        StepExec.ToolRun.Result result = merger
-                .arg("--property")
+        StepExec.ToolRun.Result result = merger.arg("--property")
                 .arg("PACKAGE=" + namespace)
                 .arg("--property")
                 .arg("MIN_SDK_VERSION=" + minSdk)

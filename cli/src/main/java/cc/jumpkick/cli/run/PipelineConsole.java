@@ -109,7 +109,8 @@ public final class PipelineConsole {
      * group:artifact}), then a {@code ✓}/{@code ✗} result line from {@code spec}. {@code --output
      * json} still emits NDJSON and {@code --verbose} still prints per-step lines.
      */
-    public static PipelineResult runPipeline(Pipeline pipeline, Mode mode, Path cacheRoot, ConsoleSpec spec, String module) {
+    public static PipelineResult runPipeline(
+            Pipeline pipeline, Mode mode, Path cacheRoot, ConsoleSpec spec, String module) {
         EventLogListener log = EventLogListener.open(cacheRoot, pipeline.name());
         if (log != null) pipeline.addListener(log);
 
@@ -212,7 +213,8 @@ public final class PipelineConsole {
      * view. The shared view is settled by the caller after the last module. Always records the event
      * log.
      */
-    public static PipelineResult runPipelineInto(Pipeline pipeline, Path cacheRoot, String module, AggregateContext agg) {
+    public static PipelineResult runPipelineInto(
+            Pipeline pipeline, Path cacheRoot, String module, AggregateContext agg) {
         return runPipelineInto(pipeline, cacheRoot, module, agg, 0);
     }
 
@@ -222,7 +224,8 @@ public final class PipelineConsole {
      * own 0→100% into its share of the aggregate bar so the bar advances cumulatively without
      * backtracking. Pass the same estimate that was summed into {@link AggregateContext#calibrate}.
      */
-    public static PipelineResult runPipelineInto(Pipeline pipeline, Path cacheRoot, String module, AggregateContext agg, long slice) {
+    public static PipelineResult runPipelineInto(
+            Pipeline pipeline, Path cacheRoot, String module, AggregateContext agg, long slice) {
         EventLogListener log = EventLogListener.open(cacheRoot, pipeline.name());
         if (log != null) pipeline.addListener(log);
         pipeline.addListener(new AggregateModuleListener(agg, module, pipeline.steps(), slice));

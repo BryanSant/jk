@@ -7,9 +7,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import cc.jumpkick.config.JkBuildParseException;
 import cc.jumpkick.config.JkBuildParser;
 import cc.jumpkick.model.JkBuild;
-import cc.jumpkick.plugin.PluginConfig;
 import cc.jumpkick.model.Scope;
 import cc.jumpkick.model.Variants;
+import cc.jumpkick.plugin.PluginConfig;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
@@ -94,7 +94,8 @@ class VariantApplyTest {
         assertThat(config.string("application-id-suffix")).isEqualTo(".fromtype");
         // Bare-value convenience: one custom dimension, `--variant free` → *=free.
         var bare = VariantApply.apply(build, dir, Variants.Selection.parse("*=paid"), Map.of());
-        assertThat(bare.build().pluginConfig("android").orElseThrow().string("variant.tier")).isEqualTo("paid");
+        assertThat(bare.build().pluginConfig("android").orElseThrow().string("variant.tier"))
+                .isEqualTo("paid");
     }
 
     @Test
@@ -128,11 +129,10 @@ class VariantApplyTest {
                 [variants.tier.paid.dependencies]
                 billing = { group = "com.acme", name = "billing", version = "3.0.0" }
                 """);
-        JkBuild free = VariantApply.apply(build, dir, Variants.Selection.parse("tier=free"), Map.of()).build();
+        JkBuild free = VariantApply.apply(build, dir, Variants.Selection.parse("tier=free"), Map.of())
+                .build();
         assertThat(free.build().extraSrc()).containsExactly("src/free/java");
-        assertThat(free.dependencies().of(Scope.MAIN))
-                .extracting(d -> d.name())
-                .containsExactly("shared", "ads");
+        assertThat(free.dependencies().of(Scope.MAIN)).extracting(d -> d.name()).containsExactly("shared", "ads");
 
         // The lock resolves the union: both values' deps, one lockfile for every variant.
         JkBuild union = Variants.unionDependencies(build);
@@ -166,8 +166,7 @@ class VariantApplyTest {
     void selection_naming_an_undeclared_dimension_is_ignored(@TempDir Path dir) throws Exception {
         // Workspace-wide selections: a module without the dimension applies only what it declares.
         JkBuild build = parse(dir, "");
-        JkBuild effective = VariantApply.apply(
-                        build, dir, Variants.Selection.parse("contentType=demo"), Map.of())
+        JkBuild effective = VariantApply.apply(build, dir, Variants.Selection.parse("contentType=demo"), Map.of())
                 .build();
         PluginConfig config = effective.pluginConfig("android").orElseThrow();
         assertThat(config.values()).doesNotContainKey("variant.contentType");
@@ -187,16 +186,15 @@ class VariantApplyTest {
                 store-file = "env:DEFINITELY_NOT_SET_ANYWHERE"
                 key-alias  = "upload"
                 """);
-        assertThatThrownBy(() -> VariantApply.apply(
-                        build, dir, Variants.Selection.parse("staging|tier=free"), Map.of()))
+        assertThatThrownBy(
+                        () -> VariantApply.apply(build, dir, Variants.Selection.parse("staging|tier=free"), Map.of()))
                 .isInstanceOf(JkBuildParseException.class)
                 .hasMessageContaining("staging");
-        assertThatThrownBy(() -> VariantApply.apply(
-                        build, dir, Variants.Selection.parse("tier=premium"), Map.of()))
+        assertThatThrownBy(() -> VariantApply.apply(build, dir, Variants.Selection.parse("tier=premium"), Map.of()))
                 .isInstanceOf(JkBuildParseException.class)
                 .hasMessageContaining("premium");
-        assertThatThrownBy(() -> VariantApply.apply(
-                        build, dir, Variants.Selection.parse("release|tier=free"), Map.of()))
+        assertThatThrownBy(
+                        () -> VariantApply.apply(build, dir, Variants.Selection.parse("release|tier=free"), Map.of()))
                 .isInstanceOf(JkBuildParseException.class)
                 .hasMessageContaining("DEFINITELY_NOT_SET_ANYWHERE");
         assertThat(VariantApply.envRefs(build)).contains("DEFINITELY_NOT_SET_ANYWHERE");

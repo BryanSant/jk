@@ -18,7 +18,8 @@ class AndroidContributionsTest {
     @Test
     void compose_flag_gates_the_compose_compiler_plugin() {
         JkBuild without = android("");
-        assertThat(PluginContributions.kotlinPlugins(without, null, "2.3.0", Set.of())).isEmpty();
+        assertThat(PluginContributions.kotlinPlugins(without, null, "2.3.0", Set.of()))
+                .isEmpty();
 
         JkBuild with = android("compose      = true\n");
         var plugins = PluginContributions.kotlinPlugins(with, null, "2.3.0", Set.of());
@@ -30,20 +31,22 @@ class AndroidContributionsTest {
     @Test
     void library_variant_swaps_the_packaging_descriptor() {
         var manifest = PluginTableRegistry.byTable("android").orElseThrow();
-        var app = manifest.packaging().resolve(android("").pluginConfig("android").orElseThrow());
+        var app =
+                manifest.packaging().resolve(android("").pluginConfig("android").orElseThrow());
         assertThat(app.execMode()).isEqualTo("device");
         assertThat(app.artifactExtension()).isEqualTo("apk");
         assertThat(app.deployCommand()).isEqualTo("deploy");
 
-        var lib = manifest.packaging().resolve(android("library      = true\n").pluginConfig("android").orElseThrow());
+        var lib = manifest.packaging()
+                .resolve(
+                        android("library      = true\n").pluginConfig("android").orElseThrow());
         assertThat(lib.execMode()).isEqualTo("none");
         assertThat(lib.artifactExtension()).isEqualTo("aar");
         assertThat(lib.deployCommand()).isEmpty();
     }
 
     private static JkBuild android(String extraKeys) {
-        return JkBuildParser.parse(
-                """
+        return JkBuildParser.parse("""
                 [project]
                 name    = "demo"
                 group   = "com.example"

@@ -55,8 +55,7 @@ final class AotCachePackage {
         }
     }
 
-    private static int runInner(Path projectDir, Path cacheDir)
-            throws IOException, InterruptedException {
+    private static int runInner(Path projectDir, Path cacheDir) throws IOException, InterruptedException {
         // Thin client: the engine computes the layout inputs (boot-ness, tier, main jar,
         // coordinate-named libs, main class); this process does the file assembly + the
         // training fork it owns.
@@ -151,8 +150,8 @@ final class AotCachePackage {
                 + Files.size(cachePath) / (1024 * 1024) + " MiB cache)");
         // Name the exact training binary: the cache is keyed to the JVM build, and a
         // "same version, different vendor" java silently falls back to a cold start.
-        CliOutput.err("jk: run it with:  cd " + projectDir.relativize(outDir) + " && " + java + " " + runFlag
-                + " -jar " + appJarName);
+        CliOutput.err("jk: run it with:  cd " + projectDir.relativize(outDir) + " && " + java + " " + runFlag + " -jar "
+                + appJarName);
         return 0;
     }
 
@@ -216,8 +215,7 @@ final class AotCachePackage {
         try (var jarIn = new java.util.jar.JarInputStream(Files.newInputStream(mainJar))) {
             java.util.jar.Manifest manifest = jarIn.getManifest();
             if (manifest == null) manifest = new java.util.jar.Manifest();
-            manifest.getMainAttributes()
-                    .putIfAbsent(java.util.jar.Attributes.Name.MANIFEST_VERSION, "1.0");
+            manifest.getMainAttributes().putIfAbsent(java.util.jar.Attributes.Name.MANIFEST_VERSION, "1.0");
             if (manifest.getMainAttributes().getValue(java.util.jar.Attributes.Name.MAIN_CLASS) == null
                     && !plan.mainClass().isEmpty()) {
                 manifest.getMainAttributes().put(java.util.jar.Attributes.Name.MAIN_CLASS, plan.mainClass());

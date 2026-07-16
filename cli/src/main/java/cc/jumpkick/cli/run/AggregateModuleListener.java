@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.cli.run;
 
-import cc.jumpkick.plugin.build.Phase;
 import cc.jumpkick.cli.tui.CommandManager;
 import cc.jumpkick.cli.tui.Glyphs;
+import cc.jumpkick.plugin.build.Phase;
 import cc.jumpkick.run.PipelineListener;
 import cc.jumpkick.run.PipelineResult;
 import cc.jumpkick.run.PipelineView;
@@ -106,7 +106,11 @@ public final class AggregateModuleListener implements PipelineListener {
             emit(ConsoleSpec.compilerWarning(step, message));
         } else {
             emit(ProgressBarListener.renderDiagnostic(
-                    Glyphs.BANG + " Warning", cc.jumpkick.cli.theme.Theme.active().warning().bold(), step, code, message));
+                    Glyphs.BANG + " Warning",
+                    cc.jumpkick.cli.theme.Theme.active().warning().bold(),
+                    step,
+                    code,
+                    message));
         }
     }
 

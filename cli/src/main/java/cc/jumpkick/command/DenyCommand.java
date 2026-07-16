@@ -85,7 +85,8 @@ public final class DenyCommand implements CliCommand {
         }
         CliOutput.err("jk deny: " + report.violationCount() + " violation(s):");
         for (int i = 0; i < report.violationCount(); i++) {
-            CliOutput.err("  " + Coords.module(report.modules().get(i), report.versions().get(i)) + " — "
+            CliOutput.err("  "
+                    + Coords.module(report.modules().get(i), report.versions().get(i)) + " — "
                     + report.reasons().get(i));
         }
         return 1;

@@ -40,8 +40,7 @@ final class DeployCommand {
         Path apk = artifact.toString().endsWith(".aab") ? universalApk(exec, artifact) : artifact;
         Path adb = adbPath(exec);
         String namespace = exec.config().string("namespace");
-        String activity =
-                launcherActivity(AndroidDeps.androidFile(exec.moduleDir(), "AndroidManifest.xml"), namespace);
+        String activity = launcherActivity(AndroidDeps.androidFile(exec.moduleDir(), "AndroidManifest.xml"), namespace);
 
         exec.label("adb install");
         exec.out("Installing " + apk.getFileName() + " …");
@@ -106,10 +105,23 @@ final class DeployCommand {
         Path keystore = work.resolve("debug.keystore");
         List<String> command = List.of(
                 Path.of(System.getProperty("java.home"), "bin", "keytool").toString(),
-                "-genkeypair", "-keystore", keystore.toAbsolutePath().toString(),
-                "-storepass", "android", "-keypass", "android", "-alias", "androiddebugkey",
-                "-keyalg", "RSA", "-keysize", "2048", "-validity", "10000",
-                "-dname", "CN=Android Debug,O=Android,C=US");
+                "-genkeypair",
+                "-keystore",
+                keystore.toAbsolutePath().toString(),
+                "-storepass",
+                "android",
+                "-keypass",
+                "android",
+                "-alias",
+                "androiddebugkey",
+                "-keyalg",
+                "RSA",
+                "-keysize",
+                "2048",
+                "-validity",
+                "10000",
+                "-dname",
+                "CN=Android Debug,O=Android,C=US");
         Process process = new ProcessBuilder(command).redirectErrorStream(true).start();
         String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
         if (process.waitFor() != 0) {
@@ -132,8 +144,7 @@ final class DeployCommand {
         List<String> command = new ArrayList<>();
         command.add(adb.toAbsolutePath().toString());
         command.addAll(List.of(args));
-        Process process =
-                new ProcessBuilder(command).redirectErrorStream(true).start();
+        Process process = new ProcessBuilder(command).redirectErrorStream(true).start();
         try (BufferedReader reader =
                 new BufferedReader(new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
             String line;
@@ -165,8 +176,7 @@ final class DeployCommand {
             NodeList actions = activity.getElementsByTagName("action");
             boolean main = false;
             for (int j = 0; j < actions.getLength(); j++) {
-                if ("android.intent.action.MAIN"
-                        .equals(((Element) actions.item(j)).getAttribute("android:name"))) {
+                if ("android.intent.action.MAIN".equals(((Element) actions.item(j)).getAttribute("android:name"))) {
                     main = true;
                 }
             }
@@ -175,7 +185,7 @@ final class DeployCommand {
             if (name.startsWith(".")) return namespace + name;
             return name;
         }
-        throw new IllegalStateException("no MAIN/LAUNCHER activity in " + manifest
-                + " — declare one to make the app launchable");
+        throw new IllegalStateException(
+                "no MAIN/LAUNCHER activity in " + manifest + " — declare one to make the app launchable");
     }
 }

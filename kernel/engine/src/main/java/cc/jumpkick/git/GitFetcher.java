@@ -59,17 +59,19 @@ public final class GitFetcher {
         String m = (mode == null || mode.isBlank()) ? "auto" : mode.trim().toLowerCase(Locale.ROOT);
         return switch (m) {
             case "jgit" -> new JGitExtension(gitRoot, credentials);
-            case "cli" -> new GitCliExtension(
-                    gitRoot,
-                    credentials,
-                    GitCliExtension.detect()
-                            .orElseThrow(() -> new IllegalStateException(
-                                    BACKEND_ENV + "=cli but no usable git command was found on PATH")));
-            case "auto" -> GitCliExtension.detect()
-                    .<GitBackend>map(git -> new GitCliExtension(gitRoot, credentials, git))
-                    .orElseGet(() -> new JGitExtension(gitRoot, credentials));
-            default -> throw new IllegalArgumentException(
-                    "invalid " + BACKEND_ENV + "=" + mode + " (expected auto|cli|jgit)");
+            case "cli" ->
+                new GitCliExtension(
+                        gitRoot,
+                        credentials,
+                        GitCliExtension.detect()
+                                .orElseThrow(() -> new IllegalStateException(
+                                        BACKEND_ENV + "=cli but no usable git command was found on PATH")));
+            case "auto" ->
+                GitCliExtension.detect()
+                        .<GitBackend>map(git -> new GitCliExtension(gitRoot, credentials, git))
+                        .orElseGet(() -> new JGitExtension(gitRoot, credentials));
+            default ->
+                throw new IllegalArgumentException("invalid " + BACKEND_ENV + "=" + mode + " (expected auto|cli|jgit)");
         };
     }
 

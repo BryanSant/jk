@@ -20,9 +20,26 @@ class BuildJournalTest {
 
     private static BuildRecord record(long finishedAt, boolean success, String coord) {
         return new BuildRecord(
-                null, 0L, BuildRecord.SCHEMA, "build", "/proj", coord,
-                finishedAt - 100, finishedAt, 100, success, false, success ? 0 : 1, "9.9-test",
-                null, List.of(), List.of(), List.of(), "cli", null, null);
+                null,
+                0L,
+                BuildRecord.SCHEMA,
+                "build",
+                "/proj",
+                coord,
+                finishedAt - 100,
+                finishedAt,
+                100,
+                success,
+                false,
+                success ? 0 : 1,
+                "9.9-test",
+                null,
+                List.of(),
+                List.of(),
+                List.of(),
+                "cli",
+                null,
+                null);
     }
 
     @Test
@@ -54,12 +71,12 @@ class BuildJournalTest {
         Path lock = dir.resolve("src-jk.lock");
         Files.writeString(lock, "version = 1");
         BuildJournal j = new BuildJournal(dir);
-        String id = j.append(record(1_700_000_000_000L, true, "g:a"),
-                new BuildJournal.Snapshot(md, lock, "boom\n"));
+        String id = j.append(record(1_700_000_000_000L, true, "g:a"), new BuildJournal.Snapshot(md, lock, "boom\n"));
         assertThat(j.artifact(id, BuildJournal.TEST_RESULTS_MD)).isPresent();
         assertThat(j.artifact(id, BuildJournal.LOCKFILE)).isPresent();
         assertThat(j.artifact(id, BuildJournal.DIAGNOSTICS_TXT)).isPresent();
-        assertThat(Files.readString(j.artifact(id, BuildJournal.TEST_RESULTS_MD).get())).contains("all good");
+        assertThat(Files.readString(j.artifact(id, BuildJournal.TEST_RESULTS_MD).get()))
+                .contains("all good");
     }
 
     @Test

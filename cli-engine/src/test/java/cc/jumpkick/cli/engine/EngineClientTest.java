@@ -102,7 +102,8 @@ class EngineClientTest {
         assertThat(status).isPresent();
         assertThat(status.get().version()).isEqualTo("7.7.7");
         assertThat(status.get().heapUsedBytes()).isPositive(); // best-effort memory made it across the wire
-        assertThat(status.get().heapCommittedBytes()).isGreaterThanOrEqualTo(status.get().heapUsedBytes());
+        assertThat(status.get().heapCommittedBytes())
+                .isGreaterThanOrEqualTo(status.get().heapUsedBytes());
 
         server.close();
     }
@@ -132,7 +133,10 @@ class EngineClientTest {
         startInBackground(server);
         waitUntil(Duration.ofSeconds(5), () -> Files.exists(EnginePaths.endpoint(p)));
 
-        assertThat(EngineClient.handshake(EnginePaths.activeSocket(p), "1.0").orElseThrow().draining()).isFalse();
+        assertThat(EngineClient.handshake(EnginePaths.activeSocket(p), "1.0")
+                        .orElseThrow()
+                        .draining())
+                .isFalse();
         var s = EngineClient.status(EnginePaths.activeSocket(p)).orElseThrow();
         assertThat(s.draining()).isFalse();
         assertThat(s.activePipelines()).isZero();
@@ -248,8 +252,7 @@ class EngineClientTest {
     }
 
     /** Materialize a fake engine jar for {@code version} into the isolated store. */
-    private static Path materialize(cc.jumpkick.cache.VersionStore store, Path dir, String version)
-            throws IOException {
+    private static Path materialize(cc.jumpkick.cache.VersionStore store, Path dir, String version) throws IOException {
         Path jar = dir.resolve("jk-engine-" + version + "-src.jar");
         Files.writeString(jar, "fake engine " + version);
         cc.jumpkick.cache.Cas cas = new cc.jumpkick.cache.Cas(dir.resolve("cache"));

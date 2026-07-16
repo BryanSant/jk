@@ -61,8 +61,8 @@ public record ExecPlan(
     /** As {@link #error(String, String)}, tagging the failure as an unresolved main-class scan. */
     public static ExecPlan error(String kind, String message, String mainIssue) {
         return new ExecPlan(
-                message, mainIssue, kind, List.of(), "", "", "", false, false, List.of(), List.of(), List.of(), "",
-                "", "", false, "", "", "", List.of(), List.of(), "");
+                message, mainIssue, kind, List.of(), "", "", "", false, false, List.of(), List.of(), List.of(), "", "",
+                "", false, "", "", "", List.of(), List.of(), "");
     }
 
     public String encode() {

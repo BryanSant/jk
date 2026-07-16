@@ -2,6 +2,8 @@
 package cc.jumpkick.runtime;
 
 import cc.jumpkick.cache.Cas;
+import cc.jumpkick.engine.plugin.PluginClient;
+import cc.jumpkick.engine.plugin.PluginJar;
 import cc.jumpkick.layout.BuildLayout;
 import cc.jumpkick.model.JkBuild;
 import cc.jumpkick.plugin.PluginConfig;
@@ -10,8 +12,6 @@ import cc.jumpkick.plugin.manifest.PluginDescriptor;
 import cc.jumpkick.plugin.manifest.PluginTableRegistry;
 import cc.jumpkick.plugin.protocol.Ndjson;
 import cc.jumpkick.util.Hashing;
-import cc.jumpkick.engine.plugin.PluginClient;
-import cc.jumpkick.engine.plugin.PluginJar;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -54,7 +54,8 @@ public final class PluginBuild {
             if (config.isPresent()) {
                 cc.jumpkick.model.PluginDeclaration declaration = PluginTableRegistry.isBuiltIn(m.id())
                         ? null
-                        : PluginDescriptorOps.declarationOf(moduleDir, project, m.id()).orElse(null);
+                        : PluginDescriptorOps.declarationOf(moduleDir, project, m.id())
+                                .orElse(null);
                 return Optional.of(new Active(m, config.get(), moduleDir, declaration));
             }
         }
@@ -148,10 +149,12 @@ public final class PluginBuild {
      * plugin version, config, registration-visible facts), so it is cached in a content-keyed file
      * under the module's target dir — a fully-cached rebuild reads the file and forks nothing.
      */
-    public static Declarations declarations(Active active, JkBuild project, Path moduleDir, Path cache, Path layoutTarget)
+    public static Declarations declarations(
+            Active active, JkBuild project, Path moduleDir, Path cache, Path layoutTarget)
             throws IOException, InterruptedException {
         String key = describeKey(active, project);
-        Path cacheFile = layoutTarget.resolve("plugin").resolve(active.manifest().id() + "-describe-" + key + ".ndjson");
+        Path cacheFile =
+                layoutTarget.resolve("plugin").resolve(active.manifest().id() + "-describe-" + key + ".ndjson");
         List<String> lines;
         if (Files.isRegularFile(cacheFile)) {
             lines = Files.readAllLines(cacheFile, StandardCharsets.UTF_8);
@@ -159,7 +162,8 @@ public final class PluginBuild {
             Path spec = Files.createTempFile("jk-plugin-describe-", ".spec");
             try {
                 List<String> specLines = new ArrayList<>();
-                specLines.add("{\"t\":\"op\",\"op\":\"describe\",\"plugin\":" + Ndjson.quote(active.manifest().id()) + "}");
+                specLines.add("{\"t\":\"op\",\"op\":\"describe\",\"plugin\":"
+                        + Ndjson.quote(active.manifest().id()) + "}");
                 appendConfig(specLines, active.config());
                 appendProject(specLines, project, project.mainClass());
                 Files.write(spec, specLines, StandardCharsets.UTF_8);
@@ -303,8 +307,7 @@ public final class PluginBuild {
                 if (dep.sdkComponent() != null) {
                     out.put(
                             dep.artifact(),
-                            SdkComponents.resolve(
-                                    dep.sdkComponent(), dep.sdkPath(), sdkPins.get(dep.sdkComponent())));
+                            SdkComponents.resolve(dep.sdkComponent(), dep.sdkPath(), sdkPins.get(dep.sdkComponent())));
                     continue;
                 }
                 if (repos == null) repos = RepoGroupBuilder.buildFor(project, null, cas);
@@ -345,8 +348,7 @@ public final class PluginBuild {
         }
         cc.jumpkick.model.Coordinate root = cc.jumpkick.model.Coordinate.parse(coordinateSpec);
         var declared = List.of(new cc.jumpkick.model.Dependency(
-                root.group() + ":" + root.artifact(),
-                cc.jumpkick.model.VersionSelector.parse("=" + root.version())));
+                root.group() + ":" + root.artifact(), cc.jumpkick.model.VersionSelector.parse("=" + root.version())));
         var resolution = new cc.jumpkick.resolver.NaiveResolver(new cc.jumpkick.repo.EffectivePomBuilder(repos))
                 .resolve(declared);
         java.util.LinkedHashSet<String> modules = new java.util.LinkedHashSet<>();
@@ -419,7 +421,9 @@ public final class PluginBuild {
         }
         try {
             var siblings = cc.jumpkick.config.WorkspaceClasspath.resolve(
-                    projectDir, project, java.util.Set.of(cc.jumpkick.model.Scope.EXPORT, cc.jumpkick.model.Scope.MAIN));
+                    projectDir,
+                    project,
+                    java.util.Set.of(cc.jumpkick.model.Scope.EXPORT, cc.jumpkick.model.Scope.MAIN));
             for (Path jar : siblings.jars()) {
                 if (!classpath.contains(jar)) classpath.add(jar);
             }
@@ -468,7 +472,9 @@ public final class PluginBuild {
         }
         try {
             var siblings = cc.jumpkick.config.WorkspaceClasspath.resolve(
-                    projectDir, project, java.util.Set.of(cc.jumpkick.model.Scope.EXPORT, cc.jumpkick.model.Scope.MAIN));
+                    projectDir,
+                    project,
+                    java.util.Set.of(cc.jumpkick.model.Scope.EXPORT, cc.jumpkick.model.Scope.MAIN));
             for (Path jar : siblings.jars()) {
                 Path container = null;
                 String name = jar.getFileName().toString();
@@ -536,13 +542,15 @@ public final class PluginBuild {
         }
 
         public SpecWriter artifact(Path path) {
-            lines.add("{\"t\":\"artifact\",\"path\":" + Ndjson.quote(path.toAbsolutePath().toString()) + "}");
+            lines.add("{\"t\":\"artifact\",\"path\":"
+                    + Ndjson.quote(path.toAbsolutePath().toString()) + "}");
             return this;
         }
 
         public SpecWriter classpath(List<Path> entries) {
             for (Path p : entries) {
-                lines.add("{\"t\":\"cp\",\"path\":" + Ndjson.quote(p.toAbsolutePath().toString()) + "}");
+                lines.add("{\"t\":\"cp\",\"path\":"
+                        + Ndjson.quote(p.toAbsolutePath().toString()) + "}");
             }
             return this;
         }
@@ -553,10 +561,12 @@ public final class PluginBuild {
 
         public SpecWriter entry(String fileName, Path jar, boolean snapshot, Path container) {
             StringBuilder b = new StringBuilder("{\"t\":\"entry\",\"file\":").append(Ndjson.quote(fileName));
-            if (jar != null) b.append(",\"path\":").append(Ndjson.quote(jar.toAbsolutePath().toString()));
+            if (jar != null)
+                b.append(",\"path\":").append(Ndjson.quote(jar.toAbsolutePath().toString()));
             b.append(",\"snapshot\":").append(snapshot);
             if (container != null) {
-                b.append(",\"container\":").append(Ndjson.quote(container.toAbsolutePath().toString()));
+                b.append(",\"container\":")
+                        .append(Ndjson.quote(container.toAbsolutePath().toString()));
             }
             b.append('}');
             lines.add(b.toString());
@@ -585,8 +595,7 @@ public final class PluginBuild {
          * specs, never action-key plaintext (the key carries a digest), never echoed by plugins.
          */
         public SpecWriter secret(String key, String value) {
-            lines.add("{\"t\":\"secret\",\"key\":" + Ndjson.quote(key) + ",\"value\":"
-                    + Ndjson.quote(value) + "}");
+            lines.add("{\"t\":\"secret\",\"key\":" + Ndjson.quote(key) + ",\"value\":" + Ndjson.quote(value) + "}");
             return this;
         }
 
@@ -611,7 +620,8 @@ public final class PluginBuild {
      */
     static Path workerJarFor(Active active, Path cache) throws IOException {
         if (PluginTableRegistry.isBuiltIn(active.manifest().id())) {
-            PluginJar workerJar = PluginJar.byArtifactId(active.manifest().code().worker())
+            PluginJar workerJar = PluginJar.byArtifactId(
+                            active.manifest().code().worker())
                     .orElseThrow(() -> new IllegalStateException(
                             "plugin " + active.manifest().id() + " names unregistered worker "
                                     + active.manifest().code().worker()));
@@ -647,8 +657,8 @@ public final class PluginBuild {
             Object v = e.getValue();
             String key = Ndjson.quote(e.getKey());
             if (v instanceof String s) {
-                lines.add("{\"t\":\"config\",\"key\":" + key + ",\"kind\":\"string\",\"value\":" + Ndjson.quote(s)
-                        + "}");
+                lines.add(
+                        "{\"t\":\"config\",\"key\":" + key + ",\"kind\":\"string\",\"value\":" + Ndjson.quote(s) + "}");
             } else if (v instanceof Boolean b) {
                 lines.add("{\"t\":\"config\",\"key\":" + key + ",\"kind\":\"bool\",\"value\":" + b + "}");
             } else if (v instanceof Long l) {
@@ -693,7 +703,8 @@ public final class PluginBuild {
      * Fork the plugin on the spec and collect its protocol lines. Throws with the
      * plugin's own error message when it reports one (or exits non-zero without reporting).
      */
-    public static List<String> runWorker(Active active, Path cache, Path spec, java.util.function.Consumer<String> onLabel)
+    public static List<String> runWorker(
+            Active active, Path cache, Path spec, java.util.function.Consumer<String> onLabel)
             throws IOException, InterruptedException {
         Path jar = workerJarFor(active, cache);
         List<String> collected = new ArrayList<>();

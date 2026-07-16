@@ -167,8 +167,7 @@ public final class ProgressBar {
      * that want a solid fill color and a distinct track color).
      */
     public static String renderBar(
-            long numerator, long denominator, int segments,
-            AttributedStyle fillStyle, AttributedStyle emptyStyle) {
+            long numerator, long denominator, int segments, AttributedStyle fillStyle, AttributedStyle emptyStyle) {
         if (segments <= 0) return "";
         int fill = (int) Math.round(fraction(numerator, denominator) * segments);
         StringBuilder sb = new StringBuilder();

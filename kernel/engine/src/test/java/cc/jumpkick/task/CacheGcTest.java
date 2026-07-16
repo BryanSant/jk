@@ -46,7 +46,8 @@ class CacheGcTest {
         assertThat(report.purgedBlobs()).isEqualTo(1);
         assertThat(report.repoLinksRemoved()).isEqualTo(1);
         assertThat(new Cas(cache).contains(hex)).isFalse();
-        assertThat(cache.resolve("repos/central/com/example/widget/1.0/widget-1.0.jar")).doesNotExist();
+        assertThat(cache.resolve("repos/central/com/example/widget/1.0/widget-1.0.jar"))
+                .doesNotExist();
         // The purged sha's entry is gone from the access log.
         assertThat(Files.readString(cache.resolve(".access.log"))).doesNotContain(hex);
     }
@@ -111,6 +112,7 @@ class CacheGcTest {
 
         assertThat(report.purgedBlobs()).isEqualTo(1);
         assertThat(new Cas(cache).contains(hex)).isTrue(); // not actually deleted
-        assertThat(cache.resolve("repos/central/com/example/widget/1.0/widget-1.0.jar")).exists();
+        assertThat(cache.resolve("repos/central/com/example/widget/1.0/widget-1.0.jar"))
+                .exists();
     }
 }

@@ -3,10 +3,10 @@ package cc.jumpkick.command;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.sun.net.httpserver.HttpServer;
 import cc.jumpkick.cli.Jk;
 import cc.jumpkick.library.LibraryCatalog;
 import cc.jumpkick.lock.LockfileReader;
+import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
@@ -86,7 +86,8 @@ class LockCommandLibraryRegistryTest {
             exchange.close();
         });
         registryServer.start();
-        registryUrl = URI.create("http://127.0.0.1:" + registryServer.getAddress().getPort() + "/libraries.toml");
+        registryUrl =
+                URI.create("http://127.0.0.1:" + registryServer.getAddress().getPort() + "/libraries.toml");
     }
 
     @AfterEach
@@ -183,7 +184,8 @@ class LockCommandLibraryRegistryTest {
             exchange.close();
         });
         registryServer.start();
-        registryUrl = URI.create("http://127.0.0.1:" + registryServer.getAddress().getPort() + "/libraries.toml");
+        registryUrl =
+                URI.create("http://127.0.0.1:" + registryServer.getAddress().getPort() + "/libraries.toml");
 
         run("new", tempDir.toString());
         int exit = lock(tempDir, libraryCache);

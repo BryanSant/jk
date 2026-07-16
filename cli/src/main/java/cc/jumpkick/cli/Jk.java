@@ -66,8 +66,8 @@ public final class Jk {
             // process group. EngineMain.run installs the engine's own signal policy instead.
             var engine = cc.jumpkick.cli.engine.InProcessEngine.find().orElse(null);
             if (engine == null) {
-                System.err.println("jk: this binary does not include the engine; "
-                        + "materialize jk " + VERSION + " (`jk self update` or the project wrapper), or set JK_ENGINE_EXE");
+                System.err.println("jk: this binary does not include the engine; " + "materialize jk " + VERSION
+                        + " (`jk self update` or the project wrapper), or set JK_ENGINE_EXE");
                 System.exit(70);
                 return;
             }
@@ -247,9 +247,9 @@ public final class Jk {
                 }
             }
         }
-        JkConfig cli = new JkConfig(
-                color, offline, rebuild, noProgress, quiet, verbose, directory, force, noAnsi);
-        cc.jumpkick.config.SessionContext.installConfig(cc.jumpkick.config.SessionContext.current().config().mergedWith(cli));
+        JkConfig cli = new JkConfig(color, offline, rebuild, noProgress, quiet, verbose, directory, force, noAnsi);
+        cc.jumpkick.config.SessionContext.installConfig(
+                cc.jumpkick.config.SessionContext.current().config().mergedWith(cli));
     }
 
     /**

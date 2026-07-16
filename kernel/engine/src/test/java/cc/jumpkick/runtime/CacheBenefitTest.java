@@ -29,8 +29,8 @@ class CacheBenefitTest {
     /** A diamond a→{b,c}→d: the critical path is the heavier branch, not the sum of all steps. */
     @Test
     void level1_longest_path_follows_the_heaviest_branch() {
-        ModuleInput m = new ModuleInput("", List.of(
-                ran("a", 10), ran("b", 20, "a"), ran("c", 5, "a"), ran("d", 30, "b", "c")));
+        ModuleInput m =
+                new ModuleInput("", List.of(ran("a", 10), ran("b", 20, "a"), ran("c", 5, "a"), ran("d", 30, "b", "c")));
         // a→b→d = 60, a→c→d = 45. Wall-clock of a parallel cold run is the critical path (60).
         Result r = CacheBenefit.compute(List.of(m), Map.of(), 60, NO_BASELINE);
         assertThat(r.estimatedUncachedMillis()).isEqualTo(60);
@@ -42,8 +42,8 @@ class CacheBenefitTest {
     /** A fully-cached rebuild: cold cost comes from baselines, actual is ~instant → big saving. */
     @Test
     void fully_cached_rebuild_saves_the_cold_critical_path() {
-        ModuleInput m = new ModuleInput("p", List.of(
-                cached("a"), cached("b", "a"), cached("c", "a"), cached("d", "b", "c")));
+        ModuleInput m =
+                new ModuleInput("p", List.of(cached("a"), cached("b", "a"), cached("c", "a"), cached("d", "b", "c")));
         Map<String, Long> cold = Map.of("a", 10L, "b", 20L, "c", 5L, "d", 30L);
         BiFunction<String, String, OptionalLong> baseline = (d, s) -> OptionalLong.of(cold.get(s));
         Result r = CacheBenefit.compute(List.of(m), Map.of(), 2, baseline);

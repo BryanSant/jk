@@ -81,8 +81,10 @@ public final class MainClassScanner {
                     + " — set `[application] main = \"...\"` in jk.toml");
         }
         if (found.size() > 1) {
-            throw new AmbiguousMainException("multiple main classes found (" + String.join(", ", found)
-                    + ") — pick one with `[application] main = \"...\"` in jk.toml", found);
+            throw new AmbiguousMainException(
+                    "multiple main classes found (" + String.join(", ", found)
+                            + ") — pick one with `[application] main = \"...\"` in jk.toml",
+                    found);
         }
         return found.get(0);
     }

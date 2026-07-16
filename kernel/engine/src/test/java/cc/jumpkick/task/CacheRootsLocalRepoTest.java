@@ -40,7 +40,9 @@ class CacheRootsLocalRepoTest {
 
         var report = CasSweep.sweep(cas, roots, false);
         assertThat(Files.exists(blob)).as("published blob survives the sweep").isTrue();
-        assertThat(Files.exists(artifact)).as("published jar survives the repo GC").isTrue();
+        assertThat(Files.exists(artifact))
+                .as("published jar survives the repo GC")
+                .isTrue();
         assertThat(report.deleted()).isZero();
     }
 

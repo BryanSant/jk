@@ -3,11 +3,11 @@ package cc.jumpkick.cli.engine;
 
 import cc.jumpkick.config.JkEngineConfig;
 import cc.jumpkick.engine.EnginePaths;
+import cc.jumpkick.engine.protocol.EngineProtocol;
 import cc.jumpkick.jdk.GlobalDefaultJdk;
 import cc.jumpkick.jdk.HostPlatform;
 import cc.jumpkick.jdk.JavaHomes;
 import cc.jumpkick.jdk.JdkEnsure;
-import cc.jumpkick.engine.protocol.EngineProtocol;
 import cc.jumpkick.plugin.protocol.Ndjson;
 import cc.jumpkick.runtime.ExplainPlan;
 import cc.jumpkick.runtime.WorkspaceBuildListener;
@@ -125,7 +125,9 @@ public final class EngineClient {
     /** Connect and request a status snapshot; empty if no engine is reachable. */
     public static Optional<Status> status(Path socket) {
         try (SocketChannel ch = connect(socket)) {
-            exchange(ch, EngineProtocol.hello(cc.jumpkick.cli.Jk.VERSION, "probe")); // handshake first, response discarded
+            exchange(
+                    ch,
+                    EngineProtocol.hello(cc.jumpkick.cli.Jk.VERSION, "probe")); // handshake first, response discarded
             String ack = exchange(ch, EngineProtocol.statusRequest());
             if (!EngineProtocol.STATUS_ACK.equals(EngineProtocol.typeOf(ack))) return Optional.empty();
             return Optional.of(new Status(
@@ -247,8 +249,7 @@ public final class EngineClient {
             writer.write(request);
             writer.write('\n');
             writer.flush();
-            BufferedReader reader =
-                    protocolReader(ch);
+            BufferedReader reader = protocolReader(ch);
             String line;
             while ((line = reader.readLine()) != null) {
                 String type = EngineProtocol.typeOf(line);
@@ -279,8 +280,7 @@ public final class EngineClient {
      * docs/engine.md} there is no in-process fallback.
      */
     public static WorkspaceResult buildWorkspace(
-            EnginePaths.Paths paths, WorkspaceRequest req, WorkspaceBuildListener listener)
-            throws IOException {
+            EnginePaths.Paths paths, WorkspaceRequest req, WorkspaceBuildListener listener) throws IOException {
         return EngineBuildListenerAdapter.buildWorkspace(paths, req, listener);
     }
 
@@ -333,7 +333,17 @@ public final class EngineClient {
                 boolean verbose,
                 boolean offline,
                 boolean force) {
-            this(entryDir, cache, jdksDir, workers, profile, skipTests, verbose, offline, force, "",
+            this(
+                    entryDir,
+                    cache,
+                    jdksDir,
+                    workers,
+                    profile,
+                    skipTests,
+                    verbose,
+                    offline,
+                    force,
+                    "",
                     java.util.Map.of());
         }
     }
@@ -360,8 +370,8 @@ public final class EngineClient {
      */
     /** One engine-hosted jk.toml edit (EDIT_REQUEST): returns changed; throws on error. */
     public static boolean edit(
-            cc.jumpkick.engine.EnginePaths.Paths paths, java.nio.file.Path file, String op,
-            java.util.List<String> args) throws java.io.IOException {
+            cc.jumpkick.engine.EnginePaths.Paths paths, java.nio.file.Path file, String op, java.util.List<String> args)
+            throws java.io.IOException {
         return EngineBuildListenerAdapter.edit(paths, file, op, args);
     }
 
@@ -389,7 +399,7 @@ public final class EngineClient {
         return EngineBuildListenerAdapter.ideModel(paths, dir, cache, jdksDir);
     }
 
-        /** A plugin-declared command, worker-executed engine-side (found=false → normal help). */
+    /** A plugin-declared command, worker-executed engine-side (found=false → normal help). */
     public static cc.jumpkick.engine.protocol.PluginCommandReport pluginCommand(
             cc.jumpkick.engine.EnginePaths.Paths paths,
             java.nio.file.Path dir,
@@ -400,7 +410,7 @@ public final class EngineClient {
         return EngineBuildListenerAdapter.pluginCommand(paths, dir, cache, command, args);
     }
 
-        /** Thin-client generator run: engine renders content, client guards/writes/prints. */
+    /** Thin-client generator run: engine renders content, client guards/writes/prints. */
     public static cc.jumpkick.engine.protocol.GeneratedFiles generate(
             cc.jumpkick.engine.EnginePaths.Paths paths, java.nio.file.Path dir, String kind)
             throws java.io.IOException {
@@ -417,7 +427,7 @@ public final class EngineClient {
         return EngineBuildListenerAdapter.generate(paths, dir, kind, params);
     }
 
-        /** Thin-client tree render: engine walks the graph, client substitutes its Theme into the tags. */
+    /** Thin-client tree render: engine walks the graph, client substitutes its Theme into the tags. */
     public static String treeRender(
             cc.jumpkick.engine.EnginePaths.Paths paths,
             java.nio.file.Path dir,
@@ -436,7 +446,7 @@ public final class EngineClient {
         return EngineBuildListenerAdapter.why(paths, dir, query);
     }
 
-        public static cc.jumpkick.engine.protocol.DenyReport denyCheck(
+    public static cc.jumpkick.engine.protocol.DenyReport denyCheck(
             cc.jumpkick.engine.EnginePaths.Paths paths, java.nio.file.Path dir) throws java.io.IOException {
         return EngineBuildListenerAdapter.denyCheck(paths, dir);
     }
@@ -496,8 +506,7 @@ public final class EngineClient {
      * holder, may be {@code null}) receives the engine-computed build-time estimate in millis
      * ({@code 0} = unknown).
      */
-    public static ExplainPlan explain(EnginePaths.Paths paths, ExplainRequest req, long[] etaOut)
-            throws IOException {
+    public static ExplainPlan explain(EnginePaths.Paths paths, ExplainRequest req, long[] etaOut) throws IOException {
         return EngineBuildListenerAdapter.explain(paths, req, etaOut);
     }
 
@@ -617,8 +626,8 @@ public final class EngineClient {
      * outdated}) — one synchronous request, one {@link cc.jumpkick.engine.protocol.OutdatedReport}
      * back. Read-only: the engine enumerates versions and writes nothing.
      */
-    public static cc.jumpkick.engine.protocol.OutdatedReport runOutdated(
-            EnginePaths.Paths paths, OutdatedRequest req) throws IOException {
+    public static cc.jumpkick.engine.protocol.OutdatedReport runOutdated(EnginePaths.Paths paths, OutdatedRequest req)
+            throws IOException {
         return EngineResolveAdapter.runOutdated(paths, req);
     }
 
@@ -973,8 +982,8 @@ public final class EngineClient {
      * single project is a cascade of one). The returned result's {@code exitCode} is authoritative
      * — computed engine-side with {@code jk native}'s 64/4/1 mapping.
      */
-    public static WorkspaceResult runNative(
-            EnginePaths.Paths paths, NativeRequest req, WorkspaceBuildListener listener) throws IOException {
+    public static WorkspaceResult runNative(EnginePaths.Paths paths, NativeRequest req, WorkspaceBuildListener listener)
+            throws IOException {
         return EngineBuildListenerAdapter.runNative(paths, req, listener);
     }
 
@@ -1042,7 +1051,9 @@ public final class EngineClient {
                 (type, line) -> {});
         String checkout = Ndjson.str(finish.finishLine(), "gitCheckout");
         return new GitFetchOutcome(
-                finish.result(), checkout != null ? Path.of(checkout) : null, Ndjson.str(finish.finishLine(), "gitSha"));
+                finish.result(),
+                checkout != null ? Path.of(checkout) : null,
+                Ndjson.str(finish.finishLine(), "gitSha"));
     }
 
     // ---- hosted long-tail commands (Wave 4 of the slim client) -------------------------------------
@@ -1179,7 +1190,13 @@ public final class EngineClient {
 
         /** Prune/purge/gc request — no project scope. */
         public CacheMaintRequest(
-                String op, Path cache, int olderThanDays, boolean dryRun, boolean sweep, String maxSize, boolean includeJkTmp) {
+                String op,
+                Path cache,
+                int olderThanDays,
+                boolean dryRun,
+                boolean sweep,
+                String maxSize,
+                boolean includeJkTmp) {
             this(op, cache, olderThanDays, dryRun, sweep, maxSize, includeJkTmp, null);
         }
     }
@@ -1297,8 +1314,11 @@ public final class EngineClient {
             throws IOException {
         for (int attempt = 0; attempt < 2; attempt++) {
             AotMode mode = chooseAotMode(target);
-            StartResult r =
-                    awaitStartup(paths, clientVersion, COLD_START_CEILING, spawn(paths, target, mode).process());
+            StartResult r = awaitStartup(
+                    paths,
+                    clientVersion,
+                    COLD_START_CEILING,
+                    spawn(paths, target, mode).process());
             switch (r.outcome()) {
                 case UP -> {
                     if (mode == AotMode.USE && scanLogForAotError(paths.log())) {
@@ -1341,8 +1361,7 @@ public final class EngineClient {
      * HotSpot/C2 JVM (AOT is only stable there), the AOT cache path, and whether a {@code .noaot}
      * marker already says AOT can't apply for this key.
      */
-    record EngineTarget(
-            EngineArtifact engine, Path javaHome, boolean hotspot, Path aotCache, boolean noAotMarker) {}
+    record EngineTarget(EngineArtifact engine, Path javaHome, boolean hotspot, Path aotCache, boolean noAotMarker) {}
 
     /** A host JDK for the engine: home, vendor, and version (from its {@code release} file). */
     record EngineJdk(Path home, cc.jumpkick.jdk.JdkVendor vendor, String version) {}
@@ -1356,7 +1375,9 @@ public final class EngineClient {
         // client can't host the engine itself, but it can download the matching jar.
         if (engine.kind() == EngineArtifact.Kind.FALLBACK
                 && EngineJarFetcher.applicable(
-                        clientVersion, isNativeImage(), cc.jumpkick.config.SessionContext.current().offline())) {
+                        clientVersion,
+                        isNativeImage(),
+                        cc.jumpkick.config.SessionContext.current().offline())) {
             System.err.println("jk: downloading the build engine (jk-engine-" + clientVersion + ".jar) ...");
             EngineJarFetcher.fetch(EngineJarFetcher.releasesBase(), clientVersion);
             engine = resolveEngineArtifact(System.getenv("JK_ENGINE_EXE"), jkExe, clientVersion);
@@ -1558,7 +1579,12 @@ public final class EngineClient {
             // Key on the PATH too: two different unreadable jars must not share one AOT key.
             signature.append("unreadable-jar:").append(engineJar.toAbsolutePath());
         }
-        signature.append(':').append(jdk == null ? "no-jdk" : jdk.version() + "|" + jdk.vendor().name());
+        signature
+                .append(':')
+                .append(
+                        jdk == null
+                                ? "no-jdk"
+                                : jdk.version() + "|" + jdk.vendor().name());
         String hash = cc.jumpkick.util.Hashing.sha256Hex(signature.toString()).substring(0, 16);
         // ONE home for every AOT cache — engine and workers alike live in ~/.jk/state/aot/ so a
         // user (or a future `jk cache info`) finds them all side by side. The engine's file
@@ -1796,7 +1822,9 @@ public final class EngineClient {
                 // The child died (setsid keeps the pid, so liveness is authoritative). One last
                 // handshake: a concurrent spawn may have won the election and be serving already —
                 // our child exiting is then the healthy loser, not a failure.
-                return handshake(EnginePaths.activeSocket(paths), clientVersion).map(StartResult::up).orElseGet(StartResult::exited);
+                return handshake(EnginePaths.activeSocket(paths), clientVersion)
+                        .map(StartResult::up)
+                        .orElseGet(StartResult::exited);
             }
             sleepQuietly(50);
         }
@@ -1885,18 +1913,16 @@ public final class EngineClient {
             }
         }
         return new cc.jumpkick.plugin.protocol.BoundedLineReader(
-                new InputStreamReader(Channels.newInputStream(ch), StandardCharsets.UTF_8),
-                ch,
-                minutes * 60_000L);
+                new InputStreamReader(Channels.newInputStream(ch), StandardCharsets.UTF_8), ch, minutes * 60_000L);
     }
 
     static SocketChannel connect(Path socket) throws IOException {
         if (cc.jumpkick.engine.EngineTransport.useLoopbackTcp()) {
             int port = Integer.parseInt(Files.readString(socket).trim());
-            String token =
-                    Files.readString(cc.jumpkick.engine.EnginePaths.tokenFor(socket)).trim();
-            SocketChannel ch = SocketChannel.open(
-                    new java.net.InetSocketAddress(java.net.InetAddress.getLoopbackAddress(), port));
+            String token = Files.readString(cc.jumpkick.engine.EnginePaths.tokenFor(socket))
+                    .trim();
+            SocketChannel ch =
+                    SocketChannel.open(new java.net.InetSocketAddress(java.net.InetAddress.getLoopbackAddress(), port));
             BufferedWriter authWriter =
                     new BufferedWriter(new OutputStreamWriter(Channels.newOutputStream(ch), StandardCharsets.UTF_8));
             authWriter.write(EngineProtocol.auth(token));
@@ -1922,8 +1948,7 @@ public final class EngineClient {
         writer.write(line);
         writer.write('\n');
         writer.flush();
-        BufferedReader reader =
-                protocolReader(ch);
+        BufferedReader reader = protocolReader(ch);
         Thread watchdog = new Thread(
                 () -> {
                     try {

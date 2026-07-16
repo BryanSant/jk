@@ -133,7 +133,8 @@ public record Variants(List<Dimension> dimensions) {
                 String origin = "[variants." + dimension.name() + "." + e.getKey() + "]";
                 e.getValue().dependencies().forEach((scope, deps) -> {
                     for (Dependency d : deps) note(seen, scope, d, origin);
-                    merged.computeIfAbsent(scope, s -> new java.util.LinkedHashSet<>()).addAll(deps);
+                    merged.computeIfAbsent(scope, s -> new java.util.LinkedHashSet<>())
+                            .addAll(deps);
                 });
             }
         }

@@ -82,8 +82,8 @@ final class AvdCommand {
         // The image must be installed (jk android sdk provisions; licenses gate as always).
         Path imageDir = root.resolve(image.replace(';', '/'));
         if (!Files.isDirectory(imageDir)) {
-            exec.out("jk avd create: system image " + image + " is not installed — "
-                    + "run `jk android sdk " + image + "` first (licenses apply)");
+            exec.out("jk avd create: system image " + image + " is not installed — " + "run `jk android sdk " + image
+                    + "` first (licenses apply)");
             return 1;
         }
         String[] parts = image.split(";");
@@ -100,8 +100,13 @@ final class AvdCommand {
         config.append("AvdId=").append(name).append('\n');
         config.append("avd.ini.displayname=").append(name).append('\n');
         config.append("abi.type=").append(abi).append('\n');
-        config.append("hw.cpu.arch=").append("x86_64".equals(abi) ? "x86_64" : abi).append('\n');
-        config.append("image.sysdir.1=").append(image.replace(';', '/')).append('/').append('\n');
+        config.append("hw.cpu.arch=")
+                .append("x86_64".equals(abi) ? "x86_64" : abi)
+                .append('\n');
+        config.append("image.sysdir.1=")
+                .append(image.replace(';', '/'))
+                .append('/')
+                .append('\n');
         config.append("tag.id=").append(tag).append('\n');
         config.append("target=").append(target).append('\n');
         config.append("hw.ramSize=2048\n");
@@ -138,18 +143,12 @@ final class AvdCommand {
         String override = flag(args, "--emulator");
         Path emulator = override != null ? Path.of(override) : root.resolve("emulator/emulator");
         if (!Files.isRegularFile(emulator)) {
-            exec.out("jk avd boot: the emulator component is not installed — "
-                    + "run `jk android sdk emulator` first");
+            exec.out("jk avd boot: the emulator component is not installed — " + "run `jk android sdk emulator` first");
             return 1;
         }
         exec.label("emulator " + name);
         List<String> command = new ArrayList<>(List.of(
-                emulator.toAbsolutePath().toString(),
-                "-avd",
-                name,
-                "-no-window",
-                "-no-audio",
-                "-no-boot-anim"));
+                emulator.toAbsolutePath().toString(), "-avd", name, "-no-window", "-no-audio", "-no-boot-anim"));
         ProcessBuilder pb = new ProcessBuilder(command).redirectErrorStream(true);
         pb.environment().put("ANDROID_AVD_HOME", avdHome.toAbsolutePath().toString());
         pb.environment().put("ANDROID_SDK_ROOT", root.toAbsolutePath().toString());

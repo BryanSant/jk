@@ -85,8 +85,8 @@ public final class GlobalConfig {
         var choice = cc.jumpkick.config.SessionContext.current().config().colorOr(JkConfig.ColorChoice.AUTO);
         return switch (choice) {
             case ALWAYS -> true;
-            case NEVER  -> false;
-            case AUTO   -> {
+            case NEVER -> false;
+            case AUTO -> {
                 String nc = System.getenv("NO_COLOR");
                 yield nc == null || nc.isEmpty();
             }
@@ -121,14 +121,17 @@ public final class GlobalConfig {
         String cacheKey;
         try {
             if (!java.nio.file.Files.exists(file)) return fallback;
-            var attrs = java.nio.file.Files.readAttributes(
-                    file, java.nio.file.attribute.BasicFileAttributes.class);
-            cacheKey = file + "|" + key + "|" + attrs.size() + "|" + attrs.lastModifiedTime().toMillis();
+            var attrs = java.nio.file.Files.readAttributes(file, java.nio.file.attribute.BasicFileAttributes.class);
+            cacheKey = file + "|" + key + "|" + attrs.size() + "|"
+                    + attrs.lastModifiedTime().toMillis();
         } catch (java.io.IOException e) {
             return fallback;
         }
-        String value = SCAN_CACHE.computeIfAbsent(
-                cacheKey, k -> Optional.ofNullable(TomlScan.scan(file, "global." + key).get("global." + key)))
+        String value = SCAN_CACHE
+                .computeIfAbsent(
+                        cacheKey,
+                        k -> Optional.ofNullable(
+                                TomlScan.scan(file, "global." + key).get("global." + key)))
                 .orElse(null);
         if (value == null) return fallback;
         return "true".equalsIgnoreCase(value) ? true : "false".equalsIgnoreCase(value) ? false : fallback;
@@ -175,13 +178,16 @@ public final class GlobalConfig {
         String cacheKey;
         try {
             if (!java.nio.file.Files.exists(file)) return Optional.empty();
-            var attrs = java.nio.file.Files.readAttributes(
-                    file, java.nio.file.attribute.BasicFileAttributes.class);
-            cacheKey = file + "|" + dotted + "|" + attrs.size() + "|" + attrs.lastModifiedTime().toMillis();
+            var attrs = java.nio.file.Files.readAttributes(file, java.nio.file.attribute.BasicFileAttributes.class);
+            cacheKey = file + "|" + dotted + "|" + attrs.size() + "|"
+                    + attrs.lastModifiedTime().toMillis();
         } catch (java.io.IOException e) {
             return Optional.empty();
         }
-        return SCAN_CACHE.computeIfAbsent(cacheKey, k -> Optional.ofNullable(TomlScan.scan(file, dotted).get(dotted)))
+        return SCAN_CACHE
+                .computeIfAbsent(
+                        cacheKey,
+                        k -> Optional.ofNullable(TomlScan.scan(file, dotted).get(dotted)))
                 .map(String::trim)
                 .filter(s -> !s.isEmpty());
     }
@@ -266,8 +272,8 @@ public final class GlobalConfig {
      * {@code ${VAR}} text (global config must never fail a build). Field parsing lives in {@link
      * RepositoryToml}.
      */
-    private static final java.util.function.UnaryOperator<String> LENIENT_INTERP = raw -> RepositoryToml.interpolate(
-            raw, var -> {
+    private static final java.util.function.UnaryOperator<String> LENIENT_INTERP =
+            raw -> RepositoryToml.interpolate(raw, var -> {
                 String v = System.getenv(var);
                 return v != null ? v : "${" + var + "}";
             });

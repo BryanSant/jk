@@ -121,8 +121,9 @@ final class AndroidCommand {
 
     private static boolean accepted(Path file, String hash) {
         try {
-            return Files.isRegularFile(file) && Files.readAllLines(file).stream()
-                    .anyMatch(line -> line.strip().equalsIgnoreCase(hash));
+            return Files.isRegularFile(file)
+                    && Files.readAllLines(file).stream()
+                            .anyMatch(line -> line.strip().equalsIgnoreCase(hash));
         } catch (IOException e) {
             return false;
         }

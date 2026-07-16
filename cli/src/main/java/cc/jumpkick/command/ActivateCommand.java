@@ -115,13 +115,19 @@ public final class ActivateCommand implements CliCommand {
         if (Files.exists(rcFile)
                 && Files.readString(rcFile, StandardCharsets.UTF_8).contains(activationLine)) {
             ensureJkxLauncher();
-            CliOutput.out(PipelineWedge.chipLine(Glyphs.CHECK, "Activate", nerdfont,
+            CliOutput.out(PipelineWedge.chipLine(
+                    Glyphs.CHECK,
+                    "Activate",
+                    nerdfont,
                     "Shell integration is already configured in " + Theme.colorize(rcDisplay, t.path())));
             return 0;
         }
 
         ensureJkxLauncher();
-        CliOutput.out(PipelineWedge.chipLine(Glyphs.BANG, "Activate", nerdfont,
+        CliOutput.out(PipelineWedge.chipLine(
+                Glyphs.BANG,
+                "Activate",
+                nerdfont,
                 "Add this to " + Theme.colorize(rcDisplay, t.path()) + " to finish activation:"));
         CliOutput.out("  " + Theme.colorize(activationLine, t.shell()));
         return 0;
@@ -139,9 +145,11 @@ public final class ActivateCommand implements CliCommand {
             if (existing.contains(activationLine)) {
                 ensureJkxLauncher();
                 Theme t = Theme.active();
-                CliOutput.out(PipelineWedge.chipLine(Glyphs.CHECK, "Activate", nerdfont,
-                        "Shell integration is already configured in "
-                                + Theme.colorize(rcDisplay, t.path())));
+                CliOutput.out(PipelineWedge.chipLine(
+                        Glyphs.CHECK,
+                        "Activate",
+                        nerdfont,
+                        "Shell integration is already configured in " + Theme.colorize(rcDisplay, t.path())));
                 return 0;
             }
         }
@@ -168,7 +176,10 @@ public final class ActivateCommand implements CliCommand {
         }
         if (result.isEmpty() || "no".equals(result.get().get("modify"))) {
             Theme t = Theme.active();
-            CliOutput.out(PipelineWedge.chipLine(Glyphs.BANG, "Activate", nerdfont,
+            CliOutput.out(PipelineWedge.chipLine(
+                    Glyphs.BANG,
+                    "Activate",
+                    nerdfont,
                     "Skipped — add this to " + Theme.colorize(rcDisplay, t.path()) + " manually:"));
             CliOutput.out("  " + Theme.colorize(activationLine, t.shell()));
             return 0;
@@ -176,7 +187,10 @@ public final class ActivateCommand implements CliCommand {
         appendActivationLine(rcFile, activationLine);
         JkxLink.Result jkx = ensureJkxLauncher();
         Theme t = Theme.active();
-        CliOutput.out(PipelineWedge.chipLine(Glyphs.CHECK, "Activate", nerdfont,
+        CliOutput.out(PipelineWedge.chipLine(
+                Glyphs.CHECK,
+                "Activate",
+                nerdfont,
                 "Shell integration configured in " + Theme.colorize(rcDisplay, t.path())));
         if (jkx.status() == JkxLink.Status.CREATED) {
             CliOutput.out("Installed " + Theme.colorize("jkx", t.shell()) + " (uvx-style `jk tool run`) → "

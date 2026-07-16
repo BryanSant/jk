@@ -39,8 +39,12 @@ class FileHashMemoTest {
         long size = Files.size(f);
         withCache(dir.resolve("cache"), () -> {
             FileHashMemo.store(f, size, mtime, "jar:abc");
-            assertThat(FileHashMemo.lookup(f, size + 1, mtime)).as("size changed").isNull();
-            assertThat(FileHashMemo.lookup(f, size, mtime - 5_000)).as("mtime changed").isNull();
+            assertThat(FileHashMemo.lookup(f, size + 1, mtime))
+                    .as("size changed")
+                    .isNull();
+            assertThat(FileHashMemo.lookup(f, size, mtime - 5_000))
+                    .as("mtime changed")
+                    .isNull();
         });
     }
 
@@ -56,7 +60,9 @@ class FileHashMemoTest {
             FileHashMemo.store(f, size, now, "jar:abc"); // must be a no-op
             long settled = now - 60_000;
             FileHashMemo.store(f, size, settled, "jar:settled");
-            assertThat(FileHashMemo.lookup(f, size, now)).as("fresh mtime — never trusted").isNull();
+            assertThat(FileHashMemo.lookup(f, size, now))
+                    .as("fresh mtime — never trusted")
+                    .isNull();
             assertThat(FileHashMemo.lookup(f, size, settled)).isEqualTo("jar:settled");
         });
     }

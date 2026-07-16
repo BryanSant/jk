@@ -46,7 +46,8 @@ public final class TrustCommand extends GroupCommand {
     }
 
     private static Opt stateDirOpt() {
-        return Opt.value("<dir>", "Override the jk state directory.", "--state-dir").hide();
+        return Opt.value("<dir>", "Override the jk state directory.", "--state-dir")
+                .hide();
     }
 
     static final class AddCmd implements CliCommand {
@@ -115,9 +116,10 @@ public final class TrustCommand extends GroupCommand {
             }
             boolean added = TrustedPlugins.load(stateDir(in)).add(coordinate);
             if (!GlobalOptions.from(in).outputIsJson()) {
-                CliOutput.out(added
-                        ? "Trusted plugin " + coordinate + " — its build code may now run in worker JVMs"
-                        : coordinate + " is already trusted");
+                CliOutput.out(
+                        added
+                                ? "Trusted plugin " + coordinate + " — its build code may now run in worker JVMs"
+                                : coordinate + " is already trusted");
             }
             return 0;
         }

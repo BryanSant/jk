@@ -104,7 +104,12 @@ class VerifyBuildCommandTest {
     void verify_requires_an_existing_jar(@TempDir Path tempDir) throws IOException {
         run("new", "--name", "widget", "--layout", "traditional", tempDir.toString());
         ScaffoldTestSupport.writeEmptyLock(tempDir); // verify requires jk.lock, but no build ran
-        int exit = run("verify", "-C", tempDir.toString(), "--cache-dir", tempDir.resolve("cache").toString());
+        int exit = run(
+                "verify",
+                "-C",
+                tempDir.toString(),
+                "--cache-dir",
+                tempDir.resolve("cache").toString());
         assertThat(exit).isEqualTo(66); // Exit.NO_INPUT — run `jk build` first
     }
 

@@ -34,11 +34,7 @@ final class Argv0 {
             if (System.getProperty("org.graalvm.nativeimage.imagecode") != null) {
                 return baseName(NativeArgv0.get());
             }
-            return ProcessHandle.current()
-                    .info()
-                    .command()
-                    .map(Argv0::baseName)
-                    .orElse(null);
+            return ProcessHandle.current().info().command().map(Argv0::baseName).orElse(null);
         } catch (RuntimeException | LinkageError e) {
             // Never let program-name sniffing break the CLI — no name, no dispatch.
             return null;

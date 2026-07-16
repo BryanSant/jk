@@ -39,16 +39,15 @@ import java.util.Set;
  */
 public final class LockOrchestrator {
 
-    private static final List<Scope> SCOPES =
-            List.of(
-                    Scope.EXPORT,
-                    Scope.MAIN,
-                    Scope.RUNTIME,
-                    Scope.PROVIDED,
-                    Scope.TEST,
-                    Scope.PROCESSOR,
-                    Scope.DEV,
-                    Scope.TEST_DEV);
+    private static final List<Scope> SCOPES = List.of(
+            Scope.EXPORT,
+            Scope.MAIN,
+            Scope.RUNTIME,
+            Scope.PROVIDED,
+            Scope.TEST,
+            Scope.PROCESSOR,
+            Scope.DEV,
+            Scope.TEST_DEV);
 
     /**
      * jk test infrastructure: always injected into the TEST classpath via {@code putIfAbsent} so
@@ -81,6 +80,7 @@ public final class LockOrchestrator {
      * projects, else standard-jvm). Set via {@link #withJvmEnvironment}.
      */
     private String jvmEnvironment = "standard-jvm";
+
     private cc.jumpkick.resolver.pubgrub.Diagnostics.Palette diagnosticPalette;
 
     public LockOrchestrator(MavenRepo repo) {
@@ -124,7 +124,7 @@ public final class LockOrchestrator {
         return r;
     }
 
-        /** Lock with the project's default feature selection. */
+    /** Lock with the project's default feature selection. */
     public Lockfile lock(JkBuild project, String jkVersion) throws IOException, InterruptedException {
         return lock(project, jkVersion, List.of(), true, ResolveObserver.NOOP);
     }
@@ -387,7 +387,8 @@ public final class LockOrchestrator {
 
             String source = fallbackSource;
             String checksum = null;
-            RepoGroup.RepoFetched hit = kmpAlias ? null : repos.tryFetchArtifact(coord).orElse(null);
+            RepoGroup.RepoFetched hit =
+                    kmpAlias ? null : repos.tryFetchArtifact(coord).orElse(null);
             if (hit != null) {
                 source = hit.repo().name() + "+" + hit.repo().baseUrl();
                 checksum = "sha256:" + hit.fetched().sha256();

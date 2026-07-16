@@ -141,7 +141,8 @@ public final class StatusCommand implements CliCommand {
         if (Ndjson.longValue(r, prefix + "Count", 0) == 0) return "";
         long avg = prefix.equals("ok")
                 ? Ndjson.longValue(r, "okAvgMillis", 0)
-                : Ndjson.longValue(r, prefix + "TotalMillis", 0) / Math.max(1, Ndjson.longValue(r, prefix + "Count", 1));
+                : Ndjson.longValue(r, prefix + "TotalMillis", 0)
+                        / Math.max(1, Ndjson.longValue(r, prefix + "Count", 1));
         return "avg " + HistoryCommand.duration(avg)
                 + "  min " + HistoryCommand.duration(Ndjson.longValue(r, prefix + "MinMillis", -1))
                 + "  max " + HistoryCommand.duration(Ndjson.longValue(r, prefix + "MaxMillis", -1))
@@ -168,7 +169,8 @@ public final class StatusCommand implements CliCommand {
         }
         if (shown < sorted.size()) {
             CliOutput.out(Theme.colorize(
-                    "    … " + (sorted.size() - shown) + " more (use --steps)", Theme.active().dim()));
+                    "    … " + (sorted.size() - shown) + " more (use --steps)",
+                    Theme.active().dim()));
         }
     }
 }

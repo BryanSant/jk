@@ -50,7 +50,8 @@ class SupportedJdkTest {
 
     @Test
     void isNativeImageCapable_matches_graalvm_sdk_names_only() {
-        assertThat(SupportedJdk.isNativeImageCapable(entry("Oracle", "GraalVM", "graalvm-jdk-26", 26))).isTrue();
+        assertThat(SupportedJdk.isNativeImageCapable(entry("Oracle", "GraalVM", "graalvm-jdk-26", 26)))
+                .isTrue();
         assertThat(SupportedJdk.isNativeImageCapable(entry("GraalVM", "Community Edition", "graalvm-ce-25", 25)))
                 .isTrue();
         assertThat(SupportedJdk.isNativeImageCapable(entry("Eclipse", "Temurin", "temurin-26", 26)))
@@ -68,8 +69,10 @@ class SupportedJdkTest {
                 entry("Oracle", "GraalVM", "graalvm-jdk-17", 17),
                 entry("Oracle", "GraalVM", "graalvm-jdk-21", 21),
                 entry("Oracle", "GraalVM", "graalvm-jdk-25", 25))));
-        assertThat(SupportedJdk.offerableMajors(catalog, false, "linux", "x86_64")).containsExactly(25, 21, 17, 26);
-        assertThat(SupportedJdk.offerableMajors(catalog, true, "linux", "x86_64")).containsExactly(25, 21, 17);
+        assertThat(SupportedJdk.offerableMajors(catalog, false, "linux", "x86_64"))
+                .containsExactly(25, 21, 17, 26);
+        assertThat(SupportedJdk.offerableMajors(catalog, true, "linux", "x86_64"))
+                .containsExactly(25, 21, 17);
     }
 
     @Test
@@ -80,7 +83,8 @@ class SupportedJdkTest {
                 entry("Oracle", "GraalVM", "graalvm-jdk-21", 21),
                 entry("Oracle", "GraalVM", "graalvm-jdk-25", 25),
                 entry("Oracle", "GraalVM", "graalvm-jdk-26", 26))));
-        assertThat(SupportedJdk.offerableMajors(catalog, true, "linux", "x86_64")).containsExactly(25, 21, 17, 26);
+        assertThat(SupportedJdk.offerableMajors(catalog, true, "linux", "x86_64"))
+                .containsExactly(25, 21, 17, 26);
     }
 
     @Test
@@ -90,12 +94,14 @@ class SupportedJdkTest {
                 entry("Eclipse", "Temurin", "temurin-26", 26, true, "linux", "x86_64"), // preview → excluded
                 entry("Eclipse", "Temurin", "temurin-26", 26, false, "macOS", "aarch64")))); // other host → excluded
         // Only 25 is published for the host (26 is preview or a different platform), so only 25 is offered.
-        assertThat(SupportedJdk.offerableMajors(catalog, false, "linux", "x86_64")).containsExactly(25);
+        assertThat(SupportedJdk.offerableMajors(catalog, false, "linux", "x86_64"))
+                .containsExactly(25);
     }
 
     @Test
     void empty_or_null_catalog_yields_empty_so_caller_falls_back_offline() {
-        assertThat(SupportedJdk.offerableMajors(new JdkCatalog(List.of()), false, "linux", "x86_64")).isEmpty();
+        assertThat(SupportedJdk.offerableMajors(new JdkCatalog(List.of()), false, "linux", "x86_64"))
+                .isEmpty();
         assertThat(SupportedJdk.offerableMajors(null, true, "linux", "x86_64")).isEmpty();
     }
 

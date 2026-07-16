@@ -89,9 +89,8 @@ class PathSourceResolutionTest {
         Cas cas = new Cas(tmp.resolve("cas"));
         RepoGroup baseRepos =
                 RepoGroup.of(new MavenRepo("central", RepositorySpec.MAVEN_CENTRAL.url(), new Http(), cas));
-        JkBuild plain = new JkBuild(
-                new JkBuild.Project("com.example", "app", "0.1.0", 25),
-                new JkBuild.Dependencies(Map.of()));
+        JkBuild plain =
+                new JkBuild(new JkBuild.Project("com.example", "app", "0.1.0", 25), new JkBuild.Dependencies(Map.of()));
 
         PathSourceResolution.Prepared prep = PathSourceResolution.prepare(
                 plain, baseRepos, cas, tmp, Path.of(System.getProperty("java.home")), "test");

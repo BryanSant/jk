@@ -5,9 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import cc.jumpkick.config.JkBuildParser;
 import cc.jumpkick.model.Dependency;
-import cc.jumpkick.model.Features;
 import cc.jumpkick.model.JkBuild;
-import cc.jumpkick.model.Profiles;
 import cc.jumpkick.model.RepositorySpec;
 import cc.jumpkick.model.Scope;
 import cc.jumpkick.model.VersionSelector;
@@ -99,7 +97,8 @@ class JkBuildRendererTest {
         // No [application] at all → isApplication() false, nothing emitted.
         JkBuild lib = JkBuild.of(new JkBuild.Project("com.example", "lib", "1.0.0", 21));
         assertThat(JkBuildRenderer.render(lib)).doesNotContain("[application]");
-        assertThat(JkBuildParser.parse(JkBuildRenderer.render(lib)).isApplication()).isFalse();
+        assertThat(JkBuildParser.parse(JkBuildRenderer.render(lib)).isApplication())
+                .isFalse();
     }
 
     @Test

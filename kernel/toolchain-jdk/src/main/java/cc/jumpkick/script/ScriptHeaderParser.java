@@ -121,7 +121,17 @@ public final class ScriptHeaderParser {
         }
 
         return new ScriptHeader(
-                deps, release, repos, features, javacOptions, javaOptions, sources, files, main, gav, description,
+                deps,
+                release,
+                repos,
+                features,
+                javacOptions,
+                javaOptions,
+                sources,
+                files,
+                main,
+                gav,
+                description,
                 kotlinVersion);
     }
 

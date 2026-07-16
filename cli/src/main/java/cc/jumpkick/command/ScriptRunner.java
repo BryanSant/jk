@@ -203,9 +203,7 @@ final class ScriptRunner {
         }
 
         List<Path> classpath = prep.classpath();
-        Path java = JavaHomes.runningJavaHome()
-                .resolve("bin")
-                .resolve(HostPlatform.isWindows() ? "java.exe" : "java");
+        Path java = JavaHomes.runningJavaHome().resolve("bin").resolve(HostPlatform.isWindows() ? "java.exe" : "java");
         List<String> command = new ArrayList<>();
         command.add(java.toString());
         command.addAll(extraJavaOptions);
@@ -229,13 +227,19 @@ final class ScriptRunner {
      * cc.jumpkick.cli.engine.InProcessEngine} seam under the test-only bypass — rendering the
      * standard single-pipeline progress either way.
      */
-    private EngineClient.ScriptPrepareOutcome prepare(String mode, Path file)
-            throws IOException, InterruptedException {
+    private EngineClient.ScriptPrepareOutcome prepare(String mode, Path file) throws IOException, InterruptedException {
         PipelineConsole.Mode consoleMode = PipelineConsole.modeFor(global);
         if (engineDisabledForTests()) {
             return cc.jumpkick.cli.engine.InProcessEngine.require()
-                    .scriptPrepare(mode, file.toAbsolutePath(), cacheDir(), stateDir(), repoUrl, forceRecompile,
-                            extraDeps, consoleMode);
+                    .scriptPrepare(
+                            mode,
+                            file.toAbsolutePath(),
+                            cacheDir(),
+                            stateDir(),
+                            repoUrl,
+                            forceRecompile,
+                            extraDeps,
+                            consoleMode);
         }
         return EngineClient.runScriptPrepare(
                 cc.jumpkick.engine.EnginePaths.current(),
@@ -268,9 +272,7 @@ final class ScriptRunner {
     private int execJava(
             Path classesDir, List<Path> classpath, List<String> jvmArgs, String mainClass, List<String> args)
             throws IOException, InterruptedException {
-        Path java = JavaHomes.runningJavaHome()
-                .resolve("bin")
-                .resolve(HostPlatform.isWindows() ? "java.exe" : "java");
+        Path java = JavaHomes.runningJavaHome().resolve("bin").resolve(HostPlatform.isWindows() ? "java.exe" : "java");
         List<Path> full = new ArrayList<>();
         if (classesDir != null) full.add(classesDir);
         full.addAll(classpath);

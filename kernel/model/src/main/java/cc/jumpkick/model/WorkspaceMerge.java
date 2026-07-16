@@ -102,8 +102,7 @@ public final class WorkspaceMerge {
                         if (visited.add(r.name())) queue.add(r.name());
                         continue;
                     }
-                    List<Dependency> mainList =
-                            resolvedByScope.computeIfAbsent(Scope.MAIN, k -> new ArrayList<>());
+                    List<Dependency> mainList = resolvedByScope.computeIfAbsent(Scope.MAIN, k -> new ArrayList<>());
                     if (mainList.stream().noneMatch(e -> e.module().equals(r.module()))) {
                         mainList.add(r);
                     }

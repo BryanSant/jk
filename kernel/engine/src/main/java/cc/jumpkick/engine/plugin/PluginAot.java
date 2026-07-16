@@ -12,7 +12,6 @@ import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -253,7 +252,8 @@ public final class PluginAot {
 
     private static void runTrainer(String what, Path cache, Path claim, TrainerCommand trainer) {
         Path scratch = null;
-        Path tmp = cache.resolveSibling(cache.getFileName() + ".tmp-" + ProcessHandle.current().pid());
+        Path tmp = cache.resolveSibling(
+                cache.getFileName() + ".tmp-" + ProcessHandle.current().pid());
         try {
             scratch = Files.createTempDirectory("jk-worker-aot-");
             Files.createDirectories(scratch.resolve("out"));
@@ -326,8 +326,9 @@ public final class PluginAot {
             }
         }
         for (Path m : markers) {
-            Path primary = m.resolveSibling(
-                    m.getFileName().toString().substring(0, m.getFileName().toString().length() - ".noaot".length()));
+            Path primary = m.resolveSibling(m.getFileName()
+                    .toString()
+                    .substring(0, m.getFileName().toString().length() - ".noaot".length()));
             if (!Files.exists(primary) && now - mtime(m) > UNUSED_TTL_MILLIS) deleteQuietly(m);
         }
     }
@@ -372,9 +373,7 @@ public final class PluginAot {
     private static Path writeJavacCorpus(Path scratch) throws IOException {
         Path dir = Files.createDirectories(scratch.resolve("corpus"));
         for (int i = 0; i < 24; i++) {
-            Files.writeString(
-                    dir.resolve("C" + i + ".java"),
-                    """
+            Files.writeString(dir.resolve("C" + i + ".java"), """
                     package demo;
                     import java.util.*;
                     import java.util.function.*;
@@ -417,8 +416,7 @@ public final class PluginAot {
                                     + SUM.apply(1, 2, 3));
                         }
                     }
-                    """
-                            .formatted(i, i + 1));
+                    """.formatted(i, i + 1));
         }
         return dir;
     }

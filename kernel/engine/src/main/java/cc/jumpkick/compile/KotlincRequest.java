@@ -84,8 +84,18 @@ public record KotlincRequest(
             Path snapshotDir,
             List<String> extraArgs,
             List<Plugin> plugins) {
-        this(sources, classpath, outputDir, jvmTarget, workerClasspath, javaHome, workingDir, snapshotDir, extraArgs,
-                plugins, null);
+        this(
+                sources,
+                classpath,
+                outputDir,
+                jvmTarget,
+                workerClasspath,
+                javaHome,
+                workingDir,
+                snapshotDir,
+                extraArgs,
+                plugins,
+                null);
     }
 
     /** Back-compat constructor: no compiler plugins. */
@@ -99,8 +109,18 @@ public record KotlincRequest(
             Path workingDir,
             Path snapshotDir,
             List<String> extraArgs) {
-        this(sources, classpath, outputDir, jvmTarget, workerClasspath, javaHome, workingDir, snapshotDir, extraArgs,
-                List.of(), null);
+        this(
+                sources,
+                classpath,
+                outputDir,
+                jvmTarget,
+                workerClasspath,
+                javaHome,
+                workingDir,
+                snapshotDir,
+                extraArgs,
+                List.of(),
+                null);
     }
 
     public boolean incremental() {

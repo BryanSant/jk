@@ -54,8 +54,26 @@ public record BuildRecord(
     /** This record with its per-project build number set (assigned at journal-append time). */
     public BuildRecord withBuildNumber(long buildNumber) {
         return new BuildRecord(
-                id, buildNumber, schema, kind, dir, coord, startedAt, finishedAt, millis,
-                success, cancelled, exitCode, jkVersion, tests, modules, steps, diagnostics, trigger, commit, benefit);
+                id,
+                buildNumber,
+                schema,
+                kind,
+                dir,
+                coord,
+                startedAt,
+                finishedAt,
+                millis,
+                success,
+                cancelled,
+                exitCode,
+                jkVersion,
+                tests,
+                modules,
+                steps,
+                diagnostics,
+                trigger,
+                commit,
+                benefit);
     }
 
     /** Aggregate test counts for the run, or {@code null} when no tests ran. */
@@ -100,5 +118,11 @@ public record BuildRecord(
      * the failure output under the failed module inside its "failure details" roll-up.
      */
     public record Diag(
-            String severity, String dir, String step, String code, String message, String test, String exceptionClass) {}
+            String severity,
+            String dir,
+            String step,
+            String code,
+            String message,
+            String test,
+            String exceptionClass) {}
 }

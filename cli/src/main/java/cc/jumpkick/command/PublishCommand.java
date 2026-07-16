@@ -159,16 +159,29 @@ public final class PublishCommand implements CliCommand {
             CliOutput.err("jk publish: " + e.getMessage());
             return Exit.CONFIG;
         }
-        String gpgPass =
-                sign ? (keyPassphrase != null ? keyPassphrase : System.getenv("JK_GPG_PASSPHRASE")) : null;
+        String gpgPass = sign ? (keyPassphrase != null ? keyPassphrase : System.getenv("JK_GPG_PASSPHRASE")) : null;
 
         PipelineConsole.Mode mode = PipelineConsole.modeFor(global);
         PipelineResult result;
         int files;
         if (engineDisabledForTests()) {
             var o = cc.jumpkick.cli.engine.InProcessEngine.require()
-                    .publishPipeline(projectDir, cache, repoUrl, region, endpoint, jarPath, allowSnapshot, dryRun,
-                            sign ? keyFile : null, gpgPass, sigstore, slsa, sbom, cred, mode);
+                    .publishPipeline(
+                            projectDir,
+                            cache,
+                            repoUrl,
+                            region,
+                            endpoint,
+                            jarPath,
+                            allowSnapshot,
+                            dryRun,
+                            sign ? keyFile : null,
+                            gpgPass,
+                            sigstore,
+                            slsa,
+                            sbom,
+                            cred,
+                            mode);
             result = o.result();
             files = o.files();
         } else {
@@ -211,9 +224,7 @@ public final class PublishCommand implements CliCommand {
 
         if (!global.outputIsJson()) {
             String summary = dryRun ? "(dry-run)" : "(" + files + " files)";
-            CliOutput.out("Published "
-                    + Coords.gav(info.group(), info.name(), info.version())
-                    + " " + summary);
+            CliOutput.out("Published " + Coords.gav(info.group(), info.name(), info.version()) + " " + summary);
         }
         return 0;
     }

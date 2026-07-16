@@ -89,8 +89,10 @@ public final class BoundedLineReader extends BufferedReader {
             }
         } catch (IOException e) {
             if (timedOut) {
-                throw new IOException("no protocol traffic for " + (idleTimeoutMillis / 60_000)
-                        + " minutes — the engine looks dead (set JK_STREAM_IDLE_MINUTES to tune)", e);
+                throw new IOException(
+                        "no protocol traffic for " + (idleTimeoutMillis / 60_000)
+                                + " minutes — the engine looks dead (set JK_STREAM_IDLE_MINUTES to tune)",
+                        e);
             }
             throw e;
         } finally {

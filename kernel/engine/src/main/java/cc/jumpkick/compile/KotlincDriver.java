@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.compile;
 
+import cc.jumpkick.engine.plugin.PluginClient;
 import cc.jumpkick.plugin.protocol.Ndjson;
 import cc.jumpkick.plugin.protocol.PluginProtocol;
 import cc.jumpkick.plugin.protocol.SpecWriter;
-import cc.jumpkick.engine.plugin.PluginClient;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
@@ -59,15 +59,13 @@ public final class KotlincDriver {
             // GC, classpath); else a background trainer compiles a synthetic hello.kt so the NEXT
             // kotlin build maps it. JVM flags, so they precede -cp.
             rest.addAll(cc.jumpkick.engine.plugin.PluginAot.kotlincFlags(
-                    hostJavaHome, classpath, (aotOutput, scratch) -> trainerCommand(
-                            request.classpath(), classpath, hostJavaHome, aotOutput, scratch)));
+                    hostJavaHome,
+                    classpath,
+                    (aotOutput, scratch) ->
+                            trainerCommand(request.classpath(), classpath, hostJavaHome, aotOutput, scratch)));
             rest.addAll(List.of(
                     // Silence the JDK's native-access / Unsafe warnings the compiler triggers.
-                    "--enable-native-access=ALL-UNNAMED",
-                    "-cp",
-                    classpath,
-                    WORKER_MAIN,
-                    "@" + spec.toAbsolutePath()));
+                    "--enable-native-access=ALL-UNNAMED", "-cp", classpath, WORKER_MAIN, "@" + spec.toAbsolutePath()));
             List<String> cmd = cc.jumpkick.engine.plugin.JvmOptions.javaCommand(
                     hostJavaHome.resolve("bin").resolve("java").toString(), 1, rest);
 
@@ -79,7 +77,8 @@ public final class KotlincDriver {
             // fails with an empty diagnostic and no way to see why.
             java.util.ArrayDeque<String> chatter = new java.util.ArrayDeque<>();
             int exit = new PluginClient(PROTOCOL_PREFIX)
-                    .on(PluginProtocol.DIAGNOSTIC,
+                    .on(
+                            PluginProtocol.DIAGNOSTIC,
                             json -> diagnostics.add(Ndjson.str(json, "sev") + ": " + Ndjson.str(json, "msg")))
                     .on(PluginProtocol.RESULT, json -> status[0] = Ndjson.str(json, "status"))
                     .passthrough(line -> {
@@ -110,9 +109,7 @@ public final class KotlincDriver {
             List<Path> compileClasspath, String classpath, Path hostJavaHome, Path aotOutput, Path scratch)
             throws IOException {
         Path source = scratch.resolve("Hello.kt");
-        Files.writeString(
-                source,
-                """
+        Files.writeString(source, """
                 package demo
 
                 data class Point(val x: Int, val y: Int)

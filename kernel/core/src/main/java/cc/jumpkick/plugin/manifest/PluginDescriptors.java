@@ -86,8 +86,18 @@ public final class PluginDescriptors {
         PluginDescriptor.Scaffold scaffold = parseScaffold(result, displayPath);
         List<PluginDescriptor.GradleImport> gradleImports = parseGradleImports(result, displayPath);
         return new PluginDescriptor(
-                id, table, version, jkCompat, schema, contributions, code, packaging, scaffold, gradleImports,
-                subSchemas, subTables);
+                id,
+                table,
+                version,
+                jkCompat,
+                schema,
+                contributions,
+                code,
+                packaging,
+                scaffold,
+                gradleImports,
+                subSchemas,
+                subTables);
     }
 
     /** Typed schema keys from one table of {@code key = { type = "…", … }} specs. */
@@ -106,9 +116,16 @@ public final class PluginDescriptors {
             var type = PluginDescriptor.SchemaKey.Type.parse(typeRaw, where + "." + key);
             boolean required = Boolean.TRUE.equals(spec.getBoolean("required"));
             Object defaultValue = defaultFor(spec, type, where + "." + key);
-            schema.put(key, new PluginDescriptor.SchemaKey(
-                    key, type, required, defaultValue, spec.getString("example"), spec.getString("hint"),
-                    Boolean.TRUE.equals(spec.getBoolean("secret"))));
+            schema.put(
+                    key,
+                    new PluginDescriptor.SchemaKey(
+                            key,
+                            type,
+                            required,
+                            defaultValue,
+                            spec.getString("example"),
+                            spec.getString("hint"),
+                            Boolean.TRUE.equals(spec.getBoolean("secret"))));
         }
         return schema;
     }
@@ -204,8 +221,7 @@ public final class PluginDescriptors {
                             + " resolves before any classpath exists, so only config predicates apply");
                 }
                 variants.add(new PluginDescriptor.Packaging.Variant(
-                        new PluginDescriptor.Condition.ConfigEquals(
-                                when.getString("config"), when.getString("equals")),
+                        new PluginDescriptor.Condition.ConfigEquals(when.getString("config"), when.getString("equals")),
                         parsePackagingTable(v, displayPath, List.of())));
             }
         }
@@ -217,9 +233,8 @@ public final class PluginDescriptors {
         String execMode = packaging.getString("exec-mode");
         if (execMode == null) execMode = "classpath";
         if (!List.of("jar", "classpath", "binary", "device", "none").contains(execMode)) {
-            throw new JkBuildParseException(
-                    displayPath + ".packaging.exec-mode must be jar, classpath, binary, device, or none — got: "
-                            + execMode);
+            throw new JkBuildParseException(displayPath
+                    + ".packaging.exec-mode must be jar, classpath, binary, device, or none — got: " + execMode);
         }
         String deployCommand = packaging.getString("deploy-command");
         if (deployCommand != null && !"device".equals(execMode)) {
@@ -229,9 +244,8 @@ public final class PluginDescriptors {
         String extension = packaging.getString("artifact-extension");
         if (extension == null) extension = "jar";
         if (!extension.matches("[a-z0-9]{1,8}")) {
-            throw new JkBuildParseException(
-                    displayPath + ".packaging.artifact-extension must be a short lowercase extension — got: "
-                            + extension);
+            throw new JkBuildParseException(displayPath
+                    + ".packaging.artifact-extension must be a short lowercase extension — got: " + extension);
         }
         return new PluginDescriptor.Packaging(
                 packaging.getString("packager"),
@@ -261,9 +275,8 @@ public final class PluginDescriptors {
             if (when instanceof PluginDescriptor.Condition.ClasspathHas) {
                 // Platform deps inject at parse time, before resolution — there is no
                 // classpath to test yet. Fail at load, not mid-build.
-                throw new JkBuildParseException(
-                        where + ": classpath-has cannot gate a platform-dependency (it is evaluated"
-                                + " before resolution)");
+                throw new JkBuildParseException(where
+                        + ": classpath-has cannot gate a platform-dependency (it is evaluated" + " before resolution)");
             }
             platformDeps.add(new PluginDescriptor.PlatformDependency(coordinate, when));
         }
@@ -314,9 +327,8 @@ public final class PluginDescriptors {
             String sdkComponent = t.getString("sdk-component");
             String sdkPath = t.getString("sdk-path");
             if ((coordinate == null) == (sdkComponent == null)) {
-                throw new JkBuildParseException(
-                        where + " needs exactly one of `coordinate` (a Maven artifact) or"
-                                + " `sdk-component` (a provisioned SDK component)");
+                throw new JkBuildParseException(where + " needs exactly one of `coordinate` (a Maven artifact) or"
+                        + " `sdk-component` (a provisioned SDK component)");
             }
             if (coordinate != null) Interpolation.validate(coordinate, schemaKeys, where);
             if (sdkComponent != null) Interpolation.validate(sdkComponent, schemaKeys, where);
@@ -333,8 +345,8 @@ public final class PluginDescriptors {
                         where + ": classpath-has cannot gate a step-dependency (tool fetches are"
                                 + " decided from config/facts, not the resolved classpath)");
             }
-            stepDeps.add(new PluginDescriptor.StepDependency(artifact, coordinate, transitive, sdkComponent, sdkPath,
-                    when));
+            stepDeps.add(
+                    new PluginDescriptor.StepDependency(artifact, coordinate, transitive, sdkComponent, sdkPath, when));
         }
 
         List<PluginDescriptor.ProvidedClasspath> provided = new ArrayList<>();
@@ -355,9 +367,7 @@ public final class PluginDescriptors {
         TomlTable resolution = contribute.getTable("resolution");
         if (resolution != null) {
             jvmEnvironment = resolution.getString("jvm-environment");
-            if (jvmEnvironment != null
-                    && !jvmEnvironment.equals("android")
-                    && !jvmEnvironment.equals("standard-jvm")) {
+            if (jvmEnvironment != null && !jvmEnvironment.equals("android") && !jvmEnvironment.equals("standard-jvm")) {
                 throw new JkBuildParseException(displayPath
                         + ".contribute.resolution: jvm-environment must be `android` or `standard-jvm`"
                         + " — got: " + jvmEnvironment);
@@ -413,8 +423,8 @@ public final class PluginDescriptors {
 
     private static void requireTrue(TomlTable when, String key, String where) {
         if (!Boolean.TRUE.equals(when.getBoolean(key))) {
-            throw new JkBuildParseException(where + ".when." + key + " must be `true` (omit the"
-                    + " condition entirely for the false case)");
+            throw new JkBuildParseException(
+                    where + ".when." + key + " must be `true` (omit the" + " condition entirely for the false case)");
         }
     }
 
