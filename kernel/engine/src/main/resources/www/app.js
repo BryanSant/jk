@@ -565,6 +565,14 @@ Vue.createApp({
       return outcomeOf(card);
     },
 
+    // Full badge label for a finished Activity card as one string: glyph, optional #buildNumber,
+    // and the capitalized outcome — e.g. "✘ #11 Failed", or "✓ Success" before a number is assigned.
+    activityBadge(card) {
+      const o = this.outcome(card);
+      const num = card.buildNumber ? '#' + card.buildNumber + ' ' : '';
+      return this.glyph(o) + ' ' + num + o.charAt(0).toUpperCase() + o.slice(1);
+    },
+
     summary(card) {
       return moduleSummary(card);
     },

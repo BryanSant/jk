@@ -62,7 +62,7 @@
       <article v-for="card in cards" :key="card.id" class="card" :class="outcome(card)">
         <div class="card-head">
           <span v-if="outcome(card) === 'running'" class="spin"></span>
-          <span v-else class="badge" :class="outcome(card)">{{ glyph(outcome(card)) }} <template v-if="card.buildNumber">#{{ card.buildNumber }} </template>{{ outcome(card) }}</span>
+          <span v-else class="badge" :class="outcome(card)">{{ activityBadge(card) }}</span>
           <span class="coord">
             <template v-if="coordParts(card).group"><span class="cg">{{ coordParts(card).group }}</span><span class="csep">:</span></template>
             <span class="cn">{{ coordParts(card).name }}</span>
