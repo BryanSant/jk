@@ -200,6 +200,19 @@ main { max-width: 66rem; margin: 0 auto; padding: 18px 20px 3rem; }
 
 .rebuild:hover { color: var(--tx); }
 
+/* Icon-only card actions (rebuild / delete on a finished card): a Material Icon sized to the
+ * small card type, the .rebuild surface tightened to a square and centred in the baseline row.
+ * The delete button flags danger — red glyph + border — on hover. */
+.rebuild.icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
+  padding: 4px 6px;
+}
+.rebuild.icon .material-icons { font-size: 16px; line-height: 1; }
+.rebuild.icon.danger:hover { color: var(--err); border-color: rgba(233, 30, 99, 0.5); }
+
 /* ---- activity cards ---- */
 
 .card {

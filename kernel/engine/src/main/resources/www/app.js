@@ -526,7 +526,7 @@ Vue.createApp({
 
     // Human label for a build's trigger. Older (pre-capture) records have none → em dash.
     triggerLabel(trigger) {
-      return { web: 'web build', cli: 'cli build' }[trigger] || '—';
+      return { web: 'Web build', cli: 'CLI build' }[trigger] || '—';
     },
 
     // Progress percentage for a running card's bar — the identical weight-based model as the CLI
@@ -713,8 +713,8 @@ Vue.createApp({
       } catch (e) {
         this.buildError =
           e.status === 401
-            ? 'unauthorized — open the tokenized URL printed by `jk engine status`'
-            : 'could not delete this run';
+            ? 'Unauthorized — open the tokenized URL printed by `jk engine status`'
+            : 'Could not delete this run';
       }
     },
 
@@ -731,12 +731,12 @@ Vue.createApp({
         this.browser = await get('/api/fs' + (dir ? '?dir=' + encodeURIComponent(dir) : ''));
       } catch (e) {
         if (e.status === 401) {
-          this.buildError = 'unauthorized — open the tokenized URL printed by `jk engine status`';
+          this.buildError = 'Unauthorized — open the tokenized URL printed by `jk engine status`';
           this.browser = null;
         } else if (this.browser) {
           // an unreadable subdir: stay where we are
         } else {
-          this.buildError = 'could not list that directory';
+          this.buildError = 'Could not list that directory';
         }
       }
     },
@@ -764,8 +764,8 @@ Vue.createApp({
       } catch (e) {
         this.buildError =
           e.status === 401
-            ? 'unauthorized — open the tokenized URL printed by `jk engine status`'
-            : e.error || 'build request failed';
+            ? 'Unauthorized — open the tokenized URL printed by `jk engine status`'
+            : e.error || 'Build request failed';
       }
     },
 
@@ -831,10 +831,10 @@ Vue.createApp({
     },
     connectionLabel() {
       return {
-        connecting: 'connecting…',
-        live: 'live',
-        offline: 'engine stopped — run any jk command to restart it',
-        unauthorized: 'unauthorized — open the URL printed by `jk engine status`',
+        connecting: 'Connecting…',
+        live: 'Live',
+        offline: 'Engine stopped — run any jk command to restart it',
+        unauthorized: 'Unauthorized — open the URL printed by `jk engine status`',
       }[this.connection];
     },
   },

@@ -164,8 +164,9 @@ final class StaticContent {
                 return false;
             }
         }
-        // The shipped SPA's only external resources: Vue from unpkg (version-pinned + SRI in
-        // index.html) and the JetBrains Mono webfont from Google Fonts — see docs/webclient.md.
+        // The shipped SPA's only external resources: Vue + ECharts from unpkg (version-pinned + SRI
+        // in index.html) and the JetBrains Mono + Material Icons webfonts from Google Fonts (CSS on
+        // fonts.googleapis.com, font files on fonts.gstatic.com) — see docs/webclient.md.
         // 'unsafe-eval' is Vue's runtime template compiler. Disk content (user reports, possibly
         // with inline styles/scripts of their own) is deliberately not CSP-gated.
         exchange.getResponseHeaders()

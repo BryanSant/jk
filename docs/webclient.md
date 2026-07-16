@@ -18,8 +18,9 @@ step, served straight from the engine jar.
   script a page that can trigger builds); the classpath CSP allows exactly that one external
   script origin. Deliberate trade-off: the dashboard's first load needs internet (unpkg serves
   pinned URLs `immutable`, so the browser caches it thereafter), and jk ships no framework bytes.
-  Everything else — app code, styles, icons — comes from the engine itself, and the rest of the
-  security posture (no CORS, strict Host checking) still assumes a self-contained origin.
+  Everything else — app code and styles — comes from the engine itself; the JetBrains Mono and
+  Material Icons webfonts load from Google Fonts (the CSP's permitted style/font origins), and the
+  rest of the security posture (no CORS, strict Host checking) still assumes a self-contained origin.
 - **Small.** The shipped tree is a handful of hand-written files; assets stream from the jar
   (nothing is cached in the engine's heap). Keep it that way.
 
@@ -58,8 +59,8 @@ kernel/engine/src/main/resources/www/
 style attributes, so a `Content-Security-Policy` header rides every <em>classpath</em>-served
 response: `default-src 'self'; script-src 'self' 'unsafe-eval' https://unpkg.com; style-src
 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com` — the `unsafe-eval` is
-Vue's runtime template compiler, the price of the no-build-step constraint; unpkg (Vue) and
-Google Fonts (JetBrains Mono) are the only permitted external origins. Disk-served `www-root` content (user reports
+Vue's runtime template compiler, the price of the no-build-step constraint; unpkg (Vue, ECharts) and
+Google Fonts (JetBrains Mono, Material Icons) are the only permitted external origins. Disk-served `www-root` content (user reports
 with inline styles of their own) is deliberately not CSP-gated.
 
 ## Architecture
@@ -159,8 +160,9 @@ Hand-written `style.css`, no framework. **Dark only, deliberately** — the pale
 same accent hues for ok/warn/error/building states, same restraint (color means state, not
 decoration). UI text is the system stack (`system-ui, sans-serif`); paths, coords, durations, and
 consoles use **JetBrainsMono Nerd Font Mono when installed locally** (the TUI already wants a Nerd
-Font), falling back to Google's JetBrains Mono webfont (`fonts.googleapis.com`, the CSP's one
-permitted style/font origin), then `ui-monospace`. One spacing scale, no icon font.
+Font), falling back to Google's JetBrains Mono webfont (`fonts.googleapis.com`, a CSP-permitted
+style/font origin), then `ui-monospace`. One spacing scale. Status/step markers are Unicode glyphs
+(✓ ✘ ⊘ · ◂ ▸); the card action buttons (rebuild / delete) use Material Icons from Google Fonts.
 
 ## Development workflow
 

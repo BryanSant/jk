@@ -9,10 +9,14 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <!-- Material Icons (classic) pulled from the Google Fonts CDN — not self-hosted; used for the
+       card action buttons (rebuild / delete). Same CDN-font pattern as JetBrains Mono above, and
+       the preconnect hints already cover fonts.googleapis.com / fonts.gstatic.com. -->
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
   <link rel="stylesheet" href="/style.css">
-  <!-- Icons are Unicode dingbats/geometric glyphs (✓ ✘ ⊘ · ◂ ▸), never emoji or images, and
-       resolve through the JetBrains Mono → system-mono fallback stack; the only image is the SVG
-       brand mark. -->
+  <!-- Status/step glyphs are Unicode dingbats (✓ ✘ ⊘ · ◂ ▸), never emoji, resolving through the
+       JetBrains Mono → system-mono stack; the card action buttons use Material Icons (above). The
+       only image is the SVG brand mark. -->
   <!-- Version-pinned + SRI: a CDN compromise must not be able to script a page that can trigger
        builds. Update the integrity hash whenever the pin moves (docs/webclient.md). -->
   <script src="https://unpkg.com/vue@3.5.39/dist/vue.global.prod.js"
@@ -45,7 +49,7 @@
     <main v-if="view === 'activity'">
       <div class="feed-head">
         <h2>Live activity</h2>
-        <span class="retention">last 50 requests</span>
+        <span class="retention">Last 50 requests</span>
         <span class="spacer"></span>
         <form class="trigger" @submit.prevent="triggerBuild()">
           <input v-model="buildDir" placeholder="/absolute/path/to/workspace" spellcheck="false">
@@ -70,10 +74,10 @@
           <span class="kind">{{ card.kind }}</span>
           <span v-if="card.modules.length > 1" class="summary">{{ summary(card) }}</span>
           <span class="spacer"></span>
-          <button v-if="outcome(card) !== 'running' && card.kind === 'build'" class="rebuild"
-                  @click="triggerBuild(card.dir)" title="Build this directory again">rebuild</button>
-          <button v-if="outcome(card) !== 'running' && card.historyId" class="rebuild"
-                  @click="deleteCard(card)" title="Delete this run from history">delete</button>
+          <button v-if="outcome(card) !== 'running' && card.kind === 'build'" class="rebuild icon"
+                  @click="triggerBuild(card.dir)" aria-label="Rebuild" title="Build this directory again"><span class="material-icons">refresh</span></button>
+          <button v-if="outcome(card) !== 'running' && card.historyId" class="rebuild icon danger"
+                  @click="deleteCard(card)" aria-label="Delete" title="Delete this run from history"><span class="material-icons">delete</span></button>
           <span v-if="outcome(card) === 'running' && eta(card)" class="eta" title="estimated time remaining">{{ eta(card) }}</span>
           <span class="millis">{{ outcome(card) === 'running' ? elapsed(card) : duration(card.millis) }}</span>
           <span v-if="outcome(card) !== 'running'" class="ago">{{ ago(card) }}</span>
@@ -156,7 +160,7 @@
           <div class="modal-head">
             <span class="lbl">choose a workspace</span>
             <span class="spacer"></span>
-            <button class="rebuild" @click="closeBrowser()">close</button>
+            <button class="rebuild" @click="closeBrowser()">Close</button>
           </div>
           <div class="modal-path">{{ browser.dir }}</div>
           <div class="modal-list">
@@ -164,12 +168,12 @@
             <div v-for="d in browser.dirs" :key="d" class="fs-entry" @click="browseTo(joinPath(browser.dir, d))">
               <span class="fs-arrow">▸</span> {{ d }}
             </div>
-            <div v-if="browser.dirs.length === 0" class="fs-entry none">no subfolders</div>
+            <div v-if="browser.dirs.length === 0" class="fs-entry none">No subfolders</div>
             <div v-if="browser.truncated" class="fs-entry none">… list truncated</div>
           </div>
           <div class="modal-foot">
             <span v-if="browser.hasJkToml" class="jk-found">✓ jk.toml found</span>
-            <span v-else class="dim small">no jk.toml in this folder</span>
+            <span v-else class="dim small">No jk.toml in this folder</span>
             <span class="spacer"></span>
             <button class="use-folder" :disabled="!browser.hasJkToml" @click="chooseBrowsed()">Use this folder</button>
           </div>
@@ -180,7 +184,7 @@
     <main v-if="view === 'projects'">
       <div class="feed-head">
         <h2>Projects</h2>
-        <span class="retention">every workspace jk has built on this machine</span>
+        <span class="retention">Every workspace jk has built on this machine</span>
       </div>
       <p v-if="projectsList.length === 0" class="empty">
         No projects yet — run a <code>jk build</code> and every workspace you build shows up here with its history.
@@ -294,7 +298,7 @@
           <div class="panel">
             <div class="panel-head"><span class="lbl">process rss</span><span class="spacer"></span>
               <span class="mono dim">{{ mib(status.rssBytes) }}</span></div>
-            <div class="dim small">compiles and tests run in separately-sized worker JVMs</div>
+            <div class="dim small">Compiles and tests run in separately-sized worker JVMs</div>
           </div>
         </div>
 
@@ -315,7 +319,7 @@
             <div class="panel wide">
               <div class="panel-head"><span class="lbl">steps (by total time)</span><span class="spacer"></span><span class="mono dim">state/builds/metrics.json</span></div>
               <table class="stats">
-                <thead><tr><th>step</th><th>runs</th><th>avg</th><th>min</th><th>max</th><th>total</th><th>failed</th></tr></thead>
+                <thead><tr><th>Step</th><th>Runs</th><th>Avg</th><th>Min</th><th>Max</th><th>Total</th><th>Failed</th></tr></thead>
                 <tbody>
                   <tr v-for="r in metricsSteps()" :key="r.step">
                     <td class="mono">{{ r.step }}</td>
@@ -357,7 +361,7 @@
                 <dt>format stamps</dt><dd>{{ count(cache.formatStampsCount) }} · {{ mib(cache.formatStampsBytes) }}</dd>
               </dl>
             </template>
-            <div v-else class="dim small">cache breakdown loading…</div>
+            <div v-else class="dim small">Cache breakdown loading…</div>
           </div>
         </div>
 
