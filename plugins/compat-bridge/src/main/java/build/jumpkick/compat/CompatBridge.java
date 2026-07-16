@@ -35,7 +35,7 @@ import java.util.Map;
  * config spec, {@code wrote}/{@code result} replies + {@code error} on failure. Exit 0 success, 1
  * operation error, 2 bad arguments, 64 unrecognised source, 73 overwrite-without-force.
  */
-public final class CompatPlugin implements Plugin {
+public final class CompatBridge implements Plugin {
 
     @Override
     public PluginManifest manifest() {

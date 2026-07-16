@@ -72,7 +72,7 @@ public final class MvnCommand implements CliCommand {
      */
     private static boolean engineDisabledForTests() {
         return Boolean.getBoolean("jk.test.noEngine")
-                || "build.jumpkick.testrunner.TestRunnerPlugin".equals(System.getProperty("jk.plugin.class"));
+                || "build.jumpkick.testrunner.TestRunner".equals(System.getProperty("jk.plugin.class"));
     }
 
     @Override

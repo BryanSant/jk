@@ -1,1 +1,1 @@
-build.jumpkick.image.ImagePlugin
+build.jumpkick.image.OciImageBuilder

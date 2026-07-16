@@ -101,7 +101,7 @@ final class StreamingListener implements EngineExecutionListener {
     }
 
     /**
-     * Emit the PLAN_FINISHED event. Called by TestRunnerPlugin after all engines complete execution,
+     * Emit the PLAN_FINISHED event. Called by TestRunner after all engines complete execution,
      * replacing the old {@code testPlanExecutionFinished(TestPlan)} callback.
      */
     void emitPlanFinished(long durationMs) {

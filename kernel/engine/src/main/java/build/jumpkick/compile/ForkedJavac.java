@@ -24,7 +24,7 @@ import java.util.TreeSet;
  * annotation-processor incrementality.
  *
  * <p>Launched as {@code <javaHome>/bin/java -cp <workerJar>
- * build.jumpkick.java.compiler.JavaCompilerPlugin @<spec>}; the plugin streams {@value #PREFIX} NDJSON
+ * build.jumpkick.java.compiler.JavaIncrementalCompiler @<spec>}; the plugin streams {@value #PREFIX} NDJSON
  * back on stdout. Mirrors {@link KotlincDriver}.
  */
 public final class ForkedJavac {

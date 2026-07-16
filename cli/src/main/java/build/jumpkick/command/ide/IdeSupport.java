@@ -35,7 +35,7 @@ public final class IdeSupport {
      */
     private static boolean engineDisabledForTests() {
         return Boolean.getBoolean("jk.test.noEngine")
-                || "build.jumpkick.testrunner.TestRunnerPlugin".equals(System.getProperty("jk.plugin.class"));
+                || "build.jumpkick.testrunner.TestRunner".equals(System.getProperty("jk.plugin.class"));
     }
 
     /** A build failure carrying the process exit code the command should return. */

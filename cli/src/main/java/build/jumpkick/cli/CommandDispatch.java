@@ -188,7 +188,7 @@ public final class CommandDispatch {
         try {
             build.jumpkick.engine.protocol.PluginCommandReport report;
             if (Boolean.getBoolean("jk.test.noEngine")
-                    || "build.jumpkick.testrunner.TestRunnerPlugin".equals(System.getProperty("jk.plugin.class"))) {
+                    || "build.jumpkick.testrunner.TestRunner".equals(System.getProperty("jk.plugin.class"))) {
                 report = build.jumpkick.cli.engine.InProcessEngine.require()
                         .pluginCommand(dir, build.jumpkick.util.JkDirs.cache(), command, args);
             } else {

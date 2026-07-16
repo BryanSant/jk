@@ -52,7 +52,7 @@ import java.util.UUID;
  * {@code {"t":"result","ok":true,"files":N}} (or {@code "ok":false,"error":…}). Exit 0 success,
  * 1 publish error, 2 bad arguments.
  */
-public final class PublishPlugin implements Plugin, PublishExtension {
+public final class Publisher implements Plugin, PublishExtension {
 
     private static final String PREFIX = "##JKPU:";
 

@@ -471,7 +471,7 @@ public final class CacheCommand extends GroupCommand {
 
         private static boolean engineDisabledForTests() {
             return Boolean.getBoolean("jk.test.noEngine")
-                    || "build.jumpkick.testrunner.TestRunnerPlugin".equals(System.getProperty("jk.plugin.class"));
+                    || "build.jumpkick.testrunner.TestRunner".equals(System.getProperty("jk.plugin.class"));
         }
 
         @Override
@@ -605,7 +605,7 @@ public final class CacheCommand extends GroupCommand {
 
         private static boolean engineDisabledForTests() {
             return Boolean.getBoolean("jk.test.noEngine")
-                    || "build.jumpkick.testrunner.TestRunnerPlugin".equals(System.getProperty("jk.plugin.class"));
+                    || "build.jumpkick.testrunner.TestRunner".equals(System.getProperty("jk.plugin.class"));
         }
 
         @Override
@@ -791,7 +791,7 @@ public final class CacheCommand extends GroupCommand {
 
         private static boolean engineDisabledForTests() {
             return Boolean.getBoolean("jk.test.noEngine")
-                    || "build.jumpkick.testrunner.TestRunnerPlugin".equals(System.getProperty("jk.plugin.class"));
+                    || "build.jumpkick.testrunner.TestRunner".equals(System.getProperty("jk.plugin.class"));
         }
 
         /** Stern, default-to-no confirmation before wiping the whole cache. */

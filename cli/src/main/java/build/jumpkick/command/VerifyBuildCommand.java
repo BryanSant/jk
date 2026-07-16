@@ -286,11 +286,11 @@ public final class VerifyBuildCommand implements CliCommand {
      * (a Gradle test JVM has no real {@code jk} binary to exec as an engine).
      */
     private static boolean engineDisabledForTests() {
-        // Also bypass inside a jk-forked test worker (jk.plugin.class=TestRunnerPlugin): under the
+        // Also bypass inside a jk-forked test worker (jk.plugin.class=TestRunner): under the
         // self-hosted build, in-process dispatches would otherwise recurse into the very
         // engine hosting the test run and deadlock — see BuildCommand's javadoc.
         return Boolean.getBoolean("jk.test.noEngine")
-                || "build.jumpkick.testrunner.TestRunnerPlugin".equals(System.getProperty("jk.plugin.class"));
+                || "build.jumpkick.testrunner.TestRunner".equals(System.getProperty("jk.plugin.class"));
     }
 
     /** A config layer that sets only {@code rerun} — laid over the invocation's config. */

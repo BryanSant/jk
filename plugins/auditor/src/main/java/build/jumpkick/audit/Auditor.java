@@ -1,92 +1,93 @@
 // SPDX-License-Identifier: Apache-2.0
 package build.jumpkick.audit;
 
+import build.jumpkick.audit.AuditReport;
+import build.jumpkick.audit.OsvAuditor;
+import build.jumpkick.audit.OsvClient;
 import build.jumpkick.lock.Lockfile;
-import build.jumpkick.run.JkThreads;
+import build.jumpkick.lock.LockfileReader;
+import build.jumpkick.plugin.Plugin;
+import build.jumpkick.plugin.PluginConfig;
+import build.jumpkick.plugin.PluginManifest;
+import build.jumpkick.plugin.protocol.ProtocolWriter;
+import build.jumpkick.plugin.protocol.PluginReply;
+import build.jumpkick.plugin.protocol.PluginSpec;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.LinkedHashSet;
+import java.net.URI;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
-import java.util.stream.Collectors;
+import java.util.Optional;
 
 /**
- * Orchestrates {@code jk audit} (PRD §23.5): turn a {@link Lockfile} into a list of {@link
- * OsvClient.Query}, batch-query OSV, then fetch full vuln details for any hits to populate severity
- * + summary.
- *
- * <p>Per-vuln fetches dispatch concurrently on {@link JkThreads#io()} — each is an independent
- * {@code GET /v1/vulns/<id>} HTTP call. Findings are emitted in deterministic order (package
- * iteration order × OSV result order) regardless of completion order.
+ * The {@code jk-auditor} plugin (op {@code command}/{@code audit}): queries the OSV vulnerability
+ * API in an isolated child JVM so Jackson and the OSV HTTP client never load in jk's own process.
+ * Speaks the unified plugin wire — the spec is NDJSON ({@code config}: {@code lockfile},
+ * {@code batchUrl}?, {@code vulnsUrl}?) and the reply is {@code finding} lines + a terminal
+ * {@code done}. Exit 0 success, 1 network/parse error, 2 bad arguments.
  */
-public final class Auditor {
+public final class Auditor implements Plugin {
 
-    private final OsvClient client;
-
-    public Auditor() {
-        this(new OsvClient());
+    @Override
+    public PluginManifest manifest() {
+        return new PluginManifest("jk-auditor", "##JKAU:");
     }
 
-    public Auditor(OsvClient client) {
-        this.client = Objects.requireNonNull(client, "client");
-    }
-
-    public AuditReport audit(Lockfile lock) throws IOException, InterruptedException {
-        List<OsvClient.Query> queries = new ArrayList<>();
-        List<Lockfile.Artifact> pkgs = new ArrayList<>();
-        for (Lockfile.Artifact pkg : lock.artifacts()) {
-            queries.add(new OsvClient.Query("Maven", pkg.name(), pkg.version()));
-            pkgs.add(pkg);
+    @Override
+    public int run(List<String> args, ProtocolWriter out) {
+        if (args.isEmpty()) {
+            System.err.println("jk-auditor: expected spec file path as first argument");
+            return 2;
         }
-        if (queries.isEmpty()) return new AuditReport(List.of());
-
-        List<OsvClient.Result> results = client.queryBatch(queries);
-
-        // Collect every unique vuln ID surfaced by the batch — a single CVE
-        // can apply to multiple packages, and we don't want to fetch its
-        // details N times.
-        Set<String> uniqueIds = new LinkedHashSet<>();
-        for (OsvClient.Result r : results) uniqueIds.addAll(r.vulnIds());
-        if (uniqueIds.isEmpty()) return new AuditReport(List.of());
-
-        // Dispatch all detail fetches concurrently.
-        Map<String, CompletableFuture<OsvClient.Vulnerability>> futures = uniqueIds.stream()
-                .collect(Collectors.toMap(
-                        id -> id,
-                        id -> CompletableFuture.supplyAsync(
-                                () -> {
-                                    try {
-                                        return client.fetchVuln(id);
-                                    } catch (IOException | InterruptedException e) {
-                                        if (e instanceof InterruptedException)
-                                            Thread.currentThread().interrupt();
-                                        throw new RuntimeException(e);
-                                    }
-                                },
-                                JkThreads.io())));
-
-        // Assemble findings in the same package × vulnId order as before —
-        // determinism is important for the supply-chain report sidecar.
-        List<AuditReport.Finding> findings = new ArrayList<>();
+        Path specFile = Path.of(args.get(0));
+        if (!Files.isRegularFile(specFile)) {
+            System.err.println("jk-auditor: spec file not found: " + specFile);
+            return 2;
+        }
+        PluginSpec spec;
         try {
-            for (int i = 0; i < pkgs.size(); i++) {
-                Lockfile.Artifact pkg = pkgs.get(i);
-                for (String vulnId : results.get(i).vulnIds()) {
-                    OsvClient.Vulnerability v = futures.get(vulnId).get();
-                    findings.add(new AuditReport.Finding(
-                            pkg.name(), pkg.version(), vulnId, v.summary(), AuditReport.Severity.parse(v.severity())));
-                }
-            }
-        } catch (ExecutionException e) {
-            Throwable cause = e.getCause() != null ? e.getCause() : e;
-            if (cause instanceof RuntimeException re && re.getCause() instanceof IOException io) throw io;
-            if (cause instanceof RuntimeException re && re.getCause() instanceof InterruptedException ie) throw ie;
-            throw new IOException("audit vuln-detail fetch failed: " + cause.getMessage(), cause);
+            spec = PluginSpec.read(specFile);
+        } catch (IOException e) {
+            System.err.println("jk-auditor: could not read spec file: " + e.getMessage());
+            return 2;
         }
-        return new AuditReport(findings);
+        PluginConfig config = spec.config();
+        Optional<String> lockfile = config.stringOpt("lockfile");
+        if (lockfile.isEmpty()) {
+            System.err.println("jk-auditor: spec missing `lockfile` config");
+            return 2;
+        }
+
+        URI batchUrl = config.stringOpt("batchUrl").map(URI::create).orElse(null);
+        URI vulnsUrl = config.stringOpt("vulnsUrl").map(URI::create).orElse(null);
+
+        Lockfile lock;
+        try {
+            lock = LockfileReader.read(Path.of(lockfile.get()));
+        } catch (IOException e) {
+            out.emit(PluginReply.error("lockfile", e.getMessage()));
+            return 1;
+        }
+
+        OsvClient client = (batchUrl != null || vulnsUrl != null)
+                ? new OsvClient(
+                        batchUrl != null ? batchUrl : OsvClient.DEFAULT_BATCH,
+                        vulnsUrl != null ? vulnsUrl : OsvClient.DEFAULT_VULNS)
+                : new OsvClient();
+
+        AuditReport report;
+        try {
+            report = new OsvAuditor(client).audit(lock);
+        } catch (IOException | InterruptedException e) {
+            if (e instanceof InterruptedException) Thread.currentThread().interrupt();
+            out.emit(PluginReply.error("osv", e.getMessage()));
+            return 1;
+        }
+
+        for (AuditReport.Finding f : report.findings()) {
+            out.emit(PluginReply.finding(f.module(), f.version(), f.vulnId(), f.severity().name(), f.summary()));
+        }
+        out.emit(PluginReply.done(0));
+        return 0;
     }
 }

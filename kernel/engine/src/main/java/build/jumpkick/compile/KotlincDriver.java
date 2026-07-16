@@ -19,7 +19,7 @@ import java.util.stream.Collectors;
  * Build Tools API in-process on jk's own runtime (the project JDK rides as -jdk-home).
  *
  * <p>The plugin is launched as {@code <javaHome>/bin/java -cp <workerClasspath>
- * build.jumpkick.kotlin.compiler.KotlinCompilerPlugin @<spec>}. It streams NDJSON back on stdout (each
+ * build.jumpkick.kotlin.compiler.KotlinCompiler @<spec>}. It streams NDJSON back on stdout (each
  * line prefixed {@value #PROTOCOL_PREFIX}); we collect the diagnostics and the terminal result.
  * Replaces the former {@code <kotlin-home>/bin/kotlinc} subprocess.
  */

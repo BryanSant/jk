@@ -19,7 +19,7 @@ import java.util.concurrent.ConcurrentLinkedDeque;
 
 /**
  * Runs a project's compiled tests by forking child JVM(s) that invoke {@code
- * build.jumpkick.testrunner.TestRunnerPlugin}. Supports two modes:
+ * build.jumpkick.testrunner.TestRunner}. Supports two modes:
  *
  * <ul>
  *   <li><b>Single-worker</b> ({@code workers=1}, default): one child JVM discovers and runs
@@ -45,9 +45,9 @@ public final class JUnitLauncher {
      * The plugin the plugin host must run. The test-runner jar is launched with the module-under-test
      * on its classpath (to discover its tests); when that module is itself a plugin, the host would
      * otherwise see two {@code Plugin} services. Naming the runner explicitly via {@code
-     * -Djk.plugin.class} keeps the host on {@code TestRunnerPlugin} regardless of what the module registers.
+     * -Djk.plugin.class} keeps the host on {@code TestRunner} regardless of what the module registers.
      */
-    private static final String RUNNER_PLUGIN_CLASS = "build.jumpkick.testrunner.TestRunnerPlugin";
+    private static final String RUNNER_PLUGIN_CLASS = "build.jumpkick.testrunner.TestRunner";
 
     /**
      * {@code jk.<worker>.plugin.jar} overrides handed to the test JVM so tests that fork a

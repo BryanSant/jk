@@ -1,1 +1,1 @@
-build.jumpkick.java.compiler.JavaCompilerPlugin
+build.jumpkick.java.compiler.JavaIncrementalCompiler

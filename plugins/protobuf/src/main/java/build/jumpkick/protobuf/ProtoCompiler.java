@@ -18,7 +18,7 @@ import java.util.List;
  * declared inputs (the proto dir, config, the fetched protoc binary) and skips the body on a
  * cache hit — no plugin-side staleness logic.
  */
-public final class ProtobufPlugin implements Plugin, BuildExtension {
+public final class ProtoCompiler implements Plugin, BuildExtension {
 
     @Override
     public PluginManifest manifest() {

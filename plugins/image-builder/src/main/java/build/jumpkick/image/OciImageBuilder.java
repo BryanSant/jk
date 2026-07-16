@@ -35,7 +35,7 @@ import java.util.Optional;
  * {@code {"t":"result","ok":true,"ref":"…"}} (or {@code "tarball"}), {@code {"t":"result",
  * "ok":false,"error":"…"}} on failure. Exit 0 success, 1 build/push error, 2 bad arguments.
  */
-public final class ImagePlugin implements Plugin, ImageExtension {
+public final class OciImageBuilder implements Plugin, ImageExtension {
 
     private static final String PREFIX = "##JKIM:";
 

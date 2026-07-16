@@ -135,7 +135,7 @@ public final class CleanCommand implements CliCommand {
      */
     private static boolean engineDisabledForTests() {
         return Boolean.getBoolean("jk.test.noEngine")
-                || "build.jumpkick.testrunner.TestRunnerPlugin".equals(System.getProperty("jk.plugin.class"));
+                || "build.jumpkick.testrunner.TestRunner".equals(System.getProperty("jk.plugin.class"));
     }
 
     /** Run the cache GC (engine-hosted for a real invocation) and print a one-line summary. */
@@ -219,7 +219,7 @@ public final class CleanCommand implements CliCommand {
         Path root = CacheCommand.resolveCacheRoot(cacheDirOverride);
         PipelineConsole.Mode mode = PipelineConsole.modeFor(new GlobalOptions());
         if (Boolean.getBoolean("jk.test.noEngine")
-                || "build.jumpkick.testrunner.TestRunnerPlugin".equals(System.getProperty("jk.plugin.class"))) {
+                || "build.jumpkick.testrunner.TestRunner".equals(System.getProperty("jk.plugin.class"))) {
             try {
                 return build.jumpkick.cli.engine.InProcessEngine.require()
                         .clearInProcess(root, projectDir, false, mode);

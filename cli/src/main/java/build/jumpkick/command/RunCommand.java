@@ -55,9 +55,9 @@ public final class RunCommand {
      * in this process (it owns the terminal).
      */
     private static boolean engineDisabledForTests() {
-        // Also bypass inside a jk-forked test worker (jk.plugin.class=TestRunnerPlugin) — see BuildCommand.
+        // Also bypass inside a jk-forked test worker (jk.plugin.class=TestRunner) — see BuildCommand.
         return Boolean.getBoolean("jk.test.noEngine")
-                || "build.jumpkick.testrunner.TestRunnerPlugin".equals(System.getProperty("jk.plugin.class"));
+                || "build.jumpkick.testrunner.TestRunner".equals(System.getProperty("jk.plugin.class"));
     }
 
     /** Package-private: {@code jk tool run <dir>} delegates a jk-project directory here. */

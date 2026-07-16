@@ -18,11 +18,11 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
- * Drives the plugin's protocol end-to-end (in-process via {@link JavaCompilerPlugin#run}): a real
+ * Drives the plugin's protocol end-to-end (in-process via {@link JavaIncrementalCompiler#run}): a real
  * annotation processor is ServiceLoader-discovered from a processor path, runs, and its
  * generated-file provenance is reported as NDJSON.
  */
-class JavaCompilerPluginTest {
+class JavaIncrementalCompilerTest {
 
     @Test
     void compiles_with_processor_and_reports_provenance(@TempDir Path dir) throws Exception {
@@ -88,7 +88,7 @@ class JavaCompilerPluginTest {
                         .lines());
 
         ByteArrayOutputStream buf = new ByteArrayOutputStream();
-        int code = JavaCompilerPlugin.compileSpec(
+        int code = JavaIncrementalCompiler.compileSpec(
                 spec,
                 new build.jumpkick.plugin.protocol.ProtocolWriter(
                         new PrintStream(buf, true, StandardCharsets.UTF_8), "##JKJC:"));

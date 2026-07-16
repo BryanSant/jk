@@ -33,7 +33,7 @@ import org.junit.platform.engine.discovery.DiscoverySelectors;
  * protocol on stdout matches the schema described in {@link EventType}; lines without the plugin's
  * protocol prefix are user test output and pass through to the parent's stdout.
  */
-public final class TestRunnerPlugin implements Plugin {
+public final class TestRunner implements Plugin {
 
     @Override
     public PluginManifest manifest() {

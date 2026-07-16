@@ -17,7 +17,7 @@ import java.util.List;
  * packages the surviving classes as one slim executable jar. Keep-rule files are declared inputs,
  * so a rules edit re-shrinks; everything else the engine fingerprints as usual.
  */
-public final class ShrinkPlugin implements Plugin, PackageExtension {
+public final class ArtifactShrinker implements Plugin, PackageExtension {
 
     @Override
     public PluginManifest manifest() {

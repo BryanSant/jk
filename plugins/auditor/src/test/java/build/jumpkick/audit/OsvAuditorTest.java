@@ -17,7 +17,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-class AuditorTest {
+class OsvAuditorTest {
 
     private HttpServer server;
     private URI base;
@@ -56,7 +56,7 @@ class AuditorTest {
     @Test
     void empty_lockfile_yields_empty_report() throws Exception {
         Lockfile lock = Lockfile.empty("test");
-        AuditReport report = new Auditor(osvClient()).audit(lock);
+        AuditReport report = new OsvAuditor(osvClient()).audit(lock);
         assertThat(report.isEmpty()).isTrue();
     }
 
@@ -98,7 +98,7 @@ class AuditorTest {
                 }
                 """).getBytes(StandardCharsets.UTF_8));
 
-        AuditReport report = new Auditor(osvClient()).audit(lock);
+        AuditReport report = new OsvAuditor(osvClient()).audit(lock);
         assertThat(report.findings()).hasSize(1);
         AuditReport.Finding f = report.findings().getFirst();
         assertThat(f.module()).isEqualTo("com.fasterxml.jackson.core:jackson-databind");
@@ -133,7 +133,7 @@ class AuditorTest {
                 {"id":"B","summary":"high","database_specific":{"severity":"HIGH"}}
                 """).getBytes(StandardCharsets.UTF_8));
 
-        AuditReport report = new Auditor(osvClient()).audit(lock);
+        AuditReport report = new OsvAuditor(osvClient()).audit(lock);
         assertThat(report.filterAtLeast(AuditReport.Severity.HIGH))
                 .extracting(AuditReport.Finding::vulnId)
                 .containsExactly("B");

@@ -209,14 +209,14 @@ public final class BuildCommand implements CliCommand {
      * fallback" design — this bypass is deliberately not reachable any other way.
      *
      * <p>The same bypass applies inside a jk-forked test worker (identified by the {@code
-     * jk.plugin.class=TestRunnerPlugin} property every such JVM carries): under the self-hosted {@code jk
+     * jk.plugin.class=TestRunner} property every such JVM carries): under the self-hosted {@code jk
      * build}, cli tests dispatch commands in-process with no Gradle test task to set the property,
      * and routing them through the resident engine would recurse into the very engine hosting the
      * test run — which serves one build at a time, so the nested request deadlocks the build.
      */
     private static boolean engineDisabledForTests() {
         return Boolean.getBoolean("jk.test.noEngine")
-                || "build.jumpkick.testrunner.TestRunnerPlugin".equals(System.getProperty("jk.plugin.class"));
+                || "build.jumpkick.testrunner.TestRunner".equals(System.getProperty("jk.plugin.class"));
     }
 
     private static final Object OUT_LOCK = new Object();

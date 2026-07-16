@@ -54,11 +54,11 @@ public final class CompileCommand implements CliCommand {
      * invocation goes through the engine (slim-client Wave 3).
      */
     private static boolean engineDisabledForTests() {
-        // Also bypass inside a jk-forked test worker (jk.plugin.class=TestRunnerPlugin): under the
+        // Also bypass inside a jk-forked test worker (jk.plugin.class=TestRunner): under the
         // self-hosted build, in-process dispatches would otherwise recurse into the very
         // engine hosting the test run and deadlock — see BuildCommand's javadoc.
         return Boolean.getBoolean("jk.test.noEngine")
-                || "build.jumpkick.testrunner.TestRunnerPlugin".equals(System.getProperty("jk.plugin.class"));
+                || "build.jumpkick.testrunner.TestRunner".equals(System.getProperty("jk.plugin.class"));
     }
 
     @Override

@@ -94,9 +94,9 @@ public final class NativeCommand implements CliCommand {
      * invocation goes through the engine (slim-client Wave 3).
      */
     private static boolean engineDisabledForTests() {
-        // Also bypass inside a jk-forked test worker (jk.plugin.class=TestRunnerPlugin) — see BuildCommand.
+        // Also bypass inside a jk-forked test worker (jk.plugin.class=TestRunner) — see BuildCommand.
         return Boolean.getBoolean("jk.test.noEngine")
-                || "build.jumpkick.testrunner.TestRunnerPlugin".equals(System.getProperty("jk.plugin.class"));
+                || "build.jumpkick.testrunner.TestRunner".equals(System.getProperty("jk.plugin.class"));
     }
 
     @Override

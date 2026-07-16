@@ -107,7 +107,7 @@ class CompileSpecTest {
                 .cp(Path.of("/f2"), PluginProtocol.ROLE_FRIEND)
                 .arg("-no-stdlib"));
 
-        List<String> args = KotlinCompilerPlugin.buildArgs(s);
+        List<String> args = KotlinCompiler.buildArgs(s);
 
         assertThat(args).doesNotContain("-d"); // destination is a builder parameter, never a raw arg
         assertThat(args).containsSequence("-jvm-target", "21");
@@ -126,7 +126,7 @@ class CompileSpecTest {
                 .layout(Map.of("classesDir", Path.of("/o")))
                 .configString("jvmTarget", "21")
                 .source(Path.of("/a.kt")));
-        assertThat(KotlinCompilerPlugin.buildArgs(s)).doesNotContain("-Xuse-fir-ic");
+        assertThat(KotlinCompiler.buildArgs(s)).doesNotContain("-Xuse-fir-ic");
     }
 
     private static CompileSpec parse(Path dir, SpecWriter sw) throws IOException {

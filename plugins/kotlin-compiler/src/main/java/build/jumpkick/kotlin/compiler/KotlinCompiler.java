@@ -25,7 +25,7 @@ import org.jetbrains.kotlin.buildtools.api.jvm.operations.JvmCompilationOperatio
  * Child-JVM entry point that drives the Kotlin Build Tools API.
  *
  * <p>jk launches this as {@code java -cp <worker.jar>:<kotlin-bta-closure>
- * build.jumpkick.kotlin.compiler.KotlinCompilerPlugin @&lt;spec&gt;}. The plugin reads the {@link
+ * build.jumpkick.kotlin.compiler.KotlinCompiler @&lt;spec&gt;}. The plugin reads the {@link
  * CompileSpec}, runs an in-process JVM compile (incremental when the spec carries a {@code
  * WORKDIR}), streams diagnostics back as NDJSON, and exits: {@code 0} success, {@code 1}
  * compilation error, {@code 3} OOM/internal compiler error, {@code 2} bad spec / unexpected
@@ -36,7 +36,7 @@ import org.jetbrains.kotlin.buildtools.api.jvm.operations.JvmCompilationOperatio
  * time — the implementation and the Kotlin compiler arrive on the classpath at runtime,
  * version-matched by jk, so the plugin never leaks compiler deps into jk.
  */
-public final class KotlinCompilerPlugin implements Plugin {
+public final class KotlinCompiler implements Plugin {
 
     @Override
     public PluginManifest manifest() {
@@ -64,7 +64,7 @@ public final class KotlinCompilerPlugin implements Plugin {
     static int compile(CompileSpec spec, KcProtocol proto) throws Exception {
         spec.outputDir.mkdirs();
 
-        KotlinToolchains toolchains = KotlinToolchains.loadImplementation(KotlinCompilerPlugin.class.getClassLoader());
+        KotlinToolchains toolchains = KotlinToolchains.loadImplementation(KotlinCompiler.class.getClassLoader());
         JvmPlatformToolchain jvm = JvmPlatformToolchain.from(toolchains);
         List<Path> sources = spec.sources.stream().map(File::toPath).toList();
 

@@ -16,10 +16,10 @@ import org.junit.jupiter.api.io.TempDir;
 /**
  * Exercises the terminal {@link build.jumpkick.plugin.build.PublishExtension} path end-to-end in
  * dry-run mode (no network): the plugin spec is parsed, mapped onto a {@code PublishContext}, and
- * {@link PublishPlugin#publish} assembles the artifacts and reports them — proving the spec→config
+ * {@link Publisher#publish} assembles the artifacts and reports them — proving the spec→config
  * roundtrip without a live repository.
  */
-class PublishPluginDryRunTest {
+class PublisherDryRunTest {
 
     @Test
     void dry_run_assembles_artifacts_and_reports_them(@TempDir Path dir) throws Exception {
@@ -45,7 +45,7 @@ class PublishPluginDryRunTest {
 
         var buffer = new ByteArrayOutputStream();
         ProtocolWriter out = new ProtocolWriter(new PrintStream(buffer, true, StandardCharsets.UTF_8), "##JKPU:");
-        int exit = new PublishPlugin().run(List.of(spec.toString()), out);
+        int exit = new Publisher().run(List.of(spec.toString()), out);
 
         assertThat(exit).isZero();
         String output = buffer.toString(StandardCharsets.UTF_8);

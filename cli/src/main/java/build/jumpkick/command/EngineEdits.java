@@ -17,7 +17,7 @@ final class EngineEdits {
     /** Apply one edit; returns whether the file changed. Throws with a ready-to-print message. */
     static boolean apply(Path file, String op, List<String> args) throws IOException {
         if (Boolean.getBoolean("jk.test.noEngine")
-                || "build.jumpkick.testrunner.TestRunnerPlugin".equals(System.getProperty("jk.plugin.class"))) {
+                || "build.jumpkick.testrunner.TestRunner".equals(System.getProperty("jk.plugin.class"))) {
             var result = build.jumpkick.cli.engine.InProcessEngine.require().edit(file, op, args);
             if (result[1] != null) throw new IOException(result[1]);
             return Boolean.parseBoolean(result[0]);

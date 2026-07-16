@@ -22,7 +22,7 @@ import javax.annotation.processing.Processor;
  * NDJSON ({@value #PREFIX}).
  *
  * <p>jk launches it as {@code <javaHome>/bin/java -cp <worker.jar>
- * build.jumpkick.java.compiler.JavaCompilerPlugin @<spec>}. Processors are discovered from the spec's
+ * build.jumpkick.java.compiler.JavaIncrementalCompiler @<spec>}. Processors are discovered from the spec's
  * processor path (the same ServiceLoader mechanism javac uses) so they can be wrapped for Filer
  * provenance capture.
  *
@@ -36,7 +36,7 @@ import javax.annotation.processing.Processor;
  *   ARG &lt;raw&gt;             extra javac argument (repeatable)
  * </pre>
  */
-public final class JavaCompilerPlugin implements Plugin {
+public final class JavaIncrementalCompiler implements Plugin {
 
     @Override
     public PluginManifest manifest() {
@@ -91,7 +91,7 @@ public final class JavaCompilerPlugin implements Plugin {
                 throw new IllegalArgumentException("bad processor path entry: " + processorPath.get(i), e);
             }
         }
-        URLClassLoader loader = new URLClassLoader(urls, JavaCompilerPlugin.class.getClassLoader());
+        URLClassLoader loader = new URLClassLoader(urls, JavaIncrementalCompiler.class.getClassLoader());
         List<Processor> processors = new ArrayList<>();
         for (Processor p : ServiceLoader.load(Processor.class, loader)) processors.add(p);
         return processors;

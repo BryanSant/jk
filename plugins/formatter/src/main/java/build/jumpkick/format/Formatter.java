@@ -2,7 +2,6 @@
 package build.jumpkick.format;
 
 import com.diffplug.spotless.DirtyState;
-import com.diffplug.spotless.Formatter;
 import com.diffplug.spotless.FormatterStep;
 import com.diffplug.spotless.LineEnding;
 import com.diffplug.spotless.Provisioner;
@@ -66,7 +65,7 @@ import org.openrewrite.java.ShortenFullyQualifiedTypeReferences;
  * downloaded here. OpenRewrite's engine is bundled directly in this fat JAR. Emits one NDJSON
  * record per file plus a final summary, all prefixed with {@code ##JKFMT:}.
  */
-public final class FormatPlugin implements Plugin {
+public final class Formatter implements Plugin {
 
     @Override
     public PluginManifest manifest() {
@@ -99,17 +98,17 @@ public final class FormatPlugin implements Plugin {
         // Build the OpenRewrite recipe once (null when no rewrite is requested).
         Recipe rewriteRecipe = spec.hasRewrite() ? buildRecipe(spec) : null;
 
-        Formatter javaFmt = spec.javaJars.isEmpty()
+        com.diffplug.spotless.Formatter javaFmt = spec.javaJars.isEmpty()
                 ? null
-                : Formatter.builder()
+                : com.diffplug.spotless.Formatter.builder()
                         .lineEndingsPolicy(LineEnding.UNIX.createPolicy())
                         .encoding(StandardCharsets.UTF_8)
                         .steps(List.of(javaStep(spec)))
                         .build();
 
-        Formatter kotlinFmt = spec.kotlinJars.isEmpty()
+        com.diffplug.spotless.Formatter kotlinFmt = spec.kotlinJars.isEmpty()
                 ? null
-                : Formatter.builder()
+                : com.diffplug.spotless.Formatter.builder()
                         .lineEndingsPolicy(LineEnding.UNIX.createPolicy())
                         .encoding(StandardCharsets.UTF_8)
                         .steps(List.of(KtfmtStep.create(
@@ -122,7 +121,7 @@ public final class FormatPlugin implements Plugin {
         int changed = 0, clean = 0, errors = 0;
         try {
             for (FileRef ref : spec.files) {
-                Formatter fmt = ref.kotlin ? kotlinFmt : javaFmt;
+                com.diffplug.spotless.Formatter fmt = ref.kotlin ? kotlinFmt : javaFmt;
                 if (fmt == null) continue; // no formatter for this language (shouldn't happen)
                 // Java 21+ unnamed classes (no type declaration) can't be parsed by
                 // palantir/google-java-format — skip them silently.
