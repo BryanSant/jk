@@ -35,7 +35,7 @@ The declaration grammar and most plumbing are already in the tree:
 - **Clone:** `GitFetcher` does bare clone + per-ref checkout under
   `$JK_CACHE_DIR/git/{db,co}/…`, resolves a ref → SHA, and `verifyLocked`
   detects a moved tag.
-- **Build/publish primitives:** the `jk build` pipeline (`JavacDriver`/
+- **Build/publish primitives:** the `jk build` pipeline (`JavacRunner`/
   `JarPackager`/`ShadowPackager`), `PublishablePom`, `MavenPublisher`, the CAS
   + `Journal`, and the `file://` `FileTransport` from the repo-transport work.
 - **Auth:** `ForgeKind.inferFromHost` + `ForgeAuth.resolveSilently`.

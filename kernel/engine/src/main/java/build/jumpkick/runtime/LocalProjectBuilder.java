@@ -6,7 +6,7 @@ import build.jumpkick.compile.ClasspathResolver;
 import build.jumpkick.compile.CompileRequest;
 import build.jumpkick.compile.CompileResult;
 import build.jumpkick.compile.JarPackager;
-import build.jumpkick.compile.JavacDriver;
+import build.jumpkick.compile.JavacRunner;
 import build.jumpkick.compile.KotlincDriver;
 import build.jumpkick.compile.KotlincRequest;
 import build.jumpkick.compile.KotlincResult;
@@ -133,7 +133,7 @@ public final class LocalProjectBuilder {
                         .extraOptions(List.of())
                         .javaHome(javaHome)
                         .build();
-                CompileResult result = new JavacDriver().compile(request);
+                CompileResult result = new JavacRunner().compile(request);
                 if (!result.success()) {
                     String msgs = result.diagnostics().stream()
                             .map(CompileResult.Diagnostic::render)

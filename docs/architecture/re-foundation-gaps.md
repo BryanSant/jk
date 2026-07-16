@@ -104,7 +104,7 @@ the one un-hoisted L8 item — offered, not yet requested.
 no `installJdk()`, no `lock()`** — the doc's M2 line "`build/explain/lock/installJdk(request,
 PipelineListener) → result`" (`re-foundation.md:53`) is a goal, not the code. Consequently the CLI reaches
 deep into engine internals: `BuildPipelines` (7 imports), `BuildGraph` (2), `CompileToolchain` (14),
-`PluginClient` (6), `BuildPlanForecast` (2), `JUnitLauncher` (2), plus `JavacDriver`, `ClasspathResolver`,
+`PluginClient` (6), `BuildPlanForecast` (2), `JUnitLauncher` (2), plus `JavacRunner`, `ClasspathResolver`,
 `ActionCache`, etc. A non-CLI front-end cannot drive explain / single-module build / JDK install through
 the facade today.
 

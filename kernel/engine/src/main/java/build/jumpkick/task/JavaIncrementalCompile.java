@@ -4,7 +4,7 @@ package build.jumpkick.task;
 import build.jumpkick.cache.Cas;
 import build.jumpkick.compile.CompileRequest;
 import build.jumpkick.compile.CompileResult;
-import build.jumpkick.compile.JavacDriver;
+import build.jumpkick.compile.JavacRunner;
 import build.jumpkick.compile.ForkedJavac;
 import build.jumpkick.compile.incremental.ClassAbi;
 import build.jumpkick.compile.incremental.ClassDependencies;
@@ -131,10 +131,19 @@ public final class JavaIncrementalCompile {
             Path stateDir,
             ApSetup ap)
             throws IOException {
-        return run(taskId, request, jkVersion, useCache, cas, actionCache, stateDir, new JavacDriver(), ap);
+        return run(
+                taskId,
+                request,
+                jkVersion,
+                useCache,
+                cas,
+                actionCache,
+                stateDir,
+                javacCompiler(new JavacRunner(), request.javaHome(), request.processorPath()),
+                ap);
     }
 
-    /** Test seam: inject the javac driver. */
+    /** Test seam: inject the full-compile ({@code javac}) backend. */
     static Result run(
             String taskId,
             CompileRequest request,
@@ -143,7 +152,7 @@ public final class JavaIncrementalCompile {
             Cas cas,
             ActionCache actionCache,
             Path stateDir,
-            JavacDriver driver,
+            Compiler javacBackend,
             ApSetup ap)
             throws IOException {
         Path out = request.outputDir();
@@ -179,7 +188,7 @@ public final class JavaIncrementalCompile {
         boolean useWorker = workerJar != null;
         Compiler compiler = useWorker
                 ? workerCompiler(workerJar, ap.generatedSourceDir(), request.javaHome(), request.processorPath())
-                : javacCompiler(driver, request.javaHome(), request.processorPath());
+                : javacBackend;
 
         // Worker mode only goes incremental when the prior build was isolating (every
         // generated file had exactly one originating source); an aggregating processor
@@ -663,24 +672,29 @@ public final class JavaIncrementalCompile {
     // ---- annotation-processor compiler routing ----------------------------
 
     /** A javac invocation; returns its result plus any generated-file provenance. */
-    private interface Compiler {
+    interface Compiler {
         CompileOut compile(List<Path> sources, List<Path> classpath, Path outputDir, int release, List<String> options);
     }
 
-    private record CompileOut(CompileResult result, Map<Path, Set<Path>> generated) {}
+    record CompileOut(CompileResult result, Map<Path, Set<Path>> generated) {}
 
     /** Plain subprocess javac: no provenance (APs, if any, run but aren't tracked). */
-    private static Compiler javacCompiler(JavacDriver driver, Path javaHome, List<Path> processorPath) {
+    static Compiler javacCompiler(JavacRunner runner, Path javaHome, List<Path> processorPath) {
         return (sources, classpath, outputDir, release, options) -> {
-            CompileResult r = driver.compile(CompileRequest.builder()
-                    .sources(sources)
-                    .classpath(classpath)
-                    .outputDir(outputDir)
-                    .release(release)
-                    .extraOptions(options)
-                    .javaHome(javaHome)
-                    .processorPath(processorPath)
-                    .build());
+            CompileResult r;
+            try {
+                r = runner.compile(CompileRequest.builder()
+                        .sources(sources)
+                        .classpath(classpath)
+                        .outputDir(outputDir)
+                        .release(release)
+                        .extraOptions(options)
+                        .javaHome(javaHome)
+                        .processorPath(processorPath)
+                        .build());
+            } catch (IOException e) {
+                throw new java.io.UncheckedIOException(e);
+            }
             return new CompileOut(r, Map.of());
         };
     }

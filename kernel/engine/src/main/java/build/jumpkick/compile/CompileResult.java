@@ -5,7 +5,7 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Objects;
 
-/** What {@link JavacDriver} returns. {@code success} mirrors {@code javac}'s exit-zero. */
+/** What {@link JavacRunner} returns. {@code success} mirrors {@code javac}'s exit-zero. */
 public record CompileResult(boolean success, List<Diagnostic> diagnostics) {
 
     public CompileResult {

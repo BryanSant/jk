@@ -17,11 +17,17 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Default {@link JavaCompileStrategy}: execs {@code <java-home>/bin/javac} as a subprocess so the
- * project's pinned JDK drives compilation regardless of what JVM jk itself is running on.
- * Diagnostics are parsed from javac's stderr.
+ * Runs a full {@code javac} pass by exec'ing {@code <java-home>/bin/javac} as a subprocess, so the
+ * project's pinned JDK drives compilation regardless of what JVM jk itself is running on. Diagnostics
+ * are parsed from javac's stderr.
  *
- * <p>Why subprocess by default:
+ * <p>This is the full-compile backend of {@link build.jumpkick.task.JavaIncrementalCompile}: it
+ * always recompiles every source it is handed. The incremental backend forks the {@code
+ * jk-java-compiler} plugin ({@code ForkedJavac}), which additionally reports per-class annotation-
+ * processor provenance; {@code JavacRunner} deliberately stays a plain, provenance-free {@code javac}
+ * driver.
+ *
+ * <p>Why subprocess:
  *
  * <ul>
  *   <li>The native-image binary has no JVM and can't host {@code javax.tools.JavaCompiler}
@@ -35,17 +41,11 @@ import java.util.regex.Pattern;
  * diagnostic format ( {@code <file>:<line>: <severity>: <message>}) has been stable for two
  * decades; the parser is a single regex.
  */
-public final class SubprocessJavacExtension implements JavaCompileStrategy {
+public final class JavacRunner {
 
     private static final Pattern DIAGNOSTIC =
             Pattern.compile("^(?<file>.+?):(?<line>\\d+): (?<sev>error|warning|note): (?<msg>.*)$");
 
-    @Override
-    public String name() {
-        return "subprocess";
-    }
-
-    @Override
     public CompileResult compile(CompileRequest request) throws IOException {
         Path outDir = request.outputDir();
         Path scratch = null;
@@ -248,13 +248,5 @@ public final class SubprocessJavacExtension implements JavaCompileStrategy {
 
     private static boolean hasErrors(List<CompileResult.Diagnostic> diagnostics) {
         return diagnostics.stream().anyMatch(d -> d.severity() == CompileResult.Severity.ERROR);
-    }
-
-    // Allow ServiceLoader.load to instantiate this without a META-INF/services
-    // file — JavaCompileStrategies falls back to a direct `new` when no impl
-    // is registered. The ServiceLoader path is for plugins.
-    @SuppressWarnings("unused")
-    private static SubprocessJavacExtension create() {
-        return new SubprocessJavacExtension();
     }
 }

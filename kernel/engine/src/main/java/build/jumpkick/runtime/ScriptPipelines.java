@@ -7,7 +7,7 @@ import build.jumpkick.plugin.build.Phase;
 import build.jumpkick.cache.Cas;
 import build.jumpkick.compile.CompileRequest;
 import build.jumpkick.compile.CompileResult;
-import build.jumpkick.compile.JavacDriver;
+import build.jumpkick.compile.JavacRunner;
 import build.jumpkick.compile.KotlincDriver;
 import build.jumpkick.compile.KotlincRequest;
 import build.jumpkick.compile.KotlincResult;
@@ -195,7 +195,7 @@ public final class ScriptPipelines {
                 .extraOptions(header.javacOptions())
                 .javaHome(JavaHomes.resolveJavaHome(script.toAbsolutePath().getParent()))
                 .build();
-        return new JavacDriver().compile(request);
+        return new JavacRunner().compile(request);
     }
 
     // --- .kt -------------------------------------------------------------

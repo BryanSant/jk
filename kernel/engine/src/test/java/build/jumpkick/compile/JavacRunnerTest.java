@@ -10,7 +10,7 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-class JavacDriverTest {
+class JavacRunnerTest {
 
     @Test
     void compiles_clean_source(@TempDir Path tempDir) throws IOException {
@@ -23,7 +23,7 @@ class JavacDriverTest {
                 }
                 """);
 
-        CompileResult result = new JavacDriver()
+        CompileResult result = new JavacRunner()
                 .compile(CompileRequest.builder()
                         .sources(List.of(source))
                         .outputDir(tempDir.resolve("out"))
@@ -39,7 +39,7 @@ class JavacDriverTest {
         Path source = tempDir.resolve("Broken.java");
         Files.writeString(source, "public class Broken { void f(  // missing brace\n");
 
-        CompileResult result = new JavacDriver()
+        CompileResult result = new JavacRunner()
                 .compile(CompileRequest.builder()
                         .sources(List.of(source))
                         .outputDir(tempDir.resolve("out"))
@@ -63,7 +63,7 @@ class JavacDriverTest {
                 }
                 """);
 
-        CompileResult result = new JavacDriver()
+        CompileResult result = new JavacRunner()
                 .compile(CompileRequest.builder()
                         .sources(List.of(source))
                         .outputDir(tempDir.resolve("out"))
@@ -89,7 +89,7 @@ class JavacDriverTest {
         Path source = tempDir.resolve("Hello.java");
         Files.writeString(source, "public class Hello {}\n");
 
-        CompileResult result = new JavacDriver()
+        CompileResult result = new JavacRunner()
                 .compile(CompileRequest.builder()
                         .sources(List.of(source))
                         .classpath(List.of(corrupt))
@@ -112,7 +112,7 @@ class JavacDriverTest {
                 """);
         Path out = tempDir.resolve("out");
 
-        CompileResult result = new JavacDriver()
+        CompileResult result = new JavacRunner()
                 .compile(CompileRequest.builder()
                         .sources(List.of(source))
                         // outputDir not set → check mode
@@ -138,7 +138,7 @@ class JavacDriverTest {
         Files.createDirectories(libPkg);
         Files.move(libSrc, libPkg.resolve("Lib.java"));
 
-        CompileResult libResult = new JavacDriver()
+        CompileResult libResult = new JavacRunner()
                 .compile(CompileRequest.builder()
                         .sources(List.of(libPkg.resolve("Lib.java")))
                         .outputDir(libDir)
@@ -154,7 +154,7 @@ class JavacDriverTest {
                 }
                 """);
 
-        CompileResult result = new JavacDriver()
+        CompileResult result = new JavacRunner()
                 .compile(CompileRequest.builder()
                         .sources(List.of(consumer))
                         .classpath(List.of(libDir))

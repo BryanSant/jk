@@ -5,10 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import build.jumpkick.cache.Cas;
 import build.jumpkick.compile.CompileRequest;
-import build.jumpkick.compile.CompileResult;
-import build.jumpkick.compile.JavaCompileStrategies;
-import build.jumpkick.compile.JavaCompileStrategy;
-import build.jumpkick.compile.JavacDriver;
+import build.jumpkick.compile.JavacRunner;
 import build.jumpkick.compile.incremental.JavacFixture;
 import java.io.IOException;
 import java.net.URL;
@@ -220,9 +217,10 @@ class JavaIncrementalCompileTest {
                     .extraOptions(List.of())
                     .javaHome(Path.of(System.getProperty("java.home")))
                     .build();
-            Recording rec = new Recording(JavaCompileStrategies.resolve());
+            Recording rec = new Recording(
+                    JavaIncrementalCompile.javacCompiler(new JavacRunner(), req.javaHome(), req.processorPath()));
             JavaIncrementalCompile.Result result = JavaIncrementalCompile.run(
-                    "compile-main", req, "jk-test", true, cas, actionCache, stateDir, new JavacDriver(rec), null);
+                    "compile-main", req, "jk-test", true, cas, actionCache, stateDir, rec, null);
             if (requireSuccess) {
                 assertThat(result.success()).as("compile succeeded").isTrue();
             }
@@ -236,28 +234,24 @@ class JavaIncrementalCompileTest {
         }
     }
 
-    /** Wraps the real strategy, recording the basenamed source paths of each compile pass. */
-    private static final class Recording implements JavaCompileStrategy {
-        private final JavaCompileStrategy delegate;
+    /** Wraps the real javac backend, recording the basenamed source paths of each compile pass. */
+    private static final class Recording implements JavaIncrementalCompile.Compiler {
+        private final JavaIncrementalCompile.Compiler delegate;
         private final Set<String> compiled = new LinkedHashSet<>();
 
-        Recording(JavaCompileStrategy delegate) {
+        Recording(JavaIncrementalCompile.Compiler delegate) {
             this.delegate = delegate;
         }
 
         @Override
-        public String name() {
-            return "recording";
-        }
-
-        @Override
-        public CompileResult compile(CompileRequest request) throws IOException {
-            for (Path s : request.sources()) {
+        public JavaIncrementalCompile.CompileOut compile(
+                List<Path> sources, List<Path> classpath, Path outputDir, int release, List<String> options) {
+            for (Path s : sources) {
                 String n = s.toString().replace('\\', '/');
                 int idx = n.indexOf("/src/main/java/");
                 compiled.add(idx >= 0 ? n.substring(idx + "/src/main/java/".length()) : n);
             }
-            return delegate.compile(request);
+            return delegate.compile(sources, classpath, outputDir, release, options);
         }
 
         Set<String> compiled() {

@@ -1,7 +1,7 @@
 # Incremental Java Compilation
 
 > **STATUS (2026-07-13):** this design shipped as option **(c)** — `JavaIncrementalCompile.run`
-> owns the multi-pass loop over `JavacDriver` + the ASM analyzers (`ClassAbi`,
+> owns the multi-pass loop over `JavacRunner` + the ASM analyzers (`ClassAbi`,
 > `ClassDependencies`) and is live in `BuildPipelines`/`TestSupport`. The single-pass
 > `IncrementalCompiler`/`FullRebuildCompiler`/`IncrementalCompilers` seam described below was
 > RETIRED with it (the classes no longer exist). The rest of this document is the design
@@ -45,7 +45,7 @@ What's missing is a **real planner**: the dependency analysis + dirty-set
 computation. That, plus the execution vehicle to run it, is this project.
 
 `org.ow2.asm:asm` + `asm-tree` are **already** engine dependencies. javac runs
-today via `SubprocessJavacStrategy`.
+today via `JavacRunner`.
 
 ---
 
@@ -152,7 +152,7 @@ ways to get it:
   ABI, ask the planner for the next wave, repeat. Keeps the `plan()`/`attribute()`
   seam but changes its contract to iterative.
 - **(c) Java-specific orchestrator:** a `JavaIncrementalCompile.run` (sibling to
-  `KotlinCompile.run`) owning the loop over `JavacDriver` + the ASM analyzer +
+  `KotlinCompile.run`) owning the loop over `JavacRunner` + the ASM analyzer +
   `ActionCache`/CAS, not using the single-pass seam.
 
 Recommended: **(c)** — it mirrors the proven `KotlinCompile.run` shape and keeps
@@ -301,7 +301,7 @@ in-tree example of a processor whose handling we must get right.
      via an output sentinel) + never-stale; aggregating classified + stays full.
      **Pipeline activation — DONE.** The PROCESSOR scope (previously a stub, dropped
      by `LockOrchestrator.SCOPES`) now resolves + tags lock packages; `CompileRequest`
-     carries a `processorPath`, `SubprocessJavacStrategy` emits `-processorpath`, and
+     carries a `processorPath`, `JavacRunner` emits `-processorpath`, and
      the action key + `.jstamp` + `canIncrement` all track processor changes.
      `compile-java` resolves a `PROCESSOR_CP`, sets it on the request, and — when
      non-empty — builds an `ApSetup(locateWorkerJar(cas) /*null-safe*/, genDir)` for

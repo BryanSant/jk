@@ -21,7 +21,7 @@ import org.junit.jupiter.api.io.TempDir;
  * sets), compiles a source with a real annotation processor, and asserts the parsed generated →
  * originating provenance.
  */
-class JavacDriverTest {
+class ForkedJavacTest {
 
     @Test
     void launches_the_worker_and_parses_provenance(@TempDir Path dir) throws IOException {
