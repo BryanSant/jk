@@ -231,18 +231,20 @@ function routeFromHash() {
 }
 
 /** Cached-vs-total step counts for one record → the build's "N of M steps served from cache". */
-function stepCacheStats(rec) {
-  const steps = (rec.modules && rec.modules.length)
-    ? rec.modules.flatMap((m) => m.steps || [])
-    : rec.steps || [];
-  let cached = 0;
-  let total = 0;
-  for (const p of steps) {
-    if (p.status === 'CANCELLED') continue; // a cancelled step never ran — not a cache decision
-    total++;
-    if (p.status === 'SKIPPED') cached++; // ctx.cached() → up-to-date / served from cache
-  }
-  return { cached, total };
+// The cache's estimated wall-clock benefit for a run, from the engine-computed `benefit` snapshot
+// (a two-level critical-path estimate — see CacheBenefit). Replaces the old "steps skipped" count,
+// which weighted a skipped 5ms no-op the same as a skipped 90s compile. `present` is false for
+// records with no benefit (older records, or a build that didn't succeed cleanly).
+function benefitStats(rec) {
+  const b = rec.benefit;
+  if (!b) return { saved: 0, uncached: 0, coveredSkips: 0, totalSkips: 0, present: false };
+  return {
+    saved: b.savedMillis || 0,
+    uncached: b.estimatedUncachedMillis || 0,
+    coveredSkips: b.coveredSkips || 0,
+    totalSkips: b.totalSkips || 0,
+    present: true,
+  };
 }
 
 /** Compact duration for the chart tooltip (no Vue instance in reach): "820 ms" / "3.4 s" / "1m 05s". */
@@ -418,8 +420,10 @@ Vue.createApp({
       const window = records.slice(0, RECENT);
       let passed = 0;
       let ran = 0;
-      let cachedSum = 0;
-      let totalSum = 0;
+      let savedSum = 0;
+      let uncachedSum = 0;
+      let covSkips = 0;
+      let totSkips = 0;
       const durs = [];
       for (const r of window) {
         const o = recordOutcome(r);
@@ -427,18 +431,27 @@ Vue.createApp({
           ran++;
           if (o === 'success') passed++;
         }
-        const cs = stepCacheStats(r);
-        cachedSum += cs.cached;
-        totalSum += cs.total;
+        // Cache benefit is a build-time property; aggregate only successful `build` runs so the tile
+        // tells the "cache saved on builds" story cleanly (test runs get a partial estimate).
+        if (r.kind === 'build') {
+          const bs = benefitStats(r);
+          if (bs.present) {
+            savedSum += bs.saved;
+            uncachedSum += bs.uncached;
+            covSkips += bs.coveredSkips;
+            totSkips += bs.totalSkips;
+          }
+        }
         if (r.millis) durs.push(r.millis);
       }
       const relPct = ran ? Math.round((100 * passed) / ran) : null;
-      const cachePct = totalSum ? Math.round((100 * cachedSum) / totalSum) : null;
+      const cacheSavedPct = uncachedSum ? Math.round((100 * savedSum) / uncachedSum) : null;
+      const cacheLowConfidence = totSkips > 0 && covSkips / totSkips < 0.5;
       durs.sort((a, b) => a - b);
       const avg = durs.length ? Math.round(durs.reduce((s, x) => s + x, 0) / durs.length) : null;
 
       const rows = records.slice(0, 50).map((r) => {
-        const cs = stepCacheStats(r);
+        const bs = benefitStats(r);
         return {
           id: r.id,
           buildNumber: r.buildNumber || null,
@@ -446,8 +459,8 @@ Vue.createApp({
           trigger: r.trigger || null,
           commit: r.commit || null,
           tests: r.tests || null,
-          cached: cs.cached,
-          cacheTotal: cs.total,
+          saved: bs.present && bs.uncached > 0 ? this.duration(bs.saved) : null,
+          savedPct: bs.present && bs.uncached > 0 ? Math.round((100 * bs.saved) / bs.uncached) : null,
           millis: r.millis,
           finishedAt: r.finishedAt || 0,
         };
@@ -459,7 +472,9 @@ Vue.createApp({
         total: latest.buildNumber || records.length,
         reliability: relPct == null ? '—' : relPct + '%',
         reliabilityClass: relPct == null ? '' : relPct >= 90 ? 'ok' : relPct >= 70 ? 'warn' : 'err',
-        cachePct: cachePct == null ? '—' : cachePct + '%',
+        cacheSaved: savedSum > 0 ? this.duration(savedSum) : '—',
+        cacheSavedPct: cacheSavedPct == null ? '' : (cacheLowConfidence ? '~' : '') + cacheSavedPct + '%',
+        cacheLowConfidence,
         minMillis: durs.length ? durs[0] : null,
         maxMillis: durs.length ? durs[durs.length - 1] : null,
         avgMillis: avg,

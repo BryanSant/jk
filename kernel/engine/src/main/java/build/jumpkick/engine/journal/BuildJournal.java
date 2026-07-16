@@ -317,6 +317,6 @@ public final class BuildJournal {
                 id, r.buildNumber(), r.schema(), r.kind(), r.dir(), r.coord(),
                 r.startedAt(), r.finishedAt(), r.millis(),
                 r.success(), r.cancelled(), r.exitCode(), r.jkVersion(),
-                r.tests(), r.modules(), r.steps(), r.diagnostics(), r.trigger(), r.commit());
+                r.tests(), r.modules(), r.steps(), r.diagnostics(), r.trigger(), r.commit(), r.benefit());
     }
 }

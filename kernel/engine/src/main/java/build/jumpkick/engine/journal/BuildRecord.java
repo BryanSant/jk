@@ -32,14 +32,16 @@ public record BuildRecord(
         List<Step> steps,
         List<Diag> diagnostics,
         String trigger,
-        String commit) {
+        String commit,
+        CacheBenefit benefit) {
 
     /**
      * The current on-disk schema version. Bumped to 2 when {@code buildNumber} — the durable,
      * monotonic per-project run counter (assigned from {@link build.jumpkick.runtime.BuildMetrics}) —
      * was added. {@code trigger} (how the build was started: {@code "cli"}/{@code "web"}) and {@code
-     * commit} (the project's git HEAD at build time) were added without a bump — pre-1.0 additive
-     * fields simply read back as {@code null} on older records.
+     * commit} (the project's git HEAD at build time) and {@code benefit} (the cache's estimated
+     * wall-clock saving) were added without a bump — pre-1.0 additive fields simply read back as
+     * {@code null} on older records.
      */
     public static final int SCHEMA = 2;
 
@@ -53,11 +55,21 @@ public record BuildRecord(
     public BuildRecord withBuildNumber(long buildNumber) {
         return new BuildRecord(
                 id, buildNumber, schema, kind, dir, coord, startedAt, finishedAt, millis,
-                success, cancelled, exitCode, jkVersion, tests, modules, steps, diagnostics, trigger, commit);
+                success, cancelled, exitCode, jkVersion, tests, modules, steps, diagnostics, trigger, commit, benefit);
     }
 
     /** Aggregate test counts for the run, or {@code null} when no tests ran. */
     public record Tests(long total, long succeeded, long failed, long skipped) {}
+
+    /**
+     * The cache's estimated wall-clock benefit for the run, or {@code null} for a build that didn't
+     * succeed cleanly (and on older records). {@code estimatedUncachedMillis} is the two-level
+     * critical-path estimate of a cold-cache run of the same work; {@code savedMillis} is
+     * {@code max(0, estimatedUncached - millis)}. {@code coveredSkips}/{@code totalSkips} report how
+     * many cache-hit steps had a real historical baseline, so a reader can gauge confidence. See
+     * {@link build.jumpkick.runtime.CacheBenefit}.
+     */
+    public record CacheBenefit(long estimatedUncachedMillis, long savedMillis, long coveredSkips, long totalSkips) {}
 
     /**
      * One module's outcome in a workspace build (the {@code modules} list is empty for a single-pipeline

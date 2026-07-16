@@ -22,7 +22,7 @@ class BuildJournalTest {
         return new BuildRecord(
                 null, 0L, BuildRecord.SCHEMA, "build", "/proj", coord,
                 finishedAt - 100, finishedAt, 100, success, false, success ? 0 : 1, "9.9-test",
-                null, List.of(), List.of(), List.of(), "cli", null);
+                null, List.of(), List.of(), List.of(), "cli", null, null);
     }
 
     @Test

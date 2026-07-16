@@ -3,6 +3,7 @@ package build.jumpkick.run;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -216,6 +217,14 @@ class PipelineTest {
         assertThat(result.steps())
                 .extracting(PipelineResult.StepReport::status)
                 .containsExactly(StepStatus.SUCCESS, StepStatus.FAIL, StepStatus.CANCELLED);
+        // Dependency edges survive into the report (needed by the engine's cache-benefit metric),
+        // including on the CANCELLED path.
+        assertThat(result.steps())
+                .extracting(PipelineResult.StepReport::name, PipelineResult.StepReport::requires)
+                .containsExactly(
+                        tuple("ok", List.of()),
+                        tuple("boom", List.of("ok")),
+                        tuple("downstream", List.of("boom")));
         assertThat(result.errors()).hasSize(1);
         assertThat(result.errors().getFirst().step()).isEqualTo("boom");
     }

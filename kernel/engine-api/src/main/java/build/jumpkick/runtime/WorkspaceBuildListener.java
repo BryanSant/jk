@@ -2,7 +2,10 @@
 package build.jumpkick.runtime;
 
 import build.jumpkick.run.PipelineListener;
+import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * Events emitted by {@link BuildService#buildWorkspace} as it drives a workspace build — the seam a
@@ -21,6 +24,13 @@ public interface WorkspaceBuildListener {
 
     /** The resolved modules in dependency order, each with its assembled pipeline + estimated weight. */
     default void onPlan(List<ModulePlan> plan) {}
+
+    /**
+     * The module dependency graph: each module dir → the dirs that must build before it. Emitted once
+     * up front (alongside {@link #onPlan}) so a caller can reconstruct the module DAG — used by the
+     * engine's critical-path cache-benefit metric to compose per-module cold-cost estimates.
+     */
+    default void onModuleGraph(Map<Path, Set<Path>> prereqs) {}
 
     /**
      * A module is about to build. Return the {@link PipelineListener} to attach to its pipeline (its

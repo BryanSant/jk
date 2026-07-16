@@ -224,7 +224,7 @@ public final class Pipeline {
         // Any remaining (un-run) steps are CANCELLED because a dep failed.
         for (Step p : remaining) {
             statuses.put(p.name(), StepStatus.CANCELLED);
-            reports.add(new PipelineResult.StepReport(p.name(), StepStatus.CANCELLED, Duration.ZERO));
+            reports.add(new PipelineResult.StepReport(p.name(), StepStatus.CANCELLED, Duration.ZERO, p.requires()));
         }
 
         boolean success = !cancelled.get()
@@ -368,7 +368,7 @@ public final class Pipeline {
             StepStatus terminal = ctx.wasCached() ? StepStatus.SKIPPED : StepStatus.SUCCESS;
             statuses.put(step.name(), terminal);
             Duration dur = Duration.between(start, Instant.now());
-            reports.add(new PipelineResult.StepReport(step.name(), terminal, dur));
+            reports.add(new PipelineResult.StepReport(step.name(), terminal, dur, step.requires()));
             stepsComplete.incrementAndGet();
             emit(l -> l.stepFinish(step.name(), step.phase().orElse(null), terminal, dur));
             return terminal;
@@ -391,7 +391,7 @@ public final class Pipeline {
             StepStatus terminal = cancel ? StepStatus.CANCELLED : StepStatus.FAIL;
             statuses.put(step.name(), terminal);
             Duration dur = Duration.between(start, Instant.now());
-            reports.add(new PipelineResult.StepReport(step.name(), terminal, dur));
+            reports.add(new PipelineResult.StepReport(step.name(), terminal, dur, step.requires()));
             stepsComplete.incrementAndGet();
             emit(l -> l.stepFinish(step.name(), step.phase().orElse(null), terminal, dur));
             return terminal;

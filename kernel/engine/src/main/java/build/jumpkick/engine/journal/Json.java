@@ -78,6 +78,17 @@ final class Json {
         o.put("trigger", r.trigger());
         o.put("commit", r.commit());
 
+        if (r.benefit() == null) {
+            o.put("benefit", null);
+        } else {
+            Map<String, Object> b = new LinkedHashMap<>();
+            b.put("estimatedUncachedMillis", r.benefit().estimatedUncachedMillis());
+            b.put("savedMillis", r.benefit().savedMillis());
+            b.put("coveredSkips", r.benefit().coveredSkips());
+            b.put("totalSkips", r.benefit().totalSkips());
+            o.put("benefit", b);
+        }
+
         return MiniJson.writePretty(o);
     }
 
@@ -120,6 +131,14 @@ final class Json {
 
         List<BuildRecord.Step> steps = readSteps(o);
 
+        BuildRecord.CacheBenefit benefit = null;
+        if (o.get("benefit") instanceof Map<?, ?> bm) {
+            Map<String, Object> b = (Map<String, Object>) bm;
+            benefit = new BuildRecord.CacheBenefit(
+                    lng(b, "estimatedUncachedMillis"), lng(b, "savedMillis"),
+                    lng(b, "coveredSkips"), lng(b, "totalSkips"));
+        }
+
         List<BuildRecord.Diag> diagnostics = new ArrayList<>();
         for (Object e : arr(o, "diagnostics")) {
             Map<String, Object> dm = (Map<String, Object>) e;
@@ -133,7 +152,7 @@ final class Json {
                 str(o, "kind"), str(o, "dir"), str(o, "coord"),
                 lng(o, "startedAt"), lng(o, "finishedAt"), lng(o, "millis"),
                 bool(o, "success"), bool(o, "cancelled"), (int) lng(o, "exitCode"), str(o, "jkVersion"),
-                tests, modules, steps, diagnostics, str(o, "trigger"), str(o, "commit"));
+                tests, modules, steps, diagnostics, str(o, "trigger"), str(o, "commit"), benefit);
     }
 
     private static String str(Map<String, Object> o, String key) {

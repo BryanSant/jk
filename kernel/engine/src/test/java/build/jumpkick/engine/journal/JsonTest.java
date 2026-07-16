@@ -21,7 +21,8 @@ class JsonTest {
                         new BuildRecord.Step("test", "test", "FAIL", 1200)),
                 List.of(new BuildRecord.Diag("error", "/proj", "test", "JUNIT", "expected 1 but was 2\nline two",
                         "com.example.AppTest#adds", "org.opentest4j.AssertionFailedError")),
-                "web", "abc1234");
+                "web", "abc1234",
+                new BuildRecord.CacheBenefit(9000, 6000, 3, 4));
 
         BuildRecord back = Json.read(Json.write(original));
 
@@ -46,6 +47,11 @@ class JsonTest {
         assertThat(back.diagnostics().get(0).dir()).isEqualTo("/proj");
         assertThat(back.diagnostics().get(0).message()).isEqualTo("expected 1 but was 2\nline two");
         assertThat(back.diagnostics().get(0).exceptionClass()).isEqualTo("org.opentest4j.AssertionFailedError");
+        assertThat(back.benefit()).isNotNull();
+        assertThat(back.benefit().estimatedUncachedMillis()).isEqualTo(9000);
+        assertThat(back.benefit().savedMillis()).isEqualTo(6000);
+        assertThat(back.benefit().coveredSkips()).isEqualTo(3);
+        assertThat(back.benefit().totalSkips()).isEqualTo(4);
     }
 
     @Test
@@ -53,7 +59,7 @@ class JsonTest {
         BuildRecord original = new BuildRecord(
                 "20260710T143022417-0000", 0, 1, "test", "/p", null,
                 0, 5, 5, true, true, 0, "9.9",
-                null, List.of(), List.of(), List.of(), null, null);
+                null, List.of(), List.of(), List.of(), null, null, null);
         BuildRecord back = Json.read(Json.write(original));
         assertThat(back.coord()).isNull();
         assertThat(back.tests()).isNull();
@@ -61,5 +67,20 @@ class JsonTest {
         assertThat(back.modules()).isEmpty();
         assertThat(back.steps()).isEmpty();
         assertThat(back.diagnostics()).isEmpty();
+        assertThat(back.benefit()).isNull();
+    }
+
+    @Test
+    void reads_an_older_record_that_predates_the_benefit_field() {
+        // A pre-benefit record.json (no "benefit" key) must still parse, with benefit == null.
+        String legacy = "{\"id\":\"old-1\",\"buildNumber\":7,\"schema\":2,\"kind\":\"build\","
+                + "\"dir\":\"/p\",\"coord\":\"g:a\",\"startedAt\":0,\"finishedAt\":10,\"millis\":10,"
+                + "\"success\":true,\"cancelled\":false,\"exitCode\":0,\"jkVersion\":\"9\","
+                + "\"tests\":null,\"modules\":[],\"steps\":[],\"diagnostics\":[],"
+                + "\"trigger\":\"cli\",\"commit\":\"deadbee\"}";
+        BuildRecord back = Json.read(legacy);
+        assertThat(back.id()).isEqualTo("old-1");
+        assertThat(back.success()).isTrue();
+        assertThat(back.benefit()).isNull();
     }
 }

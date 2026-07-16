@@ -42,8 +42,22 @@ public record PipelineResult(
         this(pipelineName, success, duration, steps, warnings, errors, cancelled, cancelled);
     }
 
-    /** One row in the report's per-step breakdown. */
-    public record StepReport(String name, StepStatus status, Duration duration) {}
+    /**
+     * One row in the report's per-step breakdown. {@code requires} carries the step's dependency
+     * edges (from {@link Step#requires()}) so downstream consumers can reconstruct the step DAG —
+     * the edges are otherwise lost once {@link Pipeline#run} returns. Used by the engine's
+     * critical-path cache-benefit metric.
+     */
+    public record StepReport(String name, StepStatus status, Duration duration, List<String> requires) {
+        public StepReport {
+            requires = requires == null ? List.of() : List.copyOf(requires);
+        }
+
+        /** Compatibility constructor for callers that don't track dependency edges. */
+        public StepReport(String name, StepStatus status, Duration duration) {
+            this(name, status, duration, List.of());
+        }
+    }
 
     /**
      * Structured diagnostic from {@link StepContext#warn} / {@link StepContext#error}.

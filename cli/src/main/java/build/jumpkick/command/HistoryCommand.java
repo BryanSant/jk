@@ -64,6 +64,11 @@ public final class HistoryCommand extends GroupCommand {
         return (total / 60) + "m" + (total % 60) + "s";
     }
 
+    /** {@code part} as a whole-number percentage of {@code whole} (0% when {@code whole <= 0}). */
+    static String pctString(long part, long whole) {
+        return (whole <= 0 ? 0 : Math.round(100.0 * part / whole)) + "%";
+    }
+
     static String ago(long finishedAt, long now) {
         if (finishedAt <= 0) return "";
         long sec = Math.max(0, (now - finishedAt) / 1000);
@@ -116,14 +121,20 @@ public final class HistoryCommand extends GroupCommand {
                 String kind = Ndjson.str(e, "kind");
                 long failed = Ndjson.longValue(e, "failedModules", 0);
                 String note = failed > 0 ? "  (" + failed + " failed)" : "";
+                long savedMillis = Ndjson.longValue(e, "savedMillis", -1);
+                long estMillis = Ndjson.longValue(e, "estimatedUncachedMillis", -1);
+                String saved = savedMillis >= 0 && estMillis > 0
+                        ? "  saved " + duration(savedMillis) + " (" + pctString(savedMillis, estMillis) + ")"
+                        : "";
                 CliOutput.out(String.format(
-                        "%s  %-20s  %-34s  %-6s  %8s  %s%s",
+                        "%s  %-20s  %-34s  %-6s  %8s  %s%s%s",
                         glyph(success, cancelled),
                         id,
                         label,
                         kind == null ? "" : kind,
                         duration(Ndjson.longValue(e, "millis", -1)),
                         ago(Ndjson.longValue(e, "finishedAt", 0), now),
+                        saved,
                         note));
             }
             return 0;
@@ -180,6 +191,15 @@ public final class HistoryCommand extends GroupCommand {
             CliOutput.out("  dir:      " + Ndjson.str(record, "dir"));
             CliOutput.out("  duration: " + duration(Ndjson.longValue(record, "millis", -1))
                     + "   " + ago(Ndjson.longValue(record, "finishedAt", 0), System.currentTimeMillis()));
+            long savedMillis = Ndjson.longValue(record, "savedMillis", -1);
+            long estMillis = Ndjson.longValue(record, "estimatedUncachedMillis", -1);
+            if (savedMillis >= 0 && estMillis > 0) {
+                long totalSkips = Ndjson.longValue(record, "totalSkips", -1);
+                long coveredSkips = Ndjson.longValue(record, "coveredSkips", -1);
+                String cov = totalSkips > 0 ? "   coverage " + pctString(coveredSkips, totalSkips) : "";
+                CliOutput.out("  saved:    " + duration(savedMillis) + " (" + pctString(savedMillis, estMillis)
+                        + " of ~" + duration(estMillis) + " uncached)" + cov);
+            }
             String jk = Ndjson.str(record, "jkVersion");
             if (jk != null) CliOutput.out("  jk:       " + jk);
             long testsTotal = Ndjson.longValue(record, "testsTotal", -1);

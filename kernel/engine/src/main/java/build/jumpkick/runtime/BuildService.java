@@ -430,6 +430,7 @@ public final class BuildService {
         }
         Perf.end("ws-prepare-modules", tp);
         listener.onPlan(List.copyOf(plans.values()));
+        listener.onModuleGraph(graph.edges());
 
         // ETA model (schedule-aware, per-module warm/cold rate) — engine knowledge, emitted as events.
         long teta = Perf.start();

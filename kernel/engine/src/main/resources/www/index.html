@@ -246,7 +246,7 @@
       <template v-if="projectDetail && !projectDetail.empty">
         <div class="tiles">
           <div class="tile"><span class="lbl">reliability</span><span class="kpi" :class="projectDetail.reliabilityClass">{{ projectDetail.reliability }}</span></div>
-          <div class="tile"><span class="lbl">cache hit</span><span class="kpi">{{ projectDetail.cachePct }}</span></div>
+          <div class="tile" title="Estimated wall-clock saved by the cache vs. a cold-cache build (critical-path estimate over the last 30 builds). ~ marks low baseline coverage."><span class="lbl">cache saved</span><span class="kpi">{{ projectDetail.cacheSaved }}<span class="kpi-sm" :class="{ warn: projectDetail.cacheLowConfidence }" v-if="projectDetail.cacheSavedPct"> {{ projectDetail.cacheSavedPct }}</span></span></div>
           <div class="tile"><span class="lbl">avg build</span><span class="kpi">{{ duration(projectDetail.avgMillis) }}</span></div>
           <div class="tile"><span class="lbl">min / max</span><span class="kpi kpi-sm">{{ duration(projectDetail.minMillis) }} / {{ duration(projectDetail.maxMillis) }}</span></div>
           <div class="tile"><span class="lbl">last built</span><span class="kpi kpi-sm">{{ agoLong(projectDetail.lastFinishedAt) }}</span></div>
@@ -263,7 +263,7 @@
                   <td>{{ triggerLabel(r.trigger) }}</td>
                   <td class="mono">{{ r.commit || '—' }}</td>
                   <td><template v-if="r.tests">{{ r.tests.succeeded }} / {{ r.tests.total }}</template><template v-else>—</template></td>
-                  <td :class="{ ok: r.cacheTotal && r.cached === r.cacheTotal }"><template v-if="r.cacheTotal">{{ r.cached }} / {{ r.cacheTotal }}</template><template v-else>—</template></td>
+                  <td :class="{ ok: r.savedPct >= 50 }"><template v-if="r.saved">{{ r.saved }} <span class="dim">({{ r.savedPct }}%)</span></template><template v-else>—</template></td>
                   <td>{{ duration(r.millis) }}</td>
                   <td>{{ agoMillis(r.finishedAt) }}</td>
                 </tr>

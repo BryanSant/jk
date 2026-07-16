@@ -22,6 +22,7 @@ import build.jumpkick.run.Step;
 import build.jumpkick.run.TestSummary;
 import build.jumpkick.runtime.BuildMetrics;
 import build.jumpkick.runtime.BuildPlan;
+import build.jumpkick.runtime.CacheBenefit;
 import build.jumpkick.runtime.BuildService;
 import build.jumpkick.runtime.ExplainPlan;
 import build.jumpkick.runtime.ModuleOutcome;
@@ -2752,6 +2753,11 @@ public final class EngineServer implements AutoCloseable {
             }
 
             @Override
+            public void onModuleGraph(java.util.Map<Path, java.util.Set<Path>> prereqs) {
+                accModuleGraph(eventRequestId, prereqs);
+            }
+
+            @Override
             public void onEtaEstimate(long millis) {
                 sendQuiet(writer, EngineProtocol.eta(millis));
                 publishEta(eventRequestId, millis);
@@ -2861,6 +2867,11 @@ public final class EngineServer implements AutoCloseable {
         if (a != null) a.addModule(o);
     }
 
+    private void accModuleGraph(long requestId, java.util.Map<Path, java.util.Set<Path>> prereqs) {
+        BuildAccumulator a = accumulators.get(requestId);
+        if (a != null) a.setModuleEdges(prereqs);
+    }
+
     private void accPipelineFinish(long requestId, String dir, PipelineResult result) {
         BuildAccumulator a = accumulators.get(requestId);
         if (a != null) a.addPipeline(dir, result);
@@ -2888,6 +2899,25 @@ public final class EngineServer implements AutoCloseable {
     }
 
     /**
+     * The cache's estimated wall-clock benefit for a finished run (two-level critical path), or
+     * {@code null} for a build that didn't succeed cleanly. Baselines come from {@link BuildMetrics}
+     * as of before this run's own fold — a cache-hit step's cold cost is its prior successful-run
+     * average (per-project tier, then the global-per-step tier); a step with no history contributes
+     * ~0 and lowers coverage. See {@link CacheBenefit}.
+     */
+    private CacheBenefit.Result computeBenefit(BuildAccumulator a, long millis) {
+        if (!a.succeeded() || a.wasCancelled()) return null;
+        BuildMetrics metrics = BuildMetrics.load(metricsFile);
+        java.util.function.BiFunction<String, String, java.util.OptionalLong> baseline = (dir, step) -> {
+            java.util.Optional<BuildMetrics.Entry> e = metrics.step(dir, step).filter(x -> x.ok().count() > 0);
+            if (e.isEmpty()) e = metrics.step("", step).filter(x -> x.ok().count() > 0);
+            return e.map(x -> java.util.OptionalLong.of(x.ok().avgMillis()))
+                    .orElse(java.util.OptionalLong.empty());
+        };
+        return CacheBenefit.compute(a.benefitModules(), a.benefitModuleEdges(), millis, baseline);
+    }
+
+    /**
      * Persist the finished build to the journal — ungated by dashboard subscribers, so every build
      * is captured whether or not a browser is watching, and survives an engine restart. Best-effort:
      * a failure here is logged, never propagated (journaling must not affect the build's outcome).
@@ -2898,7 +2928,9 @@ public final class EngineServer implements AutoCloseable {
         try {
             long finishedAt = clockMillis.getAsLong();
             String commit = gitCommit(a.dir()); // best-effort short SHA of the project's HEAD
-            BuildRecord record = a.toRecord(finishedAt, cancelled, millis, version, commit);
+            // Estimate the cache's wall-clock benefit from baselines as of BEFORE this run's fold.
+            CacheBenefit.Result benefit = computeBenefit(a, millis);
+            BuildRecord record = a.toRecord(finishedAt, cancelled, millis, version, commit, benefit);
             // Folding metrics also mints this run's durable per-project build number; stamp it onto
             // the record so the journal (and the dashboard's #NNN pill) carry it. Metrics is folded
             // even when history is disabled, so the counter stays consistent regardless.
@@ -3012,6 +3044,7 @@ public final class EngineServer implements AutoCloseable {
         for (int i = 0; i < n; i++) {
             BuildRecord r = records.get(i);
             BuildRecord.Tests t = r.tests();
+            BuildRecord.CacheBenefit b = r.benefit();
             int failedModules = (int) r.modules().stream().filter(m -> !m.success()).count();
             send(writer, JsonOut.object()
                     .put("t", EngineProtocol.HISTORY_ENTRY)
@@ -3029,6 +3062,8 @@ public final class EngineServer implements AutoCloseable {
                     .put("testsFailed", t != null ? t.failed() : -1)
                     .put("moduleCount", r.modules().size())
                     .put("failedModules", failedModules)
+                    .put("savedMillis", b != null ? b.savedMillis() : -1)
+                    .put("estimatedUncachedMillis", b != null ? b.estimatedUncachedMillis() : -1)
                     .toString());
         }
         send(writer, JsonOut.object().put("t", EngineProtocol.HISTORY_DONE).put("count", n).toString());
@@ -3048,6 +3083,7 @@ public final class EngineServer implements AutoCloseable {
         }
         BuildRecord r = found.get();
         BuildRecord.Tests t = r.tests();
+        BuildRecord.CacheBenefit b = r.benefit();
         send(writer, JsonOut.object()
                 .put("t", EngineProtocol.HISTORY_RECORD)
                 .put("id", r.id())
@@ -3065,6 +3101,10 @@ public final class EngineServer implements AutoCloseable {
                 .put("testsSucceeded", t != null ? t.succeeded() : -1)
                 .put("testsFailed", t != null ? t.failed() : -1)
                 .put("testsSkipped", t != null ? t.skipped() : -1)
+                .put("savedMillis", b != null ? b.savedMillis() : -1)
+                .put("estimatedUncachedMillis", b != null ? b.estimatedUncachedMillis() : -1)
+                .put("coveredSkips", b != null ? b.coveredSkips() : -1)
+                .put("totalSkips", b != null ? b.totalSkips() : -1)
                 .toString());
         int stepCount = 0;
         for (BuildRecord.Module m : r.modules()) {
@@ -3415,6 +3455,11 @@ public final class EngineServer implements AutoCloseable {
             }
 
             @Override
+            public void onModuleGraph(java.util.Map<Path, java.util.Set<Path>> prereqs) {
+                accModuleGraph(eventRequestId, prereqs);
+            }
+
+            @Override
             public void onEtaEstimate(long millis) {
                 publishEta(eventRequestId, millis);
             }
@@ -3657,6 +3702,13 @@ public final class EngineServer implements AutoCloseable {
         // chain per module (the dashboard shows one chain per module, not one merged strip).
         private final java.util.Map<String, java.util.Map<String, BuildRecord.Step>> stepsByDir =
                 new java.util.concurrent.ConcurrentHashMap<>();
+        // Step dependency edges (dir → step name → requires), captured from the genuine in-process
+        // PipelineResult in addPipeline. Reconstructs each module's step DAG for the critical-path
+        // cache-benefit metric; the wire's stepFinish carries no edges, so this is the only source.
+        private final java.util.Map<String, java.util.Map<String, java.util.List<String>>> requiresByDir =
+                new java.util.concurrent.ConcurrentHashMap<>();
+        // Module dependency graph (dir → prereq dirs) from onModuleGraph; empty for single-pipeline builds.
+        private volatile java.util.Map<String, java.util.Set<String>> moduleEdges = java.util.Map.of();
         private final java.util.List<BuildRecord.Diag> diagnostics = new java.util.concurrent.CopyOnWriteArrayList<>();
         private volatile BuildRecord.Tests tests;
         private volatile boolean anyFailure;
@@ -3709,8 +3761,47 @@ public final class EngineServer implements AutoCloseable {
                 diagnostics.add(new BuildRecord.Diag(
                         "warning", d0, d.step(), d.code(), d.message(), d.test(), d.exceptionClass()));
             }
+            // Capture the step dependency edges from the genuine in-process result (engine-side
+            // result.steps() is reliably populated, unlike a client-side reconstruction).
+            for (PipelineResult.StepReport s : result.steps()) {
+                requiresByDir
+                        .computeIfAbsent(d0, k -> new java.util.concurrent.ConcurrentHashMap<>())
+                        .put(s.name(), java.util.List.copyOf(s.requires()));
+            }
             if (!result.success()) anyFailure = true;
             if (result.userCancelled()) userCancelled = true;
+        }
+
+        void setModuleEdges(java.util.Map<Path, java.util.Set<Path>> edges) {
+            java.util.Map<String, java.util.Set<String>> m = new java.util.HashMap<>();
+            if (edges != null) {
+                for (var e : edges.entrySet()) {
+                    java.util.Set<String> prereqs = new java.util.HashSet<>();
+                    for (Path p : e.getValue()) prereqs.add(p.toString());
+                    m.put(e.getKey().toString(), prereqs);
+                }
+            }
+            this.moduleEdges = m;
+        }
+
+        /** Per-module step inputs (status + millis + dependency edges) for the cache-benefit metric. */
+        java.util.List<CacheBenefit.ModuleInput> benefitModules() {
+            java.util.List<CacheBenefit.ModuleInput> out = new java.util.ArrayList<>();
+            for (String d : stepsByDir.keySet()) {
+                java.util.Map<String, java.util.List<String>> req =
+                        requiresByDir.getOrDefault(d, java.util.Map.of());
+                java.util.List<CacheBenefit.StepInput> steps = new java.util.ArrayList<>();
+                for (BuildRecord.Step s : stepsFor(d)) {
+                    steps.add(new CacheBenefit.StepInput(
+                            s.name(), s.status(), s.millis(), req.getOrDefault(s.name(), java.util.List.of())));
+                }
+                out.add(new CacheBenefit.ModuleInput(d, steps));
+            }
+            return out;
+        }
+
+        java.util.Map<String, java.util.Set<String>> benefitModuleEdges() {
+            return moduleEdges;
         }
 
         private java.util.List<BuildRecord.Step> stepsFor(String dir) {
@@ -3757,6 +3848,16 @@ public final class EngineServer implements AutoCloseable {
         }
 
         BuildRecord toRecord(long finishedAt, boolean cancelled, long millis, String jkVersion, String commit) {
+            return toRecord(finishedAt, cancelled, millis, jkVersion, commit, null);
+        }
+
+        BuildRecord toRecord(
+                long finishedAt,
+                boolean cancelled,
+                long millis,
+                String jkVersion,
+                String commit,
+                CacheBenefit.Result benefit) {
             boolean ok = success != null ? success : (!anyFailure && !cancelled);
             int exit = success != null ? exitCode : (ok ? 0 : 1);
             // A build that reported success was not cancelled: cancelToken.cancelled() also fires on
@@ -3774,11 +3875,18 @@ public final class EngineServer implements AutoCloseable {
                         o.coord(), mdir, o.success(), o.exitCode(), o.millis(), stepsFor(mdir)));
             }
             java.util.List<BuildRecord.Step> topSteps = moduleList.isEmpty() ? stepsFor("") : java.util.List.of();
+            BuildRecord.CacheBenefit benefitRow = benefit == null
+                    ? null
+                    : new BuildRecord.CacheBenefit(
+                            benefit.estimatedUncachedMillis(),
+                            benefit.savedMillis(),
+                            benefit.coveredSkips(),
+                            benefit.totalSkips());
             return new BuildRecord(
                     null, 0L, BuildRecord.SCHEMA, kind, dir, coord,
                     finishedAt - millis, finishedAt, millis,
                     ok, cancelledEffective, exit, jkVersion,
-                    tests, moduleList, topSteps, new java.util.ArrayList<>(diagnostics), trigger, commit);
+                    tests, moduleList, topSteps, new java.util.ArrayList<>(diagnostics), trigger, commit, benefitRow);
         }
 
         private static boolean notBlank(String s) {
