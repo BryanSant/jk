@@ -189,7 +189,7 @@ A build plugin is one jar containing:
 
 ```
 jk-plugin.toml                      ← the declarative layer (parsed by jk, no plugin code runs)
-META-INF/services/build.jumpkick.plugin.BuildPlugin   ← the code layer (runs in a plugin process)
+META-INF/services/cc.jumpkick.plugin.BuildPlugin   ← the code layer (runs in a plugin process)
 ```
 
 **The declarative layer covers the easy 90%** and executes *zero plugin code in the

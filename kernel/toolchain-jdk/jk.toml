@@ -1,5 +1,5 @@
 [project]
-group    = "build.jumpkick"
+group    = "cc.jumpkick"
 name     = "jk-toolchain-jdk"
 version  = "0.10.0-SNAPSHOT"
 description = "jk toolchain (client slice): JDK flow, discovery probes, launcher shims, exporters."
@@ -7,8 +7,8 @@ jdk      = 25
 java     = 25
 
 [dependencies]
-jk-core      = { group = "build.jumpkick", name = "jk-core",      version = "0.10.0-SNAPSHOT" }
-jk-client-io = { group = "build.jumpkick", name = "jk-client-io", version = "0.10.0-SNAPSHOT" }
+jk-core      = { group = "cc.jumpkick", name = "jk-core",      version = "0.10.0-SNAPSHOT" }
+jk-client-io = { group = "cc.jumpkick", name = "jk-client-io", version = "0.10.0-SNAPSHOT" }
 
 [test-dependencies]
 assertj-core            = { group = "org.assertj",        name = "assertj-core",            version = "3.27.7" }

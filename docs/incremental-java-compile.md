@@ -28,13 +28,13 @@ in `kotlin-incremental-bta-decision`, the project memory).
 jk already ships the orchestration for incremental Java; it's parked behind a
 no-op planner:
 
-- `build.jumpkick.compile.incremental.IncrementalCompiler` — the seam:
+- `cc.jumpkick.compile.incremental.IncrementalCompiler` — the seam:
   `plan(PlanRequest{request, prior, stateDir}) → CompilePlan{recompile, carryOver, dropped}`
   and `attribute(plan, outputDir) → UnitOutputs` (source → produced `.class`).
-- `build.jumpkick.compile.incremental.FullRebuildCompiler` — the **only** impl today
+- `cc.jumpkick.compile.incremental.FullRebuildCompiler` — the **only** impl today
   (recompiles everything, carries nothing). No `ServiceLoader` registration, so
   `IncrementalCompilers.resolve()` falls back to it.
-- `build.jumpkick.task.IncrementalCompile.run(...)` — the orchestrator, **already
+- `cc.jumpkick.task.IncrementalCompile.run(...)` — the orchestrator, **already
   implemented**: action-key fast path → materialise carried-over classes from the
   CAS → recompile only `plan.recompile()` with javac → `attribute()` → store the
   result with a per-source unit grouping.
@@ -255,7 +255,7 @@ in-tree example of a processor whose handling we must get right.
 ## 9. Phasing
 
 1. **Shared ASM core — DONE (no plugin needed).** `ClassAbi` + `ClassDependencies`
-   (ASM) and `build.jumpkick.task.JavaIncrementalCompile` (the precise multi-pass
+   (ASM) and `cc.jumpkick.task.JavaIncrementalCompile` (the precise multi-pass
    orchestrator chosen in §5 — a sibling to `KotlinCompile`, not the single-pass
    seam) using the **existing subprocess javac**; the analysis runs in jk's
    process on the output bytecode, so phase 1 needs no plugin. Wired into
@@ -277,7 +277,7 @@ in-tree example of a processor whose handling we must get right.
    - **Slice 2 — DONE.** `JavaCompilerWorker` (main + line-oriented spec +
      `##JKJC:` NDJSON: diagnostics / provenance / result), ServiceLoader-discovering
      processors from the processor path. Packaged like the other plugins
-     (`maven-publish` `build.jumpkick:jk-java-compiler`, `installLocalCas`, runtime
+     (`maven-publish` `cc.jumpkick:jk-java-compiler`, `installLocalCas`, runtime
      `writeJavaWorkerSha`, `JkPluginSync` 3rd entry, `JavaWorkerSetup` locator —
      no impl closure needed). `jk sync` pulls it from `~/.m2`.
    - **Slice 3a — DONE.** `ForkedJavac` launcher (engine): runs the plugin

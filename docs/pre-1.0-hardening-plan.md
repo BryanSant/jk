@@ -224,7 +224,7 @@ lying if the server ever starts reading it.
 (`credential/MavenSettings`), and — worst — `JkThreads`, which installs a JVM
 **shutdown hook** and global thread pools on any classpath that touches the API jar.
 Fix: split. `:jk-api` keeps pure types + the command/run SPI; a new `:kernel/support`
-module takes `build.jumpkick.util` (JkThreads, PathUtil, Hashing, TreeFingerprint,
+module takes `cc.jumpkick.util` (JkThreads, PathUtil, Hashing, TreeFingerprint,
 ContextPropagating*, GitUrl, JkDirs), `credential/`, and `image/`+`publish/` config
 records move to where their consumers live (core/engine). Mechanical but wide; do it
 before 1.0 or never.
@@ -235,8 +235,8 @@ Gradle project id should say what it is. Rename settings.gradle.kts entry + all
 `project(":model")` references (search also for the `-jdk-home`-style worker deps).
 
 ### P2.3 — Two public `PluginManifest` types
-`build.jumpkick.plugin.PluginManifest` (plugin-api, 2-field worker identity, imported by
-all 12 workers) vs `build.jumpkick.plugin.manifest.PluginManifest` (core, 12-field parsed
+`cc.jumpkick.plugin.PluginManifest` (plugin-api, 2-field worker identity, imported by
+all 12 workers) vs `cc.jumpkick.plugin.manifest.PluginManifest` (core, 12-field parsed
 jk-plugin.toml). Coin-flip auto-import for plugin authors. Rename the **core** one to
 `PluginDescriptor` (3 importing files; the worker-facing one keeps the established
 name that 12 workers already import).
@@ -637,7 +637,7 @@ resources, lint/baseline profiles, solver version interning (BOM soft pins).
   comment now says what it is (the LIVE pin syntax), not "back-compat".
 - KEPT deliberately: `JkBuild(project, deps[, repos])` — already documented as
   explicit shortcuts delegating to canonical, used by ~28 tests; not back-compat.
-- DEFERRED (H4-residue, most valuable first): evicting `build.jumpkick.util`/
+- DEFERRED (H4-residue, most valuable first): evicting `cc.jumpkick.util`/
   `credential`/`image` from the jk-api leaf into a `:support` module (P2.1) and the
   `:model`→`:jk-api` Gradle rename (P2.2) — module-graph surgery touching every
   build file, parked to protect H5/H6's verification budget tonight; the
@@ -714,10 +714,10 @@ resources, lint/baseline profiles, solver version interning (BOM soft pins).
   contract leaf: PathUtil, Hashing, TreeFingerprint, JkDirs, GitUrl, MinimalXml,
   AtomicWrites. The leaf keeps NO `util` junk-drawer at all: JkThreads +
   ContextPropagator/ContextPropagatingExecutorService moved to
-  `build.jumpkick.run` (they ARE the Pipeline scheduler's execution seam — lazily
+  `cc.jumpkick.run` (they ARE the Pipeline scheduler's execution seam — lazily
   inert, the shutdown hook only installs when a build actually runs) and
-  JkVersion to `build.jumpkick.model`. MavenSettings (a ~/.m2 reader) moved to
-  its only consumer's module, `build.jumpkick.repo` in :client-io. No split
+  JkVersion to `cc.jumpkick.model`. MavenSettings (a ~/.m2 reader) moved to
+  its only consumer's module, `cc.jumpkick.repo` in :client-io. No split
   packages anywhere. `:support` layers ON the leaf (implementation(:jk-api))
   for the executor seam; the leaf has no edge to support. Wiring mirrors the
   old visibility: :core api-exposes :support exactly as it api-exposes the

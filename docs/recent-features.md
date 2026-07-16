@@ -186,8 +186,8 @@ The variant mechanism moved from plugin-manifest axes to a core `[variants]` sec
   removed; sub-tables are named definition groups only (android keeps `[sub-tables.signing]`).
   A schema key may share a group's name — the TOML value shape (string reference vs table of
   definitions) disambiguates.
-- `build.jumpkick.model.Variants` (declaration + `Selection` + `unionDependencies`) and
-  `build.jumpkick.plugin.manifest.VariantApply` (fold engine) replace the old
+- `cc.jumpkick.model.Variants` (declaration + `Selection` + `unionDependencies`) and
+  `cc.jumpkick.plugin.manifest.VariantApply` (fold engine) replace the old
   `plugin.manifest.Variants`.
 
 ### Variant selection on every command (same day, follow-up)

@@ -1,5 +1,5 @@
 [project]
-group    = "build.jumpkick"
+group    = "cc.jumpkick"
 name     = "jk-engine-api"
 version  = "0.10.0-SNAPSHOT"
 description = "jk engine API: the client<->engine wire contract — protocol codec, paths, build DTOs."
@@ -7,9 +7,9 @@ jdk      = 25
 java     = 25
 
 [dependencies]
-jk-model      = { group = "build.jumpkick", name = "jk-model",      version = "0.10.0-SNAPSHOT" }
-jk-core       = { group = "build.jumpkick", name = "jk-core",       version = "0.10.0-SNAPSHOT" }
-jk-plugin-api = { group = "build.jumpkick", name = "jk-plugin-api", version = "0.10.0-SNAPSHOT" }
+jk-model      = { group = "cc.jumpkick", name = "jk-model",      version = "0.10.0-SNAPSHOT" }
+jk-core       = { group = "cc.jumpkick", name = "jk-core",       version = "0.10.0-SNAPSHOT" }
+jk-plugin-api = { group = "cc.jumpkick", name = "jk-plugin-api", version = "0.10.0-SNAPSHOT" }
 
 [test-dependencies]
 assertj-core            = { group = "org.assertj",        name = "assertj-core",            version = "3.27.7" }

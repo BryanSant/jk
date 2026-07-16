@@ -164,7 +164,7 @@ jk/
 ### 3.3 The Plugin SPI (`:plugin-api`)
 
 A plugin is a jar that exposes one `Plugin` via `ServiceLoader`
-(`META-INF/services/build.jumpkick.plugin.Plugin`) — no hand-maintained registry.
+(`META-INF/services/cc.jumpkick.plugin.Plugin`) — no hand-maintained registry.
 Sketch (illustrative, not final):
 
 ```java

@@ -41,7 +41,7 @@ test-runner and the plugin-api SPI/codec it vendors) is compiled at `--release 1
 plus the single most recent release on the JetBrains feed. JDK 8 and
 JDK 11 are explicitly out of scope; jk's catalog, registry, and
 `jk.toml` parser all reject anything below 17. This is enforced
-centrally by `build.jumpkick.jdk.SupportedJdk`.
+centrally by `cc.jumpkick.jdk.SupportedJdk`.
 
 ### v1.0 Goals
 

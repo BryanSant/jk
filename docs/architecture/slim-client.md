@@ -98,7 +98,7 @@ jk (client image, :cli:nativeCompile, -Os; 26.9 MiB on linux/amd64 — see docs/
 ├── :core           jk.toml/jk.lock parse+edit, GlobalConfig, LibraryCatalog, deny policy,
 │                   ModuleOrder (shared topo-sort), SourceLayout, PluginTunings,
 │                   Versions/DependencyTree/Provenance (offline lock walkers, still package
-│                   build.jumpkick.resolver)
+│                   cc.jumpkick.resolver)
 ├── :client-io      http (3 classes) · forge (device-flow auth) · credential stores ·
 │                   LibraryRegistryClient · Cas/Linking + AccessLedger + ClasspathResolver +
 │                   RepoArtifactStore/RepoArtifactResolver/MavenLayout/M2Dirs — the blessed local
@@ -125,8 +125,8 @@ image; :cli-engine:shadowJar) — additionally links
 
 **The `engineDisabledForTests()` mechanism** (the crux the plan called out): every command's
 test-only in-process branch was moved verbatim into `InProcessEngineImpl` (module `:cli-engine`,
-package `build.jumpkick.command` so the bodies keep calling the commands' package-private rendering
-helpers). The client-side seam is the `build.jumpkick.cli.engine.InProcessEngine` interface in
+package `cc.jumpkick.command` so the bodies keep calling the commands' package-private rendering
+helpers). The client-side seam is the `cc.jumpkick.cli.engine.InProcessEngine` interface in
 `:cli`, discovered via `java.util.ServiceLoader` (the repo's established pattern — `Probes`):
 
 - **JVM dist / test classpath:** `:cli-engine` is present, so `jk --engine-server` and the

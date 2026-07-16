@@ -1,0 +1,166 @@
+// SPDX-License-Identifier: Apache-2.0
+package cc.jumpkick.cli;
+
+import cc.jumpkick.model.command.Invocation;
+import cc.jumpkick.model.command.Opt;
+import java.nio.file.Path;
+import java.util.List;
+
+/**
+ * Global flags that apply to every {@code jk} subcommand. Populated from a parsed {@link
+ * cc.jumpkick.model.command.Invocation} via {@link #from(cc.jumpkick.model.command.Invocation)}.
+ *
+ * <p>Precedence for resolving each setting: explicit flag &gt; env var &gt; project {@code jk.toml}
+ * &gt; user-global {@code ~/.jk/config.toml}. There is no {@code /etc/jk} system layer and jk never
+ * reads {@code ~/.config} — see {@link cc.jumpkick.config.ConfigSources}.
+ */
+public final class GlobalOptions {
+    public boolean quiet;
+    public boolean verbose;
+    public String color;
+    public boolean offline;
+
+    /** {@code --force}: bypass all of jk's caching for this invocation. */
+    public boolean force;
+
+    /**
+     * {@code --rebuild} — recompile/repackage/re-run tests (skip freshness stamps and the action
+     * cache, both directions) while still serving locked deps from the CAS: offline-safe cache
+     * distrust. {@code --force} implies it and additionally re-fetches.
+     */
+    public boolean rebuild;
+
+    public boolean noProgress;
+
+    /** {@code --no-ansi} — declared as a global; read here so command code never misses it. */
+    public boolean noAnsi;
+
+    /** {@code --jdk <spec>} / {@code --graal <spec>}: the top JDK / GraalVM resolution tier. */
+    public String jdk;
+
+    public String graal;
+
+    public String output;
+
+    /**
+     * True when the user asked for {@code --output json} (or set {@code JK_OUTPUT=json}). Commands
+     * may use this to suppress their own human-readable summary lines so the NDJSON stream stays
+     * machine-parseable.
+     */
+    public boolean outputIsJson() {
+        String resolved = output;
+        if (resolved == null) {
+            resolved = System.getenv("JK_OUTPUT");
+        }
+        return resolved != null && resolved.equalsIgnoreCase("json");
+    }
+
+    public Path configFile;
+    public boolean noConfig;
+    public Path directory;
+
+    /**
+     * Resolve the working directory: explicit {@code --directory} if set (either on this mixin or via
+     * {@link cc.jumpkick.config.SessionContext}, which captures {@code -C} placed before the
+     * subcommand), otherwise the current working directory. Always returns an absolute normalised
+     * path so callers can pass it into IO without worrying about whether {@code -C} was supplied.
+     */
+    public Path workingDir() {
+        Path raw = directory;
+        if (raw == null) {
+            raw = cc.jumpkick.config.SessionContext.current().config().directory().orElse(Path.of(""));
+        }
+        return raw.toAbsolutePath().normalize();
+    }
+
+    public boolean help;
+    public boolean version;
+
+    /** {@code --max-ram-percent}: per-JVM heap cap for jk's worker JVMs, or null. */
+    public Double maxRamPercent;
+
+    /** {@code --jvm-arg}: extra raw flags for jk's worker JVMs (repeatable). */
+    public List<String> jvmArgs = List.of();
+
+    /**
+     * The CLI-supplied JVM tuning as the highest-precedence {@link cc.jumpkick.config.PluginTuning}
+     * layer. {@code gc} / {@code string-dedup} are left unset here — those come from env / {@code
+     * jk.toml}; the CLI exposes only the two most common knobs.
+     */
+    public cc.jumpkick.config.PluginTuning jvmCli() {
+        return new cc.jumpkick.config.PluginTuning(maxRamPercent, null, null, jvmArgs);
+    }
+
+    /**
+     * Populate a {@code GlobalOptions} from a parsed {@link Invocation} — the picocli-free
+     * counterpart to the {@code @Mixin}. A ported command's {@code run(Invocation)} replaces its
+     * {@code @Mixin GlobalOptions global} field with {@code GlobalOptions.from(in)}; the rest of the
+     * body ({@code global.workingDir()}, {@code global.offline}, …) is unchanged.
+     */
+    public static GlobalOptions from(Invocation in) {
+        GlobalOptions g = new GlobalOptions();
+        g.quiet = in.isSet("quiet");
+        g.verbose = in.isSet("verbose");
+        g.color = in.value("color").orElse(null);
+        g.offline = in.isSet("offline");
+        g.force = in.isSet("force");
+        g.rebuild = in.isSet("rebuild");
+        g.noProgress = in.isSet("no-progress");
+        g.noAnsi = in.isSet("no-ansi");
+        g.output = in.value("output").orElse(null);
+        g.configFile = in.value("config-file").map(Path::of).orElse(null);
+        g.noConfig = in.isSet("no-config");
+        g.directory = in.value("directory").map(Path::of).orElse(null);
+        g.maxRamPercent = in.value("max-ram-percent")
+                .map(s -> {
+                    try {
+                        return Double.valueOf(s.trim());
+                    } catch (NumberFormatException e) {
+                        return null;
+                    }
+                })
+                .orElse(null);
+        g.jvmArgs = in.values("jvm-arg");
+        g.jdk = in.value("jdk").orElse(null);
+        g.graal = in.value("graal").orElse(null);
+        // Carry the top-tier JDK/GraalVM selection and the client's JVM-tuning layers on the
+        // request-scoped Session, so the toolchain resolvers (JdkResolution / GraalResolver) and
+        // every worker fork read them from the request instead of process-global system properties
+        // / static channels. Only the flag/env layers resolve here — the jk.toml [jvm] table is
+        // engine-read at worker-fork time (thin client; keeps tomlj off the client). The working
+        // dir rides along so the in-process seam overlays the same project's table.
+        cc.jumpkick.config.SessionContext.install(cc.jumpkick.config.SessionContext.current()
+                .withToolchainSpecs(g.jdk, g.graal)
+                .withWorkingDir(g.workingDir())
+                .withJvm(cc.jumpkick.config.PluginTunings.resolveClient(g.jvmCli())));
+        return g;
+    }
+
+    /**
+     * The global options as {@link cc.jumpkick.model.command.Opt} data. The dispatcher merges these
+     * into every command's option set so global flags are accepted everywhere and shown in the
+     * "Global options" help section.
+     */
+    public static List<Opt> globalOpts() {
+        return List.of(
+                Opt.flag("Suppress informational output", "-q", "--quiet"),
+                Opt.flag("Print additional diagnostic output", "-v", "--verbose"),
+                Opt.value("<WHEN>", "When to colorize output: auto, always, never", "--color"),
+                Opt.flag("Disable network access for this run", "--offline"),
+                Opt.flag("Bypass jk's caching and redo this operation, re-fetching deps too", "--force"),
+                Opt.flag("Redo this build's work (skip jk's caches) without re-fetching deps", "--rebuild"),
+                Opt.flag("Disable all progress bars and spinners", "--no-progress"),
+                Opt.flag("Disable all ANSI/color/Unicode; ASCII-only output", "--no-ansi"),
+                Opt.value("<FORMAT>", "Output format: text (default) or json", "--output"),
+                Opt.value("<FILE>", "Use this jk.toml for configuration", "--config-file"),
+                Opt.flag("Skip jk.toml discovery; use defaults", "--no-config"),
+                Opt.value("<DIR>", "Change to this directory before running", "-C", "--directory"),
+                Opt.value("<PCT>", "Worker-JVM max heap as % of RAM", "--max-ram-percent"),
+                Opt.value("<ARG>", "Extra worker-JVM flag (repeatable)", "--jvm-arg")
+                        .repeat(),
+                Opt.value("<spec>", "JDK for this run; overrides project pins", "--jdk"),
+                Opt.value("<spec>", "GraalVM for jk native / GRAALVM_HOME", "--graal"),
+                Opt.flag("Show this help message and exit", "-h", "--help"),
+                Opt.flag("Print version information and exit", "-V", "--version"));
+    }
+}

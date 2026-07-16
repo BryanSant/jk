@@ -345,24 +345,24 @@ Each item has: `name`, `step`, `action`, `duration`, `status` (`working` | `comp
 **Working UoW** (bottom item uses `╰─`, all others use `├─`):
 
 ```
- ╰─ build.jumpkick:engine › Testing › relocking_detects_a_force_moved_tag(Path)
+ ╰─ cc.jumpkick:engine › Testing › relocking_detects_a_force_moved_tag(Path)
 ```
 
 **Completed UoW**:
 
 ```
-    ✓ [15 of 17] build.jumpkick:compat-bridge took 34ms
+    ✓ [15 of 17] cc.jumpkick:compat-bridge took 34ms
 ```
 
 ### 8.2 Full ParallelTracker View
 
 ```
- ╰─ build.jumpkick:engine › Testing › relocking_detects_a_force_moved_tag(Path)
-    ✓ [15 of 17] build.jumpkick:compat-bridge took 34ms
-    ✓ [14 of 17] build.jumpkick:toolchain took 28ms
-    ✓ [13 of 17] build.jumpkick:publisher took 86ms
-    ✓ [12 of 17] build.jumpkick:image-builder took 76ms
-    ✓ [11 of 17] build.jumpkick:git-client took 69ms
+ ╰─ cc.jumpkick:engine › Testing › relocking_detects_a_force_moved_tag(Path)
+    ✓ [15 of 17] cc.jumpkick:compat-bridge took 34ms
+    ✓ [14 of 17] cc.jumpkick:toolchain took 28ms
+    ✓ [13 of 17] cc.jumpkick:publisher took 86ms
+    ✓ [12 of 17] cc.jumpkick:image-builder took 76ms
+    ✓ [11 of 17] cc.jumpkick:git-client took 69ms
       … plus 10 more …
 ```
 
@@ -374,9 +374,9 @@ Each item has: `name`, `step`, `action`, `duration`, `status` (`working` | `comp
 Each step transition is a new line. Actions are not printed unless `-vv`:
 
 ```
-[01 of 17] build.jumpkick:toolchain > Compiling ...
-[01 of 17] build.jumpkick:toolchain > Testing ...
-[01 of 17] build.jumpkick:toolchain - Complete - took 76ms
+[01 of 17] cc.jumpkick:toolchain > Compiling ...
+[01 of 17] cc.jumpkick:toolchain > Testing ...
+[01 of 17] cc.jumpkick:toolchain - Complete - took 76ms
 ```
 
 ---
@@ -420,7 +420,7 @@ Maven / Cargo-style coordinates are always colored when color is enabled. The ne
 ```
 org.apache.commons:commons-io:1.2.3       ← standard GAV
 org.apache.commons:commons-io@=1.2.3      ← Cargo-style (same coloring)
-build.jumpkick:engine                         ← version absent, still colored
+cc.jumpkick:engine                         ← version absent, still colored
 ```
 
 No-color and no-ANSI: plain text, no coloring.

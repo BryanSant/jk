@@ -1,5 +1,5 @@
 [project]
-group    = "build.jumpkick"
+group    = "cc.jumpkick"
 name     = "jk-core"
 version  = "0.10.0-SNAPSHOT"
 description = "jk core foundations: TOML config parser, lockfile, layout, deny policy."
@@ -7,7 +7,7 @@ jdk      = 25
 java     = 25
 
 [dependencies]
-jk-model = { group = "build.jumpkick", name = "jk-model", version = "0.10.0-SNAPSHOT" }
+jk-model = { group = "cc.jumpkick", name = "jk-model", version = "0.10.0-SNAPSHOT" }
 tomlj    = { group = "org.tomlj",   name = "tomlj",    version = "1.1.1" }
 # ComparableVersion for Versions.compare — rehomed from jk-resolver with the slim-client stage 5
 # move (mirrors build.gradle.kts).

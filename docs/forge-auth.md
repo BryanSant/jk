@@ -1,6 +1,6 @@
 # Forge Authentication — Multi-provider Auth & API Access
 
-**Status:** Implemented. The `build.jumpkick.forge` library layer (provider
+**Status:** Implemented. The `cc.jumpkick.forge` library layer (provider
 model, device flow, token store, resolution chain) is built and tested in
 `:io`; the `jk auth` command surface (`login`/`logout`/`status`/`token`)
 lives in `:cli`; and OAuth client IDs are configurable via `ForgeAuthConfig`
@@ -288,7 +288,7 @@ instead. The `TokenSource` enum exists precisely to make this branch clean.
 
 ## Implemented vs. remaining
 
-**Implemented in `:io` (`build.jumpkick.forge`), with tests:**
+**Implemented in `:io` (`cc.jumpkick.forge`), with tests:**
 
 - `ForgeKind` — provider model: hosts, capabilities, endpoints, env-var and
   native-CLI metadata, id/host lookup.

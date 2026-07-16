@@ -69,7 +69,7 @@ and the fallback when no engine artifact is installed. Both routes execute the e
    no `jk engine fetch` command: the fetch is built into the spawn. The JVM dist (which hosts the
    engine itself), `--offline` runs, and `-SNAPSHOT` builds never auto-fetch. The jar is
    launched as `<managed-jdk>/bin/java -XX:+UseSerialGC
-   -Xms…/-Xmx… -cp ~/.jk/versions/<v>/lib/jk-engine.jar build.jumpkick.cli.EngineMain` on the jk-managed
+   -Xms…/-Xmx… -cp ~/.jk/versions/<v>/lib/jk-engine.jar cc.jumpkick.cli.EngineMain` on the jk-managed
    default JDK. The host JDK must meet the engine's runtime floor (the release that compiled the
    client and jar — a global default pinned older for *project* builds is skipped, since it governs
    plugin processes, not the engine host); when nothing installed qualifies, the client installs
@@ -80,7 +80,7 @@ and the fallback when no engine artifact is installed. Both routes execute the e
    change boots cold and serves immediately; the client's spawn line adds
    `-Djk.aot.train.output=<cache>`, and once that engine wins its election it launches a
    **sidecar trainer** — its own jar re-entered as `java -XX:AOTCacheOutput=<cache> -cp
-   jk-engine.jar build.jumpkick.cli.EngineMain --aot-training`. The trainer is a real engine run
+   jk-engine.jar cc.jumpkick.cli.EngineMain --aot-training`. The trainer is a real engine run
    (full startup class-loading fidelity — exactly the profile worth recording) against a private
    temp state dir, so it binds only throwaway paths, can never touch the real endpoint or
    elections, and is invisible to clients; it idles ~3 s, stops itself cleanly, and the JVM

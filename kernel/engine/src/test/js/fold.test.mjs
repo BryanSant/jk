@@ -104,8 +104,8 @@ test('the feed is bounded at MAX_CARDS', () => {
 
 test('coord and client timestamps ride the card', () => {
   const cards = [];
-  foldEvent(cards, { ...start(1, '/w', { coord: 'build.jumpkick:jk' }), at: 1000 });
-  assert.equal(cards[0].coord, 'build.jumpkick:jk');
+  foldEvent(cards, { ...start(1, '/w', { coord: 'cc.jumpkick:jk' }), at: 1000 });
+  assert.equal(cards[0].coord, 'cc.jumpkick:jk');
   assert.equal(cards[0].startedAt, 1000);
   foldEvent(cards, { ...finish(1, { millis: 500 }), at: 1500 });
   assert.equal(cards[0].finishedAt, 1500);

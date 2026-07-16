@@ -43,7 +43,7 @@ max-concurrent-requests = 16  # default; 0 = the container-aware core count
 www-root = "state/www"        # absolute, or relative to the resolved JK_HOME (~/.jk)
 ```
 
-Parsed by the `JkHttpConfig` record beside `JkEngineConfig` in `build.jumpkick.config` (`:core`),
+Parsed by the `JkHttpConfig` record beside `JkEngineConfig` in `cc.jumpkick.config` (`:core`),
 via the same lenient `TomlValues` reader: missing file or missing table → the defaults (feature
 on); a present table with malformed keys falls back per-key to defaults (config is advisory, never
 a build-breaking gate). One asymmetry is deliberate: an *existing but unparseable* config file
@@ -73,9 +73,9 @@ core count" semantic.
 
 ## Placement
 
-- `build.jumpkick.engine.http` package in `:engine` (`kernel/engine`) — engine-only code; the slim
+- `cc.jumpkick.engine.http` package in `:engine` (`kernel/engine`) — engine-only code; the slim
   client never links it, preserving the compiler-enforced engine/front-end split.
-- `JkHttpConfig` in `build.jumpkick.config` (`:core`), sibling of `JkEngineConfig`.
+- `JkHttpConfig` in `cc.jumpkick.config` (`:core`), sibling of `JkEngineConfig`.
 - Shipped SPA assets in `kernel/engine/src/main/resources/www/` — rolled into the
   `jk-engine-<version>.jar` fat jar by `:cli-engine:shadowJar` with no build-file changes.
 - One new `EnginePaths.Paths` member: `<key>.http` (see Lifecycle).

@@ -232,7 +232,7 @@ who hit a probe bug or want isolated jk-owned installs.
 
 ## 8. Code changes
 
-**New** — in `:toolchain/build.jumpkick.tool/`:
+**New** — in `:toolchain/cc.jumpkick.tool/`:
 
 - `LocalToolProbe.java` — SPI interface.
 - `DiscoveredTool.java`, `ToolQuery.java` — data records.

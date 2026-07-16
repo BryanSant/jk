@@ -124,7 +124,7 @@ protocol-prefix = "##JKSB:"      # your plugin's protocol line marker
 
 ## 3. The code layer
 
-Implement `build.jumpkick.plugin.build.BuildPlugin` and register hooks; drive the jar's `main`
+Implement `cc.jumpkick.plugin.build.BuildPlugin` and register hooks; drive the jar's `main`
 through `BuildPluginHarness` (it speaks the describe/run-step/package/command protocol for you):
 
 ```java

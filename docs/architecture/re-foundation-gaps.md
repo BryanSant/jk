@@ -11,7 +11,7 @@ claims describe an *intended end-state* rather than what shipped, and there are 
 correctness leaks.
 
 **Load-bearing win that holds:** the kernel has **zero** dependency on the CLI — no
-`build.jumpkick.cli`/`build.jumpkick.command` import exists anywhere in `kernel/*/src/main`. The one-way
+`cc.jumpkick.cli`/`cc.jumpkick.command` import exists anywhere in `kernel/*/src/main`. The one-way
 layering (`model → core → {io,resolver,toolchain} → engine → cli`) is intact. M4 (worker SPI) and M5f
 (builders) are accurate as claimed.
 
@@ -87,7 +87,7 @@ ExplainPlan` — a `BuildGraph`-free forecast (dependency-ordered `BuildPlanFore
 `dir → prereq dirs` edge map + width + errors) — plus a `ResolvedGraph` opaque handle
 (package-private `graph()`, mirroring `ModulePlan`) and a `resolveGraph`/`forecastDirtyDirs` overload
 for the build preflight. `ExplainCommand` and `BuildCommand` migrated and **no longer name
-`build.jumpkick.runtime.BuildGraph` or `BuildGraph.BuildUnit`** — closing the M6-logged leak. The only
+`cc.jumpkick.runtime.BuildGraph` or `BuildGraph.BuildUnit`** — closing the M6-logged leak. The only
 remaining `BuildGraph` reference in the CLI is `NativeCommand`'s front-end-safe
 `BuildGraph.orderModules(Map)` (the M4 map API, not graph internals).
 _Update (2026-07-06):_ **`installJdk` facade landed** — `JdkService` (engine) owns catalog fetch →
@@ -208,7 +208,7 @@ through the session output sink (depends on L7's output-sink landing).
 
 **Severity: medium (encapsulation).** **Status: FIXED** (commit `compiler-enforce … M6`).
 `BuildService.ModulePlan` and `BuildPlanForecast.Module` are now `final class`es (not records) so their
-`unit()` accessor drops to package-private — reachable by engine consumers in `build.jumpkick.runtime`,
+`unit()` accessor drops to package-private — reachable by engine consumers in `cc.jumpkick.runtime`,
 invisible to the CLI. `ExplainCommand` migrated to the new public `coord()`/`dir()`; the CLI no longer
 calls `.unit()` anywhere.
 _Compromise (logged → folded into L8):_ the CLI still names `BuildGraph`/`BuildGraph.BuildUnit`
@@ -287,7 +287,7 @@ _Compromises (logged, to revisit):_
 
 - `JkBuildRenderer.java:42` re-declares its own `private static final String
   WORKSPACE_PLACEHOLDER_PREFIX = "workspace:"` and uses it at `:157`, despite importing
-  `build.jumpkick.model.Dependency` (which exposes `WORKSPACE_PREFIX`/`isWorkspaceRef`).
+  `cc.jumpkick.model.Dependency` (which exposes `WORKSPACE_PREFIX`/`isWorkspaceRef`).
 - A `git:` repo-source prefix is written in `GitSourceResolution.java:105` (`"git:" + …`) and read in
   `RepoArtifactResolver.java:37` (`startsWith("git:")`) as bare literals with no shared constant.
 - `CacheSync.java:298` and `PolicyChecker.java:31` still hand-split `+`-delimited sources instead of
@@ -336,7 +336,7 @@ in the final review. `(open)` = still a compromise; `(resolved)` = revisited and
 - **[Q2] (open)** ~11 CLI/resolver display-coloring coordinate splits left un-deduped — adopting the
   shared `Coords` helper would change rendered output bytes; `resolver`'s two cannot see cli's `Coords`.
 - **[Q3] (resolved)** `CacheSync` double-`+`-scan and **[Q3] (resolved)** `PolicyChecker`'s
-  layering-blocked hand-split are BOTH closed by a shared `build.jumpkick.lock.RepoSource` (in `core`,
+  layering-blocked hand-split are BOTH closed by a shared `cc.jumpkick.lock.RepoSource` (in `core`,
   visible to core/io/resolver): one owner of the `<name>+<url>` split with a strict nullable `name()`
   (mirrors `repoName`) and a lenient `url()` (mirrors PolicyChecker), each preserving its exact
   boundary contract (they intentionally diverge only on a trailing `+`, documented + unit-tested).
@@ -374,7 +374,7 @@ Independent re-audit of the invariants after all items landed (each verified by 
 - **CLI names no engine build internals:** zero `BuildGraph.BuildUnit` / `.unit()` references in
   `cli/src/main`; `topoSortModules` deleted; only `NativeCommand`'s front-end-safe
   `BuildGraph.orderModules(Map)` remains. (M4 + M6 + L8.)
-- **Kernel → CLI layering:** zero `import build.jumpkick.cli`/`command` in any kernel/plugin-api main
+- **Kernel → CLI layering:** zero `import cc.jumpkick.cli`/`command` in any kernel/plugin-api main
   source. Intact.
 - **Coordinate-split cluster** (the 7 `ResolvedModule → Coordinate` sites) eliminated; remaining
   `indexOf(':')` are the documented display-coloring (`DependencyTree`, `Diagnostics`) and
@@ -405,7 +405,7 @@ the adapter needed them.
 `BuildService.ModulePlan.fromWire(dir, coord, pipeline, weight, fullyCached, cache)` and
 `BuildPlanForecast.Module.fromWire(dir, coord, steps, …)`. Both `BuildUnit`-taking constructors
 dropped to package-private, and `BuildGraph.BuildUnit` itself is now **package-private**, so the
-boundary is compiler-enforced for good: no code outside `build.jumpkick.runtime` can name or construct
+boundary is compiler-enforced for good: no code outside `cc.jumpkick.runtime` can name or construct
 a unit. The adapter names only `BuildService`/`BuildPlanForecast` facade types. Re-verified: zero
 `BuildGraph.BuildUnit` references in `cli/src/main`; `NativeCommand`'s `orderModules(Map)` remains
 the sole (front-end-safe) `BuildGraph` mention.

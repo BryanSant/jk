@@ -56,7 +56,7 @@ SSE client is connected, but the accumulator and the write do not. A build run f
 with no browser open is still journaled. Journaling is best-effort: an append failure is logged and
 never propagated (it must not change a build's outcome).
 
-The journal library (`build.jumpkick.engine.journal`: `BuildRecord`, `Json`, `BuildJournal`) lives in
+The journal library (`cc.jumpkick.engine.journal`: `BuildRecord`, `Json`, `BuildJournal`) lives in
 the engine module. Concurrent builds never contend — each owns a unique `<id>/` and writes only
 within it; `append` stages into a dot-prefixed temp dir and moves it into place atomically, so a
 reader never sees a half-written entry.

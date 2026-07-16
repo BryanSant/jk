@@ -39,7 +39,7 @@ dependencies {
 graalvmNative {
     binaries.named("main") {
         imageName.set("jk")
-        mainClass.set("build.jumpkick.cli.Jk")
+        mainClass.set("cc.jumpkick.cli.Jk")
         // The plugin's "main" binary is supposed to default to executable,
         // but the 0.10.4 / GraalVM 25 combination defaults to shared library
         // on this host. Force the executable mode explicitly.

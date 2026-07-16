@@ -1,0 +1,21 @@
+{
+  "resources": {
+    "includes": [
+      {
+        "pattern": "activate/.*\\.sh"
+      },
+      {
+        "pattern": "activate/.*\\.fish"
+      },
+      {
+        "pattern": "activate/.*\\.ps1"
+      },
+      {
+        "pattern": "META-INF/jk-.*-sha256\\.txt"
+      },
+      {
+        "pattern": "cc/jumpkick/command/wrapper/.*"
+      }
+    ]
+  }
+}

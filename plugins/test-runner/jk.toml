@@ -10,7 +10,7 @@ java     = 25
 # runnable fat jar: bundles plugin-api (PluginMain) so the forked worker launches
 # standalone (`-cp <jar> PluginMain`), like the other workers.
 [application]
-main       = "build.jumpkick.testrunner.JkRunner"
+main       = "cc.jumpkick.testrunner.JkRunner"
 shadow-jar = true
 
 [manifest]
@@ -18,5 +18,5 @@ shadow-jar = true
 "Implementation-Version" = "0.1.0"
 
 [dependencies]
-jk-plugin-api         = { group = "build.jumpkick", name = "jk-plugin-api", version = "0.10.0-SNAPSHOT" }
+jk-plugin-api         = { group = "cc.jumpkick", name = "jk-plugin-api", version = "0.10.0-SNAPSHOT" }
 junit-platform-engine = { group = "org.junit.platform", version = ">=6.0.0" }

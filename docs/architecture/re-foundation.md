@@ -207,7 +207,7 @@ The mutable global *channels that carry request data* now live on `Session` (eac
     byte-identical); `coreBuilder` is now a readable assembly.
 
 - **M4 — worker SPI (PARTIALLY DONE)** —
-  - **Done — `compat` de-dup:** `compat-bridge` carried 7 (near-)duplicate `build.jumpkick.compat`
+  - **Done — `compat` de-dup:** `compat-bridge` carried 7 (near-)duplicate `cc.jumpkick.compat`
     classes (`BuildTool`/`InstalledTool`/`PassthroughEnv`/`ToolDistribution`/`ToolInstaller`/
     `ToolProvisioning`/`ToolRegistry`) already provided by `:toolchain` (a dependency). Deleted the
     worker's copies; the two cosmetically-divergent ones were functionally identical.
@@ -242,7 +242,7 @@ The mutable global *channels that carry request data* now live on `Session` (eac
   - **Done — `jk-api` blessed (it already exists as `:model`).** Investigation outcome: the physical
     API module the milestone imagined *already exists* — the codebase evolved so that `:model` is a
     zero-external-dependency, dependency-graph-leaf module holding the entire contract-type surface
-    (`build.jumpkick.model` + the `model.command` CliCommand/Invocation SPI + the `build.jumpkick.run`
+    (`cc.jumpkick.model` + the `model.command` CliCommand/Invocation SPI + the `cc.jumpkick.run`
     Pipeline/Step/PipelineListener/PipelineKey scheduler SPI). Blessed it explicitly as "jk-api" in its build
     description. A build-*driving* front-end depends on `:engine` for the `BuildService` facade — same
     as the CLI does — which is the north-star (engine=server, any client incl. CLI drives it), not a

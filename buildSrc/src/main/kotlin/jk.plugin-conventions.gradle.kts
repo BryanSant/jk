@@ -19,9 +19,9 @@ plugins {
     `maven-publish`
 }
 
-// Coordinates + version must match build.jumpkick.util.JkVersion.VERSION and the
-// build.jumpkick.engine.plugin.PluginJar registry (artifactId = jk-<projectName>).
-group = "build.jumpkick"
+// Coordinates + version must match cc.jumpkick.util.JkVersion.VERSION and the
+// cc.jumpkick.engine.plugin.PluginJar registry (artifactId = jk-<projectName>).
+group = "cc.jumpkick"
 version = "0.10.0-SNAPSHOT"
 
 val workerArtifact = "jk-${project.name}"
@@ -38,7 +38,7 @@ publishing {
 tasks.jar {
     manifest {
         attributes(
-                "Main-Class" to "build.jumpkick.plugin.process.PluginMain",
+                "Main-Class" to "cc.jumpkick.plugin.process.PluginMain",
                 "Implementation-Title" to workerArtifact,
                 "Implementation-Version" to project.version)
     }
@@ -48,7 +48,7 @@ tasks.jar {
 }
 
 // Side-load the freshly-built worker jar into the developer's local Maven repo at
-// ~/.jk/cache/repos/local/build/jumpkick/<artifact>/<version>/<artifact>-<version>.jar
+// ~/.jk/cache/repos/local/cc/jumpkick/<artifact>/<version>/<artifact>-<version>.jar
 // so PluginJar.locate() finds the worker without requiring -Djk.<x>.plugin.jar.
 // Also writes a .sha256 sidecar so RepoArtifactStore.locate() sees it as complete.
 tasks.register("installLocal") {
@@ -66,7 +66,7 @@ tasks.register("installLocal") {
         val cacheRoot: File = System.getenv("JK_CACHE_DIR")?.let { File(it) }
                 ?: System.getenv("JK_HOME")?.let { File(it).resolve("cache") }
                 ?: File(System.getProperty("user.home"), ".jk/cache")
-        val repoDir = cacheRoot.resolve("repos/local/build/jumpkick/$artifact/$ver")
+        val repoDir = cacheRoot.resolve("repos/local/cc/jumpkick/$artifact/$ver")
         repoDir.mkdirs()
         val target = repoDir.resolve("$artifact-$ver.jar")
         val sidecar = repoDir.resolve("$artifact-$ver.jar.sha256")

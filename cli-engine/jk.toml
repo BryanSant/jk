@@ -1,5 +1,5 @@
 [project]
-group    = "build.jumpkick"
+group    = "cc.jumpkick"
 name     = "jk-cli-engine"
 version  = "0.10.0-SNAPSHOT"
 description = "jk engine application: EngineMain, POSIX self-detach, and the in-process engine seam."
@@ -7,20 +7,20 @@ jdk      = 25
 java     = 25
 
 [application]
-main = "build.jumpkick.cli.Jk"
+main = "cc.jumpkick.cli.Jk"
 
 [dependencies]
-jk-cli             = { group = "build.jumpkick", name = "jk-cli",    version = "0.10.0-SNAPSHOT" }
-jk-engine          = { group = "build.jumpkick", name = "jk-engine", version = "0.10.0-SNAPSHOT" }
-jk-model           = { group = "build.jumpkick", name = "jk-model",           version = "0.10.0-SNAPSHOT" }
-jk-core            = { group = "build.jumpkick", name = "jk-core",            version = "0.10.0-SNAPSHOT" }
-jk-client-io       = { group = "build.jumpkick", name = "jk-client-io",       version = "0.10.0-SNAPSHOT" }
-jk-io              = { group = "build.jumpkick", name = "jk-io",              version = "0.10.0-SNAPSHOT" }
-jk-resolver        = { group = "build.jumpkick", name = "jk-resolver",        version = "0.10.0-SNAPSHOT" }
-jk-toolchain       = { group = "build.jumpkick", name = "jk-toolchain",       version = "0.10.0-SNAPSHOT" }
-jk-toolchain-jdk   = { group = "build.jumpkick", name = "jk-toolchain-jdk",   version = "0.10.0-SNAPSHOT" }
-jk-engine-api      = { group = "build.jumpkick", name = "jk-engine-api",      version = "0.10.0-SNAPSHOT" }
-jk-plugin-api      = { group = "build.jumpkick", name = "jk-plugin-api",      version = "0.10.0-SNAPSHOT" }
+jk-cli             = { group = "cc.jumpkick", name = "jk-cli",    version = "0.10.0-SNAPSHOT" }
+jk-engine          = { group = "cc.jumpkick", name = "jk-engine", version = "0.10.0-SNAPSHOT" }
+jk-model           = { group = "cc.jumpkick", name = "jk-model",           version = "0.10.0-SNAPSHOT" }
+jk-core            = { group = "cc.jumpkick", name = "jk-core",            version = "0.10.0-SNAPSHOT" }
+jk-client-io       = { group = "cc.jumpkick", name = "jk-client-io",       version = "0.10.0-SNAPSHOT" }
+jk-io              = { group = "cc.jumpkick", name = "jk-io",              version = "0.10.0-SNAPSHOT" }
+jk-resolver        = { group = "cc.jumpkick", name = "jk-resolver",        version = "0.10.0-SNAPSHOT" }
+jk-toolchain       = { group = "cc.jumpkick", name = "jk-toolchain",       version = "0.10.0-SNAPSHOT" }
+jk-toolchain-jdk   = { group = "cc.jumpkick", name = "jk-toolchain-jdk",   version = "0.10.0-SNAPSHOT" }
+jk-engine-api      = { group = "cc.jumpkick", name = "jk-engine-api",      version = "0.10.0-SNAPSHOT" }
+jk-plugin-api      = { group = "cc.jumpkick", name = "jk-plugin-api",      version = "0.10.0-SNAPSHOT" }
 jline-terminal-ffm = { group = "org.jline",   name = "jline-terminal-ffm", version = "4.1.2" }
 
 [test-dependencies]
@@ -50,4 +50,4 @@ test-plugin-jars = [
 ]
 
 [image]
-main-class = "build.jumpkick.cli.EngineMain"
+main-class = "cc.jumpkick.cli.EngineMain"

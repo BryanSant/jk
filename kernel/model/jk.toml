@@ -1,5 +1,5 @@
 [project]
-group    = "build.jumpkick"
+group    = "cc.jumpkick"
 name     = "jk-model"
 version  = "0.10.0-SNAPSHOT"
 description = "jk domain model: Pipeline/Step/PipelineListener, Dependency/Coordinate, zero external deps."
