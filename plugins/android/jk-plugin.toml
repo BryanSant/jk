@@ -27,7 +27,7 @@ packager           = "apk"
 exec-mode          = "device"
 self-contained     = true
 artifact-extension = "apk"
-deploy-verb        = "deploy"
+deploy-command     = "deploy"
 
 [[packaging.variant]]
 when               = { config = "library", equals = "true" }
@@ -43,7 +43,7 @@ when               = { config = "build-type", equals = "release" }
 packager           = "aab"
 exec-mode          = "device"
 artifact-extension = "aab"
-deploy-verb        = "deploy"
+deploy-command     = "deploy"
 
 [schema]
 namespace    = { type = "string", required = true, example = "com.example.app", hint = "it names the R class package and the default application id" }
