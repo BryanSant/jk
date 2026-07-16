@@ -19,7 +19,7 @@ worker          = "jk-android"
 protocol-prefix = "##JKAN:"
 
 # The APK replaces the main artifact under its own extension; it is a device artifact —
-# not host-runnable. `jk run` dispatches the declared deploy verb (adb install + am start);
+# not host-runnable. `jk run` dispatches the declared deploy command (adb install + am start);
 # `jk dev` rebuilds and re-dispatches the same verb (restart-based redeploy). A library
 # module ([android] library = true) packages an AAR instead — not executable at all.
 [packaging]
@@ -36,7 +36,7 @@ exec-mode          = "none"
 artifact-extension = "aar"
 
 # A release app packages an AAB (the Play-uploadable default — android-plan §3.3); `jk run`
-# still deploys it locally: the deploy verb builds a universal APK via bundletool first.
+# still deploys it locally: the deploy command builds a universal APK via bundletool first.
 # Order matters: the library variant above wins for a release library build.
 [[packaging.variant]]
 when               = { config = "build-type", equals = "release" }
@@ -135,14 +135,14 @@ jvm-environment = "android"
 [[contribute.provided-classpath]]
 dependency = "android-jar"
 
-# bundletool, for the AAB packager and the deploy verb's universal-APK path — a JVM library
+# bundletool, for the AAB packager and the deploy command's universal-APK path — a JVM library
 # with a real dependency graph, forked over its transitive closure like manifest-merger.
 [[contribute.step-dependency]]
 artifact   = "bundletool"
 coordinate = "com.android.tools.build:bundletool:1.17.2"
 transitive = true
 
-# adb, for the deploy verb (`jk run` onto a device) — provisioned platform-tools.
+# adb, for the deploy command (`jk run` onto a device) — provisioned platform-tools.
 [[contribute.step-dependency]]
 artifact      = "adb"
 sdk-component = "platform-tools"

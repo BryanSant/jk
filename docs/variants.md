@@ -106,7 +106,7 @@ jk install --variant contentType=prod           # and install (current-project m
 Selections are **workspace-wide**: building from any module applies the same selection to
 every workspace sibling, and modules apply only the dimensions they declare. The selection
 follows the whole invocation: `jk run --release` on an Android app builds the release AAB
-*and* deploys it (the exec plan and the plugin's deploy verb resolve the selected packaging).
+*and* deploys it (the exec plan and the plugin's deploy command resolve the selected packaging).
 Read-only consumers that must answer before a selection exists (`jk android licenses`, exec
 planning) apply leniently — selected dimensions fold, unselected mandatory ones are skipped
 rather than errors; builds alone enforce the mandatory check.

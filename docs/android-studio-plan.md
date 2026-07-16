@@ -59,7 +59,7 @@ Android Studio ──(project system SPI)── jk-studio plugin ──(HTTP + N
 | SDK / platform | `AndroidSdk` root (exists, A1) | Studio wants an SDK path + API level — both known |
 | Variant selector | Variants machinery (A3) | expose declared axes + selection; re-sync on switch |
 | Manifest index | merged manifest step output | Studio's own merged-manifest view can read the step's output |
-| Run configurations | packaging descriptor + deploy verb | `ApkProvider`/`LaunchTask` over the built artifact |
+| Run configurations | packaging descriptor + deploy command | `ApkProvider`/`LaunchTask` over the built artifact |
 | Debugger attach | plain JDWP on the device | nothing Gradle-specific; Studio owns it once the APK installs |
 | Instrumented tests | A4's adb worker | surfaces later, with A4 |
 | Compose preview | **the hard one** | preview compiles through Studio's own fast-compile pipeline; ASwB supports it — mirror its `FastPreviewManager` wiring; budget a full phase |

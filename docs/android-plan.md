@@ -27,8 +27,8 @@ APK over the public SPI, zero Android-specific engine code:
 - **manifest-merger**: the android-manifest step (transitive step-dependency closure)
   merges the app manifest — package from [android] namespace, <uses-sdk> injected — and
   aapt2 links the merged manifest (the APK's binary manifest now carries uses-sdk).
-- **jk run onto a device**: [packaging] deploy-verb — the exec plan carries it and the
-  client dispatches the plugin's deploy verb (adb install -r + am start on the launcher
+- **jk run onto a device**: [packaging] deploy-command — the exec plan carries it and the
+  client dispatches the plugin's deploy command (adb install -r + am start on the launcher
   activity; adb from provisioned platform-tools; --adb overrides).
 Phase-1 honest gap (still open): the exit's "installs and launches" ran against a
 scripted fake adb — a live `adb devices` run is the outstanding proof.
@@ -77,7 +77,7 @@ own R still carries merged symbols).
   aab packager lays out base/ (proto manifest, resources.pb, res, dex, merged assets,
   AAR jni → lib/) and forks `build-bundle` over the transitive closure;
   `bundletool validate` + `build-apks --mode=universal` both accept the result
-  (AndroidReleaseTest, real tools). The deploy verb detects `.aab` and installs the
+  (AndroidReleaseTest, real tools). The deploy command detects `.aab` and installs the
   universal APK (own aapt2 + debug keystore).
 - **AAR assets/jni fold** into APK and AAB (module assets win; `.so` STORED — apksig
   page-aligns).
