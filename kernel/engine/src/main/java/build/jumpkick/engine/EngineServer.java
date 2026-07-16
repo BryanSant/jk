@@ -2872,9 +2872,9 @@ public final class EngineServer implements AutoCloseable {
      * workspace module's {@code PipelineResult.steps()} isn't reliably populated, so we capture the
      * events directly).
      */
-    private void accStepFinish(long requestId, String dir, String step, String status, long millis) {
+    private void accStepFinish(long requestId, String dir, String step, String phase, String status, long millis) {
         BuildAccumulator a = accumulators.get(requestId);
-        if (a != null) a.addStep(dir, step, status, millis);
+        if (a != null) a.addStep(dir, step, phase, status, millis);
     }
 
     private void accTests(long requestId, TestSummary tests) {
@@ -3248,7 +3248,7 @@ public final class EngineServer implements AutoCloseable {
                     String step, build.jumpkick.plugin.build.Phase phase, build.jumpkick.run.StepStatus status, Duration duration) {
                 sendQuiet(writer, EngineProtocol.stepFinish(dir, step, phaseWire(phase), status.name()));
                 publishStepFinish(eventRequestId, dir, step, phaseWire(phase), status.name());
-                accStepFinish(eventRequestId, dir, step, status.name(), duration.toMillis());
+                accStepFinish(eventRequestId, dir, step, phaseWire(phase), status.name(), duration.toMillis());
             }
 
             @Override
@@ -3449,7 +3449,7 @@ public final class EngineServer implements AutoCloseable {
                     public void stepFinish(
                             String step, build.jumpkick.plugin.build.Phase phase, build.jumpkick.run.StepStatus status, Duration duration) {
                         publishStepFinish(eventRequestId, dir, step, phaseWire(phase), status.name());
-                        accStepFinish(eventRequestId, dir, step, status.name(), duration.toMillis());
+                        accStepFinish(eventRequestId, dir, step, phaseWire(phase), status.name(), duration.toMillis());
                     }
 
                     @Override
@@ -3691,11 +3691,11 @@ public final class EngineServer implements AutoCloseable {
         }
 
         /** One finished step, stored under its module dir ("" for a single-pipeline build). */
-        void addStep(String dir, String step, String status, long millis) {
+        void addStep(String dir, String step, String phase, String status, long millis) {
             stepsByDir
                     .computeIfAbsent(dir == null ? "" : dir,
                             k -> java.util.Collections.synchronizedMap(new java.util.LinkedHashMap<>()))
-                    .put(step, new BuildRecord.Step(step, status, millis));
+                    .put(step, new BuildRecord.Step(step, phase, status, millis));
         }
 
         /** Diagnostics + failure flag from a finished pipeline (steps come from {@link #addStep}). */

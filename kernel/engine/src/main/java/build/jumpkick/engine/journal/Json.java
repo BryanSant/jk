@@ -86,6 +86,7 @@ final class Json {
         for (BuildRecord.Step p : steps) {
             Map<String, Object> pm = new LinkedHashMap<>();
             pm.put("name", p.name());
+            pm.put("phase", p.phase());
             pm.put("status", p.status());
             pm.put("millis", p.millis());
             out.add(pm);
@@ -158,7 +159,7 @@ final class Json {
         List<BuildRecord.Step> steps = new ArrayList<>();
         for (Object e : arr(o, "steps")) {
             Map<String, Object> pm = (Map<String, Object>) e;
-            steps.add(new BuildRecord.Step(str(pm, "name"), str(pm, "status"), lng(pm, "millis")));
+            steps.add(new BuildRecord.Step(str(pm, "name"), str(pm, "phase"), str(pm, "status"), lng(pm, "millis")));
         }
         return steps;
     }

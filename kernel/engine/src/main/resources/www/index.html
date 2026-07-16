@@ -93,17 +93,17 @@
         <template v-if="compact(card)">
           <details v-if="okModules(card).length && singleChain(card).length" class="module-group" :open="outcome(card) === 'running'">
             <summary>success details</summary>
-            <step-chain :steps="singleChain(card)"></step-chain>
+            <phase-chain :steps="singleChain(card)"></phase-chain>
           </details>
           <template v-if="failedModules(card).length">
-            <step-chain v-if="singleChain(card).length" :steps="singleChain(card)"></step-chain>
+            <phase-chain v-if="singleChain(card).length" :steps="singleChain(card)"></phase-chain>
             <div v-if="singleModule(card) && singleModule(card).diagnostics.length" class="diag">
               <div class="console">
                 <div v-for="(d, i) in singleModule(card).diagnostics" :key="i" class="diag-line">
                   <!-- Separators live INSIDE spans (&nbsp;) — inter-element whitespace is not
                        preserved reliably through the template pipeline, which squashed segments
-                       together. Shape: ✘ step › test › ExceptionClass › message -->
-                  <span class="console-err">✘&nbsp;</span><span class="console-dir">{{ d.step }}</span><template v-if="d.test"><span class="console-sep">&nbsp;›&nbsp;</span><span>{{ d.test }}</span></template><template v-if="d.exceptionClass"><span class="console-sep">&nbsp;›&nbsp;</span><span>{{ d.exceptionClass }}</span></template><span class="console-sep">&nbsp;›&nbsp;</span><span>{{ d.message }}</span>
+                       together. Shape: ✘ Phase › step › test › ExceptionClass › message -->
+                  <span class="console-err">✘&nbsp;</span><template v-if="diagPhase(singleModule(card), d)"><span class="console-phase">{{ diagPhase(singleModule(card), d) }}</span><span class="console-sep">&nbsp;›&nbsp;</span></template><span class="console-dir">{{ d.step }}</span><template v-if="d.test"><span class="console-sep">&nbsp;›&nbsp;</span><span>{{ d.test }}</span></template><template v-if="d.exceptionClass"><span class="console-sep">&nbsp;›&nbsp;</span><span>{{ d.exceptionClass }}</span></template><span class="console-sep">&nbsp;›&nbsp;</span><span>{{ d.message }}</span>
                 </div>
               </div>
             </div>
@@ -124,7 +124,7 @@
                 <span class="spacer"></span>
                 <span class="millis">{{ duration(m.millis) }}</span>
               </div>
-              <step-chain v-if="m.steps.length" :steps="m.steps"></step-chain>
+              <phase-chain v-if="m.steps.length" :steps="m.steps"></phase-chain>
             </div>
           </details>
           <details v-if="failedModules(card).length" class="module-group fail" open>
@@ -136,11 +136,11 @@
                 <span class="spacer"></span>
                 <span class="millis">{{ duration(m.millis) }}</span>
               </div>
-              <step-chain v-if="m.steps.length" :steps="m.steps"></step-chain>
+              <phase-chain v-if="m.steps.length" :steps="m.steps"></phase-chain>
               <div v-if="m.diagnostics.length" class="diag">
                 <div class="console">
                   <div v-for="(d, i) in m.diagnostics" :key="i" class="diag-line">
-                    <span class="console-err">✘&nbsp;</span><span class="console-dir">{{ d.step }}</span><template v-if="d.test"><span class="console-sep">&nbsp;›&nbsp;</span><span>{{ d.test }}</span></template><template v-if="d.exceptionClass"><span class="console-sep">&nbsp;›&nbsp;</span><span>{{ d.exceptionClass }}</span></template><span class="console-sep">&nbsp;›&nbsp;</span><span>{{ d.message }}</span>
+                    <span class="console-err">✘&nbsp;</span><template v-if="diagPhase(m, d)"><span class="console-phase">{{ diagPhase(m, d) }}</span><span class="console-sep">&nbsp;›&nbsp;</span></template><span class="console-dir">{{ d.step }}</span><template v-if="d.test"><span class="console-sep">&nbsp;›&nbsp;</span><span>{{ d.test }}</span></template><template v-if="d.exceptionClass"><span class="console-sep">&nbsp;›&nbsp;</span><span>{{ d.exceptionClass }}</span></template><span class="console-sep">&nbsp;›&nbsp;</span><span>{{ d.message }}</span>
                   </div>
                 </div>
               </div>

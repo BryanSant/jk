@@ -108,6 +108,7 @@ public final class ScriptPipelines {
         String mainClass = header.main() != null ? header.main() : simpleMainClassName(script, ".java");
 
         Step parseHeader = Step.builder(StepNames.PARSE_SCRIPT)
+                .phase(Phase.RESOLVE)
                 .ticks(1)
                 .execute(ctx -> {
                     ctx.label("parse " + script.getFileName());
@@ -218,6 +219,7 @@ public final class ScriptPipelines {
         String mainClass = header.main() != null ? header.main() : kotlinMainClassName(script);
 
         Step parseHeader = Step.builder(StepNames.PARSE_SCRIPT)
+                .phase(Phase.RESOLVE)
                 .ticks(1)
                 .execute(ctx -> {
                     ctx.label("parse " + script.getFileName());
@@ -412,6 +414,7 @@ public final class ScriptPipelines {
     /** {@code inspect-jar → resolve-jar-deps} for a prebuilt jar (manifest main + embedded-POM deps). */
     public static Pipeline jarPipeline(Path jar, Path cacheDir, URI repoUrl) {
         Step inspect = Step.builder(StepNames.INSPECT_JAR)
+                .phase(Phase.RESOLVE)
                 .ticks(1)
                 .execute(ctx -> {
                     ctx.label("read manifest + embedded poms");

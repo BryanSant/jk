@@ -285,6 +285,47 @@ export function outcomeOf(card) {
   return 'finished';
 }
 
+/**
+ * Group a module's step rows into a coarse **phase-chain**, in first-encounter order (which is
+ * pipeline order): the first step of a not-yet-seen phase appends a phase node; later steps of that
+ * phase attach to it. The client stays "dumb" — it keys on whatever `phase` wire-string the steps
+ * carry, so a future/plugin phase just appears as its own node with no code change here. A step with
+ * no phase (`''`) forms a node keyed by its own name so it is never dropped (shouldn't happen once
+ * every emitted step is phase-tagged). Each node's `state` is derived from its steps
+ * (failed › running › skipped/cancelled › success) and it keeps its `steps` for click-to-expand.
+ */
+export function phaseChainOf(module) {
+  const nodes = [];
+  const byKey = new Map();
+  for (const s of (module && module.steps) || []) {
+    const key = s.phase || s.name; // '' phase → keyed by the step name (last-resort, never merged)
+    let node = byKey.get(key);
+    if (!node) {
+      node = { key, phase: s.phase || '', label: phaseLabel(s.phase || s.name), steps: [], state: 'running' };
+      byKey.set(key, node);
+      nodes.push(node);
+    }
+    node.steps.push(s);
+  }
+  for (const node of nodes) node.state = phaseState(node.steps);
+  return nodes;
+}
+
+/** Display label for a phase wire-name: capitalize the first letter ('compile' → 'Compile'). */
+function phaseLabel(wire) {
+  return wire ? wire.charAt(0).toUpperCase() + wire.slice(1) : '?';
+}
+
+/** A phase node's aggregate state from its steps: failed › running › skipped/cancelled › success. */
+function phaseState(steps) {
+  if (!steps.length) return 'running';
+  if (steps.some((s) => s.state === 'failed')) return 'failed';
+  if (steps.some((s) => s.state === 'running')) return 'running';
+  if (steps.every((s) => s.state === 'skipped')) return 'skipped';
+  if (steps.every((s) => s.state === 'skipped' || s.state === 'cancelled')) return 'cancelled';
+  return 'success'; // all terminal, at least one success
+}
+
 /** One line summarizing a card's module work, e.g. "3 modules · 1 failed" — '' when nothing to say. */
 export function moduleSummary(card) {
   const n = card.modules.length;

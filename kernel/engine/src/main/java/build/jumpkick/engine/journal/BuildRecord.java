@@ -70,8 +70,17 @@ public record BuildRecord(
         }
     }
 
-    /** One step's aggregate outcome: {@code SUCCESS} / {@code FAIL} / {@code CANCELLED} / {@code SKIPPED}. */
-    public record Step(String name, String status, long millis) {}
+    /**
+     * One step's aggregate outcome: {@code status} is {@code SUCCESS} / {@code FAIL} /
+     * {@code CANCELLED} / {@code SKIPPED}; {@code phase} is the coarse pipeline phase's wire-name
+     * ({@code ""} when unphased) so the dashboard can fold reloaded/finished cards into the same
+     * phase-chain the live cards render.
+     */
+    public record Step(String name, String phase, String status, long millis) {
+        public Step {
+            phase = phase == null ? "" : phase;
+        }
+    }
 
     /**
      * One diagnostic: {@code severity} is {@code "error"} or {@code "warning"}; {@code dir} is the

@@ -15,10 +15,10 @@ class JsonTest {
                 1000, 4000, 3000, false, false, 1, "9.9-test",
                 new BuildRecord.Tests(42, 40, 1, 1),
                 List.of(new BuildRecord.Module("com.example:app", "/proj", false, 1, 3000,
-                        List.of(new BuildRecord.Step("compile", "SUCCESS", 800),
-                                new BuildRecord.Step("test", "FAIL", 1200)))),
-                List.of(new BuildRecord.Step("compile", "SUCCESS", 800),
-                        new BuildRecord.Step("test", "FAIL", 1200)),
+                        List.of(new BuildRecord.Step("compile", "compile", "SUCCESS", 800),
+                                new BuildRecord.Step("test", "test", "FAIL", 1200)))),
+                List.of(new BuildRecord.Step("compile", "compile", "SUCCESS", 800),
+                        new BuildRecord.Step("test", "test", "FAIL", 1200)),
                 List.of(new BuildRecord.Diag("error", "/proj", "test", "JUNIT", "expected 1 but was 2\nline two",
                         "com.example.AppTest#adds", "org.opentest4j.AssertionFailedError")),
                 "web", "abc1234");
@@ -41,6 +41,7 @@ class JsonTest {
         assertThat(back.modules().get(0).coord()).isEqualTo("com.example:app");
         assertThat(back.modules().get(0).steps()).extracting(BuildRecord.Step::name).containsExactly("compile", "test");
         assertThat(back.steps()).extracting(BuildRecord.Step::status).containsExactly("SUCCESS", "FAIL");
+        assertThat(back.steps()).extracting(BuildRecord.Step::phase).containsExactly("compile", "test");
         assertThat(back.diagnostics()).hasSize(1);
         assertThat(back.diagnostics().get(0).dir()).isEqualTo("/proj");
         assertThat(back.diagnostics().get(0).message()).isEqualTo("expected 1 but was 2\nline two");

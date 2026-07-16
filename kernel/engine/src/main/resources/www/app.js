@@ -4,67 +4,100 @@
 // runtime compiler turns it into render functions at load (the CSP 'unsafe-eval' grant).
 
 import { bootstrapToken, get, getText, post, del, events } from './api.js';
-import { foldEvent, outcomeOf, moduleSummary, seedFromHistory, weightNumerator, weightDenominator } from './fold.js';
+import { foldEvent, outcomeOf, moduleSummary, phaseChainOf, seedFromHistory, weightNumerator, weightDenominator } from './fold.js';
 
 bootstrapToken();
 
-// The build-step strip: a single horizontal chain that never wraps. New steps advance rightward
-// and push earlier ones off the left (out of, or partially out of, view). There is no scrollbar —
-// when steps are hidden a ◂ / ▸ nav button appears at that edge to page the view. Anchored to the
-// newest step on mount and whenever the chain grows. See docs/webclient.md.
-const StepChain = {
+// The build **phase-chain**: a single horizontal strip of coarse pipeline phases (Resolve →
+// Compile → Test → …), never wrapping. New phases advance rightward and push earlier ones off the
+// left; when phases are hidden a ◂ / ▸ nav button pages the view (no scrollbar). Anchored to the
+// newest phase on mount and whenever the chain grows. Each phase node is a click-to-expand toggle
+// (single-open) that reveals the steps it collapses; the failed phase auto-opens. See
+// docs/webclient.md. The `steps` prop is the module's raw step rows; the phase grouping is derived
+// from them client-side (fold.phaseChainOf), so a new/plugin phase needs no code change here.
+const PhaseChain = {
   props: { steps: { type: Array, required: true } },
-  data: () => ({ atStart: true, atEnd: true }),
+  // `follow` = keep pinned to the newest phase (re-armed when the user pages back to the end).
+  // `manualKey` = the user's single-open accordion choice: `undefined` until they click (failed
+  // phase auto-opens), then a phase key, or `null` when they've closed all.
+  data: () => ({ atStart: true, atEnd: true, follow: true, manualKey: undefined }),
   template: `
-    <div class="step-chain-wrap">
-      <button v-show="!atStart" type="button" class="chain-nav left" @click="page(-1)"
-              aria-label="show earlier steps" title="earlier steps">◂</button>
-      <span v-show="!atStart" class="chain-fade left" aria-hidden="true"></span>
-      <div class="step-chain" ref="track">
-        <template v-for="(p, i) in steps" :key="p.name">
-          <span v-if="i > 0" class="step-edge" :class="steps[i - 1].state"></span>
-          <span class="step-node" :class="p.state" :title="stepTitle(p)">
-            <span v-if="p.state === 'running'" class="spin small"></span>
-            <span v-else-if="p.state === 'success'" class="step-glyph ok">✓</span>
-            <span v-else-if="p.state === 'failed'" class="step-glyph err">✘</span>
-            {{ stepLabel(p) }}
+    <div class="phase-chain-outer">
+      <div class="step-chain-wrap">
+        <button v-show="!atStart" type="button" class="chain-nav left" @click="page(-1)"
+                aria-label="show earlier phases" title="earlier phases">◂</button>
+        <span v-show="!atStart" class="chain-fade left" aria-hidden="true"></span>
+        <div class="step-chain" ref="track">
+          <template v-for="(p, i) in phases" :key="p.key">
+            <span v-if="i > 0" class="step-edge" :class="phases[i - 1].state"></span>
+            <button type="button" class="step-node phase-node" :class="[p.state, { open: openKey === p.key }]"
+                    :title="phaseTitle(p)" :aria-expanded="String(openKey === p.key)" @click="toggle(p.key)">
+              <span v-if="p.state === 'running'" class="spin small"></span>
+              <span v-else-if="p.state === 'success'" class="step-glyph ok">✓</span>
+              <span v-else-if="p.state === 'failed'" class="step-glyph err">✘</span>
+              {{ p.label }}
+            </button>
+          </template>
+        </div>
+        <span v-show="!atEnd" class="chain-fade right" aria-hidden="true"></span>
+        <button v-show="!atEnd" type="button" class="chain-nav right" @click="page(1)"
+                aria-label="show later phases" title="later phases">▸</button>
+      </div>
+      <div v-if="openPhase" class="phase-steps">
+        <template v-for="(s, i) in openPhase.steps" :key="s.name">
+          <span v-if="i > 0" class="step-edge" :class="openPhase.steps[i - 1].state"></span>
+          <span class="step-node" :class="s.state" :title="s.name">
+            <span v-if="s.state === 'running'" class="spin small"></span>
+            <span v-else-if="s.state === 'success'" class="step-glyph ok">✓</span>
+            <span v-else-if="s.state === 'failed'" class="step-glyph err">✘</span>
+            {{ stepLabel(s) }}
           </span>
         </template>
       </div>
-      <span v-show="!atEnd" class="chain-fade right" aria-hidden="true"></span>
-      <button v-show="!atEnd" type="button" class="chain-nav right" @click="page(1)"
-              aria-label="show later steps" title="later steps">▸</button>
     </div>`,
-  // `follow` = keep pinned to the newest step. True until the user pages away with ◂/▸; re-armed
-  // when they page back to the end. While following, every render (new step, or a step's node
-  // resizing as it goes running→success) re-anchors, so a build that scrolls steps off the left
-  // still finishes pinned to the right end — not stranded mid-chain with a ▸ showing.
-  data: () => ({ atStart: true, atEnd: true, follow: true }),
+  computed: {
+    phases() {
+      return phaseChainOf({ steps: this.steps });
+    },
+    // Effective open phase: the user's manual choice once they've clicked, else the failed phase
+    // (auto-open on failure) — so a failure's step is visible without any interaction.
+    openKey() {
+      if (this.manualKey !== undefined) return this.manualKey;
+      const failed = this.phases.find((p) => p.state === 'failed');
+      return failed ? failed.key : null;
+    },
+    openPhase() {
+      return this.phases.find((p) => p.key === this.openKey) || null;
+    },
+  },
   mounted() {
     this.observer = new ResizeObserver(() => this.reflow());
     this.observer.observe(this.$refs.track);
     this.$nextTick(() => this.anchorEnd());
   },
   updated() {
-    // Fires after each step update (state/width change); nextTick lets layout settle first.
+    // Fires after each phase update (state/width change); nextTick lets layout settle first.
     this.$nextTick(() => this.reflow());
   },
   beforeUnmount() {
     if (this.observer) this.observer.disconnect();
   },
   methods: {
-    // A step node's label: "phase/step" when the step carries a phase, stripping a redundant leading
-    // "phase-" from the step name (compile + compile-java → compile/java; test + run-tests →
-    // test/run-tests). No phase → the bare step name.
-    stepLabel(p) {
-      if (!p.phase) return p.name;
-      const prefix = p.phase + '-';
-      const short = p.name.startsWith(prefix) ? p.name.slice(prefix.length) : p.name;
-      return p.phase + '/' + short;
+    // Single-open accordion: clicking the open phase closes it, clicking another switches to it.
+    // Either way the user has taken control (manualKey set), so auto-open-on-failure stands down.
+    toggle(key) {
+      this.manualKey = this.openKey === key ? null : key;
     },
-    // Tooltip: the full, unstripped phase/step so the raw step name is always recoverable on hover.
-    stepTitle(p) {
-      return p.phase ? p.phase + '/' + p.name : p.name;
+    // A sub-chain step's label: drop the redundant leading "phase-" ("compile-java" under Compile →
+    // "java"). A step whose name is exactly its phase, or that carries none, shows verbatim.
+    stepLabel(s) {
+      const prefix = (s.phase || '') + '-';
+      return s.phase && s.name.startsWith(prefix) ? s.name.slice(prefix.length) : s.name;
+    },
+    // Tooltip: the phase plus the raw step names it collapses, so the detail is recoverable on hover.
+    phaseTitle(p) {
+      const names = p.steps.map((s) => s.name).join(', ');
+      return p.phase ? p.phase + ': ' + names : names;
     },
     reflow() {
       if (this.follow) this.anchorEnd();
@@ -577,6 +610,15 @@ Vue.createApp({
       return moduleSummary(card);
     },
 
+    // The capitalized phase a diagnostic belongs to, joined from the module's step rows (which carry
+    // the phase) by matching the diagnostic's step name. '' when the step has no phase or isn't found
+    // — the failure line then reads step › … without a phase prefix.
+    diagPhase(mod, d) {
+      const st = ((mod && mod.steps) || []).find((s) => s.name === d.step);
+      const wire = st && st.phase ? st.phase : '';
+      return wire ? wire.charAt(0).toUpperCase() + wire.slice(1) : '';
+    },
+
     // A build is "compact" (one step chain under the header, no module-name rows) when it has at
     // most one module — a single-project build, or a 1-module workspace. Multi-module builds render
     // a bullet+name row per module, each with its own chain.
@@ -839,6 +881,6 @@ Vue.createApp({
     },
   },
 })
-  .component('step-chain', StepChain)
+  .component('phase-chain', PhaseChain)
   .component('build-bars', BuildBars)
   .mount('#app');

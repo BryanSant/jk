@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { pathToFileURL } from 'node:url';
 
-const { foldEvent, outcomeOf, moduleSummary, seedFromHistory, MAX_CARDS, MAX_OUTPUT_LINES } = await import(
+const { foldEvent, outcomeOf, moduleSummary, phaseChainOf, seedFromHistory, MAX_CARDS, MAX_OUTPUT_LINES } = await import(
   pathToFileURL(process.env.JK_FOLD_MJS)
 );
 
@@ -315,4 +315,50 @@ test('eta is captured and cleared on finish', () => {
   assert.equal(cards[0].etaAt, 1200);
   foldEvent(cards, finish(1, { success: true }));
   assert.equal(cards[0].etaMillis, null); // countdown stops on finish
+});
+
+test('phaseChainOf collapses steps into coarse phase nodes in encounter order', () => {
+  const cards = [];
+  foldEvent(cards, start(1, '/proj'));
+  const step = (name, phase, status) => {
+    foldEvent(cards, { type: 'step-start', data: { requestId: 1, dir: '', step: name, phase } });
+    if (status) foldEvent(cards, { type: 'step-finish', data: { requestId: 1, dir: '', step: name, phase, status } });
+  };
+  step('resolve-deps', 'resolve', 'SUCCESS');
+  step('compile-java', 'compile', 'SUCCESS');
+  step('compile-kotlin', 'compile', 'SUCCESS');
+  step('run-tests', 'test', 'SUCCESS');
+  const chain = phaseChainOf(cards[0].modules[0]);
+  assert.deepEqual(chain.map((p) => p.label), ['Resolve', 'Compile', 'Test']); // one node per phase, in order
+  assert.deepEqual(chain.map((p) => p.state), ['success', 'success', 'success']);
+  assert.deepEqual(chain[1].steps.map((s) => s.name), ['compile-java', 'compile-kotlin']); // Compile collapses both
+});
+
+test('phaseChainOf state precedence: failed > running > success', () => {
+  const running = phaseChainOf({ steps: [
+    { name: 'a', phase: 'compile', state: 'success' },
+    { name: 'b', phase: 'compile', state: 'running' },
+  ] });
+  assert.equal(running[0].state, 'running'); // running dominates a sibling success
+  const failed = phaseChainOf({ steps: [
+    { name: 'a', phase: 'test', state: 'running' },
+    { name: 'b', phase: 'test', state: 'failed' },
+  ] });
+  assert.equal(failed[0].state, 'failed'); // failed dominates running
+});
+
+test('phaseChainOf appends an unknown/plugin phase verbatim (dumb client)', () => {
+  const chain = phaseChainOf({ steps: [
+    { name: 'compile-java', phase: 'compile', state: 'success' },
+    { name: 'deploy-k8s', phase: 'deploy', state: 'running' }, // a phase the client has never heard of
+  ] });
+  assert.deepEqual(chain.map((p) => p.label), ['Compile', 'Deploy']); // no enum coupling — just capitalized
+});
+
+test('phaseChainOf keeps an unphased step as its own node, keyed by name', () => {
+  const chain = phaseChainOf({ steps: [{ name: 'lock', phase: '', state: 'success' }] });
+  assert.equal(chain.length, 1);
+  assert.equal(chain[0].phase, '');
+  assert.equal(chain[0].key, 'lock'); // last-resort: keyed by the step name so it is never dropped
+  assert.equal(chain[0].label, 'Lock');
 });

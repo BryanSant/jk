@@ -2031,6 +2031,10 @@ public final class BuildPipelines {
         }
         return Step.builder("plugin-" + step.name())
                 .label(step.name())
+                // Group the plugin's step under the coarse phase it contributes to, so the web
+                // phase-chain folds it in rather than showing a stray node: a before-compile source
+                // generator belongs to COMPILE, otherwise the anchor it orders itself after.
+                .phase(beforeCompile(step) ? Phase.COMPILE : step.afterPhase())
                 .kind(StepKind.CPU)
                 .requires(requires.toArray(new String[0]))
                 .ticks(1)
