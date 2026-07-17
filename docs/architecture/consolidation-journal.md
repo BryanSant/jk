@@ -33,3 +33,39 @@ Execution order (banks low-risk, high-clarity value first; each step verified + 
    split packages.
 8. POM unification (`PomWriter` + fold `EffectivePom` → `Pom`) + rest of DRY program.
 9. Publish `jk-plugin-sdk` (independent version) + `jk new --plugin` scaffold.
+
+### Step 1 — stale-dir cleanup (no commit; untracked)
+Deleted 19 untracked build-output dirs at repo root (`core/ engine/ io/ resolver/ toolchain/
+audit-runner/ compat/ compat-runner/ git-runner/ image/ image-runner/ java-compiler/
+kotlin-compiler/ publish-runner/ runtime/ supply-chain/ supply-chain-testkit/ target/
+test-runner/`), leftovers from the pre-`kernel/` flat layout (confirmed stale: `supply-chain` was
+deleted as a module in `6e949daf`, its files were all `build/` output in the old `dev.jkbuild`
+package). Root now shows only tracked dirs + `build/`. Nothing tracked touched (`git status` clean).
+zsh gotcha: `for d in $var` doesn't word-split in zsh — used a literal list.
+
+### Step 3 — merge `:support` → `:core` (`c9ba6866`)
+7 util classes moved into `:core` (same `cc.jumpkick.util` package). Dropped `:support` from
+settings + rewired `:core`/`:engine-api`/`:publisher` (all already had `:core`). Verified:
+classes+testClasses green; `:core` + `:publisher` tests pass.
+
+### Step 4 — extract `clients/web` (`f806b89c`)
+New resources-only `:web` module (`clients/web`); `:engine` takes `runtimeOnly(project(":web"))`.
+`StaticContent` unchanged. Verified: `HttpEngineServerTest` serves the real SPA off the classpath;
+`WebClientFoldTest` (moved into `:web` with `fold.test.mjs`) passes; `jk-engine-*.jar` bundles
+`www/*`. Docs' `www/` paths updated.
+
+_(Numbering note: journal step numbers track the execution-order list above; commits are landing in
+the order 1 → 3 → 4 → 2(DRY) → 5 … to bank the compiler-verifiable structural wins first.)_
+
+### DECISION 01 — does `engine-api` actually merge into `jk-api`? (tag `decision-01-engine-api-merge`)
+Proposal B's headline was "merge `engine-api` into `jk-api`" (one module to *drive* jk). Investigation
+found a real obstacle: `engine-api` depends on `:core` — `EngineProtocol`→`config.PluginTuning`,
+`EnginePaths`→`util.JkDirs`+`util.Hashing`, `CachePruneScheduler`→`config.JkCacheConfig` (and
+`CachePruneScheduler` is consumed by `:cli`, so it can't move to `:engine`). `engine-api` sits ABOVE
+`core`; `jk-api` is the zero-dep leaf BELOW `core`. A naive merge is a dependency cycle.
+Options weighed: (1) full merge — push config/util types down into `jk-api`, making it a grab-bag;
+(2) rename `engine-api` → `shared/wire`, keep it separate above core, `jk-api` stays a pure leaf;
+(3) hybrid — fold only pure DTOs into `jk-api`, leave core-coupled bits in core.
+Per the owner's instruction, spawned 3 independent evaluators (architect / API-DX / pragmatist);
+following the majority. Tagged `decision-01-engine-api-merge` at the pre-decision state (`f806b89c`)
+for wind-back. **Outcome + rationale recorded below once the verdicts land.**

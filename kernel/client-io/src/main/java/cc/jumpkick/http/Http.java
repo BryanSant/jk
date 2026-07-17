@@ -77,29 +77,7 @@ public final class Http {
             builder.header("Accept-Encoding", "gzip");
         }
         HttpRequest request = builder.build();
-
-        IOException lastIo = null;
-        int lastStatus = -1;
-        for (int attempt = 0; attempt < backoffs.length + 1; attempt++) {
-            if (attempt > 0) {
-                Thread.sleep(jittered(backoffs[attempt - 1]));
-            }
-            try {
-                HttpResponse<byte[]> response = client.send(request, gzipAwareByteArray());
-                int status = response.statusCode();
-                if (status < 500) {
-                    return response;
-                }
-                lastStatus = status;
-            } catch (IOException e) {
-                lastIo = e;
-            }
-        }
-        if (lastIo != null) {
-            throw new IOException("GET " + uri + " failed after " + (backoffs.length + 1) + " attempts", lastIo);
-        }
-        throw new IOException(
-                "GET " + uri + " returned " + lastStatus + " after " + (backoffs.length + 1) + " attempts");
+        return sendWithRetry("GET", uri, request, gzipAwareByteArray(), null);
     }
 
     /**
@@ -131,32 +109,12 @@ public final class Http {
             builder.header("Accept-Encoding", "gzip");
         }
         HttpRequest request = builder.build();
-        IOException lastIo = null;
-        int lastStatus = -1;
-        for (int attempt = 0; attempt < backoffs.length + 1; attempt++) {
-            if (attempt > 0) {
-                Thread.sleep(jittered(backoffs[attempt - 1]));
+        // Drain the streamed body before each retry so the connection can be reused.
+        return sendWithRetry("GET", uri, request, gzipAwareInputStream(), response -> {
+            try (var body = response.body()) {
+                body.transferTo(java.io.OutputStream.nullOutputStream());
             }
-            try {
-                HttpResponse<InputStream> response = client.send(request, gzipAwareInputStream());
-                int status = response.statusCode();
-                if (status < 500) {
-                    return response;
-                }
-                // Drain the body before retrying so the connection can be reused.
-                try (var body = response.body()) {
-                    body.transferTo(java.io.OutputStream.nullOutputStream());
-                }
-                lastStatus = status;
-            } catch (IOException e) {
-                lastIo = e;
-            }
-        }
-        if (lastIo != null) {
-            throw new IOException("GET " + uri + " failed after " + (backoffs.length + 1) + " attempts", lastIo);
-        }
-        throw new IOException(
-                "GET " + uri + " returned " + lastStatus + " after " + (backoffs.length + 1) + " attempts");
+        });
     }
 
     /**
@@ -178,29 +136,7 @@ public final class Http {
                 .header("Accept", "application/json")
                 .timeout(Duration.ofSeconds(60))
                 .build();
-
-        IOException lastIo = null;
-        int lastStatus = -1;
-        for (int attempt = 0; attempt < backoffs.length + 1; attempt++) {
-            if (attempt > 0) {
-                Thread.sleep(jittered(backoffs[attempt - 1]));
-            }
-            try {
-                HttpResponse<byte[]> response = client.send(request, gzipAwareByteArray());
-                int status = response.statusCode();
-                if (status < 500) {
-                    return response;
-                }
-                lastStatus = status;
-            } catch (IOException e) {
-                lastIo = e;
-            }
-        }
-        if (lastIo != null) {
-            throw new IOException("POST " + uri + " failed after " + (backoffs.length + 1) + " attempts", lastIo);
-        }
-        throw new IOException(
-                "POST " + uri + " returned " + lastStatus + " after " + (backoffs.length + 1) + " attempts");
+        return sendWithRetry("POST", uri, request, gzipAwareByteArray(), null);
     }
 
     private static String urlEncode(Map<String, String> form) {
@@ -231,7 +167,29 @@ public final class Http {
             builder.header(e.getKey(), e.getValue());
         }
         HttpRequest request = builder.build();
+        return sendWithRetry("PUT", uri, request, HttpResponse.BodyHandlers.ofByteArray(), null);
+    }
 
+    /**
+     * A callback invoked on a retryable (5xx) response before the next attempt — used by
+     * {@link #getStream} to drain the streamed body so the connection can be reused. May throw
+     * {@link IOException} (unlike {@link java.util.function.Consumer}).
+     */
+    @FunctionalInterface
+    private interface OnServerError<T> {
+        void handle(HttpResponse<T> response) throws IOException;
+    }
+
+    /**
+     * The one send-with-retry loop shared by {@link #get}, {@link #getStream}, {@link #postForm},
+     * and {@link #put}: retry on connect failures and 5xx (never on 4xx), {@code backoffs.length + 1}
+     * attempts with jittered backoff, then throw a verb-tagged {@link IOException}. {@code onServerError}
+     * (nullable) runs on each retried 5xx before the next attempt.
+     */
+    private <T> HttpResponse<T> sendWithRetry(
+            String verb, URI uri, HttpRequest request,
+            HttpResponse.BodyHandler<T> handler, OnServerError<T> onServerError)
+            throws IOException, InterruptedException {
         IOException lastIo = null;
         int lastStatus = -1;
         for (int attempt = 0; attempt < backoffs.length + 1; attempt++) {
@@ -239,10 +197,13 @@ public final class Http {
                 Thread.sleep(jittered(backoffs[attempt - 1]));
             }
             try {
-                HttpResponse<byte[]> response = client.send(request, HttpResponse.BodyHandlers.ofByteArray());
+                HttpResponse<T> response = client.send(request, handler);
                 int status = response.statusCode();
                 if (status < 500) {
                     return response;
+                }
+                if (onServerError != null) {
+                    onServerError.handle(response);
                 }
                 lastStatus = status;
             } catch (IOException e) {
@@ -250,10 +211,10 @@ public final class Http {
             }
         }
         if (lastIo != null) {
-            throw new IOException("PUT " + uri + " failed after " + (backoffs.length + 1) + " attempts", lastIo);
+            throw new IOException(verb + " " + uri + " failed after " + (backoffs.length + 1) + " attempts", lastIo);
         }
         throw new IOException(
-                "PUT " + uri + " returned " + lastStatus + " after " + (backoffs.length + 1) + " attempts");
+                verb + " " + uri + " returned " + lastStatus + " after " + (backoffs.length + 1) + " attempts");
     }
 
     private static long jittered(Duration base) {
