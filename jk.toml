@@ -7,4 +7,4 @@ jdk      = 25
 java     = 25
 
 [workspace]
-modules = ["kernel/model", "plugin-api", "kernel/core", "kernel/client-io", "kernel/io", "kernel/resolver", "kernel/toolchain-jdk", "kernel/toolchain", "kernel/engine-api", "kernel/engine", "cli", "cli-engine"]
+modules = ["shared/jk-api", "shared/plugin-sdk", "shared/core", "shared/client-io", "server/io", "server/resolver", "shared/toolchain-jdk", "server/toolchain", "shared/wire", "server/engine", "clients/cli", "clients/cli-engine"]

@@ -64,18 +64,18 @@ class SelfHostingTomlTest {
         assertThat(root.isWorkspaceRoot()).isTrue();
         assertThat(root.workspace().modules())
                 .containsExactly(
-                        "kernel/model",
-                        "plugin-api",
-                        "kernel/core",
-                        "kernel/client-io",
-                        "kernel/io",
-                        "kernel/resolver",
-                        "kernel/toolchain-jdk",
-                        "kernel/toolchain",
-                        "kernel/engine-api",
-                        "kernel/engine",
-                        "cli",
-                        "cli-engine");
+                        "shared/jk-api",
+                        "shared/plugin-sdk",
+                        "shared/core",
+                        "shared/client-io",
+                        "server/io",
+                        "server/resolver",
+                        "shared/toolchain-jdk",
+                        "server/toolchain",
+                        "shared/wire",
+                        "server/engine",
+                        "clients/cli",
+                        "clients/cli-engine");
     }
 
     @Test
@@ -93,7 +93,7 @@ class SelfHostingTomlTest {
 
     @Test
     void cli_module_declares_a_main_class_and_image_main_class() throws Exception {
-        JkBuild cli = JkBuildParser.parse(REPO.resolve("cli/jk.toml"));
+        JkBuild cli = JkBuildParser.parse(REPO.resolve("clients/cli/jk.toml"));
         assertThat(cli.mainClass()).isEqualTo("cc.jumpkick.cli.Jk");
         assertThat(cli.isRunnable()).isTrue();
 
@@ -113,7 +113,7 @@ class SelfHostingTomlTest {
                         "cc.jumpkick:jk-toolchain");
 
         // The engine application is the one module that links both halves.
-        JkBuild cliEngine = JkBuildParser.parse(REPO.resolve("cli-engine/jk.toml"));
+        JkBuild cliEngine = JkBuildParser.parse(REPO.resolve("clients/cli-engine/jk.toml"));
         List<String> cliEngineMain = cliEngine.dependencies().of(Scope.MAIN).stream()
                 .map(d -> d.module())
                 .toList();
