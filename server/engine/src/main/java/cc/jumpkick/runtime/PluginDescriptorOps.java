@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.runtime;
 
-import cc.jumpkick.util.AtomicWrites;
-
 import cc.jumpkick.cache.Cas;
 import cc.jumpkick.lock.Lockfile;
 import cc.jumpkick.lock.LockfileReader;
 import cc.jumpkick.model.JkBuild;
 import cc.jumpkick.model.PluginDeclaration;
 import cc.jumpkick.plugin.manifest.PluginDescriptorStore;
+import cc.jumpkick.util.AtomicWrites;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;

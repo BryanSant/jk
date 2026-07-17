@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.command.ide;
 
-import cc.jumpkick.util.MinimalXml;
-
 import cc.jumpkick.cli.CliOutput;
 import cc.jumpkick.cli.theme.Theme;
 import cc.jumpkick.cli.tui.Glyphs;
 import cc.jumpkick.cli.tui.PipelineWedge;
 import cc.jumpkick.config.GlobalConfig;
 import cc.jumpkick.model.Scope;
+import cc.jumpkick.util.MinimalXml;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;

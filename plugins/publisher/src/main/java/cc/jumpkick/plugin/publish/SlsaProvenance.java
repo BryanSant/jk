@@ -2,7 +2,6 @@
 package cc.jumpkick.plugin.publish;
 
 import cc.jumpkick.plugin.protocol.Jsonl;
-
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.LinkedHashMap;

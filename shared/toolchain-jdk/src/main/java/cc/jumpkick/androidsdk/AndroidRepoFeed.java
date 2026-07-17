@@ -2,7 +2,6 @@
 package cc.jumpkick.androidsdk;
 
 import cc.jumpkick.util.Hashing;
-
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;

@@ -3,11 +3,11 @@ package cc.jumpkick.repo;
 
 import cc.jumpkick.credential.RepoCredential;
 import cc.jumpkick.util.JkDirs;
+import cc.jumpkick.util.OwnerOnlyFiles;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
-import cc.jumpkick.util.OwnerOnlyFiles;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Locale;

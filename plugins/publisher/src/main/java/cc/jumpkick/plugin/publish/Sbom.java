@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.plugin.publish;
 
-import cc.jumpkick.plugin.protocol.Jsonl;
-
 import cc.jumpkick.lock.Lockfile;
 import cc.jumpkick.model.JkBuild;
+import cc.jumpkick.plugin.protocol.Jsonl;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.UUID;

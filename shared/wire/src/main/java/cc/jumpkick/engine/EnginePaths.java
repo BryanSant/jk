@@ -2,7 +2,6 @@
 package cc.jumpkick.engine;
 
 import cc.jumpkick.util.AtomicWrites;
-
 import cc.jumpkick.util.Hashing;
 import cc.jumpkick.util.JkDirs;
 import java.nio.file.Path;

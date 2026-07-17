@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.repo;
 
+import static cc.jumpkick.repo.DomXml.childElement;
+import static cc.jumpkick.repo.DomXml.childElements;
+import static cc.jumpkick.repo.DomXml.childText;
+
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -15,9 +19,6 @@ import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
-import static cc.jumpkick.repo.DomXml.childElement;
-import static cc.jumpkick.repo.DomXml.childElements;
-import static cc.jumpkick.repo.DomXml.childText;
 
 /**
  * Parsed contents of a Maven repository's {@code maven-metadata.xml}. Only the bits the resolver

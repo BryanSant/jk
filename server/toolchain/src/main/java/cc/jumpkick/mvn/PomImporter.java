@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.mvn;
 
+import static cc.jumpkick.repo.DomXml.childElement;
+import static cc.jumpkick.repo.DomXml.childElements;
+import static cc.jumpkick.repo.DomXml.childText;
+
 import cc.jumpkick.compat.ImportReport;
 import cc.jumpkick.kotlin.KotlinResolver;
 import cc.jumpkick.model.Dependency;
@@ -32,9 +36,6 @@ import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
-import static cc.jumpkick.repo.DomXml.childElement;
-import static cc.jumpkick.repo.DomXml.childElements;
-import static cc.jumpkick.repo.DomXml.childText;
 
 /**
  * Converts a Maven {@code pom.xml} into a {@link JkBuild} model plus a {@link ImportReport} of

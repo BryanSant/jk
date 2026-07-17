@@ -2,7 +2,6 @@
 package cc.jumpkick.plugin.audit;
 
 import cc.jumpkick.plugin.protocol.Jsonl;
-
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
