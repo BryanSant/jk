@@ -996,18 +996,18 @@ class EngineServerTest {
 
     // ---- embedded HTTP server (docs/http.md) ----------------------------------------------------
 
-    private static cc.jumpkick.config.JkHttpConfig httpOnEphemeralPort(Path wwwRoot) {
-        return new cc.jumpkick.config.JkHttpConfig("127.0.0.1", 0, 16, wwwRoot.toString());
+    private static cc.jumpkick.config.JkHttpConfig httpOnEphemeralPort(Path webRoot) {
+        return new cc.jumpkick.config.JkHttpConfig("127.0.0.1", 0, 16, webRoot.toString());
     }
 
     @Test
     void http_enabled_serves_writes_url_file_and_reports_in_status() throws Exception {
         Path stateDir = shortTempDir();
         EnginePaths.Paths p = paths(stateDir);
-        Path www = Files.createDirectories(stateDir.resolve("www"));
-        Files.writeString(www.resolve("hello.txt"), "hi from the engine");
+        Path web = Files.createDirectories(stateDir.resolve("web"));
+        Files.writeString(web.resolve("hello.txt"), "hi from the engine");
 
-        EngineServer server = new EngineServer(p, JkEngineConfig.DEFAULTS, httpOnEphemeralPort(www), "1.0", null);
+        EngineServer server = new EngineServer(p, JkEngineConfig.DEFAULTS, httpOnEphemeralPort(web), "1.0", null);
         Thread serverThread = runInBackground(server);
         waitUntil(Duration.ofSeconds(5), () -> Files.exists(p.http()));
         String url = Files.readString(p.http());
@@ -1054,7 +1054,7 @@ class EngineServerTest {
                     "127.0.0.1",
                     blocker.getLocalPort(),
                     16,
-                    stateDir.resolve("www").toString());
+                    stateDir.resolve("web").toString());
             EngineServer server = new EngineServer(p, JkEngineConfig.DEFAULTS, http, "1.0", null);
             Thread serverThread = runInBackground(server);
             waitUntil(Duration.ofSeconds(5), () -> Files.exists(EnginePaths.endpoint(p)));
@@ -1078,7 +1078,7 @@ class EngineServerTest {
         Path stateDir = shortTempDir();
         EnginePaths.Paths p = paths(stateDir);
         EngineServer server =
-                new EngineServer(p, JkEngineConfig.DEFAULTS, httpOnEphemeralPort(stateDir.resolve("www")), "1.0", null);
+                new EngineServer(p, JkEngineConfig.DEFAULTS, httpOnEphemeralPort(stateDir.resolve("web")), "1.0", null);
         Thread serverThread = runInBackground(server);
         waitUntil(Duration.ofSeconds(5), () -> Files.exists(p.http()) && Files.exists(p.httpToken()));
         String url = Files.readString(p.http());

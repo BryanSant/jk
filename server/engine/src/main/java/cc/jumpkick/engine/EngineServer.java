@@ -3516,7 +3516,7 @@ public final class EngineServer implements AutoCloseable {
         if (httpConfig == null) return;
         HttpEngineServer candidate = new HttpEngineServer(
                 httpConfig,
-                httpConfig.wwwRootPath(),
+                httpConfig.webRootPath(),
                 paths.httpToken(),
                 paths.log(),
                 version,

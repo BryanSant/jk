@@ -2,7 +2,7 @@
 
 ## Context
 
-The Activity view renders a `StepChain` (`www/app.js`): one node per **fine-grained
+The Activity view renders a `StepChain` (`web/app.js`): one node per **fine-grained
 step**, labeled `phase/step` (`resolve/lock`, `compile/java`, `compile/kotlin`,
 `test/run-tests`, `package/jar`, …). On a real build that's a long strip that scrolls
 under ◂/▸ paging. We want the chain to show the **coarse pipeline phases** instead —
@@ -46,7 +46,7 @@ regrouping**, not a protocol change.
 
 ## Implementation stages (ordered safe → structural)
 
-### Stage 1 — Phase grouping in the fold (`www/fold.js`)
+### Stage 1 — Phase grouping in the fold (`web/fold.js`)
 Add pure `phaseChainOf(module)`:
 - Walk `module.steps` in arrival order; append a node the first time a `phase` is seen,
   attach subsequent same-phase steps to it. Node = `{ phase, label, state, steps: [...] }`.
@@ -59,7 +59,7 @@ Add pure `phaseChainOf(module)`:
 Leave the existing `stepRow`/`moduleRow` fold exactly as-is — step rows stay the source of
 truth; `phaseChainOf` is derived (and headlessly testable).
 
-### Stage 2 — Rendering: `PhaseChain` component (`www/app.js`, `www/index.html`, `www/style.css`)
+### Stage 2 — Rendering: `PhaseChain` component (`web/app.js`, `web/index.html`, `web/style.css`)
 - Rename `StepChain` → `PhaseChain` (its paging/anchor logic is node-agnostic — stays).
   Feed it `phaseChainOf(m)` for both the compact chain and per-module chains.
 - **Inline single-open expand:** each phase node is a toggle; the open phase renders a
@@ -67,7 +67,7 @@ truth; `phaseChainOf` is derived (and headlessly testable).
   phase closes any previously-open one (single-open state on the component/module).
 - Node label sentence-cased (consistent with the Material capitalization pass).
 
-### Stage 3 — Failures name phase + step (`www/fold.js` or `www/app.js`, `www/index.html`)
+### Stage 3 — Failures name phase + step (`web/fold.js` or `web/app.js`, `web/index.html`)
 - Resolve each `diagnostic`'s phase by joining `d.step` → the module's step row (which
   carries `phase`); no wire change needed.
 - Render the failure line as `✘ Phase › step › test › ExceptionClass › message`.

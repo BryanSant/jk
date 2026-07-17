@@ -31,7 +31,7 @@ class HttpEngineServerTest {
             new StatusSnapshot("9.9.9-test", 42, 1_000, 1, 0, 1_000, 2_000, 3_000, -1, -1);
 
     @TempDir
-    Path wwwRoot;
+    Path webRoot;
 
     @TempDir
     Path stateDir;
@@ -68,18 +68,18 @@ class HttpEngineServerTest {
 
     @BeforeEach
     void start() throws IOException {
-        Files.writeString(wwwRoot.resolve("hello.txt"), "hi from disk");
-        Files.writeString(wwwRoot.resolve("index.html"), "<html>dash</html>");
-        Files.writeString(wwwRoot.resolve("shared.txt"), "from disk");
-        // The token file lives OUTSIDE www-root (a token inside it would be served as content).
+        Files.writeString(webRoot.resolve("hello.txt"), "hi from disk");
+        Files.writeString(webRoot.resolve("index.html"), "<html>dash</html>");
+        Files.writeString(webRoot.resolve("shared.txt"), "from disk");
+        // The token file lives OUTSIDE web-root (a token inside it would be served as content).
         tokenFile = stateDir.resolve("e2e.http-token");
         logFile = stateDir.resolve("e2e.log");
         Files.writeString(logFile, "jk engine: listening\njk engine: http listening\nline three\n");
         events = new HttpEvents();
-        JkHttpConfig config = new JkHttpConfig("127.0.0.1", 0, 16, wwwRoot.toString());
+        JkHttpConfig config = new JkHttpConfig("127.0.0.1", 0, 16, webRoot.toString());
         server = new HttpEngineServer(
                 config,
-                wwwRoot,
+                webRoot,
                 tokenFile,
                 logFile,
                 "9.9.9-test",
@@ -148,13 +148,13 @@ class HttpEngineServerTest {
 
     @Test
     void disk_overrides_classpath() throws Exception {
-        // shared.txt exists in both this test's www-root and the test classpath's /www.
+        // shared.txt exists in both this test's web-root and the test classpath's /web.
         assertThat(get("/shared.txt").body()).isEqualTo("from disk");
     }
 
     @Test
     void ships_the_dashboard_spa_on_the_classpath() throws Exception {
-        // The real SPA (kernel/engine/src/main/resources/www) rides the same classpath fallback the
+        // The real SPA (clients/web/src/main/resources/web) rides the same classpath fallback the
         // test resources exercise — a bare [http] table gives a working dashboard with no file copying.
         assertThat(get("/app.js").body()).contains("Vue.createApp");
         assertThat(get("/fold.js").body()).contains("export function foldEvent");
@@ -164,9 +164,9 @@ class HttpEngineServerTest {
         assertThat(css.headers().firstValue("Content-Type")).contains("text/css; charset=utf-8");
         // Vue rides the CDN, version-pinned and integrity-locked (docs/webclient.md) — the shell
         // must carry the pin + SRI, and the CSP must allow exactly that one external origin.
-        // (Read from the classpath: this test's www-root shadows /index.html with its own.)
+        // (Read from the classpath: this test's web-root shadows /index.html with its own.)
         String shell;
-        try (var in = getClass().getResourceAsStream("/www/index.html")) {
+        try (var in = getClass().getResourceAsStream("/web/index.html")) {
             shell = new String(in.readAllBytes(), UTF_8);
         }
         assertThat(shell).contains("https://unpkg.com/vue@3.5.39/dist/vue.global.prod.js");
@@ -194,8 +194,8 @@ class HttpEngineServerTest {
         // let the browser cache classpath assets — otherwise an upgraded engine serves last jar's
         // dashboard for up to an hour.
         HttpEngineServer snapshot = new HttpEngineServer(
-                new JkHttpConfig("127.0.0.1", 0, 16, wwwRoot.toString()),
-                wwwRoot,
+                new JkHttpConfig("127.0.0.1", 0, 16, webRoot.toString()),
+                webRoot,
                 stateDir.resolve("snap.http-token"),
                 stateDir.resolve("snap.log"),
                 "0.10.0-SNAPSHOT",
@@ -243,7 +243,7 @@ class HttpEngineServerTest {
 
     @Test
     void empty_disk_file_serves_as_empty_200() throws Exception {
-        Files.writeString(wwwRoot.resolve("empty.json"), "");
+        Files.writeString(webRoot.resolve("empty.json"), "");
         HttpResponse<String> resp = get("/empty.json");
         assertThat(resp.statusCode()).isEqualTo(200);
         assertThat(resp.body()).isEmpty();
@@ -251,7 +251,7 @@ class HttpEngineServerTest {
 
     @Test
     void growing_file_serves_current_bytes_on_each_fetch() throws Exception {
-        Path log = wwwRoot.resolve("build-log.json");
+        Path log = webRoot.resolve("build-log.json");
         Files.writeString(log, "{\"lines\":1}");
         assertThat(get("/build-log.json").body()).isEqualTo("{\"lines\":1}");
         Files.writeString(log, "{\"lines\":1}{\"lines\":2}");
@@ -283,8 +283,8 @@ class HttpEngineServerTest {
 
     @Test
     void traversal_attempts_cannot_escape_the_root() throws Exception {
-        // A secret outside www-root that a traversal would reach if the gate leaked.
-        Files.writeString(wwwRoot.resolveSibling("secret.txt"), "top secret");
+        // A secret outside web-root that a traversal would reach if the gate leaked.
+        Files.writeString(webRoot.resolveSibling("secret.txt"), "top secret");
         // Encoded dots arrive decoded as ".." and are rejected by the segment gate.
         assertThat(get("/%2e%2e/secret.txt").statusCode()).isEqualTo(404);
         assertThat(get("/sub/%2e%2e/%2e%2e/secret.txt").statusCode()).isEqualTo(404);
@@ -333,7 +333,7 @@ class HttpEngineServerTest {
         assertThat(body)
                 .contains("\"activePipelines\":0")
                 .contains("\"maxConcurrentRequests\":16")
-                .contains("\"wwwRoot\":\"" + wwwRoot + "\"");
+                .contains("\"webRoot\":\"" + webRoot + "\"");
     }
 
     @Test
@@ -500,8 +500,8 @@ class HttpEngineServerTest {
         server.close();
 
         HttpEngineServer restarted = new HttpEngineServer(
-                new JkHttpConfig("127.0.0.1", 0, 16, wwwRoot.toString()),
-                wwwRoot,
+                new JkHttpConfig("127.0.0.1", 0, 16, webRoot.toString()),
+                webRoot,
                 tokenFile,
                 logFile,
                 "9.9.9-test",
@@ -535,8 +535,8 @@ class HttpEngineServerTest {
         Files.writeString(tokenFile, "   \n");
 
         HttpEngineServer restarted = new HttpEngineServer(
-                new JkHttpConfig("127.0.0.1", 0, 16, wwwRoot.toString()),
-                wwwRoot,
+                new JkHttpConfig("127.0.0.1", 0, 16, webRoot.toString()),
+                webRoot,
                 tokenFile,
                 logFile,
                 "9.9.9-test",
@@ -562,8 +562,8 @@ class HttpEngineServerTest {
         // rides out a draining predecessor, give up promptly (a handful of attempts) rather than
         // spin forever. The generous timeout only guards against a regression to an unbounded loop.
         HttpEngineServer collider = new HttpEngineServer(
-                new JkHttpConfig("127.0.0.1", port, 16, wwwRoot.toString()),
-                wwwRoot,
+                new JkHttpConfig("127.0.0.1", port, 16, webRoot.toString()),
+                webRoot,
                 tokenFile,
                 logFile,
                 "9.9.9-test",
@@ -585,11 +585,11 @@ class HttpEngineServerTest {
 
     @Test
     void non_loopback_bind_gates_api_reads_but_not_static() throws Exception {
-        JkHttpConfig config = new JkHttpConfig("0.0.0.0", 0, 16, wwwRoot.toString());
+        JkHttpConfig config = new JkHttpConfig("0.0.0.0", 0, 16, webRoot.toString());
         Path lanTokenFile = stateDir.resolve("lan.http-token");
         HttpEngineServer lan = new HttpEngineServer(
                 config,
-                wwwRoot,
+                webRoot,
                 lanTokenFile,
                 stateDir.resolve("lan.log"),
                 "9.9.9-test",
@@ -680,10 +680,10 @@ class HttpEngineServerTest {
 
     @Test
     void events_accepts_access_token_query_param_on_non_loopback_binds() throws Exception {
-        JkHttpConfig config = new JkHttpConfig("0.0.0.0", 0, 16, wwwRoot.toString());
+        JkHttpConfig config = new JkHttpConfig("0.0.0.0", 0, 16, webRoot.toString());
         HttpEngineServer lan = new HttpEngineServer(
                 config,
-                wwwRoot,
+                webRoot,
                 stateDir.resolve("sse.http-token"),
                 stateDir.resolve("sse.log"),
                 "9.9.9-test",

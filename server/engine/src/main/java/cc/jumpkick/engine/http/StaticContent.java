@@ -24,12 +24,12 @@ import java.util.Map;
  * Static file serving from two sources, checked in order (see {@code docs/http.md}):
  *
  * <ol>
- *   <li><strong>{@code www-root} on disk</strong> — user assets and server-rendered/appended
+ *   <li><strong>{@code web-root} on disk</strong> — user assets and server-rendered/appended
  *       content (a build may be appending to a {@code .json} here right now). Served {@code
  *       Cache-Control: no-cache} with {@code Last-Modified} revalidation, and a GET snapshots the
  *       file's size at open and serves exactly that many bytes — a concurrent append can never
  *       corrupt response framing.
- *   <li><strong>Classpath {@code /www}</strong> — the dashboard SPA shipped inside the engine jar.
+ *   <li><strong>Classpath {@code /web}</strong> — the dashboard SPA shipped inside the engine jar.
  *       Immutable per engine version: {@code ETag} derived from the version, {@code max-age=3600}.
  * </ol>
  *
@@ -39,7 +39,7 @@ import java.util.Map;
  */
 final class StaticContent {
 
-    private static final String CLASSPATH_PREFIX = "/www/";
+    private static final String CLASSPATH_PREFIX = "/web/";
 
     private static final DateTimeFormatter HTTP_DATE =
             DateTimeFormatter.RFC_1123_DATE_TIME.withLocale(Locale.US).withZone(ZoneOffset.UTC);
@@ -76,7 +76,7 @@ final class StaticContent {
      */
     private final boolean snapshotVersion;
 
-    /** @param root the resolved {@code www-root} — need not exist (classpath still serves) */
+    /** @param root the resolved {@code web-root} — need not exist (classpath still serves) */
     StaticContent(Path root, String version) {
         this.root = root.normalize();
         this.classpathEtag = "\"jk-" + version + "\"";

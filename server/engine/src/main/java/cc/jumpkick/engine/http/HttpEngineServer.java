@@ -51,7 +51,7 @@ public final class HttpEngineServer implements AutoCloseable {
     private final JkHttpConfig config;
     private final StaticContent staticContent;
     private final Semaphore admission;
-    private final Path wwwRoot;
+    private final Path webRoot;
     private final Path tokenFile;
     private final Path logFile;
     private final Supplier<StatusSnapshot> status;
@@ -72,7 +72,7 @@ public final class HttpEngineServer implements AutoCloseable {
     private boolean readsRequireToken;
 
     /**
-     * @param wwwRoot the resolved on-disk static root (the caller resolves {@code www-root} against
+     * @param webRoot the resolved on-disk static root (the caller resolves {@code web-root} against
      *     the live {@code JkDirs}; tests pass a temp dir) — need not exist
      * @param tokenFile where to persist the minted bearer token (owner-only permissions) so the CLI
      *     can hand the user a tokenized URL — {@code EnginePaths.Paths#httpToken()} in real use
@@ -89,7 +89,7 @@ public final class HttpEngineServer implements AutoCloseable {
      */
     public HttpEngineServer(
             JkHttpConfig config,
-            Path wwwRoot,
+            Path webRoot,
             Path tokenFile,
             Path logFile,
             String version,
@@ -101,9 +101,9 @@ public final class HttpEngineServer implements AutoCloseable {
             Supplier<CacheSnapshot> cache,
             Consumer<String> log) {
         this.config = config;
-        this.staticContent = new StaticContent(wwwRoot, version);
+        this.staticContent = new StaticContent(webRoot, version);
         this.admission = new Semaphore(config.effectiveMaxConcurrentRequests());
-        this.wwwRoot = wwwRoot;
+        this.webRoot = webRoot;
         this.tokenFile = tokenFile;
         this.logFile = logFile;
         this.status = status;
@@ -327,7 +327,7 @@ public final class HttpEngineServer implements AutoCloseable {
                 .put("aotTrainingPid", s.aotTrainingPid())
                 .put("httpUrl", url())
                 .put("maxConcurrentRequests", config.effectiveMaxConcurrentRequests())
-                .put("wwwRoot", wwwRoot.toString())
+                .put("webRoot", webRoot.toString())
                 .toString();
         sendJson(exchange, 200, body);
     }

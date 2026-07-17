@@ -40,7 +40,7 @@ enabled = true                # false = no HTTP at all (env: JK_HTTP_ENABLED)
 host = "127.0.0.1"            # default; non-loopback binds require token auth on /api (see Security)
 port = 8910                   # default; 0 = OS-assigned, recorded in <key>.http
 max-concurrent-requests = 16  # default; 0 = the container-aware core count
-www-root = "state/www"        # absolute, or relative to the resolved JK_HOME (~/.jk)
+web-root = "state/web"        # absolute, or relative to the resolved JK_HOME (~/.jk)
 ```
 
 Parsed by the `JkHttpConfig` record beside `JkEngineConfig` in `cc.jumpkick.config` (`:core`),
@@ -50,14 +50,14 @@ a build-breaking gate). One asymmetry is deliberate: an *existing but unparseabl
 disables the server — the file may contain an `enabled = false` the parser can't reach, and an
 explicit disable must fail closed, never be undone by a syntax error. Env overrides
 `JK_HTTP_ENABLED` / `JK_HTTP_HOST` / `JK_HTTP_PORT` / `JK_HTTP_MAX_CONCURRENT_REQUESTS` /
-`JK_HTTP_WWW_ROOT` win over the file (env > user-config > default); the test conventions set
+`JK_HTTP_WEB_ROOT` win over the file (env > user-config > default); the test conventions set
 `JK_HTTP_ENABLED=false` so test-spawned engines never open listening sockets as a side effect.
 
 Like `[engine]`, the table is read once at engine start. Enabling or changing it means
 `jk engine stop` and letting the next command spawn a fresh engine.
 
-`www-root` resolves against `JkDirs.homeDir()` when relative (the doc'd contract is "relative to
-JK_HOME"), so the default is `~/.jk/state/www`. The directory is created lazily on first use, not
+`web-root` resolves against `JkDirs.homeDir()` when relative (the doc'd contract is "relative to
+JK_HOME"), so the default is `~/.jk/state/web`. The directory is created lazily on first use, not
 at startup.
 
 ### Original `threads` knob — why it became `max-concurrent-requests`
@@ -76,7 +76,7 @@ core count" semantic.
 - `cc.jumpkick.engine.http` package in `:engine` (`kernel/engine`) — engine-only code; the slim
   client never links it, preserving the compiler-enforced engine/front-end split.
 - `JkHttpConfig` in `cc.jumpkick.config` (`:core`), sibling of `JkEngineConfig`.
-- Shipped SPA assets in `clients/web/src/main/resources/www/` — rolled into the
+- Shipped SPA assets in `clients/web/src/main/resources/web/` — rolled into the
   `jk-engine-<version>.jar` fat jar by `:cli-engine:shadowJar` with no build-file changes.
 - One new `EnginePaths.Paths` member: `<key>.http` (see Lifecycle).
 
@@ -141,11 +141,11 @@ pool with the engine's hashing — bounded, fair, and invisible to build correct
 
 One hand-rolled `StaticHandler` serves two sources, checked in order:
 
-1. **`www-root` on disk** (default `~/.jk/state/www`) — user-supplied assets **and
+1. **`web-root` on disk** (default `~/.jk/state/web`) — user-supplied assets **and
    server-rendered/appended content**: a running build may append to a `.json` file here, a report
    generator may drop `.html`/`.md` files, and the SPA (or curl) fetches them as plain static
    files. Disk wins so users can override shipped assets and generated data is always current.
-2. **Classpath `/www`** (inside the engine fat jar) — the shipped dashboard SPA
+2. **Classpath `/web`** (inside the engine fat jar) — the shipped dashboard SPA
    (`webclient.md`). Immutable per engine version.
 
 Resolution and safety:
@@ -166,7 +166,7 @@ Resolution and safety:
   with a matching `Content-Length` — a concurrent append never corrupts framing; the client's next
   poll sees more. Live tailing, when we want it, is an SSE endpoint's job, not the static
   handler's.
-- Empty/missing `www-root` is fine — the classpath SPA still serves; the disk root is only created
+- Empty/missing `web-root` is fine — the classpath SPA still serves; the disk root is only created
   when something writes to it.
 
 ## REST surface (v1)
@@ -262,7 +262,7 @@ and re-bootstraps from the new URL.
 
 - **Port in use / bad host** → engine logs the bind error, `jk engine status` reports it on the
   `http` line, engine serves builds normally. Never fatal.
-- **`www-root` missing** → classpath SPA serves; disk misses fall through silently by design.
+- **`web-root` missing** → classpath SPA serves; disk misses fall through silently by design.
 - **Slow/dead SSE client** → bounded queue drops oldest events; heartbeat write failure closes
   the stream and releases its in-flight slot.
 - **Saturated admission semaphore** → `503 Retry-After: 1`, zero work done.
@@ -271,7 +271,7 @@ and re-bootstraps from the new URL.
 
 Same style as the engine's existing suite (test seams, no real minutes of sleeping):
 
-- `JkHttpConfig`: table-absent/present/malformed, env layering, relative vs absolute `www-root`.
+- `JkHttpConfig`: table-absent/present/malformed, env layering, relative vs absolute `web-root`.
 - `HttpEngineServer` against a real ephemeral-port bind, driven by `java.net.http.HttpClient`:
   static resolution order (disk overrides classpath), traversal attempts (raw, encoded,
   mixed-case), MIME table, 304 behavior, growing-file snapshot reads, Host-header rejection,
@@ -286,8 +286,8 @@ Same style as the engine's existing suite (test seams, no real minutes of sleepi
 2. **Server skeleton** — `HttpEngineServer` lifecycle inside `EngineServer.run()`/`cleanup()`,
    `<key>.http` URL file, `jk engine status` line, Host validation, admission semaphore, static
    serving from both sources. This phase is independently shippable and useful (serve generated
-   reports from `state/www`).
+   reports from `state/web`).
 3. **REST core** — router, `JsonOut`, `/api/status`, token minting/validation +
    `<key>.http-token`.
 4. **Events + trigger** — SSE fan-out off the existing listener seams, `/api/build`.
-5. **Ship the SPA** — classpath `/www` assets per [`webclient.md`](webclient.md).
+5. **Ship the SPA** — classpath `/web` assets per [`webclient.md`](webclient.md).

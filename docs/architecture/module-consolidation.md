@@ -99,7 +99,7 @@ owner's proposed four-tier layout its natural definition:
 
 - **Web UI** → extract a **resources-only `clients/web` module**; `:engine` takes
   `runtimeOnly(project(":web"))`; the `shadowJar` bundles the assets automatically;
-  `StaticContent` (which resolves `/www/*` via `getResource`) needs **zero changes**; **no Java
+  `StaticContent` (which resolves `/web/*` via `getResource`) needs **zero changes**; **no Java
   moves** (the HTTP server stays server-side). Matches the owner's "own module, assets still bundled
   into engine" decision. (Today it's a build-step-free Vue-from-CDN SPA — no node toolchain to
   extract.)

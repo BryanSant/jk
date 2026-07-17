@@ -53,7 +53,7 @@ class JkHttpConfigTest {
         assertThat(JkHttpConfig.DEFAULTS.host()).isEqualTo("127.0.0.1");
         assertThat(JkHttpConfig.DEFAULTS.port()).isEqualTo(8910);
         assertThat(JkHttpConfig.DEFAULTS.maxConcurrentRequests()).isEqualTo(16);
-        assertThat(JkHttpConfig.DEFAULTS.wwwRoot()).isEqualTo("state/www");
+        assertThat(JkHttpConfig.DEFAULTS.webRoot()).isEqualTo("state/web");
     }
 
     @Test
@@ -64,13 +64,13 @@ class JkHttpConfigTest {
                 host = "0.0.0.0"
                 port = 8911
                 max-concurrent-requests = 4
-                www-root = "/srv/jk-www"
+                web-root = "/srv/jk-web"
                 """);
         JkHttpConfig c = JkHttpConfig.fromToml(toml).orElseThrow();
         assertThat(c.host()).isEqualTo("0.0.0.0");
         assertThat(c.port()).isEqualTo(8911);
         assertThat(c.maxConcurrentRequests()).isEqualTo(4);
-        assertThat(c.wwwRoot()).isEqualTo("/srv/jk-www");
+        assertThat(c.webRoot()).isEqualTo("/srv/jk-web");
     }
 
     @Test
@@ -224,13 +224,13 @@ class JkHttpConfigTest {
     }
 
     @Test
-    void relative_www_root_resolves_against_home(@TempDir Path tempDir) {
-        assertThat(JkHttpConfig.DEFAULTS.wwwRootPath(tempDir)).isEqualTo(tempDir.resolve("state/www"));
+    void relative_web_root_resolves_against_home(@TempDir Path tempDir) {
+        assertThat(JkHttpConfig.DEFAULTS.webRootPath(tempDir)).isEqualTo(tempDir.resolve("state/web"));
     }
 
     @Test
-    void absolute_www_root_ignores_home(@TempDir Path tempDir) {
-        JkHttpConfig c = new JkHttpConfig("127.0.0.1", 8910, 16, "/srv/jk-www");
-        assertThat(c.wwwRootPath(tempDir)).isEqualTo(Path.of("/srv/jk-www"));
+    void absolute_web_root_ignores_home(@TempDir Path tempDir) {
+        JkHttpConfig c = new JkHttpConfig("127.0.0.1", 8910, 16, "/srv/jk-web");
+        assertThat(c.webRootPath(tempDir)).isEqualTo(Path.of("/srv/jk-web"));
     }
 }

@@ -11,8 +11,8 @@ step, served straight from the engine jar.
 ## Constraints
 
 - **No build toolchain.** No npm, no bundler, no transpile. The dashboard is plain files checked
-  into `clients/web/src/main/resources/www/`, served as-is. A contributor edits a file, restarts
-  the engine (or points `www-root` at their checkout — see Development below), refreshes.
+  into `clients/web/src/main/resources/web/`, served as-is. A contributor edits a file, restarts
+  the engine (or points `web-root` at their checkout — see Development below), refreshes.
 - **The framework comes from the CDN; everything else is self-hosted.** Vue loads from unpkg —
   version-pinned in the URL and integrity-locked with SRI (a compromised CDN must not be able to
   script a page that can trigger builds); the classpath CSP allows exactly that one external
@@ -34,7 +34,7 @@ hatch. The pinned artifact is `vue.global.prod.js` — the *full* build whose ru
 compiles the in-DOM template in `index.html` at load, which is what preserves the no-build-step
 constraint (the runtime-only build would require precompiled render functions, i.e. a bundler).
 The production build, not `vue.global.js` — the dev build is 3× the size and exists for its
-warnings; point `www-root` at a checkout and swap the `<script>` line when debugging Vue itself.
+warnings; point `web-root` at a checkout and swap the `<script>` line when debugging Vue itself.
 **Moving the pin** means updating both the URL and the `integrity` hash in `index.html`
 (`openssl dgst -sha384 -binary vue.global.prod.js | openssl base64 -A`).
 
@@ -45,7 +45,7 @@ way if real routes ever appear.
 ## File layout
 
 ```
-clients/web/src/main/resources/www/
+clients/web/src/main/resources/web/
 ├── index.html          # the whole app shell: header, view tabs, the in-DOM Vue template
 ├── app.js              # createApp + store + view logic (ES module)
 ├── api.js              # fetch wrapper, token bootstrap, SSE client (ES module)
@@ -60,7 +60,7 @@ style attributes, so a `Content-Security-Policy` header rides every <em>classpat
 response: `default-src 'self'; script-src 'self' 'unsafe-eval' https://unpkg.com; style-src
 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com` — the `unsafe-eval` is
 Vue's runtime template compiler, the price of the no-build-step constraint; unpkg (Vue, ECharts) and
-Google Fonts (JetBrains Mono, Material Icons) are the only permitted external origins. Disk-served `www-root` content (user reports
+Google Fonts (JetBrains Mono, Material Icons) are the only permitted external origins. Disk-served `web-root` content (user reports
 with inline styles of their own) is deliberately not CSP-gated.
 
 ## Architecture
@@ -124,7 +124,7 @@ Three small layers, one file each:
   page the view (the track is moved via `scrollLeft`, `overflow:hidden`).
 - **Status** — the `jk engine status` numbers, rendered: version, pid, uptime, heap used/committed
   /max and RSS (with a small inline bar, no chart library), active connections/pipelines, the
-  resolved `www-root`, plus a **Cache panel** (the `jk cache info` sections — CAS blobs, action
+  resolved `web-root`, plus a **Cache panel** (the `jk cache info` sections — CAS blobs, action
   cache, plugin jars, run logs, format stamps — with a utilization meter against the configured
   ceiling and the last-pruned age, fed by `GET /api/cache` and polled only while the Status view
   is open) and the **engine log** on its own full-width row so lines don't wrap.
@@ -148,7 +148,7 @@ disk usage (`[history]` in `config.toml`) and enforced at the engine's idle-boun
 cache-hit rates) on top of the same journal. Charts at that point are hand-drawn inline SVG
 (sparklines, bars) before any charting library is considered — the data volumes here are tiny.
 
-Server-rendered content in `www-root` (build reports a pipeline drops as `.html`/`.json`/`.md`)
+Server-rendered content in `web-root` (build reports a pipeline drops as `.html`/`.json`/`.md`)
 is linked, not embedded: activity cards and future build-detail views link to
 `/reports/<file>.html` etc., and the static handler serves the current bytes. The SPA never
 assumes those files exist.
@@ -166,12 +166,12 @@ style/font origin), then `ui-monospace`. One spacing scale. Status/step markers 
 
 ## Development workflow
 
-`www-root` beats the classpath in the static handler's resolution order (see `http.md`), so
+`web-root` beats the classpath in the static handler's resolution order (see `http.md`), so
 front-end iteration needs no engine rebuild:
 
 ```toml
 [http]
-www-root = "/home/you/src/oss/jk/clients/web/src/main/resources/www"
+web-root = "/home/you/src/oss/jk/clients/web/src/main/resources/web"
 ```
 
 Edit, refresh. Disk content is served `Cache-Control: no-cache`, so the browser revalidates every

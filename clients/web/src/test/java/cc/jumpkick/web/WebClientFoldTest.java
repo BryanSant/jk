@@ -23,7 +23,7 @@ class WebClientFoldTest {
     void fold_logic_passes_the_node_test_suite(@TempDir Path tempDir) throws Exception {
         Assumptions.assumeTrue(nodeAvailable(), "node not installed — skipping the JS fold suite");
 
-        Path foldJs = Path.of("src/main/resources/www/fold.js");
+        Path foldJs = Path.of("src/main/resources/web/fold.js");
         Path testMjs = Path.of("src/test/js/fold.test.mjs");
         assertThat(foldJs).exists();
         assertThat(testMjs).exists();

@@ -26,8 +26,8 @@ Ground rules for the execution:
   message without remembering which request it sent.
 - **G4 — Full `./gradlew test` gates every phase**; behavioral smoke (dist + install +
   real project build) gates the merge.
-- **G5 — Don't touch** `clients/web/src/main/resources/www/index.html` and
-  `www/style.css` (user WIP).
+- **G5 — Don't touch** `clients/web/src/main/resources/web/index.html` and
+  `web/style.css` (user WIP).
 
 ---
 

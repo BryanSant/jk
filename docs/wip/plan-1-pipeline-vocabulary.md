@@ -112,7 +112,7 @@ package path contains `/build/jumpkick/`, so do **not** filter out `/build/`.
 - Display: render `command ▸ phase ▸ step` in the TUI/`GoalWedge`/listeners; Step id stays `{phase}-{step}`.
 
 **Stream 7 — Web-UI + docs (wire consumers that hard-code the tags):**
-- `clients/web/src/main/resources/www/api.js` (the `EVENT_TYPES` SSE allow-list), `www/fold.js` (`case 'goal-progress'` → `'pipeline-progress'`, `d.phase`→`d.step`, etc.), `www/app.js`, `www/index.html` (phase→step rendering tiers), and the node test `clients/web/src/test/js/fold.test.mjs`.
+- `clients/web/src/main/resources/web/api.js` (the `EVENT_TYPES` SSE allow-list), `web/fold.js` (`case 'goal-progress'` → `'pipeline-progress'`, `d.phase`→`d.step`, etc.), `web/app.js`, `web/index.html` (phase→step rendering tiers), and the node test `clients/web/src/test/js/fold.test.mjs`.
 - Docs: `docs/{protocol,webclient,http,engine,authoring-plugins,build-plugins-plan,plugin-refactor}.md` + the `Anchor.java` javadoc line referencing `Phase.requires`.
 
 **Tests that assert wire strings (update in lockstep):** `EngineProtocolTest`,

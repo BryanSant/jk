@@ -52,7 +52,7 @@ classes+testClasses green; `:core` + `:publisher` tests pass.
 New resources-only `:web` module (`clients/web`); `:engine` takes `runtimeOnly(project(":web"))`.
 `StaticContent` unchanged. Verified: `HttpEngineServerTest` serves the real SPA off the classpath;
 `WebClientFoldTest` (moved into `:web` with `fold.test.mjs`) passes; `jk-engine-*.jar` bundles
-`www/*`. Docs' `www/` paths updated.
+`web/*`. Docs' `web/` paths updated.
 
 _(Numbering note: journal step numbers track the execution-order list above; commits are landing in
 the order 1 → 3 → 4 → 2(DRY) → 5 … to bank the compiler-verifiable structural wins first.)_

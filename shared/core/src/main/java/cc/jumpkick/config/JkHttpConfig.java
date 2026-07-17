@@ -29,13 +29,13 @@ import org.tomlj.TomlTable;
  * host = "127.0.0.1"            # JK_HTTP_HOST                     non-loopback gates /api reads on the token
  * port = 8910                   # JK_HTTP_PORT                     0 = OS-assigned
  * max-concurrent-requests = 16  # JK_HTTP_MAX_CONCURRENT_REQUESTS  0 = container-aware core count
- * www-root = "state/www"        # JK_HTTP_WWW_ROOT                 absolute, or relative to ~/.jk
+ * web-root = "state/web"        # JK_HTTP_WEB_ROOT                 absolute, or relative to ~/.jk
  * }</pre>
  *
  * <p>Read once when an engine starts — a running engine does not hot-reload this file; {@code jk
  * engine stop} followed by a fresh lazy-start picks up a change.
  */
-public record JkHttpConfig(String host, int port, int maxConcurrentRequests, String wwwRoot) {
+public record JkHttpConfig(String host, int port, int maxConcurrentRequests, String webRoot) {
 
     public static final String DEFAULT_HOST = "127.0.0.1";
 
@@ -49,11 +49,11 @@ public record JkHttpConfig(String host, int port, int maxConcurrentRequests, Str
      */
     public static final int DEFAULT_MAX_CONCURRENT_REQUESTS = 16;
 
-    /** Relative to the resolved {@code ~/.jk} home — i.e. {@code ~/.jk/state/www} by default. */
-    public static final String DEFAULT_WWW_ROOT = "state/www";
+    /** Relative to the resolved {@code ~/.jk} home — i.e. {@code ~/.jk/state/web} by default. */
+    public static final String DEFAULT_WEB_ROOT = "state/web";
 
     public static final JkHttpConfig DEFAULTS =
-            new JkHttpConfig(DEFAULT_HOST, DEFAULT_PORT, DEFAULT_MAX_CONCURRENT_REQUESTS, DEFAULT_WWW_ROOT);
+            new JkHttpConfig(DEFAULT_HOST, DEFAULT_PORT, DEFAULT_MAX_CONCURRENT_REQUESTS, DEFAULT_WEB_ROOT);
 
     /**
      * The effective HTTP configuration for this machine: on by default with {@link #DEFAULTS},
@@ -84,7 +84,7 @@ public record JkHttpConfig(String host, int port, int maxConcurrentRequests, Str
                 EnvValues.intValue(env, "JK_HTTP_MAX_CONCURRENT_REQUESTS")
                         .filter(JkHttpConfig::validMaxConcurrentRequests)
                         .orElse(base.maxConcurrentRequests),
-                EnvValues.string(env, "JK_HTTP_WWW_ROOT").orElse(base.wwwRoot)));
+                EnvValues.string(env, "JK_HTTP_WEB_ROOT").orElse(base.webRoot)));
     }
 
     /**
@@ -108,7 +108,7 @@ public record JkHttpConfig(String host, int port, int maxConcurrentRequests, Str
                 TomlValues.optInt(http, "max-concurrent-requests")
                         .filter(JkHttpConfig::validMaxConcurrentRequests)
                         .orElse(DEFAULT_MAX_CONCURRENT_REQUESTS),
-                TomlValues.optString(http, "www-root").orElse(DEFAULT_WWW_ROOT)));
+                TomlValues.optString(http, "web-root").orElse(DEFAULT_WEB_ROOT)));
     }
 
     private static boolean validPort(int port) {
@@ -126,14 +126,14 @@ public record JkHttpConfig(String host, int port, int maxConcurrentRequests, Str
                 : Runtime.getRuntime().availableProcessors();
     }
 
-    /** {@code www-root} resolved against the live {@link JkDirs#home()} when relative. */
-    public Path wwwRootPath() {
-        return wwwRootPath(JkDirs.home());
+    /** {@code web-root} resolved against the live {@link JkDirs#home()} when relative. */
+    public Path webRootPath() {
+        return webRootPath(JkDirs.home());
     }
 
-    /** As {@link #wwwRootPath()} but against an explicit home dir — for tests. */
-    public Path wwwRootPath(Path homeDir) {
-        Path p = Path.of(wwwRoot);
+    /** As {@link #webRootPath()} but against an explicit home dir — for tests. */
+    public Path webRootPath(Path homeDir) {
+        Path p = Path.of(webRoot);
         return (p.isAbsolute() ? p : homeDir.resolve(p)).normalize();
     }
 }
