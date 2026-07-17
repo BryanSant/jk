@@ -328,12 +328,15 @@ public final class EngineServer implements AutoCloseable {
 
         connectionExecutor = Executors.newThreadPerTaskExecutor(
                 Thread.ofVirtual().name("jk-engine-conn-", 0).factory());
-        startHttpIfEnabled();
         planSharedWorkerMemoryOnce();
 
         log.accept("jk engine: listening on " + active.socket() + " (pid " + pid + ")");
         startAotTrainerIfConfigured();
         drainDisplaced(previousActive);
+        // HTTP binds only after the displaced predecessor has been told to drain — it still holds the
+        // fixed port until it exits, so binding earlier loses the handoff race with "Address already in
+        // use" and (being advisory, never retried for the engine's life) sticks in `jk engine status`.
+        startHttpIfEnabled();
         startDisplacementWatchdog();
         acceptLoop();
         cleanup();

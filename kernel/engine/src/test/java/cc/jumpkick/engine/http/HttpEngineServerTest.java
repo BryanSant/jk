@@ -3,6 +3,8 @@ package cc.jumpkick.engine.http;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 
 import cc.jumpkick.config.JkHttpConfig;
 import java.io.IOException;
@@ -550,6 +552,34 @@ class HttpEngineServerTest {
             assertThat(token()).isNotEmpty().isNotEqualTo(original);
         } finally {
             restarted.close();
+        }
+    }
+
+    @Test
+    void bind_on_a_held_port_fails_without_hanging() {
+        // `server` (from @BeforeEach) already holds an OS-assigned loopback port. A second server
+        // configured for that exact port must lose the bind — and, thanks to the bounded retry that
+        // rides out a draining predecessor, give up promptly (a handful of attempts) rather than
+        // spin forever. The generous timeout only guards against a regression to an unbounded loop.
+        HttpEngineServer collider = new HttpEngineServer(
+                new JkHttpConfig("127.0.0.1", port, 16, wwwRoot.toString()),
+                wwwRoot,
+                tokenFile,
+                logFile,
+                "9.9.9-test",
+                () -> SNAPSHOT,
+                events,
+                this::stubTrigger,
+                testJournal(),
+                java.util.List::of,
+                () -> EMPTY_CACHE,
+                null);
+        try {
+            assertTimeoutPreemptively(
+                    java.time.Duration.ofSeconds(10),
+                    () -> assertThatThrownBy(collider::start).isInstanceOf(java.net.BindException.class));
+        } finally {
+            collider.close();
         }
     }
 

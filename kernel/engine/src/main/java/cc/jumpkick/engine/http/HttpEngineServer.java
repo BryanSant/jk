@@ -6,6 +6,7 @@ import cc.jumpkick.engine.EngineTransport;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
+import java.net.BindException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
@@ -40,6 +41,12 @@ public final class HttpEngineServer implements AutoCloseable {
 
     /** Cap on a request body ({@code POST /api/build} carries one flat object; 64 KiB is generous). */
     private static final int MAX_BODY_BYTES = 64 * 1024;
+
+    /** Bind attempts before giving up — rides out a just-displaced predecessor still releasing the port. */
+    private static final int BIND_ATTEMPTS = 10;
+
+    /** Pause between bind attempts; {@code BIND_ATTEMPTS ×} this bounds the wait (~1.5s). */
+    private static final long BIND_RETRY_MILLIS = 150;
 
     private final JkHttpConfig config;
     private final StaticContent staticContent;
@@ -127,12 +134,36 @@ public final class HttpEngineServer implements AutoCloseable {
         loadOrMintToken();
         InetSocketAddress bind = new InetSocketAddress(InetAddress.getByName(config.host()), config.port());
         readsRequireToken = !bind.getAddress().isLoopbackAddress();
-        server = HttpServer.create(bind, 0);
+        server = bindWithRetry(bind);
         server.createContext("/", this::handle);
         executor = Executors.newThreadPerTaskExecutor(
                 Thread.ofVirtual().name("jk-http-", 0).factory());
         server.setExecutor(executor);
         server.start();
+    }
+
+    /**
+     * Bind, retrying briefly on {@link BindException}. A just-displaced predecessor engine drains
+     * gracefully (finishing in-flight work) before it releases the fixed port, so a fresh generation
+     * reaching HTTP bind moments after {@code EngineServer.drainDisplaced} can still lose the handoff
+     * race by a hair. A bounded retry rides that out without blocking startup for long — if the port
+     * is genuinely held by something else, we give up quickly and the engine serves without HTTP,
+     * exactly as before. (Port {@code 0} is OS-assigned and never collides, so this is a no-op there.)
+     */
+    private static HttpServer bindWithRetry(InetSocketAddress bind) throws IOException {
+        for (int attempt = 1; ; attempt++) {
+            try {
+                return HttpServer.create(bind, 0);
+            } catch (BindException e) {
+                if (attempt >= BIND_ATTEMPTS) throw e;
+                try {
+                    Thread.sleep(BIND_RETRY_MILLIS);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw e;
+                }
+            }
+        }
     }
 
     /**
