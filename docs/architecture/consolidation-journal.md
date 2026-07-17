@@ -103,6 +103,29 @@ Moved every module into `shared/ server/ clients/`; renamed `:engine-api`→`:wi
 `:plugin-api`→`:plugin-sdk`. `kernel/` deleted. Pure relocation + Gradle-name/build-ref changes; NO
 Java package changes (that's Step 7). Verified: `classes+testClasses` green.
 
+### DECISION 02 — package-reorg approach (tag `decision-02-package-reorg-approach`)
+The owner's interview pick was "full reorg to mirror tiers" (`cc.jumpkick.X` → `cc.jumpkick.{shared,
+server,client,plugin}.X`). Executing that blindly overnight is hazardous: the literal `cc.jumpkick`
+appears in ~169 NON-package spots that must NOT change (Maven `group = "cc.jumpkick"` in ~15 jk.toml
+files, the `PluginJar` registry, `buildSrc` publishing, `JkVersion`), a global sed can't separate
+FQN-in-code from coordinate-string, and the blanket rename would move `cc.jumpkick.command` — which
+owns the native-image resource pattern `cc/jumpkick/command/wrapper/.*` and the relative
+`getResourceAsStream("wrapper/…")` — a breakage that fails ONLY in the native binary and is caught by
+NO automation (the owner can't native-smoke-test tonight). Meanwhile the blanket prefix mostly
+*restates the already-visible directory tier*.
+**OUTCOME: unanimous 3–0 for Option B (surgical).** Fix only the genuine confusion — the plugin↔
+shipped-module package COLLISIONS (`cc.jumpkick.audit`/`publish`/`image`/`compat`, each shared between
+a plugin and core/jk-api/toolchain) — which is compile+integration-test-caught and keeps the public
+`jk-api`/`plugin-sdk`/`wire` namespaces clean. **Deferred to a human/IDE + native-smoke session** (with
+a clear recommendation): the split-package resolution (`repo`/`compat`/`mvn`/`tool`/`engine`/`runtime`
+across tiers — now disambiguated by the dir tiers anyway), the blanket `cc.jumpkick.{tier}.*` prefix,
+and the undecided public-SDK namespace question (`cc.jumpkick.plugin.*` vs `cc.jumpkick.shared.plugin.*`).
+To pursue the full blanket reorg, do it in an IDE with AST-aware refactoring + a native `jk wrapper`
+smoke test; `decision-02-package-reorg-approach` marks the pre-decision state.
+
+### Step 7 (surgical, Option B) — plugin package-collision renames
+_(in progress — see commits below)_
+
 **Full-suite checkpoint after Step 6:** `./gradlew test` → **710 tests, 1 failed**. The one failure,
 `ToolRunCommandTest.git_target_with_subdir_runs_that_directory` (a `git+file://…!subdir` tool-run
 returning exit 1 instead of 0 — jk's git materializer reports `ref 'main' not found`), was **proven
