@@ -2,6 +2,7 @@
 package cc.jumpkick.cli.tui;
 
 import java.io.IOException;
+import org.jline.terminal.Attributes;
 import org.jline.terminal.Terminal;
 import org.jline.terminal.TerminalBuilder;
 
@@ -32,6 +33,13 @@ public final class Interactivity {
     // free and emits capability queries — cache the verdict for the life of the process.
     private static volatile Boolean canPromptCache;
 
+    // The single real system terminal built by the canPrompt() probe, kept OPEN so the wizard /
+    // confirm UI can reuse it instead of building (and closing) a second one. JLine's system
+    // terminal owns native FD 0; closing it closes FD 0, so a second system(true) build would fall
+    // back to a dumb terminal whose reader throws "Stream Closed". Guarded by Interactivity.class;
+    // cleared by takeSharedTerminal() once a caller assumes ownership (and the duty to close it).
+    private static Terminal sharedTerminal;
+
     /** {@code true} when {@code CI} or {@code JK_NONINTERACTIVE} is set, or {@code TERM=dumb}. */
     private static boolean forcedNonInteractive() {
         if (System.getenv("CI") != null) return true;
@@ -53,6 +61,11 @@ public final class Interactivity {
     public static boolean canPrompt() {
         Boolean cached = canPromptCache;
         if (cached != null) return cached;
+        return computeAndCache();
+    }
+
+    private static synchronized boolean computeAndCache() {
+        if (canPromptCache != null) return canPromptCache; // another thread won the race
         boolean result = computeCanPrompt();
         canPromptCache = result;
         return result;
@@ -64,12 +77,40 @@ public final class Interactivity {
         try {
             // system(true): bind to the controlling terminal, not our (maybe-piped) stdio.
             // dumb(true): fall back to a dumb terminal instead of throwing when none exists.
-            probe = TerminalBuilder.builder().system(true).dumb(true).build();
+            // graphemeCluster(false): skip JLine's mode-2027 grapheme probe (a DECRQM + DA1 query
+            //   with a 200ms response timeout). On a slow/cold terminal (WSL) the reply lands after
+            //   the timeout, once JLine has restored ECHO, so the tty echoes it as an ANSI flash. jk
+            //   renders only single-codepoint glyphs, so grapheme-cluster width mode is unused — the
+            //   probe is pure cost. Disabling it removes the flash and speeds up terminal open.
+            probe = TerminalBuilder.builder()
+                    .system(true)
+                    .dumb(true)
+                    .graphemeCluster(false)
+                    .build();
             String type = probe.getType();
-            return !Terminal.TYPE_DUMB.equals(type) && !Terminal.TYPE_DUMB_COLOR.equals(type);
+            if (Terminal.TYPE_DUMB.equals(type) || Terminal.TYPE_DUMB_COLOR.equals(type)) {
+                probe.close(); // a dumb terminal owns nothing worth reusing
+                return false;
+            }
+            // A real system terminal. build() just emitted capability queries (DA / DECRQM) whose
+            // responses are about to arrive on the tty: suppress ECHO now, before they land, so the
+            // driver doesn't paint them to the screen as ANSI noise, then drain them so they aren't
+            // later read as phantom keystrokes.
+            //
+            // Crucially we do NOT close this probe. JLine's system terminal owns native FD 0, and
+            // closing it closes FD 0 — the next system(true) build would fail to make a system
+            // terminal (falling back to a dumb one whose reader throws "Stream Closed"). Cache it
+            // and hand this exact terminal to Wizard.openTerminal(), so the whole process opens
+            // exactly one system terminal.
+            Attributes saved = probe.getAttributes();
+            Attributes noEcho = new Attributes(saved);
+            noEcho.setLocalFlag(Attributes.LocalFlag.ECHO, false);
+            probe.setAttributes(noEcho);
+            Wizard.drainInput(probe.reader(), 40L);
+            sharedTerminal = probe;
+            installRestoreHook(probe, saved);
+            return true;
         } catch (IOException | RuntimeException e) {
-            return false; // no reachable terminal → can't prompt
-        } finally {
             if (probe != null) {
                 try {
                     probe.close();
@@ -77,7 +118,37 @@ public final class Interactivity {
                     // best-effort close of the probe terminal
                 }
             }
+            return false; // no reachable terminal → can't prompt
         }
+    }
+
+    /**
+     * Transfer ownership of the cached system terminal (built and drained by {@link #canPrompt()},
+     * with ECHO already suppressed) to the caller, which becomes responsible for closing it. Returns
+     * {@code null} when there is nothing to reuse — the caller then builds its own. Cleared on
+     * handoff so the terminal is handed out exactly once and the restore hook stands down.
+     */
+    static synchronized Terminal takeSharedTerminal() {
+        Terminal t = sharedTerminal;
+        sharedTerminal = null;
+        return t;
+    }
+
+    /**
+     * Guarantee the probe terminal's tty attributes (notably ECHO) are restored if no caller ever
+     * takes and closes it. Restores attributes rather than calling {@code close()} to avoid JLine's
+     * close blocking on its reader thread during shutdown; a taken terminal is closed by its owner,
+     * at which point {@code sharedTerminal != terminal} makes this a no-op.
+     */
+    private static void installRestoreHook(Terminal terminal, Attributes saved) {
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            synchronized (Interactivity.class) {
+                if (sharedTerminal == terminal) {
+                    terminal.setAttributes(saved);
+                    terminal.flush();
+                }
+            }
+        }, "jk-terminal-restore"));
     }
 
     /**

@@ -72,6 +72,13 @@ public final class Wizard {
     /**
      * Open a system terminal with input echo suppressed.
      *
+     * <p>Reuses the single system terminal already built by {@link Interactivity#canPrompt()} when
+     * one is available (the common path — callers gate on {@code canPrompt()} before prompting).
+     * Opening a <em>second</em> {@code system(true)} terminal is not free: JLine's system terminal
+     * owns native FD 0, so building and closing the {@code canPrompt()} probe would close FD 0 and
+     * leave this open failing back to a dumb terminal whose reader throws "Stream Closed". Falls back
+     * to building one directly for callers that open a terminal without gating on {@code canPrompt()}.
+     *
      * <p>{@link TerminalBuilder#build()} probes the terminal with capability queries (DA, DECRQM).
      * Their responses arrive on stdin shortly after; with default cooked-mode ECHO on, the OS driver
      * echoes them to the screen as raw ANSI text before {@link #run} gets a chance to enter raw mode.
@@ -83,7 +90,18 @@ public final class Wizard {
      * attributes are restored when the terminal is closed.
      */
     public static Terminal openTerminal() throws IOException {
-        var terminal = TerminalBuilder.builder().system(true).build();
+        var terminal = Interactivity.takeSharedTerminal();
+        if (terminal == null) {
+            // graphemeCluster(false): skip JLine's mode-2027 grapheme probe — see Interactivity's
+            // probe for the full rationale. Its DECRQM/DA1 query echoes as an ANSI flash on slow
+            // terminals when the reply outruns the probe timeout, and jk's single-codepoint glyphs
+            // never need grapheme-cluster width mode. (The common path reuses the already-probed
+            // shared terminal above; this fallback build must disable it too.)
+            terminal = TerminalBuilder.builder()
+                    .system(true)
+                    .graphemeCluster(false)
+                    .build();
+        }
         var attrs = terminal.getAttributes();
         attrs.setLocalFlag(Attributes.LocalFlag.ECHO, false);
         terminal.setAttributes(attrs);
