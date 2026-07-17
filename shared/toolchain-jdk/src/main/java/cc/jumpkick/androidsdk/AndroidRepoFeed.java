@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.androidsdk;
 
+import cc.jumpkick.util.Hashing;
+
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -181,14 +183,6 @@ public final class AndroidRepoFeed {
 
     /** SHA-1 hex of a license text — the sdkmanager acceptance-hash contract. */
     public static String licenseHash(String text) {
-        try {
-            var md = java.security.MessageDigest.getInstance("SHA-1");
-            byte[] digest = md.digest(text.strip().getBytes(StandardCharsets.UTF_8));
-            StringBuilder hex = new StringBuilder(digest.length * 2);
-            for (byte b : digest) hex.append(String.format("%02x", b));
-            return hex.toString();
-        } catch (java.security.NoSuchAlgorithmException e) {
-            throw new IllegalStateException(e); // SHA-1 is mandatory in every JRE
-        }
+        return Hashing.hashHex("SHA-1", text.strip().getBytes(StandardCharsets.UTF_8));
     }
 }

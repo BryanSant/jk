@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.androidsdk;
 
+import cc.jumpkick.util.Hashing;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
@@ -13,7 +15,6 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.security.DigestInputStream;
 import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.util.Locale;
 import java.util.zip.ZipEntry;
@@ -216,16 +217,10 @@ public final class AndroidSdkInstaller {
     }
 
     private static MessageDigest sha1() {
-        try {
-            return MessageDigest.getInstance("SHA-1");
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException(e);
-        }
+        return Hashing.newDigest("SHA-1");
     }
 
     private static String hex(byte[] digest) {
-        StringBuilder out = new StringBuilder(digest.length * 2);
-        for (byte b : digest) out.append(String.format("%02x", b));
-        return out.toString();
+        return Hashing.hex(digest);
     }
 }
