@@ -123,8 +123,21 @@ and the undecided public-SDK namespace question (`cc.jumpkick.plugin.*` vs `cc.j
 To pursue the full blanket reorg, do it in an IDE with AST-aware refactoring + a native `jk wrapper`
 smoke test; `decision-02-package-reorg-approach` marks the pre-decision state.
 
-### Step 7 (surgical, Option B) — plugin package-collision renames
-_(in progress — see commits below)_
+### Step 7 (surgical, Option B) — plugin package-collision renames (`ebbb8afa`)
+Moved `auditor`/`publisher`/`image-builder`/`compat-bridge` from their colliding packages
+(`cc.jumpkick.{audit,publish,image,compat}`) to `cc.jumpkick.plugin.{audit,publish,image,compat}`,
+added explicit imports for the shared classes they consume, updated ServiceLoader content. Verified:
+classes+testClasses green; plugin unit tests + forked Audit/Publish/Image/Import integration tests
+pass (ServiceLoader resolves the renamed impls).
+
+**Deferred package work (recommend a human/IDE + native-smoke session):**
+- The other 8 plugins → uniform `cc.jumpkick.plugin.*` prefix (they don't collide, so this is
+  consistency polish, not a bug fix).
+- Split-package resolution (`repo` shared/client-io↔server/io; `compat`/`mvn`/`gradle`/`tool`
+  shared/toolchain-jdk↔server/toolchain; `engine`/`runtime` shared/wire↔server/engine; `task`,
+  `compile`, `resolver`). Now largely disambiguated by the dir tiers; low urgency.
+- The blanket `cc.jumpkick.{shared,server,client}.*` prefix (Decision-02 deferred it) + the public-SDK
+  namespace choice.
 
 **Full-suite checkpoint after Step 6:** `./gradlew test` → **710 tests, 1 failed**. The one failure,
 `ToolRunCommandTest.git_target_with_subdir_runs_that_directory` (a `git+file://…!subdir` tool-run

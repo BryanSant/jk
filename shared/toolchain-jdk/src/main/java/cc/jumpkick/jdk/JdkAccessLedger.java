@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.jdk;
 
+import cc.jumpkick.util.AtomicWrites;
+
 import cc.jumpkick.util.JkDirs;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -135,13 +137,7 @@ public final class JdkAccessLedger {
                     .append(e.identifier)
                     .append('\n');
         }
-        Path tmp = file.resolveSibling(file.getFileName() + ".compact");
-        Files.writeString(tmp, sb.toString(), StandardCharsets.UTF_8);
-        Files.move(
-                tmp,
-                file,
-                java.nio.file.StandardCopyOption.ATOMIC_MOVE,
-                java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        AtomicWrites.replace(file, sb.toString());
         return Files.size(file);
     }
 

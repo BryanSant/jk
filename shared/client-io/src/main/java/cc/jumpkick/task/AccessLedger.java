@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.task;
 
+import cc.jumpkick.util.AtomicWrites;
+
 import cc.jumpkick.lock.Lockfile;
 import cc.jumpkick.util.JkDirs;
 import java.io.IOException;
@@ -173,9 +175,7 @@ public final class AccessLedger {
                 .append(e.getValue().count())
                 .append('\n'));
         if (file.getParent() != null) Files.createDirectories(file.getParent());
-        Path tmp = file.resolveSibling(file.getFileName() + ".compact");
-        Files.writeString(tmp, sb.toString(), StandardCharsets.UTF_8);
-        Files.move(tmp, file, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+        AtomicWrites.replace(file, sb.toString());
     }
 
     private static boolean isLong(String s) {

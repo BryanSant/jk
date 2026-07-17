@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.command;
 
+import cc.jumpkick.util.AtomicWrites;
+
 import cc.jumpkick.cli.CliOutput;
 import cc.jumpkick.cli.GlobalOptions;
 import cc.jumpkick.cli.ProjectContext;
@@ -319,8 +321,6 @@ public final class LockCommand implements CliCommand {
     }
 
     private static void writeAtomic(Path target, byte[] data) throws java.io.IOException {
-        Path tmp = target.resolveSibling(target.getFileName() + ".tmp");
-        Files.write(tmp, data);
-        Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+        AtomicWrites.replace(target, data);
     }
 }
