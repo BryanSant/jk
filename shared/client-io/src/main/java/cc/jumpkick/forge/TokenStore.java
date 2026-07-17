@@ -6,10 +6,8 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import cc.jumpkick.util.OwnerOnlyFiles;
 import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
-import java.nio.file.attribute.PosixFileAttributeView;
-import java.nio.file.attribute.PosixFilePermissions;
 import java.util.Locale;
 
 /**
@@ -49,16 +47,7 @@ public final class TokenStore {
     public void write(String host, String token) {
         Path file = fileFor(host);
         try {
-            Files.createDirectories(dir);
-            trySetOwnerOnly(dir, "rwx------");
-            Files.writeString(
-                    file,
-                    token,
-                    StandardCharsets.UTF_8,
-                    StandardOpenOption.CREATE,
-                    StandardOpenOption.TRUNCATE_EXISTING,
-                    StandardOpenOption.WRITE);
-            trySetOwnerOnly(file, "rw-------");
+            OwnerOnlyFiles.write(dir, file, token);
         } catch (IOException e) {
             throw new UncheckedIOException("failed to store credential for " + host, e);
         }
@@ -85,13 +74,4 @@ public final class TokenStore {
         return sb.toString();
     }
 
-    private static void trySetOwnerOnly(Path path, String perms) {
-        PosixFileAttributeView view = Files.getFileAttributeView(path, PosixFileAttributeView.class);
-        if (view == null) return; // non-POSIX (Windows) — nothing to tighten
-        try {
-            Files.setPosixFilePermissions(path, PosixFilePermissions.fromString(perms));
-        } catch (IOException ignored) {
-            // best-effort; the file still exists with default umask perms
-        }
-    }
 }

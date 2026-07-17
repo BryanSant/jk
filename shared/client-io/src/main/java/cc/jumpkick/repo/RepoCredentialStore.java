@@ -7,10 +7,8 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import cc.jumpkick.util.OwnerOnlyFiles;
 import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
-import java.nio.file.attribute.PosixFileAttributeView;
-import java.nio.file.attribute.PosixFilePermissions;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
@@ -78,16 +76,7 @@ public final class RepoCredentialStore {
                 };
         Path file = fileFor(repoId);
         try {
-            Files.createDirectories(dir);
-            trySetOwnerOnly(dir, "rwx------");
-            Files.writeString(
-                    file,
-                    body,
-                    StandardCharsets.UTF_8,
-                    StandardOpenOption.CREATE,
-                    StandardOpenOption.TRUNCATE_EXISTING,
-                    StandardOpenOption.WRITE);
-            trySetOwnerOnly(file, "rw-------");
+            OwnerOnlyFiles.write(dir, file, body);
         } catch (IOException e) {
             throw new UncheckedIOException("failed to store credential for " + repoId, e);
         }
@@ -114,13 +103,4 @@ public final class RepoCredentialStore {
         return sb.length() == 0 ? "_" : sb.toString();
     }
 
-    private static void trySetOwnerOnly(Path path, String perms) {
-        PosixFileAttributeView view = Files.getFileAttributeView(path, PosixFileAttributeView.class);
-        if (view == null) return; // non-POSIX (Windows)
-        try {
-            Files.setPosixFilePermissions(path, PosixFilePermissions.fromString(perms));
-        } catch (IOException ignored) {
-            // best-effort
-        }
-    }
 }
