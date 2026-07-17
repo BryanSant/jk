@@ -89,7 +89,6 @@ gradle.sharedServices
 include(
     // Kernel — universal capabilities (no plugin deps)
     ":jk-api",
-    ":support",
     ":core",
     ":plugin-api",
     ":io",
@@ -119,7 +118,6 @@ include(
 
 // Kernel modules live under kernel/
 project(":jk-api").projectDir    = file("kernel/model")
-project(":support").projectDir   = file("kernel/support")
 project(":core").projectDir      = file("kernel/core")
 project(":io").projectDir        = file("kernel/io")
 project(":resolver").projectDir  = file("kernel/resolver")

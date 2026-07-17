@@ -11,7 +11,6 @@ description = "jk engine API: the client<->engine wire contract — protocol cod
 dependencies {
     // The DTOs speak the jk-api vocabulary (Pipeline/Step/PipelineListener, JkBuild, TestSummary).
     api(project(":jk-api"))
-    implementation(project(":support"))
     // CachePruneScheduler consults JkCacheConfig (~/.jk/config.toml [cache]).
     api(project(":core"))
     // EngineProtocol encodes/decodes with the shared Jsonl codec.

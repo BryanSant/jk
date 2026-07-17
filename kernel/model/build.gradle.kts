@@ -4,7 +4,7 @@ plugins {
     id("jk.java-conventions")
 }
 
-description = "jk-api: the stable front-end/plugin contract (IO/thread machinery lives in :support) — Pipeline/Step scheduler SPI, " +
+description = "jk-api: the stable front-end/plugin contract (IO/thread machinery lives in :core) — Pipeline/Step scheduler SPI, " +
         "Dependency/Coordinate model, PipelineListener + command (CliCommand/Invocation) SPI. " +
         "Zero external dependencies — JDK + Lombok + JSpecify only."
 

@@ -9,9 +9,8 @@ description = "jk-publish-runner: child-JVM worker that assembles, signs, and pu
         "own classpath. Reads a line-oriented spec, streams JSONL progress back to jk."
 
 dependencies {
-    implementation(project(":core"))
+    implementation(project(":core"))  // Hashing (util) + io + jsonl codec all reachable transitively
     implementation(project(":io"))
-    implementation(project(":support"))  // Hashing for artifact checksums
     implementation(project(":plugin-api"))  // shared JSONL codec (bundled into the fat jar)
     implementation(libs.bouncycastle.bcpg)
     implementation(libs.sigstore.java)

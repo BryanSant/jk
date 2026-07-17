@@ -4,11 +4,12 @@ plugins {
     id("jk.java-conventions")
 }
 
-description = "jk core foundations: TOML config parser, lockfile, layout, library catalog, deny policy"
+description = "jk core foundations: TOML config parser, lockfile, layout, library catalog, deny " +
+        "policy, plus the shared filesystem/hashing/XML machinery (PathUtil, Hashing, TreeFingerprint, " +
+        "JkDirs, GitUrl, MinimalXml, AtomicWrites) absorbed from the former :support module"
 
 dependencies {
     api(project(":jk-api"))
-    api(project(":support"))
     // Jsonl is MiniJson's single escaping home (the JSON-consolidation decision);
     // plugin-api itself depends only on :model, so the direction is legal.
     api(project(":plugin-api"))
