@@ -123,6 +123,55 @@ and the undecided public-SDK namespace question (`cc.jumpkick.plugin.*` vs `cc.j
 To pursue the full blanket reorg, do it in an IDE with AST-aware refactoring + a native `jk wrapper`
 smoke test; `decision-02-package-reorg-approach` marks the pre-decision state.
 
+### Step 8 (DRY) — dedup wins
+- `639df42f` — `Jsonl.array()` unifies the 3 string-array writers (SpecWriter/PluginReply/EngineProtocol).
+- `a0b7fdd7` — `AtomicWrites` adopted at LockCommand/AccessLedger/JdkAccessLedger (+ fixes missing
+  cross-device fallback in the two ledgers).
+- `be4be51f` — `AtomicWrites` adopted in Calibration/StepTimings/BuildMetrics. **6 of 30 `ATOMIC_MOVE`
+  sites now use the canonical util** (the ledger/lock/state-writer cluster).
+
+## FINAL STATE (autonomous session end)
+Branch `module-consolidation`, 13 commits on top of `main`. **`./gradlew test` → 710 tests, 1 failed;
+the 1 failure is the PRE-EXISTING `ToolRunCommandTest.git_target_with_subdir_runs_that_directory`
+(fails identically on pristine `main` — env/git-materialization quirk, NOT caused by this work).**
+All 709 other tests pass; `classes testClasses` green; `jk-engine` fat jar bundles the web assets.
+
+Net module count is unchanged (25: `support`→`core` removed one, `clients/web` added one — the
+client/engine firewall pins the count; the win is clarity, not raw count). Layout is now
+`shared/ server/ clients/ plugins/`. Tags: `consolidation-base` (post-jsonl baseline),
+`decision-01-engine-api-merge`, `decision-02-package-reorg-approach`.
+
+### Prioritized follow-ups (recommend a human/IDE + native-smoke session; each is scoped + safe)
+DRY (mechanical, compile/test-verifiable):
+1. **AtomicWrites — remaining ~24 sites.** Route the rest through `AtomicWrites.replace`/`moveInto`.
+   Hash-coupled (`M2CompatWriter` ×6, `Cas` ×3) need care (the temp is also the hash sink); the
+   directory-move sites (`VersionStore`, `ExplodedArchives`, `PluginBuild`, `ReachabilityMetadata`,
+   `AndroidSdkInstaller`) map to `moveInto` but watch `REPLACE_EXISTING` semantics.
+2. **JSON escapers → `Jsonl.quote`** (6 copies: `Sbom`/`SlsaProvenance`/`CycloneDxSbom`/`OsvClient`/
+   `ToolLauncher`/`VscodeIdeGenerator.jsonEsc` — the last drops control chars, a latent bug). Watch
+   the quoted-vs-unquoted shape per site + any SBOM golden test.
+3. **XML escapers → public `MinimalXml.escapeText/escapeAttr`** (5 copies; `PublishablePom`'s copy
+   unblocks once it moves per #5).
+4. **DOM helpers → one `DomXml`** (`PomParser`/`MavenMetadata`/`PomImporter` childElement/childText +
+   XXE boilerplate). **Hashing** → route ~7 hand-rolled `MessageDigest`+hex through `Hashing`.
+   **`OwnerOnlyFileStore`** — `TokenStore`+`RepoCredentialStore` `trySetOwnerOnly` is byte-identical.
+   **DeterministicJar** — `ShadowPackager`≡`BootJarPackager` entry writers (+5 more).
+5. **POM family (owner's flagged item).** Fold `EffectivePom`→`Pom` (read side, engine-only `io`).
+   Write side: `PublishablePom`+`PomExporter` share `escape`/`mavenScope`/preamble/dep-emit — but
+   `PublishablePom` (jk-api leaf) can't see `MinimalXml` (core), and a single `PomWriter` in
+   `toolchain-jdk` would bloat the `publisher` worker. **Design fork** (unified `PomWriter(mode)` vs a
+   shared helper both call) + publish-byte-safety (POMs go to Maven repos) → do with review + golden
+   tests, NOT blind.
+Package (Decision-02 deferred):
+6. Other 8 plugins → uniform `cc.jumpkick.plugin.*`; split-package resolution; the blanket
+   `cc.jumpkick.{tier}.*` prefix + public-SDK namespace choice — IDE/AST refactor + native `jk wrapper`
+   smoke test (the native-image resource pattern is the untestable hazard).
+Features (owner's step 9):
+7. Publish `plugin-sdk` as `jk-plugin-sdk` (independent version, decouple from `JkVersion`) +
+   `jk new --plugin` scaffold — the 3rd-party plugin DX (Quarkus) enabler.
+
+Not merged to `main` — left on the branch for review. `git reset --hard <tag>` to wind back any decision.
+
 ### Step 7 (surgical, Option B) — plugin package-collision renames (`ebbb8afa`)
 Moved `auditor`/`publisher`/`image-builder`/`compat-bridge` from their colliding packages
 (`cc.jumpkick.{audit,publish,image,compat}`) to `cc.jumpkick.plugin.{audit,publish,image,compat}`,
