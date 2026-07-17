@@ -114,6 +114,8 @@ include(
     ":engine",
     ":cli",
     ":cli-engine",
+    // Clients
+    ":web",
 )
 
 // Kernel modules live under kernel/
@@ -126,6 +128,9 @@ project(":toolchain-jdk").projectDir = file("kernel/toolchain-jdk")
 project(":client-io").projectDir = file("kernel/client-io")
 project(":engine-api").projectDir  = file("kernel/engine-api")
 project(":engine").projectDir      = file("kernel/engine")
+
+// Client modules live under clients/
+project(":web").projectDir         = file("clients/web")
 
 // Plugin modules live under plugins/
 project(":test-runner").projectDir    = file("plugins/test-runner")

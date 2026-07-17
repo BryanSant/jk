@@ -76,7 +76,7 @@ core count" semantic.
 - `cc.jumpkick.engine.http` package in `:engine` (`kernel/engine`) — engine-only code; the slim
   client never links it, preserving the compiler-enforced engine/front-end split.
 - `JkHttpConfig` in `cc.jumpkick.config` (`:core`), sibling of `JkEngineConfig`.
-- Shipped SPA assets in `kernel/engine/src/main/resources/www/` — rolled into the
+- Shipped SPA assets in `clients/web/src/main/resources/www/` — rolled into the
   `jk-engine-<version>.jar` fat jar by `:cli-engine:shadowJar` with no build-file changes.
 - One new `EnginePaths.Paths` member: `<key>.http` (see Lifecycle).
 

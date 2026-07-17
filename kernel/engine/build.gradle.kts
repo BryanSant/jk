@@ -17,6 +17,10 @@ dependencies {
     implementation(project(":plugin-api"))
     implementation(project(":resolver"))
     implementation(project(":toolchain"))
+    // The web dashboard's static assets ride the engine's runtime classpath as /www/* (served by
+    // StaticContent) and get bundled into the jk-engine fat jar. Kept resources-only + runtimeOnly
+    // so the assets never touch the compile classpath and the native CLI never links them.
+    runtimeOnly(project(":web"))
     // ASM — used by the incremental Java compiler's dependency extraction
     implementation(libs.asm)
     implementation(libs.asm.tree)

@@ -11,7 +11,7 @@ step, served straight from the engine jar.
 ## Constraints
 
 - **No build toolchain.** No npm, no bundler, no transpile. The dashboard is plain files checked
-  into `kernel/engine/src/main/resources/www/`, served as-is. A contributor edits a file, restarts
+  into `clients/web/src/main/resources/www/`, served as-is. A contributor edits a file, restarts
   the engine (or points `www-root` at their checkout — see Development below), refreshes.
 - **The framework comes from the CDN; everything else is self-hosted.** Vue loads from unpkg —
   version-pinned in the URL and integrity-locked with SRI (a compromised CDN must not be able to
@@ -45,7 +45,7 @@ way if real routes ever appear.
 ## File layout
 
 ```
-kernel/engine/src/main/resources/www/
+clients/web/src/main/resources/www/
 ├── index.html          # the whole app shell: header, view tabs, the in-DOM Vue template
 ├── app.js              # createApp + store + view logic (ES module)
 ├── api.js              # fetch wrapper, token bootstrap, SSE client (ES module)
@@ -171,7 +171,7 @@ front-end iteration needs no engine rebuild:
 
 ```toml
 [http]
-www-root = "/home/you/src/oss/jk/kernel/engine/src/main/resources/www"
+www-root = "/home/you/src/oss/jk/clients/web/src/main/resources/www"
 ```
 
 Edit, refresh. Disk content is served `Cache-Control: no-cache`, so the browser revalidates every
@@ -181,7 +181,7 @@ load. Ship by simply having the same files in the jar and removing the override.
 
 - The store's event-folding logic (SSE events → activity cards) is the only real logic; it lives
   as pure functions in `fold.js` (no browser globals) and is tested headlessly with `node --test`
-  (`kernel/engine/src/test/js/fold.test.mjs`, run via the `WebClientFoldTest` JUnit wrapper) — no
+  (`clients/web/src/test/js/fold.test.mjs`, run via the `WebClientFoldTest` JUnit wrapper) — no
   browser, no framework, no new toolchain (Node is only a *test-time* convenience, not a build
   dependency; the suite is skipped when Node is absent).
 - End-to-end: the engine's HTTP test suite (see `http.md`) already binds a real server; one

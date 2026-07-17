@@ -112,7 +112,7 @@ package path contains `/build/jumpkick/`, so do **not** filter out `/build/`.
 - Display: render `command ▸ phase ▸ step` in the TUI/`GoalWedge`/listeners; Step id stays `{phase}-{step}`.
 
 **Stream 7 — Web-UI + docs (wire consumers that hard-code the tags):**
-- `kernel/engine/src/main/resources/www/api.js` (the `EVENT_TYPES` SSE allow-list), `www/fold.js` (`case 'goal-progress'` → `'pipeline-progress'`, `d.phase`→`d.step`, etc.), `www/app.js`, `www/index.html` (phase→step rendering tiers), and the node test `kernel/engine/src/test/js/fold.test.mjs`.
+- `clients/web/src/main/resources/www/api.js` (the `EVENT_TYPES` SSE allow-list), `www/fold.js` (`case 'goal-progress'` → `'pipeline-progress'`, `d.phase`→`d.step`, etc.), `www/app.js`, `www/index.html` (phase→step rendering tiers), and the node test `clients/web/src/test/js/fold.test.mjs`.
 - Docs: `docs/{protocol,webclient,http,engine,authoring-plugins,build-plugins-plan,plugin-refactor}.md` + the `Anchor.java` javadoc line referencing `Phase.requires`.
 
 **Tests that assert wire strings (update in lockstep):** `EngineProtocolTest`,
@@ -125,7 +125,7 @@ package path contains `/build/jumpkick/`, so do **not** filter out `/build/`.
 Per stream, then end-to-end:
 
 1. **Compiles:** `./gradlew compileJava compileTestJava --offline --continue` green across all modules (watch for `build`-package-path false-negatives when grepping for leftovers — use `/usr/bin/grep` + `find`).
-2. **Wire unit tests:** `EngineProtocolTest`, the renamed plugin-command tests, `PhaseTimings`/weight tests, and `node kernel/engine/src/test/js/fold.test.mjs`.
+2. **Wire unit tests:** `EngineProtocolTest`, the renamed plugin-command tests, `PhaseTimings`/weight tests, and `node clients/web/src/test/js/fold.test.mjs`.
 3. **End-to-end (mirrors the earlier proof):** `./gradlew nativeCompile` + `:cli-engine:shadowJar`; stage binary + engine jar; `install.sh`; `./gradlew installLocal`; then in `../bjs/simple`: `jk clean && jk build && jk test` — confirms Pipeline→Phase→Step→Tick execution + progress.
 4. **Plugin wire paths:** build a plugin-backed project (protobuf or spring-boot) to exercise the `describe`/`step`/`after`/`before` Phase wire; and invoke an android plugin *command* (former verb) to exercise `plugin-command-request`/`command-out`.
 5. **Web UI:** start the engine HTTP server, load the web client, confirm SSE `pipeline-*`/`step-*` events render live (fold.js reducer) — or at minimum `fold.test.mjs` green.

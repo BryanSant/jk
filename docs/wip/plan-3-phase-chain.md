@@ -90,7 +90,7 @@ truth; `phaseChainOf` is derived (and headlessly testable).
   `jk engine start`.
 
 ### Stage 6 — Tests
-- `kernel/engine/src/test/js/fold.test.mjs`: keep the step-row assertions; **add**
+- `clients/web/src/test/js/fold.test.mjs`: keep the step-row assertions; **add**
   `phaseChainOf` cases — multi-step-per-phase collapse, encounter order, state precedence
   (failed > running > success), per-module independence, an unknown/plugin phase string
   appended verbatim, and the diagnostic→phase join.
@@ -98,7 +98,7 @@ truth; `phaseChainOf` is derived (and headlessly testable).
 
 ## Verification
 
-- `node --test kernel/engine/src/test/js/fold.test.mjs` (headless fold logic).
+- `node --test clients/web/src/test/js/fold.test.mjs` (headless fold logic).
 - `./gradlew :engine:test` — journal round-trip + `HttpEngineServerTest` (CSP unchanged).
 - Manual e2e: reinstall the engine jar, `jk engine stop`, wipe
   `~/.jk/state/builds/journal/`, `jk engine start`; run a multi-module build and a failing
