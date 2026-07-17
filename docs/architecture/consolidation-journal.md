@@ -90,3 +90,23 @@ Revised two-answer rule: **`plugin-sdk` to *extend* jk, `wire` to *drive* it** (
 carries `jk-api`'s domain/SPI). Implemented as part of the tier reorg (Step 6): rename `:engine-api`
 → `:wire` (dir `shared/wire`) + move `CachePruneScheduler` → `:core`. To force the original merge
 instead, `git reset --hard decision-01-engine-api-merge` and go from there.
+
+### Step 5 (DRY, opportunistic) — `Http` retry-loop dedup (`a1667a1c`)
+The 4 byte-identical send-with-retry loops in `Http` (get/getStream/postForm/put) collapsed into one
+`sendWithRetry` helper (getStream's body-drain passed as a callback). Verified: `HttpTest` passes.
+
+### Step 6a — demote `CachePruneScheduler` → `core` (`9891b7f6`)
+Per Decision-01 refinement. Package `cc.jumpkick.task` unchanged; green.
+
+### Step 6b–e — tier reorg (`10ef372b`)
+Moved every module into `shared/ server/ clients/`; renamed `:engine-api`→`:wire`,
+`:plugin-api`→`:plugin-sdk`. `kernel/` deleted. Pure relocation + Gradle-name/build-ref changes; NO
+Java package changes (that's Step 7). Verified: `classes+testClasses` green.
+
+**Full-suite checkpoint after Step 6:** `./gradlew test` → **710 tests, 1 failed**. The one failure,
+`ToolRunCommandTest.git_target_with_subdir_runs_that_directory` (a `git+file://…!subdir` tool-run
+returning exit 1 instead of 0 — jk's git materializer reports `ref 'main' not found`), was **proven
+PRE-EXISTING**: it fails identically on pristine `main` (`3660b2fb`, verified via a throwaway
+worktree). It is unrelated to the consolidation or the jsonl rename — an environmental/git-
+materialization quirk on this host. Flagged for the owner; NOT fixed here (out of scope, and likely
+host-specific). All other 709 tests pass.
