@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.repo;
 
+import cc.jumpkick.util.AtomicWrites;
+
 import cc.jumpkick.credential.RepoCredential;
 import cc.jumpkick.http.Http;
 import cc.jumpkick.util.Hashing;
@@ -129,14 +131,7 @@ public final class MavenMetadataCache {
     }
 
     private void writeAtomic(Path target, byte[] data) throws IOException {
-        Path tmp = Files.createTempFile(dir, ".meta-", ".tmp");
-        try {
-            Files.write(tmp, data);
-            Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-        } catch (IOException | RuntimeException e) {
-            Files.deleteIfExists(tmp);
-            throw e;
-        }
+        AtomicWrites.replace(target, data);
     }
 
     private static void touch(Path body) throws IOException {

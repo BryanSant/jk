@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.runtime;
 
+import cc.jumpkick.util.AtomicWrites;
+
 import cc.jumpkick.cache.Cas;
 import cc.jumpkick.lock.Lockfile;
 import cc.jumpkick.lock.LockfileReader;
@@ -77,10 +79,7 @@ public final class PluginDescriptorOps {
                 text = new String(in.readAllBytes(), StandardCharsets.UTF_8);
             }
             Path target = PluginDescriptorStore.fileFor(moduleDir, sha256Hex);
-            Files.createDirectories(target.getParent());
-            Path tmp = Files.createTempFile(target.getParent(), ".manifest-", ".tmp");
-            Files.writeString(tmp, text, StandardCharsets.UTF_8);
-            Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            AtomicWrites.replace(target, text);
         }
     }
 

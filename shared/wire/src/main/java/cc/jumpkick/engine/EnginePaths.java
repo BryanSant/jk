@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.engine;
 
+import cc.jumpkick.util.AtomicWrites;
+
 import cc.jumpkick.util.Hashing;
 import cc.jumpkick.util.JkDirs;
 import java.nio.file.Path;
@@ -105,18 +107,7 @@ public final class EnginePaths {
     /** Atomically point the endpoint at {@code socket} (a sibling of the engine dir). */
     public static void writeEndpoint(Paths paths, Path socket) throws java.io.IOException {
         Path ep = endpoint(paths);
-        java.nio.file.Files.createDirectories(ep.getParent());
-        Path tmp = java.nio.file.Files.createTempFile(ep.getParent(), ".endpoint-", ".tmp");
-        try {
-            java.nio.file.Files.writeString(tmp, socket.getFileName().toString());
-            try {
-                java.nio.file.Files.move(tmp, ep, java.nio.file.StandardCopyOption.ATOMIC_MOVE);
-            } catch (java.nio.file.AtomicMoveNotSupportedException e) {
-                java.nio.file.Files.move(tmp, ep, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-            }
-        } finally {
-            java.nio.file.Files.deleteIfExists(tmp);
-        }
+        AtomicWrites.replace(ep, socket.getFileName().toString());
     }
 
     /**
