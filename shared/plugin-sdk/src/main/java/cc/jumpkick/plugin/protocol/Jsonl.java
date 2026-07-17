@@ -328,6 +328,16 @@ public final class Jsonl {
         return b.append('}').toString();
     }
 
+    /** Encode a list of strings as a JSON array of quoted strings: {@code ["a","b"]}. */
+    public static String array(List<String> values) {
+        StringBuilder b = new StringBuilder("[");
+        for (int i = 0; i < values.size(); i++) {
+            if (i > 0) b.append(',');
+            b.append(quote(values.get(i)));
+        }
+        return b.append(']').toString();
+    }
+
     public static String quote(String s) {
         if (s == null) return "null";
         StringBuilder b = new StringBuilder(s.length() + 2);

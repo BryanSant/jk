@@ -184,11 +184,6 @@ public final class SpecWriter {
     }
 
     private static String array(List<String> values) {
-        StringBuilder b = new StringBuilder("[");
-        for (int i = 0; i < values.size(); i++) {
-            if (i > 0) b.append(',');
-            b.append(Jsonl.quote(values.get(i)));
-        }
-        return b.append(']').toString();
+        return Jsonl.array(values);
     }
 }

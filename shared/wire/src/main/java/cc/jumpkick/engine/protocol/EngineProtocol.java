@@ -2411,12 +2411,7 @@ public final class EngineProtocol {
 
     /** {@code Jsonl} only reads string arrays; it has no writer half, so this is the encode side. */
     static String quoteArray(List<String> values) {
-        StringBuilder b = new StringBuilder("[");
-        for (int i = 0; i < values.size(); i++) {
-            if (i > 0) b.append(',');
-            b.append(Jsonl.quote(values.get(i)));
-        }
-        return b.append(']').toString();
+        return Jsonl.array(values);
     }
 
     // ---- build-history request builders (responses are built engine-side with JsonOut) ----------

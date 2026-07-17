@@ -41,14 +41,8 @@ public final class PluginReply {
 
     /** Annotation-processing provenance: a generated file and its originating sources. */
     public static String provenance(String generated, List<String> sources) {
-        StringBuilder b = new StringBuilder("{\"t\":\"provenance\",\"gen\":")
-                .append(Jsonl.quote(generated))
-                .append(",\"src\":[");
-        for (int i = 0; i < sources.size(); i++) {
-            if (i > 0) b.append(',');
-            b.append(Jsonl.quote(sources.get(i)));
-        }
-        return b.append("]}").toString();
+        return "{\"t\":\"provenance\",\"gen\":" + Jsonl.quote(generated)
+                + ",\"src\":" + Jsonl.array(sources) + "}";
     }
 
     /** An audit vulnerability finding. */
