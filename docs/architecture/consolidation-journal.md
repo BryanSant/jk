@@ -68,4 +68,25 @@ Options weighed: (1) full merge — push config/util types down into `jk-api`, m
 (3) hybrid — fold only pure DTOs into `jk-api`, leave core-coupled bits in core.
 Per the owner's instruction, spawned 3 independent evaluators (architect / API-DX / pragmatist);
 following the majority. Tagged `decision-01-engine-api-merge` at the pre-decision state (`f806b89c`)
-for wind-back. **Outcome + rationale recorded below once the verdicts land.**
+for wind-back.
+
+**OUTCOME: unanimous 3–0 for Option 2 — rename `engine-api` → `wire`, do NOT merge into `jk-api`.**
+This *overrides the "bold merge" the owner said they liked* — flagged here so it's easy to reconsider.
+Rationale the evaluators converged on:
+- The merge would have to push `JkDirs`/`Hashing` (file IO) + `JkCacheConfig` (TOML-parsing) down into
+  `jk-api`, which is contractually **zero-external-dep AND IO-free** (its own build.gradle forbids
+  project deps beyond plugin-sdk). That inverts the layer (`core → jk-api → core` cycle) or forces
+  split packages across `cc.jumpkick.config`/`util` — worse for clarity, not better.
+- jk-api is the **stable, public** contract; `EngineProtocol` is explicitly **internal, unversioned,
+  same-version-only**. Pouring churny wire shapes into the stable leaf is a category error.
+- **The DX goal survives without the merge:** `wire` already `api()`-exports `jk-api` + `core` +
+  `plugin-sdk`, so a front-end links ONE module (`wire`) and gets the whole drive-jk surface via Gradle
+  transitivity. The physical merge bought nothing transitivity doesn't already give.
+- Refinement adopted (from evaluator 2): demote `CachePruneScheduler` from `engine-api` into `core` —
+  it's a cache-maintenance scheduler over `JkCacheConfig`, not a wire type; consumed by cli/cli-engine/
+  engine (all see core). Keeps `wire` purely the wire.
+
+Revised two-answer rule: **`plugin-sdk` to *extend* jk, `wire` to *drive* it** (`wire` transitively
+carries `jk-api`'s domain/SPI). Implemented as part of the tier reorg (Step 6): rename `:engine-api`
+→ `:wire` (dir `shared/wire`) + move `CachePruneScheduler` → `:core`. To force the original merge
+instead, `git reset --hard decision-01-engine-api-merge` and go from there.

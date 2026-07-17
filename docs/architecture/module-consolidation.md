@@ -1,8 +1,15 @@
 # Module consolidation & DRY (toward 1.0)
 
-Status: **approved — Proposal B** (2026-07-16), with two owner tweaks locked in: the engine-only
-tier is named **`server/`** (not `backend`), and `plugin-api` becomes **`plugin-sdk`** (published
-artifact `jk-plugin-sdk`). Final layout: **`shared/ server/ clients/ plugins/`**, packages
+Status: **approved — Proposal B** (2026-07-16), with owner tweaks + one consensus amendment:
+- the engine-only tier is named **`server/`** (not `backend`);
+- `plugin-api` becomes **`plugin-sdk`** (published artifact `jk-plugin-sdk`);
+- **Amendment (Decision 01, 3–0 subagent consensus — see [consolidation-journal.md](./consolidation-journal.md)):**
+  the "merge `engine-api` into `jk-api`" move below is **replaced** by renaming `engine-api` →
+  **`wire`** and keeping it a separate `shared/` module. The merge would break `jk-api`'s zero-dep/
+  IO-free leaf contract; and the "one module to drive jk" DX is preserved anyway because `wire`
+  `api()`-exports `jk-api`. Two-answer rule becomes: **`plugin-sdk` to extend, `wire` to drive.**
+
+Final layout: **`shared/ server/ clients/ plugins/`**, packages
 `cc.jumpkick.{shared,server,client,plugin}.*`. Goal: the fewest, clearest Gradle modules and the
 least duplicated code we can get *without* sacrificing a genuine advantage of a module being broken
 out. Pre-1.0: breaking changes welcome — renaming modules, packages, SPIs, and constants is in scope
