@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.runtime;
 
+import cc.jumpkick.util.AtomicWrites;
+
 import cc.jumpkick.config.EnvValues;
 import cc.jumpkick.config.TomlValues;
 import cc.jumpkick.util.JkDirs;
@@ -422,16 +424,7 @@ public final class BuildMetrics {
     }
 
     private static void write(Path file, Map<String, Entry> inv, Map<String, Entry> ph) throws IOException {
-        Path parent = file.getParent();
-        if (parent != null) Files.createDirectories(parent);
-        Path tmp = Files.createTempFile(parent, ".metrics-", ".tmp");
-        try {
-            Files.writeString(tmp, MiniJson.writePretty(render(inv, ph)), StandardCharsets.UTF_8);
-            Files.move(tmp, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-        } catch (IOException | RuntimeException e) {
-            Files.deleteIfExists(tmp);
-            throw e;
-        }
+        AtomicWrites.replace(file, MiniJson.writePretty(render(inv, ph)));
     }
 
     private static List<?> list(Object v) {

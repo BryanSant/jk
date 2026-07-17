@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.runtime;
 
+import cc.jumpkick.util.AtomicWrites;
+
 import cc.jumpkick.jdk.GlobalDefaultJdk;
 import cc.jumpkick.jdk.JdkLts;
 import cc.jumpkick.jdk.JdkRegistry;
@@ -400,16 +402,7 @@ public final class Calibration {
 
     /** Atomically write {@code c} to {@code file} (mirrors {@link StepTimings}'s IO). */
     static void writeTo(Path file, Calibration c) throws IOException {
-        Path parent = file.getParent();
-        if (parent != null) Files.createDirectories(parent);
-        Path tmp = Files.createTempFile(parent, ".calibration-", ".tmp");
-        try {
-            Files.writeString(tmp, c.render(), StandardCharsets.UTF_8);
-            Files.move(tmp, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-        } catch (IOException | RuntimeException e) {
-            Files.deleteIfExists(tmp);
-            throw e;
-        }
+        AtomicWrites.replace(file, c.render());
     }
 
     private String render() {

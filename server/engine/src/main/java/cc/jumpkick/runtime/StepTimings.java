@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.runtime;
 
+import cc.jumpkick.util.AtomicWrites;
+
 import cc.jumpkick.config.EnvValues;
 import cc.jumpkick.config.TomlValues;
 import java.io.IOException;
@@ -307,16 +309,7 @@ public final class StepTimings {
     }
 
     private static void write(Path file, Map<String, Entry> m) throws IOException {
-        Path parent = file.getParent();
-        if (parent != null) Files.createDirectories(parent);
-        Path tmp = Files.createTempFile(parent, ".timings-", ".tmp");
-        try {
-            Files.writeString(tmp, render(m), StandardCharsets.UTF_8);
-            Files.move(tmp, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-        } catch (IOException | RuntimeException e) {
-            Files.deleteIfExists(tmp);
-            throw e;
-        }
+        AtomicWrites.replace(file, render(m));
     }
 
     private static OptionalLong envLong(Function<String, String> env, String name) {
