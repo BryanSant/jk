@@ -15,7 +15,7 @@ import cc.jumpkick.lock.LockfileReader;
 import cc.jumpkick.model.BuildIdentity;
 import cc.jumpkick.model.JkBuild;
 import cc.jumpkick.plugin.build.Phase;
-import cc.jumpkick.plugin.protocol.Ndjson;
+import cc.jumpkick.plugin.protocol.Jsonl;
 import cc.jumpkick.plugin.protocol.PluginProtocol;
 import cc.jumpkick.plugin.protocol.SpecWriter;
 import cc.jumpkick.run.Pipeline;
@@ -375,8 +375,8 @@ public final class ImagePipelines {
                 String[] workerError = {null};
                 StringBuilder diag = new StringBuilder();
                 int exit = new PluginClient("##JKIM:")
-                        .on(PluginProtocol.RESULT, json -> ref[0] = Ndjson.str(json, "ref"))
-                        .on(PluginProtocol.ERROR, json -> workerError[0] = Ndjson.str(json, PluginProtocol.MESSAGE))
+                        .on(PluginProtocol.RESULT, json -> ref[0] = Jsonl.str(json, "ref"))
+                        .on(PluginProtocol.ERROR, json -> workerError[0] = Jsonl.str(json, PluginProtocol.MESSAGE))
                         .passthrough(ln -> diag.append(ln).append('\n'))
                         .run(PluginLaunch.javaCommand(workerJar, spec));
                 if (workerError[0] != null) throw new RuntimeException("image worker: " + workerError[0]);

@@ -10,7 +10,7 @@ import java.util.List;
 import java.util.stream.Stream;
 
 /**
- * Delete {@code <cacheRoot>/runs/*.ndjson} entries older than {@link #DEFAULT_TTL} (7 days).
+ * Delete {@code <cacheRoot>/runs/*.jsonl} entries older than {@link #DEFAULT_TTL} (7 days).
  * Invoked by {@code jk cache prune} alongside the other steps.
  *
  * <p>Run logs are best-effort diagnostic artefacts — the data is useful for "what happened in last

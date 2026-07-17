@@ -93,7 +93,7 @@ legitimately stays in the client:
 ## 2. The two new protocol shapes
 
 Both are synchronous inline request/ack pairs (the `FORECAST_REQUEST` pattern — flat scalars +
-string lists, Ndjson discipline).
+string lists, Jsonl discipline).
 
 ### 2.1 `PROJECT_INFO_REQUEST` → `PROJECT_INFO_ACK`
 

@@ -2,7 +2,7 @@
 package cc.jumpkick.command;
 
 import cc.jumpkick.http.Http;
-import cc.jumpkick.plugin.protocol.Ndjson;
+import cc.jumpkick.plugin.protocol.Jsonl;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -58,7 +58,7 @@ final class JBangCatalog {
             try {
                 var response = http.get(URI.create(c.catalogUrl()));
                 if (response.statusCode() != 200) continue;
-                // Ndjson's lookups expect the wire's compact form; catalogs are
+                // Jsonl's lookups expect the wire's compact form; catalogs are
                 // pretty-printed by humans — normalize before parsing.
                 String json = compact(new String(response.body(), StandardCharsets.UTF_8));
                 return toResolved(target, alias, c, json);
@@ -72,12 +72,12 @@ final class JBangCatalog {
     }
 
     private static Resolved toResolved(String target, String alias, Candidate c, String json) throws IOException {
-        String aliases = Ndjson.nested(json, "aliases");
-        String entry = aliases != null ? Ndjson.nested(aliases, alias) : null;
+        String aliases = Jsonl.nested(json, "aliases");
+        String entry = aliases != null ? Jsonl.nested(aliases, alias) : null;
         if (entry == null) {
             throw new IOException("catalog " + c.catalogUrl() + " has no alias `" + alias + "`");
         }
-        String scriptRef = Ndjson.str(entry, "script-ref");
+        String scriptRef = Jsonl.str(entry, "script-ref");
         if (scriptRef == null || scriptRef.isBlank()) {
             throw new IOException("alias `" + alias + "` in " + c.catalogUrl() + " has no script-ref");
         }
@@ -86,12 +86,12 @@ final class JBangCatalog {
                 c.pageOrigin(),
                 URI.create(base),
                 scriptRef,
-                Ndjson.strArray(entry, "arguments"),
-                Ndjson.strArray(entry, "dependencies"),
-                Ndjson.strArray(entry, "java-options"));
+                Jsonl.strArray(entry, "arguments"),
+                Jsonl.strArray(entry, "dependencies"),
+                Jsonl.strArray(entry, "java-options"));
     }
 
-    /** Strip whitespace outside string literals so Ndjson's compact-form lookups match. */
+    /** Strip whitespace outside string literals so Jsonl's compact-form lookups match. */
     static String compact(String json) {
         StringBuilder sb = new StringBuilder(json.length());
         boolean inString = false;

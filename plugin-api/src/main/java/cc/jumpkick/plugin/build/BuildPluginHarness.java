@@ -2,7 +2,7 @@
 package cc.jumpkick.plugin.build;
 
 import cc.jumpkick.plugin.PluginConfig;
-import cc.jumpkick.plugin.protocol.Ndjson;
+import cc.jumpkick.plugin.protocol.Jsonl;
 import cc.jumpkick.plugin.protocol.ProtocolWriter;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -26,7 +26,7 @@ import java.util.Optional;
  *   <li>{@code package} — execute the packager body.
  * </ul>
  *
- * <p>Spec lines are flat NDJSON objects ({@code {"t":"config",…}}, {@code {"t":"cp",…}}, …);
+ * <p>Spec lines are flat JSONL objects ({@code {"t":"config",…}}, {@code {"t":"cp",…}}, …);
  * replies ride the plugin's {@link ProtocolWriter} ({@code {"t":"label"}}, {@code {"t":"error"}},
  * {@code {"t":"step"}}/{@code {"t":"packager"}} for describe, and a terminal {@code {"t":"done"}}).
  */
@@ -106,14 +106,14 @@ public final class BuildPluginHarness {
                 StepSpec step = recorder.step(spec.stepName());
                 if (step == null || step.body() == null) {
                     out.emit("{\"t\":\"error\",\"code\":\"unknown-step\",\"message\":"
-                            + Ndjson.quote("no registered step named " + spec.stepName()) + "}");
+                            + Jsonl.quote("no registered step named " + spec.stepName()) + "}");
                     return 65;
                 }
                 try {
                     step.body().run(new SpecStepExec(spec, out));
                 } catch (Exception e) {
                     out.emit("{\"t\":\"error\",\"code\":\"step-failed\",\"message\":"
-                            + Ndjson.quote(String.valueOf(e.getMessage())) + "}");
+                            + Jsonl.quote(String.valueOf(e.getMessage())) + "}");
                     return 1;
                 }
             }
@@ -121,7 +121,7 @@ public final class BuildPluginHarness {
                 PluginCommandSpec command = recorder.command(spec.stepName());
                 if (command == null || command.body() == null) {
                     out.emit("{\"t\":\"error\",\"code\":\"unknown-command\",\"message\":"
-                            + Ndjson.quote("no registered command named " + spec.stepName()) + "}");
+                            + Jsonl.quote("no registered command named " + spec.stepName()) + "}");
                     return 65;
                 }
                 try {
@@ -130,7 +130,7 @@ public final class BuildPluginHarness {
                     return exit;
                 } catch (Exception e) {
                     out.emit("{\"t\":\"error\",\"code\":\"command-failed\",\"message\":"
-                            + Ndjson.quote(String.valueOf(e.getMessage())) + "}");
+                            + Jsonl.quote(String.valueOf(e.getMessage())) + "}");
                     return 1;
                 }
             }
@@ -138,19 +138,19 @@ public final class BuildPluginHarness {
                 PackagerSpec packager = recorder.packager();
                 if (packager == null || packager.body() == null) {
                     out.emit("{\"t\":\"error\",\"code\":\"no-packager\",\"message\":"
-                            + Ndjson.quote("plugin registered no packager") + "}");
+                            + Jsonl.quote("plugin registered no packager") + "}");
                     return 65;
                 }
                 try {
                     packager.body().produce(new SpecPackageIo(spec, out));
                 } catch (Exception e) {
                     out.emit("{\"t\":\"error\",\"code\":\"package-failed\",\"message\":"
-                            + Ndjson.quote(String.valueOf(e.getMessage())) + "}");
+                            + Jsonl.quote(String.valueOf(e.getMessage())) + "}");
                     return 1;
                 }
             }
             default -> {
-                out.emit("{\"t\":\"error\",\"code\":\"unknown-op\",\"message\":" + Ndjson.quote(spec.op()) + "}");
+                out.emit("{\"t\":\"error\",\"code\":\"unknown-op\",\"message\":" + Jsonl.quote(spec.op()) + "}");
                 return 64;
             }
         }
@@ -161,11 +161,11 @@ public final class BuildPluginHarness {
     private static void describe(Recorder recorder, ProtocolWriter out) {
         for (StepSpec step : recorder.steps()) {
             StringBuilder b = new StringBuilder("{\"t\":\"step\",\"name\":")
-                    .append(Ndjson.quote(step.name()))
+                    .append(Jsonl.quote(step.name()))
                     .append(",\"after\":")
-                    .append(Ndjson.quote(step.afterPhase().wireName()))
+                    .append(Jsonl.quote(step.afterPhase().wireName()))
                     .append(",\"before\":")
-                    .append(Ndjson.quote(step.beforePhase().wireName()))
+                    .append(Jsonl.quote(step.beforePhase().wireName()))
                     .append(",\"inputs\":")
                     .append(quoteArray(step.declaredInputs().stream().map(In::wireName).toList()))
                     .append(",\"outputs\":")
@@ -179,18 +179,18 @@ public final class BuildPluginHarness {
                     .append(",\"contributesTestClasspath\":")
                     .append(quoteArray(step.testClasspathContributions()))
                     .append(",\"transformsClasses\":")
-                    .append(Ndjson.quote(step.classesTransform() == null ? "" : step.classesTransform()))
+                    .append(Jsonl.quote(step.classesTransform() == null ? "" : step.classesTransform()))
                     .append('}');
             out.emit(b.toString());
         }
         PackagerSpec packager = recorder.packager();
         if (packager != null) {
-            out.emit("{\"t\":\"packager\",\"name\":" + Ndjson.quote(packager.name()) + ",\"inputs\":"
+            out.emit("{\"t\":\"packager\",\"name\":" + Jsonl.quote(packager.name()) + ",\"inputs\":"
                     + quoteArray(packager.declaredInputs().stream().map(In::wireName).toList()) + "}");
         }
         for (PluginCommandSpec command : recorder.commands()) {
-            out.emit("{\"t\":\"command\",\"name\":" + Ndjson.quote(command.name()) + ",\"description\":"
-                    + Ndjson.quote(command.description()) + "}");
+            out.emit("{\"t\":\"command\",\"name\":" + Jsonl.quote(command.name()) + ",\"description\":"
+                    + Jsonl.quote(command.description()) + "}");
         }
     }
 
@@ -198,7 +198,7 @@ public final class BuildPluginHarness {
         StringBuilder b = new StringBuilder("[");
         for (int i = 0; i < values.size(); i++) {
             if (i > 0) b.append(',');
-            b.append(Ndjson.quote(values.get(i)));
+            b.append(Jsonl.quote(values.get(i)));
         }
         return b.append(']').toString();
     }
@@ -315,67 +315,67 @@ public final class BuildPluginHarness {
 
             for (String line : Files.readAllLines(file, StandardCharsets.UTF_8)) {
                 if (line.isBlank()) continue;
-                switch (String.valueOf(Ndjson.str(line, "t"))) {
+                switch (String.valueOf(Jsonl.str(line, "t"))) {
                     case "op" -> {
-                        op = String.valueOf(Ndjson.str(line, "op"));
-                        stepName = Ndjson.str(line, "step");
-                        pluginId = String.valueOf(Ndjson.str(line, "plugin"));
+                        op = String.valueOf(Jsonl.str(line, "op"));
+                        stepName = Jsonl.str(line, "step");
+                        pluginId = String.valueOf(Jsonl.str(line, "plugin"));
                     }
                     case "config" -> {
-                        String key = Ndjson.str(line, "key");
-                        switch (String.valueOf(Ndjson.str(line, "kind"))) {
-                            case "string" -> configValues.put(key, Ndjson.str(line, "value"));
-                            case "bool" -> configValues.put(key, Ndjson.bool(line, "value", false));
-                            case "int" -> configValues.put(key, Ndjson.longValue(line, "value", 0));
-                            case "list" -> configValues.put(key, Ndjson.strArray(line, "values"));
+                        String key = Jsonl.str(line, "key");
+                        switch (String.valueOf(Jsonl.str(line, "kind"))) {
+                            case "string" -> configValues.put(key, Jsonl.str(line, "value"));
+                            case "bool" -> configValues.put(key, Jsonl.bool(line, "value", false));
+                            case "int" -> configValues.put(key, Jsonl.longValue(line, "value", 0));
+                            case "list" -> configValues.put(key, Jsonl.strArray(line, "values"));
                             default -> {
                                 // unknown kind — treat as absent (forward compatibility)
                             }
                         }
                     }
                     case "project" -> {
-                        group = String.valueOf(Ndjson.str(line, "group"));
-                        name = String.valueOf(Ndjson.str(line, "name"));
-                        version = String.valueOf(Ndjson.str(line, "version"));
-                        javaRelease = Ndjson.intValue(line, "javaRelease", 0);
-                        mainClass = Ndjson.str(line, "mainClass");
-                        nativeDeclared = Ndjson.bool(line, "nativeDeclared", false);
-                        kotlin = Ndjson.bool(line, "kotlin", false);
+                        group = String.valueOf(Jsonl.str(line, "group"));
+                        name = String.valueOf(Jsonl.str(line, "name"));
+                        version = String.valueOf(Jsonl.str(line, "version"));
+                        javaRelease = Jsonl.intValue(line, "javaRelease", 0);
+                        mainClass = Jsonl.str(line, "mainClass");
+                        nativeDeclared = Jsonl.bool(line, "nativeDeclared", false);
+                        kotlin = Jsonl.bool(line, "kotlin", false);
                     }
-                    case "manifest-attr" -> manifest.put(Ndjson.str(line, "key"), Ndjson.str(line, "value"));
+                    case "manifest-attr" -> manifest.put(Jsonl.str(line, "key"), Jsonl.str(line, "value"));
                     case "layout" -> {
-                        String classes = Ndjson.str(line, "classesDir");
+                        String classes = Jsonl.str(line, "classesDir");
                         if (classes != null) classesDir = Path.of(classes);
-                        String module = Ndjson.str(line, "moduleDir");
+                        String module = Jsonl.str(line, "moduleDir");
                         if (module != null) moduleDir = Path.of(module);
-                        String scratchDir = Ndjson.str(line, "scratch");
+                        String scratchDir = Jsonl.str(line, "scratch");
                         if (scratchDir != null) scratch = Path.of(scratchDir);
                     }
-                    case "java-home" -> javaHome = Path.of(String.valueOf(Ndjson.str(line, "path")));
-                    case "artifact" -> artifactPath = Path.of(String.valueOf(Ndjson.str(line, "path")));
-                    case "cp" -> classpath.add(Path.of(String.valueOf(Ndjson.str(line, "path"))));
+                    case "java-home" -> javaHome = Path.of(String.valueOf(Jsonl.str(line, "path")));
+                    case "artifact" -> artifactPath = Path.of(String.valueOf(Jsonl.str(line, "path")));
+                    case "cp" -> classpath.add(Path.of(String.valueOf(Jsonl.str(line, "path"))));
                     case "entry" -> {
-                        String jarPath = Ndjson.str(line, "path");
-                        String container = Ndjson.str(line, "container");
+                        String jarPath = Jsonl.str(line, "path");
+                        String container = Jsonl.str(line, "container");
                         entries.add(new PackageIo.RuntimeEntry(
-                                String.valueOf(Ndjson.str(line, "file")),
+                                String.valueOf(Jsonl.str(line, "file")),
                                 jarPath == null ? null : Path.of(jarPath),
-                                Ndjson.bool(line, "snapshot", false),
+                                Jsonl.bool(line, "snapshot", false),
                                 container == null ? null : Path.of(container)));
                     }
                     case "step-output" ->
                         stepOutputs.put(
-                                String.valueOf(Ndjson.str(line, "name")),
-                                Path.of(String.valueOf(Ndjson.str(line, "dir"))));
-                    case "command-args" -> commandArgs.addAll(Ndjson.strArray(line, "values"));
+                                String.valueOf(Jsonl.str(line, "name")),
+                                Path.of(String.valueOf(Jsonl.str(line, "dir"))));
+                    case "command-args" -> commandArgs.addAll(Jsonl.strArray(line, "values"));
                     case "extra" ->
                         extras.put(
-                                String.valueOf(Ndjson.str(line, "name")),
-                                Path.of(String.valueOf(Ndjson.str(line, "path"))));
+                                String.valueOf(Jsonl.str(line, "name")),
+                                Path.of(String.valueOf(Jsonl.str(line, "path"))));
                     case "secret" ->
                         secrets.put(
-                                String.valueOf(Ndjson.str(line, "key")),
-                                String.valueOf(Ndjson.str(line, "value")));
+                                String.valueOf(Jsonl.str(line, "key")),
+                                String.valueOf(Jsonl.str(line, "value")));
                     default -> {
                         // unknown line — forward compatibility
                     }
@@ -445,7 +445,7 @@ public final class BuildPluginHarness {
 
         @Override
         public void label(String text) {
-            out.emit("{\"t\":\"label\",\"text\":" + Ndjson.quote(text) + "}");
+            out.emit("{\"t\":\"label\",\"text\":" + Jsonl.quote(text) + "}");
         }
     }
 
@@ -483,12 +483,12 @@ public final class BuildPluginHarness {
 
         @Override
         public void out(String line) {
-            out.emit("{\"t\":\"command-out\",\"line\":" + Ndjson.quote(line) + "}");
+            out.emit("{\"t\":\"command-out\",\"line\":" + Jsonl.quote(line) + "}");
         }
 
         @Override
         public void label(String text) {
-            out.emit("{\"t\":\"label\",\"text\":" + Ndjson.quote(text) + "}");
+            out.emit("{\"t\":\"label\",\"text\":" + Jsonl.quote(text) + "}");
         }
     }
 
@@ -545,7 +545,7 @@ public final class BuildPluginHarness {
 
         @Override
         public void label(String text) {
-            out.emit("{\"t\":\"label\",\"text\":" + Ndjson.quote(text) + "}");
+            out.emit("{\"t\":\"label\",\"text\":" + Jsonl.quote(text) + "}");
         }
     }
 }

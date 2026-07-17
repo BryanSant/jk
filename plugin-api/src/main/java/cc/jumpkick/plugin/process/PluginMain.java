@@ -13,7 +13,7 @@ import java.util.ServiceLoader;
 
 /**
  * The one entry point every out-of-process plugin jar declares as its {@code Main-Class}. Replaces
- * the bespoke {@code main()} each runner used to hand-roll (arg checks, spec read, NDJSON escaping,
+ * the bespoke {@code main()} each runner used to hand-roll (arg checks, spec read, JSONL escaping,
  * exit codes): this loads the jar's {@link Plugin} via {@link ServiceLoader}, builds the {@link
  * ProtocolWriter} from its manifest, and bridges stdio to {@link Plugin#run}.
  *

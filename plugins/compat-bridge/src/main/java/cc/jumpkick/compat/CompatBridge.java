@@ -25,7 +25,7 @@ import java.util.Map;
 /**
  * The {@code jk-compat-bridge} plugin (op {@code command}, name {@code import}/{@code provision_mvn}/
  * {@code provision_gradle}): Maven/Gradle import + tool provisioning, isolated in a forked plugin JVM
- * so the Maven/Gradle machinery never loads in jk's own process. Speaks the unified wire — NDJSON
+ * so the Maven/Gradle machinery never loads in jk's own process. Speaks the unified wire — JSONL
  * config spec, {@code wrote}/{@code result} replies + {@code error} on failure. Exit 0 success, 1
  * operation error, 2 bad arguments, 64 unrecognised source, 73 overwrite-without-force.
  */

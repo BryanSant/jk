@@ -44,7 +44,7 @@ public final class GlobalOptions {
 
     /**
      * True when the user asked for {@code --output json} (or set {@code JK_OUTPUT=json}). Commands
-     * may use this to suppress their own human-readable summary lines so the NDJSON stream stays
+     * may use this to suppress their own human-readable summary lines so the JSONL stream stays
      * machine-parseable.
      */
     public boolean outputIsJson() {

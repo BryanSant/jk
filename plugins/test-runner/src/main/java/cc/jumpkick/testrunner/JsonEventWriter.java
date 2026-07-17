@@ -7,7 +7,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * NDJSON encoder for the jk-test wire protocol. Each event is rendered as a single JSON object and
+ * JSONL encoder for the jk-test wire protocol. Each event is rendered as a single JSON object and
  * handed to the shared {@link ProtocolWriter}, which frames it with the plugin's prefix so the
  * parent jk process can distinguish protocol lines from the user's plain test output streaming
  * through the same pipe.

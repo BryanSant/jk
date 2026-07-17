@@ -11,7 +11,7 @@ import cc.jumpkick.model.command.CliCommand;
 import cc.jumpkick.model.command.Exit;
 import cc.jumpkick.model.command.Invocation;
 import cc.jumpkick.model.command.Opt;
-import cc.jumpkick.plugin.protocol.Ndjson;
+import cc.jumpkick.plugin.protocol.Jsonl;
 import cc.jumpkick.resolver.Versions;
 import cc.jumpkick.util.JkDirs;
 import java.net.URI;
@@ -168,21 +168,21 @@ public final class OutdatedCommand implements CliCommand {
             OutdatedReport.Row r = rows.get(i);
             if (i > 0) sb.append(',');
             sb.append("{\"module\":")
-                    .append(Ndjson.quote(r.moduleLabel()))
+                    .append(Jsonl.quote(r.moduleLabel()))
                     .append(",\"dependency\":")
-                    .append(Ndjson.quote(r.coordinate()))
+                    .append(Jsonl.quote(r.coordinate()))
                     .append(",\"display\":")
-                    .append(Ndjson.quote(r.display()))
+                    .append(Jsonl.quote(r.display()))
                     .append(",\"scope\":")
-                    .append(Ndjson.quote(r.scope()))
+                    .append(Jsonl.quote(r.scope()))
                     .append(",\"current\":")
-                    .append(Ndjson.quote(r.current()))
+                    .append(Jsonl.quote(r.current()))
                     .append(",\"compatible\":")
-                    .append(Ndjson.quote(r.compatible()))
+                    .append(Jsonl.quote(r.compatible()))
                     .append(",\"latest\":")
-                    .append(Ndjson.quote(r.latest()))
+                    .append(Jsonl.quote(r.latest()))
                     .append(",\"tip\":")
-                    .append(Ndjson.quote(r.tip()))
+                    .append(Jsonl.quote(r.tip()))
                     .append('}');
         }
         return sb.append(']').toString();

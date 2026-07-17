@@ -3,7 +3,7 @@ package cc.jumpkick.engine.plugin;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import cc.jumpkick.plugin.protocol.Ndjson;
+import cc.jumpkick.plugin.protocol.Jsonl;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.List;
@@ -29,7 +29,7 @@ class PluginProcessTest {
         var events = new ArrayList<String>();
         var chatter = new ArrayList<String>();
 
-        int exit = PluginProcess.run(cmd("oneshot"), "##T:", json -> events.add(Ndjson.str(json, "e")), chatter::add);
+        int exit = PluginProcess.run(cmd("oneshot"), "##T:", json -> events.add(Jsonl.str(json, "e")), chatter::add);
 
         assertThat(exit).isZero();
         assertThat(events).containsExactly("a", "b");
@@ -39,7 +39,7 @@ class PluginProcessTest {
     @Test
     void run_drops_passthrough_when_sink_is_null() throws Exception {
         var events = new ArrayList<String>();
-        int exit = PluginProcess.run(cmd("oneshot"), "##T:", json -> events.add(Ndjson.str(json, "e")), null);
+        int exit = PluginProcess.run(cmd("oneshot"), "##T:", json -> events.add(Jsonl.str(json, "e")), null);
         assertThat(exit).isZero();
         assertThat(events).containsExactly("a", "b");
     }
@@ -54,7 +54,7 @@ class PluginProcessTest {
                 cmd(),
                 "##T:",
                 (json, convo) -> {
-                    String event = Ndjson.str(json, "e");
+                    String event = Jsonl.str(json, "e");
                     if ("ready".equals(event)) {
                         String next = queue.pollFirst();
                         if (next != null) {
@@ -64,7 +64,7 @@ class PluginProcessTest {
                             convo.closeInput();
                         }
                     } else if ("ran".equals(event)) {
-                        ran.add(Ndjson.str(json, "what"));
+                        ran.add(Jsonl.str(json, "what"));
                     }
                 },
                 chatter::add);
@@ -82,11 +82,11 @@ class PluginProcessTest {
                 cmd(),
                 "##T:",
                 (json, convo) -> {
-                    if ("ready".equals(Ndjson.str(json, "e"))) {
+                    if ("ready".equals(Jsonl.str(json, "e"))) {
                         convo.send("DONE");
                         convo.closeInput();
-                    } else if ("ran".equals(Ndjson.str(json, "e"))) {
-                        ran.add(Ndjson.str(json, "what"));
+                    } else if ("ran".equals(Jsonl.str(json, "e"))) {
+                        ran.add(Jsonl.str(json, "what"));
                     }
                 },
                 null);

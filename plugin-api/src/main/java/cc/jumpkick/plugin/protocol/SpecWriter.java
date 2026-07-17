@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Builds a {@link PluginProtocol} spec (engine→plugin) as NDJSON lines — one writer for every
+ * Builds a {@link PluginProtocol} spec (engine→plugin) as JSONL lines — one writer for every
  * plugin, replacing the per-plugin KEY-value/tab spec builders. Fluent; call {@link #lines} and
  * write them to the spec file the plugin is forked with.
  */
@@ -19,11 +19,11 @@ public final class SpecWriter {
 
     public SpecWriter op(String op, String name, String pluginId) {
         StringBuilder b = new StringBuilder("{\"t\":")
-                .append(Ndjson.quote(PluginProtocol.OP))
+                .append(Jsonl.quote(PluginProtocol.OP))
                 .append(",\"op\":")
-                .append(Ndjson.quote(op));
-        if (name != null) b.append(",\"name\":").append(Ndjson.quote(name));
-        b.append(",\"plugin\":").append(Ndjson.quote(pluginId)).append('}');
+                .append(Jsonl.quote(op));
+        if (name != null) b.append(",\"name\":").append(Jsonl.quote(name));
+        b.append(",\"plugin\":").append(Jsonl.quote(pluginId)).append('}');
         lines.add(b.toString());
         return this;
     }
@@ -47,34 +47,34 @@ public final class SpecWriter {
 
     public SpecWriter configString(String key, String value) {
         if (value == null) return this;
-        lines.add("{\"t\":\"config\",\"key\":" + Ndjson.quote(key) + ",\"kind\":\"string\",\"value\":"
-                + Ndjson.quote(value) + "}");
+        lines.add("{\"t\":\"config\",\"key\":" + Jsonl.quote(key) + ",\"kind\":\"string\",\"value\":"
+                + Jsonl.quote(value) + "}");
         return this;
     }
 
     public SpecWriter configBool(String key, boolean value) {
-        lines.add("{\"t\":\"config\",\"key\":" + Ndjson.quote(key) + ",\"kind\":\"bool\",\"value\":" + value + "}");
+        lines.add("{\"t\":\"config\",\"key\":" + Jsonl.quote(key) + ",\"kind\":\"bool\",\"value\":" + value + "}");
         return this;
     }
 
     public SpecWriter configInt(String key, long value) {
-        lines.add("{\"t\":\"config\",\"key\":" + Ndjson.quote(key) + ",\"kind\":\"int\",\"value\":" + value + "}");
+        lines.add("{\"t\":\"config\",\"key\":" + Jsonl.quote(key) + ",\"kind\":\"int\",\"value\":" + value + "}");
         return this;
     }
 
     public SpecWriter configList(String key, List<String> values) {
-        lines.add("{\"t\":\"config\",\"key\":" + Ndjson.quote(key) + ",\"kind\":\"list\",\"values\":" + array(values)
+        lines.add("{\"t\":\"config\",\"key\":" + Jsonl.quote(key) + ",\"kind\":\"list\",\"values\":" + array(values)
                 + "}");
         return this;
     }
 
     public SpecWriter project(ProjectFacts p) {
         StringBuilder b = new StringBuilder("{\"t\":\"project\",\"group\":")
-                .append(Ndjson.quote(p.group()))
+                .append(Jsonl.quote(p.group()))
                 .append(",\"name\":")
-                .append(Ndjson.quote(p.name()))
+                .append(Jsonl.quote(p.name()))
                 .append(",\"version\":")
-                .append(Ndjson.quote(p.version()))
+                .append(Jsonl.quote(p.version()))
                 .append(",\"javaRelease\":")
                 .append(p.javaRelease())
                 .append(",\"nativeDeclared\":")
@@ -82,13 +82,13 @@ public final class SpecWriter {
                 .append(",\"kotlin\":")
                 .append(p.kotlin());
         if (p.mainClass() != null && !p.mainClass().isBlank()) {
-            b.append(",\"mainClass\":").append(Ndjson.quote(p.mainClass()));
+            b.append(",\"mainClass\":").append(Jsonl.quote(p.mainClass()));
         }
         b.append('}');
         lines.add(b.toString());
         for (Map.Entry<String, String> e : p.manifest().entrySet()) {
-            lines.add("{\"t\":\"manifest-attr\",\"key\":" + Ndjson.quote(e.getKey()) + ",\"value\":"
-                    + Ndjson.quote(e.getValue()) + "}");
+            lines.add("{\"t\":\"manifest-attr\",\"key\":" + Jsonl.quote(e.getKey()) + ",\"value\":"
+                    + Jsonl.quote(e.getValue()) + "}");
         }
         return this;
     }
@@ -98,9 +98,9 @@ public final class SpecWriter {
         for (Map.Entry<String, Path> e : dirs.entrySet()) {
             if (e.getValue() != null) {
                 b.append(',')
-                        .append(Ndjson.quote(e.getKey()))
+                        .append(Jsonl.quote(e.getKey()))
                         .append(':')
-                        .append(Ndjson.quote(e.getValue().toAbsolutePath().toString()));
+                        .append(Jsonl.quote(e.getValue().toAbsolutePath().toString()));
             }
         }
         b.append('}');
@@ -110,30 +110,30 @@ public final class SpecWriter {
 
     public SpecWriter javaHome(Path javaHome) {
         lines.add("{\"t\":\"java-home\",\"path\":"
-                + Ndjson.quote(javaHome.toAbsolutePath().toString()) + "}");
+                + Jsonl.quote(javaHome.toAbsolutePath().toString()) + "}");
         return this;
     }
 
     public SpecWriter artifact(Path path) {
         lines.add("{\"t\":\"artifact\",\"path\":"
-                + Ndjson.quote(path.toAbsolutePath().toString()) + "}");
+                + Jsonl.quote(path.toAbsolutePath().toString()) + "}");
         return this;
     }
 
     public SpecWriter cp(Path path, String role) {
-        lines.add("{\"t\":\"cp\",\"path\":" + Ndjson.quote(path.toAbsolutePath().toString()) + ",\"role\":"
-                + Ndjson.quote(role) + "}");
+        lines.add("{\"t\":\"cp\",\"path\":" + Jsonl.quote(path.toAbsolutePath().toString()) + ",\"role\":"
+                + Jsonl.quote(role) + "}");
         return this;
     }
 
     public SpecWriter entry(String fileName, Path jar, boolean snapshot, Path container) {
-        StringBuilder b = new StringBuilder("{\"t\":\"entry\",\"file\":").append(Ndjson.quote(fileName));
+        StringBuilder b = new StringBuilder("{\"t\":\"entry\",\"file\":").append(Jsonl.quote(fileName));
         if (jar != null)
-            b.append(",\"path\":").append(Ndjson.quote(jar.toAbsolutePath().toString()));
+            b.append(",\"path\":").append(Jsonl.quote(jar.toAbsolutePath().toString()));
         b.append(",\"snapshot\":").append(snapshot);
         if (container != null)
             b.append(",\"container\":")
-                    .append(Ndjson.quote(container.toAbsolutePath().toString()));
+                    .append(Jsonl.quote(container.toAbsolutePath().toString()));
         b.append('}');
         lines.add(b.toString());
         return this;
@@ -141,36 +141,36 @@ public final class SpecWriter {
 
     public SpecWriter source(Path path) {
         lines.add("{\"t\":\"source\",\"path\":"
-                + Ndjson.quote(path.toAbsolutePath().toString()) + "}");
+                + Jsonl.quote(path.toAbsolutePath().toString()) + "}");
         return this;
     }
 
     public SpecWriter arg(String value) {
-        lines.add("{\"t\":\"arg\",\"value\":" + Ndjson.quote(value) + "}");
+        lines.add("{\"t\":\"arg\",\"value\":" + Jsonl.quote(value) + "}");
         return this;
     }
 
     public SpecWriter compilerPlugin(String id, Path jar, List<String> options) {
-        lines.add("{\"t\":\"compiler-plugin\",\"id\":" + Ndjson.quote(id) + ",\"path\":"
-                + Ndjson.quote(jar.toAbsolutePath().toString()) + ",\"options\":" + array(options) + "}");
+        lines.add("{\"t\":\"compiler-plugin\",\"id\":" + Jsonl.quote(id) + ",\"path\":"
+                + Jsonl.quote(jar.toAbsolutePath().toString()) + ",\"options\":" + array(options) + "}");
         return this;
     }
 
     public SpecWriter stepOutput(String name, Path dir) {
-        lines.add("{\"t\":\"step-output\",\"name\":" + Ndjson.quote(name) + ",\"dir\":"
-                + Ndjson.quote(dir.toAbsolutePath().toString()) + "}");
+        lines.add("{\"t\":\"step-output\",\"name\":" + Jsonl.quote(name) + ",\"dir\":"
+                + Jsonl.quote(dir.toAbsolutePath().toString()) + "}");
         return this;
     }
 
     public SpecWriter extra(String name, Path path) {
-        lines.add("{\"t\":\"extra\",\"name\":" + Ndjson.quote(name) + ",\"path\":"
-                + Ndjson.quote(path.toAbsolutePath().toString()) + "}");
+        lines.add("{\"t\":\"extra\",\"name\":" + Jsonl.quote(name) + ",\"path\":"
+                + Jsonl.quote(path.toAbsolutePath().toString()) + "}");
         return this;
     }
 
     /** A resolved secret — package/publish specs only; never echoed by plugins. */
     public SpecWriter secret(String key, String value) {
-        lines.add("{\"t\":\"secret\",\"key\":" + Ndjson.quote(key) + ",\"value\":" + Ndjson.quote(value) + "}");
+        lines.add("{\"t\":\"secret\",\"key\":" + Jsonl.quote(key) + ",\"value\":" + Jsonl.quote(value) + "}");
         return this;
     }
 
@@ -187,7 +187,7 @@ public final class SpecWriter {
         StringBuilder b = new StringBuilder("[");
         for (int i = 0; i < values.size(); i++) {
             if (i > 0) b.append(',');
-            b.append(Ndjson.quote(values.get(i)));
+            b.append(Jsonl.quote(values.get(i)));
         }
         return b.append(']').toString();
     }

@@ -8,7 +8,7 @@ import cc.jumpkick.jdk.GlobalDefaultJdk;
 import cc.jumpkick.jdk.HostPlatform;
 import cc.jumpkick.jdk.JavaHomes;
 import cc.jumpkick.jdk.JdkEnsure;
-import cc.jumpkick.plugin.protocol.Ndjson;
+import cc.jumpkick.plugin.protocol.Jsonl;
 import cc.jumpkick.runtime.ExplainPlan;
 import cc.jumpkick.runtime.WorkspaceBuildListener;
 import cc.jumpkick.runtime.WorkspaceRequest;
@@ -107,15 +107,15 @@ public final class EngineClient {
             // Protocol-zero's teeth: an engine speaking a NEWER protocol than this client is not
             // usable — treat it as unreachable so the ensure path elects/starts a matching one
             // (which the newer engine's takeover logic then arbitrates).
-            if (Ndjson.intValue(ack, "proto", EngineProtocol.PROTOCOL) > EngineProtocol.PROTOCOL) {
+            if (Jsonl.intValue(ack, "proto", EngineProtocol.PROTOCOL) > EngineProtocol.PROTOCOL) {
                 return Optional.empty();
             }
-            String ackBuildId = Ndjson.str(ack, "buildId");
+            String ackBuildId = Jsonl.str(ack, "buildId");
             return Optional.of(new Handshake(
-                    Ndjson.str(ack, "version"),
-                    Ndjson.longValue(ack, "pid", -1),
-                    Ndjson.longValue(ack, "startedAt", -1),
-                    Ndjson.bool(ack, "draining", false),
+                    Jsonl.str(ack, "version"),
+                    Jsonl.longValue(ack, "pid", -1),
+                    Jsonl.longValue(ack, "startedAt", -1),
+                    Jsonl.bool(ack, "draining", false),
                     ackBuildId == null ? "" : ackBuildId));
         } catch (IOException e) {
             return Optional.empty();
@@ -131,19 +131,19 @@ public final class EngineClient {
             String ack = exchange(ch, EngineProtocol.statusRequest());
             if (!EngineProtocol.STATUS_ACK.equals(EngineProtocol.typeOf(ack))) return Optional.empty();
             return Optional.of(new Status(
-                    Ndjson.str(ack, "version"),
-                    Ndjson.longValue(ack, "pid", -1),
-                    Ndjson.longValue(ack, "startedAt", -1),
-                    Ndjson.intValue(ack, "activeRequests", -1),
-                    Ndjson.intValue(ack, "activePipelines", 0),
-                    Ndjson.bool(ack, "draining", false),
-                    Ndjson.longValue(ack, "heapUsedBytes", -1),
-                    Ndjson.longValue(ack, "heapCommittedBytes", -1),
-                    Ndjson.longValue(ack, "heapMaxBytes", -1),
-                    Ndjson.longValue(ack, "rssBytes", -1),
-                    Ndjson.longValue(ack, "aotTrainingPid", -1),
-                    Ndjson.str(ack, "httpUrl"),
-                    Ndjson.str(ack, "httpError")));
+                    Jsonl.str(ack, "version"),
+                    Jsonl.longValue(ack, "pid", -1),
+                    Jsonl.longValue(ack, "startedAt", -1),
+                    Jsonl.intValue(ack, "activeRequests", -1),
+                    Jsonl.intValue(ack, "activePipelines", 0),
+                    Jsonl.bool(ack, "draining", false),
+                    Jsonl.longValue(ack, "heapUsedBytes", -1),
+                    Jsonl.longValue(ack, "heapCommittedBytes", -1),
+                    Jsonl.longValue(ack, "heapMaxBytes", -1),
+                    Jsonl.longValue(ack, "rssBytes", -1),
+                    Jsonl.longValue(ack, "aotTrainingPid", -1),
+                    Jsonl.str(ack, "httpUrl"),
+                    Jsonl.str(ack, "httpError")));
         } catch (IOException e) {
             return Optional.empty();
         }
@@ -178,7 +178,7 @@ public final class EngineClient {
         try (SocketChannel ch = connect(socket)) {
             String bye = exchange(ch, EngineProtocol.shutdown(false));
             if (!EngineProtocol.BYE.equals(EngineProtocol.typeOf(bye))) return -1;
-            return Ndjson.intValue(bye, "pipelines", 0);
+            return Jsonl.intValue(bye, "pipelines", 0);
         } catch (IOException e) {
             return -1;
         }
@@ -211,7 +211,7 @@ public final class EngineClient {
 
     // ---- build history ({@code jk history}) — thin RPC over the engine's journal ----------------
 
-    /** Newest-first {@code history-entry} lines (flat NDJSON), spawning the engine if none is running. */
+    /** Newest-first {@code history-entry} lines (flat JSONL), spawning the engine if none is running. */
     public static List<String> historyList(EnginePaths.Paths paths, int limit) throws IOException {
         return streamHistory(paths, EngineProtocol.historyListRequest(limit));
     }
@@ -225,14 +225,14 @@ public final class EngineClient {
     public static boolean historyDelete(EnginePaths.Paths paths, String id) throws IOException {
         for (String line : streamHistory(paths, EngineProtocol.historyDeleteRequest(id))) {
             if (EngineProtocol.HISTORY_DELETED.equals(EngineProtocol.typeOf(line))) {
-                return Ndjson.bool(line, "deleted", false);
+                return Jsonl.bool(line, "deleted", false);
             }
         }
         return false;
     }
 
     /**
-     * Running aggregate rows ({@code metrics-entry} flat NDJSON) for {@code dir}'s project tiers
+     * Running aggregate rows ({@code metrics-entry} flat JSONL) for {@code dir}'s project tiers
      * plus the global tiers; {@code null} dir asks for every row. Spawns the engine if needed.
      */
     public static List<String> metrics(EnginePaths.Paths paths, String dir) throws IOException {
@@ -659,11 +659,11 @@ public final class EngineClient {
                         "audit",
                         listenerFactory,
                         (type, line) -> findings.onFinding(
-                                Ndjson.str(line, "module"),
-                                Ndjson.str(line, "version"),
-                                Ndjson.str(line, "vulnId"),
-                                Ndjson.str(line, "severity"),
-                                Ndjson.str(line, "summary")))
+                                Jsonl.str(line, "module"),
+                                Jsonl.str(line, "version"),
+                                Jsonl.str(line, "vulnId"),
+                                Jsonl.str(line, "severity"),
+                                Jsonl.str(line, "summary")))
                 .result();
     }
 
@@ -709,18 +709,18 @@ public final class EngineClient {
                 "format",
                 listenerFactory,
                 (type, line) -> files.onFile(
-                        Ndjson.str(line, "path"),
-                        Ndjson.str(line, "status"),
-                        Ndjson.str(line, "message"),
-                        Ndjson.intValue(line, "index", 0),
-                        Ndjson.intValue(line, "total", 0)));
+                        Jsonl.str(line, "path"),
+                        Jsonl.str(line, "status"),
+                        Jsonl.str(line, "message"),
+                        Jsonl.intValue(line, "index", 0),
+                        Jsonl.intValue(line, "total", 0)));
         return new FormatOutcome(
                 finish.result(),
-                Ndjson.intValue(finish.finishLine(), "formatChanged", -1),
-                Ndjson.intValue(finish.finishLine(), "formatClean", -1),
-                Ndjson.intValue(finish.finishLine(), "formatErrors", -1),
-                Ndjson.intValue(finish.finishLine(), "formatTotal", -1),
-                Ndjson.intValue(finish.finishLine(), "formatWorkerExit", -1));
+                Jsonl.intValue(finish.finishLine(), "formatChanged", -1),
+                Jsonl.intValue(finish.finishLine(), "formatClean", -1),
+                Jsonl.intValue(finish.finishLine(), "formatErrors", -1),
+                Jsonl.intValue(finish.finishLine(), "formatTotal", -1),
+                Jsonl.intValue(finish.finishLine(), "formatWorkerExit", -1));
     }
 
     /**
@@ -792,7 +792,7 @@ public final class EngineClient {
                 "publish",
                 listenerFactory,
                 (type, line) -> {});
-        return new PublishOutcome(finish.result(), Ndjson.intValue(finish.finishLine(), "publishFiles", -1));
+        return new PublishOutcome(finish.result(), Jsonl.intValue(finish.finishLine(), "publishFiles", -1));
     }
 
     /** Everything an engine-hosted {@code jk image} needs — mirrors {@code ImageCommand}'s local fields. */
@@ -857,22 +857,22 @@ public final class EngineClient {
                         listenerFactory,
                         (type, line) -> {},
                         line -> {
-                            long total = Ndjson.longValue(line, "testTotal", -1);
+                            long total = Jsonl.longValue(line, "testTotal", -1);
                             cc.jumpkick.run.TestSummary testResult = total < 0
                                     ? null
                                     : new cc.jumpkick.run.TestSummary(
                                             total,
-                                            Ndjson.longValue(line, "testSucceeded", 0),
-                                            Ndjson.longValue(line, "testFailed", 0),
-                                            Ndjson.longValue(line, "testSkipped", 0),
+                                            Jsonl.longValue(line, "testSucceeded", 0),
+                                            Jsonl.longValue(line, "testFailed", 0),
+                                            Jsonl.longValue(line, "testSkipped", 0),
                                             List.of());
                             summaryOut[0] = new ImageSummary(
                                     testResult,
-                                    Ndjson.str(line, "imageRef"),
-                                    Ndjson.str(line, "imageTarball"),
-                                    Ndjson.str(line, "imageName"),
-                                    Ndjson.str(line, "imageVersion"),
-                                    Ndjson.str(line, "imageDaemonExe"));
+                                    Jsonl.str(line, "imageRef"),
+                                    Jsonl.str(line, "imageTarball"),
+                                    Jsonl.str(line, "imageName"),
+                                    Jsonl.str(line, "imageVersion"),
+                                    Jsonl.str(line, "imageDaemonExe"));
                         })
                 .result();
     }
@@ -904,14 +904,14 @@ public final class EngineClient {
                         req.cache().toString()),
                 "import",
                 listenerFactory,
-                (type, line) -> notes.onNote(Ndjson.str(line, "kind"), Ndjson.str(line, "text")));
+                (type, line) -> notes.onNote(Jsonl.str(line, "kind"), Jsonl.str(line, "text")));
         String line = finish.finishLine();
         return new ImportOutcome(
                 finish.result(),
-                Ndjson.intValue(line, "importExit", 1),
-                Ndjson.intValue(line, "importWarnings", 0),
-                Ndjson.str(line, "importError"),
-                Ndjson.str(line, "importDiag"));
+                Jsonl.intValue(line, "importExit", 1),
+                Jsonl.intValue(line, "importWarnings", 0),
+                Jsonl.str(line, "importError"),
+                Jsonl.str(line, "importDiag"));
     }
 
     /**
@@ -1049,11 +1049,11 @@ public final class EngineClient {
                 "install-git-fetch",
                 listenerFactory,
                 (type, line) -> {});
-        String checkout = Ndjson.str(finish.finishLine(), "gitCheckout");
+        String checkout = Jsonl.str(finish.finishLine(), "gitCheckout");
         return new GitFetchOutcome(
                 finish.result(),
                 checkout != null ? Path.of(checkout) : null,
-                Ndjson.str(finish.finishLine(), "gitSha"));
+                Jsonl.str(finish.finishLine(), "gitSha"));
     }
 
     // ---- hosted long-tail commands (Wave 4 of the slim client) -------------------------------------
@@ -1098,9 +1098,9 @@ public final class EngineClient {
                 (type, line) -> {});
         return new ToolResolveOutcome(
                 finish.result(),
-                Ndjson.str(finish.finishLine(), "toolCoord"),
-                Ndjson.str(finish.finishLine(), "toolMainClass"),
-                Ndjson.strArray(finish.finishLine(), "toolClasspath").stream()
+                Jsonl.str(finish.finishLine(), "toolCoord"),
+                Jsonl.str(finish.finishLine(), "toolMainClass"),
+                Jsonl.strArray(finish.finishLine(), "toolClasspath").stream()
                         .map(Path::of)
                         .toList());
     }
@@ -1161,13 +1161,13 @@ public final class EngineClient {
                 listenerFactory,
                 (type, line) -> {});
         String line = finish.finishLine();
-        String classesDir = Ndjson.str(line, "scriptClassesDir");
-        String kotlincBin = Ndjson.str(line, "scriptKotlincBin");
-        String stdlib = Ndjson.str(line, "scriptStdlib");
+        String classesDir = Jsonl.str(line, "scriptClassesDir");
+        String kotlincBin = Jsonl.str(line, "scriptKotlincBin");
+        String stdlib = Jsonl.str(line, "scriptStdlib");
         return new ScriptPrepareOutcome(
                 finish.result(),
-                Ndjson.str(line, "scriptMainClass"),
-                Ndjson.strArray(line, "scriptClasspath").stream().map(Path::of).toList(),
+                Jsonl.str(line, "scriptMainClass"),
+                Jsonl.strArray(line, "scriptClasspath").stream().map(Path::of).toList(),
                 classesDir != null ? Path.of(classesDir) : null,
                 kotlincBin != null ? Path.of(kotlincBin) : null,
                 stdlib != null ? Path.of(stdlib) : null);
@@ -1238,12 +1238,12 @@ public final class EngineClient {
                         "cache-" + req.op(),
                         listenerFactory,
                         (type, line) -> onWait.accept(
-                                Ndjson.bool(line, "external", false), Ndjson.intValue(line, "pipelines", 0)),
+                                Jsonl.bool(line, "external", false), Jsonl.intValue(line, "pipelines", 0)),
                         line -> summaryOut[0] = new CacheMaintSummary(
-                                Ndjson.longValue(line, "cacheFiles", -1),
-                                Ndjson.longValue(line, "cacheBytes", -1),
-                                Ndjson.longValue(line, "cacheReachableEvicted", -1),
-                                Ndjson.longValue(line, "cacheRepoLinks", -1)))
+                                Jsonl.longValue(line, "cacheFiles", -1),
+                                Jsonl.longValue(line, "cacheBytes", -1),
+                                Jsonl.longValue(line, "cacheReachableEvicted", -1),
+                                Jsonl.longValue(line, "cacheRepoLinks", -1)))
                 .result();
     }
 

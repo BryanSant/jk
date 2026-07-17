@@ -110,7 +110,7 @@ jk (client image, :cli:nativeCompile, -Os; 26.9 MiB on linux/amd64 — see docs/
 │                   WorkspaceRequest/Result, ModulePlan/ModuleOutcome, ExplainPlan, BuildPlan,
 │                   BuildForecast, HostedEvents, WorkspaceBuildListener, CachePruneScheduler,
 │                   PluginJarNotFoundException
-└── :plugin-api     Ndjson codec
+└── :plugin-api     Jsonl codec
 
 ~/.jk/lib/jk-engine-<version>.jar (the engine: a JVM app on the jk-managed JDK, never a native
 image; :cli-engine:shadowJar) — additionally links

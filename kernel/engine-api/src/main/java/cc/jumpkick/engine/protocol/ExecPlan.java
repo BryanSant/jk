@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.engine.protocol;
 
-import cc.jumpkick.plugin.protocol.Ndjson;
+import cc.jumpkick.plugin.protocol.Jsonl;
 import java.util.List;
 
 /**
@@ -67,55 +67,55 @@ public record ExecPlan(
 
     public String encode() {
         return "{\"t\":\"" + EngineProtocol.EXEC_PLAN_ACK + "\""
-                + ",\"error\":" + (error == null ? "null" : Ndjson.quote(error))
-                + ",\"mainIssue\":" + Ndjson.quote(mainIssue)
-                + ",\"kind\":" + Ndjson.quote(kind)
+                + ",\"error\":" + (error == null ? "null" : Jsonl.quote(error))
+                + ",\"mainIssue\":" + Jsonl.quote(mainIssue)
+                + ",\"kind\":" + Jsonl.quote(kind)
                 + ",\"argv\":" + EngineProtocol.quoteArray(argv)
-                + ",\"workingDir\":" + Ndjson.quote(workingDir)
-                + ",\"display\":" + Ndjson.quote(display)
-                + ",\"javaHome\":" + Ndjson.quote(javaHome)
+                + ",\"workingDir\":" + Jsonl.quote(workingDir)
+                + ",\"display\":" + Jsonl.quote(display)
+                + ",\"javaHome\":" + Jsonl.quote(javaHome)
                 + ",\"hotReload\":" + hotReload
                 + ",\"devtoolsInjected\":" + devtoolsInjected
                 + ",\"watchRoots\":" + EngineProtocol.quoteArray(watchRoots)
                 + ",\"linkSrcs\":" + EngineProtocol.quoteArray(linkSrcs)
                 + ",\"linkDests\":" + EngineProtocol.quoteArray(linkDests)
-                + ",\"launcherPath\":" + Ndjson.quote(launcherPath)
-                + ",\"launcherScript\":" + Ndjson.quote(launcherScript)
-                + ",\"binPath\":" + Ndjson.quote(binPath)
+                + ",\"launcherPath\":" + Jsonl.quote(launcherPath)
+                + ",\"launcherScript\":" + Jsonl.quote(launcherScript)
+                + ",\"binPath\":" + Jsonl.quote(binPath)
                 + ",\"boot\":" + boot
-                + ",\"mainJar\":" + Ndjson.quote(mainJar)
-                + ",\"tier\":" + Ndjson.quote(tier)
-                + ",\"mainClass\":" + Ndjson.quote(mainClass)
+                + ",\"mainJar\":" + Jsonl.quote(mainJar)
+                + ",\"tier\":" + Jsonl.quote(tier)
+                + ",\"mainClass\":" + Jsonl.quote(mainClass)
                 + ",\"libNames\":" + EngineProtocol.quoteArray(libNames)
                 + ",\"libPaths\":" + EngineProtocol.quoteArray(libPaths)
-                + ",\"deployCommand\":" + Ndjson.quote(deployCommand)
+                + ",\"deployCommand\":" + Jsonl.quote(deployCommand)
                 + "}";
     }
 
     public static ExecPlan decode(String line) {
         return new ExecPlan(
-                Ndjson.str(line, "error"),
-                orEmpty(Ndjson.str(line, "mainIssue")),
-                orEmpty(Ndjson.str(line, "kind")),
-                Ndjson.strArray(line, "argv"),
-                orEmpty(Ndjson.str(line, "workingDir")),
-                orEmpty(Ndjson.str(line, "display")),
-                orEmpty(Ndjson.str(line, "javaHome")),
-                Ndjson.bool(line, "hotReload", false),
-                Ndjson.bool(line, "devtoolsInjected", false),
-                Ndjson.strArray(line, "watchRoots"),
-                Ndjson.strArray(line, "linkSrcs"),
-                Ndjson.strArray(line, "linkDests"),
-                orEmpty(Ndjson.str(line, "launcherPath")),
-                orEmpty(Ndjson.str(line, "launcherScript")),
-                orEmpty(Ndjson.str(line, "binPath")),
-                Ndjson.bool(line, "boot", false),
-                orEmpty(Ndjson.str(line, "mainJar")),
-                orEmpty(Ndjson.str(line, "tier")),
-                orEmpty(Ndjson.str(line, "mainClass")),
-                Ndjson.strArray(line, "libNames"),
-                Ndjson.strArray(line, "libPaths"),
-                orEmptyDeploy(Ndjson.str(line, "deployCommand")));
+                Jsonl.str(line, "error"),
+                orEmpty(Jsonl.str(line, "mainIssue")),
+                orEmpty(Jsonl.str(line, "kind")),
+                Jsonl.strArray(line, "argv"),
+                orEmpty(Jsonl.str(line, "workingDir")),
+                orEmpty(Jsonl.str(line, "display")),
+                orEmpty(Jsonl.str(line, "javaHome")),
+                Jsonl.bool(line, "hotReload", false),
+                Jsonl.bool(line, "devtoolsInjected", false),
+                Jsonl.strArray(line, "watchRoots"),
+                Jsonl.strArray(line, "linkSrcs"),
+                Jsonl.strArray(line, "linkDests"),
+                orEmpty(Jsonl.str(line, "launcherPath")),
+                orEmpty(Jsonl.str(line, "launcherScript")),
+                orEmpty(Jsonl.str(line, "binPath")),
+                Jsonl.bool(line, "boot", false),
+                orEmpty(Jsonl.str(line, "mainJar")),
+                orEmpty(Jsonl.str(line, "tier")),
+                orEmpty(Jsonl.str(line, "mainClass")),
+                Jsonl.strArray(line, "libNames"),
+                Jsonl.strArray(line, "libPaths"),
+                orEmptyDeploy(Jsonl.str(line, "deployCommand")));
     }
 
     private static String orEmptyDeploy(String s) {

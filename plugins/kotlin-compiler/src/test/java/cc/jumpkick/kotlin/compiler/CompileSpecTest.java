@@ -18,7 +18,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 /**
  * The kotlin plugin's spec decode ({@link CompileSpec#from}) + argument building over the unified
- * NDJSON plugin wire — no Build Tools API runtime required.
+ * JSONL plugin wire — no Build Tools API runtime required.
  */
 class CompileSpecTest {
 

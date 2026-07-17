@@ -5,7 +5,7 @@ import cc.jumpkick.cache.Cas;
 import cc.jumpkick.engine.plugin.PluginJar;
 import cc.jumpkick.engine.plugin.PluginProcess;
 import cc.jumpkick.jdk.HostPlatform;
-import cc.jumpkick.plugin.protocol.Ndjson;
+import cc.jumpkick.plugin.protocol.Jsonl;
 import cc.jumpkick.run.TestSummary;
 import java.io.File;
 import java.io.IOException;
@@ -23,7 +23,7 @@ import java.util.concurrent.ConcurrentLinkedDeque;
  *
  * <ul>
  *   <li><b>Single-worker</b> ({@code workers=1}, default): one child JVM discovers and runs
- *       everything, streaming events back via NDJSON on stdout. The baseline path — preserves
+ *       everything, streaming events back via JSONL on stdout. The baseline path — preserves
  *       today's behavior exactly.
  *   <li><b>Parallel pull-queue</b> ({@code workers>1}): spawn a discovery child first to enumerate
  *       test classes, then spawn N pull-mode workers concurrently. Each worker stays alive across
@@ -32,7 +32,7 @@ import java.util.concurrent.ConcurrentLinkedDeque;
  *       completes. Process isolation between forks; serial within a fork.
  * </ul>
  *
- * <p>Wire protocol: child emits one NDJSON event per line on stdout, each line prefixed with {@code
+ * <p>Wire protocol: child emits one JSONL event per line on stdout, each line prefixed with {@code
  * ##JKT:}. Lines without the prefix are the user's test stdout/stderr — forwarded to the parent's
  * stdout with a {@code [w<N>] } worker prefix in parallel mode.
  */
@@ -287,7 +287,7 @@ public final class JUnitLauncher {
             CaptureBuffer crash) {
         // Pull protocol: each "ready" pulls the next class from the shared queue.
         java.util.function.BiConsumer<String, PluginProcess.Conversation> handler = (json, convo) -> {
-            String event = Ndjson.str(json, "event");
+            String event = Jsonl.str(json, "event");
             if ("ready".equals(event)) {
                 String next = queue.pollFirst();
                 if (next != null) {
@@ -340,12 +340,12 @@ public final class JUnitLauncher {
                 PROTOCOL_PREFIX,
                 List.of("--list-only", "--scan-classpath=" + testClassesDir),
                 json -> {
-                    String event = Ndjson.str(json, "event");
+                    String event = Jsonl.str(json, "event");
                     if ("discovered".equals(event)) {
-                        classes.add(Ndjson.str(json, "class"));
+                        classes.add(Jsonl.str(json, "class"));
                     } else if ("discovery_total".equals(event)) {
                         listener.onDiscoveryTotal(
-                                Ndjson.intValue(json, "classes", 0), Ndjson.intValue(json, "tests", 0));
+                                Jsonl.intValue(json, "classes", 0), Jsonl.intValue(json, "tests", 0));
                     }
                 },
                 null);
@@ -450,14 +450,14 @@ public final class JUnitLauncher {
         }
 
         private void acceptJson(String json) {
-            String event = Ndjson.str(json, "event");
+            String event = Jsonl.str(json, "event");
             if (event == null) return;
             switch (event) {
                 case "discovery_total" ->
-                    listener.onDiscoveryTotal(Ndjson.intValue(json, "classes", 0), Ndjson.intValue(json, "tests", 0));
+                    listener.onDiscoveryTotal(Jsonl.intValue(json, "classes", 0), Jsonl.intValue(json, "tests", 0));
                 case "dynamic_registered" -> {
-                    if ("TEST".equals(Ndjson.str(json, "type"))) {
-                        dynamicIds.add(Ndjson.str(json, "id"));
+                    if ("TEST".equals(Jsonl.str(json, "type"))) {
+                        dynamicIds.add(Jsonl.str(json, "id"));
                     }
                 }
                 case "started" -> onStarted(json);
@@ -468,17 +468,17 @@ public final class JUnitLauncher {
         }
 
         private void onStarted(String json) {
-            boolean isTest = "TEST".equals(Ndjson.str(json, "type"));
-            listener.onTestStarted(Ndjson.str(json, "id"), Ndjson.str(json, "display"), isTest, workerId);
+            boolean isTest = "TEST".equals(Jsonl.str(json, "type"));
+            listener.onTestStarted(Jsonl.str(json, "id"), Jsonl.str(json, "display"), isTest, workerId);
         }
 
         private void onFinished(String json) {
-            boolean isTest = "TEST".equals(Ndjson.str(json, "type"));
-            String id = Ndjson.str(json, "id");
-            String status = Ndjson.str(json, "status");
-            String display = Ndjson.str(json, "display");
+            boolean isTest = "TEST".equals(Jsonl.str(json, "type"));
+            String id = Jsonl.str(json, "id");
+            String status = Jsonl.str(json, "status");
+            String display = Jsonl.str(json, "display");
             if (display == null) display = id;
-            long duration = Ndjson.intValue(json, "duration_ms", 0);
+            long duration = Jsonl.intValue(json, "duration_ms", 0);
             boolean wasStatic = isTest && !dynamicIds.contains(id);
             if (isTest) {
                 switch (status != null ? status : "") {
@@ -495,7 +495,7 @@ public final class JUnitLauncher {
             }
             listener.onTestFinished(id, display, status, isTest, wasStatic, duration, workerId);
             if (isTest) {
-                String throwable = Ndjson.nested(json, "throwable");
+                String throwable = Jsonl.nested(json, "throwable");
                 if ("ABORTED".equals(status)) {
                     if (xmlReport != null) xmlReport.recordSkipped(id, display, "aborted");
                     if (mdReport != null) mdReport.recordSkipped(id, display, "aborted");
@@ -509,28 +509,28 @@ public final class JUnitLauncher {
         /** Record a FAILED test/container: count it and keep its summary + full stack. */
         private void captureFailure(String id, String display, String json) {
             failed++;
-            String throwableJson = Ndjson.nested(json, "throwable");
-            String exClass = throwableJson != null ? Ndjson.str(throwableJson, "class") : null;
+            String throwableJson = Jsonl.nested(json, "throwable");
+            String exClass = throwableJson != null ? Jsonl.str(throwableJson, "class") : null;
             if (exClass == null) exClass = "?";
-            String message = throwableJson != null ? Ndjson.str(throwableJson, "message") : null;
+            String message = throwableJson != null ? Jsonl.str(throwableJson, "message") : null;
             if (message == null) message = "";
             // The runner emits the full stack trace under "stack"; keep it so the
             // build can print it (we used to read only class + message).
-            String stack = throwableJson != null ? Ndjson.str(throwableJson, "stack") : null;
+            String stack = throwableJson != null ? Jsonl.str(throwableJson, "stack") : null;
             failures.add(new TestSummary.Failure(display, exClass, message, stack == null ? "" : stack));
             listener.onFailure(id, display, exClass, message, workerId);
         }
 
         private void onSkipped(String json) {
-            boolean isTest = "TEST".equals(Ndjson.str(json, "type"));
-            String id = Ndjson.str(json, "id");
+            boolean isTest = "TEST".equals(Jsonl.str(json, "type"));
+            String id = Jsonl.str(json, "id");
             boolean wasStatic = isTest && !dynamicIds.contains(id);
             if (isTest) skipped++;
-            String reason = Ndjson.str(json, "reason");
+            String reason = Jsonl.str(json, "reason");
             listener.onTestSkipped(
-                    id, Ndjson.str(json, "display"), reason != null ? reason : "", isTest, wasStatic, workerId);
+                    id, Jsonl.str(json, "display"), reason != null ? reason : "", isTest, wasStatic, workerId);
             if (isTest) {
-                String display = Ndjson.str(json, "display");
+                String display = Jsonl.str(json, "display");
                 if (xmlReport != null) xmlReport.recordSkipped(id, display, reason);
                 if (mdReport != null) mdReport.recordSkipped(id, display, reason);
             }

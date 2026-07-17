@@ -20,7 +20,7 @@ import org.junit.jupiter.api.io.TempDir;
 /**
  * Drives the plugin's protocol end-to-end (in-process via {@link JavaIncrementalCompiler#run}): a real
  * annotation processor is ServiceLoader-discovered from a processor path, runs, and its
- * generated-file provenance is reported as NDJSON.
+ * generated-file provenance is reported as JSONL.
  */
 class JavaIncrementalCompilerTest {
 

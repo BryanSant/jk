@@ -6,7 +6,7 @@ plugins {
 
 description = "jk-kotlin-compiler: child-JVM worker that drives the Kotlin Build Tools API " +
         "(CompilationService) for full and incremental JVM compilation, isolated from jk's " +
-        "own classpath. Reads a line-oriented spec, streams NDJSON diagnostics back to jk."
+        "own classpath. Reads a line-oriented spec, streams JSONL diagnostics back to jk."
 
 // plugin-api is tiny and dependency-free; vendor just its codec classes into the
 // thin worker jar (not the whole runtime closure — the BTA impl stays external).
@@ -31,7 +31,7 @@ dependencies {
     compileOnly(libs.kotlin.stdlib)
     // Tests drive the worker against the API directly.
     testImplementation(libs.kotlin.build.tools.api)
-    // The shared NDJSON protocol codec. compileOnly so it doesn't drag onto the
+    // The shared JSONL protocol codec. compileOnly so it doesn't drag onto the
     // worker's resolved runtime closure; its classes are vendored into the jar
     // via `bundledCodec` below so the codec is present in the worker JVM.
     compileOnly(project(":plugin-api"))

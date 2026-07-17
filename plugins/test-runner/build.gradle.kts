@@ -5,7 +5,7 @@ plugins {
 }
 
 description = "jk-test-runner: child-JVM entry point that drives JUnit Platform and " +
-        "streams events back to the parent jk process as NDJSON on stdout."
+        "streams events back to the parent jk process as JSONL on stdout."
 
 // plugin-api is tiny and dependency-free; vendor just its codec classes into the
 // thin runner jar (the JUnit launcher closure must NOT be bundled — jk adds

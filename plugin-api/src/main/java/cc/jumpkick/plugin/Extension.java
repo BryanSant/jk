@@ -8,10 +8,10 @@ import java.util.Set;
  * Anything that extends the core jk engine. An extension MAY run inside the engine JVM (e.g. the
  * git backend, the javac strategy, a local-tool probe) — the sub-interface {@link Plugin} is the
  * specialization that runs <em>outside</em> the engine, in a managed, sandboxed forked worker JVM
- * that communicates over NDJSON.
+ * that communicates over JSONL.
  *
  * <p>Clients (the CLI, the Web UI) are <em>not</em> extensions even though they speak the same
- * NDJSON protocol — they drive the engine from the outside; they don't extend it.
+ * JSONL protocol — they drive the engine from the outside; they don't extend it.
  *
  * <p>An extension declares which coarse pipeline {@link Phase}(s) it participates in. For in-engine
  * domain extensions (git/compile-strategy/probe) this is metadata the engine reads for ordering and

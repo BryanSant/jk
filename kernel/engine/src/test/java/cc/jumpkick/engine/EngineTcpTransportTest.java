@@ -5,7 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import cc.jumpkick.config.JkEngineConfig;
 import cc.jumpkick.engine.protocol.EngineProtocol;
-import cc.jumpkick.plugin.protocol.Ndjson;
+import cc.jumpkick.plugin.protocol.Jsonl;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.IOException;
@@ -94,7 +94,7 @@ class EngineTcpTransportTest {
                 w.flush();
                 String ack = r.readLine();
                 if (ack == null || !EngineProtocol.HELLO_ACK.equals(EngineProtocol.typeOf(ack))) return null;
-                return Ndjson.str(ack, "version");
+                return Jsonl.str(ack, "version");
             }
         } catch (IOException | RuntimeException e) {
             return null;

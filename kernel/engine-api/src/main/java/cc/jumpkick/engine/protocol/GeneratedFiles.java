@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.engine.protocol;
 
-import cc.jumpkick.plugin.protocol.Ndjson;
+import cc.jumpkick.plugin.protocol.Jsonl;
 import java.util.List;
 
 /**
@@ -22,7 +22,7 @@ public record GeneratedFiles(String error, List<String> paths, List<String> cont
 
     public String encode() {
         return "{\"t\":\"" + EngineProtocol.GENERATE_ACK + "\""
-                + ",\"error\":" + (error == null ? "null" : Ndjson.quote(error))
+                + ",\"error\":" + (error == null ? "null" : Jsonl.quote(error))
                 + ",\"paths\":" + EngineProtocol.quoteArray(paths)
                 + ",\"contents\":" + EngineProtocol.quoteArray(contents)
                 + ",\"notes\":" + EngineProtocol.quoteArray(notes)
@@ -31,9 +31,9 @@ public record GeneratedFiles(String error, List<String> paths, List<String> cont
 
     public static GeneratedFiles decode(String line) {
         return new GeneratedFiles(
-                Ndjson.str(line, "error"),
-                Ndjson.strArray(line, "paths"),
-                Ndjson.strArray(line, "contents"),
-                Ndjson.strArray(line, "notes"));
+                Jsonl.str(line, "error"),
+                Jsonl.strArray(line, "paths"),
+                Jsonl.strArray(line, "contents"),
+                Jsonl.strArray(line, "notes"));
     }
 }

@@ -57,7 +57,7 @@ public final class EngineDelegate {
      * child. Returns the child's exit code; throws when the version isn't materialized.
      *
      * <p>The child's stderr goes to {@code stderrLog} (the daemon's log file): it must not
-     * interleave with the NDJSON event stream on stdout, and it must be DRAINED — an unread
+     * interleave with the JSONL event stream on stdout, and it must be DRAINED — an unread
      * stderr pipe fills at ~64 KB and deadlocks the child, which is exactly the failure mode a
      * rarely-exercised version-skew path cannot afford.
      */

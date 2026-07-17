@@ -23,8 +23,8 @@ class RunLogGcTest {
     void old_logs_get_swept(@TempDir Path tempDir) throws IOException {
         Path runs = tempDir.resolve("runs");
         Files.createDirectories(runs);
-        Path stale = Files.writeString(runs.resolve("ancient.ndjson"), "...");
-        Path fresh = Files.writeString(runs.resolve("today.ndjson"), "...");
+        Path stale = Files.writeString(runs.resolve("ancient.jsonl"), "...");
+        Path fresh = Files.writeString(runs.resolve("today.jsonl"), "...");
         // Backdate the stale log to 10 days ago.
         Files.setLastModifiedTime(
                 stale,
@@ -42,7 +42,7 @@ class RunLogGcTest {
     void dry_run_reports_but_doesnt_delete(@TempDir Path tempDir) throws IOException {
         Path runs = tempDir.resolve("runs");
         Files.createDirectories(runs);
-        Path stale = Files.writeString(runs.resolve("old.ndjson"), "...");
+        Path stale = Files.writeString(runs.resolve("old.jsonl"), "...");
         Files.setLastModifiedTime(
                 stale,
                 FileTime.fromMillis(

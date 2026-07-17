@@ -184,7 +184,7 @@ primitives (`Pipeline`, `JdkInstaller`, `PipelineConsole`). Addressed by L8's `i
 `SyncCommand`) pass `ctx::output`, so the warning flows through `StepContext.output` →
 `PipelineListener` and a non-CLI front-end captures it. Exact two-line text preserved.
 _Compromise (logged):_ routed through `output` (verbatim passthrough) rather than the structured
-`ctx.warn(...)` channel, so it is not counted in `PipelineResult.warnings()` / the `--ndjson`
+`ctx.warn(...)` channel, so it is not counted in `PipelineResult.warnings()` / the `--jsonl`
 `type:"warn"` stream. Chosen to preserve the exact text; revisit if structured classification is wanted.
 
 `AutoLock.java:252-253` prints `‼ jk: auto-lock warning — could not update jk.lock: …` and a follow-up
@@ -332,7 +332,7 @@ Living log. Every compromise made while fixing an item is recorded here with its
 in the final review. `(open)` = still a compromise; `(resolved)` = revisited and closed.
 
 - **[Q1] (open)** auto-lock warning routes via `StepContext.output` (verbatim) not the structured
-  `warn()` channel — not counted in `PipelineResult.warnings()`/ndjson. Intentional to preserve exact text.
+  `warn()` channel — not counted in `PipelineResult.warnings()`/jsonl. Intentional to preserve exact text.
 - **[Q2] (open)** ~11 CLI/resolver display-coloring coordinate splits left un-deduped — adopting the
   shared `Coords` helper would change rendered output bytes; `resolver`'s two cannot see cli's `Coords`.
 - **[Q3] (resolved)** `CacheSync` double-`+`-scan and **[Q3] (resolved)** `PolicyChecker`'s

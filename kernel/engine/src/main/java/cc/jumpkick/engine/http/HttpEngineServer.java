@@ -464,7 +464,7 @@ public final class HttpEngineServer implements AutoCloseable {
     /** {@code POST /api/build} — acknowledge with a request id; progress streams on {@code /api/events}. */
     private void handleBuild(HttpExchange exchange) throws IOException {
         String body = new String(exchange.getRequestBody().readNBytes(MAX_BODY_BYTES), StandardCharsets.UTF_8);
-        String dir = cc.jumpkick.plugin.protocol.Ndjson.str(body, "dir");
+        String dir = cc.jumpkick.plugin.protocol.Jsonl.str(body, "dir");
         if (dir == null || dir.isBlank()) {
             sendJson(
                     exchange,

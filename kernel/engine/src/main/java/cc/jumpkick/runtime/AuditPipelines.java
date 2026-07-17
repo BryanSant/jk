@@ -5,7 +5,7 @@ import cc.jumpkick.cache.Cas;
 import cc.jumpkick.engine.plugin.PluginClient;
 import cc.jumpkick.engine.plugin.PluginJar;
 import cc.jumpkick.lock.LockfileReader;
-import cc.jumpkick.plugin.protocol.Ndjson;
+import cc.jumpkick.plugin.protocol.Jsonl;
 import cc.jumpkick.plugin.protocol.PluginProtocol;
 import cc.jumpkick.plugin.protocol.SpecWriter;
 import cc.jumpkick.run.Pipeline;
@@ -23,7 +23,7 @@ import java.nio.file.Path;
  * plugin — hoisted out of the CLI so the resident engine can host the command (Wave 2 of {@code
  * docs/architecture/slim-client.md}) while the command's test-only in-process path builds the exact
  * same pipeline. Three steps: {@code read-lock} (SYNC) validates the lockfile is readable, {@code
- * query-osv} (IO) forks the plugin and streams its NDJSON findings to the {@link FindingObserver},
+ * query-osv} (IO) forks the plugin and streams its JSONL findings to the {@link FindingObserver},
  * {@code evaluate} (SYNC) is the threshold bookkeeping marker (the threshold itself is applied by
  * the client, which owns the report rendering and the exit code).
  *
@@ -98,7 +98,7 @@ public final class AuditPipelines {
                 .build();
     }
 
-    /** Fork the {@code jk-auditor} plugin and stream its NDJSON findings to {@code observer}. */
+    /** Fork the {@code jk-auditor} plugin and stream its JSONL findings to {@code observer}. */
     private static void runWorker(
             Path workerJar, Path lockPath, URI osvBatchUrl, URI osvVulnsUrl, FindingObserver observer) {
         try {
@@ -109,12 +109,12 @@ public final class AuditPipelines {
                         .on(
                                 PluginProtocol.FINDING,
                                 json -> observer.onFinding(
-                                        Ndjson.str(json, "module"),
-                                        Ndjson.str(json, "version"),
-                                        Ndjson.str(json, "id"),
-                                        Ndjson.str(json, "severity"),
-                                        Ndjson.str(json, "summary")))
-                        .on(PluginProtocol.ERROR, json -> error[0] = Ndjson.str(json, PluginProtocol.MESSAGE))
+                                        Jsonl.str(json, "module"),
+                                        Jsonl.str(json, "version"),
+                                        Jsonl.str(json, "id"),
+                                        Jsonl.str(json, "severity"),
+                                        Jsonl.str(json, "summary")))
+                        .on(PluginProtocol.ERROR, json -> error[0] = Jsonl.str(json, PluginProtocol.MESSAGE))
                         .run(PluginLaunch.javaCommand(workerJar, spec));
                 if (error[0] != null) {
                     throw new RuntimeException("audit worker: " + error[0]);

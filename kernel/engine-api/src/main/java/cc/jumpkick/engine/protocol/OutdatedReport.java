@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.engine.protocol;
 
-import cc.jumpkick.plugin.protocol.Ndjson;
+import cc.jumpkick.plugin.protocol.Jsonl;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -72,17 +72,17 @@ public record OutdatedReport(String error, boolean workspace, List<Row> rows) {
                     r.tip()));
         }
         return "{\"t\":\"" + EngineProtocol.OUTDATED_ACK + "\""
-                + ",\"error\":" + (error == null ? "null" : Ndjson.quote(error))
+                + ",\"error\":" + (error == null ? "null" : Jsonl.quote(error))
                 + ",\"workspace\":" + workspace
                 + ",\"rows\":" + EngineProtocol.quoteArray(encoded)
                 + "}";
     }
 
     public static OutdatedReport decode(String line) {
-        String error = Ndjson.str(line, "error");
-        boolean workspace = Ndjson.bool(line, "workspace", false);
+        String error = Jsonl.str(line, "error");
+        boolean workspace = Jsonl.bool(line, "workspace", false);
         List<Row> rows = new ArrayList<>();
-        for (String enc : Ndjson.strArray(line, "rows")) {
+        for (String enc : Jsonl.strArray(line, "rows")) {
             String[] f = enc.split("\\|", -1);
             rows.add(new Row(at(f, 0), at(f, 1), at(f, 2), at(f, 3), at(f, 4), at(f, 5), at(f, 6), at(f, 7)));
         }

@@ -41,7 +41,7 @@ migration effort (S/M/L), `—` = no migration work.
 | `clean` | Delete `target/` trees; `--cache` runs a cache GC | Local recursive delete (:core parsers for module list); `--cache`: `cc.jumpkick.task.CacheGc` (:engine) **in-process** | **CLIENT-ONLY** for `target/`; the `--cache` GC → **ENGINE-HOSTED** (fold into the cache-prune vocabulary) | S |
 | `image` | OCI image build (tarball / daemon / registry push) | `BuildPipelines` in-process; `cc.jumpkick.task.ActionCache`+`ActionKey`+`ClasspathFingerprint` in-process; **forks `PluginJar.IMAGE_BUILDER` via `new PluginClient("##JKIM:")` (ImageCommand.java:362)** | **WORKER-DELEGATED** | M |
 | `format` | Format Java/Kotlin sources | **Resolves formatter jars in-process**: `ToolResolver.mavenCentral(new Http(), cas)` → :resolver + :io (FormatCommand.java:159,198); **forks `PluginJar.FORMATTER` via `new PluginClient("##JKFMT:")` (FormatCommand.java:244,299)** | **WORKER-DELEGATED** (resolve+fork engine-side; file list + diff rendering client-side) | M |
-| `publish` | Publish artifacts to a repository | `RepoCredentialResolver` (:io) reads local credentials; `CompileToolchain.runningJavaHome`; **forks `PluginJar.PUBLISHER` via `new PluginClient("##JKPU:")` (PublishCommand.java:237)**; `Ndjson` event relay | **WORKER-DELEGATED** | M |
+| `publish` | Publish artifacts to a repository | `RepoCredentialResolver` (:io) reads local credentials; `CompileToolchain.runningJavaHome`; **forks `PluginJar.PUBLISHER` via `new PluginClient("##JKPU:")` (PublishCommand.java:237)**; `Jsonl` event relay | **WORKER-DELEGATED** | M |
 | `audit` | Dependency vulnerability audit | Reads `jk.lock`; **forks `PluginJar.AUDITOR` via `new PluginClient("##JKAU:")` (AuditCommand.java:172)**, jar located via `Cas` | **WORKER-DELEGATED** (a named Stage-3 heavy verb) | S–M |
 | `engine start/status/stop` | Engine lifecycle control | `EngineClient.handshake/ensureRunning/status/ping/stop` only | **CLIENT-ONLY** (must work engine-less by definition) | — |
 
@@ -81,7 +81,7 @@ migration effort (S/M/L), `—` = no migration work.
 
 | Verb | Today | In-process kernel today | End-state | Size |
 |---|---|---|---|---|
-| `import` | Convert a Maven/Gradle build to `jk.toml` | **Forks compat-bridge directly**: `PluginJar.COMPAT_BRIDGE.locate(new Cas(cache))` (ImportCommand.java:114), `new PluginClient("##JKCMP:")` (ImportCommand.java:126); `CompileToolchain.runningJavaHome` + `JvmOptions.javaCommand` (:engine); `Ndjson` relay. `GradleImporter`/`PomImporter` run inside the plugin, not the CLI | **WORKER-DELEGATED** | S–M |
+| `import` | Convert a Maven/Gradle build to `jk.toml` | **Forks compat-bridge directly**: `PluginJar.COMPAT_BRIDGE.locate(new Cas(cache))` (ImportCommand.java:114), `new PluginClient("##JKCMP:")` (ImportCommand.java:126); `CompileToolchain.runningJavaHome` + `JvmOptions.javaCommand` (:engine); `Jsonl` relay. `GradleImporter`/`PomImporter` run inside the plugin, not the CLI | **WORKER-DELEGATED** | S–M |
 | `mvn` / `gradle` | Passthrough to a provisioned Maven/Gradle | Provision: same `PluginJar.COMPAT_BRIDGE` fork (MvnCommand.java:103,124; GradleCommand.java:70 delegates); then `ProcessBuilder.inheritIO` exec of `bin/mvn` with `JdkResolver.forProject` + `PassthroughEnv` (:toolchain) setting `JAVA_HOME` | Split: **WORKER-DELEGATED** provisioning (one-shot request → `{bin, version, source}` result, no event stream) + **CLIENT-ONLY** exec | S |
 | `export gradle` / `export maven` | Translate `jk.toml`+`jk.lock` into Gradle/Maven build files | `GradleExporter` / `PomExporter` (:toolchain compat slice); `ExportSupport.load` → :core parsers + `CompileSupport.isSimpleLayout` (**:engine**, ExportSupport.java:64). Offline, no fetches | **ENGINE-HOSTED** (client-only *possible* but drags the compat exporters onto the client — flagged ambiguous; wrote/note burst fits) | S |
 | `export idea` | Delegate to `jk idea` | `private final IdeaCommand delegate` | see `ide` | — |
@@ -104,7 +104,7 @@ Yes — six verbs fork plugins directly from the client process:
 Moving these forks engine-side removes `cc.jumpkick.engine.plugin.PluginClient`/`PluginJar`/`JvmOptions`
 (and the `CompileToolchain.runningJavaHome` JVM-location helper) from the client. The
 `PluginJarNotFoundException` handling in `CommandDispatch` (CommandDispatch.java:201) becomes a
-structured engine error. The plugins' NDJSON event streams relay 1:1 over the engine protocol —
+structured engine error. The plugins' JSONL event streams relay 1:1 over the engine protocol —
 the same discriminated-envelope style, so this is vocabulary plumbing, not redesign.
 
 > **Status: landed (Wave 2, 2026-07-07).** All six forks now happen engine-side, through shared
@@ -203,7 +203,7 @@ module's total class count, inner classes included):
 | core.jar | 35 | 50 | 56 |
 | io.jar | 32 | 65 | 32 |
 | resolver.jar | 19 | 55 | 10 |
-| plugin-api.jar | 1 (`Ndjson`) | 5 | 10 |
+| plugin-api.jar | 1 (`Jsonl`) | 5 | 10 |
 
 Readings:
 
@@ -386,7 +386,7 @@ handler + client renderer:
 | Wave | Verbs | Size | Rationale / protocol shape |
 |---|---|---|---|
 | 1 | `lock`, `sync`, `update` | L, L, M | The memory/CPU-heavy resolution+fetch family the ceilings exist for; includes git-source materialization. New lock/sync request+event vocabulary (single-pipeline shape fits: progress + `pipeline-diagnostic`* + `pipeline-finish`; workspace cascade = `plan-module` burst). `update` rides `lock`'s vocabulary |
-| 2 | `import`, `mvn`/`gradle` provisioning, `audit`, `publish`, `format`, `image` | S–M each | The direct plugin forks (§1.5) — moving them engine-side deletes `cc.jumpkick.engine.plugin.*` from the client in one tranche. Plugins' NDJSON streams relay 1:1; `mvn`/`gradle` is a one-shot request → `{bin,version,source}` result |
+| 2 | `import`, `mvn`/`gradle` provisioning, `audit`, `publish`, `format`, `image` | S–M each | The direct plugin forks (§1.5) — moving them engine-side deletes `cc.jumpkick.engine.plugin.*` from the client in one tranche. Plugins' JSONL streams relay 1:1; `mvn`/`gradle` is a one-shot request → `{bin,version,source}` result |
 | 3 | `compile`, `run` (build part), `native`, `install` | S, M, M, L | The in-process `BuildPipelines` stragglers; `compile` reuses `jk test`'s single-pipeline vocabulary as-is; `install`'s git mode overlaps Wave 1's git-source work |
 | 4 | `ide`/`idea`/`vscode` (model part), `cache prune/purge`, `clean --cache`, `export gradle/maven`, `tool install/run` (resolve part), `explain` ETA rehome | L, M, S, S, M, S | Long tail; `ide` is the largest new wire vocabulary (serialized `IdeModel` burst + sync progress) but reuses Wave 1's sync machinery engine-side |
 

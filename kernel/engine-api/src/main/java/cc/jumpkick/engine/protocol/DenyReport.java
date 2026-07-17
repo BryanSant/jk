@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.engine.protocol;
 
-import cc.jumpkick.plugin.protocol.Ndjson;
+import cc.jumpkick.plugin.protocol.Jsonl;
 import java.util.List;
 
 /**
@@ -27,7 +27,7 @@ public record DenyReport(String error, int checked, List<String> modules, List<S
 
     public String encode() {
         return "{\"t\":\"" + EngineProtocol.DENY_CHECK_ACK + "\""
-                + ",\"error\":" + (error == null ? "null" : Ndjson.quote(error))
+                + ",\"error\":" + (error == null ? "null" : Jsonl.quote(error))
                 + ",\"checked\":" + checked
                 + ",\"modules\":" + EngineProtocol.quoteArray(modules)
                 + ",\"versions\":" + EngineProtocol.quoteArray(versions)
@@ -37,10 +37,10 @@ public record DenyReport(String error, int checked, List<String> modules, List<S
 
     public static DenyReport decode(String line) {
         return new DenyReport(
-                Ndjson.str(line, "error"),
-                Ndjson.intValue(line, "checked", 0),
-                Ndjson.strArray(line, "modules"),
-                Ndjson.strArray(line, "versions"),
-                Ndjson.strArray(line, "reasons"));
+                Jsonl.str(line, "error"),
+                Jsonl.intValue(line, "checked", 0),
+                Jsonl.strArray(line, "modules"),
+                Jsonl.strArray(line, "versions"),
+                Jsonl.strArray(line, "reasons"));
     }
 }

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.engine.protocol;
 
-import cc.jumpkick.plugin.protocol.Ndjson;
+import cc.jumpkick.plugin.protocol.Jsonl;
 import java.util.List;
 
 /**
@@ -92,81 +92,81 @@ public record ProjectInfo(
     public String encode() {
         return "{\"t\":\"" + EngineProtocol.PROJECT_INFO_ACK + "\""
                 + ",\"error\":" + quoteOrNull(error)
-                + ",\"group\":" + Ndjson.quote(group)
-                + ",\"name\":" + Ndjson.quote(name)
-                + ",\"version\":" + Ndjson.quote(version)
-                + ",\"jdk\":" + Ndjson.quote(jdk)
+                + ",\"group\":" + Jsonl.quote(group)
+                + ",\"name\":" + Jsonl.quote(name)
+                + ",\"version\":" + Jsonl.quote(version)
+                + ",\"jdk\":" + Jsonl.quote(jdk)
                 + ",\"javaRelease\":" + javaRelease
                 + ",\"kotlin\":" + kotlin
-                + ",\"kotlinVersion\":" + Ndjson.quote(kotlinVersion)
+                + ",\"kotlinVersion\":" + Jsonl.quote(kotlinVersion)
                 + ",\"layoutSimple\":" + layoutSimple
                 + ",\"workspaceRoot\":" + workspaceRoot
-                + ",\"workspaceRootDir\":" + Ndjson.quote(workspaceRootDir)
+                + ",\"workspaceRootDir\":" + Jsonl.quote(workspaceRootDir)
                 + ",\"moduleDirs\":" + EngineProtocol.quoteArray(moduleDirs)
                 + ",\"application\":" + application
-                + ",\"mainClass\":" + Ndjson.quote(mainClass)
+                + ",\"mainClass\":" + Jsonl.quote(mainClass)
                 + ",\"shadowJar\":" + shadowJar
-                + ",\"nativeMode\":" + Ndjson.quote(nativeMode)
-                + ",\"graal\":" + Ndjson.quote(graal)
+                + ",\"nativeMode\":" + Jsonl.quote(nativeMode)
+                + ",\"graal\":" + Jsonl.quote(graal)
                 + ",\"springBoot\":" + springBoot
-                + ",\"springBootVersion\":" + Ndjson.quote(springBootVersion)
-                + ",\"formatStyle\":" + Ndjson.quote(formatStyle)
-                + ",\"formatJava\":" + Ndjson.quote(formatJava)
-                + ",\"formatKotlin\":" + Ndjson.quote(formatKotlin)
+                + ",\"springBootVersion\":" + Jsonl.quote(springBootVersion)
+                + ",\"formatStyle\":" + Jsonl.quote(formatStyle)
+                + ",\"formatJava\":" + Jsonl.quote(formatJava)
+                + ",\"formatKotlin\":" + Jsonl.quote(formatKotlin)
                 + ",\"formatOptimizeImports\":" + formatOptimizeImports
                 + ",\"hasLock\":" + hasLock
-                + ",\"lockJdk\":" + Ndjson.quote(lockJdk)
-                + ",\"mainJarPath\":" + Ndjson.quote(mainJarPath)
-                + ",\"shadowJarPath\":" + Ndjson.quote(shadowJarPath)
-                + ",\"nativeBinPath\":" + Ndjson.quote(nativeBinPath)
-                + ",\"nativeLibPath\":" + Ndjson.quote(nativeLibPath)
+                + ",\"lockJdk\":" + Jsonl.quote(lockJdk)
+                + ",\"mainJarPath\":" + Jsonl.quote(mainJarPath)
+                + ",\"shadowJarPath\":" + Jsonl.quote(shadowJarPath)
+                + ",\"nativeBinPath\":" + Jsonl.quote(nativeBinPath)
+                + ",\"nativeLibPath\":" + Jsonl.quote(nativeLibPath)
                 + ",\"pathDeps\":" + EngineProtocol.quoteArray(pathDeps)
-                + ",\"sourcesJarPath\":" + Ndjson.quote(sourcesJarPath)
-                + ",\"javadocJarPath\":" + Ndjson.quote(javadocJarPath)
+                + ",\"sourcesJarPath\":" + Jsonl.quote(sourcesJarPath)
+                + ",\"javadocJarPath\":" + Jsonl.quote(javadocJarPath)
                 + ",\"envRefs\":" + EngineProtocol.quoteArray(envRefs)
                 + "}";
     }
 
     public static ProjectInfo decode(String line) {
-        String error = Ndjson.str(line, "error");
+        String error = Jsonl.str(line, "error");
         return new ProjectInfo(
                 error,
-                orEmpty(Ndjson.str(line, "group")),
-                orEmpty(Ndjson.str(line, "name")),
-                orEmpty(Ndjson.str(line, "version")),
-                orEmpty(Ndjson.str(line, "jdk")),
-                Ndjson.intValue(line, "javaRelease", 0),
-                Ndjson.bool(line, "kotlin", false),
-                orEmpty(Ndjson.str(line, "kotlinVersion")),
-                Ndjson.bool(line, "layoutSimple", true),
-                Ndjson.bool(line, "workspaceRoot", false),
-                orEmpty(Ndjson.str(line, "workspaceRootDir")),
-                Ndjson.strArray(line, "moduleDirs"),
-                Ndjson.bool(line, "application", false),
-                orEmpty(Ndjson.str(line, "mainClass")),
-                Ndjson.bool(line, "shadowJar", false),
-                orEmpty(Ndjson.str(line, "nativeMode")),
-                orEmpty(Ndjson.str(line, "graal")),
-                Ndjson.bool(line, "springBoot", false),
-                orEmpty(Ndjson.str(line, "springBootVersion")),
-                orEmpty(Ndjson.str(line, "formatStyle")),
-                orEmpty(Ndjson.str(line, "formatJava")),
-                orEmpty(Ndjson.str(line, "formatKotlin")),
-                Ndjson.bool(line, "formatOptimizeImports", false),
-                Ndjson.bool(line, "hasLock", false),
-                orEmpty(Ndjson.str(line, "lockJdk")),
-                orEmpty(Ndjson.str(line, "mainJarPath")),
-                orEmpty(Ndjson.str(line, "shadowJarPath")),
-                orEmpty(Ndjson.str(line, "nativeBinPath")),
-                orEmpty(Ndjson.str(line, "nativeLibPath")),
-                Ndjson.strArray(line, "pathDeps"),
-                orEmpty(Ndjson.str(line, "sourcesJarPath")),
-                orEmpty(Ndjson.str(line, "javadocJarPath")),
-                Ndjson.strArray(line, "envRefs"));
+                orEmpty(Jsonl.str(line, "group")),
+                orEmpty(Jsonl.str(line, "name")),
+                orEmpty(Jsonl.str(line, "version")),
+                orEmpty(Jsonl.str(line, "jdk")),
+                Jsonl.intValue(line, "javaRelease", 0),
+                Jsonl.bool(line, "kotlin", false),
+                orEmpty(Jsonl.str(line, "kotlinVersion")),
+                Jsonl.bool(line, "layoutSimple", true),
+                Jsonl.bool(line, "workspaceRoot", false),
+                orEmpty(Jsonl.str(line, "workspaceRootDir")),
+                Jsonl.strArray(line, "moduleDirs"),
+                Jsonl.bool(line, "application", false),
+                orEmpty(Jsonl.str(line, "mainClass")),
+                Jsonl.bool(line, "shadowJar", false),
+                orEmpty(Jsonl.str(line, "nativeMode")),
+                orEmpty(Jsonl.str(line, "graal")),
+                Jsonl.bool(line, "springBoot", false),
+                orEmpty(Jsonl.str(line, "springBootVersion")),
+                orEmpty(Jsonl.str(line, "formatStyle")),
+                orEmpty(Jsonl.str(line, "formatJava")),
+                orEmpty(Jsonl.str(line, "formatKotlin")),
+                Jsonl.bool(line, "formatOptimizeImports", false),
+                Jsonl.bool(line, "hasLock", false),
+                orEmpty(Jsonl.str(line, "lockJdk")),
+                orEmpty(Jsonl.str(line, "mainJarPath")),
+                orEmpty(Jsonl.str(line, "shadowJarPath")),
+                orEmpty(Jsonl.str(line, "nativeBinPath")),
+                orEmpty(Jsonl.str(line, "nativeLibPath")),
+                Jsonl.strArray(line, "pathDeps"),
+                orEmpty(Jsonl.str(line, "sourcesJarPath")),
+                orEmpty(Jsonl.str(line, "javadocJarPath")),
+                Jsonl.strArray(line, "envRefs"));
     }
 
     private static String quoteOrNull(String s) {
-        return s == null ? "null" : Ndjson.quote(s);
+        return s == null ? "null" : Jsonl.quote(s);
     }
 
     private static String orEmpty(String s) {

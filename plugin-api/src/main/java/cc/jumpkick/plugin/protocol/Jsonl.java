@@ -7,7 +7,7 @@ import java.util.List;
 
 /**
  * The canonical codec for jk's host&lt;-&gt;plugin wire protocol: the simple flat JSON objects
- * plugins (today's "runner" workers) emit as NDJSON ({@code ##PREFIX:{...}}).
+ * plugins (today's "runner" workers) emit as JSONL ({@code ##PREFIX:{...}}).
  *
  * <p>Two halves, both dependency-free so the codec can be bundled into a tiny plugin jar without
  * dragging in Jackson or any jk internals:
@@ -25,9 +25,9 @@ import java.util.List;
  * node.path("x").asString()}. It handles string, integer, boolean, string-array, and nested-object
  * fields; it does not parse nested arrays or non-string array elements.
  */
-public final class Ndjson {
+public final class Jsonl {
 
-    private Ndjson() {}
+    private Jsonl() {}
 
     /**
      * Extract a JSON string field value, handling basic escape sequences ({@code \"}, {@code \\},
@@ -207,7 +207,7 @@ public final class Ndjson {
 
     /**
      * Extract the raw JSON for a nested object field ({@code "key":{...}}). Returns the {@code {...}}
-     * string (suitable for passing back to other {@code Ndjson} methods), or {@code null} when
+     * string (suitable for passing back to other {@code Jsonl} methods), or {@code null} when
      * absent.
      */
     public static String nested(String json, String key) {

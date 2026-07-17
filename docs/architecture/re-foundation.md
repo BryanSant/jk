@@ -228,7 +228,7 @@ The mutable global *channels that carry request data* now live on `Session` (eac
     `KotlincDriver` (the **CompilerWorker bridge** — both compilers now share the client + `diag`/`result`
     envelope), and the CLI `Publish`/`Format`/`Audit`/`Image`/`Import`/`Mvn` plugins. `PluginLoader.command`
     made public so callers build the command and drive it via `PluginClient`. Also fixed 3 worker emit
-    sites that concatenated dynamic paths/refs into JSON without escaping (routed through `Ndjson.quote`).
+    sites that concatenated dynamic paths/refs into JSON without escaping (routed through `Jsonl.quote`).
     Verified by `nativeCompile` + installed-binary smoke (build/test/format/publish paths). The
     test-runner (`JUnitLauncher`) stays on `PluginLoader` directly — its stateful 10-event pull-protocol
     would be higher risk than value to reshape; `PluginClient` already supports it (`converse` + custom

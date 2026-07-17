@@ -19,7 +19,7 @@ import java.util.Optional;
 /**
  * The {@code jk-auditor} plugin (op {@code command}/{@code audit}): queries the OSV vulnerability
  * API in an isolated child JVM so Jackson and the OSV HTTP client never load in jk's own process.
- * Speaks the unified plugin wire — the spec is NDJSON ({@code config}: {@code lockfile},
+ * Speaks the unified plugin wire — the spec is JSONL ({@code config}: {@code lockfile},
  * {@code batchUrl}?, {@code vulnsUrl}?) and the reply is {@code finding} lines + a terminal
  * {@code done}. Exit 0 success, 1 network/parse error, 2 bad arguments.
  */

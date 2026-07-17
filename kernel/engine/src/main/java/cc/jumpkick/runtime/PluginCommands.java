@@ -6,7 +6,7 @@ import cc.jumpkick.engine.plugin.PluginClient;
 import cc.jumpkick.engine.protocol.PluginCommandReport;
 import cc.jumpkick.layout.BuildLayout;
 import cc.jumpkick.model.JkBuild;
-import cc.jumpkick.plugin.protocol.Ndjson;
+import cc.jumpkick.plugin.protocol.Jsonl;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -16,7 +16,7 @@ import java.util.List;
 /**
  * Engine-hosted plugin commands (build-plugins plan row 11): when the CLI sees a command it doesn't
  * own, the project's active code plugin may — the command runs in the plugin's process over the
- * existing spec/NDJSON protocol, its {@code command-out} lines stream back as the command's output,
+ * existing spec/JSONL protocol, its {@code command-out} lines stream back as the command's output,
  * and its exit code is the command's. {@code found=false} (no jk.toml / no plugin / no such
  * command) sends the client back to its normal unknown-command help.
  */
@@ -84,8 +84,8 @@ public final class PluginCommands {
                 List<String> output = new ArrayList<>();
                 String[] error = new String[1];
                 PluginClient client = new PluginClient(active.manifest().code().protocolPrefix())
-                        .on("command-out", line -> output.add(Ndjson.str(line, "line")))
-                        .on("error", line -> error[0] = Ndjson.str(line, "message"))
+                        .on("command-out", line -> output.add(Jsonl.str(line, "line")))
+                        .on("error", line -> error[0] = Jsonl.str(line, "message"))
                         .onOther(line -> {
                             // labels/done — not part of the command's user-facing output
                         });

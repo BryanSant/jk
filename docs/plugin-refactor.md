@@ -11,7 +11,7 @@ Today jk has *accidentally* grown a plugin system. The "runner" modules
 (`test-runner`, `kotlin-compiler`, `java-compiler`, `audit-runner`,
 `publish-runner`, `image-runner`, `compat-runner`, `git-runner`) are already
 child-JVM plugins that the parent locates in the CAS by SHA-256 and drives over
-an NDJSON-on-stdout protocol. That is a plugin architecture in everything but
+an JSONL-on-stdout protocol. That is a plugin architecture in everything but
 name — but it was built one runner at a time, so the wire format, the launcher,
 the spec encoding, the CAS locator, and the build wiring are **reimplemented per
 runner** with no shared contract.
@@ -39,7 +39,7 @@ It also folds in two adjacent asks that the same refactor should settle:
   `StepStatus`, `StepKind` (SYNC/IO/CPU) form a DAG scheduler with typed
   cross-step state and an observer interface. The CLI couples to the engine
   *only* through `PipelineListener` — `ProgressBarListener`, `VerboseListener`,
-  `NdjsonListener`, `EventLogListener`, `SilentListener` all live in
+  `JsonlListener`, `EventLogListener`, `SilentListener` all live in
   `cli/run/`. **This is the seam the plugin SPI should reuse, not replace.**
 - **Core modules have no picocli imports.** `core`, `io`, `resolver`,
   `toolchain`, `engine` are framework-clean.
@@ -59,7 +59,7 @@ The same eight-runner pattern is open-coded eight times:
 |---|---|---|
 | Worker `main()` + spec parse + JSON escape + exit codes | Hand-rolled per runner | 8 copies |
 | Wire prefix marker (`##JKT:`, `##JKJC:`, `##JKGIT:`, `##JKAU:`, …) | Ad-hoc per runner | 8 markers |
-| `Ndjson` flat-JSON parser | Copy-pasted | 2 copies (`engine/compile/`, `kotlin-compiler/`) |
+| `Jsonl` flat-JSON parser | Copy-pasted | 2 copies (`engine/compile/`, `kotlin-compiler/`) |
 | Parent-side jar locator | `*WorkerSetup` class per runner | 6 classes in `runtime/` |
 | Worker registry | Hand-maintained `JkPluginSync.WORKERS` list | 8 entries |
 | `build.gradle.kts` SHA-emit task | Copy-pasted `writeXxxWorkerSha` blocks | 8 in `runtime/`, +1 in `engine/` |
@@ -276,8 +276,8 @@ Replace the eight ad-hoc `##JK*:`-prefixed encodings with **one** versioned,
 typed protocol in `plugin-api`, used for both Host↔plugin (process mode) and
 CLI↔Host:
 
-- **Framing:** single-prefix NDJSON (keep NDJSON for debuggability; one prefix
-  `##JKH:`, one parser — both `Ndjson.java` copies collapsed into one in
+- **Framing:** single-prefix JSONL (keep JSONL for debuggability; one prefix
+  `##JKH:`, one parser — both `Jsonl.java` copies collapsed into one in
   `plugin-api`).
 - **Messages map to the existing event vocabulary:** `steps`, `pipelineStart`,
   `stepStart`, `progress`, `tickUpdate`, `label`, `output`, `warn`, `error`,
@@ -402,7 +402,7 @@ loaded into the Host. They keep their current model.
 | `git-runner` | `plugins/git-client` | ✓ Done (renamed) |
 | `java-compiler`, `kotlin-compiler`, `test-runner` | `plugins/*` | ✓ Done (moved) |
 | `cli/command/*` (picocli) | own renderer + `CliCommand` impls | ✓ Done (Phase 3) |
-| `Ndjson.java` ×2, `##JK*:` markers ×8 | `plugin-api` protocol codec | ✓ Done (Phase 0–1) |
+| `Jsonl.java` ×2, `##JK*:` markers ×8 | `plugin-api` protocol codec | ✓ Done (Phase 0–1) |
 | `*WorkerSetup` ×6, `JkPluginSync.WORKERS` | `PluginJar` enum | ✓ Done (Phase 2) |
 | `compat-bridge` → `maven-bridge` + `gradle-bridge` | `plugins/maven-bridge`, `plugins/gradle-bridge` | Deferred (Phase 7+) |
 
@@ -421,7 +421,7 @@ its own `HelpRenderer`. The native-image reflection config for picocli and the
 
 - Deleted 5 of 6 `*WorkerSetup` classes → `PluginJar` enum.
 - Deleted the `JkPluginSync.WORKERS` hand-list → `PluginJar` enum + SHA resources.
-- Deleted both `Ndjson.java` copies → one codec in `plugin-api`.
+- Deleted both `Jsonl.java` copies → one codec in `plugin-api`.
 - Deleted 8 `writeXxxWorkerSha` blocks → one `jk.plugin-conventions` plugin.
 - Deleted the repeated `-Djk.*.plugin.jar` test plumbing → one block per module.
 - Collapsed all per-runner `main()`+spec-parse+JSON-escape impls → `PluginHostMain`.
@@ -464,7 +464,7 @@ All foundational decisions are settled.
    `BuildCommand`, `UiCommand`, `Parameter`, `Option`, `Usage` are domain types
    in `kernel/model`, alongside `Pipeline`/`Step` — one SPI module, shared by the
    CLI and any future front-end.
-5. **Wire protocol — NDJSON.** Single `##JKH:` prefix, one codec in `plugin-api`.
+5. **Wire protocol — JSONL.** Single `##JKH:` prefix, one codec in `plugin-api`.
    Binary framing is not planned.
 
 ---

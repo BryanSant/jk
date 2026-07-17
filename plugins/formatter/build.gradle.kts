@@ -22,7 +22,7 @@ dependencies {
     implementation(libs.openrewrite.java)
     implementation(libs.openrewrite.java21)
     // spotless-lib needs slf4j-api at runtime (it declares it compileOnly); a
-    // no-op binding keeps the worker quiet (we report results via NDJSON).
+    // no-op binding keeps the worker quiet (we report results via JSONL).
     implementation(libs.slf4j.api)
     runtimeOnly(libs.slf4j.nop)
 }

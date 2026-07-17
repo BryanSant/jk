@@ -27,7 +27,7 @@ import org.jetbrains.kotlin.buildtools.api.jvm.operations.JvmCompilationOperatio
  * <p>jk launches this as {@code java -cp <worker.jar>:<kotlin-bta-closure>
  * cc.jumpkick.kotlin.compiler.KotlinCompiler @&lt;spec&gt;}. The plugin reads the {@link
  * CompileSpec}, runs an in-process JVM compile (incremental when the spec carries a {@code
- * WORKDIR}), streams diagnostics back as NDJSON, and exits: {@code 0} success, {@code 1}
+ * WORKDIR}), streams diagnostics back as JSONL, and exits: {@code 0} success, {@code 1}
  * compilation error, {@code 3} OOM/internal compiler error, {@code 2} bad spec / unexpected
  * failure.
  *

@@ -39,7 +39,7 @@ import java.util.UUID;
  * sign, and upload the Maven artifacts.
  *
  * <p>The spec is line-oriented ({@code PROJECT_DIR …}, {@code JAR …}, {@code REPO_URL …},
- * {@code SIGN_GPG …}, …); the reply is {@value #PREFIX}-prefixed NDJSON terminating in
+ * {@code SIGN_GPG …}, …); the reply is {@value #PREFIX}-prefixed JSONL terminating in
  * {@code {"t":"result","ok":true,"files":N}} (or {@code "ok":false,"error":…}). Exit 0 success,
  * 1 publish error, 2 bad arguments.
  */

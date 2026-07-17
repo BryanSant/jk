@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.cli.run;
 
-import cc.jumpkick.plugin.protocol.Ndjson;
+import cc.jumpkick.plugin.protocol.Jsonl;
 import cc.jumpkick.run.PipelineResult;
 import cc.jumpkick.run.PipelineView;
 import cc.jumpkick.run.StepStatus;
@@ -10,14 +10,14 @@ import java.time.Instant;
 
 /**
  * Stable wire format for pipeline events as one-JSON-object-per-line text. Shared by {@link
- * NdjsonListener} (writes to stdout for {@code --output json}) and {@link EventLogListener} (writes
- * to {@code <cacheRoot>/runs/<ts>.ndjson} always). Centralising the shape here means anyone parsing
+ * JsonlListener} (writes to stdout for {@code --output json}) and {@link EventLogListener} (writes
+ * to {@code <cacheRoot>/runs/<ts>.jsonl} always). Centralising the shape here means anyone parsing
  * jk's event stream has one schema to keep compatible with, no matter which channel they read it
  * from.
  */
-final class NdjsonShape {
+final class JsonlShape {
 
-    private NdjsonShape() {}
+    private JsonlShape() {}
 
     static String pipelineStart(PipelineView v) {
         return "{\"ts\":"
@@ -165,12 +165,12 @@ final class NdjsonShape {
     }
 
     /**
-     * JSON string escaping — delegates to the shared {@link Ndjson#quote} codec (same escaping the
+     * JSON string escaping — delegates to the shared {@link Jsonl#quote} codec (same escaping the
      * worker wire protocol uses) so there's one implementation to keep correct. A {@code null}
      * encodes as the bare literal {@code null}.
      */
     static String js(String s) {
-        return Ndjson.quote(s);
+        return Jsonl.quote(s);
     }
 
     static long nowMillis() {

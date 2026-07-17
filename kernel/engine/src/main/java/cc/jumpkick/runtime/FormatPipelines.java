@@ -7,7 +7,7 @@ import cc.jumpkick.engine.plugin.PluginJar;
 import cc.jumpkick.http.Http;
 import cc.jumpkick.model.Coordinate;
 import cc.jumpkick.plugin.build.Phase;
-import cc.jumpkick.plugin.protocol.Ndjson;
+import cc.jumpkick.plugin.protocol.Jsonl;
 import cc.jumpkick.plugin.protocol.PluginProtocol;
 import cc.jumpkick.plugin.protocol.SpecWriter;
 import cc.jumpkick.run.Pipeline;
@@ -189,14 +189,14 @@ public final class FormatPipelines {
                         AtomicInteger index = new AtomicInteger();
                         int exit = new PluginClient("##JKFMT:")
                                 .on("file", json -> {
-                                    String status = Ndjson.str(json, "status");
+                                    String status = Jsonl.str(json, "status");
                                     if ("changed".equals(status)) changed.incrementAndGet();
                                     else if ("error".equals(status)) errors.incrementAndGet();
                                     else clean.incrementAndGet();
                                     observer.onFile(
-                                            Ndjson.str(json, "path"),
+                                            Jsonl.str(json, "path"),
                                             status,
-                                            Ndjson.str(json, "msg"),
+                                            Jsonl.str(json, "msg"),
                                             index.incrementAndGet(),
                                             total);
                                     ctx.progress(1);

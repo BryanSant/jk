@@ -29,7 +29,7 @@ import java.util.Optional;
  * #image}, which drives {@link ImageBuilder} (Jib) to a tarball, the local daemon, or a registry.
  *
  * <p>The spec is line-oriented ({@code MAIN_JAR /abs/app.jar}, {@code BASE …}, {@code TARBALL …},
- * {@code DEP_JAR …}, …); the reply is {@value #PREFIX}-prefixed NDJSON, terminating in
+ * {@code DEP_JAR …}, …); the reply is {@value #PREFIX}-prefixed JSONL, terminating in
  * {@code {"t":"result","ok":true,"ref":"…"}} (or {@code "tarball"}), {@code {"t":"result",
  * "ok":false,"error":"…"}} on failure. Exit 0 success, 1 build/push error, 2 bad arguments.
  */

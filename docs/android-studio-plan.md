@@ -32,7 +32,7 @@ One new artifact: **`jk-studio` — an Android Studio / IntelliJ plugin implemen
 Tooling API.
 
 ```
-Android Studio ──(project system SPI)── jk-studio plugin ──(HTTP + NDJSON events)── jk engine
+Android Studio ──(project system SPI)── jk-studio plugin ──(HTTP + JSONL events)── jk engine
                                                                  │
                                                                  └── the same ExecPlans/IdeOps/
                                                                      BuildPipelines every CLI verb uses
@@ -43,7 +43,7 @@ Android Studio ──(project system SPI)── jk-studio plugin ──(HTTP + N
   `R`/BuildConfig roots, variant list + the selected variant, AAR dependency views, the SDK
   root). No configuration phase exists, so "sync" is a read — the whole class of Gradle sync
   slowness disappears by construction.
-- **Builds/runs** = `POST /build` (streaming NDJSON progress events, mapped onto Studio's build
+- **Builds/runs** = `POST /build` (streaming JSONL progress events, mapped onto Studio's build
   window), `POST /run` returning the deploy plan; the plugin drives adb itself via Studio's
   own device machinery (`ApkProvider` hands Studio the built APK path / universal APK for AABs,
   exactly like ASwB's `BlazeApkProvider`).

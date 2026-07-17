@@ -67,7 +67,7 @@ public record CompileResult(boolean success, List<Diagnostic> diagnostics) {
             };
         }
 
-        /** Map a {@code javax.tools.Diagnostic.Kind} name (plugin NDJSON) to a severity. */
+        /** Map a {@code javax.tools.Diagnostic.Kind} name (plugin JSONL) to a severity. */
         public static Severity fromName(String kind) {
             if (kind == null) return OTHER;
             return switch (kind) {

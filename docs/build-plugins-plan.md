@@ -237,7 +237,7 @@ not an expression language: `classpath-has`, `config`, `native-declared`,
 grows expressions is how build systems rot.
 
 **The code layer covers the hard 10%** and always runs in the plugin's forked process
-(the process SPI that already exists — `Plugin`/`PluginMain`/NDJSON protocol):
+(the process SPI that already exists — `Plugin`/`PluginMain`/JSONL protocol):
 
 ```java
 public interface BuildPlugin {
@@ -317,7 +317,7 @@ special cases generalize (an APK descriptor would declare `execMode: device`).
   contributions apply in-engine. A table with no owning plugin is an error naming the
   known tables ("`[micronaut]` is not owned by any installed plugin — add it under
   `[plugins]`").
-- **Code hooks execute in the plugin process** over the existing spec-file/NDJSON
+- **Code hooks execute in the plugin process** over the existing spec-file/JSONL
   protocol (steps and packagers each get a spec: resolved input paths in, output paths +
   structured events out). The engine never classloads third-party code — same isolation
   and the same trust posture as today's plugins, plus the `jk trust` model for

@@ -2,7 +2,7 @@
 package cc.jumpkick.compile;
 
 import cc.jumpkick.engine.plugin.PluginClient;
-import cc.jumpkick.plugin.protocol.Ndjson;
+import cc.jumpkick.plugin.protocol.Jsonl;
 import cc.jumpkick.plugin.protocol.PluginProtocol;
 import cc.jumpkick.plugin.protocol.SpecWriter;
 import java.io.IOException;
@@ -19,13 +19,13 @@ import java.util.stream.Collectors;
  * Build Tools API in-process on jk's own runtime (the project JDK rides as -jdk-home).
  *
  * <p>The plugin is launched as {@code <javaHome>/bin/java -cp <workerClasspath>
- * cc.jumpkick.kotlin.compiler.KotlinCompiler @<spec>}. It streams NDJSON back on stdout (each
+ * cc.jumpkick.kotlin.compiler.KotlinCompiler @<spec>}. It streams JSONL back on stdout (each
  * line prefixed {@value #PROTOCOL_PREFIX}); we collect the diagnostics and the terminal result.
  * Replaces the former {@code <kotlin-home>/bin/kotlinc} subprocess.
  */
 public final class KotlincDriver {
 
-    /** Mirrors the plugin's {@code Ndjson.PREFIX}. */
+    /** Mirrors the plugin's {@code Jsonl.PREFIX}. */
     private static final String PROTOCOL_PREFIX = "##JKKC:";
 
     private static final String WORKER_MAIN = "cc.jumpkick.plugin.process.PluginMain";
@@ -79,8 +79,8 @@ public final class KotlincDriver {
             int exit = new PluginClient(PROTOCOL_PREFIX)
                     .on(
                             PluginProtocol.DIAGNOSTIC,
-                            json -> diagnostics.add(Ndjson.str(json, "sev") + ": " + Ndjson.str(json, "msg")))
-                    .on(PluginProtocol.RESULT, json -> status[0] = Ndjson.str(json, "status"))
+                            json -> diagnostics.add(Jsonl.str(json, "sev") + ": " + Jsonl.str(json, "msg")))
+                    .on(PluginProtocol.RESULT, json -> status[0] = Jsonl.str(json, "status"))
                     .passthrough(line -> {
                         if (chatter.size() >= 40) chatter.removeFirst();
                         chatter.addLast(line);
@@ -149,7 +149,7 @@ public final class KotlincDriver {
                 hostJavaHome.resolve("bin").resolve("java").toString(), 1, rest);
     }
 
-    /** Render the request into the unified NDJSON plugin spec. */
+    /** Render the request into the unified JSONL plugin spec. */
     private static Path writeSpec(KotlincRequest request) throws IOException {
         SpecWriter sw = new SpecWriter()
                 .op(PluginProtocol.OP_COMPILE, null, "jk-kotlin-compiler")

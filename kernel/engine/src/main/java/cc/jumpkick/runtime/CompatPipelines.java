@@ -4,7 +4,7 @@ package cc.jumpkick.runtime;
 import cc.jumpkick.cache.Cas;
 import cc.jumpkick.engine.plugin.PluginClient;
 import cc.jumpkick.engine.plugin.PluginJar;
-import cc.jumpkick.plugin.protocol.Ndjson;
+import cc.jumpkick.plugin.protocol.Jsonl;
 import cc.jumpkick.plugin.protocol.PluginProtocol;
 import cc.jumpkick.plugin.protocol.SpecWriter;
 import cc.jumpkick.run.Pipeline;
@@ -85,13 +85,13 @@ public final class CompatPipelines {
                         Files.write(spec, specWriter.lines(), StandardCharsets.UTF_8);
                         StringBuilder diag = new StringBuilder();
                         int exit = new PluginClient("##JKCMP:")
-                                .on(PluginProtocol.WROTE, json -> observer.onNote("wrote", Ndjson.str(json, "path")))
+                                .on(PluginProtocol.WROTE, json -> observer.onNote("wrote", Jsonl.str(json, "path")))
                                 .on(
                                         PluginProtocol.ERROR,
-                                        json -> ctx.put(ERROR, Ndjson.str(json, PluginProtocol.MESSAGE)))
+                                        json -> ctx.put(ERROR, Jsonl.str(json, PluginProtocol.MESSAGE)))
                                 .on(
                                         PluginProtocol.RESULT,
-                                        json -> ctx.put(WARNINGS, Ndjson.intValue(json, "warnings", 0)))
+                                        json -> ctx.put(WARNINGS, Jsonl.intValue(json, "warnings", 0)))
                                 .passthrough(ln -> diag.append(ln).append('\n'))
                                 .run(PluginLaunch.javaCommand(workerJar, spec));
                         ctx.put(EXIT, exit);
@@ -146,11 +146,11 @@ public final class CompatPipelines {
             StringBuilder diag = new StringBuilder();
             int exit = new PluginClient("##JKCMP:")
                     .on(PluginProtocol.RESULT, json -> {
-                        bin[0] = Ndjson.str(json, "bin");
-                        version[0] = Ndjson.str(json, "version");
-                        source[0] = Ndjson.str(json, "source");
+                        bin[0] = Jsonl.str(json, "bin");
+                        version[0] = Jsonl.str(json, "version");
+                        source[0] = Jsonl.str(json, "source");
                     })
-                    .on(PluginProtocol.ERROR, json -> error[0] = Ndjson.str(json, PluginProtocol.MESSAGE))
+                    .on(PluginProtocol.ERROR, json -> error[0] = Jsonl.str(json, PluginProtocol.MESSAGE))
                     .passthrough(ln -> diag.append(ln).append('\n'))
                     .run(PluginLaunch.javaCommand(workerJar, spec));
             return new Provision(

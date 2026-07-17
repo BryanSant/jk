@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.engine.plugin;
 
-import cc.jumpkick.plugin.protocol.Ndjson;
+import cc.jumpkick.plugin.protocol.Jsonl;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
@@ -10,7 +10,7 @@ import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
 /**
- * Host-side driver for a forked plugin. Launches the command, splits the plugin's NDJSON
+ * Host-side driver for a forked plugin. Launches the command, splits the plugin's JSONL
  * protocol stream ({@code ##PREFIX:{...}}) by its message-type discriminator, and dispatches each
  * typed message to a registered handler — collapsing the fork + read-loop + {@code switch (t)} that
  * every launch site used to hand-roll directly over {@link PluginProcess}.
@@ -24,7 +24,7 @@ import java.util.function.Consumer;
  * <pre>{@code
  * int exit = new PluginClient("##JKJC:")
  *         .on("diag",   json -> diagnostics.add(...))
- *         .on("result", json -> status[0] = Ndjson.str(json, "status"))
+ *         .on("result", json -> status[0] = Jsonl.str(json, "status"))
  *         .run(command);
  * }</pre>
  *
@@ -93,7 +93,7 @@ public final class PluginClient {
     }
 
     private void dispatch(String json) {
-        String t = Ndjson.str(json, typeKey);
+        String t = Jsonl.str(json, typeKey);
         Consumer<String> handler = t != null ? handlers.get(t) : null;
         if (handler != null) {
             handler.accept(json);

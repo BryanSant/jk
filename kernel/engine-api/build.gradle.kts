@@ -14,6 +14,6 @@ dependencies {
     implementation(project(":support"))
     // CachePruneScheduler consults JkCacheConfig (~/.jk/config.toml [cache]).
     api(project(":core"))
-    // EngineProtocol encodes/decodes with the shared Ndjson codec.
+    // EngineProtocol encodes/decodes with the shared Jsonl codec.
     api(project(":plugin-api"))
 }

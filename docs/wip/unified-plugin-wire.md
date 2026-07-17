@@ -1,19 +1,19 @@
 # Unified plugin wire protocol
 
 **Goal:** one engine↔plugin protocol for every forked plugin, replacing the 9 bespoke
-ones (build-plugin harness NDJSON + javac/kotlinc/test/audit/format/compat/publish/image
+ones (build-plugin harness JSONL + javac/kotlinc/test/audit/format/compat/publish/image
 hand-rolled specs). Breaking changes welcome; no backward compatibility. Correctness and a
 single, superset protocol are the objective. (CLI/client plugin support is out of scope.)
 
 ## Transport & envelope
 
-- A plugin is forked `java <Main> <spec-file>`. It reads an **NDJSON spec file** (one
-  `{"t":…}` object per line) and writes **NDJSON reply lines** to stdout, each prefixed with
+- A plugin is forked `java <Main> <spec-file>`. It reads an **JSONL spec file** (one
+  `{"t":…}` object per line) and writes **JSONL reply lines** to stdout, each prefixed with
   the plugin's `##JK<XX>:` marker. Per-plugin prefixes stay (stdout disambiguation) and are
   normalized to the `##JK<XX>:` shape — **test-runner `##JKT:` → `##JKT:`**.
 - **One discriminator: `t`** on every line (test-runner's `e` is converted to `t`).
 - Kill the two other spec encodings: KEY-value text (javac/kotlinc/audit/compat/publish/
-  image) and tab records (formatter). Everything is NDJSON.
+  image) and tab records (formatter). Everything is JSONL.
 - Terminal marker: every op ends with `{"t":"done","exit":<code>}`. A typed payload (image
   ref, compile status, …) rides a `{"t":"result",…}` line immediately before `done`.
 - Bidirectional (test pull-mode only): the plugin emits `{"t":"test","event":"ready"}` and
@@ -105,7 +105,7 @@ slsa,sbom,signGpg,signSigstore,objectStore*` (publish, with creds/passphrase as 
    Delete back-compat ctors (`StepDecl`, `Declarations`, `PackageIo.RuntimeEntry`).
 2. **Command/terminal plugins** (each its own verified commit): audit, format, compat, image,
    publish (image/publish = the correct redo of S6).
-3. **Compilers**: java-compiler, kotlin-compiler (NDJSON spec, structured diagnostics).
+3. **Compilers**: java-compiler, kotlin-compiler (JSONL spec, structured diagnostics).
 4. **Test-runner** (last, most care): `e`→`t`, prefix `##JKT:`, `test` event envelope, pull loop
    preserved.
 

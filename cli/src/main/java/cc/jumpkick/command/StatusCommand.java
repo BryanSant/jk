@@ -13,7 +13,7 @@ import cc.jumpkick.engine.protocol.EngineProtocol;
 import cc.jumpkick.model.command.CliCommand;
 import cc.jumpkick.model.command.Invocation;
 import cc.jumpkick.model.command.Opt;
-import cc.jumpkick.plugin.protocol.Ndjson;
+import cc.jumpkick.plugin.protocol.Jsonl;
 import java.nio.file.Path;
 import java.util.Comparator;
 import java.util.List;
@@ -85,7 +85,7 @@ public final class StatusCommand implements CliCommand {
                 CliOutput.out("  no builds recorded for this project yet");
             } else {
                 String coord = project.stream()
-                        .map(r -> Ndjson.str(r, "coord"))
+                        .map(r -> Jsonl.str(r, "coord"))
                         .filter(c -> c != null && !c.isBlank())
                         .findFirst()
                         .orElse(null);
@@ -103,7 +103,7 @@ public final class StatusCommand implements CliCommand {
     }
 
     private static List<String> scoped(List<String> rows, String scope) {
-        return rows.stream().filter(r -> scope.equals(Ndjson.str(r, "scope"))).toList();
+        return rows.stream().filter(r -> scope.equals(Jsonl.str(r, "scope"))).toList();
     }
 
     private static String header(String title, String detail) {
@@ -113,9 +113,9 @@ public final class StatusCommand implements CliCommand {
     /** One line per invocation kind: {@code builds:  42 ok · 3 failed   avg … min … max … total …}. */
     private static void printInvocations(List<String> rows) {
         rows.stream()
-                .sorted(Comparator.comparing(r -> String.valueOf(Ndjson.str(r, "kind"))))
+                .sorted(Comparator.comparing(r -> String.valueOf(Jsonl.str(r, "kind"))))
                 .forEach(r -> {
-                    String kind = Ndjson.str(r, "kind");
+                    String kind = Jsonl.str(r, "kind");
                     CliOutput.out(String.format(
                             "  %-8s %-28s %s", (kind == null ? "?" : kind) + "s:", outcomes(r), spread(r, "ok")));
                 });
@@ -124,9 +124,9 @@ public final class StatusCommand implements CliCommand {
     /** {@code 42 ok · 3 failed · 1 cancelled} — zero buckets are dropped. */
     private static String outcomes(String r) {
         StringBuilder b = new StringBuilder();
-        appendCount(b, Ndjson.longValue(r, "okCount", 0), "ok");
-        appendCount(b, Ndjson.longValue(r, "failCount", 0), "failed");
-        appendCount(b, Ndjson.longValue(r, "cancelledCount", 0), "cancelled");
+        appendCount(b, Jsonl.longValue(r, "okCount", 0), "ok");
+        appendCount(b, Jsonl.longValue(r, "failCount", 0), "failed");
+        appendCount(b, Jsonl.longValue(r, "cancelledCount", 0), "cancelled");
         return b.length() == 0 ? "0 runs" : b.toString();
     }
 
@@ -138,34 +138,34 @@ public final class StatusCommand implements CliCommand {
 
     /** {@code avg 2.1s  min 0.8s  max 14.0s  total 1m31s} for one stats prefix, or "" when empty. */
     private static String spread(String r, String prefix) {
-        if (Ndjson.longValue(r, prefix + "Count", 0) == 0) return "";
+        if (Jsonl.longValue(r, prefix + "Count", 0) == 0) return "";
         long avg = prefix.equals("ok")
-                ? Ndjson.longValue(r, "okAvgMillis", 0)
-                : Ndjson.longValue(r, prefix + "TotalMillis", 0)
-                        / Math.max(1, Ndjson.longValue(r, prefix + "Count", 1));
+                ? Jsonl.longValue(r, "okAvgMillis", 0)
+                : Jsonl.longValue(r, prefix + "TotalMillis", 0)
+                        / Math.max(1, Jsonl.longValue(r, prefix + "Count", 1));
         return "avg " + HistoryCommand.duration(avg)
-                + "  min " + HistoryCommand.duration(Ndjson.longValue(r, prefix + "MinMillis", -1))
-                + "  max " + HistoryCommand.duration(Ndjson.longValue(r, prefix + "MaxMillis", -1))
-                + "  total " + HistoryCommand.duration(Ndjson.longValue(r, prefix + "TotalMillis", -1));
+                + "  min " + HistoryCommand.duration(Jsonl.longValue(r, prefix + "MinMillis", -1))
+                + "  max " + HistoryCommand.duration(Jsonl.longValue(r, prefix + "MaxMillis", -1))
+                + "  total " + HistoryCommand.duration(Jsonl.longValue(r, prefix + "TotalMillis", -1));
     }
 
     /** The per-step table, biggest ok-total first; capped unless {@code --steps}. */
     private static void printSteps(List<String> rows, boolean all) {
         if (rows.isEmpty()) return;
         List<String> sorted = rows.stream()
-                .sorted(Comparator.comparingLong((String r) -> Ndjson.longValue(r, "okTotalMillis", 0))
+                .sorted(Comparator.comparingLong((String r) -> Jsonl.longValue(r, "okTotalMillis", 0))
                         .reversed())
                 .toList();
         int shown = all ? sorted.size() : Math.min(sorted.size(), DEFAULT_STEP_LIMIT);
         CliOutput.out("  steps (by total time):");
         for (int i = 0; i < shown; i++) {
             String r = sorted.get(i);
-            long ok = Ndjson.longValue(r, "okCount", 0);
-            long failed = Ndjson.longValue(r, "failCount", 0);
+            long ok = Jsonl.longValue(r, "okCount", 0);
+            long failed = Jsonl.longValue(r, "failCount", 0);
             String note = failed > 0 ? "  (" + failed + " failed)" : "";
             CliOutput.out(String.format(
                     "    %-18s %4d ok  %s%s",
-                    HistoryCommand.truncate(String.valueOf(Ndjson.str(r, "step")), 18), ok, spread(r, "ok"), note));
+                    HistoryCommand.truncate(String.valueOf(Jsonl.str(r, "step")), 18), ok, spread(r, "ok"), note));
         }
         if (shown < sorted.size()) {
             CliOutput.out(Theme.colorize(

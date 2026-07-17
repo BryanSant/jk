@@ -63,7 +63,7 @@ one place this plan disagrees with the sketch — see §2.)
 
 **R6 — Delegation is downward only; upward is replacement.**
 - A build pinned to an *older* jk: the daemon materializes that version and execs its
-  engine as a **child process over stdio** — the exact worker pattern (NDJSON,
+  engine as a **child process over stdio** — the exact worker pattern (JSONL,
   protocol-prefixed lines, one job per process, exits when done). No second daemon, no
   socket, no AOT warmup expectations.
 - A client (or pin) *newer* than the daemon: the daemon must not supervise semantics it
@@ -199,7 +199,7 @@ Windows named-pipe equivalent gated to a Windows CI lane. Kill-on-skew code dele
 |---|---|
 | Lock toolchain line: `jk = "<version>" sha256 = "<hex>"` written at lock time (grep-able, the wrapper's contract) | `LockfileWriter`/`LockfileReader`, `LockFlow` |
 | Pin comparison at request intake: pin == daemon → run; pin < daemon → delegate; pin > daemon → materialize + takeover (§3) | `EngineServer` request pre-flight |
-| Child-engine exec over stdio: `jk-engine … --job` one-shot mode (no socket, no daemonize, NDJSON on stdout — the `PluginClient`/`PluginMain` pattern verbatim); daemon streams child events to the client unchanged | `EngineMain` (job mode flag), new `EngineDelegate` in `kernel/engine` (drives the child via `PluginClient`) |
+| Child-engine exec over stdio: `jk-engine … --job` one-shot mode (no socket, no daemonize, JSONL on stdout — the `PluginClient`/`PluginMain` pattern verbatim); daemon streams child events to the client unchanged | `EngineMain` (job mode flag), new `EngineDelegate` in `kernel/engine` (drives the child via `PluginClient`) |
 | Child resolves ITS OWN worker set from its `manifest.toml` (never the daemon's) | `EngineDelegate` env/args |
 
 Acceptance: a project locked to an older materialized version builds through the newer

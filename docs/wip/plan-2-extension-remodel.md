@@ -3,7 +3,7 @@
 ## Context
 
 The plugin model accreted inconsistent vocabulary and conflates two distinct ideas.
-Today there is a `Plugin` SPI (forked worker, NDJSON) and a `BuildPlugin` sub-SPI
+Today there is a `Plugin` SPI (forked worker, JSONL) and a `BuildPlugin` sub-SPI
 (`register()` with step/packaging/command hooks), plus three *unrelated* in-engine
 seams — `GitBackend`, `JavaCompileStrategy`, `LocalToolProbe` — that are conceptually
 "engine extensions" but share no supertype, no discovery mechanism, and carry
@@ -14,8 +14,8 @@ sequence. We want a coherent model:
 - **`Extension`** — anything that extends the core engine; may run *in* the engine JVM.
   `GitBackend`, `JavaCompileStrategy`, `LocalToolProbe` are Extensions.
 - **`Plugin extends Extension`** — an Extension that runs *outside* the engine JVM (forked
-  worker, NDJSON, managed + sandboxed). The 12 worker plugins are Plugins. **Clients (CLI,
-  Web-UI) are not Extensions** even though they speak NDJSON (`InProcessEngine` stays a
+  worker, JSONL, managed + sandboxed). The 12 worker plugins are Plugins. **Clients (CLI,
+  Web-UI) are not Extensions** even though they speak JSONL (`InProcessEngine` stays a
   client↔engine seam, untouched).
 - **Phases form a flexible DAG**, not a line: `resolve → compile → test → package →
   (run | image | publish)`, with `image → publish` and shortcuts allowed (incremental
@@ -54,7 +54,7 @@ sequence. We want a coherent model:
 ```
 Extension                         (base: id() + declared Phase tag(s); may run in-engine)
  ├─ GitBackend, JavaCompileStrategy, LocalToolProbe   (in-engine; own methods; phase = tag)
- └─ Plugin extends Extension      (forked worker, NDJSON, managed + sandboxed)
+ └─ Plugin extends Extension      (forked worker, JSONL, managed + sandboxed)
       ├─ capability ifaces: ResolveExtension/BuildExtension/TestExtension/PackageExtension/
       │                     RunExtension/ImageExtension/PublishExtension
       │                     (behavioral method + rich phase context; the authoring SPI)
@@ -154,5 +154,5 @@ Phase DAG (defaults; flexible):  resolve → compile → test → package → {r
 - The flexible **phase DAG** (Stream 1) changes engine wiring; introduce default edges +
   target→phase resolution without removing the existing step-graph behavior, and verify
   `jk build/test/run` unchanged before adding `image`/`publish` targets.
-- Keep the `Plugin` NDJSON wire and `META-INF/services/build.jumpkick.plugin.Plugin` discovery
+- Keep the `Plugin` JSONL wire and `META-INF/services/build.jumpkick.plugin.Plugin` discovery
   intact (string-keyed; silent-failure risk) — validate via the plugin-build + third-party tests.

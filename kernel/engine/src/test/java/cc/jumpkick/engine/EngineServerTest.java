@@ -5,7 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import cc.jumpkick.config.JkEngineConfig;
 import cc.jumpkick.engine.protocol.EngineProtocol;
-import cc.jumpkick.plugin.protocol.Ndjson;
+import cc.jumpkick.plugin.protocol.Jsonl;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.IOException;
@@ -148,8 +148,8 @@ class EngineServerTest {
         try (Client c = new Client(EnginePaths.activeSocket(p))) {
             String ack = c.send(EngineProtocol.hello("9.9.9-test"));
             assertThat(EngineProtocol.typeOf(ack)).isEqualTo(EngineProtocol.HELLO_ACK);
-            assertThat(Ndjson.str(ack, "version")).isEqualTo("9.9.9-test");
-            assertThat(Ndjson.longValue(ack, "pid", -1))
+            assertThat(Jsonl.str(ack, "version")).isEqualTo("9.9.9-test");
+            assertThat(Jsonl.longValue(ack, "pid", -1))
                     .isEqualTo(ProcessHandle.current().pid());
 
             String pong = c.send(EngineProtocol.ping());
@@ -157,12 +157,12 @@ class EngineServerTest {
 
             String status = c.send(EngineProtocol.statusRequest());
             assertThat(EngineProtocol.typeOf(status)).isEqualTo(EngineProtocol.STATUS_ACK);
-            assertThat(Ndjson.intValue(status, "activeRequests", -1)).isEqualTo(1); // this very connection
+            assertThat(Jsonl.intValue(status, "activeRequests", -1)).isEqualTo(1); // this very connection
             // Memory usage is best-effort, but heap numbers always exist on a live JVM.
-            assertThat(Ndjson.longValue(status, "heapUsedBytes", -1)).isPositive();
-            assertThat(Ndjson.longValue(status, "heapCommittedBytes", -1))
-                    .isGreaterThanOrEqualTo(Ndjson.longValue(status, "heapUsedBytes", -1));
-            long rss = Ndjson.longValue(status, "rssBytes", -99);
+            assertThat(Jsonl.longValue(status, "heapUsedBytes", -1)).isPositive();
+            assertThat(Jsonl.longValue(status, "heapCommittedBytes", -1))
+                    .isGreaterThanOrEqualTo(Jsonl.longValue(status, "heapUsedBytes", -1));
+            long rss = Jsonl.longValue(status, "rssBytes", -99);
             assertThat(rss == -1 || rss > 0).isTrue(); // -1 only where the OS exposes no RSS
         }
         server.close();
@@ -193,13 +193,13 @@ class EngineServerTest {
         try (Client c = new Client(EnginePaths.activeSocket(p))) {
             c.send(EngineProtocol.hello("9.9.9-test"));
             String status = c.send(EngineProtocol.statusRequest());
-            assertThat(Ndjson.longValue(status, "aotTrainingPid", -99)).isEqualTo(trainer[0].pid());
+            assertThat(Jsonl.longValue(status, "aotTrainingPid", -99)).isEqualTo(trainer[0].pid());
 
             // Trainer exits (self-terminates in real life) → the pid leaves the status snapshot.
             trainer[0].destroy();
             waitUntil(Duration.ofSeconds(5), () -> {
                 try {
-                    return Ndjson.longValue(c.send(EngineProtocol.statusRequest()), "aotTrainingPid", -99) == -1;
+                    return Jsonl.longValue(c.send(EngineProtocol.statusRequest()), "aotTrainingPid", -99) == -1;
                 } catch (IOException e) {
                     return false;
                 }
@@ -247,23 +247,23 @@ class EngineServerTest {
                 rows.add(line);
             }
             assertThat(EngineProtocol.typeOf(line)).isEqualTo(EngineProtocol.METRICS_DONE);
-            assertThat(Ndjson.intValue(line, "count", -1)).isEqualTo(rows.size());
+            assertThat(Jsonl.intValue(line, "count", -1)).isEqualTo(rows.size());
             assertThat(rows).hasSize(5);
 
             String global = rows.stream()
-                    .filter(r -> "global".equals(Ndjson.str(r, "scope")))
+                    .filter(r -> "global".equals(Jsonl.str(r, "scope")))
                     .findFirst()
                     .orElseThrow();
-            assertThat(Ndjson.longValue(global, "okCount", -1)).isEqualTo(1);
-            assertThat(Ndjson.longValue(global, "failCount", -1)).isEqualTo(1); // the /proj/b failure
-            assertThat(Ndjson.longValue(global, "okAvgMillis", -1)).isEqualTo(1200);
+            assertThat(Jsonl.longValue(global, "okCount", -1)).isEqualTo(1);
+            assertThat(Jsonl.longValue(global, "failCount", -1)).isEqualTo(1); // the /proj/b failure
+            assertThat(Jsonl.longValue(global, "okAvgMillis", -1)).isEqualTo(1200);
 
             String failedProject = rows.stream()
-                    .filter(r -> "/proj/b".equals(Ndjson.str(r, "dir")))
+                    .filter(r -> "/proj/b".equals(Jsonl.str(r, "dir")))
                     .findFirst()
                     .orElseThrow();
-            assertThat(Ndjson.longValue(failedProject, "okCount", -1)).isZero();
-            assertThat(Ndjson.longValue(failedProject, "failTotalMillis", -1)).isEqualTo(400);
+            assertThat(Jsonl.longValue(failedProject, "okCount", -1)).isZero();
+            assertThat(Jsonl.longValue(failedProject, "failTotalMillis", -1)).isEqualTo(400);
 
             // Filtered: /proj/a's rows plus the always-included global tiers; /proj/b drops out.
             c.sendLine(EngineProtocol.metricsRequest("/proj/a"));
@@ -273,13 +273,13 @@ class EngineServerTest {
             }
             assertThat(EngineProtocol.typeOf(line)).isEqualTo(EngineProtocol.METRICS_DONE);
             assertThat(filtered).hasSize(4);
-            assertThat(filtered).noneMatch(r -> "/proj/b".equals(Ndjson.str(r, "dir")));
+            assertThat(filtered).noneMatch(r -> "/proj/b".equals(Jsonl.str(r, "dir")));
             String stepRow = filtered.stream()
-                    .filter(r -> "project/step".equals(Ndjson.str(r, "scope")))
+                    .filter(r -> "project/step".equals(Jsonl.str(r, "scope")))
                     .findFirst()
                     .orElseThrow();
-            assertThat(Ndjson.str(stepRow, "step")).isEqualTo("compile-java");
-            assertThat(Ndjson.longValue(stepRow, "okTotalMillis", -1)).isEqualTo(700);
+            assertThat(Jsonl.str(stepRow, "step")).isEqualTo("compile-java");
+            assertThat(Jsonl.longValue(stepRow, "okTotalMillis", -1)).isEqualTo(700);
         }
         server.close();
     }
@@ -349,7 +349,7 @@ class EngineServerTest {
                 // Typed refusal, then close: distinguishable from a crash.
                 String refusal = r.readLine();
                 assertThat(EngineProtocol.typeOf(refusal)).isEqualTo(EngineProtocol.ERROR);
-                assertThat(Ndjson.str(refusal, "code")).isEqualTo(EngineProtocol.ERR_AUTH);
+                assertThat(Jsonl.str(refusal, "code")).isEqualTo(EngineProtocol.ERR_AUTH);
                 assertThat(r.readLine()).isNull(); // and nothing was dispatched
             }
 
@@ -445,7 +445,7 @@ class EngineServerTest {
                     switch (type) {
                         case EngineProtocol.LOCK_MODULE -> lockModule = line;
                         case EngineProtocol.LOCK_PACKAGE ->
-                            sawLeafPackage |= "com.foo:leaf".equals(Ndjson.str(line, "name"));
+                            sawLeafPackage |= "com.foo:leaf".equals(Jsonl.str(line, "name"));
                         case EngineProtocol.PIPELINE_FINISH -> pipelineFinish = line;
                         case EngineProtocol.LOCK_FINISH -> lockFinish = line;
                         // Terminal too (a pre-pipeline failure): break instead of waiting forever for a
@@ -465,18 +465,18 @@ class EngineServerTest {
                     .as("engine reported a pre-pipeline error instead of hosting the lock")
                     .isNull();
             assertThat(lockModule).isNotNull();
-            assertThat(Ndjson.str(lockModule, "dir")).isEqualTo(project.toString());
-            assertThat(Ndjson.str(lockModule, "coord")).isEqualTo("com.example:app");
+            assertThat(Jsonl.str(lockModule, "dir")).isEqualTo(project.toString());
+            assertThat(Jsonl.str(lockModule, "coord")).isEqualTo("com.example:app");
             assertThat(types).contains(EngineProtocol.PLAN_STEP, EngineProtocol.PLAN_DONE);
             assertThat(sawLeafPackage).as("lock-package event for com.foo:leaf").isTrue();
 
             assertThat(pipelineFinish).isNotNull();
-            assertThat(Ndjson.bool(pipelineFinish, "success", false)).isTrue();
-            assertThat(Ndjson.longValue(pipelineFinish, "lockPackages", -1)).isEqualTo(3); // leaf + 2 junit defaults
+            assertThat(Jsonl.bool(pipelineFinish, "success", false)).isTrue();
+            assertThat(Jsonl.longValue(pipelineFinish, "lockPackages", -1)).isEqualTo(3); // leaf + 2 junit defaults
 
             assertThat(lockFinish).isNotNull();
-            assertThat(Ndjson.bool(lockFinish, "success", false)).isTrue();
-            assertThat(Ndjson.intValue(lockFinish, "exitCode", -1)).isEqualTo(0);
+            assertThat(Jsonl.bool(lockFinish, "success", false)).isTrue();
+            assertThat(Jsonl.intValue(lockFinish, "exitCode", -1)).isEqualTo(0);
 
             // The engine (not the client) wrote the lockfile.
             assertThat(Files.isRegularFile(project.resolve("jk.lock"))).isTrue();
@@ -574,13 +574,13 @@ class EngineServerTest {
             assertThat(finding)
                     .as("audit-finding event for the mock vulnerability")
                     .isNotNull();
-            assertThat(Ndjson.str(finding, "module")).isEqualTo("com.foo:leaf");
-            assertThat(Ndjson.str(finding, "version")).isEqualTo("1.0");
-            assertThat(Ndjson.str(finding, "vulnId")).isEqualTo("GHSA-test-1");
-            assertThat(Ndjson.str(finding, "summary")).isEqualTo("Stub vulnerability");
+            assertThat(Jsonl.str(finding, "module")).isEqualTo("com.foo:leaf");
+            assertThat(Jsonl.str(finding, "version")).isEqualTo("1.0");
+            assertThat(Jsonl.str(finding, "vulnId")).isEqualTo("GHSA-test-1");
+            assertThat(Jsonl.str(finding, "summary")).isEqualTo("Stub vulnerability");
 
             assertThat(pipelineFinish).isNotNull();
-            assertThat(Ndjson.bool(pipelineFinish, "success", false)).isTrue();
+            assertThat(Jsonl.bool(pipelineFinish, "success", false)).isTrue();
 
             server.close();
             serverThread.join(5_000);
@@ -730,7 +730,7 @@ class EngineServerTest {
                 .isNull();
         assertThat(types).contains(EngineProtocol.PLAN_STEP, EngineProtocol.PLAN_DONE);
         assertThat(pipelineFinish).isNotNull();
-        assertThat(Ndjson.bool(pipelineFinish, "success", false))
+        assertThat(Jsonl.bool(pipelineFinish, "success", false))
                 .as("hosted compile succeeded; diagnostics: " + diagnostics)
                 .isTrue();
         // The engine (not the client) ran the compile.
@@ -808,9 +808,9 @@ class EngineServerTest {
                     .isNull();
             assertThat(types).contains(EngineProtocol.PLAN_STEP, EngineProtocol.PLAN_DONE);
             assertThat(pipelineFinish).isNotNull();
-            assertThat(Ndjson.bool(pipelineFinish, "success", false)).isTrue();
-            assertThat(Ndjson.str(pipelineFinish, "toolMainClass")).isEqualTo("com.example.Main");
-            List<String> classpath = Ndjson.strArray(pipelineFinish, "toolClasspath");
+            assertThat(Jsonl.bool(pipelineFinish, "success", false)).isTrue();
+            assertThat(Jsonl.str(pipelineFinish, "toolMainClass")).isEqualTo("com.example.Main");
+            List<String> classpath = Jsonl.strArray(pipelineFinish, "toolClasspath");
             assertThat(classpath).hasSize(1);
             // The engine (not the client) fetched the jar — the classpath entry exists on disk.
             assertThat(Files.isRegularFile(Path.of(classpath.get(0)))).isTrue();
@@ -875,9 +875,9 @@ class EngineServerTest {
                 .isNull();
         assertThat(types).contains(EngineProtocol.PLAN_STEP, EngineProtocol.PLAN_DONE);
         assertThat(pipelineFinish).isNotNull();
-        assertThat(Ndjson.bool(pipelineFinish, "success", false)).isTrue();
-        assertThat(Ndjson.longValue(pipelineFinish, "cacheFiles", -1)).isEqualTo(2);
-        assertThat(Ndjson.longValue(pipelineFinish, "cacheBytes", -1)).isPositive();
+        assertThat(Jsonl.bool(pipelineFinish, "success", false)).isTrue();
+        assertThat(Jsonl.longValue(pipelineFinish, "cacheFiles", -1)).isEqualTo(2);
+        assertThat(Jsonl.longValue(pipelineFinish, "cacheBytes", -1)).isPositive();
         // The engine (not the client) swept the cache.
         assertThat(Files.exists(staleKey)).isFalse();
         assertThat(Files.exists(putTmp)).isFalse();
@@ -940,8 +940,8 @@ class EngineServerTest {
 
         assertThat(buildError).isNull();
         assertThat(pipelineFinish).isNotNull();
-        assertThat(Ndjson.bool(pipelineFinish, "success", false)).isTrue();
-        assertThat(Ndjson.longValue(pipelineFinish, "cacheFiles", -1)).isEqualTo(2); // record + pointer
+        assertThat(Jsonl.bool(pipelineFinish, "success", false)).isTrue();
+        assertThat(Jsonl.longValue(pipelineFinish, "cacheFiles", -1)).isEqualTo(2); // record + pointer
         assertThat(Files.exists(mine)).isFalse();
         assertThat(Files.exists(cache.resolve("actions/tasks/compile-main@" + tag)))
                 .isFalse();
@@ -1033,8 +1033,8 @@ class EngineServerTest {
 
         try (Client c = new Client(EnginePaths.activeSocket(p))) {
             String ack = c.send(EngineProtocol.statusRequest());
-            assertThat(Ndjson.str(ack, "httpUrl")).isEqualTo(url);
-            assertThat(Ndjson.str(ack, "httpError")).isNull();
+            assertThat(Jsonl.str(ack, "httpUrl")).isEqualTo(url);
+            assertThat(Jsonl.str(ack, "httpError")).isNull();
             assertThat(c.send(EngineProtocol.shutdown())).isNotNull(); // bye
         }
         serverThread.join(5_000);
@@ -1064,8 +1064,8 @@ class EngineServerTest {
                 assertThat(EngineProtocol.typeOf(c.send(EngineProtocol.ping()))).isEqualTo(EngineProtocol.PONG);
                 // ...and status reports the bind failure instead of a URL.
                 String ack = c.send(EngineProtocol.statusRequest());
-                assertThat(Ndjson.str(ack, "httpUrl")).isNull();
-                assertThat(Ndjson.str(ack, "httpError")).isNotEmpty();
+                assertThat(Jsonl.str(ack, "httpUrl")).isNull();
+                assertThat(Jsonl.str(ack, "httpError")).isNotEmpty();
             }
             assertThat(Files.exists(p.http())).isFalse(); // no URL file for a server that isn't up
             server.close();

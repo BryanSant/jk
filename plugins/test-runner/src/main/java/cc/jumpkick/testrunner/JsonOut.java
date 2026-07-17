@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.testrunner;
 
-import cc.jumpkick.plugin.protocol.Ndjson;
+import cc.jumpkick.plugin.protocol.Jsonl;
 import java.util.List;
 import java.util.Map;
 
@@ -64,7 +64,7 @@ final class JsonOut {
     private static void writeString(StringBuilder out, CharSequence cs) {
         // Shared codec: surrounding quotes + escaping (backspace/form-feed
         // normalise to unicode escapes rather than their own short forms).
-        out.append(Ndjson.quote(cs.toString()));
+        out.append(Jsonl.quote(cs.toString()));
     }
 
     /** Convenience for callers that want a finished String for a small object. */

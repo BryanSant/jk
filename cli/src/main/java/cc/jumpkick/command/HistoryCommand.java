@@ -11,13 +11,13 @@ import cc.jumpkick.model.command.GroupCommand;
 import cc.jumpkick.model.command.Invocation;
 import cc.jumpkick.model.command.Opt;
 import cc.jumpkick.model.command.Param;
-import cc.jumpkick.plugin.protocol.Ndjson;
+import cc.jumpkick.plugin.protocol.Jsonl;
 import java.util.List;
 
 /**
  * {@code jk history} — browse and prune the persisted build-history journal
  * ({@code ~/.jk/state/builds/journal/}). The journal is owned by the engine; these commands are thin
- * RPCs (spawning the engine if it isn't running), rendering the flat NDJSON the engine streams back.
+ * RPCs (spawning the engine if it isn't running), rendering the flat JSONL the engine streams back.
  */
 public final class HistoryCommand extends GroupCommand {
 
@@ -114,15 +114,15 @@ public final class HistoryCommand extends GroupCommand {
             }
             long now = System.currentTimeMillis();
             for (String e : entries) {
-                boolean success = Ndjson.bool(e, "success", false);
-                boolean cancelled = Ndjson.bool(e, "cancelled", false);
-                String id = Ndjson.str(e, "id");
-                String label = truncate(label(Ndjson.str(e, "coord"), Ndjson.str(e, "dir")), 34);
-                String kind = Ndjson.str(e, "kind");
-                long failed = Ndjson.longValue(e, "failedModules", 0);
+                boolean success = Jsonl.bool(e, "success", false);
+                boolean cancelled = Jsonl.bool(e, "cancelled", false);
+                String id = Jsonl.str(e, "id");
+                String label = truncate(label(Jsonl.str(e, "coord"), Jsonl.str(e, "dir")), 34);
+                String kind = Jsonl.str(e, "kind");
+                long failed = Jsonl.longValue(e, "failedModules", 0);
                 String note = failed > 0 ? "  (" + failed + " failed)" : "";
-                long savedMillis = Ndjson.longValue(e, "savedMillis", -1);
-                long estMillis = Ndjson.longValue(e, "estimatedUncachedMillis", -1);
+                long savedMillis = Jsonl.longValue(e, "savedMillis", -1);
+                long estMillis = Jsonl.longValue(e, "estimatedUncachedMillis", -1);
                 String saved = savedMillis >= 0 && estMillis > 0
                         ? "  saved " + duration(savedMillis) + " (" + pctString(savedMillis, estMillis) + ")"
                         : "";
@@ -132,8 +132,8 @@ public final class HistoryCommand extends GroupCommand {
                         id,
                         label,
                         kind == null ? "" : kind,
-                        duration(Ndjson.longValue(e, "millis", -1)),
-                        ago(Ndjson.longValue(e, "finishedAt", 0), now),
+                        duration(Jsonl.longValue(e, "millis", -1)),
+                        ago(Jsonl.longValue(e, "finishedAt", 0), now),
                         saved,
                         note));
             }
@@ -182,33 +182,33 @@ public final class HistoryCommand extends GroupCommand {
                 CliOutput.err("No such build: " + id);
                 return 1;
             }
-            boolean success = Ndjson.bool(record, "success", false);
-            boolean cancelled = Ndjson.bool(record, "cancelled", false);
-            CliOutput.out(glyph(success, cancelled) + " " + Ndjson.str(record, "id"));
+            boolean success = Jsonl.bool(record, "success", false);
+            boolean cancelled = Jsonl.bool(record, "cancelled", false);
+            CliOutput.out(glyph(success, cancelled) + " " + Jsonl.str(record, "id"));
             CliOutput.out("  status:   " + outcome(success, cancelled) + " (exit "
-                    + Ndjson.longValue(record, "exitCode", 0) + ")");
-            CliOutput.out("  kind:     " + Ndjson.str(record, "kind"));
-            CliOutput.out("  project:  " + label(Ndjson.str(record, "coord"), Ndjson.str(record, "dir")));
-            CliOutput.out("  dir:      " + Ndjson.str(record, "dir"));
-            CliOutput.out("  duration: " + duration(Ndjson.longValue(record, "millis", -1)) + "   "
-                    + ago(Ndjson.longValue(record, "finishedAt", 0), System.currentTimeMillis()));
-            long savedMillis = Ndjson.longValue(record, "savedMillis", -1);
-            long estMillis = Ndjson.longValue(record, "estimatedUncachedMillis", -1);
+                    + Jsonl.longValue(record, "exitCode", 0) + ")");
+            CliOutput.out("  kind:     " + Jsonl.str(record, "kind"));
+            CliOutput.out("  project:  " + label(Jsonl.str(record, "coord"), Jsonl.str(record, "dir")));
+            CliOutput.out("  dir:      " + Jsonl.str(record, "dir"));
+            CliOutput.out("  duration: " + duration(Jsonl.longValue(record, "millis", -1)) + "   "
+                    + ago(Jsonl.longValue(record, "finishedAt", 0), System.currentTimeMillis()));
+            long savedMillis = Jsonl.longValue(record, "savedMillis", -1);
+            long estMillis = Jsonl.longValue(record, "estimatedUncachedMillis", -1);
             if (savedMillis >= 0 && estMillis > 0) {
-                long totalSkips = Ndjson.longValue(record, "totalSkips", -1);
-                long coveredSkips = Ndjson.longValue(record, "coveredSkips", -1);
+                long totalSkips = Jsonl.longValue(record, "totalSkips", -1);
+                long coveredSkips = Jsonl.longValue(record, "coveredSkips", -1);
                 String cov = totalSkips > 0 ? "   coverage " + pctString(coveredSkips, totalSkips) : "";
                 CliOutput.out("  saved:    " + duration(savedMillis) + " (" + pctString(savedMillis, estMillis)
                         + " of ~" + duration(estMillis) + " uncached)" + cov);
             }
-            String jk = Ndjson.str(record, "jkVersion");
+            String jk = Jsonl.str(record, "jkVersion");
             if (jk != null) CliOutput.out("  jk:       " + jk);
-            long testsTotal = Ndjson.longValue(record, "testsTotal", -1);
+            long testsTotal = Jsonl.longValue(record, "testsTotal", -1);
             if (testsTotal >= 0) {
                 CliOutput.out("  tests:    " + testsTotal + " total, "
-                        + Ndjson.longValue(record, "testsSucceeded", 0) + " passed, "
-                        + Ndjson.longValue(record, "testsFailed", 0) + " failed, "
-                        + Ndjson.longValue(record, "testsSkipped", 0) + " skipped");
+                        + Jsonl.longValue(record, "testsSucceeded", 0) + " passed, "
+                        + Jsonl.longValue(record, "testsFailed", 0) + " failed, "
+                        + Jsonl.longValue(record, "testsSkipped", 0) + " skipped");
             }
 
             printRows(
@@ -216,25 +216,25 @@ public final class HistoryCommand extends GroupCommand {
                     EngineProtocol.HISTORY_MODULE,
                     "Modules",
                     m -> "  "
-                            + glyph(Ndjson.bool(m, "success", false), false) + " "
-                            + label(Ndjson.str(m, "coord"), Ndjson.str(m, "dir"))
-                            + "  " + duration(Ndjson.longValue(m, "millis", -1)));
+                            + glyph(Jsonl.bool(m, "success", false), false) + " "
+                            + label(Jsonl.str(m, "coord"), Jsonl.str(m, "dir"))
+                            + "  " + duration(Jsonl.longValue(m, "millis", -1)));
             printRows(
                     lines,
                     EngineProtocol.HISTORY_STEP,
                     "Steps",
                     p -> "  "
-                            + Ndjson.str(p, "status") + "  " + Ndjson.str(p, "name")
-                            + "  " + duration(Ndjson.longValue(p, "millis", -1)));
+                            + Jsonl.str(p, "status") + "  " + Jsonl.str(p, "name")
+                            + "  " + duration(Jsonl.longValue(p, "millis", -1)));
             printRows(lines, EngineProtocol.HISTORY_DIAG, "Diagnostics", d -> {
                 StringBuilder b = new StringBuilder("  [")
-                        .append(Ndjson.str(d, "severity"))
+                        .append(Jsonl.str(d, "severity"))
                         .append("] ");
-                appendIf(b, Ndjson.str(d, "step"), ": ");
-                appendIf(b, Ndjson.str(d, "test"), " — ");
-                String exc = Ndjson.str(d, "exceptionClass");
+                appendIf(b, Jsonl.str(d, "step"), ": ");
+                appendIf(b, Jsonl.str(d, "test"), " — ");
+                String exc = Jsonl.str(d, "exceptionClass");
                 if (exc != null && !exc.isBlank()) b.append('(').append(exc).append(") ");
-                String msg = Ndjson.str(d, "message");
+                String msg = Jsonl.str(d, "message");
                 return b.append(msg == null ? "" : msg).toString();
             });
             return success ? 0 : 1;

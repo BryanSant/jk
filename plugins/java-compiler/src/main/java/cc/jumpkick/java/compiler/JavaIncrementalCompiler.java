@@ -19,7 +19,7 @@ import javax.annotation.processing.Processor;
 /**
  * Child-JVM entry point that runs {@link InProcessJavac} under the project's JDK and streams the
  * result — diagnostics, annotation-processing provenance, and a terminal status — back to jk as
- * NDJSON ({@value #PREFIX}).
+ * JSONL ({@value #PREFIX}).
  *
  * <p>jk launches it as {@code <javaHome>/bin/java -cp <worker.jar>
  * cc.jumpkick.java.compiler.JavaIncrementalCompiler @<spec>}. Processors are discovered from the spec's
@@ -54,7 +54,7 @@ public final class JavaIncrementalCompiler implements Plugin {
         return compileSpec(Path.of(spec), out);
     }
 
-    /** Run a compile from {@code specFile}, emitting NDJSON to {@code out}; returns the exit code. */
+    /** Run a compile from {@code specFile}, emitting JSONL to {@code out}; returns the exit code. */
     static int compileSpec(Path specFile, ProtocolWriter out) throws Exception {
         PluginSpec spec = PluginSpec.read(specFile);
         List<Processor> processors = loadProcessors(spec.processorClasspath());

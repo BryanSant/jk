@@ -89,9 +89,9 @@ The engine owns the journal on disk; every reader goes through it.
   `DELETE /api/history?id=`. Reads are read-tier; DELETE always requires the bearer token (CSRF
   defense), even on loopback. See [`http.md`](http.md).
 - **CLI** — `jk history list` / `jk history show <id>` / `jk history rm <id>`. The thin CLI never
-  reads the journal directly; it always talks to the engine (spawning it if needed) over the NDJSON
+  reads the journal directly; it always talks to the engine (spawning it if needed) over the JSONL
   socket protocol (`HISTORY_LIST_REQUEST` / `HISTORY_SHOW_REQUEST` / `HISTORY_DELETE_REQUEST`), and
-  the engine replies with flat NDJSON lines the CLI renders with the `Ndjson` helpers it already has
+  the engine replies with flat JSONL lines the CLI renders with the `Jsonl` helpers it already has
   — no journal logic and no JSON parser added to the binary.
 
 ## Calibration move

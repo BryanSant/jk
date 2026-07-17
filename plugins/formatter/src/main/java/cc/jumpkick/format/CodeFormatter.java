@@ -63,7 +63,7 @@ import org.openrewrite.java.ShortenFullyQualifiedTypeReferences;
  *
  * <p>The formatter implementation jars (palantir-java-format, ktfmt) are resolved by jk and passed
  * in — the plugin serves them to Spotless via a classpath {@link Provisioner}, so nothing is
- * downloaded here. OpenRewrite's engine is bundled directly in this fat JAR. Emits one NDJSON
+ * downloaded here. OpenRewrite's engine is bundled directly in this fat JAR. Emits one JSONL
  * record per file plus a final summary, all prefixed with {@code ##JKFMT:}.
  */
 public final class CodeFormatter implements Plugin {

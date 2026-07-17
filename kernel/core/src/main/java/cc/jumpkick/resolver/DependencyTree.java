@@ -122,7 +122,7 @@ public final class DependencyTree {
         }
     }
 
-    /** Marker-tag delimiters for {@link Styling#markers()} — printable, so they survive Ndjson. */
+    /** Marker-tag delimiters for {@link Styling#markers()} — printable, so they survive Jsonl. */
     static final char MARK_OPEN = '\u27e6'; // ⟦
 
     static final char MARK_CLOSE = '\u27e7'; // ⟧

@@ -152,7 +152,7 @@ The north-star run then added (2026-07-12/13):
   detail, a 50-cell memory bar, and theme-consistent styling.
 - **Git in-process** — jk runs git via the git CLI when present, falling back to
   embedded JGit; the separate git-client worker plugin is gone.
-- **Protocol fix** — `Ndjson.strArray` no longer truncates elements containing `]`.
+- **Protocol fix** — `Jsonl.strArray` no longer truncates elements containing `]`.
 
 ## Known parked items
 

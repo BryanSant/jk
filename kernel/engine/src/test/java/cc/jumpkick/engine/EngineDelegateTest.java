@@ -5,7 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import cc.jumpkick.config.JkEngineConfig;
 import cc.jumpkick.engine.protocol.EngineProtocol;
-import cc.jumpkick.plugin.protocol.Ndjson;
+import cc.jumpkick.plugin.protocol.Jsonl;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.IOException;
@@ -124,7 +124,7 @@ class EngineDelegateTest {
             String line;
             while ((line = r.readLine()) != null) {
                 if (EngineProtocol.typeOf(line) != null && line.contains("\"message\"")) {
-                    return Ndjson.str(line, "message");
+                    return Jsonl.str(line, "message");
                 }
             }
             return "";

@@ -10,7 +10,7 @@ import cc.jumpkick.plugin.PluginConfig;
 import cc.jumpkick.plugin.manifest.PluginContributions;
 import cc.jumpkick.plugin.manifest.PluginDescriptor;
 import cc.jumpkick.plugin.manifest.PluginTableRegistry;
-import cc.jumpkick.plugin.protocol.Ndjson;
+import cc.jumpkick.plugin.protocol.Jsonl;
 import cc.jumpkick.util.Hashing;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -27,7 +27,7 @@ import java.util.Optional;
  * registered steps/packager over the {@code describe} protocol (file-cached per config+facts, so
  * fully-cached builds never fork), writes execution specs, and forks the plugin's jar per
  * step/package run. The engine never classloads plugin code — declarations and executions both
- * cross the spec-file/NDJSON plugin boundary.
+ * cross the spec-file/JSONL plugin boundary.
  *
  * <p>Static artifact shape ({@code [packaging]}) deliberately does NOT come through here — it is
  * manifest data, readable by run/install/image plan requests without any fork ({@link #shape}).
@@ -154,7 +154,7 @@ public final class PluginBuild {
             throws IOException, InterruptedException {
         String key = describeKey(active, project);
         Path cacheFile =
-                layoutTarget.resolve("plugin").resolve(active.manifest().id() + "-describe-" + key + ".ndjson");
+                layoutTarget.resolve("plugin").resolve(active.manifest().id() + "-describe-" + key + ".jsonl");
         List<String> lines;
         if (Files.isRegularFile(cacheFile)) {
             lines = Files.readAllLines(cacheFile, StandardCharsets.UTF_8);
@@ -163,7 +163,7 @@ public final class PluginBuild {
             try {
                 List<String> specLines = new ArrayList<>();
                 specLines.add("{\"t\":\"op\",\"op\":\"describe\",\"plugin\":"
-                        + Ndjson.quote(active.manifest().id()) + "}");
+                        + Jsonl.quote(active.manifest().id()) + "}");
                 appendConfig(specLines, active.config());
                 appendProject(specLines, project, project.mainClass());
                 Files.write(spec, specLines, StandardCharsets.UTF_8);
@@ -184,23 +184,23 @@ public final class PluginBuild {
         PackagerDecl packager = null;
         List<CommandDecl> commands = new ArrayList<>();
         for (String line : lines) {
-            switch (String.valueOf(Ndjson.str(line, "t"))) {
+            switch (String.valueOf(Jsonl.str(line, "t"))) {
                 case "step" ->
                     steps.add(new StepDecl(
-                            Ndjson.str(line, "name"),
-                            Ndjson.str(line, "after"),
-                            Ndjson.str(line, "before"),
-                            Ndjson.strArray(line, "inputs"),
-                            Ndjson.strArray(line, "outputs"),
-                            Ndjson.strArray(line, "contributesClasses"),
-                            Ndjson.strArray(line, "contributesResources"),
-                            Ndjson.strArray(line, "contributesSources"),
-                            Ndjson.strArray(line, "contributesTestClasspath"),
-                            Ndjson.str(line, "transformsClasses")));
+                            Jsonl.str(line, "name"),
+                            Jsonl.str(line, "after"),
+                            Jsonl.str(line, "before"),
+                            Jsonl.strArray(line, "inputs"),
+                            Jsonl.strArray(line, "outputs"),
+                            Jsonl.strArray(line, "contributesClasses"),
+                            Jsonl.strArray(line, "contributesResources"),
+                            Jsonl.strArray(line, "contributesSources"),
+                            Jsonl.strArray(line, "contributesTestClasspath"),
+                            Jsonl.str(line, "transformsClasses")));
                 case "packager" ->
-                    packager = new PackagerDecl(Ndjson.str(line, "name"), Ndjson.strArray(line, "inputs"));
+                    packager = new PackagerDecl(Jsonl.str(line, "name"), Jsonl.strArray(line, "inputs"));
                 case "command" ->
-                    commands.add(new CommandDecl(Ndjson.str(line, "name"), Ndjson.str(line, "description")));
+                    commands.add(new CommandDecl(Jsonl.str(line, "name"), Jsonl.str(line, "description")));
                 default -> {
                     // labels etc. — irrelevant to declarations
                 }
@@ -512,9 +512,9 @@ public final class PluginBuild {
         private final List<String> lines = new ArrayList<>();
 
         public SpecWriter op(String op, String step, String pluginId) {
-            StringBuilder b = new StringBuilder("{\"t\":\"op\",\"op\":").append(Ndjson.quote(op));
-            if (step != null) b.append(",\"step\":").append(Ndjson.quote(step));
-            b.append(",\"plugin\":").append(Ndjson.quote(pluginId)).append('}');
+            StringBuilder b = new StringBuilder("{\"t\":\"op\",\"op\":").append(Jsonl.quote(op));
+            if (step != null) b.append(",\"step\":").append(Jsonl.quote(step));
+            b.append(",\"plugin\":").append(Jsonl.quote(pluginId)).append('}');
             lines.add(b.toString());
             return this;
         }
@@ -530,27 +530,27 @@ public final class PluginBuild {
         }
 
         public SpecWriter layout(Path classesDir, Path moduleDir, Path scratch) {
-            lines.add("{\"t\":\"layout\",\"classesDir\":" + Ndjson.quote(String.valueOf(classesDir))
-                    + ",\"moduleDir\":" + Ndjson.quote(String.valueOf(moduleDir))
-                    + ",\"scratch\":" + Ndjson.quote(String.valueOf(scratch)) + "}");
+            lines.add("{\"t\":\"layout\",\"classesDir\":" + Jsonl.quote(String.valueOf(classesDir))
+                    + ",\"moduleDir\":" + Jsonl.quote(String.valueOf(moduleDir))
+                    + ",\"scratch\":" + Jsonl.quote(String.valueOf(scratch)) + "}");
             return this;
         }
 
         public SpecWriter javaHome(Path javaHome) {
-            lines.add("{\"t\":\"java-home\",\"path\":" + Ndjson.quote(javaHome.toString()) + "}");
+            lines.add("{\"t\":\"java-home\",\"path\":" + Jsonl.quote(javaHome.toString()) + "}");
             return this;
         }
 
         public SpecWriter artifact(Path path) {
             lines.add("{\"t\":\"artifact\",\"path\":"
-                    + Ndjson.quote(path.toAbsolutePath().toString()) + "}");
+                    + Jsonl.quote(path.toAbsolutePath().toString()) + "}");
             return this;
         }
 
         public SpecWriter classpath(List<Path> entries) {
             for (Path p : entries) {
                 lines.add("{\"t\":\"cp\",\"path\":"
-                        + Ndjson.quote(p.toAbsolutePath().toString()) + "}");
+                        + Jsonl.quote(p.toAbsolutePath().toString()) + "}");
             }
             return this;
         }
@@ -560,13 +560,13 @@ public final class PluginBuild {
         }
 
         public SpecWriter entry(String fileName, Path jar, boolean snapshot, Path container) {
-            StringBuilder b = new StringBuilder("{\"t\":\"entry\",\"file\":").append(Ndjson.quote(fileName));
+            StringBuilder b = new StringBuilder("{\"t\":\"entry\",\"file\":").append(Jsonl.quote(fileName));
             if (jar != null)
-                b.append(",\"path\":").append(Ndjson.quote(jar.toAbsolutePath().toString()));
+                b.append(",\"path\":").append(Jsonl.quote(jar.toAbsolutePath().toString()));
             b.append(",\"snapshot\":").append(snapshot);
             if (container != null) {
                 b.append(",\"container\":")
-                        .append(Ndjson.quote(container.toAbsolutePath().toString()));
+                        .append(Jsonl.quote(container.toAbsolutePath().toString()));
             }
             b.append('}');
             lines.add(b.toString());
@@ -574,8 +574,8 @@ public final class PluginBuild {
         }
 
         public SpecWriter stepOutput(String name, Path dir) {
-            lines.add("{\"t\":\"step-output\",\"name\":" + Ndjson.quote(name) + ",\"dir\":"
-                    + Ndjson.quote(dir.toAbsolutePath().toString()) + "}");
+            lines.add("{\"t\":\"step-output\",\"name\":" + Jsonl.quote(name) + ",\"dir\":"
+                    + Jsonl.quote(dir.toAbsolutePath().toString()) + "}");
             return this;
         }
 
@@ -583,7 +583,7 @@ public final class PluginBuild {
             StringBuilder arr = new StringBuilder("[");
             for (int i = 0; i < args.size(); i++) {
                 if (i > 0) arr.append(',');
-                arr.append(Ndjson.quote(args.get(i)));
+                arr.append(Jsonl.quote(args.get(i)));
             }
             arr.append(']');
             lines.add("{\"t\":\"command-args\",\"values\":" + arr + "}");
@@ -595,13 +595,13 @@ public final class PluginBuild {
          * specs, never action-key plaintext (the key carries a digest), never echoed by plugins.
          */
         public SpecWriter secret(String key, String value) {
-            lines.add("{\"t\":\"secret\",\"key\":" + Ndjson.quote(key) + ",\"value\":" + Ndjson.quote(value) + "}");
+            lines.add("{\"t\":\"secret\",\"key\":" + Jsonl.quote(key) + ",\"value\":" + Jsonl.quote(value) + "}");
             return this;
         }
 
         public SpecWriter extra(String name, Path path) {
-            lines.add("{\"t\":\"extra\",\"name\":" + Ndjson.quote(name) + ",\"path\":"
-                    + Ndjson.quote(path.toAbsolutePath().toString()) + "}");
+            lines.add("{\"t\":\"extra\",\"name\":" + Jsonl.quote(name) + ",\"path\":"
+                    + Jsonl.quote(path.toAbsolutePath().toString()) + "}");
             return this;
         }
 
@@ -655,10 +655,10 @@ public final class PluginBuild {
     private static void appendConfig(List<String> lines, PluginConfig config) {
         for (Map.Entry<String, Object> e : config.values().entrySet()) {
             Object v = e.getValue();
-            String key = Ndjson.quote(e.getKey());
+            String key = Jsonl.quote(e.getKey());
             if (v instanceof String s) {
                 lines.add(
-                        "{\"t\":\"config\",\"key\":" + key + ",\"kind\":\"string\",\"value\":" + Ndjson.quote(s) + "}");
+                        "{\"t\":\"config\",\"key\":" + key + ",\"kind\":\"string\",\"value\":" + Jsonl.quote(s) + "}");
             } else if (v instanceof Boolean b) {
                 lines.add("{\"t\":\"config\",\"key\":" + key + ",\"kind\":\"bool\",\"value\":" + b + "}");
             } else if (v instanceof Long l) {
@@ -667,7 +667,7 @@ public final class PluginBuild {
                 StringBuilder arr = new StringBuilder("[");
                 for (int i = 0; i < list.size(); i++) {
                     if (i > 0) arr.append(',');
-                    arr.append(Ndjson.quote(String.valueOf(list.get(i))));
+                    arr.append(Jsonl.quote(String.valueOf(list.get(i))));
                 }
                 arr.append(']');
                 lines.add("{\"t\":\"config\",\"key\":" + key + ",\"kind\":\"list\",\"values\":" + arr + "}");
@@ -677,11 +677,11 @@ public final class PluginBuild {
 
     private static void appendProject(List<String> lines, JkBuild project, String resolvedMain) {
         StringBuilder b = new StringBuilder("{\"t\":\"project\",\"group\":")
-                .append(Ndjson.quote(project.project().group()))
+                .append(Jsonl.quote(project.project().group()))
                 .append(",\"name\":")
-                .append(Ndjson.quote(project.project().name()))
+                .append(Jsonl.quote(project.project().name()))
                 .append(",\"version\":")
-                .append(Ndjson.quote(project.project().version()))
+                .append(Jsonl.quote(project.project().version()))
                 .append(",\"javaRelease\":")
                 .append(project.project().javaRelease())
                 .append(",\"nativeDeclared\":")
@@ -689,13 +689,13 @@ public final class PluginBuild {
                 .append(",\"kotlin\":")
                 .append(project.project().isKotlin());
         if (resolvedMain != null && !resolvedMain.isBlank()) {
-            b.append(",\"mainClass\":").append(Ndjson.quote(resolvedMain));
+            b.append(",\"mainClass\":").append(Jsonl.quote(resolvedMain));
         }
         b.append('}');
         lines.add(b.toString());
         for (Map.Entry<String, String> e : project.manifest().entrySet()) {
-            lines.add("{\"t\":\"manifest-attr\",\"key\":" + Ndjson.quote(e.getKey()) + ",\"value\":"
-                    + Ndjson.quote(e.getValue()) + "}");
+            lines.add("{\"t\":\"manifest-attr\",\"key\":" + Jsonl.quote(e.getKey()) + ",\"value\":"
+                    + Jsonl.quote(e.getValue()) + "}");
         }
     }
 
@@ -711,9 +711,9 @@ public final class PluginBuild {
         String[] error = new String[1];
         PluginClient client = new PluginClient(active.manifest().code().protocolPrefix())
                 .on("label", line -> {
-                    if (onLabel != null) onLabel.accept(Ndjson.str(line, "text"));
+                    if (onLabel != null) onLabel.accept(Jsonl.str(line, "text"));
                 })
-                .on("error", line -> error[0] = Ndjson.str(line, "message"))
+                .on("error", line -> error[0] = Jsonl.str(line, "message"))
                 .onOther(collected::add);
         int exit = client.run(PluginLaunch.javaCommand(jar, spec));
         if (error[0] != null) {

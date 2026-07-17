@@ -11,69 +11,69 @@ import java.time.Duration;
 
 /**
  * Emit one JSON object per event to stdout. Triggered by {@code --output json}; consumed by CI
- * scripts, log aggregators, and other tooling. Wire format is defined by {@link NdjsonShape}.
+ * scripts, log aggregators, and other tooling. Wire format is defined by {@link JsonlShape}.
  */
-public final class NdjsonListener implements PipelineListener {
+public final class JsonlListener implements PipelineListener {
 
     private final PrintStream out;
 
-    public NdjsonListener(PrintStream out) {
+    public JsonlListener(PrintStream out) {
         this.out = out;
     }
 
     @Override
     public void pipelineStart(PipelineView v) {
-        emit(NdjsonShape.pipelineStart(v));
+        emit(JsonlShape.pipelineStart(v));
     }
 
     @Override
     public void stepStart(String step, Phase phase, int ticks) {
-        emit(NdjsonShape.stepStart(step, phase == null ? "" : phase.wireName(), ticks));
+        emit(JsonlShape.stepStart(step, phase == null ? "" : phase.wireName(), ticks));
     }
 
     @Override
     public void progress(String step, int delta, PipelineView v) {
-        emit(NdjsonShape.progress(step, delta, v));
+        emit(JsonlShape.progress(step, delta, v));
     }
 
     @Override
     public void tickUpdate(String step, int delta, PipelineView v) {
-        emit(NdjsonShape.tickUpdate(step, delta, v));
+        emit(JsonlShape.tickUpdate(step, delta, v));
     }
 
     @Override
     public void label(String step, String label) {
-        emit(NdjsonShape.label(step, label));
+        emit(JsonlShape.label(step, label));
     }
 
     @Override
     public void output(String step, String line) {
-        emit(NdjsonShape.output(step, line));
+        emit(JsonlShape.output(step, line));
     }
 
     @Override
     public void warn(String step, String code, String msg) {
-        emit(NdjsonShape.warn(step, code, msg));
+        emit(JsonlShape.warn(step, code, msg));
     }
 
     @Override
     public void error(String step, String code, String msg) {
-        emit(NdjsonShape.error(step, code, msg));
+        emit(JsonlShape.error(step, code, msg));
     }
 
     @Override
     public void error(String step, String code, String msg, String test, String exClass) {
-        emit(NdjsonShape.error(step, code, msg, test, exClass));
+        emit(JsonlShape.error(step, code, msg, test, exClass));
     }
 
     @Override
     public void stepFinish(String step, Phase phase, StepStatus s, Duration d) {
-        emit(NdjsonShape.stepFinish(step, phase == null ? "" : phase.wireName(), s, d));
+        emit(JsonlShape.stepFinish(step, phase == null ? "" : phase.wireName(), s, d));
     }
 
     @Override
     public void pipelineFinish(PipelineResult r) {
-        emit(NdjsonShape.pipelineFinish(r));
+        emit(JsonlShape.pipelineFinish(r));
     }
 
     private void emit(String line) {

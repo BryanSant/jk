@@ -99,7 +99,7 @@ in-process via `javax.tools.ToolProvider.getSystemJavaCompiler()` /
 reuses the now-proven plugin infrastructure:
 
 - Module `:java-compiler`, `compileOnly` nothing exotic (javac is in the JDK);
-  manifest `Main-Class`, a line-oriented spec, `##JKJC:` NDJSON back to jk.
+  manifest `Main-Class`, a line-oriented spec, `##JKJC:` JSONL back to jk.
 - Located via **CAS-by-SHA** with a `-Djk.java.plugin.jar` override
   (`JkPluginSync` already syncs from `~/.m2` after `publishToMavenLocal`; add the
   third artifact). `installLocalCas` for the dev loop.
@@ -275,13 +275,13 @@ in-tree example of a processor whose handling we must get right.
      generated-file → originating-source provenance (resolved via `Trees`).
      Validated with a real processor. The hard, novel core.
    - **Slice 2 — DONE.** `JavaCompilerWorker` (main + line-oriented spec +
-     `##JKJC:` NDJSON: diagnostics / provenance / result), ServiceLoader-discovering
+     `##JKJC:` JSONL: diagnostics / provenance / result), ServiceLoader-discovering
      processors from the processor path. Packaged like the other plugins
      (`maven-publish` `cc.jumpkick:jk-java-compiler`, `installLocalCas`, runtime
      `writeJavaWorkerSha`, `JkPluginSync` 3rd entry, `JavaWorkerSetup` locator —
      no impl closure needed). `jk sync` pulls it from `~/.m2`.
    - **Slice 3a — DONE.** `ForkedJavac` launcher (engine): runs the plugin
-     subprocess, parses the `##JKJC:` NDJSON into `(success, diagnostics,
+     subprocess, parses the `##JKJC:` JSONL into `(success, diagnostics,
      generated→originating)`. Validated end-to-end against the real plugin jar.
    - **Slice 3b — ENGINE CORE DONE.** `JavaIncrementalCompile` integration. A
      private `Compiler` seam routes javac (subprocess vs `ForkedJavac`), selected by

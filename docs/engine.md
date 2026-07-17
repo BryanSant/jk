@@ -259,7 +259,7 @@ didn't just spawn itself.)
   `workspace-finish` or `build-error`. A variable-length collection (the module plan, a pipeline's
   accumulated diagnostics) is always a burst of repeated single-item messages plus a terminal marker
   (`plan-module`+`plan-step`+`plan-done`, `pipeline-diagnostic`*+`pipeline-finish`) rather than one message
-  with a nested JSON array — the hand-rolled codec (`EngineProtocol`, mirroring `Ndjson`) only reads
+  with a nested JSON array — the hand-rolled codec (`EngineProtocol`, mirroring `Jsonl`) only reads
   flat scalar fields and string arrays, deliberately, to stay dependency-free. See
   `EngineProtocol`/`EngineServer`/`EngineBuildListenerAdapter` for the exact, current vocabulary —
   it's internal and expected to keep changing (see above), so this doc doesn't enumerate every type.

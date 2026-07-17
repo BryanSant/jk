@@ -2,7 +2,7 @@
 package cc.jumpkick.compile;
 
 import cc.jumpkick.jdk.HostPlatform;
-import cc.jumpkick.plugin.protocol.Ndjson;
+import cc.jumpkick.plugin.protocol.Jsonl;
 import cc.jumpkick.plugin.protocol.PluginProtocol;
 import cc.jumpkick.plugin.protocol.SpecWriter;
 import java.io.IOException;
@@ -24,7 +24,7 @@ import java.util.TreeSet;
  * annotation-processor incrementality.
  *
  * <p>Launched as {@code <javaHome>/bin/java -cp <workerJar>
- * cc.jumpkick.java.compiler.JavaIncrementalCompiler @<spec>}; the plugin streams {@value #PREFIX} NDJSON
+ * cc.jumpkick.java.compiler.JavaIncrementalCompiler @<spec>}; the plugin streams {@value #PREFIX} JSONL
  * back on stdout. Mirrors {@link KotlincDriver}.
  */
 public final class ForkedJavac {
@@ -87,23 +87,23 @@ public final class ForkedJavac {
                     List.of("@" + spec.toAbsolutePath()));
             int exit = new cc.jumpkick.engine.plugin.PluginClient(PREFIX)
                     .on(PluginProtocol.DIAGNOSTIC, json -> {
-                        String file = Ndjson.str(json, "file");
+                        String file = Jsonl.str(json, "file");
                         diagnostics.add(new CompileResult.Diagnostic(
-                                CompileResult.Severity.fromName(Ndjson.str(json, "sev")),
+                                CompileResult.Severity.fromName(Jsonl.str(json, "sev")),
                                 file == null ? null : Path.of(file),
-                                Ndjson.longValue(json, "line", 0),
-                                Ndjson.longValue(json, "col", 0),
-                                Ndjson.str(json, "msg")));
+                                Jsonl.longValue(json, "line", 0),
+                                Jsonl.longValue(json, "col", 0),
+                                Jsonl.str(json, "msg")));
                     })
                     .on(PluginProtocol.PROVENANCE, json -> {
-                        String genStr = Ndjson.str(json, "gen");
+                        String genStr = Jsonl.str(json, "gen");
                         if (genStr == null) return;
                         Path gen = Path.of(genStr);
                         Set<Path> origins = new TreeSet<>();
-                        for (String s : Ndjson.strArray(json, "src")) origins.add(Path.of(s));
+                        for (String s : Jsonl.strArray(json, "src")) origins.add(Path.of(s));
                         generated.put(gen, origins);
                     })
-                    .on(PluginProtocol.RESULT, json -> status[0] = Ndjson.str(json, "status"))
+                    .on(PluginProtocol.RESULT, json -> status[0] = Jsonl.str(json, "status"))
                     .run(command);
             boolean success = exit == 0 && "OK".equals(status[0]);
             return new Result(success, diagnostics, generated);

@@ -14,7 +14,7 @@ import cc.jumpkick.model.command.CliCommand;
 import cc.jumpkick.model.command.Exit;
 import cc.jumpkick.model.command.Invocation;
 import cc.jumpkick.model.command.Opt;
-import cc.jumpkick.plugin.protocol.Ndjson;
+import cc.jumpkick.plugin.protocol.Jsonl;
 import java.util.List;
 import java.util.Optional;
 
@@ -62,7 +62,7 @@ public final class EngineStatusCommand implements CliCommand {
         if (global.outputIsJson()) {
             CliOutput.out("{\"running\":true"
                     + ",\"pid\":" + s.pid()
-                    + ",\"version\":" + Ndjson.quote(s.version())
+                    + ",\"version\":" + Jsonl.quote(s.version())
                     + ",\"startedAt\":" + s.startedAtMillis()
                     + ",\"uptimeSeconds\":" + uptimeSeconds
                     + ",\"activeRequests\":" + s.activeRequests()
@@ -71,8 +71,8 @@ public final class EngineStatusCommand implements CliCommand {
                     + ",\"heapMaxBytes\":" + s.heapMaxBytes()
                     + ",\"rssBytes\":" + s.rssBytes()
                     + ",\"aotTrainingPid\":" + s.aotTrainingPid()
-                    + ",\"httpUrl\":" + (s.httpUrl() != null ? Ndjson.quote(s.httpUrl()) : "null")
-                    + ",\"httpError\":" + (s.httpError() != null ? Ndjson.quote(s.httpError()) : "null")
+                    + ",\"httpUrl\":" + (s.httpUrl() != null ? Jsonl.quote(s.httpUrl()) : "null")
+                    + ",\"httpError\":" + (s.httpError() != null ? Jsonl.quote(s.httpError()) : "null")
                     + "}");
             return Exit.SUCCESS;
         }

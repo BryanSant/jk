@@ -15,7 +15,7 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * The parsed engine→plugin spec: one NDJSON reader for every plugin, replacing the per-plugin
+ * The parsed engine→plugin spec: one JSONL reader for every plugin, replacing the per-plugin
  * KEY-value/tab parsers. It decodes the {@link PluginProtocol} spec vocabulary into typed
  * accessors; each op reads only the fields it declared. Unknown line types and config kinds are
  * ignored (forward-compat).
@@ -55,51 +55,51 @@ public final class PluginSpec {
         boolean nativeDeclared = false, kotlin = false;
         for (String line : Files.readAllLines(file, StandardCharsets.UTF_8)) {
             if (line.isBlank()) continue;
-            switch (String.valueOf(Ndjson.str(line, PluginProtocol.T))) {
+            switch (String.valueOf(Jsonl.str(line, PluginProtocol.T))) {
                 case PluginProtocol.OP -> {
-                    s.op = String.valueOf(Ndjson.str(line, PluginProtocol.OP_NAME));
-                    s.name = Ndjson.str(line, PluginProtocol.NAME);
-                    s.pluginId = String.valueOf(Ndjson.str(line, PluginProtocol.PLUGIN));
+                    s.op = String.valueOf(Jsonl.str(line, PluginProtocol.OP_NAME));
+                    s.name = Jsonl.str(line, PluginProtocol.NAME);
+                    s.pluginId = String.valueOf(Jsonl.str(line, PluginProtocol.PLUGIN));
                 }
                 case PluginProtocol.CONFIG -> {
-                    String key = Ndjson.str(line, PluginProtocol.KEY);
-                    switch (String.valueOf(Ndjson.str(line, PluginProtocol.CONFIG_KIND))) {
-                        case PluginProtocol.KIND_STRING -> s.config.put(key, Ndjson.str(line, PluginProtocol.VALUE));
+                    String key = Jsonl.str(line, PluginProtocol.KEY);
+                    switch (String.valueOf(Jsonl.str(line, PluginProtocol.CONFIG_KIND))) {
+                        case PluginProtocol.KIND_STRING -> s.config.put(key, Jsonl.str(line, PluginProtocol.VALUE));
                         case PluginProtocol.KIND_BOOL ->
-                            s.config.put(key, Ndjson.bool(line, PluginProtocol.VALUE, false));
+                            s.config.put(key, Jsonl.bool(line, PluginProtocol.VALUE, false));
                         case PluginProtocol.KIND_INT ->
-                            s.config.put(key, Ndjson.longValue(line, PluginProtocol.VALUE, 0));
+                            s.config.put(key, Jsonl.longValue(line, PluginProtocol.VALUE, 0));
                         case PluginProtocol.KIND_LIST ->
-                            s.config.put(key, Ndjson.strArray(line, PluginProtocol.VALUES));
+                            s.config.put(key, Jsonl.strArray(line, PluginProtocol.VALUES));
                         default -> {
                             // unknown kind — forward-compat
                         }
                     }
                 }
                 case PluginProtocol.PROJECT -> {
-                    group = String.valueOf(Ndjson.str(line, "group"));
-                    pname = String.valueOf(Ndjson.str(line, "name"));
-                    version = String.valueOf(Ndjson.str(line, "version"));
-                    javaRelease = Ndjson.intValue(line, "javaRelease", 0);
-                    mainClass = Ndjson.str(line, "mainClass");
-                    nativeDeclared = Ndjson.bool(line, "nativeDeclared", false);
-                    kotlin = Ndjson.bool(line, "kotlin", false);
+                    group = String.valueOf(Jsonl.str(line, "group"));
+                    pname = String.valueOf(Jsonl.str(line, "name"));
+                    version = String.valueOf(Jsonl.str(line, "version"));
+                    javaRelease = Jsonl.intValue(line, "javaRelease", 0);
+                    mainClass = Jsonl.str(line, "mainClass");
+                    nativeDeclared = Jsonl.bool(line, "nativeDeclared", false);
+                    kotlin = Jsonl.bool(line, "kotlin", false);
                 }
                 case PluginProtocol.MANIFEST_ATTR ->
-                    s.manifest.put(Ndjson.str(line, PluginProtocol.KEY), Ndjson.str(line, PluginProtocol.VALUE));
+                    s.manifest.put(Jsonl.str(line, PluginProtocol.KEY), Jsonl.str(line, PluginProtocol.VALUE));
                 case PluginProtocol.LAYOUT -> {
-                    s.classesDir = path(Ndjson.str(line, "classesDir"));
-                    s.sourceOutput = path(Ndjson.str(line, "sourceOutput"));
-                    s.moduleDir = path(Ndjson.str(line, "moduleDir"));
-                    s.scratch = path(Ndjson.str(line, "scratch"));
-                    s.workdir = path(Ndjson.str(line, "workdir"));
-                    s.snapshotDir = path(Ndjson.str(line, "snapshotDir"));
+                    s.classesDir = path(Jsonl.str(line, "classesDir"));
+                    s.sourceOutput = path(Jsonl.str(line, "sourceOutput"));
+                    s.moduleDir = path(Jsonl.str(line, "moduleDir"));
+                    s.scratch = path(Jsonl.str(line, "scratch"));
+                    s.workdir = path(Jsonl.str(line, "workdir"));
+                    s.snapshotDir = path(Jsonl.str(line, "snapshotDir"));
                 }
-                case PluginProtocol.JAVA_HOME -> s.javaHome = path(Ndjson.str(line, PluginProtocol.PATH));
-                case PluginProtocol.ARTIFACT -> s.artifactPath = path(Ndjson.str(line, PluginProtocol.PATH));
+                case PluginProtocol.JAVA_HOME -> s.javaHome = path(Jsonl.str(line, PluginProtocol.PATH));
+                case PluginProtocol.ARTIFACT -> s.artifactPath = path(Jsonl.str(line, PluginProtocol.PATH));
                 case PluginProtocol.CP -> {
-                    Path p = path(Ndjson.str(line, PluginProtocol.PATH));
-                    switch (String.valueOf(Ndjson.str(line, PluginProtocol.ROLE))) {
+                    Path p = path(Jsonl.str(line, PluginProtocol.PATH));
+                    switch (String.valueOf(Jsonl.str(line, PluginProtocol.ROLE))) {
                         case PluginProtocol.ROLE_PROCESSOR -> s.processorClasspath.add(p);
                         case PluginProtocol.ROLE_FRIEND -> s.friendPaths.add(p);
                         case PluginProtocol.ROLE_RUNTIME -> s.runtimeClasspath.add(p);
@@ -107,34 +107,34 @@ public final class PluginSpec {
                     }
                 }
                 case PluginProtocol.ENTRY -> {
-                    String jar = Ndjson.str(line, PluginProtocol.PATH);
-                    String container = Ndjson.str(line, PluginProtocol.CONTAINER);
+                    String jar = Jsonl.str(line, PluginProtocol.PATH);
+                    String container = Jsonl.str(line, PluginProtocol.CONTAINER);
                     s.entries.add(new PackageIo.RuntimeEntry(
-                            String.valueOf(Ndjson.str(line, PluginProtocol.FILE_NAME)),
+                            String.valueOf(Jsonl.str(line, PluginProtocol.FILE_NAME)),
                             jar == null ? null : Path.of(jar),
-                            Ndjson.bool(line, PluginProtocol.SNAPSHOT, false),
+                            Jsonl.bool(line, PluginProtocol.SNAPSHOT, false),
                             container == null ? null : Path.of(container)));
                 }
-                case PluginProtocol.SOURCE -> s.sources.add(path(Ndjson.str(line, PluginProtocol.PATH)));
-                case PluginProtocol.ARG -> s.args.add(Ndjson.str(line, PluginProtocol.VALUE));
+                case PluginProtocol.SOURCE -> s.sources.add(path(Jsonl.str(line, PluginProtocol.PATH)));
+                case PluginProtocol.ARG -> s.args.add(Jsonl.str(line, PluginProtocol.VALUE));
                 case PluginProtocol.COMPILER_PLUGIN ->
                     s.compilerPlugins.add(new CompilerPlugin(
-                            Ndjson.str(line, "id"),
-                            path(Ndjson.str(line, PluginProtocol.PATH)),
-                            Ndjson.strArray(line, "options")));
+                            Jsonl.str(line, "id"),
+                            path(Jsonl.str(line, PluginProtocol.PATH)),
+                            Jsonl.strArray(line, "options")));
                 case PluginProtocol.STEP_OUTPUT ->
                     s.stepOutputs.put(
-                            String.valueOf(Ndjson.str(line, PluginProtocol.NAME)),
-                            path(Ndjson.str(line, PluginProtocol.DIR)));
+                            String.valueOf(Jsonl.str(line, PluginProtocol.NAME)),
+                            path(Jsonl.str(line, PluginProtocol.DIR)));
                 case PluginProtocol.EXTRA ->
                     s.extras.put(
-                            String.valueOf(Ndjson.str(line, PluginProtocol.NAME)),
-                            path(Ndjson.str(line, PluginProtocol.PATH)));
+                            String.valueOf(Jsonl.str(line, PluginProtocol.NAME)),
+                            path(Jsonl.str(line, PluginProtocol.PATH)));
                 case PluginProtocol.SECRET ->
                     s.secrets.put(
-                            String.valueOf(Ndjson.str(line, PluginProtocol.KEY)),
-                            String.valueOf(Ndjson.str(line, PluginProtocol.VALUE)));
-                case PluginProtocol.COMMAND_ARGS -> s.commandArgs.addAll(Ndjson.strArray(line, PluginProtocol.VALUES));
+                            String.valueOf(Jsonl.str(line, PluginProtocol.KEY)),
+                            String.valueOf(Jsonl.str(line, PluginProtocol.VALUE)));
+                case PluginProtocol.COMMAND_ARGS -> s.commandArgs.addAll(Jsonl.strArray(line, PluginProtocol.VALUES));
                 default -> {
                     // unknown line — forward-compat
                 }

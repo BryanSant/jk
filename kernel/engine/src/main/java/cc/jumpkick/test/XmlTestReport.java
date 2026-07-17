@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.test;
 
-import cc.jumpkick.plugin.protocol.Ndjson;
+import cc.jumpkick.plugin.protocol.Jsonl;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.nio.file.Files;
@@ -58,9 +58,9 @@ public final class XmlTestReport {
         String className = classNameFrom(uniqueId);
         String failureType = null, failureMessage = null, failureStack = null;
         if (throwableJson != null) {
-            failureType = Ndjson.str(throwableJson, "class");
-            failureMessage = Ndjson.str(throwableJson, "message");
-            failureStack = Ndjson.str(throwableJson, "stack");
+            failureType = Jsonl.str(throwableJson, "class");
+            failureMessage = Jsonl.str(throwableJson, "message");
+            failureStack = Jsonl.str(throwableJson, "stack");
         }
         entries.add(new Entry(className, display, durationMs, failureType, failureMessage, failureStack, null));
     }

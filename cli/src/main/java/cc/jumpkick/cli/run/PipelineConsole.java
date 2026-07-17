@@ -13,7 +13,7 @@ import java.util.List;
 /**
  * Single entry point CLI commands use to run a {@link Pipeline} against the right set of console
  * listeners — picks {@link CommandManagerListener} (default TTY), {@link VerboseListener} ({@code
- * --verbose}), {@link NdjsonListener} ({@code --output json}), or {@link SilentListener} (non-TTY,
+ * --verbose}), {@link JsonlListener} ({@code --output json}), or {@link SilentListener} (non-TTY,
  * {@code --quiet}, or interactive pipeline); always layers an {@link EventLogListener} on top so the
  * run lands in {@code <cacheRoot>/runs/}.
  *
@@ -32,7 +32,7 @@ public final class PipelineConsole {
         VERBOSE,
         /** Silent (today's {@code --quiet}, or interactive pipelines). */
         QUIET,
-        /** NDJSON to stdout (today's {@code --output json}). */
+        /** JSONL to stdout (today's {@code --output json}). */
         JSON
     }
 
@@ -66,7 +66,7 @@ public final class PipelineConsole {
     /**
      * Simple-task variant: render the pipeline as a spinner + command (on a TTY) and a {@code ✓}/{@code ✗}
      * result line from {@code spec}, instead of the step-by-step progress bar. {@code --output
-     * json} still emits NDJSON and {@code --verbose} still prints per-step lines; otherwise the
+     * json} still emits JSONL and {@code --verbose} still prints per-step lines; otherwise the
      * {@link SimpleTaskListener} owns the output (animating only on a TTY).
      */
     public static PipelineResult run(Pipeline pipeline, Mode mode, Path cacheRoot, ConsoleSpec spec) {
@@ -75,7 +75,7 @@ public final class PipelineConsole {
 
         PipelineListener console =
                 switch (mode) {
-                    case JSON -> new NdjsonListener(System.out);
+                    case JSON -> new JsonlListener(System.out);
                     case VERBOSE -> new VerboseListener(System.out, System.err);
                     // AUTO animates only on an interactive TTY; QUIET / pipes print the
                     // result line without a spinner.
@@ -107,7 +107,7 @@ public final class PipelineConsole {
      * Pipeline-oriented variant: render the pipeline with the new {@link CommandManagerListener} (spinner
      * header + aggregate bar + dynamic step list) attributed to {@code module} (the project's {@code
      * group:artifact}), then a {@code ✓}/{@code ✗} result line from {@code spec}. {@code --output
-     * json} still emits NDJSON and {@code --verbose} still prints per-step lines.
+     * json} still emits JSONL and {@code --verbose} still prints per-step lines.
      */
     public static PipelineResult runPipeline(
             Pipeline pipeline, Mode mode, Path cacheRoot, ConsoleSpec spec, String module) {
@@ -126,7 +126,7 @@ public final class PipelineConsole {
      */
     public static PipelineListener chooseConsoleListener(List<Step> steps, Mode mode, ConsoleSpec spec, String module) {
         return switch (mode) {
-            case JSON -> new NdjsonListener(System.out);
+            case JSON -> new JsonlListener(System.out);
             case VERBOSE -> new VerboseListener(System.out, System.err);
             case AUTO -> new CommandManagerListener(System.out, spec, module, steps, isInteractiveTerminal());
             case QUIET -> new CommandManagerListener(System.out, spec, module, steps, false);
@@ -184,7 +184,7 @@ public final class PipelineConsole {
     private static PipelineListener chooseConsoleListener(Pipeline pipeline, Mode mode) {
         // Interactive pipelines (wizards) must NOT render a progress bar —
         // the wizard owns the terminal. Same for JSON output (events
-        // already go to stdout via NdjsonListener) and explicit quiet.
+        // already go to stdout via JsonlListener) and explicit quiet.
         if (pipeline.interactive()) return new SilentListener(System.out, System.err, true);
         return chooseConsoleListener(pipeline.name(), pipeline.steps(), mode);
     }
@@ -198,7 +198,7 @@ public final class PipelineConsole {
     public static PipelineListener chooseConsoleListener(String pipelineName, List<Step> steps, Mode mode) {
         return switch (mode) {
             case QUIET -> new SilentListener(System.out, System.err);
-            case JSON -> new NdjsonListener(System.out);
+            case JSON -> new JsonlListener(System.out);
             case VERBOSE -> new VerboseListener(System.out, System.err);
             case AUTO ->
                 isInteractiveTerminal()

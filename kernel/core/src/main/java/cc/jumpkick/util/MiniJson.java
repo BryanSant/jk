@@ -16,7 +16,7 @@ import java.util.Map;
  *       List<Object> / String / Double / Boolean / null}.
  *   <li>{@link #write}: the inverse for the same object model (plus integral {@link Number}s
  *       written without a decimal point), compact or pretty. String escaping delegates to {@link
- *       cc.jumpkick.plugin.protocol.Ndjson#quote} — the wire contract in {@code plugin-api} owns
+ *       cc.jumpkick.plugin.protocol.Jsonl#quote} — the wire contract in {@code plugin-api} owns
  *       the one escaping implementation, so a string means the same thing on every jk surface.
  * </ul>
  *
@@ -44,7 +44,7 @@ public final class MiniJson {
     private static void writeValue(StringBuilder sb, Object value, int indent) {
         switch (value) {
             case null -> sb.append("null");
-            case String s -> sb.append(cc.jumpkick.plugin.protocol.Ndjson.quote(s));
+            case String s -> sb.append(cc.jumpkick.plugin.protocol.Jsonl.quote(s));
             case Boolean b -> sb.append(b);
             case Double d -> {
                 // Integral doubles (the parser's number type) print without the ".0" so
@@ -76,7 +76,7 @@ public final class MiniJson {
             if (!first) sb.append(',');
             first = false;
             newlineIndent(sb, indent < 0 ? -1 : indent + 1);
-            sb.append(cc.jumpkick.plugin.protocol.Ndjson.quote(String.valueOf(e.getKey())))
+            sb.append(cc.jumpkick.plugin.protocol.Jsonl.quote(String.valueOf(e.getKey())))
                     .append(':');
             if (indent >= 0) sb.append(' ');
             writeValue(sb, e.getValue(), indent < 0 ? -1 : indent + 1);

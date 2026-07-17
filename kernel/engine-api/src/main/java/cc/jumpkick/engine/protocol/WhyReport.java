@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.engine.protocol;
 
-import cc.jumpkick.plugin.protocol.Ndjson;
+import cc.jumpkick.plugin.protocol.Jsonl;
 import java.util.List;
 
 /**
@@ -26,7 +26,7 @@ public record WhyReport(
 
     public String encode() {
         return "{\"t\":\"" + EngineProtocol.WHY_ACK + "\""
-                + ",\"error\":" + (error == null ? "null" : Ndjson.quote(error))
+                + ",\"error\":" + (error == null ? "null" : Jsonl.quote(error))
                 + ",\"matchNames\":" + EngineProtocol.quoteArray(matchNames)
                 + ",\"matchVersions\":" + EngineProtocol.quoteArray(matchVersions)
                 + ",\"pathOwners\":" + EngineProtocol.quoteArray(pathOwners)
@@ -36,10 +36,10 @@ public record WhyReport(
 
     public static WhyReport decode(String line) {
         return new WhyReport(
-                Ndjson.str(line, "error"),
-                Ndjson.strArray(line, "matchNames"),
-                Ndjson.strArray(line, "matchVersions"),
-                Ndjson.strArray(line, "pathOwners"),
-                Ndjson.strArray(line, "paths"));
+                Jsonl.str(line, "error"),
+                Jsonl.strArray(line, "matchNames"),
+                Jsonl.strArray(line, "matchVersions"),
+                Jsonl.strArray(line, "pathOwners"),
+                Jsonl.strArray(line, "paths"));
     }
 }

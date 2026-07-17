@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.test;
 
-import cc.jumpkick.plugin.protocol.Ndjson;
+import cc.jumpkick.plugin.protocol.Jsonl;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -63,10 +63,10 @@ public final class MarkdownTestReport {
         String className = classNameFrom(uniqueId);
         String failureMessage = null, failureStack = null;
         if (throwableJson != null) {
-            failureMessage = Ndjson.str(throwableJson, "message");
-            failureStack = Ndjson.str(throwableJson, "stack");
+            failureMessage = Jsonl.str(throwableJson, "message");
+            failureStack = Jsonl.str(throwableJson, "stack");
             if ((failureMessage == null || failureMessage.isBlank()) && failureStack == null) {
-                failureMessage = Ndjson.str(throwableJson, "class");
+                failureMessage = Jsonl.str(throwableJson, "class");
             }
         }
         entries.add(new Entry(className, display, durationMs, failureMessage, failureStack, null));

@@ -7,7 +7,7 @@ import java.io.PrintStream;
  * Plugin-side emitter for the host&lt;-&gt;plugin protocol: writes one JSON object per line, each
  * prefixed with the plugin's marker so the host can tell structured protocol lines apart from
  * passthrough chatter (anything the underlying tool writes to stdout). Pair with {@link
- * Ndjson#quote} to encode string values.
+ * Jsonl#quote} to encode string values.
  *
  * <p>Lines are flushed eagerly so the host sees progress as it happens.
  */

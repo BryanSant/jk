@@ -21,7 +21,7 @@ scaffold/…                                           ← template resources th
 
 The **declarative layer** covers most integrations and executes zero plugin code in the engine:
 jk parses `jk-plugin.toml` (data — safe even for untrusted plugins) and applies its
-contributions itself. The **code layer** runs only in a forked plugin process over an NDJSON
+contributions itself. The **code layer** runs only in a forked plugin process over an JSONL
 protocol; the engine never classloads your classes.
 
 ## 2. The manifest, section by section

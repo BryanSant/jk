@@ -27,7 +27,7 @@ import java.util.List;
  * means Kotlin test sources compile and run exactly as they do under {@code jk build} — no
  * separate, Java-only test path to keep in sync.
  *
- * <p>The test-runner's NDJSON event stream bridges into the pipeline's progress bar (the same {@code
+ * <p>The test-runner's JSONL event stream bridges into the pipeline's progress bar (the same {@code
  * ProgressBarListener} {@code jk compile}/{@code jk build} use): each completion ticks the
  * numerator, each failure becomes a {@code ctx.error}, discovery grows the denominator.
  */

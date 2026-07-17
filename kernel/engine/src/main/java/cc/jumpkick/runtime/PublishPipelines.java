@@ -11,7 +11,7 @@ import cc.jumpkick.model.Dependency;
 import cc.jumpkick.model.GitRefSpec;
 import cc.jumpkick.model.JkBuild;
 import cc.jumpkick.plugin.build.Phase;
-import cc.jumpkick.plugin.protocol.Ndjson;
+import cc.jumpkick.plugin.protocol.Jsonl;
 import cc.jumpkick.plugin.protocol.PluginProtocol;
 import cc.jumpkick.plugin.protocol.SpecWriter;
 import cc.jumpkick.run.Pipeline;
@@ -143,8 +143,8 @@ public final class PublishPipelines {
                 String[] error = {null};
                 StringBuilder workerDiag = new StringBuilder();
                 int exit = new PluginClient("##JKPU:")
-                        .on(PluginProtocol.RESULT, json -> files[0] = Ndjson.intValue(json, "files", 0))
-                        .on(PluginProtocol.ERROR, json -> error[0] = Ndjson.str(json, PluginProtocol.MESSAGE))
+                        .on(PluginProtocol.RESULT, json -> files[0] = Jsonl.intValue(json, "files", 0))
+                        .on(PluginProtocol.ERROR, json -> error[0] = Jsonl.str(json, PluginProtocol.MESSAGE))
                         .passthrough(line -> workerDiag.append(line).append('\n'))
                         .run(PluginLaunch.javaCommand(workerJar, spec));
                 if (exit != 0) {

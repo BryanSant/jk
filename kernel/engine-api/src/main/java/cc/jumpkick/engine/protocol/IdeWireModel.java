@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.engine.protocol;
 
-import cc.jumpkick.plugin.protocol.Ndjson;
+import cc.jumpkick.plugin.protocol.Jsonl;
 import java.util.List;
 
 /**
@@ -58,9 +58,9 @@ public record IdeWireModel(
 
     public String encode() {
         return "{\"t\":\"" + EngineProtocol.IDE_MODEL_ACK + "\""
-                + ",\"error\":" + (error == null ? "null" : Ndjson.quote(error))
-                + ",\"wsRoot\":" + Ndjson.quote(wsRoot)
-                + ",\"rootName\":" + Ndjson.quote(rootName)
+                + ",\"error\":" + (error == null ? "null" : Jsonl.quote(error))
+                + ",\"wsRoot\":" + Jsonl.quote(wsRoot)
+                + ",\"rootName\":" + Jsonl.quote(rootName)
                 + ",\"workspace\":" + workspace
                 + ",\"moduleDirs\":" + EngineProtocol.quoteArray(moduleDirs)
                 + ",\"names\":" + EngineProtocol.quoteArray(names)
@@ -84,49 +84,49 @@ public record IdeWireModel(
                 + ",\"sdkLevels\":" + EngineProtocol.quoteArray(sdkLevels)
                 + ",\"sdkHomes\":" + EngineProtocol.quoteArray(sdkHomes)
                 + ",\"sdkVersions\":" + EngineProtocol.quoteArray(sdkVersions)
-                + ",\"defSdkStableName\":" + Ndjson.quote(defSdkStableName)
-                + ",\"defSdkName\":" + Ndjson.quote(defSdkName)
+                + ",\"defSdkStableName\":" + Jsonl.quote(defSdkStableName)
+                + ",\"defSdkName\":" + Jsonl.quote(defSdkName)
                 + ",\"defSdkLevel\":" + defSdkLevel
-                + ",\"defSdkHome\":" + Ndjson.quote(defSdkHome)
-                + ",\"defSdkVersion\":" + Ndjson.quote(defSdkVersion)
+                + ",\"defSdkHome\":" + Jsonl.quote(defSdkHome)
+                + ",\"defSdkVersion\":" + Jsonl.quote(defSdkVersion)
                 + ",\"sdkEntries\":" + EngineProtocol.quoteArray(sdkEntries)
                 + "}";
     }
 
     public static IdeWireModel decode(String line) {
         return new IdeWireModel(
-                Ndjson.str(line, "error"),
-                orEmpty(Ndjson.str(line, "wsRoot")),
-                orEmpty(Ndjson.str(line, "rootName")),
-                Ndjson.bool(line, "workspace", false),
-                Ndjson.strArray(line, "moduleDirs"),
-                Ndjson.strArray(line, "names"),
-                Ndjson.strArray(line, "javaReleases"),
-                Ndjson.strArray(line, "mainClasses"),
-                Ndjson.strArray(line, "classesDirs"),
-                Ndjson.strArray(line, "testClassesDirs"),
-                Ndjson.strArray(line, "jdtClassesDirs"),
-                Ndjson.strArray(line, "jdtTestClassesDirs"),
-                Ndjson.strArray(line, "genSrcDirs"),
-                Ndjson.strArray(line, "genTestSrcDirs"),
-                Ndjson.strArray(line, "libNames"),
-                Ndjson.strArray(line, "libFiles"),
-                Ndjson.strArray(line, "libJars"),
-                Ndjson.strArray(line, "libSources"),
-                Ndjson.strArray(line, "siblingRefs"),
-                Ndjson.strArray(line, "libEntries"),
-                Ndjson.strArray(line, "processorJars"),
-                Ndjson.strArray(line, "sdkStableNames"),
-                Ndjson.strArray(line, "sdkNames"),
-                Ndjson.strArray(line, "sdkLevels"),
-                Ndjson.strArray(line, "sdkHomes"),
-                Ndjson.strArray(line, "sdkVersions"),
-                orEmpty(Ndjson.str(line, "defSdkStableName")),
-                orEmpty(Ndjson.str(line, "defSdkName")),
-                Ndjson.intValue(line, "defSdkLevel", 0),
-                orEmpty(Ndjson.str(line, "defSdkHome")),
-                orEmpty(Ndjson.str(line, "defSdkVersion")),
-                Ndjson.strArray(line, "sdkEntries"));
+                Jsonl.str(line, "error"),
+                orEmpty(Jsonl.str(line, "wsRoot")),
+                orEmpty(Jsonl.str(line, "rootName")),
+                Jsonl.bool(line, "workspace", false),
+                Jsonl.strArray(line, "moduleDirs"),
+                Jsonl.strArray(line, "names"),
+                Jsonl.strArray(line, "javaReleases"),
+                Jsonl.strArray(line, "mainClasses"),
+                Jsonl.strArray(line, "classesDirs"),
+                Jsonl.strArray(line, "testClassesDirs"),
+                Jsonl.strArray(line, "jdtClassesDirs"),
+                Jsonl.strArray(line, "jdtTestClassesDirs"),
+                Jsonl.strArray(line, "genSrcDirs"),
+                Jsonl.strArray(line, "genTestSrcDirs"),
+                Jsonl.strArray(line, "libNames"),
+                Jsonl.strArray(line, "libFiles"),
+                Jsonl.strArray(line, "libJars"),
+                Jsonl.strArray(line, "libSources"),
+                Jsonl.strArray(line, "siblingRefs"),
+                Jsonl.strArray(line, "libEntries"),
+                Jsonl.strArray(line, "processorJars"),
+                Jsonl.strArray(line, "sdkStableNames"),
+                Jsonl.strArray(line, "sdkNames"),
+                Jsonl.strArray(line, "sdkLevels"),
+                Jsonl.strArray(line, "sdkHomes"),
+                Jsonl.strArray(line, "sdkVersions"),
+                orEmpty(Jsonl.str(line, "defSdkStableName")),
+                orEmpty(Jsonl.str(line, "defSdkName")),
+                Jsonl.intValue(line, "defSdkLevel", 0),
+                orEmpty(Jsonl.str(line, "defSdkHome")),
+                orEmpty(Jsonl.str(line, "defSdkVersion")),
+                Jsonl.strArray(line, "sdkEntries"));
     }
 
     private static String orEmpty(String s) {

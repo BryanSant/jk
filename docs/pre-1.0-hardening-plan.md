@@ -70,7 +70,7 @@ Add a TCP-transport round-trip test (force `EngineTransport.useLoopbackTcp()`).
 warning), it blocks and the relay deadlocks in `readLine()`. This is the rarely-run
 version-skew path — it will hang in the field, not in CI.
 Fix: `redirectError(Redirect.appendTo(engineLog))` — stderr must not interleave with
-the child's NDJSON stdout, and discarding diagnostics from the path most likely to
+the child's JSONL stdout, and discarding diagnostics from the path most likely to
 fail is wrong. Also bound the client→child pump to the relay's lifetime (today it can
 outlive the exchange and write to a closed stream).
 
@@ -113,7 +113,7 @@ native-image, `/proc/self/exe` on Linux, `ProcessHandle.info().command()` otherw
 
 ## Part 1 — Wire protocol v1 (the 1.0 freeze candidate)
 
-The NDJSON protocol works but is three encoders, two spellings of "directory", ~10
+The JSONL protocol works but is three encoders, two spellings of "directory", ~10
 error shapes, and one message type wearing eleven schemas. This is the part of the
 sweep with a hard deadline: after 1.0 every one of these becomes a compat constraint.
 
@@ -157,11 +157,11 @@ tool/script` silently drop `--jvm-arg`/`JK_JVM_*`.
 ### P1.5 — One map encoding
 Three ad-hoc parallel-array pairs (`graalDirs/graalHomes`, `paramKeys/paramValues`,
 `envNames/envValues`), each with its own silent-on-mismatch decode. Add
-`Ndjson.strMap(key)` + a matching encoder (flat `k1 v1…` or a nested-object
+`Jsonl.strMap(key)` + a matching encoder (flat `k1 v1…` or a nested-object
 mini-grammar — implementer's choice, but exactly one) and use it for all three.
 
 ### P1.6 — One null convention
-`Ndjson.quote(null)` already emits `null`; delete the five hand-rolled
+`Jsonl.quote(null)` already emits `null`; delete the five hand-rolled
 `(x == null ? "null" : quote(x))` re-implementations, and make `statusAck` stop
 omitting `httpUrl`/`httpError` keys (emit `null` like everything else). Rule for 1.0:
 **absent and null are the same thing, and the encoder always emits the key.** Replace
@@ -590,7 +590,7 @@ resources, lint/baseline profiles, solver version interning (BOM soft pins).
   DIVERGENCE from the plan text: session state attaches at the adapter chokepoints
   via withSession rather than as parameters on every builder — same self-description
   and universality, a fraction of the churn, and the splice is now validated.
-- One flat-map encoding (`Ndjson.map`/`strMap`): `env`, `graalHomes`, `params`
+- One flat-map encoding (`Jsonl.map`/`strMap`): `env`, `graalHomes`, `params`
   replaced their parallel-array pairs. One null convention (keys always emitted,
   null = not applicable); statusAck stopped omitting http keys.
 - Protocol-zero has teeth: server rejects `proto >` its own with

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.engine.protocol;
 
-import cc.jumpkick.plugin.protocol.Ndjson;
+import cc.jumpkick.plugin.protocol.Jsonl;
 import java.util.List;
 
 /**
@@ -17,7 +17,7 @@ import java.util.List;
  *
  * <p>Step 2 adds {@code buildWorkspace} hosting: a {@link #BUILD_REQUEST}, one event type per {@code
  * WorkspaceBuildListener}/{@code PipelineListener} callback, and a terminal {@link #WORKSPACE_FINISH} /
- * {@link #ERROR_LINE}. This hand-rolled codec (mirroring {@code Ndjson}, which only reads flat
+ * {@link #ERROR_LINE}. This hand-rolled codec (mirroring {@code Jsonl}, which only reads flat
  * scalar fields and string arrays — no nested object arrays) deliberately avoids ever encoding an
  * array of objects: a variable-length collection (the module plan, a pipeline's accumulated diagnostics)
  * is sent as a burst of individually-typed repeated messages plus a terminal marker, not one message
@@ -523,8 +523,8 @@ public final class EngineProtocol {
 
     // ---- build-history journal ({@code jk history}) --------------------------------
     // The engine owns the journal on disk; the thin CLI reaches it only over these RPCs. Responses
-    // are flat NDJSON lines (one object per line, scalar fields) so the CLI renders them with the
-    // Ndjson helpers it already has — it never parses nested JSON.
+    // are flat JSONL lines (one object per line, scalar fields) so the CLI renders them with the
+    // Jsonl helpers it already has — it never parses nested JSON.
 
     /** Client → server: list journal entries (newest first, up to {@code limit}). */
     public static final String HISTORY_LIST_REQUEST = "history-list-request";
@@ -558,7 +558,7 @@ public final class EngineProtocol {
 
     // ---- running build metrics ({@code jk status}) ----------------------------------
     // Aggregates (count/total/min/max/avg per outcome) the engine folds at every build/test finish:
-    // global, per project, per step, and per project per step — same flat-NDJSON discipline as
+    // global, per project, per step, and per project per step — same flat-JSONL discipline as
     // the history RPCs.
 
     /** Client → server: stream aggregate rows; optional {@code dir} filters project-tier rows. */
@@ -572,11 +572,11 @@ public final class EngineProtocol {
 
     /** The {@code "t"} discriminator of a decoded message, or {@code null} if absent/malformed. */
     public static String typeOf(String json) {
-        return Ndjson.str(json, TYPE_FIELD);
+        return Jsonl.str(json, TYPE_FIELD);
     }
 
     public static String auth(String token) {
-        return "{\"t\":\"" + AUTH + "\",\"token\":" + Ndjson.quote(token) + "}";
+        return "{\"t\":\"" + AUTH + "\",\"token\":" + Jsonl.quote(token) + "}";
     }
 
     /**
@@ -598,9 +598,9 @@ public final class EngineProtocol {
      * honest in both directions.
      */
     public static String hello(String version, String purpose) {
-        return "{\"t\":\"" + HELLO + "\",\"version\":" + Ndjson.quote(version)
+        return "{\"t\":\"" + HELLO + "\",\"version\":" + Jsonl.quote(version)
                 + ",\"proto\":" + PROTOCOL
-                + ",\"purpose\":" + Ndjson.quote(purpose) + "}";
+                + ",\"purpose\":" + Jsonl.quote(purpose) + "}";
     }
 
     /**
@@ -612,7 +612,7 @@ public final class EngineProtocol {
         return "{\"t\":\""
                 + HELLO_ACK
                 + "\",\"version\":"
-                + Ndjson.quote(version)
+                + Jsonl.quote(version)
                 + ",\"pid\":"
                 + pid
                 + ",\"startedAt\":"
@@ -622,7 +622,7 @@ public final class EngineProtocol {
                 + ",\"draining\":"
                 + draining
                 + ",\"buildId\":"
-                + Ndjson.quote(buildId == null ? "" : buildId)
+                + Jsonl.quote(buildId == null ? "" : buildId)
                 + "}";
     }
 
@@ -665,7 +665,7 @@ public final class EngineProtocol {
         return "{\"t\":\""
                 + STATUS_ACK
                 + "\",\"version\":"
-                + Ndjson.quote(version)
+                + Jsonl.quote(version)
                 + ",\"pid\":"
                 + pid
                 + ",\"startedAt\":"
@@ -689,9 +689,9 @@ public final class EngineProtocol {
                 + ",\"aotTrainingPid\":"
                 + aotTrainingPid
                 + ",\"httpUrl\":"
-                + Ndjson.quote(httpUrl)
+                + Jsonl.quote(httpUrl)
                 + ",\"httpError\":"
-                + Ndjson.quote(httpError)
+                + Jsonl.quote(httpError)
                 + "}";
     }
 
@@ -747,15 +747,15 @@ public final class EngineProtocol {
         return "{\"t\":\""
                 + BUILD_REQUEST
                 + "\",\"dir\":"
-                + Ndjson.quote(dir)
+                + Jsonl.quote(dir)
                 + ",\"cache\":"
-                + Ndjson.quote(cache)
+                + Jsonl.quote(cache)
                 + ",\"jdksDir\":"
-                + Ndjson.quote(jdksDir)
+                + Jsonl.quote(jdksDir)
                 + ",\"workers\":"
                 + workers
                 + ",\"profile\":"
-                + Ndjson.quote(profile)
+                + Jsonl.quote(profile)
                 + ",\"skipTests\":"
                 + skipTests
                 + ",\"verbose\":"
@@ -790,15 +790,15 @@ public final class EngineProtocol {
         return "{\"t\":\""
                 + TEST_REQUEST
                 + "\",\"dir\":"
-                + Ndjson.quote(dir)
+                + Jsonl.quote(dir)
                 + ",\"cache\":"
-                + Ndjson.quote(cache)
+                + Jsonl.quote(cache)
                 + ",\"jdksDir\":"
-                + Ndjson.quote(jdksDir)
+                + Jsonl.quote(jdksDir)
                 + ",\"workers\":"
                 + workers
                 + ",\"profile\":"
-                + Ndjson.quote(profile)
+                + Jsonl.quote(profile)
                 + ",\"verbose\":"
                 + verbose
                 + ",\"offline\":"
@@ -822,15 +822,15 @@ public final class EngineProtocol {
         return "{\"t\":\""
                 + SINGLE_BUILD_REQUEST
                 + "\",\"dir\":"
-                + Ndjson.quote(dir)
+                + Jsonl.quote(dir)
                 + ",\"cache\":"
-                + Ndjson.quote(cache)
+                + Jsonl.quote(cache)
                 + ",\"jdksDir\":"
-                + Ndjson.quote(jdksDir)
+                + Jsonl.quote(jdksDir)
                 + ",\"workers\":"
                 + workers
                 + ",\"profile\":"
-                + Ndjson.quote(profile)
+                + Jsonl.quote(profile)
                 + ",\"skipTests\":"
                 + skipTests
                 + ",\"verbose\":"
@@ -860,9 +860,9 @@ public final class EngineProtocol {
         return "{\"t\":\""
                 + LOCK_REQUEST
                 + "\",\"dir\":"
-                + Ndjson.quote(dir)
+                + Jsonl.quote(dir)
                 + ",\"cache\":"
-                + Ndjson.quote(cache)
+                + Jsonl.quote(cache)
                 + ",\"features\":"
                 + quoteArray(features)
                 + ",\"noDefaultFeatures\":"
@@ -870,7 +870,7 @@ public final class EngineProtocol {
                 + ",\"sources\":"
                 + sources
                 + ",\"repoUrl\":"
-                + Ndjson.quote(repoUrl)
+                + Jsonl.quote(repoUrl)
                 + ",\"offline\":"
                 + offline
                 + ",\"force\":"
@@ -899,19 +899,19 @@ public final class EngineProtocol {
         return "{\"t\":\""
                 + UPDATE_REQUEST
                 + "\",\"dir\":"
-                + Ndjson.quote(dir)
+                + Jsonl.quote(dir)
                 + ",\"cache\":"
-                + Ndjson.quote(cache)
+                + Jsonl.quote(cache)
                 + ",\"features\":"
                 + quoteArray(features)
                 + ",\"noDefaultFeatures\":"
                 + noDefaultFeatures
                 + ",\"repoUrl\":"
-                + Ndjson.quote(repoUrl)
+                + Jsonl.quote(repoUrl)
                 + ",\"gitOnly\":"
                 + gitOnly
                 + ",\"gitTarget\":"
-                + Ndjson.quote(gitTarget)
+                + Jsonl.quote(gitTarget)
                 + ",\"offline\":"
                 + offline
                 + ",\"force\":"
@@ -940,13 +940,13 @@ public final class EngineProtocol {
         return "{\"t\":\""
                 + SYNC_REQUEST
                 + "\",\"dir\":"
-                + Ndjson.quote(dir)
+                + Jsonl.quote(dir)
                 + ",\"cache\":"
-                + Ndjson.quote(cache)
+                + Jsonl.quote(cache)
                 + ",\"jdksDir\":"
-                + Ndjson.quote(jdksDir)
+                + Jsonl.quote(jdksDir)
                 + ",\"repoUrl\":"
-                + Ndjson.quote(repoUrl)
+                + Jsonl.quote(repoUrl)
                 + ",\"sources\":"
                 + sources
                 + ",\"offline\":"
@@ -971,15 +971,15 @@ public final class EngineProtocol {
         return "{\"t\":\""
                 + AUDIT_REQUEST
                 + "\",\"dir\":"
-                + Ndjson.quote(dir)
+                + Jsonl.quote(dir)
                 + ",\"cache\":"
-                + Ndjson.quote(cache)
+                + Jsonl.quote(cache)
                 + ",\"severity\":"
-                + Ndjson.quote(severity)
+                + Jsonl.quote(severity)
                 + ",\"osvBatchUrl\":"
-                + Ndjson.quote(osvBatchUrl)
+                + Jsonl.quote(osvBatchUrl)
                 + ",\"osvVulnsUrl\":"
-                + Ndjson.quote(osvVulnsUrl)
+                + Jsonl.quote(osvVulnsUrl)
                 + "}";
     }
 
@@ -1001,19 +1001,19 @@ public final class EngineProtocol {
         return "{\"t\":\""
                 + FORMAT_REQUEST
                 + "\",\"dir\":"
-                + Ndjson.quote(dir)
+                + Jsonl.quote(dir)
                 + ",\"cache\":"
-                + Ndjson.quote(cache)
+                + Jsonl.quote(cache)
                 + ",\"check\":"
                 + check
                 + ",\"javaStyle\":"
-                + Ndjson.quote(javaStyle)
+                + Jsonl.quote(javaStyle)
                 + ",\"kotlinStyle\":"
-                + Ndjson.quote(kotlinStyle)
+                + Jsonl.quote(kotlinStyle)
                 + ",\"optimizeImports\":"
                 + optimizeImports
                 + ",\"rewriteConfig\":"
-                + Ndjson.quote(rewriteConfig)
+                + Jsonl.quote(rewriteConfig)
                 + ",\"offline\":"
                 + offline
                 + ",\"verbose\":"
@@ -1048,25 +1048,25 @@ public final class EngineProtocol {
         return "{\"t\":\""
                 + PUBLISH_REQUEST
                 + "\",\"dir\":"
-                + Ndjson.quote(dir)
+                + Jsonl.quote(dir)
                 + ",\"cache\":"
-                + Ndjson.quote(cache)
+                + Jsonl.quote(cache)
                 + ",\"repoUrl\":"
-                + Ndjson.quote(repoUrl)
+                + Jsonl.quote(repoUrl)
                 + ",\"region\":"
-                + Ndjson.quote(region)
+                + Jsonl.quote(region)
                 + ",\"endpoint\":"
-                + Ndjson.quote(endpoint)
+                + Jsonl.quote(endpoint)
                 + ",\"jar\":"
-                + Ndjson.quote(jar)
+                + Jsonl.quote(jar)
                 + ",\"allowSnapshot\":"
                 + allowSnapshot
                 + ",\"dryRun\":"
                 + dryRun
                 + ",\"keyFile\":"
-                + Ndjson.quote(keyFile)
+                + Jsonl.quote(keyFile)
                 + ",\"gpgPassphrase\":"
-                + Ndjson.quote(gpgPassphrase)
+                + Jsonl.quote(gpgPassphrase)
                 + ",\"sigstore\":"
                 + sigstore
                 + ",\"slsa\":"
@@ -1074,13 +1074,13 @@ public final class EngineProtocol {
                 + ",\"sbom\":"
                 + sbom
                 + ",\"authType\":"
-                + Ndjson.quote(authType)
+                + Jsonl.quote(authType)
                 + ",\"user\":"
-                + Ndjson.quote(user)
+                + Jsonl.quote(user)
                 + ",\"pass\":"
-                + Ndjson.quote(pass)
+                + Jsonl.quote(pass)
                 + ",\"token\":"
-                + Ndjson.quote(token)
+                + Jsonl.quote(token)
                 + ",\"verbose\":"
                 + verbose
                 + "}";
@@ -1109,21 +1109,21 @@ public final class EngineProtocol {
         return "{\"t\":\""
                 + IMAGE_REQUEST
                 + "\",\"dir\":"
-                + Ndjson.quote(dir)
+                + Jsonl.quote(dir)
                 + ",\"cache\":"
-                + Ndjson.quote(cache)
+                + Jsonl.quote(cache)
                 + ",\"jdksDir\":"
-                + Ndjson.quote(jdksDir)
+                + Jsonl.quote(jdksDir)
                 + ",\"mainClass\":"
-                + Ndjson.quote(mainClass)
+                + Jsonl.quote(mainClass)
                 + ",\"registry\":"
-                + Ndjson.quote(registry)
+                + Jsonl.quote(registry)
                 + ",\"tag\":"
-                + Ndjson.quote(tag)
+                + Jsonl.quote(tag)
                 + ",\"tarball\":"
-                + Ndjson.quote(tarball)
+                + Jsonl.quote(tarball)
                 + ",\"dockerExecutable\":"
-                + Ndjson.quote(dockerExecutable)
+                + Jsonl.quote(dockerExecutable)
                 + ",\"skipTests\":"
                 + skipTests
                 + ",\"offline\":"
@@ -1145,19 +1145,19 @@ public final class EngineProtocol {
         return "{\"t\":\""
                 + IMPORT_REQUEST
                 + "\",\"source\":"
-                + Ndjson.quote(source)
+                + Jsonl.quote(source)
                 + ",\"out\":"
-                + Ndjson.quote(out)
+                + Jsonl.quote(out)
                 + ",\"baseDir\":"
-                + Ndjson.quote(baseDir)
+                + Jsonl.quote(baseDir)
                 + ",\"tmpDir\":"
-                + Ndjson.quote(tmpDir)
+                + Jsonl.quote(tmpDir)
                 + ",\"force\":"
                 + force
                 + ",\"report\":"
-                + Ndjson.quote(report)
+                + Jsonl.quote(report)
                 + ",\"cache\":"
-                + Ndjson.quote(cache)
+                + Jsonl.quote(cache)
                 + "}";
     }
 
@@ -1167,11 +1167,11 @@ public final class EngineProtocol {
         return "{\"t\":\""
                 + PROVISION_REQUEST
                 + "\",\"cache\":"
-                + Ndjson.quote(cache)
+                + Jsonl.quote(cache)
                 + ",\"projectDir\":"
-                + Ndjson.quote(projectDir)
+                + Jsonl.quote(projectDir)
                 + ",\"toolsRoot\":"
-                + Ndjson.quote(toolsRoot)
+                + Jsonl.quote(toolsRoot)
                 + ",\"noDiscover\":"
                 + noDiscover
                 + ",\"gradle\":"
@@ -1188,11 +1188,11 @@ public final class EngineProtocol {
         return "{\"t\":\""
                 + COMPILE_REQUEST
                 + "\",\"dir\":"
-                + Ndjson.quote(dir)
+                + Jsonl.quote(dir)
                 + ",\"cache\":"
-                + Ndjson.quote(cache)
+                + Jsonl.quote(cache)
                 + ",\"profile\":"
-                + Ndjson.quote(profile)
+                + Jsonl.quote(profile)
                 + ",\"offline\":"
                 + offline
                 + ",\"force\":"
@@ -1207,7 +1207,7 @@ public final class EngineProtocol {
      * override (may be {@code null} — the engine resolves {@code [native].main-class}/{@code
      * [image].main}/{@code [project].main} itself); {@code extraArgs} are forwarded to {@code
      * native-image}; {@code graalHomes} maps each native-eligible module dir to the GraalVM home
-     * the client resolved for it (the one flat-map wire encoding — see {@code Ndjson.map}).
+     * the client resolved for it (the one flat-map wire encoding — see {@code Jsonl.map}).
      */
     public static String nativeRequest(
             String dir,
@@ -1223,13 +1223,13 @@ public final class EngineProtocol {
         return "{\"t\":\""
                 + NATIVE_REQUEST
                 + "\",\"dir\":"
-                + Ndjson.quote(dir)
+                + Jsonl.quote(dir)
                 + ",\"cache\":"
-                + Ndjson.quote(cache)
+                + Jsonl.quote(cache)
                 + ",\"jdksDir\":"
-                + Ndjson.quote(jdksDir)
+                + Jsonl.quote(jdksDir)
                 + ",\"mainClass\":"
-                + Ndjson.quote(mainClass)
+                + Jsonl.quote(mainClass)
                 + ",\"skipTests\":"
                 + skipTests
                 + ",\"offline\":"
@@ -1241,7 +1241,7 @@ public final class EngineProtocol {
                 + ",\"extraArgs\":"
                 + quoteArray(extraArgs)
                 + ",\"graalHomes\":"
-                + Ndjson.map(graalHomes)
+                + Jsonl.map(graalHomes)
                 + "}";
     }
 
@@ -1262,13 +1262,13 @@ public final class EngineProtocol {
         return "{\"t\":\""
                 + INSTALL_REQUEST
                 + "\",\"dir\":"
-                + Ndjson.quote(dir)
+                + Jsonl.quote(dir)
                 + ",\"cache\":"
-                + Ndjson.quote(cache)
+                + Jsonl.quote(cache)
                 + ",\"m2Dir\":"
-                + Ndjson.quote(m2Dir)
+                + Jsonl.quote(m2Dir)
                 + ",\"graalHome\":"
-                + Ndjson.quote(graalHome)
+                + Jsonl.quote(graalHome)
                 + ",\"skipTests\":"
                 + skipTests
                 + ",\"offline\":"
@@ -1290,13 +1290,13 @@ public final class EngineProtocol {
         return "{\"t\":\""
                 + GIT_FETCH_REQUEST
                 + "\",\"url\":"
-                + Ndjson.quote(url)
+                + Jsonl.quote(url)
                 + ",\"canonicalUrl\":"
-                + Ndjson.quote(canonicalUrl)
+                + Jsonl.quote(canonicalUrl)
                 + ",\"ref\":"
-                + Ndjson.quote(ref)
+                + Jsonl.quote(ref)
                 + ",\"cache\":"
-                + Ndjson.quote(cache)
+                + Jsonl.quote(cache)
                 + ",\"refresh\":"
                 + refresh
                 + ",\"requireJkToml\":"
@@ -1323,17 +1323,17 @@ public final class EngineProtocol {
         return "{\"t\":\""
                 + EXPLAIN_REQUEST
                 + "\",\"dir\":"
-                + Ndjson.quote(dir)
+                + Jsonl.quote(dir)
                 + ",\"cache\":"
-                + Ndjson.quote(cache)
+                + Jsonl.quote(cache)
                 + ",\"workers\":"
                 + workers
                 + ",\"skipTests\":"
                 + skipTests
                 + ",\"profile\":"
-                + Ndjson.quote(profile)
+                + Jsonl.quote(profile)
                 + ",\"jdksDir\":"
-                + Ndjson.quote(jdksDir)
+                + Jsonl.quote(jdksDir)
                 + ",\"serial\":"
                 + serial
                 + ",\"parallelTests\":"
@@ -1350,9 +1350,9 @@ public final class EngineProtocol {
         return "{\"t\":\""
                 + EXPLAIN_MODULE
                 + "\",\"dir\":"
-                + Ndjson.quote(dir)
+                + Jsonl.quote(dir)
                 + ",\"coord\":"
-                + Ndjson.quote(coord)
+                + Jsonl.quote(coord)
                 + ",\"sourceCount\":"
                 + sourceCount
                 + ",\"testCount\":"
@@ -1368,15 +1368,15 @@ public final class EngineProtocol {
         return "{\"t\":\""
                 + EXPLAIN_STEP
                 + "\",\"dir\":"
-                + Ndjson.quote(dir)
+                + Jsonl.quote(dir)
                 + ",\"name\":"
-                + Ndjson.quote(name)
+                + Jsonl.quote(name)
                 + ",\"status\":"
-                + Ndjson.quote(status)
+                + Jsonl.quote(status)
                 + ",\"text\":"
-                + Ndjson.quote(text)
+                + Jsonl.quote(text)
                 + ",\"key\":"
-                + Ndjson.quote(key)
+                + Jsonl.quote(key)
                 + "}";
     }
 
@@ -1384,9 +1384,9 @@ public final class EngineProtocol {
         return "{\"t\":\""
                 + EXPLAIN_EDGE
                 + "\",\"dir\":"
-                + Ndjson.quote(dir)
+                + Jsonl.quote(dir)
                 + ",\"dependsOnDir\":"
-                + Ndjson.quote(dependsOnDir)
+                + Jsonl.quote(dependsOnDir)
                 + "}";
     }
 
@@ -1395,9 +1395,9 @@ public final class EngineProtocol {
         return "{\"t\":\""
                 + FORECAST_REQUEST
                 + "\",\"dir\":"
-                + Ndjson.quote(dir)
+                + Jsonl.quote(dir)
                 + ",\"cache\":"
-                + Ndjson.quote(cache)
+                + Jsonl.quote(cache)
                 + ",\"skipTests\":"
                 + skipTests
                 + ",\"offline\":"
@@ -1411,7 +1411,7 @@ public final class EngineProtocol {
 
     public static String treeRequest(
             String dir, int maxDepth, boolean flatten, boolean stack, java.util.List<String> scopes) {
-        return "{\"t\":\"" + TREE_REQUEST + "\",\"dir\":" + Ndjson.quote(dir)
+        return "{\"t\":\"" + TREE_REQUEST + "\",\"dir\":" + Jsonl.quote(dir)
                 + ",\"maxDepth\":" + maxDepth
                 + ",\"flatten\":" + flatten
                 + ",\"stack\":" + stack
@@ -1420,21 +1420,21 @@ public final class EngineProtocol {
     }
 
     public static String treeAck(String error, String rendered) {
-        return "{\"t\":\"" + TREE_ACK + "\",\"error\":" + Ndjson.quote(error)
-                + ",\"rendered\":" + Ndjson.quote(rendered == null ? "" : rendered)
+        return "{\"t\":\"" + TREE_ACK + "\",\"error\":" + Jsonl.quote(error)
+                + ",\"rendered\":" + Jsonl.quote(rendered == null ? "" : rendered)
                 + "}";
     }
 
     public static String whyRequest(String dir, String query) {
-        return "{\"t\":\"" + WHY_REQUEST + "\",\"dir\":" + Ndjson.quote(dir)
-                + ",\"query\":" + Ndjson.quote(query)
+        return "{\"t\":\"" + WHY_REQUEST + "\",\"dir\":" + Jsonl.quote(dir)
+                + ",\"query\":" + Jsonl.quote(query)
                 + "}";
     }
 
     public static String ideModelRequest(String dir, String cache, String jdksDir) {
-        return "{\"t\":\"" + IDE_MODEL_REQUEST + "\",\"dir\":" + Ndjson.quote(dir)
-                + ",\"cache\":" + Ndjson.quote(cache)
-                + ",\"jdksDir\":" + Ndjson.quote(jdksDir)
+        return "{\"t\":\"" + IDE_MODEL_REQUEST + "\",\"dir\":" + Jsonl.quote(dir)
+                + ",\"cache\":" + Jsonl.quote(cache)
+                + ",\"jdksDir\":" + Jsonl.quote(jdksDir)
                 + "}";
     }
 
@@ -1444,48 +1444,48 @@ public final class EngineProtocol {
 
     /** As above with generator parameters (scaffold inputs etc.) as a flat map. */
     public static String generateRequest(String dir, String kind, java.util.Map<String, String> params) {
-        return "{\"t\":\"" + GENERATE_REQUEST + "\",\"dir\":" + Ndjson.quote(dir)
-                + ",\"kind\":" + Ndjson.quote(kind)
-                + ",\"params\":" + Ndjson.map(params)
+        return "{\"t\":\"" + GENERATE_REQUEST + "\",\"dir\":" + Jsonl.quote(dir)
+                + ",\"kind\":" + Jsonl.quote(kind)
+                + ",\"params\":" + Jsonl.map(params)
                 + "}";
     }
 
     /** Decode side of {@link #generateRequest(String, String, java.util.Map)}. */
     public static java.util.Map<String, String> generateParams(String requestLine) {
-        return Ndjson.strMap(requestLine, "params");
+        return Jsonl.strMap(requestLine, "params");
     }
 
     public static String pluginCommandRequest(String dir, String cache, String command, java.util.List<String> args) {
-        return "{\"t\":\"" + PLUGIN_VERB_REQUEST + "\",\"dir\":" + Ndjson.quote(dir)
-                + ",\"cache\":" + Ndjson.quote(cache)
-                + ",\"command\":" + Ndjson.quote(command)
+        return "{\"t\":\"" + PLUGIN_VERB_REQUEST + "\",\"dir\":" + Jsonl.quote(dir)
+                + ",\"cache\":" + Jsonl.quote(cache)
+                + ",\"command\":" + Jsonl.quote(command)
                 + ",\"args\":" + quoteArray(args)
                 + "}";
     }
 
     public static String denyCheckRequest(String dir) {
-        return "{\"t\":\"" + DENY_CHECK_REQUEST + "\",\"dir\":" + Ndjson.quote(dir) + "}";
+        return "{\"t\":\"" + DENY_CHECK_REQUEST + "\",\"dir\":" + Jsonl.quote(dir) + "}";
     }
 
     public static String editRequest(String file, String op, java.util.List<String> args) {
-        return "{\"t\":\"" + EDIT_REQUEST + "\",\"file\":" + Ndjson.quote(file)
-                + ",\"op\":" + Ndjson.quote(op)
+        return "{\"t\":\"" + EDIT_REQUEST + "\",\"file\":" + Jsonl.quote(file)
+                + ",\"op\":" + Jsonl.quote(op)
                 + ",\"args\":" + quoteArray(args) + "}";
     }
 
     public static String editAck(boolean changed, String error) {
-        return "{\"t\":\"" + EDIT_ACK + "\",\"changed\":" + changed + ",\"error\":" + Ndjson.quote(error) + "}";
+        return "{\"t\":\"" + EDIT_ACK + "\",\"changed\":" + changed + ",\"error\":" + Jsonl.quote(error) + "}";
     }
 
     public static String projectInfoRequest(String dir, String cache) {
-        return "{\"t\":\"" + PROJECT_INFO_REQUEST + "\",\"dir\":" + Ndjson.quote(dir) + ",\"cache\":"
-                + Ndjson.quote(cache) + "}";
+        return "{\"t\":\"" + PROJECT_INFO_REQUEST + "\",\"dir\":" + Jsonl.quote(dir) + ",\"cache\":"
+                + Jsonl.quote(cache) + "}";
     }
 
     public static String outdatedRequest(String dir, String cache, String repoUrl, boolean offline, boolean force) {
-        return "{\"t\":\"" + OUTDATED_REQUEST + "\",\"dir\":" + Ndjson.quote(dir)
-                + ",\"cache\":" + Ndjson.quote(cache)
-                + ",\"repoUrl\":" + Ndjson.quote(repoUrl)
+        return "{\"t\":\"" + OUTDATED_REQUEST + "\",\"dir\":" + Jsonl.quote(dir)
+                + ",\"cache\":" + Jsonl.quote(cache)
+                + ",\"repoUrl\":" + Jsonl.quote(repoUrl)
                 + ",\"offline\":" + offline
                 + ",\"force\":" + force
                 + "}";
@@ -1493,13 +1493,13 @@ public final class EngineProtocol {
 
     public static String execPlanRequest(
             String dir, String cache, String kind, String mainOverride, String binName, String binDir, String libDir) {
-        return "{\"t\":\"" + EXEC_PLAN_REQUEST + "\",\"dir\":" + Ndjson.quote(dir)
-                + ",\"cache\":" + Ndjson.quote(cache)
-                + ",\"kind\":" + Ndjson.quote(kind)
-                + ",\"mainOverride\":" + Ndjson.quote(mainOverride)
-                + ",\"binName\":" + Ndjson.quote(binName)
-                + ",\"binDir\":" + Ndjson.quote(binDir)
-                + ",\"libDir\":" + Ndjson.quote(libDir)
+        return "{\"t\":\"" + EXEC_PLAN_REQUEST + "\",\"dir\":" + Jsonl.quote(dir)
+                + ",\"cache\":" + Jsonl.quote(cache)
+                + ",\"kind\":" + Jsonl.quote(kind)
+                + ",\"mainOverride\":" + Jsonl.quote(mainOverride)
+                + ",\"binName\":" + Jsonl.quote(binName)
+                + ",\"binDir\":" + Jsonl.quote(binDir)
+                + ",\"libDir\":" + Jsonl.quote(libDir)
                 + "}";
     }
 
@@ -1534,11 +1534,11 @@ public final class EngineProtocol {
         return "{\"t\":\""
                 + PLAN_MODULE
                 + "\",\"dir\":"
-                + Ndjson.quote(dir)
+                + Jsonl.quote(dir)
                 + ",\"coord\":"
-                + Ndjson.quote(coord)
+                + Jsonl.quote(coord)
                 + ",\"pipelineName\":"
-                + Ndjson.quote(pipelineName)
+                + Jsonl.quote(pipelineName)
                 + ",\"weight\":"
                 + weight
                 + ",\"fullyCached\":"
@@ -1550,13 +1550,13 @@ public final class EngineProtocol {
         return "{\"t\":\""
                 + PLAN_STEP
                 + "\",\"dir\":"
-                + Ndjson.quote(dir)
+                + Jsonl.quote(dir)
                 + ",\"name\":"
-                + Ndjson.quote(name)
+                + Jsonl.quote(name)
                 + ",\"label\":"
-                + Ndjson.quote(label)
+                + Jsonl.quote(label)
                 + ",\"phase\":"
-                + Ndjson.quote(phase)
+                + Jsonl.quote(phase)
                 + "}";
     }
 
@@ -1569,7 +1569,7 @@ public final class EngineProtocol {
     }
 
     public static String moduleStart(String dir) {
-        return "{\"t\":\"" + MODULE_START + "\",\"dir\":" + Ndjson.quote(dir) + "}";
+        return "{\"t\":\"" + MODULE_START + "\",\"dir\":" + Jsonl.quote(dir) + "}";
     }
 
     public static String pipelineStart(
@@ -1583,9 +1583,9 @@ public final class EngineProtocol {
         return "{\"t\":\""
                 + PIPELINE_START
                 + "\",\"dir\":"
-                + Ndjson.quote(dir)
+                + Jsonl.quote(dir)
                 + ",\"pipelineName\":"
-                + Ndjson.quote(pipelineName)
+                + Jsonl.quote(pipelineName)
                 + ",\"numerator\":"
                 + numerator
                 + ",\"denominator\":"
@@ -1603,11 +1603,11 @@ public final class EngineProtocol {
         return "{\"t\":\""
                 + STEP_START
                 + "\",\"dir\":"
-                + Ndjson.quote(dir)
+                + Jsonl.quote(dir)
                 + ",\"step\":"
-                + Ndjson.quote(step)
+                + Jsonl.quote(step)
                 + ",\"phase\":"
-                + Ndjson.quote(phase)
+                + Jsonl.quote(phase)
                 + ",\"ticks\":"
                 + ticks
                 + "}";
@@ -1626,9 +1626,9 @@ public final class EngineProtocol {
         return "{\"t\":\""
                 + type
                 + "\",\"dir\":"
-                + Ndjson.quote(dir)
+                + Jsonl.quote(dir)
                 + ",\"step\":"
-                + Ndjson.quote(step)
+                + Jsonl.quote(step)
                 + ",\"delta\":"
                 + delta
                 + ",\"numerator\":"
@@ -1673,11 +1673,11 @@ public final class EngineProtocol {
         return "{\"t\":\""
                 + LABEL
                 + "\",\"dir\":"
-                + Ndjson.quote(dir)
+                + Jsonl.quote(dir)
                 + ",\"step\":"
-                + Ndjson.quote(step)
+                + Jsonl.quote(step)
                 + ",\"label\":"
-                + Ndjson.quote(label)
+                + Jsonl.quote(label)
                 + "}";
     }
 
@@ -1685,11 +1685,11 @@ public final class EngineProtocol {
         return "{\"t\":\""
                 + OUTPUT
                 + "\",\"dir\":"
-                + Ndjson.quote(dir)
+                + Jsonl.quote(dir)
                 + ",\"step\":"
-                + Ndjson.quote(step)
+                + Jsonl.quote(step)
                 + ",\"line\":"
-                + Ndjson.quote(line)
+                + Jsonl.quote(line)
                 + "}";
     }
 
@@ -1698,17 +1698,17 @@ public final class EngineProtocol {
         return "{\"t\":\""
                 + type
                 + "\",\"dir\":"
-                + Ndjson.quote(dir)
+                + Jsonl.quote(dir)
                 + ",\"step\":"
-                + Ndjson.quote(step)
+                + Jsonl.quote(step)
                 + ",\"code\":"
-                + Ndjson.quote(code)
+                + Jsonl.quote(code)
                 + ",\"message\":"
-                + Ndjson.quote(message)
+                + Jsonl.quote(message)
                 + ",\"test\":"
-                + Ndjson.quote(test)
+                + Jsonl.quote(test)
                 + ",\"exceptionClass\":"
-                + Ndjson.quote(exceptionClass)
+                + Jsonl.quote(exceptionClass)
                 + "}";
     }
 
@@ -1730,18 +1730,18 @@ public final class EngineProtocol {
         return "{\"t\":\""
                 + STEP_FINISH
                 + "\",\"dir\":"
-                + Ndjson.quote(dir)
+                + Jsonl.quote(dir)
                 + ",\"step\":"
-                + Ndjson.quote(step)
+                + Jsonl.quote(step)
                 + ",\"phase\":"
-                + Ndjson.quote(phase)
+                + Jsonl.quote(phase)
                 + ",\"status\":"
-                + Ndjson.quote(status)
+                + Jsonl.quote(status)
                 + "}";
     }
 
     public static String pipelineFinish(String dir, boolean success) {
-        return "{\"t\":\"" + PIPELINE_FINISH + "\",\"kind\":\"build\",\"dir\":" + Ndjson.quote(dir) + ",\"success\":"
+        return "{\"t\":\"" + PIPELINE_FINISH + "\",\"kind\":\"build\",\"dir\":" + Jsonl.quote(dir) + ",\"success\":"
                 + success + "}";
     }
 
@@ -1770,11 +1770,11 @@ public final class EngineProtocol {
         return "{\"t\":\""
                 + PIPELINE_FINISH
                 + "\",\"kind\":\"build\",\"dir\":"
-                + Ndjson.quote(dir)
+                + Jsonl.quote(dir)
                 + ",\"success\":"
                 + success
                 + ",\"buildOutcome\":"
-                + Ndjson.quote(buildOutcome)
+                + Jsonl.quote(buildOutcome)
                 + ",\"testTotal\":"
                 + total
                 + ",\"testSucceeded\":"
@@ -1796,7 +1796,7 @@ public final class EngineProtocol {
         return "{\"t\":\""
                 + PIPELINE_FINISH
                 + "\",\"kind\":\"lock\",\"dir\":"
-                + Ndjson.quote(dir)
+                + Jsonl.quote(dir)
                 + ",\"success\":"
                 + success
                 + ",\"lockPackages\":"
@@ -1816,7 +1816,7 @@ public final class EngineProtocol {
         return "{\"t\":\""
                 + PIPELINE_FINISH
                 + "\",\"kind\":\"sync\",\"dir\":"
-                + Ndjson.quote(dir)
+                + Jsonl.quote(dir)
                 + ",\"success\":"
                 + success
                 + ",\"syncFetched\":"
@@ -1828,7 +1828,7 @@ public final class EngineProtocol {
 
     /** Opens one module's event scope in a {@code jk lock}/{@code jk update} cascade (see {@link #LOCK_MODULE}). */
     public static String lockModule(String dir, String coord) {
-        return "{\"t\":\"" + LOCK_MODULE + "\",\"dir\":" + Ndjson.quote(dir) + ",\"coord\":" + Ndjson.quote(coord)
+        return "{\"t\":\"" + LOCK_MODULE + "\",\"dir\":" + Jsonl.quote(dir) + ",\"coord\":" + Jsonl.quote(coord)
                 + "}";
     }
 
@@ -1837,11 +1837,11 @@ public final class EngineProtocol {
         return "{\"t\":\""
                 + LOCK_PACKAGE
                 + "\",\"dir\":"
-                + Ndjson.quote(dir)
+                + Jsonl.quote(dir)
                 + ",\"name\":"
-                + Ndjson.quote(name)
+                + Jsonl.quote(name)
                 + ",\"version\":"
-                + Ndjson.quote(version)
+                + Jsonl.quote(version)
                 + "}";
     }
 
@@ -1874,17 +1874,17 @@ public final class EngineProtocol {
         return "{\"t\":\""
                 + AUDIT_FINDING
                 + "\",\"dir\":"
-                + Ndjson.quote(dir)
+                + Jsonl.quote(dir)
                 + ",\"module\":"
-                + Ndjson.quote(module)
+                + Jsonl.quote(module)
                 + ",\"version\":"
-                + Ndjson.quote(version)
+                + Jsonl.quote(version)
                 + ",\"vulnId\":"
-                + Ndjson.quote(vulnId)
+                + Jsonl.quote(vulnId)
                 + ",\"severity\":"
-                + Ndjson.quote(severity)
+                + Jsonl.quote(severity)
                 + ",\"summary\":"
-                + Ndjson.quote(summary)
+                + Jsonl.quote(summary)
                 + "}";
     }
 
@@ -1896,13 +1896,13 @@ public final class EngineProtocol {
         return "{\"t\":\""
                 + FORMAT_FILE
                 + "\",\"dir\":"
-                + Ndjson.quote(dir)
+                + Jsonl.quote(dir)
                 + ",\"path\":"
-                + Ndjson.quote(path)
+                + Jsonl.quote(path)
                 + ",\"status\":"
-                + Ndjson.quote(status)
+                + Jsonl.quote(status)
                 + ",\"message\":"
-                + Ndjson.quote(message)
+                + Jsonl.quote(message)
                 + ",\"index\":"
                 + index
                 + ",\"total\":"
@@ -1915,11 +1915,11 @@ public final class EngineProtocol {
         return "{\"t\":\""
                 + IMPORT_NOTE
                 + "\",\"dir\":"
-                + Ndjson.quote(dir)
+                + Jsonl.quote(dir)
                 + ",\"kind\":"
-                + Ndjson.quote(kind)
+                + Jsonl.quote(kind)
                 + ",\"text\":"
-                + Ndjson.quote(text)
+                + Jsonl.quote(text)
                 + "}";
     }
 
@@ -1934,17 +1934,17 @@ public final class EngineProtocol {
         return "{\"t\":\""
                 + PROVISION_RESULT
                 + "\",\"bin\":"
-                + Ndjson.quote(bin)
+                + Jsonl.quote(bin)
                 + ",\"version\":"
-                + Ndjson.quote(version)
+                + Jsonl.quote(version)
                 + ",\"source\":"
-                + Ndjson.quote(source)
+                + Jsonl.quote(source)
                 + ",\"error\":"
-                + Ndjson.quote(error)
+                + Jsonl.quote(error)
                 + ",\"exit\":"
                 + exit
                 + ",\"diag\":"
-                + Ndjson.quote(diag)
+                + Jsonl.quote(diag)
                 + "}";
     }
 
@@ -1959,7 +1959,7 @@ public final class EngineProtocol {
         return "{\"t\":\""
                 + PIPELINE_FINISH
                 + "\",\"kind\":\"format\",\"dir\":"
-                + Ndjson.quote(dir)
+                + Jsonl.quote(dir)
                 + ",\"success\":"
                 + success
                 + ",\"formatChanged\":"
@@ -1983,13 +1983,13 @@ public final class EngineProtocol {
         return "{\"t\":\""
                 + PIPELINE_FINISH
                 + "\",\"kind\":\"git-fetch\",\"dir\":"
-                + Ndjson.quote(dir)
+                + Jsonl.quote(dir)
                 + ",\"success\":"
                 + success
                 + ",\"gitCheckout\":"
-                + Ndjson.quote(checkout)
+                + Jsonl.quote(checkout)
                 + ",\"gitSha\":"
-                + Ndjson.quote(sha)
+                + Jsonl.quote(sha)
                 + "}";
     }
 
@@ -1998,7 +1998,7 @@ public final class EngineProtocol {
         return "{\"t\":\""
                 + PIPELINE_FINISH
                 + "\",\"kind\":\"publish\",\"dir\":"
-                + Ndjson.quote(dir)
+                + Jsonl.quote(dir)
                 + ",\"success\":"
                 + success
                 + ",\"publishFiles\":"
@@ -2016,7 +2016,7 @@ public final class EngineProtocol {
         return "{\"t\":\""
                 + PIPELINE_FINISH
                 + "\",\"kind\":\"import\",\"dir\":"
-                + Ndjson.quote(dir)
+                + Jsonl.quote(dir)
                 + ",\"success\":"
                 + success
                 + ",\"importExit\":"
@@ -2024,9 +2024,9 @@ public final class EngineProtocol {
                 + ",\"importWarnings\":"
                 + warnings
                 + ",\"importError\":"
-                + Ndjson.quote(error)
+                + Jsonl.quote(error)
                 + ",\"importDiag\":"
-                + Ndjson.quote(diag)
+                + Jsonl.quote(diag)
                 + "}";
     }
 
@@ -2053,7 +2053,7 @@ public final class EngineProtocol {
         return "{\"t\":\""
                 + PIPELINE_FINISH
                 + "\",\"kind\":\"image\",\"dir\":"
-                + Ndjson.quote(dir)
+                + Jsonl.quote(dir)
                 + ",\"success\":"
                 + success
                 + ",\"testTotal\":"
@@ -2065,15 +2065,15 @@ public final class EngineProtocol {
                 + ",\"testSkipped\":"
                 + testSkipped
                 + ",\"imageRef\":"
-                + Ndjson.quote(ref)
+                + Jsonl.quote(ref)
                 + ",\"imageTarball\":"
-                + Ndjson.quote(tarball)
+                + Jsonl.quote(tarball)
                 + ",\"imageName\":"
-                + Ndjson.quote(name)
+                + Jsonl.quote(name)
                 + ",\"imageVersion\":"
-                + Ndjson.quote(version)
+                + Jsonl.quote(version)
                 + ",\"imageDaemonExe\":"
-                + Ndjson.quote(daemonExe)
+                + Jsonl.quote(daemonExe)
                 + "}";
     }
 
@@ -2081,9 +2081,9 @@ public final class EngineProtocol {
         return "{\"t\":\""
                 + MODULE_FINISH
                 + "\",\"dir\":"
-                + Ndjson.quote(dir)
+                + Jsonl.quote(dir)
                 + ",\"coord\":"
-                + Ndjson.quote(coord)
+                + Jsonl.quote(coord)
                 + ",\"success\":"
                 + success
                 + ",\"exitCode\":"
@@ -2107,7 +2107,7 @@ public final class EngineProtocol {
 
     /** The one error envelope; see {@link #ERROR} for the code vocabulary. */
     public static String error(String code, String message) {
-        return "{\"t\":\"" + ERROR + "\",\"code\":" + Ndjson.quote(code) + ",\"message\":" + Ndjson.quote(message)
+        return "{\"t\":\"" + ERROR + "\",\"code\":" + Jsonl.quote(code) + ",\"message\":" + Jsonl.quote(message)
                 + "}";
     }
 
@@ -2131,17 +2131,17 @@ public final class EngineProtocol {
         return "{\"t\":\""
                 + TOOL_RESOLVE_REQUEST
                 + "\",\"coord\":"
-                + Ndjson.quote(coord)
+                + Jsonl.quote(coord)
                 + ",\"with\":"
                 + quoteArray(with)
                 + ",\"bin\":"
-                + Ndjson.quote(bin)
+                + Jsonl.quote(bin)
                 + ",\"mainClass\":"
-                + Ndjson.quote(mainClass)
+                + Jsonl.quote(mainClass)
                 + ",\"repoUrl\":"
-                + Ndjson.quote(repoUrl)
+                + Jsonl.quote(repoUrl)
                 + ",\"cache\":"
-                + Ndjson.quote(cache)
+                + Jsonl.quote(cache)
                 + "}";
     }
 
@@ -2157,13 +2157,13 @@ public final class EngineProtocol {
         return "{\"t\":\""
                 + PIPELINE_FINISH
                 + "\",\"kind\":\"tool\",\"dir\":"
-                + Ndjson.quote(dir)
+                + Jsonl.quote(dir)
                 + ",\"success\":"
                 + success
                 + ",\"toolCoord\":"
-                + Ndjson.quote(coord)
+                + Jsonl.quote(coord)
                 + ",\"toolMainClass\":"
-                + Ndjson.quote(mainClass)
+                + Jsonl.quote(mainClass)
                 + ",\"toolClasspath\":"
                 + quoteArray(classpath)
                 + "}";
@@ -2184,17 +2184,17 @@ public final class EngineProtocol {
         return "{\"t\":\""
                 + SCRIPT_PREPARE_REQUEST
                 + "\",\"mode\":"
-                + Ndjson.quote(mode)
+                + Jsonl.quote(mode)
                 + ",\"with\":"
                 + quoteArray(with)
                 + ",\"script\":"
-                + Ndjson.quote(script)
+                + Jsonl.quote(script)
                 + ",\"cache\":"
-                + Ndjson.quote(cache)
+                + Jsonl.quote(cache)
                 + ",\"stateDir\":"
-                + Ndjson.quote(stateDir)
+                + Jsonl.quote(stateDir)
                 + ",\"repoUrl\":"
-                + Ndjson.quote(repoUrl)
+                + Jsonl.quote(repoUrl)
                 + ",\"forceRecompile\":"
                 + forceRecompile
                 + "}";
@@ -2216,19 +2216,19 @@ public final class EngineProtocol {
         return "{\"t\":\""
                 + PIPELINE_FINISH
                 + "\",\"kind\":\"script\",\"dir\":"
-                + Ndjson.quote(dir)
+                + Jsonl.quote(dir)
                 + ",\"success\":"
                 + success
                 + ",\"scriptMainClass\":"
-                + Ndjson.quote(mainClass)
+                + Jsonl.quote(mainClass)
                 + ",\"scriptClasspath\":"
                 + quoteArray(classpath)
                 + ",\"scriptClassesDir\":"
-                + Ndjson.quote(classesDir)
+                + Jsonl.quote(classesDir)
                 + ",\"scriptKotlincBin\":"
-                + Ndjson.quote(kotlincBin)
+                + Jsonl.quote(kotlincBin)
                 + ",\"scriptStdlib\":"
-                + Ndjson.quote(stdlib)
+                + Jsonl.quote(stdlib)
                 + "}";
     }
 
@@ -2250,9 +2250,9 @@ public final class EngineProtocol {
         return "{\"t\":\""
                 + CACHE_PRUNE_REQUEST
                 + "\",\"op\":"
-                + Ndjson.quote(op)
+                + Jsonl.quote(op)
                 + ",\"cache\":"
-                + Ndjson.quote(cache)
+                + Jsonl.quote(cache)
                 + ",\"olderThanDays\":"
                 + olderThanDays
                 + ",\"dryRun\":"
@@ -2260,7 +2260,7 @@ public final class EngineProtocol {
                 + ",\"sweep\":"
                 + sweep
                 + ",\"maxSize\":"
-                + Ndjson.quote(maxSize)
+                + Jsonl.quote(maxSize)
                 + ",\"includeJkTmp\":"
                 + includeJkTmp
                 + "}";
@@ -2277,9 +2277,9 @@ public final class EngineProtocol {
         return "{\"t\":\""
                 + CACHE_PRUNE_REQUEST
                 + "\",\"op\":\"clear\",\"cache\":"
-                + Ndjson.quote(cache)
+                + Jsonl.quote(cache)
                 + ",\"dir\":"
-                + Ndjson.quote(projectRoot)
+                + Jsonl.quote(projectRoot)
                 + ",\"dryRun\":"
                 + dryRun
                 + "}";
@@ -2301,7 +2301,7 @@ public final class EngineProtocol {
         return "{\"t\":\""
                 + PIPELINE_FINISH
                 + "\",\"kind\":\"cache\",\"dir\":"
-                + Ndjson.quote(dir)
+                + Jsonl.quote(dir)
                 + ",\"success\":"
                 + success
                 + ",\"cacheFiles\":"
@@ -2359,12 +2359,12 @@ public final class EngineProtocol {
         if (!hasVariant && !hasEnv && !hasJvm && !rebuild) return request;
         StringBuilder b = new StringBuilder(request.substring(0, request.length() - 1));
         if (rebuild) b.append(",\"rebuild\":true");
-        if (hasVariant) b.append(",\"variant\":").append(Ndjson.quote(variant));
-        if (hasEnv) b.append(",\"env\":").append(Ndjson.map(clientEnv));
+        if (hasVariant) b.append(",\"variant\":").append(Jsonl.quote(variant));
+        if (hasEnv) b.append(",\"env\":").append(Jsonl.map(clientEnv));
         if (hasJvm) {
             if (t.maxRamPercent() != null)
                 b.append(",\"jvmMaxRam\":\"").append(t.maxRamPercent()).append('\"');
-            if (t.gc() != null) b.append(",\"jvmGc\":").append(Ndjson.quote(t.gc()));
+            if (t.gc() != null) b.append(",\"jvmGc\":").append(Jsonl.quote(t.gc()));
             if (t.stringDedup() != null)
                 b.append(",\"jvmStringDedup\":\"").append(t.stringDedup()).append('\"');
             if (!t.extraArgs().isEmpty()) b.append(",\"jvmArgs\":").append(quoteArray(t.extraArgs()));
@@ -2382,21 +2382,21 @@ public final class EngineProtocol {
 
     /** Decode side of {@link #withSession}: the selection, or {@code ""}. */
     public static String variantOf(String request) {
-        String v = Ndjson.str(request, "variant");
+        String v = Jsonl.str(request, "variant");
         return v == null ? "" : v;
     }
 
     /** Decode side of {@link #withSession}: the client-resolved env values, or empty. */
     public static java.util.Map<String, String> clientEnvOf(String request) {
-        return Ndjson.strMap(request, "env");
+        return Jsonl.strMap(request, "env");
     }
 
     /** Decode side of {@link #withSession}; NONE when the request carries no tuning fields. */
     public static cc.jumpkick.config.PluginTuning jvmTuning(String request) {
-        String maxRam = Ndjson.str(request, "jvmMaxRam");
-        String gc = Ndjson.str(request, "jvmGc");
-        String dedup = Ndjson.str(request, "jvmStringDedup");
-        List<String> args = Ndjson.strArray(request, "jvmArgs");
+        String maxRam = Jsonl.str(request, "jvmMaxRam");
+        String gc = Jsonl.str(request, "jvmGc");
+        String dedup = Jsonl.str(request, "jvmStringDedup");
+        List<String> args = Jsonl.strArray(request, "jvmArgs");
         if (maxRam == null && gc == null && dedup == null && args.isEmpty()) {
             return cc.jumpkick.config.PluginTuning.NONE;
         }
@@ -2409,12 +2409,12 @@ public final class EngineProtocol {
         return new cc.jumpkick.config.PluginTuning(ram, gc, dedup == null ? null : Boolean.valueOf(dedup), args);
     }
 
-    /** {@code Ndjson} only reads string arrays; it has no writer half, so this is the encode side. */
+    /** {@code Jsonl} only reads string arrays; it has no writer half, so this is the encode side. */
     static String quoteArray(List<String> values) {
         StringBuilder b = new StringBuilder("[");
         for (int i = 0; i < values.size(); i++) {
             if (i > 0) b.append(',');
-            b.append(Ndjson.quote(values.get(i)));
+            b.append(Jsonl.quote(values.get(i)));
         }
         return b.append(']').toString();
     }
@@ -2426,17 +2426,17 @@ public final class EngineProtocol {
     }
 
     public static String historyShowRequest(String id) {
-        return "{\"t\":\"" + HISTORY_SHOW_REQUEST + "\",\"id\":" + Ndjson.quote(id) + "}";
+        return "{\"t\":\"" + HISTORY_SHOW_REQUEST + "\",\"id\":" + Jsonl.quote(id) + "}";
     }
 
     public static String historyDeleteRequest(String id) {
-        return "{\"t\":\"" + HISTORY_DELETE_REQUEST + "\",\"id\":" + Ndjson.quote(id) + "}";
+        return "{\"t\":\"" + HISTORY_DELETE_REQUEST + "\",\"id\":" + Jsonl.quote(id) + "}";
     }
 
     /** A metrics stream request; null/blank {@code dir} asks for every row. */
     public static String metricsRequest(String dir) {
         return dir == null || dir.isBlank()
                 ? "{\"t\":\"" + METRICS_REQUEST + "\"}"
-                : "{\"t\":\"" + METRICS_REQUEST + "\",\"dir\":" + Ndjson.quote(dir) + "}";
+                : "{\"t\":\"" + METRICS_REQUEST + "\",\"dir\":" + Jsonl.quote(dir) + "}";
     }
 }

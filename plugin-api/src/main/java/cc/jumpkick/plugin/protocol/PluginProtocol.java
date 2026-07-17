@@ -2,7 +2,7 @@
 package cc.jumpkick.plugin.protocol;
 
 /**
- * The single vocabulary of the engine↔plugin wire — one NDJSON protocol every forked plugin
+ * The single vocabulary of the engine↔plugin wire — one JSONL protocol every forked plugin
  * speaks (see {@code docs/wip/unified-plugin-wire.md}). Every line is a flat object keyed by
  * {@link #T} ({@code "t"}); the spec (engine→plugin, a file) and the reply (plugin→engine, stdout,
  * {@code ##JK<XX>:}-prefixed) draw from the constants here so neither side hard-codes a string.

@@ -13,7 +13,7 @@ dependencies {
     implementation(project(":io"))
     implementation(project(":toolchain"))
     // compat deleted: mvn/gradle/kotlin bridge + JkBuildRenderer moved into this module
-    implementation(project(":plugin-api"))  // shared NDJSON codec (bundled into the fat jar)
+    implementation(project(":plugin-api"))  // shared JSONL codec (bundled into the fat jar)
 }
 
 // Fat JAR: bundle the full runtime closure so the worker runs as `java -jar`.

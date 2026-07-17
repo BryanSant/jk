@@ -19,7 +19,7 @@ dependencies {
     implementation(project(":client-io"))
     implementation(project(":toolchain-jdk"))
     implementation(project(":engine-api"))
-    // Shared NDJSON reader for the engine/worker wire envelope.
+    // Shared JSONL reader for the engine/worker wire envelope.
     implementation(project(":plugin-api"))
 
     // JLine 4 FFM terminal provider for raw-mode TUI (jk init wizard).

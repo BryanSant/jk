@@ -9,7 +9,7 @@ stripped-down, JVM-centric, single-user cousin of Buildkite (build history, tren
 This is the "web backend" [`engine.md`](engine.md) anticipated when it deferred a stable versioned
 wire protocol: because the HTTP server lives *inside* the engine process and calls `BuildService`
 and friends directly, it is always the same build as the engine — no protocol versioning is needed,
-and the NDJSON socket protocol stays untouched and internal.
+and the JSONL socket protocol stays untouched and internal.
 
 ## Design constraints (non-negotiable)
 
@@ -19,7 +19,7 @@ and the NDJSON socket protocol stays untouched and internal.
 - **Zero new dependencies.** The server is the JDK's own `jdk.httpserver` module
   (`com.sun.net.httpserver.HttpServer` — a spec'd JDK module, not internal API), which the engine's
   JDK 25 floor guarantees. Routing, JSON emission, and MIME mapping are small hand-rolled pieces in
-  the existing `Ndjson`/`MinimalXml` tradition. No Jetty, no Netty, no JSON library.
+  the existing `Jsonl`/`MinimalXml` tradition. No Jetty, no Netty, no JSON library.
 - **Advisory, never load-bearing.** The engine's primary role is hosting builds. If the HTTP bind
   fails (port already in use, bad `host` value), the engine logs it loudly, surfaces it in
   `jk engine status`, and **continues serving builds without HTTP**. An HTTP misconfiguration must
@@ -173,7 +173,7 @@ Resolution and safety:
 
 All under `/api/`, dispatched by a tiny hand-rolled router (method + first path segment — no
 pattern language until something needs it). Responses are JSON emitted by a small `JsonOut`
-writer; request bodies are the flat scalar objects the existing dependency-free `Ndjson` reader
+writer; request bodies are the flat scalar objects the existing dependency-free `Jsonl` reader
 already parses — the same deliberate flat-message discipline as the engine wire protocol.
 
 | Endpoint | Method | Auth | Purpose |

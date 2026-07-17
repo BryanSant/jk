@@ -17,7 +17,7 @@ import cc.jumpkick.engine.plugin.JvmOptions;
 import cc.jumpkick.engine.plugin.MemoryProbe;
 import cc.jumpkick.engine.protocol.EngineProtocol;
 import cc.jumpkick.model.JkBuild;
-import cc.jumpkick.plugin.protocol.Ndjson;
+import cc.jumpkick.plugin.protocol.Jsonl;
 import cc.jumpkick.run.PipelineListener;
 import cc.jumpkick.run.PipelineResult;
 import cc.jumpkick.run.PipelineView;
@@ -409,9 +409,9 @@ public final class EngineServer implements AutoCloseable {
             w.flush();
             String ack = r.readLine();
             if (ack == null || !EngineProtocol.HELLO_ACK.equals(EngineProtocol.typeOf(ack))) return null;
-            String v = cc.jumpkick.plugin.protocol.Ndjson.str(ack, "version");
+            String v = cc.jumpkick.plugin.protocol.Jsonl.str(ack, "version");
             if (v == null) return null;
-            String id = cc.jumpkick.plugin.protocol.Ndjson.str(ack, "buildId");
+            String id = cc.jumpkick.plugin.protocol.Jsonl.str(ack, "buildId");
             return new Incumbent(v, id == null ? "" : id);
         } catch (IOException | RuntimeException e) {
             return null;
@@ -503,7 +503,7 @@ public final class EngineServer implements AutoCloseable {
     private boolean authenticate(BufferedReader reader) throws IOException {
         String line = reader.readLine();
         if (line == null || !EngineProtocol.AUTH.equals(EngineProtocol.typeOf(line))) return false;
-        String presented = Ndjson.str(line, "token");
+        String presented = Jsonl.str(line, "token");
         if (presented == null) return false;
         return java.security.MessageDigest.isEqual(
                 expectedToken.getBytes(StandardCharsets.UTF_8), presented.getBytes(StandardCharsets.UTF_8));
@@ -570,7 +570,7 @@ public final class EngineServer implements AutoCloseable {
                 }
                 switch (type) {
                     case EngineProtocol.HELLO -> {
-                        int clientProto = Ndjson.intValue(line, "proto", EngineProtocol.PROTOCOL);
+                        int clientProto = Jsonl.intValue(line, "proto", EngineProtocol.PROTOCOL);
                         if (clientProto > EngineProtocol.PROTOCOL) {
                             // A newer-protocol client: this engine must not serve wire semantics
                             // it postdates — the client reacts by taking over (spawn + drain).
@@ -605,7 +605,7 @@ public final class EngineServer implements AutoCloseable {
                                         httpError));
                     }
                     case EngineProtocol.SHUTDOWN -> {
-                        boolean force = cc.jumpkick.plugin.protocol.Ndjson.bool(line, "force", false);
+                        boolean force = cc.jumpkick.plugin.protocol.Jsonl.bool(line, "force", false);
                         synchronized (lifecycleLock) {
                             int jobs = activePipelines.get();
                             if (force || jobs == 0) {
@@ -897,9 +897,9 @@ public final class EngineServer implements AutoCloseable {
 
     /** The request's location for journal/dashboard rows: {@code dir}, else the nearest thing. */
     private static String journalDir(String requestLine) {
-        String dir = Ndjson.str(requestLine, "dir");
+        String dir = Jsonl.str(requestLine, "dir");
         if (dir != null) return dir;
-        String cache = Ndjson.str(requestLine, "cache");
+        String cache = Jsonl.str(requestLine, "cache");
         if (cache != null) return cache;
         return "";
     }
@@ -1205,23 +1205,23 @@ public final class EngineServer implements AutoCloseable {
     /** Decode the request, reconstruct a {@link Session}/{@link WorkspaceRequest}, and run it. */
     private void runBuild(String requestLine, Session.CancelToken cancelToken, BufferedWriter writer) {
         try {
-            String entryDirStr = Ndjson.str(requestLine, "dir");
-            String cacheStr = Ndjson.str(requestLine, "cache");
-            String jdksDirStr = Ndjson.str(requestLine, "jdksDir");
-            int workers = Ndjson.intValue(requestLine, "workers", 1);
-            String profile = Ndjson.str(requestLine, "profile");
-            boolean skipTests = Ndjson.bool(requestLine, "skipTests", false);
-            boolean verbose = Ndjson.bool(requestLine, "verbose", false);
-            int maxModuleConcurrency = Ndjson.intValue(requestLine, "maxModuleConcurrency", 0);
-            boolean parallelTests = Ndjson.bool(requestLine, "parallelTests", false);
-            boolean offline = Ndjson.bool(requestLine, "offline", false);
-            boolean force = Ndjson.bool(requestLine, "force", false);
+            String entryDirStr = Jsonl.str(requestLine, "dir");
+            String cacheStr = Jsonl.str(requestLine, "cache");
+            String jdksDirStr = Jsonl.str(requestLine, "jdksDir");
+            int workers = Jsonl.intValue(requestLine, "workers", 1);
+            String profile = Jsonl.str(requestLine, "profile");
+            boolean skipTests = Jsonl.bool(requestLine, "skipTests", false);
+            boolean verbose = Jsonl.bool(requestLine, "verbose", false);
+            int maxModuleConcurrency = Jsonl.intValue(requestLine, "maxModuleConcurrency", 0);
+            boolean parallelTests = Jsonl.bool(requestLine, "parallelTests", false);
+            boolean offline = Jsonl.bool(requestLine, "offline", false);
+            boolean force = Jsonl.bool(requestLine, "force", false);
             // Distinct from force: rerun bypasses the action cache / freshness stamps without
             // implying refresh, so locked dependencies still come from the local CAS (jk verify).
-            boolean rerun = Ndjson.bool(requestLine, "rebuild", false);
+            boolean rerun = Jsonl.bool(requestLine, "rebuild", false);
             // jk build sends true (auto-freshen a stale workspace lock engine-side before building);
             // jk verify's scratch rebuild sends false (pinned lock used verbatim).
-            boolean freshenLock = Ndjson.bool(requestLine, "freshenLock", false);
+            boolean freshenLock = Jsonl.bool(requestLine, "freshenLock", false);
 
             Path entryDir = Path.of(entryDirStr);
             Path cache = Path.of(cacheStr);
@@ -1273,7 +1273,7 @@ public final class EngineServer implements AutoCloseable {
             }
         } catch (Exception e) {
             sendQuiet(writer, EngineProtocol.requestFailed(String.valueOf(e.getMessage())));
-            publishRequestError(eventRequestId(), Ndjson.str(requestLine, "dir"), String.valueOf(e.getMessage()));
+            publishRequestError(eventRequestId(), Jsonl.str(requestLine, "dir"), String.valueOf(e.getMessage()));
         }
     }
 
@@ -1307,7 +1307,7 @@ public final class EngineServer implements AutoCloseable {
     private void handleProjectInfoRequest(String requestLine, BufferedWriter writer) {
         cc.jumpkick.engine.protocol.ProjectInfo info;
         try {
-            info = cc.jumpkick.runtime.ExecPlans.projectInfo(Path.of(Ndjson.str(requestLine, "dir")));
+            info = cc.jumpkick.runtime.ExecPlans.projectInfo(Path.of(Jsonl.str(requestLine, "dir")));
         } catch (RuntimeException e) {
             info = cc.jumpkick.engine.protocol.ProjectInfo.error(String.valueOf(e.getMessage()));
         }
@@ -1323,18 +1323,18 @@ public final class EngineServer implements AutoCloseable {
     private void handleOutdatedRequest(String requestLine, BufferedWriter writer) {
         cc.jumpkick.engine.protocol.OutdatedReport report;
         try {
-            Path dir = Path.of(Ndjson.str(requestLine, "dir"));
-            Path cache = Path.of(Ndjson.str(requestLine, "cache"));
-            String repoUrl = Ndjson.str(requestLine, "repoUrl");
+            Path dir = Path.of(Jsonl.str(requestLine, "dir"));
+            Path cache = Path.of(Jsonl.str(requestLine, "cache"));
+            String repoUrl = Jsonl.str(requestLine, "repoUrl");
             JkConfig config = new JkConfig(
                     Optional.empty(),
-                    Optional.of(Ndjson.bool(requestLine, "offline", false)),
-                    Optional.of(Ndjson.bool(requestLine, "rebuild", false)),
+                    Optional.of(Jsonl.bool(requestLine, "offline", false)),
+                    Optional.of(Jsonl.bool(requestLine, "rebuild", false)),
                     Optional.empty(),
                     Optional.empty(),
                     Optional.empty(),
                     Optional.empty(),
-                    Optional.of(Ndjson.bool(requestLine, "force", false)),
+                    Optional.of(Jsonl.bool(requestLine, "force", false)),
                     Optional.empty());
             Session session =
                     Session.defaults().withConfig(config).withWorkingDir(dir).withCacheDir(cache);
@@ -1359,11 +1359,11 @@ public final class EngineServer implements AutoCloseable {
         String rendered = null;
         try {
             rendered = cc.jumpkick.runtime.GraphOps.treeRender(
-                    Path.of(Ndjson.str(requestLine, "dir")),
-                    Ndjson.intValue(requestLine, "maxDepth", Integer.MAX_VALUE),
-                    Ndjson.bool(requestLine, "flatten", false),
-                    Ndjson.bool(requestLine, "stack", false),
-                    Ndjson.strArray(requestLine, "scopes"));
+                    Path.of(Jsonl.str(requestLine, "dir")),
+                    Jsonl.intValue(requestLine, "maxDepth", Integer.MAX_VALUE),
+                    Jsonl.bool(requestLine, "flatten", false),
+                    Jsonl.bool(requestLine, "stack", false),
+                    Jsonl.strArray(requestLine, "scopes"));
         } catch (java.io.IOException | RuntimeException e) {
             error = String.valueOf(e.getMessage());
         }
@@ -1375,7 +1375,7 @@ public final class EngineServer implements AutoCloseable {
         cc.jumpkick.engine.protocol.WhyReport report;
         try {
             report = cc.jumpkick.runtime.GraphOps.why(
-                    Path.of(Ndjson.str(requestLine, "dir")), Ndjson.str(requestLine, "query"));
+                    Path.of(Jsonl.str(requestLine, "dir")), Jsonl.str(requestLine, "query"));
         } catch (RuntimeException e) {
             report = cc.jumpkick.engine.protocol.WhyReport.error(String.valueOf(e.getMessage()));
         }
@@ -1401,7 +1401,7 @@ public final class EngineServer implements AutoCloseable {
      */
     private boolean maybeDelegate(String requestLine, BufferedReader reader, BufferedWriter writer) {
         if (jobMode) return false; // a job child serves what it was handed — never re-routes
-        String entryDir = cc.jumpkick.plugin.protocol.Ndjson.str(requestLine, "dir");
+        String entryDir = cc.jumpkick.plugin.protocol.Jsonl.str(requestLine, "dir");
         if (entryDir == null) return false;
         String pin = EngineDelegate.pinnedVersionDiffering(Path.of(entryDir), version);
         if (pin == null) return false;
@@ -1431,10 +1431,10 @@ public final class EngineServer implements AutoCloseable {
         cc.jumpkick.engine.protocol.PluginCommandReport report;
         try {
             report = cc.jumpkick.runtime.PluginCommands.run(
-                    Path.of(Ndjson.str(requestLine, "dir")),
-                    Path.of(Ndjson.str(requestLine, "cache")),
-                    Ndjson.str(requestLine, "command"),
-                    Ndjson.strArray(requestLine, "args"),
+                    Path.of(Jsonl.str(requestLine, "dir")),
+                    Path.of(Jsonl.str(requestLine, "cache")),
+                    Jsonl.str(requestLine, "command"),
+                    Jsonl.strArray(requestLine, "args"),
                     EngineProtocol.variantOf(requestLine),
                     EngineProtocol.clientEnvOf(requestLine));
         } catch (RuntimeException e) {
@@ -1448,8 +1448,8 @@ public final class EngineServer implements AutoCloseable {
         cc.jumpkick.engine.protocol.GeneratedFiles files;
         try {
             files = cc.jumpkick.runtime.GenerateOps.generate(
-                    Path.of(Ndjson.str(requestLine, "dir")),
-                    Ndjson.str(requestLine, "kind"),
+                    Path.of(Jsonl.str(requestLine, "dir")),
+                    Jsonl.str(requestLine, "kind"),
                     EngineProtocol.generateParams(requestLine));
         } catch (RuntimeException e) {
             files = cc.jumpkick.engine.protocol.GeneratedFiles.error(String.valueOf(e.getMessage()));
@@ -1461,10 +1461,10 @@ public final class EngineServer implements AutoCloseable {
     private void handleIdeModelRequest(String requestLine, BufferedWriter writer) {
         cc.jumpkick.engine.protocol.IdeWireModel model;
         try {
-            String jdksDir = Ndjson.str(requestLine, "jdksDir");
+            String jdksDir = Jsonl.str(requestLine, "jdksDir");
             model = cc.jumpkick.runtime.IdeOps.ideModel(
-                    Path.of(Ndjson.str(requestLine, "dir")),
-                    Path.of(Ndjson.str(requestLine, "cache")),
+                    Path.of(Jsonl.str(requestLine, "dir")),
+                    Path.of(Jsonl.str(requestLine, "cache")),
                     jdksDir == null ? null : Path.of(jdksDir),
                     false);
         } catch (RuntimeException e) {
@@ -1477,7 +1477,7 @@ public final class EngineServer implements AutoCloseable {
     private void handleDenyCheckRequest(String requestLine, BufferedWriter writer) {
         cc.jumpkick.engine.protocol.DenyReport report;
         try {
-            report = cc.jumpkick.runtime.PolicyOps.denyCheck(Path.of(Ndjson.str(requestLine, "dir")));
+            report = cc.jumpkick.runtime.PolicyOps.denyCheck(Path.of(Jsonl.str(requestLine, "dir")));
         } catch (RuntimeException e) {
             report = cc.jumpkick.engine.protocol.DenyReport.error(String.valueOf(e.getMessage()));
         }
@@ -1489,9 +1489,9 @@ public final class EngineServer implements AutoCloseable {
         cc.jumpkick.runtime.EditOps.Result result;
         try {
             result = cc.jumpkick.runtime.EditOps.apply(
-                    Path.of(Ndjson.str(requestLine, "file")),
-                    Ndjson.str(requestLine, "op"),
-                    Ndjson.strArray(requestLine, "args"));
+                    Path.of(Jsonl.str(requestLine, "file")),
+                    Jsonl.str(requestLine, "op"),
+                    Jsonl.strArray(requestLine, "args"));
         } catch (RuntimeException e) {
             result = new cc.jumpkick.runtime.EditOps.Result(false, String.valueOf(e.getMessage()));
         }
@@ -1501,14 +1501,14 @@ public final class EngineServer implements AutoCloseable {
     private void handleExecPlanRequest(String requestLine, BufferedWriter writer) {
         cc.jumpkick.engine.protocol.ExecPlan plan;
         try {
-            String binDir = Ndjson.str(requestLine, "binDir");
-            String libDir = Ndjson.str(requestLine, "libDir");
+            String binDir = Jsonl.str(requestLine, "binDir");
+            String libDir = Jsonl.str(requestLine, "libDir");
             plan = cc.jumpkick.runtime.ExecPlans.execPlan(
-                    Path.of(Ndjson.str(requestLine, "dir")),
-                    Path.of(Ndjson.str(requestLine, "cache")),
-                    Ndjson.str(requestLine, "kind"),
-                    Ndjson.str(requestLine, "mainOverride"),
-                    Ndjson.str(requestLine, "binName"),
+                    Path.of(Jsonl.str(requestLine, "dir")),
+                    Path.of(Jsonl.str(requestLine, "cache")),
+                    Jsonl.str(requestLine, "kind"),
+                    Jsonl.str(requestLine, "mainOverride"),
+                    Jsonl.str(requestLine, "binName"),
                     binDir == null ? null : Path.of(binDir),
                     libDir == null ? null : Path.of(libDir),
                     EngineProtocol.variantOf(requestLine),
@@ -1521,18 +1521,18 @@ public final class EngineServer implements AutoCloseable {
 
     private void handleForecastRequest(String requestLine, BufferedWriter writer) {
         try {
-            Path entryDir = Path.of(Ndjson.str(requestLine, "dir"));
-            Path cache = Path.of(Ndjson.str(requestLine, "cache"));
-            boolean skipTests = Ndjson.bool(requestLine, "skipTests", false);
+            Path entryDir = Path.of(Jsonl.str(requestLine, "dir"));
+            Path cache = Path.of(Jsonl.str(requestLine, "cache"));
+            boolean skipTests = Jsonl.bool(requestLine, "skipTests", false);
             JkConfig config = new JkConfig(
                     Optional.empty(),
-                    Optional.of(Ndjson.bool(requestLine, "offline", false)),
-                    Optional.of(Ndjson.bool(requestLine, "rebuild", false)),
+                    Optional.of(Jsonl.bool(requestLine, "offline", false)),
+                    Optional.of(Jsonl.bool(requestLine, "rebuild", false)),
                     Optional.empty(),
                     Optional.empty(),
                     Optional.empty(),
                     Optional.empty(),
-                    Optional.of(Ndjson.bool(requestLine, "force", false)),
+                    Optional.of(Jsonl.bool(requestLine, "force", false)),
                     Optional.empty());
             Session session = Session.defaults()
                     .withConfig(config)
@@ -1575,8 +1575,8 @@ public final class EngineServer implements AutoCloseable {
      */
     private void handleExplainRequest(String requestLine, BufferedWriter writer) {
         try {
-            String entryDirStr = Ndjson.str(requestLine, "dir");
-            String cacheStr = Ndjson.str(requestLine, "cache");
+            String entryDirStr = Jsonl.str(requestLine, "dir");
+            String cacheStr = Jsonl.str(requestLine, "cache");
             Path entryDir = Path.of(entryDirStr);
             Path cache = Path.of(cacheStr);
             JkBuild entryBuild = JkBuildParser.parse(entryDir.resolve("jk.toml"));
@@ -1608,18 +1608,18 @@ public final class EngineServer implements AutoCloseable {
             // The schedule-aware build-time estimate (Wave 3: previously computed client-side
             // against BuildPipelines/EffortWeights/Calibration — the known docs/engine.md gap).
             // 0 = unknown; the client renders "Build time unknown" for that.
-            String etaJdksDirStr = Ndjson.str(requestLine, "jdksDir");
+            String etaJdksDirStr = Jsonl.str(requestLine, "jdksDir");
             long etaMillis = BuildService.estimateEtaMillis(
                     plan,
                     entryDir,
                     cache,
-                    Ndjson.intValue(requestLine, "workers", 1),
+                    Jsonl.intValue(requestLine, "workers", 1),
                     etaJdksDirStr != null ? Path.of(etaJdksDirStr) : null,
-                    Ndjson.str(requestLine, "profile"),
-                    Ndjson.bool(requestLine, "skipTests", false),
-                    Ndjson.bool(requestLine, "verbose", false),
-                    Ndjson.bool(requestLine, "serial", false),
-                    Ndjson.bool(requestLine, "parallelTests", false));
+                    Jsonl.str(requestLine, "profile"),
+                    Jsonl.bool(requestLine, "skipTests", false),
+                    Jsonl.bool(requestLine, "verbose", false),
+                    Jsonl.bool(requestLine, "serial", false),
+                    Jsonl.bool(requestLine, "parallelTests", false));
             sendQuiet(writer, EngineProtocol.eta(etaMillis));
             sendQuiet(
                     writer,
@@ -1639,14 +1639,14 @@ public final class EngineServer implements AutoCloseable {
      */
     private void runTest(String requestLine, Session.CancelToken cancelToken, BufferedWriter writer) {
         try {
-            String entryDirStr = Ndjson.str(requestLine, "dir");
-            String cacheStr = Ndjson.str(requestLine, "cache");
-            String jdksDirStr = Ndjson.str(requestLine, "jdksDir");
-            int workers = Ndjson.intValue(requestLine, "workers", 1);
-            String profile = Ndjson.str(requestLine, "profile");
-            boolean verbose = Ndjson.bool(requestLine, "verbose", false);
-            boolean offline = Ndjson.bool(requestLine, "offline", false);
-            boolean force = Ndjson.bool(requestLine, "force", false);
+            String entryDirStr = Jsonl.str(requestLine, "dir");
+            String cacheStr = Jsonl.str(requestLine, "cache");
+            String jdksDirStr = Jsonl.str(requestLine, "jdksDir");
+            int workers = Jsonl.intValue(requestLine, "workers", 1);
+            String profile = Jsonl.str(requestLine, "profile");
+            boolean verbose = Jsonl.bool(requestLine, "verbose", false);
+            boolean offline = Jsonl.bool(requestLine, "offline", false);
+            boolean force = Jsonl.bool(requestLine, "force", false);
 
             Path entryDir = Path.of(entryDirStr);
             Path cache = Path.of(cacheStr);
@@ -1666,7 +1666,7 @@ public final class EngineServer implements AutoCloseable {
             JkConfig config = new JkConfig(
                     Optional.empty(),
                     Optional.of(offline),
-                    Optional.of(Ndjson.bool(requestLine, "rebuild", false)),
+                    Optional.of(Jsonl.bool(requestLine, "rebuild", false)),
                     Optional.empty(),
                     Optional.empty(),
                     Optional.of(verbose),
@@ -1739,15 +1739,15 @@ public final class EngineServer implements AutoCloseable {
      */
     private void runSingleBuild(String requestLine, Session.CancelToken cancelToken, BufferedWriter writer) {
         try {
-            String entryDirStr = Ndjson.str(requestLine, "dir");
-            String cacheStr = Ndjson.str(requestLine, "cache");
-            String jdksDirStr = Ndjson.str(requestLine, "jdksDir");
-            int workers = Ndjson.intValue(requestLine, "workers", 1);
-            String profile = Ndjson.str(requestLine, "profile");
-            boolean skipTests = Ndjson.bool(requestLine, "skipTests", false);
-            boolean verbose = Ndjson.bool(requestLine, "verbose", false);
-            boolean offline = Ndjson.bool(requestLine, "offline", false);
-            boolean force = Ndjson.bool(requestLine, "force", false);
+            String entryDirStr = Jsonl.str(requestLine, "dir");
+            String cacheStr = Jsonl.str(requestLine, "cache");
+            String jdksDirStr = Jsonl.str(requestLine, "jdksDir");
+            int workers = Jsonl.intValue(requestLine, "workers", 1);
+            String profile = Jsonl.str(requestLine, "profile");
+            boolean skipTests = Jsonl.bool(requestLine, "skipTests", false);
+            boolean verbose = Jsonl.bool(requestLine, "verbose", false);
+            boolean offline = Jsonl.bool(requestLine, "offline", false);
+            boolean force = Jsonl.bool(requestLine, "force", false);
 
             Path entryDir = Path.of(entryDirStr);
             Path cache = Path.of(cacheStr);
@@ -1764,7 +1764,7 @@ public final class EngineServer implements AutoCloseable {
             JkConfig config = new JkConfig(
                     Optional.empty(),
                     Optional.of(offline),
-                    Optional.of(Ndjson.bool(requestLine, "rebuild", false)),
+                    Optional.of(Jsonl.bool(requestLine, "rebuild", false)),
                     Optional.empty(),
                     Optional.empty(),
                     Optional.of(verbose),
@@ -1843,9 +1843,9 @@ public final class EngineServer implements AutoCloseable {
      */
     private void runLock(String requestLine, Session.CancelToken cancelToken, BufferedWriter writer) {
         try {
-            java.util.List<String> features = Ndjson.strArray(requestLine, "features");
-            boolean withDefaults = !Ndjson.bool(requestLine, "noDefaultFeatures", false);
-            boolean sources = Ndjson.bool(requestLine, "sources", false);
+            java.util.List<String> features = Jsonl.strArray(requestLine, "features");
+            boolean withDefaults = !Jsonl.bool(requestLine, "noDefaultFeatures", false);
+            boolean sources = Jsonl.bool(requestLine, "sources", false);
             Session session = resolveSession(requestLine, cancelToken, false);
             java.net.URI repoUrl = repoUrlOf(requestLine);
             SessionContext.where(session, () -> {
@@ -1873,10 +1873,10 @@ public final class EngineServer implements AutoCloseable {
      */
     private void runUpdate(String requestLine, Session.CancelToken cancelToken, BufferedWriter writer) {
         try {
-            java.util.List<String> features = Ndjson.strArray(requestLine, "features");
-            boolean withDefaults = !Ndjson.bool(requestLine, "noDefaultFeatures", false);
-            boolean gitOnly = Ndjson.bool(requestLine, "gitOnly", false);
-            String gitTarget = Ndjson.str(requestLine, "gitTarget");
+            java.util.List<String> features = Jsonl.strArray(requestLine, "features");
+            boolean withDefaults = !Jsonl.bool(requestLine, "noDefaultFeatures", false);
+            boolean gitOnly = Jsonl.bool(requestLine, "gitOnly", false);
+            String gitTarget = Jsonl.str(requestLine, "gitTarget");
             Session session = resolveSession(requestLine, cancelToken, false);
             java.net.URI repoUrl = repoUrlOf(requestLine);
             SessionContext.where(session, () -> {
@@ -1927,9 +1927,9 @@ public final class EngineServer implements AutoCloseable {
      */
     private void runSync(String requestLine, Session.CancelToken cancelToken, BufferedWriter writer) {
         try {
-            boolean sources = Ndjson.bool(requestLine, "sources", false);
-            boolean refresh = Ndjson.bool(requestLine, "refresh", false);
-            String jdksDirStr = Ndjson.str(requestLine, "jdksDir");
+            boolean sources = Jsonl.bool(requestLine, "sources", false);
+            boolean refresh = Jsonl.bool(requestLine, "refresh", false);
+            String jdksDirStr = Jsonl.str(requestLine, "jdksDir");
             Path jdksDir = jdksDirStr != null ? Path.of(jdksDirStr) : null;
             Session session = resolveSession(requestLine, cancelToken, refresh).withJdksDir(jdksDir);
             java.net.URI repoUrl = repoUrlOf(requestLine);
@@ -2000,11 +2000,11 @@ public final class EngineServer implements AutoCloseable {
      */
     private void runAudit(String requestLine, Session.CancelToken cancelToken, BufferedWriter writer) {
         try {
-            Path entryDir = Path.of(Ndjson.str(requestLine, "dir"));
-            Path cache = Path.of(Ndjson.str(requestLine, "cache"));
-            String severity = Ndjson.str(requestLine, "severity");
-            String batch = Ndjson.str(requestLine, "osvBatchUrl");
-            String vulns = Ndjson.str(requestLine, "osvVulnsUrl");
+            Path entryDir = Path.of(Jsonl.str(requestLine, "dir"));
+            Path cache = Path.of(Jsonl.str(requestLine, "cache"));
+            String severity = Jsonl.str(requestLine, "severity");
+            String batch = Jsonl.str(requestLine, "osvBatchUrl");
+            String vulns = Jsonl.str(requestLine, "osvVulnsUrl");
             Session session = Session.defaults()
                     .withWorkingDir(entryDir)
                     .withCacheDir(cache)
@@ -2034,11 +2034,11 @@ public final class EngineServer implements AutoCloseable {
      */
     private void runFormat(String requestLine, Session.CancelToken cancelToken, BufferedWriter writer) {
         try {
-            boolean check = Ndjson.bool(requestLine, "check", false);
-            String javaStyle = Ndjson.str(requestLine, "javaStyle");
-            String kotlinStyle = Ndjson.str(requestLine, "kotlinStyle");
-            boolean optimizeImports = Ndjson.bool(requestLine, "optimizeImports", true);
-            String rewriteConfig = Ndjson.str(requestLine, "rewriteConfig");
+            boolean check = Jsonl.bool(requestLine, "check", false);
+            String javaStyle = Jsonl.str(requestLine, "javaStyle");
+            String kotlinStyle = Jsonl.str(requestLine, "kotlinStyle");
+            boolean optimizeImports = Jsonl.bool(requestLine, "optimizeImports", true);
+            String rewriteConfig = Jsonl.str(requestLine, "rewriteConfig");
             Session session = resolveSession(requestLine, cancelToken, false);
             String dir = EngineProtocol.SINGLE_PIPELINE_DIR;
             cc.jumpkick.run.Pipeline pipeline = cc.jumpkick.runtime.FormatPipelines.formatPipeline(
@@ -2080,32 +2080,32 @@ public final class EngineServer implements AutoCloseable {
      */
     private void runPublish(String requestLine, Session.CancelToken cancelToken, BufferedWriter writer) {
         try {
-            Path entryDir = Path.of(Ndjson.str(requestLine, "dir"));
-            Path cache = Path.of(Ndjson.str(requestLine, "cache"));
-            String jar = Ndjson.str(requestLine, "jar");
-            String keyFile = Ndjson.str(requestLine, "keyFile");
+            Path entryDir = Path.of(Jsonl.str(requestLine, "dir"));
+            Path cache = Path.of(Jsonl.str(requestLine, "cache"));
+            String jar = Jsonl.str(requestLine, "jar");
+            String keyFile = Jsonl.str(requestLine, "keyFile");
             cc.jumpkick.credential.RepoCredential credential =
-                    switch (String.valueOf(Ndjson.str(requestLine, "authType"))) {
+                    switch (String.valueOf(Jsonl.str(requestLine, "authType"))) {
                         case "basic" ->
                             new cc.jumpkick.credential.RepoCredential.Basic(
-                                    Ndjson.str(requestLine, "user"),
-                                    Ndjson.str(requestLine, "pass") != null ? Ndjson.str(requestLine, "pass") : "");
+                                    Jsonl.str(requestLine, "user"),
+                                    Jsonl.str(requestLine, "pass") != null ? Jsonl.str(requestLine, "pass") : "");
                         case "bearer" ->
-                            new cc.jumpkick.credential.RepoCredential.Bearer(Ndjson.str(requestLine, "token"));
+                            new cc.jumpkick.credential.RepoCredential.Bearer(Jsonl.str(requestLine, "token"));
                         default -> cc.jumpkick.credential.RepoCredential.ANONYMOUS;
                     };
             cc.jumpkick.runtime.PublishPipelines.Request req = new cc.jumpkick.runtime.PublishPipelines.Request(
-                    java.net.URI.create(Ndjson.str(requestLine, "repoUrl")),
-                    Ndjson.str(requestLine, "region"),
-                    Ndjson.str(requestLine, "endpoint"),
+                    java.net.URI.create(Jsonl.str(requestLine, "repoUrl")),
+                    Jsonl.str(requestLine, "region"),
+                    Jsonl.str(requestLine, "endpoint"),
                     jar != null ? Path.of(jar) : null,
-                    Ndjson.bool(requestLine, "allowSnapshot", false),
-                    Ndjson.bool(requestLine, "dryRun", false),
+                    Jsonl.bool(requestLine, "allowSnapshot", false),
+                    Jsonl.bool(requestLine, "dryRun", false),
                     keyFile != null ? Path.of(keyFile) : null,
-                    Ndjson.str(requestLine, "gpgPassphrase"),
-                    Ndjson.bool(requestLine, "sigstore", false),
-                    Ndjson.bool(requestLine, "slsa", false),
-                    Ndjson.bool(requestLine, "sbom", false),
+                    Jsonl.str(requestLine, "gpgPassphrase"),
+                    Jsonl.bool(requestLine, "sigstore", false),
+                    Jsonl.bool(requestLine, "slsa", false),
+                    Jsonl.bool(requestLine, "sbom", false),
                     credential);
             Session session = Session.defaults()
                     .withWorkingDir(entryDir)
@@ -2136,21 +2136,21 @@ public final class EngineServer implements AutoCloseable {
      */
     private void runImage(String requestLine, Session.CancelToken cancelToken, BufferedWriter writer) {
         try {
-            Path entryDir = Path.of(Ndjson.str(requestLine, "dir"));
-            Path cache = Path.of(Ndjson.str(requestLine, "cache"));
-            String jdksDirStr = Ndjson.str(requestLine, "jdksDir");
+            Path entryDir = Path.of(Jsonl.str(requestLine, "dir"));
+            Path cache = Path.of(Jsonl.str(requestLine, "cache"));
+            String jdksDirStr = Jsonl.str(requestLine, "jdksDir");
             Path jdksDir = jdksDirStr != null ? Path.of(jdksDirStr) : null;
-            boolean skipTests = Ndjson.bool(requestLine, "skipTests", false);
-            boolean verbose = Ndjson.bool(requestLine, "verbose", false);
+            boolean skipTests = Jsonl.bool(requestLine, "skipTests", false);
+            boolean verbose = Jsonl.bool(requestLine, "verbose", false);
             JkConfig config = new JkConfig(
                     Optional.empty(),
-                    Optional.of(Ndjson.bool(requestLine, "offline", false)),
-                    Optional.of(Ndjson.bool(requestLine, "rebuild", false)),
+                    Optional.of(Jsonl.bool(requestLine, "offline", false)),
+                    Optional.of(Jsonl.bool(requestLine, "rebuild", false)),
                     Optional.empty(),
                     Optional.empty(),
                     Optional.of(verbose),
                     Optional.empty(),
-                    Optional.of(Ndjson.bool(requestLine, "force", false)),
+                    Optional.of(Jsonl.bool(requestLine, "force", false)),
                     Optional.empty());
             Session session = Session.defaults()
                     .withConfig(config)
@@ -2171,11 +2171,11 @@ public final class EngineServer implements AutoCloseable {
                             jdksDir,
                             skipTests,
                             verbose,
-                            Ndjson.str(requestLine, "mainClass"),
-                            Ndjson.str(requestLine, "registry"),
-                            Ndjson.str(requestLine, "tag"),
-                            Ndjson.str(requestLine, "tarball"),
-                            Ndjson.str(requestLine, "dockerExecutable")));
+                            Jsonl.str(requestLine, "mainClass"),
+                            Jsonl.str(requestLine, "registry"),
+                            Jsonl.str(requestLine, "tag"),
+                            Jsonl.str(requestLine, "tarball"),
+                            Jsonl.str(requestLine, "dockerExecutable")));
             streamSinglePipeline(pipeline, session, writer, result -> {
                 cc.jumpkick.run.TestSummary testResult = pipeline.get(cc.jumpkick.runtime.BuildPipelines.TEST_RESULT)
                         .orElse(null);
@@ -2219,20 +2219,20 @@ public final class EngineServer implements AutoCloseable {
      */
     private void runImport(String requestLine, Session.CancelToken cancelToken, BufferedWriter writer) {
         try {
-            Path baseDir = Path.of(Ndjson.str(requestLine, "baseDir"));
-            Path cache = Path.of(Ndjson.str(requestLine, "cache"));
-            String report = Ndjson.str(requestLine, "report");
+            Path baseDir = Path.of(Jsonl.str(requestLine, "baseDir"));
+            Path cache = Path.of(Jsonl.str(requestLine, "cache"));
+            String report = Jsonl.str(requestLine, "report");
             Session session = Session.defaults()
                     .withWorkingDir(baseDir)
                     .withCacheDir(cache)
                     .withCancel(cancelToken);
             String dir = EngineProtocol.SINGLE_PIPELINE_DIR;
             cc.jumpkick.run.Pipeline pipeline = cc.jumpkick.runtime.CompatPipelines.importPipeline(
-                    Path.of(Ndjson.str(requestLine, "source")),
-                    Path.of(Ndjson.str(requestLine, "out")),
+                    Path.of(Jsonl.str(requestLine, "source")),
+                    Path.of(Jsonl.str(requestLine, "out")),
                     baseDir,
-                    Path.of(Ndjson.str(requestLine, "tmpDir")),
-                    Ndjson.bool(requestLine, "force", false),
+                    Path.of(Jsonl.str(requestLine, "tmpDir")),
+                    Jsonl.bool(requestLine, "force", false),
                     report != null ? Path.of(report) : null,
                     cache,
                     (kind, text) -> sendQuiet(writer, EngineProtocol.importNote(dir, kind, text)));
@@ -2264,11 +2264,11 @@ public final class EngineServer implements AutoCloseable {
     private void runProvision(String requestLine, Session.CancelToken cancelToken, BufferedWriter writer) {
         try {
             var outcome = cc.jumpkick.runtime.CompatPipelines.provision(
-                    Path.of(Ndjson.str(requestLine, "cache")),
-                    Path.of(Ndjson.str(requestLine, "projectDir")),
-                    Path.of(Ndjson.str(requestLine, "toolsRoot")),
-                    Ndjson.bool(requestLine, "noDiscover", false),
-                    Ndjson.bool(requestLine, "gradle", false));
+                    Path.of(Jsonl.str(requestLine, "cache")),
+                    Path.of(Jsonl.str(requestLine, "projectDir")),
+                    Path.of(Jsonl.str(requestLine, "toolsRoot")),
+                    Jsonl.bool(requestLine, "noDiscover", false),
+                    Jsonl.bool(requestLine, "gradle", false));
             sendQuiet(
                     writer,
                     EngineProtocol.provisionResult(
@@ -2292,8 +2292,8 @@ public final class EngineServer implements AutoCloseable {
      */
     private void runCompile(String requestLine, Session.CancelToken cancelToken, BufferedWriter writer) {
         try {
-            String profile = Ndjson.str(requestLine, "profile");
-            boolean verbose = Ndjson.bool(requestLine, "verbose", false);
+            String profile = Jsonl.str(requestLine, "profile");
+            boolean verbose = Jsonl.bool(requestLine, "verbose", false);
             Session session = resolveSession(requestLine, cancelToken, false);
             String dir = EngineProtocol.SINGLE_PIPELINE_DIR;
             // Constructed in-session — see runImage's note on ambient-session capture.
@@ -2316,10 +2316,10 @@ public final class EngineServer implements AutoCloseable {
      */
     private void runInstall(String requestLine, Session.CancelToken cancelToken, BufferedWriter writer) {
         try {
-            boolean skipTests = Ndjson.bool(requestLine, "skipTests", false);
-            boolean verbose = Ndjson.bool(requestLine, "verbose", false);
-            String m2DirStr = Ndjson.str(requestLine, "m2Dir");
-            String graalHomeStr = Ndjson.str(requestLine, "graalHome");
+            boolean skipTests = Jsonl.bool(requestLine, "skipTests", false);
+            boolean verbose = Jsonl.bool(requestLine, "verbose", false);
+            String m2DirStr = Jsonl.str(requestLine, "m2Dir");
+            String graalHomeStr = Jsonl.str(requestLine, "graalHome");
             Session session = resolveSession(requestLine, cancelToken, false);
             String dir = EngineProtocol.SINGLE_PIPELINE_DIR;
             // Constructed in-session — see runImage's note on ambient-session capture.
@@ -2358,8 +2358,8 @@ public final class EngineServer implements AutoCloseable {
      */
     private void runGitFetch(String requestLine, Session.CancelToken cancelToken, BufferedWriter writer) {
         try {
-            Path cache = Path.of(Ndjson.str(requestLine, "cache"));
-            boolean refresh = Ndjson.bool(requestLine, "refresh", false);
+            Path cache = Path.of(Jsonl.str(requestLine, "cache"));
+            boolean refresh = Jsonl.bool(requestLine, "refresh", false);
             JkConfig config = new JkConfig(
                     Optional.empty(),
                     Optional.empty(),
@@ -2374,12 +2374,12 @@ public final class EngineServer implements AutoCloseable {
                     Session.defaults().withConfig(config).withCacheDir(cache).withCancel(cancelToken);
             String dir = EngineProtocol.SINGLE_PIPELINE_DIR;
             cc.jumpkick.run.Pipeline pipeline = cc.jumpkick.runtime.InstallPipelines.gitFetchPipeline(
-                    Ndjson.str(requestLine, "url"),
-                    Ndjson.str(requestLine, "canonicalUrl"),
-                    Ndjson.str(requestLine, "ref"),
+                    Jsonl.str(requestLine, "url"),
+                    Jsonl.str(requestLine, "canonicalUrl"),
+                    Jsonl.str(requestLine, "ref"),
                     cache,
                     refresh,
-                    Ndjson.bool(requestLine, "requireJkToml", true));
+                    Jsonl.bool(requestLine, "requireJkToml", true));
             streamSinglePipeline(pipeline, session, writer, result -> {
                 Path checkout = pipeline.get(cc.jumpkick.runtime.InstallPipelines.CHECKOUT)
                         .orElse(null);
@@ -2403,19 +2403,19 @@ public final class EngineServer implements AutoCloseable {
      */
     private void runScriptPrepare(String requestLine, Session.CancelToken cancelToken, BufferedWriter writer) {
         try {
-            String mode = String.valueOf(Ndjson.str(requestLine, "mode"));
-            Path script = Path.of(Ndjson.str(requestLine, "script"));
-            Path cache = Path.of(Ndjson.str(requestLine, "cache"));
-            String stateDirStr = Ndjson.str(requestLine, "stateDir");
+            String mode = String.valueOf(Jsonl.str(requestLine, "mode"));
+            Path script = Path.of(Jsonl.str(requestLine, "script"));
+            Path cache = Path.of(Jsonl.str(requestLine, "cache"));
+            String stateDirStr = Jsonl.str(requestLine, "stateDir");
             Path stateDir = stateDirStr != null ? Path.of(stateDirStr) : cc.jumpkick.util.JkDirs.state();
             java.net.URI repoUrl = repoUrlOf(requestLine);
-            boolean forceRecompile = Ndjson.bool(requestLine, "forceRecompile", false);
+            boolean forceRecompile = Jsonl.bool(requestLine, "forceRecompile", false);
             java.nio.file.Files.createDirectories(cache);
             Session session = Session.defaults()
                     .withWorkingDir(script.toAbsolutePath().getParent())
                     .withCacheDir(cache)
                     .withCancel(cancelToken);
-            java.util.List<cc.jumpkick.model.Dependency> extraDeps = Ndjson.strArray(requestLine, "with").stream()
+            java.util.List<cc.jumpkick.model.Dependency> extraDeps = Jsonl.strArray(requestLine, "with").stream()
                     .map(cc.jumpkick.script.ScriptHeaderParser::parseDependency)
                     .toList();
             cc.jumpkick.run.Pipeline pipeline =
@@ -2464,14 +2464,14 @@ public final class EngineServer implements AutoCloseable {
      */
     private void runToolResolve(String requestLine, Session.CancelToken cancelToken, BufferedWriter writer) {
         try {
-            Path cache = Path.of(Ndjson.str(requestLine, "cache"));
-            String coord = Ndjson.str(requestLine, "coord");
-            String bin = Ndjson.str(requestLine, "bin");
-            String mainClass = Ndjson.str(requestLine, "mainClass");
+            Path cache = Path.of(Jsonl.str(requestLine, "cache"));
+            String coord = Jsonl.str(requestLine, "coord");
+            String bin = Jsonl.str(requestLine, "bin");
+            String mainClass = Jsonl.str(requestLine, "mainClass");
             java.net.URI repoUrl = repoUrlOf(requestLine);
             java.nio.file.Files.createDirectories(cache);
             cc.jumpkick.model.ToolCoordSpec spec = cc.jumpkick.model.ToolCoordSpec.parse(coord);
-            java.util.List<cc.jumpkick.model.ToolCoordSpec> with = Ndjson.strArray(requestLine, "with").stream()
+            java.util.List<cc.jumpkick.model.ToolCoordSpec> with = Jsonl.strArray(requestLine, "with").stream()
                     .map(cc.jumpkick.model.ToolCoordSpec::parse)
                     .toList();
             Session session = Session.defaults().withCacheDir(cache).withCancel(cancelToken);
@@ -2506,9 +2506,9 @@ public final class EngineServer implements AutoCloseable {
      */
     private void runCacheMaintenance(String requestLine, Session.CancelToken cancelToken, BufferedWriter writer) {
         try {
-            String op = String.valueOf(Ndjson.str(requestLine, "op"));
-            Path cache = Path.of(Ndjson.str(requestLine, "cache"));
-            boolean dryRun = Ndjson.bool(requestLine, "dryRun", false);
+            String op = String.valueOf(Jsonl.str(requestLine, "op"));
+            Path cache = Path.of(Jsonl.str(requestLine, "cache"));
+            boolean dryRun = Jsonl.bool(requestLine, "dryRun", false);
 
             if (!cacheGate.writeLock().tryLock()) {
                 sendQuiet(writer, EngineProtocol.pruneWait(activePipelines.get(), false));
@@ -2531,15 +2531,15 @@ public final class EngineServer implements AutoCloseable {
                                     case "gc" -> cc.jumpkick.runtime.CachePipelines.gcPipeline(cache);
                                     case "clear" ->
                                         cc.jumpkick.runtime.CachePipelines.clearPipeline(
-                                                cache, Path.of(Ndjson.str(requestLine, "dir")), dryRun);
+                                                cache, Path.of(Jsonl.str(requestLine, "dir")), dryRun);
                                     default ->
                                         cc.jumpkick.runtime.CachePipelines.prunePipeline(
                                                 cache,
-                                                Ndjson.intValue(requestLine, "olderThanDays", 30),
+                                                Jsonl.intValue(requestLine, "olderThanDays", 30),
                                                 dryRun,
-                                                Ndjson.bool(requestLine, "sweep", false),
-                                                Ndjson.str(requestLine, "maxSize"),
-                                                Ndjson.bool(requestLine, "includeJkTmp", false));
+                                                Jsonl.bool(requestLine, "sweep", false),
+                                                Jsonl.str(requestLine, "maxSize"),
+                                                Jsonl.bool(requestLine, "includeJkTmp", false));
                                 };
                         Session session = Session.defaults().withCacheDir(cache).withCancel(cancelToken);
                         String dir = EngineProtocol.SINGLE_PIPELINE_DIR;
@@ -2581,14 +2581,14 @@ public final class EngineServer implements AutoCloseable {
      */
     private void runNative(String requestLine, Session.CancelToken cancelToken, BufferedWriter writer) {
         try {
-            String jdksDirStr = Ndjson.str(requestLine, "jdksDir");
+            String jdksDirStr = Jsonl.str(requestLine, "jdksDir");
             Path jdksDir = jdksDirStr != null ? Path.of(jdksDirStr) : null;
-            String mainClass = Ndjson.str(requestLine, "mainClass");
-            boolean skipTests = Ndjson.bool(requestLine, "skipTests", false);
-            boolean verbose = Ndjson.bool(requestLine, "verbose", false);
-            java.util.List<String> extraArgs = Ndjson.strArray(requestLine, "extraArgs");
+            String mainClass = Jsonl.str(requestLine, "mainClass");
+            boolean skipTests = Jsonl.bool(requestLine, "skipTests", false);
+            boolean verbose = Jsonl.bool(requestLine, "verbose", false);
+            java.util.List<String> extraArgs = Jsonl.strArray(requestLine, "extraArgs");
             java.util.Map<Path, Path> graalByDir = new java.util.HashMap<>();
-            Ndjson.strMap(requestLine, "graalHomes").forEach((d, h) -> graalByDir.put(Path.of(d), Path.of(h)));
+            Jsonl.strMap(requestLine, "graalHomes").forEach((d, h) -> graalByDir.put(Path.of(d), Path.of(h)));
             Session session = resolveSession(requestLine, cancelToken, false).withJdksDir(jdksDir);
             SessionContext.where(session, () -> {
                 nativeCascade(
@@ -2838,17 +2838,17 @@ public final class EngineServer implements AutoCloseable {
      * — the same fields {@link #runBuild} decodes inline.
      */
     private static Session resolveSession(String requestLine, Session.CancelToken cancelToken, boolean refresh) {
-        Path entryDir = Path.of(Ndjson.str(requestLine, "dir"));
-        Path cache = Path.of(Ndjson.str(requestLine, "cache"));
+        Path entryDir = Path.of(Jsonl.str(requestLine, "dir"));
+        Path cache = Path.of(Jsonl.str(requestLine, "cache"));
         JkConfig config = new JkConfig(
                 Optional.empty(),
-                Optional.of(Ndjson.bool(requestLine, "offline", false)),
-                Optional.of(Ndjson.bool(requestLine, "rebuild", false)),
+                Optional.of(Jsonl.bool(requestLine, "offline", false)),
+                Optional.of(Jsonl.bool(requestLine, "rebuild", false)),
                 Optional.empty(),
                 Optional.empty(),
-                Optional.of(Ndjson.bool(requestLine, "verbose", false)),
+                Optional.of(Jsonl.bool(requestLine, "verbose", false)),
                 Optional.empty(),
-                Optional.of(Ndjson.bool(requestLine, "force", false) || refresh),
+                Optional.of(Jsonl.bool(requestLine, "force", false) || refresh),
                 Optional.empty());
         return Session.defaults()
                 .withConfig(config)
@@ -2863,7 +2863,7 @@ public final class EngineServer implements AutoCloseable {
 
     /** The optional {@code repoUrl} request field ({@code --repo-url} overrides), or {@code null}. */
     private static java.net.URI repoUrlOf(String requestLine) {
-        String s = Ndjson.str(requestLine, "repoUrl");
+        String s = Jsonl.str(requestLine, "repoUrl");
         return s != null ? java.net.URI.create(s) : null;
     }
 
@@ -3153,7 +3153,7 @@ public final class EngineServer implements AutoCloseable {
      * tiers are always included so the client can render its summary alongside).
      */
     private void handleMetrics(String requestLine, BufferedWriter writer) throws IOException {
-        String dirFilter = Ndjson.str(requestLine, "dir");
+        String dirFilter = Jsonl.str(requestLine, "dir");
         int n = 0;
         for (BuildMetrics.Entry e : BuildMetrics.load(metricsFile).entries()) {
             if (dirFilter != null && !e.dir().isEmpty() && !e.dir().equals(dirFilter)) continue;
@@ -3195,7 +3195,7 @@ public final class EngineServer implements AutoCloseable {
 
     /** {@code history-list-request} → one flat {@code history-entry} per entry, then {@code history-done}. */
     private void handleHistoryList(String requestLine, BufferedWriter writer) throws IOException {
-        int limit = Math.max(1, Ndjson.intValue(requestLine, "limit", 200));
+        int limit = Math.max(1, Jsonl.intValue(requestLine, "limit", 200));
         java.util.List<BuildRecord> records = journal.list();
         int n = Math.min(records.size(), limit);
         for (int i = 0; i < n; i++) {
@@ -3236,7 +3236,7 @@ public final class EngineServer implements AutoCloseable {
 
     /** {@code history-show-request} → a {@code history-record} header + module/step/diag rows + {@code history-done}. */
     private void handleHistoryShow(String requestLine, BufferedWriter writer) throws IOException {
-        String id = Ndjson.str(requestLine, "id");
+        String id = Jsonl.str(requestLine, "id");
         java.util.Optional<BuildRecord> found = id == null ? java.util.Optional.empty() : journal.get(id);
         if (found.isEmpty()) {
             send(
@@ -3335,7 +3335,7 @@ public final class EngineServer implements AutoCloseable {
 
     /** {@code history-delete-request} → {@code history-deleted} carrying whether the entry existed. */
     private void handleHistoryDelete(String requestLine, BufferedWriter writer) throws IOException {
-        String id = Ndjson.str(requestLine, "id");
+        String id = Jsonl.str(requestLine, "id");
         boolean deleted = id != null && journal.delete(id);
         send(
                 writer,

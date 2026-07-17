@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.engine.protocol;
 
-import cc.jumpkick.plugin.protocol.Ndjson;
+import cc.jumpkick.plugin.protocol.Jsonl;
 import java.util.List;
 
 /**
@@ -23,7 +23,7 @@ public record PluginCommandReport(String error, boolean found, int exit, List<St
 
     public String encode() {
         return "{\"t\":\"" + EngineProtocol.PLUGIN_VERB_ACK + "\""
-                + ",\"error\":" + (error == null ? "null" : Ndjson.quote(error))
+                + ",\"error\":" + (error == null ? "null" : Jsonl.quote(error))
                 + ",\"found\":" + found
                 + ",\"exit\":" + exit
                 + ",\"output\":" + EngineProtocol.quoteArray(output)
@@ -32,9 +32,9 @@ public record PluginCommandReport(String error, boolean found, int exit, List<St
 
     public static PluginCommandReport decode(String line) {
         return new PluginCommandReport(
-                Ndjson.str(line, "error"),
-                Ndjson.bool(line, "found", false),
-                Ndjson.intValue(line, "exit", 0),
-                Ndjson.strArray(line, "output"));
+                Jsonl.str(line, "error"),
+                Jsonl.bool(line, "found", false),
+                Jsonl.intValue(line, "exit", 0),
+                Jsonl.strArray(line, "output"));
     }
 }

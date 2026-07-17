@@ -34,7 +34,7 @@ Tick      progress sub-unit within a Step: one source · test · artifact  (was 
 
 **Scope decisions:** breaking changes are acceptable (pre-1.0; backwards-compat is a
 non-goal — maximal correctness now). The rename extends to the serialized wire
-(engine NDJSON, Web-UI SSE, public `jk --json`) and all clients. Steps will explicitly
+(engine JSONL, Web-UI SSE, public `jk --json`) and all clients. Steps will explicitly
 declare their owning Phase. Canonical Step identity is **`{phase}-{step}`**
 (e.g. `compile-java`, `resolve-deps`); the running Command is display context, rendered
 `command ▸ phase ▸ step` where it adds value, not baked into Step identity (steps are
@@ -89,7 +89,7 @@ package path contains `/build/jumpkick/`, so do **not** filter out `/build/`.
 - Engine factories: `kernel/engine/src/main/java/build/jumpkick/runtime/*Goals.java`, `BuildPipeline.java`, `PhaseTimings*.java`; the plugin-command path `runtime/PluginVerbs.java`, `runtime/PluginBuild.java`
 - Wire (single-sourced Java constants): `kernel/engine-api/.../engine/protocol/EngineProtocol.java` (the `GOAL_*`/`PHASE_*`/`PLUGIN_VERB_*`/`SCOPE_UPDATE` constants), `PluginVerbReport.java`
 - Engine SSE producer: `kernel/engine/.../engine/EngineServer.java`
-- CLI adapters/consumers: `cli/.../cli/engine/Engine{Build,Resolve,Worker}*Adapter.java`, `cli/.../cli/run/{GoalConsole,CompositeGoalListener,ProgressBarListener,VerboseListener,EventLogListener,NdjsonShape,...}.java`, `cli/.../cli/tui/GoalWedge.java`, `cli/.../cli/CommandDispatch.java`
+- CLI adapters/consumers: `cli/.../cli/engine/Engine{Build,Resolve,Worker}*Adapter.java`, `cli/.../cli/run/{GoalConsole,CompositeGoalListener,ProgressBarListener,VerboseListener,EventLogListener,JsonlShape,...}.java`, `cli/.../cli/tui/GoalWedge.java`, `cli/.../cli/CommandDispatch.java`
 - Plugin-api: `plugin-api/.../plugin/build/{Anchor,StepSpec,VerbSpec,VerbExec,BuildPluginContext,BuildPluginHarness}.java`
 - Plugins referencing `Anchor` / android `*Verb`: `plugins/{android,protobuf,spring-boot}/...`
 - Model command layer stays `Command`/`CliCommand`; only `Command#name()` javadoc ("The verb…") updates.

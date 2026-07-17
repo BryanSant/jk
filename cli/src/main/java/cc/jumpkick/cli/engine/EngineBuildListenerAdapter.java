@@ -7,7 +7,7 @@ import cc.jumpkick.config.SessionContext;
 import cc.jumpkick.engine.EnginePaths;
 import cc.jumpkick.engine.protocol.EngineProtocol;
 import cc.jumpkick.plugin.build.Phase;
-import cc.jumpkick.plugin.protocol.Ndjson;
+import cc.jumpkick.plugin.protocol.Jsonl;
 import cc.jumpkick.run.Pipeline;
 import cc.jumpkick.run.PipelineListener;
 import cc.jumpkick.run.PipelineResult;
@@ -345,36 +345,36 @@ final class EngineBuildListenerAdapter {
                 if (type == null) continue;
                 switch (type) {
                     case EngineProtocol.EXPLAIN_MODULE -> {
-                        String dir = Ndjson.str(line, "dir");
+                        String dir = Jsonl.str(line, "dir");
                         order.add(dir);
-                        coordByDir.put(dir, Ndjson.str(line, "coord"));
+                        coordByDir.put(dir, Jsonl.str(line, "coord"));
                         countsByDir.put(dir, new int[] {
-                            Ndjson.intValue(line, "sourceCount", 0), Ndjson.intValue(line, "testCount", 0)
+                            Jsonl.intValue(line, "sourceCount", 0), Jsonl.intValue(line, "testCount", 0)
                         });
                         flagsByDir.put(dir, new boolean[] {
-                            Ndjson.bool(line, "producesJar", false), Ndjson.bool(line, "producesImage", false)
+                            Jsonl.bool(line, "producesJar", false), Jsonl.bool(line, "producesImage", false)
                         });
                         stepsByDir.put(dir, new ArrayList<>());
                     }
                     case EngineProtocol.EXPLAIN_STEP -> {
-                        String dir = Ndjson.str(line, "dir");
+                        String dir = Jsonl.str(line, "dir");
                         stepsByDir
                                 .get(dir)
                                 .add(new cc.jumpkick.runtime.BuildPlan.Step(
-                                        Ndjson.str(line, "name"),
-                                        cc.jumpkick.runtime.BuildPlan.Status.valueOf(Ndjson.str(line, "status")),
-                                        Ndjson.str(line, "text"),
-                                        Ndjson.str(line, "key")));
+                                        Jsonl.str(line, "name"),
+                                        cc.jumpkick.runtime.BuildPlan.Status.valueOf(Jsonl.str(line, "status")),
+                                        Jsonl.str(line, "text"),
+                                        Jsonl.str(line, "key")));
                     }
                     case EngineProtocol.EXPLAIN_EDGE -> {
-                        Path dir = Path.of(Ndjson.str(line, "dir"));
-                        Path dependsOn = Path.of(Ndjson.str(line, "dependsOnDir"));
+                        Path dir = Path.of(Jsonl.str(line, "dir"));
+                        Path dependsOn = Path.of(Jsonl.str(line, "dependsOnDir"));
                         edges.computeIfAbsent(dir, d -> new java.util.LinkedHashSet<>())
                                 .add(dependsOn);
                     }
-                    case EngineProtocol.ERROR -> errors.add(Ndjson.str(line, "message"));
+                    case EngineProtocol.ERROR -> errors.add(Jsonl.str(line, "message"));
                     case EngineProtocol.ETA -> {
-                        if (etaOut != null) etaOut[0] = Ndjson.longValue(line, "millis", 0);
+                        if (etaOut != null) etaOut[0] = Jsonl.longValue(line, "millis", 0);
                     }
                     case EngineProtocol.EXPLAIN_DONE -> {
                         for (String dir : order) {
@@ -389,7 +389,7 @@ final class EngineBuildListenerAdapter {
                                     flags[0],
                                     flags[1]));
                         }
-                        return new ExplainPlan(modules, edges, Ndjson.intValue(line, "maxReadyWidth", 1), errors);
+                        return new ExplainPlan(modules, edges, Jsonl.intValue(line, "maxReadyWidth", 1), errors);
                     }
                     default -> {
                         /* forward-compatible no-op */
@@ -420,9 +420,9 @@ final class EngineBuildListenerAdapter {
             String line;
             while ((line = reader.readLine()) != null) {
                 if (!EngineProtocol.EDIT_ACK.equals(EngineProtocol.typeOf(line))) continue;
-                String error = Ndjson.str(line, "error");
+                String error = Jsonl.str(line, "error");
                 if (error != null) throw new IOException(error);
-                return Ndjson.bool(line, "changed", false);
+                return Jsonl.bool(line, "changed", false);
             }
             throw new IOException("jk engine: disconnected before answering the edit request");
         }
@@ -448,9 +448,9 @@ final class EngineBuildListenerAdapter {
             String line;
             while ((line = reader.readLine()) != null) {
                 if (!EngineProtocol.TREE_ACK.equals(EngineProtocol.typeOf(line))) continue;
-                String error = Ndjson.str(line, "error");
+                String error = Jsonl.str(line, "error");
                 if (error != null) throw new IOException(error);
-                return Ndjson.str(line, "rendered");
+                return Jsonl.str(line, "rendered");
             }
             throw new IOException("jk engine: disconnected before answering the tree request");
         }
@@ -640,12 +640,12 @@ final class EngineBuildListenerAdapter {
             while ((line = reader.readLine()) != null) {
                 if (!EngineProtocol.FORECAST_ACK.equals(EngineProtocol.typeOf(line))) continue;
                 java.util.Set<Path> dirty = new java.util.LinkedHashSet<>();
-                for (String d : Ndjson.strArray(line, "dirtyDirs")) dirty.add(Path.of(d));
+                for (String d : Jsonl.strArray(line, "dirtyDirs")) dirty.add(Path.of(d));
                 return new cc.jumpkick.runtime.BuildForecast(
                         dirty,
-                        Ndjson.bool(line, "lockStale", false),
-                        Ndjson.bool(line, "empty", false),
-                        Ndjson.strArray(line, "errors"));
+                        Jsonl.bool(line, "lockStale", false),
+                        Jsonl.bool(line, "empty", false),
+                        Jsonl.strArray(line, "errors"));
             }
             throw new IOException("jk engine: the build engine disconnected unexpectedly before finishing "
                     + "(it may have crashed); run `jk engine status` for details");
@@ -672,60 +672,60 @@ final class EngineBuildListenerAdapter {
             if (type == null) continue;
             switch (type) {
                 case EngineProtocol.PLAN_STEP ->
-                    steps.add(Step.builder(Ndjson.str(line, "name"))
-                            .label(Ndjson.str(line, "label"))
-                            .phase(Phase.fromWireOrNull(Ndjson.str(line, "phase")))
+                    steps.add(Step.builder(Jsonl.str(line, "name"))
+                            .label(Jsonl.str(line, "label"))
+                            .phase(Phase.fromWireOrNull(Jsonl.str(line, "phase")))
                             .build());
                 case EngineProtocol.PLAN_DONE -> listener = listenerFactory.apply(steps);
                 case EngineProtocol.PIPELINE_START -> listener.pipelineStart(readPipelineView(line));
                 case EngineProtocol.STEP_START ->
                     listener.stepStart(
-                            Ndjson.str(line, "step"),
-                            Phase.fromWireOrNull(Ndjson.str(line, "phase")),
-                            Ndjson.intValue(line, "ticks", 0));
+                            Jsonl.str(line, "step"),
+                            Phase.fromWireOrNull(Jsonl.str(line, "phase")),
+                            Jsonl.intValue(line, "ticks", 0));
                 case EngineProtocol.PROGRESS ->
                     listener.progress(
-                            Ndjson.str(line, "step"), Ndjson.intValue(line, "delta", 0), readPipelineView(line));
+                            Jsonl.str(line, "step"), Jsonl.intValue(line, "delta", 0), readPipelineView(line));
                 case EngineProtocol.TICK_UPDATE ->
                     listener.tickUpdate(
-                            Ndjson.str(line, "step"), Ndjson.intValue(line, "delta", 0), readPipelineView(line));
-                case EngineProtocol.LABEL -> listener.label(Ndjson.str(line, "step"), Ndjson.str(line, "label"));
-                case EngineProtocol.OUTPUT -> listener.output(Ndjson.str(line, "step"), Ndjson.str(line, "line"));
+                            Jsonl.str(line, "step"), Jsonl.intValue(line, "delta", 0), readPipelineView(line));
+                case EngineProtocol.LABEL -> listener.label(Jsonl.str(line, "step"), Jsonl.str(line, "label"));
+                case EngineProtocol.OUTPUT -> listener.output(Jsonl.str(line, "step"), Jsonl.str(line, "line"));
                 case EngineProtocol.WARN ->
-                    listener.warn(Ndjson.str(line, "step"), Ndjson.str(line, "code"), Ndjson.str(line, "message"));
+                    listener.warn(Jsonl.str(line, "step"), Jsonl.str(line, "code"), Jsonl.str(line, "message"));
                 case EngineProtocol.ERROR_LINE ->
                     listener.error(
-                            Ndjson.str(line, "step"),
-                            Ndjson.str(line, "code"),
-                            Ndjson.str(line, "message"),
-                            Ndjson.str(line, "test"),
-                            Ndjson.str(line, "exceptionClass"));
+                            Jsonl.str(line, "step"),
+                            Jsonl.str(line, "code"),
+                            Jsonl.str(line, "message"),
+                            Jsonl.str(line, "test"),
+                            Jsonl.str(line, "exceptionClass"));
                 case EngineProtocol.PIPELINE_DIAGNOSTIC ->
                     diagnostics.add(new PipelineResult.Diagnostic(
-                            Ndjson.str(line, "step"),
-                            Ndjson.str(line, "code"),
-                            Ndjson.str(line, "message"),
-                            Ndjson.str(line, "test"),
-                            Ndjson.str(line, "exceptionClass")));
+                            Jsonl.str(line, "step"),
+                            Jsonl.str(line, "code"),
+                            Jsonl.str(line, "message"),
+                            Jsonl.str(line, "test"),
+                            Jsonl.str(line, "exceptionClass")));
                 case EngineProtocol.STEP_FINISH ->
                     listener.stepFinish(
-                            Ndjson.str(line, "step"),
-                            Phase.fromWireOrNull(Ndjson.str(line, "phase")),
-                            StepStatus.valueOf(Ndjson.str(line, "status")),
+                            Jsonl.str(line, "step"),
+                            Phase.fromWireOrNull(Jsonl.str(line, "phase")),
+                            StepStatus.valueOf(Jsonl.str(line, "status")),
                             Duration.ZERO);
                 case EngineProtocol.PIPELINE_FINISH -> {
-                    boolean success = Ndjson.bool(line, "success", false);
-                    long total = Ndjson.longValue(line, "testTotal", -1);
+                    boolean success = Jsonl.bool(line, "success", false);
+                    long total = Jsonl.longValue(line, "testTotal", -1);
                     if (total >= 0 && testResultOut != null) {
                         testResultOut[0] = new cc.jumpkick.run.TestSummary(
                                 total,
-                                Ndjson.longValue(line, "testSucceeded", 0),
-                                Ndjson.longValue(line, "testFailed", 0),
-                                Ndjson.longValue(line, "testSkipped", 0),
+                                Jsonl.longValue(line, "testSucceeded", 0),
+                                Jsonl.longValue(line, "testFailed", 0),
+                                Jsonl.longValue(line, "testSkipped", 0),
                                 List.of());
                     }
                     if (buildOutcomeOut != null) {
-                        buildOutcomeOut[0] = Ndjson.str(line, "buildOutcome");
+                        buildOutcomeOut[0] = Jsonl.str(line, "buildOutcome");
                     }
                     PipelineResult result = new PipelineResult(
                             "test",
@@ -740,7 +740,7 @@ final class EngineBuildListenerAdapter {
                     return result;
                 }
                 case EngineProtocol.ERROR ->
-                    throw new IOException("jk engine: run failed: " + Ndjson.str(line, "message"));
+                    throw new IOException("jk engine: run failed: " + Jsonl.str(line, "message"));
                 default -> {
                     /* forward-compatible no-op */
                 }
@@ -762,29 +762,29 @@ final class EngineBuildListenerAdapter {
         while ((line = reader.readLine()) != null) {
             String type = EngineProtocol.typeOf(line);
             if (type == null) continue;
-            String dir = Ndjson.str(line, "dir");
+            String dir = Jsonl.str(line, "dir");
             switch (type) {
                 case EngineProtocol.PLAN_MODULE -> {
                     planByDir.put(
                             dir,
                             new ModuleMeta(
-                                    Ndjson.str(line, "coord"),
-                                    Ndjson.str(line, "pipelineName"),
-                                    Ndjson.intValue(line, "weight", 0),
-                                    Ndjson.bool(line, "fullyCached", false)));
+                                    Jsonl.str(line, "coord"),
+                                    Jsonl.str(line, "pipelineName"),
+                                    Jsonl.intValue(line, "weight", 0),
+                                    Jsonl.bool(line, "fullyCached", false)));
                     pendingPlanDir = dir;
                 }
                 case EngineProtocol.PLAN_STEP -> {
                     ModuleMeta m = planByDir.get(dir != null ? dir : pendingPlanDir);
                     if (m != null) {
-                        m.steps.add(Step.builder(Ndjson.str(line, "name"))
-                                .label(Ndjson.str(line, "label"))
-                                .phase(Phase.fromWireOrNull(Ndjson.str(line, "phase")))
+                        m.steps.add(Step.builder(Jsonl.str(line, "name"))
+                                .label(Jsonl.str(line, "label"))
+                                .phase(Phase.fromWireOrNull(Jsonl.str(line, "phase")))
                                 .build());
                     }
                 }
                 case EngineProtocol.PLAN_DONE -> listener.onPlan(buildModulePlans(planByDir, cache));
-                case EngineProtocol.ETA -> listener.onEtaEstimate(Ndjson.longValue(line, "millis", 0));
+                case EngineProtocol.ETA -> listener.onEtaEstimate(Jsonl.longValue(line, "millis", 0));
                 case EngineProtocol.MODULE_START -> {
                     ModulePlan plan = buildModulePlan(dir, planByDir.get(dir), cache);
                     PipelineListener gl = listener.onModuleStart(plan);
@@ -796,60 +796,60 @@ final class EngineBuildListenerAdapter {
                     pipelineListenersByDir
                             .getOrDefault(dir, NOOP)
                             .stepStart(
-                                    Ndjson.str(line, "step"),
-                                    Phase.fromWireOrNull(Ndjson.str(line, "phase")),
-                                    Ndjson.intValue(line, "ticks", 0));
+                                    Jsonl.str(line, "step"),
+                                    Phase.fromWireOrNull(Jsonl.str(line, "phase")),
+                                    Jsonl.intValue(line, "ticks", 0));
                 case EngineProtocol.PROGRESS ->
                     pipelineListenersByDir
                             .getOrDefault(dir, NOOP)
                             .progress(
-                                    Ndjson.str(line, "step"),
-                                    Ndjson.intValue(line, "delta", 0),
+                                    Jsonl.str(line, "step"),
+                                    Jsonl.intValue(line, "delta", 0),
                                     readPipelineView(line));
                 case EngineProtocol.TICK_UPDATE ->
                     pipelineListenersByDir
                             .getOrDefault(dir, NOOP)
                             .tickUpdate(
-                                    Ndjson.str(line, "step"),
-                                    Ndjson.intValue(line, "delta", 0),
+                                    Jsonl.str(line, "step"),
+                                    Jsonl.intValue(line, "delta", 0),
                                     readPipelineView(line));
                 case EngineProtocol.LABEL ->
                     pipelineListenersByDir
                             .getOrDefault(dir, NOOP)
-                            .label(Ndjson.str(line, "step"), Ndjson.str(line, "label"));
+                            .label(Jsonl.str(line, "step"), Jsonl.str(line, "label"));
                 case EngineProtocol.OUTPUT ->
                     pipelineListenersByDir
                             .getOrDefault(dir, NOOP)
-                            .output(Ndjson.str(line, "step"), Ndjson.str(line, "line"));
+                            .output(Jsonl.str(line, "step"), Jsonl.str(line, "line"));
                 case EngineProtocol.WARN ->
                     pipelineListenersByDir
                             .getOrDefault(dir, NOOP)
-                            .warn(Ndjson.str(line, "step"), Ndjson.str(line, "code"), Ndjson.str(line, "message"));
+                            .warn(Jsonl.str(line, "step"), Jsonl.str(line, "code"), Jsonl.str(line, "message"));
                 case EngineProtocol.ERROR_LINE ->
                     pipelineListenersByDir
                             .getOrDefault(dir, NOOP)
                             .error(
-                                    Ndjson.str(line, "step"),
-                                    Ndjson.str(line, "code"),
-                                    Ndjson.str(line, "message"),
-                                    Ndjson.str(line, "test"),
-                                    Ndjson.str(line, "exceptionClass"));
+                                    Jsonl.str(line, "step"),
+                                    Jsonl.str(line, "code"),
+                                    Jsonl.str(line, "message"),
+                                    Jsonl.str(line, "test"),
+                                    Jsonl.str(line, "exceptionClass"));
                 case EngineProtocol.PIPELINE_DIAGNOSTIC ->
                     diagnosticsByDir
                             .computeIfAbsent(dir, d -> new ArrayList<>())
                             .add(new PipelineResult.Diagnostic(
-                                    Ndjson.str(line, "step"),
-                                    Ndjson.str(line, "code"),
-                                    Ndjson.str(line, "message"),
-                                    Ndjson.str(line, "test"),
-                                    Ndjson.str(line, "exceptionClass")));
+                                    Jsonl.str(line, "step"),
+                                    Jsonl.str(line, "code"),
+                                    Jsonl.str(line, "message"),
+                                    Jsonl.str(line, "test"),
+                                    Jsonl.str(line, "exceptionClass")));
                 case EngineProtocol.STEP_FINISH ->
                     pipelineListenersByDir
                             .getOrDefault(dir, NOOP)
                             .stepFinish(
-                                    Ndjson.str(line, "step"),
-                                    Phase.fromWireOrNull(Ndjson.str(line, "phase")),
-                                    StepStatus.valueOf(Ndjson.str(line, "status")),
+                                    Jsonl.str(line, "step"),
+                                    Phase.fromWireOrNull(Jsonl.str(line, "phase")),
+                                    StepStatus.valueOf(Jsonl.str(line, "status")),
                                     Duration.ZERO);
                 case EngineProtocol.PIPELINE_FINISH -> {
                     ModuleMeta meta = planByDir.get(dir);
@@ -857,7 +857,7 @@ final class EngineBuildListenerAdapter {
                     List<PipelineResult.Diagnostic> diags = diagnosticsByDir.remove(dir);
                     PipelineResult result = new PipelineResult(
                             pipelineName,
-                            Ndjson.bool(line, "success", false),
+                            Jsonl.bool(line, "success", false),
                             Duration.ZERO,
                             List.of(),
                             List.of(),
@@ -868,25 +868,25 @@ final class EngineBuildListenerAdapter {
                 }
                 case EngineProtocol.MODULE_FINISH -> {
                     ModuleOutcome outcome = new ModuleOutcome(
-                            Ndjson.str(line, "coord"),
+                            Jsonl.str(line, "coord"),
                             Path.of(dir),
-                            Ndjson.bool(line, "success", false),
-                            Ndjson.intValue(line, "exitCode", 1),
-                            Ndjson.longValue(line, "millis", 0));
+                            Jsonl.bool(line, "success", false),
+                            Jsonl.intValue(line, "exitCode", 1),
+                            Jsonl.longValue(line, "millis", 0));
                     outcomes.add(outcome);
                     listener.onModuleFinish(outcome);
                 }
                 case EngineProtocol.WORKSPACE_FINISH -> {
                     WorkspaceResult result = new WorkspaceResult(
-                            Ndjson.bool(line, "success", false),
-                            Ndjson.intValue(line, "exitCode", 1),
+                            Jsonl.bool(line, "success", false),
+                            Jsonl.intValue(line, "exitCode", 1),
                             List.copyOf(outcomes),
-                            Ndjson.strArray(line, "errors"));
+                            Jsonl.strArray(line, "errors"));
                     listener.onWorkspaceFinish(result);
                     return result;
                 }
                 case EngineProtocol.ERROR ->
-                    throw new IOException("jk engine: build failed: " + Ndjson.str(line, "message"));
+                    throw new IOException("jk engine: build failed: " + Jsonl.str(line, "message"));
                 default -> {
                     /* forward-compatible no-op */
                 }
@@ -912,12 +912,12 @@ final class EngineBuildListenerAdapter {
 
     private static PipelineView readPipelineView(String line) {
         return new PipelineView(
-                Ndjson.str(line, "pipelineName"),
-                Ndjson.longValue(line, "numerator", 0),
-                Ndjson.longValue(line, "denominator", 0),
-                Ndjson.intValue(line, "stepsTotal", 0),
-                Ndjson.intValue(line, "stepsComplete", 0),
-                Ndjson.bool(line, "cancelled", false));
+                Jsonl.str(line, "pipelineName"),
+                Jsonl.longValue(line, "numerator", 0),
+                Jsonl.longValue(line, "denominator", 0),
+                Jsonl.intValue(line, "stepsTotal", 0),
+                Jsonl.intValue(line, "stepsComplete", 0),
+                Jsonl.bool(line, "cancelled", false));
     }
 
     private static final PipelineListener NOOP = new PipelineListener() {};

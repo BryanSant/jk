@@ -9,7 +9,7 @@ import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
 /**
- * Forks a jk plugin process and bridges its NDJSON event stream back to the caller. A plugin is
+ * Forks a jk plugin process and bridges its JSONL event stream back to the caller. A plugin is
  * launched as {@code <java> <jvmFlags> -cp <classpath> cc.jumpkick.plugin.process.PluginMain
  * <args>}: {@code PluginMain} {@code ServiceLoader}-loads the single {@link
  * cc.jumpkick.plugin.Plugin} on that classpath, runs it, and the plugin emits {@code

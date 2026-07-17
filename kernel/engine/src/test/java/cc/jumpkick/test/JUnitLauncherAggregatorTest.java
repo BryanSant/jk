@@ -7,7 +7,7 @@ import cc.jumpkick.run.TestSummary;
 import org.junit.jupiter.api.Test;
 
 /**
- * Whitebox tests for {@link JUnitLauncher.ResultAggregator}. The aggregator processes the NDJSON
+ * Whitebox tests for {@link JUnitLauncher.ResultAggregator}. The aggregator processes the JSONL
  * event stream the workers emit; we feed it raw lines here rather than spinning up a real fork.
  */
 class JUnitLauncherAggregatorTest {

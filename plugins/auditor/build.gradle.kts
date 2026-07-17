@@ -5,12 +5,12 @@ plugins {
 }
 
 description = "jk-audit-runner: child-JVM worker that queries the OSV vulnerability API and " +
-        "streams NDJSON findings back to jk. Isolated from jk's own classpath so Jackson " +
+        "streams JSONL findings back to jk. Isolated from jk's own classpath so Jackson " +
         "and the OSV HTTP client never load in the main jk process."
 
 dependencies {
     implementation(project(":core"))
-    implementation(project(":plugin-api"))  // shared NDJSON codec (bundled into the fat jar)
+    implementation(project(":plugin-api"))  // shared JSONL codec (bundled into the fat jar)
     implementation(libs.jackson.databind)
 }
 

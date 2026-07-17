@@ -1,13 +1,13 @@
 # The jk wire protocol (v1)
 
 The contract between the `jk` client and the resident engine: newline-delimited flat JSON
-objects (NDJSON) over a Unix domain socket (macOS/Linux) or token-gated loopback TCP
+objects (JSONL) over a Unix domain socket (macOS/Linux) or token-gated loopback TCP
 (Windows). This document is the freeze candidate for 1.0 — after that, changes here follow
 the protocol-evolution rules at the bottom.
 
 ## Framing
 
-- One message per line; the codec is `Ndjson` (flat objects: string, integer, boolean,
+- One message per line; the codec is `Jsonl` (flat objects: string, integer, boolean,
   string-array, flat string-map, and nested-object extraction).
 - **Line cap**: 64 MB. A line that long without a terminator is a protocol violation; both
   sides fail the read (`BoundedLineReader`).
@@ -24,7 +24,7 @@ the protocol-evolution rules at the bottom.
 - **One null convention**: keys are always emitted; a JSON `null` value means "not
   applicable". Readers treat missing and null identically (the add-a-field seam).
 - **One map encoding**: flat string maps are nested objects (`"env":{"K":"V"}`), written by
-  `Ndjson.map`, read by `Ndjson.strMap`. No parallel arrays.
+  `Jsonl.map`, read by `Jsonl.strMap`. No parallel arrays.
 - **One location field**: every request that concerns a project carries it as `dir`.
 - Numeric "not applicable" is `-1` only where a field predates the null rule and is
   primitive (`testTotal` etc.).
