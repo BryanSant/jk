@@ -130,6 +130,31 @@ smoke test; `decision-02-package-reorg-approach` marks the pre-decision state.
 - `be4be51f` — `AtomicWrites` adopted in Calibration/StepTimings/BuildMetrics. **6 of 30 `ATOMIC_MOVE`
   sites now use the canonical util** (the ledger/lock/state-writer cluster).
 
+## Follow-up session (2026-07-17) — git fix + safe DRY batch
+Owner awake; asked to fix the pre-existing git failure and run the safe/mechanical DRY batch.
+
+- **`www` → `web`** (`48229c5b`): classpath `/www/`→`/web/`, `~/.jk/state/web`, `web-root` config,
+  resource dir; URLs/`x-www-form`/`WWW-Authenticate` left alone.
+- **git checkout fix** (`7dd9483a`): `git checkout --detach --end-of-options <sha>` fails on git
+  2.43 (parses the flag as a pathspec). Dropped `--end-of-options` (sha is a resolved full hex).
+  This was THE pre-existing `ToolRunCommandTest` failure — and it masked two more, because gradle
+  stops at the first failing task (`:cli-engine:test`), so `:engine:test`/`:core:test` never ran:
+  - **aggregator fixtures** (`32367d72`): `JUnitLauncherAggregatorTest` emitted the old `"e"`
+    discriminator; worker + aggregator use the unified `"event"`. Fixed the fixtures.
+  - **self-host paths** (this entry): root `jk.toml` `[workspace] modules` + `SelfHostingTomlTest`
+    still pointed at `kernel/*`, `cli`, `cli-engine`. Updated to the tier layout.
+- **DRY batch** (all verified green): `Jsonl.quote` for 5 JSON escapers (`692e7bc9`); `MinimalXml.
+  escapeAttr` for 3 XML escapers (`2bfcc91d`); 4 more `AtomicWrites` sites → 10/30 (`436ebc68`);
+  `Hashing` for 3 SHA sites (`b882d9c9`); `OwnerOnlyFiles` for the 2 credential stores (`22859d6c`);
+  `DomXml` for the POM/metadata DOM helpers, −11 dup methods (`a2d98483`); import normalization
+  (`style`).
+- **`./gradlew test` → FULLY GREEN (0 failures)** — first clean full run of the effort.
+
+Remaining DRY follow-ups unchanged (POM unification; hash-coupled `M2CompatWriter`/`Cas` + dir-move
+AtomicWrites; the 3 plugin/`BuildIdentity` hashing sites; `Jsonl.obj()` builder; deterministic-jar).
+New follow-up: align self-host `jk.toml` coordinate names (`jk-engine-api`→`jk-wire`,
+`jk-plugin-api`→`jk-plugin-sdk`, `jk-model`→`jk-api`) + `SelfHostingTomlTest`'s expected coords.
+
 ## FINAL STATE (autonomous session end)
 Branch `module-consolidation`, 13 commits on top of `main`. **`./gradlew test` → 710 tests, 1 failed;
 the 1 failure is the PRE-EXISTING `ToolRunCommandTest.git_target_with_subdir_runs_that_directory`
