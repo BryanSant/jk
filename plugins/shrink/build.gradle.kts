@@ -10,7 +10,7 @@ description = "jk-shrink: the built-in shrink build plugin's code layer — R8 i
         "the android plugin's release shrinking, sharing the same r8 artifact."
 
 dependencies {
-    implementation(project(":plugin-api"))
+    implementation(project(":plugin-sdk"))
 }
 
 // Fat JAR: bundle the runtime closure (plugin-api + model) so the worker runs as `java -jar`.

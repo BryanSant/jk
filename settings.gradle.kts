@@ -87,50 +87,55 @@ gradle.sharedServices
     .get() // eager: take the lock now, before any task can touch shared outputs
 
 include(
-    // Kernel — universal capabilities (no plugin deps)
-    ":jk-api",
-    ":core",
-    ":plugin-api",
-    ":io",
-    ":resolver",
-    ":toolchain",
-    ":toolchain-jdk",
-    ":client-io",
-    // Plugins — first-party, shipped with jk
+    // shared/ — client-safe contracts + code (everything the native CLI can link)
+    ":jk-api",          // the domain + scheduler/command SPI contract (zero-dep, IO-free leaf)
+    ":plugin-sdk",      // the plugin SPI + Jsonl wire codec (JDK-17; published as jk-plugin-sdk)
+    ":core",            // config/lock/layout/catalog/deny + filesystem/hashing/XML util
+    ":client-io",       // client I/O slice: http, forge auth, credential files, CAS read/link
+    ":toolchain-jdk",   // client JDK/tool flow: catalog/installer/registry, launchers, exporters
+    ":wire",            // the client<->engine wire contract (was :engine-api)
+    // server/ — engine-only (never on the native CLI classpath)
+    ":io",              // repo fetch/publish machinery: transports (http/file/s3), POM, metadata
+    ":resolver",        // PubGrub solver + conflict diagnostics
+    ":toolchain",       // resolver-backed tool installs, Gradle/Maven import machinery
+    ":engine",          // the Pipeline/Step scheduler + build pipeline
+    // clients/
+    ":cli",             // the slim native GraalVM client
+    ":cli-engine",      // engine JVM entrypoint + JVM dist + in-process seam + CLI test suite
+    ":web",             // the web dashboard SPA (resources-only; bundled into the engine jar)
+    // plugins/ — first-party, shipped with jk (one module per plugin)
     ":test-runner",
     ":kotlin-compiler",
     ":java-compiler",
-    ":auditor",        // was :audit-runner
-    ":publisher",      // was :publish-runner
-    ":image-builder",  // was :image-runner
-    ":compat-bridge",  // was :compat-runner
-    ":formatter",      // jk format — Spotless-wrapped Java/Kotlin formatter
-    ":spring-boot",    // spring-boot build plugin (AOT step + boot-jar packager)
-    ":android",        // android build plugin (aapt2/R-gen, d8 dex, APK packager — the SPI stress test)
-    ":protobuf",       // protobuf build plugin (protoc codegen before compile)
-    ":shrink",         // shrink build plugin (R8 --classfile slims the packaged jar)
-    // Host + CLI
-    ":engine-api",
-    ":engine",
-    ":cli",
-    ":cli-engine",
-    // Clients
-    ":web",
+    ":auditor",
+    ":publisher",
+    ":image-builder",
+    ":compat-bridge",
+    ":formatter",
+    ":spring-boot",
+    ":android",
+    ":protobuf",
+    ":shrink",
 )
 
-// Kernel modules live under kernel/
-project(":jk-api").projectDir    = file("kernel/model")
-project(":core").projectDir      = file("kernel/core")
-project(":io").projectDir        = file("kernel/io")
-project(":resolver").projectDir  = file("kernel/resolver")
-project(":toolchain").projectDir = file("kernel/toolchain")
-project(":toolchain-jdk").projectDir = file("kernel/toolchain-jdk")
-project(":client-io").projectDir = file("kernel/client-io")
-project(":engine-api").projectDir  = file("kernel/engine-api")
-project(":engine").projectDir      = file("kernel/engine")
+// shared/ — client-safe contracts + code
+project(":jk-api").projectDir        = file("shared/jk-api")
+project(":plugin-sdk").projectDir    = file("shared/plugin-sdk")
+project(":core").projectDir          = file("shared/core")
+project(":client-io").projectDir     = file("shared/client-io")
+project(":toolchain-jdk").projectDir = file("shared/toolchain-jdk")
+project(":wire").projectDir          = file("shared/wire")
 
-// Client modules live under clients/
-project(":web").projectDir         = file("clients/web")
+// server/ — engine-only
+project(":io").projectDir        = file("server/io")
+project(":resolver").projectDir  = file("server/resolver")
+project(":toolchain").projectDir = file("server/toolchain")
+project(":engine").projectDir    = file("server/engine")
+
+// clients/
+project(":cli").projectDir        = file("clients/cli")
+project(":cli-engine").projectDir = file("clients/cli-engine")
+project(":web").projectDir        = file("clients/web")
 
 // Plugin modules live under plugins/
 project(":test-runner").projectDir    = file("plugins/test-runner")

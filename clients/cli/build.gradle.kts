@@ -18,9 +18,9 @@ dependencies {
     implementation(project(":core"))
     implementation(project(":client-io"))
     implementation(project(":toolchain-jdk"))
-    implementation(project(":engine-api"))
+    implementation(project(":wire"))
     // Shared JSONL reader for the engine/worker wire envelope.
-    implementation(project(":plugin-api"))
+    implementation(project(":plugin-sdk"))
 
     // JLine 4 FFM terminal provider for raw-mode TUI (jk init wizard).
     // FFM backend requires JDK 22+; the GraalVM-compiled binary embeds the

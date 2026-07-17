@@ -11,10 +11,10 @@ description = "jk build engine: the Pipeline/Step scheduler and the build pipeli
 dependencies {
     // The client<->engine wire contract (protocol codec, EnginePaths, build DTOs) — api so a
     // caller of BuildService sees the DTO types (slim-client Stage 5).
-    api(project(":engine-api"))
+    api(project(":wire"))
     implementation(project(":core"))
     implementation(project(":io"))
-    implementation(project(":plugin-api"))
+    implementation(project(":plugin-sdk"))
     implementation(project(":resolver"))
     implementation(project(":toolchain"))
     // The web dashboard's static assets ride the engine's runtime classpath as /www/* (served by

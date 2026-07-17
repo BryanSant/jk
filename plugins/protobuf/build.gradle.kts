@@ -11,7 +11,7 @@ description = "jk-protobuf: the built-in protobuf build plugin's code layer — 
         "before-compile codegen SPI after the android plugin."
 
 dependencies {
-    implementation(project(":plugin-api"))
+    implementation(project(":plugin-sdk"))
 }
 
 // Fat JAR: bundle the runtime closure (plugin-api + model) so the worker runs as `java -jar`.

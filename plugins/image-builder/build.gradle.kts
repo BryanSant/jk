@@ -11,7 +11,7 @@ dependencies {
     implementation(project(":core"))
     implementation(project(":io"))
     // image module deleted; ImageConfig moved to :core
-    implementation(project(":plugin-api"))  // shared JSONL codec (bundled into the fat jar)
+    implementation(project(":plugin-sdk"))  // shared JSONL codec (bundled into the fat jar)
     implementation(libs.jib.core)
 }
 

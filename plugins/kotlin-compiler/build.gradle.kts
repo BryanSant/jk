@@ -34,9 +34,9 @@ dependencies {
     // The shared JSONL protocol codec. compileOnly so it doesn't drag onto the
     // worker's resolved runtime closure; its classes are vendored into the jar
     // via `bundledCodec` below so the codec is present in the worker JVM.
-    compileOnly(project(":plugin-api"))
-    bundledCodec(project(":plugin-api"))
-    testImplementation(project(":plugin-api"))
+    compileOnly(project(":plugin-sdk"))
+    bundledCodec(project(":plugin-sdk"))
+    testImplementation(project(":plugin-sdk"))
 }
 
 tasks.jar {

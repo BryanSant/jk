@@ -11,7 +11,7 @@ description = "jk-spring-boot: the built-in Spring Boot build plugin's code laye
         "depends on plugin-api alone: it is the blueprint third-party build plugins copy."
 
 dependencies {
-    implementation(project(":plugin-api"))
+    implementation(project(":plugin-sdk"))
 }
 
 // Fat JAR: bundle the runtime closure (plugin-api + model) so the worker runs as `java -jar`.

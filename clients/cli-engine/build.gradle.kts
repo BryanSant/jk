@@ -26,8 +26,8 @@ dependencies {
     implementation(project(":resolver"))
     implementation(project(":toolchain"))
     implementation(project(":toolchain-jdk"))
-    implementation(project(":engine-api"))
-    implementation(project(":plugin-api"))
+    implementation(project(":wire"))
+    implementation(project(":plugin-sdk"))
 
     // EngineMain ignores terminal SIGINT/SIGHUP through JLine's signal registry (same library the
     // CLI's TUI already ships).

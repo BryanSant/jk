@@ -10,7 +10,7 @@ description = "jk-formatter: child-JVM worker that formats Java/Kotlin (and, lat
         "runtime by jk and handed in, keeping them out of the main jk binary."
 
 dependencies {
-    implementation(project(":plugin-api"))
+    implementation(project(":plugin-sdk"))
     // The Spotless formatting engine. Zero runtime deps of its own; the actual
     // formatter implementations are loaded at runtime via a Provisioner from
     // jar paths jk resolves and passes in the spec.

@@ -9,7 +9,7 @@ description = "jk-api: the stable front-end/plugin contract (IO/thread machinery
         "Zero external dependencies — JDK + Lombok + JSpecify only."
 
 // This module IS jk's public API surface (Gradle project ":jk-api"; dir kept at
-// kernel/model): the impl-free contract that
+// shared/jk-api): the impl-free contract that
 // plugins, third-party tools, and alternative front-ends (IDE/web/CI) compile
 // against. The contract leaf is the {plugin-api, model} PAIR: plugin-api sits below
 // (it holds jk's promised JDK 17 project floor — its classes ride the user's test
@@ -21,5 +21,5 @@ description = "jk-api: the stable front-end/plugin contract (IO/thread machinery
 // here beyond :plugin-api, and no external dependencies in either module.
 
 dependencies {
-    api(project(":plugin-api"))
+    api(project(":plugin-sdk"))
 }

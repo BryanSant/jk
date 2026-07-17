@@ -12,7 +12,7 @@ description = "jk-android: the built-in Android build plugin's code layer — th
         "libraries (apksig for v1+v2 signing)."
 
 dependencies {
-    implementation(project(":plugin-api"))
+    implementation(project(":plugin-sdk"))
     // The plugin's own signing library — bundled into the worker fat jar exactly the way
     // a third-party plugin ships its private deps. Never touches the engine classpath.
     implementation("com.android.tools.build:apksig:8.7.3")
