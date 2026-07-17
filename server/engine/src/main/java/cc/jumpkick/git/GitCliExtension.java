@@ -256,7 +256,12 @@ public final class GitCliExtension implements GitBackend {
             JGitExtension.deleteRecursively(dir);
             throw new IOException("checkout clone failed: " + clone.output.strip());
         }
-        ProcResult co = exec(dir, null, List.of("checkout", "--detach", "--end-of-options", sha), LOCAL_TIMEOUT_SEC);
+        // NB: no `--end-of-options` here. Unlike rev-parse/show/describe, `git checkout --detach`
+        // rejects it — git parses the token as a pathspec and fails with "--detach does not take a
+        // path argument '--end-of-options'" (seen on git 2.43). `sha` is an already-resolved full
+        // 40-hex commit id (resolveRefSha → rev-parse --verify), so it can't be mistaken for an
+        // option or a path; the plain form is safe and works across git versions (Linux/macOS).
+        ProcResult co = exec(dir, null, List.of("checkout", "--detach", sha), LOCAL_TIMEOUT_SEC);
         if (co.exit != 0) {
             JGitExtension.deleteRecursively(dir);
             throw new IOException("checkout failed: " + co.output.strip());

@@ -178,7 +178,8 @@ public final class InstallPipelines {
             GitSource asBranch = new GitSource(canonical, expanded, new GitRefSpec.Branch(refStr), null, true, false);
             return fetcher.fetch(asBranch, refresh);
         } catch (IOException branchFailure) {
-            IOException wrapped = new IOException("ref `" + refStr + "` not found as tag or branch in " + expanded);
+            IOException wrapped = new IOException("ref `" + refStr + "` not found as tag or branch in " + expanded
+                    + " (tag: " + tagFailure.getMessage() + "; branch: " + branchFailure.getMessage() + ")");
             wrapped.addSuppressed(tagFailure);
             wrapped.addSuppressed(branchFailure);
             throw wrapped;
