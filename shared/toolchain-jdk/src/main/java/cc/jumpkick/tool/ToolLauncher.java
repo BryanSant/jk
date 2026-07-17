@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.tool;
 
+import cc.jumpkick.plugin.protocol.Jsonl;
+
 import cc.jumpkick.jdk.HostPlatform;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -245,21 +247,7 @@ public final class ToolLauncher {
     }
 
     private static String jsonString(String s) {
-        StringBuilder sb = new StringBuilder(s.length() + 2);
-        sb.append('"');
-        for (int i = 0; i < s.length(); i++) {
-            char c = s.charAt(i);
-            switch (c) {
-                case '\\' -> sb.append("\\\\");
-                case '"' -> sb.append("\\\"");
-                case '\n' -> sb.append("\\n");
-                case '\r' -> sb.append("\\r");
-                case '\t' -> sb.append("\\t");
-                default -> sb.append(c);
-            }
-        }
-        sb.append('"');
-        return sb.toString();
+        return Jsonl.quote(s);
     }
 
     private static String shellQuote(String value) {

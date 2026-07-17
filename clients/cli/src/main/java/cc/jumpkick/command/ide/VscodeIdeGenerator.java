@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.command.ide;
 
+import cc.jumpkick.plugin.protocol.Jsonl;
+
 import cc.jumpkick.cli.CliOutput;
 import cc.jumpkick.cli.theme.Theme;
 import cc.jumpkick.cli.tui.Glyphs;
@@ -389,7 +391,11 @@ public final class VscodeIdeGenerator implements IdeGenerator {
     }
 
     private static String jsonEsc(String s) {
-        return s.replace("\\", "\\\\").replace("\"", "\\\"");
+        // Delegate to the canonical Jsonl codec (also escapes control chars, which the old
+        // two-replace version dropped) and strip its surrounding quotes — call sites add their own.
+        if (s == null) return "";
+        String quoted = Jsonl.quote(s);
+        return quoted.substring(1, quoted.length() - 1);
     }
 
     private static void write(Path file, String content) throws IOException {
