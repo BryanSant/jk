@@ -15,6 +15,9 @@ import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
+import static cc.jumpkick.repo.DomXml.childElement;
+import static cc.jumpkick.repo.DomXml.childElements;
+import static cc.jumpkick.repo.DomXml.childText;
 
 /**
  * Parsed contents of a Maven repository's {@code maven-metadata.xml}. Only the bits the resolver
@@ -71,31 +74,6 @@ public record MavenMetadata(String groupId, String artifactId, List<String> vers
 
     // --- DOM helpers (duplicated lightly from PomParser to keep modules independent) ---
 
-    private static String childText(Element parent, String tagName) {
-        Element child = childElement(parent, tagName);
-        return child == null ? null : child.getTextContent().trim();
-    }
 
-    private static Element childElement(Element parent, String tagName) {
-        NodeList children = parent.getChildNodes();
-        for (int i = 0; i < children.getLength(); i++) {
-            Node node = children.item(i);
-            if (node.getNodeType() == Node.ELEMENT_NODE && node.getNodeName().equals(tagName)) {
-                return (Element) node;
-            }
-        }
-        return null;
-    }
 
-    private static List<Element> childElements(Element parent, String tagName) {
-        List<Element> result = new ArrayList<>();
-        NodeList children = parent.getChildNodes();
-        for (int i = 0; i < children.getLength(); i++) {
-            Node node = children.item(i);
-            if (node.getNodeType() == Node.ELEMENT_NODE && node.getNodeName().equals(tagName)) {
-                result.add((Element) node);
-            }
-        }
-        return result;
-    }
 }

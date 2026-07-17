@@ -20,6 +20,9 @@ import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
+import static cc.jumpkick.repo.DomXml.childElement;
+import static cc.jumpkick.repo.DomXml.childElements;
+import static cc.jumpkick.repo.DomXml.childText;
 
 /**
  * Parses Maven POM XML into a {@link Pom}.
@@ -203,45 +206,7 @@ public final class PomParser {
         return value;
     }
 
-    private static String childText(Element parent, String tagName) {
-        Element child = childElement(parent, tagName);
-        return child == null ? null : child.getTextContent().trim();
-    }
 
-    private static Element childElement(Element parent, String tagName) {
-        if (parent == null) return null;
-        NodeList children = parent.getChildNodes();
-        for (int i = 0; i < children.getLength(); i++) {
-            Node node = children.item(i);
-            if (node.getNodeType() == Node.ELEMENT_NODE && node.getNodeName().equals(tagName)) {
-                return (Element) node;
-            }
-        }
-        return null;
-    }
 
-    private static List<Element> childElements(Element parent, String tagName) {
-        List<Element> result = new ArrayList<>();
-        if (parent == null) return result;
-        NodeList children = parent.getChildNodes();
-        for (int i = 0; i < children.getLength(); i++) {
-            Node node = children.item(i);
-            if (node.getNodeType() == Node.ELEMENT_NODE && node.getNodeName().equals(tagName)) {
-                result.add((Element) node);
-            }
-        }
-        return result;
-    }
 
-    private static List<Element> childElements(Element parent) {
-        List<Element> result = new ArrayList<>();
-        NodeList children = parent.getChildNodes();
-        for (int i = 0; i < children.getLength(); i++) {
-            Node node = children.item(i);
-            if (node.getNodeType() == Node.ELEMENT_NODE) {
-                result.add((Element) node);
-            }
-        }
-        return result;
-    }
 }
