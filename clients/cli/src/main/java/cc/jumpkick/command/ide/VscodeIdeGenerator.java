@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.command.ide;
 
+import cc.jumpkick.util.MinimalXml;
+
 import cc.jumpkick.plugin.protocol.Jsonl;
 
 import cc.jumpkick.cli.CliOutput;
@@ -384,10 +386,7 @@ public final class VscodeIdeGenerator implements IdeGenerator {
     }
 
     private static String esc(String s) {
-        return s.replace("&", "&amp;")
-                .replace("\"", "&quot;")
-                .replace("<", "&lt;")
-                .replace(">", "&gt;");
+        return MinimalXml.escapeAttr(s);
     }
 
     private static String jsonEsc(String s) {

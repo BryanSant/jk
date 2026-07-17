@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.test;
 
+import cc.jumpkick.util.MinimalXml;
+
 import cc.jumpkick.plugin.protocol.Jsonl;
 import java.io.IOException;
 import java.net.InetAddress;
@@ -156,8 +158,7 @@ public final class XmlTestReport {
     }
 
     private static String esc(String s) {
-        if (s == null) return "";
-        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;");
+        return s == null ? "" : MinimalXml.escapeAttr(s);
     }
 
     private static String cdata(String s) {

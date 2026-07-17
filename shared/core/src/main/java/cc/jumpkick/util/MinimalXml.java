@@ -381,11 +381,13 @@ public final class MinimalXml {
         }
     }
 
-    private static String escapeText(String v) {
+    /** XML-escape element text: {@code & < >}. The one XML text-escaper (shared by IDE/report writers). */
+    public static String escapeText(String v) {
         return v.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
     }
 
-    private static String escapeAttr(String v) {
+    /** XML-escape an attribute value: {@link #escapeText} plus {@code "}. */
+    public static String escapeAttr(String v) {
         return escapeText(v).replace("\"", "&quot;");
     }
 }

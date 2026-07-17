@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 package cc.jumpkick.command.ide;
 
+import cc.jumpkick.util.MinimalXml;
+
 import cc.jumpkick.cli.CliOutput;
 import cc.jumpkick.cli.theme.Theme;
 import cc.jumpkick.cli.tui.Glyphs;
@@ -440,10 +442,7 @@ public final class IntellijIdeGenerator implements IdeGenerator {
     }
 
     private static String esc(String s) {
-        return s.replace("&", "&amp;")
-                .replace("\"", "&quot;")
-                .replace("<", "&lt;")
-                .replace(">", "&gt;");
+        return MinimalXml.escapeAttr(s);
     }
 
     private static void write(Path file, String content) throws IOException {
